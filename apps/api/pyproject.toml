@@ -51,6 +51,8 @@ select = ["E", "F", "I", "UP", "B", "SIM"]
 "src/modules/manufacturing/domain/enums.py" = ["UP042"]
 "src/modules/quality/**" = ["E501", "SIM102"]
 "src/modules/quality/domain/enums.py" = ["UP042"]
+"src/modules/crm/**" = ["E501", "SIM102"]
+"src/modules/crm/domain/enums.py" = ["UP042"]
 "src/tests/**" = ["SIM117", "E501"]
 
 [tool.mypy]
@@ -71,6 +73,7 @@ module = [
     "modules.inventory.*",
     "modules.manufacturing.*",
     "modules.quality.*",
+    "modules.crm.*",
     "security.jwt",
     "security.password",
     "security.rbac",

@@ -2,6 +2,7 @@
 
 from fastapi import APIRouter
 
+from modules.crm.router import crm_router
 from modules.finance.router import finance_router
 from modules.foundation.router import foundation_router
 from modules.inventory.router import inventory_router
@@ -24,3 +25,4 @@ api_v1_router.include_router(procurement_router)
 api_v1_router.include_router(inventory_router)
 api_v1_router.include_router(manufacturing_router)
 api_v1_router.include_router(quality_router)
+api_v1_router.include_router(crm_router)
