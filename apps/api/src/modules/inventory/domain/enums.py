@@ -153,3 +153,4 @@ class SourceModule(str, Enum):
     SALES = "sales"
     INVENTORY = "inventory"
     MANUFACTURING = "manufacturing"
+    QUALITY = "quality"

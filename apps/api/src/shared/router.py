@@ -9,6 +9,7 @@ from modules.manufacturing.router import manufacturing_router
 from modules.master_data.router import master_data_router
 from modules.organization.router import organization_router
 from modules.procurement.router import procurement_router
+from modules.quality.router import quality_router
 from modules.sales.router import sales_router
 from shared.health import router as health_router
 
@@ -22,3 +23,4 @@ api_v1_router.include_router(sales_router)
 api_v1_router.include_router(procurement_router)
 api_v1_router.include_router(inventory_router)
 api_v1_router.include_router(manufacturing_router)
+api_v1_router.include_router(quality_router)
