@@ -7,6 +7,7 @@ from modules.crm.router import crm_router
 from modules.document.router import document_router
 from modules.finance.router import finance_router
 from modules.foundation.router import foundation_router
+from modules.grc.router import grc_router
 from modules.helpdesk.router import helpdesk_router
 from modules.hr.router import hr_router
 from modules.inventory.router import inventory_router
@@ -42,3 +43,4 @@ api_v1_router.include_router(asset_router)
 api_v1_router.include_router(service_router)
 api_v1_router.include_router(helpdesk_router)
 api_v1_router.include_router(document_router)
+api_v1_router.include_router(grc_router)

@@ -41,6 +41,7 @@ celery_app.autodiscover_tasks(
         "modules.service",
         "modules.helpdesk",
         "modules.document",
+        "modules.grc",
     ],
     related_name="tasks",
     force=True,
