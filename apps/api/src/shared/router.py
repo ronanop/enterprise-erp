@@ -2,6 +2,7 @@
 
 from fastapi import APIRouter
 
+from modules.analytics.router import analytics_router
 from modules.asset.router import asset_router
 from modules.crm.router import crm_router
 from modules.document.router import document_router
@@ -44,3 +45,4 @@ api_v1_router.include_router(service_router)
 api_v1_router.include_router(helpdesk_router)
 api_v1_router.include_router(document_router)
 api_v1_router.include_router(grc_router)
+api_v1_router.include_router(analytics_router)
