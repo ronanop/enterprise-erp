@@ -33,6 +33,7 @@ import modules.grc.models  # noqa: F401 — register ORM metadata
 import modules.analytics.models  # noqa: F401 — register ORM metadata
 import modules.integration.models  # noqa: F401 — register ORM metadata
 import modules.ecommerce.models  # noqa: F401 — register ORM metadata
+import modules.portal.models  # noqa: F401 — register ORM metadata
 
 config = context.config
 

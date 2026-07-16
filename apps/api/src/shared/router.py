@@ -18,6 +18,7 @@ from modules.manufacturing.router import manufacturing_router
 from modules.master_data.router import master_data_router
 from modules.organization.router import organization_router
 from modules.payroll.router import payroll_router
+from modules.portal.router import portal_router
 from modules.procurement.router import procurement_router
 from modules.project.router import project_router
 from modules.quality.router import quality_router
@@ -50,3 +51,4 @@ api_v1_router.include_router(grc_router)
 api_v1_router.include_router(analytics_router)
 api_v1_router.include_router(integration_router)
 api_v1_router.include_router(ecommerce_router)
+api_v1_router.include_router(portal_router)

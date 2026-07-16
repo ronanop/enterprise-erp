@@ -45,6 +45,7 @@ celery_app.autodiscover_tasks(
         "modules.analytics",
         "modules.integration",
         "modules.ecommerce",
+        "modules.portal",
     ],
     related_name="tasks",
     force=True,
