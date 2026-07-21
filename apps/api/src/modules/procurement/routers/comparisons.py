@@ -19,6 +19,24 @@ from shared.schemas import APIResponse
 comparisons_router = APIRouter(prefix="/comparisons", tags=["Procurement - Comparisons"])
 
 
+@comparisons_router.get(
+    "",
+    response_model=APIResponse[list[ComparisonResponse]],
+)
+def list_comparisons(
+    ctx: Annotated[
+        TenantContext, Depends(require_permission("procurement.vendor_quotation:read"))
+    ],
+    db: Annotated[Session, Depends(get_db)],
+    company_id: UUID | None = None,
+) -> APIResponse[list[ComparisonResponse]]:
+    rows = VendorComparisonService(db).list(ctx, company_id)
+    return APIResponse(
+        message="Vendor comparisons retrieved",
+        data=[ComparisonResponse.model_validate(row) for row in rows],
+    )
+
+
 @comparisons_router.post(
     "/rfqs/{rfq_id}/run",
     response_model=APIResponse[ComparisonResponse],

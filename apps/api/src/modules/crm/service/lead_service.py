@@ -5,7 +5,7 @@ from uuid import UUID
 
 from sqlalchemy.orm import Session
 
-from core.exceptions import NotFoundException
+from core.exceptions import ConflictException, NotFoundException
 from modules.crm.domain.enums import CrmEntityType, LeadStatus
 from modules.crm.models import CrmLead
 from modules.crm.repository.lead_activity_repository import LeadActivityRepository
@@ -15,6 +15,7 @@ from modules.crm.repository.lead_source_repository import LeadSourceRepository
 from modules.crm.service.crm_scope_validator import CrmScopeValidator
 from modules.crm.service.document_number_service import DocumentNumberService
 from modules.crm.service.engines import LeadActivityEngine, LeadAssignmentEngine, LeadEngine
+from modules.crm.service.engines import sales_blueprint_engine
 from modules.crm.service.integration_service import CRMIntegrationService
 from modules.foundation.domain.value_objects import TenantContext
 from modules.foundation.service.audit_service import AuditService
@@ -133,41 +134,86 @@ class LeadService:
         expected_revenue: float = 0,
         existing_customer_id: UUID | None = None,
         create_customer: bool = True,
+        remark: str | None = None,
     ):
         lead = self.get(ctx, lead_id)
-        self._engine.validate_convertible(lead)
+        if lead.company_account_id is not None:
+            # Sales-blueprint lead (rule #1/#2): lifecycle is governed by
+            # ``blueprint_state``, not the legacy ``status`` qualification
+            # gate — only require it to still be in the initial "open" state
+            # and unlocked.
+            if lead.blueprint_state != "open":
+                raise ConflictException(
+                    f"Lead is in blueprint state '{lead.blueprint_state}'; only an 'open' "
+                    "sales lead can be converted"
+                )
+            sales_blueprint_engine.assert_not_locked(lead)
+        else:
+            self._engine.validate_convertible(lead)
         customer_id = existing_customer_id or lead.customer_id
-        if create_customer and customer_id is None:
+        # ``crm_company`` is an optional, non-duplicate link to
+        # ``master_customer`` (per the sales-account spec) — sales-blueprint
+        # leads therefore don't auto-create a master_customer on convert;
+        # legacy (non-blueprint) leads keep the previous auto-create-customer
+        # behaviour for backward compatibility.
+        if create_customer and customer_id is None and lead.company_account_id is None:
             customer = self._integration.convert_lead_to_customer(ctx, lead_id)
             customer_id = customer.id
             lead = self.get(ctx, lead_id)
         from modules.crm.service.opportunity_service import OpportunityService
 
         opp_svc = OpportunityService(self._db)
-        opportunity = opp_svc.create(
-            ctx,
-            branch_id=lead.branch_id,
-            company_id=lead.company_id,
-            opportunity_name=opportunity_name,
-            pipeline_id=pipeline_id,
-            owner_employee_id=lead.owner_employee_id,
-            lead_id=lead_id,
-            customer_id=customer_id,
-            expected_revenue=expected_revenue,
-            probability_percent=25,
-            current_stage="qualification",
-        )
+        opp_fields = {
+            "branch_id": lead.branch_id,
+            "company_id": lead.company_id,
+            "opportunity_name": opportunity_name,
+            "pipeline_id": pipeline_id,
+            "owner_employee_id": lead.owner_employee_id,
+            "lead_id": lead_id,
+            "customer_id": customer_id,
+            "expected_revenue": expected_revenue,
+            "probability_percent": 25,
+            "current_stage": "qualification",
+        }
+        # Rule #2: an Opportunity is only ever created "for the sales process"
+        # (i.e. blueprint-enabled) via this lead-convert path — direct
+        # POST /crm/opportunities calls leave blueprint_state unset.
+        if lead.company_account_id is not None:
+            opp_fields["company_account_id"] = lead.company_account_id
+            opp_fields["blueprint_state"] = "open"
+            opp_fields["project_title"] = lead.project_title
+
+        opportunity = opp_svc.create(ctx, **opp_fields)
         now = datetime.now(timezone.utc)
-        self._engine.apply_convert(lead)
+        if lead.company_account_id is None:
+            self._engine.apply_convert(lead)
         self._repo.update(
             ctx,
             lead_id,
             status=LeadStatus.CONVERTED.value,
+            blueprint_state="converted",
             converted_opportunity_id=opportunity.id,
             converted_at=now,
             customer_id=customer_id,
+            convert_remark=remark,
         )
         return opportunity
+
+    def mark_lost(self, ctx: TenantContext, lead_id: UUID, *, reason: str | None = None) -> CrmLead:
+        lead = self.get(ctx, lead_id)
+        if lead.status in {LeadStatus.CONVERTED.value, LeadStatus.LOST.value}:
+            raise ConflictException("Lead is already converted or lost")
+        sales_blueprint_engine.assert_not_locked(lead)
+        row = self._repo.update(
+            ctx,
+            lead_id,
+            status=LeadStatus.LOST.value,
+            blueprint_state="lost",
+            lost_reason=reason,
+        )
+        if row is None:
+            raise NotFoundException("Lead not found")
+        return row
 
     def add_activity(self, ctx: TenantContext, lead_id: UUID, **fields):
         lead = self.get(ctx, lead_id)

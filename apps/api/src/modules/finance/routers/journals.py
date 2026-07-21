@@ -1,22 +1,26 @@
-"""Journal and GL routers."""
+"""Journal routers."""
 
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
 from database.session import get_db
-from modules.finance.dependencies import PaginationParams, get_pagination, paginate
+from modules.finance.dependencies import PaginationParams, extract_update_fields, get_pagination, paginate
 from modules.finance.schemas import (
     GlEntryResponse,
+    JournalCommentRequest,
     JournalCreateRequest,
     JournalLineCreateRequest,
     JournalLineResponse,
+    JournalLinesReorderRequest,
+    JournalLineUpdateRequest,
+    JournalListResponse,
     JournalResponse,
+    JournalUpdateRequest,
     WorkflowActionRequest,
 )
-from modules.finance.service.general_ledger_service import GeneralLedgerService
 from modules.finance.service.journal_service import JournalService
 from modules.finance.service.posting_service import PostingService
 from modules.foundation.dependencies import require_permission
@@ -24,21 +28,40 @@ from modules.foundation.domain.value_objects import TenantContext
 from shared.schemas import APIResponse
 
 journals_router = APIRouter(prefix="/journals", tags=["Finance - Journals"])
-gl_router = APIRouter(prefix="/gl", tags=["Finance - General Ledger"])
 
 
-@journals_router.get("", response_model=APIResponse[list[JournalResponse]])
+@journals_router.get("", response_model=APIResponse[JournalListResponse])
 def list_journals(
     ctx: Annotated[TenantContext, Depends(require_permission("finance.journal:read"))],
     db: Annotated[Session, Depends(get_db)],
     pagination: Annotated[PaginationParams, Depends(get_pagination)],
     company_id: UUID | None = None,
-) -> APIResponse[list[JournalResponse]]:
-    journals = JournalService(db).list_journals(ctx, company_id)
+    status: Annotated[str | None, Query()] = None,
+    journal_type: Annotated[str | None, Query(alias="journal_type")] = None,
+    period_id: UUID | None = None,
+    q: Annotated[str | None, Query()] = None,
+    sort_by: Annotated[str, Query()] = "journal_date",
+    sort_dir: Annotated[str, Query()] = "desc",
+) -> APIResponse[JournalListResponse]:
+    journals = JournalService(db).list_journals(
+        ctx,
+        company_id,
+        status=status,
+        journal_type=journal_type,
+        period_id=period_id,
+        search=q,
+        sort_by=sort_by,
+        sort_dir=sort_dir,
+    )
     page = paginate(journals, pagination)
     return APIResponse(
         message="Journals retrieved",
-        data=[JournalResponse.model_validate(j) for j in page],
+        data=JournalListResponse(
+            items=[JournalResponse.model_validate(j) for j in page],
+            total=len(journals),
+            page=pagination.page,
+            page_size=pagination.page_size,
+        ),
     )
 
 
@@ -60,7 +83,25 @@ def get_journal(
     db: Annotated[Session, Depends(get_db)],
 ) -> APIResponse[JournalResponse]:
     journal = JournalService(db).get_journal(ctx, journal_id)
-    return APIResponse(message="Journal retrieved", data=JournalResponse.model_validate(journal))
+    payload = JournalResponse.model_validate(journal)
+    active_lines = sorted(
+        [ln for ln in journal.lines if not ln.is_deleted],
+        key=lambda ln: ln.line_number,
+    )
+    payload.lines = [JournalLineResponse.model_validate(ln) for ln in active_lines]
+    return APIResponse(message="Journal retrieved", data=payload)
+
+
+@journals_router.patch("/{journal_id}", response_model=APIResponse[JournalResponse])
+def update_journal(
+    journal_id: UUID,
+    body: JournalUpdateRequest,
+    ctx: Annotated[TenantContext, Depends(require_permission("finance.journal:update"))],
+    db: Annotated[Session, Depends(get_db)],
+) -> APIResponse[JournalResponse]:
+    journal = JournalService(db).update_journal(ctx, journal_id, **extract_update_fields(body))
+    db.commit()
+    return APIResponse(message="Journal updated", data=JournalResponse.model_validate(journal))
 
 
 @journals_router.post("/{journal_id}/lines", response_model=APIResponse[JournalLineResponse])
@@ -73,6 +114,63 @@ def add_journal_line(
     line = JournalService(db).add_line(ctx, journal_id, **body.model_dump())
     db.commit()
     return APIResponse(message="Journal line added", data=JournalLineResponse.model_validate(line))
+
+
+@journals_router.patch(
+    "/{journal_id}/lines/{line_id}",
+    response_model=APIResponse[JournalLineResponse],
+)
+def update_journal_line(
+    journal_id: UUID,
+    line_id: UUID,
+    body: JournalLineUpdateRequest,
+    ctx: Annotated[TenantContext, Depends(require_permission("finance.journal:update"))],
+    db: Annotated[Session, Depends(get_db)],
+) -> APIResponse[JournalLineResponse]:
+    line = JournalService(db).update_line(
+        ctx, journal_id, line_id, **extract_update_fields(body)
+    )
+    db.commit()
+    return APIResponse(message="Journal line updated", data=JournalLineResponse.model_validate(line))
+
+
+@journals_router.delete("/{journal_id}/lines/{line_id}", response_model=APIResponse[dict])
+def delete_journal_line(
+    journal_id: UUID,
+    line_id: UUID,
+    ctx: Annotated[TenantContext, Depends(require_permission("finance.journal:update"))],
+    db: Annotated[Session, Depends(get_db)],
+) -> APIResponse[dict]:
+    JournalService(db).delete_line(ctx, journal_id, line_id)
+    db.commit()
+    return APIResponse(message="Journal line deleted", data={"id": str(line_id)})
+
+
+@journals_router.post(
+    "/{journal_id}/lines/reorder",
+    response_model=APIResponse[JournalResponse],
+)
+def reorder_journal_lines(
+    journal_id: UUID,
+    body: JournalLinesReorderRequest,
+    ctx: Annotated[TenantContext, Depends(require_permission("finance.journal:update"))],
+    db: Annotated[Session, Depends(get_db)],
+) -> APIResponse[JournalResponse]:
+    journal = JournalService(db).reorder_lines(ctx, journal_id, body.line_ids)
+    db.commit()
+    return APIResponse(message="Journal lines reordered", data=JournalResponse.model_validate(journal))
+
+
+@journals_router.post("/{journal_id}/comments", response_model=APIResponse[dict])
+def add_journal_comment(
+    journal_id: UUID,
+    body: JournalCommentRequest,
+    ctx: Annotated[TenantContext, Depends(require_permission("finance.journal:read"))],
+    db: Annotated[Session, Depends(get_db)],
+) -> APIResponse[dict]:
+    result = JournalService(db).add_comment(ctx, journal_id, body.comment)
+    db.commit()
+    return APIResponse(message="Comment recorded", data=result)
 
 
 @journals_router.post("/{journal_id}/submit", response_model=APIResponse[dict])
@@ -99,6 +197,18 @@ def approve_journal(
     return APIResponse(message="Journal approved", data={"status": instance.status})
 
 
+@journals_router.post("/{journal_id}/reject", response_model=APIResponse[dict])
+def reject_journal(
+    journal_id: UUID,
+    _body: WorkflowActionRequest,
+    ctx: Annotated[TenantContext, Depends(require_permission("finance.journal:approve"))],
+    db: Annotated[Session, Depends(get_db)],
+) -> APIResponse[dict]:
+    instance = JournalService(db).reject(ctx, journal_id)
+    db.commit()
+    return APIResponse(message="Journal rejected", data={"status": instance.status})
+
+
 @journals_router.post("/{journal_id}/post", response_model=APIResponse[list[GlEntryResponse]])
 def post_journal(
     journal_id: UUID,
@@ -122,22 +232,3 @@ def reverse_journal(
     reversal = JournalService(db).reverse(ctx, journal_id)
     db.commit()
     return APIResponse(message="Reversal journal created", data=JournalResponse.model_validate(reversal))
-
-
-@gl_router.get("", response_model=APIResponse[list[GlEntryResponse]])
-def list_gl_entries(
-    ctx: Annotated[TenantContext, Depends(require_permission("finance.gl:read"))],
-    db: Annotated[Session, Depends(get_db)],
-    pagination: Annotated[PaginationParams, Depends(get_pagination)],
-    company_id: UUID | None = None,
-    account_id: UUID | None = None,
-    period_id: UUID | None = None,
-) -> APIResponse[list[GlEntryResponse]]:
-    entries = GeneralLedgerService(db).list_entries(
-        ctx, company_id, account_id=account_id, period_id=period_id
-    )
-    page = paginate(entries, pagination)
-    return APIResponse(
-        message="GL entries retrieved",
-        data=[GlEntryResponse.model_validate(e) for e in page],
-    )

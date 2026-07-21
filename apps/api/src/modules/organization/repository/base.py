@@ -19,7 +19,10 @@ class OrgScopedRepository:
 
     @staticmethod
     def apply_tenant_filter(stmt, model, ctx: TenantContext):
-        return stmt.where(model.tenant_id == ctx.tenant_id, model.is_deleted.is_(False))
+        stmt = stmt.where(model.tenant_id == ctx.tenant_id)
+        if hasattr(model, "is_deleted"):
+            stmt = stmt.where(model.is_deleted.is_(False))
+        return stmt
 
     @staticmethod
     def ensure_company_access(ctx: TenantContext, company_id: UUID) -> None:

@@ -22,7 +22,6 @@ def test_auth_login_invalid_credentials() -> None:
         response = client.post(
             "/api/v1/auth/login",
             json={
-                "tenant_id": "00000000-0000-0000-0000-000000000001",
                 "email": "nobody@example.com",
                 "password": "Secure1!",
             },

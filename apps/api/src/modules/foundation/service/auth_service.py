@@ -6,7 +6,7 @@ from uuid import UUID, uuid4
 from sqlalchemy.orm import Session
 
 from core.config import settings
-from core.exceptions import TooManyRequestsException, UnauthorizedException
+from core.exceptions import UnauthorizedException
 from core.redis import SessionStore
 from modules.foundation.domain.exceptions import AccountLockedException, InvalidCredentialsException
 from modules.foundation.models.security import SecUser
@@ -29,18 +29,12 @@ class AuthService:
     def login(
         self,
         *,
-        tenant_id: UUID,
         email: str,
         password: str,
         ip_address: str | None = None,
         user_agent: str | None = None,
     ) -> dict:
-        if ip_address:
-            attempts = self._store.increment_login_attempts(ip_address)
-            if attempts > settings.login_rate_limit:
-                raise TooManyRequestsException("Too many login attempts")
-
-        user = self._users.get_by_email(tenant_id, email)
+        user = self._users.get_active_by_email(email)
         if user is None or not PasswordHasher.verify_password(password, user.password_hash):
             if user is not None:
                 self._users.record_failed_login(user)
@@ -68,7 +62,6 @@ class AuthService:
     def verify_mfa(
         self,
         *,
-        tenant_id: UUID,
         email: str,
         otp: str,
         ip_address: str | None = None,
@@ -76,7 +69,7 @@ class AuthService:
     ) -> dict:
         import pyotp
 
-        user = self._users.get_by_email(tenant_id, email)
+        user = self._users.get_active_by_email(email)
         if user is None or not user.mfa_enabled or not user.mfa_secret_encrypted:
             raise InvalidCredentialsException()
         totp = pyotp.TOTP(user.mfa_secret_encrypted)

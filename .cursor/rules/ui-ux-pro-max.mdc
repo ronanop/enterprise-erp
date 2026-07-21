@@ -1,0 +1,47 @@
+---
+description: Mandatory UI/UX Pro Max skill for all frontend design and UI work
+globs: apps/web/**/*.{tsx,ts,css}
+alwaysApply: true
+---
+
+# Frontend Design — UI/UX Pro Max (Mandatory)
+
+All frontend UI/UX work for this ERP **must** use the **ui-ux-pro-max** skill. Do not invent ad-hoc visual systems.
+
+## Before Any UI Change
+
+1. **Read the skill:** `.cursor/skills/ui-ux-pro-max/SKILL.md`
+2. **Read the design system:**
+   - `design-system/enterprise-erp-platform/MASTER.md`
+   - If building a named page, also check `design-system/enterprise-erp-platform/pages/[page].md` (overrides MASTER)
+3. **Run design searches when needed** (Windows: use `python`, not `python3`):
+
+```bash
+python .cursor/skills/ui-ux-pro-max/scripts/search.py "<query>" --design-system -p "Enterprise ERP Platform"
+python .cursor/skills/ui-ux-pro-max/scripts/search.py "<query>" --stack nextjs
+python .cursor/skills/ui-ux-pro-max/scripts/search.py "<query>" --domain ux
+```
+
+## Locked Product Direction
+
+- **Product:** Enterprise ERP / B2B SaaS admin
+- **Style:** Data-Dense Dashboard + Swiss Minimalism
+- **Stack:** Next.js + TypeScript + Tailwind + ShadCN UI
+- **Density:** High (dashboard). **Motion:** Subtle. **Variance:** Low/centered
+- **Icons:** Lucide / Heroicons SVG only — never emoji icons
+
+## Persist New Page Systems
+
+When introducing a major new page pattern, persist an override:
+
+```bash
+python .cursor/skills/ui-ux-pro-max/scripts/search.py "<query>" --design-system --persist -p "Enterprise ERP Platform" --page "<page-name>"
+```
+
+## Pre-Delivery (Required)
+
+- [ ] Follows MASTER / page override tokens (colors, type, spacing)
+- [ ] `cursor-pointer` on clickable elements; 150–300ms hover transitions
+- [ ] Focus states visible; contrast ≥ 4.5:1; `prefers-reduced-motion` respected
+- [ ] No AI purple/pink gradients; no dark-mode-by-default
+- [ ] Responsive checks: 375 / 768 / 1024 / 1440

@@ -1,11 +1,13 @@
 """CRM module dependencies."""
 
+from collections.abc import Generator
 from dataclasses import dataclass
 from typing import Annotated
 
 from fastapi import Query
+from sqlalchemy.orm import Session
 
-from database.session import get_db
+from database.session import SessionLocal
 from modules.foundation.dependencies import get_tenant_context, require_permission
 from modules.foundation.domain.value_objects import TenantContext
 
@@ -19,6 +21,25 @@ __all__ = [
     "paginate",
     "extract_update_fields",
 ]
+
+
+def get_db() -> Generator[Session]:
+    """CRM request-scoped unit of work.
+
+    CRM services intentionally flush so multi-step blueprint operations remain
+    atomic. Commit once after a successful request and roll back every failed
+    request; otherwise flushed companies, leads, approvals, and lines disappear
+    when the shared SQLAlchemy session closes.
+    """
+    db = SessionLocal()
+    try:
+        yield db
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+    finally:
+        db.close()
 
 
 @dataclass(frozen=True)

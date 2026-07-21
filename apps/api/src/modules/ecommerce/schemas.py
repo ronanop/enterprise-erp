@@ -1,5 +1,7 @@
 """E-Commerce Pydantic schemas."""
 
+from decimal import Decimal
+from datetime import date, datetime
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict
@@ -19,8 +21,19 @@ class StoreUpdate(BaseModel):
 
 class StoreResponse(OrmModel):
     id: UUID
-    company_id: UUID
+    branch_id: UUID | None
+    store_number: str
+    store_code: str
+    store_name: str
+    store_type: str
+    default_currency: str
+    timezone: str | None
+    owner_employee_id: UUID
+    department_id: UUID | None
     status: str
+    workflow_status: str | None
+    workflow_instance_id: UUID | None
+    company_id: UUID
     version: int
 
 class SalesChannelCreate(BaseModel):
@@ -33,8 +46,17 @@ class SalesChannelUpdate(BaseModel):
 
 class SalesChannelResponse(OrmModel):
     id: UUID
-    company_id: UUID
+    branch_id: UUID | None
+    channel_number: str
+    channel_code: str
+    channel_name: str
+    store_id: UUID
+    channel_type: str
+    external_channel_ref: str | None
+    is_active: bool
+    config_json: dict | None
     status: str
+    company_id: UUID
     version: int
 
 class ProductListingCreate(BaseModel):
@@ -47,8 +69,21 @@ class ProductListingUpdate(BaseModel):
 
 class ProductListingResponse(OrmModel):
     id: UUID
-    company_id: UUID
+    branch_id: UUID | None
+    listing_number: str
+    sales_channel_id: UUID
+    product_id: UUID
+    external_sku: str | None
+    external_listing_id: str | None
+    title: str
+    description: str | None
+    attributes_json: dict | None
+    published_by_employee_id: UUID | None
+    published_at: datetime | None
     status: str
+    workflow_status: str | None
+    workflow_instance_id: UUID | None
+    company_id: UUID
     version: int
 
 class ListingPriceCreate(BaseModel):
@@ -61,8 +96,17 @@ class ListingPriceUpdate(BaseModel):
 
 class ListingPriceResponse(OrmModel):
     id: UUID
-    company_id: UUID
+    branch_id: UUID | None
+    product_listing_id: UUID
+    price_type: str
+    currency: str
+    list_price: Decimal
+    sale_price: Decimal | None
+    effective_from: datetime | None
+    effective_to: datetime | None
+    promotion_id: UUID | None
     status: str
+    company_id: UUID
     version: int
 
 class ListingInventoryCreate(BaseModel):
@@ -75,8 +119,17 @@ class ListingInventoryUpdate(BaseModel):
 
 class ListingInventoryResponse(OrmModel):
     id: UUID
-    company_id: UUID
+    branch_id: UUID | None
+    product_listing_id: UUID
+    warehouse_id: UUID | None
+    available_qty: Decimal
+    reserved_qty: Decimal
+    safety_stock_qty: Decimal
+    last_synced_at: datetime | None
+    inventory_item_ref_id: UUID | None
+    sync_status: str
     status: str
+    company_id: UUID
     version: int
 
 class CustomerCartCreate(BaseModel):
@@ -89,8 +142,16 @@ class CustomerCartUpdate(BaseModel):
 
 class CustomerCartResponse(OrmModel):
     id: UUID
-    company_id: UUID
+    branch_id: UUID | None
+    cart_number: str
+    sales_channel_id: UUID
+    customer_id: UUID
+    currency: str
+    coupon_id: UUID | None
+    expires_at: datetime | None
+    converted_order_id: UUID | None
     status: str
+    company_id: UUID
     version: int
 
 class CartItemCreate(BaseModel):
@@ -103,8 +164,15 @@ class CartItemUpdate(BaseModel):
 
 class CartItemResponse(OrmModel):
     id: UUID
-    company_id: UUID
+    branch_id: UUID | None
+    cart_id: UUID
+    product_listing_id: UUID
+    product_id: UUID
+    quantity: Decimal
+    unit_price: Decimal
+    line_amount: Decimal
     status: str
+    company_id: UUID
     version: int
 
 class OrderCreate(BaseModel):
@@ -117,8 +185,28 @@ class OrderUpdate(BaseModel):
 
 class OrderResponse(OrmModel):
     id: UUID
-    company_id: UUID
+    branch_id: UUID | None
+    order_number: str
+    sales_channel_id: UUID
+    store_id: UUID
+    customer_id: UUID
+    cart_id: UUID | None
+    coupon_id: UUID | None
+    external_order_ref: str | None
+    currency: str
+    subtotal_amount: Decimal
+    discount_amount: Decimal
+    tax_amount: Decimal
+    shipping_amount: Decimal
+    grand_total: Decimal
+    shipping_address_json: dict | None
+    billing_address_json: dict | None
+    sales_order_id: UUID | None
+    placed_at: datetime | None
     status: str
+    workflow_status: str | None
+    workflow_instance_id: UUID | None
+    company_id: UUID
     version: int
 
 class OrderItemCreate(BaseModel):
@@ -131,8 +219,20 @@ class OrderItemUpdate(BaseModel):
 
 class OrderItemResponse(OrmModel):
     id: UUID
-    company_id: UUID
+    branch_id: UUID | None
+    order_id: UUID
+    line_no: int
+    product_listing_id: UUID
+    product_id: UUID
+    external_line_ref: str | None
+    quantity: Decimal
+    unit_price: Decimal
+    discount_amount: Decimal
+    tax_amount: Decimal
+    line_total: Decimal
+    sales_order_line_id: UUID | None
     status: str
+    company_id: UUID
     version: int
 
 class PaymentCreate(BaseModel):
@@ -145,8 +245,18 @@ class PaymentUpdate(BaseModel):
 
 class PaymentResponse(OrmModel):
     id: UUID
-    company_id: UUID
+    branch_id: UUID | None
+    payment_number: str
+    order_id: UUID
+    payment_method: str
+    currency: str
+    amount: Decimal
+    gateway_code: str | None
+    gateway_payment_ref: str | None
+    captured_at: datetime | None
+    finance_journal_id: UUID | None
     status: str
+    company_id: UUID
     version: int
 
 class PaymentTransactionCreate(BaseModel):
@@ -159,8 +269,16 @@ class PaymentTransactionUpdate(BaseModel):
 
 class PaymentTransactionResponse(OrmModel):
     id: UUID
-    company_id: UUID
+    branch_id: UUID | None
+    payment_id: UUID
+    transaction_type: str
+    amount: Decimal
+    gateway_txn_ref: str | None
+    occurred_at: datetime | None
+    raw_payload_json: dict | None
+    finance_journal_id: UUID | None
     status: str
+    company_id: UUID
     version: int
 
 class ShipmentCreate(BaseModel):
@@ -173,8 +291,17 @@ class ShipmentUpdate(BaseModel):
 
 class ShipmentResponse(OrmModel):
     id: UUID
-    company_id: UUID
+    branch_id: UUID | None
+    shipment_number: str
+    order_id: UUID
+    carrier_code: str
+    tracking_number: str | None
+    shipped_at: datetime | None
+    delivered_at: datetime | None
+    shipping_label_uri: str | None
+    sales_delivery_id: UUID | None
     status: str
+    company_id: UUID
     version: int
 
 class ShippingTrackingCreate(BaseModel):
@@ -187,8 +314,15 @@ class ShippingTrackingUpdate(BaseModel):
 
 class ShippingTrackingResponse(OrmModel):
     id: UUID
-    company_id: UUID
+    branch_id: UUID | None
+    shipment_id: UUID
+    tracked_at: datetime | None
+    tracking_status: str
+    location_text: str | None
+    carrier_event_code: str | None
+    payload_json: dict | None
     status: str
+    company_id: UUID
     version: int
 
 class ReturnRequestCreate(BaseModel):
@@ -201,8 +335,18 @@ class ReturnRequestUpdate(BaseModel):
 
 class ReturnRequestResponse(OrmModel):
     id: UUID
-    company_id: UUID
+    branch_id: UUID | None
+    return_number: str
+    order_id: UUID
+    customer_id: UUID
+    reason_code: str
+    requested_at: datetime | None
+    refund_payment_id: UUID | None
+    sales_return_id: UUID | None
     status: str
+    workflow_status: str | None
+    workflow_instance_id: UUID | None
+    company_id: UUID
     version: int
 
 class ReturnItemCreate(BaseModel):
@@ -215,8 +359,15 @@ class ReturnItemUpdate(BaseModel):
 
 class ReturnItemResponse(OrmModel):
     id: UUID
-    company_id: UUID
+    branch_id: UUID | None
+    return_request_id: UUID
+    order_item_id: UUID
+    product_id: UUID
+    quantity: Decimal
+    condition_code: str
+    refund_amount: Decimal
     status: str
+    company_id: UUID
     version: int
 
 class CouponCreate(BaseModel):
@@ -229,8 +380,18 @@ class CouponUpdate(BaseModel):
 
 class CouponResponse(OrmModel):
     id: UUID
-    company_id: UUID
+    branch_id: UUID | None
+    coupon_number: str
+    store_id: UUID
+    coupon_code: str
+    discount_type: str
+    discount_value: Decimal
+    max_redemptions: int | None
+    redeemed_count: int
+    valid_from: datetime | None
+    valid_to: datetime | None
     status: str
+    company_id: UUID
     version: int
 
 class PromotionCreate(BaseModel):
@@ -243,8 +404,18 @@ class PromotionUpdate(BaseModel):
 
 class PromotionResponse(OrmModel):
     id: UUID
-    company_id: UUID
+    branch_id: UUID | None
+    promotion_number: str
+    store_id: UUID
+    promotion_code: str
+    promotion_name: str
+    promotion_type: str
+    channel_scope_json: dict | None
+    rules_json: dict | None
+    valid_from: datetime | None
+    valid_to: datetime | None
     status: str
+    company_id: UUID
     version: int
 
 class MarketplaceConnectorCreate(BaseModel):
@@ -257,8 +428,19 @@ class MarketplaceConnectorUpdate(BaseModel):
 
 class MarketplaceConnectorResponse(OrmModel):
     id: UUID
-    company_id: UUID
+    branch_id: UUID | None
+    connector_binding_number: str
+    sales_channel_id: UUID
+    marketplace_code: str
+    int_external_system_id: UUID | None
+    int_connector_id: UUID | None
+    vendor_id: UUID | None
+    sync_mode: str
+    last_sync_at: datetime | None
     status: str
+    workflow_status: str | None
+    workflow_instance_id: UUID | None
+    company_id: UUID
     version: int
 
 class NotificationCreate(BaseModel):
@@ -271,8 +453,15 @@ class NotificationUpdate(BaseModel):
 
 class NotificationResponse(OrmModel):
     id: UUID
-    company_id: UUID
+    document_id: UUID | None
+    notification_type: str
+    recipient_user_id: UUID | None
+    recipient_employee_id: UUID | None
+    payload_json: dict | None
+    sent_at: datetime | None
+    delivery_status: str
     status: str
+    company_id: UUID
     version: int
 
 class ReportCreate(BaseModel):
@@ -285,6 +474,14 @@ class ReportUpdate(BaseModel):
 
 class ReportResponse(OrmModel):
     id: UUID
-    company_id: UUID
+    report_code: str
+    report_type: str
+    period_start: date | None
+    period_end: date | None
+    department_id: UUID | None
+    folder_id: UUID | None
+    metrics_json: dict | None
+    generated_at: datetime | None
     status: str
+    company_id: UUID
     version: int

@@ -47,6 +47,34 @@ CRM_PERMISSIONS: list[tuple[str, str, str, str]] = [
     ("crm.satisfaction:publish", "crm.satisfaction", "publish", "crm"),
     ("crm.report:read", "crm.report", "read", "crm"),
     ("crm.report:export", "crm.report", "export", "crm"),
+    # --- Sales CRM (Zoho-replacement) additions ---
+    ("crm.lead:close", "crm.lead", "close", "crm"),
+    ("crm.company:read", "crm.company", "read", "crm"),
+    ("crm.company:create", "crm.company", "create", "crm"),
+    ("crm.company:update", "crm.company", "update", "crm"),
+    ("crm.contact:read", "crm.contact", "read", "crm"),
+    ("crm.contact:create", "crm.contact", "create", "crm"),
+    ("crm.contact:update", "crm.contact", "update", "crm"),
+    ("crm.product:read", "crm.product", "read", "crm"),
+    ("crm.product:create", "crm.product", "create", "crm"),
+    ("crm.product:update", "crm.product", "update", "crm"),
+    ("crm.quote:read", "crm.quote", "read", "crm"),
+    ("crm.quote:create", "crm.quote", "create", "crm"),
+    ("crm.quote:update", "crm.quote", "update", "crm"),
+    ("crm.quote:send_approval", "crm.quote", "send_approval", "crm"),
+    ("crm.quote:approve", "crm.quote", "approve", "crm"),
+    ("crm.ovf:read", "crm.ovf", "read", "crm"),
+    ("crm.ovf:create", "crm.ovf", "create", "crm"),
+    ("crm.ovf:update", "crm.ovf", "update", "crm"),
+    ("crm.ovf:approve", "crm.ovf", "approve", "crm"),
+    ("crm.ovf:share_scm", "crm.ovf", "share_scm", "crm"),
+    ("crm.ovf:deal_won", "crm.ovf", "deal_won", "crm"),
+    ("crm.my_jobs:read", "crm.my_jobs", "read", "crm"),
+    ("crm.my_jobs:decide", "crm.my_jobs", "decide", "crm"),
+    ("crm.attachment:read", "crm.attachment", "read", "crm"),
+    ("crm.attachment:create", "crm.attachment", "create", "crm"),
+    ("crm.blueprint:read", "crm.blueprint", "read", "crm"),
+    ("crm.blueprint:act", "crm.blueprint", "act", "crm"),
 ]
 
 CRM_SALES_REP_PERMISSIONS = [
@@ -84,6 +112,28 @@ CRM_SALES_REP_PERMISSIONS = [
     "crm.feedback:create",
     "crm.satisfaction:read",
     "crm.report:read",
+    "crm.lead:close",
+    "crm.company:read",
+    "crm.company:create",
+    "crm.company:update",
+    "crm.contact:read",
+    "crm.contact:create",
+    "crm.contact:update",
+    "crm.product:read",
+    "crm.quote:read",
+    "crm.quote:create",
+    "crm.quote:update",
+    "crm.quote:send_approval",
+    "crm.ovf:read",
+    "crm.ovf:create",
+    "crm.ovf:update",
+    "crm.ovf:share_scm",
+    "crm.ovf:deal_won",
+    "crm.my_jobs:read",
+    "crm.attachment:read",
+    "crm.attachment:create",
+    "crm.blueprint:read",
+    "crm.blueprint:act",
 ]
 
 CRM_SALES_MANAGER_PERMISSIONS = list(
@@ -102,8 +152,36 @@ CRM_SALES_MANAGER_PERMISSIONS = list(
             "crm.satisfaction:create",
             "crm.satisfaction:publish",
             "crm.report:export",
+            "crm.product:create",
+            "crm.product:update",
+            "crm.quote:approve",
+            "crm.ovf:approve",
+            "crm.my_jobs:decide",
         ]
     )
+)
+
+# Team roles that only need to see + decide their own "My Jobs" queue and
+# read the sales blueprint state — they do not manage leads/quotes directly.
+CRM_APPROVAL_TEAM_PERMISSIONS = [
+    "crm.my_jobs:read",
+    "crm.my_jobs:decide",
+    "crm.blueprint:read",
+    "crm.attachment:read",
+    "crm.opportunity:read",
+    "crm.quote:read",
+    "crm.ovf:read",
+    "crm.company:read",
+]
+
+CRM_PRESALES_PERMISSIONS = list(CRM_APPROVAL_TEAM_PERMISSIONS)
+CRM_PROJECT_PERMISSIONS = list(CRM_APPROVAL_TEAM_PERMISSIONS)
+CRM_MANAGEMENT_PERMISSIONS = list(
+    dict.fromkeys(CRM_APPROVAL_TEAM_PERMISSIONS + ["crm.quote:approve", "crm.ovf:approve"])
+)
+CRM_ACCOUNTS_PERMISSIONS = list(CRM_APPROVAL_TEAM_PERMISSIONS)
+CRM_SCM_PERMISSIONS = list(
+    dict.fromkeys(CRM_APPROVAL_TEAM_PERMISSIONS + ["crm.ovf:share_scm"])
 )
 
 CRM_MARKETING_PERMISSIONS = [

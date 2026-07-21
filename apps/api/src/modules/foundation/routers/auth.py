@@ -31,7 +31,6 @@ def login(
 ) -> APIResponse[TokenResponse]:
     service = AuthService(db)
     result = service.login(
-        tenant_id=body.tenant_id,
         email=body.email,
         password=body.password,
         ip_address=get_client_ip(request),
@@ -49,7 +48,6 @@ def verify_mfa(
 ) -> APIResponse[TokenResponse]:
     service = AuthService(db)
     result = service.verify_mfa(
-        tenant_id=body.tenant_id,
         email=body.email,
         otp=body.otp,
         ip_address=get_client_ip(request),

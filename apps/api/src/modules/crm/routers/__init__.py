@@ -6,10 +6,10 @@ from uuid import UUID
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
-from database.session import get_db
 from modules.crm.dependencies import (
     PaginationParams,
     extract_update_fields,
+    get_db,
     get_pagination,
     paginate,
 )
@@ -599,3 +599,18 @@ def report_summary(
     company_id: UUID | None = None,
 ):
     return APIResponse(message="OK", data=CRMReportService(db).summary(ctx, company_id))
+
+
+# ---------------------------------------------------------------------------
+# Sales CRM (Zoho-replacement) routers — defined in their own modules and
+# re-exported here so `modules.crm.router` can import everything from this
+# package the same way it does for the legacy CRM routers above.
+# ---------------------------------------------------------------------------
+from modules.crm.routers.attachments import attachments_router  # noqa: E402
+from modules.crm.routers.blueprint import blueprint_router  # noqa: E402
+from modules.crm.routers.companies import companies_router  # noqa: E402
+from modules.crm.routers.contacts import contacts_router  # noqa: E402
+from modules.crm.routers.my_jobs import my_jobs_router  # noqa: E402
+from modules.crm.routers.ovf import ovf_router  # noqa: E402
+from modules.crm.routers.products import products_router  # noqa: E402
+from modules.crm.routers.sales_quotes import quotes_router  # noqa: E402

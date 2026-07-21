@@ -1,5 +1,7 @@
 """Service Pydantic schemas."""
 
+from decimal import Decimal
+from datetime import date, datetime
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict
@@ -19,8 +21,14 @@ class ServiceCategoryUpdate(BaseModel):
 
 class ServiceCategoryResponse(OrmModel):
     id: UUID
-    company_id: UUID
+    branch_id: UUID | None
+    category_code: str
+    category_name: str
+    default_priority: str
+    default_sla_id: UUID | None
+    is_billable_default: bool
     status: str
+    company_id: UUID
     version: int
 
 class ServiceRequestCreate(BaseModel):
@@ -34,8 +42,32 @@ class ServiceRequestUpdate(BaseModel):
 
 class ServiceRequestResponse(OrmModel):
     id: UUID
-    company_id: UUID
+    document_number: str
+    category_id: UUID
+    customer_id: UUID
+    requested_by_employee_id: UUID | None
+    department_id: UUID | None
+    contract_id: UUID | None
+    service_type: str
+    priority: str
+    channel: str | None
+    subject: str
+    description: str | None
+    master_asset_id: UUID | None
+    asset_id: UUID | None
+    maintenance_plan_id: UUID | None
+    crm_opportunity_id: UUID | None
+    crm_customer_id: UUID | None
+    project_id: UUID | None
+    requested_at: datetime | None
+    due_at: datetime | None
+    sla_id: UUID | None
+    sla_status: str | None
     status: str
+    workflow_status: str | None
+    workflow_instance_id: UUID | None
+    company_id: UUID
+    branch_id: UUID
     version: int
 
 class ServiceTicketCreate(BaseModel):
@@ -49,8 +81,17 @@ class ServiceTicketUpdate(BaseModel):
 
 class ServiceTicketResponse(OrmModel):
     id: UUID
-    company_id: UUID
+    document_number: str
+    request_id: UUID
+    ticket_type: str
+    queue_code: str | None
+    priority: str
+    owner_employee_id: UUID | None
+    opened_at: datetime | None
+    closed_at: datetime | None
     status: str
+    company_id: UUID
+    branch_id: UUID
     version: int
 
 class ServiceAssignmentCreate(BaseModel):
@@ -64,8 +105,17 @@ class ServiceAssignmentUpdate(BaseModel):
 
 class ServiceAssignmentResponse(OrmModel):
     id: UUID
-    company_id: UUID
+    document_number: str
+    request_id: UUID | None
+    ticket_id: UUID | None
+    work_order_id: UUID | None
+    technician_employee_id: UUID
+    role_on_job: str
+    assigned_at: datetime | None
+    unassigned_at: datetime | None
     status: str
+    company_id: UUID
+    branch_id: UUID
     version: int
 
 class ServiceScheduleCreate(BaseModel):
@@ -79,8 +129,17 @@ class ServiceScheduleUpdate(BaseModel):
 
 class ServiceScheduleResponse(OrmModel):
     id: UUID
-    company_id: UUID
+    document_number: str
+    work_order_id: UUID
+    technician_employee_id: UUID
+    planned_start: datetime
+    planned_end: datetime
+    actual_start: datetime | None
+    actual_end: datetime | None
+    timezone: str | None
     status: str
+    company_id: UUID
+    branch_id: UUID
     version: int
 
 class WorkOrderCreate(BaseModel):
@@ -94,8 +153,28 @@ class WorkOrderUpdate(BaseModel):
 
 class WorkOrderResponse(OrmModel):
     id: UUID
-    company_id: UUID
+    document_number: str
+    request_id: UUID
+    ticket_id: UUID | None
+    work_order_type: str
+    primary_technician_id: UUID | None
+    scheduled_date: date | None
+    completed_date: date | None
+    asset_id: UUID | None
+    maintenance_plan_id: UUID | None
+    inventory_issue_id: UUID | None
+    inventory_receipt_id: UUID | None
+    purchase_order_id: UUID | None
+    project_id: UUID | None
+    production_order_id: UUID | None
+    quality_inspection_id: UUID | None
+    estimated_hours: Decimal | None
+    actual_hours: Decimal | None
     status: str
+    workflow_status: str | None
+    workflow_instance_id: UUID | None
+    company_id: UUID
+    branch_id: UUID
     version: int
 
 class ServiceTaskCreate(BaseModel):
@@ -108,8 +187,16 @@ class ServiceTaskUpdate(BaseModel):
 
 class ServiceTaskResponse(OrmModel):
     id: UUID
-    company_id: UUID
+    branch_id: UUID | None
+    work_order_id: UUID
+    task_code: str
+    task_name: str
+    sequence_no: int
+    assignee_employee_id: UUID | None
+    planned_hours: Decimal | None
+    actual_hours: Decimal | None
     status: str
+    company_id: UUID
     version: int
 
 class ServiceChecklistCreate(BaseModel):
@@ -122,8 +209,17 @@ class ServiceChecklistUpdate(BaseModel):
 
 class ServiceChecklistResponse(OrmModel):
     id: UUID
-    company_id: UUID
+    branch_id: UUID | None
+    work_order_id: UUID | None
+    visit_id: UUID | None
+    task_id: UUID | None
+    checklist_code: str
+    checklist_name: str
+    items_json: dict | None
+    completed_at: datetime | None
+    completed_by_employee_id: UUID | None
     status: str
+    company_id: UUID
     version: int
 
 class ServiceVisitCreate(BaseModel):
@@ -137,8 +233,18 @@ class ServiceVisitUpdate(BaseModel):
 
 class ServiceVisitResponse(OrmModel):
     id: UUID
-    company_id: UUID
+    document_number: str
+    work_order_id: UUID
+    technician_employee_id: UUID
+    visit_started_at: datetime | None
+    visit_ended_at: datetime | None
+    site_address: str | None
+    geo_lat: Decimal | None
+    geo_lng: Decimal | None
+    customer_signoff_name: str | None
     status: str
+    company_id: UUID
+    branch_id: UUID
     version: int
 
 class ServiceMaterialCreate(BaseModel):
@@ -151,8 +257,15 @@ class ServiceMaterialUpdate(BaseModel):
 
 class ServiceMaterialResponse(OrmModel):
     id: UUID
-    company_id: UUID
+    branch_id: UUID | None
+    work_order_id: UUID
+    product_id: UUID
+    quantity: Decimal
+    unit_cost: Decimal | None
+    line_amount: Decimal | None
+    inventory_issue_id: UUID | None
     status: str
+    company_id: UUID
     version: int
 
 class ServiceTimeEntryCreate(BaseModel):
@@ -165,8 +278,18 @@ class ServiceTimeEntryUpdate(BaseModel):
 
 class ServiceTimeEntryResponse(OrmModel):
     id: UUID
-    company_id: UUID
+    branch_id: UUID | None
+    work_order_id: UUID
+    task_id: UUID | None
+    visit_id: UUID | None
+    employee_id: UUID
+    entry_date: date
+    hours: Decimal
+    is_billable: bool
+    labor_rate: Decimal | None
+    amount: Decimal | None
     status: str
+    company_id: UUID
     version: int
 
 class ServiceExpenseCreate(BaseModel):
@@ -180,8 +303,19 @@ class ServiceExpenseUpdate(BaseModel):
 
 class ServiceExpenseResponse(OrmModel):
     id: UUID
-    company_id: UUID
+    document_number: str
+    work_order_id: UUID | None
+    request_id: UUID | None
+    expense_type: str
+    amount: Decimal
+    currency_code: str
+    incurred_on: date
+    employee_id: UUID | None
+    is_billable: bool
+    finance_journal_id: UUID | None
     status: str
+    company_id: UUID
+    branch_id: UUID
     version: int
 
 class ServiceSlaCreate(BaseModel):
@@ -194,8 +328,16 @@ class ServiceSlaUpdate(BaseModel):
 
 class ServiceSlaResponse(OrmModel):
     id: UUID
-    company_id: UUID
+    branch_id: UUID | None
+    sla_code: str
+    sla_name: str
+    contract_id: UUID | None
+    priority: str
+    response_minutes: int
+    resolution_minutes: int
+    business_hours_only: bool
     status: str
+    company_id: UUID
     version: int
 
 class ServiceEscalationCreate(BaseModel):
@@ -209,8 +351,20 @@ class ServiceEscalationUpdate(BaseModel):
 
 class ServiceEscalationResponse(OrmModel):
     id: UUID
-    company_id: UUID
+    document_number: str
+    request_id: UUID | None
+    ticket_id: UUID | None
+    work_order_id: UUID | None
+    sla_id: UUID | None
+    escalation_level: int
+    reason_code: str
+    escalated_to_employee_id: UUID
+    escalated_at: datetime | None
     status: str
+    workflow_status: str | None
+    workflow_instance_id: UUID | None
+    company_id: UUID
+    branch_id: UUID
     version: int
 
 class ServiceFeedbackCreate(BaseModel):
@@ -223,8 +377,16 @@ class ServiceFeedbackUpdate(BaseModel):
 
 class ServiceFeedbackResponse(OrmModel):
     id: UUID
-    company_id: UUID
+    branch_id: UUID | None
+    request_id: UUID
+    work_order_id: UUID | None
+    customer_id: UUID
+    rating: int
+    comments: str | None
+    captured_at: datetime | None
+    channel: str | None
     status: str
+    company_id: UUID
     version: int
 
 class ServiceResolutionCreate(BaseModel):
@@ -238,8 +400,20 @@ class ServiceResolutionUpdate(BaseModel):
 
 class ServiceResolutionResponse(OrmModel):
     id: UUID
-    company_id: UUID
+    document_number: str
+    request_id: UUID
+    work_order_id: UUID | None
+    ticket_id: UUID | None
+    resolution_code: str
+    resolution_summary: str | None
+    resolved_by_employee_id: UUID
+    resolved_at: datetime | None
+    first_time_fix: bool
     status: str
+    workflow_status: str | None
+    workflow_instance_id: UUID | None
+    company_id: UUID
+    branch_id: UUID
     version: int
 
 class ServiceDocumentCreate(BaseModel):
@@ -252,8 +426,17 @@ class ServiceDocumentUpdate(BaseModel):
 
 class ServiceDocumentResponse(OrmModel):
     id: UUID
-    company_id: UUID
+    branch_id: UUID | None
+    request_id: UUID | None
+    work_order_id: UUID | None
+    contract_id: UUID | None
+    visit_id: UUID | None
+    document_type: str
+    document_name: str
+    storage_uri: str | None
+    content_hash: str | None
     status: str
+    company_id: UUID
     version: int
 
 class ServiceNotificationCreate(BaseModel):
@@ -266,8 +449,19 @@ class ServiceNotificationUpdate(BaseModel):
 
 class ServiceNotificationResponse(OrmModel):
     id: UUID
-    company_id: UUID
+    branch_id: UUID | None
+    request_id: UUID | None
+    work_order_id: UUID | None
+    contract_id: UUID | None
+    notification_type: str
+    recipient_user_id: UUID | None
+    recipient_employee_id: UUID | None
+    recipient_customer_id: UUID | None
+    payload_json: dict | None
+    sent_at: datetime | None
+    delivery_status: str
     status: str
+    company_id: UUID
     version: int
 
 class ServiceContractCreate(BaseModel):
@@ -281,8 +475,20 @@ class ServiceContractUpdate(BaseModel):
 
 class ServiceContractResponse(OrmModel):
     id: UUID
-    company_id: UUID
+    document_number: str
+    customer_id: UUID
+    contract_type: str
+    start_date: date
+    end_date: date
+    coverage_notes: str | None
+    default_sla_id: UUID | None
+    department_id: UUID | None
+    crm_opportunity_id: UUID | None
     status: str
+    workflow_status: str | None
+    workflow_instance_id: UUID | None
+    company_id: UUID
+    branch_id: UUID
     version: int
 
 class ServiceReportCreate(BaseModel):
@@ -295,8 +501,18 @@ class ServiceReportUpdate(BaseModel):
 
 class ServiceReportResponse(OrmModel):
     id: UUID
-    company_id: UUID
+    branch_id: UUID | None
+    report_code: str
+    report_type: str
+    period_start: date
+    period_end: date
+    customer_id: UUID | None
+    department_id: UUID | None
+    category_id: UUID | None
+    metrics_json: dict | None
+    generated_at: datetime | None
     status: str
+    company_id: UUID
     version: int
 
 class FinancePostRequest(BaseModel):

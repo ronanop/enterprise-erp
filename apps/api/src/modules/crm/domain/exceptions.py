@@ -61,3 +61,18 @@ class InvalidCampaignMemberState(ConflictException):
 class CrmConversionError(ConflictException):
     def __init__(self, message: str = "CRM conversion failed") -> None:
         super().__init__(message)
+
+
+class InvalidBlueprintState(ConflictException):
+    def __init__(self, message: str = "Invalid sales blueprint transition") -> None:
+        super().__init__(message)
+
+
+class RecordLocked(ConflictException):
+    def __init__(self, message: str = "Record is locked pending approval") -> None:
+        super().__init__(message)
+
+
+class MarginBelowThreshold(ConflictException):
+    def __init__(self, message: str = "Margin is at or below the required threshold") -> None:
+        super().__init__(message)

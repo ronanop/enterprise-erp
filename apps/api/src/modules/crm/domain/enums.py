@@ -144,6 +144,11 @@ class CrmEntityType(str, Enum):
     MEETING = "meeting"
     INTERACTION = "interaction"
     FEEDBACK = "feedback"
+    COMPANY = "company"
+    QUOTE = "quote"
+    OVF = "ovf"
+    PRODUCT = "product"
+    APPROVAL_TASK = "approval_task"
 
 
 CODE_PREFIXES: dict[CrmEntityType, tuple[str, int]] = {
@@ -156,6 +161,15 @@ CODE_PREFIXES: dict[CrmEntityType, tuple[str, int]] = {
     CrmEntityType.MEETING: ("MTG-", 6),
     CrmEntityType.INTERACTION: ("INT-", 6),
     CrmEntityType.FEEDBACK: ("FBK-", 6),
+    CrmEntityType.COMPANY: ("ACC-", 6),
+    CrmEntityType.QUOTE: ("QTE-", 6),
+    CrmEntityType.OVF: ("OVF-", 6),
+    CrmEntityType.PRODUCT: ("PRD-", 6),
+    CrmEntityType.APPROVAL_TASK: ("JOB-", 6),
 }
+
+# Team roles that can receive a "My Jobs" approval task.
+APPROVAL_TEAM_ROLES = ("presales", "project", "management", "accounts", "scm")
+APPROVAL_TASK_STATUSES = ("pending", "approved", "rejected", "cancelled")
 
 SOURCE_MODULE = "crm"

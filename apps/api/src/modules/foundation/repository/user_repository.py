@@ -36,6 +36,14 @@ class UserRepository(TenantScopedRepository):
         )
         return self.db.scalar(stmt)
 
+    def get_active_by_email(self, email: str) -> SecUser | None:
+        """Resolve a user by email for login (emails are unique per organization)."""
+        stmt = select(SecUser).where(
+            SecUser.email == email.lower(),
+            SecUser.is_deleted.is_(False),
+        )
+        return self.db.scalars(stmt).first()
+
     def list_users(self, tenant_id: UUID) -> list[UserEntity]:
         stmt = (
             select(SecUser)

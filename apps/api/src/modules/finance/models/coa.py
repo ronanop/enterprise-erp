@@ -8,6 +8,7 @@ from sqlalchemy import (
     ForeignKey,
     SmallInteger,
     String,
+    Text,
     UniqueConstraint,
 )
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
@@ -95,6 +96,10 @@ class FinChartOfAccount(Base, *FinanceMasterMixin):
     )
     normal_balance: Mapped[str] = mapped_column(String(10), nullable=False)
     currency_code: Mapped[str | None] = mapped_column(String(3), nullable=True)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    is_tax_applicable: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="false"
+    )
     status: Mapped[str] = mapped_column(String(30), nullable=False, default="draft", index=True)
 
     account_group: Mapped[FinAccountGroup] = relationship(foreign_keys=[account_group_id])

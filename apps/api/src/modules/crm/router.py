@@ -3,9 +3,13 @@
 from fastapi import APIRouter
 
 from modules.crm.routers import (
+    attachments_router,
+    blueprint_router,
     call_logs_router,
     campaign_members_router,
     campaigns_router,
+    companies_router,
+    contacts_router,
     email_logs_router,
     feedback_router,
     followups_router,
@@ -15,9 +19,13 @@ from modules.crm.routers import (
     lead_sources_router,
     leads_router,
     meetings_router,
+    my_jobs_router,
     opportunities_router,
     opportunity_stages_router,
+    ovf_router,
     pipelines_router,
+    products_router,
+    quotes_router,
     reports_router,
     satisfaction_router,
     tasks_router,
@@ -44,3 +52,13 @@ crm_router.include_router(visit_logs_router)
 crm_router.include_router(feedback_router)
 crm_router.include_router(satisfaction_router)
 crm_router.include_router(reports_router)
+
+# --- Sales CRM (Zoho-replacement) additions ---
+crm_router.include_router(companies_router)
+crm_router.include_router(contacts_router)
+crm_router.include_router(products_router)
+crm_router.include_router(quotes_router)
+crm_router.include_router(ovf_router)
+crm_router.include_router(my_jobs_router)
+crm_router.include_router(attachments_router)
+crm_router.include_router(blueprint_router)

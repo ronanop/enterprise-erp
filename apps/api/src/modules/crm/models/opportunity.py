@@ -5,6 +5,7 @@ from decimal import Decimal
 from uuid import UUID, uuid4
 
 from sqlalchemy import (
+    Boolean,
     CheckConstraint,
     Date,
     DateTime,
@@ -88,3 +89,43 @@ class CrmOpportunity(Base, *CrmTransactionMixin):
     lost_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     lost_reason: Mapped[str | None] = mapped_column(String(255), nullable=True)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    # --- Sales-process (Zoho-replacement) extensions. Nullable / defaulted so
+    # legacy opportunities created via the old CRM POST /opportunities flow
+    # are unaffected. Only opportunities created via lead-convert receive a
+    # non-null blueprint_state and therefore support blueprint actions. ---
+    company_account_id: Mapped[UUID | None] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("crm.crm_company.id", ondelete="RESTRICT"),
+        nullable=True,
+        index=True,
+    )
+    blueprint_state: Mapped[str | None] = mapped_column(String(30), nullable=True, index=True)
+    locked: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
+
+    boq_attached: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
+    boq_approved: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
+    sow_attached: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
+    sow_approved: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
+    sow_skipped: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
+
+    deal_reg_number: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    oem_quotation_received: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="false"
+    )
+    oem_quote_attached: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="false"
+    )
+
+    customer_po_attached: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="false"
+    )
+    customer_po_approved: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="false"
+    )
+    deal_won_amount: Mapped[Decimal | None] = mapped_column(Numeric(18, 4), nullable=True)
+
+    project_title: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    has_hardware: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
+    has_software: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
+    has_services: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")

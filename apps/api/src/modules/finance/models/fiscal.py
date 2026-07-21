@@ -38,6 +38,8 @@ class FinFiscalYear(Base, *FinanceMasterMixin):
     start_date: Mapped[date] = mapped_column(Date, nullable=False)
     end_date: Mapped[date] = mapped_column(Date, nullable=False)
     status: Mapped[str] = mapped_column(String(30), nullable=False, default="open", index=True)
+    description: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    is_default: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
     closed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     closed_by: Mapped[UUID | None] = mapped_column(
         PG_UUID(as_uuid=True),

@@ -43,12 +43,17 @@ class BomUpdateRequest(BaseModel):
 
 class BomLineResponse(OrmModel):
     id: UUID
+    branch_id: UUID | None
+    bom_id: UUID
     line_number: int
     component_product_id: UUID
     quantity: Decimal
     uom_id: UUID
     scrap_percent: Decimal
+    alternate_product_id: UUID | None
+    is_optional: bool
     status: str
+    company_id: UUID
 
 
 class BomResponse(OrmModel):
@@ -92,6 +97,8 @@ class RoutingUpdateRequest(BaseModel):
 
 class RoutingOpResponse(OrmModel):
     id: UUID
+    branch_id: UUID | None
+    routing_id: UUID
     operation_seq: int
     operation_code: str
     operation_name: str | None
@@ -99,16 +106,19 @@ class RoutingOpResponse(OrmModel):
     setup_time_minutes: Decimal
     run_time_minutes: Decimal
     status: str
+    company_id: UUID
 
 
 class RoutingResponse(OrmModel):
     id: UUID
-    company_id: UUID
+    branch_id: UUID | None
     routing_code: str
     routing_name: str | None
     product_id: UUID | None
     status: str
-    operations: list[RoutingOpResponse] = Field(default_factory=list)
+    notes: str | None
+    company_id: UUID
+    version: int
 
 
 class WorkCenterCreateRequest(BaseModel):
@@ -132,11 +142,15 @@ class WorkCenterUpdateRequest(BaseModel):
 
 class WorkCenterResponse(OrmModel):
     id: UUID
-    company_id: UUID
+    branch_id: UUID | None
     work_center_code: str
     work_center_name: str | None
     work_center_type: str
+    capacity_per_shift: Decimal | None
+    shift_count: int
     status: str
+    company_id: UUID
+    version: int
 
 
 class MachineCreateRequest(BaseModel):
@@ -156,12 +170,14 @@ class MachineUpdateRequest(BaseModel):
 
 class MachineResponse(OrmModel):
     id: UUID
-    company_id: UUID
+    branch_id: UUID | None
     machine_code: str
     machine_name: str | None
     work_center_id: UUID
     status: str
     last_status_at: datetime | None
+    company_id: UUID
+    version: int
 
 
 class ProductionOrderCreateRequest(BaseModel):
@@ -187,13 +203,20 @@ class ProductionOrderUpdateRequest(BaseModel):
 
 class ProductionOperationResponse(OrmModel):
     id: UUID
+    production_order_id: UUID
     operation_seq: int
+    routing_operation_id: UUID | None
     work_center_id: UUID | None
     machine_id: UUID | None
+    operator_employee_id: UUID | None
     planned_qty: Decimal
     produced_qty: Decimal
     rejected_qty: Decimal
+    setup_time_actual: Decimal | None
+    run_time_actual: Decimal | None
     status: str
+    company_id: UUID
+    branch_id: UUID
 
 
 class ProductionOrderResponse(OrmModel):
@@ -253,11 +276,19 @@ class MaterialConfirmRequest(BaseModel):
 
 class MaterialIssueLineResponse(OrmModel):
     id: UUID
+    material_issue_id: UUID
     line_number: int
     component_product_id: UUID
     quantity: Decimal
     uom_id: UUID
+    bom_line_id: UUID | None
+    batch_reference: UUID | None
+    bin_reference: UUID | None
+    unit_cost: Decimal | None
+    inventory_event_id: UUID | None
     status: str
+    company_id: UUID
+    branch_id: UUID
 
 
 class MaterialIssueResponse(OrmModel):
@@ -267,15 +298,33 @@ class MaterialIssueResponse(OrmModel):
     production_order_id: UUID
     warehouse_id: UUID
     status: str
-    lines: list[MaterialIssueLineResponse] = Field(default_factory=list)
+    issued_at: datetime | None
+    issued_by: UUID | None
+    finance_journal_id: UUID | None
+    period_id: UUID | None
+    company_id: UUID
+    branch_id: UUID
+    version: int
 
 
 class MaterialReturnCreateRequest(MaterialIssueCreateRequest):
     pass
 
 
-class MaterialReturnResponse(MaterialIssueResponse):
-    pass
+class MaterialReturnResponse(OrmModel):
+    id: UUID
+    document_number: str
+    document_date: date
+    production_order_id: UUID
+    warehouse_id: UUID
+    status: str
+    returned_at: datetime | None = None
+    returned_by: UUID | None = None
+    finance_journal_id: UUID | None = None
+    period_id: UUID | None = None
+    company_id: UUID
+    branch_id: UUID
+    version: int
 
 
 class ReceiptLineCreate(BaseModel):
@@ -306,11 +355,18 @@ class ReceiptConfirmRequest(BaseModel):
 
 class ReceiptLineResponse(OrmModel):
     id: UUID
+    production_receipt_id: UUID
     line_number: int
     product_id: UUID
     quantity: Decimal
     uom_id: UUID
+    unit_cost: Decimal | None
+    quality_status: str | None
+    quality_reference: UUID | None
+    inventory_event_id: UUID | None
     status: str
+    company_id: UUID
+    branch_id: UUID
 
 
 class ProductionReceiptResponse(OrmModel):
@@ -320,7 +376,13 @@ class ProductionReceiptResponse(OrmModel):
     production_order_id: UUID
     warehouse_id: UUID
     status: str
-    lines: list[ReceiptLineResponse] = Field(default_factory=list)
+    received_at: datetime | None
+    received_by: UUID | None
+    finance_journal_id: UUID | None
+    period_id: UUID | None
+    company_id: UUID
+    branch_id: UUID
+    version: int
 
 
 class ScrapCreateRequest(BaseModel):
@@ -363,6 +425,11 @@ class WipResponse(OrmModel):
     overhead_cost: Decimal
     total_cost: Decimal
     status: str
+    period_id: UUID | None
+    finance_journal_id: UUID | None
+    company_id: UUID
+    branch_id: UUID
+    version: int
 
 
 class VariancePostRequest(BaseModel):
@@ -379,6 +446,11 @@ class VarianceResponse(OrmModel):
     actual_amount: Decimal
     variance_amount: Decimal
     status: str
+    period_id: UUID | None
+    finance_journal_id: UUID | None
+    company_id: UUID
+    branch_id: UUID
+    version: int
 
 
 class ReportSummaryResponse(BaseModel):

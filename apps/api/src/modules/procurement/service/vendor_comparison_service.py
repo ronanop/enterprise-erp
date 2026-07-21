@@ -35,6 +35,10 @@ class VendorComparisonService:
         self._scope.validate_company_access(ctx, row.company_id)
         return row
 
+    def list(self, ctx: TenantContext, company_id: UUID | None = None) -> list[ProcVendorComparison]:
+        cid = self._scope.resolve_company_id(ctx, company_id)
+        return self._repo.list_comparisons(ctx, cid)
+
     def run_comparison(self, ctx: TenantContext, rfq_header_id: UUID) -> ProcVendorComparison:
         rfq = self._rfqs.get_rfq(ctx, rfq_header_id)
         if rfq is None:

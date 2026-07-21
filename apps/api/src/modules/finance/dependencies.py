@@ -33,7 +33,8 @@ class PaginationParams:
 
 def get_pagination(
     page: Annotated[int, Query(ge=1)] = 1,
-    page_size: Annotated[int, Query(ge=1, le=200)] = 25,
+    # Enterprise COA tree / AR-AP allocation lookups request up to 500 rows.
+    page_size: Annotated[int, Query(ge=1, le=1000)] = 25,
 ) -> PaginationParams:
     return PaginationParams(page=page, page_size=page_size)
 

@@ -1,5 +1,6 @@
 """GRC Pydantic schemas."""
 
+from datetime import date, datetime
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict
@@ -19,8 +20,22 @@ class PolicyUpdate(BaseModel):
 
 class PolicyResponse(OrmModel):
     id: UUID
-    company_id: UUID
+    branch_id: UUID | None
+    policy_number: str
+    policy_code: str
+    policy_name: str
+    policy_type: str
+    owner_employee_id: UUID
+    department_id: UUID | None
+    current_version_no: int
+    effective_from: date | None
+    effective_to: date | None
+    review_due_at: date | None
+    document_id: UUID | None
     status: str
+    workflow_status: str | None
+    workflow_instance_id: UUID | None
+    company_id: UUID
     version: int
 
 class PolicyVersionCreate(BaseModel):
@@ -33,8 +48,17 @@ class PolicyVersionUpdate(BaseModel):
 
 class PolicyVersionResponse(OrmModel):
     id: UUID
-    company_id: UUID
+    policy_id: UUID
+    version_no: int
+    title: str
+    summary: str | None
+    change_summary: str | None
+    document_id: UUID | None
+    published_at: datetime | None
+    created_by_employee_id: UUID | None
+    is_current: bool
     status: str
+    company_id: UUID
     version: int
 
 class PolicyAcknowledgementCreate(BaseModel):
@@ -47,8 +71,13 @@ class PolicyAcknowledgementUpdate(BaseModel):
 
 class PolicyAcknowledgementResponse(OrmModel):
     id: UUID
-    company_id: UUID
+    policy_id: UUID
+    policy_version_id: UUID | None
+    employee_id: UUID
+    acknowledged_at: datetime | None
+    acknowledgement_method: str | None
     status: str
+    company_id: UUID
     version: int
 
 class ControlCreate(BaseModel):
@@ -61,8 +90,20 @@ class ControlUpdate(BaseModel):
 
 class ControlResponse(OrmModel):
     id: UUID
-    company_id: UUID
+    branch_id: UUID | None
+    control_number: str
+    control_code: str
+    control_name: str
+    control_type: str
+    description: str | None
+    owner_employee_id: UUID
+    department_id: UUID | None
+    policy_id: UUID | None
+    risk_id: UUID | None
+    frequency: str | None
+    document_id: UUID | None
     status: str
+    company_id: UUID
     version: int
 
 class ControlTestCreate(BaseModel):
@@ -76,8 +117,17 @@ class ControlTestUpdate(BaseModel):
 
 class ControlTestResponse(OrmModel):
     id: UUID
-    company_id: UUID
+    control_id: UUID
+    test_number: str
+    tested_by_employee_id: UUID
+    tested_at: datetime | None
+    test_result: str | None
+    sample_size: int | None
+    findings_summary: str | None
+    document_id: UUID | None
     status: str
+    company_id: UUID
+    branch_id: UUID
     version: int
 
 class RiskCategoryCreate(BaseModel):
@@ -90,8 +140,12 @@ class RiskCategoryUpdate(BaseModel):
 
 class RiskCategoryResponse(OrmModel):
     id: UUID
-    company_id: UUID
+    category_code: str
+    category_name: str
+    parent_category_id: UUID | None
+    description: str | None
     status: str
+    company_id: UUID
     version: int
 
 class RiskRegisterCreate(BaseModel):
@@ -105,8 +159,31 @@ class RiskRegisterUpdate(BaseModel):
 
 class RiskRegisterResponse(OrmModel):
     id: UUID
-    company_id: UUID
+    risk_number: str
+    risk_title: str
+    risk_category_id: UUID
+    owner_employee_id: UUID
+    department_id: UUID | None
+    description: str | None
+    inherent_impact: int | None
+    inherent_probability: int | None
+    inherent_score: int | None
+    residual_impact: int | None
+    residual_probability: int | None
+    residual_score: int | None
+    risk_level: str | None
+    project_id: UUID | None
+    asset_id: UUID | None
+    crm_opportunity_id: UUID | None
+    inventory_ref_id: UUID | None
+    production_order_id: UUID | None
+    document_id: UUID | None
+    next_review_at: date | None
     status: str
+    workflow_status: str | None
+    workflow_instance_id: UUID | None
+    company_id: UUID
+    branch_id: UUID
     version: int
 
 class RiskAssessmentCreate(BaseModel):
@@ -120,8 +197,18 @@ class RiskAssessmentUpdate(BaseModel):
 
 class RiskAssessmentResponse(OrmModel):
     id: UUID
-    company_id: UUID
+    risk_id: UUID
+    assessment_number: str
+    assessed_by_employee_id: UUID
+    assessed_at: datetime | None
+    impact: int | None
+    probability: int | None
+    risk_score: int | None
+    risk_level: str | None
+    assessment_notes: str | None
     status: str
+    company_id: UUID
+    branch_id: UUID
     version: int
 
 class RiskTreatmentCreate(BaseModel):
@@ -135,8 +222,17 @@ class RiskTreatmentUpdate(BaseModel):
 
 class RiskTreatmentResponse(OrmModel):
     id: UUID
-    company_id: UUID
+    risk_id: UUID
+    treatment_number: str
+    treatment_strategy: str
+    action_plan: str | None
+    owner_employee_id: UUID
+    target_date: date | None
+    control_id: UUID | None
+    completed_at: datetime | None
     status: str
+    company_id: UUID
+    branch_id: UUID
     version: int
 
 class ComplianceFrameworkCreate(BaseModel):
@@ -149,8 +245,15 @@ class ComplianceFrameworkUpdate(BaseModel):
 
 class ComplianceFrameworkResponse(OrmModel):
     id: UUID
-    company_id: UUID
+    framework_code: str
+    framework_name: str
+    framework_type: str
+    jurisdiction: str | None
+    description: str | None
+    owner_employee_id: UUID | None
+    document_id: UUID | None
     status: str
+    company_id: UUID
     version: int
 
 class ComplianceRequirementCreate(BaseModel):
@@ -163,8 +266,15 @@ class ComplianceRequirementUpdate(BaseModel):
 
 class ComplianceRequirementResponse(OrmModel):
     id: UUID
-    company_id: UUID
+    framework_id: UUID
+    requirement_code: str
+    requirement_name: str
+    description: str | None
+    compliance_area: str | None
+    owner_employee_id: UUID | None
+    due_date: date | None
     status: str
+    company_id: UUID
     version: int
 
 class ComplianceAssessmentCreate(BaseModel):
@@ -178,8 +288,17 @@ class ComplianceAssessmentUpdate(BaseModel):
 
 class ComplianceAssessmentResponse(OrmModel):
     id: UUID
-    company_id: UUID
+    requirement_id: UUID
+    assessment_number: str
+    assessed_by_employee_id: UUID
+    assessed_at: datetime | None
+    compliance_status: str | None
+    evidence_summary: str | None
+    document_id: UUID | None
+    next_due_at: date | None
     status: str
+    company_id: UUID
+    branch_id: UUID
     version: int
 
 class AuditPlanCreate(BaseModel):
@@ -192,8 +311,15 @@ class AuditPlanUpdate(BaseModel):
 
 class AuditPlanResponse(OrmModel):
     id: UUID
-    company_id: UUID
+    plan_code: str
+    plan_name: str
+    plan_year: int | None
+    owner_employee_id: UUID
+    scope_summary: str | None
+    period_start: date | None
+    period_end: date | None
     status: str
+    company_id: UUID
     version: int
 
 class AuditCreate(BaseModel):
@@ -207,8 +333,24 @@ class AuditUpdate(BaseModel):
 
 class AuditResponse(OrmModel):
     id: UUID
-    company_id: UUID
+    audit_number: str
+    audit_plan_id: UUID | None
+    audit_type: str
+    title: str
+    lead_auditor_employee_id: UUID
+    department_id: UUID | None
+    planned_start: date | None
+    planned_end: date | None
+    actual_start: date | None
+    actual_end: date | None
+    document_id: UUID | None
+    project_id: UUID | None
+    quality_nonconformance_id: UUID | None
     status: str
+    workflow_status: str | None
+    workflow_instance_id: UUID | None
+    company_id: UUID
+    branch_id: UUID
     version: int
 
 class AuditFindingCreate(BaseModel):
@@ -222,8 +364,20 @@ class AuditFindingUpdate(BaseModel):
 
 class AuditFindingResponse(OrmModel):
     id: UUID
-    company_id: UUID
+    audit_id: UUID
+    finding_number: str
+    severity: str
+    title: str
+    description: str | None
+    action_required: str | None
+    owner_employee_id: UUID | None
+    due_date: date | None
+    control_id: UUID | None
+    risk_id: UUID | None
+    document_id: UUID | None
     status: str
+    company_id: UUID
+    branch_id: UUID
     version: int
 
 class CorrectiveActionCreate(BaseModel):
@@ -237,8 +391,24 @@ class CorrectiveActionUpdate(BaseModel):
 
 class CorrectiveActionResponse(OrmModel):
     id: UUID
-    company_id: UUID
+    capa_number: str
+    finding_id: UUID | None
+    incident_id: UUID | None
+    title: str
+    description: str | None
+    owner_employee_id: UUID
+    due_date: date | None
+    completed_at: datetime | None
+    effectiveness_result: str | None
+    document_id: UUID | None
+    quality_nonconformance_id: UUID | None
+    helpdesk_ticket_id: UUID | None
+    finance_journal_id: UUID | None
     status: str
+    workflow_status: str | None
+    workflow_instance_id: UUID | None
+    company_id: UUID
+    branch_id: UUID
     version: int
 
 class ExceptionCreate(BaseModel):
@@ -252,8 +422,21 @@ class ExceptionUpdate(BaseModel):
 
 class ExceptionResponse(OrmModel):
     id: UUID
-    company_id: UUID
+    exception_number: str
+    exception_type: str
+    title: str
+    description: str | None
+    requested_by_employee_id: UUID
+    approver_employee_id: UUID | None
+    policy_id: UUID | None
+    control_id: UUID | None
+    risk_id: UUID | None
+    valid_from: date | None
+    valid_to: date | None
+    document_id: UUID | None
     status: str
+    company_id: UUID
+    branch_id: UUID
     version: int
 
 class IncidentCreate(BaseModel):
@@ -267,8 +450,31 @@ class IncidentUpdate(BaseModel):
 
 class IncidentResponse(OrmModel):
     id: UUID
-    company_id: UUID
+    incident_number: str
+    incident_type: str
+    title: str
+    description: str | None
+    reported_by_employee_id: UUID
+    owner_employee_id: UUID | None
+    customer_id: UUID | None
+    department_id: UUID | None
+    risk_id: UUID | None
+    control_id: UUID | None
+    severity: str | None
+    occurred_at: datetime | None
+    detected_at: datetime | None
+    helpdesk_ticket_id: UUID | None
+    service_request_id: UUID | None
+    project_id: UUID | None
+    quality_nonconformance_id: UUID | None
+    asset_id: UUID | None
+    document_id: UUID | None
+    finance_journal_id: UUID | None
     status: str
+    workflow_status: str | None
+    workflow_instance_id: UUID | None
+    company_id: UUID
+    branch_id: UUID
     version: int
 
 class NotificationCreate(BaseModel):
@@ -281,8 +487,15 @@ class NotificationUpdate(BaseModel):
 
 class NotificationResponse(OrmModel):
     id: UUID
-    company_id: UUID
+    document_id: UUID | None
+    notification_type: str
+    recipient_user_id: UUID | None
+    recipient_employee_id: UUID | None
+    payload_json: dict | None
+    sent_at: datetime | None
+    delivery_status: str
     status: str
+    company_id: UUID
     version: int
 
 class ReportCreate(BaseModel):
@@ -295,6 +508,14 @@ class ReportUpdate(BaseModel):
 
 class ReportResponse(OrmModel):
     id: UUID
-    company_id: UUID
+    report_code: str
+    report_type: str
+    period_start: date | None
+    period_end: date | None
+    department_id: UUID | None
+    folder_id: UUID | None
+    metrics_json: dict | None
+    generated_at: datetime | None
     status: str
+    company_id: UUID
     version: int

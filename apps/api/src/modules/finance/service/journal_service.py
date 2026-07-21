@@ -33,9 +33,29 @@ class JournalService:
         self._governance = FinanceGovernanceService(db)
         self._audit = AuditService(db)
 
-    def list_journals(self, ctx: TenantContext, company_id: UUID | None = None):
+    def list_journals(
+        self,
+        ctx: TenantContext,
+        company_id: UUID | None = None,
+        *,
+        status: str | None = None,
+        journal_type: str | None = None,
+        period_id: UUID | None = None,
+        search: str | None = None,
+        sort_by: str = "journal_date",
+        sort_dir: str = "desc",
+    ):
         cid = self._scope.resolve_company_id(ctx, company_id)
-        return self._repo.list_journals(ctx, cid)
+        return self._repo.list_journals(
+            ctx,
+            cid,
+            status=status,
+            journal_type=journal_type,
+            period_id=period_id,
+            search=search,
+            sort_by=sort_by,
+            sort_dir=sort_dir,
+        )
 
     def get_journal(self, ctx: TenantContext, journal_id: UUID) -> FinJournalHeader:
         journal = self._repo.get_journal(ctx, journal_id)
@@ -106,6 +126,51 @@ class JournalService:
         )
         return journal
 
+    def update_journal(
+        self,
+        ctx: TenantContext,
+        journal_id: UUID,
+        **fields: object,
+    ) -> FinJournalHeader:
+        journal = self.get_journal(ctx, journal_id)
+        if journal.status != JournalStatus.DRAFT.value:
+            raise JournalStateError("Only draft journals can be edited")
+
+        allowed = {
+            "journal_date",
+            "description",
+            "journal_type",
+            "currency_code",
+            "exchange_rate",
+            "period_id",
+            "branch_id",
+        }
+        payload = {k: v for k, v in fields.items() if k in allowed and v is not None}
+
+        if "branch_id" in payload:
+            self._scope.validate_branch_access(ctx, payload["branch_id"])  # type: ignore[arg-type]
+
+        if "period_id" in payload:
+            period = self._fiscal.get_period(ctx, payload["period_id"])  # type: ignore[arg-type]
+            if period is None:
+                raise NotFoundException("Period not found")
+            payload["fiscal_year_id"] = period.fiscal_year_id
+            self._engine.validate_period_for_journal(
+                period, str(payload.get("journal_type") or journal.journal_type)
+            )
+
+        updated = self._repo.update_journal(ctx, journal_id, **payload)
+        if updated is None:
+            raise NotFoundException("Journal not found")
+        self._audit.log_entity_change(
+            tenant_id=ctx.tenant_id,
+            entity_name="fin_journal_header",
+            entity_id=journal_id,
+            operation="update",
+            performed_by=ctx.user_id,
+        )
+        return self.get_journal(ctx, journal_id)
+
     def add_line(
         self,
         ctx: TenantContext,
@@ -160,6 +225,114 @@ class JournalService:
         self._engine.apply_totals_to_header(journal, totals)
         return line
 
+    def update_line(
+        self,
+        ctx: TenantContext,
+        journal_id: UUID,
+        line_id: UUID,
+        **fields: object,
+    ):
+        journal = self.get_journal(ctx, journal_id)
+        if journal.status != JournalStatus.DRAFT.value:
+            raise JournalStateError("Lines can only be edited on draft journals")
+
+        line = self._repo.get_line(ctx, line_id)
+        if line is None or line.journal_header_id != journal_id:
+            raise NotFoundException("Journal line not found")
+
+        payload = {k: v for k, v in fields.items() if v is not None}
+        if "account_id" in payload:
+            account = self._coa.get_account(ctx, payload["account_id"])  # type: ignore[arg-type]
+            if account is None:
+                raise NotFoundException("Account not found")
+            self._engine.validate_posting_account(account)
+            cost_center_id = payload.get("cost_center_id", line.cost_center_id)
+            self._engine.validate_cost_center(account, cost_center_id)  # type: ignore[arg-type]
+
+        debit = float(payload.get("debit_amount", line.debit_amount) or 0)
+        credit = float(payload.get("credit_amount", line.credit_amount) or 0)
+        self._engine.validate_amounts(debit, credit)
+        rate = Decimal(str(journal.exchange_rate))
+        payload["debit_amount"] = debit
+        payload["credit_amount"] = credit
+        payload["base_debit_amount"] = (
+            float((Decimal(str(debit)) * rate).quantize(Decimal("0.0001"))) if debit > 0 else 0
+        )
+        payload["base_credit_amount"] = (
+            float((Decimal(str(credit)) * rate).quantize(Decimal("0.0001"))) if credit > 0 else 0
+        )
+
+        updated = self._repo.update_line(ctx, line_id, **payload)
+        if updated is None:
+            raise NotFoundException("Journal line not found")
+        journal = self.get_journal(ctx, journal_id)
+        totals = self._engine.compute_totals([ln for ln in journal.lines if not ln.is_deleted])
+        self._engine.apply_totals_to_header(journal, totals)
+        self._audit.log_entity_change(
+            tenant_id=ctx.tenant_id,
+            entity_name="fin_journal_line",
+            entity_id=line_id,
+            operation="update",
+            performed_by=ctx.user_id,
+        )
+        return updated
+
+    def delete_line(self, ctx: TenantContext, journal_id: UUID, line_id: UUID) -> None:
+        journal = self.get_journal(ctx, journal_id)
+        if journal.status != JournalStatus.DRAFT.value:
+            raise JournalStateError("Lines can only be deleted on draft journals")
+        line = self._repo.get_line(ctx, line_id)
+        if line is None or line.journal_header_id != journal_id:
+            raise NotFoundException("Journal line not found")
+        active = [ln for ln in journal.lines if not ln.is_deleted]
+        if len(active) <= 2:
+            raise JournalStateError("Journal must keep at least two lines")
+        self._repo.soft_delete_line(ctx, line_id)
+        journal = self.get_journal(ctx, journal_id)
+        totals = self._engine.compute_totals([ln for ln in journal.lines if not ln.is_deleted])
+        self._engine.apply_totals_to_header(journal, totals)
+        self._audit.log_entity_change(
+            tenant_id=ctx.tenant_id,
+            entity_name="fin_journal_line",
+            entity_id=line_id,
+            operation="delete",
+            performed_by=ctx.user_id,
+        )
+
+    def reorder_lines(self, ctx: TenantContext, journal_id: UUID, line_ids: list[UUID]):
+        journal = self.get_journal(ctx, journal_id)
+        if journal.status != JournalStatus.DRAFT.value:
+            raise JournalStateError("Lines can only be reordered on draft journals")
+        active = {ln.id: ln for ln in journal.lines if not ln.is_deleted}
+        if set(line_ids) != set(active.keys()):
+            raise JournalStateError("Reorder list must include all active lines exactly once")
+        for index, line_id in enumerate(line_ids, start=1):
+            self._repo.update_line(ctx, line_id, line_number=index)
+        self._audit.log_entity_change(
+            tenant_id=ctx.tenant_id,
+            entity_name="fin_journal_header",
+            entity_id=journal_id,
+            operation="reorder_lines",
+            performed_by=ctx.user_id,
+        )
+        return self.get_journal(ctx, journal_id)
+
+    def add_comment(self, ctx: TenantContext, journal_id: UUID, comment: str) -> dict:
+        journal = self.get_journal(ctx, journal_id)
+        self._audit.log_entity_change(
+            tenant_id=ctx.tenant_id,
+            entity_name="fin_journal_header",
+            entity_id=journal.id,
+            operation="comment",
+            performed_by=ctx.user_id,
+            new_value={"comment": comment},
+        )
+        return {
+            "journal_id": str(journal_id),
+            "comment": comment,
+            "created_by": str(ctx.user_id),
+        }
+
     def submit(self, ctx: TenantContext, journal_id: UUID):
         journal = self.get_journal(ctx, journal_id)
         if journal.status != JournalStatus.DRAFT.value:
@@ -197,6 +370,29 @@ class JournalService:
             entity_name="fin_journal_header",
             entity_id=journal_id,
             on_approved=on_approved,
+        )
+
+    def reject(self, ctx: TenantContext, journal_id: UUID):
+        journal = self.get_journal(ctx, journal_id)
+        if journal.status != JournalStatus.SUBMITTED.value:
+            raise JournalStateError("Only submitted journals can be rejected")
+        if journal.workflow_instance_id is None:
+            raise JournalStateError("Journal has no workflow instance")
+
+        def on_rejected():
+            self._repo.update_journal(
+                ctx,
+                journal_id,
+                status=JournalStatus.DRAFT.value,
+                workflow_status=WorkflowStatus.REJECTED.value,
+            )
+
+        return self._governance.reject(
+            ctx,
+            instance_id=journal.workflow_instance_id,
+            entity_name="fin_journal_header",
+            entity_id=journal_id,
+            on_rejected=on_rejected,
         )
 
     def reverse(self, ctx: TenantContext, journal_id: UUID):

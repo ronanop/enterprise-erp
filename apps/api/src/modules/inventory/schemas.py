@@ -280,8 +280,12 @@ class ValuationLayerResponse(BaseModel):
     id: UUID
     warehouse_id: UUID
     product_id: UUID
+    original_qty: float
     remaining_qty: float
     unit_cost: float
+    currency_code: str
+    source_module: str
+    received_at: datetime | None = None
     status: str
 
 

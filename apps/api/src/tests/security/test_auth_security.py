@@ -18,7 +18,6 @@ def test_login_validation_error() -> None:
     response = client.post(
         "/api/v1/auth/login",
         json={
-            "tenant_id": "00000000-0000-0000-0000-000000000001",
             "email": "bad",
             "password": "short",
         },

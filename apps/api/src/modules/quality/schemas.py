@@ -108,12 +108,18 @@ class CharacteristicUpdateRequest(BaseModel):
 
 class CharacteristicResponse(OrmModel):
     id: UUID
-    company_id: UUID
+    branch_id: UUID | None
+    inspection_plan_id: UUID | None
     characteristic_code: str
     characteristic_name: str
     characteristic_type: str
-    inspection_plan_id: UUID | None
+    uom_id: UUID | None
+    target_value: Decimal | None
+    min_value: Decimal | None
+    max_value: Decimal | None
+    is_mandatory: bool
     status: str
+    company_id: UUID
     version: int
 
 
@@ -136,12 +142,13 @@ class DefectTypeUpdateRequest(BaseModel):
 
 class DefectTypeResponse(OrmModel):
     id: UUID
-    company_id: UUID
+    branch_id: UUID | None
     defect_type_code: str
     defect_type_name: str
     severity_default: str
     category: str
     status: str
+    company_id: UUID
     version: int
 
 
@@ -438,12 +445,16 @@ class SupplierQualityUpdateRequest(BaseModel):
 
 class SupplierQualityResponse(OrmModel):
     id: UUID
-    company_id: UUID
+    branch_id: UUID | None
     vendor_id: UUID
     score_period_start: date
     score_period_end: date
+    incoming_accept_rate: Decimal | None
+    defect_rate: Decimal | None
+    ncr_count: Decimal | None
     overall_score: Decimal | None
     status: str
+    company_id: UUID
     version: int
 
 

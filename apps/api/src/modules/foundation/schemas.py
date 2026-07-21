@@ -7,13 +7,11 @@ from pydantic import BaseModel, EmailStr, Field
 
 
 class LoginRequest(BaseModel):
-    tenant_id: UUID
     email: EmailStr
     password: str = Field(min_length=8)
 
 
 class MfaVerifyRequest(BaseModel):
-    tenant_id: UUID
     email: EmailStr
     otp: str = Field(min_length=6, max_length=6)
 

@@ -29,11 +29,12 @@ class LeadSourceUpdate(BaseModel):
 
 class LeadSourceResponse(OrmModel):
     id: UUID
-    company_id: UUID
+    branch_id: UUID | None
     source_code: str
     source_name: str
     channel: str | None
     status: str
+    company_id: UUID
     version: int
 
 
@@ -56,11 +57,13 @@ class PipelineUpdate(BaseModel):
 
 class PipelineResponse(OrmModel):
     id: UUID
-    company_id: UUID
+    branch_id: UUID | None
     pipeline_code: str
     pipeline_name: str
     is_default: bool
     status: str
+    stages_json: dict | list | None
+    company_id: UUID
     version: int
 
 
@@ -104,6 +107,7 @@ class LeadConvertRequest(BaseModel):
     expected_revenue: Decimal = Decimal("0")
     existing_customer_id: UUID | None = None
     create_customer: bool = True
+    remark: str | None = None
 
 
 class LeadResponse(OrmModel):
@@ -159,6 +163,8 @@ class OpportunityResponse(OrmModel):
     id: UUID
     company_id: UUID
     branch_id: UUID
+    lead_id: UUID | None
+    company_account_id: UUID | None
     opportunity_code: str
     opportunity_name: str
     status: str
@@ -197,11 +203,17 @@ class CampaignMemberCreate(BaseModel):
 
 class CampaignResponse(OrmModel):
     id: UUID
-    company_id: UUID
+    branch_id: UUID | None
     campaign_code: str
     campaign_name: str
     campaign_type: str
+    start_date: date | None
+    end_date: date | None
+    budget_amount: Decimal | None
+    currency_code: str | None
+    owner_employee_id: UUID | None
     status: str
+    company_id: UUID
     version: int
 
 
@@ -222,9 +234,17 @@ class TaskResponse(OrmModel):
     id: UUID
     task_code: str
     title: str
-    status: str
-    priority: str
+    description: str | None
+    lead_id: UUID | None
+    opportunity_id: UUID | None
+    customer_id: UUID | None
     owner_employee_id: UUID
+    due_at: datetime | None
+    priority: str
+    status: str
+    completed_at: datetime | None
+    company_id: UUID
+    branch_id: UUID
     version: int
 
 
@@ -246,8 +266,20 @@ class MeetingResponse(OrmModel):
     meeting_code: str
     title: str
     meeting_date: date
-    status: str
+    start_time: time | None
+    end_time: time | None
+    location: str | None
+    meeting_mode: str | None
+    lead_id: UUID | None
+    opportunity_id: UUID | None
+    customer_id: UUID | None
+    organizer_employee_id: UUID
+    participants_text: str | None
+    notes: str | None
     outcome: str | None
+    status: str
+    company_id: UUID
+    branch_id: UUID
     version: int
 
 
@@ -269,7 +301,23 @@ class InteractionResponse(OrmModel):
     id: UUID
     interaction_code: str | None
     interaction_type: str
+    interaction_at: datetime
+    lead_id: UUID | None
+    opportunity_id: UUID | None
+    customer_id: UUID | None
+    owner_employee_id: UUID
+    channel: str | None
+    direction: str | None
+    subject: str | None
+    summary: str | None
+    outcome: str | None
+    call_log_id: UUID | None
+    email_log_id: UUID | None
+    meeting_id: UUID | None
+    visit_log_id: UUID | None
     status: str
+    company_id: UUID
+    branch_id: UUID
     version: int
 
 
@@ -287,8 +335,17 @@ class FollowupCreate(BaseModel):
 class FollowupResponse(OrmModel):
     id: UUID
     followup_code: str
-    status: str
+    lead_id: UUID | None
+    opportunity_id: UUID | None
+    owner_employee_id: UUID
     followup_at: datetime
+    followup_type: str
+    notes: str | None
+    outcome: str | None
+    status: str
+    related_task_id: UUID | None
+    company_id: UUID
+    branch_id: UUID
     version: int
 
 
@@ -308,8 +365,18 @@ class FeedbackResponse(OrmModel):
     id: UUID
     feedback_code: str
     customer_id: UUID
-    status: str
+    feedback_date: date
+    feedback_type: str
     rating: int | None
+    comments: str | None
+    source_module: str | None
+    source_document_id: UUID | None
+    opportunity_id: UUID | None
+    lead_id: UUID | None
+    owner_employee_id: UUID | None
+    status: str
+    company_id: UUID
+    branch_id: UUID
     version: int
 
 
@@ -326,10 +393,16 @@ class SatisfactionCreate(BaseModel):
 
 class SatisfactionResponse(OrmModel):
     id: UUID
+    branch_id: UUID | None
     customer_id: UUID
+    score_period_start: date
+    score_period_end: date
     csat_score: Decimal
     nps_score: Decimal | None
+    survey_count: int
+    quality_satisfaction_ref_id: UUID | None
     status: str
+    company_id: UUID
     version: int
 
 
@@ -382,8 +455,34 @@ class VisitLogCreate(BaseModel):
 
 
 class LogResponse(OrmModel):
+    """Shared response for call / email / visit activity logs."""
+
     id: UUID
+    lead_id: UUID | None = None
+    opportunity_id: UUID | None = None
+    customer_id: UUID | None = None
+    employee_id: UUID
+    # call
+    called_at: datetime | None = None
+    duration_seconds: int | None = None
+    phone_number: str | None = None
+    # email
+    sent_at: datetime | None = None
+    from_address: str | None = None
+    to_address: str | None = None
+    subject: str | None = None
+    body_preview: str | None = None
+    # visit
+    visited_at: datetime | None = None
+    location_text: str | None = None
+    purpose: str | None = None
+    # shared
+    direction: str | None = None
+    outcome: str | None = None
+    notes: str | None = None
     status: str
+    company_id: UUID
+    branch_id: UUID
     version: int
 
 
@@ -412,15 +511,29 @@ class LeadActivityResponse(OrmModel):
     id: UUID
     lead_id: UUID
     activity_type: str
+    activity_at: datetime
+    owner_employee_id: UUID
+    subject: str | None
+    notes: str | None
+    outcome: str | None
+    related_meeting_id: UUID | None
+    related_task_id: UUID | None
     status: str
+    company_id: UUID
+    branch_id: UUID
 
 
 class LeadAssignmentResponse(OrmModel):
     id: UUID
     lead_id: UUID
-    to_employee_id: UUID
     assignment_type: str
+    from_employee_id: UUID | None
+    to_employee_id: UUID
+    assigned_at: datetime
+    assignment_reason: str | None
     status: str
+    company_id: UUID
+    branch_id: UUID
 
 
 class OpportunityStageResponse(OrmModel):
@@ -429,10 +542,542 @@ class OpportunityStageResponse(OrmModel):
     sequence_no: int
     stage_code: str
     stage_name: str
+    entered_at: datetime
+    exited_at: datetime | None
+    probability_percent: Decimal | None
+    changed_by_employee_id: UUID | None
+    notes: str | None
+    company_id: UUID
+    branch_id: UUID
 
 
 class CampaignMemberResponse(OrmModel):
     id: UUID
+    branch_id: UUID | None
     campaign_id: UUID
     member_type: str
+    lead_id: UUID | None
+    customer_id: UUID | None
     member_status: str
+    added_at: datetime
+    company_id: UUID
+    version: int
+
+
+# ---------------------------------------------------------------------------
+# Sales CRM (Zoho-replacement) — Company / Contact / Product / Quote / OVF /
+# My Jobs / Attachments / Blueprint schemas.
+# ---------------------------------------------------------------------------
+
+
+class CompanyCreate(BaseModel):
+    company_id: UUID | None = None
+    branch_id: UUID
+    customer_name: str
+    account_owner_id: UUID | None = None
+    account_type: str | None = None
+    industry: str
+    other_industries: str | None = None
+    portal_id: str | None = None
+    source: str
+    rating: str | None = None
+    first_name: str | None = None
+    last_name: str | None = None
+    customer_email: str | None = None
+    phone: str | None = None
+    website: str | None = None
+    account_ownership_id: UUID | None = None
+    customer_id_ext: str | None = None
+    role: str | None = None
+    billing_street: str
+    billing_city: str
+    billing_state: str
+    billing_code: str
+    billing_country: str
+    shipping_street: str | None = None
+    shipping_city: str | None = None
+    shipping_state: str | None = None
+    shipping_code: str | None = None
+    shipping_country: str | None = None
+    description: str | None = None
+    master_customer_id: UUID | None = None
+
+
+class CompanyUpdate(BaseModel):
+    customer_name: str | None = None
+    account_owner_id: UUID | None = None
+    account_type: str | None = None
+    industry: str | None = None
+    other_industries: str | None = None
+    portal_id: str | None = None
+    source: str | None = None
+    rating: str | None = None
+    first_name: str | None = None
+    last_name: str | None = None
+    customer_email: str | None = None
+    phone: str | None = None
+    website: str | None = None
+    account_ownership_id: UUID | None = None
+    customer_id_ext: str | None = None
+    role: str | None = None
+    billing_street: str | None = None
+    billing_city: str | None = None
+    billing_state: str | None = None
+    billing_code: str | None = None
+    billing_country: str | None = None
+    shipping_street: str | None = None
+    shipping_city: str | None = None
+    shipping_state: str | None = None
+    shipping_code: str | None = None
+    shipping_country: str | None = None
+    description: str | None = None
+    status: str | None = None
+    version: int | None = None
+
+
+class CompanyResponse(OrmModel):
+    id: UUID
+    company_id: UUID
+    branch_id: UUID
+    account_number: str
+    customer_name: str
+    account_owner_id: UUID | None
+    account_type: str | None
+    industry: str
+    other_industries: str | None
+    portal_id: str | None
+    source: str
+    rating: str | None
+    first_name: str | None
+    last_name: str | None
+    customer_email: str | None
+    phone: str | None
+    website: str | None
+    account_ownership_id: UUID | None
+    customer_id_ext: str | None
+    role: str | None
+    billing_street: str
+    billing_city: str
+    billing_state: str
+    billing_code: str
+    billing_country: str
+    shipping_street: str | None
+    shipping_city: str | None
+    shipping_state: str | None
+    shipping_code: str | None
+    shipping_country: str | None
+    description: str | None
+    master_customer_id: UUID | None
+    status: str
+    locked: bool
+    version: int
+
+
+class ContactCreate(BaseModel):
+    company_account_id: UUID
+    branch_id: UUID
+    first_name: str
+    last_name: str | None = None
+    email: str | None = None
+    phone: str | None = None
+    mobile: str | None = None
+    title: str | None = None
+    is_primary: bool = False
+    owner_id: UUID | None = None
+
+
+class ContactUpdate(BaseModel):
+    first_name: str | None = None
+    last_name: str | None = None
+    email: str | None = None
+    phone: str | None = None
+    mobile: str | None = None
+    title: str | None = None
+    is_primary: bool | None = None
+    status: str | None = None
+    version: int | None = None
+
+
+class ContactResponse(OrmModel):
+    id: UUID
+    company_account_id: UUID
+    company_id: UUID
+    branch_id: UUID
+    first_name: str
+    last_name: str | None
+    email: str | None
+    phone: str | None
+    mobile: str | None
+    title: str | None
+    is_primary: bool
+    owner_id: UUID | None
+    status: str
+    version: int
+
+
+class LeadCreateFromCompany(BaseModel):
+    """Body for POST /crm/companies/{id}/leads — the only sales-lead entry point."""
+
+    branch_id: UUID
+    first_name: str | None = None
+    last_name: str | None = None
+    salutation: str | None = None
+    mobile: str | None = None
+    email: str | None = None
+    lead_source_id: UUID
+    owner_employee_id: UUID
+    assign_to_id: UUID | None = None
+    expected_amount: Decimal | None = None
+    expected_closure_date: date | None = None
+    product_type: str | None = None
+    sub_product_category: str | None = None
+    sub_product: str | None = None
+    sub_product_other: str | None = None
+    project_title: str | None = None
+    requirement_type: str | None = None
+    purchase_model: str | None = None
+    deal_type: str | None = None
+    industry: str | None = None
+    territory: str | None = None
+    region: str | None = None
+    street: str | None = None
+    city: str | None = None
+    state: str | None = None
+    zip: str | None = None
+    country: str | None = None
+    oem_name: str | None = None
+    oem_contact_person: str | None = None
+    oem_contact_number: str | None = None
+    oem_contact_email: str | None = None
+    distributor_name: str | None = None
+    distributor_contact: str | None = None
+    end_customer_name: str | None = None
+    end_customer_location: str | None = None
+    entity_name: str | None = None
+    entity_email: str | None = None
+    entity_address: str | None = None
+    entity_gst: str | None = None
+    entity_contact: str | None = None
+    notes: str | None = None
+
+
+class LeadLostRequest(BaseModel):
+    reason: str | None = None
+
+
+class SalesLeadResponse(OrmModel):
+    id: UUID
+    company_id: UUID
+    branch_id: UUID
+    lead_code: str
+    first_name: str
+    last_name: str | None
+    mobile: str
+    email: str | None
+    status: str
+    blueprint_state: str
+    locked: bool
+    company_account_id: UUID | None
+    owner_employee_id: UUID
+    assign_to_id: UUID | None
+    expected_amount: Decimal | None
+    expected_closure_date: date | None
+    converted_opportunity_id: UUID | None
+    version: int
+
+
+class ProductCreate(BaseModel):
+    company_id: UUID | None = None
+    product_code: str | None = None
+    product_name: str
+    product_type: str
+    hsn_sac: str | None = None
+    unit_price: Decimal = Decimal("0")
+    status: str = "active"
+
+
+class ProductUpdate(BaseModel):
+    product_name: str | None = None
+    hsn_sac: str | None = None
+    unit_price: Decimal | None = None
+    status: str | None = None
+    version: int | None = None
+
+
+class ProductResponse(OrmModel):
+    id: UUID
+    company_id: UUID
+    product_code: str
+    product_name: str
+    product_type: str
+    hsn_sac: str | None
+    unit_price: Decimal
+    status: str
+    version: int
+
+
+class QuoteCreate(BaseModel):
+    opportunity_id: UUID
+    branch_id: UUID
+    contact_id: UUID | None = None
+    subject: str | None = None
+    valid_until: date | None = None
+    entity_name: str | None = None
+    entity_email: str | None = None
+    entity_address: str | None = None
+    entity_gst: str | None = None
+    entity_contact: str | None = None
+    billing_country: str | None = None
+    shipping_country: str | None = None
+    freight: Decimal = Decimal("0")
+    terms: str | None = None
+    description: str | None = None
+    reason_for_discount: str | None = None
+
+
+class QuoteUpdate(BaseModel):
+    subject: str | None = None
+    valid_until: date | None = None
+    freight: Decimal | None = None
+    terms: str | None = None
+    description: str | None = None
+    reason_for_discount: str | None = None
+    version: int | None = None
+
+
+class QuoteResponse(OrmModel):
+    id: UUID
+    company_id: UUID
+    branch_id: UUID
+    opportunity_id: UUID
+    company_account_id: UUID | None
+    contact_id: UUID | None
+    subject: str | None
+    quote_no: str
+    quote_revision: int
+    quote_stage: str
+    approval_status: str
+    locked: bool
+    valid_until: date | None
+    freight: Decimal
+    grand_total: Decimal
+    avg_margin_pct: Decimal
+    total_margin_amount: Decimal
+    reason_for_discount: str | None
+    sales_order_id: UUID | None
+    version: int
+
+
+class QuoteLineCreate(BaseModel):
+    product_id: UUID | None = None
+    product_name: str
+    hsn_sac: str | None = None
+    description: str | None = None
+    line_type: str = "hardware"
+    qty: Decimal = Decimal("1")
+    unit_cost: Decimal = Decimal("0")
+    unit_sell: Decimal = Decimal("0")
+    gst_pct: Decimal = Decimal("0")
+
+
+class QuoteLineUpdate(BaseModel):
+    product_name: str | None = None
+    description: str | None = None
+    line_type: str | None = None
+    qty: Decimal | None = None
+    unit_cost: Decimal | None = None
+    unit_sell: Decimal | None = None
+    gst_pct: Decimal | None = None
+    version: int | None = None
+
+
+class QuoteLineResponse(OrmModel):
+    id: UUID
+    quote_id: UUID
+    line_no: int
+    product_id: UUID | None
+    product_name: str
+    hsn_sac: str | None
+    line_type: str
+    qty: Decimal
+    unit_cost: Decimal
+    unit_sell: Decimal
+    margin_pct: Decimal
+    margin_amount: Decimal
+    gst_pct: Decimal
+    gst_amount: Decimal
+    line_total: Decimal
+    version: int
+
+
+class QuoteMarginSummaryResponse(BaseModel):
+    quote_id: UUID
+    avg_margin_pct: Decimal
+    total_margin_amount: Decimal
+    total_sell_amount: Decimal
+    required_threshold_pct: Decimal
+    requires_management_approval: bool
+    line_types_present: list[str]
+
+
+class QuoteSendForApprovalRequest(BaseModel):
+    team_role: str = "management"
+    remarks: str | None = None
+
+
+class QuoteActionRequest(BaseModel):
+    remark: str | None = None
+    valid_until: date | None = None
+
+
+class OvfCreate(BaseModel):
+    quote_id: UUID
+    branch_id: UUID
+    po_number: str | None = None
+    delivery_period: str | None = None
+    technology_segment: str | None = None
+    sub_technology_segment: str | None = None
+    installation_details: str | None = None
+    vendor_payment_days: int = 0
+    customer_payment_days: int = 0
+    additional_charges: Decimal = Decimal("0")
+    freight: Decimal = Decimal("0")
+
+
+class OvfResponse(OrmModel):
+    id: UUID
+    company_id: UUID
+    branch_id: UUID
+    ovf_no: str
+    quote_id: UUID
+    opportunity_id: UUID
+    company_account_id: UUID | None
+    po_number: str | None
+    approval_status: str
+    blueprint_state: str
+    locked: bool
+    shared_to_scm: bool
+    deal_won: bool
+    deal_won_amount: Decimal | None
+    vendor_payment_days: int
+    customer_payment_days: int
+    finance_cost_pct: Decimal
+    total_margin_pct: Decimal
+    total_margin_amount: Decimal
+    version: int
+
+
+class OvfLineCreate(BaseModel):
+    side: str = "customer_po"
+    product_name: str
+    qty: Decimal = Decimal("1")
+    unit_price: Decimal = Decimal("0")
+
+
+class OvfLineResponse(OrmModel):
+    id: UUID
+    ovf_id: UUID
+    side: str
+    line_no: int
+    product_name: str
+    qty: Decimal
+    unit_price: Decimal
+    line_total: Decimal
+    version: int
+
+
+class OvfSendForApprovalRequest(BaseModel):
+    team_role: str = "management"
+    remarks: str | None = None
+
+
+class OvfDealWonRequest(BaseModel):
+    deal_won_amount: Decimal
+
+
+class AttachmentCreate(BaseModel):
+    entity_type: str
+    entity_id: UUID
+    branch_id: UUID
+    company_id: UUID | None = None
+    file_name: str
+    category: str = "other"
+    file_path: str | None = None
+    content_base64: str | None = None
+    content_type: str | None = None
+
+
+class AttachmentResponse(OrmModel):
+    id: UUID
+    entity_type: str
+    entity_id: UUID
+    file_name: str
+    file_path: str
+    content_type: str | None
+    size: int | None
+    category: str
+    uploaded_by: UUID | None
+    company_id: UUID
+    branch_id: UUID
+
+
+class ApprovalTaskResponse(OrmModel):
+    id: UUID
+    task_code: str
+    title: str
+    entity_type: str
+    entity_id: UUID
+    team_role: str
+    assigned_role: str | None
+    assigned_user_id: UUID | None
+    status: str
+    requested_by: UUID | None
+    remarks: str | None
+    decision_remark: str | None
+    decided_at: datetime | None
+    decided_by: UUID | None
+    priority: str
+    due_at: datetime | None
+    notification_sent: bool
+    action: str | None
+    company_id: UUID
+    branch_id: UUID
+
+
+class ApprovalTaskDecisionRequest(BaseModel):
+    decision: str = Field(pattern="^(approved|rejected)$")
+    remark: str | None = None
+
+
+class BlueprintStateResponse(BaseModel):
+    entity_type: str
+    entity_id: UUID
+    state: str
+    locked: bool
+    allowed_actions: list[str]
+    is_sales_blueprint: bool | None = None
+
+
+class BlueprintActionRequest(BaseModel):
+    """Generic action payload — fields are action-specific and all optional.
+
+    e.g. ``file_name``/``file_path``/``content_base64`` for attach_* actions,
+    ``team_role``/``remarks`` for send_*_approval, ``deal_reg_number`` for
+    deal_reg, ``reason``/``remark`` for lost, ``valid_until`` for
+    send_to_customer, ``deal_won_amount`` for deal_won.
+    """
+
+    file_name: str | None = None
+    file_path: str | None = None
+    content_base64: str | None = None
+    content_type: str | None = None
+    team_role: str | None = None
+    remarks: str | None = None
+    remark: str | None = None
+    reason: str | None = None
+    deal_reg_number: str | None = None
+    valid_until: date | None = None
+    deal_won_amount: Decimal | None = None
+
+    def to_payload(self) -> dict:
+        return self.model_dump(exclude_none=True)

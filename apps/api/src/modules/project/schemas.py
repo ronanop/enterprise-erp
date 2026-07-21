@@ -1,5 +1,7 @@
 """Project Pydantic schemas."""
 
+from decimal import Decimal
+from datetime import date, datetime
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict
@@ -20,8 +22,29 @@ class ProjectUpdate(BaseModel):
 
 class ProjectResponse(OrmModel):
     id: UUID
-    company_id: UUID
+    project_code: str
+    project_name: str
+    project_type: str
+    customer_id: UUID | None
+    department_id: UUID | None
+    project_manager_employee_id: UUID
+    sponsor_employee_id: UUID | None
+    planned_start_date: date
+    planned_end_date: date
+    actual_start_date: date | None
+    actual_end_date: date | None
+    budget_amount: Decimal | None
+    currency_code: str
+    billing_type: str | None
+    crm_opportunity_id: UUID | None
+    crm_customer_id: UUID | None
+    health_status: str | None
+    description: str | None
     status: str
+    workflow_status: str | None
+    workflow_instance_id: UUID | None
+    company_id: UUID
+    branch_id: UUID
     version: int
 
 class ProjectPhaseCreate(BaseModel):
@@ -34,8 +57,15 @@ class ProjectPhaseUpdate(BaseModel):
 
 class ProjectPhaseResponse(OrmModel):
     id: UUID
-    company_id: UUID
+    branch_id: UUID | None
+    project_id: UUID
+    phase_code: str
+    phase_name: str
+    sequence_no: int
+    planned_start_date: date
+    planned_end_date: date
     status: str
+    company_id: UUID
     version: int
 
 class ProjectMilestoneCreate(BaseModel):
@@ -48,8 +78,16 @@ class ProjectMilestoneUpdate(BaseModel):
 
 class ProjectMilestoneResponse(OrmModel):
     id: UUID
-    company_id: UUID
+    branch_id: UUID | None
+    project_id: UUID
+    phase_id: UUID | None
+    milestone_code: str
+    milestone_name: str
+    owner_employee_id: UUID | None
+    due_date: date
+    achieved_at: datetime | None
     status: str
+    company_id: UUID
     version: int
 
 class ProjectTaskCreate(BaseModel):
@@ -63,8 +101,23 @@ class ProjectTaskUpdate(BaseModel):
 
 class ProjectTaskResponse(OrmModel):
     id: UUID
-    company_id: UUID
+    document_number: str | None
+    project_id: UUID
+    phase_id: UUID | None
+    milestone_id: UUID | None
+    parent_task_id: UUID | None
+    task_name: str
+    priority: str
+    planned_start_date: date | None
+    due_date: date | None
+    estimated_hours: Decimal | None
+    actual_hours: Decimal | None
+    percent_complete: Decimal | None
     status: str
+    workflow_status: str | None
+    workflow_instance_id: UUID | None
+    company_id: UUID
+    branch_id: UUID
     version: int
 
 class TaskDependencyCreate(BaseModel):
@@ -77,8 +130,13 @@ class TaskDependencyUpdate(BaseModel):
 
 class TaskDependencyResponse(OrmModel):
     id: UUID
-    company_id: UUID
+    project_id: UUID
+    from_task_id: UUID
+    to_task_id: UUID
+    dependency_type: str
+    lag_days: int
     status: str
+    company_id: UUID
     version: int
 
 class TaskAssignmentCreate(BaseModel):
@@ -91,8 +149,15 @@ class TaskAssignmentUpdate(BaseModel):
 
 class TaskAssignmentResponse(OrmModel):
     id: UUID
-    company_id: UUID
+    branch_id: UUID | None
+    task_id: UUID
+    project_id: UUID
+    employee_id: UUID
+    role_on_task: str
+    allocation_percent: Decimal | None
+    assigned_at: datetime | None
     status: str
+    company_id: UUID
     version: int
 
 class TimesheetCreate(BaseModel):
@@ -106,8 +171,17 @@ class TimesheetUpdate(BaseModel):
 
 class TimesheetResponse(OrmModel):
     id: UUID
-    company_id: UUID
+    document_number: str
+    employee_id: UUID
+    project_id: UUID | None
+    period_start: date
+    period_end: date
+    total_hours: Decimal | None
     status: str
+    workflow_status: str | None
+    workflow_instance_id: UUID | None
+    company_id: UUID
+    branch_id: UUID
     version: int
 
 class TimesheetEntryCreate(BaseModel):
@@ -121,8 +195,16 @@ class TimesheetEntryUpdate(BaseModel):
 
 class TimesheetEntryResponse(OrmModel):
     id: UUID
-    company_id: UUID
+    timesheet_id: UUID
+    project_id: UUID
+    task_id: UUID
+    employee_id: UUID
+    work_date: date
+    hours_worked: Decimal
+    description: str | None
     status: str
+    company_id: UUID
+    branch_id: UUID
     version: int
 
 class ResourcePlanCreate(BaseModel):
@@ -135,8 +217,14 @@ class ResourcePlanUpdate(BaseModel):
 
 class ResourcePlanResponse(OrmModel):
     id: UUID
-    company_id: UUID
+    branch_id: UUID | None
+    document_number: str
+    project_id: UUID
+    plan_name: str
+    planned_from: date
+    planned_to: date
     status: str
+    company_id: UUID
     version: int
 
 class ResourceAllocationCreate(BaseModel):
@@ -149,8 +237,16 @@ class ResourceAllocationUpdate(BaseModel):
 
 class ResourceAllocationResponse(OrmModel):
     id: UUID
-    company_id: UUID
+    branch_id: UUID | None
+    resource_plan_id: UUID
+    project_id: UUID
+    employee_id: UUID
+    resource_type: str
+    allocation_percent: Decimal
+    start_date: date
+    end_date: date
     status: str
+    company_id: UUID
     version: int
 
 class ProjectBudgetCreate(BaseModel):
@@ -163,8 +259,19 @@ class ProjectBudgetUpdate(BaseModel):
 
 class ProjectBudgetResponse(OrmModel):
     id: UUID
-    company_id: UUID
+    branch_id: UUID | None
+    document_number: str
+    project_id: UUID
+    budget_type: str
+    budget_amount: Decimal
+    currency_code: str
+    fiscal_year_id: UUID | None
+    cost_center_code: str | None
+    finance_budget_id: UUID | None
     status: str
+    workflow_status: str | None
+    workflow_instance_id: UUID | None
+    company_id: UUID
     version: int
 
 class ProjectCostCreate(BaseModel):
@@ -178,8 +285,26 @@ class ProjectCostUpdate(BaseModel):
 
 class ProjectCostResponse(OrmModel):
     id: UUID
-    company_id: UUID
+    document_number: str
+    project_id: UUID
+    cost_source: str
+    cost_amount: Decimal
+    currency_code: str
+    cost_date: date
+    employee_id: UUID | None
+    product_id: UUID | None
+    timesheet_entry_id: UUID | None
+    purchase_request_id: UUID | None
+    purchase_order_id: UUID | None
+    material_issue_id: UUID | None
+    material_receipt_id: UUID | None
+    production_order_id: UUID | None
+    quality_inspection_id: UUID | None
+    finance_journal_id: UUID | None
+    idempotency_key: str
     status: str
+    company_id: UUID
+    branch_id: UUID
     version: int
 
 class ProjectIssueCreate(BaseModel):
@@ -192,8 +317,17 @@ class ProjectIssueUpdate(BaseModel):
 
 class ProjectIssueResponse(OrmModel):
     id: UUID
-    company_id: UUID
+    branch_id: UUID | None
+    document_number: str
+    project_id: UUID
+    task_id: UUID | None
+    issue_title: str
+    severity: str
+    owner_employee_id: UUID | None
+    opened_at: datetime | None
+    resolved_at: datetime | None
     status: str
+    company_id: UUID
     version: int
 
 class ProjectRiskCreate(BaseModel):
@@ -206,8 +340,18 @@ class ProjectRiskUpdate(BaseModel):
 
 class ProjectRiskResponse(OrmModel):
     id: UUID
-    company_id: UUID
+    branch_id: UUID | None
+    document_number: str
+    project_id: UUID
+    risk_name: str
+    impact: str
+    probability: str
+    risk_level: str
+    owner_employee_id: UUID | None
+    mitigation_plan: str | None
+    review_date: date | None
     status: str
+    company_id: UUID
     version: int
 
 class ChangeRequestCreate(BaseModel):
@@ -221,8 +365,19 @@ class ChangeRequestUpdate(BaseModel):
 
 class ChangeRequestResponse(OrmModel):
     id: UUID
-    company_id: UUID
+    document_number: str
+    project_id: UUID
+    change_title: str
+    change_type: str
+    requested_by_employee_id: UUID
+    impact_summary: str | None
+    budget_impact_amount: Decimal | None
+    schedule_impact_days: int | None
     status: str
+    workflow_status: str | None
+    workflow_instance_id: UUID | None
+    company_id: UUID
+    branch_id: UUID
     version: int
 
 class ProjectDocumentCreate(BaseModel):
@@ -235,8 +390,17 @@ class ProjectDocumentUpdate(BaseModel):
 
 class ProjectDocumentResponse(OrmModel):
     id: UUID
-    company_id: UUID
+    branch_id: UUID | None
+    project_id: UUID
+    task_id: UUID | None
+    milestone_id: UUID | None
+    document_type: str
+    document_name: str
+    storage_uri: str | None
+    content_hash: str | None
+    uploaded_by_employee_id: UUID | None
     status: str
+    company_id: UUID
     version: int
 
 class ProjectCommentCreate(BaseModel):
@@ -249,8 +413,15 @@ class ProjectCommentUpdate(BaseModel):
 
 class ProjectCommentResponse(OrmModel):
     id: UUID
-    company_id: UUID
+    branch_id: UUID | None
+    project_id: UUID
+    task_id: UUID | None
+    issue_id: UUID | None
+    risk_id: UUID | None
+    author_user_id: UUID
+    comment_text: str
     status: str
+    company_id: UUID
     version: int
 
 class ProjectStatusHistoryCreate(BaseModel):
@@ -263,8 +434,15 @@ class ProjectStatusHistoryUpdate(BaseModel):
 
 class ProjectStatusHistoryResponse(OrmModel):
     id: UUID
-    company_id: UUID
+    branch_id: UUID | None
+    project_id: UUID
+    from_status: str
+    to_status: str
+    changed_at: datetime
+    changed_by_user_id: UUID
+    reason: str | None
     status: str
+    company_id: UUID
     version: int
 
 class ProjectNotificationCreate(BaseModel):
@@ -277,8 +455,16 @@ class ProjectNotificationUpdate(BaseModel):
 
 class ProjectNotificationResponse(OrmModel):
     id: UUID
-    company_id: UUID
+    branch_id: UUID | None
+    project_id: UUID
+    notification_type: str
+    recipient_user_id: UUID | None
+    recipient_employee_id: UUID | None
+    payload_json: dict | None
+    sent_at: datetime | None
+    delivery_status: str
     status: str
+    company_id: UUID
     version: int
 
 class ProjectReportCreate(BaseModel):
@@ -291,8 +477,16 @@ class ProjectReportUpdate(BaseModel):
 
 class ProjectReportResponse(OrmModel):
     id: UUID
-    company_id: UUID
+    branch_id: UUID | None
+    report_code: str
+    project_id: UUID | None
+    report_type: str
+    period_start: date
+    period_end: date
+    metrics_json: dict | None
+    generated_at: datetime | None
     status: str
+    company_id: UUID
     version: int
 
 class ProjectCostPostRequest(BaseModel):

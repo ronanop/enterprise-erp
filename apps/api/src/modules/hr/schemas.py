@@ -29,11 +29,12 @@ class DesignationUpdate(BaseModel):
 
 class DesignationResponse(OrmModel):
     id: UUID
-    company_id: UUID
+    branch_id: UUID | None
     designation_code: str
     designation_name: str
     job_level: str | None
     status: str
+    company_id: UUID
     version: int
 
 
@@ -69,10 +70,25 @@ class EmployeeProfileUpdate(BaseModel):
 
 class EmployeeProfileResponse(OrmModel):
     id: UUID
+    employee_id: UUID
+    employee_code: str | None = None
+    employee_name: str | None = None
+    first_name: str | None = None
+    last_name: str | None = None
+    email: str | None = None
+    designation: str | None = None
+    date_of_birth: date | None
+    gender: str | None
+    marital_status: str | None
+    nationality: str | None
+    blood_group: str | None
+    emergency_contact_name: str | None
+    emergency_contact_mobile: str | None
+    permanent_address_json: dict | None
+    current_address_json: dict | None
+    status: str
     company_id: UUID
     branch_id: UUID
-    employee_id: UUID
-    status: str
     version: int
 
 
@@ -245,11 +261,13 @@ class HolidayCalendarUpdate(BaseModel):
 
 class HolidayCalendarResponse(OrmModel):
     id: UUID
-    company_id: UUID
+    branch_id: UUID | None
     calendar_code: str
     calendar_name: str
     calendar_year: int
+    holidays_json: dict | list | None
     status: str
+    company_id: UUID
     version: int
 
 
@@ -275,11 +293,14 @@ class LeaveTypeUpdate(BaseModel):
 
 class LeaveTypeResponse(OrmModel):
     id: UUID
-    company_id: UUID
+    branch_id: UUID | None
     leave_type_code: str
     leave_type_name: str
     is_paid: bool
+    max_days_per_year: Decimal | None
+    requires_attachment: bool
     status: str
+    company_id: UUID
     version: int
 
 
@@ -442,7 +463,13 @@ class GoalResponse(OrmModel):
     employee_id: UUID
     sequence_no: int
     goal_title: str
+    goal_description: str | None
+    target_value: Decimal | None
+    actual_value: Decimal | None
+    weight_percent: Decimal | None
     status: str
+    company_id: UUID
+    branch_id: UUID
     version: int
 
 
@@ -463,7 +490,10 @@ class AppraisalResponse(OrmModel):
     sequence_no: int
     appraisal_area: str
     rating: int
+    comments: str | None
     status: str
+    company_id: UUID
+    branch_id: UUID
     version: int
 
 
@@ -492,11 +522,16 @@ class TrainingUpdate(BaseModel):
 
 class TrainingResponse(OrmModel):
     id: UUID
-    company_id: UUID
+    branch_id: UUID | None
     training_code: str
     training_name: str
     training_type: str
+    trainer_name: str | None
+    trainer_employee_id: UUID | None
+    start_date: date | None
+    end_date: date | None
     status: str
+    company_id: UUID
     version: int
 
 
@@ -508,12 +543,14 @@ class TrainingAssignRequest(BaseModel):
 
 class TrainingAttendanceResponse(OrmModel):
     id: UUID
-    company_id: UUID
-    branch_id: UUID
     training_id: UUID
     employee_id: UUID
     attendance_status: str
+    completion_percent: Decimal | None
+    certificate_uri: str | None
     status: str
+    company_id: UUID
+    branch_id: UUID
     version: int
 
 

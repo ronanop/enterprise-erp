@@ -119,6 +119,18 @@ class VendorQuotationRepository(ProcScopedRepository):
         )
         return self.db.scalar(stmt)
 
+    def list_comparisons(self, ctx: TenantContext, company_id: UUID) -> list[ProcVendorComparison]:
+        stmt = (
+            select(ProcVendorComparison)
+            .where(
+                ProcVendorComparison.company_id == company_id,
+                ProcVendorComparison.tenant_id == ctx.tenant_id,
+                ProcVendorComparison.is_deleted.is_(False),
+            )
+            .order_by(ProcVendorComparison.document_number)
+        )
+        return list(self.db.scalars(stmt).all())
+
     def create_comparison(
         self, ctx: TenantContext, *, company_id: UUID, branch_id: UUID, **fields: object
     ) -> ProcVendorComparison:
