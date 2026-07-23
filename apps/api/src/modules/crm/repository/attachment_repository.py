@@ -28,6 +28,23 @@ class AttachmentRepository(CrmScopedRepository):
         stmt = self.apply_crm_filter(stmt, CrmAttachment, ctx, branch_scoped=True)
         return list(self.db.scalars(stmt).all())
 
+    def list_by_category(
+        self,
+        ctx: TenantContext,
+        company_id: UUID,
+        *,
+        category: str | None = None,
+    ):
+        stmt = select(CrmAttachment).where(
+            CrmAttachment.company_id == company_id,
+            CrmAttachment.is_deleted.is_(False),
+        )
+        if category:
+            stmt = stmt.where(CrmAttachment.category == category)
+        stmt = self.apply_crm_filter(stmt, CrmAttachment, ctx, branch_scoped=True)
+        stmt = stmt.order_by(CrmAttachment.created_at.desc())
+        return list(self.db.scalars(stmt).all())
+
     def create(self, ctx: TenantContext, **fields) -> CrmAttachment:
         row = CrmAttachment(
             id=uuid4(),

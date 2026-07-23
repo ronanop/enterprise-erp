@@ -58,6 +58,9 @@ class OrderService:
         contract_id: UUID | None = None,
         payment_terms: str | None = None,
         expected_delivery_date=None,
+        source_module: str | None = None,
+        source_document_type: str | None = None,
+        source_document_id: UUID | None = None,
     ):
         cid = self._scope.resolve_company_id(ctx, company_id)
         self._scope.validate_branch_access(ctx, branch_id)
@@ -84,6 +87,9 @@ class OrderService:
             exchange_rate=exchange_rate,
             status=OrderStatus.DRAFT.value,
             workflow_status=WorkflowStatus.PENDING.value,
+            source_module=source_module,
+            source_document_type=source_document_type,
+            source_document_id=source_document_id,
         )
         self._audit.log_entity_change(
             tenant_id=ctx.tenant_id,

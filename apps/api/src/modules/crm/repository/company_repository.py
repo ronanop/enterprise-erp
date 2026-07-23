@@ -25,6 +25,7 @@ class CompanyRepository(CrmScopedRepository):
             CrmCompany.is_deleted.is_(False),
         )
         stmt = self.apply_crm_filter(stmt, CrmCompany, ctx, branch_scoped=True)
+        stmt = stmt.order_by(CrmCompany.created_at.desc())
         return list(self.db.scalars(stmt).all())
 
     def create(self, ctx: TenantContext, **fields) -> CrmCompany:

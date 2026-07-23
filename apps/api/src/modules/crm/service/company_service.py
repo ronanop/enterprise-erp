@@ -82,6 +82,27 @@ class CompanyService:
         lead_fields["email"] = lead_fields.get("email") or account.customer_email
         lead_fields["mobile"] = lead_fields.get("mobile") or account.phone or ""
         lead_fields["industry"] = lead_fields.get("industry") or account.industry
+        lead_fields["street"] = lead_fields.get("street") or account.billing_street
+        lead_fields["city"] = lead_fields.get("city") or account.billing_city
+        lead_fields["state"] = lead_fields.get("state") or account.billing_state
+        lead_fields["zip"] = lead_fields.get("zip") or account.billing_code
+        lead_fields["country"] = lead_fields.get("country") or account.billing_country
+        lead_fields["entity_name"] = lead_fields.get("entity_name") or account.customer_name
+        lead_fields["entity_email"] = lead_fields.get("entity_email") or account.customer_email
+        lead_fields["entity_contact"] = lead_fields.get("entity_contact") or account.phone
+        if not lead_fields.get("entity_address"):
+            billing_address = ", ".join(
+                str(value)
+                for value in (
+                    account.billing_street,
+                    account.billing_city,
+                    account.billing_state,
+                    account.billing_code,
+                    account.billing_country,
+                )
+                if value
+            )
+            lead_fields["entity_address"] = billing_address or None
         lead_fields["assigned_date"] = lead_fields.get("assigned_date") or date.today()
         lead_fields["status"] = LeadStatus.NEW.value
         lead_fields["company_account_id"] = company_account_id

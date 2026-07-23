@@ -33,6 +33,19 @@ class OvfRepository(CrmScopedRepository):
         if opportunity_id is not None:
             stmt = stmt.where(CrmOvf.opportunity_id == opportunity_id)
         stmt = self.apply_crm_filter(stmt, CrmOvf, ctx, branch_scoped=True)
+        stmt = stmt.order_by(CrmOvf.created_at.desc())
+        return list(self.db.scalars(stmt).all())
+
+    def list_shared_to_scm(self, ctx: TenantContext, company_id: UUID) -> list[CrmOvf]:
+        """OVFs Finance/Sales shared to SCM (approved commercial lock)."""
+        stmt = select(CrmOvf).where(
+            CrmOvf.company_id == company_id,
+            CrmOvf.is_deleted.is_(False),
+            CrmOvf.shared_to_scm.is_(True),
+            CrmOvf.blueprint_state.in_(("shared_scm", "deal_won")),
+        )
+        stmt = self.apply_crm_filter(stmt, CrmOvf, ctx, branch_scoped=True)
+        stmt = stmt.order_by(CrmOvf.updated_at.desc())
         return list(self.db.scalars(stmt).all())
 
     def create(self, ctx: TenantContext, **fields) -> CrmOvf:

@@ -16,6 +16,12 @@ function isActivePath(pathname: string, href: string) {
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
+/** Open module pages in a content-only tab (no app sidebar). */
+function standaloneHref(href: string) {
+  const joiner = href.includes("?") ? "&" : "?";
+  return `${href}${joiner}standalone=1`;
+}
+
 export function AppSidebar() {
   const pathname = usePathname();
   const [collapsed, setCollapsed] = useState(false);
@@ -87,7 +93,9 @@ export function AppSidebar() {
                 return (
                   <li key={item.href}>
                     <Link
-                      href={item.href}
+                      href={standaloneHref(item.href)}
+                      target="_blank"
+                      rel="noopener noreferrer"
                       title={item.title}
                       className={cn(
                         "group relative flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-[13px] transition-colors",

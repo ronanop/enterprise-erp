@@ -18,6 +18,7 @@ from modules.crm.service.engines import (
     LeadEngine,
     OpportunityEngine,
     TaskEngine,
+    sales_blueprint_engine,
 )
 
 
@@ -30,7 +31,9 @@ def test_lead_convert_requires_mobile_and_contact():
 
 def test_opportunity_win_requires_customer():
     engine = OpportunityEngine()
-    opp = SimpleNamespace(status="open", customer_id=None, expected_revenue=100, probability_percent=50)
+    opp = SimpleNamespace(
+        status="open", customer_id=None, expected_revenue=100, probability_percent=50
+    )
     with pytest.raises(InvalidOpportunityState):
         engine.validate_closeable(opp, won=True)
 
@@ -39,6 +42,21 @@ def test_opportunity_forecast():
     engine = OpportunityEngine()
     opp = SimpleNamespace(expected_revenue=Decimal("1000"), probability_percent=Decimal("25"))
     assert engine.compute_forecast(opp) == Decimal("250.0000")
+
+
+def test_opportunity_document_step_offers_boq_or_sow():
+    actions = sales_blueprint_engine.allowed_actions("opportunity", "open")
+
+    assert "attach_boq" in actions
+    assert "attach_sow" in actions
+    assert sales_blueprint_engine.transition("opportunity", "open", "attach_sow") == "boq_pending"
+
+
+def test_document_approval_skips_standalone_sow_step():
+    assert (
+        sales_blueprint_engine.transition("opportunity", "boq_approval", "approve_boq")
+        == "deal_reg"
+    )
 
 
 def test_campaign_activate_from_draft_only():

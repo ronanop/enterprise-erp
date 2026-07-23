@@ -19,12 +19,23 @@ class LeadRepository(CrmScopedRepository):
         stmt = self.apply_crm_filter(stmt, CrmLead, ctx, branch_scoped=True)
         return self.db.scalar(stmt)
 
-    def list_leads(self, ctx: TenantContext, company_id: UUID):
+    def list_leads(
+        self,
+        ctx: TenantContext,
+        company_id: UUID,
+        company_account_id: UUID | None = None,
+    ):
         stmt = select(CrmLead).where(
             CrmLead.company_id == company_id,
             CrmLead.is_deleted.is_(False),
+            # Converted leads live under Opportunities — keep Leads free of duplicates.
+            CrmLead.blueprint_state != "converted",
+            CrmLead.converted_opportunity_id.is_(None),
         )
+        if company_account_id is not None:
+            stmt = stmt.where(CrmLead.company_account_id == company_account_id)
         stmt = self.apply_crm_filter(stmt, CrmLead, ctx, branch_scoped=True)
+        stmt = stmt.order_by(CrmLead.created_at.desc())
         return list(self.db.scalars(stmt).all())
 
     def create(self, ctx: TenantContext, **fields) -> CrmLead:

@@ -9,6 +9,7 @@ from modules.procurement.routers.performance import performance_router
 from modules.procurement.routers.requisitions import requisitions_router
 from modules.procurement.routers.returns import returns_router
 from modules.procurement.routers.rfqs import rfqs_router
+from modules.procurement.routers.scm import scm_router
 from modules.procurement.routers.vendor_quotations import vendor_quotations_router
 
 __all__ = [
@@ -22,4 +23,5 @@ __all__ = [
     "returns_router",
     "contracts_router",
     "performance_router",
+    "scm_router",
 ]

@@ -11,7 +11,16 @@ import { PageHeader } from "@/components/layout/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ApiClientError } from "@/services/api-client";
-import { decideMyJob, listMyJobs, myJobEntityHref, type ApprovalTask } from "@/services/sales-crm-service";
+import {
+  decideMyJob,
+  listMyJobs,
+  listOpportunities,
+  listOvfs,
+  listQuotes,
+  listSalesLeads,
+  myJobEntityHref,
+  type ApprovalTask,
+} from "@/services/sales-crm-service";
 
 const TEAM_ROLES = ["presales", "project", "management", "accounts", "scm"];
 const STATUSES = ["pending", "approved", "rejected", "cancelled"];
@@ -25,7 +34,13 @@ function formatDate(value: string | null): string {
   }
 }
 
-export function MyJobsPage() {
+export function MyJobsPage({
+  companyAccountId,
+  embedded,
+}: {
+  companyAccountId?: string;
+  embedded?: boolean;
+} = {}) {
   const [rows, setRows] = useState<ApprovalTask[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -42,20 +57,40 @@ export function MyJobsPage() {
     setLoading(true);
     setError(null);
     try {
-      setRows(
-        await listMyJobs({
-          team_role: teamRole || undefined,
-          status: status || undefined,
-          mine: mineOnly || undefined,
-        }),
-      );
+      const tasks = await listMyJobs({
+        team_role: teamRole || undefined,
+        status: status || undefined,
+        mine: mineOnly || undefined,
+      });
+
+      if (!companyAccountId) {
+        setRows(tasks);
+        return;
+      }
+
+      const [leads, opps, quotes, ovfs] = await Promise.all([
+        listSalesLeads(companyAccountId).catch(() => []),
+        listOpportunities({ company_account_id: companyAccountId }).catch(() => []),
+        listQuotes({ company_account_id: companyAccountId }).catch(() => []),
+        listOvfs({ company_account_id: companyAccountId }).catch(() => []),
+      ]);
+
+      const entityIds = new Set<string>([
+        companyAccountId,
+        ...leads.map((row) => row.id),
+        ...opps.map((row) => row.id),
+        ...quotes.map((row) => row.id),
+        ...ovfs.map((row) => row.id),
+      ]);
+
+      setRows(tasks.filter((task) => entityIds.has(task.entity_id)));
     } catch (err) {
       setRows([]);
       setError(err instanceof ApiClientError ? err.message : "Failed to load My Jobs");
     } finally {
       setLoading(false);
     }
-  }, [teamRole, status, mineOnly]);
+  }, [teamRole, status, mineOnly, companyAccountId]);
 
   useEffect(() => {
     void load();
@@ -88,16 +123,18 @@ export function MyJobsPage() {
 
   return (
     <div className="space-y-4">
-      <PageHeader
-        title="My Jobs"
-        description="Team approval inbox — approve or reject requests routed from the sales blueprint, with remarks."
-        actions={
-          <Button type="button" variant="outline" size="sm" className="cursor-pointer" onClick={() => void load()} disabled={loading}>
-            <RefreshCw className={`size-3.5 ${loading ? "animate-spin" : ""}`} />
-            Refresh
-          </Button>
-        }
-      />
+      {!embedded ? (
+        <PageHeader
+          title="My Jobs"
+          description="Team approval inbox — approve or reject requests routed from the sales blueprint, with remarks."
+          actions={
+            <Button type="button" variant="outline" size="sm" className="cursor-pointer" onClick={() => void load()} disabled={loading}>
+              <RefreshCw className={`size-3.5 ${loading ? "animate-spin" : ""}`} />
+              Refresh
+            </Button>
+          }
+        />
+      ) : null}
 
       <div className="flex flex-wrap items-center gap-3 rounded-xl border border-border/80 bg-card px-4 py-3 shadow-sm">
         <div className="flex items-center gap-2">
@@ -131,6 +168,12 @@ export function MyJobsPage() {
           />
           Assigned to me only
         </label>
+        {embedded ? (
+          <Button type="button" variant="outline" size="sm" className="ml-auto cursor-pointer" onClick={() => void load()} disabled={loading}>
+            <RefreshCw className={`size-3.5 ${loading ? "animate-spin" : ""}`} />
+            Refresh
+          </Button>
+        ) : null}
       </div>
 
       {error ? (
@@ -140,9 +183,9 @@ export function MyJobsPage() {
       ) : null}
 
       <div className="overflow-hidden rounded-xl border border-border/80 bg-card shadow-sm">
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border/70 px-4 py-3">
-          <div className="flex items-center gap-2">
-            <h2 className="text-sm font-medium tracking-tight">Tasks</h2>
+        <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2 border-b border-border/70 px-4 py-3">
+          <div className="flex min-w-0 flex-1 items-center gap-2">
+            <h2 className="truncate text-sm font-medium tracking-tight">Tasks</h2>
             <Badge variant="secondary">{rows.length} shown</Badge>
           </div>
         </div>

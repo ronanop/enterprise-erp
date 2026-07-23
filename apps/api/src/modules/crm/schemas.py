@@ -117,10 +117,57 @@ class LeadResponse(OrmModel):
     lead_code: str
     first_name: str
     last_name: str | None
+    salutation: str | None = None
     mobile: str
     email: str | None
     status: str
+    blueprint_state: str
+    locked: bool
+    company_account_id: UUID | None
     owner_employee_id: UUID
+    assign_to_id: UUID | None
+    assigned_date: date | None = None
+    expected_amount: Decimal | None
+    expected_closure_date: date | None
+    project_title: str | None
+    product_type: str | None
+    sub_product_category: str | None
+    sub_product: str | None
+    sub_product_other: str | None
+    engagement_score: int | None = None
+    portal_link: str | None = None
+    requirement_type: str | None = None
+    purchase_model: str | None = None
+    dr_number: str | None = None
+    new_dr_number: str | None = None
+    deal_type: str | None = None
+    industry: str | None = None
+    territory: str | None = None
+    region: str | None = None
+    street: str | None = None
+    city: str | None = None
+    state: str | None = None
+    zip: str | None = None
+    country: str | None = None
+    entity_name: str | None
+    entity_email: str | None
+    entity_address: str | None
+    entity_gst: str | None
+    entity_contact: str | None
+    oem_name: str | None = None
+    oem_contact_person: str | None = None
+    oem_contact_number: str | None = None
+    oem_contact_email: str | None = None
+    distributor_name: str | None = None
+    distributor_contact: str | None = None
+    distributor_contact_person: str | None = None
+    distributor_contact_email: str | None = None
+    distributor_department: str | None = None
+    end_customer_name: str | None = None
+    end_customer_location: str | None = None
+    notes: str | None
+    convert_remark: str | None = None
+    lost_reason: str | None = None
     customer_id: UUID | None
     converted_opportunity_id: UUID | None
     version: int
@@ -167,6 +214,8 @@ class OpportunityResponse(OrmModel):
     company_account_id: UUID | None
     opportunity_code: str
     opportunity_name: str
+    project_title: str | None
+    owner_employee_id: UUID
     status: str
     current_stage: str
     expected_revenue: Decimal
@@ -175,6 +224,13 @@ class OpportunityResponse(OrmModel):
     customer_id: UUID | None
     sales_quotation_id: UUID | None
     sales_order_id: UUID | None
+    blueprint_state: str | None = None
+    locked: bool = False
+    boq_attached: bool = False
+    sow_attached: bool = False
+    oem_quote_attached: bool = False
+    customer_po_attached: bool = False
+    customer_po_approved: bool = False
     version: int
 
 
@@ -223,11 +279,18 @@ class TaskCreate(BaseModel):
     title: str
     description: str | None = None
     owner_employee_id: UUID
+    assigned_to_employee_id: UUID | None = None
     due_at: datetime | None = None
-    priority: str = "medium"
+    priority: str = Field(default="medium", pattern="^(highest|high|medium|low)$")
     lead_id: UUID | None = None
     opportunity_id: UUID | None = None
     customer_id: UUID | None = None
+    account_name: str | None = None
+    opportunity_name: str | None = None
+    reminder_date: date | None = None
+    reminder_time: time | None = None
+    email: str | None = None
+    repeat_rule: str | None = None
 
 
 class TaskResponse(OrmModel):
@@ -239,7 +302,14 @@ class TaskResponse(OrmModel):
     opportunity_id: UUID | None
     customer_id: UUID | None
     owner_employee_id: UUID
+    assigned_to_employee_id: UUID | None = None
+    account_name: str | None = None
+    opportunity_name: str | None = None
     due_at: datetime | None
+    reminder_date: date | None = None
+    reminder_time: time | None = None
+    email: str | None = None
+    repeat_rule: str | None = None
     priority: str
     status: str
     completed_at: datetime | None
@@ -254,11 +324,24 @@ class MeetingCreate(BaseModel):
     title: str
     meeting_date: date
     organizer_employee_id: UUID
+    end_date: date | None = None
     start_time: time | None = None
     end_time: time | None = None
+    all_day: bool = False
+    location: str | None = None
+    meeting_mode: str | None = None
+    related_to: str | None = None
+    repeat_rule: str | None = None
+    participants_reminder: str | None = None
+    reminder_primary: str | None = None
+    reminder_secondary: str | None = None
     lead_id: UUID | None = None
     opportunity_id: UUID | None = None
     customer_id: UUID | None = None
+    company_account_id: UUID | None = None
+    participants_text: str | None = None
+    notes: str | None = None
+    tagged_employee_id: UUID | None = None
 
 
 class MeetingResponse(OrmModel):
@@ -266,14 +349,23 @@ class MeetingResponse(OrmModel):
     meeting_code: str
     title: str
     meeting_date: date
+    end_date: date | None = None
     start_time: time | None
     end_time: time | None
+    all_day: bool = False
     location: str | None
     meeting_mode: str | None
+    related_to: str | None = None
+    repeat_rule: str | None = None
+    participants_reminder: str | None = None
+    reminder_primary: str | None = None
+    reminder_secondary: str | None = None
     lead_id: UUID | None
     opportunity_id: UUID | None
     customer_id: UUID | None
+    company_account_id: UUID | None = None
     organizer_employee_id: UUID
+    tagged_employee_id: UUID | None = None
     participants_text: str | None
     notes: str | None
     outcome: str | None
@@ -326,9 +418,11 @@ class FollowupCreate(BaseModel):
     branch_id: UUID
     owner_employee_id: UUID
     followup_at: datetime
-    followup_type: str
+    followup_type: str = "call"
     lead_id: UUID | None = None
     opportunity_id: UUID | None = None
+    company_account_id: UUID | None = None
+    customer_name: str | None = None
     notes: str | None = None
 
 
@@ -337,6 +431,8 @@ class FollowupResponse(OrmModel):
     followup_code: str
     lead_id: UUID | None
     opportunity_id: UUID | None
+    company_account_id: UUID | None
+    customer_name: str | None
     owner_employee_id: UUID
     followup_at: datetime
     followup_type: str
@@ -575,16 +671,16 @@ class CompanyCreate(BaseModel):
     branch_id: UUID
     customer_name: str
     account_owner_id: UUID | None = None
-    account_type: str | None = None
+    account_type: str
     industry: str
     other_industries: str | None = None
     portal_id: str | None = None
     source: str
     rating: str | None = None
-    first_name: str | None = None
-    last_name: str | None = None
-    customer_email: str | None = None
-    phone: str | None = None
+    first_name: str
+    last_name: str
+    customer_email: str
+    phone: str
     website: str | None = None
     account_ownership_id: UUID | None = None
     customer_id_ext: str | None = None
@@ -727,15 +823,20 @@ class LeadCreateFromCompany(BaseModel):
     lead_source_id: UUID
     owner_employee_id: UUID
     assign_to_id: UUID | None = None
+    assigned_date: date | None = None
     expected_amount: Decimal | None = None
     expected_closure_date: date | None = None
     product_type: str | None = None
     sub_product_category: str | None = None
     sub_product: str | None = None
     sub_product_other: str | None = None
+    engagement_score: int | None = None
+    portal_link: str | None = None
     project_title: str | None = None
     requirement_type: str | None = None
     purchase_model: str | None = None
+    dr_number: str | None = None
+    new_dr_number: str | None = None
     deal_type: str | None = None
     industry: str | None = None
     territory: str | None = None
@@ -751,6 +852,9 @@ class LeadCreateFromCompany(BaseModel):
     oem_contact_email: str | None = None
     distributor_name: str | None = None
     distributor_contact: str | None = None
+    distributor_contact_person: str | None = None
+    distributor_contact_email: str | None = None
+    distributor_department: str | None = None
     end_customer_name: str | None = None
     end_customer_location: str | None = None
     entity_name: str | None = None
@@ -782,6 +886,28 @@ class SalesLeadResponse(OrmModel):
     assign_to_id: UUID | None
     expected_amount: Decimal | None
     expected_closure_date: date | None
+    project_title: str | None = None
+    product_type: str | None = None
+    sub_product_category: str | None = None
+    sub_product: str | None = None
+    sub_product_other: str | None = None
+    entity_name: str | None = None
+    entity_email: str | None = None
+    entity_address: str | None = None
+    entity_gst: str | None = None
+    entity_contact: str | None = None
+    oem_name: str | None = None
+    oem_contact_person: str | None = None
+    oem_contact_number: str | None = None
+    oem_contact_email: str | None = None
+    distributor_name: str | None = None
+    distributor_contact: str | None = None
+    distributor_contact_person: str | None = None
+    distributor_contact_email: str | None = None
+    distributor_department: str | None = None
+    end_customer_name: str | None = None
+    end_customer_location: str | None = None
+    notes: str | None = None
     converted_opportunity_id: UUID | None
     version: int
 
@@ -821,6 +947,10 @@ class QuoteCreate(BaseModel):
     branch_id: UUID
     contact_id: UUID | None = None
     subject: str | None = None
+    project_title: str | None = None
+    account_name: str | None = None
+    service_type: str | None = None
+    owner_name: str | None = None
     valid_until: date | None = None
     entity_name: str | None = None
     entity_email: str | None = None
@@ -837,6 +967,10 @@ class QuoteCreate(BaseModel):
 
 class QuoteUpdate(BaseModel):
     subject: str | None = None
+    project_title: str | None = None
+    account_name: str | None = None
+    service_type: str | None = None
+    owner_name: str | None = None
     valid_until: date | None = None
     freight: Decimal | None = None
     terms: str | None = None
@@ -853,6 +987,17 @@ class QuoteResponse(OrmModel):
     company_account_id: UUID | None
     contact_id: UUID | None
     subject: str | None
+    project_title: str | None = None
+    account_name: str | None = None
+    service_type: str | None = None
+    owner_name: str | None = None
+    entity_name: str | None
+    entity_email: str | None
+    entity_address: str | None
+    entity_gst: str | None
+    entity_contact: str | None
+    billing_country: str | None
+    shipping_country: str | None
     quote_no: str
     quote_revision: int
     quote_stage: str
@@ -864,6 +1009,8 @@ class QuoteResponse(OrmModel):
     avg_margin_pct: Decimal
     total_margin_amount: Decimal
     reason_for_discount: str | None
+    terms: str | None = None
+    description: str | None = None
     sales_order_id: UUID | None
     version: int
 
@@ -935,6 +1082,18 @@ class OvfCreate(BaseModel):
     branch_id: UUID
     po_number: str | None = None
     delivery_period: str | None = None
+    customer_name: str | None = None
+    quote_name: str | None = None
+    billing_address: str | None = None
+    billing_state: str | None = None
+    billing_country: str | None = None
+    owner_name: str | None = None
+    billing_contact_person: str | None = None
+    shipping_address: str | None = None
+    shipping_state: str | None = None
+    shipping_country: str | None = None
+    shipping_contact_person: str | None = None
+    account_name: str | None = None
     technology_segment: str | None = None
     sub_technology_segment: str | None = None
     installation_details: str | None = None
@@ -953,6 +1112,22 @@ class OvfResponse(OrmModel):
     opportunity_id: UUID
     company_account_id: UUID | None
     po_number: str | None
+    delivery_period: str | None
+    customer_name: str | None
+    quote_name: str | None
+    billing_address: str | None
+    billing_state: str | None
+    billing_country: str | None
+    owner_name: str | None
+    billing_contact_person: str | None
+    shipping_address: str | None
+    shipping_state: str | None
+    shipping_country: str | None
+    shipping_contact_person: str | None
+    account_name: str | None
+    technology_segment: str | None
+    sub_technology_segment: str | None
+    installation_details: str | None
     approval_status: str
     blueprint_state: str
     locked: bool
@@ -962,6 +1137,8 @@ class OvfResponse(OrmModel):
     vendor_payment_days: int
     customer_payment_days: int
     finance_cost_pct: Decimal
+    additional_charges: Decimal
+    freight: Decimal
     total_margin_pct: Decimal
     total_margin_amount: Decimal
     version: int
@@ -1002,6 +1179,7 @@ class AttachmentCreate(BaseModel):
     company_id: UUID | None = None
     file_name: str
     category: str = "other"
+    source: str = Field(default="upload", pattern="^(upload|link|google_drive|onedrive|dropbox|box)$")
     file_path: str | None = None
     content_base64: str | None = None
     content_type: str | None = None
@@ -1016,6 +1194,7 @@ class AttachmentResponse(OrmModel):
     content_type: str | None
     size: int | None
     category: str
+    source: str = "upload"
     uploaded_by: UUID | None
     company_id: UUID
     branch_id: UUID
@@ -1056,6 +1235,37 @@ class BlueprintStateResponse(BaseModel):
     locked: bool
     allowed_actions: list[str]
     is_sales_blueprint: bool | None = None
+
+
+class OpportunityTimelineEventResponse(BaseModel):
+    id: str
+    occurred_at: datetime
+    event_type: str
+    entity_type: str
+    entity_id: UUID
+    entity_label: str | None = None
+    title: str
+    summary: str | None = None
+    action: str | None = None
+    from_state: str | None = None
+    to_state: str | None = None
+    actor_id: UUID | None = None
+    actor_name: str | None = None
+    requested_by_id: UUID | None = None
+    requested_by_name: str | None = None
+    decided_by_id: UUID | None = None
+    decided_by_name: str | None = None
+    decision: str | None = None
+    team_role: str | None = None
+    remark: str | None = None
+    version: int | None = None
+
+
+class OpportunityTimelineResponse(BaseModel):
+    opportunity_id: UUID
+    opportunity_code: str | None = None
+    opportunity_name: str | None = None
+    events: list[OpportunityTimelineEventResponse]
 
 
 class BlueprintActionRequest(BaseModel):

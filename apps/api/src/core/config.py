@@ -46,12 +46,14 @@ class Settings(BaseSettings):
 
     jwt_secret_key: str = Field(default="change-me-in-production", alias="JWT_SECRET_KEY")
     jwt_algorithm: str = Field(default="HS256", alias="JWT_ALGORITHM")
+    # Long-lived by default so local/demo sessions are not cut short mid-work.
+    # Override via env for production hardening.
     jwt_access_token_expire_minutes: int = Field(
-        default=15, alias="JWT_ACCESS_TOKEN_EXPIRE_MINUTES"
+        default=10080, alias="JWT_ACCESS_TOKEN_EXPIRE_MINUTES"
     )
-    jwt_refresh_token_expire_days: int = Field(default=7, alias="JWT_REFRESH_TOKEN_EXPIRE_DAYS")
-    session_ttl_seconds: int = Field(default=1800, alias="SESSION_TTL_SECONDS")
-    login_rate_limit: int = Field(default=5, alias="LOGIN_RATE_LIMIT")
+    jwt_refresh_token_expire_days: int = Field(default=30, alias="JWT_REFRESH_TOKEN_EXPIRE_DAYS")
+    session_ttl_seconds: int = Field(default=604800, alias="SESSION_TTL_SECONDS")
+    login_rate_limit: int = Field(default=0, alias="LOGIN_RATE_LIMIT")
     login_rate_window_seconds: int = Field(default=900, alias="LOGIN_RATE_WINDOW_SECONDS")
     account_lockout_threshold: int = Field(default=5, alias="ACCOUNT_LOCKOUT_THRESHOLD")
     account_lockout_minutes: int = Field(default=15, alias="ACCOUNT_LOCKOUT_MINUTES")

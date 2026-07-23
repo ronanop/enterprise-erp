@@ -29,11 +29,34 @@ class AttachmentService:
     def list_for_entity(self, ctx: TenantContext, entity_type: str, entity_id: UUID):
         return self._repo.list_for_entity(ctx, entity_type, entity_id)
 
+    def list_by_category(
+        self,
+        ctx: TenantContext,
+        *,
+        category: str | None = None,
+        company_id: UUID | None = None,
+    ):
+        cid = self._scope.resolve_company_id(ctx, company_id)
+        return self._repo.list_by_category(ctx, cid, category=category)
+
     def get(self, ctx: TenantContext, row_id: UUID):
         row = self._repo.get(ctx, row_id)
         if row is None:
             raise NotFoundException("Attachment not found")
         return row
+
+    def resolve_file_path(self, ctx: TenantContext, row_id: UUID) -> tuple[Path, str, str | None]:
+        """Return (path, file_name, content_type) for streaming download."""
+        row = self.get(ctx, row_id)
+        path = Path(row.file_path)
+        if not path.is_file():
+            # Fallback: file may have been stored relative to the upload root.
+            candidate = UPLOAD_ROOT / path.name
+            if candidate.is_file():
+                path = candidate
+            else:
+                raise NotFoundException("Attachment file is missing on disk")
+        return path, row.file_name, row.content_type
 
     def create(
         self,
@@ -43,6 +66,7 @@ class AttachmentService:
         entity_id: UUID,
         file_name: str,
         category: str = "other",
+        source: str = "upload",
         branch_id: UUID,
         company_id: UUID | None = None,
         file_path: str | None = None,
@@ -60,6 +84,7 @@ class AttachmentService:
             dest = UPLOAD_ROOT / f"{uuid.uuid4()}_{file_name}"
             dest.write_bytes(raw)
             stored_path = str(dest)
+            source = "upload"
 
         if not stored_path:
             raise NotFoundException("Either file_path or content_base64 must be provided")
@@ -75,5 +100,6 @@ class AttachmentService:
             content_type=content_type,
             size=size,
             category=category,
+            source=source,
             uploaded_by=ctx.user_id,
         )

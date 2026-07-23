@@ -1,42 +1,106 @@
 "use client";
 
+import type { ReactNode } from "react";
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, Pencil, Plus, RefreshCw, Target } from "lucide-react";
+import { CalendarDays, ClipboardList, Plus, Target } from "lucide-react";
 
-import { ApprovalBanner } from "@/components/crm/sales/approval-banner";
-import { CompanyFormDialog } from "@/components/crm/sales/company-form-dialog";
-import { DealTimeline, type DealStage } from "@/components/crm/sales/deal-timeline";
+import { CompanyWorkspaceShell } from "@/components/crm/company-workspace-shell";
+import { FollowupFormDialog } from "@/components/crm/sales/followup-form-dialog";
+import { MeetingFormDialog } from "@/components/crm/sales/meeting-form-dialog";
 import { FinanceStatusBadge } from "@/components/finance/finance-status-badge";
-import { PageHeader } from "@/components/layout/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ApiClientError } from "@/services/api-client";
 import {
   fullName,
   getCompany,
+  listEmployeeOptions,
+  listFollowups,
+  listMeetings,
   listSalesLeads,
   type Company,
+  type CrmFollowup,
+  type CrmMeeting,
+  type Option,
   type SalesLead,
 } from "@/services/sales-crm-service";
+
+function textOrDash(value: string | null | undefined): string {
+  return value?.trim() || "-";
+}
+
+function DetailItem({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div className="min-w-0">
+      <dt className="text-muted-foreground">{label}</dt>
+      <dd className="mt-1 break-words text-foreground">{children}</dd>
+    </div>
+  );
+}
+
+const VENUE_LABELS: Record<string, string> = {
+  client_location: "Client location",
+  office: "Office",
+  online: "Online",
+  phone: "Phone",
+};
+
+function formatMeetingWhen(row: CrmMeeting): string {
+  if (row.all_day) return `${row.meeting_date} · All day`;
+  const start = row.start_time?.slice(0, 5) ?? "";
+  const end = row.end_time?.slice(0, 5) ?? "";
+  if (start && end) return `${row.meeting_date} · ${start} – ${end}`;
+  if (start) return `${row.meeting_date} · ${start}`;
+  return row.meeting_date;
+}
+
+function formatFollowupDate(row: CrmFollowup): string {
+  const iso = row.followup_at;
+  if (!iso) return "—";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso.slice(0, 10);
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  return `${yyyy}-${mm}-${dd}`;
+}
+
+function formatFollowupTime(row: CrmFollowup): string {
+  const iso = row.followup_at;
+  if (!iso) return "—";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso.length >= 16 ? iso.slice(11, 16) : "—";
+  return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+}
 
 export function CompanyDetailPage({ companyAccountId }: { companyAccountId: string }) {
   const [company, setCompany] = useState<Company | null>(null);
   const [leads, setLeads] = useState<SalesLead[]>([]);
+  const [meetings, setMeetings] = useState<CrmMeeting[]>([]);
+  const [followups, setFollowups] = useState<CrmFollowup[]>([]);
+  const [employees, setEmployees] = useState<Option[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [editOpen, setEditOpen] = useState(false);
+  const [meetingOpen, setMeetingOpen] = useState(false);
+  const [followupOpen, setFollowupOpen] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const [companyRow, allLeads] = await Promise.all([
+      const [companyRow, allLeads, employeeOptions, meetingRows, followupRows] = await Promise.all([
         getCompany(companyAccountId),
-        listSalesLeads().catch(() => [] as SalesLead[]),
+        listSalesLeads(companyAccountId).catch(() => [] as SalesLead[]),
+        listEmployeeOptions().catch(() => [] as Option[]),
+        listMeetings(companyAccountId).catch(() => [] as CrmMeeting[]),
+        listFollowups(companyAccountId).catch(() => [] as CrmFollowup[]),
       ]);
       setCompany(companyRow);
-      setLeads(allLeads.filter((l) => l.company_account_id === companyAccountId));
+      setLeads(allLeads);
+      setEmployees(employeeOptions);
+      setMeetings(meetingRows);
+      setFollowups(followupRows);
     } catch (err) {
       setCompany(null);
       setError(err instanceof ApiClientError ? err.message : "Failed to load company");
@@ -46,249 +110,312 @@ export function CompanyDetailPage({ companyAccountId }: { companyAccountId: stri
   }, [companyAccountId]);
 
   useEffect(() => {
-    void load();
+    const timer = window.setTimeout(() => void load(), 0);
+    return () => window.clearTimeout(timer);
   }, [load]);
 
-  if (loading && !company) {
-    return (
-      <div className="space-y-3">
-        <div className="h-8 w-48 animate-pulse rounded bg-muted" />
-        <div className="h-40 animate-pulse rounded-xl bg-muted/60" />
-      </div>
-    );
-  }
+  const employeeName = (id: string | null) =>
+    id ? employees.find((employee) => employee.id === id)?.label ?? id : "-";
+  const openMeetings = meetings.filter((m) => m.status === "scheduled");
+  const openFollowups = followups.filter((f) => f.status === "scheduled");
 
-  if (error || !company) {
-    return (
-      <div className="space-y-3">
-        <Link href="/crm/companies" className="inline-flex cursor-pointer items-center gap-1 text-xs font-medium text-primary">
-          <ArrowLeft className="size-3.5" /> Back to Company
-        </Link>
+  return (
+    <CompanyWorkspaceShell companyAccountId={companyAccountId}>
+      {loading && !company ? (
+        <div className="h-40 animate-pulse rounded-xl bg-muted/60" />
+      ) : error || !company ? (
         <div className="rounded-xl border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive">
           {error ?? "Company not found"}
         </div>
-      </div>
-    );
-  }
+      ) : (
+        <div className="space-y-4">
+          <section className="space-y-3 rounded-xl border border-border/80 bg-card p-4 shadow-sm">
+            <h2 className="text-sm font-medium tracking-tight">Account Information</h2>
+            <dl className="grid grid-cols-2 gap-3 text-xs lg:grid-cols-3">
+              <DetailItem label="Customer Name">{textOrDash(company.customer_name)}</DetailItem>
+              <DetailItem label="Account Number">{textOrDash(company.account_number)}</DetailItem>
+              <DetailItem label="Status">
+                {company.status ? <FinanceStatusBadge status={company.status} /> : "-"}
+              </DetailItem>
+              <DetailItem label="Account Owner">{employeeName(company.account_owner_id)}</DetailItem>
+              <DetailItem label="Account Type">
+                <span className="capitalize">{textOrDash(company.account_type)}</span>
+              </DetailItem>
+              <DetailItem label="Industry">{textOrDash(company.industry)}</DetailItem>
+              <DetailItem label="Other Industries">{textOrDash(company.other_industries)}</DetailItem>
+              <DetailItem label="Portal ID">{textOrDash(company.portal_id)}</DetailItem>
+              <DetailItem label="Source">
+                <span className="capitalize">{textOrDash(company.source)?.replaceAll("_", " ")}</span>
+              </DetailItem>
+              <DetailItem label="Rating">
+                <span className="capitalize">{textOrDash(company.rating)}</span>
+              </DetailItem>
+              <DetailItem label="First Name">{textOrDash(company.first_name)}</DetailItem>
+              <DetailItem label="Last Name">{textOrDash(company.last_name)}</DetailItem>
+              <DetailItem label="Customer Email">{textOrDash(company.customer_email)}</DetailItem>
+              <DetailItem label="Phone">{textOrDash(company.phone)}</DetailItem>
+              <DetailItem label="Website">{textOrDash(company.website)}</DetailItem>
+              <DetailItem label="Account Ownership">{employeeName(company.account_ownership_id)}</DetailItem>
+              <DetailItem label="Customer ID">{textOrDash(company.customer_id_ext)}</DetailItem>
+              <DetailItem label="Role">{textOrDash(company.role)}</DetailItem>
+            </dl>
 
-  const hasOpenLead = leads.some((l) => l.blueprint_state === "open");
-  const activeLead = leads.find((lead) => lead.blueprint_state === "open") ?? leads[0];
-  const timelineStage: DealStage = activeLead?.converted_opportunity_id
-    ? "opportunity"
-    : activeLead
-      ? "lead"
-      : "company";
-  const timelineLinks = {
-    company: `/crm/companies/${company.id}`,
-    ...(activeLead ? { lead: `/crm/leads/${activeLead.id}` } : {}),
-    ...(activeLead?.converted_opportunity_id
-      ? { opportunity: `/crm/opportunities/${activeLead.converted_opportunity_id}` }
-      : {}),
-  };
-  const nextStep = activeLead?.converted_opportunity_id
-    ? {
-        label: "Continue Opportunity",
-        description: "Resume BOQ, OEM, Quote, Customer PO, and OVF actions.",
-        href: `/crm/opportunities/${activeLead.converted_opportunity_id}`,
-      }
-    : activeLead
-      ? {
-          label: "Continue Lead",
-          description: "Review this lead and convert it to an opportunity when qualified.",
-          href: `/crm/leads/${activeLead.id}`,
-        }
-      : company.status === "active"
-        ? {
-            label: "Create Lead",
-            description: "Start the sales blueprint from this company account.",
-            href: `/crm/companies/${company.id}/leads/new`,
-          }
-        : undefined;
+            <h3 className="border-t border-border/70 pt-3 text-sm font-medium tracking-tight">
+              Address Information
+            </h3>
+            <dl className="grid grid-cols-2 gap-3 text-xs lg:grid-cols-3">
+              <DetailItem label="Billing Street">{textOrDash(company.billing_street)}</DetailItem>
+              <DetailItem label="Billing City">{textOrDash(company.billing_city)}</DetailItem>
+              <DetailItem label="Billing State">{textOrDash(company.billing_state)}</DetailItem>
+              <DetailItem label="Billing Code">{textOrDash(company.billing_code)}</DetailItem>
+              <DetailItem label="Billing Country">{textOrDash(company.billing_country)}</DetailItem>
+              <DetailItem label="Shipping Street">{textOrDash(company.shipping_street)}</DetailItem>
+              <DetailItem label="Shipping City">{textOrDash(company.shipping_city)}</DetailItem>
+              <DetailItem label="Shipping State">{textOrDash(company.shipping_state)}</DetailItem>
+              <DetailItem label="Shipping Code">{textOrDash(company.shipping_code)}</DetailItem>
+              <DetailItem label="Shipping Country">{textOrDash(company.shipping_country)}</DetailItem>
+            </dl>
 
-  return (
-    <div className="space-y-4">
-      <Link href="/crm/companies" className="inline-flex cursor-pointer items-center gap-1 text-xs font-medium text-primary transition-opacity duration-200 hover:opacity-80">
-        <ArrowLeft className="size-3.5" /> Company
-      </Link>
+            <h3 className="border-t border-border/70 pt-3 text-sm font-medium tracking-tight">
+              Description Information
+            </h3>
+            <dl className="text-xs">
+              <DetailItem label="Description">
+                <span className="whitespace-pre-wrap">{textOrDash(company.description)}</span>
+              </DetailItem>
+            </dl>
+          </section>
 
-      <DealTimeline current={timelineStage} links={timelineLinks} nextStep={nextStep} />
-      <ApprovalBanner locked={company.locked} label="This company account" />
-
-      <PageHeader
-        title={company.customer_name}
-        description={`Account ${company.account_number} · ${company.industry}`}
-        actions={
-          <div className="flex flex-wrap items-center gap-2">
-            <Button type="button" variant="outline" size="sm" className="cursor-pointer" onClick={() => void load()}>
-              <RefreshCw className="size-3.5" /> Refresh
-            </Button>
-            <Button type="button" variant="outline" size="sm" className="cursor-pointer" onClick={() => setEditOpen(true)}>
-              <Pencil className="size-3.5" /> Edit
-            </Button>
-            {hasOpenLead || company.status !== "active" ? (
-              <Button
-                type="button"
-                size="sm"
-                className="cursor-pointer"
-                disabled
-                title={
-                  hasOpenLead
-                    ? "This company already has an open lead in progress"
-                    : "Company account must be active to create a lead"
-                }
-              >
-                <Plus className="size-3.5" /> Create Lead
-              </Button>
-            ) : (
-              <Link
-                href={`/crm/companies/${company.id}/leads/new`}
-                className="inline-flex h-7 cursor-pointer items-center gap-1.5 rounded-lg bg-primary px-2.5 text-[0.8rem] font-medium text-primary-foreground shadow-sm transition-opacity duration-200 hover:opacity-90"
-              >
-                <Plus className="size-3.5" /> Create Lead
-              </Link>
-            )}
-          </div>
-        }
-      />
-
-      <div className="grid gap-3 lg:grid-cols-3">
-        <section className="space-y-3 rounded-xl border border-border/80 bg-card p-4 shadow-sm lg:col-span-2">
-          <h2 className="text-sm font-medium tracking-tight">Account Info</h2>
-          <dl className="grid grid-cols-2 gap-3 text-xs">
-            <div>
-              <dt className="text-muted-foreground">Status</dt>
-              <dd className="mt-1"><FinanceStatusBadge status={company.status} /></dd>
+          <section
+            id="company-meetings"
+            className="overflow-hidden rounded-xl border border-border/80 bg-card shadow-sm"
+          >
+            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border/70 px-4 py-3">
+              <h2 className="flex items-center gap-2 text-sm font-medium tracking-tight">
+                <CalendarDays className="size-3.5" /> Meetings
+              </h2>
+              <div className="flex items-center gap-2">
+                <Badge variant="secondary">{openMeetings.length}</Badge>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="cursor-pointer"
+                  onClick={() => setMeetingOpen(true)}
+                >
+                  <Plus className="size-3.5" /> Meeting
+                </Button>
+                <Link
+                  href={`/crm/companies/${company.id}/meetings`}
+                  className="text-xs font-medium text-primary underline-offset-2 transition-opacity duration-200 hover:underline hover:opacity-80"
+                >
+                  View all
+                </Link>
+              </div>
             </div>
-            <div>
-              <dt className="text-muted-foreground">Rating</dt>
-              <dd className="mt-1 capitalize">{company.rating ?? "—"}</dd>
-            </div>
-            <div>
-              <dt className="text-muted-foreground">Account Type</dt>
-              <dd className="mt-1 capitalize">{company.account_type ?? "—"}</dd>
-            </div>
-            <div>
-              <dt className="text-muted-foreground">Source</dt>
-              <dd className="mt-1 capitalize">{company.source.replaceAll("_", " ")}</dd>
-            </div>
-            <div>
-              <dt className="text-muted-foreground">Phone</dt>
-              <dd className="mt-1">{company.phone ?? "—"}</dd>
-            </div>
-            <div>
-              <dt className="text-muted-foreground">Email</dt>
-              <dd className="mt-1">{company.customer_email ?? "—"}</dd>
-            </div>
-            <div>
-              <dt className="text-muted-foreground">Website</dt>
-              <dd className="mt-1">{company.website ?? "—"}</dd>
-            </div>
-            <div>
-              <dt className="text-muted-foreground">Contact</dt>
-              <dd className="mt-1">
-                {[company.first_name, company.last_name].filter(Boolean).join(" ") || "—"}
-              </dd>
-            </div>
-            <div>
-              <dt className="text-muted-foreground">Portal ID</dt>
-              <dd className="mt-1">{company.portal_id ?? "—"}</dd>
-            </div>
-            <div>
-              <dt className="text-muted-foreground">Customer ID</dt>
-              <dd className="mt-1">{company.customer_id_ext ?? "—"}</dd>
-            </div>
-            <div>
-              <dt className="text-muted-foreground">Role</dt>
-              <dd className="mt-1">{company.role ?? "—"}</dd>
-            </div>
-          </dl>
-
-          <h3 className="pt-2 text-sm font-medium tracking-tight">Billing Address</h3>
-          <p className="text-xs text-muted-foreground">
-            {company.billing_street}, {company.billing_city}, {company.billing_state}{" "}
-            {company.billing_code}, {company.billing_country}
-          </p>
-          {company.shipping_street ? (
-            <>
-              <h3 className="pt-2 text-sm font-medium tracking-tight">Shipping Address</h3>
-              <p className="text-xs text-muted-foreground">
-                {company.shipping_street}, {company.shipping_city}, {company.shipping_state}{" "}
-                {company.shipping_code}, {company.shipping_country}
-              </p>
-            </>
-          ) : null}
-          {company.description ? (
-            <>
-              <h3 className="pt-2 text-sm font-medium tracking-tight">Description</h3>
-              <p className="whitespace-pre-wrap text-xs text-muted-foreground">{company.description}</p>
-            </>
-          ) : null}
-        </section>
-
-        <section className="rounded-xl border border-border/80 bg-card p-4 shadow-sm">
-          <h2 className="text-sm font-medium tracking-tight">Sales Blueprint</h2>
-          <p className="mt-2 text-xs text-muted-foreground">
-            Leads created from this company follow the Company → Lead → Opportunity → Quote → OVF →
-            Won blueprint. Only one open lead is allowed at a time.
-          </p>
-        </section>
-      </div>
-
-      <section className="overflow-hidden rounded-xl border border-border/80 bg-card shadow-sm">
-        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border/70 px-4 py-3">
-          <h2 className="flex items-center gap-2 text-sm font-medium tracking-tight">
-            <Target className="size-3.5" /> Leads from this company
-          </h2>
-          <Badge variant="secondary">{leads.length}</Badge>
-        </div>
-        <div className="erp-scroll overflow-x-auto">
-          <table className="w-full min-w-[700px] text-left text-sm">
-            <thead>
-              <tr className="border-b border-border/70 bg-muted/40 text-[11px] tracking-wide text-muted-foreground uppercase">
-                <th className="px-4 py-2.5">Lead</th>
-                <th className="px-4 py-2.5">Mobile</th>
-                <th className="px-4 py-2.5">Blueprint State</th>
-                <th className="px-4 py-2.5">Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {leads.length === 0 ? (
-                <tr>
-                  <td colSpan={4} className="px-4 py-8 text-center text-muted-foreground">
-                    No leads yet — use “Create Lead” above to start the sales process.
-                  </td>
-                </tr>
-              ) : (
-                leads.map((lead) => (
-                  <tr key={lead.id} className="border-b border-border/50 last:border-0 hover:bg-accent/30">
-                    <td className="px-4 py-2.5 font-medium text-foreground">
-                      <Link href={`/crm/leads/${lead.id}`} className="cursor-pointer hover:underline">
-                        {fullName(lead)} · {lead.lead_code}
-                      </Link>
-                    </td>
-                    <td className="px-4 py-2.5 text-muted-foreground">{lead.mobile}</td>
-                    <td className="px-4 py-2.5">
-                      <Badge variant="outline" className="capitalize">
-                        {lead.blueprint_state.replaceAll("_", " ")}
-                      </Badge>
-                    </td>
-                    <td className="px-4 py-2.5">
-                      <FinanceStatusBadge status={lead.status} />
-                    </td>
+            <div className="erp-scroll overflow-x-auto">
+              <table className="w-full min-w-[640px] text-left text-sm">
+                <thead>
+                  <tr className="border-b border-border/70 bg-muted/40 text-[11px] tracking-wide text-muted-foreground uppercase">
+                    <th className="px-4 py-2.5">Title</th>
+                    <th className="px-4 py-2.5">When</th>
+                    <th className="px-4 py-2.5">Venue</th>
+                    <th className="px-4 py-2.5">Host</th>
+                    <th className="px-4 py-2.5">Status</th>
                   </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-      </section>
+                </thead>
+                <tbody>
+                  {meetings.length === 0 ? (
+                    <tr>
+                      <td colSpan={5} className="px-4 py-8 text-center text-muted-foreground">
+                        No meetings yet — use “Meeting” above to schedule one.
+                      </td>
+                    </tr>
+                  ) : (
+                    meetings.slice(0, 5).map((meeting) => (
+                      <tr
+                        key={meeting.id}
+                        className="border-b border-border/50 last:border-0 hover:bg-accent/30"
+                      >
+                        <td className="px-4 py-2.5 font-medium text-foreground">
+                          {meeting.title}
+                          <div className="text-[11px] font-normal text-muted-foreground">
+                            {meeting.meeting_code}
+                          </div>
+                        </td>
+                        <td className="px-4 py-2.5 text-muted-foreground">
+                          {formatMeetingWhen(meeting)}
+                        </td>
+                        <td className="px-4 py-2.5 text-muted-foreground">
+                          {VENUE_LABELS[meeting.meeting_mode ?? ""] ?? meeting.meeting_mode ?? "—"}
+                        </td>
+                        <td className="px-4 py-2.5 text-muted-foreground">
+                          {employeeName(meeting.organizer_employee_id)}
+                        </td>
+                        <td className="px-4 py-2.5">
+                          <FinanceStatusBadge status={meeting.status} />
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </section>
 
-      <CompanyFormDialog
-        open={editOpen}
-        company={company}
-        onClose={() => setEditOpen(false)}
-        onSaved={() => void load()}
-      />
-    </div>
+          <section
+            id="company-followups"
+            className="overflow-hidden rounded-xl border border-border/80 bg-card shadow-sm"
+          >
+            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border/70 px-4 py-3">
+              <h2 className="flex items-center gap-2 text-sm font-medium tracking-tight">
+                <ClipboardList className="size-3.5" /> Follow Up
+              </h2>
+              <div className="flex items-center gap-2">
+                <Badge variant="secondary">{openFollowups.length}</Badge>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="cursor-pointer"
+                  onClick={() => setFollowupOpen(true)}
+                >
+                  <Plus className="size-3.5" /> Follow Up
+                </Button>
+                <Link
+                  href={`/crm/companies/${company.id}/customer-followups`}
+                  className="text-xs font-medium text-primary underline-offset-2 transition-opacity duration-200 hover:underline hover:opacity-80"
+                >
+                  View all
+                </Link>
+              </div>
+            </div>
+            <div className="erp-scroll overflow-x-auto">
+              <table className="w-full min-w-[720px] text-left text-sm">
+                <thead>
+                  <tr className="border-b border-border/70 bg-muted/40 text-[11px] tracking-wide text-muted-foreground uppercase">
+                    <th className="px-4 py-2.5">Customer Name</th>
+                    <th className="px-4 py-2.5">Date</th>
+                    <th className="px-4 py-2.5">Time</th>
+                    <th className="px-4 py-2.5">Remark</th>
+                    <th className="px-4 py-2.5">Team Member</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {followups.length === 0 ? (
+                    <tr>
+                      <td colSpan={5} className="px-4 py-8 text-center text-muted-foreground">
+                        No follow-ups yet — use “Follow Up” above to schedule one.
+                      </td>
+                    </tr>
+                  ) : (
+                    followups.slice(0, 5).map((followup) => (
+                      <tr
+                        key={followup.id}
+                        className="border-b border-border/50 last:border-0 hover:bg-accent/30"
+                      >
+                        <td className="px-4 py-2.5 font-medium text-foreground">
+                          {followup.customer_name || company.customer_name}
+                          <div className="text-[11px] font-normal text-muted-foreground">
+                            {followup.followup_code}
+                          </div>
+                        </td>
+                        <td className="px-4 py-2.5 text-muted-foreground">
+                          {formatFollowupDate(followup)}
+                        </td>
+                        <td className="px-4 py-2.5 text-muted-foreground">
+                          {formatFollowupTime(followup)}
+                        </td>
+                        <td className="max-w-[240px] px-4 py-2.5 text-muted-foreground">
+                          <span className="line-clamp-2">{textOrDash(followup.notes)}</span>
+                        </td>
+                        <td className="px-4 py-2.5">
+                          <Badge variant="outline" className="font-normal">
+                            {employeeName(followup.owner_employee_id)}
+                          </Badge>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </section>
+
+          <section
+            id="company-leads"
+            className="overflow-hidden rounded-xl border border-border/80 bg-card shadow-sm"
+          >
+            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border/70 px-4 py-3">
+              <h2 className="flex items-center gap-2 text-sm font-medium tracking-tight">
+                <Target className="size-3.5" /> Leads from this company
+              </h2>
+              <div className="flex items-center gap-2">
+                <Badge variant="secondary">{leads.length}</Badge>
+                <Link
+                  href={`/crm/companies/${company.id}/leads`}
+                  className="text-xs font-medium text-primary underline-offset-2 transition-opacity duration-200 hover:underline hover:opacity-80"
+                >
+                  View all
+                </Link>
+              </div>
+            </div>
+            <div className="erp-scroll overflow-x-auto">
+              <table className="w-full min-w-[700px] text-left text-sm">
+                <thead>
+                  <tr className="border-b border-border/70 bg-muted/40 text-[11px] tracking-wide text-muted-foreground uppercase">
+                    <th className="px-4 py-2.5">Lead</th>
+                    <th className="px-4 py-2.5">Mobile</th>
+                    <th className="px-4 py-2.5">Blueprint State</th>
+                    <th className="px-4 py-2.5">Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {leads.length === 0 ? (
+                    <tr>
+                      <td colSpan={4} className="px-4 py-8 text-center text-muted-foreground">
+                        No leads yet — use “Create Lead” above to start the sales process.
+                      </td>
+                    </tr>
+                  ) : (
+                    leads.slice(0, 5).map((lead) => (
+                      <tr key={lead.id} className="border-b border-border/50 last:border-0 hover:bg-accent/30">
+                        <td className="px-4 py-2.5 font-medium text-foreground">
+                          <Link href={`/crm/leads/${lead.id}`} className="cursor-pointer hover:underline">
+                            {fullName(lead)} · {lead.lead_code}
+                          </Link>
+                        </td>
+                        <td className="px-4 py-2.5 text-muted-foreground">{lead.mobile}</td>
+                        <td className="px-4 py-2.5">
+                          <Badge variant="outline" className="capitalize">
+                            {lead.blueprint_state.replaceAll("_", " ")}
+                          </Badge>
+                        </td>
+                        <td className="px-4 py-2.5">
+                          <FinanceStatusBadge status={lead.status} />
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </section>
+
+          <MeetingFormDialog
+            open={meetingOpen}
+            companyAccount={company}
+            onClose={() => setMeetingOpen(false)}
+            onSaved={() => void load()}
+          />
+          <FollowupFormDialog
+            open={followupOpen}
+            companyAccount={company}
+            onClose={() => setFollowupOpen(false)}
+            onSaved={() => void load()}
+          />
+        </div>
+      )}
+    </CompanyWorkspaceShell>
   );
 }

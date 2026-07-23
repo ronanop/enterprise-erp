@@ -1,6 +1,6 @@
 """Opportunity sales-blueprint orchestration.
 
-Implements the BOQ -> approval -> SOW -> deal-reg -> OEM -> quote -> PO ->
+Implements the BOQ/SOW -> approval -> deal-reg -> OEM -> quote -> PO ->
 approval -> OVF -> won/lost flow described in the product spec, delegating
 approval-gated steps to :class:`ApprovalTaskService` (My Jobs) and every
 transition to :mod:`sales_blueprint_engine`.
@@ -20,6 +20,7 @@ from modules.crm.service.attachment_service import AttachmentService
 from modules.crm.service.crm_scope_validator import CrmScopeValidator
 from modules.crm.service.engines import sales_blueprint_engine
 from modules.foundation.domain.value_objects import TenantContext
+
 
 def utcnow() -> datetime:
     return datetime.now(timezone.utc)
@@ -52,6 +53,9 @@ def log_state_history(
         performed_at=utcnow(),
     )
 
+
+# Opportunity actions that are UI affordances only — driven by Quote/OVF services.
+_GATED_OPPORTUNITY_ACTIONS = {"create_quote", "quote_accepted", "create_ovf", "deal_won"}
 
 # Actions that resume a previously "sent for approval" (locked) opportunity —
 # these must be allowed to run *while* the record is locked, since they are
@@ -86,11 +90,28 @@ class OpportunityBlueprintService:
         opp = self.get(ctx, opportunity_id)
         is_sales_blueprint = opp.blueprint_state is not None
         current = opp.blueprint_state or "open"
-        allowed = (
-            []
-            if opp.locked or not is_sales_blueprint
-            else sales_blueprint_engine.allowed_actions("opportunity", current)
-        )
+        if not is_sales_blueprint:
+            allowed: list[str] = []
+        elif opp.locked:
+            # While locked, only Lost remains available to the actor; approve/reject
+            # run exclusively through My Jobs.
+            allowed = ["lost"] if "lost" in sales_blueprint_engine.allowed_actions("opportunity", current) else []
+        else:
+            allowed = [
+                action
+                for action in sales_blueprint_engine.allowed_actions("opportunity", current)
+                if action not in _GATED_OPPORTUNITY_ACTIONS or action in {"create_quote", "create_ovf"}
+            ]
+            # Keep create_quote / create_ovf for UI CTAs; drop quote_accepted / deal_won
+            # which must never be invoked via the generic opportunity endpoint.
+            allowed = [action for action in allowed if action not in {"quote_accepted", "deal_won"}]
+        if current == "boq_pending":
+            # BOQ and SOW are alternatives in one document step. Once one is
+            # selected, only surface re-attachment for that document type.
+            if opp.boq_attached and not opp.sow_attached:
+                allowed = [action for action in allowed if action != "attach_sow"]
+            elif opp.sow_attached and not opp.boq_attached:
+                allowed = [action for action in allowed if action != "attach_boq"]
         return {
             "entity_type": "opportunity",
             "entity_id": opp.id,
@@ -113,6 +134,11 @@ class OpportunityBlueprintService:
 
         if action != "lost" and action not in _UNLOCKING_ACTIONS:
             sales_blueprint_engine.assert_not_locked(opp)
+        if action in _UNLOCKING_ACTIONS and not opp.locked:
+            raise ConflictException(
+                f"Action '{action}' is only available while the opportunity is locked "
+                "pending approval via My Jobs"
+            )
 
         next_state = sales_blueprint_engine.transition("opportunity", current, action, ctx)
         updates: dict[str, Any] = {}
@@ -121,14 +147,29 @@ class OpportunityBlueprintService:
             self._attach(ctx, opp, payload, category="boq")
             updates["boq_attached"] = True
         elif action == "send_boq_approval":
-            self._raise_approval(ctx, opp, action="approve_boq", team_role=payload.get("team_role", "presales"),
-                                  title=f"Approve BOQ — {opp.opportunity_name}", remarks=payload.get("remarks"))
+            if not opp.boq_attached and not opp.sow_attached:
+                raise ConflictException("Attach a BOQ or SOW before requesting approval")
+            document_label = "SOW" if opp.sow_attached and not opp.boq_attached else "BOQ"
+            self._raise_approval(
+                ctx,
+                opp,
+                action="approve_boq",
+                team_role=payload.get("team_role", "presales"),
+                title=f"Approve {document_label} — {opp.opportunity_name}",
+                remarks=payload.get("remarks"),
+            )
             updates["locked"] = True
         elif action == "approve_boq":
-            updates["boq_approved"] = True
+            if opp.sow_attached and not opp.boq_attached:
+                updates["sow_approved"] = True
+            else:
+                updates["boq_approved"] = True
             updates["locked"] = False
         elif action == "reject_boq":
-            updates["boq_approved"] = False
+            if opp.sow_attached and not opp.boq_attached:
+                updates["sow_approved"] = False
+            else:
+                updates["boq_approved"] = False
             updates["locked"] = False
         elif action == "attach_sow":
             self._attach(ctx, opp, payload, category="sow")
@@ -149,10 +190,16 @@ class OpportunityBlueprintService:
             self._attach(ctx, opp, payload, category="customer_po")
             updates["customer_po_attached"] = True
         elif action == "send_po_approval":
-            if not opp.customer_po_attached and not payload.get("file_name"):
+            if not opp.customer_po_attached:
                 raise ConflictException("Attach the customer PO before requesting approval")
-            self._raise_approval(ctx, opp, action="approve_po", team_role=payload.get("team_role", "management"),
-                                  title=f"Approve Customer PO — {opp.opportunity_name}", remarks=payload.get("remarks"))
+            self._raise_approval(
+                ctx,
+                opp,
+                action="approve_po",
+                team_role=payload.get("team_role", "management"),
+                title=f"Approve Customer PO — {opp.opportunity_name}",
+                remarks=payload.get("remarks"),
+            )
             updates["locked"] = True
         elif action == "approve_po":
             updates["customer_po_approved"] = True
@@ -160,18 +207,21 @@ class OpportunityBlueprintService:
         elif action == "reject_po":
             updates["customer_po_approved"] = False
             updates["locked"] = False
-        elif action in {"create_quote", "quote_accepted", "create_ovf", "deal_won"}:
+        elif action in _GATED_OPPORTUNITY_ACTIONS:
             # These transitions are driven exclusively by QuoteService /
             # OvfService as a side effect of their own lifecycle (create a
             # quote, accept a quote, create an OVF, mark deal won). They are
-            # only listed here so allowed_actions() can surface them for UI
-            # affordance — invoking them directly is rejected.
+            # only listed in allowed_actions for UI affordance — invoking them
+            # directly is rejected.
             raise ConflictException(
                 f"Action '{action}' must be performed via its dedicated endpoint "
                 "(quotes / OVF), not the generic opportunity action endpoint."
             )
         elif action == "lost":
             updates["status"] = "lost"
+            updates["current_stage"] = "lost"
+            updates["probability_percent"] = 0
+            updates["forecast_amount"] = 0
             updates["lost_reason"] = payload.get("reason")
             updates["lost_at"] = utcnow()
             updates["locked"] = False
@@ -194,9 +244,15 @@ class OpportunityBlueprintService:
         )
         return row
 
-    def _attach(self, ctx: TenantContext, opp: CrmOpportunity, payload: dict[str, Any], *, category: str) -> None:
+    def _attach(
+        self, ctx: TenantContext, opp: CrmOpportunity, payload: dict[str, Any], *, category: str
+    ) -> None:
         if not payload.get("file_name"):
-            return
+            raise ConflictException(f"A file is required to attach {category.replace('_', ' ')}")
+        if not payload.get("content_base64") and not payload.get("file_path"):
+            raise ConflictException(
+                f"Upload file content is required to attach {category.replace('_', ' ')}"
+            )
         self._attachments.create(
             ctx,
             entity_type="opportunity",

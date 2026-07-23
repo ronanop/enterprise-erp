@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Plus, RefreshCw } from "lucide-react";
+import { Info, Plus, RefreshCw } from "lucide-react";
 
 import { FinanceField, FinanceSelect } from "@/components/finance/journals/finance-form-field";
 import { FinanceStatusBadge } from "@/components/finance/finance-status-badge";
@@ -23,7 +23,13 @@ const EMPTY: ProductFormInput = {
   status: "active",
 };
 
-export function ProductsListPage() {
+export function ProductsListPage({
+  companyAccountId,
+  embedded,
+}: {
+  companyAccountId?: string;
+  embedded?: boolean;
+} = {}) {
   const [rows, setRows] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -85,23 +91,34 @@ export function ProductsListPage() {
     return r.product_name.toLowerCase().includes(q) || r.product_code.toLowerCase().includes(q);
   });
 
+  const actions = (
+    <div className="flex shrink-0 flex-nowrap items-center gap-2">
+      <Button type="button" variant="outline" size="sm" className="cursor-pointer" onClick={() => void load()} disabled={loading}>
+        <RefreshCw className={`size-3.5 ${loading ? "animate-spin" : ""}`} />
+        Refresh
+      </Button>
+      <Button type="button" size="sm" className="cursor-pointer" onClick={openCreate}>
+        <Plus className="size-3.5" /> New Product
+      </Button>
+    </div>
+  );
+
   return (
     <div className="space-y-4">
-      <PageHeader
-        title="Products"
-        description="Product / SKU catalog used on Quote and OVF lines."
-        actions={
-          <div className="flex flex-wrap items-center gap-2">
-            <Button type="button" variant="outline" size="sm" className="cursor-pointer" onClick={() => void load()} disabled={loading}>
-              <RefreshCw className={`size-3.5 ${loading ? "animate-spin" : ""}`} />
-              Refresh
-            </Button>
-            <Button type="button" size="sm" className="cursor-pointer" onClick={openCreate}>
-              <Plus className="size-3.5" /> New Product
-            </Button>
-          </div>
-        }
-      />
+      {!embedded ? (
+        <PageHeader
+          title="Products"
+          description="Product / SKU catalog used on Quote and OVF lines."
+          actions={actions}
+        />
+      ) : null}
+
+      {companyAccountId ? (
+        <div className="flex items-start gap-2 rounded-xl border border-blue-200 bg-blue-50 px-4 py-2.5 text-xs text-blue-900">
+          <Info className="mt-0.5 size-3.5 shrink-0" />
+          Product catalog is shared across companies.
+        </div>
+      ) : null}
 
       {error ? (
         <div className="rounded-xl border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive">
@@ -110,12 +127,15 @@ export function ProductsListPage() {
       ) : null}
 
       <div className="overflow-hidden rounded-xl border border-border/80 bg-card shadow-sm">
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border/70 px-4 py-3">
-          <div className="flex items-center gap-2">
-            <h2 className="text-sm font-medium tracking-tight">Products</h2>
+        <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2 border-b border-border/70 px-4 py-3">
+          <div className="flex min-w-0 flex-1 items-center gap-2">
+            <h2 className="truncate text-sm font-medium tracking-tight">Products</h2>
             <Badge variant="secondary">{filtered.length} shown</Badge>
           </div>
-          <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search products…" className="h-8 max-w-xs" />
+          <div className="ml-auto flex shrink-0 flex-nowrap items-center gap-2">
+            {embedded ? actions : null}
+            <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search products…" className="h-8 w-52 shrink-0 sm:w-56" />
+          </div>
         </div>
 
         <div className="erp-scroll overflow-x-auto">

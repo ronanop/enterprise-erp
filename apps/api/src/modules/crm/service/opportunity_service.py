@@ -6,7 +6,7 @@ from uuid import UUID
 
 from sqlalchemy.orm import Session
 
-from core.exceptions import NotFoundException
+from core.exceptions import ConflictException, NotFoundException
 from modules.crm.domain.enums import CrmEntityType, OpportunityStatus
 from modules.crm.models import CrmOpportunity, CrmPipeline
 from modules.crm.repository.opportunity_repository import OpportunityRepository
@@ -136,6 +136,11 @@ class OpportunityService:
 
     def close_won(self, ctx: TenantContext, opportunity_id: UUID, *, create_quotation: bool = True, currency_code: str = "USD"):
         opp = self.get(ctx, opportunity_id)
+        if opp.blueprint_state and opp.blueprint_state not in {"won", "lost"}:
+            raise ConflictException(
+                "This opportunity is on the sales blueprint. Mark Deal Won from the "
+                "OVF after Share to SCM — do not use legacy close-won."
+            )
         self._engine.apply_win(opp)
         now = datetime.now(timezone.utc)
         self._repo.update(
@@ -156,6 +161,11 @@ class OpportunityService:
 
     def close_lost(self, ctx: TenantContext, opportunity_id: UUID, *, lost_reason: str | None = None):
         opp = self.get(ctx, opportunity_id)
+        if opp.blueprint_state and opp.blueprint_state not in {"won", "lost"}:
+            raise ConflictException(
+                "This opportunity is on the sales blueprint. Use Mark Lost from the "
+                "blueprint actions instead of legacy close-lost."
+            )
         self._engine.apply_loss(opp)
         return self._repo.update(
             ctx,

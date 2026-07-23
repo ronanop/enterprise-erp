@@ -35,6 +35,13 @@ export const PROCUREMENT_MODULE_KEY = "procurement";
 
 export const procurementWorkspaceGroups: ProcurementWorkspaceGroup[] = [
   {
+    key: "scm",
+    title: "SCM Workflow",
+    description: "OVF queue, vendor POs, and goods receipt",
+    icon: Truck,
+    resourceKeys: ["scm", "vendor-po", "orders", "grns"],
+  },
+  {
     key: "sourcing",
     title: "Sourcing",
     description: "Requisitions, RFQs, vendor quotes, and comparisons",
@@ -45,7 +52,7 @@ export const procurementWorkspaceGroups: ProcurementWorkspaceGroup[] = [
     key: "fulfillment",
     title: "Fulfillment & Payables",
     description: "Purchase orders, GRNs, vendor invoices, and returns",
-    icon: Truck,
+    icon: ShoppingCart,
     resourceKeys: ["orders", "grns", "invoices", "returns"],
   },
   {
@@ -81,27 +88,27 @@ export function resolveProcurementGroupResources(
 
 export const procurementQuickLinks = [
   {
-    title: "Requisitions",
-    href: "/procurement/requisitions",
-    description: "Internal purchase needs",
+    title: "SCM Queue",
+    href: "/procurement/scm",
+    description: "Approved OVFs → Create PO",
     icon: ClipboardList,
+  },
+  {
+    title: "Vendors & PO",
+    href: "/procurement/vendor-po",
+    description: "PO list + GRN badges",
+    icon: ShoppingCart,
   },
   {
     title: "Purchase Orders",
     href: "/procurement/orders",
     description: "Committed spend",
-    icon: ShoppingCart,
+    icon: PackageCheck,
   },
   {
     title: "GRNs",
     href: "/procurement/grns",
     description: "Goods receipts",
-    icon: PackageCheck,
-  },
-  {
-    title: "Vendor Invoices",
-    href: "/procurement/invoices",
-    description: "AP billing",
     icon: Receipt,
   },
 ] as const;

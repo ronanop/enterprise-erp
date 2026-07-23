@@ -8,14 +8,19 @@ from sqlalchemy.orm import Session
 from core.exceptions import ConflictException, NotFoundException
 from modules.crm.domain.enums import CrmEntityType, LeadStatus
 from modules.crm.models import CrmLead
+from modules.crm.repository.company_repository import CompanyRepository
 from modules.crm.repository.lead_activity_repository import LeadActivityRepository
 from modules.crm.repository.lead_assignment_repository import LeadAssignmentRepository
 from modules.crm.repository.lead_repository import LeadRepository
 from modules.crm.repository.lead_source_repository import LeadSourceRepository
 from modules.crm.service.crm_scope_validator import CrmScopeValidator
 from modules.crm.service.document_number_service import DocumentNumberService
-from modules.crm.service.engines import LeadActivityEngine, LeadAssignmentEngine, LeadEngine
-from modules.crm.service.engines import sales_blueprint_engine
+from modules.crm.service.engines import (
+    LeadActivityEngine,
+    LeadAssignmentEngine,
+    LeadEngine,
+    sales_blueprint_engine,
+)
 from modules.crm.service.integration_service import CRMIntegrationService
 from modules.foundation.domain.value_objects import TenantContext
 from modules.foundation.service.audit_service import AuditService
@@ -51,6 +56,7 @@ class LeadService:
     def __init__(self, db: Session) -> None:
         self._db = db
         self._repo = LeadRepository(db)
+        self._companies = CompanyRepository(db)
         self._assignments = LeadAssignmentRepository(db)
         self._activities = LeadActivityRepository(db)
         self._scope = CrmScopeValidator(db)
@@ -61,15 +67,80 @@ class LeadService:
         self._integration = CRMIntegrationService(db)
         self._audit = AuditService(db)
 
-    def list(self, ctx: TenantContext, company_id: UUID | None = None):
+    def list(
+        self,
+        ctx: TenantContext,
+        company_id: UUID | None = None,
+        company_account_id: UUID | None = None,
+    ):
         cid = self._scope.resolve_company_id(ctx, company_id)
-        return self._repo.list_leads(ctx, cid)
+        return self._repo.list_leads(ctx, cid, company_account_id)
 
     def get(self, ctx: TenantContext, lead_id: UUID) -> CrmLead:
         row = self._repo.get(ctx, lead_id)
         if row is None:
             raise NotFoundException("Lead not found")
+        self._ensure_display_snapshot(ctx, row)
         return row
+
+    def _ensure_display_snapshot(self, ctx: TenantContext, lead: CrmLead) -> None:
+        """Backfill blank address/entity fields from the linked company account."""
+        if lead.company_account_id is None:
+            return
+        snapshot_keys = (
+            "company_name",
+            "email",
+            "mobile",
+            "industry",
+            "street",
+            "city",
+            "state",
+            "zip",
+            "country",
+            "entity_name",
+            "entity_email",
+            "entity_address",
+            "entity_contact",
+        )
+        if not any(not (getattr(lead, key, None) or "").strip() for key in snapshot_keys):
+            return
+        account = self._companies.get(ctx, lead.company_account_id)
+        if account is None:
+            return
+        billing_address = ", ".join(
+            str(value)
+            for value in (
+                account.billing_street,
+                account.billing_city,
+                account.billing_state,
+                account.billing_code,
+                account.billing_country,
+            )
+            if value
+        )
+        patches = {
+            "company_name": account.customer_name,
+            "email": account.customer_email,
+            "mobile": account.phone,
+            "industry": account.industry,
+            "street": account.billing_street,
+            "city": account.billing_city,
+            "state": account.billing_state,
+            "zip": account.billing_code,
+            "country": account.billing_country,
+            "entity_name": account.customer_name,
+            "entity_email": account.customer_email,
+            "entity_address": billing_address or None,
+            "entity_contact": account.phone,
+        }
+        patched = False
+        for key, value in patches.items():
+            current = getattr(lead, key, None)
+            if (not current or not str(current).strip()) and value:
+                setattr(lead, key, value)
+                patched = True
+        if patched:
+            self._db.flush()
 
     def create(self, ctx: TenantContext, *, branch_id: UUID, company_id: UUID | None = None, **fields):
         cid = self._scope.resolve_company_id(ctx, company_id)
@@ -166,12 +237,13 @@ class LeadService:
         opp_fields = {
             "branch_id": lead.branch_id,
             "company_id": lead.company_id,
-            "opportunity_name": opportunity_name,
+            "opportunity_name": opportunity_name or lead.project_title or f"{lead.company_name} — Opportunity",
             "pipeline_id": pipeline_id,
             "owner_employee_id": lead.owner_employee_id,
             "lead_id": lead_id,
             "customer_id": customer_id,
-            "expected_revenue": expected_revenue,
+            "expected_revenue": expected_revenue or lead.expected_amount or 0,
+            "expected_close_date": lead.expected_closure_date,
             "probability_percent": 25,
             "current_stage": "qualification",
         }

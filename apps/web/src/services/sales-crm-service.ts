@@ -7,6 +7,8 @@
  * never talks to the database directly (DG-01).
  */
 import { ApiClientError, apiClient, resourceService } from "@/services/api-client";
+import { getAccessToken } from "@/lib/auth";
+import { env } from "@/utils/env";
 
 function asArray<T>(data: T[] | T | null | undefined): T[] {
   if (Array.isArray(data)) return data;
@@ -193,15 +195,20 @@ export type LeadCreateFromCompanyInput = {
   lead_source_id: string;
   owner_employee_id: string;
   assign_to_id?: string | null;
+  assigned_date?: string | null;
   expected_amount?: number | null;
   expected_closure_date?: string | null;
   product_type?: string | null;
   sub_product_category?: string | null;
   sub_product?: string | null;
   sub_product_other?: string | null;
+  engagement_score?: number | null;
+  portal_link?: string | null;
   project_title?: string | null;
   requirement_type?: string | null;
   purchase_model?: string | null;
+  dr_number?: string | null;
+  new_dr_number?: string | null;
   deal_type?: string | null;
   industry?: string | null;
   territory?: string | null;
@@ -217,6 +224,9 @@ export type LeadCreateFromCompanyInput = {
   oem_contact_email?: string | null;
   distributor_name?: string | null;
   distributor_contact?: string | null;
+  distributor_contact_person?: string | null;
+  distributor_contact_email?: string | null;
+  distributor_department?: string | null;
   end_customer_name?: string | null;
   end_customer_location?: string | null;
   entity_name?: string | null;
@@ -343,6 +353,7 @@ export type SalesLead = {
   lead_code: string;
   first_name: string;
   last_name: string | null;
+  salutation?: string | null;
   mobile: string;
   email: string | null;
   status: string;
@@ -351,15 +362,63 @@ export type SalesLead = {
   company_account_id: string | null;
   owner_employee_id: string;
   assign_to_id: string | null;
+  assigned_date?: string | null;
   expected_amount: number | null;
   expected_closure_date: string | null;
+  project_title: string | null;
+  product_type: string | null;
+  sub_product_category: string | null;
+  sub_product: string | null;
+  sub_product_other: string | null;
+  engagement_score?: number | null;
+  portal_link?: string | null;
+  requirement_type?: string | null;
+  purchase_model?: string | null;
+  dr_number?: string | null;
+  new_dr_number?: string | null;
+  deal_type?: string | null;
+  industry?: string | null;
+  territory?: string | null;
+  region?: string | null;
+  street?: string | null;
+  city?: string | null;
+  state?: string | null;
+  zip?: string | null;
+  country?: string | null;
+  entity_name: string | null;
+  entity_email: string | null;
+  entity_address: string | null;
+  entity_gst: string | null;
+  entity_contact: string | null;
+  oem_name?: string | null;
+  oem_contact_person?: string | null;
+  oem_contact_number?: string | null;
+  oem_contact_email?: string | null;
+  distributor_name?: string | null;
+  distributor_contact?: string | null;
+  distributor_contact_person?: string | null;
+  distributor_contact_email?: string | null;
+  distributor_department?: string | null;
+  end_customer_name?: string | null;
+  end_customer_location?: string | null;
+  notes: string | null;
+  convert_remark?: string | null;
+  lost_reason?: string | null;
   converted_opportunity_id: string | null;
   version: number;
 };
 
-export async function listSalesLeads(): Promise<SalesLead[]> {
-  const res = await resourceService.list<SalesLead>(CRM_LEADS_API);
-  return asArray(res.data).filter((row) => Boolean(row.company_account_id));
+export async function listSalesLeads(companyAccountId?: string): Promise<SalesLead[]> {
+  const res = await resourceService.list<SalesLead>(CRM_LEADS_API, {
+    company_account_id: companyAccountId,
+    page_size: 200,
+  });
+  return asArray(res.data).filter(
+    (row) =>
+      Boolean(row.company_account_id) &&
+      row.blueprint_state !== "converted" &&
+      !row.converted_opportunity_id,
+  );
 }
 
 export async function getSalesLead(id: string): Promise<SalesLead> {
@@ -405,6 +464,8 @@ export type Opportunity = {
   company_account_id: string | null;
   opportunity_code: string;
   opportunity_name: string;
+  project_title: string | null;
+  owner_employee_id: string;
   status: string;
   current_stage: string;
   expected_revenue: number;
@@ -413,12 +474,25 @@ export type Opportunity = {
   customer_id: string | null;
   sales_quotation_id: string | null;
   sales_order_id: string | null;
+  blueprint_state?: string | null;
+  locked?: boolean;
+  boq_attached?: boolean;
+  sow_attached?: boolean;
+  oem_quote_attached?: boolean;
+  customer_po_attached?: boolean;
+  customer_po_approved?: boolean;
   version: number;
 };
 
-export async function listOpportunities(): Promise<Opportunity[]> {
-  const res = await resourceService.list<Opportunity>(CRM_OPPORTUNITIES_API);
-  return asArray(res.data);
+export async function listOpportunities(params?: {
+  company_account_id?: string;
+}): Promise<Opportunity[]> {
+  const res = await resourceService.list<Opportunity>(CRM_OPPORTUNITIES_API, params);
+  const rows = asArray(res.data);
+  if (params?.company_account_id) {
+    return rows.filter((row) => row.company_account_id === params.company_account_id);
+  }
+  return rows;
 }
 
 export async function getOpportunity(id: string): Promise<Opportunity> {
@@ -428,6 +502,42 @@ export async function getOpportunity(id: string): Promise<Opportunity> {
 export async function getOpportunityBlueprint(id: string): Promise<BlueprintState> {
   return unwrap(await apiClient<BlueprintState>(`${CRM_OPPORTUNITIES_API}/${id}/blueprint`));
 }
+
+export type OpportunityTimelineEvent = {
+  id: string;
+  occurred_at: string;
+  event_type: string;
+  entity_type: string;
+  entity_id: string;
+  entity_label: string | null;
+  title: string;
+  summary: string | null;
+  action: string | null;
+  from_state: string | null;
+  to_state: string | null;
+  actor_id: string | null;
+  actor_name: string | null;
+  requested_by_id: string | null;
+  requested_by_name: string | null;
+  decided_by_id: string | null;
+  decided_by_name: string | null;
+  decision: string | null;
+  team_role: string | null;
+  remark: string | null;
+  version: number | null;
+};
+
+export type OpportunityTimeline = {
+  opportunity_id: string;
+  opportunity_code: string | null;
+  opportunity_name: string | null;
+  events: OpportunityTimelineEvent[];
+};
+
+export async function getOpportunityTimeline(id: string): Promise<OpportunityTimeline> {
+  return unwrap(await apiClient<OpportunityTimeline>(`${CRM_OPPORTUNITIES_API}/${id}/timeline`));
+}
+
 
 export async function applyOpportunityAction(
   id: string,
@@ -456,6 +566,17 @@ export type Quote = {
   company_account_id: string | null;
   contact_id: string | null;
   subject: string | null;
+  project_title?: string | null;
+  account_name?: string | null;
+  service_type?: string | null;
+  owner_name?: string | null;
+  entity_name: string | null;
+  entity_email: string | null;
+  entity_address: string | null;
+  entity_gst: string | null;
+  entity_contact: string | null;
+  billing_country: string | null;
+  shipping_country: string | null;
   quote_no: string;
   quote_revision: number;
   quote_stage: string;
@@ -467,6 +588,8 @@ export type Quote = {
   avg_margin_pct: number;
   total_margin_amount: number;
   reason_for_discount: string | null;
+  terms?: string | null;
+  description?: string | null;
   sales_order_id: string | null;
   version: number;
 };
@@ -476,6 +599,10 @@ export type QuoteFormInput = {
   branch_id: string;
   contact_id?: string | null;
   subject?: string | null;
+  project_title?: string | null;
+  account_name?: string | null;
+  service_type?: string | null;
+  owner_name?: string | null;
   valid_until?: string | null;
   entity_name?: string | null;
   entity_email?: string | null;
@@ -531,9 +658,16 @@ export type QuoteMarginSummary = {
   line_types_present: string[];
 };
 
-export async function listQuotes(params?: { opportunity_id?: string }): Promise<Quote[]> {
+export async function listQuotes(params?: {
+  opportunity_id?: string;
+  company_account_id?: string;
+}): Promise<Quote[]> {
   const res = await resourceService.list<Quote>(CRM_QUOTES_API, params);
-  return asArray(res.data);
+  const rows = asArray(res.data);
+  if (params?.company_account_id) {
+    return rows.filter((row) => row.company_account_id === params.company_account_id);
+  }
+  return rows;
 }
 
 export async function getQuote(id: string): Promise<Quote> {
@@ -632,6 +766,22 @@ export type Ovf = {
   opportunity_id: string;
   company_account_id: string | null;
   po_number: string | null;
+  delivery_period: string | null;
+  customer_name: string | null;
+  quote_name: string | null;
+  billing_address: string | null;
+  billing_state: string | null;
+  billing_country: string | null;
+  owner_name: string | null;
+  billing_contact_person: string | null;
+  shipping_address: string | null;
+  shipping_state: string | null;
+  shipping_country: string | null;
+  shipping_contact_person: string | null;
+  account_name: string | null;
+  technology_segment: string | null;
+  sub_technology_segment: string | null;
+  installation_details: string | null;
   approval_status: string;
   blueprint_state: string;
   locked: boolean;
@@ -641,6 +791,8 @@ export type Ovf = {
   vendor_payment_days: number;
   customer_payment_days: number;
   finance_cost_pct: number;
+  additional_charges: number;
+  freight: number;
   total_margin_pct: number;
   total_margin_amount: number;
   version: number;
@@ -651,6 +803,18 @@ export type OvfFormInput = {
   branch_id: string;
   po_number?: string | null;
   delivery_period?: string | null;
+  customer_name?: string | null;
+  quote_name?: string | null;
+  billing_address?: string | null;
+  billing_state?: string | null;
+  billing_country?: string | null;
+  owner_name?: string | null;
+  billing_contact_person?: string | null;
+  shipping_address?: string | null;
+  shipping_state?: string | null;
+  shipping_country?: string | null;
+  shipping_contact_person?: string | null;
+  account_name?: string | null;
   technology_segment?: string | null;
   sub_technology_segment?: string | null;
   installation_details?: string | null;
@@ -679,9 +843,16 @@ export type OvfLineFormInput = {
   unit_price?: number;
 };
 
-export async function listOvfs(params?: { opportunity_id?: string }): Promise<Ovf[]> {
+export async function listOvfs(params?: {
+  opportunity_id?: string;
+  company_account_id?: string;
+}): Promise<Ovf[]> {
   const res = await resourceService.list<Ovf>(CRM_OVF_API, params);
-  return asArray(res.data);
+  const rows = asArray(res.data);
+  if (params?.company_account_id) {
+    return rows.filter((row) => row.company_account_id === params.company_account_id);
+  }
+  return rows;
 }
 
 export async function getOvf(id: string): Promise<Ovf> {
@@ -823,6 +994,7 @@ export type Attachment = {
   content_type: string | null;
   size: number | null;
   category: string;
+  source?: "upload" | "link" | "google_drive" | "onedrive" | "dropbox" | "box";
   uploaded_by: string | null;
   company_id: string;
   branch_id: string;
@@ -835,28 +1007,249 @@ export type AttachmentFormInput = {
   company_id?: string | null;
   file_name: string;
   category?: string;
+  source?: "upload" | "link" | "google_drive" | "onedrive" | "dropbox" | "box";
   file_path?: string | null;
   content_base64?: string | null;
   content_type?: string | null;
 };
 
-export async function listAttachments(entityType: string, entityId: string): Promise<Attachment[]> {
+export async function listAttachments(
+  entityType?: string,
+  entityId?: string,
+  category?: string,
+): Promise<Attachment[]> {
   const res = await resourceService.list<Attachment>(CRM_ATTACHMENTS_API, {
     entity_type: entityType,
     entity_id: entityId,
+    category,
   });
   return asArray(res.data);
+}
+
+export async function listAttachmentsByCategory(category: string): Promise<Attachment[]> {
+  return listAttachments(undefined, undefined, category);
 }
 
 export async function createAttachment(body: AttachmentFormInput): Promise<Attachment> {
   return unwrap(await resourceService.create<Attachment>(CRM_ATTACHMENTS_API, body));
 }
 
+/** Open an attachment: external links/cloud URLs open directly; uploads stream via API. */
+export async function openAttachmentInNewTab(attachment: Attachment | string): Promise<void> {
+  if (typeof attachment !== "string") {
+    const source = attachment.source ?? "upload";
+    const path = attachment.file_path?.trim() ?? "";
+    if (source !== "upload" || /^https?:\/\//i.test(path)) {
+      window.open(path, "_blank", "noopener,noreferrer");
+      return;
+    }
+  }
+
+  const attachmentId = typeof attachment === "string" ? attachment : attachment.id;
+  const token = getAccessToken();
+  const response = await fetch(`${env.apiUrl}${CRM_ATTACHMENTS_API}/${attachmentId}/content`, {
+    headers: {
+      Accept: "*/*",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    cache: "no-store",
+  });
+  if (!response.ok) {
+    throw new Error(`Failed to open attachment (${response.status})`);
+  }
+  const blob = await response.blob();
+  const url = URL.createObjectURL(blob);
+  // Do not fall back to same-tab navigation: with `noopener`, `window.open` often
+  // returns `null` even when the new tab opened successfully.
+  window.open(url, "_blank", "noopener,noreferrer");
+  window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+}
+
+// ---------------------------------------------------------------------------
+// Meetings
+// ---------------------------------------------------------------------------
+
+const CRM_MEETINGS_API = "/crm/meetings";
+
+export type CrmMeeting = {
+  id: string;
+  meeting_code: string;
+  title: string;
+  meeting_date: string;
+  end_date?: string | null;
+  start_time?: string | null;
+  end_time?: string | null;
+  all_day?: boolean;
+  location?: string | null;
+  meeting_mode?: string | null;
+  related_to?: string | null;
+  repeat_rule?: string | null;
+  participants_reminder?: string | null;
+  reminder_primary?: string | null;
+  reminder_secondary?: string | null;
+  lead_id?: string | null;
+  opportunity_id?: string | null;
+  customer_id?: string | null;
+  company_account_id?: string | null;
+  organizer_employee_id: string;
+  tagged_employee_id?: string | null;
+  participants_text?: string | null;
+  notes?: string | null;
+  outcome?: string | null;
+  status: string;
+  company_id: string;
+  branch_id: string;
+  version: number;
+};
+
+export type MeetingFormInput = {
+  branch_id: string;
+  title: string;
+  meeting_date: string;
+  end_date?: string | null;
+  start_time?: string | null;
+  end_time?: string | null;
+  all_day?: boolean;
+  location?: string | null;
+  meeting_mode?: string | null;
+  related_to?: string | null;
+  repeat_rule?: string | null;
+  participants_reminder?: string | null;
+  reminder_primary?: string | null;
+  reminder_secondary?: string | null;
+  lead_id?: string | null;
+  opportunity_id?: string | null;
+  company_account_id?: string | null;
+  organizer_employee_id: string;
+  tagged_employee_id?: string | null;
+  participants_text?: string | null;
+  notes?: string | null;
+};
+
+export async function listMeetings(companyAccountId?: string): Promise<CrmMeeting[]> {
+  const res = await resourceService.list<CrmMeeting>(CRM_MEETINGS_API, {
+    company_account_id: companyAccountId,
+  });
+  return asArray(res.data);
+}
+
+export async function createMeeting(body: MeetingFormInput): Promise<CrmMeeting> {
+  return unwrap(await resourceService.create<CrmMeeting>(CRM_MEETINGS_API, body));
+}
+
+// ---------------------------------------------------------------------------
+// Follow-ups
+// ---------------------------------------------------------------------------
+
+const CRM_FOLLOWUPS_API = "/crm/followups";
+
+export type CrmFollowup = {
+  id: string;
+  followup_code: string;
+  lead_id?: string | null;
+  opportunity_id?: string | null;
+  company_account_id?: string | null;
+  customer_name?: string | null;
+  owner_employee_id: string;
+  followup_at: string;
+  followup_type: string;
+  notes?: string | null;
+  outcome?: string | null;
+  status: string;
+  related_task_id?: string | null;
+  company_id: string;
+  branch_id: string;
+  version: number;
+};
+
+export type FollowupFormInput = {
+  branch_id: string;
+  owner_employee_id: string;
+  followup_at: string;
+  followup_type?: string;
+  company_account_id?: string | null;
+  customer_name?: string | null;
+  notes?: string | null;
+  lead_id?: string | null;
+  opportunity_id?: string | null;
+};
+
+export async function listFollowups(companyAccountId?: string): Promise<CrmFollowup[]> {
+  const res = await resourceService.list<CrmFollowup>(CRM_FOLLOWUPS_API, {
+    company_account_id: companyAccountId,
+  });
+  return asArray(res.data);
+}
+
+export async function createFollowup(body: FollowupFormInput): Promise<CrmFollowup> {
+  return unwrap(await resourceService.create<CrmFollowup>(CRM_FOLLOWUPS_API, body));
+}
+
+// ---------------------------------------------------------------------------
+// Tasks (internal team assignment)
+// ---------------------------------------------------------------------------
+
+const CRM_TASKS_API = "/crm/tasks";
+
+export type CrmTask = {
+  id: string;
+  task_code: string;
+  title: string;
+  description?: string | null;
+  lead_id?: string | null;
+  opportunity_id?: string | null;
+  customer_id?: string | null;
+  owner_employee_id: string;
+  assigned_to_employee_id?: string | null;
+  account_name?: string | null;
+  opportunity_name?: string | null;
+  due_at?: string | null;
+  reminder_date?: string | null;
+  reminder_time?: string | null;
+  email?: string | null;
+  repeat_rule?: string | null;
+  priority: string;
+  status: string;
+  completed_at?: string | null;
+  company_id: string;
+  branch_id: string;
+  version: number;
+};
+
+export type TaskFormInput = {
+  branch_id: string;
+  title: string;
+  owner_employee_id: string;
+  assigned_to_employee_id?: string | null;
+  due_at?: string | null;
+  priority?: "highest" | "high" | "medium" | "low";
+  opportunity_id?: string | null;
+  customer_id?: string | null;
+  account_name?: string | null;
+  opportunity_name?: string | null;
+  reminder_date?: string | null;
+  reminder_time?: string | null;
+  email?: string | null;
+  repeat_rule?: string | null;
+  description?: string | null;
+};
+
+export async function listTasks(params?: {
+  opportunity_id?: string;
+}): Promise<CrmTask[]> {
+  const res = await resourceService.list<CrmTask>(CRM_TASKS_API, params);
+  return asArray(res.data);
+}
+
+export async function createTask(body: TaskFormInput): Promise<CrmTask> {
+  return unwrap(await resourceService.create<CrmTask>(CRM_TASKS_API, body));
+}
+
 // ---------------------------------------------------------------------------
 // Lookups shared by sales CRM forms
 // ---------------------------------------------------------------------------
 
-export type Option = { id: string; label: string };
+export type Option = { id: string; label: string; email?: string };
 
 export async function listLeadSourceOptions(): Promise<Option[]> {
   const res = await resourceService.list("/crm/lead-sources");
@@ -893,5 +1286,6 @@ export async function listEmployeeOptions(): Promise<Option[]> {
     label: `${[r.first_name, r.last_name].filter(Boolean).join(" ")}${
       r.employee_code ? ` (${r.employee_code})` : ""
     }`.trim(),
+    email: r.email ? String(r.email) : undefined,
   }));
 }

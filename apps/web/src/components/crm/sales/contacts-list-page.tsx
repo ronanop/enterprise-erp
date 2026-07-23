@@ -31,7 +31,13 @@ const EMPTY: ContactFormInput = {
   is_primary: false,
 };
 
-export function ContactsListPage() {
+export function ContactsListPage({
+  companyAccountId,
+  embedded,
+}: {
+  companyAccountId?: string;
+  embedded?: boolean;
+} = {}) {
   const [rows, setRows] = useState<Contact[]>([]);
   const [companies, setCompanies] = useState<Company[]>([]);
   const [loading, setLoading] = useState(true);
@@ -43,11 +49,16 @@ export function ContactsListPage() {
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
 
+  const hideCompanyPicker = Boolean(embedded && companyAccountId);
+
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const [contactRows, companyRows] = await Promise.all([listContacts(), listCompanies()]);
+      const [contactRows, companyRows] = await Promise.all([
+        listContacts(companyAccountId),
+        listCompanies(),
+      ]);
       setRows(contactRows);
       setCompanies(companyRows);
     } catch (err) {
@@ -56,7 +67,7 @@ export function ContactsListPage() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [companyAccountId]);
 
   useEffect(() => {
     void load();
@@ -67,14 +78,29 @@ export function ContactsListPage() {
   }
 
   function openCreate() {
-    setForm(EMPTY);
+    const scoped = companyAccountId
+      ? companies.find((c) => c.id === companyAccountId)
+      : undefined;
+    setForm(
+      scoped
+        ? {
+            ...EMPTY,
+            company_account_id: scoped.id,
+            branch_id: scoped.branch_id,
+          }
+        : EMPTY,
+    );
     setFormError(null);
     setDialogOpen(true);
   }
 
-  function onSelectCompany(companyAccountId: string) {
-    const company = companies.find((c) => c.id === companyAccountId);
-    setForm((f) => ({ ...f, company_account_id: companyAccountId, branch_id: company?.branch_id ?? f.branch_id }));
+  function onSelectCompany(nextCompanyAccountId: string) {
+    const company = companies.find((c) => c.id === nextCompanyAccountId);
+    setForm((f) => ({
+      ...f,
+      company_account_id: nextCompanyAccountId,
+      branch_id: company?.branch_id ?? f.branch_id,
+    }));
   }
 
   async function onSave() {
@@ -109,23 +135,27 @@ export function ContactsListPage() {
     );
   });
 
+  const actions = (
+    <div className="flex shrink-0 flex-nowrap items-center gap-2">
+      <Button type="button" variant="outline" size="sm" className="cursor-pointer" onClick={() => void load()} disabled={loading}>
+        <RefreshCw className={`size-3.5 ${loading ? "animate-spin" : ""}`} />
+        Refresh
+      </Button>
+      <Button type="button" size="sm" className="cursor-pointer" onClick={openCreate}>
+        <Plus className="size-3.5" /> New Contact
+      </Button>
+    </div>
+  );
+
   return (
     <div className="space-y-4">
-      <PageHeader
-        title="Contacts"
-        description="Company contact persons for the sales blueprint."
-        actions={
-          <div className="flex flex-wrap items-center gap-2">
-            <Button type="button" variant="outline" size="sm" className="cursor-pointer" onClick={() => void load()} disabled={loading}>
-              <RefreshCw className={`size-3.5 ${loading ? "animate-spin" : ""}`} />
-              Refresh
-            </Button>
-            <Button type="button" size="sm" className="cursor-pointer" onClick={openCreate}>
-              <Plus className="size-3.5" /> New Contact
-            </Button>
-          </div>
-        }
-      />
+      {!embedded ? (
+        <PageHeader
+          title="Contacts"
+          description="Company contact persons for the sales blueprint."
+          actions={actions}
+        />
+      ) : null}
 
       {error ? (
         <div className="rounded-xl border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive">
@@ -134,12 +164,15 @@ export function ContactsListPage() {
       ) : null}
 
       <div className="overflow-hidden rounded-xl border border-border/80 bg-card shadow-sm">
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border/70 px-4 py-3">
-          <div className="flex items-center gap-2">
-            <h2 className="text-sm font-medium tracking-tight">Contacts</h2>
+        <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2 border-b border-border/70 px-4 py-3">
+          <div className="flex min-w-0 flex-1 items-center gap-2">
+            <h2 className="truncate text-sm font-medium tracking-tight">Contacts</h2>
             <Badge variant="secondary">{filtered.length} shown</Badge>
           </div>
-          <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search contacts…" className="h-8 max-w-xs" />
+          <div className="ml-auto flex shrink-0 flex-nowrap items-center gap-2">
+            {embedded ? actions : null}
+            <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search contacts…" className="h-8 w-52 shrink-0 sm:w-56" />
+          </div>
         </div>
 
         <div className="erp-scroll overflow-x-auto">
@@ -210,16 +243,25 @@ export function ContactsListPage() {
             ) : null}
 
             <div className="mt-4 space-y-3">
-              <FinanceField label="Company *">
-                <FinanceSelect value={form.company_account_id} onChange={(e) => onSelectCompany(e.target.value)}>
-                  <option value="">Select company</option>
-                  {companies.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.customer_name}
-                    </option>
-                  ))}
-                </FinanceSelect>
-              </FinanceField>
+              {!hideCompanyPicker ? (
+                <FinanceField label="Company *">
+                  <FinanceSelect value={form.company_account_id} onChange={(e) => onSelectCompany(e.target.value)}>
+                    <option value="">Select company</option>
+                    {companies.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.customer_name}
+                      </option>
+                    ))}
+                  </FinanceSelect>
+                </FinanceField>
+              ) : (
+                <p className="text-xs text-muted-foreground">
+                  Company:{" "}
+                  <span className="font-medium text-foreground">
+                    {companyName(form.company_account_id)}
+                  </span>
+                </p>
+              )}
               <div className="grid grid-cols-2 gap-2">
                 <FinanceField label="First Name *">
                   <Input value={form.first_name} onChange={(e) => setForm((f) => ({ ...f, first_name: e.target.value }))} />

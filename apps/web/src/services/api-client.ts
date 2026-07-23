@@ -1,4 +1,4 @@
-import { clearTokens, getAccessToken, setTokens } from "@/lib/auth";
+import { clearTokens, getAccessToken, getRefreshToken, setTokens } from "@/lib/auth";
 import { env } from "@/utils/env";
 import type { ApiResponse, ErrorResponse, TokenData, UserProfile } from "@/types/api";
 
@@ -17,6 +17,8 @@ type RequestOptions = Omit<RequestInit, "body"> & {
   body?: unknown;
   auth?: boolean;
   query?: Record<string, string | number | boolean | null | undefined>;
+  /** Internal: skip one refresh retry to avoid loops. */
+  _retried?: boolean;
 };
 
 function buildUrl(path: string, query?: RequestOptions["query"]): string {
@@ -31,6 +33,41 @@ function buildUrl(path: string, query?: RequestOptions["query"]): string {
   return qs ? `${base}?${qs}` : base;
 }
 
+let refreshInFlight: Promise<boolean> | null = null;
+
+async function tryRefreshAccessToken(): Promise<boolean> {
+  const refreshToken = getRefreshToken();
+  if (!refreshToken) return false;
+
+  if (!refreshInFlight) {
+    refreshInFlight = (async () => {
+      try {
+        const response = await fetch(buildUrl("/auth/refresh"), {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Accept: "application/json",
+          },
+          body: JSON.stringify({ refresh_token: refreshToken }),
+          cache: "no-store",
+        });
+        const payload = (await response.json()) as ApiResponse<TokenData> | ErrorResponse;
+        if (!response.ok || payload.success === false || !payload.data?.access_token) {
+          return false;
+        }
+        setTokens(payload.data.access_token, payload.data.refresh_token);
+        return true;
+      } catch {
+        return false;
+      } finally {
+        refreshInFlight = null;
+      }
+    })();
+  }
+
+  return refreshInFlight;
+}
+
 /**
  * Foundation HTTP client for all API communication.
  * UI must never access the database directly (DG-01).
@@ -39,7 +76,7 @@ export async function apiClient<T>(
   path: string,
   options: RequestOptions = {},
 ): Promise<ApiResponse<T>> {
-  const { body, headers, auth = true, query, ...rest } = options;
+  const { body, headers, auth = true, query, _retried, ...rest } = options;
   const token = auth ? getAccessToken() : null;
 
   const response = await fetch(buildUrl(path, query), {
@@ -61,8 +98,23 @@ export async function apiClient<T>(
     throw new ApiClientError("Invalid API response", response.status);
   }
 
+  if (
+    auth &&
+    !_retried &&
+    response.status === 401 &&
+    (payload as ErrorResponse).message
+  ) {
+    const refreshed = await tryRefreshAccessToken();
+    if (refreshed) {
+      return apiClient<T>(path, { ...options, _retried: true });
+    }
+  }
+
   if (!response.ok || payload.success === false) {
     const errorPayload = payload as ErrorResponse;
+    if (auth && response.status === 401) {
+      clearTokens();
+    }
     throw new ApiClientError(
       errorPayload.message ?? "API request failed",
       response.status,

@@ -58,6 +58,10 @@ class CrmQuote(Base, *CrmTransactionMixin):
         nullable=True,
     )
     subject: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    project_title: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    account_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    service_type: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    owner_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
     valid_until: Mapped[date | None] = mapped_column(Date, nullable=True)
     quote_no: Mapped[str] = mapped_column(String(50), nullable=False)
     quote_revision: Mapped[int] = mapped_column(Integer, nullable=False, default=1, server_default="1")

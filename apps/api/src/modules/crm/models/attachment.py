@@ -17,6 +17,10 @@ class CrmAttachment(Base, *CrmDetailMixin):
             "category IN ('boq','sow','oem_quote','customer_po','vendor_quote','other')",
             name="ck_crm_attachment_category",
         ),
+        CheckConstraint(
+            "source IN ('upload','link','google_drive','onedrive','dropbox','box')",
+            name="ck_crm_attachment_source",
+        ),
         {"schema": "crm"},
     )
 
@@ -29,3 +33,4 @@ class CrmAttachment(Base, *CrmDetailMixin):
     size: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     uploaded_by: Mapped[UUID | None] = mapped_column(PG_UUID(as_uuid=True), nullable=True)
     category: Mapped[str] = mapped_column(String(30), nullable=False, default="other")
+    source: Mapped[str] = mapped_column(String(30), nullable=False, default="upload")

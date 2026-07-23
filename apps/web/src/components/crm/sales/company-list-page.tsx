@@ -81,16 +81,16 @@ export function CompanyListPage() {
       ) : null}
 
       <div className="overflow-hidden rounded-xl border border-border/80 bg-card shadow-sm">
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border/70 px-4 py-3">
-          <div className="flex items-center gap-2">
-            <h2 className="text-sm font-medium tracking-tight">Accounts</h2>
+        <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2 border-b border-border/70 px-4 py-3">
+          <div className="flex min-w-0 flex-1 items-center gap-2">
+            <h2 className="truncate text-sm font-medium tracking-tight">Accounts</h2>
             <Badge variant="secondary">{filtered.length} shown</Badge>
           </div>
           <Input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Search companies…"
-            className="h-8 max-w-xs"
+            className="h-8 w-52 shrink-0 sm:w-56"
           />
         </div>
 

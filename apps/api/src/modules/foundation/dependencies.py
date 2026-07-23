@@ -36,7 +36,15 @@ def get_tenant_context(
     store = SessionStore()
     cached = store.get_session(session_id)
     if cached is None:
-        raise UnauthorizedException("Session not found in cache")
+        # Rehydrate Redis from the active DB session instead of hard-failing
+        # when the cache TTL elapsed while the JWT/session are still valid.
+        cached = {
+            "user_id": str(payload["sub"]),
+            "tenant_id": str(payload["tenant_id"]),
+        }
+        store.set_session(session_id, cached)
+    else:
+        store.touch_session(session_id)
     company_id = UUID(cached["company_id"]) if cached.get("company_id") else None
     branch_id = UUID(cached["branch_id"]) if cached.get("branch_id") else None
     if not company_id:

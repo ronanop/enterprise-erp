@@ -14,9 +14,12 @@ from uuid import UUID
 
 from sqlalchemy.orm import Session
 
-from core.exceptions import ConflictException, NotFoundException
+from core.exceptions import ConflictException, ForbiddenException, NotFoundException
 from modules.crm.domain.enums import CrmEntityType
 from modules.crm.models import CrmOpportunity, CrmQuote, CrmQuoteLine
+from modules.crm.repository.company_repository import CompanyRepository
+from modules.crm.repository.contact_repository import ContactRepository
+from modules.crm.repository.lead_repository import LeadRepository
 from modules.crm.repository.opportunity_repository import OpportunityRepository
 from modules.crm.repository.quote_repository import QuoteLineRepository, QuoteRepository
 from modules.crm.service.blueprint_service import log_state_history
@@ -24,6 +27,17 @@ from modules.crm.service.crm_scope_validator import CrmScopeValidator
 from modules.crm.service.document_number_service import DocumentNumberService
 from modules.crm.service.engines import margin_engine, sales_blueprint_engine
 from modules.foundation.domain.value_objects import TenantContext
+from modules.master_data.service.employee_service import EmployeeService
+
+
+def _first(*values: Any) -> Any:
+    for value in values:
+        if value is None:
+            continue
+        if isinstance(value, str) and not value.strip():
+            continue
+        return value
+    return None
 
 
 class QuoteService:
@@ -32,6 +46,10 @@ class QuoteService:
         self._repo = QuoteRepository(db)
         self._lines = QuoteLineRepository(db)
         self._opportunities = OpportunityRepository(db)
+        self._leads = LeadRepository(db)
+        self._companies = CompanyRepository(db)
+        self._contacts = ContactRepository(db)
+        self._employees = EmployeeService(db)
         self._scope = CrmScopeValidator(db)
         self._numbers = DocumentNumberService(db)
 
@@ -44,6 +62,7 @@ class QuoteService:
         row = self._repo.get(ctx, quote_id)
         if row is None:
             raise NotFoundException("Quote not found")
+        self._ensure_display_snapshot(ctx, row)
         return row
 
     def list_lines(self, ctx: TenantContext, quote_id: UUID):
@@ -66,6 +85,173 @@ class QuoteService:
             raise NotFoundException("Opportunity not found")
         return opp
 
+    def _owner_label(self, ctx: TenantContext, owner_employee_id: UUID | None) -> str | None:
+        if owner_employee_id is None:
+            return None
+        try:
+            employee = self._employees.get_employee(ctx, owner_employee_id)
+        except (NotFoundException, ForbiddenException):
+            return None
+        name = f"{employee.first_name} {employee.last_name}".strip()
+        return name or None
+
+    def _default_contact_id(self, ctx: TenantContext, *, company_id: UUID, company_account_id: UUID | None) -> UUID | None:
+        if company_account_id is None:
+            return None
+        contacts = self._contacts.list_contacts(ctx, company_id, company_account_id)
+        if not contacts:
+            return None
+        primary = next((row for row in contacts if row.is_primary), None)
+        return (primary or contacts[0]).id
+
+    def _snapshot_fields_from_related(
+        self,
+        ctx: TenantContext,
+        *,
+        opp: CrmOpportunity,
+        lead: Any | None,
+        account: Any | None,
+        current: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        current = current or {}
+        billing_address = None
+        if account is not None:
+            billing_address = ", ".join(
+                str(value)
+                for value in (
+                    account.billing_street,
+                    account.billing_city,
+                    account.billing_state,
+                    account.billing_code,
+                    account.billing_country,
+                )
+                if value
+            )
+
+        service_type = _first(
+            current.get("service_type"),
+            lead.product_type if lead is not None else None,
+        )
+        if isinstance(service_type, str):
+            normalized = service_type.strip().lower()
+            if normalized in {"hardware", "software", "services"}:
+                service_type = normalized
+
+        return {
+            "subject": _first(
+                current.get("subject"),
+                opp.project_title,
+                opp.opportunity_name,
+            ),
+            "project_title": _first(
+                current.get("project_title"),
+                opp.project_title,
+                opp.opportunity_name,
+            ),
+            "account_name": _first(
+                current.get("account_name"),
+                account.customer_name if account is not None else None,
+            ),
+            "service_type": service_type,
+            "owner_name": _first(
+                current.get("owner_name"),
+                self._owner_label(ctx, getattr(opp, "owner_employee_id", None)),
+            ),
+            "contact_id": _first(
+                current.get("contact_id"),
+                self._default_contact_id(
+                    ctx,
+                    company_id=opp.company_id,
+                    company_account_id=opp.company_account_id,
+                ),
+            ),
+            "entity_name": _first(
+                current.get("entity_name"),
+                lead.entity_name if lead is not None else None,
+                account.customer_name if account is not None else None,
+            ),
+            "entity_email": _first(
+                current.get("entity_email"),
+                lead.entity_email if lead is not None else None,
+                account.customer_email if account is not None else None,
+            ),
+            "entity_address": _first(
+                current.get("entity_address"),
+                lead.entity_address if lead is not None else None,
+                billing_address,
+            ),
+            "entity_gst": _first(
+                current.get("entity_gst"),
+                lead.entity_gst if lead is not None else None,
+            ),
+            "entity_contact": _first(
+                current.get("entity_contact"),
+                lead.entity_contact if lead is not None else None,
+                account.phone if account is not None else None,
+            ),
+            "billing_country": _first(
+                current.get("billing_country"),
+                account.billing_country if account is not None else None,
+                lead.country if lead is not None else None,
+            ),
+            "shipping_country": _first(
+                current.get("shipping_country"),
+                account.shipping_country if account is not None else None,
+                account.billing_country if account is not None else None,
+            ),
+            "description": _first(
+                current.get("description"),
+                lead.notes if lead is not None else None,
+                account.description if account is not None else None,
+            ),
+        }
+
+    def _ensure_display_snapshot(self, ctx: TenantContext, quote: CrmQuote) -> None:
+        """Fill blank quote header fields from opportunity / company / lead for display.
+
+        Missing snapshot columns are written back so older quotes keep showing the
+        values that were available when the quote was created.
+        """
+        snapshot_keys = (
+            "subject",
+            "project_title",
+            "account_name",
+            "service_type",
+            "owner_name",
+            "contact_id",
+            "entity_name",
+            "entity_email",
+            "entity_address",
+            "entity_gst",
+            "entity_contact",
+            "billing_country",
+            "shipping_country",
+            "description",
+        )
+        if not any(_first(getattr(quote, key, None)) is None for key in snapshot_keys):
+            return
+
+        opp = self._opportunities.get(ctx, quote.opportunity_id)
+        if opp is None:
+            return
+        lead = self._leads.get(ctx, opp.lead_id) if opp.lead_id else None
+        account = self._companies.get(ctx, opp.company_account_id) if opp.company_account_id else None
+        resolved = self._snapshot_fields_from_related(
+            ctx,
+            opp=opp,
+            lead=lead,
+            account=account,
+            current={key: getattr(quote, key, None) for key in snapshot_keys},
+        )
+
+        patched = False
+        for key, value in resolved.items():
+            if _first(getattr(quote, key, None)) is None and value is not None:
+                setattr(quote, key, value)
+                patched = True
+        if patched:
+            self._db.flush()
+
     # -- create ------------------------------------------------------------
     def create(self, ctx: TenantContext, *, opportunity_id: UUID, branch_id: UUID, **fields) -> CrmQuote:
         opp = self._get_opportunity(ctx, opportunity_id)
@@ -83,6 +269,18 @@ class QuoteService:
             )
         sales_blueprint_engine.assert_not_locked(opp)
 
+        lead = self._leads.get(ctx, opp.lead_id) if opp.lead_id else None
+        account = self._companies.get(ctx, opp.company_account_id) if opp.company_account_id else None
+        fields.update(
+            self._snapshot_fields_from_related(
+                ctx,
+                opp=opp,
+                lead=lead,
+                account=account,
+                current=fields,
+            )
+        )
+
         code = self._numbers.generate(CrmEntityType.QUOTE, opp.company_id, CrmQuote, "quote_no")
         fields.setdefault("valid_until", None)
         fields.setdefault("quote_stage", "draft")
@@ -90,7 +288,7 @@ class QuoteService:
         row = self._repo.create(
             ctx,
             company_id=opp.company_id,
-            branch_id=branch_id,
+            branch_id=opp.branch_id,
             opportunity_id=opportunity_id,
             company_account_id=opp.company_account_id,
             quote_no=code,
@@ -230,8 +428,15 @@ class QuoteService:
         """Generic action entry point used by the blueprint router + My Jobs resume."""
         quote = self.get(ctx, quote_id)
         if action == "approve_internally":
-            return self.approve_internally(ctx, quote_id, remark=payload.get("remark"), force=True)
+            # Force only when My Jobs is deciding a locked internal-approval quote.
+            # Direct public calls from draft always go through the margin gate.
+            force = bool(quote.locked and quote.quote_stage == "internal_approval")
+            return self.approve_internally(ctx, quote_id, remark=payload.get("remark"), force=force)
         if action == "reject_internally":
+            if not (quote.locked and quote.quote_stage == "internal_approval"):
+                raise ConflictException(
+                    "Reject is only available for quotes pending Management approval via My Jobs"
+                )
             next_state = sales_blueprint_engine.transition("quote", quote.quote_stage, "reject_internally")
             row = self._repo.update(ctx, quote_id, quote_stage=next_state, approval_status="rejected", locked=False)
             self._log(ctx, quote, quote.quote_stage, next_state, "reject_internally", payload.get("remark"))
@@ -251,7 +456,10 @@ class QuoteService:
         if action != "lost":
             sales_blueprint_engine.assert_not_locked(quote)
         next_state = sales_blueprint_engine.transition("quote", quote.quote_stage, action)
-        row = self._repo.update(ctx, quote_id, quote_stage=next_state)
+        updates: dict[str, Any] = {"quote_stage": next_state}
+        if action == "lost":
+            updates["locked"] = False
+        row = self._repo.update(ctx, quote_id, **updates)
         self._log(ctx, quote, quote.quote_stage, next_state, action, payload.get("remark"))
 
         if action == "accept":

@@ -5,13 +5,15 @@ import { usePathname } from "next/navigation";
 
 import { cn } from "@/lib/utils";
 
-/** Primary procurement screens from FRD-07 screen inventory */
+/** Primary procurement screens — SCM workflow first, then P2P */
 const PROCUREMENT_NAV = [
   { title: "Overview", href: "/procurement" },
-  { title: "Requisitions", href: "/procurement/requisitions" },
-  { title: "RFQs", href: "/procurement/rfqs" },
+  { title: "SCM Queue", href: "/procurement/scm" },
+  { title: "Vendors & PO", href: "/procurement/vendor-po" },
   { title: "Orders", href: "/procurement/orders" },
   { title: "GRNs", href: "/procurement/grns" },
+  { title: "Requisitions", href: "/procurement/requisitions" },
+  { title: "RFQs", href: "/procurement/rfqs" },
   { title: "Invoices", href: "/procurement/invoices" },
   { title: "Contracts", href: "/procurement/contracts" },
   { title: "Performance", href: "/procurement/performance" },

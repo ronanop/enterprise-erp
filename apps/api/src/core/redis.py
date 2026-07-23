@@ -50,7 +50,20 @@ class SessionStore:
     def invalidate_permissions(self, user_id: UUID) -> None:
         self._client.delete(f"permissions:{user_id}")
 
+    def touch_session(self, session_id: UUID, payload: dict[str, Any] | None = None) -> None:
+        """Refresh session TTL; optionally replace cached payload."""
+        key = f"session:{session_id}"
+        if payload is not None:
+            self._client.setex(key, self._ttl, json.dumps(payload))
+            return
+        raw = cast(str | None, self._client.get(key))
+        if raw is not None:
+            self._client.setex(key, self._ttl, raw)
+
     def increment_login_attempts(self, ip: str) -> int:
+        """Return attempt count. When login_rate_limit <= 0, rate limiting is disabled."""
+        if settings.login_rate_limit <= 0:
+            return 0
         key = f"rate_limit:login:{ip}"
         count = cast(int, self._client.incr(key))
         if count == 1:

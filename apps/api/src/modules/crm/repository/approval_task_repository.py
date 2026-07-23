@@ -60,6 +60,21 @@ class ApprovalTaskRepository(CrmScopedRepository):
         stmt = self.apply_crm_filter(stmt, CrmApprovalTask, ctx, branch_scoped=True)
         return self.db.scalar(stmt)
 
+    def list_for_entity_ids(self, ctx: TenantContext, company_id: UUID, entity_ids: list[UUID]):
+        if not entity_ids:
+            return []
+        stmt = (
+            select(CrmApprovalTask)
+            .where(
+                CrmApprovalTask.company_id == company_id,
+                CrmApprovalTask.entity_id.in_(entity_ids),
+                CrmApprovalTask.is_deleted.is_(False),
+            )
+            .order_by(CrmApprovalTask.created_at)
+        )
+        stmt = self.apply_crm_filter(stmt, CrmApprovalTask, ctx, branch_scoped=True)
+        return list(self.db.scalars(stmt).all())
+
     def create(self, ctx: TenantContext, **fields) -> CrmApprovalTask:
         row = CrmApprovalTask(
             id=uuid4(),

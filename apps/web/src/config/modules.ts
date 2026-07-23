@@ -304,11 +304,25 @@ export const erpModules: ErpModule[] = [
   {
     key: "procurement",
     title: "Procurement",
-    description: "Procure-to-pay: requisitions, RFQs, POs, GRNs, vendor invoices, contracts.",
+    description: "SCM: OVF queue → vendor PO → GRN, plus full procure-to-pay.",
     href: "/procurement",
     group: "operations",
     icon: "truck",
     resources: [
+      {
+        key: "scm",
+        title: "SCM Queue",
+        description: "Finance-approved OVFs awaiting vendor PO",
+        apiPath: "/procurement/scm/queue",
+        listable: true,
+      },
+      {
+        key: "vendor-po",
+        title: "Vendors & PO",
+        description: "Vendor purchase orders with GRN status",
+        apiPath: "/procurement/scm/vendor-pos",
+        listable: true,
+      },
       {
         key: "requisitions",
         title: "Requisitions",
@@ -670,18 +684,6 @@ export const erpModules: ErpModule[] = [
         title: "Products",
         description: "Product / SKU catalog for quote and OVF lines",
         apiPath: "/crm/products",
-      },
-      {
-        key: "calls",
-        title: "Calls",
-        description: "Call logging (coming soon)",
-        apiPath: "/crm/call-logs",
-      },
-      {
-        key: "kyc",
-        title: "KYC",
-        description: "Customer KYC verification (coming soon)",
-        apiPath: "/crm/kyc",
       },
       {
         key: "lead-sources",

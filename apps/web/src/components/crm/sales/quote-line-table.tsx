@@ -50,10 +50,6 @@ function sellFromCostMargin(cost: number, marginPct: number): number {
   return Number((cost / denom).toFixed(4));
 }
 
-function costFromSellMargin(sell: number, marginPct: number): number {
-  return Number((sell * (1 - marginPct / 100)).toFixed(4));
-}
-
 function ReverseMarginRow({
   draft,
   onChange,
@@ -99,11 +95,13 @@ export function QuoteLineTable({
   quoteId,
   lines,
   readOnly,
+  initialDraft,
   onChanged,
 }: {
   quoteId: string;
   lines: QuoteLine[];
   readOnly?: boolean;
+  initialDraft?: Partial<Pick<Draft, "product_name" | "line_type">>;
   onChanged: () => void;
 }) {
   const [adding, setAdding] = useState(false);
@@ -112,6 +110,13 @@ export function QuoteLineTable({
   const [editDraft, setEditDraft] = useState<Draft>(EMPTY_DRAFT);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  function toggleAdd() {
+    if (!adding) {
+      setDraft({ ...EMPTY_DRAFT, ...initialDraft });
+    }
+    setAdding((value) => !value);
+  }
 
   async function submitAdd() {
     if (!draft.product_name.trim()) {
@@ -198,7 +203,7 @@ export function QuoteLineTable({
           <p className="text-[11px] text-muted-foreground">GST/HSN aware · reverse margin calculator (cost ↔ sell ↔ margin%)</p>
         </div>
         {!readOnly ? (
-          <Button type="button" variant="outline" size="sm" className="cursor-pointer" onClick={() => setAdding((v) => !v)}>
+          <Button type="button" variant="outline" size="sm" className="cursor-pointer" onClick={toggleAdd}>
             {adding ? <X className="size-3.5" /> : <Plus className="size-3.5" />}
             {adding ? "Cancel" : "Add line"}
           </Button>

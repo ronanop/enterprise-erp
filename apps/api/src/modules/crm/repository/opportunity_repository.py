@@ -25,6 +25,7 @@ class OpportunityRepository(CrmScopedRepository):
             CrmOpportunity.is_deleted.is_(False),
         )
         stmt = self.apply_crm_filter(stmt, CrmOpportunity, ctx, branch_scoped=True)
+        stmt = stmt.order_by(CrmOpportunity.created_at.desc())
         return list(self.db.scalars(stmt).all())
 
     def create(self, ctx: TenantContext, **fields) -> CrmOpportunity:

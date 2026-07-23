@@ -19,12 +19,21 @@ class FollowupRepository(CrmScopedRepository):
         stmt = self.apply_crm_filter(stmt, CrmFollowup, ctx, branch_scoped=True)
         return self.db.scalar(stmt)
 
-    def list_followups(self, ctx: TenantContext, company_id: UUID):
+    def list_followups(
+        self,
+        ctx: TenantContext,
+        company_id: UUID,
+        *,
+        company_account_id: UUID | None = None,
+    ):
         stmt = select(CrmFollowup).where(
             CrmFollowup.company_id == company_id,
             CrmFollowup.is_deleted.is_(False),
         )
+        if company_account_id is not None:
+            stmt = stmt.where(CrmFollowup.company_account_id == company_account_id)
         stmt = self.apply_crm_filter(stmt, CrmFollowup, ctx, branch_scoped=True)
+        stmt = stmt.order_by(CrmFollowup.created_at.desc())
         return list(self.db.scalars(stmt).all())
 
     def create(self, ctx: TenantContext, **fields) -> CrmFollowup:

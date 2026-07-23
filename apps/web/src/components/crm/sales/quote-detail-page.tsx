@@ -1,5 +1,6 @@
 "use client";
 
+import type { ReactNode } from "react";
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { AlertTriangle, ArrowLeft, RefreshCw } from "lucide-react";
@@ -18,23 +19,46 @@ import {
   approveQuoteInternally,
   formatInr,
   formatInrPrecise,
+  fullName,
+  getCompany,
   getOpportunity,
   getQuote,
   getQuoteBlueprint,
   getQuoteMargin,
+  getSalesLead,
+  listAttachments,
+  listContacts,
+  listEmployeeOptions,
   listQuoteLines,
   listOvfs,
   sendQuoteForApproval,
   type BlueprintActionPayload,
   type BlueprintState,
+  type Company,
+  type Contact,
   type Opportunity,
+  type Option,
   type Ovf,
   type Quote,
   type QuoteLine,
   type QuoteMarginSummary,
+  type SalesLead,
 } from "@/services/sales-crm-service";
 
-const DEDICATED_ACTIONS = new Set(["send_for_approval", "approve_internally"]);
+function textOrDash(value: string | number | null | undefined): string {
+  if (value === null || value === undefined) return "—";
+  const text = String(value).trim();
+  return text || "—";
+}
+
+function DetailItem({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div className="min-w-0">
+      <dt className="text-xs text-muted-foreground">{label}</dt>
+      <dd className="mt-1 break-words text-sm text-foreground">{children}</dd>
+    </div>
+  );
+}
 
 export function QuoteDetailPage({ quoteId }: { quoteId: string }) {
   const [quote, setQuote] = useState<Quote | null>(null);
@@ -42,8 +66,12 @@ export function QuoteDetailPage({ quoteId }: { quoteId: string }) {
   const [margin, setMargin] = useState<QuoteMarginSummary | null>(null);
   const [lines, setLines] = useState<QuoteLine[]>([]);
   const [opportunity, setOpportunity] = useState<Opportunity | null>(null);
+  const [company, setCompany] = useState<Company | null>(null);
+  const [sourceLead, setSourceLead] = useState<SalesLead | null>(null);
+  const [contacts, setContacts] = useState<Contact[]>([]);
+  const [employees, setEmployees] = useState<Option[]>([]);
   const [existingOvf, setExistingOvf] = useState<Ovf | null>(null);
-  const [hasVendorQuote, setHasVendorQuote] = useState(true);
+  const [hasVendorQuote, setHasVendorQuote] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [banner, setBanner] = useState<{ text: string; tone: "success" | "error" } | null>(null);
@@ -53,21 +81,37 @@ export function QuoteDetailPage({ quoteId }: { quoteId: string }) {
     setLoading(true);
     setError(null);
     try {
-      const [quoteRow, bp, marginRow, lineRows] = await Promise.all([
+      const [quoteRow, bp, marginRow, lineRows, attachmentRows] = await Promise.all([
         getQuote(quoteId),
         getQuoteBlueprint(quoteId),
         getQuoteMargin(quoteId).catch(() => null),
         listQuoteLines(quoteId).catch(() => []),
+        listAttachments("quote", quoteId).catch(() => []),
       ]);
       setQuote(quoteRow);
       setBlueprint(bp);
       setMargin(marginRow);
       setLines(lineRows);
-      const [opp, ovfRows] = await Promise.all([
+      setHasVendorQuote(attachmentRows.some((row) => row.category === "vendor_quote"));
+      const [opp, ovfRows, companyRow, employeeRows] = await Promise.all([
         getOpportunity(quoteRow.opportunity_id).catch(() => null),
         listOvfs({ opportunity_id: quoteRow.opportunity_id }).catch(() => []),
+        quoteRow.company_account_id
+          ? getCompany(quoteRow.company_account_id).catch(() => null)
+          : Promise.resolve(null),
+        listEmployeeOptions().catch(() => [] as Option[]),
       ]);
       setOpportunity(opp);
+      setCompany(companyRow);
+      setEmployees(employeeRows);
+      setSourceLead(
+        opp?.lead_id ? await getSalesLead(opp.lead_id).catch(() => null) : null,
+      );
+      setContacts(
+        opp?.company_account_id
+          ? await listContacts(opp.company_account_id).catch(() => [] as Contact[])
+          : [],
+      );
       setExistingOvf(ovfRows[0] ?? null);
     } catch (err) {
       setQuote(null);
@@ -78,7 +122,8 @@ export function QuoteDetailPage({ quoteId }: { quoteId: string }) {
   }, [quoteId]);
 
   useEffect(() => {
-    void load();
+    const timer = window.setTimeout(() => void load(), 0);
+    return () => window.clearTimeout(timer);
   }, [load]);
 
   async function onBlueprintAction(action: string, payload: BlueprintActionPayload) {
@@ -129,6 +174,44 @@ export function QuoteDetailPage({ quoteId }: { quoteId: string }) {
   const readOnlyLines = quote.locked || ["accepted", "lost", "sent_to_customer", "negotiation", "follow_up"].includes(quote.quote_stage);
   const nearingSubmit = blueprint.allowed_actions.includes("send_for_approval") && !hasVendorQuote;
   const timelineStage: DealStage = existingOvf?.deal_won ? "won" : existingOvf ? "ovf" : "quote";
+  const contact =
+    contacts.find((row) => row.id === quote.contact_id) ??
+    contacts.find((row) => row.is_primary) ??
+    contacts[0];
+  const ownerFromEmployee = opportunity?.owner_employee_id
+    ? employees.find((row) => row.id === opportunity.owner_employee_id)?.label
+    : undefined;
+  const projectTitle =
+    quote.project_title || opportunity?.project_title || opportunity?.opportunity_name || null;
+  const accountName = quote.account_name || company?.customer_name || null;
+  const serviceType = quote.service_type || sourceLead?.product_type || null;
+  const ownerName = quote.owner_name || ownerFromEmployee || null;
+  const contactName = contact ? fullName(contact) : "—";
+  const entityName = quote.entity_name || sourceLead?.entity_name || company?.customer_name || null;
+  const entityEmail =
+    quote.entity_email || sourceLead?.entity_email || company?.customer_email || null;
+  const entityAddress =
+    quote.entity_address ||
+    sourceLead?.entity_address ||
+    [
+      company?.billing_street,
+      company?.billing_city,
+      company?.billing_state,
+      company?.billing_code,
+      company?.billing_country,
+    ]
+      .filter(Boolean)
+      .join(", ") ||
+    null;
+  const entityGst = quote.entity_gst || sourceLead?.entity_gst || null;
+  const entityContact =
+    quote.entity_contact || sourceLead?.entity_contact || company?.phone || null;
+  const billingCountry =
+    quote.billing_country || company?.billing_country || sourceLead?.country || null;
+  const shippingCountry =
+    quote.shipping_country || company?.shipping_country || company?.billing_country || null;
+  const description =
+    quote.description || sourceLead?.notes || company?.description || null;
   const timelineLinks = {
     ...(opportunity?.company_account_id
       ? { company: `/crm/companies/${opportunity.company_account_id}` }
@@ -220,9 +303,23 @@ export function QuoteDetailPage({ quoteId }: { quoteId: string }) {
       <BlueprintActions
         allowedActions={blueprint.allowed_actions}
         locked={blueprint.locked}
+        excludeActions={
+          margin?.requires_management_approval && !blueprint.locked
+            ? ["approve_internally"]
+            : undefined
+        }
         onAction={onBlueprintAction}
         disabled={busy}
       />
+      {margin?.requires_management_approval &&
+      blueprint.allowed_actions.includes("approve_internally") &&
+      !blueprint.locked ? (
+        <div className="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-2.5 text-xs text-amber-900">
+          <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
+          Margin is below the management threshold. Send for approval via My Jobs instead of approving
+          internally.
+        </div>
+      ) : null}
 
       <section className="grid gap-3 rounded-xl border border-border/80 bg-card p-4 shadow-sm sm:grid-cols-2 lg:grid-cols-4">
         <div>
@@ -260,7 +357,84 @@ export function QuoteDetailPage({ quoteId }: { quoteId: string }) {
         </div>
       </section>
 
-      <QuoteLineTable quoteId={quote.id} lines={lines} readOnly={readOnlyLines} onChanged={() => void load()} />
+      <section className="space-y-3 rounded-xl border border-border/80 bg-card p-4 shadow-sm">
+        <h2 className="text-sm font-medium tracking-tight">Quote Details</h2>
+
+        <h3 className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
+          Quote Information
+        </h3>
+        <dl className="grid grid-cols-2 gap-3 text-xs lg:grid-cols-3">
+          <DetailItem label="Customer's Project Title">{textOrDash(projectTitle)}</DetailItem>
+          <DetailItem label="Subject">{textOrDash(quote.subject || projectTitle)}</DetailItem>
+          <DetailItem label="Account Name">{textOrDash(accountName)}</DetailItem>
+          <DetailItem label="Valid Until">{textOrDash(quote.valid_until)}</DetailItem>
+          <DetailItem label="Contact Name">{contactName}</DetailItem>
+          <DetailItem label="Quote Owner">{textOrDash(ownerName)}</DetailItem>
+          <DetailItem label="Service Type">{textOrDash(serviceType)}</DetailItem>
+          <DetailItem label="Quote No.">{quote.quote_no}</DetailItem>
+          <DetailItem label="Quote Stage">
+            <span className="capitalize">{quote.quote_stage.replaceAll("_", " ")}</span>
+          </DetailItem>
+          <DetailItem label="Quote Revision">{quote.quote_revision}</DetailItem>
+          <DetailItem label="Approval Status">
+            <FinanceStatusBadge status={quote.approval_status} />
+          </DetailItem>
+          <DetailItem label="Sales Order ID">
+            {textOrDash(quote.sales_order_id ?? opportunity?.sales_order_id)}
+          </DetailItem>
+        </dl>
+
+        <h3 className="border-t border-border/70 pt-3 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
+          Entity Information
+        </h3>
+        <dl className="grid grid-cols-2 gap-3 text-xs lg:grid-cols-3">
+          <DetailItem label="Entity Name">{textOrDash(entityName)}</DetailItem>
+          <DetailItem label="Entity Address">
+            <span className="whitespace-pre-wrap">{textOrDash(entityAddress)}</span>
+          </DetailItem>
+          <DetailItem label="Entity Contact Number">{textOrDash(entityContact)}</DetailItem>
+          <DetailItem label="Entity Email">{textOrDash(entityEmail)}</DetailItem>
+          <DetailItem label="Entity GST No.">{textOrDash(entityGst)}</DetailItem>
+          <DetailItem label="Billing Country">{textOrDash(billingCountry)}</DetailItem>
+          <DetailItem label="Shipping Country">{textOrDash(shippingCountry)}</DetailItem>
+        </dl>
+
+        <h3 className="border-t border-border/70 pt-3 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
+          Commercial Terms
+        </h3>
+        <dl className="grid grid-cols-2 gap-3 text-xs lg:grid-cols-3">
+          <DetailItem label="Freight Charges (₹)">{formatInr(quote.freight)}</DetailItem>
+          <DetailItem label="Grand Total">{formatInrPrecise(quote.grand_total)}</DetailItem>
+          <DetailItem label="Avg Margin">{quote.avg_margin_pct}%</DetailItem>
+          <DetailItem label="Total Margin Amount">{formatInrPrecise(quote.total_margin_amount)}</DetailItem>
+          <DetailItem label="Description">
+            <span className="whitespace-pre-wrap">{textOrDash(description)}</span>
+          </DetailItem>
+          <DetailItem label="Reason For Discount">
+            <span className="whitespace-pre-wrap">{textOrDash(quote.reason_for_discount)}</span>
+          </DetailItem>
+          <DetailItem label="Terms and Conditions">
+            <span className="whitespace-pre-wrap">{textOrDash(quote.terms)}</span>
+          </DetailItem>
+        </dl>
+      </section>
+
+      <QuoteLineTable
+        quoteId={quote.id}
+        lines={lines}
+        readOnly={readOnlyLines}
+        initialDraft={{
+          product_name:
+            sourceLead?.sub_product ||
+            sourceLead?.sub_product_other ||
+            sourceLead?.sub_product_category ||
+            "",
+          line_type: ["hardware", "software", "services"].includes(sourceLead?.product_type ?? "")
+            ? sourceLead?.product_type ?? "hardware"
+            : "hardware",
+        }}
+        onChanged={() => void load()}
+      />
 
       <AttachmentsPanel
         entityType="quote"

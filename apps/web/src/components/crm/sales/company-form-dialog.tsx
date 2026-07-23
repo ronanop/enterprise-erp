@@ -41,7 +41,7 @@ const EMPTY_FORM: CompanyFormInput = {
   branch_id: "",
   customer_name: "",
   account_owner_id: "",
-  account_type: "prospect",
+  account_type: "",
   industry: "",
   other_industries: "",
   portal_id: "",
@@ -77,7 +77,6 @@ type Props = {
 
 export function CompanyFormDialog({ open, company, onClose, onSaved }: Props) {
   const [form, setForm] = useState<CompanyFormInput>(EMPTY_FORM);
-  const [branches, setBranches] = useState<Option[]>([]);
   const [employees, setEmployees] = useState<Option[]>([]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -85,10 +84,15 @@ export function CompanyFormDialog({ open, company, onClose, onSaved }: Props) {
   useEffect(() => {
     if (!open) return;
     void Promise.all([listBranchOptions(), listEmployeeOptions()]).then(([b, e]) => {
-      setBranches(b);
       setEmployees(e);
+      if (!company && b[0]) {
+        setForm((current) => ({
+          ...current,
+          branch_id: current.branch_id || b[0].id,
+        }));
+      }
     });
-  }, [open]);
+  }, [open, company]);
 
   useEffect(() => {
     if (!open) return;
@@ -98,7 +102,7 @@ export function CompanyFormDialog({ open, company, onClose, onSaved }: Props) {
         branch_id: company.branch_id,
         customer_name: company.customer_name,
         account_owner_id: company.account_owner_id ?? "",
-        account_type: company.account_type ?? "prospect",
+        account_type: company.account_type ?? "",
         industry: company.industry,
         other_industries: company.other_industries ?? "",
         portal_id: company.portal_id ?? "",
@@ -149,6 +153,26 @@ export function CompanyFormDialog({ open, company, onClose, onSaved }: Props) {
   async function save() {
     if (!form.customer_name.trim() || !form.industry || !form.source) {
       setError("Customer name, industry, and source are required.");
+      return;
+    }
+    if (!form.account_type) {
+      setError("Account type is required.");
+      return;
+    }
+    if (!form.first_name?.trim()) {
+      setError("First name is required.");
+      return;
+    }
+    if (!form.last_name?.trim()) {
+      setError("Last name is required.");
+      return;
+    }
+    if (!form.customer_email?.trim()) {
+      setError("Customer email is required.");
+      return;
+    }
+    if (!form.phone?.trim()) {
+      setError("Phone is required.");
       return;
     }
     if (!company && !form.branch_id) {
@@ -216,202 +240,147 @@ export function CompanyFormDialog({ open, company, onClose, onSaved }: Props) {
           </div>
         ) : null}
 
-        <div className="mt-4 grid gap-4 sm:grid-cols-2">
-          <section className="space-y-3 rounded-lg border border-border/70 p-3">
-            <h3 className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
-              Account Info
+        <div className="mt-4 space-y-4">
+          <section className="rounded-lg border border-border/70 p-4">
+            <h3 className="mb-3 text-xs font-semibold tracking-wide text-foreground">
+              Account Information
             </h3>
-            <FinanceField label="Customer Name *">
-              <Input value={form.customer_name} onChange={(e) => set("customer_name", e.target.value)} />
-            </FinanceField>
-            <FinanceField
-              label="Account Number"
-              hint="Generated automatically when the company is created."
-            >
-              <Input
-                value={company?.account_number ?? "Auto-generated on save"}
-                disabled
-                aria-readonly="true"
-              />
-            </FinanceField>
-            {!company ? (
-              <FinanceField label="Branch *">
-                <FinanceSelect value={form.branch_id} onChange={(e) => set("branch_id", e.target.value)}>
-                  <option value="">Select branch</option>
-                  {branches.map((b) => (
-                    <option key={b.id} value={b.id}>
-                      {b.label}
-                    </option>
-                  ))}
-                </FinanceSelect>
-              </FinanceField>
-            ) : null}
-            <FinanceField label="Account Owner">
-              <FinanceSelect
-                value={form.account_owner_id ?? ""}
-                onChange={(e) => set("account_owner_id", e.target.value)}
-              >
-                <option value="">Unassigned</option>
-                {employees.map((e) => (
-                  <option key={e.id} value={e.id}>
-                    {e.label}
-                  </option>
-                ))}
-              </FinanceSelect>
-            </FinanceField>
-            <div className="grid grid-cols-2 gap-2">
-              <FinanceField label="Account Type">
-                <FinanceSelect
-                  value={form.account_type ?? ""}
-                  onChange={(e) => set("account_type", e.target.value)}
-                >
-                  {ACCOUNT_TYPES.map((t) => (
-                    <option key={t} value={t}>
-                      {t}
-                    </option>
-                  ))}
-                </FinanceSelect>
-              </FinanceField>
-              <FinanceField label="Rating">
-                <FinanceSelect value={form.rating ?? ""} onChange={(e) => set("rating", e.target.value)}>
-                  <option value="">—</option>
-                  {RATINGS.map((r) => (
-                    <option key={r} value={r}>
-                      {r}
-                    </option>
-                  ))}
-                </FinanceSelect>
-              </FinanceField>
-            </div>
-            <div className="grid grid-cols-2 gap-2">
-              <FinanceField label="Industry *">
-                <FinanceSelect value={form.industry} onChange={(e) => set("industry", e.target.value)}>
-                  <option value="">Select industry</option>
-                  {INDUSTRIES.map((i) => (
-                    <option key={i} value={i}>
-                      {i}
-                    </option>
-                  ))}
-                </FinanceSelect>
-              </FinanceField>
-              <FinanceField label="Source *">
-                <FinanceSelect value={form.source} onChange={(e) => set("source", e.target.value)}>
-                  <option value="">Select source</option>
-                  {SOURCES.map((s) => (
-                    <option key={s} value={s}>
-                      {s.replaceAll("_", " ")}
-                    </option>
-                  ))}
-                </FinanceSelect>
-              </FinanceField>
-            </div>
-            <FinanceField label="Other Industries">
-              <Input
-                value={form.other_industries ?? ""}
-                onChange={(e) => set("other_industries", e.target.value)}
-                placeholder={form.industry === "Others" ? "Specify industry" : "Optional"}
-              />
-            </FinanceField>
-            <FinanceField label="Portal ID">
-              <Input
-                value={form.portal_id ?? ""}
-                onChange={(e) => set("portal_id", e.target.value)}
-              />
-            </FinanceField>
-            <div className="grid grid-cols-2 gap-2">
-              <FinanceField label="First Name">
-                <Input value={form.first_name ?? ""} onChange={(e) => set("first_name", e.target.value)} />
-              </FinanceField>
-              <FinanceField label="Last Name">
-                <Input value={form.last_name ?? ""} onChange={(e) => set("last_name", e.target.value)} />
-              </FinanceField>
-            </div>
-            <FinanceField label="Email">
-              <Input
-                type="email"
-                value={form.customer_email ?? ""}
-                onChange={(e) => set("customer_email", e.target.value)}
-              />
-            </FinanceField>
-            <div className="grid grid-cols-2 gap-2">
-              <FinanceField label="Phone">
-                <Input value={form.phone ?? ""} onChange={(e) => set("phone", e.target.value)} />
-              </FinanceField>
-              <FinanceField label="Website">
-                <Input value={form.website ?? ""} onChange={(e) => set("website", e.target.value)} />
-              </FinanceField>
-            </div>
-            <FinanceField label="Account Ownership">
-              <FinanceSelect
-                value={form.account_ownership_id ?? ""}
-                onChange={(e) => set("account_ownership_id", e.target.value)}
-              >
-                <option value="">None</option>
-                {employees.map((employee) => (
-                  <option key={employee.id} value={employee.id}>
-                    {employee.label}
-                  </option>
-                ))}
-              </FinanceSelect>
-            </FinanceField>
-            <div className="grid grid-cols-2 gap-2">
-              <FinanceField label="Customer ID">
-                <Input
-                  value={form.customer_id_ext ?? ""}
-                  onChange={(e) => set("customer_id_ext", e.target.value)}
-                />
-              </FinanceField>
-              <FinanceField label="Role">
-                <FinanceSelect
-                  value={form.role ?? ""}
-                  onChange={(e) => set("role", e.target.value)}
-                >
-                  <option value="">None</option>
-                  {CONTACT_ROLES.map((role) => (
-                    <option key={role} value={role}>
-                      {role}
-                    </option>
-                  ))}
-                </FinanceSelect>
-              </FinanceField>
+            <div className="grid gap-4 lg:grid-cols-2 lg:gap-x-10">
+              <div className="space-y-3">
+                <FinanceField label="Account Owner">
+                  <FinanceSelect
+                    value={form.account_owner_id ?? ""}
+                    onChange={(e) => set("account_owner_id", e.target.value)}
+                  >
+                    <option value="">Unassigned</option>
+                    {employees.map((employee) => (
+                      <option key={employee.id} value={employee.id}>
+                        {employee.label}
+                      </option>
+                    ))}
+                  </FinanceSelect>
+                </FinanceField>
+                <FinanceField label="Customer Name *">
+                  <Input value={form.customer_name} onChange={(e) => set("customer_name", e.target.value)} />
+                </FinanceField>
+                <FinanceField label="Account Number">
+                  <Input
+                    value={company?.account_number ?? ""}
+                    disabled
+                    aria-readonly="true"
+                  />
+                </FinanceField>
+                <FinanceField label="Account Type *">
+                  <FinanceSelect
+                    value={form.account_type ?? ""}
+                    onChange={(e) => set("account_type", e.target.value)}
+                  >
+                    <option value="">None</option>
+                    {ACCOUNT_TYPES.map((type) => (
+                      <option key={type} value={type}>
+                        {type}
+                      </option>
+                    ))}
+                  </FinanceSelect>
+                </FinanceField>
+                <FinanceField label="Industry *">
+                  <FinanceSelect value={form.industry} onChange={(e) => set("industry", e.target.value)}>
+                    <option value="">None</option>
+                    {INDUSTRIES.map((industry) => (
+                      <option key={industry} value={industry}>
+                        {industry}
+                      </option>
+                    ))}
+                  </FinanceSelect>
+                </FinanceField>
+                <FinanceField label="Other Industries">
+                  <Input
+                    value={form.other_industries ?? ""}
+                    onChange={(e) => set("other_industries", e.target.value)}
+                  />
+                </FinanceField>
+                <FinanceField label="Portal ID">
+                  <Input value={form.portal_id ?? ""} onChange={(e) => set("portal_id", e.target.value)} />
+                </FinanceField>
+                <FinanceField label="Source *">
+                  <FinanceSelect value={form.source} onChange={(e) => set("source", e.target.value)}>
+                    <option value="">None</option>
+                    {SOURCES.map((source) => (
+                      <option key={source} value={source}>
+                        {source.replaceAll("_", " ")}
+                      </option>
+                    ))}
+                  </FinanceSelect>
+                </FinanceField>
+              </div>
+
+              <div className="space-y-3">
+                <FinanceField label="Rating">
+                  <FinanceSelect value={form.rating ?? ""} onChange={(e) => set("rating", e.target.value)}>
+                    <option value="">None</option>
+                    {RATINGS.map((rating) => (
+                      <option key={rating} value={rating}>
+                        {rating}
+                      </option>
+                    ))}
+                  </FinanceSelect>
+                </FinanceField>
+                <FinanceField label="First Name *">
+                  <Input value={form.first_name ?? ""} onChange={(e) => set("first_name", e.target.value)} />
+                </FinanceField>
+                <FinanceField label="Last Name *">
+                  <Input value={form.last_name ?? ""} onChange={(e) => set("last_name", e.target.value)} />
+                </FinanceField>
+                <FinanceField label="Customer Email *">
+                  <Input
+                    type="email"
+                    value={form.customer_email ?? ""}
+                    onChange={(e) => set("customer_email", e.target.value)}
+                  />
+                </FinanceField>
+                <FinanceField label="Phone *">
+                  <Input value={form.phone ?? ""} onChange={(e) => set("phone", e.target.value)} />
+                </FinanceField>
+                <FinanceField label="Website">
+                  <Input value={form.website ?? ""} onChange={(e) => set("website", e.target.value)} />
+                </FinanceField>
+                <FinanceField label="Account Ownership">
+                  <FinanceSelect
+                    value={form.account_ownership_id ?? ""}
+                    onChange={(e) => set("account_ownership_id", e.target.value)}
+                  >
+                    <option value="">None</option>
+                    {employees.map((employee) => (
+                      <option key={employee.id} value={employee.id}>
+                        {employee.label}
+                      </option>
+                    ))}
+                  </FinanceSelect>
+                </FinanceField>
+                <FinanceField label="Customer ID">
+                  <Input
+                    value={form.customer_id_ext ?? ""}
+                    onChange={(e) => set("customer_id_ext", e.target.value)}
+                  />
+                </FinanceField>
+                <FinanceField label="Role">
+                  <FinanceSelect value={form.role ?? ""} onChange={(e) => set("role", e.target.value)}>
+                    <option value="">None</option>
+                    {CONTACT_ROLES.map((role) => (
+                      <option key={role} value={role}>
+                        {role}
+                      </option>
+                    ))}
+                  </FinanceSelect>
+                </FinanceField>
+              </div>
             </div>
           </section>
 
-          <section className="space-y-3 rounded-lg border border-border/70 p-3">
-            <div className="flex items-center justify-between">
-              <h3 className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
-                Billing Address *
-              </h3>
-            </div>
-            <FinanceField label="Street">
-              <Input
-                value={form.billing_street}
-                onChange={(e) => set("billing_street", e.target.value)}
-              />
-            </FinanceField>
-            <div className="grid grid-cols-2 gap-2">
-              <FinanceField label="City">
-                <Input value={form.billing_city} onChange={(e) => set("billing_city", e.target.value)} />
-              </FinanceField>
-              <FinanceField label="State">
-                <Input value={form.billing_state} onChange={(e) => set("billing_state", e.target.value)} />
-              </FinanceField>
-            </div>
-            <div className="grid grid-cols-2 gap-2">
-              <FinanceField label="PIN / ZIP">
-                <Input value={form.billing_code} onChange={(e) => set("billing_code", e.target.value)} />
-              </FinanceField>
-              <FinanceField label="Country">
-                <Input
-                  value={form.billing_country}
-                  onChange={(e) => set("billing_country", e.target.value)}
-                />
-              </FinanceField>
-            </div>
-
-            <div className="flex items-center justify-between pt-1">
-              <h3 className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
-                Shipping Address
+          <section className="rounded-lg border border-border/70 p-4">
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <h3 className="text-xs font-semibold tracking-wide text-foreground">
+                Address Information
               </h3>
               <Button
                 type="button"
@@ -420,37 +389,53 @@ export function CompanyFormDialog({ open, company, onClose, onSaved }: Props) {
                 className="cursor-pointer"
                 onClick={copyBillingToShipping}
               >
-                <Copy className="size-3" /> Copy from Billing
+                <Copy className="size-3" /> Copy Address
               </Button>
             </div>
-            <FinanceField label="Street">
-              <Input
-                value={form.shipping_street ?? ""}
-                onChange={(e) => set("shipping_street", e.target.value)}
-              />
-            </FinanceField>
-            <div className="grid grid-cols-2 gap-2">
-              <FinanceField label="City">
+            <div className="grid gap-x-10 gap-y-3 sm:grid-cols-2">
+              <FinanceField label="Billing Street *">
+                <Input value={form.billing_street} onChange={(e) => set("billing_street", e.target.value)} />
+              </FinanceField>
+              <FinanceField label="Shipping Street">
+                <Input
+                  value={form.shipping_street ?? ""}
+                  onChange={(e) => set("shipping_street", e.target.value)}
+                />
+              </FinanceField>
+              <FinanceField label="Billing City *">
+                <Input value={form.billing_city} onChange={(e) => set("billing_city", e.target.value)} />
+              </FinanceField>
+              <FinanceField label="Shipping City">
                 <Input
                   value={form.shipping_city ?? ""}
                   onChange={(e) => set("shipping_city", e.target.value)}
                 />
               </FinanceField>
-              <FinanceField label="State">
+              <FinanceField label="Billing State *">
+                <Input value={form.billing_state} onChange={(e) => set("billing_state", e.target.value)} />
+              </FinanceField>
+              <FinanceField label="Shipping State">
                 <Input
                   value={form.shipping_state ?? ""}
                   onChange={(e) => set("shipping_state", e.target.value)}
                 />
               </FinanceField>
-            </div>
-            <div className="grid grid-cols-2 gap-2">
-              <FinanceField label="PIN / ZIP">
+              <FinanceField label="Billing Code *">
+                <Input value={form.billing_code} onChange={(e) => set("billing_code", e.target.value)} />
+              </FinanceField>
+              <FinanceField label="Shipping Code">
                 <Input
                   value={form.shipping_code ?? ""}
                   onChange={(e) => set("shipping_code", e.target.value)}
                 />
               </FinanceField>
-              <FinanceField label="Country">
+              <FinanceField label="Billing Country *">
+                <Input
+                  value={form.billing_country}
+                  onChange={(e) => set("billing_country", e.target.value)}
+                />
+              </FinanceField>
+              <FinanceField label="Shipping Country">
                 <Input
                   value={form.shipping_country ?? ""}
                   onChange={(e) => set("shipping_country", e.target.value)}
@@ -458,14 +443,19 @@ export function CompanyFormDialog({ open, company, onClose, onSaved }: Props) {
               </FinanceField>
             </div>
           </section>
-        </div>
 
-        <FinanceField label="Description" className="mt-4">
-          <FinanceTextarea
-            value={form.description ?? ""}
-            onChange={(e) => set("description", e.target.value)}
-          />
-        </FinanceField>
+          <section className="rounded-lg border border-border/70 p-4">
+            <h3 className="mb-3 text-xs font-semibold tracking-wide text-foreground">
+              Description Information
+            </h3>
+            <FinanceField label="Description">
+              <FinanceTextarea
+                value={form.description ?? ""}
+                onChange={(e) => set("description", e.target.value)}
+              />
+            </FinanceField>
+          </section>
+        </div>
 
         <div className="mt-4 flex justify-end gap-2">
           <Button type="button" variant="outline" className="cursor-pointer" onClick={onClose} disabled={saving}>

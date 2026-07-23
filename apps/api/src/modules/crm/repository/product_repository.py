@@ -25,6 +25,7 @@ class ProductRepository(CrmScopedRepository):
             CrmProduct.is_deleted.is_(False),
         )
         stmt = self.apply_crm_filter(stmt, CrmProduct, ctx)
+        stmt = stmt.order_by(CrmProduct.created_at.desc())
         return list(self.db.scalars(stmt).all())
 
     def create(self, ctx: TenantContext, **fields) -> CrmProduct:

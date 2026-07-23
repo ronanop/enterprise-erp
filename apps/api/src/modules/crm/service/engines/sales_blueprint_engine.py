@@ -5,8 +5,8 @@ existing (coarse) ``status`` / ``current_stage`` columns already used by the
 legacy CRM lead & opportunity flows:
 
     LEAD:        open -> converted | lost
-    OPPORTUNITY: open -> boq_pending -> boq_approval -> sow_optional ->
-                 deal_reg -> oem_pending -> oem_attached -> quote_ready ->
+    OPPORTUNITY: open -> boq_pending -> boq_approval -> deal_reg ->
+                 oem_pending -> oem_attached -> quote_ready ->
                  quote_in_progress -> po_pending -> po_approval ->
                  ovf_ready -> won | lost
     QUOTE:       draft -> internal_approval -> approved_internal ->
@@ -41,13 +41,24 @@ _TRANSITIONS: dict[str, dict[str, dict[str, str]]] = {
         "lost": {},
     },
     OPPORTUNITY: {
-        "open": {"attach_boq": "boq_pending", "lost": "lost"},
+        "open": {
+            "attach_boq": "boq_pending",
+            "attach_sow": "boq_pending",
+            "lost": "lost",
+        },
         "boq_pending": {
             "attach_boq": "boq_pending",
+            "attach_sow": "boq_pending",
             "send_boq_approval": "boq_approval",
             "lost": "lost",
         },
-        "boq_approval": {"approve_boq": "sow_optional", "reject_boq": "boq_pending", "lost": "lost"},
+        "boq_approval": {
+            "approve_boq": "deal_reg",
+            "reject_boq": "boq_pending",
+            "lost": "lost",
+        },
+        # Backward-compatible exit for opportunities already persisted in the
+        # former standalone SOW stage.
         "sow_optional": {
             "attach_sow": "deal_reg",
             "skip_sow": "deal_reg",

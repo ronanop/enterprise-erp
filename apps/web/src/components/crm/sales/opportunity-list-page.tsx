@@ -5,14 +5,21 @@ import Link from "next/link";
 import { Info, RefreshCw } from "lucide-react";
 
 import { FinanceStatusBadge } from "@/components/finance/finance-status-badge";
+import { CrmListToolbar } from "@/components/crm/sales/crm-list-toolbar";
 import { PageHeader } from "@/components/layout/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { setCrmSidebarFocus } from "@/lib/crm-sidebar-focus";
 import { ApiClientError } from "@/services/api-client";
 import { formatInr, listOpportunities, type Opportunity } from "@/services/sales-crm-service";
 
-export function OpportunityListPage() {
+export function OpportunityListPage({
+  companyAccountId,
+  embedded,
+}: {
+  companyAccountId?: string;
+  embedded?: boolean;
+} = {}) {
   const [rows, setRows] = useState<Opportunity[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -22,18 +29,29 @@ export function OpportunityListPage() {
     setLoading(true);
     setError(null);
     try {
-      setRows(await listOpportunities());
+      const data = await listOpportunities(
+        companyAccountId ? { company_account_id: companyAccountId } : undefined,
+      );
+      setRows(
+        companyAccountId
+          ? data.filter((row) => row.company_account_id === companyAccountId)
+          : data,
+      );
     } catch (err) {
       setRows([]);
       setError(err instanceof ApiClientError ? err.message : "Failed to load opportunities");
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [companyAccountId]);
 
   useEffect(() => {
     void load();
   }, [load]);
+
+  useEffect(() => {
+    if (!embedded) setCrmSidebarFocus("opportunities");
+  }, [embedded]);
 
   const filtered = rows.filter((r) => {
     const q = query.trim().toLowerCase();
@@ -43,21 +61,25 @@ export function OpportunityListPage() {
 
   return (
     <div className="space-y-4">
-      <PageHeader
-        title="Opportunities"
-        description="Deals converted from a Lead — BOQ to Won/Lost sales blueprint."
-        actions={
-          <Button type="button" variant="outline" size="sm" className="cursor-pointer" onClick={() => void load()} disabled={loading}>
-            <RefreshCw className={`size-3.5 ${loading ? "animate-spin" : ""}`} />
-            Refresh
-          </Button>
-        }
-      />
+      {!embedded ? (
+        <PageHeader
+          title="Opportunities"
+          description="Deals converted from a Lead — BOQ to Won/Lost sales blueprint."
+          actions={
+            <Button type="button" variant="outline" size="sm" className="cursor-pointer" onClick={() => void load()} disabled={loading}>
+              <RefreshCw className={`size-3.5 ${loading ? "animate-spin" : ""}`} />
+              Refresh
+            </Button>
+          }
+        />
+      ) : null}
 
-      <div className="flex items-start gap-2 rounded-xl border border-blue-200 bg-blue-50 px-4 py-2.5 text-xs text-blue-900">
-        <Info className="mt-0.5 size-3.5 shrink-0" />
-        Opportunities are created only by converting a Lead — there is no direct “create” action here.
-      </div>
+      {!embedded ? (
+        <div className="flex items-start gap-2 rounded-xl border border-blue-200 bg-blue-50 px-4 py-2.5 text-xs text-blue-900">
+          <Info className="mt-0.5 size-3.5 shrink-0" />
+          Opportunities are created only by converting a Lead — there is no direct “create” action here.
+        </div>
+      ) : null}
 
       {error ? (
         <div className="rounded-xl border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive">
@@ -66,13 +88,30 @@ export function OpportunityListPage() {
       ) : null}
 
       <div className="overflow-hidden rounded-xl border border-border/80 bg-card shadow-sm">
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border/70 px-4 py-3">
-          <div className="flex items-center gap-2">
-            <h2 className="text-sm font-medium tracking-tight">Opportunities</h2>
-            <Badge variant="secondary">{filtered.length} shown</Badge>
-          </div>
-          <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search opportunities…" className="h-8 max-w-xs" />
-        </div>
+        <CrmListToolbar
+          title="Opportunities"
+          count={filtered.length}
+          actions={
+            embedded ? (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="cursor-pointer"
+                onClick={() => void load()}
+                disabled={loading}
+              >
+                <RefreshCw className={`size-3.5 ${loading ? "animate-spin" : ""}`} />
+                Refresh
+              </Button>
+            ) : null
+          }
+          search={{
+            value: query,
+            onChange: setQuery,
+            placeholder: "Search opportunities…",
+          }}
+        />
 
         <div className="erp-scroll overflow-x-auto">
           <table className="w-full min-w-[800px] text-left text-sm">

@@ -29,6 +29,7 @@ from modules.crm.service.opportunity_service import (
     OpportunityStageService,
     PipelineService,
 )
+from modules.crm.service.opportunity_timeline_service import OpportunityTimelineService
 from modules.crm.service.ovf_service import OvfService
 from modules.crm.service.product_service import ProductService
 from modules.crm.service.quote_service import QuoteService
@@ -57,6 +58,7 @@ __all__ = [
     "OpportunityBlueprintService",
     "OpportunityService",
     "OpportunityStageService",
+    "OpportunityTimelineService",
     "OvfService",
     "PipelineService",
     "ProductService",

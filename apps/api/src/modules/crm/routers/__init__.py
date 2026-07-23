@@ -45,6 +45,7 @@ from modules.crm.schemas import (
     OpportunityCreate,
     OpportunityResponse,
     OpportunityStageResponse,
+    OpportunityTimelineResponse,
     OpportunityUpdate,
     PipelineCreate,
     PipelineResponse,
@@ -72,6 +73,7 @@ from modules.crm.service import (
     MeetingService,
     OpportunityService,
     OpportunityStageService,
+    OpportunityTimelineService,
     PipelineService,
     TaskService,
     VisitLogService,
@@ -147,8 +149,10 @@ def list_leads(
     db: Annotated[Session, Depends(get_db)],
     pagination: Annotated[PaginationParams, Depends(get_pagination)],
     company_id: UUID | None = None,
+    company_account_id: UUID | None = None,
 ):
-    return APIResponse(message="OK", data=paginate(LeadService(db).list(ctx, company_id), pagination))
+    rows = LeadService(db).list(ctx, company_id, company_account_id)
+    return APIResponse(message="OK", data=paginate(rows, pagination))
 
 
 @leads_router.post("", response_model=APIResponse[LeadResponse])
@@ -285,6 +289,21 @@ def get_opportunity(
     return APIResponse(message="OK", data=OpportunityService(db).get(ctx, opportunity_id))
 
 
+@opportunities_router.get(
+    "/{opportunity_id}/timeline",
+    response_model=APIResponse[OpportunityTimelineResponse],
+)
+def get_opportunity_timeline(
+    opportunity_id: UUID,
+    ctx: Annotated[TenantContext, Depends(require_permission("crm.opportunity:read"))],
+    db: Annotated[Session, Depends(get_db)],
+):
+    return APIResponse(
+        message="OK",
+        data=OpportunityTimelineService(db).timeline(ctx, opportunity_id),
+    )
+
+
 @opportunities_router.patch("/{opportunity_id}", response_model=APIResponse[OpportunityResponse])
 def update_opportunity(
     opportunity_id: UUID,
@@ -400,8 +419,15 @@ def list_tasks(
     db: Annotated[Session, Depends(get_db)],
     pagination: Annotated[PaginationParams, Depends(get_pagination)],
     company_id: UUID | None = None,
+    opportunity_id: UUID | None = None,
 ):
-    return APIResponse(message="OK", data=paginate(TaskService(db).list(ctx, company_id), pagination))
+    return APIResponse(
+        message="OK",
+        data=paginate(
+            TaskService(db).list(ctx, company_id, opportunity_id=opportunity_id),
+            pagination,
+        ),
+    )
 
 
 @tasks_router.post("", response_model=APIResponse[TaskResponse])
@@ -428,8 +454,10 @@ def list_followups(
     db: Annotated[Session, Depends(get_db)],
     pagination: Annotated[PaginationParams, Depends(get_pagination)],
     company_id: UUID | None = None,
+    company_account_id: UUID | None = None,
 ):
-    return APIResponse(message="OK", data=paginate(FollowupService(db).list(ctx, company_id), pagination))
+    rows = FollowupService(db).list(ctx, company_id, company_account_id=company_account_id)
+    return APIResponse(message="OK", data=paginate(rows, pagination))
 
 
 @followups_router.post("", response_model=APIResponse[FollowupResponse])
@@ -456,8 +484,10 @@ def list_meetings(
     db: Annotated[Session, Depends(get_db)],
     pagination: Annotated[PaginationParams, Depends(get_pagination)],
     company_id: UUID | None = None,
+    company_account_id: UUID | None = None,
 ):
-    return APIResponse(message="OK", data=paginate(MeetingService(db).list(ctx, company_id), pagination))
+    rows = MeetingService(db).list(ctx, company_id, company_account_id=company_account_id)
+    return APIResponse(message="OK", data=paginate(rows, pagination))
 
 
 @meetings_router.post("", response_model=APIResponse[MeetingResponse])
@@ -606,11 +636,11 @@ def report_summary(
 # re-exported here so `modules.crm.router` can import everything from this
 # package the same way it does for the legacy CRM routers above.
 # ---------------------------------------------------------------------------
-from modules.crm.routers.attachments import attachments_router  # noqa: E402
-from modules.crm.routers.blueprint import blueprint_router  # noqa: E402
-from modules.crm.routers.companies import companies_router  # noqa: E402
-from modules.crm.routers.contacts import contacts_router  # noqa: E402
-from modules.crm.routers.my_jobs import my_jobs_router  # noqa: E402
-from modules.crm.routers.ovf import ovf_router  # noqa: E402
-from modules.crm.routers.products import products_router  # noqa: E402
-from modules.crm.routers.sales_quotes import quotes_router  # noqa: E402
+from modules.crm.routers.attachments import attachments_router  # noqa: E402,F401
+from modules.crm.routers.blueprint import blueprint_router  # noqa: E402,F401
+from modules.crm.routers.companies import companies_router  # noqa: E402,F401
+from modules.crm.routers.contacts import contacts_router  # noqa: E402,F401
+from modules.crm.routers.my_jobs import my_jobs_router  # noqa: E402,F401
+from modules.crm.routers.ovf import ovf_router  # noqa: E402,F401
+from modules.crm.routers.products import products_router  # noqa: E402,F401
+from modules.crm.routers.sales_quotes import quotes_router  # noqa: E402,F401

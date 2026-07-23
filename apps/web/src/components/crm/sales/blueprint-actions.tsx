@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { Fragment, useRef, useState } from "react";
 import { Paperclip } from "lucide-react";
 
 import { FinanceField, FinanceTextarea } from "@/components/finance/journals/finance-form-field";
@@ -47,9 +47,9 @@ const ACTION_CONFIG: Record<string, ActionConfig> = {
     fields: [{ key: "file_name", label: "BOQ file", type: "file", required: true }],
   },
   send_boq_approval: {
-    label: "Send BOQ for Approval",
+    label: "Send BOQ / SOW for Approval",
     fields: [REMARK_FIELD],
-    description: "Routes to the Pre-sales team via My Jobs.",
+    description: "Routes the attached BOQ or SOW to the Pre-sales team via My Jobs.",
   },
   attach_sow: {
     label: "Attach SOW",
@@ -112,13 +112,21 @@ type Props = {
   locked?: boolean;
   /** Actions rendered elsewhere by the parent (e.g. gated Create Quote / Create OVF CTAs). */
   excludeActions?: string[];
+  defaultValues?: Partial<Record<string, string | number | null>>;
   onAction: (action: string, payload: BlueprintActionPayload) => Promise<void>;
   disabled?: boolean;
 };
 
-export function BlueprintActions({ allowedActions, locked, excludeActions, onAction, disabled }: Props) {
+export function BlueprintActions({
+  allowedActions,
+  locked,
+  excludeActions,
+  defaultValues,
+  onAction,
+  disabled,
+}: Props) {
   const exclude = new Set(excludeActions ?? []);
-  const visibleActions = allowedActions.filter((a) => ACTION_CONFIG[a] && !exclude.has(a));
+  const visibleActions = allowedActions.filter((a) => !exclude.has(a));
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [activeAction, setActiveAction] = useState<string | null>(null);
@@ -129,9 +137,26 @@ export function BlueprintActions({ allowedActions, locked, excludeActions, onAct
 
   if (locked || visibleActions.length === 0) return null;
 
+  function resolveConfig(action: string): ActionConfig {
+    return (
+      ACTION_CONFIG[action] ?? {
+        label: action.replaceAll("_", " ").replace(/\b\w/g, (c) => c.toUpperCase()),
+        fields: [REMARK_FIELD_ALT],
+      }
+    );
+  }
+
   function openAction(action: string) {
+    const config = resolveConfig(action);
     setActiveAction(action);
-    setValues({});
+    setValues(
+      Object.fromEntries(
+        config.fields.flatMap((field) => {
+          const value = defaultValues?.[field.key];
+          return value === null || value === undefined ? [] : [[field.key, String(value)]];
+        }),
+      ),
+    );
     setFile(null);
     setError(null);
   }
@@ -147,7 +172,7 @@ export function BlueprintActions({ allowedActions, locked, excludeActions, onAct
 
   async function confirm() {
     if (!activeAction) return;
-    const config = ACTION_CONFIG[activeAction];
+    const config = resolveConfig(activeAction);
     for (const field of config.fields) {
       if (field.required && field.type !== "file" && !values[field.key]?.trim()) {
         setError(`${field.label} is required`);
@@ -188,7 +213,7 @@ export function BlueprintActions({ allowedActions, locked, excludeActions, onAct
     }
   }
 
-  const activeConfig = activeAction ? ACTION_CONFIG[activeAction] : null;
+  const activeConfig = activeAction ? resolveConfig(activeAction) : null;
 
   return (
     <div className="space-y-2">
@@ -196,20 +221,26 @@ export function BlueprintActions({ allowedActions, locked, excludeActions, onAct
         <span className="text-[11px] font-medium tracking-wide text-muted-foreground uppercase">
           Blueprint actions
         </span>
-        {visibleActions.map((action) => {
-          const config = ACTION_CONFIG[action];
+        {visibleActions.map((action, index) => {
+          const config = resolveConfig(action);
           return (
-            <Button
-              key={action}
-              type="button"
-              size="sm"
-              variant={config.tone === "destructive" ? "destructive" : "outline"}
-              className="cursor-pointer"
-              disabled={disabled}
-              onClick={() => openAction(action)}
-            >
-              {config.label}
-            </Button>
+            <Fragment key={action}>
+              {action === "attach_sow" && visibleActions[index - 1] === "attach_boq" ? (
+                <span className="text-xs font-medium text-muted-foreground" aria-hidden="true">
+                  or
+                </span>
+              ) : null}
+              <Button
+                type="button"
+                size="sm"
+                variant={config.tone === "destructive" ? "destructive" : "outline"}
+                className="cursor-pointer"
+                disabled={disabled}
+                onClick={() => openAction(action)}
+              >
+                {config.label}
+              </Button>
+            </Fragment>
           );
         })}
       </div>

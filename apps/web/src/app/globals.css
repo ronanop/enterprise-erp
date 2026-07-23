@@ -120,11 +120,14 @@
   html {
     @apply font-sans;
     scroll-behavior: smooth;
+    overflow-x: clip;
   }
   body {
     @apply bg-background font-sans text-foreground antialiased;
     font-weight: 400;
     letter-spacing: -0.011em;
+    min-width: 0;
+    overflow-x: clip;
   }
   h1,
   h2,

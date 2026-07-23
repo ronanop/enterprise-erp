@@ -273,6 +273,7 @@ class OrderLineResponse(BaseModel):
     line_number: int
     product_id: UUID
     product_code: str | None = None
+    product_name: str | None = None
     quantity: float
     quantity_received: float
     unit_cost: float
@@ -294,11 +295,113 @@ class OrderResponse(BaseModel):
     vendor_quotation_header_id: UUID | None = None
     contract_id: UUID | None = None
     currency_code: str
+    payment_terms: str | None = None
+    expected_delivery_date: date | None = None
     total_amount: float
+    received_amount: float = 0
     status: str
     workflow_status: str | None = None
+    source_module: str | None = None
+    source_document_type: str | None = None
+    source_document_id: UUID | None = None
     version: int
     lines: list[OrderLineResponse] = Field(default_factory=list)
+
+
+# --- SCM handoff (CRM OVF → vendor PO → GRN) ---
+
+
+class ScmQueueItemResponse(BaseModel):
+    ovf_id: UUID
+    ovf_no: str
+    customer_name: str | None = None
+    quote_name: str | None = None
+    account_name: str | None = None
+    po_number: str | None = None
+    owner_name: str | None = None
+    blueprint_state: str
+    company_id: UUID
+    branch_id: UUID
+    vendor_line_count: int = 0
+    vendor_total: float = 0
+    purchase_order_id: UUID | None = None
+    purchase_order_number: str | None = None
+    purchase_order_status: str | None = None
+    can_create_po: bool = True
+
+
+class ScmVendorLinePreview(BaseModel):
+    line_id: UUID
+    line_no: int
+    product_name: str
+    qty: float
+    unit_price: float
+    line_total: float
+
+
+class ScmOvfPreviewResponse(BaseModel):
+    ovf_id: UUID
+    ovf_no: str
+    company_id: UUID
+    branch_id: UUID
+    quote_id: UUID
+    opportunity_id: UUID
+    po_number: str | None = None
+    customer_name: str | None = None
+    quote_name: str | None = None
+    account_name: str | None = None
+    owner_name: str | None = None
+    blueprint_state: str
+    freight: float = 0
+    additional_charges: float = 0
+    vendor_payment_days: int = 0
+    total_margin_amount: float = 0
+    vendor_lines: list[ScmVendorLinePreview] = Field(default_factory=list)
+    purchase_order_id: UUID | None = None
+    purchase_order_number: str | None = None
+    can_create_po: bool = True
+
+
+class ScmCreatePoFromOvfRequest(BaseModel):
+    vendor_id: UUID
+    document_date: date | None = None
+    currency_code: str = "INR"
+    payment_terms: str | None = None
+    expected_delivery_date: date | None = None
+    finalize: bool = False
+
+
+class ScmLineReceiptUpdateRequest(BaseModel):
+    quantity_received: float
+    grn_status: str | None = None  # pending | partial | delivered
+
+
+class ScmVendorPoLineResponse(BaseModel):
+    id: UUID
+    line_number: int
+    product_name: str | None = None
+    quantity: float
+    quantity_received: float
+    unit_cost: float
+    line_total: float
+    status: str
+    grn_status: str
+
+
+class ScmVendorPoResponse(BaseModel):
+    id: UUID
+    document_number: str
+    document_date: date
+    vendor_id: UUID
+    status: str
+    currency_code: str
+    total_amount: float
+    source_module: str | None = None
+    source_document_type: str | None = None
+    source_document_id: UUID | None = None
+    grn_status: str
+    line_count: int = 0
+    lines: list[ScmVendorPoLineResponse] = Field(default_factory=list)
 
 
 # --- GRN ---

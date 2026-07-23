@@ -23,6 +23,21 @@ class StateHistoryRepository(CrmScopedRepository):
         stmt = self.apply_crm_filter(stmt, CrmStateHistory, ctx, branch_scoped=True)
         return list(self.db.scalars(stmt).all())
 
+    def list_for_entities(self, ctx: TenantContext, entity_ids: list[UUID]):
+        """All state-history rows for any of the given entity ids (any type)."""
+        if not entity_ids:
+            return []
+        stmt = (
+            select(CrmStateHistory)
+            .where(
+                CrmStateHistory.entity_id.in_(entity_ids),
+                CrmStateHistory.is_deleted.is_(False),
+            )
+            .order_by(CrmStateHistory.performed_at)
+        )
+        stmt = self.apply_crm_filter(stmt, CrmStateHistory, ctx, branch_scoped=True)
+        return list(self.db.scalars(stmt).all())
+
     def create(self, ctx: TenantContext, **fields) -> CrmStateHistory:
         row = CrmStateHistory(
             id=uuid4(),

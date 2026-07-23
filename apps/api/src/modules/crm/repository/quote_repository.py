@@ -33,6 +33,7 @@ class QuoteRepository(CrmScopedRepository):
         if opportunity_id is not None:
             stmt = stmt.where(CrmQuote.opportunity_id == opportunity_id)
         stmt = self.apply_crm_filter(stmt, CrmQuote, ctx, branch_scoped=True)
+        stmt = stmt.order_by(CrmQuote.created_at.desc())
         return list(self.db.scalars(stmt).all())
 
     def create(self, ctx: TenantContext, **fields) -> CrmQuote:

@@ -110,6 +110,8 @@ class AuthService:
             user_type=user_model.user_type,
             session_id=session_id,
         )
+        # Keep Redis session alive alongside refreshed tokens.
+        self._store.touch_session(session_id)
         return {
             "access_token": access,
             "refresh_token": new_refresh,
