@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import {
   getCrmSidebarFocus,
   isCompanyDealWorkspacePath,
+  setCrmOpportunityContext,
   setCrmSidebarFocus,
   type CrmSidebarFocus,
 } from "@/lib/crm-sidebar-focus";
@@ -134,6 +135,7 @@ export function CrmSidebar() {
 
   return (
     <aside
+      data-erp-primary-sidebar
       className={cn(
         "sticky top-0 z-20 flex h-dvh shrink-0 flex-col border-r border-sidebar-border bg-sidebar text-sidebar-foreground transition-[width] duration-200",
         collapsed ? "w-[72px]" : "w-[260px]",
@@ -187,6 +189,7 @@ export function CrmSidebar() {
                   onClick={() => {
                     const focus = focusForHref(item.href);
                     if (focus) setCrmSidebarFocus(focus);
+                    if (focus !== "opportunities") setCrmOpportunityContext(null);
                   }}
                   className={cn(
                     "group relative flex cursor-pointer items-center gap-2.5 rounded-lg px-2.5 py-2 text-[13px] transition-colors duration-200",

@@ -19,7 +19,12 @@ from alembic import op
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from helpers import (  # noqa: E402
+    add_column_if_missing,
+    create_fk_if_missing,
+)
 from modules.crm.models.approval_task import CrmApprovalTask  # noqa: F401,E402
 from modules.crm.models.attachment import CrmAttachment  # noqa: F401,E402
 from modules.crm.models.company import CrmCompany  # noqa: F401,E402
@@ -116,9 +121,10 @@ def upgrade() -> None:
     CrmProduct.__table__.create(bind=bind, checkfirst=True)
 
     # 2. Extend existing lead / opportunity tables.
+    # Idempotent: 0140+ may already create these columns via current ORM models.
     for column in LEAD_NEW_COLUMNS:
-        op.add_column("crm_lead", column.copy(), schema="crm")
-    op.create_foreign_key(
+        add_column_if_missing("crm_lead", column.copy(), schema="crm")
+    create_fk_if_missing(
         "fk_crm_lead_company_account",
         "crm_lead",
         "crm_company",
@@ -130,8 +136,8 @@ def upgrade() -> None:
     )
 
     for column in OPPORTUNITY_NEW_COLUMNS:
-        op.add_column("crm_opportunity", column.copy(), schema="crm")
-    op.create_foreign_key(
+        add_column_if_missing("crm_opportunity", column.copy(), schema="crm")
+    create_fk_if_missing(
         "fk_crm_opportunity_company_account",
         "crm_opportunity",
         "crm_company",

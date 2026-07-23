@@ -1,9 +1,14 @@
 """Add editable Quote Information snapshot fields to crm_quote."""
 
+import sys
 from collections.abc import Sequence
+from pathlib import Path
 
 import sqlalchemy as sa
-from alembic import op
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from helpers import add_column_if_missing  # noqa: E402
 
 revision: str = "0449_crm_quote_snapshot"
 down_revision: str | None = "0448_crm_meeting_zoho"
@@ -18,9 +23,11 @@ def upgrade() -> None:
         sa.Column("service_type", sa.String(length=50), nullable=True),
         sa.Column("owner_name", sa.String(length=255), nullable=True),
     ):
-        op.add_column("crm_quote", column, schema="crm")
+        add_column_if_missing("crm_quote", column, schema="crm")
 
 
 def downgrade() -> None:
+    from alembic import op
+
     for column_name in ("owner_name", "service_type", "account_name", "project_title"):
         op.drop_column("crm_quote", column_name, schema="crm")

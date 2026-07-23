@@ -44,6 +44,7 @@ export function AppSidebar() {
 
   return (
     <aside
+      data-erp-primary-sidebar
       className={cn(
         "sticky top-0 z-20 flex h-dvh shrink-0 flex-col border-r border-sidebar-border bg-sidebar text-sidebar-foreground transition-[width] duration-200",
         collapsed ? "w-[72px]" : "w-[260px]",

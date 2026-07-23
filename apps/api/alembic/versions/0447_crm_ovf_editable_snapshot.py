@@ -1,9 +1,14 @@
 """Add editable inherited snapshot fields to CRM OVF."""
 
+import sys
 from collections.abc import Sequence
+from pathlib import Path
 
 import sqlalchemy as sa
-from alembic import op
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from helpers import add_column_if_missing  # noqa: E402
 
 revision: str = "0447_crm_ovf_snapshot"
 down_revision: str | None = "0446_crm_lead_contacts"
@@ -27,10 +32,12 @@ def upgrade() -> None:
         sa.Column("account_name", sa.String(length=255), nullable=True),
     )
     for column in columns:
-        op.add_column("crm_ovf", column, schema="crm")
+        add_column_if_missing("crm_ovf", column, schema="crm")
 
 
 def downgrade() -> None:
+    from alembic import op
+
     for column_name in (
         "account_name",
         "shipping_contact_person",

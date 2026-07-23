@@ -8,7 +8,7 @@ from alembic import op
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
 
-from modules.crm.models.task import CrmTask  # noqa: F401
+from modules.crm.models.task import CrmTask  # noqa: F401,E402
 
 revision: str = "0147_crm_task"
 down_revision: str | None = "0146_crm_interaction"

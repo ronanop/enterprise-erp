@@ -3,6 +3,7 @@
 import type { ReactNode } from "react";
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { ArrowLeft, Pencil, Plus, RefreshCw } from "lucide-react";
 
 import { ApprovalBanner } from "@/components/crm/sales/approval-banner";
@@ -11,7 +12,13 @@ import { CompanyWorkspaceNav } from "@/components/crm/company-workspace-nav";
 import { DealTimeline, type DealStage } from "@/components/crm/sales/deal-timeline";
 import { PageHeader } from "@/components/layout/page-header";
 import { Button } from "@/components/ui/button";
-import { getCrmSidebarFocus, setCrmSidebarFocus } from "@/lib/crm-sidebar-focus";
+import {
+  getCrmOpportunityContext,
+  getCrmSidebarFocus,
+  isCompanyWorkspaceSectionPath,
+  setCrmOpportunityContext,
+  setCrmSidebarFocus,
+} from "@/lib/crm-sidebar-focus";
 import { ApiClientError } from "@/services/api-client";
 import {
   getCompany,
@@ -29,12 +36,17 @@ export function CompanyWorkspaceShell({
   children: ReactNode;
   onCompanyChange?: (company: Company | null) => void;
 }) {
+  const pathname = usePathname();
   const [company, setCompany] = useState<Company | null>(null);
   const [leads, setLeads] = useState<SalesLead[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [editOpen, setEditOpen] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
+  const [fromOpportunityId, setFromOpportunityId] = useState<string | null>(() => {
+    if (typeof window === "undefined") return null;
+    return getCrmSidebarFocus() === "opportunities" ? getCrmOpportunityContext() : null;
+  });
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -63,10 +75,27 @@ export function CompanyWorkspaceShell({
 
   useEffect(() => {
     // Don't steal Opportunities focus when browsing deal docs from an opportunity.
-    if (getCrmSidebarFocus() !== "opportunities") {
-      setCrmSidebarFocus("company");
+    if (getCrmSidebarFocus() === "opportunities") {
+      setFromOpportunityId(getCrmOpportunityContext());
+      return;
     }
-  }, [companyAccountId]);
+    setCrmSidebarFocus("company");
+    setCrmOpportunityContext(null);
+    setFromOpportunityId(null);
+  }, [companyAccountId, pathname]);
+
+  const isSection = isCompanyWorkspaceSectionPath(pathname);
+  const backToOpportunity = Boolean(fromOpportunityId);
+  const backHref = backToOpportunity
+    ? `/crm/opportunities/${fromOpportunityId}`
+    : isSection && company
+      ? `/crm/companies/${company.id}`
+      : "/crm/companies";
+  const backLabel = backToOpportunity
+    ? "Opportunity"
+    : isSection && company
+      ? company.customer_name
+      : "Companies";
 
   if (loading && !company) {
     return (
@@ -81,10 +110,10 @@ export function CompanyWorkspaceShell({
     return (
       <div className="space-y-3">
         <Link
-          href="/crm/companies"
+          href={backHref}
           className="inline-flex cursor-pointer items-center gap-1 text-xs font-medium text-primary"
         >
-          <ArrowLeft className="size-3.5" /> Back to Company
+          <ArrowLeft className="size-3.5" /> Back to {backLabel}
         </Link>
         <div className="rounded-xl border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive">
           {error ?? "Company not found"}
@@ -127,15 +156,20 @@ export function CompanyWorkspaceShell({
         : undefined;
 
   return (
-    <div className="flex min-w-0 items-start gap-4">
-      <CompanyWorkspaceNav companyAccountId={company.id} scope="company" />
+    <div className="flex min-w-0 items-start gap-0">
+      <CompanyWorkspaceNav
+        companyAccountId={company.id}
+        scope={backToOpportunity ? "opportunity" : "company"}
+        opportunityId={fromOpportunityId ?? undefined}
+      />
 
-      <div className="min-w-0 flex-1 space-y-4 overflow-x-clip">
+      <div className="min-w-0 flex-1 space-y-4 overflow-x-clip pl-4 sm:pl-6 lg:pl-8">
         <Link
-          href="/crm/companies"
-          className="inline-flex cursor-pointer items-center gap-1 text-xs font-medium text-primary transition-opacity duration-200 hover:opacity-80"
+          href={backHref}
+          className="inline-flex max-w-full cursor-pointer items-center gap-1 text-xs font-medium text-primary transition-opacity duration-200 hover:opacity-80"
         >
-          <ArrowLeft className="size-3.5" /> Company
+          <ArrowLeft className="size-3.5 shrink-0" />
+          <span className="truncate">{backLabel}</span>
         </Link>
 
         <DealTimeline current={timelineStage} links={timelineLinks} nextStep={nextStep} />

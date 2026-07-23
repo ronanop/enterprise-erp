@@ -30,6 +30,7 @@ import {
   type Opportunity,
   type SalesLead,
 } from "@/services/sales-crm-service";
+import { setCrmOpportunityContext, setCrmSidebarFocus } from "@/lib/crm-sidebar-focus";
 
 type QuickCreateKind = "task" | "followup" | "lead" | "meeting" | "attachment";
 
@@ -176,7 +177,7 @@ async function loadCompanyNavCounts(
   };
 }
 
-/** Internal company sidebar — fixed & vertically centered; does not scroll with the page. */
+/** Internal company/opportunity sidebar — fixed, vertically centered, docked to primary sidebar. */
 export function CompanyWorkspaceNav({
   companyAccountId,
   scope = "company",
@@ -212,6 +213,16 @@ export function CompanyWorkspaceNav({
   const showTimeline = scope === "opportunity" && Boolean(opportunityId);
   const isOpportunityScope = scope === "opportunity" && Boolean(opportunityId);
   const isCompanyScope = scope === "company";
+  const overviewHref =
+    isOpportunityScope && opportunityId
+      ? `/crm/opportunities/${opportunityId}`
+      : base;
+
+  function rememberOpportunityContext() {
+    if (!opportunityId) return;
+    setCrmSidebarFocus("opportunities");
+    setCrmOpportunityContext(opportunityId);
+  }
 
   function canQuickCreate(kind: QuickCreateKind | undefined): boolean {
     if (!kind) return false;
@@ -223,18 +234,29 @@ export function CompanyWorkspaceNav({
 
   useLayoutEffect(() => {
     const spacer = spacerRef.current;
-    if (!spacer) return;
 
     const sync = () => {
-      setLeft(spacer.getBoundingClientRect().left);
+      const primary = document.querySelector<HTMLElement>("[data-erp-primary-sidebar]");
+      if (primary) {
+        // Dock flush to the primary sidebar (no gap).
+        setLeft(Math.round(primary.getBoundingClientRect().right));
+        return;
+      }
+      // Fallback when primary sidebar is absent (should be rare on CRM pages).
+      if (spacer) setLeft(Math.round(spacer.getBoundingClientRect().left));
     };
 
     sync();
+    // Re-run after paint in case primary sidebar mounts slightly later.
+    const raf = window.requestAnimationFrame(sync);
     const observer = new ResizeObserver(sync);
-    observer.observe(spacer);
+    const primary = document.querySelector<HTMLElement>("[data-erp-primary-sidebar]");
+    if (primary) observer.observe(primary);
+    if (spacer) observer.observe(spacer);
     window.addEventListener("resize", sync);
 
     return () => {
+      window.cancelAnimationFrame(raf);
       observer.disconnect();
       window.removeEventListener("resize", sync);
     };
@@ -293,6 +315,12 @@ export function CompanyWorkspaceNav({
     if (segment === "task-assignment") return taskOpen;
     if (segment === "attachments") return attachmentsOpen;
     if (!segment) {
+      if (isOpportunityScope && opportunityId) {
+        return (
+          pathname === `/crm/opportunities/${opportunityId}` ||
+          pathname.startsWith(`/crm/opportunities/${opportunityId}/`)
+        );
+      }
       return pathname === base || pathname === `${base}/`;
     }
     const href = `${base}/${segment}`;
@@ -307,16 +335,19 @@ export function CompanyWorkspaceNav({
 
   return (
     <>
-      {/* Reserves horizontal space in the flex row while the real nav is fixed. */}
+      {/*
+        Reserves horizontal space for the fixed nav. Negative margin cancels
+        AppShell main padding so the slot starts at the primary sidebar edge
+        (same left as the docked fixed aside) — removes the white gap.
+      */}
       <div
         ref={spacerRef}
-        className="shrink-0"
-        style={{ width: NAV_WIDTH }}
+        className="w-[220px] shrink-0 -ml-4 sm:-ml-6 lg:-ml-8"
         aria-hidden
       />
 
       <aside
-        className="fixed z-30 flex w-[220px] flex-col overflow-hidden rounded-xl border border-border/80 bg-card shadow-sm"
+        className="fixed z-30 flex w-[220px] flex-col overflow-hidden rounded-none border-y border-r border-border/80 bg-card"
         style={{
           top: "50%",
           transform: "translateY(-50%)",
@@ -326,7 +357,7 @@ export function CompanyWorkspaceNav({
       >
         <div className="shrink-0 border-b border-border/70 px-3 py-2.5">
           <p className="text-[10px] font-medium tracking-[0.14em] text-muted-foreground uppercase">
-            Company
+            {isOpportunityScope ? "Opportunity" : "Company"}
           </p>
           {showTimeline ? (
             <Button
@@ -341,10 +372,13 @@ export function CompanyWorkspaceNav({
             </Button>
           ) : null}
         </div>
-        <nav aria-label="Company workspace" className="px-1.5 py-2">
+        <nav
+          aria-label={isOpportunityScope ? "Opportunity workspace" : "Company workspace"}
+          className="px-1.5 py-2"
+        >
           <ul className="space-y-0.5">
             {items.map((item) => {
-              const href = item.segment ? `${base}/${item.segment}` : base;
+              const href = item.segment ? `${base}/${item.segment}` : overviewHref;
               const active = isActive(item.segment);
               const count = counts[item.segment];
               const showQuickCreate = canQuickCreate(item.quickCreate);
@@ -368,6 +402,7 @@ export function CompanyWorkspaceNav({
                         type="button"
                         className="flex min-w-0 flex-1 cursor-pointer items-center gap-2 rounded-lg py-1 pl-2.5 text-left text-[12px] font-medium"
                         onClick={() => {
+                          rememberOpportunityContext();
                           if (item.segment === "task-assignment") setTaskOpen(true);
                           if (item.segment === "attachments") setAttachmentsOpen(true);
                         }}
@@ -377,6 +412,13 @@ export function CompanyWorkspaceNav({
                     ) : (
                       <Link
                         href={href}
+                        onClick={() => {
+                          if (isOpportunityScope) rememberOpportunityContext();
+                          else {
+                            setCrmSidebarFocus("company");
+                            setCrmOpportunityContext(null);
+                          }
+                        }}
                         className="flex min-w-0 flex-1 cursor-pointer items-center gap-2 rounded-lg py-1 pl-2.5 text-[12px] font-medium"
                       >
                         <span className="min-w-0 flex-1 truncate">{item.title}</span>
