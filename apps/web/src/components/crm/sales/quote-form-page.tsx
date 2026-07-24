@@ -3,13 +3,18 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Paperclip, Plus, Trash2 } from "lucide-react";
+import { ArrowLeft, Building2, FileText, ListOrdered, Paperclip, Plus, Scale, Trash2 } from "lucide-react";
 
+import { CrmErrorBanner, CrmIconBadge, CrmListPanel, CrmPage, CrmSection } from "@/components/crm/crm-ui";
 import {
   FinanceField,
   FinanceSelect,
   FinanceTextarea,
 } from "@/components/finance/journals/finance-form-field";
+import {
+  RequiredFieldsDialog,
+  missingRequiredMessage,
+} from "@/components/crm/sales/required-fields-dialog";
 import { PageHeader } from "@/components/layout/page-header";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -18,18 +23,24 @@ import {
   addQuoteLine,
   createAttachment,
   createQuote,
+  deleteQuoteLine,
   fileToBase64,
   formatInrPrecise,
   fullName,
   getCompany,
   getOpportunity,
   getOpportunityBlueprint,
+  getQuote,
   getSalesLead,
   listContacts,
   listEmployeeOptions,
+  listQuoteLines,
+  updateQuote,
+  updateQuoteLine,
   type Contact,
   type Opportunity,
   type Option,
+  type Quote,
   type SalesLead,
 } from "@/services/sales-crm-service";
 
@@ -56,6 +67,7 @@ type QuoteDraft = {
 
 type LineDraft = {
   key: string;
+  serverId?: string;
   product_name: string;
   hsn_sac: string;
   description: string;
@@ -63,6 +75,7 @@ type LineDraft = {
   qty: string;
   unit_cost: string;
   unit_sell: string;
+  margin_pct: string;
   gst_pct: string;
   vendorFile: File | null;
 };
@@ -88,15 +101,6 @@ const EMPTY_FORM: QuoteDraft = {
   freight: "0",
 };
 
-function defaultValidUntil(): string {
-  const d = new Date();
-  d.setDate(d.getDate() + 30);
-  const yyyy = d.getFullYear();
-  const mm = String(d.getMonth() + 1).padStart(2, "0");
-  const dd = String(d.getDate()).padStart(2, "0");
-  return `${yyyy}-${mm}-${dd}`;
-}
-
 function newLine(source?: SalesLead | null): LineDraft {
   const productName =
     source?.sub_product || source?.sub_product_other || source?.sub_product_category || "";
@@ -110,27 +114,105 @@ function newLine(source?: SalesLead | null): LineDraft {
     qty: "1",
     unit_cost: "0",
     unit_sell: "0",
+    margin_pct: "0",
     gst_pct: "18",
     vendorFile: null,
   };
 }
 
-export function QuoteFormPage({ opportunityId }: { opportunityId: string }) {
+export function QuoteFormPage({
+  opportunityId,
+  quoteId,
+}: {
+  opportunityId?: string;
+  quoteId?: string;
+}) {
   const router = useRouter();
+  const isEdit = Boolean(quoteId);
+  const [quote, setQuote] = useState<Quote | null>(null);
   const [opportunity, setOpportunity] = useState<Opportunity | null>(null);
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [employees, setEmployees] = useState<Option[]>([]);
   const [form, setForm] = useState<QuoteDraft>(EMPTY_FORM);
   const [lines, setLines] = useState<LineDraft[]>([]);
-  const [boqFile, setBoqFile] = useState<File | null>(null);
+  const [initialLineIds, setInitialLineIds] = useState<string[]>([]);
+  const [boqFiles, setBoqFiles] = useState<File[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [mandateOpen, setMandateOpen] = useState(false);
+  const [mandateMessage, setMandateMessage] = useState("");
 
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
+      if (isEdit && quoteId) {
+        const quoteRow = await getQuote(quoteId);
+        if (quoteRow.locked) {
+          throw new ApiClientError("This quote is locked and cannot be edited.", 409);
+        }
+        if (quoteRow.quote_stage === "accepted" || quoteRow.quote_stage === "lost") {
+          throw new ApiClientError("Accepted or lost quotes cannot be edited.", 409);
+        }
+        const [opportunityRow, lineRows, contactRows, employeeRows] = await Promise.all([
+          getOpportunity(quoteRow.opportunity_id),
+          listQuoteLines(quoteId).catch(() => []),
+          quoteRow.company_account_id
+            ? listContacts(quoteRow.company_account_id).catch(() => [])
+            : Promise.resolve([]),
+          listEmployeeOptions().catch(() => []),
+        ]);
+        setQuote(quoteRow);
+        setOpportunity(opportunityRow);
+        setContacts(contactRows);
+        setEmployees(employeeRows);
+        setForm({
+          project_title: quoteRow.project_title ?? "",
+          account_name: quoteRow.account_name ?? "",
+          contact_id: quoteRow.contact_id ?? "",
+          service_type: quoteRow.service_type ?? "",
+          owner_name: quoteRow.owner_name ?? "",
+          subject: quoteRow.subject ?? "",
+          valid_until: quoteRow.valid_until ?? "",
+          entity_name: quoteRow.entity_name ?? "",
+          entity_email: quoteRow.entity_email ?? "",
+          entity_address: quoteRow.entity_address ?? "",
+          entity_gst: quoteRow.entity_gst ?? "",
+          entity_contact: quoteRow.entity_contact ?? "",
+          billing_country: quoteRow.billing_country ?? "",
+          shipping_country: quoteRow.shipping_country ?? "",
+          description: quoteRow.description ?? "",
+          reason_for_discount: quoteRow.reason_for_discount ?? "",
+          terms: quoteRow.terms ?? "",
+          freight: String(quoteRow.freight ?? 0),
+        });
+        const mappedLines =
+          lineRows.length > 0
+            ? lineRows.map((line) => ({
+                key: line.id,
+                serverId: line.id,
+                product_name: line.product_name,
+                hsn_sac: line.hsn_sac ?? "",
+                description: line.description ?? "",
+                line_type: line.line_type || "hardware",
+                qty: String(line.qty ?? 1),
+                unit_cost: String(line.unit_cost ?? 0),
+                unit_sell: String(line.unit_cost ?? 0),
+                margin_pct: String(line.margin_pct ?? 0),
+                gst_pct: String(line.gst_pct ?? 0),
+                vendorFile: null,
+              }))
+            : [newLine()];
+        setLines(mappedLines);
+        setInitialLineIds(lineRows.map((line) => line.id));
+        return;
+      }
+
+      if (!opportunityId) {
+        throw new ApiClientError("Opportunity is required to create a quote.", 400);
+      }
+
       const opportunityRow = await getOpportunity(opportunityId);
       const [companyRow, leadRow, contactRows, employeeRows, blueprint] = await Promise.all([
         opportunityRow.company_account_id
@@ -174,18 +256,14 @@ export function QuoteFormPage({ opportunityId }: { opportunityId: string }) {
       const ownerLabel =
         employeeRows.find((employee) => employee.id === opportunityRow.owner_employee_id)?.label ??
         "";
-      const serviceType =
-        leadRow?.product_type && ["hardware", "software", "services"].includes(leadRow.product_type)
-          ? leadRow.product_type
-          : "hardware";
       setForm({
         project_title: opportunityRow.project_title || opportunityRow.opportunity_name || "",
         account_name: companyRow?.customer_name ?? "",
         contact_id: primaryContact?.id ?? "",
-        service_type: serviceType,
+        service_type: "",
         owner_name: ownerLabel,
-        subject: opportunityRow.project_title || opportunityRow.opportunity_name,
-        valid_until: defaultValidUntil(),
+        subject: "",
+        valid_until: "",
         entity_name: leadRow?.entity_name || companyRow?.customer_name || "",
         entity_email: leadRow?.entity_email || companyRow?.customer_email || "",
         entity_address: leadRow?.entity_address || billingAddress,
@@ -199,12 +277,13 @@ export function QuoteFormPage({ opportunityId }: { opportunityId: string }) {
         freight: "0",
       });
       setLines([newLine(leadRow)]);
+      setInitialLineIds([]);
     } catch (err) {
       setError(err instanceof ApiClientError ? err.message : "Failed to load quote details");
     } finally {
       setLoading(false);
     }
-  }, [opportunityId]);
+  }, [isEdit, opportunityId, quoteId]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => void load(), 0);
@@ -224,27 +303,48 @@ export function QuoteFormPage({ opportunityId }: { opportunityId: string }) {
   const totals = useMemo(() => {
     const rows = lines.map((line) => {
       const qty = Number(line.qty) || 0;
-      const cost = Number(line.unit_cost) || 0;
-      const sell = Number(line.unit_sell) || 0;
+      const unitPrice = Number(line.unit_sell) || 0;
+      const marginPct = Number(line.margin_pct) || 0;
       const gstPct = Number(line.gst_pct) || 0;
-      const sellTotal = qty * sell;
-      const marginAmount = qty * (sell - cost);
-      const gstAmount = (sellTotal * gstPct) / 100;
+      // Markup on unit price: margin value = price × margin%
+      const unitMarginValue = (unitPrice * marginPct) / 100;
+      const unitPriceMargin = unitPrice + unitMarginValue;
+      const totalMarginValue = qty * unitMarginValue;
+      const totalQtyPriceMargin = qty * unitPriceMargin;
+      const gstAmount = (totalQtyPriceMargin * gstPct) / 100;
       return {
-        sellTotal,
-        marginAmount,
-        marginPct: sell ? ((sell - cost) / sell) * 100 : 0,
+        unitMarginValue,
+        unitPriceMargin,
+        totalMarginValue,
+        totalQtyPriceMargin,
+        marginAmount: totalMarginValue,
+        marginPct,
         gstAmount,
-        withGst: sellTotal + gstAmount,
+        withGst: totalQtyPriceMargin + gstAmount,
+        sellTotal: totalQtyPriceMargin,
       };
     });
     const sellTotal = rows.reduce((sum, row) => sum + row.sellTotal, 0);
-    const marginAmount = rows.reduce((sum, row) => sum + row.marginAmount, 0);
-    const grandTotal = rows.reduce((sum, row) => sum + row.withGst, 0);
+    const marginAmount = rows.reduce((sum, row) => sum + row.totalMarginValue, 0);
+    const grandTotal = sellTotal;
     const freight = Number(form.freight) || 0;
+    // Mean of each row's Margin % — only rows that look like real line items
+    // (have a product, price, or non-zero margin) so blank "Add row" lines don't dilute.
+    const activeMarginPcts = lines
+      .filter((line) => {
+        const hasProduct = line.product_name.trim().length > 0;
+        const hasPrice = (Number(line.unit_sell) || 0) > 0;
+        const hasMargin = (Number(line.margin_pct) || 0) !== 0;
+        return hasProduct || hasPrice || hasMargin;
+      })
+      .map((line) => Number(line.margin_pct) || 0);
+    const avgMargin =
+      activeMarginPcts.length > 0
+        ? activeMarginPcts.reduce((sum, pct) => sum + pct, 0) / activeMarginPcts.length
+        : 0;
     return {
       rows,
-      avgMargin: sellTotal ? (marginAmount / sellTotal) * 100 : 0,
+      avgMargin,
       marginAmount,
       grandTotal,
       grandWithFreight: grandTotal + freight,
@@ -252,14 +352,14 @@ export function QuoteFormPage({ opportunityId }: { opportunityId: string }) {
   }, [form.freight, lines]);
 
   async function uploadFile(
-    quoteId: string,
+    targetQuoteId: string,
     file: File,
     category: "boq" | "vendor_quote",
   ) {
     if (!opportunity) return;
     await createAttachment({
       entity_type: "quote",
-      entity_id: quoteId,
+      entity_id: targetQuoteId,
       branch_id: opportunity.branch_id,
       company_id: opportunity.company_id,
       file_name: file.name,
@@ -269,67 +369,111 @@ export function QuoteFormPage({ opportunityId }: { opportunityId: string }) {
     });
   }
 
+  function linePayload(line: LineDraft) {
+    const unitPrice = Number(line.unit_sell) || 0;
+    const marginPct = Number(line.margin_pct) || 0;
+    return {
+      product_name: line.product_name.trim(),
+      hsn_sac: line.hsn_sac || null,
+      description: line.description || null,
+      line_type: line.line_type,
+      qty: Number(line.qty) || 1,
+      unit_cost: unitPrice,
+      unit_sell: unitPrice * (1 + marginPct / 100),
+      gst_pct: Number(line.gst_pct) || 0,
+    };
+  }
+
+  function quotePayload() {
+    return {
+      contact_id: form.contact_id || null,
+      subject: form.subject.trim(),
+      project_title: form.project_title.trim() || null,
+      account_name: form.account_name.trim() || null,
+      service_type: form.service_type || null,
+      owner_name: form.owner_name.trim() || null,
+      valid_until: form.valid_until || null,
+      entity_name: form.entity_name || null,
+      entity_email: form.entity_email || null,
+      entity_address: form.entity_address || null,
+      entity_gst: form.entity_gst || null,
+      entity_contact: form.entity_contact || null,
+      billing_country: form.billing_country || null,
+      shipping_country: form.shipping_country || null,
+      freight: Number(form.freight) || 0,
+      terms: form.terms || null,
+      description: form.description || null,
+      reason_for_discount: form.reason_for_discount || null,
+    };
+  }
+
   async function onSave() {
     if (!opportunity) return;
-    if (!form.subject.trim()) {
-      setError("Subject is required.");
-      return;
-    }
-    if (lines.some((line) => !line.product_name.trim())) {
-      setError("Product Name is required for every quoted item.");
+    const missing: string[] = [];
+    if (!form.subject.trim()) missing.push("Subject");
+    if (!form.valid_until.trim()) missing.push("Valid Until");
+    if (!form.service_type.trim()) missing.push("Service Type");
+    if (lines.some((line) => !line.product_name.trim())) missing.push("Product Name (quoted items)");
+    if (missing.length > 0) {
+      setMandateMessage(missingRequiredMessage(missing));
+      setMandateOpen(true);
       return;
     }
     setSaving(true);
     setError(null);
     try {
-      const quote = await createQuote({
+      if (isEdit && quoteId) {
+        const saved = await updateQuote(quoteId, quotePayload());
+        const keptIds = new Set(lines.map((line) => line.serverId).filter(Boolean) as string[]);
+        await Promise.all(
+          initialLineIds
+            .filter((id) => !keptIds.has(id))
+            .map((id) => deleteQuoteLine(id)),
+        );
+        await Promise.all(
+          lines.map((line) =>
+            line.serverId
+              ? updateQuoteLine(line.serverId, linePayload(line))
+              : addQuoteLine(saved.id, linePayload(line)),
+          ),
+        );
+        const files = [
+          ...boqFiles.map((file) => ({ file, category: "boq" as const })),
+          ...lines.flatMap((line) =>
+            line.vendorFile
+              ? [{ file: line.vendorFile, category: "vendor_quote" as const }]
+              : [],
+          ),
+        ];
+        await Promise.all(files.map(({ file, category }) => uploadFile(saved.id, file, category)));
+        router.push(`/crm/quotes/${saved.id}`);
+        return;
+      }
+
+      const created = await createQuote({
         opportunity_id: opportunity.id,
         branch_id: opportunity.branch_id,
-        contact_id: form.contact_id || null,
-        subject: form.subject.trim(),
-        project_title: form.project_title.trim() || null,
-        account_name: form.account_name.trim() || null,
-        service_type: form.service_type || null,
-        owner_name: form.owner_name.trim() || null,
-        valid_until: form.valid_until || null,
-        entity_name: form.entity_name || null,
-        entity_email: form.entity_email || null,
-        entity_address: form.entity_address || null,
-        entity_gst: form.entity_gst || null,
-        entity_contact: form.entity_contact || null,
-        billing_country: form.billing_country || null,
-        shipping_country: form.shipping_country || null,
-        freight: Number(form.freight) || 0,
-        terms: form.terms || null,
-        description: form.description || null,
-        reason_for_discount: form.reason_for_discount || null,
+        ...quotePayload(),
       });
-      await Promise.all(
-        lines.map((line) =>
-          addQuoteLine(quote.id, {
-            product_name: line.product_name.trim(),
-            hsn_sac: line.hsn_sac || null,
-            description: line.description || null,
-            line_type: line.line_type,
-            qty: Number(line.qty) || 1,
-            unit_cost: Number(line.unit_cost) || 0,
-            unit_sell: Number(line.unit_sell) || 0,
-            gst_pct: Number(line.gst_pct) || 0,
-          }),
-        ),
-      );
+      await Promise.all(lines.map((line) => addQuoteLine(created.id, linePayload(line))));
       const files = [
-        ...(boqFile ? [{ file: boqFile, category: "boq" as const }] : []),
+        ...boqFiles.map((file) => ({ file, category: "boq" as const })),
         ...lines.flatMap((line) =>
           line.vendorFile
             ? [{ file: line.vendorFile, category: "vendor_quote" as const }]
             : [],
         ),
       ];
-      await Promise.all(files.map(({ file, category }) => uploadFile(quote.id, file, category)));
-      router.push(`/crm/quotes/${quote.id}`);
+      await Promise.all(files.map(({ file, category }) => uploadFile(created.id, file, category)));
+      router.push(`/crm/quotes/${created.id}`);
     } catch (err) {
-      setError(err instanceof ApiClientError ? err.message : "Failed to create quote");
+      setError(
+        err instanceof ApiClientError
+          ? err.message
+          : isEdit
+            ? "Failed to update quote"
+            : "Failed to create quote",
+      );
     } finally {
       setSaving(false);
     }
@@ -339,40 +483,44 @@ export function QuoteFormPage({ opportunityId }: { opportunityId: string }) {
     return <div className="h-96 animate-pulse rounded-xl bg-muted/60" />;
   }
 
+  const backHref = isEdit && quoteId
+    ? `/crm/quotes/${quoteId}`
+    : `/crm/opportunities/${opportunityId ?? opportunity?.id ?? ""}`;
+  const backLabel = isEdit ? quote?.quote_no ?? "Quote" : "Opportunity";
+
   return (
-    <div className="grid min-w-0 max-w-full grid-cols-1 gap-4 overflow-x-clip">
+    <CrmPage className="grid min-w-0 max-w-full grid-cols-1 gap-4 overflow-x-clip space-y-0">
       <Link
-        href={`/crm/opportunities/${opportunityId}`}
+        href={backHref}
         className="inline-flex w-fit cursor-pointer items-center gap-1 text-xs font-medium text-primary transition-opacity duration-200 hover:opacity-80"
       >
-        <ArrowLeft className="size-3.5" /> Opportunity
+        <ArrowLeft className="size-3.5" /> {backLabel}
       </Link>
       <PageHeader
         className="min-w-0"
-        title="Create Quote"
-        description="Customer quote details are prefilled from the Company, Lead, and Opportunity — edit anything before saving."
+        title={isEdit ? `Edit ${quote?.quote_no ?? "Quote"}` : "Create Quote"}
+        description={
+          isEdit
+            ? "Update quote details, entity information, and quoted items."
+            : "Customer quote details are prefilled from the Company, Lead, and Opportunity — edit anything before saving."
+        }
         actions={
           <div className="flex flex-wrap items-center gap-2">
             <Link
-              href={`/crm/opportunities/${opportunityId}`}
+              href={backHref}
               className="inline-flex h-8 cursor-pointer items-center rounded-lg border border-border px-3 text-sm font-medium transition-colors duration-200 hover:bg-muted"
             >
               Cancel
             </Link>
             <Button type="button" className="cursor-pointer" disabled={saving} onClick={() => void onSave()}>
-              {saving ? "Saving…" : "Save"}
+              {saving ? "Saving…" : isEdit ? "Save changes" : "Save"}
             </Button>
           </div>
         }
       />
-      {error ? (
-        <div className="rounded-xl border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive">
-          {error}
-        </div>
-      ) : null}
+      {error ? <CrmErrorBanner>{error}</CrmErrorBanner> : null}
 
-      <section className="min-w-0 overflow-x-clip rounded-xl border border-border/80 bg-card p-4 shadow-sm">
-        <h2 className="mb-3 text-sm font-medium">Quote Information</h2>
+      <CrmSection title="Quote Information" icon={FileText} className="min-w-0 overflow-x-clip">
         <div className="grid min-w-0 gap-x-6 gap-y-3 md:grid-cols-2">
           <FinanceField label="Customer's Project Title">
             <Input
@@ -389,7 +537,7 @@ export function QuoteFormPage({ opportunityId }: { opportunityId: string }) {
               onChange={(event) => setField("account_name", event.target.value)}
             />
           </FinanceField>
-          <FinanceField label="Valid Until">
+          <FinanceField label="Valid Until *">
             <Input
               type="date"
               value={form.valid_until}
@@ -422,33 +570,49 @@ export function QuoteFormPage({ opportunityId }: { opportunityId: string }) {
               ))}
             </FinanceSelect>
           </FinanceField>
-          <FinanceField label="Service Type">
+          <FinanceField label="Service Type *">
             <FinanceSelect
               value={form.service_type}
               onChange={(event) => setField("service_type", event.target.value)}
             >
+              <option value="">Select</option>
               <option value="hardware">Hardware</option>
               <option value="software">Software</option>
               <option value="services">Services</option>
             </FinanceSelect>
           </FinanceField>
           <FinanceField label="Quote No.">
-            <Input value="Auto-generated on save" disabled />
+            <Input value={isEdit ? quote?.quote_no ?? "-" : "Auto-generated on save"} disabled />
           </FinanceField>
           <FinanceField label="Quote Stage">
-            <Input value="Quote Create" disabled />
+            <Input
+              value={
+                isEdit
+                  ? (quote?.quote_stage ?? "").replaceAll("_", " ") || "-"
+                  : "Quote Create"
+              }
+              disabled
+              className="capitalize"
+            />
           </FinanceField>
           <FinanceField label="Version">
-            <Input value="1" disabled />
+            <Input value={isEdit ? String(quote?.version ?? 1) : "1"} disabled />
           </FinanceField>
           <FinanceField label="Approval Status">
-            <Input value="Not required" disabled />
+            <Input
+              value={
+                isEdit
+                  ? (quote?.approval_status ?? "").replaceAll("_", " ") || "-"
+                  : "Not required"
+              }
+              disabled
+              className="capitalize"
+            />
           </FinanceField>
         </div>
-      </section>
+      </CrmSection>
 
-      <section className="min-w-0 overflow-x-clip rounded-xl border border-border/80 bg-card p-4 shadow-sm">
-        <h2 className="mb-3 text-sm font-medium">Entity Information</h2>
+      <CrmSection title="Entity Information" icon={Building2} className="min-w-0 overflow-x-clip">
         <div className="grid min-w-0 gap-x-6 gap-y-3 md:grid-cols-2">
           <FinanceField label="Entity Name"><Input value={form.entity_name} onChange={(e) => setField("entity_name", e.target.value)} /></FinanceField>
           <FinanceField label="Entity Address"><Input value={form.entity_address} onChange={(e) => setField("entity_address", e.target.value)} /></FinanceField>
@@ -456,37 +620,68 @@ export function QuoteFormPage({ opportunityId }: { opportunityId: string }) {
           <FinanceField label="Entity Email"><Input type="email" value={form.entity_email} onChange={(e) => setField("entity_email", e.target.value)} /></FinanceField>
           <FinanceField label="Entity GST No."><Input value={form.entity_gst} onChange={(e) => setField("entity_gst", e.target.value)} /></FinanceField>
         </div>
-      </section>
+      </CrmSection>
 
-      <section className="min-w-0 overflow-x-clip rounded-xl border border-border/80 bg-card p-4 shadow-sm">
-        <h2 className="mb-3 text-sm font-medium">Additional Information</h2>
+      <CrmSection title="Additional Information" icon={FileText} className="min-w-0 overflow-x-clip">
         <div className="min-w-0 space-y-3">
           <FinanceField label="Sales Order ID"><Input value={opportunity?.sales_order_id ?? ""} disabled /></FinanceField>
           <FinanceField label="Description"><FinanceTextarea value={form.description} onChange={(e) => setField("description", e.target.value)} /></FinanceField>
           <FinanceField label="Reason For Discount"><FinanceTextarea value={form.reason_for_discount} onChange={(e) => setField("reason_for_discount", e.target.value)} /></FinanceField>
         </div>
-      </section>
+      </CrmSection>
 
-      <section className="min-w-0 overflow-x-clip rounded-xl border border-border/80 bg-card p-4 shadow-sm">
-        <h2 className="mb-3 text-sm font-medium">Terms and Conditions</h2>
+      <CrmSection title="Terms and Conditions" icon={Scale} className="min-w-0 overflow-x-clip">
         <div className="grid min-w-0 gap-x-6 gap-y-3 md:grid-cols-2">
           <FinanceField label="Terms and Conditions" className="md:col-span-2"><FinanceTextarea value={form.terms} onChange={(e) => setField("terms", e.target.value)} /></FinanceField>
           <FinanceField label="Freight Charges (₹)"><Input type="number" min={0} value={form.freight} onChange={(e) => setField("freight", e.target.value)} /></FinanceField>
-          <FinanceField label="BOQ Attachment">
-            <div className="flex min-w-0 items-center gap-2">
-              <Button type="button" variant="outline" size="sm" className="shrink-0 cursor-pointer" onClick={() => document.getElementById("quote-boq-file")?.click()}><Paperclip className="size-3.5" /> Choose file</Button>
-              <input id="quote-boq-file" type="file" className="sr-only" onChange={(e) => setBoqFile(e.target.files?.[0] ?? null)} />
-              <span className="min-w-0 truncate text-xs text-muted-foreground">{boqFile?.name ?? "No file selected"}</span>
+          <FinanceField label="BOQ Attachment (multiple)">
+            <div className="flex min-w-0 flex-col gap-1.5">
+              <div className="flex min-w-0 items-center gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="shrink-0 cursor-pointer"
+                  onClick={() => document.getElementById("quote-boq-file")?.click()}
+                >
+                  <Paperclip className="size-3.5" /> Choose files
+                </Button>
+                <input
+                  id="quote-boq-file"
+                  type="file"
+                  multiple
+                  className="hidden"
+                  tabIndex={-1}
+                  onChange={(e) => setBoqFiles(Array.from(e.target.files ?? []))}
+                />
+                <span className="min-w-0 truncate text-xs text-muted-foreground">
+                  {boqFiles.length === 0
+                    ? "No files selected"
+                    : `${boqFiles.length} file${boqFiles.length === 1 ? "" : "s"} selected`}
+                </span>
+              </div>
+              {boqFiles.length > 0 ? (
+                <ul className="space-y-0.5 text-[11px] text-muted-foreground">
+                  {boqFiles.map((file) => (
+                    <li key={file.name} className="truncate">
+                      {file.name}
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
             </div>
           </FinanceField>
           <FinanceField label="Billing Country"><Input value={form.billing_country} onChange={(e) => setField("billing_country", e.target.value)} /></FinanceField>
           <FinanceField label="Shipping Country"><Input value={form.shipping_country} onChange={(e) => setField("shipping_country", e.target.value)} /></FinanceField>
         </div>
-      </section>
+      </CrmSection>
 
-      <section className="grid min-w-0 max-w-full grid-cols-1 overflow-x-clip rounded-xl border border-border/80 bg-card shadow-sm">
+      <CrmListPanel className="min-w-0 max-w-full overflow-x-clip">
         <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border/70 px-4 py-3">
-          <h2 className="text-sm font-medium">Quoted Items</h2>
+          <div className="flex items-center gap-2.5">
+            <CrmIconBadge icon={ListOrdered} />
+            <h2 className="text-sm font-medium">Quoted Items</h2>
+          </div>
           <Button
             type="button"
             variant="outline"
@@ -508,9 +703,12 @@ export function QuoteFormPage({ opportunityId }: { opportunityId: string }) {
                   "Item Description",
                   "Service Type",
                   "Quantity",
-                  "Unit Cost (₹)",
                   "Unit Price (₹)",
                   "Margin %",
+                  "Unit Margin Value (₹)",
+                  "Unit Price Margin (₹)",
+                  "Total Margin Value (₹)",
+                  "Total Qty Price Margin (₹)",
                   "GST %",
                   "Total GST",
                   "Total Amount incl. GST",
@@ -575,21 +773,31 @@ export function QuoteFormPage({ opportunityId }: { opportunityId: string }) {
                         className="w-28"
                         type="number"
                         min={0}
-                        value={line.unit_cost}
-                        onChange={(e) => setLine(line.key, "unit_cost", e.target.value)}
-                      />
-                    </td>
-                    <td className="px-2 py-2">
-                      <Input
-                        className="w-28"
-                        type="number"
-                        min={0}
                         value={line.unit_sell}
                         onChange={(e) => setLine(line.key, "unit_sell", e.target.value)}
                       />
                     </td>
+                    <td className="px-2 py-2">
+                      <Input
+                        className="w-20"
+                        type="number"
+                        min={0}
+                        step="0.01"
+                        value={line.margin_pct}
+                        onChange={(e) => setLine(line.key, "margin_pct", e.target.value)}
+                      />
+                    </td>
                     <td className="whitespace-nowrap px-2 py-2 tabular-nums">
-                      {rowTotal?.marginPct.toFixed(2) ?? "0.00"}
+                      {formatInrPrecise(rowTotal?.unitMarginValue ?? 0)}
+                    </td>
+                    <td className="whitespace-nowrap px-2 py-2 tabular-nums">
+                      {formatInrPrecise(rowTotal?.unitPriceMargin ?? 0)}
+                    </td>
+                    <td className="whitespace-nowrap px-2 py-2 tabular-nums">
+                      {formatInrPrecise(rowTotal?.totalMarginValue ?? 0)}
+                    </td>
+                    <td className="whitespace-nowrap px-2 py-2 font-medium tabular-nums">
+                      {formatInrPrecise(rowTotal?.totalQtyPriceMargin ?? 0)}
                     </td>
                     <td className="px-2 py-2">
                       <Input
@@ -606,15 +814,35 @@ export function QuoteFormPage({ opportunityId }: { opportunityId: string }) {
                     <td className="whitespace-nowrap px-2 py-2 font-medium tabular-nums">
                       {formatInrPrecise(rowTotal?.withGst ?? 0)}
                     </td>
-                    <td className="px-2 py-2">
-                      <label className="inline-flex cursor-pointer items-center gap-1 whitespace-nowrap rounded-lg border px-2 py-1.5 transition-colors duration-200 hover:bg-muted">
-                        <Paperclip className="size-3" /> {line.vendorFile?.name ?? "Choose file"}
+                    <td className="max-w-[11rem] px-2 py-2">
+                      <div className="relative max-w-[11rem]">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="xs"
+                          title={line.vendorFile?.name ?? "Choose file"}
+                          className="h-8 max-w-full cursor-pointer justify-start gap-1 px-2"
+                          onClick={(event) => {
+                            const input = event.currentTarget
+                              .parentElement
+                              ?.querySelector<HTMLInputElement>('input[type="file"]');
+                            input?.click();
+                          }}
+                        >
+                          <Paperclip className="size-3 shrink-0" />
+                          <span className="min-w-0 truncate">
+                            {line.vendorFile?.name ?? "Choose file"}
+                          </span>
+                        </Button>
                         <input
                           type="file"
-                          className="sr-only"
-                          onChange={(e) => setLine(line.key, "vendorFile", e.target.files?.[0] ?? null)}
+                          className="hidden"
+                          tabIndex={-1}
+                          onChange={(e) =>
+                            setLine(line.key, "vendorFile", e.target.files?.[0] ?? null)
+                          }
                         />
-                      </label>
+                      </div>
                     </td>
                     <td className="px-2 py-2">
                       <Button
@@ -636,25 +864,30 @@ export function QuoteFormPage({ opportunityId }: { opportunityId: string }) {
             </tbody>
           </table>
         </div>
-        <div className="ml-auto grid max-w-md gap-2 p-4 text-xs">
-          <div className="flex justify-between">
-            <span className="text-muted-foreground">Margin in Avg (%)</span>
-            <span>{totals.avgMargin.toFixed(3)}%</span>
+        <div className="ml-auto w-full max-w-sm space-y-2.5 border-t border-border/70 px-4 py-4 text-xs sm:px-5">
+          <div className="flex items-baseline justify-between gap-6">
+            <span className="shrink-0 text-muted-foreground">Margin in Avg (%)</span>
+            <span className="tabular-nums text-foreground">{totals.avgMargin.toFixed(3)}%</span>
           </div>
-          <div className="flex justify-between">
-            <span className="text-muted-foreground">Total Margin Amount</span>
-            <span>{formatInrPrecise(totals.marginAmount)}</span>
+          <div className="flex items-baseline justify-between gap-6">
+            <span className="shrink-0 text-muted-foreground">Total Margin Amount</span>
+            <span className="tabular-nums text-foreground">{formatInrPrecise(totals.marginAmount)}</span>
           </div>
-          <div className="flex justify-between">
-            <span className="text-muted-foreground">Grand Total</span>
-            <span>{formatInrPrecise(totals.grandTotal)}</span>
+          <div className="flex items-baseline justify-between gap-6">
+            <span className="shrink-0 text-muted-foreground">Grand Total (ex. GST)</span>
+            <span className="tabular-nums text-foreground">{formatInrPrecise(totals.grandTotal)}</span>
           </div>
-          <div className="flex justify-between border-t pt-2 font-medium">
-            <span>Grand Total including Freight</span>
-            <span>{formatInrPrecise(totals.grandWithFreight)}</span>
+          <div className="flex items-baseline justify-between gap-6 border-t border-border/70 pt-3 font-medium text-foreground">
+            <span className="shrink-0">Grand Total including Freight</span>
+            <span className="tabular-nums">{formatInrPrecise(totals.grandWithFreight)}</span>
           </div>
         </div>
-      </section>
-    </div>
+      </CrmListPanel>
+      <RequiredFieldsDialog
+        open={mandateOpen}
+        message={mandateMessage}
+        onClose={() => setMandateOpen(false)}
+      />
+    </CrmPage>
   );
 }

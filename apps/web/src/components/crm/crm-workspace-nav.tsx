@@ -104,9 +104,9 @@ export function CrmWorkspaceNav() {
                 <Link
                   href={item.href}
                   className={cn(
-                    "inline-flex h-8 cursor-pointer items-center rounded-t-md px-2.5 text-xs font-medium transition-colors duration-200",
+                    "relative inline-flex h-8 cursor-pointer items-center rounded-lg px-2.5 text-xs font-medium transition-[color,background-color] duration-200",
                     active
-                      ? "border-b-2 border-primary text-foreground"
+                      ? "bg-muted/60 font-semibold text-foreground after:absolute after:inset-x-2 after:bottom-0.5 after:h-0.5 after:rounded-full after:bg-primary"
                       : "text-muted-foreground hover:bg-muted/50 hover:text-foreground",
                   )}
                 >

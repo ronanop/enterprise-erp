@@ -6,8 +6,8 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { ArrowLeft, Pencil, Plus, RefreshCw } from "lucide-react";
 
+import { CrmErrorBanner, CrmPage } from "@/components/crm/crm-ui";
 import { ApprovalBanner } from "@/components/crm/sales/approval-banner";
-import { CompanyFormDialog } from "@/components/crm/sales/company-form-dialog";
 import { CompanyWorkspaceNav } from "@/components/crm/company-workspace-nav";
 import { DealTimeline, type DealStage } from "@/components/crm/sales/deal-timeline";
 import { PageHeader } from "@/components/layout/page-header";
@@ -41,7 +41,6 @@ export function CompanyWorkspaceShell({
   const [leads, setLeads] = useState<SalesLead[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [editOpen, setEditOpen] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
   const [fromOpportunityId, setFromOpportunityId] = useState<string | null>(() => {
     if (typeof window === "undefined") return null;
@@ -85,6 +84,7 @@ export function CompanyWorkspaceShell({
   }, [companyAccountId, pathname]);
 
   const isSection = isCompanyWorkspaceSectionPath(pathname);
+  const hideWorkspaceNav = /\/leads\/new\/?$/.test(pathname);
   const backToOpportunity = Boolean(fromOpportunityId);
   const backHref = backToOpportunity
     ? `/crm/opportunities/${fromOpportunityId}`
@@ -108,17 +108,15 @@ export function CompanyWorkspaceShell({
 
   if (error || !company) {
     return (
-      <div className="space-y-3">
+      <CrmPage className="space-y-3">
         <Link
           href={backHref}
           className="inline-flex cursor-pointer items-center gap-1 text-xs font-medium text-primary"
         >
           <ArrowLeft className="size-3.5" /> Back to {backLabel}
         </Link>
-        <div className="rounded-xl border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive">
-          {error ?? "Company not found"}
-        </div>
-      </div>
+        <CrmErrorBanner>{error ?? "Company not found"}</CrmErrorBanner>
+      </CrmPage>
     );
   }
 
@@ -157,81 +155,92 @@ export function CompanyWorkspaceShell({
 
   return (
     <div className="flex min-w-0 items-start gap-0">
-      <CompanyWorkspaceNav
-        companyAccountId={company.id}
-        scope={backToOpportunity ? "opportunity" : "company"}
-        opportunityId={fromOpportunityId ?? undefined}
-      />
-
-      <div className="min-w-0 flex-1 space-y-4 overflow-x-clip pl-4 sm:pl-6 lg:pl-8">
-        <Link
-          href={backHref}
-          className="inline-flex max-w-full cursor-pointer items-center gap-1 text-xs font-medium text-primary transition-opacity duration-200 hover:opacity-80"
-        >
-          <ArrowLeft className="size-3.5 shrink-0" />
-          <span className="truncate">{backLabel}</span>
-        </Link>
-
-        <DealTimeline current={timelineStage} links={timelineLinks} nextStep={nextStep} />
-        <ApprovalBanner locked={company.locked} label="This company account" />
-
-        <PageHeader
-          title={company.customer_name}
-          description={`Account ${company.account_number} · ${company.industry}`}
-          actions={
-            <div className="flex flex-wrap items-center gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="cursor-pointer"
-                onClick={() => setRefreshKey((value) => value + 1)}
-              >
-                <RefreshCw className="size-3.5" /> Refresh
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="cursor-pointer"
-                onClick={() => setEditOpen(true)}
-              >
-                <Pencil className="size-3.5" /> Edit
-              </Button>
-              {company.status !== "active" ? (
-                <Button
-                  type="button"
-                  size="sm"
-                  className="cursor-pointer"
-                  disabled
-                  title="Company account must be active to create a lead"
-                >
-                  <Plus className="size-3.5" /> Create Lead
-                </Button>
-              ) : (
-                <Link
-                  href={`/crm/companies/${company.id}/leads/new`}
-                  className="inline-flex h-7 cursor-pointer items-center gap-1.5 rounded-lg bg-primary px-2.5 text-[0.8rem] font-medium text-primary-foreground shadow-sm transition-opacity duration-200 hover:opacity-90"
-                >
-                  <Plus className="size-3.5" /> Create Lead
-                </Link>
-              )}
-            </div>
-          }
+      {hideWorkspaceNav ? null : (
+        <CompanyWorkspaceNav
+          companyAccountId={company.id}
+          scope={backToOpportunity ? "opportunity" : "company"}
+          opportunityId={fromOpportunityId ?? undefined}
         />
+      )}
 
-        <div className="min-w-0">{children}</div>
+      <div
+        className={
+          hideWorkspaceNav
+            ? "min-w-0 flex-1 overflow-x-clip"
+            : "min-w-0 flex-1 overflow-x-clip pl-4 sm:pl-6 lg:pl-8"
+        }
+      >
+        <CrmPage>
+          <div className="rounded-xl border border-border/80 bg-card/60 px-4 py-3 shadow-sm">
+            <Link
+              href={backHref}
+              className="inline-flex max-w-full cursor-pointer items-center gap-1 text-xs font-medium text-primary transition-opacity duration-200 hover:opacity-80"
+            >
+              <ArrowLeft className="size-3.5 shrink-0" />
+              <span className="truncate">{backLabel}</span>
+            </Link>
+
+            {hideWorkspaceNav ? null : (
+              <div className="mt-3 space-y-3">
+                <DealTimeline current={timelineStage} links={timelineLinks} nextStep={nextStep} />
+                <ApprovalBanner locked={company.locked} label="This company account" />
+              </div>
+            )}
+
+            <div className="mt-3">
+              <PageHeader
+                title={hideWorkspaceNav ? "Create Lead" : company.customer_name}
+                description={
+                  hideWorkspaceNav
+                    ? "The only supported entry point for a sales-process lead is from its parent company."
+                    : `Account ${company.account_number} · ${company.industry}`
+                }
+                actions={
+                  hideWorkspaceNav ? undefined : (
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="cursor-pointer"
+                        onClick={() => setRefreshKey((value) => value + 1)}
+                      >
+                        <RefreshCw className="size-3.5" /> Refresh
+                      </Button>
+                      <Link
+                        href={`/crm/companies/${company.id}/edit`}
+                        className="inline-flex h-7 cursor-pointer items-center gap-1.5 rounded-lg border border-border bg-background px-2.5 text-[0.8rem] font-medium text-foreground shadow-sm transition-colors duration-200 hover:bg-muted/60"
+                      >
+                        <Pencil className="size-3.5" /> Edit
+                      </Link>
+                      {company.status !== "active" ? (
+                        <Button
+                          type="button"
+                          size="sm"
+                          className="cursor-pointer"
+                          disabled
+                          title="Company account must be active to create a lead"
+                        >
+                          <Plus className="size-3.5" /> Create Lead
+                        </Button>
+                      ) : (
+                        <Link
+                          href={`/crm/companies/${company.id}/leads/new`}
+                          className="inline-flex h-7 cursor-pointer items-center gap-1.5 rounded-lg bg-primary px-2.5 text-[0.8rem] font-medium text-primary-foreground shadow-sm transition-opacity duration-200 hover:opacity-90"
+                        >
+                          <Plus className="size-3.5" /> Create Lead
+                        </Link>
+                      )}
+                    </div>
+                  )
+                }
+              />
+            </div>
+          </div>
+
+          <div className="min-w-0">{children}</div>
+        </CrmPage>
       </div>
-
-      <CompanyFormDialog
-        open={editOpen}
-        company={company}
-        onClose={() => setEditOpen(false)}
-        onSaved={() => {
-          setEditOpen(false);
-          setRefreshKey((value) => value + 1);
-        }}
-      />
     </div>
   );
 }

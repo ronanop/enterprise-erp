@@ -1,24 +1,40 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { Plus, RefreshCw } from "lucide-react";
+import { Building2, Plus, RefreshCw } from "lucide-react";
 
-import { CompanyFormDialog } from "@/components/crm/sales/company-form-dialog";
+import { CrmErrorBanner, CrmListPanel, CrmPage } from "@/components/crm/crm-ui";
 import { PageHeader } from "@/components/layout/page-header";
 import { FinanceStatusBadge } from "@/components/finance/finance-status-badge";
+import { CrmListToolbar } from "@/components/crm/sales/crm-list-toolbar";
+import { CrmSortableTh, sortRows, useTableSort } from "@/components/crm/sales/crm-table-sort";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { ApiClientError } from "@/services/api-client";
 import { listCompanies, type Company } from "@/services/sales-crm-service";
 
+type SortKey =
+  | "customer_name"
+  | "account_number"
+  | "phone"
+  | "customer_email"
+  | "industry"
+  | "created_at"
+  | "status";
+
+function formatCreatedDate(iso: string | null | undefined): string {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso.slice(0, 10);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
 export function CompanyListPage() {
   const [rows, setRows] = useState<Company[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
-  const [dialogOpen, setDialogOpen] = useState(false);
+  const { sortBy, sortDir, onSort } = useTableSort<SortKey>("customer_name");
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -37,19 +53,34 @@ export function CompanyListPage() {
     void load();
   }, [load]);
 
-  const filtered = rows.filter((r) => {
+  const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (!q) return true;
-    return (
-      r.customer_name.toLowerCase().includes(q) ||
-      (r.customer_email ?? "").toLowerCase().includes(q) ||
-      (r.phone ?? "").toLowerCase().includes(q) ||
-      r.account_number.toLowerCase().includes(q)
+    if (!q) return rows;
+    return rows.filter(
+      (r) =>
+        r.customer_name.toLowerCase().includes(q) ||
+        (r.customer_email ?? "").toLowerCase().includes(q) ||
+        (r.phone ?? "").toLowerCase().includes(q) ||
+        r.account_number.toLowerCase().includes(q),
     );
-  });
+  }, [rows, query]);
+
+  const sorted = useMemo(
+    () =>
+      sortRows(filtered, sortBy, sortDir, {
+        customer_name: (r) => r.customer_name,
+        account_number: (r) => r.account_number,
+        phone: (r) => r.phone,
+        customer_email: (r) => r.customer_email,
+        industry: (r) => r.industry,
+        created_at: (r) => r.created_at,
+        status: (r) => r.status,
+      }),
+    [filtered, sortBy, sortDir],
+  );
 
   return (
-    <div className="space-y-4">
+    <CrmPage>
       <PageHeader
         title="Company"
         description="Sales accounts — the only entry point for creating leads. Convert a company's lead through Opportunity, Quote, and OVF to Won."
@@ -66,45 +97,43 @@ export function CompanyListPage() {
               <RefreshCw className={`size-3.5 ${loading ? "animate-spin" : ""}`} />
               Refresh
             </Button>
-            <Button type="button" size="sm" className="cursor-pointer" onClick={() => setDialogOpen(true)}>
+            <Link
+              href="/crm/companies/new"
+              className="inline-flex h-7 cursor-pointer items-center gap-1.5 rounded-lg bg-primary px-2.5 text-[0.8rem] font-medium text-primary-foreground shadow-sm transition-opacity duration-200 hover:opacity-90"
+            >
               <Plus className="size-3.5" />
               New Company
-            </Button>
+            </Link>
           </div>
         }
       />
 
-      {error ? (
-        <div className="rounded-xl border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive">
-          {error}
-        </div>
-      ) : null}
+      {error ? <CrmErrorBanner>{error}</CrmErrorBanner> : null}
 
-      <div className="overflow-hidden rounded-xl border border-border/80 bg-card shadow-sm">
-        <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2 border-b border-border/70 px-4 py-3">
-          <div className="flex min-w-0 flex-1 items-center gap-2">
-            <h2 className="truncate text-sm font-medium tracking-tight">Accounts</h2>
-            <Badge variant="secondary">{filtered.length} shown</Badge>
-          </div>
-          <Input
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search companies…"
-            className="h-8 w-52 shrink-0 sm:w-56"
-          />
-        </div>
+      <CrmListPanel>
+        <CrmListToolbar
+          title="Accounts"
+          subtitle="Sales accounts"
+          icon={Building2}
+          count={sorted.length}
+          search={{
+            value: query,
+            onChange: setQuery,
+            placeholder: "Search companies…",
+          }}
+        />
 
         <div className="erp-scroll overflow-x-auto">
           <table className="w-full min-w-[900px] text-left text-sm">
             <thead>
               <tr className="border-b border-border/70 bg-muted/40 text-[11px] tracking-wide text-muted-foreground uppercase">
-                <th className="px-4 py-2.5">Customer Name</th>
-                <th className="px-4 py-2.5">Account No.</th>
-                <th className="px-4 py-2.5">Phone</th>
-                <th className="px-4 py-2.5">Email</th>
-                <th className="px-4 py-2.5">Industry</th>
-                <th className="px-4 py-2.5">Rating</th>
-                <th className="px-4 py-2.5">Status</th>
+                <CrmSortableTh label="Customer Name" sortKey="customer_name" activeKey={sortBy} dir={sortDir} onSort={onSort} />
+                <CrmSortableTh label="Account No." sortKey="account_number" activeKey={sortBy} dir={sortDir} onSort={onSort} />
+                <CrmSortableTh label="Phone" sortKey="phone" activeKey={sortBy} dir={sortDir} onSort={onSort} />
+                <CrmSortableTh label="Email" sortKey="customer_email" activeKey={sortBy} dir={sortDir} onSort={onSort} />
+                <CrmSortableTh label="Industry" sortKey="industry" activeKey={sortBy} dir={sortDir} onSort={onSort} />
+                <CrmSortableTh label="Date Created" sortKey="created_at" activeKey={sortBy} dir={sortDir} onSort={onSort} />
+                <CrmSortableTh label="Status" sortKey="status" activeKey={sortBy} dir={sortDir} onSort={onSort} />
               </tr>
             </thead>
             <tbody>
@@ -114,14 +143,14 @@ export function CompanyListPage() {
                     Loading companies…
                   </td>
                 </tr>
-              ) : filtered.length === 0 ? (
+              ) : sorted.length === 0 ? (
                 <tr>
                   <td colSpan={7} className="px-4 py-10 text-center text-muted-foreground">
                     No companies yet. Create one to start the sales blueprint.
                   </td>
                 </tr>
               ) : (
-                filtered.map((row) => (
+                sorted.map((row) => (
                   <tr key={row.id} className="border-b border-border/50 transition-colors last:border-0 hover:bg-accent/30">
                     <td className="px-4 py-2.5 font-medium text-foreground">
                       <Link href={`/crm/companies/${row.id}`} className="cursor-pointer hover:underline">
@@ -132,7 +161,7 @@ export function CompanyListPage() {
                     <td className="px-4 py-2.5 text-muted-foreground">{row.phone ?? "—"}</td>
                     <td className="px-4 py-2.5 text-muted-foreground">{row.customer_email ?? "—"}</td>
                     <td className="px-4 py-2.5 text-muted-foreground">{row.industry}</td>
-                    <td className="px-4 py-2.5 text-muted-foreground capitalize">{row.rating ?? "—"}</td>
+                    <td className="px-4 py-2.5 text-muted-foreground">{formatCreatedDate(row.created_at)}</td>
                     <td className="px-4 py-2.5">
                       <FinanceStatusBadge status={row.status} />
                       {row.locked ? (
@@ -147,13 +176,7 @@ export function CompanyListPage() {
             </tbody>
           </table>
         </div>
-      </div>
-
-      <CompanyFormDialog
-        open={dialogOpen}
-        onClose={() => setDialogOpen(false)}
-        onSaved={() => void load()}
-      />
-    </div>
+      </CrmListPanel>
+    </CrmPage>
   );
 }

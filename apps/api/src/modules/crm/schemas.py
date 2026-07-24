@@ -232,6 +232,7 @@ class OpportunityResponse(OrmModel):
     customer_po_attached: bool = False
     customer_po_approved: bool = False
     version: int
+    created_at: datetime | None = None
 
 
 class CampaignCreate(BaseModel):
@@ -767,6 +768,7 @@ class CompanyResponse(OrmModel):
     status: str
     locked: bool
     version: int
+    created_at: datetime | None = None
 
 
 class ContactCreate(BaseModel):
@@ -942,6 +944,37 @@ class ProductResponse(OrmModel):
     version: int
 
 
+class OemCreate(BaseModel):
+    company_id: UUID | None = None
+    oem_code: str | None = None
+    oem_name: str
+    contact_person: str | None = None
+    contact_number: str | None = None
+    contact_email: str | None = None
+    status: str = "active"
+
+
+class OemUpdate(BaseModel):
+    oem_name: str | None = None
+    contact_person: str | None = None
+    contact_number: str | None = None
+    contact_email: str | None = None
+    status: str | None = None
+    version: int | None = None
+
+
+class OemResponse(OrmModel):
+    id: UUID
+    company_id: UUID
+    oem_code: str
+    oem_name: str
+    contact_person: str | None
+    contact_number: str | None
+    contact_email: str | None
+    status: str
+    version: int
+
+
 class QuoteCreate(BaseModel):
     opportunity_id: UUID
     branch_id: UUID
@@ -966,12 +999,20 @@ class QuoteCreate(BaseModel):
 
 
 class QuoteUpdate(BaseModel):
+    contact_id: UUID | None = None
     subject: str | None = None
     project_title: str | None = None
     account_name: str | None = None
     service_type: str | None = None
     owner_name: str | None = None
     valid_until: date | None = None
+    entity_name: str | None = None
+    entity_email: str | None = None
+    entity_address: str | None = None
+    entity_gst: str | None = None
+    entity_contact: str | None = None
+    billing_country: str | None = None
+    shipping_country: str | None = None
     freight: Decimal | None = None
     terms: str | None = None
     description: str | None = None
@@ -1013,6 +1054,7 @@ class QuoteResponse(OrmModel):
     description: str | None = None
     sales_order_id: UUID | None
     version: int
+    created_at: datetime | None = None
 
 
 class QuoteLineCreate(BaseModel):
@@ -1029,6 +1071,7 @@ class QuoteLineCreate(BaseModel):
 
 class QuoteLineUpdate(BaseModel):
     product_name: str | None = None
+    hsn_sac: str | None = None
     description: str | None = None
     line_type: str | None = None
     qty: Decimal | None = None
@@ -1045,6 +1088,7 @@ class QuoteLineResponse(OrmModel):
     product_id: UUID | None
     product_name: str
     hsn_sac: str | None
+    description: str | None = None
     line_type: str
     qty: Decimal
     unit_cost: Decimal
@@ -1101,6 +1145,39 @@ class OvfCreate(BaseModel):
     customer_payment_days: int = 0
     additional_charges: Decimal = Decimal("0")
     freight: Decimal = Decimal("0")
+    total_margin_amount: Decimal | None = None
+    total_margin_pct: Decimal | None = None
+    finance_cost_pct: Decimal | None = None
+    approval_status: str | None = None
+
+
+class OvfUpdate(BaseModel):
+    po_number: str | None = None
+    delivery_period: str | None = None
+    customer_name: str | None = None
+    quote_name: str | None = None
+    billing_address: str | None = None
+    billing_state: str | None = None
+    billing_country: str | None = None
+    owner_name: str | None = None
+    billing_contact_person: str | None = None
+    shipping_address: str | None = None
+    shipping_state: str | None = None
+    shipping_country: str | None = None
+    shipping_contact_person: str | None = None
+    account_name: str | None = None
+    technology_segment: str | None = None
+    sub_technology_segment: str | None = None
+    installation_details: str | None = None
+    vendor_payment_days: int | None = None
+    customer_payment_days: int | None = None
+    additional_charges: Decimal | None = None
+    freight: Decimal | None = None
+    total_margin_amount: Decimal | None = None
+    total_margin_pct: Decimal | None = None
+    finance_cost_pct: Decimal | None = None
+    approval_status: str | None = None
+    version: int | None = None
 
 
 class OvfResponse(OrmModel):
@@ -1142,6 +1219,7 @@ class OvfResponse(OrmModel):
     total_margin_pct: Decimal
     total_margin_amount: Decimal
     version: int
+    created_at: datetime | None = None
 
 
 class OvfLineCreate(BaseModel):
@@ -1149,6 +1227,13 @@ class OvfLineCreate(BaseModel):
     product_name: str
     qty: Decimal = Decimal("1")
     unit_price: Decimal = Decimal("0")
+
+
+class OvfLineUpdate(BaseModel):
+    product_name: str | None = None
+    qty: Decimal | None = None
+    unit_price: Decimal | None = None
+    version: int | None = None
 
 
 class OvfLineResponse(OrmModel):

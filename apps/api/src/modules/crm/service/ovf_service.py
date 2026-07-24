@@ -290,14 +290,20 @@ class OvfService:
             )
         )
 
-        fields["freight"] = fields.get("freight") or quote.freight or Decimal("0")
-        fields["total_margin_pct"] = quote.avg_margin_pct
-        fields["total_margin_amount"] = quote.total_margin_amount
+        fields["freight"] = fields.get("freight") if fields.get("freight") is not None else (quote.freight or Decimal("0"))
+        if fields.get("total_margin_pct") is None:
+            fields["total_margin_pct"] = quote.avg_margin_pct
+        if fields.get("total_margin_amount") is None:
+            fields["total_margin_amount"] = quote.total_margin_amount
         vendor_days = int(fields.get("vendor_payment_days", 0) or 0)
         customer_days = int(fields.get("customer_payment_days", 0) or 0)
-        fields["finance_cost_pct"] = margin_engine.compute_finance_cost_pct(vendor_days, customer_days)
+        if fields.get("finance_cost_pct") is None:
+            fields["finance_cost_pct"] = margin_engine.compute_finance_cost_pct(vendor_days, customer_days)
 
         code = self._numbers.generate(CrmEntityType.OVF, opp.company_id, CrmOvf, "ovf_no")
+        approval_status = fields.pop("approval_status", None) or "not_required"
+        if approval_status not in ("not_required", "pending", "approved", "rejected"):
+            approval_status = "not_required"
         row = self._repo.create(
             ctx,
             company_id=opp.company_id,
@@ -306,7 +312,7 @@ class OvfService:
             quote_id=quote_id,
             opportunity_id=opp.id,
             company_account_id=opp.company_account_id,
-            approval_status=fields.pop("approval_status", "not_required"),
+            approval_status=approval_status,
             blueprint_state="draft",
             **fields,
         )
@@ -329,14 +335,47 @@ class OvfService:
                     line_total=(quote_line.qty * unit_price).quantize(Decimal("0.0001")),
                 )
 
-        next_state = sales_blueprint_engine.transition("opportunity", opp.blueprint_state, "create_ovf")
+        self._recompute_margin(ctx, row.id)
+
+        from_opp_state = opp.blueprint_state or "ovf_ready"
+        next_state = sales_blueprint_engine.transition("opportunity", from_opp_state, "create_ovf")
         self._opportunities.update(ctx, opp.id, blueprint_state=next_state)
         log_state_history(
             self._db, ctx, company_id=opp.company_id, branch_id=opp.branch_id,
             entity_type="opportunity", entity_id=opp.id,
-            from_state="ovf_ready", to_state=next_state, action="create_ovf",
+            from_state=from_opp_state, to_state=next_state, action="create_ovf",
             remark=f"OVF {code} created",
         )
+        return row
+
+    def update(self, ctx: TenantContext, ovf_id: UUID, **fields) -> CrmOvf:
+        ovf = self.get(ctx, ovf_id)
+        sales_blueprint_engine.assert_not_locked(ovf)
+        if ovf.deal_won or ovf.shared_to_scm:
+            raise ConflictException("OVF cannot be edited after it is shared to SCM or marked Deal Won")
+
+        vendor_days = int(fields.get("vendor_payment_days", ovf.vendor_payment_days) or 0)
+        customer_days = int(fields.get("customer_payment_days", ovf.customer_payment_days) or 0)
+        if "vendor_payment_days" in fields or "customer_payment_days" in fields:
+            if fields.get("finance_cost_pct") is None:
+                fields["finance_cost_pct"] = margin_engine.compute_finance_cost_pct(vendor_days, customer_days)
+
+        approval_status = fields.get("approval_status")
+        if approval_status is not None and approval_status not in (
+            "not_required",
+            "pending",
+            "approved",
+            "rejected",
+        ):
+            fields.pop("approval_status", None)
+
+        row = self._repo.update(ctx, ovf_id, **fields)
+        if row is None:
+            raise NotFoundException("OVF not found")
+        if any(key in fields for key in ("freight", "vendor_payment_days", "customer_payment_days", "finance_cost_pct")):
+            if fields.get("total_margin_amount") is None and fields.get("total_margin_pct") is None:
+                self._recompute_margin(ctx, ovf_id)
+                row = self.get(ctx, ovf_id)
         return row
 
     # -- lines -----------------------------------------------------------
@@ -353,13 +392,35 @@ class OvfService:
         self._recompute_margin(ctx, ovf_id)
         return line
 
+    def update_line(self, ctx: TenantContext, line_id: UUID, **fields) -> CrmOvfLine:
+        line = self._lines.get(ctx, line_id)
+        if line is None:
+            raise NotFoundException("OVF line not found")
+        ovf = self.get(ctx, line.ovf_id)
+        sales_blueprint_engine.assert_not_locked(ovf)
+        qty = Decimal(str(fields.get("qty", line.qty)))
+        unit_price = Decimal(str(fields.get("unit_price", line.unit_price)))
+        fields["line_total"] = (qty * unit_price).quantize(Decimal("0.0001"))
+        row = self._lines.update(ctx, line_id, **fields)
+        if row is None:
+            raise NotFoundException("OVF line not found")
+        self._recompute_margin(ctx, ovf.id)
+        return row
+
     def _recompute_margin(self, ctx: TenantContext, ovf_id: UUID) -> None:
-        self.get(ctx, ovf_id)
+        ovf = self.get(ctx, ovf_id)
         lines = self._lines.list_for_ovf(ctx, ovf_id)
         customer_total = sum((Decimal(str(ln.line_total)) for ln in lines if ln.side == "customer_po"), Decimal("0"))
         vendor_total = sum((Decimal(str(ln.line_total)) for ln in lines if ln.side == "vendor"), Decimal("0"))
-        margin_amount = (customer_total - vendor_total).quantize(Decimal("0.0001"))
-        margin_pct = (margin_amount / customer_total * Decimal("100")).quantize(Decimal("0.001")) if customer_total else Decimal("0")
+        freight = Decimal(str(ovf.freight or 0))
+        finance_pct = Decimal(str(ovf.finance_cost_pct or 0))
+        finance_amount = (customer_total * finance_pct / Decimal("100")).quantize(Decimal("0.0001"))
+        margin_amount = (customer_total - vendor_total - freight - finance_amount).quantize(Decimal("0.0001"))
+        margin_pct = (
+            (margin_amount / customer_total * Decimal("100")).quantize(Decimal("0.001"))
+            if customer_total
+            else Decimal("0")
+        )
         self._repo.update(ctx, ovf_id, total_margin_amount=margin_amount, total_margin_pct=margin_pct)
 
     # -- blueprint / approval workflow ------------------------------------

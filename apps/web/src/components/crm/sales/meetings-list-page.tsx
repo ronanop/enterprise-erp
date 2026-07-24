@@ -1,14 +1,15 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { CalendarDays, Plus, RefreshCw } from "lucide-react";
 
+import { CrmErrorBanner, CrmListPanel, CrmPage } from "@/components/crm/crm-ui";
 import { MeetingFormDialog } from "@/components/crm/sales/meeting-form-dialog";
+import { CrmListToolbar } from "@/components/crm/sales/crm-list-toolbar";
+import { CrmSortableTh, sortRows, useTableSort } from "@/components/crm/sales/crm-table-sort";
 import { FinanceStatusBadge } from "@/components/finance/finance-status-badge";
 import { PageHeader } from "@/components/layout/page-header";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { ApiClientError } from "@/services/api-client";
 import {
   getCompany,
@@ -27,6 +28,8 @@ const VENUE_LABELS: Record<string, string> = {
   in_person: "In person",
   video: "Video",
 };
+
+type SortKey = "title" | "when" | "venue" | "host" | "status";
 
 function formatMeetingWhen(row: CrmMeeting): string {
   const date = row.meeting_date;
@@ -52,6 +55,7 @@ export function MeetingsListPage({
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [dialogOpen, setDialogOpen] = useState(false);
+  const { sortBy, sortDir, onSort } = useTableSort<SortKey>("when", "desc");
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -82,16 +86,30 @@ export function MeetingsListPage({
   const hostName = (id: string) =>
     employees.find((employee) => employee.id === id)?.label ?? id.slice(0, 8);
 
-  const filtered = rows.filter((row) => {
+  const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (!q) return true;
-    return (
-      row.title.toLowerCase().includes(q) ||
-      row.meeting_code.toLowerCase().includes(q) ||
-      (row.location ?? "").toLowerCase().includes(q) ||
-      (row.participants_text ?? "").toLowerCase().includes(q)
+    if (!q) return rows;
+    return rows.filter(
+      (row) =>
+        row.title.toLowerCase().includes(q) ||
+        row.meeting_code.toLowerCase().includes(q) ||
+        (row.location ?? "").toLowerCase().includes(q) ||
+        (row.participants_text ?? "").toLowerCase().includes(q),
     );
-  });
+  }, [rows, query]);
+
+  const sorted = useMemo(
+    () =>
+      sortRows(filtered, sortBy, sortDir, {
+        title: (r) => r.title,
+        when: (r) => `${r.meeting_date} ${r.start_time ?? ""}`,
+        venue: (r) => VENUE_LABELS[r.meeting_mode ?? ""] ?? r.meeting_mode,
+        host: (r) => hostName(r.organizer_employee_id),
+        status: (r) => r.status,
+      }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [filtered, sortBy, sortDir, employees],
+  );
 
   const actions = (
     <div className="flex shrink-0 flex-nowrap items-center gap-2">
@@ -116,7 +134,7 @@ export function MeetingsListPage({
   );
 
   return (
-    <div className="space-y-4">
+    <CrmPage>
       {!embedded ? (
         <PageHeader
           title="Meetings"
@@ -125,38 +143,31 @@ export function MeetingsListPage({
         />
       ) : null}
 
-      <div className="overflow-hidden rounded-xl border border-border/80 bg-card shadow-sm">
-        <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2 border-b border-border/70 px-4 py-3">
-          <div className="flex min-w-0 flex-1 items-center gap-2">
-            <h2 className="truncate text-sm font-medium tracking-tight">Meetings</h2>
-            <Badge variant="secondary">{filtered.length} shown</Badge>
-          </div>
-          <div className="ml-auto flex shrink-0 flex-nowrap items-center gap-2">
-            {embedded ? actions : null}
-            <Input
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search meetings…"
-              className="h-8 w-52 shrink-0 sm:w-56"
-            />
-          </div>
-        </div>
+      {error ? <CrmErrorBanner>{error}</CrmErrorBanner> : null}
 
-        {error ? (
-          <div className="border-b border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive">
-            {error}
-          </div>
-        ) : null}
+      <CrmListPanel>
+        <CrmListToolbar
+          title="Meetings"
+          subtitle="Scheduled client meetings"
+          icon={CalendarDays}
+          count={sorted.length}
+          actions={embedded ? actions : null}
+          search={{
+            value: query,
+            onChange: setQuery,
+            placeholder: "Search meetings…",
+          }}
+        />
 
         <div className="erp-scroll overflow-x-auto">
           <table className="w-full min-w-[880px] text-left text-sm">
             <thead>
               <tr className="border-b border-border/70 bg-muted/40 text-[11px] tracking-wide text-muted-foreground uppercase">
-                <th className="px-4 py-2.5">Meeting</th>
-                <th className="px-4 py-2.5">When</th>
-                <th className="px-4 py-2.5">Venue</th>
-                <th className="px-4 py-2.5">Host</th>
-                <th className="px-4 py-2.5">Status</th>
+                <CrmSortableTh label="Meeting" sortKey="title" activeKey={sortBy} dir={sortDir} onSort={onSort} />
+                <CrmSortableTh label="When" sortKey="when" activeKey={sortBy} dir={sortDir} onSort={onSort} />
+                <CrmSortableTh label="Venue" sortKey="venue" activeKey={sortBy} dir={sortDir} onSort={onSort} />
+                <CrmSortableTh label="Host" sortKey="host" activeKey={sortBy} dir={sortDir} onSort={onSort} />
+                <CrmSortableTh label="Status" sortKey="status" activeKey={sortBy} dir={sortDir} onSort={onSort} />
               </tr>
             </thead>
             <tbody>
@@ -166,7 +177,7 @@ export function MeetingsListPage({
                     Loading meetings…
                   </td>
                 </tr>
-              ) : filtered.length === 0 ? (
+              ) : sorted.length === 0 ? (
                 <tr>
                   <td colSpan={5} className="px-4 py-12 text-center text-muted-foreground">
                     <div className="mx-auto flex max-w-sm flex-col items-center gap-2">
@@ -179,7 +190,7 @@ export function MeetingsListPage({
                   </td>
                 </tr>
               ) : (
-                filtered.map((row) => (
+                sorted.map((row) => (
                   <tr
                     key={row.id}
                     className="border-b border-border/50 last:border-0 hover:bg-accent/30"
@@ -207,7 +218,7 @@ export function MeetingsListPage({
             </tbody>
           </table>
         </div>
-      </div>
+      </CrmListPanel>
 
       <MeetingFormDialog
         open={dialogOpen}
@@ -216,6 +227,6 @@ export function MeetingsListPage({
         companyAccount={companyAccount}
         defaultBranchId={companyAccount?.branch_id}
       />
-    </div>
+    </CrmPage>
   );
 }

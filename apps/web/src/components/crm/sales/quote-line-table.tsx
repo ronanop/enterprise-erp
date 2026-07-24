@@ -39,17 +39,6 @@ const EMPTY_DRAFT: Draft = {
   gst_pct: "18",
 };
 
-function marginFromCostSell(cost: number, sell: number): number {
-  if (!sell) return 0;
-  return Number((((sell - cost) / sell) * 100).toFixed(3));
-}
-
-function sellFromCostMargin(cost: number, marginPct: number): number {
-  const denom = 1 - marginPct / 100;
-  if (denom <= 0) return cost;
-  return Number((cost / denom).toFixed(4));
-}
-
 function ReverseMarginRow({
   draft,
   onChange,
@@ -57,30 +46,17 @@ function ReverseMarginRow({
   draft: Draft;
   onChange: (next: Draft) => void;
 }) {
-  function onCostChange(value: string) {
-    const cost = Number(value) || 0;
-    const sell = Number(draft.unit_sell) || 0;
-    onChange({ ...draft, unit_cost: value, margin_pct: marginFromCostSell(cost, sell).toString() });
-  }
   function onSellChange(value: string) {
-    const sell = Number(value) || 0;
-    const cost = Number(draft.unit_cost) || 0;
-    onChange({ ...draft, unit_sell: value, margin_pct: marginFromCostSell(cost, sell).toString() });
+    onChange({ ...draft, unit_sell: value, unit_cost: value });
   }
   function onMarginChange(value: string) {
-    const marginPct = Number(value) || 0;
-    const cost = Number(draft.unit_cost) || 0;
-    onChange({ ...draft, margin_pct: value, unit_sell: sellFromCostMargin(cost, marginPct).toString() });
+    onChange({ ...draft, margin_pct: value });
   }
 
   return (
-    <div className="grid grid-cols-3 gap-2">
+    <div className="grid grid-cols-2 gap-2">
       <div>
-        <span className="text-[10px] text-muted-foreground uppercase">Unit Cost (₹)</span>
-        <Input type="number" step="0.01" value={draft.unit_cost} onChange={(e) => onCostChange(e.target.value)} />
-      </div>
-      <div>
-        <span className="text-[10px] text-muted-foreground uppercase">Unit Sell (₹)</span>
+        <span className="text-[10px] text-muted-foreground uppercase">Unit Price (₹)</span>
         <Input type="number" step="0.01" value={draft.unit_sell} onChange={(e) => onSellChange(e.target.value)} />
       </div>
       <div>
@@ -131,8 +107,9 @@ export function QuoteLineTable({
         hsn_sac: draft.hsn_sac || null,
         line_type: draft.line_type,
         qty: Number(draft.qty) || 1,
-        unit_cost: Number(draft.unit_cost) || 0,
-        unit_sell: Number(draft.unit_sell) || 0,
+        unit_cost: Number(draft.unit_sell) || 0,
+        unit_sell:
+          (Number(draft.unit_sell) || 0) * (1 + (Number(draft.margin_pct) || 0) / 100),
         gst_pct: Number(draft.gst_pct) || 0,
       });
       setDraft(EMPTY_DRAFT);
@@ -151,9 +128,9 @@ export function QuoteLineTable({
       product_name: line.product_name,
       hsn_sac: line.hsn_sac ?? "",
       line_type: line.line_type,
-      qty: String(line.qty),
+      qty: String(Math.round(Number(line.qty))),
       unit_cost: String(line.unit_cost),
-      unit_sell: String(line.unit_sell),
+      unit_sell: String(line.unit_cost),
       margin_pct: String(line.margin_pct),
       gst_pct: String(line.gst_pct),
     });
@@ -169,8 +146,9 @@ export function QuoteLineTable({
         hsn_sac: editDraft.hsn_sac || null,
         line_type: editDraft.line_type,
         qty: Number(editDraft.qty) || 1,
-        unit_cost: Number(editDraft.unit_cost) || 0,
-        unit_sell: Number(editDraft.unit_sell) || 0,
+        unit_cost: Number(editDraft.unit_sell) || 0,
+        unit_sell:
+          (Number(editDraft.unit_sell) || 0) * (1 + (Number(editDraft.margin_pct) || 0) / 100),
         gst_pct: Number(editDraft.gst_pct) || 0,
       });
       setEditingId(null);
@@ -200,7 +178,7 @@ export function QuoteLineTable({
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border/70 px-4 py-3">
         <div>
           <h2 className="text-sm font-medium tracking-tight">Quote Lines</h2>
-          <p className="text-[11px] text-muted-foreground">GST/HSN aware · reverse margin calculator (cost ↔ sell ↔ margin%)</p>
+          <p className="text-[11px] text-muted-foreground">GST/HSN aware · unit price + margin %</p>
         </div>
         {!readOnly ? (
           <Button type="button" variant="outline" size="sm" className="cursor-pointer" onClick={toggleAdd}>
@@ -261,8 +239,7 @@ export function QuoteLineTable({
               <th className="px-3 py-2">HSN</th>
               <th className="px-3 py-2">Type</th>
               <th className="px-3 py-2">Qty</th>
-              <th className="px-3 py-2">Cost</th>
-              <th className="px-3 py-2">Sell</th>
+              <th className="px-3 py-2">Unit Price</th>
               <th className="px-3 py-2">Margin %</th>
               <th className="px-3 py-2">GST %</th>
               <th className="px-3 py-2">Line Total</th>
@@ -272,7 +249,7 @@ export function QuoteLineTable({
           <tbody>
             {lines.length === 0 ? (
               <tr>
-                <td colSpan={11} className="px-3 py-8 text-center text-muted-foreground">
+                <td colSpan={9} className="px-3 py-8 text-center text-muted-foreground">
                   No lines yet.
                 </td>
               </tr>
@@ -340,7 +317,6 @@ export function QuoteLineTable({
                     <td className="px-3 py-2 capitalize text-muted-foreground">{line.line_type}</td>
                     <td className="px-3 py-2">{line.qty}</td>
                     <td className="px-3 py-2">{formatInrPrecise(line.unit_cost)}</td>
-                    <td className="px-3 py-2">{formatInrPrecise(line.unit_sell)}</td>
                     <td className="px-3 py-2">{line.margin_pct}%</td>
                     <td className="px-3 py-2">{line.gst_pct}%</td>
                     <td className="px-3 py-2 font-medium">{formatInrPrecise(line.line_total)}</td>

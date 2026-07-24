@@ -1,11 +1,17 @@
 "use client";
 
-import type { ReactNode } from "react";
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, RefreshCw } from "lucide-react";
+import { ArrowLeft, RefreshCw, UserPlus } from "lucide-react";
 
+import {
+  CrmDetailGrid,
+  CrmDetailItem,
+  CrmErrorBanner,
+  CrmPage,
+  CrmSection,
+} from "@/components/crm/crm-ui";
 import { ApprovalBanner, SyncedBanner } from "@/components/crm/sales/approval-banner";
 import { BlueprintActions, BlueprintStateBadge } from "@/components/crm/sales/blueprint-actions";
 import { DealTimeline } from "@/components/crm/sales/deal-timeline";
@@ -36,15 +42,6 @@ function textOrDash(value: string | number | null | undefined): string {
   if (value === null || value === undefined) return "—";
   const text = String(value).trim();
   return text || "—";
-}
-
-function DetailItem({ label, children }: { label: string; children: ReactNode }) {
-  return (
-    <div className="min-w-0">
-      <dt className="text-xs text-muted-foreground">{label}</dt>
-      <dd className="mt-1 break-words text-sm text-foreground">{children}</dd>
-    </div>
-  );
 }
 
 export function LeadDetailPage({ leadId }: { leadId: string }) {
@@ -158,14 +155,12 @@ export function LeadDetailPage({ leadId }: { leadId: string }) {
 
   if (error || !lead || !blueprint) {
     return (
-      <div className="space-y-3">
+      <CrmPage className="space-y-3">
         <Link href="/crm/leads" className="inline-flex cursor-pointer items-center gap-1 text-xs font-medium text-primary">
           <ArrowLeft className="size-3.5" /> Leads
         </Link>
-        <div className="rounded-xl border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive">
-          {error ?? "Lead not found"}
-        </div>
-      </div>
+        <CrmErrorBanner>{error ?? "Lead not found"}</CrmErrorBanner>
+      </CrmPage>
     );
   }
 
@@ -183,7 +178,7 @@ export function LeadDetailPage({ leadId }: { leadId: string }) {
   };
 
   return (
-    <div className="space-y-4">
+    <CrmPage>
       <div className="flex flex-wrap items-center justify-between gap-2">
         <Link
           href="/crm/leads"
@@ -251,15 +246,13 @@ export function LeadDetailPage({ leadId }: { leadId: string }) {
       />
 
       {banner ? (
-        <div
-          className={`rounded-xl px-4 py-2.5 text-sm ${
-            banner.tone === "success"
-              ? "border border-emerald-200 bg-emerald-50 text-emerald-950"
-              : "border border-destructive/30 bg-destructive/5 text-destructive"
-          }`}
-        >
-          {banner.text}
-        </div>
+        banner.tone === "error" ? (
+          <CrmErrorBanner>{banner.text}</CrmErrorBanner>
+        ) : (
+          <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-2.5 text-sm text-emerald-950">
+            {banner.text}
+          </div>
+        )
       ) : null}
 
       <BlueprintActions
@@ -269,25 +262,24 @@ export function LeadDetailPage({ leadId }: { leadId: string }) {
         onAction={onBlueprintAction}
       />
 
-      <section className="space-y-3 rounded-xl border border-border/80 bg-card p-4 shadow-sm">
-        <h2 className="text-sm font-medium tracking-tight">Lead Information</h2>
-        <dl className="grid grid-cols-2 gap-3 text-xs lg:grid-cols-3">
-          <DetailItem label="Lead Code">{lead.lead_code}</DetailItem>
-          <DetailItem label="Blueprint State">
+      <CrmSection title="Lead Information" subtitle="Contact, ownership, and qualification" icon={UserPlus}>
+        <CrmDetailGrid>
+          <CrmDetailItem label="Lead Code">{lead.lead_code}</CrmDetailItem>
+          <CrmDetailItem label="Blueprint State">
             <BlueprintStateBadge state={blueprint.state} />
-          </DetailItem>
-          <DetailItem label="Status">
+          </CrmDetailItem>
+          <CrmDetailItem label="Status">
             <FinanceStatusBadge status={lead.status} />
-          </DetailItem>
-          <DetailItem label="Salutation">{textOrDash(lead.salutation)}</DetailItem>
-          <DetailItem label="First Name">{textOrDash(lead.first_name)}</DetailItem>
-          <DetailItem label="Last Name">{textOrDash(lead.last_name)}</DetailItem>
-          <DetailItem label="Mobile">{textOrDash(lead.mobile)}</DetailItem>
-          <DetailItem label="Email">{textOrDash(lead.email)}</DetailItem>
-          <DetailItem label="Owner">{employeeName(lead.owner_employee_id)}</DetailItem>
-          <DetailItem label="Assign To">{employeeName(lead.assign_to_id)}</DetailItem>
-          <DetailItem label="Assigned Date">{textOrDash(lead.assigned_date)}</DetailItem>
-          <DetailItem label="Company Account">
+          </CrmDetailItem>
+          <CrmDetailItem label="Salutation">{textOrDash(lead.salutation)}</CrmDetailItem>
+          <CrmDetailItem label="First Name">{textOrDash(lead.first_name)}</CrmDetailItem>
+          <CrmDetailItem label="Last Name">{textOrDash(lead.last_name)}</CrmDetailItem>
+          <CrmDetailItem label="Mobile">{textOrDash(lead.mobile)}</CrmDetailItem>
+          <CrmDetailItem label="Email">{textOrDash(lead.email)}</CrmDetailItem>
+          <CrmDetailItem label="Owner">{employeeName(lead.owner_employee_id)}</CrmDetailItem>
+          <CrmDetailItem label="Assign To">{employeeName(lead.assign_to_id)}</CrmDetailItem>
+          <CrmDetailItem label="Assigned Date">{textOrDash(lead.assigned_date)}</CrmDetailItem>
+          <CrmDetailItem label="Company Account">
             {lead.company_account_id ? (
               <Link
                 href={`/crm/companies/${lead.company_account_id}`}
@@ -298,102 +290,102 @@ export function LeadDetailPage({ leadId }: { leadId: string }) {
             ) : (
               "—"
             )}
-          </DetailItem>
-          <DetailItem label="Expected Amount">
+          </CrmDetailItem>
+          <CrmDetailItem label="Expected Amount">
             {lead.expected_amount != null ? formatInr(lead.expected_amount) : "—"}
-          </DetailItem>
-          <DetailItem label="Expected Closure">{textOrDash(lead.expected_closure_date)}</DetailItem>
-          <DetailItem label="Engagement Score">{textOrDash(lead.engagement_score)}</DetailItem>
-          <DetailItem label="Portal Link">{textOrDash(lead.portal_link)}</DetailItem>
-        </dl>
+          </CrmDetailItem>
+          <CrmDetailItem label="Expected Closure">{textOrDash(lead.expected_closure_date)}</CrmDetailItem>
+          <CrmDetailItem label="Engagement Score">{textOrDash(lead.engagement_score)}</CrmDetailItem>
+          <CrmDetailItem label="Portal Link">{textOrDash(lead.portal_link)}</CrmDetailItem>
+        </CrmDetailGrid>
 
-        <h3 className="border-t border-border/70 pt-3 text-sm font-medium tracking-tight">
+        <h3 className="mt-4 border-t border-border/70 pt-3 text-sm font-medium tracking-tight">
           Opportunity / Product
         </h3>
-        <dl className="grid grid-cols-2 gap-3 text-xs lg:grid-cols-3">
-          <DetailItem label="Project Title">{textOrDash(lead.project_title)}</DetailItem>
-          <DetailItem label="Product Type">{textOrDash(lead.product_type)}</DetailItem>
-          <DetailItem label="Sub Product Category">{textOrDash(lead.sub_product_category)}</DetailItem>
-          <DetailItem label="Sub Product">{textOrDash(lead.sub_product)}</DetailItem>
-          <DetailItem label="Sub Product Other">{textOrDash(lead.sub_product_other)}</DetailItem>
-          <DetailItem label="Requirement Type">{textOrDash(lead.requirement_type)}</DetailItem>
-          <DetailItem label="Purchase Model">{textOrDash(lead.purchase_model)}</DetailItem>
-          <DetailItem label="Deal Type">{textOrDash(lead.deal_type)}</DetailItem>
-          <DetailItem label="DR Number">{textOrDash(lead.dr_number)}</DetailItem>
-          <DetailItem label="New DR Number">{textOrDash(lead.new_dr_number)}</DetailItem>
-          <DetailItem label="Industry">{textOrDash(lead.industry)}</DetailItem>
-          <DetailItem label="Territory">{textOrDash(lead.territory)}</DetailItem>
-          <DetailItem label="Region">{textOrDash(lead.region)}</DetailItem>
-        </dl>
+        <CrmDetailGrid className="mt-3">
+          <CrmDetailItem label="Project Title">{textOrDash(lead.project_title)}</CrmDetailItem>
+          <CrmDetailItem label="Product Type">{textOrDash(lead.product_type)}</CrmDetailItem>
+          <CrmDetailItem label="Sub Product Category">{textOrDash(lead.sub_product_category)}</CrmDetailItem>
+          <CrmDetailItem label="Sub Product">{textOrDash(lead.sub_product)}</CrmDetailItem>
+          <CrmDetailItem label="Sub Product Other">{textOrDash(lead.sub_product_other)}</CrmDetailItem>
+          <CrmDetailItem label="Requirement Type">{textOrDash(lead.requirement_type)}</CrmDetailItem>
+          <CrmDetailItem label="Purchase Model">{textOrDash(lead.purchase_model)}</CrmDetailItem>
+          <CrmDetailItem label="Deal Type">{textOrDash(lead.deal_type)}</CrmDetailItem>
+          <CrmDetailItem label="DR Number">{textOrDash(lead.dr_number)}</CrmDetailItem>
+          <CrmDetailItem label="New DR Number">{textOrDash(lead.new_dr_number)}</CrmDetailItem>
+          <CrmDetailItem label="Industry">{textOrDash(lead.industry)}</CrmDetailItem>
+          <CrmDetailItem label="Territory">{textOrDash(lead.territory)}</CrmDetailItem>
+          <CrmDetailItem label="Region">{textOrDash(lead.region)}</CrmDetailItem>
+        </CrmDetailGrid>
 
-        <h3 className="border-t border-border/70 pt-3 text-sm font-medium tracking-tight">Address</h3>
-        <dl className="grid grid-cols-2 gap-3 text-xs lg:grid-cols-3">
-          <DetailItem label="Street">{textOrDash(lead.street)}</DetailItem>
-          <DetailItem label="City">{textOrDash(lead.city)}</DetailItem>
-          <DetailItem label="State">{textOrDash(lead.state)}</DetailItem>
-          <DetailItem label="Zip">{textOrDash(lead.zip)}</DetailItem>
-          <DetailItem label="Country">{textOrDash(lead.country)}</DetailItem>
-        </dl>
+        <h3 className="mt-4 border-t border-border/70 pt-3 text-sm font-medium tracking-tight">Address</h3>
+        <CrmDetailGrid className="mt-3">
+          <CrmDetailItem label="Street">{textOrDash(lead.street)}</CrmDetailItem>
+          <CrmDetailItem label="City">{textOrDash(lead.city)}</CrmDetailItem>
+          <CrmDetailItem label="State">{textOrDash(lead.state)}</CrmDetailItem>
+          <CrmDetailItem label="Zip">{textOrDash(lead.zip)}</CrmDetailItem>
+          <CrmDetailItem label="Country">{textOrDash(lead.country)}</CrmDetailItem>
+        </CrmDetailGrid>
 
-        <h3 className="border-t border-border/70 pt-3 text-sm font-medium tracking-tight">OEM</h3>
-        <dl className="grid grid-cols-2 gap-3 text-xs lg:grid-cols-3">
-          <DetailItem label="OEM Name">{textOrDash(lead.oem_name)}</DetailItem>
-          <DetailItem label="OEM Contact Person">{textOrDash(lead.oem_contact_person)}</DetailItem>
-          <DetailItem label="OEM Contact Number">{textOrDash(lead.oem_contact_number)}</DetailItem>
-          <DetailItem label="OEM Contact Email">{textOrDash(lead.oem_contact_email)}</DetailItem>
-        </dl>
+        <h3 className="mt-4 border-t border-border/70 pt-3 text-sm font-medium tracking-tight">OEM</h3>
+        <CrmDetailGrid className="mt-3">
+          <CrmDetailItem label="OEM Name">{textOrDash(lead.oem_name)}</CrmDetailItem>
+          <CrmDetailItem label="OEM Contact Person">{textOrDash(lead.oem_contact_person)}</CrmDetailItem>
+          <CrmDetailItem label="OEM Contact Number">{textOrDash(lead.oem_contact_number)}</CrmDetailItem>
+          <CrmDetailItem label="OEM Contact Email">{textOrDash(lead.oem_contact_email)}</CrmDetailItem>
+        </CrmDetailGrid>
 
-        <h3 className="border-t border-border/70 pt-3 text-sm font-medium tracking-tight">
+        <h3 className="mt-4 border-t border-border/70 pt-3 text-sm font-medium tracking-tight">
           Distributor
         </h3>
-        <dl className="grid grid-cols-2 gap-3 text-xs lg:grid-cols-3">
-          <DetailItem label="Distributor Name">{textOrDash(lead.distributor_name)}</DetailItem>
-          <DetailItem label="Contact Person">{textOrDash(lead.distributor_contact_person)}</DetailItem>
-          <DetailItem label="Contact">{textOrDash(lead.distributor_contact)}</DetailItem>
-          <DetailItem label="Contact Email">{textOrDash(lead.distributor_contact_email)}</DetailItem>
-          <DetailItem label="Department">{textOrDash(lead.distributor_department)}</DetailItem>
-        </dl>
+        <CrmDetailGrid className="mt-3">
+          <CrmDetailItem label="Distributor Name">{textOrDash(lead.distributor_name)}</CrmDetailItem>
+          <CrmDetailItem label="Contact Person">{textOrDash(lead.distributor_contact_person)}</CrmDetailItem>
+          <CrmDetailItem label="Contact">{textOrDash(lead.distributor_contact)}</CrmDetailItem>
+          <CrmDetailItem label="Contact Email">{textOrDash(lead.distributor_contact_email)}</CrmDetailItem>
+          <CrmDetailItem label="Department">{textOrDash(lead.distributor_department)}</CrmDetailItem>
+        </CrmDetailGrid>
 
-        <h3 className="border-t border-border/70 pt-3 text-sm font-medium tracking-tight">
+        <h3 className="mt-4 border-t border-border/70 pt-3 text-sm font-medium tracking-tight">
           End Customer
         </h3>
-        <dl className="grid grid-cols-2 gap-3 text-xs lg:grid-cols-3">
-          <DetailItem label="End Customer Name">{textOrDash(lead.end_customer_name)}</DetailItem>
-          <DetailItem label="End Customer Location">{textOrDash(lead.end_customer_location)}</DetailItem>
-        </dl>
+        <CrmDetailGrid className="mt-3">
+          <CrmDetailItem label="End Customer Name">{textOrDash(lead.end_customer_name)}</CrmDetailItem>
+          <CrmDetailItem label="End Customer Location">{textOrDash(lead.end_customer_location)}</CrmDetailItem>
+        </CrmDetailGrid>
 
-        <h3 className="border-t border-border/70 pt-3 text-sm font-medium tracking-tight">Entity</h3>
-        <dl className="grid grid-cols-2 gap-3 text-xs lg:grid-cols-3">
-          <DetailItem label="Entity Name">{textOrDash(lead.entity_name)}</DetailItem>
-          <DetailItem label="Entity Email">{textOrDash(lead.entity_email)}</DetailItem>
-          <DetailItem label="Entity Contact">{textOrDash(lead.entity_contact)}</DetailItem>
-          <DetailItem label="Entity GST">{textOrDash(lead.entity_gst)}</DetailItem>
-          <DetailItem label="Entity Address">
+        <h3 className="mt-4 border-t border-border/70 pt-3 text-sm font-medium tracking-tight">Entity</h3>
+        <CrmDetailGrid className="mt-3">
+          <CrmDetailItem label="Entity Name">{textOrDash(lead.entity_name)}</CrmDetailItem>
+          <CrmDetailItem label="Entity Email">{textOrDash(lead.entity_email)}</CrmDetailItem>
+          <CrmDetailItem label="Entity Contact">{textOrDash(lead.entity_contact)}</CrmDetailItem>
+          <CrmDetailItem label="Entity GST">{textOrDash(lead.entity_gst)}</CrmDetailItem>
+          <CrmDetailItem label="Entity Address">
             <span className="whitespace-pre-wrap">{textOrDash(lead.entity_address)}</span>
-          </DetailItem>
-        </dl>
+          </CrmDetailItem>
+        </CrmDetailGrid>
 
-        <h3 className="border-t border-border/70 pt-3 text-sm font-medium tracking-tight">Notes</h3>
-        <dl className="grid gap-3 text-xs">
-          <DetailItem label="Notes">
+        <h3 className="mt-4 border-t border-border/70 pt-3 text-sm font-medium tracking-tight">Notes</h3>
+        <CrmDetailGrid className="mt-3 grid-cols-1 lg:grid-cols-1">
+          <CrmDetailItem label="Notes">
             <span className="whitespace-pre-wrap">{textOrDash(lead.notes)}</span>
-          </DetailItem>
-          <DetailItem label="Convert Remark">
+          </CrmDetailItem>
+          <CrmDetailItem label="Convert Remark">
             <span className="whitespace-pre-wrap">{textOrDash(lead.convert_remark)}</span>
-          </DetailItem>
-          <DetailItem label="Lost Reason">{textOrDash(lead.lost_reason)}</DetailItem>
+          </CrmDetailItem>
+          <CrmDetailItem label="Lost Reason">{textOrDash(lead.lost_reason)}</CrmDetailItem>
           {lead.converted_opportunity_id ? (
-            <DetailItem label="Converted Opportunity">
+            <CrmDetailItem label="Converted Opportunity">
               <Link
                 href={`/crm/opportunities/${lead.converted_opportunity_id}`}
                 className="cursor-pointer font-medium text-primary hover:underline"
               >
                 Open Opportunity
               </Link>
-            </DetailItem>
+            </CrmDetailItem>
           ) : null}
-        </dl>
-      </section>
+        </CrmDetailGrid>
+      </CrmSection>
 
       <ConfirmDialog
         open={convertOpen}
@@ -441,6 +433,6 @@ export function LeadDetailPage({ leadId }: { leadId: string }) {
           {convertError ? <p className="text-xs text-destructive">{convertError}</p> : null}
         </div>
       </ConfirmDialog>
-    </div>
+    </CrmPage>
   );
 }

@@ -28,6 +28,7 @@ def utcnow() -> datetime:
 # so a single "action" field on CrmApprovalTask can resume either outcome.
 _REJECT_ACTION_MAP = {
     "approve_boq": "reject_boq",
+    "approve_sow": "reject_sow",
     "approve_po": "reject_po",
     "approve_internally": "reject_internally",
     "approve": "reject",

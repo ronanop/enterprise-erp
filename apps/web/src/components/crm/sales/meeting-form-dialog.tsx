@@ -8,6 +8,10 @@ import {
   FinanceSelect,
   FinanceTextarea,
 } from "@/components/finance/journals/finance-form-field";
+import {
+  RequiredFieldsDialog,
+  missingRequiredMessage,
+} from "@/components/crm/sales/required-fields-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ApiClientError } from "@/services/api-client";
@@ -180,6 +184,8 @@ export function MeetingFormDialog({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [touched, setTouched] = useState(false);
+  const [mandateOpen, setMandateOpen] = useState(false);
+  const [mandateMessage, setMandateMessage] = useState("");
 
   useEffect(() => {
     if (!open) return;
@@ -234,16 +240,17 @@ export function MeetingFormDialog({
 
   async function save() {
     setTouched(true);
-    if (
-      !form.title.trim() ||
-      !form.meeting_mode ||
-      !form.meeting_date ||
-      !form.end_date ||
-      !form.company_account_id ||
-      !form.organizer_employee_id ||
-      !form.branch_id
-    ) {
-      setError("Title, Meeting Venue, From, To, Account, and Host are required.");
+    const missing: string[] = [];
+    if (!form.title.trim()) missing.push("Title");
+    if (!form.meeting_mode) missing.push("Meeting Venue");
+    if (!form.meeting_date) missing.push("From");
+    if (!form.end_date) missing.push("To");
+    if (!form.company_account_id) missing.push("Account");
+    if (!form.organizer_employee_id) missing.push("Host");
+    if (!form.branch_id) missing.push("Branch");
+    if (missing.length > 0) {
+      setMandateMessage(missingRequiredMessage(missing));
+      setMandateOpen(true);
       return;
     }
 
@@ -614,6 +621,11 @@ export function MeetingFormDialog({
           </Button>
         </div>
       </div>
+      <RequiredFieldsDialog
+        open={mandateOpen}
+        message={mandateMessage}
+        onClose={() => setMandateOpen(false)}
+      />
     </div>
   );
 }

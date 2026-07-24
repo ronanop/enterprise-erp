@@ -100,7 +100,13 @@ def get_quote_blueprint(
             "state": quote.quote_stage,
             "locked": quote.locked,
             "allowed_actions": (
-                [] if quote.locked else sales_blueprint_engine.allowed_actions("quote", quote.quote_stage)
+                []
+                if quote.locked
+                else [
+                    action
+                    for action in sales_blueprint_engine.allowed_actions("quote", quote.quote_stage)
+                    if action != "approve_internally"
+                ]
             ),
         },
     )

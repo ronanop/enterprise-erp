@@ -1,11 +1,28 @@
 "use client";
 
-import type { ReactNode } from "react";
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { CalendarDays, ClipboardList, Plus, Target } from "lucide-react";
+import {
+  Building2,
+  CalendarDays,
+  ClipboardList,
+  MapPin,
+  Plus,
+  Target,
+} from "lucide-react";
 
 import { CompanyWorkspaceShell } from "@/components/crm/company-workspace-shell";
+import {
+  CrmCountBadge,
+  CrmDetailGrid,
+  CrmDetailItem,
+  CrmErrorBanner,
+  CrmIconBadge,
+  CrmListPanel,
+  CrmPage,
+  CrmSection,
+  CrmViewAllLink,
+} from "@/components/crm/crm-ui";
 import { FollowupFormDialog } from "@/components/crm/sales/followup-form-dialog";
 import { MeetingFormDialog } from "@/components/crm/sales/meeting-form-dialog";
 import { FinanceStatusBadge } from "@/components/finance/finance-status-badge";
@@ -28,15 +45,6 @@ import {
 
 function textOrDash(value: string | null | undefined): string {
   return value?.trim() || "-";
-}
-
-function DetailItem({ label, children }: { label: string; children: ReactNode }) {
-  return (
-    <div className="min-w-0">
-      <dt className="text-muted-foreground">{label}</dt>
-      <dd className="mt-1 break-words text-foreground">{children}</dd>
-    </div>
-  );
 }
 
 const VENUE_LABELS: Record<string, string> = {
@@ -124,78 +132,86 @@ export function CompanyDetailPage({ companyAccountId }: { companyAccountId: stri
       {loading && !company ? (
         <div className="h-40 animate-pulse rounded-xl bg-muted/60" />
       ) : error || !company ? (
-        <div className="rounded-xl border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive">
-          {error ?? "Company not found"}
-        </div>
+        <CrmErrorBanner>{error ?? "Company not found"}</CrmErrorBanner>
       ) : (
-        <div className="space-y-4">
-          <section className="space-y-3 rounded-xl border border-border/80 bg-card p-4 shadow-sm">
-            <h2 className="text-sm font-medium tracking-tight">Account Information</h2>
-            <dl className="grid grid-cols-2 gap-3 text-xs lg:grid-cols-3">
-              <DetailItem label="Customer Name">{textOrDash(company.customer_name)}</DetailItem>
-              <DetailItem label="Account Number">{textOrDash(company.account_number)}</DetailItem>
-              <DetailItem label="Status">
-                {company.status ? <FinanceStatusBadge status={company.status} /> : "-"}
-              </DetailItem>
-              <DetailItem label="Account Owner">{employeeName(company.account_owner_id)}</DetailItem>
-              <DetailItem label="Account Type">
-                <span className="capitalize">{textOrDash(company.account_type)}</span>
-              </DetailItem>
-              <DetailItem label="Industry">{textOrDash(company.industry)}</DetailItem>
-              <DetailItem label="Other Industries">{textOrDash(company.other_industries)}</DetailItem>
-              <DetailItem label="Portal ID">{textOrDash(company.portal_id)}</DetailItem>
-              <DetailItem label="Source">
-                <span className="capitalize">{textOrDash(company.source)?.replaceAll("_", " ")}</span>
-              </DetailItem>
-              <DetailItem label="Rating">
-                <span className="capitalize">{textOrDash(company.rating)}</span>
-              </DetailItem>
-              <DetailItem label="First Name">{textOrDash(company.first_name)}</DetailItem>
-              <DetailItem label="Last Name">{textOrDash(company.last_name)}</DetailItem>
-              <DetailItem label="Customer Email">{textOrDash(company.customer_email)}</DetailItem>
-              <DetailItem label="Phone">{textOrDash(company.phone)}</DetailItem>
-              <DetailItem label="Website">{textOrDash(company.website)}</DetailItem>
-              <DetailItem label="Account Ownership">{employeeName(company.account_ownership_id)}</DetailItem>
-              <DetailItem label="Customer ID">{textOrDash(company.customer_id_ext)}</DetailItem>
-              <DetailItem label="Role">{textOrDash(company.role)}</DetailItem>
-            </dl>
-
-            <h3 className="border-t border-border/70 pt-3 text-sm font-medium tracking-tight">
-              Address Information
-            </h3>
-            <dl className="grid grid-cols-2 gap-3 text-xs lg:grid-cols-3">
-              <DetailItem label="Billing Street">{textOrDash(company.billing_street)}</DetailItem>
-              <DetailItem label="Billing City">{textOrDash(company.billing_city)}</DetailItem>
-              <DetailItem label="Billing State">{textOrDash(company.billing_state)}</DetailItem>
-              <DetailItem label="Billing Code">{textOrDash(company.billing_code)}</DetailItem>
-              <DetailItem label="Billing Country">{textOrDash(company.billing_country)}</DetailItem>
-              <DetailItem label="Shipping Street">{textOrDash(company.shipping_street)}</DetailItem>
-              <DetailItem label="Shipping City">{textOrDash(company.shipping_city)}</DetailItem>
-              <DetailItem label="Shipping State">{textOrDash(company.shipping_state)}</DetailItem>
-              <DetailItem label="Shipping Code">{textOrDash(company.shipping_code)}</DetailItem>
-              <DetailItem label="Shipping Country">{textOrDash(company.shipping_country)}</DetailItem>
-            </dl>
-
-            <h3 className="border-t border-border/70 pt-3 text-sm font-medium tracking-tight">
-              Description Information
-            </h3>
-            <dl className="text-xs">
-              <DetailItem label="Description">
-                <span className="whitespace-pre-wrap">{textOrDash(company.description)}</span>
-              </DetailItem>
-            </dl>
-          </section>
-
-          <section
-            id="company-meetings"
-            className="overflow-hidden rounded-xl border border-border/80 bg-card shadow-sm"
+        <CrmPage>
+          <CrmSection
+            title="Account Information"
+            subtitle="Core account, contact, and ownership fields"
+            icon={Building2}
           >
+            <CrmDetailGrid>
+              <CrmDetailItem label="Customer Name">{textOrDash(company.customer_name)}</CrmDetailItem>
+              <CrmDetailItem label="Account Number">{textOrDash(company.account_number)}</CrmDetailItem>
+              <CrmDetailItem label="Status">
+                {company.status ? <FinanceStatusBadge status={company.status} /> : "-"}
+              </CrmDetailItem>
+              <CrmDetailItem label="Account Owner">{employeeName(company.account_owner_id)}</CrmDetailItem>
+              <CrmDetailItem label="Account Type">
+                <span className="capitalize">{textOrDash(company.account_type)}</span>
+              </CrmDetailItem>
+              <CrmDetailItem label="Industry">{textOrDash(company.industry)}</CrmDetailItem>
+              <CrmDetailItem label="Other Industries">{textOrDash(company.other_industries)}</CrmDetailItem>
+              <CrmDetailItem label="Portal ID">{textOrDash(company.portal_id)}</CrmDetailItem>
+              <CrmDetailItem label="Source">
+                <span className="capitalize">{textOrDash(company.source)?.replaceAll("_", " ")}</span>
+              </CrmDetailItem>
+              <CrmDetailItem label="Rating">
+                <span className="capitalize">{textOrDash(company.rating)}</span>
+              </CrmDetailItem>
+              <CrmDetailItem label="First Name">{textOrDash(company.first_name)}</CrmDetailItem>
+              <CrmDetailItem label="Last Name">{textOrDash(company.last_name)}</CrmDetailItem>
+              <CrmDetailItem label="Customer Email">{textOrDash(company.customer_email)}</CrmDetailItem>
+              <CrmDetailItem label="Phone">{textOrDash(company.phone)}</CrmDetailItem>
+              <CrmDetailItem label="Website">{textOrDash(company.website)}</CrmDetailItem>
+              <CrmDetailItem label="Account Ownership">{employeeName(company.account_ownership_id)}</CrmDetailItem>
+              <CrmDetailItem label="Customer ID">{textOrDash(company.customer_id_ext)}</CrmDetailItem>
+              <CrmDetailItem label="Role">{textOrDash(company.role)}</CrmDetailItem>
+            </CrmDetailGrid>
+
+            <div className="mt-4 border-t border-border/70 pt-3">
+              <div className="mb-3 flex items-center gap-2">
+                <CrmIconBadge icon={MapPin} className="size-7" />
+                <h3 className="text-sm font-medium tracking-tight">Address Information</h3>
+              </div>
+              <CrmDetailGrid>
+                <CrmDetailItem label="Billing Street">{textOrDash(company.billing_street)}</CrmDetailItem>
+                <CrmDetailItem label="Billing City">{textOrDash(company.billing_city)}</CrmDetailItem>
+                <CrmDetailItem label="Billing State">{textOrDash(company.billing_state)}</CrmDetailItem>
+                <CrmDetailItem label="Billing Code">{textOrDash(company.billing_code)}</CrmDetailItem>
+                <CrmDetailItem label="Billing Country">{textOrDash(company.billing_country)}</CrmDetailItem>
+                <CrmDetailItem label="Shipping Street">{textOrDash(company.shipping_street)}</CrmDetailItem>
+                <CrmDetailItem label="Shipping City">{textOrDash(company.shipping_city)}</CrmDetailItem>
+                <CrmDetailItem label="Shipping State">{textOrDash(company.shipping_state)}</CrmDetailItem>
+                <CrmDetailItem label="Shipping Code">{textOrDash(company.shipping_code)}</CrmDetailItem>
+                <CrmDetailItem label="Shipping Country">{textOrDash(company.shipping_country)}</CrmDetailItem>
+              </CrmDetailGrid>
+            </div>
+
+            <div className="mt-4 border-t border-border/70 pt-3">
+              <h3 className="mb-3 text-sm font-medium tracking-tight">Description Information</h3>
+              <CrmDetailGrid className="grid-cols-1 lg:grid-cols-1">
+                <CrmDetailItem label="Description">
+                  <span className="whitespace-pre-wrap">{textOrDash(company.description)}</span>
+                </CrmDetailItem>
+              </CrmDetailGrid>
+            </div>
+          </CrmSection>
+
+          <div id="company-meetings">
+          <CrmListPanel>
             <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border/70 px-4 py-3">
-              <h2 className="flex items-center gap-2 text-sm font-medium tracking-tight">
-                <CalendarDays className="size-3.5" /> Meetings
-              </h2>
+              <div className="flex min-w-0 items-center gap-2.5">
+                <CrmIconBadge icon={CalendarDays} />
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2">
+                    <h2 className="text-sm font-medium tracking-tight">Meetings</h2>
+                    <CrmCountBadge count={openMeetings.length} label="open" />
+                  </div>
+                  <p className="text-[11px] text-muted-foreground">Scheduled account meetings</p>
+                </div>
+              </div>
               <div className="flex items-center gap-2">
-                <Badge variant="secondary">{openMeetings.length}</Badge>
                 <Button
                   type="button"
                   size="sm"
@@ -205,12 +221,7 @@ export function CompanyDetailPage({ companyAccountId }: { companyAccountId: stri
                 >
                   <Plus className="size-3.5" /> Meeting
                 </Button>
-                <Link
-                  href={`/crm/companies/${company.id}/meetings`}
-                  className="text-xs font-medium text-primary underline-offset-2 transition-opacity duration-200 hover:underline hover:opacity-80"
-                >
-                  View all
-                </Link>
+                <CrmViewAllLink href={`/crm/companies/${company.id}/meetings`} />
               </div>
             </div>
             <div className="erp-scroll overflow-x-auto">
@@ -261,18 +272,23 @@ export function CompanyDetailPage({ companyAccountId }: { companyAccountId: stri
                 </tbody>
               </table>
             </div>
-          </section>
+          </CrmListPanel>
+          </div>
 
-          <section
-            id="company-followups"
-            className="overflow-hidden rounded-xl border border-border/80 bg-card shadow-sm"
-          >
+          <div id="company-followups">
+          <CrmListPanel>
             <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border/70 px-4 py-3">
-              <h2 className="flex items-center gap-2 text-sm font-medium tracking-tight">
-                <ClipboardList className="size-3.5" /> Follow Up
-              </h2>
+              <div className="flex min-w-0 items-center gap-2.5">
+                <CrmIconBadge icon={ClipboardList} />
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2">
+                    <h2 className="text-sm font-medium tracking-tight">Follow Up</h2>
+                    <CrmCountBadge count={openFollowups.length} label="open" />
+                  </div>
+                  <p className="text-[11px] text-muted-foreground">Open customer follow-ups</p>
+                </div>
+              </div>
               <div className="flex items-center gap-2">
-                <Badge variant="secondary">{openFollowups.length}</Badge>
                 <Button
                   type="button"
                   size="sm"
@@ -282,12 +298,7 @@ export function CompanyDetailPage({ companyAccountId }: { companyAccountId: stri
                 >
                   <Plus className="size-3.5" /> Follow Up
                 </Button>
-                <Link
-                  href={`/crm/companies/${company.id}/customer-followups`}
-                  className="text-xs font-medium text-primary underline-offset-2 transition-opacity duration-200 hover:underline hover:opacity-80"
-                >
-                  View all
-                </Link>
+                <CrmViewAllLink href={`/crm/companies/${company.id}/customer-followups`} />
               </div>
             </div>
             <div className="erp-scroll overflow-x-auto">
@@ -340,25 +351,23 @@ export function CompanyDetailPage({ companyAccountId }: { companyAccountId: stri
                 </tbody>
               </table>
             </div>
-          </section>
+          </CrmListPanel>
+          </div>
 
-          <section
-            id="company-leads"
-            className="overflow-hidden rounded-xl border border-border/80 bg-card shadow-sm"
-          >
+          <div id="company-leads">
+          <CrmListPanel>
             <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border/70 px-4 py-3">
-              <h2 className="flex items-center gap-2 text-sm font-medium tracking-tight">
-                <Target className="size-3.5" /> Leads from this company
-              </h2>
-              <div className="flex items-center gap-2">
-                <Badge variant="secondary">{leads.length}</Badge>
-                <Link
-                  href={`/crm/companies/${company.id}/leads`}
-                  className="text-xs font-medium text-primary underline-offset-2 transition-opacity duration-200 hover:underline hover:opacity-80"
-                >
-                  View all
-                </Link>
+              <div className="flex min-w-0 items-center gap-2.5">
+                <CrmIconBadge icon={Target} />
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2">
+                    <h2 className="text-sm font-medium tracking-tight">Leads from this company</h2>
+                    <CrmCountBadge count={leads.length} />
+                  </div>
+                  <p className="text-[11px] text-muted-foreground">Sales blueprint entry points</p>
+                </div>
               </div>
+              <CrmViewAllLink href={`/crm/companies/${company.id}/leads`} />
             </div>
             <div className="erp-scroll overflow-x-auto">
               <table className="w-full min-w-[700px] text-left text-sm">
@@ -400,7 +409,8 @@ export function CompanyDetailPage({ companyAccountId }: { companyAccountId: stri
                 </tbody>
               </table>
             </div>
-          </section>
+          </CrmListPanel>
+          </div>
 
           <MeetingFormDialog
             open={meetingOpen}
@@ -414,7 +424,7 @@ export function CompanyDetailPage({ companyAccountId }: { companyAccountId: stri
             onClose={() => setFollowupOpen(false)}
             onSaved={() => void load()}
           />
-        </div>
+        </CrmPage>
       )}
     </CompanyWorkspaceShell>
   );

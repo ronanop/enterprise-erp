@@ -55,6 +55,8 @@ _TRANSITIONS: dict[str, dict[str, dict[str, str]]] = {
         "boq_approval": {
             "approve_boq": "deal_reg",
             "reject_boq": "boq_pending",
+            "approve_sow": "deal_reg",
+            "reject_sow": "deal_reg",
             "lost": "lost",
         },
         # Backward-compatible exit for opportunities already persisted in the
@@ -64,7 +66,12 @@ _TRANSITIONS: dict[str, dict[str, dict[str, str]]] = {
             "skip_sow": "deal_reg",
             "lost": "lost",
         },
-        "deal_reg": {"deal_reg": "oem_pending", "lost": "lost"},
+        "deal_reg": {
+            "attach_sow": "deal_reg",
+            "deal_reg": "oem_pending",
+            "lost": "lost",
+            "send_sow_approval": "boq_approval",
+        },
         "oem_pending": {"oem_received": "oem_attached", "lost": "lost"},
         "oem_attached": {"attach_oem_quote": "quote_ready", "lost": "lost"},
         "quote_ready": {"create_quote": "quote_in_progress", "lost": "lost"},
@@ -80,13 +87,11 @@ _TRANSITIONS: dict[str, dict[str, dict[str, str]]] = {
         "lost": {},
     },
     QUOTE: {
-        # ``approve_internally`` is reachable straight from "draft" for the
-        # healthy-margin fast path (QuoteService.approve_internally without
-        # ``force``); it is also reachable from "internal_approval" once
-        # Management resumes a "send for approval" My Jobs decision.
+        # Self-serve quote UI only offers Send for Approval from draft.
+        # ``approve_internally`` / ``reject_internally`` run via My Jobs after
+        # the quote is locked in ``internal_approval``.
         "draft": {
             "send_for_approval": "internal_approval",
-            "approve_internally": "approved_internal",
             "lost": "lost",
         },
         "internal_approval": {

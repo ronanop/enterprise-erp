@@ -135,6 +135,7 @@ export type Company = {
   status: string;
   locked: boolean;
   version: number;
+  created_at?: string | null;
 };
 
 export type CompanyFormInput = {
@@ -341,6 +342,46 @@ export async function updateProduct(id: string, body: Partial<ProductFormInput>)
 }
 
 // ---------------------------------------------------------------------------
+// OEMs (partner master)
+// ---------------------------------------------------------------------------
+
+export const CRM_OEMS_API = "/crm/oems";
+
+export type Oem = {
+  id: string;
+  company_id: string;
+  oem_code: string;
+  oem_name: string;
+  contact_person: string | null;
+  contact_number: string | null;
+  contact_email: string | null;
+  status: string;
+  version: number;
+};
+
+export type OemFormInput = {
+  oem_code?: string | null;
+  oem_name: string;
+  contact_person?: string | null;
+  contact_number?: string | null;
+  contact_email?: string | null;
+  status?: string;
+};
+
+export async function listOems(): Promise<Oem[]> {
+  const res = await resourceService.list<Oem>(CRM_OEMS_API);
+  return asArray(res.data);
+}
+
+export async function createOem(body: OemFormInput): Promise<Oem> {
+  return unwrap(await resourceService.create<Oem>(CRM_OEMS_API, body));
+}
+
+export async function updateOem(id: string, body: Partial<OemFormInput>): Promise<Oem> {
+  return unwrap(await resourceService.update<Oem>(CRM_OEMS_API, id, body));
+}
+
+// ---------------------------------------------------------------------------
 // Sales Leads (legacy /crm/leads endpoints, filtered to sales-blueprint rows)
 // ---------------------------------------------------------------------------
 
@@ -482,6 +523,7 @@ export type Opportunity = {
   customer_po_attached?: boolean;
   customer_po_approved?: boolean;
   version: number;
+  created_at?: string | null;
 };
 
 export async function listOpportunities(params?: {
@@ -592,6 +634,7 @@ export type Quote = {
   description?: string | null;
   sales_order_id: string | null;
   version: number;
+  created_at?: string | null;
 };
 
 export type QuoteFormInput = {
@@ -624,6 +667,7 @@ export type QuoteLine = {
   product_id: string | null;
   product_name: string;
   hsn_sac: string | null;
+  description?: string | null;
   line_type: string;
   qty: number;
   unit_cost: number;
@@ -796,6 +840,7 @@ export type Ovf = {
   total_margin_pct: number;
   total_margin_amount: number;
   version: number;
+  created_at?: string | null;
 };
 
 export type OvfFormInput = {
@@ -822,6 +867,10 @@ export type OvfFormInput = {
   customer_payment_days?: number;
   additional_charges?: number;
   freight?: number;
+  total_margin_amount?: number;
+  total_margin_pct?: number;
+  finance_cost_pct?: number;
+  approval_status?: string;
 };
 
 export type OvfLine = {
@@ -863,6 +912,10 @@ export async function createOvf(body: OvfFormInput): Promise<Ovf> {
   return unwrap(await resourceService.create<Ovf>(CRM_OVF_API, body));
 }
 
+export async function updateOvf(id: string, body: Partial<OvfFormInput>): Promise<Ovf> {
+  return unwrap(await resourceService.update<Ovf>(CRM_OVF_API, id, body));
+}
+
 export async function listOvfLines(ovfId: string): Promise<OvfLine[]> {
   const res = await apiClient<OvfLine[]>(`${CRM_OVF_API}/${ovfId}/lines`);
   return asArray(res.data);
@@ -871,6 +924,12 @@ export async function listOvfLines(ovfId: string): Promise<OvfLine[]> {
 export async function addOvfLine(ovfId: string, body: OvfLineFormInput): Promise<OvfLine> {
   return unwrap(
     await apiClient<OvfLine>(`${CRM_OVF_API}/${ovfId}/lines`, { method: "POST", body }),
+  );
+}
+
+export async function updateOvfLine(lineId: string, body: OvfLineFormInput): Promise<OvfLine> {
+  return unwrap(
+    await apiClient<OvfLine>(`${CRM_OVF_API}/lines/${lineId}`, { method: "PATCH", body }),
   );
 }
 
@@ -1283,9 +1342,8 @@ export async function listEmployeeOptions(): Promise<Option[]> {
   const rows = asArray(res.data as Record<string, unknown>[] | Record<string, unknown> | null);
   return rows.map((r) => ({
     id: String(r.id),
-    label: `${[r.first_name, r.last_name].filter(Boolean).join(" ")}${
-      r.employee_code ? ` (${r.employee_code})` : ""
-    }`.trim(),
+    label: `${[r.first_name, r.last_name].filter(Boolean).join(" ")}${r.employee_code ? ` (${r.employee_code})` : ""
+      }`.trim(),
     email: r.email ? String(r.email) : undefined,
   }));
 }

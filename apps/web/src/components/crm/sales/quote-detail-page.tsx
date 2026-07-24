@@ -1,10 +1,19 @@
 "use client";
 
-import type { ReactNode } from "react";
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { AlertTriangle, ArrowLeft, RefreshCw } from "lucide-react";
+import { AlertTriangle, ArrowLeft, FileText, Pencil, Plus, RefreshCw } from "lucide-react";
 
+import {
+  CrmDetailGrid,
+  CrmDetailItem,
+  CrmErrorBanner,
+  CrmHeadlineBand,
+  CrmHeadlineStat,
+  CrmPage,
+  CrmSection,
+  CrmWarnBanner,
+} from "@/components/crm/crm-ui";
 import { ApprovalBanner } from "@/components/crm/sales/approval-banner";
 import { AttachmentsPanel } from "@/components/crm/sales/attachments-panel";
 import { BlueprintActions, BlueprintStateBadge } from "@/components/crm/sales/blueprint-actions";
@@ -49,15 +58,6 @@ function textOrDash(value: string | number | null | undefined): string {
   if (value === null || value === undefined) return "—";
   const text = String(value).trim();
   return text || "—";
-}
-
-function DetailItem({ label, children }: { label: string; children: ReactNode }) {
-  return (
-    <div className="min-w-0">
-      <dt className="text-xs text-muted-foreground">{label}</dt>
-      <dd className="mt-1 break-words text-sm text-foreground">{children}</dd>
-    </div>
-  );
 }
 
 export function QuoteDetailPage({ quoteId }: { quoteId: string }) {
@@ -159,12 +159,12 @@ export function QuoteDetailPage({ quoteId }: { quoteId: string }) {
 
   if (error && !quote) {
     return (
-      <div className="space-y-3">
+      <CrmPage className="space-y-3">
         <Link href="/crm/quotes" className="inline-flex cursor-pointer items-center gap-1 text-xs font-medium text-primary">
           <ArrowLeft className="size-3.5" /> Quotes
         </Link>
-        <div className="rounded-xl border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive">{error}</div>
-      </div>
+        <CrmErrorBanner>{error}</CrmErrorBanner>
+      </CrmPage>
     );
   }
 
@@ -230,19 +230,34 @@ export function QuoteDetailPage({ quoteId }: { quoteId: string }) {
           : "Continue approval, SCM sharing, and Deal Won on the OVF.",
         href: `/crm/ovf/${existingOvf.id}`,
       }
-    : quote.quote_stage === "accepted"
+    : quote.quote_stage === "accepted" &&
+        opportunity?.blueprint_state === "ovf_ready" &&
+        opportunity.customer_po_approved
       ? {
-          label: "Attach Customer PO",
-          description: "The quote is accepted. Continue on the opportunity to attach and approve the customer PO.",
-          href: `/crm/opportunities/${quote.opportunity_id}`,
+          label: "Create OVF",
+          description: "Customer PO is approved. Create the OVF to continue the deal.",
+          href: `/crm/quotes/${quote.id}/ovf/new`,
         }
-      : {
-          label: "Complete Quote",
-          description: "Use the quote actions and line editor on this screen to advance the deal.",
-        };
+      : quote.quote_stage === "accepted"
+        ? {
+            label: "Attach Customer PO",
+            description:
+              "The quote is accepted. Continue on the opportunity to attach and approve the customer PO.",
+            href: `/crm/opportunities/${quote.opportunity_id}`,
+          }
+        : {
+            label: "Complete Quote",
+            description: "Use the quote actions and line editor on this screen to advance the deal.",
+          };
+
+  const canCreateOvf =
+    quote.quote_stage === "accepted" &&
+    !existingOvf &&
+    opportunity?.blueprint_state === "ovf_ready" &&
+    Boolean(opportunity.customer_po_approved);
 
   return (
-    <div className="space-y-4">
+    <CrmPage>
       <div className="flex flex-wrap items-center justify-between gap-2">
         <Link href="/crm/quotes" className="inline-flex cursor-pointer items-center gap-1 text-xs font-medium text-primary transition-opacity duration-200 hover:opacity-80">
           <ArrowLeft className="size-3.5" /> Quotes
@@ -262,6 +277,31 @@ export function QuoteDetailPage({ quoteId }: { quoteId: string }) {
           <div className="flex flex-wrap items-center gap-2">
             <FinanceStatusBadge status={quote.approval_status} />
             <BlueprintStateBadge state={blueprint.state} />
+            {!quote.locked &&
+            quote.quote_stage !== "accepted" &&
+            quote.quote_stage !== "lost" ? (
+              <Link
+                href={`/crm/quotes/${quote.id}/edit`}
+                className="inline-flex h-7 cursor-pointer items-center gap-1.5 rounded-lg border border-border bg-background px-2.5 text-[0.8rem] font-medium text-foreground shadow-sm transition-colors duration-200 hover:bg-muted/60"
+              >
+                <Pencil className="size-3.5" /> Edit
+              </Link>
+            ) : null}
+            {canCreateOvf ? (
+              <Link
+                href={`/crm/quotes/${quote.id}/ovf/new`}
+                className="inline-flex h-7 cursor-pointer items-center gap-1.5 rounded-lg bg-primary px-2.5 text-[0.8rem] font-medium text-primary-foreground shadow-sm transition-opacity duration-200 hover:opacity-90"
+              >
+                <Plus className="size-3.5" /> Create OVF
+              </Link>
+            ) : existingOvf ? (
+              <Link
+                href={`/crm/ovf/${existingOvf.id}`}
+                className="inline-flex h-7 cursor-pointer items-center gap-1.5 rounded-lg border border-border bg-background px-2.5 text-[0.8rem] font-medium text-foreground shadow-sm transition-colors duration-200 hover:bg-muted/60"
+              >
+                Open OVF
+              </Link>
+            ) : null}
           </div>
         }
       />
@@ -279,145 +319,125 @@ export function QuoteDetailPage({ quoteId }: { quoteId: string }) {
       ) : null}
 
       {banner ? (
-        <div
-          className={`rounded-xl px-4 py-2.5 text-sm ${
-            banner.tone === "success"
-              ? "border border-emerald-200 bg-emerald-50 text-emerald-950"
-              : "border border-destructive/30 bg-destructive/5 text-destructive"
-          }`}
-        >
-          {banner.text}
-        </div>
+        banner.tone === "error" ? (
+          <CrmErrorBanner>{banner.text}</CrmErrorBanner>
+        ) : (
+          <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-2.5 text-sm text-emerald-950">
+            {banner.text}
+          </div>
+        )
       ) : null}
-      {error ? (
-        <div className="rounded-xl border border-destructive/30 bg-destructive/5 px-4 py-2.5 text-sm text-destructive">{error}</div>
-      ) : null}
+      {error ? <CrmErrorBanner>{error}</CrmErrorBanner> : null}
 
       {nearingSubmit ? (
-        <div className="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-2.5 text-xs text-amber-900">
-          <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
-          No vendor quote attached yet — attach it below before sending this quote for approval.
-        </div>
+        <CrmWarnBanner>
+          <span className="flex items-start gap-2">
+            <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
+            No vendor quote attached yet — attach it below before sending this quote for approval.
+          </span>
+        </CrmWarnBanner>
       ) : null}
 
       <BlueprintActions
         allowedActions={blueprint.allowed_actions}
         locked={blueprint.locked}
-        excludeActions={
-          margin?.requires_management_approval && !blueprint.locked
-            ? ["approve_internally"]
-            : undefined
-        }
+        excludeActions={["approve_internally"]}
         onAction={onBlueprintAction}
         disabled={busy}
       />
-      {margin?.requires_management_approval &&
-      blueprint.allowed_actions.includes("approve_internally") &&
-      !blueprint.locked ? (
-        <div className="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-2.5 text-xs text-amber-900">
-          <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
-          Margin is below the management threshold. Send for approval via My Jobs instead of approving
-          internally.
-        </div>
+      {margin?.requires_management_approval && !blueprint.locked ? (
+        <CrmWarnBanner>
+          <span className="flex items-start gap-2">
+            <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
+            Margin is below the management threshold ({margin.required_threshold_pct}%). Use Send for
+            Approval.
+          </span>
+        </CrmWarnBanner>
       ) : null}
 
-      <section className="grid gap-3 rounded-xl border border-border/80 bg-card p-4 shadow-sm sm:grid-cols-2 lg:grid-cols-4">
-        <div>
-          <dt className="text-xs text-muted-foreground">Grand Total</dt>
-          <dd className="mt-0.5 text-sm font-medium">{formatInrPrecise(quote.grand_total)}</dd>
+      <CrmHeadlineBand>
+        <div className="grid divide-y divide-white/10 sm:grid-cols-2 sm:divide-x sm:divide-y-0 lg:grid-cols-4">
+          <CrmHeadlineStat label="Grand Total" value={formatInrPrecise(quote.grand_total)} />
+          <CrmHeadlineStat
+            label="Avg Margin"
+            value={`${quote.avg_margin_pct}%`}
+            sub={
+              margin?.requires_management_approval
+                ? `Below ${margin.required_threshold_pct}% threshold`
+                : undefined
+            }
+          />
+          <CrmHeadlineStat
+            label="Stage"
+            value={quote.quote_stage.replaceAll("_", " ")}
+          />
+          <CrmHeadlineStat
+            label="Approval"
+            value={quote.approval_status.replaceAll("_", " ")}
+            sub={`Freight ${formatInr(quote.freight)}`}
+          />
         </div>
-        <div>
-          <dt className="text-xs text-muted-foreground">Avg Margin</dt>
-          <dd className="mt-0.5 text-sm font-medium">
-            {quote.avg_margin_pct}%{" "}
-            {margin?.requires_management_approval ? (
-              <span className="text-destructive">(below {margin.required_threshold_pct}% threshold)</span>
-            ) : null}
-          </dd>
-        </div>
-        <div>
-          <dt className="text-xs text-muted-foreground">Total Margin Amount</dt>
-          <dd className="mt-0.5 text-sm">{formatInrPrecise(quote.total_margin_amount)}</dd>
-        </div>
-        <div>
-          <dt className="text-xs text-muted-foreground">Freight</dt>
-          <dd className="mt-0.5 text-sm">{formatInr(quote.freight)}</dd>
-        </div>
-        <div>
-          <dt className="text-xs text-muted-foreground">Valid Until</dt>
-          <dd className="mt-0.5 text-sm">{quote.valid_until ?? "—"}</dd>
-        </div>
-        <div>
-          <dt className="text-xs text-muted-foreground">Reason for Discount</dt>
-          <dd className="mt-0.5 text-sm">{quote.reason_for_discount ?? "—"}</dd>
-        </div>
-        <div>
-          <dt className="text-xs text-muted-foreground">Version</dt>
-          <dd className="mt-0.5 text-sm">{quote.version}</dd>
-        </div>
-      </section>
+      </CrmHeadlineBand>
 
-      <section className="space-y-3 rounded-xl border border-border/80 bg-card p-4 shadow-sm">
-        <h2 className="text-sm font-medium tracking-tight">Quote Details</h2>
-
+      <CrmSection title="Quote Details" subtitle="Commercial, entity, and terms" icon={FileText}>
         <h3 className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
           Quote Information
         </h3>
-        <dl className="grid grid-cols-2 gap-3 text-xs lg:grid-cols-3">
-          <DetailItem label="Customer's Project Title">{textOrDash(projectTitle)}</DetailItem>
-          <DetailItem label="Subject">{textOrDash(quote.subject || projectTitle)}</DetailItem>
-          <DetailItem label="Account Name">{textOrDash(accountName)}</DetailItem>
-          <DetailItem label="Valid Until">{textOrDash(quote.valid_until)}</DetailItem>
-          <DetailItem label="Contact Name">{contactName}</DetailItem>
-          <DetailItem label="Quote Owner">{textOrDash(ownerName)}</DetailItem>
-          <DetailItem label="Service Type">{textOrDash(serviceType)}</DetailItem>
-          <DetailItem label="Quote No.">{quote.quote_no}</DetailItem>
-          <DetailItem label="Quote Stage">
+        <CrmDetailGrid className="mt-3">
+          <CrmDetailItem label="Customer's Project Title">{textOrDash(projectTitle)}</CrmDetailItem>
+          <CrmDetailItem label="Subject">{textOrDash(quote.subject || projectTitle)}</CrmDetailItem>
+          <CrmDetailItem label="Account Name">{textOrDash(accountName)}</CrmDetailItem>
+          <CrmDetailItem label="Valid Until">{textOrDash(quote.valid_until)}</CrmDetailItem>
+          <CrmDetailItem label="Contact Name">{contactName}</CrmDetailItem>
+          <CrmDetailItem label="Quote Owner">{textOrDash(ownerName)}</CrmDetailItem>
+          <CrmDetailItem label="Service Type">{textOrDash(serviceType)}</CrmDetailItem>
+          <CrmDetailItem label="Quote No.">{quote.quote_no}</CrmDetailItem>
+          <CrmDetailItem label="Quote Stage">
             <span className="capitalize">{quote.quote_stage.replaceAll("_", " ")}</span>
-          </DetailItem>
-          <DetailItem label="Quote Revision">{quote.quote_revision}</DetailItem>
-          <DetailItem label="Approval Status">
+          </CrmDetailItem>
+          <CrmDetailItem label="Quote Revision">{quote.quote_revision}</CrmDetailItem>
+          <CrmDetailItem label="Approval Status">
             <FinanceStatusBadge status={quote.approval_status} />
-          </DetailItem>
-          <DetailItem label="Sales Order ID">
+          </CrmDetailItem>
+          <CrmDetailItem label="Sales Order ID">
             {textOrDash(quote.sales_order_id ?? opportunity?.sales_order_id)}
-          </DetailItem>
-        </dl>
+          </CrmDetailItem>
+        </CrmDetailGrid>
 
-        <h3 className="border-t border-border/70 pt-3 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
+        <h3 className="mt-4 border-t border-border/70 pt-3 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
           Entity Information
         </h3>
-        <dl className="grid grid-cols-2 gap-3 text-xs lg:grid-cols-3">
-          <DetailItem label="Entity Name">{textOrDash(entityName)}</DetailItem>
-          <DetailItem label="Entity Address">
+        <CrmDetailGrid className="mt-3">
+          <CrmDetailItem label="Entity Name">{textOrDash(entityName)}</CrmDetailItem>
+          <CrmDetailItem label="Entity Address">
             <span className="whitespace-pre-wrap">{textOrDash(entityAddress)}</span>
-          </DetailItem>
-          <DetailItem label="Entity Contact Number">{textOrDash(entityContact)}</DetailItem>
-          <DetailItem label="Entity Email">{textOrDash(entityEmail)}</DetailItem>
-          <DetailItem label="Entity GST No.">{textOrDash(entityGst)}</DetailItem>
-          <DetailItem label="Billing Country">{textOrDash(billingCountry)}</DetailItem>
-          <DetailItem label="Shipping Country">{textOrDash(shippingCountry)}</DetailItem>
-        </dl>
+          </CrmDetailItem>
+          <CrmDetailItem label="Entity Contact Number">{textOrDash(entityContact)}</CrmDetailItem>
+          <CrmDetailItem label="Entity Email">{textOrDash(entityEmail)}</CrmDetailItem>
+          <CrmDetailItem label="Entity GST No.">{textOrDash(entityGst)}</CrmDetailItem>
+          <CrmDetailItem label="Billing Country">{textOrDash(billingCountry)}</CrmDetailItem>
+          <CrmDetailItem label="Shipping Country">{textOrDash(shippingCountry)}</CrmDetailItem>
+        </CrmDetailGrid>
 
-        <h3 className="border-t border-border/70 pt-3 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
+        <h3 className="mt-4 border-t border-border/70 pt-3 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
           Commercial Terms
         </h3>
-        <dl className="grid grid-cols-2 gap-3 text-xs lg:grid-cols-3">
-          <DetailItem label="Freight Charges (₹)">{formatInr(quote.freight)}</DetailItem>
-          <DetailItem label="Grand Total">{formatInrPrecise(quote.grand_total)}</DetailItem>
-          <DetailItem label="Avg Margin">{quote.avg_margin_pct}%</DetailItem>
-          <DetailItem label="Total Margin Amount">{formatInrPrecise(quote.total_margin_amount)}</DetailItem>
-          <DetailItem label="Description">
+        <CrmDetailGrid className="mt-3">
+          <CrmDetailItem label="Freight Charges (₹)">{formatInr(quote.freight)}</CrmDetailItem>
+          <CrmDetailItem label="Grand Total">{formatInrPrecise(quote.grand_total)}</CrmDetailItem>
+          <CrmDetailItem label="Avg Margin">{quote.avg_margin_pct}%</CrmDetailItem>
+          <CrmDetailItem label="Total Margin Amount">{formatInrPrecise(quote.total_margin_amount)}</CrmDetailItem>
+          <CrmDetailItem label="Description">
             <span className="whitespace-pre-wrap">{textOrDash(description)}</span>
-          </DetailItem>
-          <DetailItem label="Reason For Discount">
+          </CrmDetailItem>
+          <CrmDetailItem label="Reason For Discount">
             <span className="whitespace-pre-wrap">{textOrDash(quote.reason_for_discount)}</span>
-          </DetailItem>
-          <DetailItem label="Terms and Conditions">
+          </CrmDetailItem>
+          <CrmDetailItem label="Terms and Conditions">
             <span className="whitespace-pre-wrap">{textOrDash(quote.terms)}</span>
-          </DetailItem>
-        </dl>
-      </section>
+          </CrmDetailItem>
+        </CrmDetailGrid>
+      </CrmSection>
 
       <QuoteLineTable
         quoteId={quote.id}
@@ -446,6 +466,6 @@ export function QuoteDetailPage({ quoteId }: { quoteId: string }) {
         readOnly={quote.locked}
         onChanged={(rows) => setHasVendorQuote(rows.some((r) => r.category === "vendor_quote"))}
       />
-    </div>
+    </CrmPage>
   );
 }

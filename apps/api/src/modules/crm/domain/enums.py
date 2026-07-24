@@ -148,6 +148,7 @@ class CrmEntityType(str, Enum):
     QUOTE = "quote"
     OVF = "ovf"
     PRODUCT = "product"
+    OEM = "oem"
     APPROVAL_TASK = "approval_task"
 
 
@@ -162,9 +163,10 @@ CODE_PREFIXES: dict[CrmEntityType, tuple[str, int]] = {
     CrmEntityType.INTERACTION: ("INT-", 6),
     CrmEntityType.FEEDBACK: ("FBK-", 6),
     CrmEntityType.COMPANY: ("ACC-", 6),
-    CrmEntityType.QUOTE: ("QTE-", 6),
+    CrmEntityType.QUOTE: ("QT-", 6),
     CrmEntityType.OVF: ("OVF-", 6),
     CrmEntityType.PRODUCT: ("PRD-", 6),
+    CrmEntityType.OEM: ("OEM-", 6),
     CrmEntityType.APPROVAL_TASK: ("JOB-", 6),
 }
 

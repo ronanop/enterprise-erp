@@ -1336,6 +1336,23 @@ def seed_crm(db, tenant_id, company_id, branch_id, admin_id, employees, customer
             "updated_by": admin_id,
         },
     )
+    for code, name in [
+        ("PHONE", "Phone"),
+        ("EMAIL", "Email"),
+        ("VERBAL", "Verbal Communication"),
+        ("REF", "Reference"),
+    ]:
+        ensure(
+            db,
+            CrmLeadSource,
+            {"tenant_id": tenant_id, "company_id": company_id, "source_code": code},
+            {
+                "source_name": name,
+                "status": "active",
+                "created_by": admin_id,
+                "updated_by": admin_id,
+            },
+        )
     pipeline = ensure(
         db,
         CrmPipeline,

@@ -62,7 +62,7 @@ _GATED_OPPORTUNITY_ACTIONS = {"create_quote", "quote_accepted", "create_ovf", "d
 # exactly what releases the lock (approve) or sends it back for rework
 # (reject). Only invoked by ApprovalTaskService._resume() from a My Jobs
 # decision, never directly by the generic action endpoint pre-lock.
-_UNLOCKING_ACTIONS = {"approve_boq", "reject_boq", "approve_po", "reject_po"}
+_UNLOCKING_ACTIONS = {"approve_boq", "reject_boq", "approve_sow", "reject_sow", "approve_po", "reject_po"}
 
 
 class OpportunityBlueprintService:
@@ -112,6 +112,8 @@ class OpportunityBlueprintService:
                 allowed = [action for action in allowed if action != "attach_sow"]
             elif opp.sow_attached and not opp.boq_attached:
                 allowed = [action for action in allowed if action != "attach_boq"]
+        if opp.sow_approved:
+            allowed = [action for action in allowed if action != "send_sow_approval"]
         return {
             "entity_type": "opportunity",
             "entity_id": opp.id,
@@ -159,6 +161,20 @@ class OpportunityBlueprintService:
                 remarks=payload.get("remarks"),
             )
             updates["locked"] = True
+        elif action == "send_sow_approval":
+            if not opp.sow_attached:
+                raise ConflictException("Attach a SOW before requesting approval")
+            if opp.sow_approved:
+                raise ConflictException("SOW is already approved")
+            self._raise_approval(
+                ctx,
+                opp,
+                action="approve_sow",
+                team_role=payload.get("team_role", "presales"),
+                title=f"Approve SOW — {opp.opportunity_name}",
+                remarks=payload.get("remarks"),
+            )
+            updates["locked"] = True
         elif action == "approve_boq":
             if opp.sow_attached and not opp.boq_attached:
                 updates["sow_approved"] = True
@@ -170,6 +186,12 @@ class OpportunityBlueprintService:
                 updates["sow_approved"] = False
             else:
                 updates["boq_approved"] = False
+            updates["locked"] = False
+        elif action == "approve_sow":
+            updates["sow_approved"] = True
+            updates["locked"] = False
+        elif action == "reject_sow":
+            updates["sow_approved"] = False
             updates["locked"] = False
         elif action == "attach_sow":
             self._attach(ctx, opp, payload, category="sow")

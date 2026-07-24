@@ -2,12 +2,13 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { Info, RefreshCw } from "lucide-react";
+import { FileStack, RefreshCw } from "lucide-react";
 
+import { CrmErrorBanner, CrmInfoBanner, CrmListPanel, CrmPage } from "@/components/crm/crm-ui";
+import { CrmListToolbar } from "@/components/crm/sales/crm-list-toolbar";
+import { CrmSortableTh, sortRows, useTableSort } from "@/components/crm/sales/crm-table-sort";
 import { PageHeader } from "@/components/layout/page-header";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { ApiClientError } from "@/services/api-client";
 import {
   listAttachmentsByCategory,
@@ -19,33 +20,39 @@ import {
 
 export type DocumentCategory = "oem_quote" | "customer_po" | "boq" | "sow";
 
+type SortKey = "document" | "opportunity" | "stage" | "size";
+
 const META: Record<
   DocumentCategory,
-  { title: string; description: string; flag: keyof Opportunity; label: string }
+  { title: string; description: string; flag: keyof Opportunity; label: string; subtitle: string }
 > = {
   oem_quote: {
     title: "OEM Quote",
     description: "OEM quotations attached on opportunities before customer quote creation.",
     flag: "oem_quote_attached",
     label: "OEM Quote",
+    subtitle: "OEM quotation documents",
   },
   customer_po: {
     title: "Purchase Order",
     description: "Customer purchase orders attached after quote acceptance.",
     flag: "customer_po_attached",
     label: "Customer PO",
+    subtitle: "Customer purchase orders",
   },
   boq: {
     title: "BOQ",
     description: "Bill of Quantities documents attached on opportunities.",
     flag: "boq_attached",
     label: "BOQ",
+    subtitle: "Bill of quantities",
   },
   sow: {
     title: "SOW",
     description: "Statement of Work documents attached on opportunities.",
     flag: "sow_attached",
     label: "SOW",
+    subtitle: "Statements of work",
   },
 };
 
@@ -64,6 +71,7 @@ export function DocumentRegistryListPage({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
+  const { sortBy, sortDir, onSort } = useTableSort<SortKey>("document");
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -132,18 +140,30 @@ export function DocumentRegistryListPage({
     }));
   }, [attachments, flaggedOpps, meta.label, oppById]);
 
-  const filtered = rows.filter((row) => {
+  const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (!q) return true;
-    return (
-      row.name.toLowerCase().includes(q) ||
-      (row.opportunity?.opportunity_name ?? "").toLowerCase().includes(q) ||
-      (row.opportunity?.opportunity_code ?? "").toLowerCase().includes(q)
+    if (!q) return rows;
+    return rows.filter(
+      (row) =>
+        row.name.toLowerCase().includes(q) ||
+        (row.opportunity?.opportunity_name ?? "").toLowerCase().includes(q) ||
+        (row.opportunity?.opportunity_code ?? "").toLowerCase().includes(q),
     );
-  });
+  }, [rows, query]);
+
+  const sorted = useMemo(
+    () =>
+      sortRows(filtered, sortBy, sortDir, {
+        document: (r) => r.name,
+        opportunity: (r) => r.opportunity?.opportunity_name,
+        stage: (r) => r.opportunity?.blueprint_state ?? r.opportunity?.current_stage,
+        size: (r) => r.size,
+      }),
+    [filtered, sortBy, sortDir],
+  );
 
   return (
-    <div className="space-y-4">
+    <CrmPage>
       {!embedded ? (
         <PageHeader
           title={meta.title}
@@ -165,27 +185,22 @@ export function DocumentRegistryListPage({
       ) : null}
 
       {!embedded ? (
-        <div className="flex items-start gap-2 rounded-xl border border-blue-200 bg-blue-50 px-4 py-2.5 text-xs text-blue-900">
-          <Info className="mt-0.5 size-3.5 shrink-0" />
+        <CrmInfoBanner>
           {meta.label} files are attached from an Opportunity blueprint step — open the opportunity to
           upload or review.
-        </div>
+        </CrmInfoBanner>
       ) : null}
 
-      {error ? (
-        <div className="rounded-xl border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive">
-          {error}
-        </div>
-      ) : null}
+      {error ? <CrmErrorBanner>{error}</CrmErrorBanner> : null}
 
-      <div className="overflow-hidden rounded-xl border border-border/80 bg-card shadow-sm">
-        <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2 border-b border-border/70 px-4 py-3">
-          <div className="flex min-w-0 flex-1 items-center gap-2">
-            <h2 className="truncate text-sm font-medium tracking-tight">{meta.title}</h2>
-            <Badge variant="secondary">{filtered.length} shown</Badge>
-          </div>
-          <div className="ml-auto flex shrink-0 flex-nowrap items-center gap-2">
-            {embedded ? (
+      <CrmListPanel>
+        <CrmListToolbar
+          title={meta.title}
+          subtitle={meta.subtitle}
+          icon={FileStack}
+          count={sorted.length}
+          actions={
+            embedded ? (
               <Button
                 type="button"
                 variant="outline"
@@ -197,41 +212,40 @@ export function DocumentRegistryListPage({
                 <RefreshCw className={`size-3.5 ${loading ? "animate-spin" : ""}`} />
                 Refresh
               </Button>
-            ) : null}
-            <Input
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder={`Search ${meta.title.toLowerCase()}…`}
-              className="h-8 w-52 shrink-0 sm:w-56"
-            />
-          </div>
-        </div>
+            ) : null
+          }
+          search={{
+            value: query,
+            onChange: setQuery,
+            placeholder: `Search ${meta.title.toLowerCase()}…`,
+          }}
+        />
 
         <div className="erp-scroll overflow-x-auto">
           <table className="w-full min-w-[720px] text-left text-sm">
             <thead>
               <tr className="border-b border-border/70 bg-muted/40 text-[11px] tracking-wide text-muted-foreground uppercase">
-                <th className="px-4 py-2.5">Document</th>
-                <th className="px-4 py-2.5">Opportunity</th>
-                <th className="px-4 py-2.5">Stage</th>
-                <th className="px-4 py-2.5">Size</th>
+                <CrmSortableTh label="Document" sortKey="document" activeKey={sortBy} dir={sortDir} onSort={onSort} />
+                <CrmSortableTh label="Opportunity" sortKey="opportunity" activeKey={sortBy} dir={sortDir} onSort={onSort} />
+                <CrmSortableTh label="Stage" sortKey="stage" activeKey={sortBy} dir={sortDir} onSort={onSort} />
+                <CrmSortableTh label="Size" sortKey="size" activeKey={sortBy} dir={sortDir} onSort={onSort} />
               </tr>
             </thead>
             <tbody>
-              {loading && filtered.length === 0 ? (
+              {loading && sorted.length === 0 ? (
                 <tr>
                   <td colSpan={4} className="px-4 py-8 text-center text-muted-foreground">
                     Loading…
                   </td>
                 </tr>
-              ) : filtered.length === 0 ? (
+              ) : sorted.length === 0 ? (
                 <tr>
                   <td colSpan={4} className="px-4 py-8 text-center text-muted-foreground">
                     No {meta.title.toLowerCase()} documents yet.
                   </td>
                 </tr>
               ) : (
-                filtered.map((row) => (
+                sorted.map((row) => (
                   <tr key={row.id} className="border-b border-border/50 last:border-0 hover:bg-accent/30">
                     <td className="px-4 py-2.5 font-medium">
                       {row.attachmentId ? (
@@ -282,7 +296,7 @@ export function DocumentRegistryListPage({
             </tbody>
           </table>
         </div>
-      </div>
-    </div>
+      </CrmListPanel>
+    </CrmPage>
   );
 }

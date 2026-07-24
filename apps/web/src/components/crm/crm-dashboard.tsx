@@ -3,9 +3,12 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import {
+  BarChart3,
   CalendarDays,
   ClipboardList,
   Handshake,
+  LayoutGrid,
+  PieChart,
   RefreshCw,
   Target,
   TrendingUp,
@@ -18,7 +21,18 @@ import {
   CrmStageDonutChart,
   CRM_CHART_COLORS,
 } from "@/components/crm/crm-dashboard-charts";
-import { FinanceKpiCard } from "@/components/finance/finance-kpi-card";
+import {
+  CrmActivityTile,
+  CrmHeadlineBand,
+  CrmHeadlineStat,
+  CrmIconBadge,
+  CrmKpiCard,
+  CrmListPanel,
+  CrmPage,
+  CrmSection,
+  CrmViewAllLink,
+  CrmWarnBanner,
+} from "@/components/crm/crm-ui";
 import { FinanceStatusBadge } from "@/components/finance/finance-status-badge";
 import { PageHeader } from "@/components/layout/page-header";
 import { Badge } from "@/components/ui/badge";
@@ -52,6 +66,14 @@ const STAGE_DEFS = [
   { key: "proposal", label: "Proposal" },
   { key: "negotiation", label: "Negotiation" },
   { key: "won", label: "Won" },
+] as const;
+
+const STAGE_COLORS = [
+  CRM_CHART_COLORS.sky,
+  CRM_CHART_COLORS.skyDark,
+  CRM_CHART_COLORS.teal,
+  CRM_CHART_COLORS.emerald,
+  CRM_CHART_COLORS.slate,
 ] as const;
 
 export function CrmDashboard() {
@@ -156,7 +178,7 @@ export function CrmDashboard() {
     (!authenticated && Boolean(data?.errors.length));
 
   return (
-    <div className="space-y-5">
+    <CrmPage>
       <PageHeader
         title="Sales CRM Dashboard"
         description="Pipeline health, deal mix, and revenue outlook across leads and opportunities."
@@ -191,12 +213,12 @@ export function CrmDashboard() {
       />
 
       {authBlocked ? (
-        <div className="rounded-xl border border-dashed border-amber-300/80 bg-amber-50 px-4 py-3 text-sm text-amber-950">
+        <CrmWarnBanner>
           Sign in to load live CRM data.{" "}
           <Link href="/login" className="cursor-pointer font-medium underline underline-offset-2">
             Go to login
           </Link>
-        </div>
+        </CrmWarnBanner>
       ) : null}
 
       {data?.partial && !authBlocked ? (
@@ -205,55 +227,80 @@ export function CrmDashboard() {
         </div>
       ) : null}
 
-      {/* KPI strip */}
-      <div className="grid gap-2.5 sm:grid-cols-2 xl:grid-cols-5">
-        <FinanceKpiCard
+      <CrmHeadlineBand>
+        <div className="grid divide-y divide-white/10 sm:grid-cols-2 sm:divide-x sm:divide-y-0 lg:grid-cols-4">
+          <CrmHeadlineStat
+            label="Pipeline value"
+            value={formatInr(kpis.pipelineValue)}
+            sub={`${kpis.openOpps} open opportunities`}
+            loading={loading}
+          />
+          <CrmHeadlineStat
+            label="Won value"
+            value={formatInr(kpis.wonValue)}
+            sub={`${kpis.winRate}% win rate`}
+            loading={loading}
+          />
+          <CrmHeadlineStat
+            label="Open leads"
+            value={String(kpis.openLeads)}
+            sub={`${data?.leads.length ?? 0} total leads`}
+            loading={loading}
+          />
+          <CrmHeadlineStat
+            label="Active campaigns"
+            value={String(countByStatus(data?.campaigns ?? [], ["active"]))}
+            sub={`${data?.campaigns.length ?? 0} total campaigns`}
+            loading={loading}
+          />
+        </div>
+      </CrmHeadlineBand>
+
+      <div className="grid gap-2.5 sm:grid-cols-2 xl:grid-cols-4">
+        <CrmKpiCard
           label="Open leads"
-          value={loading ? "—" : String(kpis.openLeads)}
+          value={String(kpis.openLeads)}
           hint={`${data?.leads.length ?? 0} total`}
           icon={UserPlus}
           tone={kpis.openLeads > 0 ? "warning" : "success"}
+          href="/crm/leads"
+          loading={loading}
         />
-        <FinanceKpiCard
+        <CrmKpiCard
           label="Open opportunities"
-          value={loading ? "—" : String(kpis.openOpps)}
+          value={String(kpis.openOpps)}
           hint={`${countByStatus(data?.opportunities ?? [], ["won"])} won`}
           icon={Handshake}
           tone="default"
+          href="/crm/opportunities"
+          loading={loading}
         />
-        <FinanceKpiCard
-          label="Pipeline value"
-          value={loading ? "—" : formatInr(kpis.pipelineValue)}
-          hint="Open deals · expected"
-          icon={Target}
-          tone={kpis.pipelineValue > 0 ? "default" : "success"}
-        />
-        <FinanceKpiCard
-          label="Won value"
-          value={loading ? "—" : formatInr(kpis.wonValue)}
-          hint={`${kpis.winRate}% win rate`}
+        <CrmKpiCard
+          label="Win rate"
+          value={`${kpis.winRate}%`}
+          hint={`${formatInr(kpis.wonValue)} won value`}
           icon={TrendingUp}
           tone="success"
+          loading={loading}
         />
-        <FinanceKpiCard
+        <CrmKpiCard
           label="Open tasks"
-          value={loading ? "—" : String(kpis.pendingTasks)}
+          value={String(kpis.pendingTasks)}
           hint={`${kpis.missedFollowups} missed follow-ups`}
           icon={ClipboardList}
           tone={kpis.pendingTasks > 0 || kpis.missedFollowups > 0 ? "warning" : "success"}
+          href="/crm/tasks"
+          loading={loading}
         />
       </div>
 
-      {/* Charts */}
       <div className="grid gap-3 xl:grid-cols-3">
-        <section className="rounded-xl border border-border/80 bg-card p-4 shadow-sm xl:col-span-1">
-          <div className="mb-1 flex items-center justify-between gap-2">
-            <div>
-              <h2 className="text-sm font-medium tracking-tight">Pipeline funnel</h2>
-              <p className="text-[11px] text-muted-foreground">Lead → Meeting volume</p>
-            </div>
-            <Badge variant="secondary">Counts</Badge>
-          </div>
+        <CrmSection
+          title="Pipeline funnel"
+          subtitle="Lead → Meeting volume"
+          icon={BarChart3}
+          badge={<Badge variant="secondary">Counts</Badge>}
+        >
           <CrmPipelineBarChart data={pipelineChart} loading={loading} />
           <ol className="mt-1 flex flex-wrap gap-x-3 gap-y-1 border-t border-border/60 pt-2">
             {crmPipelineStages.map((stage, i) => (
@@ -264,31 +311,21 @@ export function CrmDashboard() {
                 >
                   <span
                     className="size-1.5 rounded-full"
-                    style={{
-                      backgroundColor: [
-                        CRM_CHART_COLORS.sky,
-                        CRM_CHART_COLORS.skyDark,
-                        CRM_CHART_COLORS.teal,
-                        CRM_CHART_COLORS.emerald,
-                        CRM_CHART_COLORS.slate,
-                      ][i],
-                    }}
+                    style={{ backgroundColor: STAGE_COLORS[i % STAGE_COLORS.length] }}
                   />
                   {stage.title}
                 </Link>
               </li>
             ))}
           </ol>
-        </section>
+        </CrmSection>
 
-        <section className="rounded-xl border border-border/80 bg-card p-4 shadow-sm">
-          <div className="mb-1 flex items-center justify-between gap-2">
-            <div>
-              <h2 className="text-sm font-medium tracking-tight">Stage mix</h2>
-              <p className="text-[11px] text-muted-foreground">All opportunities</p>
-            </div>
-            <Badge variant="secondary">Share</Badge>
-          </div>
+        <CrmSection
+          title="Stage mix"
+          subtitle="All opportunities"
+          icon={PieChart}
+          badge={<Badge variant="secondary">Share</Badge>}
+        >
           <CrmStageDonutChart data={stageDonut} loading={loading} />
           <ul className="mt-1 grid grid-cols-2 gap-x-3 gap-y-1 border-t border-border/60 pt-2">
             {STAGE_DEFS.map((s, i) => {
@@ -299,54 +336,43 @@ export function CrmDashboard() {
                   <span className="flex min-w-0 items-center gap-1.5 truncate text-muted-foreground">
                     <span
                       className="size-1.5 shrink-0 rounded-full"
-                      style={{
-                        backgroundColor: [
-                          CRM_CHART_COLORS.sky,
-                          CRM_CHART_COLORS.skyDark,
-                          CRM_CHART_COLORS.teal,
-                          CRM_CHART_COLORS.emerald,
-                          CRM_CHART_COLORS.slate,
-                        ][i],
-                      }}
+                      style={{ backgroundColor: STAGE_COLORS[i % STAGE_COLORS.length] }}
                     />
                     {s.label}
                   </span>
-                  <span className="font-mono tabular-nums text-foreground">{loading ? "—" : count}</span>
+                  <span className="font-medium tabular-nums text-foreground">
+                    {loading ? "—" : count}
+                  </span>
                 </li>
               );
             })}
           </ul>
-        </section>
+        </CrmSection>
 
-        <section className="rounded-xl border border-border/80 bg-card p-4 shadow-sm">
-          <div className="mb-1 flex items-center justify-between gap-2">
-            <div>
-              <h2 className="text-sm font-medium tracking-tight">Pipeline value</h2>
-              <p className="text-[11px] text-muted-foreground">Expected revenue by stage</p>
-            </div>
-            <Badge variant="secondary">INR</Badge>
-          </div>
+        <CrmSection
+          title="Pipeline value"
+          subtitle="Expected revenue by stage"
+          icon={Target}
+          badge={<Badge variant="secondary">INR</Badge>}
+        >
           <CrmRevenueBarChart data={revenueByStage} loading={loading} formatValue={formatInr} />
-        </section>
+        </CrmSection>
       </div>
 
-      {/* Tables */}
       <div className="grid gap-3 xl:grid-cols-2">
-        <div className="overflow-hidden rounded-xl border border-border/80 bg-card shadow-sm">
+        <CrmListPanel>
           <div className="flex items-center justify-between gap-2 border-b border-border/70 px-4 py-3">
-            <div>
-              <h2 className="text-sm font-medium tracking-tight">Recent leads</h2>
-              <p className="text-[11px] text-muted-foreground">Latest prospect activity</p>
+            <div className="flex items-center gap-2.5">
+              <CrmIconBadge icon={UserPlus} />
+              <div>
+                <h2 className="text-sm font-medium tracking-tight">Recent leads</h2>
+                <p className="text-[11px] text-muted-foreground">Latest prospect activity</p>
+              </div>
             </div>
-            <Link
-              href="/crm/leads"
-              className="cursor-pointer text-xs font-medium text-primary transition-opacity duration-200 hover:opacity-80"
-            >
-              View all
-            </Link>
+            <CrmViewAllLink href="/crm/leads" />
           </div>
           <div className="erp-scroll overflow-x-auto">
-            <table className="w-full min-w-[440px] text-left text-sm">
+            <table className="w-full min-w-110 text-left text-sm">
               <thead>
                 <tr className="border-b border-border/70 bg-muted/40 text-[11px] tracking-wide text-muted-foreground uppercase">
                   <th className="px-4 py-2.5 font-medium">Lead</th>
@@ -356,11 +382,20 @@ export function CrmDashboard() {
               </thead>
               <tbody>
                 {loading ? (
-                  <tr>
-                    <td colSpan={3} className="px-4 py-10 text-center text-muted-foreground">
-                      Loading…
-                    </td>
-                  </tr>
+                  Array.from({ length: 5 }).map((_, i) => (
+                    <tr key={i} className="border-b border-border/50 last:border-0">
+                      <td className="px-4 py-3">
+                        <div className="h-3.5 w-32 animate-pulse rounded bg-muted" />
+                        <div className="mt-1.5 h-2.5 w-16 animate-pulse rounded bg-muted/70" />
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="h-3.5 w-24 animate-pulse rounded bg-muted" />
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="h-5 w-16 animate-pulse rounded-full bg-muted" />
+                      </td>
+                    </tr>
+                  ))
                 ) : recent.length === 0 ? (
                   <tr>
                     <td colSpan={3} className="px-4 py-10 text-center text-muted-foreground">
@@ -373,7 +408,7 @@ export function CrmDashboard() {
                       key={String(row.id ?? idx)}
                       className="border-b border-border/50 transition-colors duration-150 last:border-0 hover:bg-accent/30"
                     >
-                      <td className="max-w-[200px] truncate px-4 py-2.5">
+                      <td className="max-w-50 truncate px-4 py-2.5">
                         <Link
                           href={`/crm/leads/${String(row.id ?? "")}`}
                           className={cn(
@@ -401,24 +436,30 @@ export function CrmDashboard() {
               </tbody>
             </table>
           </div>
-        </div>
+        </CrmListPanel>
 
-        <div className="overflow-hidden rounded-xl border border-border/80 bg-card shadow-sm">
+        <CrmListPanel>
           <div className="flex items-center justify-between gap-2 border-b border-border/70 px-4 py-3">
-            <div>
-              <h2 className="text-sm font-medium tracking-tight">Top opportunities</h2>
-              <p className="text-[11px] text-muted-foreground">Highest expected revenue</p>
+            <div className="flex items-center gap-2.5">
+              <CrmIconBadge icon={Handshake} />
+              <div>
+                <h2 className="text-sm font-medium tracking-tight">Top opportunities</h2>
+                <p className="text-[11px] text-muted-foreground">Highest expected revenue</p>
+              </div>
             </div>
-            <Link
-              href="/crm/opportunities"
-              className="cursor-pointer text-xs font-medium text-primary transition-opacity duration-200 hover:opacity-80"
-            >
-              View all
-            </Link>
+            <CrmViewAllLink href="/crm/opportunities" />
           </div>
           <ul className="divide-y divide-border/60">
             {loading ? (
-              <li className="px-4 py-8 text-center text-sm text-muted-foreground">Loading…</li>
+              Array.from({ length: 5 }).map((_, i) => (
+                <li key={i} className="px-4 py-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="h-3.5 w-40 animate-pulse rounded bg-muted" />
+                    <div className="h-3.5 w-16 animate-pulse rounded bg-muted" />
+                  </div>
+                  <div className="mt-2 h-2.5 w-28 animate-pulse rounded bg-muted/70" />
+                </li>
+              ))
             ) : oppWatch.length === 0 ? (
               <li className="px-4 py-8 text-center text-sm text-muted-foreground">
                 No open opportunities.
@@ -439,7 +480,7 @@ export function CrmDashboard() {
                     >
                       {String(row.opportunity_name ?? row.opportunity_code ?? "—")}
                     </Link>
-                    <span className="shrink-0 font-mono text-xs tabular-nums text-foreground">
+                    <span className="shrink-0 text-xs font-semibold tabular-nums text-foreground">
                       {formatInr(asNumber(row.expected_revenue))}
                     </span>
                   </div>
@@ -455,69 +496,32 @@ export function CrmDashboard() {
               ))
             )}
           </ul>
-        </div>
+        </CrmListPanel>
       </div>
 
-      {/* Activity strip */}
       <div className="grid gap-2.5 sm:grid-cols-3">
-        <div className="flex items-center gap-3 rounded-xl border border-border/80 bg-card px-4 py-3 shadow-sm">
-          <span className="flex size-9 items-center justify-center rounded-lg bg-sky-50 text-sky-800">
-            <CalendarDays className="size-4" />
-          </span>
-          <div className="min-w-0">
-            <p className="text-[11px] font-medium tracking-wide text-muted-foreground uppercase">
-              Meetings
-            </p>
-            <p className="font-mono text-lg font-medium tabular-nums">
-              {loading ? "—" : data?.meetings.length ?? 0}
-            </p>
-          </div>
-          <Link
-            href="/crm/meetings"
-            className="ml-auto cursor-pointer text-xs font-medium text-primary hover:opacity-80"
-          >
-            Open
-          </Link>
-        </div>
-        <div className="flex items-center gap-3 rounded-xl border border-border/80 bg-card px-4 py-3 shadow-sm">
-          <span className="flex size-9 items-center justify-center rounded-lg bg-amber-50 text-amber-900">
-            <ClipboardList className="size-4" />
-          </span>
-          <div className="min-w-0">
-            <p className="text-[11px] font-medium tracking-wide text-muted-foreground uppercase">
-              Follow-ups
-            </p>
-            <p className="font-mono text-lg font-medium tabular-nums">
-              {loading ? "—" : data?.followups.length ?? 0}
-            </p>
-          </div>
-          <Link
-            href="/crm/customer-followups"
-            className="ml-auto cursor-pointer text-xs font-medium text-primary hover:opacity-80"
-          >
-            Open
-          </Link>
-        </div>
-        <div className="flex items-center gap-3 rounded-xl border border-border/80 bg-card px-4 py-3 shadow-sm">
-          <span className="flex size-9 items-center justify-center rounded-lg bg-emerald-50 text-emerald-800">
-            <Target className="size-4" />
-          </span>
-          <div className="min-w-0">
-            <p className="text-[11px] font-medium tracking-wide text-muted-foreground uppercase">
-              Campaigns active
-            </p>
-            <p className="font-mono text-lg font-medium tabular-nums">
-              {loading ? "—" : countByStatus(data?.campaigns ?? [], ["active"])}
-            </p>
-          </div>
-          <Link
-            href="/crm/campaigns"
-            className="ml-auto cursor-pointer text-xs font-medium text-primary hover:opacity-80"
-          >
-            Open
-          </Link>
-        </div>
+        <CrmActivityTile
+          label="Meetings"
+          value={loading ? "—" : String(data?.meetings.length ?? 0)}
+          icon={CalendarDays}
+          tint="bg-sky-50 text-sky-800"
+          href="/crm/meetings"
+        />
+        <CrmActivityTile
+          label="Follow-ups"
+          value={loading ? "—" : String(data?.followups.length ?? 0)}
+          icon={ClipboardList}
+          tint="bg-amber-50 text-amber-900"
+          href="/crm/customer-followups"
+        />
+        <CrmActivityTile
+          label="Campaigns active"
+          value={loading ? "—" : String(countByStatus(data?.campaigns ?? [], ["active"]))}
+          icon={LayoutGrid}
+          tint="bg-emerald-50 text-emerald-800"
+          href="/crm/campaigns"
+        />
       </div>
-    </div>
+    </CrmPage>
   );
 }

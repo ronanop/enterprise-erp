@@ -641,6 +641,7 @@ from modules.crm.routers.blueprint import blueprint_router  # noqa: E402,F401
 from modules.crm.routers.companies import companies_router  # noqa: E402,F401
 from modules.crm.routers.contacts import contacts_router  # noqa: E402,F401
 from modules.crm.routers.my_jobs import my_jobs_router  # noqa: E402,F401
+from modules.crm.routers.oems import oems_router  # noqa: E402,F401
 from modules.crm.routers.ovf import ovf_router  # noqa: E402,F401
 from modules.crm.routers.products import products_router  # noqa: E402,F401
 from modules.crm.routers.sales_quotes import quotes_router  # noqa: E402,F401

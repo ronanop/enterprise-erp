@@ -47,7 +47,7 @@ class CrmLead(Base, *CrmTransactionMixin):
     last_name: Mapped[str | None] = mapped_column(String(100), nullable=True)
     company_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
     email: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    mobile: Mapped[str] = mapped_column(String(30), nullable=False)
+    mobile: Mapped[str] = mapped_column(String(50), nullable=False)
     lead_source_id: Mapped[UUID] = mapped_column(
         PG_UUID(as_uuid=True),
         ForeignKey("crm.crm_lead_source.id", ondelete="RESTRICT"),

@@ -44,16 +44,21 @@ const ACTION_CONFIG: Record<string, ActionConfig> = {
   },
   attach_boq: {
     label: "Attach BOQ",
-    fields: [{ key: "file_name", label: "BOQ file", type: "file", required: true }],
+    fields: [{ key: "file_name", label: "BOQ files", type: "file", required: true }],
   },
   send_boq_approval: {
-    label: "Send BOQ / SOW for Approval",
+    label: "Send BOQ for Approval",
     fields: [REMARK_FIELD],
     description: "Routes the attached BOQ or SOW to the Pre-sales team via My Jobs.",
   },
   attach_sow: {
     label: "Attach SOW",
-    fields: [{ key: "file_name", label: "SOW file", type: "file", required: true }],
+    fields: [{ key: "file_name", label: "SOW files", type: "file", required: true }],
+  },
+  send_sow_approval: {
+    label: "Send SOW for Approval",
+    fields: [REMARK_FIELD],
+    description: "Routes the attached SOW to the Pre-sales team via My Jobs.",
   },
   skip_sow: { label: "Skip SOW", fields: [] },
   deal_reg: {
@@ -89,11 +94,11 @@ const ACTION_CONFIG: Record<string, ActionConfig> = {
   },
   send_to_customer: {
     label: "Send to Customer",
-    fields: [{ key: "valid_until", label: "Valid until", type: "date" }],
+    fields: [],
   },
   negotiate: { label: "Move to Negotiation", fields: [REMARK_FIELD_ALT] },
   follow_up: { label: "Move to Follow-up", fields: [REMARK_FIELD_ALT] },
-  accept: { label: "Mark Accepted", fields: [REMARK_FIELD_ALT] },
+  accept: { label: "Quote Accepted", fields: [REMARK_FIELD_ALT] },
   approve: { label: "Approve", fields: [REMARK_FIELD_ALT] },
   reject: {
     label: "Reject",
@@ -132,6 +137,7 @@ export function BlueprintActions({
   const [activeAction, setActiveAction] = useState<string | null>(null);
   const [values, setValues] = useState<Record<string, string>>({});
   const [file, setFile] = useState<File | null>(null);
+  const [files, setFiles] = useState<File[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -158,6 +164,7 @@ export function BlueprintActions({
       ),
     );
     setFile(null);
+    setFiles([]);
     setError(null);
   }
 
@@ -166,6 +173,7 @@ export function BlueprintActions({
     setActiveAction(null);
     setValues({});
     setFile(null);
+    setFiles([]);
     if (fileInputRef.current) fileInputRef.current.value = "";
     setError(null);
   }
@@ -173,38 +181,56 @@ export function BlueprintActions({
   async function confirm() {
     if (!activeAction) return;
     const config = resolveConfig(activeAction);
+    const isMultiFile =
+      activeAction === "attach_boq" ||
+      activeAction === "attach_sow" ||
+      activeAction === "attach_oem_quote" ||
+      activeAction === "attach_po";
     for (const field of config.fields) {
       if (field.required && field.type !== "file" && !values[field.key]?.trim()) {
         setError(`${field.label} is required`);
         return;
       }
-      if (field.required && field.type === "file" && !file) {
-        setError(`${field.label} is required`);
-        return;
+      if (field.required && field.type === "file") {
+        if (isMultiFile && files.length === 0) {
+          setError(`${field.label} is required`);
+          return;
+        }
+        if (!isMultiFile && !file) {
+          setError(`${field.label} is required`);
+          return;
+        }
       }
     }
 
     setBusy(true);
     setError(null);
     try {
-      const payload: BlueprintActionPayload = {};
+      const payloadBase: BlueprintActionPayload = {};
       for (const field of config.fields) {
         if (field.type === "file") continue;
         const raw = values[field.key];
         if (!raw) continue;
-        if (field.key === "deal_won_amount") payload.deal_won_amount = Number(raw);
-        else if (field.key === "valid_until") payload.valid_until = raw;
-        else (payload as Record<string, string>)[field.key] = raw;
+        if (field.key === "deal_won_amount") payloadBase.deal_won_amount = Number(raw);
+        else if (field.key === "valid_until") payloadBase.valid_until = raw;
+        else (payloadBase as Record<string, string>)[field.key] = raw;
       }
       if (activeAction === "lost" && values.reason) {
-        payload.remark = values.reason;
+        payloadBase.remark = values.reason;
       }
-      if (file) {
-        payload.file_name = file.name;
-        payload.content_type = file.type || "application/octet-stream";
-        payload.content_base64 = await fileToBase64(file);
+      const uploadList = isMultiFile ? files : file ? [file] : [];
+      if (uploadList.length > 0) {
+        for (const upload of uploadList) {
+          await onAction(activeAction, {
+            ...payloadBase,
+            file_name: upload.name,
+            content_type: upload.type || "application/octet-stream",
+            content_base64: await fileToBase64(upload),
+          });
+        }
+      } else {
+        await onAction(activeAction, payloadBase);
       }
-      await onAction(activeAction, payload);
       close();
     } catch (err) {
       setError(err instanceof ApiClientError ? err.message : `Failed to ${activeAction}`);
@@ -214,6 +240,17 @@ export function BlueprintActions({
   }
 
   const activeConfig = activeAction ? resolveConfig(activeAction) : null;
+  const orderedActions = [...visibleActions].sort((a, b) => {
+    const rank = (action: string) => {
+      if (action === "attach_sow") return 0;
+      if (action === "attach_boq") return 1;
+      if (action === "deal_reg") return 2;
+      if (action === "lost") return 3;
+      if (action === "send_sow_approval") return 4;
+      return 10;
+    };
+    return rank(a) - rank(b);
+  });
 
   return (
     <div className="space-y-2">
@@ -221,11 +258,11 @@ export function BlueprintActions({
         <span className="text-[11px] font-medium tracking-wide text-muted-foreground uppercase">
           Blueprint actions
         </span>
-        {visibleActions.map((action, index) => {
+        {orderedActions.map((action, index) => {
           const config = resolveConfig(action);
           return (
             <Fragment key={action}>
-              {action === "attach_sow" && visibleActions[index - 1] === "attach_boq" ? (
+              {action === "attach_boq" && orderedActions[index - 1] === "attach_sow" ? (
                 <span className="text-xs font-medium text-muted-foreground" aria-hidden="true">
                   or
                 </span>
@@ -268,26 +305,65 @@ export function BlueprintActions({
                     onChange={(e) => setValues((v) => ({ ...v, [field.key]: e.target.value }))}
                   />
                 ) : field.type === "file" ? (
-                  <div className="flex min-w-0 flex-wrap items-center gap-2">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      className="cursor-pointer"
-                      onClick={() => fileInputRef.current?.click()}
-                    >
-                      <Paperclip className="size-3.5" />
-                      Choose file
-                    </Button>
-                    <input
-                      ref={fileInputRef}
-                      type="file"
-                      className="sr-only"
-                      onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-                    />
-                    <span className="min-w-0 max-w-full truncate text-xs text-muted-foreground">
-                      {file?.name ?? "No file selected"}
-                    </span>
+                  <div className="flex min-w-0 flex-col gap-1.5">
+                    <div className="flex min-w-0 flex-wrap items-center gap-2">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="cursor-pointer"
+                        onClick={() => fileInputRef.current?.click()}
+                      >
+                        <Paperclip className="size-3.5" />
+                        Choose file
+                        {activeAction === "attach_boq" ||
+                        activeAction === "attach_sow" ||
+                        activeAction === "attach_oem_quote" ||
+                        activeAction === "attach_po"
+                          ? "s"
+                          : ""}
+                      </Button>
+                      <input
+                        ref={fileInputRef}
+                        type="file"
+                        multiple={
+                          activeAction === "attach_boq" ||
+                          activeAction === "attach_sow" ||
+                          activeAction === "attach_oem_quote" ||
+                          activeAction === "attach_po"
+                        }
+                        className="sr-only"
+                        onChange={(e) => {
+                          const selected = Array.from(e.target.files ?? []);
+                          if (
+                            activeAction === "attach_boq" ||
+                            activeAction === "attach_sow" ||
+                            activeAction === "attach_oem_quote" ||
+                            activeAction === "attach_po"
+                          ) {
+                            setFiles(selected);
+                            setFile(selected[0] ?? null);
+                          } else {
+                            setFile(selected[0] ?? null);
+                            setFiles(selected[0] ? [selected[0]] : []);
+                          }
+                        }}
+                      />
+                      <span className="min-w-0 max-w-full truncate text-xs text-muted-foreground">
+                        {files.length > 1
+                          ? `${files.length} files selected`
+                          : file?.name ?? "No file selected"}
+                      </span>
+                    </div>
+                    {files.length > 1 ? (
+                      <ul className="space-y-0.5 text-[11px] text-muted-foreground">
+                        {files.map((f) => (
+                          <li key={f.name} className="truncate">
+                            {f.name}
+                          </li>
+                        ))}
+                      </ul>
+                    ) : null}
                   </div>
                 ) : (
                   <Input

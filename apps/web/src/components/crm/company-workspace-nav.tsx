@@ -32,7 +32,7 @@ import {
 } from "@/services/sales-crm-service";
 import { setCrmOpportunityContext, setCrmSidebarFocus } from "@/lib/crm-sidebar-focus";
 
-type QuickCreateKind = "task" | "followup" | "lead" | "meeting" | "attachment";
+type QuickCreateKind = "task" | "followup" | "lead" | "meeting" | "attachment" | "kyc";
 
 type NavItem = {
   title: string;
@@ -70,7 +70,7 @@ export const COMPANY_WORKSPACE_NAV: readonly NavItem[] = [
   { title: "Products", segment: "products" },
   { title: "Meetings", segment: "meetings", companyOnly: true, quickCreate: "meeting" },
   { title: "Customer Follow Ups", segment: "customer-followups", quickCreate: "followup" },
-  { title: "KYC - Account Mapping", segment: "kyc-account-mapping", companyOnly: true },
+  { title: "KYC - Account Mapping", segment: "kyc-account-mapping", companyOnly: true, quickCreate: "kyc" },
   { title: "OEM", segment: "oem" },
   { title: "Distributor", segment: "distributors" },
   { title: "BOQ", segment: "boq" },
@@ -227,8 +227,9 @@ export function CompanyWorkspaceNav({
   function canQuickCreate(kind: QuickCreateKind | undefined): boolean {
     if (!kind) return false;
     if (kind === "task" || kind === "attachment") return isOpportunityScope;
-    if (kind === "lead" || kind === "meeting") return isCompanyScope;
-    if (kind === "followup") return isCompanyScope || isOpportunityScope;
+    if (kind === "lead" || kind === "meeting" || kind === "kyc") return isCompanyScope;
+    // Company sidebar: no hover "+" — create from the follow-ups page / opportunity only.
+    if (kind === "followup") return isOpportunityScope;
     return false;
   }
 
@@ -305,6 +306,10 @@ export function CompanyWorkspaceNav({
     }
     if (kind === "meeting") {
       setMeetingOpen(true);
+      return;
+    }
+    if (kind === "kyc") {
+      router.push("/crm/companies/new");
       return;
     }
     if (kind === "lead") {
@@ -428,7 +433,7 @@ export function CompanyWorkspaceNav({
                       <span className="relative z-10 mr-1 flex size-5 shrink-0 items-center justify-center">
                         <span
                           className={cn(
-                            "pointer-events-none font-mono text-[10px] tabular-nums transition-opacity duration-150",
+                            "pointer-events-none text-[11px] font-extrabold tabular-nums transition-opacity duration-150",
                             showQuickCreate && "group-hover/nav:opacity-0",
                             active
                               ? "text-foreground"

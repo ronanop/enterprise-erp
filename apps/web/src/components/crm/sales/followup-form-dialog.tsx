@@ -8,6 +8,10 @@ import {
   FinanceSelect,
   FinanceTextarea,
 } from "@/components/finance/journals/finance-form-field";
+import {
+  RequiredFieldsDialog,
+  missingRequiredMessage,
+} from "@/components/crm/sales/required-fields-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ApiClientError } from "@/services/api-client";
@@ -92,6 +96,8 @@ export function FollowupFormDialog({
   const [form, setForm] = useState<FormState>(() => emptyForm());
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [mandateOpen, setMandateOpen] = useState(false);
+  const [mandateMessage, setMandateMessage] = useState("");
 
   useEffect(() => {
     if (!open) return;
@@ -126,14 +132,15 @@ export function FollowupFormDialog({
   if (!open) return null;
 
   async function onSubmit() {
-    if (
-      !form.branch_id ||
-      !form.customer_name.trim() ||
-      !form.followup_date ||
-      !form.followup_time ||
-      !form.owner_employee_id
-    ) {
-      setError("Customer name, date, time, and team member are required.");
+    const missing: string[] = [];
+    if (!form.customer_name.trim()) missing.push("Customer Name");
+    if (!form.followup_date) missing.push("Date");
+    if (!form.followup_time) missing.push("Time");
+    if (!form.owner_employee_id) missing.push("Team Member");
+    if (!form.branch_id) missing.push("Branch");
+    if (missing.length > 0) {
+      setMandateMessage(missingRequiredMessage(missing));
+      setMandateOpen(true);
       return;
     }
     setSaving(true);
@@ -279,6 +286,11 @@ export function FollowupFormDialog({
           </Button>
         </div>
       </div>
+      <RequiredFieldsDialog
+        open={mandateOpen}
+        message={mandateMessage}
+        onClose={() => setMandateOpen(false)}
+      />
     </div>
   );
 }

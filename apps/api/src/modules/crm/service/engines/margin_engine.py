@@ -67,20 +67,27 @@ def required_threshold_for(line_types: Iterable[str]) -> Decimal:
 def evaluate_quote_margin(
     lines: Iterable[tuple[str, Decimal, Decimal, Decimal]],
 ) -> QuoteMarginResult:
-    """``lines`` is an iterable of (line_type, qty, unit_cost, unit_sell)."""
+    """``lines`` is an iterable of (line_type, qty, unit_cost, unit_sell).
+
+    Avg margin is the arithmetic mean of each line's margin %, not a weighted total.
+    """
     total_sell = Decimal("0")
     total_margin = Decimal("0")
+    line_margins: list[Decimal] = []
     line_types: set[str] = set()
     for line_type, qty, unit_cost, unit_sell in lines:
         line_types.add(line_type)
         result = compute_line_margin(qty, unit_cost, unit_sell)
         total_sell += result.line_total
         total_margin += result.margin_amount
+        line_margins.append(result.margin_pct)
 
-    if total_sell == 0:
+    if not line_margins:
         avg_margin_pct = Decimal("0")
     else:
-        avg_margin_pct = (total_margin / total_sell * Decimal("100")).quantize(Decimal("0.001"))
+        avg_margin_pct = (sum(line_margins, Decimal("0")) / Decimal(len(line_margins))).quantize(
+            Decimal("0.001")
+        )
 
     threshold = required_threshold_for(line_types)
     requires_approval = avg_margin_pct <= threshold

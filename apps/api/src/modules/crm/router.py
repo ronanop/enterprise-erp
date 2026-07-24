@@ -20,6 +20,7 @@ from modules.crm.routers import (
     leads_router,
     meetings_router,
     my_jobs_router,
+    oems_router,
     opportunities_router,
     opportunity_stages_router,
     ovf_router,
@@ -57,6 +58,7 @@ crm_router.include_router(reports_router)
 crm_router.include_router(companies_router)
 crm_router.include_router(contacts_router)
 crm_router.include_router(products_router)
+crm_router.include_router(oems_router)
 crm_router.include_router(quotes_router)
 crm_router.include_router(ovf_router)
 crm_router.include_router(my_jobs_router)

@@ -1,14 +1,16 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
-import { Plus, RefreshCw } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { ClipboardList, Plus, RefreshCw } from "lucide-react";
 
+import { CrmErrorBanner, CrmListPanel, CrmPage } from "@/components/crm/crm-ui";
 import { FollowupFormDialog } from "@/components/crm/sales/followup-form-dialog";
+import { CrmListToolbar } from "@/components/crm/sales/crm-list-toolbar";
+import { CrmSortableTh, sortRows, useTableSort } from "@/components/crm/sales/crm-table-sort";
 import { FinanceStatusBadge } from "@/components/finance/finance-status-badge";
 import { PageHeader } from "@/components/layout/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { ApiClientError } from "@/services/api-client";
 import {
   getCompany,
@@ -18,6 +20,8 @@ import {
   type CrmFollowup,
   type Option,
 } from "@/services/sales-crm-service";
+
+type SortKey = "customer_name" | "date" | "time" | "remark" | "team_member" | "status";
 
 function formatDate(iso: string): string {
   const d = new Date(iso);
@@ -45,6 +49,7 @@ export function FollowupsListPage({
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [dialogOpen, setDialogOpen] = useState(false);
+  const { sortBy, sortDir, onSort } = useTableSort<SortKey>("date", "desc");
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -75,15 +80,30 @@ export function FollowupsListPage({
   const employeeName = (id: string) =>
     employees.find((employee) => employee.id === id)?.label ?? id.slice(0, 8);
 
-  const filtered = rows.filter((row) => {
+  const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (!q) return true;
-    return (
-      (row.customer_name ?? "").toLowerCase().includes(q) ||
-      row.followup_code.toLowerCase().includes(q) ||
-      (row.notes ?? "").toLowerCase().includes(q)
+    if (!q) return rows;
+    return rows.filter(
+      (row) =>
+        (row.customer_name ?? "").toLowerCase().includes(q) ||
+        row.followup_code.toLowerCase().includes(q) ||
+        (row.notes ?? "").toLowerCase().includes(q),
     );
-  });
+  }, [rows, query]);
+
+  const sorted = useMemo(
+    () =>
+      sortRows(filtered, sortBy, sortDir, {
+        customer_name: (r) => r.customer_name,
+        date: (r) => r.followup_at,
+        time: (r) => formatTime(r.followup_at),
+        remark: (r) => r.notes,
+        team_member: (r) => employeeName(r.owner_employee_id),
+        status: (r) => r.status,
+      }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [filtered, sortBy, sortDir, employees],
+  );
 
   const actions = (
     <div className="flex shrink-0 flex-nowrap items-center gap-2">
@@ -108,7 +128,7 @@ export function FollowupsListPage({
   );
 
   return (
-    <div className="space-y-4">
+    <CrmPage>
       {!embedded ? (
         <PageHeader
           title="Customer Follow Ups"
@@ -117,56 +137,49 @@ export function FollowupsListPage({
         />
       ) : null}
 
-      {error ? (
-        <div className="rounded-xl border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive">
-          {error}
-        </div>
-      ) : null}
+      {error ? <CrmErrorBanner>{error}</CrmErrorBanner> : null}
 
-      <div className="overflow-hidden rounded-xl border border-border/80 bg-card shadow-sm">
-        <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2 border-b border-border/70 px-4 py-3">
-          <div className="flex min-w-0 flex-1 items-center gap-2">
-            <h2 className="truncate text-sm font-medium tracking-tight">Follow Ups</h2>
-            <Badge variant="secondary">{filtered.length} shown</Badge>
-          </div>
-          <div className="ml-auto flex shrink-0 flex-nowrap items-center gap-2">
-            {embedded ? actions : null}
-            <Input
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search customer or remark…"
-              className="h-8 w-52 shrink-0 sm:w-56"
-            />
-          </div>
-        </div>
+      <CrmListPanel>
+        <CrmListToolbar
+          title="Follow Ups"
+          subtitle="Customer follow-ups"
+          icon={ClipboardList}
+          count={sorted.length}
+          actions={embedded ? actions : null}
+          search={{
+            value: query,
+            onChange: setQuery,
+            placeholder: "Search customer or remark…",
+          }}
+        />
 
         <div className="erp-scroll overflow-x-auto">
           <table className="w-full min-w-[800px] text-left text-sm">
             <thead>
               <tr className="border-b border-border/70 bg-muted/40 text-[11px] tracking-wide text-muted-foreground uppercase">
-                <th className="px-4 py-2.5">Customer Name</th>
-                <th className="px-4 py-2.5">Date</th>
-                <th className="px-4 py-2.5">Time</th>
-                <th className="px-4 py-2.5">Remark</th>
-                <th className="px-4 py-2.5">Team Member</th>
-                <th className="px-4 py-2.5">Status</th>
+                <CrmSortableTh label="Customer Name" sortKey="customer_name" activeKey={sortBy} dir={sortDir} onSort={onSort} />
+                <CrmSortableTh label="Date" sortKey="date" activeKey={sortBy} dir={sortDir} onSort={onSort} />
+                <CrmSortableTh label="Time" sortKey="time" activeKey={sortBy} dir={sortDir} onSort={onSort} />
+                <CrmSortableTh label="Remark" sortKey="remark" activeKey={sortBy} dir={sortDir} onSort={onSort} />
+                <CrmSortableTh label="Team Member" sortKey="team_member" activeKey={sortBy} dir={sortDir} onSort={onSort} />
+                <CrmSortableTh label="Status" sortKey="status" activeKey={sortBy} dir={sortDir} onSort={onSort} />
               </tr>
             </thead>
             <tbody>
-              {loading && filtered.length === 0 ? (
+              {loading && sorted.length === 0 ? (
                 <tr>
                   <td colSpan={6} className="px-4 py-8 text-center text-muted-foreground">
                     Loading…
                   </td>
                 </tr>
-              ) : filtered.length === 0 ? (
+              ) : sorted.length === 0 ? (
                 <tr>
                   <td colSpan={6} className="px-4 py-8 text-center text-muted-foreground">
                     No follow-ups yet.
                   </td>
                 </tr>
               ) : (
-                filtered.map((row) => (
+                sorted.map((row) => (
                   <tr key={row.id} className="border-b border-border/50 last:border-0 hover:bg-accent/30">
                     <td className="px-4 py-2.5 font-medium">
                       {row.customer_name || "—"}
@@ -193,7 +206,7 @@ export function FollowupsListPage({
             </tbody>
           </table>
         </div>
-      </div>
+      </CrmListPanel>
 
       <FollowupFormDialog
         open={dialogOpen}
@@ -202,6 +215,6 @@ export function FollowupsListPage({
         companyAccount={companyAccount}
         defaultBranchId={companyAccount?.branch_id}
       />
-    </div>
+    </CrmPage>
   );
 }

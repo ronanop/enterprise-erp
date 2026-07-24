@@ -10,7 +10,7 @@ function CrmLayoutInner({ children }: { children: ReactNode }) {
   const standalone = useStandaloneChrome();
 
   return (
-    <div className="grid min-w-0 max-w-full grid-cols-1 gap-4 overflow-x-clip">
+    <div className="grid min-w-0 max-w-full grid-cols-1 gap-5 overflow-x-clip">
       {/* Horizontal strip only when CRM shares the main module sidebar. */}
       {!standalone ? <CrmWorkspaceNav /> : null}
       <div className="min-w-0 max-w-full overflow-x-clip">{children}</div>

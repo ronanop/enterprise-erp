@@ -17,6 +17,7 @@ from modules.crm.models.lead_activity import CrmLeadActivity
 from modules.crm.models.lead_assignment import CrmLeadAssignment
 from modules.crm.models.lead_source import CrmLeadSource
 from modules.crm.models.meeting import CrmMeeting
+from modules.crm.models.oem import CrmOem
 from modules.crm.models.opportunity import CrmOpportunity
 from modules.crm.models.opportunity_stage import CrmOpportunityStage
 from modules.crm.models.ovf import CrmOvf, CrmOvfLine
@@ -45,6 +46,7 @@ __all__ = [
     "CrmLeadAssignment",
     "CrmLeadSource",
     "CrmMeeting",
+    "CrmOem",
     "CrmOpportunity",
     "CrmOpportunityStage",
     "CrmOvf",

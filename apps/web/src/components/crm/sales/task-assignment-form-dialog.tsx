@@ -8,6 +8,10 @@ import {
   FinanceSelect,
   FinanceTextarea,
 } from "@/components/finance/journals/finance-form-field";
+import {
+  RequiredFieldsDialog,
+  missingRequiredMessage,
+} from "@/components/crm/sales/required-fields-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ApiClientError } from "@/services/api-client";
@@ -153,6 +157,8 @@ export function TaskAssignmentFormDialog({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [mandateOpen, setMandateOpen] = useState(false);
+  const [mandateMessage, setMandateMessage] = useState("");
 
   const ownerName = useMemo(
     () => employeeLabel(employees, form.owner_employee_id),
@@ -255,24 +261,17 @@ export function TaskAssignmentFormDialog({
   }
 
   async function onSubmit() {
+    const missing: string[] = [];
     if (!form.account_name.trim() || !form.opportunity_name.trim()) {
-      setError("Account and opportunity names could not be loaded. Close and try again.");
-      return;
+      missing.push("Account / Opportunity");
     }
-    if (!form.subject.trim()) {
-      setError("Subject is required");
-      return;
-    }
-    if (!form.owner_employee_id) {
-      setError("Owner could not be loaded for this opportunity");
-      return;
-    }
-    if (!form.assigned_to_employee_id) {
-      setError("Assign to is required");
-      return;
-    }
-    if (!branchId) {
-      setError("Opportunity branch is missing");
+    if (!form.subject.trim()) missing.push("Subject");
+    if (!form.owner_employee_id) missing.push("Owner");
+    if (!form.assigned_to_employee_id) missing.push("Assign To");
+    if (!branchId) missing.push("Branch");
+    if (missing.length > 0) {
+      setMandateMessage(missingRequiredMessage(missing));
+      setMandateOpen(true);
       return;
     }
 
@@ -501,6 +500,11 @@ export function TaskAssignmentFormDialog({
           </Button>
         </div>
       </div>
+      <RequiredFieldsDialog
+        open={mandateOpen}
+        message={mandateMessage}
+        onClose={() => setMandateOpen(false)}
+      />
     </div>
   );
 }

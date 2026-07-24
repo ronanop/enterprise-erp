@@ -1,11 +1,14 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { Check, RefreshCw, X } from "lucide-react";
+import { Briefcase, Check, RefreshCw, X } from "lucide-react";
 
+import { CrmErrorBanner, CrmListPanel, CrmPage } from "@/components/crm/crm-ui";
 import { ConfirmDialog } from "@/components/finance/journals/confirm-dialog";
 import { FinanceSelect, FinanceTextarea } from "@/components/finance/journals/finance-form-field";
+import { CrmListToolbar } from "@/components/crm/sales/crm-list-toolbar";
+import { CrmSortableTh, sortRows, useTableSort } from "@/components/crm/sales/crm-table-sort";
 import { FinanceStatusBadge } from "@/components/finance/finance-status-badge";
 import { PageHeader } from "@/components/layout/page-header";
 import { Badge } from "@/components/ui/badge";
@@ -24,6 +27,8 @@ import {
 
 const TEAM_ROLES = ["presales", "project", "management", "accounts", "scm"];
 const STATUSES = ["pending", "approved", "rejected", "cancelled"];
+
+type SortKey = "title" | "entity_type" | "team_role" | "priority" | "status" | "due_at";
 
 function formatDate(value: string | null): string {
   if (!value) return "—";
@@ -47,6 +52,7 @@ export function MyJobsPage({
   const [teamRole, setTeamRole] = useState<string>("");
   const [status, setStatus] = useState<string>("pending");
   const [mineOnly, setMineOnly] = useState(false);
+  const { sortBy, sortDir, onSort } = useTableSort<SortKey>("due_at", "asc");
 
   const [decision, setDecision] = useState<{ task: ApprovalTask; outcome: "approved" | "rejected" } | null>(null);
   const [remark, setRemark] = useState("");
@@ -121,8 +127,21 @@ export function MyJobsPage({
     }
   }
 
+  const sorted = useMemo(
+    () =>
+      sortRows(rows, sortBy, sortDir, {
+        title: (t) => t.title,
+        entity_type: (t) => t.entity_type,
+        team_role: (t) => t.team_role,
+        priority: (t) => t.priority,
+        status: (t) => t.status,
+        due_at: (t) => t.due_at,
+      }),
+    [rows, sortBy, sortDir],
+  );
+
   return (
-    <div className="space-y-4">
+    <CrmPage>
       {!embedded ? (
         <PageHeader
           title="My Jobs"
@@ -176,30 +195,26 @@ export function MyJobsPage({
         ) : null}
       </div>
 
-      {error ? (
-        <div className="rounded-xl border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive">
-          {error}
-        </div>
-      ) : null}
+      {error ? <CrmErrorBanner>{error}</CrmErrorBanner> : null}
 
-      <div className="overflow-hidden rounded-xl border border-border/80 bg-card shadow-sm">
-        <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2 border-b border-border/70 px-4 py-3">
-          <div className="flex min-w-0 flex-1 items-center gap-2">
-            <h2 className="truncate text-sm font-medium tracking-tight">Tasks</h2>
-            <Badge variant="secondary">{rows.length} shown</Badge>
-          </div>
-        </div>
+      <CrmListPanel>
+        <CrmListToolbar
+          title="Tasks"
+          subtitle="Approval inbox"
+          icon={Briefcase}
+          count={sorted.length}
+        />
 
         <div className="erp-scroll overflow-x-auto">
           <table className="w-full min-w-[980px] text-left text-sm">
             <thead>
               <tr className="border-b border-border/70 bg-muted/40 text-[11px] tracking-wide text-muted-foreground uppercase">
-                <th className="px-4 py-2.5">Task</th>
-                <th className="px-4 py-2.5">Entity</th>
-                <th className="px-4 py-2.5">Team</th>
-                <th className="px-4 py-2.5">Priority</th>
-                <th className="px-4 py-2.5">Status</th>
-                <th className="px-4 py-2.5">Due</th>
+                <CrmSortableTh label="Task" sortKey="title" activeKey={sortBy} dir={sortDir} onSort={onSort} />
+                <CrmSortableTh label="Entity" sortKey="entity_type" activeKey={sortBy} dir={sortDir} onSort={onSort} />
+                <CrmSortableTh label="Team" sortKey="team_role" activeKey={sortBy} dir={sortDir} onSort={onSort} />
+                <CrmSortableTh label="Priority" sortKey="priority" activeKey={sortBy} dir={sortDir} onSort={onSort} />
+                <CrmSortableTh label="Status" sortKey="status" activeKey={sortBy} dir={sortDir} onSort={onSort} />
+                <CrmSortableTh label="Due" sortKey="due_at" activeKey={sortBy} dir={sortDir} onSort={onSort} />
                 <th className="px-4 py-2.5" />
               </tr>
             </thead>
@@ -210,14 +225,14 @@ export function MyJobsPage({
                     Loading tasks…
                   </td>
                 </tr>
-              ) : rows.length === 0 ? (
+              ) : sorted.length === 0 ? (
                 <tr>
                   <td colSpan={7} className="px-4 py-10 text-center text-muted-foreground">
                     No tasks match these filters.
                   </td>
                 </tr>
               ) : (
-                rows.map((task) => (
+                sorted.map((task) => (
                   <tr key={task.id} className="border-b border-border/50 last:border-0 hover:bg-accent/30">
                     <td className="px-4 py-2.5">
                       <div className="font-medium text-foreground">{task.title}</div>
@@ -275,7 +290,7 @@ export function MyJobsPage({
             </tbody>
           </table>
         </div>
-      </div>
+      </CrmListPanel>
 
       <ConfirmDialog
         open={Boolean(decision)}
@@ -295,6 +310,6 @@ export function MyJobsPage({
           {decideError ? <p className="text-xs text-destructive">{decideError}</p> : null}
         </div>
       </ConfirmDialog>
-    </div>
+    </CrmPage>
   );
 }
