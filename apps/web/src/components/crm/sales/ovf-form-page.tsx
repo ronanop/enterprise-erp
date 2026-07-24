@@ -289,7 +289,7 @@ export function OvfFormPage({ quoteId, ovfId }: { quoteId?: string; ovfId?: stri
   const totalPurchaseValue = sumLineTotals(vendorRows);
   const freightAmount = Number(form.freight) || 0;
   const financeCostPct = Number(form.finance_cost_pct) || 0;
-  const financeCostAmount = (totalSaleValue * financeCostPct) / 100;
+  const financeCostAmount = (totalPurchaseValue * financeCostPct) / 100;
   const totalMarginAmount = totalSaleValue - totalPurchaseValue - freightAmount - financeCostAmount;
   const totalMarginPct = totalSaleValue
     ? (totalMarginAmount / totalSaleValue) * 100
@@ -319,9 +319,8 @@ export function OvfFormPage({ quoteId, ovfId }: { quoteId?: string; ovfId?: stri
       freight: Number(freightAmount.toFixed(2)),
       additional_charges: Number(Number(form.additional_charges || 0).toFixed(2)),
       total_margin_amount: Number(totalMarginAmount.toFixed(2)),
-      total_margin_pct: Number(totalMarginPct.toFixed(3)),
-      finance_cost_pct: Number(financeCostPct.toFixed(3)),
-      approval_status: form.approval_status || "not_required",
+      total_margin_pct: Number(totalMarginPct.toFixed(2)),
+      finance_cost_pct: Number(financeCostPct.toFixed(2)),
     };
   }
 
@@ -497,9 +496,9 @@ export function OvfFormPage({ quoteId, ovfId }: { quoteId?: string; ovfId?: stri
           <FinanceField label="Total Margin in Percentage">
             <Input
               type="number"
-              step="0.001"
+              step="0.01"
               className={`${NUMBER_NO_SPIN} cursor-default bg-muted/50`}
-              value={Number.isFinite(totalMarginPct) ? totalMarginPct.toFixed(3) : "0.000"}
+              value={Number.isFinite(totalMarginPct) ? totalMarginPct.toFixed(2) : "0.00"}
               disabled
               title="Total Margin Amount ÷ Customer Total × 100"
             />
@@ -527,21 +526,27 @@ export function OvfFormPage({ quoteId, ovfId }: { quoteId?: string; ovfId?: stri
             />
           </FinanceField>
           <FinanceField label="Approval Status">
-            <FinanceSelect
-              value={form.approval_status}
-              onChange={(event) => setField("approval_status", event.target.value)}
-            >
-              <option value="not_required">None</option>
-              <option value="pending">Pending</option>
-              <option value="approved">Approved</option>
-              <option value="rejected">Rejected</option>
-            </FinanceSelect>
+            <Input
+              value={
+                (
+                  {
+                    not_required: "None",
+                    pending: "Pending",
+                    approved: "Approved",
+                    rejected: "Rejected",
+                  } as Record<string, string>
+                )[form.approval_status] ?? form.approval_status.replaceAll("_", " ")
+              }
+              disabled
+              aria-readonly="true"
+              className="cursor-default bg-muted/50 capitalize"
+            />
           </FinanceField>
           <FinanceField label="Finance Cost (%)">
             <Input
               type="number"
               min={0}
-              step="0.001"
+              step="0.01"
               className={NUMBER_NO_SPIN}
               value={form.finance_cost_pct}
               onChange={(event) => setField("finance_cost_pct", event.target.value)}

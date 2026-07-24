@@ -414,7 +414,7 @@ class OvfService:
         vendor_total = sum((Decimal(str(ln.line_total)) for ln in lines if ln.side == "vendor"), Decimal("0"))
         freight = Decimal(str(ovf.freight or 0))
         finance_pct = Decimal(str(ovf.finance_cost_pct or 0))
-        finance_amount = (customer_total * finance_pct / Decimal("100")).quantize(Decimal("0.0001"))
+        finance_amount = (vendor_total * finance_pct / Decimal("100")).quantize(Decimal("0.0001"))
         margin_amount = (customer_total - vendor_total - freight - finance_amount).quantize(Decimal("0.0001"))
         margin_pct = (
             (margin_amount / customer_total * Decimal("100")).quantize(Decimal("0.001"))

@@ -253,35 +253,46 @@ export function LeadFormPage({ companyAccountId }: { companyAccountId: string })
       const inheritedSource = sources.find(
         (source) => source.label.trim().toLowerCase() === sourceLabel,
       );
-      setForm((f) => ({
-        ...f,
-        branch_id: companyRow.branch_id,
-        first_name: companyRow.first_name ?? "",
-        last_name: companyRow.last_name ?? "",
-        mobile: companyRow.phone ?? "",
-        email: companyRow.customer_email ?? "",
-        lead_source_id: f.lead_source_id || inheritedSource?.id || "",
-        industry: companyRow.industry,
-        portal_link: f.portal_link || companyRow.website || "",
-        owner_employee_id:
-          f.owner_employee_id ||
-          companyRow.account_owner_id ||
-          companyRow.account_ownership_id ||
-          emps[0]?.id ||
-          "",
-        street: companyRow.billing_street,
-        city: companyRow.billing_city,
-        state: companyRow.billing_state,
-        zip: companyRow.billing_code,
-        country: companyRow.billing_country,
-        // End customer & entity must be entered manually — do not prefill from company.
-        end_customer_name: f.end_customer_name || "",
-        entity_name: f.entity_name || "",
-        entity_email: f.entity_email || "",
-        entity_address: f.entity_address || "",
-        entity_contact: f.entity_contact || "",
-        notes: f.notes || companyRow.description || "",
-      }));
+      setForm((f) => {
+        const billingAddress = [
+          companyRow.billing_street,
+          companyRow.billing_city,
+          companyRow.billing_state,
+          companyRow.billing_code,
+          companyRow.billing_country,
+        ]
+          .filter(Boolean)
+          .join(", ");
+        return {
+          ...f,
+          branch_id: companyRow.branch_id,
+          first_name: companyRow.first_name ?? "",
+          last_name: companyRow.last_name ?? "",
+          mobile: companyRow.phone ?? "",
+          email: companyRow.customer_email ?? "",
+          lead_source_id: f.lead_source_id || inheritedSource?.id || "",
+          industry: companyRow.industry,
+          portal_link: f.portal_link || companyRow.website || "",
+          owner_employee_id:
+            f.owner_employee_id ||
+            companyRow.account_owner_id ||
+            companyRow.account_ownership_id ||
+            emps[0]?.id ||
+            "",
+          street: companyRow.billing_street,
+          city: companyRow.billing_city,
+          state: companyRow.billing_state,
+          zip: companyRow.billing_code,
+          country: companyRow.billing_country,
+          end_customer_name: f.end_customer_name || "",
+          entity_name: companyRow.customer_name || "",
+          entity_email: companyRow.customer_email ?? "",
+          entity_address: billingAddress,
+          entity_contact: companyRow.phone ?? "",
+          entity_gst: f.entity_gst || "",
+          notes: f.notes || companyRow.description || "",
+        };
+      });
     } catch (err) {
       setError(err instanceof ApiClientError ? err.message : "Failed to load company");
     } finally {

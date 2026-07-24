@@ -88,10 +88,16 @@ export function moneyFromQtyPrice(qty: string, unitPrice: string, gstPct: string
   const total = q * p;
   const totalGst = (total * g) / 100;
   return {
-    total: total ? String(total) : "",
-    total_gst: total ? String(totalGst) : "",
-    total_with_gst: total ? String(total + totalGst) : "",
+    total: total ? moneyAsFixed(total) : "",
+    total_gst: total ? moneyAsFixed(totalGst) : "",
+    total_with_gst: total ? moneyAsFixed(total + totalGst) : "",
   };
+}
+
+function moneyAsFixed(value: number | string | null | undefined): string {
+  const n = typeof value === "string" ? Number(value) : value ?? 0;
+  if (!Number.isFinite(n)) return "";
+  return Number(n).toFixed(2);
 }
 
 function qtyAsInt(value: string | number | null | undefined): string {
@@ -113,7 +119,7 @@ export function customerRowsFromOvfLines(lines: OvfLine[]): CustomerChargeRow[] 
     .filter((line) => line.side === "customer_po")
     .map((line) => {
       const qty = qtyAsInt(line.qty);
-      const unitPrice = String(line.unit_price ?? 0);
+      const unitPrice = moneyAsFixed(line.unit_price ?? 0);
       const gstPct = String(GST_PCT);
       const money = moneyFromQtyPrice(qty, unitPrice, gstPct);
       return {
@@ -138,7 +144,7 @@ export function vendorRowsFromOvfLines(lines: OvfLine[]): VendorChargeRow[] {
     .filter((line) => line.side === "vendor")
     .map((line) => {
       const qty = qtyAsInt(line.qty);
-      const unitPrice = String(line.unit_price ?? 0);
+      const unitPrice = moneyAsFixed(line.unit_price ?? 0);
       const gstPct = String(GST_PCT);
       const money = moneyFromQtyPrice(qty, unitPrice, gstPct);
       return {
@@ -162,7 +168,7 @@ export function vendorRowsFromOvfLines(lines: OvfLine[]): VendorChargeRow[] {
 
 export function customerFromQuote(quoteLine: QuoteLine, ovfLine?: OvfLine): CustomerChargeRow {
   const qty = qtyAsInt(quoteLine.qty);
-  const unitPrice = String(ovfLine?.unit_price ?? quoteLine.unit_sell ?? 0);
+  const unitPrice = moneyAsFixed(ovfLine?.unit_price ?? quoteLine.unit_sell ?? 0);
   const gstPct = String(quoteLine.gst_pct || GST_PCT);
   const money = moneyFromQtyPrice(qty, unitPrice, gstPct);
   return {
@@ -183,7 +189,7 @@ export function customerFromQuote(quoteLine: QuoteLine, ovfLine?: OvfLine): Cust
 
 export function vendorFromQuote(quoteLine: QuoteLine, ovfLine?: OvfLine): VendorChargeRow {
   const qty = qtyAsInt(quoteLine.qty);
-  const unitPrice = String(ovfLine?.unit_price ?? quoteLine.unit_cost ?? 0);
+  const unitPrice = moneyAsFixed(ovfLine?.unit_price ?? quoteLine.unit_cost ?? 0);
   const gstPct = String(quoteLine.gst_pct || GST_PCT);
   const money = moneyFromQtyPrice(qty, unitPrice, gstPct);
   return {
@@ -722,7 +728,7 @@ export async function persistOvfOrderLinesAfterCreate(
       side: "customer_po",
       product_name: row.product_name.trim(),
       qty: Math.round(Number(row.qty)) || 1,
-      unit_price: Number(row.unit_price) || 0,
+      unit_price: Number(moneyAsFixed(Number(row.unit_price) || 0)) || 0,
     });
   }
 
@@ -732,7 +738,7 @@ export async function persistOvfOrderLinesAfterCreate(
       side: "vendor",
       product_name: row.vendor_name.trim(),
       qty: Math.round(Number(row.qty)) || 1,
-      unit_price: Number(row.unit_price) || 0,
+      unit_price: Number(moneyAsFixed(Number(row.unit_price) || 0)) || 0,
     });
   }
 
@@ -798,7 +804,7 @@ export async function persistOvfOrderLinesOnUpdate(
     const payload = {
       product_name: row.product_name.trim(),
       qty: Math.round(Number(row.qty)) || 1,
-      unit_price: Number(row.unit_price) || 0,
+      unit_price: Number(moneyAsFixed(Number(row.unit_price) || 0)) || 0,
     };
     if (row.serverId) {
       await deps.updateOvfLine(row.serverId, payload);
@@ -812,7 +818,7 @@ export async function persistOvfOrderLinesOnUpdate(
     const payload = {
       product_name: row.vendor_name.trim(),
       qty: Math.round(Number(row.qty)) || 1,
-      unit_price: Number(row.unit_price) || 0,
+      unit_price: Number(moneyAsFixed(Number(row.unit_price) || 0)) || 0,
     };
     if (row.serverId) {
       await deps.updateOvfLine(row.serverId, payload);
