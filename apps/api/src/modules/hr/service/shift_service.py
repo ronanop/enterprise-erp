@@ -66,6 +66,20 @@ class ShiftAssignmentService:
             raise NotFoundException("Shift assignment not found")
         return row
 
+    def update(self, ctx: TenantContext, row_id: UUID, **fields):
+        self.get(ctx, row_id)
+        if "shift_id" in fields and fields["shift_id"] is not None:
+            if self._shifts.get(ctx, fields["shift_id"]) is None:
+                raise NotFoundException("Shift not found")
+        if "employee_id" in fields and fields["employee_id"] is not None:
+            self._master.get_employee(ctx, fields["employee_id"])
+        if "branch_id" in fields and fields["branch_id"] is not None:
+            self._scope.validate_branch_access(ctx, fields["branch_id"])
+        row = self._repo.update(ctx, row_id, **fields)
+        if row is None:
+            raise NotFoundException("Shift assignment not found")
+        return row
+
     def create(
         self,
         ctx: TenantContext,
@@ -106,3 +120,7 @@ class ShiftAssignmentService:
         row = self.get(ctx, row_id)
         self._engine.approve(row)
         return self._repo.update(ctx, row_id, status=row.status)
+
+    def delete(self, ctx: TenantContext, row_id: UUID) -> None:
+        if not self._repo.soft_delete(ctx, row_id):
+            raise NotFoundException("Shift assignment not found")

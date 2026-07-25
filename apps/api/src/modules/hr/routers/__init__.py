@@ -6,12 +6,12 @@ from uuid import UUID
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
-from database.session import get_db
 from modules.foundation.dependencies import require_permission
 from modules.foundation.domain.value_objects import TenantContext
 from modules.hr.dependencies import (
     PaginationParams,
     extract_update_fields,
+    get_db,
     get_pagination,
     paginate,
 )
@@ -58,6 +58,7 @@ from modules.hr.schemas import (
     SeparationResponse,
     ShiftAssignmentCreate,
     ShiftAssignmentResponse,
+    ShiftAssignmentUpdate,
     ShiftCreate,
     ShiftResponse,
     ShiftUpdate,
@@ -277,6 +278,15 @@ def list_sfa(
     return APIResponse(message="OK", data=paginate(ShiftAssignmentService(db).list(ctx, company_id), pagination))
 
 
+@shift_assignments_router.get("/{row_id}", response_model=APIResponse[ShiftAssignmentResponse])
+def get_sfa(
+    row_id: UUID,
+    ctx: Annotated[TenantContext, Depends(require_permission("hr.shift_assignment:read"))],
+    db: Annotated[Session, Depends(get_db)],
+):
+    return APIResponse(message="OK", data=ShiftAssignmentService(db).get(ctx, row_id))
+
+
 @shift_assignments_router.post("", response_model=APIResponse[ShiftAssignmentResponse])
 def create_sfa(
     body: ShiftAssignmentCreate,
@@ -284,6 +294,19 @@ def create_sfa(
     db: Annotated[Session, Depends(get_db)],
 ):
     return APIResponse(message="OK", data=ShiftAssignmentService(db).create(ctx, **body.model_dump()))
+
+
+@shift_assignments_router.patch("/{row_id}", response_model=APIResponse[ShiftAssignmentResponse])
+def update_sfa(
+    row_id: UUID,
+    body: ShiftAssignmentUpdate,
+    ctx: Annotated[TenantContext, Depends(require_permission("hr.shift_assignment:create"))],
+    db: Annotated[Session, Depends(get_db)],
+):
+    return APIResponse(
+        message="OK",
+        data=ShiftAssignmentService(db).update(ctx, row_id, **extract_update_fields(body)),
+    )
 
 
 @shift_assignments_router.post("/{row_id}/submit", response_model=APIResponse[ShiftAssignmentResponse])
@@ -302,6 +325,16 @@ def approve_sfa(
     db: Annotated[Session, Depends(get_db)],
 ):
     return APIResponse(message="OK", data=ShiftAssignmentService(db).approve(ctx, row_id))
+
+
+@shift_assignments_router.delete("/{row_id}", response_model=APIResponse[None])
+def delete_sfa(
+    row_id: UUID,
+    ctx: Annotated[TenantContext, Depends(require_permission("hr.shift_assignment:create"))],
+    db: Annotated[Session, Depends(get_db)],
+):
+    ShiftAssignmentService(db).delete(ctx, row_id)
+    return APIResponse(message="Shift assignment deleted", data=None)
 
 
 @holiday_calendars_router.get("", response_model=APIResponse[list[HolidayCalendarResponse]])
@@ -340,6 +373,25 @@ def publish_holiday(
     db: Annotated[Session, Depends(get_db)],
 ):
     return APIResponse(message="OK", data=HolidayCalendarService(db).publish(ctx, row_id))
+
+
+@holiday_calendars_router.post("/{row_id}/archive", response_model=APIResponse[HolidayCalendarResponse])
+def archive_holiday(
+    row_id: UUID,
+    ctx: Annotated[TenantContext, Depends(require_permission("hr.holiday_calendar:update"))],
+    db: Annotated[Session, Depends(get_db)],
+):
+    return APIResponse(message="OK", data=HolidayCalendarService(db).archive(ctx, row_id))
+
+
+@holiday_calendars_router.delete("/{row_id}", response_model=APIResponse[None])
+def delete_holiday(
+    row_id: UUID,
+    ctx: Annotated[TenantContext, Depends(require_permission("hr.holiday_calendar:update"))],
+    db: Annotated[Session, Depends(get_db)],
+):
+    HolidayCalendarService(db).delete(ctx, row_id)
+    return APIResponse(message="Holiday calendar deleted", data=None)
 
 
 @leave_types_router.get("", response_model=APIResponse[list[LeaveTypeResponse]])

@@ -107,40 +107,75 @@ OPPORTUNITY_NEW_COLUMNS: list[sa.Column] = [
 ]
 
 
+def _existing_columns(table: str, schema: str) -> set[str]:
+    bind = op.get_bind()
+    insp = sa.inspect(bind)
+    return {c["name"] for c in insp.get_columns(table, schema=schema)}
+
+
+def _existing_fks(table: str, schema: str) -> set[str]:
+    bind = op.get_bind()
+    insp = sa.inspect(bind)
+    return {fk.get("name") for fk in insp.get_foreign_keys(table, schema=schema) if fk.get("name")}
+
+
 def upgrade() -> None:
     bind = op.get_bind()
 
     # 1. New standalone / catalog tables first.
+    # crm_company may already exist from 0140 (FK prerequisite for CrmLead).
     CrmCompany.__table__.create(bind=bind, checkfirst=True)
     CrmContact.__table__.create(bind=bind, checkfirst=True)
     CrmProduct.__table__.create(bind=bind, checkfirst=True)
 
-    # 2. Extend existing lead / opportunity tables.
+    # 2. Extend existing lead / opportunity tables (idempotent — columns may
+    # already exist when ORM models include sales-process fields at 0140/0143).
+    lead_cols = _existing_columns("crm_lead", "crm")
     for column in LEAD_NEW_COLUMNS:
-        op.add_column("crm_lead", column.copy(), schema="crm")
-    op.create_foreign_key(
-        "fk_crm_lead_company_account",
-        "crm_lead",
-        "crm_company",
-        ["company_account_id"],
-        ["id"],
-        source_schema="crm",
-        referent_schema="crm",
-        ondelete="RESTRICT",
-    )
+        if column.name not in lead_cols:
+            op.add_column("crm_lead", column.copy(), schema="crm")
+    lead_fks = _existing_fks("crm_lead", "crm")
+    if "fk_crm_lead_company_account" not in lead_fks:
+        # Model-create path may already have attached an unnamed/autogen FK.
+        has_company_fk = any(
+            fk.get("referred_table") == "crm_company"
+            and fk.get("constrained_columns") == ["company_account_id"]
+            for fk in sa.inspect(bind).get_foreign_keys("crm_lead", schema="crm")
+        )
+        if not has_company_fk:
+            op.create_foreign_key(
+                "fk_crm_lead_company_account",
+                "crm_lead",
+                "crm_company",
+                ["company_account_id"],
+                ["id"],
+                source_schema="crm",
+                referent_schema="crm",
+                ondelete="RESTRICT",
+            )
 
+    opp_cols = _existing_columns("crm_opportunity", "crm")
     for column in OPPORTUNITY_NEW_COLUMNS:
-        op.add_column("crm_opportunity", column.copy(), schema="crm")
-    op.create_foreign_key(
-        "fk_crm_opportunity_company_account",
-        "crm_opportunity",
-        "crm_company",
-        ["company_account_id"],
-        ["id"],
-        source_schema="crm",
-        referent_schema="crm",
-        ondelete="RESTRICT",
-    )
+        if column.name not in opp_cols:
+            op.add_column("crm_opportunity", column.copy(), schema="crm")
+    opp_fks = _existing_fks("crm_opportunity", "crm")
+    if "fk_crm_opportunity_company_account" not in opp_fks:
+        has_company_fk = any(
+            fk.get("referred_table") == "crm_company"
+            and fk.get("constrained_columns") == ["company_account_id"]
+            for fk in sa.inspect(bind).get_foreign_keys("crm_opportunity", schema="crm")
+        )
+        if not has_company_fk:
+            op.create_foreign_key(
+                "fk_crm_opportunity_company_account",
+                "crm_opportunity",
+                "crm_company",
+                ["company_account_id"],
+                ["id"],
+                source_schema="crm",
+                referent_schema="crm",
+                ondelete="RESTRICT",
+            )
 
     # 3. Quote / OVF (depend on opportunity + company + contact + product).
     CrmQuote.__table__.create(bind=bind, checkfirst=True)

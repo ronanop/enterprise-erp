@@ -60,7 +60,12 @@ class Settings(BaseSettings):
     @classmethod
     def parse_cors_origins(cls, value: str | list[str]) -> list[str]:
         if isinstance(value, str):
-            return [origin.strip() for origin in value.split(",") if origin.strip()]
+            cleaned = value.strip().removeprefix("[").removesuffix("]")
+            return [
+                origin.strip().strip("\"'")
+                for origin in cleaned.split(",")
+                if origin.strip().strip("\"'")
+            ]
         return value
 
     @property

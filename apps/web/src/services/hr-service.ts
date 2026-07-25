@@ -2,6 +2,12 @@ import { ApiClientError, resourceService } from "@/services/api-client";
 
 export type HrRow = Record<string, unknown>;
 
+export type HrOption = { id: string; label: string };
+
+function asArray(data: unknown): HrRow[] {
+  return normalizeRows(data);
+}
+
 export type HrOverview = {
   designations: HrRow[];
   profiles: HrRow[];
@@ -184,4 +190,96 @@ export async function loadHrOverview(): Promise<HrOverview> {
     statusCodes,
     partial: errors.length > 0,
   };
+}
+
+export async function listHrBranchOptions(): Promise<HrOption[]> {
+  try {
+    const res = await resourceService.list("/branches");
+    return asArray(res.data).map((r) => ({
+      id: String(r.id),
+      label: String(r.branch_name ?? r.name ?? r.branch_code ?? r.id),
+    }));
+  } catch {
+    return [];
+  }
+}
+
+export async function listHrEmployeeOptions(): Promise<HrOption[]> {
+  try {
+    const res = await resourceService.list("/employees");
+    return asArray(res.data).map((r) => ({
+      id: String(r.id),
+      label:
+        `${[r.first_name, r.last_name].filter(Boolean).join(" ")}${
+          r.employee_code ? ` (${r.employee_code})` : ""
+        }`.trim() || String(r.id),
+    }));
+  } catch {
+    return [];
+  }
+}
+
+export async function listLeaveTypeOptions(): Promise<HrOption[]> {
+  try {
+    const res = await resourceService.list("/hr/leave-types");
+    return asArray(res.data).map((r) => ({
+      id: String(r.id),
+      label: String(r.leave_type_name ?? r.leave_type_code ?? r.name ?? r.id),
+    }));
+  } catch {
+    return [];
+  }
+}
+
+export async function listShiftOptions(): Promise<HrOption[]> {
+  try {
+    const res = await resourceService.list("/hr/shifts");
+    return asArray(res.data).map((r) => ({
+      id: String(r.id),
+      label: String(r.shift_name ?? r.shift_code ?? r.name ?? r.id),
+    }));
+  } catch {
+    return [];
+  }
+}
+
+export async function createLeaveRequest(body: {
+  branch_id: string;
+  employee_id: string;
+  leave_type_id: string;
+  start_date: string;
+  end_date: string;
+  days_count: number;
+  reason?: string;
+}) {
+  return resourceService.create("/hr/leave-requests", body);
+}
+
+export async function createAttendance(body: {
+  branch_id: string;
+  employee_id: string;
+  attendance_date: string;
+  attendance_status: string;
+  source?: string;
+  shift_id?: string | null;
+  notes?: string;
+  total_hours?: number | null;
+}) {
+  return resourceService.create("/hr/attendance", {
+    ...body,
+    source: body.source ?? "manual",
+  });
+}
+
+export async function createDesignation(body: {
+  branch_id?: string | null;
+  designation_code: string;
+  designation_name: string;
+  job_level?: string;
+  status?: string;
+}) {
+  return resourceService.create("/hr/designations", {
+    ...body,
+    status: body.status ?? "active",
+  });
 }

@@ -1,0 +1,363 @@
+/**
+ * HR Setup configuration center — section + tab registry (Darwinbox-style).
+ */
+
+import type { LucideIcon } from "lucide-react";
+import {
+  Banknote,
+  Bell,
+  Briefcase,
+  Building2,
+  CalendarDays,
+  Clock3,
+  FileText,
+  FolderTree,
+  GitBranch,
+  Layers,
+  Mail,
+  MapPin,
+  Network,
+  Shield,
+  UserCog,
+  Users,
+  Wallet,
+} from "lucide-react";
+
+export type HrSetupTabId =
+  | "branches"
+  | "departments"
+  | "designations"
+  | "job-levels"
+  | "grades"
+  | "work-locations"
+  | "employment-types"
+  | "reporting"
+  | "document-types"
+  | "leave-policies"
+  | "leave-types"
+  | "holiday-calendar"
+  | "shift-master"
+  | "shift-rotation"
+  | "shift-assignment"
+  | "attendance-rules"
+  | "salary-components"
+  | "bank-master"
+  | "tax-rules"
+  | "pf-esi"
+  | "approval-flows"
+  | "email-templates"
+  | "notification-settings"
+  | "roles-permissions";
+
+export type HrSetupSectionId =
+  | "organization"
+  | "employment"
+  | "leave"
+  | "shift"
+  | "payroll"
+  | "workflow";
+
+export type HrSetupTab = {
+  id: HrSetupTabId;
+  title: string;
+  description: string;
+  /** api = FastAPI resource; local = browser config store; derived = computed list */
+  source: "api" | "local" | "derived";
+  apiPath?: string;
+  codePrefix?: string;
+};
+
+export type HrSetupSection = {
+  id: HrSetupSectionId;
+  title: string;
+  description: string;
+  icon: LucideIcon;
+  tabs: HrSetupTab[];
+};
+
+export const hrSetupSections: HrSetupSection[] = [
+  {
+    id: "organization",
+    title: "Organization",
+    description: "Company structure and job architecture",
+    icon: Building2,
+    tabs: [
+      {
+        id: "branches",
+        title: "Branches",
+        description: "Operating branches and locations",
+        source: "api",
+        apiPath: "/branches",
+        codePrefix: "BR",
+      },
+      {
+        id: "departments",
+        title: "Departments",
+        description: "Department hierarchy",
+        source: "api",
+        apiPath: "/departments",
+        codePrefix: "DEP",
+      },
+      {
+        id: "designations",
+        title: "Designations",
+        description: "Job titles and levels",
+        source: "api",
+        apiPath: "/hr/designations",
+        codePrefix: "DES",
+      },
+      {
+        id: "job-levels",
+        title: "Job Levels",
+        description: "Junior through CXO bands",
+        source: "local",
+        codePrefix: "LVL",
+      },
+      {
+        id: "grades",
+        title: "Grades",
+        description: "Pay grades and salary bands",
+        source: "local",
+        codePrefix: "GRD",
+      },
+      {
+        id: "work-locations",
+        title: "Work Locations",
+        description: "Offices and site addresses",
+        source: "api",
+        apiPath: "/locations",
+        codePrefix: "LOC",
+      },
+    ],
+  },
+  {
+    id: "employment",
+    title: "Employment",
+    description: "Employment taxonomy and documents",
+    icon: Briefcase,
+    tabs: [
+      {
+        id: "employment-types",
+        title: "Employment Types",
+        description: "Permanent, contract, intern…",
+        source: "local",
+        codePrefix: "EMP",
+      },
+      {
+        id: "reporting",
+        title: "Reporting Structure",
+        description: "Managers derived from roles",
+        source: "derived",
+      },
+      {
+        id: "document-types",
+        title: "Document Types",
+        description: "KYC and HR document catalog",
+        source: "local",
+        codePrefix: "DOC",
+      },
+    ],
+  },
+  {
+    id: "leave",
+    title: "Leave Setup",
+    description: "Policies, types, and holidays",
+    icon: CalendarDays,
+    tabs: [
+      {
+        id: "leave-policies",
+        title: "Leave Policies",
+        description: "Accrual and approval rules",
+        source: "local",
+        codePrefix: "LP",
+      },
+      {
+        id: "leave-types",
+        title: "Leave Types",
+        description: "Casual, sick, privilege…",
+        source: "api",
+        apiPath: "/hr/leave-types",
+        codePrefix: "LT",
+      },
+      {
+        id: "holiday-calendar",
+        title: "Holiday Calendar",
+        description: "National and company holidays",
+        source: "api",
+        apiPath: "/hr/holiday-calendars",
+        codePrefix: "HC",
+      },
+    ],
+  },
+  {
+    id: "shift",
+    title: "Shift & Attendance",
+    description: "Shifts, rotations, and rules",
+    icon: Clock3,
+    tabs: [
+      {
+        id: "shift-master",
+        title: "Shift Master",
+        description: "Shift definitions",
+        source: "api",
+        apiPath: "/hr/shifts",
+        codePrefix: "SFT",
+      },
+      {
+        id: "shift-rotation",
+        title: "Shift Rotation",
+        description: "Weekly / monthly cycles",
+        source: "local",
+        codePrefix: "ROT",
+      },
+      {
+        id: "shift-assignment",
+        title: "Shift Assignment",
+        description: "Employee shift mapping",
+        source: "api",
+        apiPath: "/hr/shift-assignments",
+        codePrefix: "SA",
+      },
+      {
+        id: "attendance-rules",
+        title: "Attendance Rules",
+        description: "Grace, OT, and marking rules",
+        source: "local",
+        codePrefix: "AR",
+      },
+    ],
+  },
+  {
+    id: "payroll",
+    title: "Payroll Setup",
+    description: "Compensation configuration",
+    icon: Wallet,
+    tabs: [
+      {
+        id: "salary-components",
+        title: "Salary Components",
+        description: "Earnings and deductions",
+        source: "api",
+        apiPath: "/payroll/salary-components",
+        codePrefix: "SC",
+      },
+      {
+        id: "bank-master",
+        title: "Bank Master",
+        description: "Payroll bank catalog",
+        source: "local",
+        codePrefix: "BNK",
+      },
+      {
+        id: "tax-rules",
+        title: "Tax Rules",
+        description: "Income / professional tax",
+        source: "api",
+        apiPath: "/payroll/tax-configurations",
+        codePrefix: "TAX",
+      },
+      {
+        id: "pf-esi",
+        title: "PF / ESI",
+        description: "Statutory contributions",
+        source: "api",
+        apiPath: "/payroll/statutory-contributions",
+        codePrefix: "STAT",
+      },
+    ],
+  },
+  {
+    id: "workflow",
+    title: "Workflow",
+    description: "Approvals, templates, access",
+    icon: GitBranch,
+    tabs: [
+      {
+        id: "approval-flows",
+        title: "Approval Flows",
+        description: "Workflow definitions",
+        source: "api",
+        apiPath: "/workflows/definitions",
+        codePrefix: "WF",
+      },
+      {
+        id: "email-templates",
+        title: "Email Templates",
+        description: "Transactional email content",
+        source: "api",
+        apiPath: "/notifications/templates",
+        codePrefix: "EML",
+      },
+      {
+        id: "notification-settings",
+        title: "Notification Settings",
+        description: "Email · SMS · Push channels",
+        source: "local",
+        codePrefix: "NTF",
+      },
+      {
+        id: "roles-permissions",
+        title: "Roles & Permissions",
+        description: "HR access control",
+        source: "api",
+        apiPath: "/roles",
+        codePrefix: "ROL",
+      },
+    ],
+  },
+];
+
+export const setupSectionIcons: Record<HrSetupSectionId, LucideIcon> = {
+  organization: Building2,
+  employment: Briefcase,
+  leave: CalendarDays,
+  shift: Clock3,
+  payroll: Wallet,
+  workflow: Network,
+};
+
+export const setupTabIcons: Partial<Record<HrSetupTabId, LucideIcon>> = {
+  branches: Building2,
+  departments: FolderTree,
+  designations: Users,
+  "job-levels": Layers,
+  grades: Layers,
+  "work-locations": MapPin,
+  "employment-types": UserCog,
+  reporting: Users,
+  "document-types": FileText,
+  "leave-policies": Shield,
+  "leave-types": CalendarDays,
+  "holiday-calendar": CalendarDays,
+  "shift-master": Clock3,
+  "shift-rotation": Clock3,
+  "shift-assignment": Clock3,
+  "attendance-rules": Clock3,
+  "salary-components": Wallet,
+  "bank-master": Banknote,
+  "tax-rules": Wallet,
+  "pf-esi": Wallet,
+  "approval-flows": GitBranch,
+  "email-templates": Mail,
+  "notification-settings": Bell,
+  "roles-permissions": Shield,
+};
+
+export function getSetupSection(id: string | null | undefined) {
+  return hrSetupSections.find((s) => s.id === id) ?? hrSetupSections[0];
+}
+
+export function getSetupTab(sectionId: string, tabId: string | null | undefined) {
+  const section = getSetupSection(sectionId);
+  return section.tabs.find((t) => t.id === tabId) ?? section.tabs[0];
+}
+
+export function nextCode(prefix: string, existing: string[]): string {
+  let max = 0;
+  const re = new RegExp(`^${prefix}-(\\d+)$`, "i");
+  for (const code of existing) {
+    const m = code.match(re);
+    if (m) max = Math.max(max, Number(m[1]));
+  }
+  return `${prefix}-${String(max + 1).padStart(3, "0")}`;
+}

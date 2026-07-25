@@ -230,6 +230,16 @@ class ShiftAssignmentCreate(BaseModel):
     effective_to: date | None = None
 
 
+class ShiftAssignmentUpdate(BaseModel):
+    branch_id: UUID | None = None
+    employee_id: UUID | None = None
+    shift_id: UUID | None = None
+    effective_from: date | None = None
+    effective_to: date | None = None
+    status: str | None = None
+    version: int | None = None
+
+
 class ShiftAssignmentResponse(OrmModel):
     id: UUID
     company_id: UUID
@@ -238,6 +248,7 @@ class ShiftAssignmentResponse(OrmModel):
     employee_id: UUID
     shift_id: UUID
     effective_from: date
+    effective_to: date | None = None
     status: str
     version: int
 
