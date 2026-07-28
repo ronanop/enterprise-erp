@@ -1,11 +1,11 @@
 "use client";
 
 import { useState } from "react";
-import * as XLSX from "xlsx";
 import { FileUp } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { downloadFiscalImportTemplate } from "@/lib/finance/fiscal-export";
+import { parseSpreadsheetFile } from "@/lib/spreadsheet";
 import { ApiClientError } from "@/services/api-client";
 import { importFiscalYears, type FiscalCreatePayload } from "@/services/fiscal-service";
 
@@ -21,10 +21,7 @@ export function FiscalImportPanel({ onImported }: Props) {
     setError(null);
     setResult(null);
     try {
-      const buffer = await file.arrayBuffer();
-      const wb = XLSX.read(buffer, { type: "array" });
-      const sheet = wb.Sheets[wb.SheetNames[0]];
-      const json = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet);
+      const json = await parseSpreadsheetFile(file);
       const rows: FiscalCreatePayload[] = json.map((row) => ({
         fiscal_year_code: String(row.fiscal_year_code ?? ""),
         fiscal_year_name: String(row.fiscal_year_name ?? ""),
@@ -36,7 +33,13 @@ export function FiscalImportPanel({ onImported }: Props) {
       setResult(res);
       onImported();
     } catch (err) {
-      setError(err instanceof ApiClientError ? err.message : "Import failed");
+      setError(
+        err instanceof ApiClientError
+          ? err.message
+          : err instanceof Error
+            ? err.message
+            : "Import failed",
+      );
     } finally {
       setBusy(false);
     }
@@ -53,7 +56,7 @@ export function FiscalImportPanel({ onImported }: Props) {
           <Button type="button" size="sm" variant="outline" className="h-8 cursor-pointer" onClick={() => downloadFiscalImportTemplate()}>Template</Button>
           <label className="inline-flex h-8 cursor-pointer items-center gap-1.5 rounded-lg border border-input px-3 text-xs font-medium hover:bg-muted/50">
             <FileUp className="size-3.5" /> {busy ? "Importing…" : "Import CSV"}
-            <input type="file" accept=".csv,.xlsx,.xls" className="hidden" disabled={busy} onChange={(e) => { const f = e.target.files?.[0]; if (f) void onFile(f); e.target.value = ""; }} />
+            <input type="file" accept=".csv,.xlsx" className="hidden" disabled={busy} onChange={(e) => { const f = e.target.files?.[0]; if (f) void onFile(f); e.target.value = ""; }} />
           </label>
         </div>
       </div>

@@ -40,7 +40,12 @@ class Settings(BaseSettings):
     )
 
     cors_origins: list[str] = Field(
-        default=["http://localhost:3000"],
+        default=[
+            "http://localhost:3000",
+            "http://127.0.0.1:3000",
+            "http://localhost:3001",
+            "http://127.0.0.1:3001",
+        ],
         alias="CORS_ORIGINS",
     )
 
@@ -55,6 +60,7 @@ class Settings(BaseSettings):
     login_rate_window_seconds: int = Field(default=900, alias="LOGIN_RATE_WINDOW_SECONDS")
     account_lockout_threshold: int = Field(default=5, alias="ACCOUNT_LOCKOUT_THRESHOLD")
     account_lockout_minutes: int = Field(default=15, alias="ACCOUNT_LOCKOUT_MINUTES")
+    app_timezone: str = Field(default="Asia/Kolkata", alias="APP_TIMEZONE")
 
     @field_validator("cors_origins", mode="before")
     @classmethod
