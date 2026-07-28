@@ -1,10 +1,13 @@
-"""Seed one employee login linked for Employee App (ESS) testing.
+"""Seed one employee login linked to real HRMS workforce data.
 
 Creates/updates:
   - User: employee@example.com / Secure1!
-  - Employee: EMP-ESS-001 linked via master_employee.user_id
+  - Links that user to master_employee EMP-004 (Priya Sharma) from
+    seed_hr_workforce so ESS /me, leave, and attendance return real HR data.
 
-Prerequisites: run seed_demo_data first (tenant, company, branch).
+Prerequisites:
+  - python -m scripts.seed_demo_data
+  - python -m scripts.seed_hr_workforce
 
 Usage (from apps/api):
   python -m scripts.seed_ess_employee
@@ -13,7 +16,7 @@ Usage (from apps/api):
 from __future__ import annotations
 
 import sys
-from datetime import date, datetime, timezone
+from datetime import datetime, timezone
 from pathlib import Path
 from uuid import uuid4
 
@@ -34,12 +37,14 @@ from modules.foundation.service.user_service import UserService  # noqa: E402
 from modules.master_data.models.employee import MasterEmployee  # noqa: E402
 from modules.organization.models.branch import OrgBranch  # noqa: E402
 from modules.organization.models.company import OrgCompany  # noqa: E402
-from modules.organization.models.hierarchy import OrgDepartment  # noqa: E402
 from security.password import PasswordHasher  # noqa: E402
 
 DEMO_PASSWORD = "Secure1!"
 ESS_EMAIL = "employee@example.com"
-ESS_EMPLOYEE_CODE = "EMP-ESS-001"
+# Prefer a workforce employee that has leave balances + attendance history.
+ESS_EMPLOYEE_CODE = "EMP-004"
+# Fallback if workforce seed was never run.
+ESS_FALLBACK_CODES = ("EMP-001", "EMP-002", "EMP-003", "EMP-004", "EMP-005")
 
 
 def utcnow() -> datetime:
@@ -80,26 +85,31 @@ def main() -> None:
         )
         admin_id = admin.id if admin else None
 
-        department = db.scalar(
-            select(OrgDepartment).where(
-                OrgDepartment.company_id == company.id,
-                OrgDepartment.is_deleted.is_(False),
+        employee = db.scalar(
+            select(MasterEmployee).where(
+                MasterEmployee.company_id == company.id,
+                MasterEmployee.employee_code == ESS_EMPLOYEE_CODE,
+                MasterEmployee.is_deleted.is_(False),
             )
         )
-        if department is None:
-            department = OrgDepartment(
-                id=uuid4(),
-                tenant_id=tenant.id,
-                company_id=company.id,
-                branch_id=branch.id,
-                department_code="ESS",
-                department_name="Employee Self Service",
-                status="active",
-                created_by=admin_id,
-                updated_by=admin_id,
+        if employee is None:
+            for code in ESS_FALLBACK_CODES:
+                employee = db.scalar(
+                    select(MasterEmployee).where(
+                        MasterEmployee.company_id == company.id,
+                        MasterEmployee.employee_code == code,
+                        MasterEmployee.is_deleted.is_(False),
+                    )
+                )
+                if employee is not None:
+                    break
+        if employee is None:
+            raise SystemExit(
+                "No HRMS employee found — run seed_hr_workforce first "
+                f"(expected {ESS_EMPLOYEE_CODE})"
             )
-            db.add(department)
-            db.flush()
+
+        display_name = f"{employee.first_name} {employee.last_name}".strip() or "Demo Employee"
 
         service = UserService(db)
         user = db.scalar(
@@ -114,12 +124,16 @@ def main() -> None:
                 tenant_id=tenant.id,
                 email=ESS_EMAIL,
                 password=DEMO_PASSWORD,
-                display_name="Demo Employee",
+                display_name=display_name,
                 user_type="employee",
                 created_by=admin_id,
             )
             user = db.scalar(select(SecUser).where(SecUser.id == created.id))
             assert user is not None
+        else:
+            user.display_name = display_name
+            user.user_type = "employee"
+            user.updated_by = admin_id
 
         role = db.scalar(
             select(SecRole).where(
@@ -163,48 +177,36 @@ def main() -> None:
                 )
             )
 
-        employee = db.scalar(
+        # Clear this login from any other employee, then map to HRMS record.
+        linked_elsewhere = db.scalars(
             select(MasterEmployee).where(
-                MasterEmployee.company_id == company.id,
-                MasterEmployee.employee_code == ESS_EMPLOYEE_CODE,
+                MasterEmployee.tenant_id == tenant.id,
+                MasterEmployee.user_id == user.id,
+                MasterEmployee.id != employee.id,
                 MasterEmployee.is_deleted.is_(False),
             )
-        )
-        if employee is None:
-            employee = MasterEmployee(
-                id=uuid4(),
-                tenant_id=tenant.id,
-                company_id=company.id,
-                branch_id=branch.id,
-                department_id=department.id,
-                employee_code=ESS_EMPLOYEE_CODE,
-                first_name="Demo",
-                last_name="Employee",
-                email=ESS_EMAIL,
-                mobile="+91-90000-99999",
-                designation="Staff",
-                date_of_joining=date(2024, 4, 1),
-                status="active",
-                user_id=user.id,
-                created_by=admin_id,
-                updated_by=admin_id,
-            )
-            db.add(employee)
-        else:
-            employee.user_id = user.id
-            employee.status = "active"
-            employee.updated_by = admin_id
+        ).all()
+        for other in linked_elsewhere:
+            other.user_id = None
+            other.updated_by = admin_id
+
+        employee.user_id = user.id
+        employee.status = "active"
+        employee.updated_by = admin_id
 
         db.commit()
         print("=" * 60)
-        print("ESS employee seeded")
+        print("ESS employee mapped to HRMS")
         print("=" * 60)
-        print(f"Email         : {ESS_EMAIL}")
+        print(f"Login email   : {ESS_EMAIL}")
         print(f"Password      : {DEMO_PASSWORD}")
-        print(f"Employee code : {ESS_EMPLOYEE_CODE}")
+        print(f"Employee code : {employee.employee_code}")
+        print(f"Name          : {display_name}")
+        print(f"HRMS email    : {employee.email}")
         print(f"Employee id   : {employee.id}")
         print(f"User id       : {user.id}")
-        print("Use these credentials in Employee App (http://localhost:3001)")
+        print("ESS /me, leave, attendance will use this HRMS employee.")
+        print("Login in Employee App with the credentials above.")
         print("=" * 60)
     except Exception:
         db.rollback()
