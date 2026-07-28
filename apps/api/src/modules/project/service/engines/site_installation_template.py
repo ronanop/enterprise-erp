@@ -1,0 +1,197 @@
+"""Canonical WBS template for site installation projects."""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+
+from modules.project.domain.enums import (
+    SiteWorkflowStage,
+    delivery_includes_os,
+    delivery_is_rack_only,
+    delivery_needs_configuration,
+    delivery_needs_hwat,
+)
+
+
+@dataclass(frozen=True)
+class WbsTaskSpec:
+    task_name: str
+    priority: str = "medium"
+
+
+@dataclass(frozen=True)
+class WbsMilestoneSpec:
+    code: str
+    name: str
+    tasks: tuple[WbsTaskSpec, ...] = ()
+
+
+@dataclass(frozen=True)
+class WbsPhaseSpec:
+    code: str
+    name: str
+    sequence_no: int
+    stage: str
+    milestone: WbsMilestoneSpec
+
+
+SITE_INSTALLATION_WBS: tuple[WbsPhaseSpec, ...] = (
+    WbsPhaseSpec(
+        code="PH-INTAKE",
+        name="Intake & RFAI",
+        sequence_no=1,
+        stage=SiteWorkflowStage.INTAKE.value,
+        milestone=WbsMilestoneSpec(
+            code="MS-RFAI",
+            name="RFAI Issued",
+            tasks=(
+                WbsTaskSpec("Capture site request & requestor"),
+                WbsTaskSpec("Confirm circle / cloud / site list"),
+                WbsTaskSpec("Capture power requirements"),
+                WbsTaskSpec("Raise RFAI request"),
+                WbsTaskSpec("Record RFAI number"),
+            ),
+        ),
+    ),
+    WbsPhaseSpec(
+        code="PH-SURVEY",
+        name="Survey",
+        sequence_no=2,
+        stage=SiteWorkflowStage.SURVEY.value,
+        milestone=WbsMilestoneSpec(
+            code="MS-SURVEY",
+            name="Survey Complete",
+            tasks=(
+                WbsTaskSpec("Cable length survey"),
+                WbsTaskSpec("Industrial socket check"),
+                WbsTaskSpec("Lugs check"),
+                WbsTaskSpec("Power-on material check"),
+                WbsTaskSpec("Confirm space & power available"),
+                WbsTaskSpec("Record tile details"),
+            ),
+        ),
+    ),
+    WbsPhaseSpec(
+        code="PH-SCM",
+        name="SCM / Logistics",
+        sequence_no=3,
+        stage=SiteWorkflowStage.SCM.value,
+        milestone=WbsMilestoneSpec(
+            code="MS-MATERIAL",
+            name="Material On Site",
+            tasks=(
+                WbsTaskSpec("Raise MO request", "high"),
+                WbsTaskSpec("Track server / rack / PDU WH & on-site delivery"),
+                WbsTaskSpec("Confirm IM material"),
+                WbsTaskSpec("Material handover WH → Site", "high"),
+            ),
+        ),
+    ),
+    WbsPhaseSpec(
+        code="PH-INSTALL",
+        name="Installation",
+        sequence_no=4,
+        stage=SiteWorkflowStage.INSTALLATION.value,
+        milestone=WbsMilestoneSpec(
+            code="MS-INSTALL",
+            name="Site Powered & Cabling Done",
+            tasks=(
+                WbsTaskSpec("Rack installation + server stacking", "high"),
+                WbsTaskSpec("Rack + server power on", "high"),
+                WbsTaskSpec("DAC / ILO cabling"),
+            ),
+        ),
+    ),
+    WbsPhaseSpec(
+        code="PH-CONFIG",
+        name="Configuration",
+        sequence_no=5,
+        stage=SiteWorkflowStage.CONFIGURATION.value,
+        milestone=WbsMilestoneSpec(
+            code="MS-CONFIG",
+            name="Config Ready",
+            tasks=(
+                WbsTaskSpec("BIOS configuration"),
+                WbsTaskSpec("Firmware / N/W configuration"),
+                WbsTaskSpec("LLD availability"),
+                WbsTaskSpec("OS installation", "high"),
+                WbsTaskSpec("MBSS", "high"),
+            ),
+        ),
+    ),
+    WbsPhaseSpec(
+        code="PH-ACCEPT",
+        name="Acceptance",
+        sequence_no=6,
+        stage=SiteWorkflowStage.ACCEPTANCE.value,
+        milestone=WbsMilestoneSpec(
+            code="MS-HO",
+            name="Handover / Circle Sign-off",
+            tasks=(
+                WbsTaskSpec("Handover to Cloud", "high"),
+                WbsTaskSpec("HW AT request", "high"),
+                WbsTaskSpec("HW AT sign-off from circle", "critical"),
+            ),
+        ),
+    ),
+)
+
+
+def wbs_for_delivery_type(delivery_type: str) -> tuple[WbsPhaseSpec, ...]:
+    """Filter WBS phases/tasks by delivery scope."""
+    phases: list[WbsPhaseSpec] = []
+    for phase in SITE_INSTALLATION_WBS:
+        if (
+            not delivery_needs_configuration(delivery_type)
+            and phase.stage == SiteWorkflowStage.CONFIGURATION.value
+        ):
+            continue
+
+        tasks = phase.milestone.tasks
+        if (
+            not delivery_includes_os(delivery_type)
+            and phase.stage == SiteWorkflowStage.CONFIGURATION.value
+        ):
+            tasks = tuple(
+                t
+                for t in tasks
+                if t.task_name not in {"OS installation", "MBSS"}
+            )
+
+        if (
+            delivery_is_rack_only(delivery_type)
+            and phase.stage == SiteWorkflowStage.INSTALLATION.value
+        ):
+            tasks = tuple(
+                t
+                for t in tasks
+                if "power on" not in t.task_name.lower()
+                and "dac" not in t.task_name.lower()
+            )
+            tasks = tuple(
+                WbsTaskSpec("Rack installation", t.priority)
+                if "stacking" in t.task_name.lower()
+                else t
+                for t in tasks
+            )
+
+        if (
+            not delivery_needs_hwat(delivery_type)
+            and phase.stage == SiteWorkflowStage.ACCEPTANCE.value
+        ):
+            tasks = tuple(t for t in tasks if "HW AT" not in t.task_name)
+
+        phases.append(
+            WbsPhaseSpec(
+                code=phase.code,
+                name=phase.name,
+                sequence_no=phase.sequence_no,
+                stage=phase.stage,
+                milestone=WbsMilestoneSpec(
+                    code=phase.milestone.code,
+                    name=phase.milestone.name,
+                    tasks=tasks,
+                ),
+            )
+        )
+    return tuple(phases)

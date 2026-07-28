@@ -219,7 +219,7 @@ export type LeadCreateFromCompanyInput = {
   state?: string | null;
   zip?: string | null;
   country?: string | null;
-  oem_name?: string | null;
+  oem_name: string;
   oem_contact_person?: string | null;
   oem_contact_number?: string | null;
   oem_contact_email?: string | null;
@@ -841,6 +841,7 @@ export type Ovf = {
   total_margin_amount: number;
   version: number;
   created_at?: string | null;
+  updated_at?: string | null;
 };
 
 export type OvfFormInput = {

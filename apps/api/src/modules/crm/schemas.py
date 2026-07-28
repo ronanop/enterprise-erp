@@ -848,7 +848,7 @@ class LeadCreateFromCompany(BaseModel):
     state: str | None = None
     zip: str | None = None
     country: str | None = None
-    oem_name: str | None = None
+    oem_name: str = Field(min_length=1, max_length=150)
     oem_contact_person: str | None = None
     oem_contact_number: str | None = None
     oem_contact_email: str | None = None
@@ -1220,6 +1220,7 @@ class OvfResponse(OrmModel):
     total_margin_amount: Decimal
     version: int
     created_at: datetime | None = None
+    updated_at: datetime | None = None
 
 
 class OvfLineCreate(BaseModel):

@@ -1,0 +1,1256 @@
+/**
+ * Typed client for the Project Management module (`/api/v1/projects/*`).
+ *
+ * Mirrors `sales-crm-service.ts`: one section per entity with an API path
+ * constant, a row type, a form-input type, and list/get/create/update calls.
+ */
+
+import { ApiClientError, apiClient, resourceService } from "@/services/api-client";
+
+function asArray<T>(data: T[] | T | null | undefined): T[] {
+  if (Array.isArray(data)) return data;
+  if (data == null) return [];
+  return [data];
+}
+
+function unwrap<T>(res: { data: T | null }): T {
+  if (res.data == null) {
+    throw new ApiClientError("Empty response from server", 500);
+  }
+  return res.data;
+}
+
+export function formatInr(value: number | string | null | undefined): string {
+  const n = typeof value === "number" ? value : Number(value ?? 0);
+  return new Intl.NumberFormat("en-IN", {
+    style: "currency",
+    currency: "INR",
+    maximumFractionDigits: 0,
+  }).format(Number.isFinite(n) ? n : 0);
+}
+
+export function formatInrPrecise(value: number | string | null | undefined): string {
+  const n = typeof value === "number" ? value : Number(value ?? 0);
+  return new Intl.NumberFormat("en-IN", {
+    style: "currency",
+    currency: "INR",
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(Number.isFinite(n) ? n : 0);
+}
+
+/** `2026-07-27` from an ISO timestamp or date string. */
+export function formatDate(value: string | null | undefined): string {
+  if (!value) return "—";
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return value.slice(0, 10);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(
+    d.getDate(),
+  ).padStart(2, "0")}`;
+}
+
+export function formatHours(value: number | string | null | undefined): string {
+  const n = typeof value === "number" ? value : Number(value ?? 0);
+  if (!Number.isFinite(n)) return "—";
+  return `${n.toFixed(2)} h`;
+}
+
+/** Turns `in_progress` into `In progress` for display. */
+export function humanizeStatus(value: string | null | undefined): string {
+  if (!value) return "—";
+  const spaced = value.replace(/_/g, " ");
+  return spaced.charAt(0).toUpperCase() + spaced.slice(1);
+}
+
+type AuditFields = {
+  id: string;
+  company_id: string;
+  status: string;
+  created_at?: string | null;
+  version: number;
+};
+
+// ---------------------------------------------------------------------------
+// Projects
+// ---------------------------------------------------------------------------
+
+export const PROJECTS_API = "/projects/projects";
+
+export type Project = AuditFields & {
+  branch_id: string;
+  project_code: string;
+  project_name: string;
+  project_type: string;
+  customer_id: string | null;
+  department_id: string | null;
+  project_manager_employee_id: string;
+  sponsor_employee_id: string | null;
+  planned_start_date: string;
+  planned_end_date: string;
+  actual_start_date: string | null;
+  actual_end_date: string | null;
+  budget_amount: string | null;
+  currency_code: string;
+  billing_type: string | null;
+  crm_opportunity_id: string | null;
+  crm_customer_id: string | null;
+  health_status: string | null;
+  description: string | null;
+  workflow_status: string | null;
+};
+
+export type ProjectFormInput = {
+  branch_id?: string;
+  project_name?: string;
+  project_type?: string;
+  customer_id?: string | null;
+  department_id?: string | null;
+  project_manager_employee_id?: string;
+  sponsor_employee_id?: string | null;
+  planned_start_date?: string;
+  planned_end_date?: string;
+  actual_start_date?: string | null;
+  actual_end_date?: string | null;
+  budget_amount?: string | null;
+  currency_code?: string;
+  billing_type?: string | null;
+  health_status?: string | null;
+  description?: string | null;
+  status?: string;
+  site_installation?: SiteInstallationNestedInput | null;
+};
+
+export type SiteInstallationNestedInput = {
+  delivery_type?: string;
+  requestor_name?: string | null;
+  circle?: string | null;
+  cloud_name?: string | null;
+  site_name?: string | null;
+  power_requirements?: string | null;
+  rfai_request_done?: boolean;
+  rfai_number?: string | null;
+  fabric_partner?: string | null;
+  application?: string | null;
+  remarks?: string | null;
+};
+
+export async function listProjects(): Promise<Project[]> {
+  const res = await resourceService.list<Project>(PROJECTS_API, { page_size: 200 });
+  return asArray(res.data);
+}
+
+export async function getProject(id: string): Promise<Project> {
+  return unwrap(await resourceService.get<Project>(PROJECTS_API, id));
+}
+
+export async function createProject(body: ProjectFormInput): Promise<Project> {
+  return unwrap(await resourceService.create<Project>(PROJECTS_API, body));
+}
+
+export async function updateProject(
+  id: string,
+  body: Partial<ProjectFormInput>,
+): Promise<Project> {
+  return unwrap(await resourceService.update<Project>(PROJECTS_API, id, body));
+}
+
+export async function submitProject(id: string): Promise<Project> {
+  return unwrap(await resourceService.action<Project>(PROJECTS_API, id, "submit"));
+}
+
+export async function approveProject(id: string): Promise<Project> {
+  return unwrap(await resourceService.action<Project>(PROJECTS_API, id, "approve"));
+}
+
+export async function closeProject(id: string): Promise<Project> {
+  return unwrap(await resourceService.action<Project>(PROJECTS_API, id, "close"));
+}
+
+// ---------------------------------------------------------------------------
+// Site Installation workflow
+// ---------------------------------------------------------------------------
+
+export const SITE_INSTALLATIONS_API = "/projects/site-installations";
+
+export type MaterialLine = {
+  type: string;
+  quantity: number;
+  date?: string | null;
+};
+
+export type SiteInstallation = AuditFields & {
+  branch_id: string | null;
+  project_id: string;
+  document_number: string;
+  delivery_type: string;
+  workflow_stage: string;
+  requestor_name: string | null;
+  circle: string | null;
+  cloud_name: string | null;
+  site_name: string | null;
+  power_requirements: string | null;
+  rfai_request_done: boolean;
+  rfai_number: string | null;
+  fabric_partner: string | null;
+  application: string | null;
+  cable_length: string | null;
+  industrial_socket: boolean;
+  lugs: boolean;
+  cable_lines: MaterialLine[];
+  lug_lines: MaterialLine[];
+  industrial_socket_lines: MaterialLine[];
+  power_on_material: boolean;
+  power_on_material_date: string | null;
+  tile_details: string | null;
+  survey_completed: boolean;
+  survey_completed_date: string | null;
+  space_available: boolean;
+  space_available_date: string | null;
+  power_available: boolean;
+  power_available_date: string | null;
+  server_qty: number | null;
+  rack_qty: number | null;
+  server_wh_delivery_date: string | null;
+  server_on_site_delivery_date: string | null;
+  rack_wh_delivery_date: string | null;
+  rack_on_site_delivery_date: string | null;
+  pdu_wh_delivery_date: string | null;
+  pdu_on_site_delivery_date: string | null;
+  mo_request: boolean;
+  mo_request_date: string | null;
+  im_material: boolean;
+  im_material_date: string | null;
+  material_handover_done: boolean;
+  material_handover_date: string | null;
+  rack_server_stacking_done: boolean;
+  rack_server_power_on_done: boolean;
+  dac_ilo_cabling_done: boolean;
+  bios_configuration_done: boolean;
+  firmware_nw_config_done: boolean;
+  lld_done: boolean;
+  os_installation_done: boolean;
+  mbss_done: boolean;
+  handover_to_cloud_done: boolean;
+  hwat_request_done: boolean;
+  hwat_signoff_received: boolean;
+  remarks: string | null;
+};
+
+export type SiteInstallationFormInput = {
+  delivery_type?: string;
+  requestor_name?: string | null;
+  circle?: string | null;
+  cloud_name?: string | null;
+  site_name?: string | null;
+  power_requirements?: string | null;
+  rfai_request_done?: boolean;
+  rfai_number?: string | null;
+  fabric_partner?: string | null;
+  application?: string | null;
+  cable_length?: string | null;
+  industrial_socket?: boolean;
+  lugs?: boolean;
+  cable_lines?: MaterialLine[] | null;
+  lug_lines?: MaterialLine[] | null;
+  industrial_socket_lines?: MaterialLine[] | null;
+  power_on_material?: boolean;
+  power_on_material_date?: string | null;
+  tile_details?: string | null;
+  survey_completed?: boolean;
+  survey_completed_date?: string | null;
+  space_available?: boolean;
+  space_available_date?: string | null;
+  power_available?: boolean;
+  power_available_date?: string | null;
+  server_qty?: number | null;
+  rack_qty?: number | null;
+  server_wh_delivery_date?: string | null;
+  server_on_site_delivery_date?: string | null;
+  rack_wh_delivery_date?: string | null;
+  rack_on_site_delivery_date?: string | null;
+  pdu_wh_delivery_date?: string | null;
+  pdu_on_site_delivery_date?: string | null;
+  mo_request?: boolean;
+  mo_request_date?: string | null;
+  im_material?: boolean;
+  im_material_date?: string | null;
+  material_handover_done?: boolean;
+  material_handover_date?: string | null;
+  rack_server_stacking_done?: boolean;
+  rack_server_power_on_done?: boolean;
+  dac_ilo_cabling_done?: boolean;
+  bios_configuration_done?: boolean;
+  firmware_nw_config_done?: boolean;
+  lld_done?: boolean;
+  os_installation_done?: boolean;
+  mbss_done?: boolean;
+  handover_to_cloud_done?: boolean;
+  hwat_request_done?: boolean;
+  hwat_signoff_received?: boolean;
+  remarks?: string | null;
+};
+
+export type SiteInstallationBlueprint = {
+  entity: string;
+  state: string;
+  delivery_type: string;
+  allowed_actions: string[];
+  action_labels: Record<string, string>;
+  stages: Array<{ key: string; label: string }>;
+  terminal: boolean;
+};
+
+export async function getSiteInstallationByProject(
+  projectId: string,
+): Promise<SiteInstallation> {
+  return unwrap(
+    await apiClient<SiteInstallation>(
+      `${SITE_INSTALLATIONS_API}/by-project/${projectId}`,
+    ),
+  );
+}
+
+export async function getSiteInstallationBlueprint(
+  projectId: string,
+): Promise<SiteInstallationBlueprint> {
+  return unwrap(
+    await apiClient<SiteInstallationBlueprint>(
+      `${SITE_INSTALLATIONS_API}/by-project/${projectId}/blueprint`,
+    ),
+  );
+}
+
+export async function updateSiteInstallationByProject(
+  projectId: string,
+  body: SiteInstallationFormInput,
+): Promise<SiteInstallation> {
+  return unwrap(
+    await apiClient<SiteInstallation>(
+      `${SITE_INSTALLATIONS_API}/by-project/${projectId}`,
+      { method: "PATCH", body },
+    ),
+  );
+}
+
+export async function advanceSiteInstallation(
+  projectId: string,
+  action: string,
+): Promise<SiteInstallation> {
+  return unwrap(
+    await apiClient<SiteInstallation>(
+      `${SITE_INSTALLATIONS_API}/by-project/${projectId}/advance`,
+      { method: "POST", body: { action } },
+    ),
+  );
+}
+
+export async function listSiteInstallations(): Promise<SiteInstallation[]> {
+  const res = await resourceService.list<SiteInstallation>(SITE_INSTALLATIONS_API, {
+    page_size: 200,
+  });
+  return asArray(res.data);
+}
+
+// ---------------------------------------------------------------------------
+// Project phases
+// ---------------------------------------------------------------------------
+
+export const PROJECT_PHASES_API = "/projects/project-phases";
+
+export type ProjectPhase = AuditFields & {
+  branch_id: string | null;
+  project_id: string;
+  phase_code: string;
+  phase_name: string;
+  sequence_no: number;
+  planned_start_date: string;
+  planned_end_date: string;
+};
+
+export type ProjectPhaseFormInput = {
+  project_id: string;
+  phase_name: string;
+  sequence_no?: number;
+  planned_start_date: string;
+  planned_end_date: string;
+  status?: string;
+};
+
+export async function listProjectPhases(): Promise<ProjectPhase[]> {
+  const res = await resourceService.list<ProjectPhase>(PROJECT_PHASES_API, { page_size: 200 });
+  return asArray(res.data);
+}
+
+export async function getProjectPhase(id: string): Promise<ProjectPhase> {
+  return unwrap(await resourceService.get<ProjectPhase>(PROJECT_PHASES_API, id));
+}
+
+export async function createProjectPhase(body: ProjectPhaseFormInput): Promise<ProjectPhase> {
+  return unwrap(await resourceService.create<ProjectPhase>(PROJECT_PHASES_API, body));
+}
+
+export async function updateProjectPhase(
+  id: string,
+  body: Partial<ProjectPhaseFormInput>,
+): Promise<ProjectPhase> {
+  return unwrap(await resourceService.update<ProjectPhase>(PROJECT_PHASES_API, id, body));
+}
+
+// ---------------------------------------------------------------------------
+// Project milestones
+// ---------------------------------------------------------------------------
+
+export const PROJECT_MILESTONES_API = "/projects/project-milestones";
+
+export type ProjectMilestone = AuditFields & {
+  branch_id: string | null;
+  project_id: string;
+  phase_id: string | null;
+  milestone_code: string;
+  milestone_name: string;
+  owner_employee_id: string | null;
+  due_date: string;
+  achieved_at: string | null;
+};
+
+export type ProjectMilestoneFormInput = {
+  project_id: string;
+  phase_id?: string | null;
+  milestone_name: string;
+  owner_employee_id?: string | null;
+  due_date: string;
+  status?: string;
+};
+
+export async function listProjectMilestones(): Promise<ProjectMilestone[]> {
+  const res = await resourceService.list<ProjectMilestone>(PROJECT_MILESTONES_API, {
+    page_size: 200,
+  });
+  return asArray(res.data);
+}
+
+export async function getProjectMilestone(id: string): Promise<ProjectMilestone> {
+  return unwrap(await resourceService.get<ProjectMilestone>(PROJECT_MILESTONES_API, id));
+}
+
+export async function createProjectMilestone(
+  body: ProjectMilestoneFormInput,
+): Promise<ProjectMilestone> {
+  return unwrap(await resourceService.create<ProjectMilestone>(PROJECT_MILESTONES_API, body));
+}
+
+export async function updateProjectMilestone(
+  id: string,
+  body: Partial<ProjectMilestoneFormInput>,
+): Promise<ProjectMilestone> {
+  return unwrap(await resourceService.update<ProjectMilestone>(PROJECT_MILESTONES_API, id, body));
+}
+
+// ---------------------------------------------------------------------------
+// Project tasks
+// ---------------------------------------------------------------------------
+
+export const PROJECT_TASKS_API = "/projects/project-tasks";
+
+export type ProjectTask = AuditFields & {
+  branch_id: string;
+  document_number: string | null;
+  project_id: string;
+  phase_id: string | null;
+  milestone_id: string | null;
+  parent_task_id: string | null;
+  task_name: string;
+  priority: string;
+  planned_start_date: string | null;
+  due_date: string | null;
+  estimated_hours: string | null;
+  actual_hours: string | null;
+  percent_complete: string | null;
+  workflow_status: string | null;
+};
+
+export type ProjectTaskFormInput = {
+  branch_id?: string;
+  project_id: string;
+  phase_id?: string | null;
+  milestone_id?: string | null;
+  parent_task_id?: string | null;
+  task_name: string;
+  priority?: string;
+  planned_start_date?: string | null;
+  due_date?: string | null;
+  estimated_hours?: string | null;
+  actual_hours?: string | null;
+  percent_complete?: string | null;
+  status?: string;
+};
+
+export async function listProjectTasks(): Promise<ProjectTask[]> {
+  const res = await resourceService.list<ProjectTask>(PROJECT_TASKS_API, { page_size: 200 });
+  return asArray(res.data);
+}
+
+export async function getProjectTask(id: string): Promise<ProjectTask> {
+  return unwrap(await resourceService.get<ProjectTask>(PROJECT_TASKS_API, id));
+}
+
+export async function createProjectTask(body: ProjectTaskFormInput): Promise<ProjectTask> {
+  return unwrap(await resourceService.create<ProjectTask>(PROJECT_TASKS_API, body));
+}
+
+export async function updateProjectTask(
+  id: string,
+  body: Partial<ProjectTaskFormInput>,
+): Promise<ProjectTask> {
+  return unwrap(await resourceService.update<ProjectTask>(PROJECT_TASKS_API, id, body));
+}
+
+// ---------------------------------------------------------------------------
+// Timesheets
+// ---------------------------------------------------------------------------
+
+export const TIMESHEETS_API = "/projects/timesheets";
+
+export type Timesheet = AuditFields & {
+  branch_id: string;
+  document_number: string;
+  employee_id: string;
+  project_id: string | null;
+  period_start: string;
+  period_end: string;
+  total_hours: string | null;
+  workflow_status: string | null;
+};
+
+export type TimesheetFormInput = {
+  branch_id?: string;
+  employee_id: string;
+  project_id?: string | null;
+  period_start: string;
+  period_end: string;
+  total_hours?: string | null;
+  status?: string;
+};
+
+export async function listTimesheets(): Promise<Timesheet[]> {
+  const res = await resourceService.list<Timesheet>(TIMESHEETS_API, { page_size: 200 });
+  return asArray(res.data);
+}
+
+export async function getTimesheet(id: string): Promise<Timesheet> {
+  return unwrap(await resourceService.get<Timesheet>(TIMESHEETS_API, id));
+}
+
+export async function createTimesheet(body: TimesheetFormInput): Promise<Timesheet> {
+  return unwrap(await resourceService.create<Timesheet>(TIMESHEETS_API, body));
+}
+
+export async function updateTimesheet(
+  id: string,
+  body: Partial<TimesheetFormInput>,
+): Promise<Timesheet> {
+  return unwrap(await resourceService.update<Timesheet>(TIMESHEETS_API, id, body));
+}
+
+export async function submitTimesheet(id: string): Promise<Timesheet> {
+  return unwrap(await resourceService.action<Timesheet>(TIMESHEETS_API, id, "submit"));
+}
+
+export async function approveTimesheet(id: string): Promise<Timesheet> {
+  return unwrap(await resourceService.action<Timesheet>(TIMESHEETS_API, id, "approve"));
+}
+
+// ---------------------------------------------------------------------------
+// Timesheet entries
+// ---------------------------------------------------------------------------
+
+export const TIMESHEET_ENTRIES_API = "/projects/timesheet-entries";
+
+export type TimesheetEntry = AuditFields & {
+  branch_id: string;
+  timesheet_id: string;
+  project_id: string;
+  task_id: string;
+  employee_id: string;
+  work_date: string;
+  hours_worked: string;
+  description: string | null;
+};
+
+export type TimesheetEntryFormInput = {
+  branch_id?: string;
+  timesheet_id: string;
+  project_id: string;
+  task_id: string;
+  employee_id: string;
+  work_date: string;
+  hours_worked: string;
+  description?: string | null;
+  status?: string;
+};
+
+export async function listTimesheetEntries(): Promise<TimesheetEntry[]> {
+  const res = await resourceService.list<TimesheetEntry>(TIMESHEET_ENTRIES_API, {
+    page_size: 200,
+  });
+  return asArray(res.data);
+}
+
+export async function getTimesheetEntry(id: string): Promise<TimesheetEntry> {
+  return unwrap(await resourceService.get<TimesheetEntry>(TIMESHEET_ENTRIES_API, id));
+}
+
+export async function createTimesheetEntry(
+  body: TimesheetEntryFormInput,
+): Promise<TimesheetEntry> {
+  return unwrap(await resourceService.create<TimesheetEntry>(TIMESHEET_ENTRIES_API, body));
+}
+
+export async function updateTimesheetEntry(
+  id: string,
+  body: Partial<TimesheetEntryFormInput>,
+): Promise<TimesheetEntry> {
+  return unwrap(await resourceService.update<TimesheetEntry>(TIMESHEET_ENTRIES_API, id, body));
+}
+
+// ---------------------------------------------------------------------------
+// Resource plans
+// ---------------------------------------------------------------------------
+
+export const RESOURCE_PLANS_API = "/projects/resource-plans";
+
+export type ResourcePlan = AuditFields & {
+  branch_id: string | null;
+  document_number: string;
+  project_id: string;
+  plan_name: string;
+  planned_from: string;
+  planned_to: string;
+};
+
+export type ResourcePlanFormInput = {
+  project_id: string;
+  plan_name: string;
+  planned_from: string;
+  planned_to: string;
+  status?: string;
+};
+
+export async function listResourcePlans(): Promise<ResourcePlan[]> {
+  const res = await resourceService.list<ResourcePlan>(RESOURCE_PLANS_API, { page_size: 200 });
+  return asArray(res.data);
+}
+
+export async function getResourcePlan(id: string): Promise<ResourcePlan> {
+  return unwrap(await resourceService.get<ResourcePlan>(RESOURCE_PLANS_API, id));
+}
+
+export async function createResourcePlan(body: ResourcePlanFormInput): Promise<ResourcePlan> {
+  return unwrap(await resourceService.create<ResourcePlan>(RESOURCE_PLANS_API, body));
+}
+
+export async function updateResourcePlan(
+  id: string,
+  body: Partial<ResourcePlanFormInput>,
+): Promise<ResourcePlan> {
+  return unwrap(await resourceService.update<ResourcePlan>(RESOURCE_PLANS_API, id, body));
+}
+
+// ---------------------------------------------------------------------------
+// Resource allocations
+// ---------------------------------------------------------------------------
+
+export const RESOURCE_ALLOCATIONS_API = "/projects/resource-allocations";
+
+export type ResourceAllocation = AuditFields & {
+  branch_id: string | null;
+  resource_plan_id: string;
+  project_id: string;
+  employee_id: string;
+  resource_type: string;
+  allocation_percent: string;
+  start_date: string;
+  end_date: string;
+};
+
+export type ResourceAllocationFormInput = {
+  resource_plan_id: string;
+  project_id: string;
+  employee_id: string;
+  resource_type?: string;
+  allocation_percent: string;
+  start_date: string;
+  end_date: string;
+  status?: string;
+};
+
+export async function listResourceAllocations(): Promise<ResourceAllocation[]> {
+  const res = await resourceService.list<ResourceAllocation>(RESOURCE_ALLOCATIONS_API, {
+    page_size: 200,
+  });
+  return asArray(res.data);
+}
+
+export async function getResourceAllocation(id: string): Promise<ResourceAllocation> {
+  return unwrap(await resourceService.get<ResourceAllocation>(RESOURCE_ALLOCATIONS_API, id));
+}
+
+export async function createResourceAllocation(
+  body: ResourceAllocationFormInput,
+): Promise<ResourceAllocation> {
+  return unwrap(await resourceService.create<ResourceAllocation>(RESOURCE_ALLOCATIONS_API, body));
+}
+
+export async function updateResourceAllocation(
+  id: string,
+  body: Partial<ResourceAllocationFormInput>,
+): Promise<ResourceAllocation> {
+  return unwrap(
+    await resourceService.update<ResourceAllocation>(RESOURCE_ALLOCATIONS_API, id, body),
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Project budgets
+// ---------------------------------------------------------------------------
+
+export const PROJECT_BUDGETS_API = "/projects/project-budgets";
+
+export type ProjectBudget = AuditFields & {
+  branch_id: string | null;
+  document_number: string;
+  project_id: string;
+  budget_type: string;
+  budget_amount: string;
+  currency_code: string;
+  fiscal_year_id: string | null;
+  cost_center_code: string | null;
+  finance_budget_id: string | null;
+  workflow_status: string | null;
+};
+
+export type ProjectBudgetFormInput = {
+  project_id: string;
+  budget_type: string;
+  budget_amount: string;
+  currency_code?: string;
+  cost_center_code?: string | null;
+  status?: string;
+};
+
+export async function listProjectBudgets(): Promise<ProjectBudget[]> {
+  const res = await resourceService.list<ProjectBudget>(PROJECT_BUDGETS_API, { page_size: 200 });
+  return asArray(res.data);
+}
+
+export async function getProjectBudget(id: string): Promise<ProjectBudget> {
+  return unwrap(await resourceService.get<ProjectBudget>(PROJECT_BUDGETS_API, id));
+}
+
+export async function createProjectBudget(body: ProjectBudgetFormInput): Promise<ProjectBudget> {
+  return unwrap(await resourceService.create<ProjectBudget>(PROJECT_BUDGETS_API, body));
+}
+
+export async function updateProjectBudget(
+  id: string,
+  body: Partial<ProjectBudgetFormInput>,
+): Promise<ProjectBudget> {
+  return unwrap(await resourceService.update<ProjectBudget>(PROJECT_BUDGETS_API, id, body));
+}
+
+export async function submitProjectBudget(id: string): Promise<ProjectBudget> {
+  return unwrap(await resourceService.action<ProjectBudget>(PROJECT_BUDGETS_API, id, "submit"));
+}
+
+export async function approveProjectBudget(id: string): Promise<ProjectBudget> {
+  return unwrap(await resourceService.action<ProjectBudget>(PROJECT_BUDGETS_API, id, "approve"));
+}
+
+// ---------------------------------------------------------------------------
+// Project costs
+// ---------------------------------------------------------------------------
+
+export const PROJECT_COSTS_API = "/projects/project-costs";
+
+export type ProjectCost = AuditFields & {
+  branch_id: string;
+  document_number: string;
+  project_id: string;
+  cost_source: string;
+  cost_amount: string;
+  currency_code: string;
+  cost_date: string;
+  employee_id: string | null;
+  product_id: string | null;
+  timesheet_entry_id: string | null;
+  finance_journal_id: string | null;
+  idempotency_key: string;
+};
+
+export type ProjectCostFormInput = {
+  branch_id?: string;
+  project_id: string;
+  cost_source: string;
+  cost_amount: string;
+  currency_code?: string;
+  cost_date: string;
+  employee_id?: string | null;
+  status?: string;
+};
+
+export async function listProjectCosts(): Promise<ProjectCost[]> {
+  const res = await resourceService.list<ProjectCost>(PROJECT_COSTS_API, { page_size: 200 });
+  return asArray(res.data);
+}
+
+export async function getProjectCost(id: string): Promise<ProjectCost> {
+  return unwrap(await resourceService.get<ProjectCost>(PROJECT_COSTS_API, id));
+}
+
+export async function createProjectCost(body: ProjectCostFormInput): Promise<ProjectCost> {
+  return unwrap(await resourceService.create<ProjectCost>(PROJECT_COSTS_API, body));
+}
+
+export async function updateProjectCost(
+  id: string,
+  body: Partial<ProjectCostFormInput>,
+): Promise<ProjectCost> {
+  return unwrap(await resourceService.update<ProjectCost>(PROJECT_COSTS_API, id, body));
+}
+
+// ---------------------------------------------------------------------------
+// Project issues
+// ---------------------------------------------------------------------------
+
+export const PROJECT_ISSUES_API = "/projects/project-issues";
+
+export type ProjectIssue = AuditFields & {
+  branch_id: string | null;
+  document_number: string;
+  project_id: string;
+  task_id: string | null;
+  issue_title: string;
+  severity: string;
+  owner_employee_id: string | null;
+  opened_at: string | null;
+  resolved_at: string | null;
+};
+
+export type ProjectIssueFormInput = {
+  project_id: string;
+  task_id?: string | null;
+  issue_title: string;
+  severity?: string;
+  owner_employee_id?: string | null;
+  status?: string;
+};
+
+export async function listProjectIssues(): Promise<ProjectIssue[]> {
+  const res = await resourceService.list<ProjectIssue>(PROJECT_ISSUES_API, { page_size: 200 });
+  return asArray(res.data);
+}
+
+export async function getProjectIssue(id: string): Promise<ProjectIssue> {
+  return unwrap(await resourceService.get<ProjectIssue>(PROJECT_ISSUES_API, id));
+}
+
+export async function createProjectIssue(body: ProjectIssueFormInput): Promise<ProjectIssue> {
+  return unwrap(await resourceService.create<ProjectIssue>(PROJECT_ISSUES_API, body));
+}
+
+export async function updateProjectIssue(
+  id: string,
+  body: Partial<ProjectIssueFormInput>,
+): Promise<ProjectIssue> {
+  return unwrap(await resourceService.update<ProjectIssue>(PROJECT_ISSUES_API, id, body));
+}
+
+// ---------------------------------------------------------------------------
+// Project risks
+// ---------------------------------------------------------------------------
+
+export const PROJECT_RISKS_API = "/projects/project-risks";
+
+export type ProjectRisk = AuditFields & {
+  branch_id: string | null;
+  document_number: string;
+  project_id: string;
+  risk_name: string;
+  impact: string;
+  probability: string;
+  risk_level: string;
+  owner_employee_id: string | null;
+  mitigation_plan: string | null;
+  review_date: string | null;
+};
+
+export type ProjectRiskFormInput = {
+  project_id: string;
+  risk_name: string;
+  impact?: string;
+  probability?: string;
+  risk_level?: string;
+  owner_employee_id?: string | null;
+  mitigation_plan?: string | null;
+  review_date?: string | null;
+  status?: string;
+};
+
+export async function listProjectRisks(): Promise<ProjectRisk[]> {
+  const res = await resourceService.list<ProjectRisk>(PROJECT_RISKS_API, { page_size: 200 });
+  return asArray(res.data);
+}
+
+export async function getProjectRisk(id: string): Promise<ProjectRisk> {
+  return unwrap(await resourceService.get<ProjectRisk>(PROJECT_RISKS_API, id));
+}
+
+export async function createProjectRisk(body: ProjectRiskFormInput): Promise<ProjectRisk> {
+  return unwrap(await resourceService.create<ProjectRisk>(PROJECT_RISKS_API, body));
+}
+
+export async function updateProjectRisk(
+  id: string,
+  body: Partial<ProjectRiskFormInput>,
+): Promise<ProjectRisk> {
+  return unwrap(await resourceService.update<ProjectRisk>(PROJECT_RISKS_API, id, body));
+}
+
+// ---------------------------------------------------------------------------
+// Change requests
+// ---------------------------------------------------------------------------
+
+export const CHANGE_REQUESTS_API = "/projects/change-requests";
+
+export type ChangeRequest = AuditFields & {
+  branch_id: string;
+  document_number: string;
+  project_id: string;
+  change_title: string;
+  change_type: string;
+  requested_by_employee_id: string;
+  impact_summary: string | null;
+  budget_impact_amount: string | null;
+  schedule_impact_days: number | null;
+  workflow_status: string | null;
+};
+
+export type ChangeRequestFormInput = {
+  branch_id?: string;
+  project_id: string;
+  change_title: string;
+  change_type: string;
+  requested_by_employee_id: string;
+  impact_summary?: string | null;
+  budget_impact_amount?: string | null;
+  schedule_impact_days?: number | null;
+  status?: string;
+};
+
+export async function listChangeRequests(): Promise<ChangeRequest[]> {
+  const res = await resourceService.list<ChangeRequest>(CHANGE_REQUESTS_API, { page_size: 200 });
+  return asArray(res.data);
+}
+
+export async function getChangeRequest(id: string): Promise<ChangeRequest> {
+  return unwrap(await resourceService.get<ChangeRequest>(CHANGE_REQUESTS_API, id));
+}
+
+export async function createChangeRequest(body: ChangeRequestFormInput): Promise<ChangeRequest> {
+  return unwrap(await resourceService.create<ChangeRequest>(CHANGE_REQUESTS_API, body));
+}
+
+export async function updateChangeRequest(
+  id: string,
+  body: Partial<ChangeRequestFormInput>,
+): Promise<ChangeRequest> {
+  return unwrap(await resourceService.update<ChangeRequest>(CHANGE_REQUESTS_API, id, body));
+}
+
+export async function submitChangeRequest(id: string): Promise<ChangeRequest> {
+  return unwrap(await resourceService.action<ChangeRequest>(CHANGE_REQUESTS_API, id, "submit"));
+}
+
+export async function approveChangeRequest(id: string): Promise<ChangeRequest> {
+  return unwrap(await resourceService.action<ChangeRequest>(CHANGE_REQUESTS_API, id, "approve"));
+}
+
+// ---------------------------------------------------------------------------
+// Project documents
+// ---------------------------------------------------------------------------
+
+export const PROJECT_DOCUMENTS_API = "/projects/project-documents";
+
+export type ProjectDocument = AuditFields & {
+  branch_id: string | null;
+  project_id: string;
+  task_id: string | null;
+  milestone_id: string | null;
+  document_type: string;
+  document_name: string;
+  storage_uri: string | null;
+  content_hash: string | null;
+  uploaded_by_employee_id: string | null;
+};
+
+export type ProjectDocumentFormInput = {
+  project_id: string;
+  task_id?: string | null;
+  milestone_id?: string | null;
+  document_type?: string;
+  document_name: string;
+  storage_uri?: string | null;
+  uploaded_by_employee_id?: string | null;
+  status?: string;
+};
+
+export async function listProjectDocuments(): Promise<ProjectDocument[]> {
+  const res = await resourceService.list<ProjectDocument>(PROJECT_DOCUMENTS_API, {
+    page_size: 200,
+  });
+  return asArray(res.data);
+}
+
+export async function getProjectDocument(id: string): Promise<ProjectDocument> {
+  return unwrap(await resourceService.get<ProjectDocument>(PROJECT_DOCUMENTS_API, id));
+}
+
+export async function createProjectDocument(
+  body: ProjectDocumentFormInput,
+): Promise<ProjectDocument> {
+  return unwrap(await resourceService.create<ProjectDocument>(PROJECT_DOCUMENTS_API, body));
+}
+
+export async function updateProjectDocument(
+  id: string,
+  body: Partial<ProjectDocumentFormInput>,
+): Promise<ProjectDocument> {
+  return unwrap(await resourceService.update<ProjectDocument>(PROJECT_DOCUMENTS_API, id, body));
+}
+
+// ---------------------------------------------------------------------------
+// Lookup options
+// ---------------------------------------------------------------------------
+
+export type Option = { id: string; label: string };
+
+function toOptions(
+  data: unknown,
+  label: (row: Record<string, unknown>) => string,
+): Option[] {
+  const rows = asArray(data as Record<string, unknown>[] | Record<string, unknown> | null);
+  return rows
+    .filter((r) => r && typeof r === "object" && r.id)
+    .map((r) => ({ id: String(r.id), label: label(r) }));
+}
+
+export async function listBranchOptions(): Promise<Option[]> {
+  const res = await resourceService.list("/branches");
+  return toOptions(res.data, (r) => String(r.branch_name ?? r.name ?? r.id));
+}
+
+export async function listEmployeeOptions(): Promise<Option[]> {
+  const res = await resourceService.list("/employees", { page_size: 200 });
+  return toOptions(res.data, (r) => {
+    const name = [r.first_name, r.last_name].filter(Boolean).join(" ").trim();
+    const code = r.employee_code ? ` (${r.employee_code})` : "";
+    return `${name || String(r.id)}${code}`;
+  });
+}
+
+export async function listCustomerOptions(): Promise<Option[]> {
+  const res = await resourceService.list("/customers", { page_size: 200 });
+  return toOptions(res.data, (r) =>
+    String(r.customer_name ?? r.name ?? r.customer_code ?? r.id),
+  );
+}
+
+export type CustomerCreateInput = {
+  branch_id: string;
+  customer_name: string;
+  customer_type?: string;
+  billing_address_json?: {
+    line1: string;
+    city: string;
+    country_code: string;
+    state?: string | null;
+    postal_code?: string | null;
+  };
+  email?: string | null;
+  mobile?: string | null;
+};
+
+export type CustomerCreated = {
+  id: string;
+  customer_name: string;
+  customer_code: string;
+  status: string;
+};
+
+/** Create a master customer (same API as Master Data → Customers). */
+export async function createCustomer(body: CustomerCreateInput): Promise<CustomerCreated> {
+  return unwrap(
+    await resourceService.create<CustomerCreated>("/customers", {
+      branch_id: body.branch_id,
+      customer_name: body.customer_name.trim(),
+      customer_type: body.customer_type ?? "corporate",
+      billing_address_json: body.billing_address_json ?? {
+        line1: "TBD",
+        city: "TBD",
+        country_code: "IN",
+      },
+      email: body.email ?? null,
+      mobile: body.mobile ?? null,
+    }),
+  );
+}
+
+export async function listDepartmentOptions(): Promise<Option[]> {
+  const res = await resourceService.list("/departments", { page_size: 200 });
+  return toOptions(res.data, (r) =>
+    String(r.department_name ?? r.name ?? r.department_code ?? r.id),
+  );
+}
+
+export async function listProjectOptions(): Promise<Option[]> {
+  const rows = await listProjects();
+  return rows.map((r) => ({ id: r.id, label: `${r.project_name} (${r.project_code})` }));
+}
+
+export async function listTaskOptions(): Promise<Option[]> {
+  const rows = await listProjectTasks();
+  return rows.map((r) => ({
+    id: r.id,
+    label: r.document_number ? `${r.task_name} (${r.document_number})` : r.task_name,
+  }));
+}
+
+export async function listPhaseOptions(): Promise<Option[]> {
+  const rows = await listProjectPhases();
+  return rows.map((r) => ({ id: r.id, label: `${r.phase_name} (${r.phase_code})` }));
+}
+
+export async function listMilestoneOptions(): Promise<Option[]> {
+  const rows = await listProjectMilestones();
+  return rows.map((r) => ({ id: r.id, label: `${r.milestone_name} (${r.milestone_code})` }));
+}
+
+export async function listResourcePlanOptions(): Promise<Option[]> {
+  const rows = await listResourcePlans();
+  return rows.map((r) => ({ id: r.id, label: `${r.plan_name} (${r.document_number})` }));
+}
+
+export async function listTimesheetOptions(): Promise<Option[]> {
+  const rows = await listTimesheets();
+  return rows.map((r) => ({
+    id: r.id,
+    label: `${r.document_number} · ${r.period_start} → ${r.period_end}`,
+  }));
+}
+
+// ---------------------------------------------------------------------------
+// Portfolio overview
+// ---------------------------------------------------------------------------
+
+/** Numeric coercion for the `Numeric` columns the API serialises as strings. */
+export function num(value: number | string | null | undefined): number {
+  const n = typeof value === "number" ? value : Number(value ?? 0);
+  return Number.isFinite(n) ? n : 0;
+}
+
+export function sumBy<T>(rows: T[], pick: (row: T) => number | string | null | undefined): number {
+  return rows.reduce((total, row) => total + num(pick(row)), 0);
+}
+
+export function countIn<T extends { status: string }>(rows: T[], statuses: string[]): number {
+  return rows.filter((r) => statuses.includes(r.status)).length;
+}
+
+export function countNotIn<T extends { status: string }>(rows: T[], statuses: string[]): number {
+  return rows.filter((r) => !statuses.includes(r.status)).length;
+}
+
+export type ProjectsOverview = {
+  projects: Project[];
+  phases: ProjectPhase[];
+  milestones: ProjectMilestone[];
+  tasks: ProjectTask[];
+  timesheets: Timesheet[];
+  entries: TimesheetEntry[];
+  allocations: ResourceAllocation[];
+  budgets: ProjectBudget[];
+  costs: ProjectCost[];
+  issues: ProjectIssue[];
+  risks: ProjectRisk[];
+  changeRequests: ChangeRequest[];
+  documents: ProjectDocument[];
+  /** True when at least one endpoint failed — the rest is still usable. */
+  partial: boolean;
+  statusCodes: number[];
+};
+
+/**
+ * Loads the whole portfolio in one pass. A failing endpoint degrades to an
+ * empty list rather than blanking the dashboard, and its HTTP status is
+ * reported so the caller can distinguish "signed out" from "server error".
+ */
+export async function loadProjectsOverview(): Promise<ProjectsOverview> {
+  const statusCodes: number[] = [];
+
+  async function safe<T>(load: () => Promise<T[]>): Promise<T[]> {
+    try {
+      return await load();
+    } catch (err) {
+      if (err instanceof ApiClientError) statusCodes.push(err.status);
+      return [];
+    }
+  }
+
+  const [
+    projects,
+    phases,
+    milestones,
+    tasks,
+    timesheets,
+    entries,
+    allocations,
+    budgets,
+    costs,
+    issues,
+    risks,
+    changeRequests,
+    documents,
+  ] = await Promise.all([
+    safe(listProjects),
+    safe(listProjectPhases),
+    safe(listProjectMilestones),
+    safe(listProjectTasks),
+    safe(listTimesheets),
+    safe(listTimesheetEntries),
+    safe(listResourceAllocations),
+    safe(listProjectBudgets),
+    safe(listProjectCosts),
+    safe(listProjectIssues),
+    safe(listProjectRisks),
+    safe(listChangeRequests),
+    safe(listProjectDocuments),
+  ]);
+
+  return {
+    projects,
+    phases,
+    milestones,
+    tasks,
+    timesheets,
+    entries,
+    allocations,
+    budgets,
+    costs,
+    issues,
+    risks,
+    changeRequests,
+    documents,
+    partial: statusCodes.length > 0,
+    statusCodes,
+  };
+}

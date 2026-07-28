@@ -36,6 +36,8 @@ class CompanyResponse(BaseModel):
     status: str
     fiscal_year_start_month: int
     timezone: str
+    registration_number: str | None = None
+    tax_number: str | None = None
 
 
 class BranchCreateRequest(BaseModel):
@@ -65,6 +67,14 @@ class BranchResponse(BaseModel):
     branch_name: str
     branch_type: str
     status: str
+    address_line1: str | None = None
+    address_line2: str | None = None
+    city: str | None = None
+    state_code: str | None = None
+    postal_code: str | None = None
+    country_code: str | None = None
+    phone: str | None = None
+    email: str | None = None
 
 
 class DepartmentCreateRequest(BaseModel):

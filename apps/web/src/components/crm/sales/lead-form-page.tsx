@@ -424,6 +424,7 @@ export function LeadFormPage({ companyAccountId }: { companyAccountId: string })
     if (!form.entity_email?.trim()) missing.push("Entity Email");
     if (!form.entity_address?.trim()) missing.push("Entity Address");
     if (!form.entity_contact?.trim()) missing.push("Entity Contact Number");
+    if (!form.oem_name?.trim()) missing.push("OEM Name");
     if (missing.length > 0) {
       setMandateMessage(missingRequiredMessage(missing));
       setMandateOpen(true);
@@ -677,11 +678,12 @@ export function LeadFormPage({ companyAccountId }: { companyAccountId: string })
 
       <CrmSection title="OEM Information" icon={Package}>
         <div className="grid gap-x-10 gap-y-3 md:grid-cols-2">
-          <FinanceField label="OEM Name">
+          <FinanceField label="OEM Name *">
             <FinanceSelect
               value={oemPick}
               onChange={(e) => onOemPickChange(e.target.value)}
               aria-label="Select OEM"
+              required
             >
               <option value="">None</option>
               {oemCatalog.map((oem) => (

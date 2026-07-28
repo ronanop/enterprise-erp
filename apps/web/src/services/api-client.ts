@@ -79,17 +79,25 @@ export async function apiClient<T>(
   const { body, headers, auth = true, query, _retried, ...rest } = options;
   const token = auth ? getAccessToken() : null;
 
-  const response = await fetch(buildUrl(path, query), {
-    ...rest,
-    headers: {
-      "Content-Type": "application/json",
-      Accept: "application/json",
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...headers,
-    },
-    body: body !== undefined ? JSON.stringify(body) : undefined,
-    cache: "no-store",
-  });
+  let response: Response;
+  try {
+    response = await fetch(buildUrl(path, query), {
+      ...rest,
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...headers,
+      },
+      body: body !== undefined ? JSON.stringify(body) : undefined,
+      cache: "no-store",
+    });
+  } catch {
+    throw new ApiClientError(
+      "Cannot reach the API. Confirm the backend is running on port 8000.",
+      0,
+    );
+  }
 
   let payload: ApiResponse<T> | ErrorResponse;
   try {

@@ -2,7 +2,9 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { AlertTriangle, ArrowLeft, FileText, Pencil, Plus, RefreshCw } from "lucide-react";
+import { AlertTriangle, ArrowLeft, Download, FileText, Pencil, Plus, RefreshCw } from "lucide-react";
+
+import { exportQuotePdf, loadSellerLetterhead } from "@/lib/crm/export-quote-pdf";
 
 import {
   CrmDetailGrid,
@@ -76,6 +78,7 @@ export function QuoteDetailPage({ quoteId }: { quoteId: string }) {
   const [error, setError] = useState<string | null>(null);
   const [banner, setBanner] = useState<{ text: string; tone: "success" | "error" } | null>(null);
   const [busy, setBusy] = useState(false);
+  const [exporting, setExporting] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -224,37 +227,63 @@ export function QuoteDetailPage({ quoteId }: { quoteId: string }) {
   };
   const nextStep = existingOvf
     ? {
-        label: existingOvf.deal_won ? "Review Won Deal" : "Continue OVF",
-        description: existingOvf.deal_won
-          ? "The deal is complete. Review its final OVF and value."
-          : "Continue approval, SCM sharing, and Deal Won on the OVF.",
-        href: `/crm/ovf/${existingOvf.id}`,
-      }
+      label: existingOvf.deal_won ? "Review Won Deal" : "Continue OVF",
+      description: existingOvf.deal_won
+        ? "The deal is complete. Review its final OVF and value."
+        : "Continue approval, SCM sharing, and Deal Won on the OVF.",
+      href: `/crm/ovf/${existingOvf.id}`,
+    }
     : quote.quote_stage === "accepted" &&
-        opportunity?.blueprint_state === "ovf_ready" &&
-        opportunity.customer_po_approved
+      opportunity?.blueprint_state === "ovf_ready" &&
+      opportunity.customer_po_approved
       ? {
-          label: "Create OVF",
-          description: "Customer PO is approved. Create the OVF to continue the deal.",
-          href: `/crm/quotes/${quote.id}/ovf/new`,
-        }
+        label: "Create OVF",
+        description: "Customer PO is approved. Create the OVF to continue the deal.",
+        href: `/crm/quotes/${quote.id}/ovf/new`,
+      }
       : quote.quote_stage === "accepted"
         ? {
-            label: "Attach Customer PO",
-            description:
-              "The quote is accepted. Continue on the opportunity to attach and approve the customer PO.",
-            href: `/crm/opportunities/${quote.opportunity_id}`,
-          }
+          label: "Attach Customer PO",
+          description:
+            "The quote is accepted. Continue on the opportunity to attach and approve the customer PO.",
+          href: `/crm/opportunities/${quote.opportunity_id}`,
+        }
         : {
-            label: "Complete Quote",
-            description: "Use the quote actions and line editor on this screen to advance the deal.",
-          };
+          label: "Complete Quote",
+          description: "Use the quote actions and line editor on this screen to advance the deal.",
+        };
 
   const canCreateOvf =
     quote.quote_stage === "accepted" &&
     !existingOvf &&
     opportunity?.blueprint_state === "ovf_ready" &&
     Boolean(opportunity.customer_po_approved);
+
+  async function onExportPdf() {
+    const q = quote;
+    if (!q) return;
+    setExporting(true);
+    setError(null);
+    try {
+      const seller = await loadSellerLetterhead(q.company_id, q.branch_id);
+      await exportQuotePdf({
+        quote: q,
+        lines,
+        seller,
+        customerName: entityName || accountName || "—",
+        customerAddress: entityAddress || "—",
+        subject: q.subject || projectTitle || q.quote_no,
+        ownerName: ownerName || "—",
+        termsOverride: q.terms,
+      });
+      setBanner({ text: "Quote PDF exported.", tone: "success" });
+    } catch (err) {
+      const message = err instanceof ApiClientError ? err.message : "Failed to export quote PDF";
+      setBanner({ text: message, tone: "error" });
+    } finally {
+      setExporting(false);
+    }
+  }
 
   return (
     <CrmPage>
@@ -277,9 +306,20 @@ export function QuoteDetailPage({ quoteId }: { quoteId: string }) {
           <div className="flex flex-wrap items-center gap-2">
             <FinanceStatusBadge status={quote.approval_status} />
             <BlueprintStateBadge state={blueprint.state} />
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-7 cursor-pointer px-2.5 text-[0.8rem] transition-colors duration-200"
+              disabled={exporting || loading}
+              onClick={() => void onExportPdf()}
+            >
+              <Download className={`size-3.5 ${exporting ? "animate-pulse" : ""}`} />
+              {exporting ? "Exporting…" : "Export PDF"}
+            </Button>
             {!quote.locked &&
-            quote.quote_stage !== "accepted" &&
-            quote.quote_stage !== "lost" ? (
+              quote.quote_stage !== "accepted" &&
+              quote.quote_stage !== "lost" ? (
               <Link
                 href={`/crm/quotes/${quote.id}/edit`}
                 className="inline-flex h-7 cursor-pointer items-center gap-1.5 rounded-lg border border-border bg-background px-2.5 text-[0.8rem] font-medium text-foreground shadow-sm transition-colors duration-200 hover:bg-muted/60"

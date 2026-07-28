@@ -7,9 +7,14 @@ from pydantic import BaseModel, Field
 
 
 class AddressJson(BaseModel):
-    line1: str
-    city: str
-    country_code: str = Field(max_length=3)
+    """Billing/shipping address payload.
+
+    Defaults keep list/get responses working when legacy rows stored `{}`.
+    """
+
+    line1: str = "TBD"
+    city: str = "TBD"
+    country_code: str = Field(default="IN", max_length=3)
     state: str | None = None
     postal_code: str | None = None
 

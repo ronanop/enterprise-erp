@@ -4,43 +4,79 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import {
   AlertTriangle,
-  ArrowUpRight,
+  BarChart3,
+  CalendarDays,
   ClipboardList,
+  FileText,
   FolderKanban,
+  GitPullRequestArrow,
+  PieChart,
   RefreshCw,
+  Scale,
+  Target,
   Timer,
+  Users,
 } from "lucide-react";
 
-import { FinanceKpiCard } from "@/components/finance/finance-kpi-card";
+import { HealthDot } from "@/components/projects/projects-badges";
+import {
+  PROJECTS_CHART_COLORS,
+  ProjectsActivityTile,
+  ProjectsCountBarChart,
+  ProjectsDonutChart,
+  ProjectsHeadlineBand,
+  ProjectsHeadlineStat,
+  ProjectsIconBadge,
+  ProjectsKpiCard,
+  ProjectsListPanel,
+  ProjectsPage,
+  ProjectsSection,
+  ProjectsValueBarChart,
+  ProjectsViewAllLink,
+  ProjectsWarnBanner,
+} from "@/components/projects/projects-ui";
 import { FinanceStatusBadge } from "@/components/finance/finance-status-badge";
 import { PageHeader } from "@/components/layout/page-header";
-import { ProjectsPipelineFunnel } from "@/components/projects/projects-pipeline-funnel";
 import { Badge } from "@/components/ui/badge";
-import {
-  projectsQuickLinks,
-  projectsWorkspaceGroups,
-  resolveProjectsGroupResources,
-} from "@/config/projects";
+import { Button } from "@/components/ui/button";
+import { projectsPipelineStages } from "@/config/projects";
 import { isAuthenticated } from "@/lib/auth";
 import {
-  asNumber,
-  asStatus,
-  countByStatus,
-  countOpenDocs,
+  countIn,
+  countNotIn,
+  formatDate,
   formatInr,
+  humanizeStatus,
   loadProjectsOverview,
-  sumField,
+  num,
+  sumBy,
+  type Project,
   type ProjectsOverview,
-  type ProjectsRow,
-} from "@/services/projects-service";
+} from "@/services/projects-portal-service";
 
-function recentProjects(rows: ProjectsRow[], limit = 6): ProjectsRow[] {
+/** Portfolio lifecycle stages — FRD-11 §4 project statuses. */
+const LIFECYCLE = [
+  { key: "draft", label: "Draft" },
+  { key: "submitted", label: "Submitted" },
+  { key: "approved", label: "Approved" },
+  { key: "in_progress", label: "In progress" },
+  { key: "on_hold", label: "On hold" },
+  { key: "completed", label: "Completed" },
+] as const;
+
+const STAGE_COLORS = [
+  PROJECTS_CHART_COLORS.sky,
+  PROJECTS_CHART_COLORS.skyDark,
+  PROJECTS_CHART_COLORS.teal,
+  PROJECTS_CHART_COLORS.emerald,
+  PROJECTS_CHART_COLORS.slate,
+] as const;
+
+const ACTIVE_STATUSES = ["approved", "in_progress"];
+
+function newestProjects(rows: Project[], limit = 6): Project[] {
   return [...rows]
-    .sort((a, b) =>
-      String(b.project_code ?? b.project_name ?? "").localeCompare(
-        String(a.project_code ?? a.project_name ?? ""),
-      ),
-    )
+    .sort((a, b) => (b.created_at ?? "").localeCompare(a.created_at ?? ""))
     .slice(0, limit);
 }
 
@@ -63,112 +99,127 @@ export function ProjectsDashboard() {
   }, [load]);
 
   const kpis = useMemo(() => {
-    if (!data) {
-      return {
-        activeProjects: 0,
-        openTasks: 0,
-        pendingTimesheets: 0,
-        openIssues: 0,
-        budgetTotal: 0,
-        hoursTotal: 0,
-      };
-    }
+    const projects = data?.projects ?? [];
+    const tasks = data?.tasks ?? [];
+    const budgets = data?.budgets ?? [];
+    const costs = data?.costs ?? [];
+
+    const budgetTotal = sumBy(budgets, (b) => b.budget_amount);
+    const costTotal = sumBy(costs, (c) => c.cost_amount);
+
     return {
-      activeProjects: countByStatus(data.projects, [
-        "in_progress",
-        "approved",
-        "submitted",
-      ]),
-      openTasks: countByStatus(data.tasks, ["open", "in_progress", "blocked", "submitted"]),
-      pendingTimesheets: countByStatus(data.timesheets, ["submitted", "draft"]),
-      openIssues: countOpenDocs(data.issues, ["resolved", "closed", "cancelled"]),
-      budgetTotal: sumField(data.budgets, "budget_amount"),
-      hoursTotal: sumField(data.timesheets, "total_hours"),
+      active: countIn(projects, ACTIVE_STATUSES),
+      atRisk: projects.filter((p) => p.health_status === "red").length,
+      openTasks: countNotIn(tasks, ["completed", "cancelled"]),
+      blockedTasks: countIn(tasks, ["blocked"]),
+      pendingTimesheets: countIn(data?.timesheets ?? [], ["submitted"]),
+      openIssues: countNotIn(data?.issues ?? [], ["resolved", "closed", "cancelled"]),
+      openRisks: countNotIn(data?.risks ?? [], ["closed", "cancelled", "accepted"]),
+      pendingChanges: countIn(data?.changeRequests ?? [], ["submitted"]),
+      portfolioValue: sumBy(projects, (p) => p.budget_amount),
+      budgetTotal,
+      costTotal,
+      burnPct: budgetTotal > 0 ? Math.round((costTotal / budgetTotal) * 100) : 0,
+      loggedHours: sumBy(data?.entries ?? [], (e) => e.hours_worked),
+      milestonesAchieved: countIn(data?.milestones ?? [], ["achieved"]),
     };
   }, [data]);
 
-  const pipelineCounts = useMemo(
-    () => ({
+  const funnelChart = useMemo(() => {
+    const counts: Record<string, number> = {
       projects: data?.projects.length ?? 0,
       "project-phases": data?.phases.length ?? 0,
       "project-milestones": data?.milestones.length ?? 0,
       "project-tasks": data?.tasks.length ?? 0,
       timesheets: data?.timesheets.length ?? 0,
       "project-budgets": data?.budgets.length ?? 0,
-    }),
-    [data],
-  );
-
-  const recent = useMemo(() => recentProjects(data?.projects ?? []), [data]);
-
-  const taskWatch = useMemo(() => {
-    const rows = data?.tasks ?? [];
-    return [...rows]
-      .sort((a, b) => asNumber(b.estimated_hours) - asNumber(a.estimated_hours))
-      .slice(0, 5);
+    };
+    return projectsPipelineStages.map((stage) => ({
+      name: stage.title,
+      count: counts[stage.resource] ?? 0,
+    }));
   }, [data]);
 
-  const projectStatusMix = useMemo(() => {
+  const lifecycleDonut = useMemo(() => {
     const rows = data?.projects ?? [];
-    const stages = [
-      { key: "draft", label: "Draft", barClass: "bg-slate-400" },
-      { key: "submitted", label: "Submitted", barClass: "bg-sky-600" },
-      { key: "approved", label: "Approved", barClass: "bg-teal-600" },
-      { key: "in_progress", label: "In progress", barClass: "bg-emerald-600" },
-      { key: "on_hold", label: "On hold", barClass: "bg-amber-500" },
-      { key: "completed", label: "Completed", barClass: "bg-slate-600" },
-    ] as const;
-    const total = rows.length || 1;
-    return stages.map((s) => {
-      const count = countByStatus(rows, [s.key]);
-      return { ...s, count, pct: Math.round((count / total) * 100) };
-    });
+    return LIFECYCLE.map((s) => ({
+      name: s.label,
+      value: countIn(rows, [s.key]),
+    })).filter((d) => d.value > 0);
+  }, [data]);
+
+  const budgetByType = useMemo(() => {
+    const rows = data?.budgets ?? [];
+    const totals = new Map<string, number>();
+    for (const row of rows) {
+      totals.set(row.budget_type, (totals.get(row.budget_type) ?? 0) + num(row.budget_amount));
+    }
+    return [...totals.entries()]
+      .map(([type, value]) => ({ name: humanizeStatus(type), value }))
+      .sort((a, b) => b.value - a.value)
+      .slice(0, 6);
+  }, [data]);
+
+  const recent = useMemo(() => newestProjects(data?.projects ?? []), [data]);
+
+  const dueTasks = useMemo(() => {
+    const rows = (data?.tasks ?? []).filter(
+      (t) => !["completed", "cancelled"].includes(t.status) && t.due_date,
+    );
+    return rows.sort((a, b) => (a.due_date ?? "").localeCompare(b.due_date ?? "")).slice(0, 6);
+  }, [data]);
+
+  const projectNameById = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const p of data?.projects ?? []) map.set(p.id, p.project_name);
+    return map;
   }, [data]);
 
   const authBlocked =
-    Boolean(data?.statusCodes.includes(401)) ||
-    (!authenticated && Boolean(data?.errors.length));
+    Boolean(data?.statusCodes.includes(401)) || (!authenticated && Boolean(data?.partial));
 
   return (
-    <div className="space-y-5">
+    <ProjectsPage>
       <PageHeader
-        title="Projects"
-        description="PMO workspace — portfolio, WBS, tasks, timesheets, resources, budgets, issues, risks, and change control."
+        title="Project Delivery Dashboard"
+        description="Portfolio health, delivery progress, effort, and cost control across every active project."
         actions={
           <div className="flex flex-wrap items-center gap-2">
-            <button
+            <Button
               type="button"
+              variant="outline"
+              size="sm"
+              className="cursor-pointer"
               onClick={() => void load()}
               disabled={loading}
-              className="inline-flex h-8 cursor-pointer items-center gap-1.5 rounded-lg border border-border/80 bg-card px-3 text-sm font-medium shadow-sm transition-colors duration-200 hover:bg-muted disabled:opacity-60"
             >
               <RefreshCw className={`size-3.5 ${loading ? "animate-spin" : ""}`} />
               Refresh
-            </button>
+            </Button>
             <Link
-              href="/projects/project-tasks"
+              href="/projects/projects/new"
               className="inline-flex h-8 cursor-pointer items-center gap-1.5 rounded-lg bg-primary px-3 text-sm font-medium text-primary-foreground shadow-sm transition-opacity duration-200 hover:opacity-90"
             >
-              <ClipboardList className="size-3.5" />
-              Tasks
+              <FolderKanban className="size-3.5" />
+              New Project
             </Link>
             <Link
-              href="/projects/timesheets"
+              href="/projects/task-board"
               className="inline-flex h-8 cursor-pointer items-center rounded-lg border border-border/80 bg-card px-3 text-sm font-medium shadow-sm transition-colors duration-200 hover:bg-muted"
             >
-              Timesheets
+              Task Board
             </Link>
           </div>
         }
       />
 
       {authBlocked ? (
-        <div className="rounded-xl border border-dashed border-amber-300/80 bg-amber-50 px-4 py-3 text-sm text-amber-950">
+        <ProjectsWarnBanner>
           Sign in to load live project data.{" "}
           <Link href="/login" className="cursor-pointer font-medium underline underline-offset-2">
             Go to login
           </Link>
-        </div>
+        </ProjectsWarnBanner>
       ) : null}
 
       {data?.partial && !authBlocked ? (
@@ -177,142 +228,180 @@ export function ProjectsDashboard() {
         </div>
       ) : null}
 
+      <ProjectsHeadlineBand>
+        <div className="grid divide-y divide-white/10 sm:grid-cols-2 sm:divide-x sm:divide-y-0 lg:grid-cols-4">
+          <ProjectsHeadlineStat
+            label="Portfolio value"
+            value={formatInr(kpis.portfolioValue)}
+            sub={`${data?.projects.length ?? 0} projects · ${kpis.active} active`}
+            loading={loading}
+          />
+          <ProjectsHeadlineStat
+            label="Budget approved"
+            value={formatInr(kpis.budgetTotal)}
+            sub={`${data?.budgets.length ?? 0} budget lines`}
+            loading={loading}
+          />
+          <ProjectsHeadlineStat
+            label="Cost booked"
+            value={formatInr(kpis.costTotal)}
+            sub={`${kpis.burnPct}% of approved budget`}
+            loading={loading}
+          />
+          <ProjectsHeadlineStat
+            label="Hours logged"
+            value={kpis.loggedHours.toFixed(1)}
+            sub={`${data?.entries.length ?? 0} time entries`}
+            loading={loading}
+          />
+        </div>
+      </ProjectsHeadlineBand>
+
       <div className="grid gap-2.5 sm:grid-cols-2 xl:grid-cols-4">
-        <FinanceKpiCard
+        <ProjectsKpiCard
           label="Active projects"
-          value={loading ? "—" : String(kpis.activeProjects)}
-          hint={`${formatInr(sumField(data?.projects ?? [], "budget_amount"))} portfolio · ${data?.projects.length ?? 0} total`}
+          value={String(kpis.active)}
+          hint={`${kpis.atRisk} flagged red`}
           icon={FolderKanban}
-          tone={kpis.activeProjects > 0 ? "default" : "success"}
+          tone={kpis.atRisk > 0 ? "warning" : "default"}
+          href="/projects/projects"
+          loading={loading}
         />
-        <FinanceKpiCard
+        <ProjectsKpiCard
           label="Open tasks"
-          value={loading ? "—" : String(kpis.openTasks)}
-          hint={`${countByStatus(data?.tasks ?? [], ["blocked"])} blocked · ${data?.tasks.length ?? 0} tasks`}
+          value={String(kpis.openTasks)}
+          hint={`${kpis.blockedTasks} blocked`}
           icon={ClipboardList}
-          tone={kpis.openTasks > 0 ? "warning" : "success"}
+          tone={kpis.blockedTasks > 0 ? "warning" : "default"}
+          href="/projects/project-tasks"
+          loading={loading}
         />
-        <FinanceKpiCard
-          label="Pending timesheets"
-          value={loading ? "—" : String(kpis.pendingTimesheets)}
-          hint={`${kpis.hoursTotal} hrs · ${data?.timesheets.length ?? 0} sheets`}
+        <ProjectsKpiCard
+          label="Timesheets to approve"
+          value={String(kpis.pendingTimesheets)}
+          hint={`${data?.timesheets.length ?? 0} sheets total`}
           icon={Timer}
           tone={kpis.pendingTimesheets > 0 ? "warning" : "success"}
+          href="/projects/timesheets"
+          loading={loading}
         />
-        <FinanceKpiCard
+        <ProjectsKpiCard
           label="Open issues"
-          value={loading ? "—" : String(kpis.openIssues)}
-          hint={`${formatInr(kpis.budgetTotal)} budgets · ${countOpenDocs(data?.risks ?? [], ["closed", "cancelled", "accepted"])} risks open`}
+          value={String(kpis.openIssues)}
+          hint={`${kpis.openRisks} risks open · ${kpis.pendingChanges} changes pending`}
           icon={AlertTriangle}
           tone={kpis.openIssues > 0 ? "danger" : "success"}
+          href="/projects/project-issues"
+          loading={loading}
         />
       </div>
 
-      <ProjectsPipelineFunnel counts={pipelineCounts} loading={loading} />
+      <div className="grid gap-3 xl:grid-cols-3">
+        <ProjectsSection
+          title="Delivery funnel"
+          subtitle="Project → Budget volume"
+          icon={BarChart3}
+          badge={<Badge variant="secondary">Counts</Badge>}
+        >
+          <ProjectsCountBarChart data={funnelChart} loading={loading} />
+          <ol className="mt-1 flex flex-wrap gap-x-3 gap-y-1 border-t border-border/60 pt-2">
+            {projectsPipelineStages.map((stage, i) => (
+              <li key={stage.key}>
+                <Link
+                  href={stage.href}
+                  className="inline-flex cursor-pointer items-center gap-1.5 text-[11px] text-muted-foreground transition-colors duration-200 hover:text-foreground"
+                >
+                  <span
+                    className="size-1.5 rounded-full"
+                    style={{ backgroundColor: STAGE_COLORS[i % STAGE_COLORS.length] }}
+                  />
+                  {stage.title}
+                </Link>
+              </li>
+            ))}
+          </ol>
+        </ProjectsSection>
 
-      <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
-        {projectsQuickLinks.map((link) => {
-          const Icon = link.icon;
-          return (
-            <Link
-              key={link.href}
-              href={link.href}
-              className="group flex cursor-pointer items-center gap-3 rounded-xl border border-border/80 bg-card px-3.5 py-3 shadow-sm transition-[border-color,box-shadow] duration-200 hover:border-primary/25 hover:shadow-md"
-            >
-              <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-accent text-accent-foreground">
-                <Icon className="size-4" />
-              </span>
-              <span className="min-w-0 flex-1">
-                <span className="flex items-center gap-1 text-sm font-medium tracking-tight">
-                  {link.title}
-                  <ArrowUpRight className="size-3 text-muted-foreground opacity-0 transition-opacity duration-200 group-hover:opacity-100" />
-                </span>
-                <span className="block text-[11px] text-muted-foreground">
-                  {link.description}
-                </span>
-              </span>
-            </Link>
-          );
-        })}
+        <ProjectsSection
+          title="Lifecycle mix"
+          subtitle="All projects by status"
+          icon={PieChart}
+          badge={<Badge variant="secondary">Share</Badge>}
+        >
+          <ProjectsDonutChart data={lifecycleDonut} loading={loading} />
+          <ul className="mt-1 grid grid-cols-2 gap-x-3 gap-y-1 border-t border-border/60 pt-2">
+            {LIFECYCLE.map((s, i) => {
+              const count = countIn(data?.projects ?? [], [s.key]);
+              if (!count && !loading) return null;
+              return (
+                <li key={s.key} className="flex items-center justify-between gap-2 text-[11px]">
+                  <span className="flex min-w-0 items-center gap-1.5 truncate text-muted-foreground">
+                    <span
+                      className="size-1.5 shrink-0 rounded-full"
+                      style={{ backgroundColor: STAGE_COLORS[i % STAGE_COLORS.length] }}
+                    />
+                    {s.label}
+                  </span>
+                  <span className="font-medium tabular-nums text-foreground">
+                    {loading ? "—" : count}
+                  </span>
+                </li>
+              );
+            })}
+          </ul>
+        </ProjectsSection>
+
+        <ProjectsSection
+          title="Budget by category"
+          subtitle="Approved spend envelope"
+          icon={Target}
+          badge={<Badge variant="secondary">INR</Badge>}
+        >
+          <ProjectsValueBarChart data={budgetByType} loading={loading} formatValue={formatInr} />
+        </ProjectsSection>
       </div>
 
-      <section className="space-y-3">
-        <div className="flex items-center justify-between gap-2">
-          <h2 className="text-sm font-medium tracking-tight">Workspace</h2>
-          <Badge variant="secondary">{projectsWorkspaceGroups.length} areas</Badge>
-        </div>
-        <div className="grid gap-3 lg:grid-cols-3">
-          {projectsWorkspaceGroups.map((group) => {
-            const Icon = group.icon;
-            const resources = resolveProjectsGroupResources(group);
-            return (
-              <div
-                key={group.key}
-                className="rounded-xl border border-border/80 bg-card p-4 shadow-sm"
-              >
-                <div className="mb-3 flex items-start gap-3">
-                  <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-muted text-foreground">
-                    <Icon className="size-4" />
-                  </span>
-                  <div className="min-w-0">
-                    <h3 className="text-sm font-medium tracking-tight">{group.title}</h3>
-                    <p className="mt-0.5 text-[11px] leading-relaxed text-muted-foreground">
-                      {group.description}
-                    </p>
-                  </div>
-                </div>
-                <ul className="space-y-1">
-                  {resources.map((resource) => (
-                    <li key={resource.key}>
-                      <Link
-                        href={`/projects/${resource.key}`}
-                        className="flex cursor-pointer items-center justify-between gap-2 rounded-lg px-2 py-1.5 text-xs transition-colors duration-200 hover:bg-accent/50"
-                      >
-                        <span className="font-medium text-foreground">{resource.title}</span>
-                        <span className="truncate text-[10px] text-muted-foreground">
-                          {resource.description}
-                        </span>
-                      </Link>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            );
-          })}
-        </div>
-      </section>
-
-      <div className="grid gap-3 xl:grid-cols-[1.3fr_1fr_1fr]">
-        <div className="overflow-hidden rounded-xl border border-border/80 bg-card shadow-sm">
+      <div className="grid gap-3 xl:grid-cols-2">
+        <ProjectsListPanel>
           <div className="flex items-center justify-between gap-2 border-b border-border/70 px-4 py-3">
-            <div>
-              <h2 className="text-sm font-medium tracking-tight">Recent projects</h2>
-              <p className="text-[11px] text-muted-foreground">Portfolio register</p>
+            <div className="flex items-center gap-2.5">
+              <ProjectsIconBadge icon={FolderKanban} />
+              <div>
+                <h2 className="text-sm font-medium tracking-tight">Recent projects</h2>
+                <p className="text-[11px] text-muted-foreground">Newest in the portfolio</p>
+              </div>
             </div>
-            <Link
-              href="/projects/projects"
-              className="cursor-pointer text-xs font-medium text-primary transition-opacity duration-200 hover:opacity-80"
-            >
-              View all
-            </Link>
+            <ProjectsViewAllLink href="/projects/projects" />
           </div>
           <div className="erp-scroll overflow-x-auto">
-            <table className="w-full min-w-[480px] text-left text-sm">
+            <table className="w-full min-w-110 text-left text-sm">
               <thead>
                 <tr className="border-b border-border/70 bg-muted/40 text-[11px] tracking-wide text-muted-foreground uppercase">
                   <th className="px-4 py-2.5 font-medium">Project</th>
-                  <th className="px-4 py-2.5 font-medium">Type</th>
                   <th className="px-4 py-2.5 font-medium">Budget</th>
+                  <th className="px-4 py-2.5 font-medium">Health</th>
                   <th className="px-4 py-2.5 font-medium">Status</th>
                 </tr>
               </thead>
               <tbody>
                 {loading ? (
-                  <tr>
-                    <td colSpan={4} className="px-4 py-10 text-center text-muted-foreground">
-                      Loading…
-                    </td>
-                  </tr>
+                  Array.from({ length: 5 }).map((_, i) => (
+                    <tr key={i} className="border-b border-border/50 last:border-0">
+                      <td className="px-4 py-3">
+                        <div className="h-3.5 w-32 animate-pulse rounded bg-muted" />
+                        <div className="mt-1.5 h-2.5 w-16 animate-pulse rounded bg-muted/70" />
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="h-3.5 w-20 animate-pulse rounded bg-muted" />
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="h-3.5 w-12 animate-pulse rounded bg-muted" />
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="h-5 w-16 animate-pulse rounded-full bg-muted" />
+                      </td>
+                    </tr>
+                  ))
                 ) : recent.length === 0 ? (
                   <tr>
                     <td colSpan={4} className="px-4 py-10 text-center text-muted-foreground">
@@ -320,29 +409,30 @@ export function ProjectsDashboard() {
                     </td>
                   </tr>
                 ) : (
-                  recent.map((row, idx) => (
+                  recent.map((row) => (
                     <tr
-                      key={String(row.id ?? idx)}
+                      key={row.id}
                       className="border-b border-border/50 transition-colors duration-150 last:border-0 hover:bg-accent/30"
                     >
-                      <td className="max-w-[200px] truncate px-4 py-2.5">
-                        <p className="font-medium text-foreground">
-                          {String(row.project_name ?? "—")}
-                        </p>
+                      <td className="max-w-50 truncate px-4 py-2.5">
+                        <Link
+                          href={`/projects/projects/${row.id}`}
+                          className="cursor-pointer font-medium text-foreground hover:underline"
+                        >
+                          {row.project_name}
+                        </Link>
                         <p className="truncate text-[11px] text-muted-foreground">
-                          {String(row.project_code ?? "")}
+                          {row.project_code} · {formatDate(row.planned_end_date)}
                         </p>
                       </td>
-                      <td className="px-4 py-2.5 text-xs capitalize text-muted-foreground">
-                        {String(row.project_type ?? "—").replaceAll("_", " ")}
-                      </td>
-                      <td className="px-4 py-2.5 font-mono text-xs tabular-nums text-foreground">
-                        {formatInr(asNumber(row.budget_amount))}
+                      <td className="px-4 py-2.5 tabular-nums text-foreground">
+                        {formatInr(row.budget_amount)}
                       </td>
                       <td className="px-4 py-2.5">
-                        <FinanceStatusBadge
-                          status={asStatus(row.status) || String(row.status ?? "")}
-                        />
+                        <HealthDot health={row.health_status} />
+                      </td>
+                      <td className="px-4 py-2.5">
+                        <FinanceStatusBadge status={row.status} />
                       </td>
                     </tr>
                   ))
@@ -350,93 +440,93 @@ export function ProjectsDashboard() {
               </tbody>
             </table>
           </div>
-        </div>
+        </ProjectsListPanel>
 
-        <div className="overflow-hidden rounded-xl border border-border/80 bg-card shadow-sm">
+        <ProjectsListPanel>
           <div className="flex items-center justify-between gap-2 border-b border-border/70 px-4 py-3">
-            <div>
-              <h2 className="text-sm font-medium tracking-tight">Task watch</h2>
-              <p className="text-[11px] text-muted-foreground">Highest estimated hours</p>
+            <div className="flex items-center gap-2.5">
+              <ProjectsIconBadge icon={CalendarDays} />
+              <div>
+                <h2 className="text-sm font-medium tracking-tight">Next due tasks</h2>
+                <p className="text-[11px] text-muted-foreground">Open work by due date</p>
+              </div>
             </div>
-            <Link
-              href="/projects/project-tasks"
-              className="cursor-pointer text-xs font-medium text-primary transition-opacity duration-200 hover:opacity-80"
-            >
-              View all
-            </Link>
+            <ProjectsViewAllLink href="/projects/project-tasks" />
           </div>
           <ul className="divide-y divide-border/60">
             {loading ? (
-              <li className="px-4 py-8 text-center text-sm text-muted-foreground">Loading…</li>
-            ) : taskWatch.length === 0 ? (
+              Array.from({ length: 5 }).map((_, i) => (
+                <li key={i} className="px-4 py-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="h-3.5 w-40 animate-pulse rounded bg-muted" />
+                    <div className="h-3.5 w-16 animate-pulse rounded bg-muted" />
+                  </div>
+                  <div className="mt-2 h-2.5 w-28 animate-pulse rounded bg-muted/70" />
+                </li>
+              ))
+            ) : dueTasks.length === 0 ? (
               <li className="px-4 py-8 text-center text-sm text-muted-foreground">
-                No tasks yet.
+                No dated open tasks.
               </li>
             ) : (
-              taskWatch.map((row, idx) => (
+              dueTasks.map((row) => (
                 <li
-                  key={String(row.id ?? idx)}
+                  key={row.id}
                   className="px-4 py-2.5 transition-colors duration-150 hover:bg-accent/30"
                 >
                   <div className="flex items-center justify-between gap-2">
-                    <p className="truncate text-sm font-medium">
-                      {String(row.task_name ?? row.document_number ?? "—")}
-                    </p>
-                    <FinanceStatusBadge
-                      status={asStatus(row.status) || String(row.status ?? "")}
-                    />
+                    <span className="min-w-0 truncate text-sm font-medium text-foreground">
+                      {row.task_name}
+                    </span>
+                    <span className="shrink-0 text-xs font-semibold tabular-nums text-foreground">
+                      {formatDate(row.due_date)}
+                    </span>
                   </div>
-                  <p className="mt-1 text-[11px] text-muted-foreground">
-                    {String(row.document_number ?? "")} · Est{" "}
-                    {asNumber(row.estimated_hours)}h · Actual{" "}
-                    {asNumber(row.actual_hours)}h
+                  <p className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
+                    <span className="truncate">
+                      {projectNameById.get(row.project_id) ?? row.document_number ?? "—"}
+                    </span>
+                    <span>·</span>
+                    <span>{num(row.percent_complete)}% done</span>
+                    <FinanceStatusBadge status={row.status} />
                   </p>
                 </li>
               ))
             )}
           </ul>
-        </div>
-
-        <div className="rounded-xl border border-border/80 bg-card p-4 shadow-sm">
-          <div className="mb-3">
-            <h2 className="text-sm font-medium tracking-tight">Project status mix</h2>
-            <p className="text-[11px] text-muted-foreground">Portfolio lifecycle</p>
-          </div>
-          {loading ? (
-            <p className="py-6 text-center text-sm text-muted-foreground">Loading…</p>
-          ) : (
-            <div className="space-y-3">
-              {projectStatusMix.map((s) => (
-                <div key={s.key}>
-                  <div className="mb-1 flex items-center justify-between gap-2 text-xs">
-                    <span className="font-medium text-foreground">{s.label}</span>
-                    <span className="font-mono tabular-nums text-muted-foreground">
-                      {s.count} · {s.pct}%
-                    </span>
-                  </div>
-                  <div className="h-1.5 overflow-hidden rounded-full bg-muted">
-                    <div
-                      className={`h-full rounded-full transition-[width] duration-300 ${s.barClass}`}
-                      style={{ width: `${Math.max(4, s.pct)}%` }}
-                      role="presentation"
-                    />
-                  </div>
-                </div>
-              ))}
-              <p className="pt-1 text-[11px] text-muted-foreground">
-                Milestones achieved{" "}
-                {countByStatus(data?.milestones ?? [], ["achieved"])} · Changes open{" "}
-                {countOpenDocs(data?.changeRequests ?? [], [
-                  "implemented",
-                  "rejected",
-                  "cancelled",
-                ])}{" "}
-                · Costs posted {countByStatus(data?.costs ?? [], ["posted"])}
-              </p>
-            </div>
-          )}
-        </div>
+        </ProjectsListPanel>
       </div>
-    </div>
+
+      <div className="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-4">
+        <ProjectsActivityTile
+          label="Allocations"
+          value={loading ? "—" : String(data?.allocations.length ?? 0)}
+          icon={Users}
+          tint="bg-sky-50 text-sky-800"
+          href="/projects/resource-allocations"
+        />
+        <ProjectsActivityTile
+          label="Milestones achieved"
+          value={loading ? "—" : String(kpis.milestonesAchieved)}
+          icon={Scale}
+          tint="bg-emerald-50 text-emerald-800"
+          href="/projects/project-milestones"
+        />
+        <ProjectsActivityTile
+          label="Change requests"
+          value={loading ? "—" : String(data?.changeRequests.length ?? 0)}
+          icon={GitPullRequestArrow}
+          tint="bg-amber-50 text-amber-900"
+          href="/projects/change-requests"
+        />
+        <ProjectsActivityTile
+          label="Documents"
+          value={loading ? "—" : String(data?.documents.length ?? 0)}
+          icon={FileText}
+          tint="bg-slate-100 text-slate-800"
+          href="/projects/project-documents"
+        />
+      </div>
+    </ProjectsPage>
   );
 }

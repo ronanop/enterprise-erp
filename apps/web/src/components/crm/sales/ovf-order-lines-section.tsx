@@ -784,7 +784,7 @@ export async function persistOvfOrderLinesOnUpdate(
     ) => Promise<OvfLine>;
     updateOvfLine: (
       lineId: string,
-      body: { product_name?: string; qty?: number; unit_price?: number },
+      body: { product_name: string; qty?: number; unit_price?: number },
     ) => Promise<OvfLine>;
     createAttachment: (body: {
       entity_type: string;

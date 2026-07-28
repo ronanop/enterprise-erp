@@ -7,8 +7,10 @@ from sqlalchemy.orm import Session
 from core.exceptions import NotFoundException
 from modules.foundation.domain.value_objects import TenantContext
 from modules.foundation.service.audit_service import AuditService
+from modules.project.domain.enums import PrjEntityType
 from modules.project.models import PrjProjectMilestone
 from modules.project.repository.project_milestone_repository import ProjectMilestoneRepository
+from modules.project.service.document_number_service import DocumentNumberService
 from modules.project.service.engines import ProjectMilestoneEngine
 from modules.project.service.project_scope_validator import ProjectScopeValidator
 
@@ -17,6 +19,7 @@ class MilestoneService:
     def __init__(self, db: Session) -> None:
         self._repo = ProjectMilestoneRepository(db)
         self._scope = ProjectScopeValidator(db)
+        self._numbers = DocumentNumberService(db)
         self._engine = ProjectMilestoneEngine()
         self._audit = AuditService(db)
 
@@ -32,6 +35,10 @@ class MilestoneService:
 
     def create(self, ctx: TenantContext, company_id: UUID | None = None, **fields):
         cid = self._scope.resolve_company_id(ctx, company_id)
+        if not fields.get("milestone_code"):
+            fields["milestone_code"] = self._numbers.generate(
+                PrjEntityType.PROJECT_MILESTONE, cid, PrjProjectMilestone, "milestone_code"
+            )
 
         row = self._repo.create(ctx, company_id=cid,  **fields)
         self._audit.log_entity_change(

@@ -16,6 +16,7 @@ from modules.project.models.project_status_history import PrjProjectStatusHistor
 from modules.project.models.project_task import PrjProjectTask
 from modules.project.models.resource_allocation import PrjResourceAllocation
 from modules.project.models.resource_plan import PrjResourcePlan
+from modules.project.models.site_installation import PrjSiteInstallation
 from modules.project.models.task_assignment import PrjTaskAssignment
 from modules.project.models.task_dependency import PrjTaskDependency
 from modules.project.models.timesheet import PrjTimesheet
@@ -42,4 +43,5 @@ __all__ = [
     "PrjProjectStatusHistory",
     "PrjProjectNotification",
     "PrjProjectReport",
+    "PrjSiteInstallation",
 ]

@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, ClipboardCheck, Pencil, RefreshCw, Trophy } from "lucide-react";
+import { ArrowLeft, ClipboardCheck, Download, Pencil, RefreshCw, Trophy } from "lucide-react";
 
 import {
   CrmDetailGrid,
@@ -26,6 +26,7 @@ import {
 import { FinanceStatusBadge } from "@/components/finance/finance-status-badge";
 import { PageHeader } from "@/components/layout/page-header";
 import { Button } from "@/components/ui/button";
+import { exportOvfPdf } from "@/lib/crm/export-ovf-pdf";
 import { ApiClientError } from "@/services/api-client";
 import {
   applyOvfAction,
@@ -69,6 +70,7 @@ export function OvfDetailPage({ ovfId }: { ovfId: string }) {
   const [error, setError] = useState<string | null>(null);
   const [banner, setBanner] = useState<{ text: string; tone: "success" | "error" } | null>(null);
   const [busy, setBusy] = useState(false);
+  const [exporting, setExporting] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -157,6 +159,7 @@ export function OvfDetailPage({ ovfId }: { ovfId: string }) {
   }
 
   if (!ovf || !blueprint) return null;
+  const ovfRecord = ovf;
 
   const ownerFromEmployee = opportunity?.owner_employee_id
     ? employees.find((row) => row.id === opportunity.owner_employee_id)?.label
@@ -199,9 +202,9 @@ export function OvfDetailPage({ ovfId }: { ovfId: string }) {
   );
   const shippingCountry = textOrDash(
     ovf.shipping_country ||
-      quote?.shipping_country ||
-      company?.shipping_country ||
-      company?.billing_country,
+    quote?.shipping_country ||
+    company?.shipping_country ||
+    company?.billing_country,
   );
   const shippingContact = textOrDash(ovf.shipping_contact_person || quote?.entity_contact);
   const timelineLinks = {
@@ -214,6 +217,40 @@ export function OvfDetailPage({ ovfId }: { ovfId: string }) {
     ovf: `/crm/ovf/${ovf.id}`,
     ...(ovf.deal_won ? { won: `/crm/ovf/${ovf.id}` } : {}),
   };
+
+  function onExportPdf() {
+    setExporting(true);
+    setError(null);
+    try {
+      exportOvfPdf({
+        ovf: ovfRecord,
+        quote,
+        opportunity,
+        customerName: customerName === "—" ? "-" : customerName,
+        accountName: accountName === "—" ? "-" : accountName,
+        quoteName: quoteName === "—" ? "-" : quoteName,
+        ownerName: ownerName === "—" ? "-" : ownerName,
+        billingAddress: billingAddress === "—" ? "-" : billingAddress,
+        billingState: billingState === "—" ? "-" : billingState,
+        billingCountry: billingCountry === "—" ? "-" : billingCountry,
+        billingContact: billingContact === "—" ? "-" : billingContact,
+        shippingAddress: shippingAddress === "—" ? "-" : shippingAddress,
+        shippingState: shippingState === "—" ? "-" : shippingState,
+        shippingCountry: shippingCountry === "—" ? "-" : shippingCountry,
+        shippingContact: shippingContact === "—" ? "-" : shippingContact,
+        customerRows,
+        vendorRows,
+        createdBy: ownerName === "—" ? null : ownerName,
+        modifiedBy: ownerName === "—" ? null : ownerName,
+      });
+      setBanner({ text: "OVF PDF exported.", tone: "success" });
+    } catch (err) {
+      const message = err instanceof ApiClientError ? err.message : "Failed to export OVF PDF";
+      setBanner({ text: message, tone: "error" });
+    } finally {
+      setExporting(false);
+    }
+  }
 
   return (
     <CrmPage>
@@ -236,10 +273,10 @@ export function OvfDetailPage({ ovfId }: { ovfId: string }) {
           ovf.deal_won
             ? undefined
             : {
-                label: "Complete OVF",
-                description:
-                  "Use the blueprint actions on this screen through Share to SCM and Deal Won.",
-              }
+              label: "Complete OVF",
+              description:
+                "Use the blueprint actions on this screen through Share to SCM and Deal Won.",
+            }
         }
       />
       <ApprovalBanner locked={blueprint.locked} approvalStatus={ovf.approval_status} label="This OVF" />
@@ -257,6 +294,17 @@ export function OvfDetailPage({ ovfId }: { ovfId: string }) {
         actions={
           <div className="flex shrink-0 flex-wrap items-center gap-2">
             <BlueprintStateBadge state={blueprint.state} />
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-7 cursor-pointer px-2.5 text-[0.8rem] transition-colors duration-200"
+              disabled={exporting || loading}
+              onClick={() => onExportPdf()}
+            >
+              <Download className={`size-3.5 ${exporting ? "animate-pulse" : ""}`} />
+              {exporting ? "Exporting…" : "Export PDF"}
+            </Button>
             {!ovf.locked && !ovf.deal_won && !ovf.shared_to_scm ? (
               <Link
                 href={`/crm/ovf/${ovf.id}/edit`}

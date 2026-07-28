@@ -13,7 +13,7 @@ from uuid import UUID
 
 from sqlalchemy.orm import Session
 
-from core.exceptions import ConflictException, NotFoundException
+from core.exceptions import AppException, ConflictException, NotFoundException
 from modules.crm.domain.enums import CrmEntityType, LeadStatus
 from modules.crm.models import CrmCompany
 from modules.crm.repository.company_repository import CompanyRepository
@@ -107,6 +107,11 @@ class CompanyService:
         lead_fields["status"] = LeadStatus.NEW.value
         lead_fields["company_account_id"] = company_account_id
         lead_fields["blueprint_state"] = "open"
+
+        oem_name = (lead_fields.get("oem_name") or "").strip()
+        if not oem_name:
+            raise AppException("OEM name is required")
+        lead_fields["oem_name"] = oem_name
 
         return LeadService(self._db).create(
             ctx,

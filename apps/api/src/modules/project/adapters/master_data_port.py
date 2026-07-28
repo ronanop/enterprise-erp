@@ -19,6 +19,17 @@ class ProjectMasterDataAdapter:
     def get_employee(self, ctx: TenantContext, employee_id: UUID):
         return self._employees.get_employee(ctx, employee_id)
 
+    def list_employees(
+        self,
+        ctx: TenantContext,
+        *,
+        company_id: UUID | None = None,
+        branch_id: UUID | None = None,
+    ):
+        return self._employees.list_employees(
+            ctx, company_id=company_id, branch_id=branch_id
+        )
+
     def get_customer(self, ctx: TenantContext, customer_id: UUID):
         return self._customers.get_customer(ctx, customer_id)
 
