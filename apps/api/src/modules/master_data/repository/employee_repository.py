@@ -40,6 +40,15 @@ class EmployeeRepository(MasterScopedRepository):
         row = self.db.scalar(stmt)
         return self._to_entity(row) if row else None
 
+    def get_by_user_id(self, ctx: TenantContext, user_id: UUID) -> EmployeeEntity | None:
+        stmt = select(MasterEmployee).where(
+            MasterEmployee.user_id == user_id,
+            MasterEmployee.tenant_id == ctx.tenant_id,
+            MasterEmployee.is_deleted.is_(False),
+        )
+        row = self.db.scalar(stmt)
+        return self._to_entity(row) if row else None
+
     def get_by_code(
         self, ctx: TenantContext, company_id: UUID, employee_code: str
     ) -> MasterEmployee | None:

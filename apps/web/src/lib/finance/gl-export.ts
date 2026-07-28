@@ -1,15 +1,5 @@
-import * as XLSX from "xlsx";
-
 import type { GlEntry } from "@/services/gl-service";
-
-function downloadBlob(filename: string, blob: Blob) {
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = filename;
-  a.click();
-  URL.revokeObjectURL(url);
-}
+import { downloadCsv, downloadXlsx } from "@/lib/spreadsheet";
 
 function rowsForExport(rows: GlEntry[]) {
   return rows.map((r) => ({
@@ -32,26 +22,16 @@ function rowsForExport(rows: GlEntry[]) {
 }
 
 export function exportGlCsv(rows: GlEntry[]) {
-  const data = rowsForExport(rows);
-  const ws = XLSX.utils.json_to_sheet(data);
-  const csv = XLSX.utils.sheet_to_csv(ws);
-  downloadBlob(
+  downloadCsv(
     `general-ledger-${new Date().toISOString().slice(0, 10)}.csv`,
-    new Blob([`\uFEFF${csv}`], { type: "text/csv;charset=utf-8" }),
+    rowsForExport(rows),
   );
 }
 
-export function exportGlXlsx(rows: GlEntry[]) {
-  const data = rowsForExport(rows);
-  const ws = XLSX.utils.json_to_sheet(data);
-  const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, "General Ledger");
-  const buffer = XLSX.write(wb, { bookType: "xlsx", type: "array" });
-  downloadBlob(
+export async function exportGlXlsx(rows: GlEntry[]) {
+  await downloadXlsx(
     `general-ledger-${new Date().toISOString().slice(0, 10)}.xlsx`,
-    new Blob([buffer], {
-      type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-    }),
+    [{ name: "General Ledger", rows: rowsForExport(rows) }],
   );
 }
 

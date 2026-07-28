@@ -7,6 +7,7 @@ from modules.asset.router import asset_router
 from modules.crm.router import crm_router
 from modules.document.router import document_router
 from modules.ecommerce.router import ecommerce_router
+from modules.ess.router import ess_router
 from modules.finance.router import finance_router
 from modules.foundation.router import foundation_router
 from modules.grc.router import grc_router
@@ -43,6 +44,7 @@ api_v1_router.include_router(manufacturing_router)
 api_v1_router.include_router(quality_router)
 api_v1_router.include_router(crm_router)
 api_v1_router.include_router(hr_router)
+api_v1_router.include_router(ess_router)
 api_v1_router.include_router(payroll_router)
 api_v1_router.include_router(recruitment_router)
 api_v1_router.include_router(project_router)

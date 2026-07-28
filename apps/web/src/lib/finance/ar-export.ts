@@ -1,15 +1,5 @@
-import * as XLSX from "xlsx";
-
 import type { ArAgingBucket, ArEntry } from "@/services/ar-service";
-
-function downloadBlob(filename: string, blob: Blob) {
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = filename;
-  a.click();
-  URL.revokeObjectURL(url);
-}
+import { downloadCsv, downloadXlsx } from "@/lib/spreadsheet";
 
 function invoiceRowsForExport(rows: ArEntry[]) {
   return rows.map((r) => ({
@@ -38,26 +28,16 @@ function agingRowsForExport(buckets: ArAgingBucket[]) {
 }
 
 export function exportArInvoicesCsv(rows: ArEntry[]) {
-  const data = invoiceRowsForExport(rows);
-  const ws = XLSX.utils.json_to_sheet(data);
-  const csv = XLSX.utils.sheet_to_csv(ws);
-  downloadBlob(
+  downloadCsv(
     `accounts-receivable-${new Date().toISOString().slice(0, 10)}.csv`,
-    new Blob([`\uFEFF${csv}`], { type: "text/csv;charset=utf-8" }),
+    invoiceRowsForExport(rows),
   );
 }
 
-export function exportArInvoicesXlsx(rows: ArEntry[]) {
-  const data = invoiceRowsForExport(rows);
-  const ws = XLSX.utils.json_to_sheet(data);
-  const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, "AR Invoices");
-  const buffer = XLSX.write(wb, { bookType: "xlsx", type: "array" });
-  downloadBlob(
+export async function exportArInvoicesXlsx(rows: ArEntry[]) {
+  await downloadXlsx(
     `accounts-receivable-${new Date().toISOString().slice(0, 10)}.xlsx`,
-    new Blob([buffer], {
-      type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-    }),
+    [{ name: "AR Invoices", rows: invoiceRowsForExport(rows) }],
   );
 }
 
@@ -98,27 +78,13 @@ export function printArInvoicesTable(title: string, rows: ArEntry[]) {
 }
 
 export function exportArAgingCsv(buckets: ArAgingBucket[], asOf: string) {
-  const data = agingRowsForExport(buckets);
-  const ws = XLSX.utils.json_to_sheet(data);
-  const csv = XLSX.utils.sheet_to_csv(ws);
-  downloadBlob(
-    `ar-aging-${asOf}.csv`,
-    new Blob([`\uFEFF${csv}`], { type: "text/csv;charset=utf-8" }),
-  );
+  downloadCsv(`ar-aging-${asOf}.csv`, agingRowsForExport(buckets));
 }
 
-export function exportArAgingXlsx(buckets: ArAgingBucket[], asOf: string) {
-  const data = agingRowsForExport(buckets);
-  const ws = XLSX.utils.json_to_sheet(data);
-  const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, "AR Aging");
-  const buffer = XLSX.write(wb, { bookType: "xlsx", type: "array" });
-  downloadBlob(
-    `ar-aging-${asOf}.xlsx`,
-    new Blob([buffer], {
-      type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-    }),
-  );
+export async function exportArAgingXlsx(buckets: ArAgingBucket[], asOf: string) {
+  await downloadXlsx(`ar-aging-${asOf}.xlsx`, [
+    { name: "AR Aging", rows: agingRowsForExport(buckets) },
+  ]);
 }
 
 export function printArAgingTable(title: string, buckets: ArAgingBucket[]) {
