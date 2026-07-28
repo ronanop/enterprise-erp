@@ -115,6 +115,49 @@ const DEFAULT_LOCAL: Partial<Record<HrSetupTabId, SetupRow[]>> = {
       status: "active",
       effective_from: "2026-01-01",
     },
+    {
+      id: "lp-2",
+      code: "LP-002",
+      name: "Casual Leave Policy",
+      leave_type: "Casual Leave",
+      leave_days: 12,
+      carry_forward: false,
+      max_carry: 0,
+      negative_balance: false,
+      half_day: true,
+      requires_approval: true,
+      approval_flow: "Manager → HR",
+      status: "active",
+      effective_from: "2026-01-01",
+    },
+    {
+      id: "lp-3",
+      code: "LP-003",
+      name: "Sick Leave Policy",
+      leave_type: "Sick Leave",
+      leave_days: 10,
+      carry_forward: false,
+      max_carry: 0,
+      negative_balance: false,
+      half_day: true,
+      requires_approval: true,
+      approval_flow: "Manager → HR",
+      status: "active",
+      effective_from: "2026-01-01",
+    },
+    {
+      id: "lp-4",
+      code: "LP-004",
+      name: "Earned Leave Policy",
+      leave_type: "Earned Leave",
+      leave_days: 18,
+      negative_balance: false,
+      half_day: true,
+      requires_approval: true,
+      approval_flow: "Manager → HR → Director",
+      status: "active",
+      effective_from: "2026-01-01",
+    },
   ],
   "shift-rotation": [],
   "attendance-rules": [
@@ -143,20 +186,52 @@ const DEFAULT_LOCAL: Partial<Record<HrSetupTabId, SetupRow[]>> = {
   ],
 };
 
+function stampDefaults(rows: SetupRow[]): SetupRow[] {
+  return rows.map((r) => ({
+    ...r,
+    __source: "local" as const,
+    created_at: r.created_at ?? new Date().toISOString(),
+    updated_at: r.updated_at ?? new Date().toISOString(),
+    created_by: r.created_by ?? "system",
+    updated_by: r.updated_by ?? "system",
+  }));
+}
+
 function ensureLocal(tabId: HrSetupTabId): SetupRow[] {
   const store = readLocal();
+  const defaults = stampDefaults(DEFAULT_LOCAL[tabId] ?? []);
   if (!store[tabId]) {
-    store[tabId] = (DEFAULT_LOCAL[tabId] ?? []).map((r) => ({
-      ...r,
-      __source: "local",
-      created_at: r.created_at ?? new Date().toISOString(),
-      updated_at: r.updated_at ?? new Date().toISOString(),
-      created_by: r.created_by ?? "system",
-      updated_by: r.updated_by ?? "system",
-    }));
+    store[tabId] = defaults;
+    writeLocal(store);
+    return store[tabId] ?? [];
+  }
+
+  // Merge any newly added default rows (by code) without wiping user edits.
+  const existing = store[tabId] ?? [];
+  const codes = new Set(existing.map((r) => String(r.code ?? "")));
+  const missing = defaults.filter((d) => d.code && !codes.has(String(d.code)));
+  if (missing.length) {
+    store[tabId] = [...existing, ...missing];
     writeLocal(store);
   }
   return store[tabId] ?? [];
+}
+
+/** Coerce checkbox/number form strings into typed local values. */
+export function coerceLocalForm(
+  fields: { key: string; type?: string }[],
+  form: Record<string, string>,
+): Record<string, unknown> {
+  const out: Record<string, unknown> = { ...form };
+  for (const f of fields) {
+    const raw = form[f.key];
+    if (f.type === "checkbox") {
+      out[f.key] = raw === "true" || raw === "1" || raw === "yes";
+    } else if (f.type === "number") {
+      out[f.key] = raw === "" || raw == null ? null : Number(raw);
+    }
+  }
+  return out;
 }
 
 export async function listSetupApi(apiPath: string): Promise<SetupRow[]> {

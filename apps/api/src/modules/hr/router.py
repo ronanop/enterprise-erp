@@ -22,6 +22,8 @@ from modules.hr.routers import (
     shift_assignments_router,
     shifts_router,
     training_attendance_router,
+    training_requests_router,
+    training_rooms_router,
     training_router,
 )
 
@@ -44,5 +46,7 @@ hr_router.include_router(goals_router)
 hr_router.include_router(appraisals_router)
 hr_router.include_router(training_router)
 hr_router.include_router(training_attendance_router)
+hr_router.include_router(training_rooms_router)
+hr_router.include_router(training_requests_router)
 hr_router.include_router(separation_router)
 hr_router.include_router(reports_router)

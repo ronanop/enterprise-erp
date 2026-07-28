@@ -18,6 +18,7 @@ import {
   LeaveApprovalDrawer,
   LeaveBalancePanel,
   LeaveReportsPanel,
+  LeaveTypePolicyPanel,
 } from "@/components/hr/leave/leave-panels";
 import {
   HrAuthBanner,
@@ -35,10 +36,10 @@ import { isAuthenticated } from "@/lib/auth";
 import { cn } from "@/lib/utils";
 import {
   computeLeaveStats,
+  deriveLeaveAudit,
   downloadTextFile,
   exportLeaveCsv,
   filterLeaveRequests,
-  listLeaveAudit,
   loadLeaveDirectory,
   type LeaveDirectory,
 } from "@/services/leave-management-service";
@@ -97,7 +98,7 @@ export function LeaveManagementPage() {
 
   useEffect(() => setPage(1), [query, filters, tab]);
 
-  const audit = useMemo(() => listLeaveAudit(), [dir, tab]);
+  const audit = useMemo(() => deriveLeaveAudit(dir), [dir, tab]);
   const authBlocked = !isAuthenticated() && !loading && !dir?.requests.length;
 
   return (
@@ -430,34 +431,7 @@ export function LeaveManagementPage() {
       {tab === "balances" && dir ? <LeaveBalancePanel directory={dir} /> : null}
 
       {tab === "types" && dir ? (
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {dir.leaveTypes.map((t) => {
-            const used = dir.balances
-              .filter((b) => b.leaveTypeId === t.id)
-              .reduce((s, b) => s + b.used, 0);
-            const allocated = dir.balances
-              .filter((b) => b.leaveTypeId === t.id)
-              .reduce((s, b) => s + b.allocated, 0);
-            return (
-              <div key={t.id} className="rounded-xl border border-border/70 bg-card p-4 shadow-sm">
-                <div className="flex items-center gap-2">
-                  <span className="size-3 rounded-full" style={{ backgroundColor: t.color }} />
-                  <h3 className="text-sm font-semibold">{t.name}</h3>
-                  <span className="font-mono text-[10px] text-muted-foreground">{t.code}</span>
-                </div>
-                <p className="mt-2 text-xs text-muted-foreground">{t.eligibility}</p>
-                <p className="mt-2 text-xs">
-                  Max {t.maxDays || "—"} · Allocated {allocated} · Used {used} · Remaining{" "}
-                  {Math.max(0, allocated - used)}
-                </p>
-                <p className="mt-1 text-[10px] text-muted-foreground">
-                  Carry forward {t.carryForwardAllowed ? "yes" : "no"} · Approval{" "}
-                  {t.approvalRequired ? "required" : "optional"} · {t.isPaid ? "Paid" : "Unpaid"}
-                </p>
-              </div>
-            );
-          })}
-        </div>
+        <LeaveTypePolicyPanel directory={dir} onSaved={() => void load()} />
       ) : null}
 
       {tab === "policies" ? (
@@ -496,26 +470,67 @@ export function LeaveManagementPage() {
 
       {tab === "audit" ? (
         <div className="rounded-xl border border-border/70 bg-card p-4 shadow-sm">
-          <table className="w-full text-left text-xs">
-            <thead>
-              <tr className="border-b text-muted-foreground">
-                <th className="py-2">Action</th>
-                <th className="py-2">Detail</th>
-                <th className="py-2">Who</th>
-                <th className="py-2">When</th>
-              </tr>
-            </thead>
-            <tbody>
-              {audit.slice(0, 50).map((a) => (
-                <tr key={a.id} className="border-b border-border/40">
-                  <td className="py-2 font-medium">{a.action}</td>
-                  <td className="py-2 text-muted-foreground">{a.detail}</td>
-                  <td className="py-2">{a.actor}</td>
-                  <td className="py-2">{new Date(a.at).toLocaleString()}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <h3 className="text-sm font-semibold">Audit trail</h3>
+              <p className="text-[11px] text-muted-foreground">
+                Leave applications, approvals, and policy changes ({audit.length} entries).
+              </p>
+            </div>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className="cursor-pointer"
+              onClick={() => {
+                const csv = [
+                  "Action,Detail,Who,When",
+                  ...audit.map(
+                    (a) =>
+                      `"${a.action}","${String(a.detail).replace(/"/g, '""')}","${a.actor}","${a.at}"`,
+                  ),
+                ].join("\n");
+                downloadTextFile(
+                  `leave-audit-${new Date().toISOString().slice(0, 10)}.csv`,
+                  csv,
+                  "text/csv",
+                );
+                toast("Audit CSV exported", "success");
+              }}
+            >
+              <Download className="size-3.5" />
+              Export audit
+            </Button>
+          </div>
+          {!audit.length ? (
+            <HrEmptyState
+              title="No audit entries"
+              description="Apply leave, approve requests, or edit leave type policies to populate the audit log."
+            />
+          ) : (
+            <div className="erp-scroll mt-3 max-h-[28rem] overflow-auto">
+              <table className="w-full text-left text-xs">
+                <thead className="sticky top-0 bg-card">
+                  <tr className="border-b text-muted-foreground">
+                    <th className="py-2">Action</th>
+                    <th className="py-2">Detail</th>
+                    <th className="py-2">Who</th>
+                    <th className="py-2">When</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {audit.slice(0, 100).map((a) => (
+                    <tr key={a.id} className="border-b border-border/40">
+                      <td className="py-2 font-medium capitalize">{a.action.replace(/_/g, " ")}</td>
+                      <td className="py-2 text-muted-foreground">{a.detail}</td>
+                      <td className="py-2">{a.actor}</td>
+                      <td className="py-2">{new Date(a.at).toLocaleString()}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
       ) : null}
 

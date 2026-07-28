@@ -1,55 +1,50 @@
-# Page Override: HR Executive Dashboard
+# Hr Dashboard Page Overrides
 
-> Overrides `MASTER.md` for `/hr` executive overview only.
+> **PROJECT:** Enterprise ERP Platform
+> **Generated:** 2026-07-28 10:45:16
+> **Page Type:** Dashboard / Data View
 
-**Project:** Enterprise ERP Platform  
-**Page:** hr-dashboard  
-**Generated:** 2026-07-23
+> ⚠️ **IMPORTANT:** Rules in this file **override** the Master file (`design-system/MASTER.md`).
+> Only deviations from the Master are documented here. For all other rules, refer to the Master.
 
 ---
 
-## Page Intent
+## Page-Specific Rules
 
-World-class HRMS executive dashboard (SuccessFactors / Workday / Darwinbox style): real-time workforce KPIs, analytics, calendar, approvals, activity, notifications, and role-based views.
+### Layout Overrides
 
-## Design Rules (Overrides)
+- **Max Width:** 1400px or full-width
+- **Grid:** 12-column grid for data flexibility
+- **Sections:** 1. Hero (product + live preview or status), 2. Key metrics/indicators, 3. How it works, 4. CTA (Start trial / Contact)
 
-| Token | Value | Notes |
-|-------|-------|-------|
-| Primary | `#2563EB` | Match MASTER — not darker blue from persist script |
-| Accent | `#059669` | Success / present / approved |
-| Background | `#F8FAFC` | Light enterprise |
-| Foreground | `#0F172A` | High contrast |
-| Warning | `#D97706` | Pending approvals |
-| Danger | `#DC2626` | Absent / attrition |
+### Spacing Overrides
 
-**Typography:** Plus Jakarta Sans (MASTER)  
-**Density:** High data-dense dashboard  
-**Motion:** Subtle 150–300ms; respect `prefers-reduced-motion`  
-**Icons:** Lucide only — no emoji  
+- **Content Density:** High — optimize for information display
 
-## Layout
+### Typography Overrides
 
-1. Greeting strip (date/time, search, notifications, profile, role switcher)
-2. Quick actions row
-3. Statistics card grid (15 KPIs)
-4. Analytics charts (2-col / responsive)
-5. Three-column: Calendar | Approvals | Notifications
-6. Activity timeline + Quick reports
+- No overrides — use Master typography
 
-## Role Views
+### Color Overrides
 
-| Role | Visibility |
-|------|------------|
-| HR / Super Admin | Full dashboard |
-| Manager | Team attendance, leave, approvals, calendar |
-| Employee | Personal attendance, leave, notifications |
-| Recruiter | Hiring funnel, jobs, candidates, interviews |
-| Finance | Payroll KPIs, cost trend, payroll approvals |
+- **Strategy:** Dark or neutral. Status colors (green/amber/red). Data-dense but scannable.
 
-## Anti-Patterns
+### Component Overrides
 
-- No purple/pink gradients
-- No dark-mode-by-default
-- No emoji icons
-- No ornate decorative chrome
+- Avoid: Single row actions only
+- Avoid: Auto-play high-res video loops
+
+---
+
+## Page-Specific Components
+
+- Premium analytics charts (Recharts): donut/pie, area trends, horizontal bars, hiring funnel
+- Chart palette: teal / cyan / blue / amber / red (no purple-pink AI gradients)
+- Tooltips + % legends for accessibility; `motion-safe` fade-in respects reduced motion
+- Funnel shows stage conversion % between steps
+
+## Recommendations
+
+- Effects: Hover tooltips, row highlighting on hover, smooth 150–200ms transitions
+- Charts: Donut for part-to-whole (≤5 categories); Area for trends; Funnel for hiring pipeline
+- CTA Placement: Primary CTA in nav + After metrics

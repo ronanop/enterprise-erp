@@ -101,27 +101,45 @@ def performance_review_due() -> dict:
 
 @celery_app.task(name="hr.training_due_alerts")
 def training_due_alerts() -> dict:
+    """Find trainings scheduled for today and enrolled attendees (for notification workers)."""
     from datetime import date
 
     from sqlalchemy import select
 
     from database.session import SessionLocal
-    from modules.hr.models import HrTraining
+    from modules.hr.models import HrTraining, HrTrainingAttendance
 
     db = SessionLocal()
     try:
         today = date.today()
-        rows = list(
+        trainings = list(
             db.scalars(
                 select(HrTraining).where(
                     HrTraining.is_deleted.is_(False),
-                    HrTraining.status == "planned",
-                    HrTraining.start_date.is_not(None),
-                    HrTraining.start_date <= today,
+                    HrTraining.status.in_(["planned", "in_progress"]),
+                    HrTraining.start_date == today,
                 )
             ).all()
         )
-        return {"status": "ok", "due_trainings": len(rows)}
+        attendee_count = 0
+        for trn in trainings:
+            attendee_count += len(
+                list(
+                    db.scalars(
+                        select(HrTrainingAttendance).where(
+                            HrTrainingAttendance.training_id == trn.id,
+                            HrTrainingAttendance.is_deleted.is_(False),
+                            HrTrainingAttendance.status == "active",
+                        )
+                    ).all()
+                )
+            )
+        return {
+            "status": "ok",
+            "due_trainings": len(trainings),
+            "attendees_to_notify": attendee_count,
+            "message": "Day-of reminders ready for notification engine",
+        }
     finally:
         db.close()
 

@@ -41,9 +41,9 @@ import { cn } from "@/lib/utils";
 import {
   bulkUpdateAttendanceStatus,
   computeDashboardStats,
+  deriveAttendanceAudit,
   exportAttendanceCsv,
   filterAttendanceRecords,
-  listAttendanceAudit,
   loadAttendanceDirectory,
   todayIso,
   downloadTextFile,
@@ -93,6 +93,15 @@ export function AttendanceManagementPage() {
     () => filterAttendanceRecords(records, query, filters),
     [records, query, filters],
   );
+  const calendarFiltered = useMemo(
+    () =>
+      filterAttendanceRecords(records, query, {
+        ...filters,
+        dateFrom: "",
+        dateTo: "",
+      }),
+    [records, query, filters],
+  );
   const stats = useMemo(() => computeDashboardStats(filtered, todayIso()), [filtered]);
   const pageRows = useMemo(() => {
     const start = (page - 1) * PAGE_SIZE;
@@ -107,7 +116,7 @@ export function AttendanceManagementPage() {
   );
 
   const authBlocked = !isAuthenticated() && !loading && !records.length;
-  const auditRows = useMemo(() => listAttendanceAudit(), [records, view]);
+  const auditRows = useMemo(() => deriveAttendanceAudit(filtered), [filtered]);
 
   function formatTime(iso: string) {
     if (!iso) return "—";
@@ -220,7 +229,7 @@ export function AttendanceManagementPage() {
 
           {view === "calendar" ? (
             <AttendanceCalendar
-              records={filtered}
+              records={calendarFiltered}
               month={calendarMonth}
               onMonthChange={setCalendarMonth}
               onSelectDate={(date, rows) => setDayDetail({ date, rows })}
@@ -236,27 +245,63 @@ export function AttendanceManagementPage() {
 
           {view === "audit" ? (
             <div className="rounded-xl border border-border/70 bg-card p-4 shadow-sm">
-              <h3 className="text-sm font-semibold">Audit trail</h3>
-              <table className="mt-3 w-full text-left text-xs">
-                <thead>
-                  <tr className="border-b text-muted-foreground">
-                    <th className="py-2">Action</th>
-                    <th className="py-2">Detail</th>
-                    <th className="py-2">Who</th>
-                    <th className="py-2">When</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {auditRows.slice(0, 50).map((a) => (
-                    <tr key={a.id} className="border-b border-border/40">
-                      <td className="py-2 font-medium">{a.action}</td>
-                      <td className="py-2 text-muted-foreground">{a.detail}</td>
-                      <td className="py-2">{a.actor}</td>
-                      <td className="py-2">{new Date(a.at).toLocaleString()}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <h3 className="text-sm font-semibold">Audit trail</h3>
+                  <p className="text-[11px] text-muted-foreground">
+                    Recent attendance events for the current filter range ({auditRows.length} entries).
+                  </p>
+                </div>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="cursor-pointer"
+                  onClick={() => {
+                    const csv = [
+                      "Action,Detail,Who,When",
+                      ...auditRows.map(
+                        (a) =>
+                          `"${a.action}","${a.detail.replace(/"/g, '""')}","${a.actor}","${a.at}"`,
+                      ),
+                    ].join("\n");
+                    downloadTextFile(`attendance-audit-${todayIso()}.csv`, csv, "text/csv");
+                    toast("Audit CSV exported", "success");
+                  }}
+                >
+                  <Download className="size-3.5" />
+                  Export audit
+                </Button>
+              </div>
+              {!auditRows.length ? (
+                <HrEmptyState
+                  title="No audit entries"
+                  description="Mark or correct attendance to populate the audit log."
+                />
+              ) : (
+                <div className="erp-scroll mt-3 max-h-[28rem] overflow-auto">
+                  <table className="w-full text-left text-xs">
+                    <thead className="sticky top-0 bg-card">
+                      <tr className="border-b text-muted-foreground">
+                        <th className="py-2">Action</th>
+                        <th className="py-2">Detail</th>
+                        <th className="py-2">Who</th>
+                        <th className="py-2">When</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {auditRows.slice(0, 100).map((a) => (
+                        <tr key={a.id} className="border-b border-border/40">
+                          <td className="py-2 font-medium capitalize">{a.action.replace(/_/g, " ")}</td>
+                          <td className="py-2 text-muted-foreground">{a.detail}</td>
+                          <td className="py-2 capitalize">{a.actor}</td>
+                          <td className="py-2">{new Date(a.at).toLocaleString()}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </div>
           ) : null}
 
@@ -324,8 +369,33 @@ export function AttendanceManagementPage() {
                   <SetupField label="To">
                     <Input type="date" value={filters.dateTo} onChange={(e) => setFilters((f) => ({ ...f, dateTo: e.target.value }))} />
                   </SetupField>
+                  <button
+                    type="button"
+                    className="cursor-pointer w-full rounded-lg border border-border/60 px-2 py-1.5 text-[11px] font-medium text-primary transition-colors hover:bg-primary/5"
+                    onClick={() => {
+                      const t = todayIso();
+                      setFilters((f) => ({ ...f, dateFrom: t, dateTo: t }));
+                    }}
+                  >
+                    Show today only
+                  </button>
+                  <button
+                    type="button"
+                    className="cursor-pointer w-full rounded-lg border border-border/60 px-2 py-1.5 text-[11px] font-medium text-muted-foreground transition-colors hover:bg-muted"
+                    onClick={() => {
+                      const t = todayIso();
+                      const [y, m] = t.split("-");
+                      setFilters((f) => ({
+                        ...f,
+                        dateFrom: `${y}-${m}-01`,
+                        dateTo: t,
+                      }));
+                    }}
+                  >
+                    This month
+                  </button>
                   <SetupField label="Location">
-                    <Input value={filters.location} onChange={(e) => setFilters((f) => ({ ...f, location: e.target.value }))} />
+                    <Input value={filters.location} onChange={(e) => setFilters((f) => ({ ...f, location: e.target.value }))} placeholder="e.g. HQ" />
                   </SetupField>
                 </div>
               </aside>
@@ -430,6 +500,7 @@ export function AttendanceManagementPage() {
                               />
                             </th>
                             {[
+                              "Date",
                               "Employee",
                               "ID",
                               "Department",
@@ -471,6 +542,9 @@ export function AttendanceManagementPage() {
                                     });
                                   }}
                                 />
+                              </td>
+                              <td className="px-2 py-2 font-mono text-[10px] text-muted-foreground">
+                                {row.attendanceDate}
                               </td>
                               <td className="px-2 py-2 text-xs font-medium">{row.extension.employeeName}</td>
                               <td className="px-2 py-2 font-mono text-[10px] text-muted-foreground">
@@ -520,11 +594,17 @@ export function AttendanceManagementPage() {
         onClose={() => setMarkOpen(false)}
         onSaved={() => void load()}
       />
-      <AttendanceImportDrawer open={importOpen} onClose={() => setImportOpen(false)} />
+      <AttendanceImportDrawer
+        open={importOpen}
+        directory={directory}
+        onClose={() => setImportOpen(false)}
+        onImported={() => void load()}
+      />
       <AttendanceCorrectionDrawer
         open={Boolean(correctionRecord)}
         record={correctionRecord}
         onClose={() => setCorrectionRecord(null)}
+        onSaved={() => void load()}
       />
       <AttendanceDayDetailDrawer
         open={Boolean(dayDetail)}

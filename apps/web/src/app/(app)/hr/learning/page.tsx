@@ -1,5 +1,5 @@
-import { TrainingHubPage } from "@/components/hr/hr-hubs";
+import { TrainingManagementPage } from "@/components/hr/training/training-management-page";
 
 export default function HrLearningPage() {
-  return <TrainingHubPage />;
+  return <TrainingManagementPage />;
 }

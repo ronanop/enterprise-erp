@@ -6,20 +6,42 @@ import { Download } from "lucide-react";
 import { SetupDrawer, SetupField, SetupInput, SetupSelect, SetupTextarea } from "@/components/hr/setup/setup-drawer";
 import { toast } from "@/components/hr/setup/setup-toast";
 import { Button } from "@/components/ui/button";
-import { downloadTextFile } from "@/services/attendance-management-service";
-import { submitCorrection } from "@/services/attendance-management-service";
+import {
+  applyAttendanceCorrection,
+  downloadTextFile,
+  importAttendanceCsv,
+  type AttendanceDirectory,
+} from "@/services/attendance-management-service";
 import type { AttendanceRecord } from "@/types/attendance-management";
 
 const SAMPLE = `employee_code,attendance_date,check_in,check_out,status,source
-EMP-000001,2026-07-22,09:05,18:10,present,biometric`;
+EMP-001,2026-07-22,09:05,18:10,present,biometric
+EMP-002,2026-07-22,09:12,18:05,present,biometric
+EMP-003,2026-07-22,09:08,17:50,work_from_home,mobile`;
 
 export function AttendanceImportDrawer({
   open,
   onClose,
+  directory,
+  onImported,
 }: {
   open: boolean;
   onClose: () => void;
+  directory: AttendanceDirectory | null;
+  onImported: () => void;
 }) {
+  const [busy, setBusy] = useState(false);
+  const [fileName, setFileName] = useState("");
+  const [csvText, setCsvText] = useState("");
+
+  useEffect(() => {
+    if (!open) {
+      setBusy(false);
+      setFileName("");
+      setCsvText("");
+    }
+  }, [open]);
+
   return (
     <SetupDrawer
       open={open}
@@ -27,9 +49,34 @@ export function AttendanceImportDrawer({
       description="CSV import with duplicate validation (employee + date)."
       onClose={onClose}
       footer={
-        <Button type="button" size="sm" className="cursor-pointer" onClick={onClose}>
-          Close
-        </Button>
+        <>
+          <Button type="button" size="sm" variant="outline" className="cursor-pointer" onClick={onClose}>
+            Close
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            className="cursor-pointer"
+            disabled={busy || !csvText || !directory}
+            onClick={() => {
+              if (!directory || !csvText) return;
+              setBusy(true);
+              void importAttendanceCsv(csvText, directory)
+                .then((res) => {
+                  if (res.created > 0) {
+                    toast(`Imported ${res.created} row(s)${res.skipped ? `, skipped ${res.skipped}` : ""}`, "success");
+                    onImported();
+                    onClose();
+                  } else {
+                    toast(res.errors[0] || `Nothing imported (${res.skipped} skipped)`, "error");
+                  }
+                })
+                .finally(() => setBusy(false));
+            }}
+          >
+            {busy ? "Importing…" : "Import CSV"}
+          </Button>
+        </>
       }
     >
       <Button
@@ -43,10 +90,22 @@ export function AttendanceImportDrawer({
         Download sample CSV
       </Button>
       <SetupField label="Upload CSV">
-        <input type="file" accept=".csv" className="cursor-pointer text-xs" />
+        <input
+          type="file"
+          accept=".csv,text/csv"
+          className="cursor-pointer text-xs"
+          onChange={(e) => {
+            const file = e.target.files?.[0];
+            if (!file) return;
+            setFileName(file.name);
+            void file.text().then(setCsvText);
+          }}
+        />
       </SetupField>
+      {fileName ? <p className="text-[11px] text-muted-foreground">Selected: {fileName}</p> : null}
       <p className="mt-2 text-[10px] text-muted-foreground">
-        Rows are validated against existing employee codes and unique date per employee before POST to /hr/attendance.
+        Required columns: employee_code, attendance_date. Optional: check_in, check_out, status, source.
+        Duplicate employee+date rows are skipped.
       </p>
     </SetupDrawer>
   );
@@ -56,30 +115,34 @@ export function AttendanceCorrectionDrawer({
   open,
   onClose,
   record,
+  onSaved,
 }: {
   open: boolean;
   onClose: () => void;
   record: AttendanceRecord | null;
+  onSaved: () => void;
 }) {
   const [field, setField] = useState<"check_in" | "check_out">("check_in");
   const [oldTime, setOldTime] = useState("");
   const [newTime, setNewTime] = useState("");
   const [reason, setReason] = useState("");
   const [fileName, setFileName] = useState("");
+  const [busy, setBusy] = useState(false);
 
   useEffect(() => {
     if (!open || !record) return;
-    setOldTime(record.checkIn ? new Date(record.checkIn).toLocaleTimeString() : "");
+    setOldTime(record.checkIn ? new Date(record.checkIn).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "");
     setNewTime("");
     setReason("");
     setFileName("");
+    setBusy(false);
   }, [open, record]);
 
   return (
     <SetupDrawer
       open={open}
       title="Attendance correction"
-      description="Employee → Manager → HR → Approved"
+      description="Updates punch time and logs a correction request"
       onClose={onClose}
       footer={
         <>
@@ -90,26 +153,30 @@ export function AttendanceCorrectionDrawer({
             type="button"
             size="sm"
             className="cursor-pointer"
+            disabled={busy}
             onClick={() => {
               if (!record || !newTime || !reason) {
                 toast("Correct time and reason required", "error");
                 return;
               }
-              submitCorrection({
-                attendanceId: record.id,
-                employeeId: record.employeeId,
-                date: record.attendanceDate,
+              setBusy(true);
+              void applyAttendanceCorrection({
+                record,
                 field,
-                oldTime,
                 newTime,
                 reason,
                 attachmentName: fileName,
-              });
-              toast("Correction submitted for approval", "success");
-              onClose();
+              })
+                .then(() => {
+                  toast("Correction applied and logged", "success");
+                  onSaved();
+                  onClose();
+                })
+                .catch((e) => toast(e instanceof Error ? e.message : "Correction failed", "error"))
+                .finally(() => setBusy(false));
             }}
           >
-            Submit request
+            {busy ? "Saving…" : "Submit correction"}
           </Button>
         </>
       }
@@ -142,10 +209,9 @@ export function AttendanceCorrectionDrawer({
             />
           </SetupField>
           <ol className="list-decimal pl-4 text-[10px] text-muted-foreground">
-            <li>Employee submits</li>
-            <li>Manager reviews</li>
-            <li>HR approves</li>
-            <li>Attendance updated & audit logged</li>
+            <li>Punch time is updated immediately</li>
+            <li>Correction request is audit-logged</li>
+            <li>Status moves to pending approval review</li>
           </ol>
         </div>
       ) : null}

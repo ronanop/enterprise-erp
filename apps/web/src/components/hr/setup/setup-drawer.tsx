@@ -73,14 +73,14 @@ export function SetupField({
   children: ReactNode;
 }) {
   return (
-    <label className="block space-y-1">
+    <div className="block space-y-1">
       <span className="text-[11px] font-medium tracking-wide text-muted-foreground uppercase">
         {label}
         {required ? <span className="text-destructive"> *</span> : null}
       </span>
       {children}
       {hint ? <span className="block text-[10px] text-muted-foreground">{hint}</span> : null}
-    </label>
+    </div>
   );
 }
 

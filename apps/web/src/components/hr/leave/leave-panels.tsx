@@ -1,8 +1,12 @@
 "use client";
 
+import { useEffect, useMemo, useState } from "react";
+import { Pencil } from "lucide-react";
+
 import { SetupDrawer, SetupField, SetupInput, SetupSelect, SetupTextarea } from "@/components/hr/setup/setup-drawer";
 import { toast } from "@/components/hr/setup/setup-toast";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { EmsTimeline } from "@/components/hr/workforce/ems-primitives";
 import {
   advanceLeaveApproval,
@@ -10,23 +14,102 @@ import {
   leaveTrendByMonth,
   saveCompOff,
   saveEncashment,
+  updateLeaveTypePolicy,
   type LeaveDirectory,
 } from "@/services/leave-management-service";
-import type { LeaveRequestRecord } from "@/types/leave-management";
+import type { LeaveRequestRecord, LeaveTypeRecord } from "@/types/leave-management";
 import { LEAVE_STATUS_LABELS } from "@/types/leave-management";
-import { useState } from "react";
 
 export function LeaveBalancePanel({ directory }: { directory: LeaveDirectory }) {
-  const byEmployee = new Map<string, typeof directory.balances>();
-  for (const b of directory.balances) {
-    const list = byEmployee.get(b.employeeId) ?? [];
-    list.push(b);
-    byEmployee.set(b.employeeId, list);
-  }
+  const [employeeId, setEmployeeId] = useState("");
+  const [query, setQuery] = useState("");
+
+  const employees = useMemo(() => {
+    const map = new Map<string, { id: string; name: string; code: string }>();
+    for (const b of directory.balances) {
+      if (!map.has(b.employeeId)) {
+        map.set(b.employeeId, {
+          id: b.employeeId,
+          name: b.employeeName || "Unknown",
+          code: b.employeeCode || "",
+        });
+      }
+    }
+    for (const e of directory.options.employees) {
+      if (!map.has(e.id)) {
+        map.set(e.id, { id: e.id, name: e.label, code: e.code });
+      }
+    }
+    return [...map.values()].sort((a, b) => a.name.localeCompare(b.name));
+  }, [directory]);
+
+  const byEmployee = useMemo(() => {
+    const map = new Map<string, typeof directory.balances>();
+    const q = query.trim().toLowerCase();
+    for (const b of directory.balances) {
+      if (employeeId && b.employeeId !== employeeId) continue;
+      if (q) {
+        const hay = `${b.employeeName} ${b.employeeCode} ${b.leaveTypeName}`.toLowerCase();
+        if (!hay.includes(q)) continue;
+      }
+      const list = map.get(b.employeeId) ?? [];
+      list.push(b);
+      map.set(b.employeeId, list);
+    }
+    return [...map.entries()].sort((a, b) =>
+      (a[1][0]?.employeeName ?? "").localeCompare(b[1][0]?.employeeName ?? ""),
+    );
+  }, [directory.balances, employeeId, query]);
 
   return (
     <div className="space-y-4">
-      {[...byEmployee.entries()].slice(0, 20).map(([empId, rows]) => (
+      <div className="flex flex-wrap items-end gap-2 rounded-xl border border-border/70 bg-card p-3 shadow-sm">
+        <div className="min-w-[12rem] flex-1 space-y-1">
+          <label className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+            Employee
+          </label>
+          <SetupSelect
+            value={employeeId}
+            onChange={(e) => setEmployeeId(e.target.value)}
+            className="w-full"
+          >
+            <option value="">All employees</option>
+            {employees.map((e) => (
+              <option key={e.id} value={e.id}>
+                {e.name} ({e.code})
+              </option>
+            ))}
+          </SetupSelect>
+        </div>
+        <div className="min-w-[14rem] flex-[2] space-y-1">
+          <label className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+            Search
+          </label>
+          <Input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search name, ID, leave type…"
+          />
+        </div>
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          className="cursor-pointer"
+          onClick={() => {
+            setEmployeeId("");
+            setQuery("");
+          }}
+        >
+          Clear
+        </Button>
+        <p className="w-full text-[11px] text-muted-foreground">
+          Showing {byEmployee.length} employee{byEmployee.length === 1 ? "" : "s"}
+          {employeeId ? " (filtered)" : ""}
+        </p>
+      </div>
+
+      {byEmployee.map(([empId, rows]) => (
         <div key={empId} className="rounded-xl border border-border/70 bg-card p-4 shadow-sm">
           <h3 className="text-sm font-semibold">
             {rows[0]?.employeeName}{" "}
@@ -53,10 +136,243 @@ export function LeaveBalancePanel({ directory }: { directory: LeaveDirectory }) 
           </div>
         </div>
       ))}
-      {!directory.balances.length ? (
-        <p className="text-xs text-muted-foreground">No leave balances loaded. Seed HR balances or import.</p>
+
+      {!byEmployee.length ? (
+        <p className="text-xs text-muted-foreground">
+          {directory.balances.length
+            ? "No balances match this employee filter."
+            : "No leave balances loaded. Seed HR balances or import."}
+        </p>
       ) : null}
     </div>
+  );
+}
+
+export function LeaveTypePolicyPanel({
+  directory,
+  onSaved,
+}: {
+  directory: LeaveDirectory;
+  onSaved: () => void;
+}) {
+  const [editing, setEditing] = useState<LeaveTypeRecord | null>(null);
+
+  return (
+    <>
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        {directory.leaveTypes.map((t) => {
+          const used = directory.balances
+            .filter((b) => b.leaveTypeId === t.id)
+            .reduce((s, b) => s + b.used, 0);
+          const allocated = directory.balances
+            .filter((b) => b.leaveTypeId === t.id)
+            .reduce((s, b) => s + b.allocated, 0);
+          return (
+            <div key={t.id} className="rounded-xl border border-border/70 bg-card p-4 shadow-sm">
+              <div className="flex items-start justify-between gap-2">
+                <div className="flex min-w-0 items-center gap-2">
+                  <span className="size-3 shrink-0 rounded-full" style={{ backgroundColor: t.color }} />
+                  <div className="min-w-0">
+                    <h3 className="truncate text-sm font-semibold">{t.name}</h3>
+                    <span className="font-mono text-[10px] text-muted-foreground">{t.code}</span>
+                  </div>
+                </div>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="cursor-pointer h-7 shrink-0"
+                  onClick={() => setEditing(t)}
+                >
+                  <Pencil className="size-3.5" />
+                  Edit
+                </Button>
+              </div>
+              <p className="mt-2 text-xs text-muted-foreground">{t.eligibility}</p>
+              <p className="mt-2 text-xs">
+                Max {t.maxDays || "—"} · Allocated {allocated} · Used {used} · Remaining{" "}
+                {Math.max(0, allocated - used)}
+              </p>
+              <p className="mt-1 text-[10px] text-muted-foreground">
+                Carry forward {t.carryForwardAllowed ? "yes" : "no"} · Approval{" "}
+                {t.approvalRequired ? "required" : "optional"} · {t.isPaid ? "Paid" : "Unpaid"} ·{" "}
+                {t.status}
+              </p>
+            </div>
+          );
+        })}
+      </div>
+      <LeaveTypeEditDrawer
+        open={Boolean(editing)}
+        leaveType={editing}
+        onClose={() => setEditing(null)}
+        onSaved={() => {
+          setEditing(null);
+          onSaved();
+        }}
+      />
+    </>
+  );
+}
+
+export function LeaveTypeEditDrawer({
+  open,
+  leaveType,
+  onClose,
+  onSaved,
+}: {
+  open: boolean;
+  leaveType: LeaveTypeRecord | null;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const [name, setName] = useState("");
+  const [maxDays, setMaxDays] = useState("12");
+  const [isPaid, setIsPaid] = useState(true);
+  const [requiresAttachment, setRequiresAttachment] = useState(false);
+  const [status, setStatus] = useState("active");
+  const [color, setColor] = useState("#059669");
+  const [carryForwardAllowed, setCarryForwardAllowed] = useState(true);
+  const [approvalRequired, setApprovalRequired] = useState(true);
+  const [genderRestriction, setGenderRestriction] = useState("");
+  const [eligibility, setEligibility] = useState("All employees");
+  const [busy, setBusy] = useState(false);
+
+  // Sync form when drawer opens for a type
+  useEffect(() => {
+    if (!open || !leaveType) return;
+    setName(leaveType.name);
+    setMaxDays(String(leaveType.maxDays || 0));
+    setIsPaid(leaveType.isPaid);
+    setRequiresAttachment(leaveType.requiresAttachment);
+    setStatus(leaveType.status || "active");
+    setColor(leaveType.color);
+    setCarryForwardAllowed(leaveType.carryForwardAllowed);
+    setApprovalRequired(leaveType.approvalRequired);
+    setGenderRestriction(leaveType.genderRestriction || "");
+    setEligibility(leaveType.eligibility || "All employees");
+    setBusy(false);
+  }, [open, leaveType]);
+
+  return (
+    <SetupDrawer
+      open={open}
+      title="Edit leave type policy"
+      description={leaveType ? `${leaveType.code} · policy & eligibility` : ""}
+      onClose={onClose}
+      footer={
+        <>
+          <Button type="button" size="sm" variant="outline" className="cursor-pointer" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            className="cursor-pointer"
+            disabled={busy || !leaveType}
+            onClick={() => {
+              if (!leaveType) return;
+              setBusy(true);
+              void updateLeaveTypePolicy(leaveType, {
+                name,
+                maxDays: Number(maxDays) || 0,
+                isPaid,
+                requiresAttachment,
+                status,
+                color,
+                carryForwardAllowed,
+                approvalRequired,
+                genderRestriction,
+                eligibility,
+              })
+                .then(() => {
+                  toast("Leave type policy updated", "success");
+                  onSaved();
+                })
+                .catch((e) => toast(e instanceof Error ? e.message : "Update failed", "error"))
+                .finally(() => setBusy(false));
+            }}
+          >
+            {busy ? "Saving…" : "Save policy"}
+          </Button>
+        </>
+      }
+    >
+      {leaveType ? (
+        <div className="space-y-3">
+          <SetupField label="Display name" required>
+            <SetupInput value={name} onChange={(e) => setName(e.target.value)} />
+          </SetupField>
+          <SetupField label="Max days / year">
+            <SetupInput type="number" min={0} value={maxDays} onChange={(e) => setMaxDays(e.target.value)} />
+          </SetupField>
+          <SetupField label="Eligibility">
+            <SetupInput value={eligibility} onChange={(e) => setEligibility(e.target.value)} />
+          </SetupField>
+          <SetupField label="Status">
+            <SetupSelect value={status} onChange={(e) => setStatus(e.target.value)}>
+              <option value="active">Active</option>
+              <option value="inactive">Inactive</option>
+            </SetupSelect>
+          </SetupField>
+          <SetupField label="Paid leave">
+            <SetupSelect value={isPaid ? "yes" : "no"} onChange={(e) => setIsPaid(e.target.value === "yes")}>
+              <option value="yes">Yes — paid</option>
+              <option value="no">No — unpaid</option>
+            </SetupSelect>
+          </SetupField>
+          <SetupField label="Approval required">
+            <SetupSelect
+              value={approvalRequired ? "yes" : "no"}
+              onChange={(e) => setApprovalRequired(e.target.value === "yes")}
+            >
+              <option value="yes">Required</option>
+              <option value="no">Optional / auto</option>
+            </SetupSelect>
+          </SetupField>
+          <SetupField label="Carry forward allowed">
+            <SetupSelect
+              value={carryForwardAllowed ? "yes" : "no"}
+              onChange={(e) => setCarryForwardAllowed(e.target.value === "yes")}
+            >
+              <option value="yes">Yes</option>
+              <option value="no">No</option>
+            </SetupSelect>
+          </SetupField>
+          <SetupField label="Attachment required">
+            <SetupSelect
+              value={requiresAttachment ? "yes" : "no"}
+              onChange={(e) => setRequiresAttachment(e.target.value === "yes")}
+            >
+              <option value="yes">Yes</option>
+              <option value="no">No</option>
+            </SetupSelect>
+          </SetupField>
+          <SetupField label="Gender restriction">
+            <SetupSelect value={genderRestriction} onChange={(e) => setGenderRestriction(e.target.value)}>
+              <option value="">None</option>
+              <option value="female">Female only</option>
+              <option value="male">Male only</option>
+            </SetupSelect>
+          </SetupField>
+          <SetupField label="Calendar color">
+            <div className="flex items-center gap-2">
+              <input
+                type="color"
+                value={color}
+                onChange={(e) => setColor(e.target.value)}
+                className="h-9 w-12 cursor-pointer rounded border border-border/60 bg-transparent"
+              />
+              <SetupInput value={color} onChange={(e) => setColor(e.target.value)} />
+            </div>
+          </SetupField>
+          <p className="text-[10px] text-muted-foreground">
+            Name, max days, paid flag, attachment, and status save to the API. Color, carry-forward,
+            approval, eligibility, and gender rules are stored as HR policy extensions and audited.
+          </p>
+        </div>
+      ) : null}
+    </SetupDrawer>
   );
 }
 

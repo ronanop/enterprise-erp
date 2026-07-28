@@ -503,6 +503,7 @@ const TAB_CONFIG: Partial<Record<HrSetupTabId, TabConfig>> = {
           "Annual Leave",
           "Casual Leave",
           "Sick Leave",
+          "Earned Leave",
           "Maternity",
           "Paternity",
           "Comp Off",
@@ -554,6 +555,7 @@ const TAB_CONFIG: Partial<Record<HrSetupTabId, TabConfig>> = {
       max_days_per_year: f.max_days_per_year ? Number(f.max_days_per_year) : null,
       requires_attachment: f.requires_attachment === "true",
       status: f.status,
+      version: f.version ? Number(f.version) : undefined,
     }),
   },
   "holiday-calendar": {

@@ -400,9 +400,14 @@ class AttendanceResponse(OrmModel):
     branch_id: UUID
     employee_id: UUID
     attendance_date: date
+    check_in_at: datetime | None = None
+    check_out_at: datetime | None = None
+    total_hours: Decimal | None = None
     attendance_status: str
     source: str
+    shift_id: UUID | None = None
     status: str
+    notes: str | None = None
     version: int
 
 
@@ -518,15 +523,29 @@ class TrainingCreate(BaseModel):
     trainer_employee_id: UUID | None = None
     start_date: date | None = None
     end_date: date | None = None
+    start_time: time | None = None
+    end_time: time | None = None
+    room_id: UUID | None = None
+    is_recurring: bool = False
+    recurrence_rule: str | None = "none"
+    notes: str | None = None
     status: str = "planned"
+    employee_ids: list[UUID] = []
 
 
 class TrainingUpdate(BaseModel):
     training_name: str | None = None
     training_type: str | None = None
     trainer_name: str | None = None
+    trainer_employee_id: UUID | None = None
     start_date: date | None = None
     end_date: date | None = None
+    start_time: time | None = None
+    end_time: time | None = None
+    room_id: UUID | None = None
+    is_recurring: bool | None = None
+    recurrence_rule: str | None = None
+    notes: str | None = None
     status: str | None = None
     version: int | None = None
 
@@ -541,6 +560,12 @@ class TrainingResponse(OrmModel):
     trainer_employee_id: UUID | None
     start_date: date | None
     end_date: date | None
+    start_time: time | None = None
+    end_time: time | None = None
+    room_id: UUID | None = None
+    is_recurring: bool = False
+    recurrence_rule: str | None = None
+    notes: str | None = None
     status: str
     company_id: UUID
     version: int
@@ -562,6 +587,91 @@ class TrainingAttendanceResponse(OrmModel):
     status: str
     company_id: UUID
     branch_id: UUID
+    version: int
+
+
+class TrainingRoomCreate(BaseModel):
+    company_id: UUID | None = None
+    branch_id: UUID | None = None
+    room_code: str | None = None
+    room_name: str
+    capacity: int = 10
+    equipment_json: list[str] | None = None
+    notes: str | None = None
+    status: str = "active"
+
+
+class TrainingRoomUpdate(BaseModel):
+    room_name: str | None = None
+    capacity: int | None = None
+    equipment_json: list[str] | None = None
+    notes: str | None = None
+    status: str | None = None
+    version: int | None = None
+
+
+class TrainingRoomResponse(OrmModel):
+    id: UUID
+    branch_id: UUID | None
+    room_code: str
+    room_name: str
+    capacity: int
+    equipment_json: list | None
+    notes: str | None
+    status: str
+    company_id: UUID
+    version: int
+
+
+class TrainingRequestAttendee(BaseModel):
+    employee_id: UUID
+    employee_name: str | None = None
+    employee_code: str | None = None
+
+
+class TrainingRequestCreate(BaseModel):
+    company_id: UUID | None = None
+    branch_id: UUID
+    title: str
+    request_type: str = "meeting"
+    requested_by_employee_id: UUID
+    host_employee_id: UUID | None = None
+    host_name: str | None = None
+    room_id: UUID | None = None
+    request_date: date
+    start_time: time | None = None
+    end_time: time | None = None
+    is_recurring: bool = False
+    recurrence_rule: str | None = None
+    attendees: list[TrainingRequestAttendee] = []
+    agenda: str | None = None
+
+
+class TrainingRequestDecision(BaseModel):
+    approval_notes: str | None = None
+
+
+class TrainingRequestResponse(OrmModel):
+    id: UUID
+    branch_id: UUID
+    request_code: str
+    title: str
+    request_type: str
+    requested_by_employee_id: UUID
+    host_employee_id: UUID | None
+    host_name: str | None
+    room_id: UUID | None
+    training_id: UUID | None
+    request_date: date
+    start_time: time | None
+    end_time: time | None
+    is_recurring: bool
+    recurrence_rule: str | None
+    attendees_json: list | None
+    agenda: str | None
+    approval_notes: str | None
+    status: str
+    company_id: UUID
     version: int
 
 

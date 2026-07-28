@@ -15,10 +15,6 @@ import {
   Users,
   Wallet,
   Clock,
-  UserRound,
-  Cake,
-  Award,
-  AlertCircle,
   ChevronRight,
   RefreshCw,
 } from "lucide-react";
@@ -28,6 +24,12 @@ import {
   HrEmptyState,
   HrStatusBadge,
 } from "@/components/hr/hr-primitives";
+import {
+  PremiumAreaChart,
+  PremiumBarChart,
+  PremiumDonutChart,
+  PremiumFunnelChart,
+} from "@/components/hr/dashboard/hr-analytics-charts";
 import { toast, SetupToastHost } from "@/components/hr/setup/setup-toast";
 import { EmsSkeleton } from "@/components/hr/workforce/ems-primitives";
 import { Button } from "@/components/ui/button";
@@ -44,7 +46,6 @@ import {
 import type {
   DashboardRole,
   HrExecutiveDashboard,
-  NamedCount,
 } from "@/types/hr-executive-dashboard";
 import { DASHBOARD_ROLE_LABELS } from "@/types/hr-executive-dashboard";
 
@@ -68,75 +69,6 @@ const EVENT_LABELS: Record<string, string> = {
   meeting: "Meeting",
   payroll: "Payroll",
 };
-
-function BarChart({
-  title,
-  subtitle,
-  data,
-  formatValue,
-}: {
-  title: string;
-  subtitle?: string;
-  data: NamedCount[];
-  formatValue?: (n: number) => string;
-}) {
-  const max = Math.max(1, ...data.map((d) => d.value));
-  return (
-    <div className="rounded-xl border border-border/70 bg-card p-4 shadow-sm">
-      <h3 className="text-sm font-semibold tracking-tight">{title}</h3>
-      {subtitle ? (
-        <p className="mt-0.5 text-[11px] text-muted-foreground">{subtitle}</p>
-      ) : null}
-      <div className="mt-4 space-y-2.5">
-        {data.length === 0 ? (
-          <p className="py-6 text-center text-xs text-muted-foreground">No data</p>
-        ) : (
-          data.map((d) => (
-            <div key={d.label}>
-              <div className="mb-1 flex items-center justify-between gap-2 text-xs">
-                <span className="truncate font-medium text-foreground">{d.label}</span>
-                <span className="shrink-0 font-mono tabular-nums text-muted-foreground">
-                  {formatValue ? formatValue(d.value) : d.value.toLocaleString("en-IN")}
-                </span>
-              </div>
-              <div className="h-1.5 overflow-hidden rounded-full bg-muted">
-                <div
-                  className="h-full rounded-full bg-primary/80 transition-all duration-300"
-                  style={{ width: `${Math.max(4, (d.value / max) * 100)}%` }}
-                  role="presentation"
-                />
-              </div>
-            </div>
-          ))
-        )}
-      </div>
-    </div>
-  );
-}
-
-function FunnelChart({ data }: { data: NamedCount[] }) {
-  const max = Math.max(1, ...data.map((d) => d.value));
-  return (
-    <div className="rounded-xl border border-border/70 bg-card p-4 shadow-sm">
-      <h3 className="text-sm font-semibold tracking-tight">Hiring Funnel</h3>
-      <p className="mt-0.5 text-[11px] text-muted-foreground">Applied → Hired</p>
-      <div className="mt-4 space-y-2">
-        {data.map((d, i) => (
-          <div
-            key={d.label}
-            className="mx-auto flex h-9 items-center justify-between rounded-md bg-primary/10 px-3 text-xs transition-colors duration-200 hover:bg-primary/15"
-            style={{ width: `${Math.max(42, (d.value / max) * 100)}%` }}
-          >
-            <span className="font-medium">
-              {i + 1}. {d.label}
-            </span>
-            <span className="font-mono tabular-nums">{d.value}</span>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
 
 function useClock() {
   const [now, setNow] = useState(() => new Date());
@@ -199,21 +131,12 @@ export function HrExecutiveDashboardPage() {
   const charts = data?.charts;
 
   const kpiCards = [
-    { label: "Total Employees", value: stats?.totalEmployees, icon: Users },
-    { label: "Active Employees", value: stats?.activeEmployees, icon: UserRound },
-    { label: "New Joiners", value: stats?.newJoiners, icon: UserPlus },
-    { label: "Employees on Leave", value: stats?.onLeave, icon: CalendarDays },
-    { label: "Present Today", value: stats?.presentToday, icon: ClipboardCheck },
-    { label: "Absent Today", value: stats?.absentToday, icon: AlertCircle },
-    { label: "Late Arrivals", value: stats?.lateArrivals, icon: Clock },
-    { label: "Open Positions", value: stats?.openPositions, icon: Briefcase },
-    { label: "Candidates in Pipeline", value: stats?.candidatesInPipeline, icon: Users },
-    { label: "Pending Approvals", value: stats?.pendingApprovals, icon: ClipboardCheck },
-    { label: "Payroll Processed", value: stats?.payrollProcessed, icon: Wallet },
-    { label: "Upcoming Birthdays", value: stats?.upcomingBirthdays, icon: Cake },
-    { label: "Upcoming Work Anniversaries", value: stats?.upcomingAnniversaries, icon: Award },
-    { label: "Employees on Probation", value: stats?.onProbation, icon: Clock },
-    { label: "Employees on Notice Period", value: stats?.onNoticePeriod, icon: AlertCircle },
+    { label: "Headcount", value: stats?.totalEmployees, icon: Users, hint: "Active workforce" },
+    { label: "Present Today", value: stats?.presentToday, icon: ClipboardCheck, hint: "Attendance" },
+    { label: "On Leave", value: stats?.onLeave, icon: CalendarDays, hint: "Approved today" },
+    { label: "Pending Approvals", value: stats?.pendingApprovals, icon: ClipboardCheck, hint: "Leave / shifts" },
+    { label: "Open Roles", value: stats?.openPositions, icon: Briefcase, hint: "Requisitions" },
+    { label: "Pipeline", value: stats?.candidatesInPipeline, icon: Users, hint: "Active applicants" },
   ];
 
   const showRecruiting = role === "hr" || role === "super_admin" || role === "recruiter";
@@ -391,10 +314,15 @@ export function HrExecutiveDashboardPage() {
         <EmsSkeleton rows={8} />
       ) : (
         <>
-          {/* Stats */}
+          {/* Slim KPI strip */}
           <section>
-            <h2 className="mb-2 text-sm font-semibold tracking-tight">Statistics</h2>
-            <div className="grid gap-2.5 grid-cols-2 sm:grid-cols-3 lg:grid-cols-5">
+            <div className="mb-2 flex items-end justify-between gap-2">
+              <h2 className="text-sm font-semibold tracking-tight">Key metrics</h2>
+              <p className="text-[11px] text-muted-foreground">
+                Live from employees · attendance · leave · recruitment
+              </p>
+            </div>
+            <div className="grid gap-2.5 grid-cols-2 sm:grid-cols-3 xl:grid-cols-6">
               {kpiCards.map((k) => {
                 const Icon = k.icon;
                 return (
@@ -403,9 +331,12 @@ export function HrExecutiveDashboardPage() {
                     className="rounded-xl border border-border/70 bg-card px-3 py-3 shadow-sm transition-shadow duration-200 hover:shadow-md"
                   >
                     <div className="flex items-start justify-between gap-2">
-                      <p className="text-[10px] font-medium tracking-wide text-muted-foreground uppercase leading-tight">
-                        {k.label}
-                      </p>
+                      <div>
+                        <p className="text-[10px] font-medium tracking-wide text-muted-foreground uppercase leading-tight">
+                          {k.label}
+                        </p>
+                        <p className="mt-0.5 text-[10px] text-muted-foreground/80">{k.hint}</p>
+                      </div>
                       <Icon className="size-3.5 shrink-0 text-muted-foreground" />
                     </div>
                     <p className="mt-1.5 text-xl font-semibold tabular-nums text-foreground">
@@ -417,36 +348,76 @@ export function HrExecutiveDashboardPage() {
             </div>
           </section>
 
-          {/* Analytics */}
+          {/* Analytics — premium charts */}
           <section className="space-y-3">
-            <h2 className="text-sm font-semibold tracking-tight">HR Analytics</h2>
+            <div className="flex items-end justify-between gap-2">
+              <div>
+                <h2 className="text-sm font-semibold tracking-tight">HR Analytics</h2>
+                <p className="mt-0.5 text-[11px] text-muted-foreground">
+                  Pie · trends · funnel — live from related ERP tables
+                </p>
+              </div>
+            </div>
+
             <div className="grid gap-3 lg:grid-cols-2 xl:grid-cols-3">
               {showPeopleAnalytics ? (
                 <>
-                  <BarChart
-                    title="Employee Growth (Monthly)"
-                    subtitle="Headcount trend"
+                  <PremiumAreaChart
+                    title="Employee Growth"
+                    subtitle="Cumulative headcount by joining date"
                     data={charts?.employeeGrowth ?? []}
+                    color="#0F766E"
                   />
-                  <BarChart
+                  <PremiumBarChart
                     title="Department-wise Employees"
+                    subtitle="master_employee → org_department"
                     data={charts?.departmentWise ?? []}
+                    layout="horizontal"
                   />
-                  <BarChart title="Gender Diversity" data={charts?.genderDiversity ?? []} />
-                  <BarChart title="Age Distribution" data={charts?.ageDistribution ?? []} />
+                  <PremiumDonutChart
+                    title="Gender Diversity"
+                    subtitle="hr_employee_profile.gender"
+                    data={charts?.genderDiversity ?? []}
+                  />
+                  <PremiumBarChart
+                    title="Age Distribution"
+                    subtitle="hr_employee_profile.date_of_birth"
+                    data={charts?.ageDistribution ?? []}
+                  />
                 </>
               ) : null}
-              {showRecruiting ? <FunnelChart data={charts?.hiringFunnel ?? []} /> : null}
+
+              {showRecruiting ? (
+                <PremiumFunnelChart
+                  title="Hiring Funnel"
+                  subtitle="recruitment.rec_application stages"
+                  data={charts?.hiringFunnel ?? []}
+                />
+              ) : null}
+
               {role !== "recruiter" && role !== "finance" ? (
                 <>
-                  <BarChart title="Attendance Trend" data={charts?.attendanceTrend ?? []} />
-                  <BarChart title="Leave Trend" data={charts?.leaveTrend ?? []} />
+                  <PremiumAreaChart
+                    title="Attendance Trend"
+                    subtitle="Present / WFH days by month"
+                    data={charts?.attendanceTrend ?? []}
+                    color="#0891B2"
+                  />
+                  <PremiumAreaChart
+                    title="Leave Trend"
+                    subtitle="Submitted + approved requests by month"
+                    data={charts?.leaveTrend ?? []}
+                    color="#D97706"
+                  />
                 </>
               ) : null}
+
               {showPayroll ? (
-                <BarChart
+                <PremiumAreaChart
                   title="Payroll Cost Trend"
+                  subtitle="Est. monthly CTC from hr_employment"
                   data={charts?.payrollCostTrend ?? []}
+                  color="#2563EB"
                   formatValue={(n) =>
                     n >= 100000
                       ? `₹${(n / 100000).toFixed(1)}L`
@@ -454,20 +425,24 @@ export function HrExecutiveDashboardPage() {
                   }
                 />
               ) : null}
+
               {showPeopleAnalytics ? (
                 <>
-                  <BarChart
+                  <PremiumAreaChart
                     title="Attrition Trend"
-                    subtitle="% monthly"
+                    subtitle="% exits / headcount"
                     data={charts?.attritionTrend ?? []}
+                    color="#DC2626"
                     formatValue={(n) => `${n}%`}
                   />
-                  <BarChart
+                  <PremiumDonutChart
                     title="Performance Distribution"
+                    subtitle="hr_performance_review.overall_rating"
                     data={charts?.performanceDistribution ?? []}
                   />
-                  <BarChart
+                  <PremiumDonutChart
                     title="Training Completion"
+                    subtitle="hr_training_attendance"
                     data={charts?.trainingCompletion ?? []}
                   />
                 </>

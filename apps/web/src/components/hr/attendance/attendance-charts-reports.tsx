@@ -52,7 +52,7 @@ export function AttendanceReportsPanel({ records }: { records: AttendanceRecord[
   }
 
   const reports = [
-    reportSummary(records, "Daily / filtered range"),
+    reportSummary(records, "Filtered range"),
     reportSummary(
       records.filter((r) => r.status === "late" || r.extension.isLate),
       "Late arrival",
@@ -62,6 +62,14 @@ export function AttendanceReportsPanel({ records }: { records: AttendanceRecord[
       "Missing punch",
     ),
   ];
+
+  if (!records.length) {
+    return (
+      <div className="rounded-xl border border-border/70 bg-card p-8 text-center text-sm text-muted-foreground shadow-sm">
+        No attendance in the current filter range. Adjust filters or mark attendance to generate reports.
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-4">
@@ -89,7 +97,9 @@ export function AttendanceReportsPanel({ records }: { records: AttendanceRecord[
             </tr>
           </thead>
           <tbody>
-            {[...byDept.entries()].map(([dept, rows]) => {
+            {[...byDept.entries()]
+              .sort((a, b) => b[1].length - a[1].length)
+              .map(([dept, rows]) => {
               const s = reportSummary(rows, dept);
               return (
                 <tr key={dept} className="border-b border-border/40">

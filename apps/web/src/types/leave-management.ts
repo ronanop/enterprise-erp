@@ -86,6 +86,7 @@ export type LeaveTypeRecord = {
   maxDays: number;
   requiresAttachment: boolean;
   status: string;
+  version: number;
   color: string;
   carryForwardAllowed: boolean;
   approvalRequired: boolean;

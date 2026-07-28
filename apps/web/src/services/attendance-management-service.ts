@@ -19,8 +19,53 @@ const CORRECTIONS_KEY = "erp_attendance_corrections_v1";
 const NORMAL_HOURS = 8;
 const DOUBLE_OT_THRESHOLD = 12;
 
-function todayIso(): string {
-  return new Date().toISOString().slice(0, 10);
+/** Local calendar date (avoids UTC shift from toISOString). */
+function todayIso(d = new Date()): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+function parseLocationFromNotes(notes: string): string {
+  if (!notes) return "";
+  const locMatch = notes.match(/Location:\s*(.+)$/i);
+  if (locMatch?.[1]) return locMatch[1].trim();
+  if (notes.includes("·")) {
+    const parts = notes.split("·").map((p) => p.trim());
+    const last = parts[parts.length - 1];
+    if (last && !/on approved leave/i.test(last) && !/^WFH/i.test(last)) return last;
+  }
+  return "";
+}
+
+function inferDisplayStatus(
+  apiStatus: string,
+  checkIn: string,
+  notes: string,
+): AttendanceStatusCode {
+  const base = (apiStatus || "present") as AttendanceStatusCode;
+  if (base === "absent" && /leave/i.test(notes)) return "leave";
+  if (base !== "present") return base;
+  if (/late arrival/i.test(notes)) return "late";
+  if (checkIn) {
+    const t = new Date(checkIn);
+    if (!Number.isNaN(t.getTime()) && (t.getHours() > 9 || (t.getHours() === 9 && t.getMinutes() >= 30))) {
+      return "late";
+    }
+  }
+  return base;
+}
+
+async function listAllRows(apiPath: string): Promise<HrRow[]> {
+  const all: HrRow[] = [];
+  for (let page = 1; page <= 30; page += 1) {
+    const res = await resourceService.list(apiPath, { page, page_size: 200 }).catch(() => ({ data: [] }));
+    const rows = (Array.isArray(res.data) ? res.data : []) as HrRow[];
+    all.push(...rows);
+    if (rows.length < 200) break;
+  }
+  return all;
 }
 
 function actorLabel(): string {
@@ -69,6 +114,25 @@ export function appendAttendanceAudit(entry: Omit<AttendanceAuditEntry, "id" | "
 export function listAttendanceAudit(attendanceId?: string): AttendanceAuditEntry[] {
   const all = readJson<AttendanceAuditEntry[]>(AUDIT_KEY, []);
   return attendanceId ? all.filter((a) => a.attendanceId === attendanceId) : all;
+}
+
+/** Build a readable audit trail from attendance rows when local audit log is empty. */
+export function deriveAttendanceAudit(records: AttendanceRecord[]): AttendanceAuditEntry[] {
+  const stored = listAttendanceAudit();
+  if (stored.length > 0) return stored;
+  return [...records]
+    .sort((a, b) => b.attendanceDate.localeCompare(a.attendanceDate))
+    .slice(0, 80)
+    .map((r) => ({
+      id: `derived-${r.id}`,
+      attendanceId: r.id,
+      action: r.recordStatus === "adjusted" ? "adjusted" : "recorded",
+      detail: `${r.extension.employeeName} (${r.extension.employeeCode}) · ${r.attendanceDate} · ${r.status}${
+        r.checkIn ? ` · in ${new Date(r.checkIn).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}` : ""
+      }${r.checkOut ? ` · out ${new Date(r.checkOut).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}` : ""}`,
+      actor: r.source || "system",
+      at: `${r.attendanceDate}T12:00:00`,
+    }));
 }
 
 export function listCorrections(employeeId?: string): AttendanceCorrection[] {
@@ -173,6 +237,7 @@ function mergeRow(
   empMap: Map<string, { name: string; code: string; dept: string; deptId: string; desig: string; manager: string }>,
   shiftMap: Map<string, string>,
   ext: AttendanceExtension,
+  savedOverride: boolean,
 ): AttendanceRecord {
   const id = String(row.id);
   const employeeId = String(row.employee_id);
@@ -180,13 +245,19 @@ function mergeRow(
   const date = String(row.attendance_date ?? "");
   const checkIn = String(row.check_in_at ?? "");
   const checkOut = String(row.check_out_at ?? "");
-  const breakMin = ext.breakMinutes || 0;
+  const notes = String(row.notes ?? "");
+  const breakMin = ext.breakMinutes || (checkIn && checkOut ? 30 : 0);
+  const totalHoursRaw = row.total_hours;
   const working =
-    typeof row.total_hours === "number"
-      ? Number(row.total_hours)
+    totalHoursRaw !== null && totalHoursRaw !== undefined && totalHoursRaw !== ""
+      ? Number(totalHoursRaw)
       : diffHours(checkIn, checkOut, breakMin);
-  const ot = computeOvertime(working);
-  const displayStatus = ext.displayStatus || (String(row.attendance_status) as AttendanceStatusCode);
+  const ot = computeOvertime(Number.isFinite(working) ? working : 0);
+  const apiStatus = String(row.attendance_status ?? "");
+  const displayStatus = savedOverride
+    ? ext.displayStatus || inferDisplayStatus(apiStatus, checkIn, notes)
+    : inferDisplayStatus(apiStatus, checkIn, notes);
+  const location = ext.location || parseLocationFromNotes(notes) || (checkIn ? "HQ Office" : "");
 
   return {
     id,
@@ -196,20 +267,24 @@ function mergeRow(
     attendanceDate: date,
     checkIn,
     checkOut,
-    workingHours: Math.round(working * 100) / 100,
+    workingHours: Math.round((Number.isFinite(working) ? working : 0) * 100) / 100,
     breakTime: breakMin,
     overtimeHours: Math.round(ot.total * 100) / 100,
     status: displayStatus,
-    apiStatus: String(row.attendance_status ?? ""),
-    location: ext.location,
+    apiStatus,
+    location,
     device: ext.device || String(row.source ?? ""),
     source: ext.sourceDetail || String(row.source ?? "manual"),
     approvalStatus: ext.approvalStatus,
     recordStatus: String(row.status ?? "recorded"),
     version: Number(row.version ?? 1),
-    notes: String(row.notes ?? ""),
+    notes,
     extension: {
       ...ext,
+      displayStatus,
+      breakMinutes: breakMin,
+      location,
+      isLate: displayStatus === "late" || ext.isLate,
       employeeName: emp?.name ?? ext.employeeName,
       employeeCode: emp?.code ?? ext.employeeCode,
       departmentName: emp?.dept ?? ext.departmentName,
@@ -235,15 +310,18 @@ export type AttendanceDirectory = {
 };
 
 export async function loadAttendanceDirectory(): Promise<AttendanceDirectory> {
-  const [attRes, empDir, branches, departments, shifts] = await Promise.all([
-    resourceService.list("/hr/attendance").catch(() => ({ data: [] })),
-    loadEmployeeDirectory().catch(() => ({ records: [], options: { branches: [], departments: [], designations: [], managers: [], shifts: [] }, errors: [] })),
-    resourceService.list("/branches").catch(() => ({ data: [] })),
-    resourceService.list("/departments").catch(() => ({ data: [] })),
-    resourceService.list("/hr/shifts").catch(() => ({ data: [] })),
+  const [attRows, empDir, branchRows, departmentRows, shiftRowsRaw] = await Promise.all([
+    listAllRows("/hr/attendance"),
+    loadEmployeeDirectory().catch(() => ({
+      records: [],
+      options: { branches: [], departments: [], designations: [], managers: [], shifts: [] },
+      errors: [],
+    })),
+    listAllRows("/branches"),
+    listAllRows("/departments"),
+    listAllRows("/hr/shifts"),
   ]);
 
-  const rows = (Array.isArray(attRes.data) ? attRes.data : []) as HrRow[];
   const extensions = loadExtensions();
 
   const empMap = new Map<
@@ -261,40 +339,56 @@ export async function loadAttendanceDirectory(): Promise<AttendanceDirectory> {
     });
   }
 
-  const shiftRows = (Array.isArray(shifts.data) ? shifts.data : []) as HrRow[];
   const shiftMap = new Map(
-    shiftRows.map((s) => [String(s.id), String(s.shift_name ?? s.shift_code ?? s.id)]),
+    shiftRowsRaw.map((s) => [String(s.id), String(s.shift_name ?? s.shift_code ?? s.id)]),
   );
 
-  const asOpts = (d: unknown, labelKeys: string[]) => {
-    const arr = (Array.isArray(d) ? d : []) as HrRow[];
-    return arr.map((r) => ({
+  const asOpts = (arr: HrRow[], labelKeys: string[]) =>
+    arr.map((r) => ({
       id: String(r.id),
       label: String(labelKeys.map((k) => r[k]).find(Boolean) ?? r.id),
     }));
-  };
 
-  const records = rows.map((row) => {
-    const id = String(row.id);
-    const emp = empMap.get(String(row.employee_id));
-    const ext = extensions[id] ?? defaultExtension({
-      displayStatus: String(row.attendance_status) as AttendanceStatusCode,
-      employeeName: emp?.name,
-      employeeCode: emp?.code,
-      departmentName: emp?.dept,
-      designationName: emp?.desig,
-      managerName: emp?.manager,
-      sourceDetail: String(row.source ?? "manual") as AttendanceSource,
+  const records = attRows
+    .map((row) => {
+      const id = String(row.id);
+      const emp = empMap.get(String(row.employee_id));
+      const saved = extensions[id];
+      const notes = String(row.notes ?? "");
+      const ext =
+        saved ??
+        defaultExtension({
+          displayStatus: inferDisplayStatus(
+            String(row.attendance_status ?? ""),
+            String(row.check_in_at ?? ""),
+            notes,
+          ),
+          location: parseLocationFromNotes(notes),
+          device: String(row.source ?? ""),
+          employeeName: emp?.name,
+          employeeCode: emp?.code,
+          departmentName: emp?.dept,
+          departmentId: emp?.deptId,
+          designationName: emp?.desig,
+          managerName: emp?.manager,
+          sourceDetail: String(row.source ?? "manual") as AttendanceSource,
+          breakMinutes: row.check_in_at && row.check_out_at ? 30 : 0,
+          approvalStatus: "approved",
+        });
+      return mergeRow(row, empMap, shiftMap, ext, Boolean(saved));
+    })
+    .sort((a, b) => {
+      const byDate = b.attendanceDate.localeCompare(a.attendanceDate);
+      if (byDate !== 0) return byDate;
+      return a.extension.employeeName.localeCompare(b.extension.employeeName);
     });
-    return mergeRow(row, empMap, shiftMap, ext);
-  });
 
   return {
     records,
     options: {
-      branches: asOpts(branches.data, ["branch_name", "name", "branch_code"]),
-      departments: asOpts(departments.data, ["department_name", "name", "department_code"]),
-      shifts: asOpts(shifts.data, ["shift_name", "shift_code"]),
+      branches: asOpts(branchRows, ["branch_name", "name", "branch_code"]),
+      departments: asOpts(departmentRows, ["department_name", "name", "department_code"]),
+      shifts: asOpts(shiftRowsRaw, ["shift_name", "shift_code"]),
       managers: empDir.options.managers,
       employees: empDir.records.map((e) => ({
         id: e.id,
@@ -325,12 +419,16 @@ export function filterAttendanceRecords(
     }
     if (filters.departmentId && r.extension.departmentId !== filters.departmentId) return false;
     if (filters.designation && r.extension.designationName !== filters.designation) return false;
-    if (filters.managerId) {
-      const mgr = r.extension.managerName;
-      if (!mgr) return false;
-    }
+    if (filters.managerId && !r.extension.managerName) return false;
     if (!q) return true;
-    const hay = [r.extension.employeeName, r.extension.employeeCode, r.extension.departmentName, r.status]
+    const hay = [
+      r.extension.employeeName,
+      r.extension.employeeCode,
+      r.extension.departmentName,
+      r.status,
+      r.location,
+      r.attendanceDate,
+    ]
       .join(" ")
       .toLowerCase();
     return hay.includes(q);
@@ -498,9 +596,123 @@ export function reportSummary(records: AttendanceRecord[], label: string) {
     label,
     total: records.length,
     present: records.filter((r) => r.status === "present" || r.status === "late").length,
-    absent: records.filter((r) => r.status === "absent").length,
+    absent: records.filter((r) => r.status === "absent" || r.status === "leave").length,
     late: records.filter((r) => r.status === "late" || r.extension.isLate).length,
     missing: records.filter((r) => r.status === "missed_punch").length,
     ot: records.reduce((s, r) => s + r.overtimeHours, 0),
   };
+}
+
+export async function importAttendanceCsv(
+  csvText: string,
+  directory: AttendanceDirectory,
+): Promise<{ created: number; skipped: number; errors: string[] }> {
+  const lines = csvText
+    .split(/\r?\n/)
+    .map((l) => l.trim())
+    .filter(Boolean);
+  if (lines.length < 2) return { created: 0, skipped: 0, errors: ["CSV has no data rows"] };
+
+  const header = lines[0].toLowerCase().split(",").map((h) => h.trim().replace(/^"|"$/g, ""));
+  const idx = (name: string) => header.indexOf(name);
+
+  const codeIdx = idx("employee_code");
+  const dateIdx = idx("attendance_date");
+  const inIdx = idx("check_in");
+  const outIdx = idx("check_out");
+  const statusIdx = idx("status");
+  const sourceIdx = idx("source");
+  if (codeIdx < 0 || dateIdx < 0) {
+    return { created: 0, skipped: 0, errors: ["Required columns: employee_code, attendance_date"] };
+  }
+
+  const byCode = new Map(directory.options.employees.map((e) => [e.code.toLowerCase(), e]));
+  const existing = new Set(directory.records.map((r) => `${r.employeeId}|${r.attendanceDate}`));
+  const branchId = directory.options.branches[0]?.id ?? "";
+  const shiftId = directory.options.shifts[0]?.id ?? "";
+
+  let created = 0;
+  let skipped = 0;
+  const errors: string[] = [];
+
+  for (let i = 1; i < lines.length; i += 1) {
+    const cols = lines[i].match(/("([^"]|"")*"|[^,]*)/g)?.map((c) => c.replace(/^"|"$/g, "").replace(/""/g, '"').trim()) ?? [];
+    const code = (cols[codeIdx] ?? "").trim();
+    const date = (cols[dateIdx] ?? "").trim();
+    const emp = byCode.get(code.toLowerCase());
+    if (!emp || !date) {
+      errors.push(`Row ${i + 1}: unknown employee or date`);
+      skipped += 1;
+      continue;
+    }
+    if (existing.has(`${emp.id}|${date}`)) {
+      skipped += 1;
+      continue;
+    }
+    const status = ((cols[statusIdx] || "present") as AttendanceStatusCode);
+    const source = ((cols[sourceIdx] || "manual") as AttendanceSource);
+    try {
+      await markAttendance({
+        branchId,
+        employeeId: emp.id,
+        attendanceDate: date,
+        shiftId,
+        checkIn: cols[inIdx] || "",
+        checkOut: cols[outIdx] || "",
+        breakStart: "",
+        breakEnd: "",
+        status,
+        location: "HQ Office",
+        source,
+        gpsCoordinates: "",
+        notes: "Imported from CSV",
+      });
+      existing.add(`${emp.id}|${date}`);
+      created += 1;
+    } catch (e) {
+      errors.push(`Row ${i + 1}: ${e instanceof Error ? e.message : "failed"}`);
+      skipped += 1;
+    }
+  }
+
+  return { created, skipped, errors: errors.slice(0, 10) };
+}
+
+export async function applyAttendanceCorrection(input: {
+  record: AttendanceRecord;
+  field: "check_in" | "check_out";
+  newTime: string;
+  reason: string;
+  attachmentName: string;
+}): Promise<void> {
+  const { record, field, newTime, reason, attachmentName } = input;
+  const timePart = newTime.length === 5 ? `${newTime}:00` : newTime;
+  const iso = `${record.attendanceDate}T${timePart}`;
+  const nextIn = field === "check_in" ? iso : record.checkIn;
+  const nextOut = field === "check_out" ? iso : record.checkOut;
+  const working = diffHours(nextIn, nextOut, record.breakTime);
+
+  await resourceService.update("/hr/attendance", record.id, {
+    version: record.version,
+    check_in_at: nextIn || null,
+    check_out_at: nextOut || null,
+    total_hours: working > 0 ? working : null,
+    notes: `${record.notes ? `${record.notes} · ` : ""}Corrected: ${reason}`,
+  });
+
+  submitCorrection({
+    attendanceId: record.id,
+    employeeId: record.employeeId,
+    date: record.attendanceDate,
+    field,
+    oldTime: field === "check_in" ? record.checkIn : record.checkOut,
+    newTime,
+    reason,
+    attachmentName,
+  });
+
+  saveExtension(record.id, {
+    ...record.extension,
+    approvalStatus: "pending",
+  });
 }

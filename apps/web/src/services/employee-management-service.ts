@@ -202,11 +202,11 @@ export type EmployeeDirectoryOptions = {
 
 async function loadOptions(): Promise<EmployeeDirectoryOptions> {
   const [branches, departments, designations, employees, shifts] = await Promise.all([
-    resourceService.list("/branches").catch(() => ({ data: [] })),
-    resourceService.list("/departments").catch(() => ({ data: [] })),
-    resourceService.list("/hr/designations").catch(() => ({ data: [] })),
-    resourceService.list("/employees").catch(() => ({ data: [] })),
-    resourceService.list("/hr/shifts").catch(() => ({ data: [] })),
+    resourceService.list("/branches", { page_size: 200 }).catch(() => ({ data: [] })),
+    resourceService.list("/departments", { page_size: 200 }).catch(() => ({ data: [] })),
+    resourceService.list("/hr/designations", { page_size: 200 }).catch(() => ({ data: [] })),
+    resourceService.list("/employees", { page_size: 200 }).catch(() => ({ data: [] })),
+    resourceService.list("/hr/shifts", { page_size: 200 }).catch(() => ({ data: [] })),
   ]);
 
   const asRows = (d: unknown) =>
@@ -242,9 +242,9 @@ export async function loadEmployeeDirectory(): Promise<{
   errors: string[];
 }> {
   const [masters, profiles, employment, options] = await Promise.all([
-    resourceService.list("/employees").catch((e) => ({ data: [], error: e })),
-    resourceService.list("/hr/employee-profiles").catch((e) => ({ data: [], error: e })),
-    resourceService.list("/hr/employment").catch((e) => ({ data: [], error: e })),
+    resourceService.list("/employees", { page_size: 200, page: 1 }).catch((e) => ({ data: [], error: e })),
+    resourceService.list("/hr/employee-profiles", { page_size: 200, page: 1 }).catch((e) => ({ data: [], error: e })),
+    resourceService.list("/hr/employment", { page_size: 200, page: 1 }).catch((e) => ({ data: [], error: e })),
     loadOptions(),
   ]);
 

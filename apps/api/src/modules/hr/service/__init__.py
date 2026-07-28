@@ -21,7 +21,12 @@ from modules.hr.service.performance_service import AppraisalService, GoalService
 from modules.hr.service.report_service import HRReportService
 from modules.hr.service.separation_service import SeparationService
 from modules.hr.service.shift_service import ShiftAssignmentService, ShiftService
-from modules.hr.service.training_service import TrainingAttendanceService, TrainingService
+from modules.hr.service.training_service import (
+    TrainingAttendanceService,
+    TrainingRequestService,
+    TrainingRoomService,
+    TrainingService,
+)
 
 LeaveService = LeaveRequestService
 
@@ -48,5 +53,7 @@ __all__ = [
     "ShiftAssignmentService",
     "ShiftService",
     "TrainingAttendanceService",
+    "TrainingRequestService",
+    "TrainingRoomService",
     "TrainingService",
 ]

@@ -7,8 +7,8 @@
 ---
 
 **Project:** Enterprise ERP Platform
-**Generated:** 2026-07-23 12:22:46
-**Category:** Job Board/Recruitment
+**Generated:** 2026-07-28 10:45:16
+**Category:** Analytics Dashboard
 
 ---
 
@@ -18,18 +18,18 @@
 
 | Role | Hex | CSS Variable |
 |------|-----|--------------|
-| Primary | `#0F172A` | `--color-primary` |
+| Primary | `#1E40AF` | `--color-primary` |
 | On Primary | `#FFFFFF` | `--color-on-primary` |
-| Secondary | `#1E293B` | `--color-secondary` |
-| Accent/CTA | `#22C55E` | `--color-accent` |
-| Background | `#020617` | `--color-background` |
-| Foreground | `#F8FAFC` | `--color-foreground` |
-| Muted | `#1A1E2F` | `--color-muted` |
-| Border | `#334155` | `--color-border` |
-| Destructive | `#EF4444` | `--color-destructive` |
-| Ring | `#0F172A` | `--color-ring` |
+| Secondary | `#3B82F6` | `--color-secondary` |
+| Accent/CTA | `#D97706` | `--color-accent` |
+| Background | `#F8FAFC` | `--color-background` |
+| Foreground | `#1E3A8A` | `--color-foreground` |
+| Muted | `#E9EEF6` | `--color-muted` |
+| Border | `#DBEAFE` | `--color-border` |
+| Destructive | `#DC2626` | `--color-destructive` |
+| Ring | `#1E40AF` | `--color-ring` |
 
-**Color Notes:** Dark bg + green positive indicators
+**Color Notes:** Blue data + amber highlights [Accent adjusted from #F59E0B for WCAG 3:1]
 
 ### Typography
 
@@ -73,7 +73,7 @@
 ```css
 /* Primary Button */
 .btn-primary {
-  background: #22C55E;
+  background: #D97706;
   color: white;
   padding: 12px 24px;
   border-radius: 8px;
@@ -90,8 +90,8 @@
 /* Secondary Button */
 .btn-secondary {
   background: transparent;
-  color: #0F172A;
-  border: 2px solid #0F172A;
+  color: #1E40AF;
+  border: 2px solid #1E40AF;
   padding: 12px 24px;
   border-radius: 8px;
   font-weight: 600;
@@ -104,7 +104,7 @@
 
 ```css
 .card {
-  background: #020617;
+  background: #F8FAFC;
   border-radius: 12px;
   padding: 24px;
   box-shadow: var(--shadow-md);
@@ -130,9 +130,9 @@
 }
 
 .input:focus {
-  border-color: #0F172A;
+  border-color: #1E40AF;
   outline: none;
-  box-shadow: 0 0 0 3px #0F172A20;
+  box-shadow: 0 0 0 3px #1E40AF20;
 }
 ```
 
@@ -158,28 +158,28 @@
 
 ## Style Guidelines
 
-**Style:** Minimalism & Swiss Style
+**Style:** Data-Dense Dashboard
 
-**Keywords:** Clean, simple, spacious, functional, white space, high contrast, geometric, sans-serif, grid-based, essential
+**Keywords:** Multiple charts/widgets, data tables, KPI cards, minimal padding, grid layout, space-efficient, maximum data visibility
 
-**Best For:** Enterprise apps, dashboards, documentation sites, SaaS platforms, professional tools
+**Best For:** Business intelligence dashboards, financial analytics, enterprise reporting, operational dashboards, data warehousing
 
-**Key Effects:** Subtle hover (200-250ms), smooth transitions, sharp shadows if any, clear type hierarchy, fast loading
+**Key Effects:** Hover tooltips, chart zoom on click, row highlighting on hover, smooth filter animations, data loading spinners
 
 ### Page Pattern
 
-**Pattern Name:** Enterprise Gateway
+**Pattern Name:** Real-Time / Operations Landing
 
-- **Conversion Strategy:** Path selection (I am a...). Mega menu navigation. Trust signals prominent.
-- **CTA Placement:** Contact Sales (Primary) + Login (Secondary)
-- **Section Order:** 1. Hero (Video/Mission), 2. Solutions by Industry, 3. Solutions by Role, 4. Client Logos, 5. Contact Sales
+- **Conversion Strategy:** For ops/security/iot products. Demo or sandbox link. Trust signals.
+- **CTA Placement:** Primary CTA in nav + After metrics
+- **Section Order:** 1. Hero (product + live preview or status), 2. Key metrics/indicators, 3. How it works, 4. CTA (Start trial / Contact)
 
 ---
 
 ## Anti-Patterns (Do NOT Use)
 
-- ❌ Outdated forms
-- ❌ Hidden filters
+- ❌ Ornate design
+- ❌ No filtering
 
 ### Additional Forbidden Patterns
 

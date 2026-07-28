@@ -36,6 +36,7 @@ import { ApiClientError, resourceService } from "@/services/api-client";
 import {
   archiveLocal,
   cell,
+  coerceLocalForm,
   createLocalSetup,
   duplicateLocal,
   exportRowsCsv,
@@ -73,6 +74,21 @@ type ColumnDef = {
 type Mode = "create" | "edit" | "view" | "history" | null;
 
 const PAGE_SIZE = 10;
+
+function toFormValue(value: unknown, type?: FieldDef["type"]): string {
+  if (value == null) return type === "checkbox" ? "false" : "";
+  if (type === "checkbox") {
+    if (typeof value === "boolean") return value ? "true" : "false";
+    const s = String(value).trim().toLowerCase();
+    return s === "true" || s === "1" || s === "yes" ? "true" : "false";
+  }
+  return String(value);
+}
+
+function isFormChecked(value: string | undefined): boolean {
+  const s = String(value ?? "").trim().toLowerCase();
+  return s === "true" || s === "1" || s === "yes";
+}
 
 function SkeletonRows() {
   return (
@@ -158,6 +174,17 @@ export function SetupEntityPanel({
   }>({ companies: [], branches: [], departments: [], employees: [], shifts: [] });
 
   const needsOrgLookups = fields.some((f) => f.optionsSource);
+
+  useEffect(() => {
+    if (!menuId) return;
+    function onDocClick(e: MouseEvent) {
+      const t = e.target as HTMLElement | null;
+      if (t?.closest?.("[data-setup-row-menu]")) return;
+      setMenuId(null);
+    }
+    document.addEventListener("mousedown", onDocClick);
+    return () => document.removeEventListener("mousedown", onDocClick);
+  }, [menuId]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -297,7 +324,9 @@ export function SetupEntityPanel({
   }
 
   function openEdit(row: SetupRow, viewOnly = false) {
-    const initial: Record<string, string> = {};
+    const initial: Record<string, string> = {
+      version: String(row.version ?? 1),
+    };
     for (const f of fields) {
       const v = row[f.key];
       const isTime =
@@ -305,11 +334,12 @@ export function SetupEntityPanel({
       if (isTime) {
         initial[f.key] = toTimeInputValue(v == null ? "" : String(v));
       } else {
-        initial[f.key] = v == null ? "" : String(v);
+        initial[f.key] = toFormValue(v, f.type);
       }
     }
     setForm(initial);
     setActive(row);
+    setMenuId(null);
     setMode(viewOnly ? "view" : "edit");
   }
 
@@ -328,10 +358,11 @@ export function SetupEntityPanel({
     setSaving(true);
     try {
       if (tab.source === "local") {
+        const payload = coerceLocalForm(fields, form);
         if (mode === "create") {
-          await createLocalSetup(tab.id, tab.codePrefix ?? "CFG", form);
+          await createLocalSetup(tab.id, tab.codePrefix ?? "CFG", payload);
         } else if (active) {
-          await updateLocalSetup(tab.id, active.id, form);
+          await updateLocalSetup(tab.id, active.id, payload);
         }
       } else if (tab.apiPath) {
         if (mode === "create") {
@@ -572,7 +603,7 @@ export function SetupEntityPanel({
           ) : null}
         </div>
       ) : (
-        <div className="overflow-hidden rounded-xl border border-border/70 bg-card shadow-sm">
+        <div className="rounded-xl border border-border/70 bg-card shadow-sm">
           <div className="erp-scroll overflow-x-auto">
             <table className="w-full min-w-[720px] text-left text-sm">
               <thead className="border-b border-border/70 bg-muted/40">
@@ -630,18 +661,21 @@ export function SetupEntityPanel({
                             : cell(row, c.key, ...nameKeys)}
                       </td>
                     ))}
-                    <td className="relative px-3 py-2">
+                    <td className="relative px-3 py-2" data-setup-row-menu>
                       <Button
                         type="button"
                         size="icon-xs"
                         variant="ghost"
                         className="cursor-pointer"
-                        onClick={() => setMenuId(menuId === row.id ? null : row.id)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setMenuId(menuId === row.id ? null : row.id);
+                        }}
                       >
                         <MoreHorizontal className="size-4" />
                       </Button>
                       {menuId === row.id ? (
-                        <div className="absolute top-8 right-2 z-20 w-40 rounded-lg border border-border bg-card py-1 shadow-lg">
+                        <div className="absolute right-2 bottom-9 z-30 w-44 rounded-lg border border-border bg-card py-1 shadow-lg">
                           {(
                             [
                               { label: "View", icon: Eye, fn: () => openEdit(row, true) },
@@ -663,8 +697,9 @@ export function SetupEntityPanel({
                             <button
                               key={item.label}
                               type="button"
-                              className="flex w-full cursor-pointer items-center gap-2 px-3 py-1.5 text-left text-xs hover:bg-muted"
-                              onClick={() => {
+                              className="flex w-full cursor-pointer items-center gap-2 px-3 py-1.5 text-left text-xs transition-colors hover:bg-muted"
+                              onClick={(e) => {
+                                e.stopPropagation();
                                 setMenuId(null);
                                 item.fn();
                               }}
@@ -783,17 +818,21 @@ export function SetupEntityPanel({
                     onChange={(v) => setForm((prev) => ({ ...prev, [f.key]: v }))}
                   />
                 ) : f.type === "checkbox" ? (
-                  <label className="flex h-8 cursor-pointer items-center gap-2 text-sm">
+                  <div className="flex h-8 items-center gap-2 text-sm">
                     <input
+                      id={`setup-cb-${f.key}`}
                       type="checkbox"
-                      checked={form[f.key] === "true"}
+                      className="cursor-pointer"
+                      checked={isFormChecked(form[f.key])}
                       disabled={readOnly || f.readOnly}
                       onChange={(e) =>
                         setForm((prev) => ({ ...prev, [f.key]: e.target.checked ? "true" : "false" }))
                       }
                     />
-                    Enabled
-                  </label>
+                    <label htmlFor={`setup-cb-${f.key}`} className="cursor-pointer text-muted-foreground">
+                      Enabled
+                    </label>
+                  </div>
                 ) : (
                   <SetupInput
                     type={f.type === "number" ? "number" : f.type === "date" ? "date" : "text"}

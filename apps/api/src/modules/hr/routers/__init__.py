@@ -65,7 +65,13 @@ from modules.hr.schemas import (
     TrainingAssignRequest,
     TrainingAttendanceResponse,
     TrainingCreate,
+    TrainingRequestCreate,
+    TrainingRequestDecision,
+    TrainingRequestResponse,
     TrainingResponse,
+    TrainingRoomCreate,
+    TrainingRoomResponse,
+    TrainingRoomUpdate,
     TrainingUpdate,
 )
 from modules.hr.service import (
@@ -88,6 +94,8 @@ from modules.hr.service import (
     ShiftAssignmentService,
     ShiftService,
     TrainingAttendanceService,
+    TrainingRequestService,
+    TrainingRoomService,
     TrainingService,
 )
 from shared.schemas import APIResponse
@@ -110,6 +118,8 @@ goals_router = APIRouter(prefix="/goals", tags=["HR - Goals"])
 appraisals_router = APIRouter(prefix="/appraisals", tags=["HR - Appraisals"])
 training_router = APIRouter(prefix="/training", tags=["HR - Training"])
 training_attendance_router = APIRouter(prefix="/training-attendance", tags=["HR - Training Attendance"])
+training_rooms_router = APIRouter(prefix="/training-rooms", tags=["HR - Training Rooms"])
+training_requests_router = APIRouter(prefix="/training-requests", tags=["HR - Training Requests"])
 separation_router = APIRouter(prefix="/separation", tags=["HR - Separation"])
 reports_router = APIRouter(prefix="/reports", tags=["HR - Reports"])
 
@@ -668,6 +678,93 @@ def list_training_attendance(
     company_id: UUID | None = None,
 ):
     return APIResponse(message="OK", data=paginate(TrainingAttendanceService(db).list(ctx, company_id), pagination))
+
+
+@training_rooms_router.get("", response_model=APIResponse[list[TrainingRoomResponse]])
+def list_training_rooms(
+    ctx: Annotated[TenantContext, Depends(require_permission("hr.training:read"))],
+    db: Annotated[Session, Depends(get_db)],
+    pagination: Annotated[PaginationParams, Depends(get_pagination)],
+    company_id: UUID | None = None,
+):
+    return APIResponse(message="OK", data=paginate(TrainingRoomService(db).list(ctx, company_id), pagination))
+
+
+@training_rooms_router.post("", response_model=APIResponse[TrainingRoomResponse])
+def create_training_room(
+    body: TrainingRoomCreate,
+    ctx: Annotated[TenantContext, Depends(require_permission("hr.training:create"))],
+    db: Annotated[Session, Depends(get_db)],
+):
+    return APIResponse(message="OK", data=TrainingRoomService(db).create(ctx, **body.model_dump(exclude_none=True)))
+
+
+@training_rooms_router.patch("/{row_id}", response_model=APIResponse[TrainingRoomResponse])
+def update_training_room(
+    row_id: UUID,
+    body: TrainingRoomUpdate,
+    ctx: Annotated[TenantContext, Depends(require_permission("hr.training:update"))],
+    db: Annotated[Session, Depends(get_db)],
+):
+    return APIResponse(
+        message="OK",
+        data=TrainingRoomService(db).update(ctx, row_id, **extract_update_fields(body)),
+    )
+
+
+@training_requests_router.get("", response_model=APIResponse[list[TrainingRequestResponse]])
+def list_training_requests(
+    ctx: Annotated[TenantContext, Depends(require_permission("hr.training:read"))],
+    db: Annotated[Session, Depends(get_db)],
+    pagination: Annotated[PaginationParams, Depends(get_pagination)],
+    company_id: UUID | None = None,
+):
+    return APIResponse(message="OK", data=paginate(TrainingRequestService(db).list(ctx, company_id), pagination))
+
+
+@training_requests_router.post("", response_model=APIResponse[TrainingRequestResponse])
+def create_training_request(
+    body: TrainingRequestCreate,
+    ctx: Annotated[TenantContext, Depends(require_permission("hr.training:create"))],
+    db: Annotated[Session, Depends(get_db)],
+):
+    payload = body.model_dump(exclude_none=True)
+    attendees = payload.pop("attendees", []) or []
+    payload["attendees_json"] = [
+        {
+            "employee_id": str(a["employee_id"]),
+            "employee_name": a.get("employee_name"),
+            "employee_code": a.get("employee_code"),
+        }
+        for a in attendees
+    ]
+    return APIResponse(message="OK", data=TrainingRequestService(db).create(ctx, **payload))
+
+
+@training_requests_router.post("/{row_id}/approve", response_model=APIResponse[TrainingRequestResponse])
+def approve_training_request(
+    row_id: UUID,
+    body: TrainingRequestDecision,
+    ctx: Annotated[TenantContext, Depends(require_permission("hr.training:update"))],
+    db: Annotated[Session, Depends(get_db)],
+):
+    return APIResponse(
+        message="OK",
+        data=TrainingRequestService(db).approve(ctx, row_id, approval_notes=body.approval_notes),
+    )
+
+
+@training_requests_router.post("/{row_id}/reject", response_model=APIResponse[TrainingRequestResponse])
+def reject_training_request(
+    row_id: UUID,
+    body: TrainingRequestDecision,
+    ctx: Annotated[TenantContext, Depends(require_permission("hr.training:update"))],
+    db: Annotated[Session, Depends(get_db)],
+):
+    return APIResponse(
+        message="OK",
+        data=TrainingRequestService(db).reject(ctx, row_id, approval_notes=body.approval_notes),
+    )
 
 
 @separation_router.get("", response_model=APIResponse[list[SeparationResponse]])

@@ -19,6 +19,8 @@ from modules.hr.models.shift import HrShift
 from modules.hr.models.shift_assignment import HrShiftAssignment
 from modules.hr.models.training import HrTraining
 from modules.hr.models.training_attendance import HrTrainingAttendance
+from modules.hr.models.training_request import HrTrainingRequest
+from modules.hr.models.training_room import HrTrainingRoom
 
 __all__ = [
     "HrDesignation",
@@ -39,5 +41,7 @@ __all__ = [
     "HrAppraisal",
     "HrTraining",
     "HrTrainingAttendance",
+    "HrTrainingRoom",
+    "HrTrainingRequest",
     "HrSeparation",
 ]

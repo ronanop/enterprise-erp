@@ -149,15 +149,13 @@ export const CALENDAR_CODES: Record<AttendanceStatusCode, string> = {
 };
 
 export function emptyAttendanceFilters(today: string): AttendanceFilters {
-  const d = new Date(today);
-  const start = new Date(d.getFullYear(), d.getMonth(), 1).toISOString().slice(0, 10);
   return {
     branchId: "",
     departmentId: "",
     designation: "",
     shiftId: "",
     status: "",
-    dateFrom: start,
+    dateFrom: today,
     dateTo: today,
     managerId: "",
     location: "",
