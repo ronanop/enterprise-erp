@@ -206,6 +206,7 @@ def delivery_needs_hwat(delivery_type: str) -> bool:
 
 class SiteWorkflowStage(str, Enum):
     INTAKE = "intake"
+    ASSIGNMENT = "assignment"
     SURVEY = "survey"
     SCM = "scm"
     INSTALLATION = "installation"

@@ -223,16 +223,32 @@ export type SiteInstallation = AuditFields & {
   material_handover_done: boolean;
   material_handover_date: string | null;
   rack_server_stacking_done: boolean;
+  rack_server_stacking_date: string | null;
   rack_server_power_on_done: boolean;
+  rack_server_power_on_date: string | null;
   dac_ilo_cabling_done: boolean;
+  dac_ilo_cabling_date: string | null;
   bios_configuration_done: boolean;
+  bios_configuration_date: string | null;
   firmware_nw_config_done: boolean;
+  firmware_nw_config_date: string | null;
   lld_done: boolean;
+  lld_date: string | null;
   os_installation_done: boolean;
+  os_installation_date: string | null;
   mbss_done: boolean;
+  mbss_date: string | null;
   handover_to_cloud_done: boolean;
+  handover_to_cloud_date: string | null;
   hwat_request_done: boolean;
+  hwat_request_date: string | null;
   hwat_signoff_received: boolean;
+  hwat_signoff_date: string | null;
+  survey_assignee_employee_id: string | null;
+  scm_assignee_employee_id: string | null;
+  installation_assignee_employee_id: string | null;
+  configuration_assignee_employee_id: string | null;
+  acceptance_assignee_employee_id: string | null;
   remarks: string | null;
 };
 
@@ -277,17 +293,40 @@ export type SiteInstallationFormInput = {
   material_handover_done?: boolean;
   material_handover_date?: string | null;
   rack_server_stacking_done?: boolean;
+  rack_server_stacking_date?: string | null;
   rack_server_power_on_done?: boolean;
+  rack_server_power_on_date?: string | null;
   dac_ilo_cabling_done?: boolean;
+  dac_ilo_cabling_date?: string | null;
   bios_configuration_done?: boolean;
+  bios_configuration_date?: string | null;
   firmware_nw_config_done?: boolean;
+  firmware_nw_config_date?: string | null;
   lld_done?: boolean;
+  lld_date?: string | null;
   os_installation_done?: boolean;
+  os_installation_date?: string | null;
   mbss_done?: boolean;
+  mbss_date?: string | null;
   handover_to_cloud_done?: boolean;
+  handover_to_cloud_date?: string | null;
   hwat_request_done?: boolean;
+  hwat_request_date?: string | null;
   hwat_signoff_received?: boolean;
+  hwat_signoff_date?: string | null;
+  survey_assignee_employee_id?: string | null;
+  scm_assignee_employee_id?: string | null;
+  installation_assignee_employee_id?: string | null;
+  configuration_assignee_employee_id?: string | null;
+  acceptance_assignee_employee_id?: string | null;
   remarks?: string | null;
+};
+
+export type SiteStageAssignment = {
+  stage: string;
+  label: string;
+  assignee_employee_id: string | null;
+  work_status: "pending" | "in_progress" | "done" | "skipped" | string;
 };
 
 export type SiteInstallationBlueprint = {
@@ -297,6 +336,7 @@ export type SiteInstallationBlueprint = {
   allowed_actions: string[];
   action_labels: Record<string, string>;
   stages: Array<{ key: string; label: string }>;
+  stage_assignments?: SiteStageAssignment[];
   terminal: boolean;
 };
 
@@ -1049,13 +1089,58 @@ export async function listBranchOptions(): Promise<Option[]> {
   return toOptions(res.data, (r) => String(r.branch_name ?? r.name ?? r.id));
 }
 
+function employeeOptionLabel(r: Record<string, unknown>): string {
+  const name = [r.first_name, r.last_name].filter(Boolean).join(" ").trim();
+  const code = r.employee_code ? ` (${r.employee_code})` : "";
+  return `${name || String(r.id)}${code}`;
+}
+
 export async function listEmployeeOptions(): Promise<Option[]> {
   const res = await resourceService.list("/employees", { page_size: 200 });
-  return toOptions(res.data, (r) => {
-    const name = [r.first_name, r.last_name].filter(Boolean).join(" ").trim();
-    const code = r.employee_code ? ` (${r.employee_code})` : "";
-    return `${name || String(r.id)}${code}`;
+  return toOptions(res.data, employeeOptionLabel);
+}
+
+/**
+ * Employees in Project Management departments (or with a project-related
+ * designation). Falls back to the full employee list when no match exists.
+ */
+export async function listProjectManagementTeamOptions(): Promise<Option[]> {
+  const [empRes, deptRes] = await Promise.all([
+    resourceService.list("/employees", { page_size: 200 }),
+    resourceService.list("/departments", { page_size: 200 }),
+  ]);
+  const employees = asArray(
+    empRes.data as Record<string, unknown>[] | Record<string, unknown> | null,
+  ).filter((r) => r && typeof r === "object" && r.id);
+  const departments = asArray(
+    deptRes.data as Record<string, unknown>[] | Record<string, unknown> | null,
+  );
+  const pmDeptIds = new Set(
+    departments
+      .filter((d) => {
+        const name = String(d.department_name ?? d.name ?? "").toLowerCase();
+        const code = String(d.department_code ?? "").toLowerCase();
+        return (
+          name.includes("project") ||
+          code.includes("project") ||
+          code === "pm" ||
+          code === "pmo"
+        );
+      })
+      .map((d) => String(d.id)),
+  );
+  const team = employees.filter((r) => {
+    if (String(r.status ?? "").toLowerCase() === "terminated") return false;
+    if (pmDeptIds.has(String(r.department_id ?? ""))) return true;
+    const designation = String(r.designation ?? "").toLowerCase();
+    return (
+      designation.includes("project") ||
+      designation.includes("pmo") ||
+      designation.includes("delivery manager")
+    );
   });
+  const source = team.length > 0 ? team : employees;
+  return source.map((r) => ({ id: String(r.id), label: employeeOptionLabel(r) }));
 }
 
 export async function listCustomerOptions(): Promise<Option[]> {

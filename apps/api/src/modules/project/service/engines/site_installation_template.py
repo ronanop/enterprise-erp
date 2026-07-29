@@ -89,28 +89,16 @@ SITE_INSTALLATION_WBS: tuple[WbsPhaseSpec, ...] = (
     ),
     WbsPhaseSpec(
         code="PH-INSTALL",
-        name="Installation",
+        name="Installation & Configuration",
         sequence_no=4,
         stage=SiteWorkflowStage.INSTALLATION.value,
         milestone=WbsMilestoneSpec(
             code="MS-INSTALL",
-            name="Site Powered & Cabling Done",
+            name="Install & Config Ready",
             tasks=(
                 WbsTaskSpec("Rack installation + server stacking", "high"),
                 WbsTaskSpec("Rack + server power on", "high"),
                 WbsTaskSpec("DAC / ILO cabling"),
-            ),
-        ),
-    ),
-    WbsPhaseSpec(
-        code="PH-CONFIG",
-        name="Configuration",
-        sequence_no=5,
-        stage=SiteWorkflowStage.CONFIGURATION.value,
-        milestone=WbsMilestoneSpec(
-            code="MS-CONFIG",
-            name="Config Ready",
-            tasks=(
                 WbsTaskSpec("BIOS configuration"),
                 WbsTaskSpec("Firmware / N/W configuration"),
                 WbsTaskSpec("LLD availability"),
@@ -122,15 +110,15 @@ SITE_INSTALLATION_WBS: tuple[WbsPhaseSpec, ...] = (
     WbsPhaseSpec(
         code="PH-ACCEPT",
         name="Acceptance",
-        sequence_no=6,
+        sequence_no=5,
         stage=SiteWorkflowStage.ACCEPTANCE.value,
         milestone=WbsMilestoneSpec(
             code="MS-HO",
             name="Handover / Circle Sign-off",
             tasks=(
-                WbsTaskSpec("Handover to Cloud", "high"),
-                WbsTaskSpec("HW AT request", "high"),
-                WbsTaskSpec("HW AT sign-off from circle", "critical"),
+                WbsTaskSpec("Handover to Application Team", "high"),
+                WbsTaskSpec("HWAT request", "high"),
+                WbsTaskSpec("HWAT sign-off from circle", "critical"),
             ),
         ),
     ),
@@ -139,48 +127,44 @@ SITE_INSTALLATION_WBS: tuple[WbsPhaseSpec, ...] = (
 
 def wbs_for_delivery_type(delivery_type: str) -> tuple[WbsPhaseSpec, ...]:
     """Filter WBS phases/tasks by delivery scope."""
+    config_tasks = {
+        "BIOS configuration",
+        "Firmware / N/W configuration",
+        "LLD availability",
+        "OS installation",
+        "MBSS",
+    }
     phases: list[WbsPhaseSpec] = []
     for phase in SITE_INSTALLATION_WBS:
-        if (
-            not delivery_needs_configuration(delivery_type)
-            and phase.stage == SiteWorkflowStage.CONFIGURATION.value
-        ):
+        if phase.stage == SiteWorkflowStage.CONFIGURATION.value:
             continue
-
         tasks = phase.milestone.tasks
-        if (
-            not delivery_includes_os(delivery_type)
-            and phase.stage == SiteWorkflowStage.CONFIGURATION.value
-        ):
-            tasks = tuple(
-                t
-                for t in tasks
-                if t.task_name not in {"OS installation", "MBSS"}
-            )
-
-        if (
-            delivery_is_rack_only(delivery_type)
-            and phase.stage == SiteWorkflowStage.INSTALLATION.value
-        ):
-            tasks = tuple(
-                t
-                for t in tasks
-                if "power on" not in t.task_name.lower()
-                and "dac" not in t.task_name.lower()
-            )
-            tasks = tuple(
-                WbsTaskSpec("Rack installation", t.priority)
-                if "stacking" in t.task_name.lower()
-                else t
-                for t in tasks
-            )
-
+        if phase.stage == SiteWorkflowStage.INSTALLATION.value:
+            if not delivery_needs_configuration(delivery_type):
+                tasks = tuple(t for t in tasks if t.task_name not in config_tasks)
+            elif not delivery_includes_os(delivery_type):
+                tasks = tuple(
+                    t for t in tasks if t.task_name not in {"OS installation", "MBSS"}
+                )
+            if delivery_is_rack_only(delivery_type):
+                tasks = tuple(
+                    t
+                    for t in tasks
+                    if "power on" not in t.task_name.lower()
+                    and "dac" not in t.task_name.lower()
+                    and t.task_name not in config_tasks
+                )
+                tasks = tuple(
+                    WbsTaskSpec("Rack installation", t.priority)
+                    if "stacking" in t.task_name.lower()
+                    else t
+                    for t in tasks
+                )
         if (
             not delivery_needs_hwat(delivery_type)
             and phase.stage == SiteWorkflowStage.ACCEPTANCE.value
         ):
-            tasks = tuple(t for t in tasks if "HW AT" not in t.task_name)
-
+            tasks = tuple(t for t in tasks if "HWAT" not in t.task_name)
         phases.append(
             WbsPhaseSpec(
                 code=phase.code,

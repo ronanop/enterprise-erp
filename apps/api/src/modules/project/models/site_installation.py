@@ -36,7 +36,7 @@ class PrjSiteInstallation(Base, *PrjDetailMixin):
         ),
         CheckConstraint(
             "workflow_stage IN ("
-            "'intake','survey','scm','installation','configuration','acceptance','completed'"
+            "'intake','assignment','survey','scm','installation','acceptance','completed'"
             ")",
             name="ck_prj_site_workflow_stage",
         ),
@@ -122,6 +122,9 @@ class PrjSiteInstallation(Base, *PrjDetailMixin):
     rack_server_stacking_done: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     rack_server_power_on_done: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     dac_ilo_cabling_done: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    rack_server_stacking_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    rack_server_power_on_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    dac_ilo_cabling_date: Mapped[date | None] = mapped_column(Date, nullable=True)
 
     # Configuration
     bios_configuration_done: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
@@ -129,12 +132,52 @@ class PrjSiteInstallation(Base, *PrjDetailMixin):
     lld_done: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     os_installation_done: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     mbss_done: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    bios_configuration_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    firmware_nw_config_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    lld_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    os_installation_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    mbss_date: Mapped[date | None] = mapped_column(Date, nullable=True)
 
     # Acceptance
     handover_to_cloud_done: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     hwat_request_done: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     hwat_signoff_received: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    handover_to_cloud_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    hwat_request_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    hwat_signoff_date: Mapped[date | None] = mapped_column(Date, nullable=True)
 
     remarks: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    # Stage owners — set by project assignee before Survey work begins
+    survey_assignee_employee_id: Mapped[UUID | None] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("master.master_employee.id", ondelete="RESTRICT"),
+        nullable=True,
+        index=True,
+    )
+    scm_assignee_employee_id: Mapped[UUID | None] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("master.master_employee.id", ondelete="RESTRICT"),
+        nullable=True,
+        index=True,
+    )
+    installation_assignee_employee_id: Mapped[UUID | None] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("master.master_employee.id", ondelete="RESTRICT"),
+        nullable=True,
+        index=True,
+    )
+    configuration_assignee_employee_id: Mapped[UUID | None] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("master.master_employee.id", ondelete="RESTRICT"),
+        nullable=True,
+        index=True,
+    )
+    acceptance_assignee_employee_id: Mapped[UUID | None] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("master.master_employee.id", ondelete="RESTRICT"),
+        nullable=True,
+        index=True,
+    )
 
     status: Mapped[str] = mapped_column(String(30), nullable=False, default="active", index=True)

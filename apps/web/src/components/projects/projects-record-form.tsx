@@ -28,6 +28,7 @@ import {
 } from "@/components/projects/projects-ui";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { cn } from "@/lib/utils";
 import { ApiClientError } from "@/services/api-client";
 import {
   createCustomer,
@@ -97,8 +98,34 @@ export type FormSection = {
   title: string;
   subtitle?: string;
   icon?: LucideIcon;
+  /** Desktop column count for the field grid (default 2). */
+  columns?: 2 | 3;
   fields: FieldSpec[];
 };
+
+type FieldBlock =
+  | { kind: "single"; field: FieldSpec }
+  | { kind: "pair"; checkbox: FieldSpec; date: FieldSpec };
+
+/** Pair checkbox + following date when the date is cleared by / tied to that checkbox. */
+function groupFieldBlocks(fields: FieldSpec[]): FieldBlock[] {
+  const blocks: FieldBlock[] = [];
+  for (let i = 0; i < fields.length; i++) {
+    const field = fields[i];
+    const next = fields[i + 1];
+    const clearsDate =
+      field.type === "checkbox" &&
+      next?.type === "date" &&
+      (field.clearFieldsOnChange ?? []).includes(next.name);
+    if (clearsDate && next) {
+      blocks.push({ kind: "pair", checkbox: field, date: next });
+      i += 1;
+      continue;
+    }
+    blocks.push({ kind: "single", field });
+  }
+  return blocks;
+}
 
 /**
  * Shared create/edit shell for Projects records. Values are held as strings and
@@ -183,6 +210,133 @@ export function ProjectsRecordForm({
       return (lookups[field.optionsKey] ?? []).map((o) => ({ value: o.id, label: o.label }));
     }
     return [];
+  }
+
+  function fieldSpanClass(field: FieldSpec, columns?: 2 | 3): string | undefined {
+    const spanFull =
+      field.full || field.type === "type_qty_lines" || field.type === "textarea";
+    if (!spanFull) return undefined;
+    return columns === 3 ? "sm:col-span-2 xl:col-span-3" : "sm:col-span-2";
+  }
+
+  function renderFieldControl(field: FieldSpec) {
+    if (field.type === "type_qty_lines") {
+      return (
+        <TypeQtyLinesEditor
+          value={values[field.name] ?? ""}
+          options={optionsFor(field)}
+          addLabel={field.addLabel ?? "Add type"}
+          onChange={(next) => set(field.name, next)}
+        />
+      );
+    }
+    if (field.type === "select") {
+      return (
+        <FinanceSelect
+          value={values[field.name] ?? ""}
+          onChange={(e) => onSelectChange(field, e.target.value)}
+        >
+          <option value="">{field.placeholder ?? "Select…"}</option>
+          {optionsFor(field).map((o) => (
+            <option key={o.value} value={o.value}>
+              {o.label}
+            </option>
+          ))}
+          {field.creatable === "customer" ? (
+            <option value={NEW_CUSTOMER_VALUE}>
+              {field.createNewLabel ?? "New Customer"}
+            </option>
+          ) : null}
+        </FinanceSelect>
+      );
+    }
+    if (field.type === "textarea") {
+      return (
+        <FinanceTextarea
+          value={values[field.name] ?? ""}
+          placeholder={field.placeholder}
+          onChange={(e) => set(field.name, e.target.value)}
+        />
+      );
+    }
+    if (field.type === "readonly") {
+      return (
+        <Input
+          className="min-w-0 w-full"
+          value={values[field.name] ?? ""}
+          disabled
+          aria-readonly="true"
+        />
+      );
+    }
+    if (field.type === "yesno") {
+      return (
+        <div className="flex flex-wrap items-center gap-4 text-sm text-foreground">
+          <label className="flex cursor-pointer items-center gap-2">
+            <input
+              type="checkbox"
+              className="size-4 cursor-pointer rounded border border-input accent-[var(--color-accent,#0369A1)]"
+              checked={values[field.name] === "true"}
+              onChange={() => set(field.name, "true", field.clearFieldsOnChange)}
+            />
+            <span>Yes</span>
+          </label>
+          <label className="flex cursor-pointer items-center gap-2">
+            <input
+              type="checkbox"
+              className="size-4 cursor-pointer rounded border border-input accent-[var(--color-accent,#0369A1)]"
+              checked={values[field.name] === "false"}
+              onChange={() => set(field.name, "false", field.clearFieldsOnChange)}
+            />
+            <span>No</span>
+          </label>
+        </div>
+      );
+    }
+    if (field.type === "checkbox") {
+      return (
+        <label className="flex min-h-10 w-full cursor-pointer items-start gap-3 rounded-lg border border-border/80 bg-muted/25 px-3 py-2.5 text-sm text-foreground transition-colors duration-200 hover:bg-muted/40">
+          <input
+            type="checkbox"
+            className="mt-0.5 size-4 shrink-0 cursor-pointer rounded border border-input accent-[var(--color-accent,#0369A1)]"
+            checked={values[field.name] === "true"}
+            onChange={(e) =>
+              set(
+                field.name,
+                e.target.checked ? "true" : "false",
+                field.clearFieldsOnChange,
+              )
+            }
+          />
+          <span className="min-w-0 leading-snug">{field.placeholder ?? "Yes"}</span>
+        </label>
+      );
+    }
+    return (
+      <Input
+        className="min-w-0 w-full"
+        type={field.type}
+        value={values[field.name] ?? ""}
+        placeholder={field.placeholder}
+        step={field.step}
+        min={field.min}
+        max={field.max}
+        onChange={(e) => set(field.name, e.target.value)}
+      />
+    );
+  }
+
+  function renderField(field: FieldSpec, className?: string) {
+    return (
+      <FinanceField
+        key={field.name}
+        label={isFieldRequired(field) ? `${field.label} *` : field.label}
+        hint={field.hint}
+        className={cn("min-w-0", className)}
+      >
+        {renderFieldControl(field)}
+      </FinanceField>
+    );
   }
 
   function openCustomerDialog(fieldName: string) {
@@ -317,101 +471,38 @@ export function ProjectsRecordForm({
           title={section.title}
           subtitle={section.subtitle}
           icon={section.icon}
+          bodyClassName="min-w-0"
         >
-          <div className="grid items-start gap-x-10 gap-y-3 md:grid-cols-2">
-            {section.fields.filter(isFieldVisible).map((field) => (
-              <FinanceField
-                key={field.name}
-                label={isFieldRequired(field) ? `${field.label} *` : field.label}
-                hint={field.hint}
-                className={field.full || field.type === "type_qty_lines" ? "md:col-span-2" : undefined}
-              >
-                {field.type === "type_qty_lines" ? (
-                  <TypeQtyLinesEditor
-                    value={values[field.name] ?? ""}
-                    options={optionsFor(field)}
-                    addLabel={field.addLabel ?? "Add type"}
-                    onChange={(next) => set(field.name, next)}
-                  />
-                ) : field.type === "select" ? (
-                  <FinanceSelect
-                    value={values[field.name] ?? ""}
-                    onChange={(e) => onSelectChange(field, e.target.value)}
+          <div
+            className={cn(
+              "grid min-w-0 grid-cols-1 items-start gap-x-8 gap-y-5",
+              section.columns === 3
+                ? "sm:grid-cols-2 xl:grid-cols-3"
+                : "sm:grid-cols-2",
+            )}
+          >
+            {groupFieldBlocks(section.fields.filter(isFieldVisible)).map((block) => {
+              if (block.kind === "pair") {
+                const dateVisible = isFieldVisible(block.date);
+                return (
+                  <div
+                    key={block.checkbox.name}
+                    className={cn(
+                      "grid min-w-0 grid-cols-1 items-start gap-x-8 gap-y-5",
+                      dateVisible
+                        ? section.columns === 3
+                          ? "sm:col-span-2 xl:col-span-3 sm:grid-cols-2"
+                          : "sm:col-span-2 sm:grid-cols-2"
+                        : undefined,
+                    )}
                   >
-                    <option value="">{field.placeholder ?? "Select…"}</option>
-                    {optionsFor(field).map((o) => (
-                      <option key={o.value} value={o.value}>
-                        {o.label}
-                      </option>
-                    ))}
-                    {field.creatable === "customer" ? (
-                      <option value={NEW_CUSTOMER_VALUE}>
-                        {field.createNewLabel ?? "New Customer"}
-                      </option>
-                    ) : null}
-                  </FinanceSelect>
-                ) : field.type === "textarea" ? (
-                  <FinanceTextarea
-                    value={values[field.name] ?? ""}
-                    placeholder={field.placeholder}
-                    onChange={(e) => set(field.name, e.target.value)}
-                  />
-                ) : field.type === "readonly" ? (
-                  <Input value={values[field.name] ?? ""} disabled aria-readonly="true" />
-                ) : field.type === "yesno" ? (
-                  <div className="flex flex-wrap items-center gap-4 text-sm text-foreground">
-                    <label className="flex cursor-pointer items-center gap-2">
-                      <input
-                        type="checkbox"
-                        className="size-4 cursor-pointer rounded border border-input accent-[var(--color-accent,#0369A1)]"
-                        checked={values[field.name] === "true"}
-                        onChange={() =>
-                          set(field.name, "true", field.clearFieldsOnChange)
-                        }
-                      />
-                      <span>Yes</span>
-                    </label>
-                    <label className="flex cursor-pointer items-center gap-2">
-                      <input
-                        type="checkbox"
-                        className="size-4 cursor-pointer rounded border border-input accent-[var(--color-accent,#0369A1)]"
-                        checked={values[field.name] === "false"}
-                        onChange={() =>
-                          set(field.name, "false", field.clearFieldsOnChange)
-                        }
-                      />
-                      <span>No</span>
-                    </label>
+                    {renderField(block.checkbox)}
+                    {dateVisible ? renderField(block.date) : null}
                   </div>
-                ) : field.type === "checkbox" ? (
-                  <label className="flex cursor-pointer items-center gap-2 text-sm text-foreground">
-                    <input
-                      type="checkbox"
-                      className="size-4 cursor-pointer rounded border border-input accent-[var(--color-accent,#0369A1)]"
-                      checked={values[field.name] === "true"}
-                      onChange={(e) =>
-                        set(
-                          field.name,
-                          e.target.checked ? "true" : "false",
-                          field.clearFieldsOnChange,
-                        )
-                      }
-                    />
-                    <span>{field.placeholder ?? "Yes"}</span>
-                  </label>
-                ) : (
-                  <Input
-                    type={field.type}
-                    value={values[field.name] ?? ""}
-                    placeholder={field.placeholder}
-                    step={field.step}
-                    min={field.min}
-                    max={field.max}
-                    onChange={(e) => set(field.name, e.target.value)}
-                  />
-                )}
-              </FinanceField>
-            ))}
+                );
+              }
+              return renderField(block.field, fieldSpanClass(block.field, section.columns));
+            })}
           </div>
         </ProjectsSection>
       ))}

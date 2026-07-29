@@ -22,9 +22,14 @@ import {
   type FormValues,
 } from "@/components/projects/projects-record-form";
 import {
+  resolveStageOwnerDisplay,
+  stageOwnerBannerSection,
+} from "@/components/projects/site-stage-assignments";
+import {
   advanceSiteInstallation,
   getProject,
   getSiteInstallationByProject,
+  listEmployeeOptions,
   updateSiteInstallationByProject,
 } from "@/services/projects-portal-service";
 
@@ -34,6 +39,7 @@ const EMPTY: FormValues = {
   project_label: "",
   site_name: "",
   delivery_type: "",
+  stage_assignee_label: "",
   cable_length: "",
   cable_lines: EMPTY_LINES,
   industrial_socket: "false",
@@ -65,16 +71,19 @@ function dateOrNull(v: string | undefined): string | null {
 
 export function SiteSurveyFormPage({ projectId }: { projectId: string }) {
   const load = useCallback(async () => {
-    const [project, site] = await Promise.all([
+    const [project, site, employees] = await Promise.all([
       getProject(projectId),
       getSiteInstallationByProject(projectId),
+      listEmployeeOptions().catch(() => []),
     ]);
+    const owner = resolveStageOwnerDisplay(site, "survey", employees);
 
     return {
       values: {
         project_label: `${project.project_name} (${project.project_code})`,
         site_name: site.site_name ?? "",
         delivery_type: site.delivery_type ?? "",
+        stage_assignee_label: owner.stage_assignee_label,
         cable_length: site.cable_length ?? "",
         cable_lines: serializeTypeQtyLines(linesFromMaterial(site.cable_lines)),
         industrial_socket: site.industrial_socket ? "true" : "false",
@@ -141,8 +150,8 @@ export function SiteSurveyFormPage({ projectId }: { projectId: string }) {
       }
 
       let site = await getSiteInstallationByProject(projectId);
-      if (site.workflow_stage === "intake") {
-        site = await advanceSiteInstallation(projectId, "complete_intake");
+      if (site.workflow_stage === "assignment") {
+        site = await advanceSiteInstallation(projectId, "complete_assignment");
       }
       if (site.workflow_stage === "survey") {
         await advanceSiteInstallation(projectId, "complete_survey");
@@ -155,9 +164,10 @@ export function SiteSurveyFormPage({ projectId }: { projectId: string }) {
 
   const sections = useMemo<FormSection[]>(
     () => [
+      stageOwnerBannerSection(),
       {
         title: "Survey",
-        subtitle: "Step 2 — Site readiness checks. Next: SCM / Logistics.",
+        subtitle: "Step 3 — Site readiness checks. Next: SCM / Logistics.",
         icon: MapPin,
         fields: [
           {
@@ -202,7 +212,6 @@ export function SiteSurveyFormPage({ projectId }: { projectId: string }) {
             name: "industrial_socket",
             label: "Industrial Socket",
             type: "checkbox",
-            required: true,
             visibleWhen: (v) => !isRack(v),
           },
           {
@@ -219,7 +228,6 @@ export function SiteSurveyFormPage({ projectId }: { projectId: string }) {
             name: "lugs",
             label: "Lugs",
             type: "checkbox",
-            required: true,
             visibleWhen: (v) => !isRack(v),
           },
           {
@@ -234,7 +242,6 @@ export function SiteSurveyFormPage({ projectId }: { projectId: string }) {
             name: "power_on_material",
             label: "Power-on Material",
             type: "checkbox",
-            required: true,
             clearFieldsOnChange: ["power_on_material_date"],
           },
           {
@@ -248,7 +255,6 @@ export function SiteSurveyFormPage({ projectId }: { projectId: string }) {
             name: "survey_completed",
             label: "Survey Completed",
             type: "checkbox",
-            required: true,
             clearFieldsOnChange: ["survey_completed_date"],
           },
           {
@@ -262,7 +268,6 @@ export function SiteSurveyFormPage({ projectId }: { projectId: string }) {
             name: "space_available",
             label: "Space Available",
             type: "checkbox",
-            required: true,
             clearFieldsOnChange: ["space_available_date"],
           },
           {
@@ -276,7 +281,6 @@ export function SiteSurveyFormPage({ projectId }: { projectId: string }) {
             name: "power_available",
             label: "Power Available",
             type: "checkbox",
-            required: true,
             clearFieldsOnChange: ["power_available_date"],
           },
           {
@@ -295,10 +299,10 @@ export function SiteSurveyFormPage({ projectId }: { projectId: string }) {
   return (
     <ProjectsRecordForm
       title="Survey"
-      description="Step 2 — For rack scopes, add cable / socket / lug type, quantity, and date. Complete site readiness checks with dates."
+      description="Step 3 — Site readiness checks. Next: SCM / Logistics."
       backHref={`/projects/projects/${projectId}`}
       backLabel="Back to project"
-      submitLabel="Complete Survey"
+      submitLabel="Save & continue to SCM"
       sections={sections}
       emptyValues={EMPTY}
       load={load}

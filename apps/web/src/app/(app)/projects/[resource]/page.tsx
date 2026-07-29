@@ -27,10 +27,10 @@ interface PageProps {
 const SITE_STAGE_RESOURCES: Record<string, string> = {
   "site-installations": "",
   intake: "intake",
+  assignment: "assignment",
   survey: "survey",
   scm: "scm",
   installation: "installation",
-  configuration: "configuration",
   acceptance: "acceptance",
   completed: "completed",
 };

@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useMemo } from "react";
-import { Package } from "lucide-react";
+import { Package, Truck, Warehouse } from "lucide-react";
 
 import { deliveryIncludesRack } from "@/components/projects/projects-domain";
 import {
@@ -15,13 +15,19 @@ import {
   advanceSiteInstallation,
   getProject,
   getSiteInstallationByProject,
+  listEmployeeOptions,
   updateSiteInstallationByProject,
 } from "@/services/projects-portal-service";
+import {
+  resolveStageOwnerDisplay,
+  stageOwnerBannerSection,
+} from "@/components/projects/site-stage-assignments";
 
 const EMPTY: FormValues = {
   project_label: "",
   site_name: "",
   delivery_type: "",
+  stage_assignee_label: "",
   server_qty: "",
   rack_qty: "",
   server_wh_delivery_date: "",
@@ -52,16 +58,19 @@ function isRack(values: FormValues): boolean {
 
 export function SiteScmFormPage({ projectId }: { projectId: string }) {
   const load = useCallback(async () => {
-    const [project, site] = await Promise.all([
+    const [project, site, employees] = await Promise.all([
       getProject(projectId),
       getSiteInstallationByProject(projectId),
+      listEmployeeOptions().catch(() => []),
     ]);
+    const owner = resolveStageOwnerDisplay(site, "scm", employees);
 
     return {
       values: {
         project_label: `${project.project_name} (${project.project_code})`,
         site_name: site.site_name ?? "",
         delivery_type: site.delivery_type ?? "",
+        stage_assignee_label: owner.stage_assignee_label,
         server_qty: site.server_qty != null ? String(site.server_qty) : "",
         rack_qty: site.rack_qty != null ? String(site.rack_qty) : "",
         server_wh_delivery_date: dateOrEmpty(site.server_wh_delivery_date),
@@ -118,18 +127,25 @@ export function SiteScmFormPage({ projectId }: { projectId: string }) {
 
   const sections = useMemo<FormSection[]>(
     () => [
+      stageOwnerBannerSection(),
       {
         title: "SCM / Logistics",
-        subtitle: "Step 3 — MO → WH → Site. Next: Installation.",
+        subtitle: "Step 4 — MO → WH → Site. Next: Installation.",
         icon: Package,
         fields: [
           { name: "project_label", label: "Project", type: "readonly" },
           { name: "site_name", label: "Site", type: "readonly" },
+        ],
+      },
+      {
+        title: "Material order",
+        subtitle: "Raise the MO and capture quantities.",
+        icon: Truck,
+        fields: [
           {
             name: "mo_request",
             label: "MO Request",
             type: "checkbox",
-            required: true,
             hint: "Material order raised (MO → Warehouse → Site).",
             clearFieldsOnChange: ["mo_request_date"],
           },
@@ -142,7 +158,7 @@ export function SiteScmFormPage({ projectId }: { projectId: string }) {
           },
           {
             name: "server_qty",
-            label: "Server QTY",
+            label: "Server Qty",
             type: "number",
             required: true,
             min: "0",
@@ -157,6 +173,14 @@ export function SiteScmFormPage({ projectId }: { projectId: string }) {
             step: "1",
             visibleWhen: isRack,
           },
+        ],
+      },
+      {
+        title: "Warehouse & on-site delivery",
+        subtitle: "Track WH and site delivery dates for server, rack, and PDU.",
+        icon: Warehouse,
+        columns: 3,
+        fields: [
           {
             name: "server_wh_delivery_date",
             label: "Server WH Delivery",
@@ -189,11 +213,17 @@ export function SiteScmFormPage({ projectId }: { projectId: string }) {
             label: "PDU On-site Delivery",
             type: "date",
           },
+        ],
+      },
+      {
+        title: "IM material & handover",
+        subtitle: "Confirm IM material and warehouse-to-site handover.",
+        icon: Package,
+        fields: [
           {
             name: "im_material",
             label: "IM Material",
             type: "checkbox",
-            required: true,
             clearFieldsOnChange: ["im_material_date"],
           },
           {
@@ -207,7 +237,6 @@ export function SiteScmFormPage({ projectId }: { projectId: string }) {
             name: "material_handover_done",
             label: "Material Handover (WH → Site)",
             type: "checkbox",
-            required: true,
             clearFieldsOnChange: ["material_handover_date"],
           },
           {
@@ -226,7 +255,7 @@ export function SiteScmFormPage({ projectId }: { projectId: string }) {
   return (
     <ProjectsRecordForm
       title="SCM / Logistics"
-      description="Step 3 — Track MO request, warehouse and on-site delivery for server / rack / PDU, IM material, and handover."
+      description="Step 4 — Track MO request, warehouse and on-site delivery for server / rack / PDU, IM material, and handover."
       backHref={`/projects/projects/${projectId}`}
       backLabel="Back to project"
       submitLabel="Complete SCM"

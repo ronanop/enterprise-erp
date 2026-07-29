@@ -90,8 +90,8 @@ class SiteInstallationService:
     ) -> PrjSiteInstallation:
         """Called from ProjectService.create to attach the site workflow.
 
-        When Intake fields from create satisfy gates, auto-advance to Survey
-        so the UI can open Step 2 immediately.
+        When Intake fields from create satisfy gates, auto-advance to Assignment
+        so the UI can open Step 2 (assign stage owners) immediately.
         """
         row = self._create_for_project(ctx, project, **fields)
         try:

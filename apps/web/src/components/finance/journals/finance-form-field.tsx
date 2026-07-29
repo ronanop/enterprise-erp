@@ -20,13 +20,13 @@ export function FinanceField({
   children: ReactNode;
 }) {
   return (
-    <label className={cn("block space-y-1", className)} htmlFor={htmlFor}>
-      <span className="text-[11px] font-medium tracking-wide text-muted-foreground uppercase">
+    <label className={cn("block min-w-0 space-y-1.5", className)} htmlFor={htmlFor}>
+      <span className="block text-[11px] font-medium tracking-wide text-muted-foreground uppercase break-words">
         {label}
       </span>
-      {children}
+      <div className="min-w-0">{children}</div>
       {hint && !error ? (
-        <span className="block text-[10px] text-muted-foreground">{hint}</span>
+        <span className="block text-[11px] leading-snug text-muted-foreground">{hint}</span>
       ) : null}
       {error ? <span className="block text-[11px] text-destructive">{error}</span> : null}
     </label>

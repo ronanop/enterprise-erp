@@ -230,6 +230,10 @@ export function deliveryIsRackOnly(v: string | null | undefined): boolean {
   return v === "rack_only";
 }
 
+export function deliveryNeedsConfiguration(v: string | null | undefined): boolean {
+  return !deliveryIsRackOnly(v);
+}
+
 export function deliveryIncludesOs(v: string | null | undefined): boolean {
   return v === "server_os_rack" || v === "server_os";
 }
@@ -258,10 +262,10 @@ export function deliveryNeedsHwat(v: string | null | undefined): boolean {
 
 export const SITE_WORKFLOW_STAGES: Choice[] = [
   choice("intake", "Intake & RFAI"),
+  choice("assignment", "Assign stage owners"),
   choice("survey", "Survey"),
   choice("scm", "SCM / Logistics"),
-  choice("installation", "Installation"),
-  choice("configuration", "Configuration"),
+  choice("installation", "Installation & Configuration"),
   choice("acceptance", "Acceptance"),
   choice("completed", "Completed"),
 ];

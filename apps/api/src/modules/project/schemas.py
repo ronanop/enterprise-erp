@@ -838,16 +838,32 @@ class SiteInstallationCreate(BaseModel):
     material_handover_done: bool | None = None
     material_handover_date: date | None = None
     rack_server_stacking_done: bool | None = None
+    rack_server_stacking_date: date | None = None
     rack_server_power_on_done: bool | None = None
+    rack_server_power_on_date: date | None = None
     dac_ilo_cabling_done: bool | None = None
+    dac_ilo_cabling_date: date | None = None
     bios_configuration_done: bool | None = None
+    bios_configuration_date: date | None = None
     firmware_nw_config_done: bool | None = None
+    firmware_nw_config_date: date | None = None
     lld_done: bool | None = None
+    lld_date: date | None = None
     os_installation_done: bool | None = None
+    os_installation_date: date | None = None
     mbss_done: bool | None = None
+    mbss_date: date | None = None
     handover_to_cloud_done: bool | None = None
+    handover_to_cloud_date: date | None = None
     hwat_request_done: bool | None = None
+    hwat_request_date: date | None = None
     hwat_signoff_received: bool | None = None
+    hwat_signoff_date: date | None = None
+    survey_assignee_employee_id: UUID | None = None
+    scm_assignee_employee_id: UUID | None = None
+    installation_assignee_employee_id: UUID | None = None
+    configuration_assignee_employee_id: UUID | None = None
+    acceptance_assignee_employee_id: UUID | None = None
     remarks: str | None = None
 
 
@@ -892,16 +908,32 @@ class SiteInstallationUpdate(BaseModel):
     material_handover_done: bool | None = None
     material_handover_date: date | None = None
     rack_server_stacking_done: bool | None = None
+    rack_server_stacking_date: date | None = None
     rack_server_power_on_done: bool | None = None
+    rack_server_power_on_date: date | None = None
     dac_ilo_cabling_done: bool | None = None
+    dac_ilo_cabling_date: date | None = None
     bios_configuration_done: bool | None = None
+    bios_configuration_date: date | None = None
     firmware_nw_config_done: bool | None = None
+    firmware_nw_config_date: date | None = None
     lld_done: bool | None = None
+    lld_date: date | None = None
     os_installation_done: bool | None = None
+    os_installation_date: date | None = None
     mbss_done: bool | None = None
+    mbss_date: date | None = None
     handover_to_cloud_done: bool | None = None
+    handover_to_cloud_date: date | None = None
     hwat_request_done: bool | None = None
+    hwat_request_date: date | None = None
     hwat_signoff_received: bool | None = None
+    hwat_signoff_date: date | None = None
+    survey_assignee_employee_id: UUID | None = None
+    scm_assignee_employee_id: UUID | None = None
+    installation_assignee_employee_id: UUID | None = None
+    configuration_assignee_employee_id: UUID | None = None
+    acceptance_assignee_employee_id: UUID | None = None
     remarks: str | None = None
     version: int | None = None
 
@@ -952,21 +984,44 @@ class SiteInstallationResponse(OrmModel):
     material_handover_done: bool
     material_handover_date: date | None = None
     rack_server_stacking_done: bool
+    rack_server_stacking_date: date | None = None
     rack_server_power_on_done: bool
+    rack_server_power_on_date: date | None = None
     dac_ilo_cabling_done: bool
+    dac_ilo_cabling_date: date | None = None
     bios_configuration_done: bool
+    bios_configuration_date: date | None = None
     firmware_nw_config_done: bool
+    firmware_nw_config_date: date | None = None
     lld_done: bool
+    lld_date: date | None = None
     os_installation_done: bool
+    os_installation_date: date | None = None
     mbss_done: bool
+    mbss_date: date | None = None
     handover_to_cloud_done: bool
+    handover_to_cloud_date: date | None = None
     hwat_request_done: bool
+    hwat_request_date: date | None = None
     hwat_signoff_received: bool
+    hwat_signoff_date: date | None = None
+    survey_assignee_employee_id: UUID | None = None
+    scm_assignee_employee_id: UUID | None = None
+    installation_assignee_employee_id: UUID | None = None
+    configuration_assignee_employee_id: UUID | None = None
+    acceptance_assignee_employee_id: UUID | None = None
     remarks: str | None
     status: str
     company_id: UUID
     created_at: datetime | None = None
     version: int
+
+
+class SiteStageAssignmentBlueprint(BaseModel):
+    stage: str
+    label: str
+    assignee_employee_id: UUID | None = None
+    work_status: str
 
 
 class SiteInstallationBlueprintResponse(BaseModel):
@@ -976,7 +1031,13 @@ class SiteInstallationBlueprintResponse(BaseModel):
     allowed_actions: list[str]
     action_labels: dict[str, str]
     stages: list[dict[str, str]]
+    stage_assignments: list[SiteStageAssignmentBlueprint] = Field(default_factory=list)
     terminal: bool
+    includes_os: bool | None = None
+    includes_bios: bool | None = None
+    includes_server: bool | None = None
+    is_rack_only: bool | None = None
+    needs_hwat: bool | None = None
 
 
 class SiteInstallationAdvanceRequest(BaseModel):

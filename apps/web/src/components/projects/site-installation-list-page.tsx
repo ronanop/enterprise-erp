@@ -27,6 +27,11 @@ const STAGE_META: Record<
     description: "Site requests awaiting RFAI capture — requestor, circle, cloud, and site.",
     empty: "No sites in Intake. Create a project to start the delivery workflow.",
   },
+  assignment: {
+    title: "Assign stage owners",
+    description: "Project assignee picks owners for Survey, SCM, Installation, Configuration, and Acceptance.",
+    empty: "No sites waiting for stage assignment.",
+  },
   survey: {
     title: "Survey",
     description: "Sites in survey — space, power, tile details, and survey completion.",
@@ -38,18 +43,13 @@ const STAGE_META: Record<
     empty: "No sites in SCM / Logistics.",
   },
   installation: {
-    title: "Installation",
-    description: "Rack stacking, power-on, and DAC/ILO cabling at site.",
-    empty: "No sites in Installation.",
-  },
-  configuration: {
-    title: "Configuration",
-    description: "BIOS / firmware and LLD configuration before acceptance.",
-    empty: "No sites in Configuration.",
+    title: "Installation & Configuration",
+    description: "Rack / power / cabling plus BIOS, firmware, LLD, OS, and MBSS when in scope.",
+    empty: "No sites in Installation & Configuration.",
   },
   acceptance: {
     title: "Acceptance",
-    description: "Handover to Cloud and HW AT / circle sign-off.",
+    description: "Handover to Application Team and HW AT / circle sign-off.",
     empty: "No sites in Acceptance.",
   },
   completed: {
@@ -69,7 +69,7 @@ export function SiteInstallationListPage({ stage }: { stage?: string }) {
     : {
       title: "All Sites",
       description:
-        "Site installation register across Intake → Survey → SCM → Installation → Configuration → Acceptance.",
+        "Site installation register across Intake → Assign → Survey → SCM → Installation & Configuration → Acceptance.",
       empty: "No site installations yet. Create a project to seed the workflow.",
     };
 
