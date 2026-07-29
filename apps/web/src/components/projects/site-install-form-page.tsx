@@ -6,6 +6,7 @@ import { Server, Wrench } from "lucide-react";
 import {
   deliveryIncludesBios,
   deliveryIncludesOs,
+  deliveryIncludesRack,
   deliveryIsRackOnly,
 } from "@/components/projects/projects-domain";
 import {
@@ -15,10 +16,15 @@ import {
   type FormValues,
 } from "@/components/projects/projects-record-form";
 import {
+  INTAKE_SUMMARY_EMPTY,
+  intakeSummarySection,
+  intakeSummaryValues,
+  loadIntakeSummaryLookups,
+} from "@/components/projects/site-intake-summary";
+import {
   advanceSiteInstallation,
   getProject,
   getSiteInstallationByProject,
-  listEmployeeOptions,
   updateSiteInstallationByProject,
 } from "@/services/projects-portal-service";
 import {
@@ -27,8 +33,7 @@ import {
 } from "@/components/projects/site-stage-assignments";
 
 const EMPTY: FormValues = {
-  project_label: "",
-  site_name: "",
+  ...INTAKE_SUMMARY_EMPTY,
   delivery_type: "server_os_rack",
   stage_assignee_label: "",
   rack_server_stacking_done: "false",
@@ -47,6 +52,8 @@ const EMPTY: FormValues = {
   os_installation_date: "",
   mbss_done: "false",
   mbss_date: "",
+  vascan_done: "false",
+  vascan_date: "",
 };
 
 function asBool(v: string | undefined): boolean {
@@ -60,22 +67,28 @@ function dateOrEmpty(v: string | null | undefined): string {
 export function SiteInstallFormPage({ projectId }: { projectId: string }) {
   const [deliveryType, setDeliveryType] = useState("server_os_rack");
   const isRackOnly = deliveryIsRackOnly(deliveryType);
+  const hasRack = deliveryIncludesRack(deliveryType);
   const showBios = deliveryIncludesBios(deliveryType);
   const showOs = deliveryIncludesOs(deliveryType);
 
   const load = useCallback(async () => {
-    const [project, site, employees] = await Promise.all([
+    const [project, site, lookups] = await Promise.all([
       getProject(projectId),
       getSiteInstallationByProject(projectId),
-      listEmployeeOptions().catch(() => []),
+      loadIntakeSummaryLookups(),
     ]);
     setDeliveryType(site.delivery_type || "server_os_rack");
-    const owner = resolveStageOwnerDisplay(site, "installation", employees);
+    const owner = resolveStageOwnerDisplay(site, "installation", lookups.employees);
 
     return {
       values: {
-        project_label: `${project.project_name} (${project.project_code})`,
-        site_name: site.site_name ?? "",
+        ...intakeSummaryValues({
+          project,
+          site,
+          branches: lookups.branches,
+          customers: lookups.customers,
+          employees: lookups.employees,
+        }),
         stage_assignee_label: owner.stage_assignee_label,
         delivery_type: site.delivery_type || "server_os_rack",
         rack_server_stacking_done: site.rack_server_stacking_done ? "true" : "false",
@@ -94,6 +107,8 @@ export function SiteInstallFormPage({ projectId }: { projectId: string }) {
         os_installation_date: dateOrEmpty(site.os_installation_date),
         mbss_done: site.mbss_done ? "true" : "false",
         mbss_date: dateOrEmpty(site.mbss_date),
+        vascan_done: site.vascan_done ? "true" : "false",
+        vascan_date: dateOrEmpty(site.vascan_date),
       } satisfies FormValues,
     };
   }, [projectId]);
@@ -135,13 +150,15 @@ export function SiteInstallFormPage({ projectId }: { projectId: string }) {
           includeOs && asBool(v.os_installation_done) ? orNull(v.os_installation_date) : null,
         mbss_done: includeOs ? asBool(v.mbss_done) : false,
         mbss_date: includeOs && asBool(v.mbss_done) ? orNull(v.mbss_date) : null,
+        vascan_done: includeOs ? asBool(v.vascan_done) : false,
+        vascan_date: includeOs && asBool(v.vascan_done) ? orNull(v.vascan_date) : null,
       });
 
       let site = await getSiteInstallationByProject(projectId);
       if (site.workflow_stage === "scm") {
         site = await advanceSiteInstallation(projectId, "complete_scm");
       }
-      if (site.workflow_stage === "installation") {
+      if (site.workflow_stage === "installation" || site.workflow_stage === "configuration") {
         await advanceSiteInstallation(projectId, "complete_installation");
       }
 
@@ -151,18 +168,32 @@ export function SiteInstallFormPage({ projectId }: { projectId: string }) {
   );
 
   const sections = useMemo<FormSection[]>(() => {
+    const stackingLabel = isRackOnly
+      ? "Rack Installation"
+      : hasRack
+        ? "Rack Installation + Server Stacking"
+        : "Server Stacking";
+    const stackingDateLabel = isRackOnly
+      ? "Rack Installation Date"
+      : hasRack
+        ? "Rack + Stacking Date"
+        : "Server Stacking Date";
+    const installSubtitle = isRackOnly
+      ? "Rack installation at site"
+      : hasRack
+        ? "Rack + stacking · Power on · DAC/ILO"
+        : "Server stacking · Power on · DAC/ILO";
+
     const installFields: FormSection["fields"] = [
-      { name: "project_label", label: "Project", type: "readonly" },
-      { name: "site_name", label: "Site", type: "readonly" },
       {
         name: "rack_server_stacking_done",
-        label: isRackOnly ? "Rack Installation" : "Rack Installation + Server Stacking",
+        label: stackingLabel,
         type: "checkbox",
         clearFieldsOnChange: ["rack_server_stacking_date"],
       },
       {
         name: "rack_server_stacking_date",
-        label: isRackOnly ? "Rack Installation Date" : "Rack + Stacking Date",
+        label: stackingDateLabel,
         type: "date",
         required: true,
         visibleWhen: (v) => v.rack_server_stacking_done === "true",
@@ -173,7 +204,7 @@ export function SiteInstallFormPage({ projectId }: { projectId: string }) {
       installFields.push(
         {
           name: "rack_server_power_on_done",
-          label: "Rack + Server Power On",
+          label: hasRack ? "Rack + Server Power On" : "Server Power On",
           type: "checkbox",
           clearFieldsOnChange: ["rack_server_power_on_date"],
         },
@@ -201,12 +232,11 @@ export function SiteInstallFormPage({ projectId }: { projectId: string }) {
     }
 
     const sectionsOut: FormSection[] = [
+      intakeSummarySection(),
       stageOwnerBannerSection(),
       {
         title: "Installation",
-        subtitle: isRackOnly
-          ? "Rack installation at site"
-          : "Rack + stacking · Power on · DAC/ILO",
+        subtitle: installSubtitle,
         icon: Server,
         fields: installFields,
       },
@@ -285,12 +315,25 @@ export function SiteInstallFormPage({ projectId }: { projectId: string }) {
             required: true,
             visibleWhen: (v) => v.mbss_done === "true",
           },
+          {
+            name: "vascan_done",
+            label: "VASCAN",
+            type: "checkbox",
+            clearFieldsOnChange: ["vascan_date"],
+          },
+          {
+            name: "vascan_date",
+            label: "VASCAN Date",
+            type: "date",
+            required: true,
+            visibleWhen: (v) => v.vascan_done === "true",
+          },
         );
       }
       sectionsOut.push({
         title: "Configuration",
         subtitle: showOs
-          ? "BIOS / Firmware / N/W · LLD · OS · MBSS"
+          ? "BIOS / Firmware / N/W · LLD · OS · MBSS · VASCAN"
           : "BIOS / Firmware / N/W · LLD",
         icon: Wrench,
         fields: configFields,
@@ -298,11 +341,11 @@ export function SiteInstallFormPage({ projectId }: { projectId: string }) {
     }
 
     return sectionsOut;
-  }, [isRackOnly, showBios, showOs]);
+  }, [hasRack, isRackOnly, showBios, showOs]);
 
   return (
     <ProjectsRecordForm
-      title="Installation & Configuration"
+      title={isRackOnly ? "Installation" : "Installation & Configuration"}
       description={
         isRackOnly
           ? "Step 5 — Confirm rack installation, then continue to Acceptance."
@@ -310,7 +353,9 @@ export function SiteInstallFormPage({ projectId }: { projectId: string }) {
       }
       backHref={`/projects/projects/${projectId}`}
       backLabel="Back to project"
-      submitLabel="Complete & continue to Acceptance"
+      submitLabel={
+        isRackOnly ? "Complete installation" : "Complete & continue to Acceptance"
+      }
       sections={sections}
       emptyValues={EMPTY}
       load={load}

@@ -238,6 +238,8 @@ export type SiteInstallation = AuditFields & {
   os_installation_date: string | null;
   mbss_done: boolean;
   mbss_date: string | null;
+  vascan_done: boolean;
+  vascan_date: string | null;
   handover_to_cloud_done: boolean;
   handover_to_cloud_date: string | null;
   hwat_request_done: boolean;
@@ -249,6 +251,14 @@ export type SiteInstallation = AuditFields & {
   installation_assignee_employee_id: string | null;
   configuration_assignee_employee_id: string | null;
   acceptance_assignee_employee_id: string | null;
+  survey_assigned_date: string | null;
+  survey_finished_date: string | null;
+  scm_assigned_date: string | null;
+  scm_finished_date: string | null;
+  installation_assigned_date: string | null;
+  installation_finished_date: string | null;
+  acceptance_assigned_date: string | null;
+  acceptance_finished_date: string | null;
   remarks: string | null;
 };
 
@@ -308,6 +318,8 @@ export type SiteInstallationFormInput = {
   os_installation_date?: string | null;
   mbss_done?: boolean;
   mbss_date?: string | null;
+  vascan_done?: boolean;
+  vascan_date?: string | null;
   handover_to_cloud_done?: boolean;
   handover_to_cloud_date?: string | null;
   hwat_request_done?: boolean;
@@ -327,6 +339,8 @@ export type SiteStageAssignment = {
   label: string;
   assignee_employee_id: string | null;
   work_status: "pending" | "in_progress" | "done" | "skipped" | string;
+  assigned_date?: string | null;
+  completed_date?: string | null;
 };
 
 export type SiteInstallationBlueprint = {
@@ -1257,6 +1271,7 @@ export function countNotIn<T extends { status: string }>(rows: T[], statuses: st
 
 export type ProjectsOverview = {
   projects: Project[];
+  siteInstallations: SiteInstallation[];
   phases: ProjectPhase[];
   milestones: ProjectMilestone[];
   tasks: ProjectTask[];
@@ -1293,6 +1308,7 @@ export async function loadProjectsOverview(): Promise<ProjectsOverview> {
 
   const [
     projects,
+    siteInstallations,
     phases,
     milestones,
     tasks,
@@ -1307,6 +1323,7 @@ export async function loadProjectsOverview(): Promise<ProjectsOverview> {
     documents,
   ] = await Promise.all([
     safe(listProjects),
+    safe(listSiteInstallations),
     safe(listProjectPhases),
     safe(listProjectMilestones),
     safe(listProjectTasks),
@@ -1323,6 +1340,7 @@ export async function loadProjectsOverview(): Promise<ProjectsOverview> {
 
   return {
     projects,
+    siteInstallations,
     phases,
     milestones,
     tasks,

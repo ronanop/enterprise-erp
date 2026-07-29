@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import timedelta
+from datetime import date, timedelta
 from uuid import UUID
 
 from sqlalchemy.orm import Session
@@ -129,6 +129,8 @@ class SiteInstallationService:
             delivery_type=delivery,
             workflow_stage=SiteWorkflowStage.INTAKE.value,
             status=SiteInstallationStatus.ACTIVE.value,
+            # Survey is the first delivery step — starts on project creation day
+            survey_assigned_date=date.today(),
             **fields,
         )
         self._seed_wbs(ctx, project, delivery)
@@ -292,7 +294,16 @@ class SiteInstallationService:
         engine.assert_advance_gates(row, action)
         new_stage = engine.transition(row.workflow_stage, action, row.delivery_type)
 
-        updates: dict = {"workflow_stage": new_stage}
+        updates: dict = {
+            "workflow_stage": new_stage,
+            **engine.stage_date_updates_for_action(action, date.today()),
+        }
+        # Keep survey start = creation day if somehow missing when entering survey work
+        if (
+            new_stage == SiteWorkflowStage.SURVEY.value
+            and getattr(row, "survey_assigned_date", None) is None
+        ):
+            updates["survey_assigned_date"] = date.today()
         if new_stage == SiteWorkflowStage.COMPLETED.value:
             updates["status"] = SiteInstallationStatus.COMPLETED.value
             project = self._projects.get(ctx, project_id)

@@ -132,11 +132,13 @@ class PrjSiteInstallation(Base, *PrjDetailMixin):
     lld_done: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     os_installation_done: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     mbss_done: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    vascan_done: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     bios_configuration_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     firmware_nw_config_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     lld_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     os_installation_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     mbss_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    vascan_date: Mapped[date | None] = mapped_column(Date, nullable=True)
 
     # Acceptance
     handover_to_cloud_done: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
@@ -179,5 +181,15 @@ class PrjSiteInstallation(Base, *PrjDetailMixin):
         nullable=True,
         index=True,
     )
+
+    # Stage tracking — assigned when the step starts; finished when advanced
+    survey_assigned_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    survey_finished_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    scm_assigned_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    scm_finished_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    installation_assigned_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    installation_finished_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    acceptance_assigned_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    acceptance_finished_date: Mapped[date | None] = mapped_column(Date, nullable=True)
 
     status: Mapped[str] = mapped_column(String(30), nullable=False, default="active", index=True)

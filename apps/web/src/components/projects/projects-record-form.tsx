@@ -88,6 +88,10 @@ export type FieldSpec = {
   createNewLabel?: string;
   /** Label for the Add row button on type_qty_lines fields. */
   addLabel?: string;
+  /** For type_qty_lines — show per-line delivery date (default true). */
+  showDate?: boolean;
+  /** For type_qty_lines — lock type/qty; only dates editable (SCM). */
+  datesOnly?: boolean;
   /** Hide field unless predicate returns true. */
   visibleWhen?: (values: FormValues) => boolean;
   /** Clear these fields when this yesno/select/checkbox value changes. */
@@ -226,6 +230,8 @@ export function ProjectsRecordForm({
           value={values[field.name] ?? ""}
           options={optionsFor(field)}
           addLabel={field.addLabel ?? "Add type"}
+          showDate={field.showDate !== false}
+          datesOnly={Boolean(field.datesOnly)}
           onChange={(next) => set(field.name, next)}
         />
       );
@@ -413,7 +419,11 @@ export function ProjectsRecordForm({
         if (!isFieldRequired(f) || f.type === "readonly") return false;
         if (f.type === "checkbox") return values[f.name] !== "true";
         if (f.type === "yesno") return values[f.name] !== "true" && values[f.name] !== "false";
-        if (f.type === "type_qty_lines") return !hasValidTypeQtyLines(values[f.name]);
+        if (f.type === "type_qty_lines") {
+          return !hasValidTypeQtyLines(values[f.name], {
+            requireDate: f.showDate !== false,
+          });
+        }
         return !(values[f.name] ?? "").trim();
       })
       .map((f) => f.label);
@@ -481,26 +491,30 @@ export function ProjectsRecordForm({
                 : "sm:grid-cols-2",
             )}
           >
-            {groupFieldBlocks(section.fields.filter(isFieldVisible)).map((block) => {
+            {groupFieldBlocks(section.fields).map((block) => {
               if (block.kind === "pair") {
+                if (!isFieldVisible(block.checkbox)) return null;
                 const dateVisible = isFieldVisible(block.date);
                 return (
                   <div
                     key={block.checkbox.name}
                     className={cn(
                       "grid min-w-0 grid-cols-1 items-start gap-x-8 gap-y-5",
-                      dateVisible
-                        ? section.columns === 3
-                          ? "sm:col-span-2 xl:col-span-3 sm:grid-cols-2"
-                          : "sm:col-span-2 sm:grid-cols-2"
-                        : undefined,
+                      // Always reserve full row width so checkboxes stay in the left column;
+                      // date appears in the right column only when the checkbox is checked.
+                      section.columns === 3
+                        ? "sm:col-span-2 xl:col-span-3 sm:grid-cols-2"
+                        : "sm:col-span-2 sm:grid-cols-2",
                     )}
                   >
                     {renderField(block.checkbox)}
-                    {dateVisible ? renderField(block.date) : null}
+                    {dateVisible ? renderField(block.date) : (
+                      <div className="hidden sm:block" aria-hidden="true" />
+                    )}
                   </div>
                 );
               }
+              if (!isFieldVisible(block.field)) return null;
               return renderField(block.field, fieldSpanClass(block.field, section.columns));
             })}
           </div>

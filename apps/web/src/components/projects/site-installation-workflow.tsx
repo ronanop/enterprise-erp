@@ -14,6 +14,11 @@ import {
 } from "lucide-react";
 
 import {
+  deliveryIncludesBios,
+  deliveryIncludesOs,
+  deliveryIncludesRack,
+  deliveryIncludesServer,
+  deliveryIsRackOnly,
   siteDeliveryTypeLabel,
   siteWorkflowStageLabel,
 } from "@/components/projects/projects-domain";
@@ -136,10 +141,17 @@ export function SiteInstallationTrackingSummary({ projectId }: { projectId: stri
     return employeeOptions.find((e) => e.id === employeeId)?.label ?? employeeId;
   };
 
+  const rackOnly = deliveryIsRackOnly(site.delivery_type);
+  const hasRack = deliveryIncludesRack(site.delivery_type);
+  const hasServer = deliveryIncludesServer(site.delivery_type);
+  const hasBios = deliveryIncludesBios(site.delivery_type);
+  const hasOs = deliveryIncludesOs(site.delivery_type);
+  const installStep = rackOnly ? "Installation" : "Installation & Configuration";
+
   const completedByForStep = (step: string) => {
     if (step === "Survey") return employeeName(site.survey_assignee_employee_id);
     if (step === "SCM / Logistics") return employeeName(site.scm_assignee_employee_id);
-    if (step === "Installation & Configuration") {
+    if (step === "Installation" || step === "Installation & Configuration") {
       return employeeName(site.installation_assignee_employee_id);
     }
     if (step === "Acceptance") return employeeName(site.acceptance_assignee_employee_id);
@@ -147,18 +159,6 @@ export function SiteInstallationTrackingSummary({ projectId }: { projectId: stri
   };
 
   const stageDates: Array<{ step: string; item: string; date: string; completedBy: string }> = [
-    {
-      step: "Survey",
-      item: "Power-on Material",
-      date: displayDate(site.power_on_material_date),
-      completedBy: completedByForStep("Survey"),
-    },
-    {
-      step: "Survey",
-      item: "Survey Completed",
-      date: displayDate(site.survey_completed_date),
-      completedBy: completedByForStep("Survey"),
-    },
     {
       step: "Survey",
       item: "Space Available",
@@ -169,6 +169,12 @@ export function SiteInstallationTrackingSummary({ projectId }: { projectId: stri
       step: "Survey",
       item: "Power Available",
       date: displayDate(site.power_available_date),
+      completedBy: completedByForStep("Survey"),
+    },
+    {
+      step: "Survey",
+      item: "Survey Completed",
+      date: displayDate(site.survey_completed_date),
       completedBy: completedByForStep("Survey"),
     },
     {
@@ -183,6 +189,16 @@ export function SiteInstallationTrackingSummary({ projectId }: { projectId: stri
       date: displayDate(site.im_material_date),
       completedBy: completedByForStep("SCM / Logistics"),
     },
+    ...(rackOnly
+      ? []
+      : [
+        {
+          step: "SCM / Logistics",
+          item: "Power-on Material",
+          date: displayDate(site.power_on_material_date),
+          completedBy: completedByForStep("SCM / Logistics"),
+        },
+      ]),
     {
       step: "SCM / Logistics",
       item: "Material Handover",
@@ -190,77 +206,103 @@ export function SiteInstallationTrackingSummary({ projectId }: { projectId: stri
       completedBy: completedByForStep("SCM / Logistics"),
     },
     {
-      step: "Installation & Configuration",
-      item: "Rack + Stacking",
+      step: installStep,
+      item: rackOnly
+        ? "Rack Installation"
+        : hasRack
+          ? "Rack + Stacking"
+          : "Server Stacking",
       date: displayDate(site.rack_server_stacking_date),
-      completedBy: completedByForStep("Installation & Configuration"),
+      completedBy: completedByForStep(installStep),
     },
-    {
-      step: "Installation & Configuration",
-      item: "Power On",
-      date: displayDate(site.rack_server_power_on_date),
-      completedBy: completedByForStep("Installation & Configuration"),
-    },
-    {
-      step: "Installation & Configuration",
-      item: "DAC / ILO Cabling",
-      date: displayDate(site.dac_ilo_cabling_date),
-      completedBy: completedByForStep("Installation & Configuration"),
-    },
-    {
-      step: "Installation & Configuration",
-      item: "BIOS Configuration",
-      date: displayDate(site.bios_configuration_date),
-      completedBy: completedByForStep("Installation & Configuration"),
-    },
-    {
-      step: "Installation & Configuration",
-      item: "Firmware / N/W",
-      date: displayDate(site.firmware_nw_config_date),
-      completedBy: completedByForStep("Installation & Configuration"),
-    },
-    {
-      step: "Installation & Configuration",
-      item: "LLD",
-      date: displayDate(site.lld_date),
-      completedBy: completedByForStep("Installation & Configuration"),
-    },
-    {
-      step: "Installation & Configuration",
-      item: "OS Installation",
-      date: displayDate(site.os_installation_date),
-      completedBy: completedByForStep("Installation & Configuration"),
-    },
-    {
-      step: "Installation & Configuration",
-      item: "MBSS",
-      date: displayDate(site.mbss_date),
-      completedBy: completedByForStep("Installation & Configuration"),
-    },
+    ...(rackOnly || !hasServer
+      ? []
+      : [
+        {
+          step: installStep,
+          item: hasRack ? "Rack + Server Power On" : "Server Power On",
+          date: displayDate(site.rack_server_power_on_date),
+          completedBy: completedByForStep(installStep),
+        },
+        {
+          step: installStep,
+          item: "DAC / ILO Cabling",
+          date: displayDate(site.dac_ilo_cabling_date),
+          completedBy: completedByForStep(installStep),
+        },
+      ]),
+    ...(hasBios
+      ? [
+        {
+          step: installStep,
+          item: "BIOS Configuration",
+          date: displayDate(site.bios_configuration_date),
+          completedBy: completedByForStep(installStep),
+        },
+        {
+          step: installStep,
+          item: "Firmware / N/W",
+          date: displayDate(site.firmware_nw_config_date),
+          completedBy: completedByForStep(installStep),
+        },
+        {
+          step: installStep,
+          item: "LLD",
+          date: displayDate(site.lld_date),
+          completedBy: completedByForStep(installStep),
+        },
+      ]
+      : []),
+    ...(hasOs
+      ? [
+        {
+          step: installStep,
+          item: "OS Installation",
+          date: displayDate(site.os_installation_date),
+          completedBy: completedByForStep(installStep),
+        },
+        {
+          step: installStep,
+          item: "MBSS",
+          date: displayDate(site.mbss_date),
+          completedBy: completedByForStep(installStep),
+        },
+        {
+          step: installStep,
+          item: "VASCAN",
+          date: displayDate(site.vascan_date),
+          completedBy: completedByForStep(installStep),
+        },
+      ]
+      : []),
     {
       step: "Acceptance",
       item: "Handover to Application Team",
       date: displayDate(site.handover_to_cloud_date),
       completedBy: completedByForStep("Acceptance"),
     },
-    {
-      step: "Acceptance",
-      item: "HWAT Request",
-      date: displayDate(site.hwat_request_date),
-      completedBy: completedByForStep("Acceptance"),
-    },
-    {
-      step: "Acceptance",
-      item: "HWAT Sign-off",
-      date: displayDate(site.hwat_signoff_date),
-      completedBy: completedByForStep("Acceptance"),
-    },
+    ...(rackOnly
+      ? []
+      : [
+        {
+          step: "Acceptance",
+          item: "HWAT Request",
+          date: displayDate(site.hwat_request_date),
+          completedBy: completedByForStep("Acceptance"),
+        },
+        {
+          step: "Acceptance",
+          item: "HWAT Sign-off",
+          date: displayDate(site.hwat_signoff_date),
+          completedBy: completedByForStep("Acceptance"),
+        },
+      ]),
   ].filter((row) => row.date !== "—");
 
   return (
     <ProjectsSection
       title="Project Tracking"
-      subtitle="Assigned person, completion status, and completed dates by delivery step"
+      subtitle="Stage owners with step-wise assigned and completed dates"
       icon={Users}
     >
       {error ? <ProjectsErrorBanner>{error}</ProjectsErrorBanner> : null}
@@ -272,6 +314,8 @@ export function SiteInstallationTrackingSummary({ projectId }: { projectId: stri
               <tr className="border-b border-border/70 bg-muted/20 text-[11px] uppercase tracking-wide text-muted-foreground">
                 <th className="px-3 py-2 font-medium">Step</th>
                 <th className="px-3 py-2 font-medium">Assigned To</th>
+                <th className="px-3 py-2 font-medium">Date Assigned</th>
+                <th className="px-3 py-2 font-medium">Date Completed</th>
                 <th className="px-3 py-2 font-medium">Status</th>
               </tr>
             </thead>
@@ -285,6 +329,12 @@ export function SiteInstallationTrackingSummary({ projectId }: { projectId: stri
                   <tr key={sa.stage} className="border-b border-border/50 last:border-0">
                     <td className="px-3 py-2 font-medium text-foreground">{sa.label}</td>
                     <td className="px-3 py-2 text-muted-foreground">{assigneeLabel}</td>
+                    <td className="px-3 py-2 text-muted-foreground">
+                      {displayDate(sa.assigned_date)}
+                    </td>
+                    <td className="px-3 py-2 text-muted-foreground">
+                      {displayDate(sa.completed_date)}
+                    </td>
                     <td className="px-3 py-2 text-muted-foreground">{statusText(sa.work_status)}</td>
                   </tr>
                 );
@@ -377,6 +427,10 @@ export function SiteInstallationWorkflow({ projectId }: { projectId: string }) {
   }
 
   const formLink = STAGE_FORM_LINKS[stage];
+  const formLinkLabel =
+    stage === "installation" && deliveryIsRackOnly(row.delivery_type)
+      ? "Open Installation form"
+      : formLink?.label;
 
   return (
     <ProjectsSection
@@ -393,7 +447,7 @@ export function SiteInstallationWorkflow({ projectId }: { projectId: string }) {
             href={formLink.href(projectId)}
             className="inline-flex h-8 cursor-pointer items-center justify-center rounded-md bg-primary px-3 text-xs font-medium text-primary-foreground transition-colors duration-200 hover:bg-primary/90"
           >
-            {formLink.label}
+            {formLinkLabel}
           </Link>
         ) : null}
         {stage === "intake" && !locked ? (

@@ -7,7 +7,6 @@ import {
   deliveryIncludesOs,
   deliveryIsRackOnly,
   deliveryNeedsHwat,
-  siteDeliveryTypeLabel,
 } from "@/components/projects/projects-domain";
 import {
   ProjectsRecordForm,
@@ -16,10 +15,15 @@ import {
   type FormValues,
 } from "@/components/projects/projects-record-form";
 import {
+  INTAKE_SUMMARY_EMPTY,
+  intakeSummarySection,
+  intakeSummaryValues,
+  loadIntakeSummaryLookups,
+} from "@/components/projects/site-intake-summary";
+import {
   advanceSiteInstallation,
   getProject,
   getSiteInstallationByProject,
-  listEmployeeOptions,
   updateSiteInstallationByProject,
 } from "@/services/projects-portal-service";
 import {
@@ -28,13 +32,12 @@ import {
 } from "@/components/projects/site-stage-assignments";
 
 const EMPTY: FormValues = {
-  project_label: "",
-  site_name: "",
+  ...INTAKE_SUMMARY_EMPTY,
   delivery_type: "server_os_rack",
   stage_assignee_label: "",
-  delivery_type_label: "",
   os_installation_done: "",
   mbss_done: "",
+  vascan_done: "",
   handover_to_cloud_done: "false",
   handover_to_cloud_date: "",
   hwat_request_done: "false",
@@ -57,24 +60,29 @@ export function SiteAcceptanceFormPage({ projectId }: { projectId: string }) {
   const showOsStatus = deliveryIncludesOs(deliveryType);
 
   const load = useCallback(async () => {
-    const [project, site, employees] = await Promise.all([
+    const [project, site, lookups] = await Promise.all([
       getProject(projectId),
       getSiteInstallationByProject(projectId),
-      listEmployeeOptions().catch(() => []),
+      loadIntakeSummaryLookups(),
     ]);
     const type = site.delivery_type || "server_os_rack";
     setDeliveryType(type);
-    const owner = resolveStageOwnerDisplay(site, "acceptance", employees);
+    const owner = resolveStageOwnerDisplay(site, "acceptance", lookups.employees);
 
     return {
       values: {
-        project_label: `${project.project_name} (${project.project_code})`,
-        site_name: site.site_name ?? "",
+        ...intakeSummaryValues({
+          project,
+          site,
+          branches: lookups.branches,
+          customers: lookups.customers,
+          employees: lookups.employees,
+        }),
         stage_assignee_label: owner.stage_assignee_label,
         delivery_type: type,
-        delivery_type_label: siteDeliveryTypeLabel(type),
         os_installation_done: site.os_installation_done ? "Done" : "Pending",
         mbss_done: site.mbss_done ? "Done" : "Pending",
+        vascan_done: site.vascan_done ? "Done" : "Pending",
         handover_to_cloud_done: site.handover_to_cloud_done ? "true" : "false",
         handover_to_cloud_date: dateOrEmpty(site.handover_to_cloud_date),
         hwat_request_done: site.hwat_request_done ? "true" : "false",
@@ -117,16 +125,7 @@ export function SiteAcceptanceFormPage({ projectId }: { projectId: string }) {
   );
 
   const sections = useMemo<FormSection[]>(() => {
-    const fields: FormSection["fields"] = [
-      { name: "project_label", label: "Project", type: "readonly" },
-      { name: "site_name", label: "Site", type: "readonly" },
-      {
-        name: "delivery_type_label",
-        label: "Delivery scope",
-        type: "readonly",
-        full: true,
-      },
-    ];
+    const fields: FormSection["fields"] = [];
 
     if (showOsStatus) {
       fields.push(
@@ -138,6 +137,11 @@ export function SiteAcceptanceFormPage({ projectId }: { projectId: string }) {
         {
           name: "mbss_done",
           label: "MBSS (from Configuration)",
+          type: "readonly",
+        },
+        {
+          name: "vascan_done",
+          label: "VASCAN (from Configuration)",
           type: "readonly",
         },
       );
@@ -192,6 +196,7 @@ export function SiteAcceptanceFormPage({ projectId }: { projectId: string }) {
     }
 
     return [
+      intakeSummarySection(),
       stageOwnerBannerSection(),
       {
         title: "Acceptance / Closure",

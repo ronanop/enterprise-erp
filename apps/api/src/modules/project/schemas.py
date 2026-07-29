@@ -853,6 +853,8 @@ class SiteInstallationCreate(BaseModel):
     os_installation_date: date | None = None
     mbss_done: bool | None = None
     mbss_date: date | None = None
+    vascan_done: bool | None = None
+    vascan_date: date | None = None
     handover_to_cloud_done: bool | None = None
     handover_to_cloud_date: date | None = None
     hwat_request_done: bool | None = None
@@ -864,6 +866,14 @@ class SiteInstallationCreate(BaseModel):
     installation_assignee_employee_id: UUID | None = None
     configuration_assignee_employee_id: UUID | None = None
     acceptance_assignee_employee_id: UUID | None = None
+    survey_assigned_date: date | None = None
+    survey_finished_date: date | None = None
+    scm_assigned_date: date | None = None
+    scm_finished_date: date | None = None
+    installation_assigned_date: date | None = None
+    installation_finished_date: date | None = None
+    acceptance_assigned_date: date | None = None
+    acceptance_finished_date: date | None = None
     remarks: str | None = None
 
 
@@ -923,6 +933,8 @@ class SiteInstallationUpdate(BaseModel):
     os_installation_date: date | None = None
     mbss_done: bool | None = None
     mbss_date: date | None = None
+    vascan_done: bool | None = None
+    vascan_date: date | None = None
     handover_to_cloud_done: bool | None = None
     handover_to_cloud_date: date | None = None
     hwat_request_done: bool | None = None
@@ -934,6 +946,14 @@ class SiteInstallationUpdate(BaseModel):
     installation_assignee_employee_id: UUID | None = None
     configuration_assignee_employee_id: UUID | None = None
     acceptance_assignee_employee_id: UUID | None = None
+    survey_assigned_date: date | None = None
+    survey_finished_date: date | None = None
+    scm_assigned_date: date | None = None
+    scm_finished_date: date | None = None
+    installation_assigned_date: date | None = None
+    installation_finished_date: date | None = None
+    acceptance_assigned_date: date | None = None
+    acceptance_finished_date: date | None = None
     remarks: str | None = None
     version: int | None = None
 
@@ -999,6 +1019,8 @@ class SiteInstallationResponse(OrmModel):
     os_installation_date: date | None = None
     mbss_done: bool
     mbss_date: date | None = None
+    vascan_done: bool
+    vascan_date: date | None = None
     handover_to_cloud_done: bool
     handover_to_cloud_date: date | None = None
     hwat_request_done: bool
@@ -1010,6 +1032,14 @@ class SiteInstallationResponse(OrmModel):
     installation_assignee_employee_id: UUID | None = None
     configuration_assignee_employee_id: UUID | None = None
     acceptance_assignee_employee_id: UUID | None = None
+    survey_assigned_date: date | None = None
+    survey_finished_date: date | None = None
+    scm_assigned_date: date | None = None
+    scm_finished_date: date | None = None
+    installation_assigned_date: date | None = None
+    installation_finished_date: date | None = None
+    acceptance_assigned_date: date | None = None
+    acceptance_finished_date: date | None = None
     remarks: str | None
     status: str
     company_id: UUID
@@ -1022,6 +1052,8 @@ class SiteStageAssignmentBlueprint(BaseModel):
     label: str
     assignee_employee_id: UUID | None = None
     work_status: str
+    assigned_date: date | None = None
+    completed_date: date | None = None
 
 
 class SiteInstallationBlueprintResponse(BaseModel):

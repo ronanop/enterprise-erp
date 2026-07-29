@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { Users } from "lucide-react";
 
 import {
@@ -8,6 +8,12 @@ import {
   type FormSection,
   type FormValues,
 } from "@/components/projects/projects-record-form";
+import {
+  INTAKE_SUMMARY_EMPTY,
+  intakeSummarySection,
+  intakeSummaryValues,
+  loadIntakeSummaryLookups,
+} from "@/components/projects/site-intake-summary";
 import {
   assigneePayloadFromValues,
   assigneeValuesFromSite,
@@ -17,13 +23,11 @@ import {
   advanceSiteInstallation,
   getProject,
   getSiteInstallationByProject,
-  listEmployeeOptions,
   updateSiteInstallationByProject,
 } from "@/services/projects-portal-service";
 
 const EMPTY: FormValues = {
-  project_label: "",
-  site_name: "",
+  ...INTAKE_SUMMARY_EMPTY,
   delivery_type: "",
   survey_assignee_employee_id: "",
   scm_assignee_employee_id: "",
@@ -32,21 +36,29 @@ const EMPTY: FormValues = {
 };
 
 export function SiteAssignFormPage({ projectId }: { projectId: string }) {
+  const [deliveryType, setDeliveryType] = useState("");
+
   const load = useCallback(async () => {
-    const [project, site, employees] = await Promise.all([
+    const [project, site, lookups] = await Promise.all([
       getProject(projectId),
       getSiteInstallationByProject(projectId),
-      listEmployeeOptions().catch(() => []),
+      loadIntakeSummaryLookups(),
     ]);
+    setDeliveryType(site.delivery_type ?? "");
 
     return {
       values: {
-        project_label: `${project.project_name} (${project.project_code})`,
-        site_name: site.site_name ?? "",
+        ...intakeSummaryValues({
+          project,
+          site,
+          branches: lookups.branches,
+          customers: lookups.customers,
+          employees: lookups.employees,
+        }),
         delivery_type: site.delivery_type ?? "",
         ...assigneeValuesFromSite(site),
       } satisfies FormValues,
-      lookups: { employees },
+      lookups: { employees: lookups.employees },
     };
   }, [projectId]);
 
@@ -71,24 +83,25 @@ export function SiteAssignFormPage({ projectId }: { projectId: string }) {
 
   const sections = useMemo<FormSection[]>(
     () => [
+      intakeSummarySection(),
       {
-        title: "Project",
-        subtitle: "Step 2 — Assign people for each delivery stage, then continue to Survey.",
+        title: "Assign stage owners",
+        subtitle: "Step 2 — Select who owns each delivery stage, then continue to Survey.",
         icon: Users,
-        fields: [
-          { name: "project_label", label: "Project", type: "readonly" },
-          { name: "site_name", label: "Site", type: "readonly" },
-        ],
+        fields: stageAssignmentSection(deliveryType).fields,
       },
-      stageAssignmentSection(),
     ],
-    [],
+    [deliveryType],
   );
 
   return (
     <ProjectsRecordForm
       title="Assign stage owners"
-      description="Step 2 — Project assignee selects who owns Survey, SCM, Installation & Configuration, and Acceptance. Next: Survey."
+      description={
+        deliveryType === "rack_only"
+          ? "Step 2 — Select who owns Survey, SCM, Installation, and Acceptance. Next: Survey."
+          : "Step 2 — Project assignee selects who owns Survey, SCM, Installation & Configuration, and Acceptance. Next: Survey."
+      }
       backHref={`/projects/projects/${projectId}`}
       backLabel="Back to project"
       submitLabel="Save & continue to Survey"

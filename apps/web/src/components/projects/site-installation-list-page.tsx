@@ -29,7 +29,8 @@ const STAGE_META: Record<
   },
   assignment: {
     title: "Assign stage owners",
-    description: "Project assignee picks owners for Survey, SCM, Installation, Configuration, and Acceptance.",
+    description:
+      "Project assignee picks owners for Survey, SCM, Installation & Configuration, and Acceptance.",
     empty: "No sites waiting for stage assignment.",
   },
   survey: {
@@ -44,7 +45,8 @@ const STAGE_META: Record<
   },
   installation: {
     title: "Installation & Configuration",
-    description: "Rack / power / cabling plus BIOS, firmware, LLD, OS, and MBSS when in scope.",
+    description:
+      "In-scope install work — rack-only sites skip server / OS / configuration; other scopes include stacking, power, cabling, and config as applicable.",
     empty: "No sites in Installation & Configuration.",
   },
   acceptance: {

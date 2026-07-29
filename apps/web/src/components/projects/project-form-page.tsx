@@ -13,6 +13,7 @@ import {
   ProjectsRecordForm,
   type FormSection,
   type FormValues,
+  type Lookups,
 } from "@/components/projects/projects-record-form";
 import {
   createProject,
@@ -64,7 +65,7 @@ const EMPTY_EDIT: FormValues = {
 export function ProjectFormPage({ projectId }: { projectId?: string }) {
   const isEdit = Boolean(projectId);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (): Promise<{ values?: FormValues; lookups?: Lookups }> => {
     const [branches, employees, pmTeam, customers, record] = await Promise.all([
       listBranchOptions().catch(() => []),
       listEmployeeOptions().catch(() => []),
@@ -73,44 +74,43 @@ export function ProjectFormPage({ projectId }: { projectId?: string }) {
       projectId ? getProject(projectId) : Promise.resolve(null),
     ]);
     const team = pmTeam.length > 0 ? pmTeam : employees;
+    const lookups: Lookups = {
+      branches,
+      employees,
+      pmTeam: team,
+      customers,
+    };
 
     if (record) {
       const site = await getSiteInstallationByProject(projectId!).catch(() => null);
       const branchLabel =
         branches.find((b) => b.id === record.branch_id)?.label ?? record.branch_id;
 
-      return {
-        values: {
-          project_code: record.project_code,
-          workflow_stage_label: site
-            ? siteWorkflowStageLabel(site.workflow_stage)
-            : "—",
-          branch_id: record.branch_id,
-          branch_label: branchLabel,
-          project_name: record.project_name,
-          customer_id: record.customer_id ?? "",
-          delivery_type: site?.delivery_type || "server_os_rack",
-          site_name: site?.site_name ?? "",
-          project_manager_employee_id: record.project_manager_employee_id,
-          rfai_request_done: site?.rfai_request_done ? "true" : "false",
-          rfai_number: site?.rfai_number ?? "",
-          power_requirements: site?.power_requirements ?? "",
-          circle: site?.circle ?? "",
-          cloud_name: site?.cloud_name ?? "",
-          fabric_partner: site?.fabric_partner ?? "",
-          application: site?.application ?? "",
-          remarks: site?.remarks ?? "",
-          planned_start_date: record.planned_start_date,
-          planned_end_date: record.planned_end_date,
-          status: record.status,
-        } satisfies FormValues,
-        lookups: {
-          branches,
-          employees,
-          pmTeam: team,
-          customers,
-        },
+      const values: FormValues = {
+        project_code: record.project_code,
+        workflow_stage_label: site
+          ? siteWorkflowStageLabel(site.workflow_stage)
+          : "—",
+        branch_id: record.branch_id,
+        branch_label: branchLabel,
+        project_name: record.project_name,
+        customer_id: record.customer_id ?? "",
+        delivery_type: site?.delivery_type || "server_os_rack",
+        site_name: site?.site_name ?? "",
+        project_manager_employee_id: record.project_manager_employee_id,
+        rfai_request_done: site?.rfai_request_done ? "true" : "false",
+        rfai_number: site?.rfai_number ?? "",
+        power_requirements: site?.power_requirements ?? "",
+        circle: site?.circle ?? "",
+        cloud_name: site?.cloud_name ?? "",
+        fabric_partner: site?.fabric_partner ?? "",
+        application: site?.application ?? "",
+        remarks: site?.remarks ?? "",
+        planned_start_date: record.planned_start_date,
+        planned_end_date: record.planned_end_date,
+        status: record.status,
       };
+      return { values, lookups };
     }
 
     return {
@@ -118,12 +118,7 @@ export function ProjectFormPage({ projectId }: { projectId?: string }) {
         branch_id: branches[0]?.id ?? "",
         project_manager_employee_id: team[0]?.id ?? "",
       },
-      lookups: {
-        branches,
-        employees,
-        pmTeam: team,
-        customers,
-      },
+      lookups,
     };
   }, [projectId]);
 

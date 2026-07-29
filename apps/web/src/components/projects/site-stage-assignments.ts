@@ -88,10 +88,13 @@ export function assigneePayloadFromValues(
 }
 
 /** Editable assignment section — shown on Assign stage owners step. */
-export function stageAssignmentSection(): FormSection {
+export function stageAssignmentSection(deliveryType?: string): FormSection {
   const fields: FieldSpec[] = STAGE_ASSIGNEE_FIELDS.map((f) => ({
     name: f.name,
-    label: f.label,
+    label:
+      f.stage === "installation" && deliveryType === "rack_only"
+        ? "Installation assignee"
+        : f.label,
     type: "select" as const,
     required: true,
     optionsKey: "employees",

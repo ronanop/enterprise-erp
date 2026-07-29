@@ -209,7 +209,7 @@ export function deliveryIncludesRack(v: string | null | undefined): boolean {
 export const CABLE_TYPES: Choice[] = [
   choice("5cr 10sqmm", "5cr 10sqmm"),
   choice("5 cr 6 sqmm", "5 cr 6 sqmm"),
-  choice("25 cr Green", "25 cr Green"),
+  choice("25sqmm Green", "25sqmm Green"),
 ];
 
 export const LUG_TYPES: Choice[] = [
@@ -286,5 +286,8 @@ export const resourceTypeLabel = (v: string | null | undefined) => labelFrom(RES
 export const documentTypeLabel = (v: string | null | undefined) => labelFrom(DOCUMENT_TYPES, v);
 export const siteDeliveryTypeLabel = (v: string | null | undefined) =>
   labelFrom(SITE_DELIVERY_TYPES, v);
-export const siteWorkflowStageLabel = (v: string | null | undefined) =>
-  labelFrom(SITE_WORKFLOW_STAGES, v);
+export const siteWorkflowStageLabel = (v: string | null | undefined) => {
+  // Legacy stage before install+config merge
+  if (v === "configuration") return "Installation & Configuration";
+  return labelFrom(SITE_WORKFLOW_STAGES, v);
+};

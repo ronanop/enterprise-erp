@@ -7,6 +7,8 @@ from dataclasses import dataclass
 from modules.project.domain.enums import (
     SiteWorkflowStage,
     delivery_includes_os,
+    delivery_includes_rack,
+    delivery_includes_server,
     delivery_is_rack_only,
     delivery_needs_configuration,
     delivery_needs_hwat,
@@ -65,7 +67,6 @@ SITE_INSTALLATION_WBS: tuple[WbsPhaseSpec, ...] = (
                 WbsTaskSpec("Cable length survey"),
                 WbsTaskSpec("Industrial socket check"),
                 WbsTaskSpec("Lugs check"),
-                WbsTaskSpec("Power-on material check"),
                 WbsTaskSpec("Confirm space & power available"),
                 WbsTaskSpec("Record tile details"),
             ),
@@ -83,6 +84,7 @@ SITE_INSTALLATION_WBS: tuple[WbsPhaseSpec, ...] = (
                 WbsTaskSpec("Raise MO request", "high"),
                 WbsTaskSpec("Track server / rack / PDU WH & on-site delivery"),
                 WbsTaskSpec("Confirm IM material"),
+                WbsTaskSpec("Power-on material check"),
                 WbsTaskSpec("Material handover WH → Site", "high"),
             ),
         ),
@@ -104,6 +106,7 @@ SITE_INSTALLATION_WBS: tuple[WbsPhaseSpec, ...] = (
                 WbsTaskSpec("LLD availability"),
                 WbsTaskSpec("OS installation", "high"),
                 WbsTaskSpec("MBSS", "high"),
+                WbsTaskSpec("VASCAN", "high"),
             ),
         ),
     ),
@@ -133,6 +136,7 @@ def wbs_for_delivery_type(delivery_type: str) -> tuple[WbsPhaseSpec, ...]:
         "LLD availability",
         "OS installation",
         "MBSS",
+        "VASCAN",
     }
     phases: list[WbsPhaseSpec] = []
     for phase in SITE_INSTALLATION_WBS:
@@ -144,7 +148,9 @@ def wbs_for_delivery_type(delivery_type: str) -> tuple[WbsPhaseSpec, ...]:
                 tasks = tuple(t for t in tasks if t.task_name not in config_tasks)
             elif not delivery_includes_os(delivery_type):
                 tasks = tuple(
-                    t for t in tasks if t.task_name not in {"OS installation", "MBSS"}
+                    t
+                    for t in tasks
+                    if t.task_name not in {"OS installation", "MBSS", "VASCAN"}
                 )
             if delivery_is_rack_only(delivery_type):
                 tasks = tuple(
@@ -160,6 +166,20 @@ def wbs_for_delivery_type(delivery_type: str) -> tuple[WbsPhaseSpec, ...]:
                     else t
                     for t in tasks
                 )
+            elif (
+                delivery_includes_server(delivery_type)
+                and not delivery_includes_rack(delivery_type)
+            ):
+                renamed: list[WbsTaskSpec] = []
+                for t in tasks:
+                    lower = t.task_name.lower()
+                    if "stacking" in lower:
+                        renamed.append(WbsTaskSpec("Server stacking", t.priority))
+                    elif "power on" in lower:
+                        renamed.append(WbsTaskSpec("Server power on", t.priority))
+                    else:
+                        renamed.append(t)
+                tasks = tuple(renamed)
         if (
             not delivery_needs_hwat(delivery_type)
             and phase.stage == SiteWorkflowStage.ACCEPTANCE.value
