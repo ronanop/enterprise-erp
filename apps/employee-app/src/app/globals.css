@@ -1,0 +1,154 @@
+@import "tailwindcss";
+
+@theme inline {
+  --font-sans: var(--font-display);
+  --animate-fade-up: fade-up 0.35s ease both;
+  --color-background: #f8f9ff;
+  --color-surface: #f8f9ff;
+  --color-primary: #004ac6;
+  --color-primary-container: #2563eb;
+  --color-secondary: #712ae2;
+  --color-on-surface: #0b1c30;
+  --color-on-surface-variant: #434655;
+  --color-success: #10b981;
+}
+
+@keyframes fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes pulse-soft {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.85;
+    transform: scale(0.98);
+  }
+}
+
+@keyframes success-glow {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.35);
+  }
+  50% {
+    box-shadow: 0 0 40px 12px rgba(16, 185, 129, 0.25);
+  }
+}
+
+body {
+  min-height: 100dvh;
+  background: #f8f9ff;
+  color: #0b1c30;
+}
+
+.animate-pulse-soft {
+  animation: pulse-soft 3s infinite ease-in-out;
+}
+
+.success-glow {
+  animation: success-glow 2.4s ease-in-out infinite;
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+/* Splash / onboarding motion (Stitch cinematic splash) */
+@keyframes splash-float {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-14px);
+  }
+}
+
+@keyframes splash-blob {
+  0%,
+  100% {
+    transform: translate(0, 0) scale(1);
+  }
+  50% {
+    transform: translate(12px, -18px) scale(1.06);
+  }
+}
+
+@keyframes splash-pulse-glow {
+  0% {
+    transform: scale(0.95);
+    opacity: 0.55;
+    box-shadow: 0 0 0 0 rgba(37, 99, 235, 0.45);
+  }
+  70% {
+    transform: scale(1);
+    opacity: 1;
+    box-shadow: 0 0 0 10px rgba(37, 99, 235, 0);
+  }
+  100% {
+    transform: scale(0.95);
+    opacity: 0.55;
+    box-shadow: 0 0 0 0 rgba(37, 99, 235, 0);
+  }
+}
+
+.splash-float {
+  animation: splash-float 6s ease-in-out infinite;
+}
+
+.splash-blob {
+  animation: splash-blob 10s ease-in-out infinite;
+}
+
+.splash-blob-slow {
+  animation: splash-blob 14s ease-in-out infinite reverse;
+}
+
+.splash-pulse {
+  animation: splash-pulse-glow 2s infinite;
+}
+
+/* Feather image rectangle so objects sit on splash bg (one screen, not a card). */
+.splash-hero-blend {
+  mix-blend-mode: multiply;
+  -webkit-mask-image:
+    linear-gradient(to right, transparent 0%, #000 8%, #000 92%, transparent 100%),
+    linear-gradient(to bottom, transparent 0%, #000 10%, #000 88%, transparent 100%);
+  mask-image:
+    linear-gradient(to right, transparent 0%, #000 8%, #000 92%, transparent 100%),
+    linear-gradient(to bottom, transparent 0%, #000 10%, #000 88%, transparent 100%);
+  -webkit-mask-composite: source-in;
+  mask-composite: intersect;
+  -webkit-mask-size: 100% 100%;
+  mask-size: 100% 100%;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+}
+
+/* Hide floating tab bar while leave sheet is open */
+body[data-leave-sheet="open"] [data-bottom-nav] {
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(120%);
+}
+
+/* Hide FABs while leave sheet is open */
+body[data-leave-sheet="open"] [data-viewport-fab] {
+  opacity: 0;
+  pointer-events: none;
+}

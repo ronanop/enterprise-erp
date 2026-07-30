@@ -1,0 +1,388 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0, viewport-fit=cover" name="viewport"/>
+<title>Education &amp; Skills | Enterprise HR</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            "colors": {
+                    "on-surface": "#0b1c30",
+                    "error-container": "#ffdad6",
+                    "tertiary-fixed-dim": "#4edea3",
+                    "inverse-surface": "#213145",
+                    "on-secondary-fixed-variant": "#5a00c6",
+                    "secondary": "#712ae2",
+                    "error": "#ba1a1a",
+                    "on-background": "#0b1c30",
+                    "on-secondary-fixed": "#25005a",
+                    "on-tertiary-fixed": "#002113",
+                    "tertiary-container": "#007d55",
+                    "secondary-fixed-dim": "#d2bbff",
+                    "on-primary-fixed": "#00174b",
+                    "inverse-on-surface": "#eaf1ff",
+                    "primary": "#004ac6",
+                    "on-primary-fixed-variant": "#003ea8",
+                    "secondary-fixed": "#eaddff",
+                    "on-secondary-container": "#fffbff",
+                    "surface-container-highest": "#d3e4fe",
+                    "primary-fixed": "#dbe1ff",
+                    "outline": "#737686",
+                    "surface-container-low": "#eff4ff",
+                    "surface-tint": "#0053db",
+                    "on-surface-variant": "#434655",
+                    "primary-container": "#2563eb",
+                    "surface-container": "#e5eeff",
+                    "on-tertiary": "#ffffff",
+                    "surface-dim": "#cbdbf5",
+                    "surface": "#f8f9ff",
+                    "surface-bright": "#f8f9ff",
+                    "on-error": "#ffffff",
+                    "on-tertiary-container": "#bdffdb",
+                    "surface-container-lowest": "#ffffff",
+                    "outline-variant": "#c3c6d7",
+                    "on-primary-container": "#eeefff",
+                    "background": "#f8f9ff",
+                    "on-error-container": "#93000a",
+                    "tertiary-fixed": "#6ffbbe",
+                    "tertiary": "#006242",
+                    "on-primary": "#ffffff",
+                    "surface-container-high": "#dce9ff",
+                    "on-tertiary-fixed-variant": "#005236",
+                    "secondary-container": "#8a4cfc",
+                    "surface-variant": "#d3e4fe",
+                    "on-secondary": "#ffffff",
+                    "primary-fixed-dim": "#b4c5ff",
+                    "inverse-primary": "#b4c5ff"
+            },
+            "borderRadius": {
+                    "DEFAULT": "0.25rem",
+                    "lg": "0.5rem",
+                    "xl": "0.75rem",
+                    "full": "9999px"
+            },
+            "spacing": {
+                    "stack-gap-md": "16px",
+                    "container-padding": "20px",
+                    "unit": "4px",
+                    "stack-gap-lg": "24px",
+                    "stack-gap-sm": "8px",
+                    "section-margin": "32px"
+            },
+            "fontFamily": {
+                    "label-md": ["Inter"],
+                    "headline-sm": ["Inter"],
+                    "label-sm": ["Inter"],
+                    "body-sm": ["Inter"],
+                    "display-lg-mobile": ["Inter"],
+                    "display-lg": ["Inter"],
+                    "title-lg": ["Inter"],
+                    "display-md": ["Inter"],
+                    "body-md": ["Inter"]
+            },
+            "fontSize": {
+                    "label-md": ["14px", {"lineHeight": "20px", "fontWeight": "500"}],
+                    "headline-sm": ["20px", {"lineHeight": "28px", "fontWeight": "600"}],
+                    "label-sm": ["12px", {"lineHeight": "16px", "fontWeight": "600"}],
+                    "body-sm": ["14px", {"lineHeight": "20px", "fontWeight": "400"}],
+                    "display-lg-mobile": ["28px", {"lineHeight": "34px", "fontWeight": "700"}],
+                    "display-lg": ["32px", {"lineHeight": "40px", "letterSpacing": "-0.02em", "fontWeight": "700"}],
+                    "title-lg": ["18px", {"lineHeight": "24px", "fontWeight": "600"}],
+                    "display-md": ["24px", {"lineHeight": "32px", "letterSpacing": "-0.01em", "fontWeight": "700"}],
+                    "body-md": ["16px", {"lineHeight": "24px", "fontWeight": "400"}]
+            }
+          },
+        },
+      }
+    </script>
+<style>
+        body {
+            font-family: 'Inter', sans-serif;
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+        }
+        .glass-effect {
+            background: rgba(248, 249, 255, 0.8);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+        }
+        .timeline-line::before {
+            content: '';
+            position: absolute;
+            left: 7px;
+            top: 24px;
+            bottom: 0;
+            width: 2px;
+            background: linear-gradient(to bottom, #2563eb, #e2e8f0);
+            border-radius: 1px;
+        }
+        .timeline-item:last-child .timeline-line::before {
+            display: none;
+        }
+        .custom-scrollbar::-webkit-scrollbar {
+            width: 4px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: #e2e8f0;
+            border-radius: 10px;
+        }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-surface text-on-surface min-h-screen pb-24">
+<!-- TopAppBar -->
+<header class="fixed top-0 w-full z-50 bg-surface/80 backdrop-blur-xl shadow-sm flex items-center justify-between px-container-padding h-16 w-full transition-all duration-200">
+<div class="flex items-center gap-3">
+<div class="w-10 h-10 rounded-full overflow-hidden border-2 border-primary-container">
+<img class="w-full h-full object-cover" data-alt="A professional close-up studio portrait of a modern product designer named Alex. He has a friendly expression and is wearing a sleek charcoal turtleneck. The background is a soft, out-of-focus modern office with cool blue and white tones, matching a high-end corporate enterprise aesthetic with clean lighting." src="https://lh3.googleusercontent.com/aida-public/AB6AXuCi6dEeWuM3auao__x4_lX_2uLnQaksvQl97VZxhMawAnYtKv-gZBMs6oFesZsFn9ss89cOkcG4S_3g7WUTmsUkte9zLx73Ip2MbS2EocbRg4zGBDjZYY_c2yKvspl5hsCeLx84IsgOo8OlbpTTjsDpBtPFzPwJ-07WQRKbDrUhFrdKSZxEF2LBisI3LBaHzf_GefcbqmHsGuvPNvFAcXtbChUZ5jJ9ax4od2bn4nBl1C1g8Rbnc6PMJhKGedwYiFJu7WMHRoeNAxU"/>
+</div>
+<h1 class="font-headline-sm text-headline-sm-mobile text-primary">Education &amp; Skills</h1>
+</div>
+<button class="text-on-surface-variant hover:opacity-80 transition-all duration-200 active:scale-95">
+<span class="material-symbols-outlined">notifications</span>
+</button>
+</header>
+<main class="pt-24 px-container-padding space-y-section-margin">
+<!-- Summary Card (Bento Style) -->
+<section class="grid grid-cols-1 md:grid-cols-3 gap-4">
+<div class="md:col-span-2 p-6 rounded-xl bg-white shadow-[0px_4px_20px_rgba(0,0,0,0.05)] border border-outline-variant flex flex-col justify-between relative overflow-hidden">
+<div class="z-10">
+<h2 class="font-title-lg text-title-lg text-on-surface mb-2">Professional Growth</h2>
+<p class="font-body-sm text-body-sm text-on-surface-variant max-w-md">Alex Rivera is a Senior Product Designer with 8+ years of experience in enterprise systems and design orchestration.</p>
+</div>
+<div class="flex gap-4 mt-6 z-10">
+<div class="flex flex-col">
+<span class="font-label-sm text-label-sm text-primary">Seniority</span>
+<span class="font-title-lg text-title-lg">Level 4</span>
+</div>
+<div class="w-px h-10 bg-outline-variant"></div>
+<div class="flex flex-col">
+<span class="font-label-sm text-label-sm text-primary">Certifications</span>
+<span class="font-title-lg text-title-lg">12 Active</span>
+</div>
+</div>
+<!-- Subtle background decoration -->
+<div class="absolute -right-10 -bottom-10 w-40 h-40 bg-primary/5 rounded-full blur-3xl"></div>
+</div>
+<div class="p-6 rounded-xl bg-primary-container text-on-primary-container shadow-lg flex flex-col items-center justify-center text-center gap-2">
+<span class="material-symbols-outlined text-4xl" style="font-variation-settings: 'FILL' 1;">workspace_premium</span>
+<span class="font-label-sm text-label-sm uppercase tracking-wider opacity-80">Top Performer</span>
+<span class="font-display-md text-display-md">Elite Tier</span>
+</div>
+</section>
+<!-- Vertical Timeline: Work & Education -->
+<section class="space-y-stack-gap-lg">
+<div class="flex items-center justify-between">
+<h3 class="font-title-lg text-title-lg flex items-center gap-2">
+<span class="material-symbols-outlined text-primary">history_edu</span> Experience &amp; Education
+                </h3>
+<button class="text-primary font-label-md text-label-md flex items-center gap-1">
+<span class="material-symbols-outlined text-sm">add</span> Add New
+                </button>
+</div>
+<div class="space-y-0">
+<!-- Timeline Item 1 -->
+<div class="timeline-item flex gap-4 relative">
+<div class="timeline-line shrink-0 relative flex flex-col items-center">
+<div class="w-4 h-4 rounded-full bg-primary ring-4 ring-primary-fixed shrink-0 z-10"></div>
+</div>
+<div class="pb-8 flex-1">
+<div class="p-4 bg-white rounded-xl border border-outline-variant shadow-sm hover:shadow-md transition-shadow">
+<div class="flex justify-between items-start mb-1">
+<h4 class="font-title-lg text-title-lg leading-tight">Senior Product Designer</h4>
+<span class="bg-surface-container-highest text-primary font-label-sm text-label-sm px-2 py-1 rounded-full shrink-0">Current</span>
+</div>
+<p class="font-label-md text-label-md text-on-surface-variant mb-3">Enterprise Flow Systems • 2021 – Present</p>
+<p class="font-body-sm text-body-sm text-on-surface-variant">Leading the UI/UX overhaul of the global workforce management platform, scaling to 50k+ active daily users.</p>
+</div>
+</div>
+</div>
+<!-- Timeline Item 2 -->
+<div class="timeline-item flex gap-4 relative">
+<div class="timeline-line shrink-0 relative flex flex-col items-center">
+<div class="w-4 h-4 rounded-full bg-outline-variant shrink-0 z-10"></div>
+</div>
+<div class="pb-8 flex-1">
+<div class="p-4 bg-white rounded-xl border border-outline-variant shadow-sm">
+<div class="flex justify-between items-start mb-1">
+<h4 class="font-title-lg text-title-lg leading-tight">Master of Fine Arts, UI Design</h4>
+<span class="text-on-surface-variant font-label-sm text-label-sm">2019 – 2021</span>
+</div>
+<p class="font-label-md text-label-md text-on-surface-variant mb-3">Rhode Island School of Design</p>
+<p class="font-body-sm text-body-sm text-on-surface-variant">Thesis focused on cognitive load in high-frequency trading dashboards and decision-making interfaces.</p>
+</div>
+</div>
+</div>
+<!-- Timeline Item 3 -->
+<div class="timeline-item flex gap-4 relative">
+<div class="timeline-line shrink-0 relative flex flex-col items-center">
+<div class="w-4 h-4 rounded-full bg-outline-variant shrink-0 z-10"></div>
+</div>
+<div class="pb-4 flex-1">
+<div class="p-4 bg-white rounded-xl border border-outline-variant shadow-sm">
+<div class="flex justify-between items-start mb-1">
+<h4 class="font-title-lg text-title-lg leading-tight">Product Designer</h4>
+<span class="text-on-surface-variant font-label-sm text-label-sm">2017 – 2019</span>
+</div>
+<p class="font-label-md text-label-md text-on-surface-variant mb-3">Fintech Solutions Inc.</p>
+<p class="font-body-sm text-body-sm text-on-surface-variant">Designed end-to-end consumer banking experiences for mobile and web platforms.</p>
+</div>
+</div>
+</div>
+</div>
+</section>
+<!-- Skills & Languages (Chips) -->
+<section class="grid grid-cols-1 md:grid-cols-2 gap-stack-gap-lg">
+<div class="space-y-4">
+<h3 class="font-title-lg text-title-lg flex items-center gap-2">
+<span class="material-symbols-outlined text-primary">psychology</span> Skills
+                </h3>
+<div class="flex flex-wrap gap-2">
+<span class="px-4 py-2 bg-primary-container text-on-primary-container rounded-full font-label-md text-label-md">User Experience</span>
+<span class="px-4 py-2 bg-white border border-outline-variant rounded-full font-label-md text-label-md">Visual Systems</span>
+<span class="px-4 py-2 bg-white border border-outline-variant rounded-full font-label-md text-label-md">React / Tailwind</span>
+<span class="px-4 py-2 bg-white border border-outline-variant rounded-full font-label-md text-label-md">Service Design</span>
+<span class="px-4 py-2 bg-white border border-outline-variant rounded-full font-label-md text-label-md">Motion Design</span>
+<span class="px-4 py-2 bg-white border border-outline-variant rounded-full font-label-md text-label-md">Prototyping</span>
+<span class="px-4 py-2 bg-white border border-outline-variant rounded-full font-label-md text-label-md">+4 more</span>
+</div>
+</div>
+<div class="space-y-4">
+<h3 class="font-title-lg text-title-lg flex items-center gap-2">
+<span class="material-symbols-outlined text-primary">translate</span> Languages
+                </h3>
+<div class="flex flex-wrap gap-3">
+<div class="flex items-center gap-2 px-4 py-2 bg-tertiary-fixed text-on-tertiary-fixed rounded-xl font-label-md text-label-md">
+<span class="w-2 h-2 bg-tertiary rounded-full"></span>
+                        English (Native)
+                    </div>
+<div class="flex items-center gap-2 px-4 py-2 bg-white border border-outline-variant rounded-xl font-label-md text-label-md">
+<span class="w-2 h-2 bg-outline rounded-full"></span>
+                        Spanish (Professional)
+                    </div>
+<div class="flex items-center gap-2 px-4 py-2 bg-white border border-outline-variant rounded-xl font-label-md text-label-md">
+<span class="w-2 h-2 bg-outline-variant rounded-full"></span>
+                        Japanese (Conversational)
+                    </div>
+</div>
+</div>
+</section>
+<!-- Certificates with Previews -->
+<section class="space-y-4">
+<div class="flex items-center justify-between">
+<h3 class="font-title-lg text-title-lg flex items-center gap-2">
+<span class="material-symbols-outlined text-primary">verified</span> Certificates
+                </h3>
+</div>
+<div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+<!-- Certificate 1 -->
+<div class="group relative aspect-[4/3] rounded-xl overflow-hidden border border-outline-variant bg-surface-container-low transition-all hover:border-primary">
+<div class="absolute inset-0 bg-cover bg-center transition-transform group-hover:scale-105" data-alt="A premium digital certificate with high-end typography and a gold holographic seal. The design is modern, using a light mode aesthetic with crisp lines and an elegant border pattern. The text indicates a Google UX Design Professional certification, set against a pristine white background." style="background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuDpNIknArba8ZNDfjX6bVfiquYVxgDueR81Nz5aF8x12GrTEVPD-jZMFDauwrCGExQMZMYwM5Mhcolpz6-WXtFY7M6yvzZMEBUzscHQSHb6Q-0QUwOpoYO8Hu24P1jkQnKpHqZwP7l2Hx1HOMqogyGFFxxD3L5MiSnjRm4UWThrfP0SwwGWtebK5j-dGweUw0NwgxlARDK1JbZh4mcSRK5GO4g4KFY2gsPFvhahk7QLTVuYppghLFWruO-yAQ4JQk3wIEiCglWpJvA')"></div>
+<div class="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent flex flex-col justify-end p-3">
+<span class="font-label-sm text-white opacity-90 truncate">Google UX Design</span>
+</div>
+<div class="absolute top-2 right-2 p-1 bg-white/20 backdrop-blur-md rounded-full text-white opacity-0 group-hover:opacity-100 transition-opacity">
+<span class="material-symbols-outlined text-sm">open_in_new</span>
+</div>
+</div>
+<!-- Certificate 2 -->
+<div class="group relative aspect-[4/3] rounded-xl overflow-hidden border border-outline-variant bg-surface-container-low transition-all hover:border-primary">
+<div class="absolute inset-0 bg-cover bg-center transition-transform group-hover:scale-105" data-alt="A clean, professional digital badge for Human-Computer Interaction from a top university. The design features a minimalist crest and blue accent colors. High-quality paper texture and sharp digital rendering for a modern enterprise professional profile. Light mode aesthetic." style="background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuDVEGFKDTsv8tLINnN4Mvi1pvpZYru4b7ZztlVZvUTTtq7o1DHn1UC8JYkpQrOEgcexsDRer2ttm8OA-c2UU_Gq1TjGqEHhSHW1EmUxwWU1Mb1gWk01-Sv-PK_pkJht_edkXpDxpep-seMEsrOAqLO-pS3qfQ10c4FVHetyjY-v2WR-4Dyf3a4qu44H9B8njQhzrwsdtJp5MaorHUmW9ydog4V-B1xgM-k0btzG-8-kGmjt1jsl2y5NBdGecIZraVgtagW35UKNtbU')"></div>
+<div class="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent flex flex-col justify-end p-3">
+<span class="font-label-sm text-white opacity-90 truncate">Stanford HCI</span>
+</div>
+<div class="absolute top-2 right-2 p-1 bg-white/20 backdrop-blur-md rounded-full text-white opacity-0 group-hover:opacity-100 transition-opacity">
+<span class="material-symbols-outlined text-sm">open_in_new</span>
+</div>
+</div>
+<!-- Certificate 3 -->
+<div class="group relative aspect-[4/3] rounded-xl overflow-hidden border border-outline-variant bg-surface-container-low transition-all hover:border-primary">
+<div class="absolute inset-0 bg-cover bg-center transition-transform group-hover:scale-105" data-alt="A modern web development certificate showing mastery of React and Next.js. The design uses a futuristic dark-blue and purple gradient background with white typography. It has a high-tech, clean digital appearance suitable for a premium career dashboard." style="background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuB-f1frJIlM8bC7R504aVyqibaDajvtnrWTNQousOyGrIWGFKjBFyks6vbhfIlmo17mCmUpCgCE2sLr6i5WL2cSnFdMbaBxdmXmFpficKD9jb_UbeH4UAramlFBt287m2TCLdbqO3BaJUSAiKZpeXJCUW88lPM2H1W_nZSpBWNUP9EkOoglo-7hx0hAMFRmdBhnh5rzr995RVkMDeuzbPRyioDAXJ32EIDypVL2VIJz236fd8_aR6sVk_6Ql8ghpOeRZn7pD-qewxQ')"></div>
+<div class="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent flex flex-col justify-end p-3">
+<span class="font-label-sm text-white opacity-90 truncate">Advanced React</span>
+</div>
+<div class="absolute top-2 right-2 p-1 bg-white/20 backdrop-blur-md rounded-full text-white opacity-0 group-hover:opacity-100 transition-opacity">
+<span class="material-symbols-outlined text-sm">open_in_new</span>
+</div>
+</div>
+<!-- Add New Placeholder -->
+<div class="aspect-[4/3] rounded-xl border-2 border-dashed border-outline-variant flex flex-col items-center justify-center gap-2 text-on-surface-variant hover:bg-white transition-colors cursor-pointer group">
+<span class="material-symbols-outlined text-3xl group-hover:scale-110 transition-transform">upload_file</span>
+<span class="font-label-sm text-label-sm">Upload New</span>
+</div>
+</div>
+</section>
+</main>
+<!-- AI Assistant FAB -->
+<button class="fixed bottom-24 right-container-padding w-14 h-14 rounded-full bg-gradient-to-br from-secondary to-primary text-white shadow-lg flex items-center justify-center z-50 transition-transform hover:scale-110 active:scale-95 group">
+<div class="absolute inset-0 bg-white/20 rounded-full backdrop-blur-[15px] opacity-0 group-hover:opacity-100 transition-opacity"></div>
+<span class="material-symbols-outlined text-2xl relative z-10">auto_awesome</span>
+</button>
+<!-- BottomNavBar -->
+<nav class="fixed bottom-0 left-0 w-full z-50 flex justify-around items-center px-2 pb-safe h-20 bg-surface/80 dark:bg-on-surface/80 border-t border-outline-variant backdrop-blur-xl shadow-lg">
+<a class="flex flex-col items-center justify-center text-on-surface-variant transition-transform duration-200 active:scale-90 hover:bg-surface-container-low p-2 rounded-lg" href="#">
+<span class="material-symbols-outlined">home</span>
+<span class="font-label-sm text-label-sm">Home</span>
+</a>
+<a class="flex flex-col items-center justify-center text-on-surface-variant transition-transform duration-200 active:scale-90 hover:bg-surface-container-low p-2 rounded-lg" href="#">
+<span class="material-symbols-outlined">fingerprint</span>
+<span class="font-label-sm text-label-sm">Attendance</span>
+</a>
+<a class="flex flex-col items-center justify-center text-on-surface-variant transition-transform duration-200 active:scale-90 hover:bg-surface-container-low p-2 rounded-lg" href="#">
+<span class="material-symbols-outlined">calendar_today</span>
+<span class="font-label-sm text-label-sm">Leave</span>
+</a>
+<a class="flex flex-col items-center justify-center text-on-surface-variant transition-transform duration-200 active:scale-90 hover:bg-surface-container-low p-2 rounded-lg" href="#">
+<span class="material-symbols-outlined">payments</span>
+<span class="font-label-sm text-label-sm">Salary</span>
+</a>
+<a class="flex flex-col items-center justify-center text-primary font-bold after:content-[''] after:w-1 after:h-1 after:bg-primary after:rounded-full after:mt-1 transition-transform duration-200 active:scale-90 p-2 rounded-lg" href="#">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">person</span>
+<span class="font-label-sm text-label-sm">Profile</span>
+</a>
+</nav>
+<script>
+        // Micro-interaction for timeline items
+        document.querySelectorAll('.timeline-item').forEach(item => {
+            item.addEventListener('mouseenter', () => {
+                const icon = item.querySelector('.timeline-line div');
+                if (icon) {
+                    icon.classList.add('scale-125');
+                    icon.classList.add('transition-transform');
+                }
+            });
+            item.addEventListener('mouseleave', () => {
+                const icon = item.querySelector('.timeline-line div');
+                if (icon) {
+                    icon.classList.remove('scale-125');
+                }
+            });
+        });
+
+        // Toggle Glass Effect on Scroll
+        window.addEventListener('scroll', () => {
+            const header = document.querySelector('header');
+            if (window.scrollY > 20) {
+                header.classList.add('shadow-md');
+                header.classList.remove('shadow-sm');
+            } else {
+                header.classList.remove('shadow-md');
+                header.classList.add('shadow-sm');
+            }
+        });
+    </script>
+</body></html>
