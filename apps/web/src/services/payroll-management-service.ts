@@ -3,11 +3,13 @@
  */
 
 import { formatInr, loadPayrollOverview } from "@/services/payroll-service";
+import { resourceService } from "@/services/api-client";
 import type {
   BonusRecord,
   EmployeeSalary,
   LoanRecord,
   MonthLock,
+  PayrollAdjustmentRecord,
   PayrollAudit,
   PayrollFilters,
   PayrollRun,
@@ -18,10 +20,16 @@ import type {
   SalaryStructure,
 } from "@/types/payroll-management";
 import {
+  CACHE_DIGITECH_STRUCTURES,
   monthLabel,
   structureDeductions,
   structureGross,
+  type SalaryStructureTemplate,
 } from "@/types/payroll-management";
+
+const PAY_CTX_KEY = "erp_pay_api_context_v1";
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 const K = {
   structures: "erp_pay_structures_v1",
@@ -30,6 +38,7 @@ const K = {
   locks: "erp_pay_locks_v1",
   revisions: "erp_pay_revisions_v1",
   bonuses: "erp_pay_bonuses_v1",
+  adjustments: "erp_pay_adjustments_v1",
   reimbursements: "erp_pay_reimb_v1",
   loans: "erp_pay_loans_v1",
   payslips: "erp_pay_payslips_v1",
@@ -106,6 +115,7 @@ export type PayrollDirectory = {
   locks: MonthLock[];
   revisions: SalaryRevision[];
   bonuses: BonusRecord[];
+  adjustments: PayrollAdjustmentRecord[];
   reimbursements: ReimbursementRecord[];
   loans: LoanRecord[];
   payslips: PayslipRecord[];
@@ -113,6 +123,115 @@ export type PayrollDirectory = {
 
 export function isMonthLocked(month: string): boolean {
   return load<MonthLock>(K.locks).some((l) => l.month === month && l.status === "locked");
+}
+
+function buildDefaultStructures(): SalaryStructure[] {
+  const ts = nowIso();
+  return CACHE_DIGITECH_STRUCTURES.map((t) => ({
+    ...t,
+    id: crypto.randomUUID(),
+    createdAt: ts,
+  }));
+}
+
+function templateFor(name: string, code?: string, index = 0): SalaryStructureTemplate {
+  const byCode = code
+    ? CACHE_DIGITECH_STRUCTURES.find((t) => t.code?.toLowerCase() === code.toLowerCase())
+    : undefined;
+  if (byCode) return byCode;
+  const byName = CACHE_DIGITECH_STRUCTURES.find(
+    (t) => t.name.toLowerCase() === name.toLowerCase(),
+  );
+  if (byName) return byName;
+  // Legacy "Standard CTC" / unknown → Engineer band (middle)
+  if (/standard/i.test(name)) {
+    return CACHE_DIGITECH_STRUCTURES[2];
+  }
+  return CACHE_DIGITECH_STRUCTURES[Math.min(index, CACHE_DIGITECH_STRUCTURES.length - 1)];
+}
+
+function mapApiStructure(
+  s: Record<string, unknown>,
+  i: number,
+  previous?: SalaryStructure[],
+): SalaryStructure {
+  const id = String(s.id ?? crypto.randomUUID());
+  const name = String(s.structure_name ?? s.name ?? `Structure ${i + 1}`);
+  const code = String(s.structure_code ?? s.code ?? "");
+  const prev = previous?.find((p) => p.id === id || p.name === name);
+  const tpl = templateFor(name, code || undefined, i);
+  const base = prev ?? tpl;
+  const hasApiAmounts =
+    s.basic != null || s.hra != null || s.special_allowance != null || s.pf != null;
+  return {
+    id,
+    code: code || base.code || tpl.code,
+    name,
+    basic: Number(hasApiAmounts ? (s.basic ?? base.basic) : base.basic),
+    hra: Number(hasApiAmounts ? (s.hra ?? base.hra) : base.hra),
+    specialAllowance: Number(
+      hasApiAmounts ? (s.special_allowance ?? base.specialAllowance) : base.specialAllowance,
+    ),
+    medicalAllowance: Number(
+      hasApiAmounts ? (s.medical_allowance ?? base.medicalAllowance) : base.medicalAllowance,
+    ),
+    travelAllowance: Number(
+      hasApiAmounts ? (s.travel_allowance ?? base.travelAllowance) : base.travelAllowance,
+    ),
+    foodAllowance: Number(
+      hasApiAmounts ? (s.food_allowance ?? base.foodAllowance) : base.foodAllowance,
+    ),
+    internetAllowance: Number(
+      hasApiAmounts ? (s.internet_allowance ?? base.internetAllowance) : base.internetAllowance,
+    ),
+    bonus: Number(s.bonus ?? base.bonus),
+    incentives: Number(s.incentives ?? base.incentives),
+    overtime: Number(s.overtime ?? base.overtime),
+    arrears: Number(s.arrears ?? base.arrears),
+    reimbursement: Number(s.reimbursement ?? base.reimbursement),
+    otherEarnings: Number(s.other_earnings ?? base.otherEarnings),
+    pf: Number(hasApiAmounts ? (s.pf ?? base.pf) : base.pf),
+    esi: Number(hasApiAmounts ? (s.esi ?? base.esi) : base.esi),
+    professionalTax: Number(
+      hasApiAmounts ? (s.professional_tax ?? base.professionalTax) : base.professionalTax,
+    ),
+    tds: Number(hasApiAmounts ? (s.tds ?? base.tds) : base.tds),
+    loanRecovery: Number(s.loan_recovery ?? base.loanRecovery),
+    advanceRecovery: Number(s.advance_recovery ?? base.advanceRecovery),
+    insurance: Number(hasApiAmounts ? (s.insurance ?? base.insurance) : base.insurance),
+    otherDeductions: Number(s.other_deductions ?? base.otherDeductions),
+    createdAt: prev?.createdAt ?? nowIso(),
+  };
+}
+
+/** Drop duplicate Standard CTC / identical-amount clones; keep graded catalog. */
+function normalizeStructures(rows: SalaryStructure[]): SalaryStructure[] {
+  const byName = new Map<string, SalaryStructure>();
+  for (const row of rows) {
+    const key = row.name.trim().toLowerCase();
+    if (!byName.has(key)) byName.set(key, row);
+  }
+  let unique = [...byName.values()];
+
+  const allIdenticalStandard =
+    unique.length > 0 &&
+    unique.every(
+      (s) =>
+        /standard/i.test(s.name) &&
+        s.basic === 30000 &&
+        s.hra === 12000,
+    );
+
+  if (allIdenticalStandard || unique.length === 0) {
+    return buildDefaultStructures();
+  }
+
+  // Upgrade legacy single Standard CTC into full Cache Digitech set
+  if (unique.length === 1 && /standard/i.test(unique[0].name)) {
+    return buildDefaultStructures();
+  }
+
+  return unique;
 }
 
 export async function loadPayrollDirectory(): Promise<PayrollDirectory> {
@@ -127,37 +246,23 @@ export async function loadPayrollDirectory(): Promise<PayrollDirectory> {
   try {
     const overview = await loadPayrollOverview();
 
-    if (structures.length === 0 && overview.structures.length) {
-      structures = overview.structures.map((s, i) => ({
-        id: String(s.id ?? crypto.randomUUID()),
-        name: String(s.structure_name ?? s.name ?? `Structure ${i + 1}`),
-        basic: Number(s.basic ?? 30000),
-        hra: Number(s.hra ?? 12000),
-        specialAllowance: Number(s.special_allowance ?? 5000),
-        medicalAllowance: Number(s.medical_allowance ?? 1250),
-        travelAllowance: Number(s.travel_allowance ?? 1600),
-        foodAllowance: Number(s.food_allowance ?? 0),
-        internetAllowance: Number(s.internet_allowance ?? 0),
-        bonus: Number(s.bonus ?? 0),
-        incentives: Number(s.incentives ?? 0),
-        overtime: Number(s.overtime ?? 0),
-        arrears: Number(s.arrears ?? 0),
-        reimbursement: Number(s.reimbursement ?? 0),
-        otherEarnings: Number(s.other_earnings ?? 0),
-        pf: Number(s.pf ?? 1800),
-        esi: Number(s.esi ?? 0),
-        professionalTax: Number(s.professional_tax ?? 200),
-        tds: Number(s.tds ?? 0),
-        loanRecovery: Number(s.loan_recovery ?? 0),
-        advanceRecovery: Number(s.advance_recovery ?? 0),
-        insurance: Number(s.insurance ?? 0),
-        otherDeductions: Number(s.other_deductions ?? 0),
-        createdAt: nowIso(),
-      }));
+    if (overview.structures.length) {
+      const previous = structures;
+      structures = overview.structures.map((s, i) =>
+        mapApiStructure(s as Record<string, unknown>, i, previous),
+      );
+      structures = normalizeStructures(structures);
+      // If API only had legacy Standard / SS-STD rows, prefer full catalog
+      if (
+        structures.length <= 2 &&
+        structures.every((s) => /standard|ss-std/i.test(`${s.name} ${s.code ?? ""}`))
+      ) {
+        structures = buildDefaultStructures();
+      }
       save(K.structures, structures);
     }
 
-    if (salaries.length === 0 && overview.employeeSalaries.length) {
+    if (overview.employeeSalaries.length) {
       salaries = overview.employeeSalaries.map((e, i) => ({
         id: String(e.id ?? crypto.randomUUID()),
         employeeId: String(e.employee_code ?? e.employee_id ?? `EMP-${i + 1}`),
@@ -204,7 +309,7 @@ export async function loadPayrollDirectory(): Promise<PayrollDirectory> {
       }
     }
 
-    if (runs.length === 0 && overview.runs.length) {
+    if (overview.runs.length) {
       runs = overview.runs.map((r, i) => {
         const month = String(r.period_code ?? r.payroll_month ?? `2026-${String((i % 12) + 1).padStart(2, "0")}`);
         return {
@@ -264,7 +369,7 @@ export async function loadPayrollDirectory(): Promise<PayrollDirectory> {
       save(K.loans, loans);
     }
 
-    if (payslips.length === 0 && overview.payslips.length) {
+    if (overview.payslips.length) {
       payslips = overview.payslips.map((p, i) => ({
         id: String(p.id ?? crypto.randomUUID()),
         payslipCode: String(p.document_number ?? `PSL-${String(i + 1).padStart(6, "0")}`),
@@ -291,47 +396,26 @@ export async function loadPayrollDirectory(): Promise<PayrollDirectory> {
     /* offline */
   }
 
-  // Seed a default structure if still empty
-  if (load<SalaryStructure>(K.structures).length === 0) {
-    const def: SalaryStructure = {
-      id: crypto.randomUUID(),
-      name: "Standard CTC",
-      basic: 30000,
-      hra: 12000,
-      specialAllowance: 8000,
-      medicalAllowance: 1250,
-      travelAllowance: 1600,
-      foodAllowance: 0,
-      internetAllowance: 500,
-      bonus: 0,
-      incentives: 0,
-      overtime: 0,
-      arrears: 0,
-      reimbursement: 0,
-      otherEarnings: 0,
-      pf: 1800,
-      esi: 0,
-      professionalTax: 200,
-      tds: 2500,
-      loanRecovery: 0,
-      advanceRecovery: 0,
-      insurance: 300,
-      otherDeductions: 0,
-      createdAt: nowIso(),
-    };
-    save(K.structures, [def]);
+  // Seed Cache Digitech graded structures when still empty after API
+  if (structures.length === 0) {
+    structures = buildDefaultStructures();
+    save(K.structures, structures);
+  } else {
+    structures = normalizeStructures(structures);
+    save(K.structures, structures);
   }
 
   return {
-    structures: load(K.structures),
-    salaries: load(K.salaries),
-    runs: load(K.runs),
-    locks: load(K.locks),
-    revisions: load(K.revisions),
-    bonuses: load(K.bonuses),
-    reimbursements: load(K.reimbursements),
-    loans: load(K.loans),
-    payslips: load(K.payslips),
+    structures,
+    salaries,
+    runs,
+    locks: load<MonthLock>(K.locks),
+    revisions: load<SalaryRevision>(K.revisions),
+    bonuses,
+    adjustments: load<PayrollAdjustmentRecord>(K.adjustments),
+    reimbursements,
+    loans,
+    payslips,
   };
 }
 
@@ -362,10 +446,32 @@ export function computePayrollStats(dir: PayrollDirectory) {
   };
 }
 
-export function createStructure(
+export async function createStructure(
   input: Omit<SalaryStructure, "id" | "createdAt">,
-): SalaryStructure {
+): Promise<SalaryStructure> {
   const row: SalaryStructure = { ...input, id: crypto.randomUUID(), createdAt: nowIso() };
+  try {
+    const ctx = readJson<{ branchId?: string }>(PAY_CTX_KEY, {});
+    const code =
+      input.code?.trim() ||
+      `SS-${input.name.replace(/[^A-Za-z0-9]+/g, "-").toUpperCase().slice(0, 20)}`;
+    const res = await resourceService.create<Record<string, unknown>>("/payroll/salary-structures", {
+      branch_id: ctx.branchId || null,
+      structure_name: input.name,
+      structure_code: code,
+      effective_from: nowIso().slice(0, 10),
+      currency_code: "INR",
+      status: "active",
+    });
+    const apiId = String(res.data?.id ?? "");
+    if (apiId) {
+      row.id = apiId;
+      row.name = String(res.data?.structure_name ?? row.name);
+      row.code = String(res.data?.structure_code ?? code);
+    }
+  } catch (err) {
+    console.warn("createStructure API failed; local cache kept", err);
+  }
   const all = load<SalaryStructure>(K.structures);
   all.unshift(row);
   save(K.structures, all);
@@ -373,10 +479,83 @@ export function createStructure(
   return row;
 }
 
-export function assignEmployeeSalary(
+export async function updateStructure(
+  id: string,
+  input: Omit<SalaryStructure, "id" | "createdAt">,
+): Promise<SalaryStructure> {
+  const all = load<SalaryStructure>(K.structures);
+  const idx = all.findIndex((s) => s.id === id);
+  const existing = idx >= 0 ? all[idx] : undefined;
+  const row: SalaryStructure = {
+    ...input,
+    id,
+    createdAt: existing?.createdAt ?? nowIso(),
+  };
+
+  if (UUID_RE.test(id)) {
+    try {
+      await resourceService.update("/payroll/salary-structures", id, {
+        structure_name: input.name,
+        status: "active",
+      });
+    } catch (err) {
+      console.warn("updateStructure API failed; local cache kept", err);
+    }
+  }
+
+  if (idx >= 0) all[idx] = row;
+  else all.unshift(row);
+  save(K.structures, all);
+  appendPayrollAudit({ action: "structure_updated", detail: row.name, actor: actor() });
+  return row;
+}
+
+export function deleteStructureLocal(id: string): void {
+  save(
+    K.structures,
+    load<SalaryStructure>(K.structures).filter((s) => s.id !== id),
+  );
+}
+
+/** Reset local structures to the Cache Digitech graded catalog. */
+export function resetStructuresToCacheDigitech(): SalaryStructure[] {
+  const rows = buildDefaultStructures();
+  save(K.structures, rows);
+  return rows;
+}
+
+export async function assignEmployeeSalary(
   input: Omit<EmployeeSalary, "id">,
-): EmployeeSalary {
+): Promise<EmployeeSalary> {
   const row: EmployeeSalary = { ...input, id: crypto.randomUUID() };
+  try {
+    const ctx = readJson<{
+      branchId?: string;
+      employmentId?: string;
+      departmentId?: string;
+    }>(PAY_CTX_KEY, {});
+    const structureIsUuid = UUID_RE.test(input.structureId);
+    const employeeIsUuid = UUID_RE.test(input.employeeId);
+    const employmentId = ctx.employmentId;
+    if (ctx.branchId && structureIsUuid && employeeIsUuid && employmentId && UUID_RE.test(employmentId)) {
+      const res = await resourceService.create<Record<string, unknown>>("/payroll/employee-salaries", {
+        branch_id: ctx.branchId,
+        employee_id: input.employeeId,
+        salary_structure_id: input.structureId,
+        employment_id: employmentId,
+        department_id: ctx.departmentId || null,
+        effective_from: input.effectiveDate || nowIso().slice(0, 10),
+        ctc_amount: input.monthlyCtc * 12,
+        gross_amount: input.monthlyCtc,
+        currency_code: "INR",
+        status: "active",
+      });
+      const apiId = String(res.data?.id ?? "");
+      if (apiId) row.id = apiId;
+    }
+  } catch (err) {
+    console.warn("assignEmployeeSalary API failed; local cache kept", err);
+  }
   const all = load<EmployeeSalary>(K.salaries);
   all.unshift(row);
   save(K.salaries, all);
@@ -388,7 +567,7 @@ export function assignEmployeeSalary(
   return row;
 }
 
-export function runPayroll(month: string): PayrollRun {
+export async function runPayroll(month: string): Promise<PayrollRun> {
   if (isMonthLocked(month)) {
     throw new Error(`Payroll month ${monthLabel(month)} is locked and cannot be processed.`);
   }
@@ -398,23 +577,25 @@ export function runPayroll(month: string): PayrollRun {
 
   let gross = 0;
   let ded = 0;
-  const employees = salaries.length ? salaries : [
-    {
-      id: "demo",
-      employeeId: "EMP-000001",
-      employeeName: "Demo Employee",
-      structureId: structures[0]?.id ?? "",
-      structureName: structures[0]?.name ?? "Standard",
-      monthlyCtc: structureGross(structures[0] ?? emptyStructure()),
-      annualCtc: 0,
-      payrollGroup: "General",
-      bankAccount: "XXXX1234",
-      taxRegime: "new" as const,
-      salaryStatus: "active" as const,
-      department: "General",
-      effectiveDate: nowIso().slice(0, 10),
-    },
-  ];
+  const employees = salaries.length
+    ? salaries
+    : [
+        {
+          id: "demo",
+          employeeId: "EMP-000001",
+          employeeName: "Demo Employee",
+          structureId: structures[0]?.id ?? "",
+          structureName: structures[0]?.name ?? "Standard",
+          monthlyCtc: structureGross(structures[0] ?? emptyStructure()),
+          annualCtc: 0,
+          payrollGroup: "General",
+          bankAccount: "XXXX1234",
+          taxRegime: "new" as const,
+          salaryStatus: "active" as const,
+          department: "General",
+          effectiveDate: nowIso().slice(0, 10),
+        },
+      ];
 
   for (const sal of employees) {
     const st = structureMap.get(sal.structureId) ?? structures[0];
@@ -446,6 +627,54 @@ export function runPayroll(month: string): PayrollRun {
     createdAt: nowIso(),
     updatedAt: nowIso(),
   };
+
+  try {
+    const ctx = readJson<{ branchId?: string }>(PAY_CTX_KEY, {});
+    if (ctx.branchId) {
+      const periods = await resourceService.list<Record<string, unknown>>("/payroll/payroll-periods");
+      const periodRows = Array.isArray(periods.data) ? periods.data : [];
+      const open = periodRows.find((p) =>
+        ["open", "processing"].includes(String(p.status ?? "").toLowerCase()),
+      );
+      const periodId = String(open?.id ?? "");
+      if (periodId) {
+        const created = await resourceService.create<Record<string, unknown>>("/payroll/payroll-runs", {
+          branch_id: ctx.branchId,
+          payroll_period_id: periodId,
+          run_date: `${month}-01`,
+          run_type: "regular",
+          currency_code: "INR",
+          status: "draft",
+        });
+        const runId = String(created.data?.id ?? "");
+        if (runId) {
+          const calculated = await resourceService.action<Record<string, unknown>>(
+            "/payroll/payroll-runs",
+            runId,
+            "calculate",
+            {},
+          );
+          row.id = runId;
+          row.runCode = String(calculated.data?.document_number ?? created.data?.document_number ?? row.runCode);
+          row.grossTotal = Number(calculated.data?.total_gross ?? row.grossTotal);
+          row.deductionTotal = Number(calculated.data?.total_deduction ?? row.deductionTotal);
+          row.netTotal = Number(calculated.data?.total_net ?? row.netTotal);
+          row.employeeCount = Number(calculated.data?.employee_count ?? row.employeeCount);
+          row.status = "processing";
+          try {
+            await resourceService.action("/payroll/payroll-runs", runId, "submit", {});
+            await resourceService.action("/payroll/payroll-runs", runId, "approve", {});
+            row.status = "approved";
+          } catch {
+            /* submit/approve may fail — keep processing */
+          }
+        }
+      }
+    }
+  } catch (err) {
+    console.warn("runPayroll API failed; local cache kept", err);
+  }
+
   const all = load<PayrollRun>(K.runs);
   all.unshift(row);
   save(K.runs, all);
@@ -602,18 +831,140 @@ export function createRevision(
   return row;
 }
 
-export function addBonus(input: Omit<BonusRecord, "id" | "createdAt">): BonusRecord {
+export async function addBonus(input: Omit<BonusRecord, "id" | "createdAt">): Promise<BonusRecord> {
   const row: BonusRecord = { ...input, id: crypto.randomUUID(), createdAt: nowIso() };
+  try {
+    const ctx = readJson<{ branchId?: string }>(PAY_CTX_KEY, {});
+    const employeeId = input.employeeId && UUID_RE.test(input.employeeId) ? input.employeeId : undefined;
+    if (ctx.branchId && employeeId) {
+      const periods = await resourceService.list<Record<string, unknown>>("/payroll/payroll-periods", {
+        page: 1,
+        page_size: 200,
+      });
+      const periodRows = Array.isArray(periods.data) ? periods.data : [];
+      const month = input.month || nowIso().slice(0, 7);
+      const matched =
+        periodRows.find((p) => String(p.period_code ?? p.period_name ?? "").includes(month)) ||
+        periodRows.find((p) => ["open", "processing"].includes(String(p.status ?? "").toLowerCase()));
+      const periodId = String(matched?.id ?? "");
+      const apiType = input.bonusType === "referral" ? "other" : input.bonusType;
+      const created = await resourceService.create<Record<string, unknown>>("/payroll/bonuses", {
+        branch_id: ctx.branchId,
+        employee_id: employeeId,
+        payroll_period_id: periodId || null,
+        bonus_type: apiType,
+        amount: input.amount,
+        status: "draft",
+      });
+      const bonusId = String(created.data?.id ?? "");
+      if (bonusId) {
+        try {
+          await resourceService.action("/payroll/bonuses", bonusId, "submit");
+          await resourceService.action("/payroll/bonuses", bonusId, "approve");
+        } catch {
+          /* leave draft/submitted */
+        }
+        row.id = bonusId;
+      }
+    }
+  } catch (err) {
+    console.warn("addBonus API failed; local cache kept", err);
+  }
   const all = load<BonusRecord>(K.bonuses);
   all.unshift(row);
   save(K.bonuses, all);
   return row;
 }
 
-export function addReimbursement(
-  input: Omit<ReimbursementRecord, "id" | "createdAt">,
-): ReimbursementRecord {
+export async function addPayrollAdjustment(
+  input: Omit<PayrollAdjustmentRecord, "id" | "createdAt" | "status"> & {
+    status?: PayrollAdjustmentRecord["status"];
+  },
+): Promise<PayrollAdjustmentRecord> {
+  const row: PayrollAdjustmentRecord = {
+    ...input,
+    id: crypto.randomUUID(),
+    status: input.status ?? "draft",
+    createdAt: nowIso(),
+  };
+  try {
+    const ctx = readJson<{ branchId?: string }>(PAY_CTX_KEY, {});
+    if (ctx.branchId && UUID_RE.test(input.employeeId)) {
+      const periods = await resourceService.list<Record<string, unknown>>("/payroll/payroll-periods", {
+        page: 1,
+        page_size: 200,
+      });
+      const periodRows = Array.isArray(periods.data) ? periods.data : [];
+      const month = input.month || nowIso().slice(0, 7);
+      const matched =
+        periodRows.find((p) => String(p.period_code ?? p.period_name ?? "").includes(month)) ||
+        periodRows.find((p) => ["open", "processing"].includes(String(p.status ?? "").toLowerCase()));
+      const periodId = String(matched?.id ?? "");
+      if (periodId) {
+        const created = await resourceService.create<Record<string, unknown>>(
+          "/payroll/payroll-adjustments",
+          {
+            branch_id: ctx.branchId,
+            employee_id: input.employeeId,
+            payroll_period_id: periodId,
+            adjustment_type: "earning",
+            amount: input.amount,
+            reason: input.kind,
+            status: "draft",
+          },
+        );
+        const adjId = String(created.data?.id ?? "");
+        if (adjId) {
+          try {
+            await resourceService.action("/payroll/payroll-adjustments", adjId, "apply");
+            row.status = "applied";
+          } catch {
+            row.status = "draft";
+          }
+          row.id = adjId;
+        }
+      }
+    }
+  } catch (err) {
+    console.warn("addPayrollAdjustment API failed; local cache kept", err);
+  }
+  const all = load<PayrollAdjustmentRecord>(K.adjustments);
+  all.unshift(row);
+  save(K.adjustments, all);
+  return row;
+}
+
+export async function addReimbursement(
+  input: Omit<ReimbursementRecord, "id" | "createdAt"> & { employeeId?: string },
+): Promise<ReimbursementRecord> {
   const row: ReimbursementRecord = { ...input, id: crypto.randomUUID(), createdAt: nowIso() };
+  const ctx = readJson<{ branchId?: string }>(PAY_CTX_KEY, {});
+  const employeeId = (input as { employeeId?: string }).employeeId;
+  if (ctx.branchId && employeeId && UUID_RE.test(employeeId)) {
+    try {
+      const typeMap: Record<string, string> = {
+        Travel: "travel",
+        Internet: "internet",
+        Medical: "medical",
+        Training: "training",
+        Mobile: "mobile",
+      };
+      const created = await resourceService.create<Record<string, unknown>>("/payroll/reimbursements", {
+        branch_id: ctx.branchId,
+        employee_id: employeeId,
+        reimbursement_type: typeMap[input.reimbType] || "other",
+        claim_amount: input.amount,
+        status: "draft",
+      });
+      const id = String(created.data?.id ?? "");
+      if (id) {
+        await resourceService.action("/payroll/reimbursements", id, "submit").catch(() => undefined);
+        row.id = id;
+      }
+    } catch (err) {
+      console.warn("addReimbursement API failed; local cache kept", err);
+    }
+  }
   const all = load<ReimbursementRecord>(K.reimbursements);
   all.unshift(row);
   save(K.reimbursements, all);
@@ -626,21 +977,129 @@ export function approveReimbursement(id: string, status: ReimbursementRecord["st
   if (idx < 0) return null;
   all[idx] = { ...all[idx], status };
   save(K.reimbursements, all);
+  if (UUID_RE.test(id) && status === "approved") {
+    void resourceService.action("/payroll/reimbursements", id, "approve").catch(() => undefined);
+  }
   return all[idx];
 }
 
-export function addLoan(input: Omit<LoanRecord, "id" | "createdAt">): LoanRecord {
+export async function addLoan(
+  input: Omit<LoanRecord, "id" | "createdAt"> & { employeeId?: string },
+): Promise<LoanRecord> {
   const row: LoanRecord = { ...input, id: crypto.randomUUID(), createdAt: nowIso() };
+  const ctx = readJson<{ branchId?: string }>(PAY_CTX_KEY, {});
+  const employeeId = (input as { employeeId?: string }).employeeId;
+  if (ctx.branchId && employeeId && UUID_RE.test(employeeId)) {
+    try {
+      const created = await resourceService.create<Record<string, unknown>>("/payroll/loans", {
+        branch_id: ctx.branchId,
+        employee_id: employeeId,
+        loan_type: "personal",
+        principal_amount: input.loanAmount,
+        emi_amount: input.recoveryPerMonth,
+        interest_rate: 0,
+        installment_count: input.installments,
+        start_date: new Date().toISOString().slice(0, 10),
+        outstanding_amount: input.remainingBalance || input.loanAmount,
+        status: "draft",
+      });
+      const id = String(created.data?.id ?? "");
+      if (id) {
+        await resourceService.action("/payroll/loans", id, "submit").catch(() => undefined);
+        row.id = id;
+      }
+    } catch (err) {
+      console.warn("addLoan API failed; local cache kept", err);
+    }
+  }
   const all = load<LoanRecord>(K.loans);
   all.unshift(row);
   save(K.loans, all);
   return row;
 }
 
-export function generatePayslips(runId: string): PayslipRecord[] {
+export async function generatePayslips(runId: string): Promise<PayslipRecord[]> {
   const runs = load<PayrollRun>(K.runs);
   const run = runs.find((r) => r.id === runId);
   if (!run) throw new Error("Payroll run not found");
+
+  if (UUID_RE.test(runId)) {
+    try {
+      const ctx = readJson<{ branchId?: string }>(PAY_CTX_KEY, {});
+      if (ctx.branchId && UUID_RE.test(ctx.branchId)) {
+        const runRes = await resourceService.get<Record<string, unknown>>("/payroll/payroll-runs", runId);
+        const periodId = String(runRes.data?.payroll_period_id ?? "");
+        const linesRes = await resourceService.list<Record<string, unknown>>("/payroll/payroll-run-lines", {
+          page: 1,
+          page_size: 200,
+        });
+        const lineRows = Array.isArray(linesRes.data) ? linesRes.data : [];
+        const lines = lineRows.filter((l) => String(l.payroll_run_id ?? "") === runId);
+        const slips: PayslipRecord[] = [];
+        for (const line of lines) {
+          const lineId = String(line.id ?? "");
+          const employeeId = String(line.employee_id ?? "");
+          const gross = Number(line.gross_earnings ?? 0);
+          const deductions = Number(line.total_deductions ?? 0);
+          const net = Number(line.net_pay ?? Math.max(0, gross - deductions));
+          if (!lineId || !employeeId || !periodId) continue;
+          const breakdown = (line.component_breakdown_json as Record<string, unknown> | null) ?? {};
+          const created = await resourceService.create<Record<string, unknown>>("/payroll/payslips", {
+            branch_id: ctx.branchId,
+            payroll_run_id: runId,
+            payroll_run_line_id: lineId,
+            employee_id: employeeId,
+            payroll_period_id: periodId,
+            gross_salary: gross,
+            total_deductions: deductions,
+            net_salary: net,
+            payslip_json: breakdown,
+            status: "generated",
+          });
+          const slipId = String(created.data?.id ?? "");
+          if (slipId) {
+            try {
+              await resourceService.action("/payroll/payslips", slipId, "issue");
+            } catch {
+              /* issue optional */
+            }
+          }
+          slips.push({
+            id: slipId || crypto.randomUUID(),
+            payslipCode: String(created.data?.document_number ?? nextCode("slip", "PSL")),
+            runId,
+            employeeId,
+            employeeName: String(created.data?.employee_name ?? employeeId),
+            month: run.month,
+            monthLabel: run.monthLabel,
+            department: "—",
+            bankAccount: "—",
+            presentDays: Number(line.paid_days ?? 0),
+            leaveDays: Number(line.leave_days ?? 0),
+            earnings: [{ label: "Gross", amount: gross }],
+            deductions: [{ label: "Deductions", amount: deductions }],
+            gross,
+            totalDeductions: deductions,
+            net,
+            taxRegime: "new",
+            generatedAt: nowIso(),
+          });
+        }
+        if (slips.length) {
+          const all = load<PayslipRecord>(K.payslips);
+          save(K.payslips, [...slips, ...all.filter((p) => p.runId !== runId || !UUID_RE.test(p.id))]);
+          appendPayrollAudit({
+            action: "payslips_generated",
+            detail: `${slips.length} payslips (API) for ${run.monthLabel}`,
+            actor: actor(),
+          });
+          return slips;
+        }
+      }
+    } catch (err) {
+      console.warn("generatePayslips API failed; using local generation", err);
+    }
+  }
 
   const salaries = load<EmployeeSalary>(K.salaries);
   const structures = load<SalaryStructure>(K.structures);

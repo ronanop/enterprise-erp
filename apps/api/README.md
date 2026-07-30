@@ -20,8 +20,14 @@ cp ../../.env.example ../../.env
 ## Run
 
 ```bash
-# From apps/api with PYTHONPATH=src
-uvicorn main:app --reload --host 0.0.0.0 --port 8000 --app-dir src
+# From apps/api — watch only src/ so editing scripts/ does not crash reload
+uvicorn main:app --reload --reload-dir src --host 0.0.0.0 --port 8000 --app-dir src
+```
+
+On Windows you can also use:
+
+```powershell
+.\scripts\run_dev.ps1
 ```
 
 ## Migrations

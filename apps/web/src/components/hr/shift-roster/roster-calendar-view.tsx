@@ -73,7 +73,7 @@ export function RosterCalendarView({
     if (!dragShiftId) return;
     const sh = directory.shifts.find((s) => s.id === dragShiftId);
     if (!sh) return;
-    setRosterCell({
+    void setRosterCell({
       date,
       employeeId,
       shiftId: sh.id,
@@ -81,9 +81,10 @@ export function RosterCalendarView({
       color: sh.extension.color,
       isWeeklyOff: false,
       isHoliday: directory.holidays.some((h) => h.date === date),
+    }).then(() => {
+      toast("Roster updated", "info");
+      onUpdated();
     });
-    toast("Roster updated — pending approval in workflow (demo)", "info");
-    onUpdated();
   }
 
   return (

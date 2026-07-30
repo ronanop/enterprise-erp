@@ -4,11 +4,8 @@ import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react
 import {
   Archive,
   CheckSquare,
-  Copy,
   Download,
-  Eye,
   History,
-  MoreHorizontal,
   Pencil,
   Plus,
   RefreshCw,
@@ -31,6 +28,7 @@ import { HrStatusBadge } from "@/components/hr/hr-primitives";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { RowActionsItem, RowActionsMenu } from "@/components/ui/row-actions-menu";
 import { nextCode, type HrSetupTab } from "@/config/hr-setup";
 import { ApiClientError, resourceService } from "@/services/api-client";
 import {
@@ -38,7 +36,6 @@ import {
   cell,
   coerceLocalForm,
   createLocalSetup,
-  duplicateLocal,
   exportRowsCsv,
   listLocalSetup,
   listReportingManagers,
@@ -174,17 +171,6 @@ export function SetupEntityPanel({
   }>({ companies: [], branches: [], departments: [], employees: [], shifts: [] });
 
   const needsOrgLookups = fields.some((f) => f.optionsSource);
-
-  useEffect(() => {
-    if (!menuId) return;
-    function onDocClick(e: MouseEvent) {
-      const t = e.target as HTMLElement | null;
-      if (t?.closest?.("[data-setup-row-menu]")) return;
-      setMenuId(null);
-    }
-    document.addEventListener("mousedown", onDocClick);
-    return () => document.removeEventListener("mousedown", onDocClick);
-  }, [menuId]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -422,28 +408,6 @@ export function SetupEntityPanel({
     }
   }
 
-  async function duplicateRow(row: SetupRow) {
-    try {
-      if (tab.source === "local") {
-        await duplicateLocal(tab.id, row.id, tab.codePrefix ?? "CFG");
-      } else if (tab.apiPath) {
-        const { id: _id, version: _version, __source: _src, ...rest } = row;
-        const body: Record<string, unknown> = { ...rest };
-        if (codeKey in body) {
-          body[codeKey] = nextCode(
-            tab.codePrefix ?? "CFG",
-            rows.map((r) => String(r[codeKey] ?? "")),
-          );
-        }
-        await resourceService.create(tab.apiPath, body);
-      }
-      toast("Duplicated");
-      await load();
-    } catch (err) {
-      toast(err instanceof ApiClientError ? err.message : "Duplicate failed", "error");
-    }
-  }
-
   const readOnly = mode === "view" || tab.source === "derived";
   const canCreate = tab.source !== "derived";
 
@@ -661,55 +625,50 @@ export function SetupEntityPanel({
                             : cell(row, c.key, ...nameKeys)}
                       </td>
                     ))}
-                    <td className="relative px-3 py-2" data-setup-row-menu>
-                      <Button
-                        type="button"
-                        size="icon-xs"
-                        variant="ghost"
-                        className="cursor-pointer"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setMenuId(menuId === row.id ? null : row.id);
-                        }}
+                    <td className="px-3 py-2">
+                      <RowActionsMenu
+                        open={menuId === row.id}
+                        onOpenChange={(open) => setMenuId(open ? row.id : null)}
+                        buttonSize="icon-xs"
                       >
-                        <MoreHorizontal className="size-4" />
-                      </Button>
-                      {menuId === row.id ? (
-                        <div className="absolute right-2 bottom-9 z-30 w-44 rounded-lg border border-border bg-card py-1 shadow-lg">
-                          {(
-                            [
-                              { label: "View", icon: Eye, fn: () => openEdit(row, true) },
-                              { label: "Edit", icon: Pencil, fn: () => openEdit(row) },
-                              { label: "Duplicate", icon: Copy, fn: () => void duplicateRow(row) },
-                              { label: "History", icon: History, fn: () => openHistory(row) },
-                              {
-                                label: "Archive",
-                                icon: Archive,
-                                fn: () => setConfirm({ type: "archive", ids: [row.id] }),
-                              },
-                              {
-                                label: "Delete",
-                                icon: Trash2,
-                                fn: () => setConfirm({ type: "delete", ids: [row.id] }),
-                              },
-                            ] as const
-                          ).map((item) => (
-                            <button
-                              key={item.label}
-                              type="button"
-                              className="flex w-full cursor-pointer items-center gap-2 px-3 py-1.5 text-left text-xs transition-colors hover:bg-muted"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setMenuId(null);
-                                item.fn();
-                              }}
-                            >
-                              <item.icon className="size-3.5 text-muted-foreground" />
-                              {item.label}
-                            </button>
-                          ))}
-                        </div>
-                      ) : null}
+                        <RowActionsItem
+                          onClick={() => {
+                            setMenuId(null);
+                            openEdit(row);
+                          }}
+                        >
+                          <Pencil className="size-3.5 text-muted-foreground" />
+                          Edit
+                        </RowActionsItem>
+                        <RowActionsItem
+                          onClick={() => {
+                            setMenuId(null);
+                            openHistory(row);
+                          }}
+                        >
+                          <History className="size-3.5 text-muted-foreground" />
+                          History
+                        </RowActionsItem>
+                        <RowActionsItem
+                          onClick={() => {
+                            setMenuId(null);
+                            setConfirm({ type: "archive", ids: [row.id] });
+                          }}
+                        >
+                          <Archive className="size-3.5 text-muted-foreground" />
+                          Archive
+                        </RowActionsItem>
+                        <RowActionsItem
+                          destructive
+                          onClick={() => {
+                            setMenuId(null);
+                            setConfirm({ type: "delete", ids: [row.id] });
+                          }}
+                        >
+                          <Trash2 className="size-3.5" />
+                          Delete
+                        </RowActionsItem>
+                      </RowActionsMenu>
                     </td>
                   </tr>
                 ))}

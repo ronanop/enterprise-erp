@@ -21,6 +21,7 @@ export type ReimbStatus = "pending" | "approved" | "rejected" | "paid";
 export type SalaryStructure = {
   id: string;
   name: string;
+  code?: string;
   basic: number;
   hra: number;
   specialAllowance: number;
@@ -44,6 +45,212 @@ export type SalaryStructure = {
   otherDeductions: number;
   createdAt: string;
 };
+
+/** Cache Digitech monthly CTC templates (amounts in INR). */
+export type SalaryStructureTemplate = Omit<SalaryStructure, "id" | "createdAt">;
+
+export const CACHE_DIGITECH_STRUCTURES: SalaryStructureTemplate[] = [
+  {
+    code: "SS-INTERN",
+    name: "Intern Structure",
+    basic: 10000,
+    hra: 4000,
+    specialAllowance: 2500,
+    medicalAllowance: 500,
+    travelAllowance: 1000,
+    foodAllowance: 0,
+    internetAllowance: 500,
+    bonus: 0,
+    incentives: 0,
+    overtime: 0,
+    arrears: 0,
+    reimbursement: 0,
+    otherEarnings: 0,
+    pf: 1200,
+    esi: 0,
+    professionalTax: 0,
+    tds: 0,
+    loanRecovery: 0,
+    advanceRecovery: 0,
+    insurance: 0,
+    otherDeductions: 0,
+  },
+  {
+    code: "SS-JUNIOR",
+    name: "Junior Structure",
+    basic: 18000,
+    hra: 7200,
+    specialAllowance: 4500,
+    medicalAllowance: 1250,
+    travelAllowance: 1600,
+    foodAllowance: 0,
+    internetAllowance: 500,
+    bonus: 0,
+    incentives: 0,
+    overtime: 0,
+    arrears: 0,
+    reimbursement: 0,
+    otherEarnings: 0,
+    pf: 1800,
+    esi: 0,
+    professionalTax: 200,
+    tds: 500,
+    loanRecovery: 0,
+    advanceRecovery: 0,
+    insurance: 200,
+    otherDeductions: 0,
+  },
+  {
+    code: "SS-ENG",
+    name: "Engineer Structure",
+    basic: 35000,
+    hra: 14000,
+    specialAllowance: 10000,
+    medicalAllowance: 1250,
+    travelAllowance: 2400,
+    foodAllowance: 0,
+    internetAllowance: 1000,
+    bonus: 0,
+    incentives: 0,
+    overtime: 0,
+    arrears: 0,
+    reimbursement: 0,
+    otherEarnings: 0,
+    pf: 1800,
+    esi: 0,
+    professionalTax: 200,
+    tds: 3500,
+    loanRecovery: 0,
+    advanceRecovery: 0,
+    insurance: 300,
+    otherDeductions: 0,
+  },
+  {
+    code: "SS-SENIOR",
+    name: "Senior Engineer Structure",
+    basic: 55000,
+    hra: 22000,
+    specialAllowance: 18000,
+    medicalAllowance: 2500,
+    travelAllowance: 3200,
+    foodAllowance: 0,
+    internetAllowance: 1500,
+    bonus: 0,
+    incentives: 0,
+    overtime: 0,
+    arrears: 0,
+    reimbursement: 0,
+    otherEarnings: 0,
+    pf: 1800,
+    esi: 0,
+    professionalTax: 200,
+    tds: 8000,
+    loanRecovery: 0,
+    advanceRecovery: 0,
+    insurance: 500,
+    otherDeductions: 0,
+  },
+  {
+    code: "SS-LEAD",
+    name: "Lead Structure",
+    basic: 75000,
+    hra: 30000,
+    specialAllowance: 28000,
+    medicalAllowance: 3000,
+    travelAllowance: 4000,
+    foodAllowance: 0,
+    internetAllowance: 2000,
+    bonus: 0,
+    incentives: 0,
+    overtime: 0,
+    arrears: 0,
+    reimbursement: 0,
+    otherEarnings: 0,
+    pf: 1800,
+    esi: 0,
+    professionalTax: 200,
+    tds: 14000,
+    loanRecovery: 0,
+    advanceRecovery: 0,
+    insurance: 800,
+    otherDeductions: 0,
+  },
+  {
+    code: "SS-MGR",
+    name: "Manager Structure",
+    basic: 100000,
+    hra: 40000,
+    specialAllowance: 40000,
+    medicalAllowance: 4000,
+    travelAllowance: 5000,
+    foodAllowance: 0,
+    internetAllowance: 2500,
+    bonus: 0,
+    incentives: 0,
+    overtime: 0,
+    arrears: 0,
+    reimbursement: 0,
+    otherEarnings: 0,
+    pf: 1800,
+    esi: 0,
+    professionalTax: 200,
+    tds: 22000,
+    loanRecovery: 0,
+    advanceRecovery: 0,
+    insurance: 1000,
+    otherDeductions: 0,
+  },
+  {
+    code: "SS-DIR",
+    name: "Director Structure",
+    basic: 150000,
+    hra: 60000,
+    specialAllowance: 70000,
+    medicalAllowance: 5000,
+    travelAllowance: 8000,
+    foodAllowance: 0,
+    internetAllowance: 3000,
+    bonus: 0,
+    incentives: 0,
+    overtime: 0,
+    arrears: 0,
+    reimbursement: 0,
+    otherEarnings: 0,
+    pf: 1800,
+    esi: 0,
+    professionalTax: 200,
+    tds: 40000,
+    loanRecovery: 0,
+    advanceRecovery: 0,
+    insurance: 1500,
+    otherDeductions: 0,
+  },
+  {
+    code: "SS-EXEC",
+    name: "Executive Structure",
+    basic: 220000,
+    hra: 88000,
+    specialAllowance: 120000,
+    medicalAllowance: 8000,
+    travelAllowance: 12000,
+    foodAllowance: 0,
+    internetAllowance: 5000,
+    bonus: 0,
+    incentives: 0,
+    overtime: 0,
+    arrears: 0,
+    reimbursement: 0,
+    otherEarnings: 0,
+    pf: 1800,
+    esi: 0,
+    professionalTax: 200,
+    tds: 70000,
+    loanRecovery: 0,
+    advanceRecovery: 0,
+    insurance: 2500,
+    otherDeductions: 0,
+  },
+];
 
 export type EmployeeSalary = {
   id: string;
@@ -105,10 +312,22 @@ export type SalaryRevision = {
 
 export type BonusRecord = {
   id: string;
+  employeeId?: string;
   employeeName: string;
   bonusType: BonusType;
   amount: number;
   month: string;
+  createdAt: string;
+};
+
+export type PayrollAdjustmentRecord = {
+  id: string;
+  employeeId: string;
+  employeeName: string;
+  kind: "arrears" | "incentive" | "other";
+  amount: number;
+  month: string;
+  status: "draft" | "applied" | "cancelled";
   createdAt: string;
 };
 

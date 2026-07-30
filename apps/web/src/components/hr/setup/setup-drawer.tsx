@@ -36,7 +36,7 @@ export function SetupDrawer({
       <div
         className={cn(
           "relative z-10 flex h-full w-full flex-col border-l border-border bg-card shadow-xl animate-in slide-in-from-right duration-200",
-          wide ? "max-w-xl" : "max-w-md",
+          wide ? "max-w-2xl" : "max-w-md",
         )}
       >
         <div className="flex items-start justify-between gap-3 border-b border-border/70 px-4 py-3">

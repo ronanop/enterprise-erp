@@ -18,10 +18,12 @@ import {
   HrTable,
   HrToolbar,
 } from "@/components/hr/hr-primitives";
+import { toast, SetupToastHost } from "@/components/hr/setup/setup-toast";
 import { PageHeader } from "@/components/layout/page-header";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { isAuthenticated } from "@/lib/auth";
+import { ApiClientError, downloadApiFile, resourceService } from "@/services/api-client";
 import {
   countByAttendanceStatus,
   countByStatus,
@@ -560,12 +562,45 @@ export function TrainingHubPage() {
 
 export function SeparationHub() {
   const { data, loading, load, authBlocked } = useHrData();
+  const [actingId, setActingId] = useState<string | null>(null);
+
+  async function runAction(
+    id: string,
+    action: string,
+    body?: Record<string, unknown>,
+    label?: string,
+  ) {
+    setActingId(id);
+    try {
+      await resourceService.action("/hr/separation", id, action, body ?? {});
+      toast(label ?? `Separation ${action}`);
+      await load();
+    } catch (e) {
+      toast(e instanceof ApiClientError ? e.message : "Action failed", "error");
+    } finally {
+      setActingId(null);
+    }
+  }
+
   return (
     <div className="space-y-5">
+      <SetupToastHost />
       <PageHeader
         title="Separation / Exit"
-        description="Exit requests, last working day, and clearance tracking."
-        actions={<HrToolbar onRefresh={() => void load()} loading={loading} />}
+        description="Exit requests, last working day, FNF settlement, and clearance tracking."
+        actions={
+          <HrToolbar onRefresh={() => void load()} loading={loading}>
+            <Button
+              size="sm"
+              variant="outline"
+              className="cursor-pointer"
+              onClick={() => toast("Create via API POST /hr/separation or seed demo rows", "info")}
+            >
+              <Plus className="size-3.5" />
+              New separation
+            </Button>
+          </HrToolbar>
+        }
       />
       {authBlocked ? <HrAuthBanner /> : null}
       {loading && !data ? <HrLoadingBlock /> : null}
@@ -589,16 +624,168 @@ export function SeparationHub() {
           { key: "emp", label: "Employee" },
           { key: "lwd", label: "Last working day" },
           { key: "status", label: "Status" },
+          { key: "fnf", label: "FNF" },
+          { key: "actions", label: "Actions" },
         ]}
         emptyTitle="No separations"
         emptyDescription="Exit requests will appear here when created."
-        rows={(data?.separation ?? []).map((row) => ({
-          __key: String(row.id),
-          doc: String(row.document_number ?? row.id),
-          emp: String(row.employee_id ?? "—").slice(0, 8),
-          lwd: String(row.last_working_date ?? row.relieving_date ?? "—"),
-          status: <HrStatusBadge status={String(row.status ?? "—")} />,
-        }))}
+        rows={(data?.separation ?? []).map((row) => {
+          const id = String(row.id);
+          const status = String(row.status ?? "").toLowerCase();
+          const fnfStatus = String(row.fnf_status ?? "pending").toLowerCase();
+          const busy = actingId === id;
+          const canFnf =
+            (status === "hr_approved" || status === "manager_approved") &&
+            (fnfStatus === "pending" || fnfStatus === "prepared");
+          const canSettle = fnfStatus === "calculated" || fnfStatus === "prepared";
+          const canComplete =
+            status === "hr_approved" &&
+            (fnfStatus === "calculated" || fnfStatus === "settled" || fnfStatus === "waived");
+          return {
+            __key: id,
+            doc: String(row.document_number ?? row.id),
+            emp: String(row.employee_id ?? "—").slice(0, 8),
+            lwd: String(
+              row.approved_last_working_date ??
+                row.requested_last_working_date ??
+                row.last_working_date ??
+                row.relieving_date ??
+                "—",
+            ),
+            status: <HrStatusBadge status={String(row.status ?? "—")} />,
+            fnf: <HrStatusBadge status={fnfStatus} />,
+            actions: (
+              <div className="flex flex-wrap gap-1">
+                {status === "draft" ? (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-7 cursor-pointer px-2 text-[0.75rem]"
+                    disabled={busy}
+                    onClick={() => void runAction(id, "submit", {}, "Submitted")}
+                  >
+                    Submit
+                  </Button>
+                ) : null}
+                {status === "submitted" ? (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-7 cursor-pointer px-2 text-[0.75rem]"
+                    disabled={busy}
+                    onClick={() =>
+                      void runAction(id, "approve", { stage: "manager" }, "Manager approved")
+                    }
+                  >
+                    Manager Approve
+                  </Button>
+                ) : null}
+                {status === "manager_approved" ? (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-7 cursor-pointer px-2 text-[0.75rem]"
+                    disabled={busy}
+                    onClick={() => void runAction(id, "approve", { stage: "hr" }, "HR approved")}
+                  >
+                    HR Approve
+                  </Button>
+                ) : null}
+                {canFnf ? (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-7 cursor-pointer px-2 text-[0.75rem]"
+                    disabled={busy}
+                    onClick={() => void runAction(id, "fnf/prepare", {}, "FNF prepared")}
+                  >
+                    Prepare FNF
+                  </Button>
+                ) : null}
+                {canSettle ? (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-7 cursor-pointer px-2 text-[0.75rem]"
+                    disabled={busy}
+                    onClick={() => void runAction(id, "fnf/settle", {}, "FNF settled")}
+                  >
+                    Settle FNF
+                  </Button>
+                ) : null}
+                {canComplete ? (
+                  <Button
+                    size="sm"
+                    className="h-7 cursor-pointer px-2 text-[0.75rem]"
+                    disabled={busy}
+                    onClick={() => void runAction(id, "complete", {}, "Completed")}
+                  >
+                    Complete
+                  </Button>
+                ) : null}
+                {status !== "draft" && status !== "completed" ? (
+                  <>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-7 cursor-pointer px-2 text-[0.75rem]"
+                      disabled={busy}
+                      onClick={() =>
+                        void runAction(
+                          id,
+                          "checklist",
+                          { item_key: "assets", done: true },
+                          "Assets cleared",
+                        )
+                      }
+                    >
+                      Clear assets
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-7 cursor-pointer px-2 text-[0.75rem]"
+                      disabled={busy}
+                      onClick={() =>
+                        void runAction(
+                          id,
+                          "checklist",
+                          { item_key: "it", done: true },
+                          "IT cleared",
+                        )
+                      }
+                    >
+                      Clear IT
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-7 cursor-pointer px-2 text-[0.75rem]"
+                      disabled={busy}
+                      onClick={() =>
+                        void runAction(
+                          id,
+                          "exit-interview",
+                          {
+                            answers: {
+                              reason: "career_growth",
+                              recommend: "yes",
+                              comments: "Recorded via Separation Hub",
+                            },
+                            interviewer_notes: "Quick capture from hub",
+                          },
+                          "Exit interview saved",
+                        )
+                      }
+                    >
+                      Exit interview
+                    </Button>
+                  </>
+                ) : null}
+              </div>
+            ),
+          };
+        })}
       />
     </div>
   );
@@ -606,13 +793,20 @@ export function SeparationHub() {
 
 export function ReportsHub() {
   const { data, loading, load, authBlocked } = useHrData();
+  const [exporting, setExporting] = useState<string | null>(null);
   const kpis = useMemo(() => {
     const profiles = data?.profiles ?? [];
+    const employment = data?.employment ?? [];
     const leave = data?.leaveRequests ?? [];
     const attendance = data?.attendance ?? [];
+    const headcount = profiles.length > 0 ? profiles.length : employment.length;
+    const active =
+      profiles.length > 0
+        ? countByStatus(profiles, ["active"])
+        : countByStatus(employment, ["active", "confirmed", "probation"]);
     return [
-      { label: "Headcount", value: profiles.length },
-      { label: "Active employees", value: countByStatus(profiles, ["active"]) },
+      { label: "Headcount", value: headcount },
+      { label: "Active employees", value: active },
       {
         label: "Pending leave",
         value: countByStatus(leave, ["draft", "submitted"]),
@@ -631,17 +825,65 @@ export function ReportsHub() {
     ];
   }, [data]);
 
+  const reportTypes = [
+    { type: "attendance", label: "Attendance" },
+    { type: "leave", label: "Leave" },
+    { type: "headcount", label: "Headcount" },
+    { type: "late", label: "Late coming" },
+    { type: "overtime", label: "Overtime" },
+    { type: "probation", label: "Probation" },
+    { type: "joining", label: "Joining" },
+    { type: "exit", label: "Exit / Attrition" },
+  ] as const;
+
+  async function exportCsv(reportType: string) {
+    setExporting(reportType);
+    try {
+      await downloadApiFile(
+        "/hr/reports/export",
+        { report_type: reportType, fmt: "csv" },
+        `${reportType}.csv`,
+      );
+      toast(`Downloaded ${reportType} CSV`);
+    } catch (e) {
+      toast(e instanceof ApiClientError ? e.message : "Export failed", "error");
+    } finally {
+      setExporting(null);
+    }
+  }
+
   return (
     <div className="space-y-5">
       <PageHeader
         title="HR reports & KPIs"
-        description="Workforce health snapshot derived from live HR lists."
+        description="Workforce health snapshot and CSV exports from live HR data."
         actions={<HrToolbar onRefresh={() => void load()} loading={loading} />}
       />
       {authBlocked ? <HrAuthBanner /> : null}
       {loading && !data ? <HrLoadingBlock /> : null}
       <HrKpiGrid items={kpis.map((k) => ({ ...k, value: k.value }))} />
-      {!loading && data && data.profiles.length === 0 ? (
+      <HrSection title="Exports" description="Download Excel-friendly CSV (UTF-8 BOM).">
+        <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+          {reportTypes.map((r) => (
+            <div
+              key={r.type}
+              className="flex items-center justify-between gap-2 border border-border px-3 py-2"
+            >
+              <span className="text-[0.85rem] font-medium">{r.label}</span>
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-7 cursor-pointer px-2.5 text-[0.75rem]"
+                disabled={exporting !== null}
+                onClick={() => void exportCsv(r.type)}
+              >
+                {exporting === r.type ? "…" : "Download CSV"}
+              </Button>
+            </div>
+          ))}
+        </div>
+      </HrSection>
+      {!loading && data && data.profiles.length === 0 && data.employment.length === 0 ? (
         <HrEmptyState
           title="No KPI source data yet"
           description="Seed HR demo rows or create profiles, leave, and attendance to populate reports."

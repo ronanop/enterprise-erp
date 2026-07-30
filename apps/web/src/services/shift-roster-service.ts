@@ -103,7 +103,7 @@ export type ShiftRosterDirectory = {
 };
 
 export async function loadShiftRosterDirectory(): Promise<ShiftRosterDirectory> {
-  const [shiftRes, assignRes, holidayRes, empDir, branches] = await Promise.all([
+  const [shiftRes, assignRes, holidayRes, empDir, branches, weeklyOffRes] = await Promise.all([
     resourceService.list("/hr/shifts").catch(() => ({ data: [] })),
     resourceService.list("/hr/shift-assignments").catch(() => ({ data: [] })),
     resourceService.list("/hr/holiday-calendars").catch(() => ({ data: [] })),
@@ -113,6 +113,7 @@ export async function loadShiftRosterDirectory(): Promise<ShiftRosterDirectory> 
       errors: [],
     })),
     resourceService.list("/branches").catch(() => ({ data: [] })),
+    resourceService.list("/hr/weekly-off-policies").catch(() => ({ data: [] })),
   ]);
 
   const shiftRows = (Array.isArray(shiftRes.data) ? shiftRes.data : []) as HrRow[];
@@ -188,13 +189,78 @@ export async function loadShiftRosterDirectory(): Promise<ShiftRosterDirectory> 
     }
   }
 
+  const weeklyOffRows = (Array.isArray(weeklyOffRes.data) ? weeklyOffRes.data : []) as HrRow[];
+  const activePolicy =
+    weeklyOffRows.find((p) => p.is_default && p.status === "active") ??
+    weeklyOffRows.find((p) => p.status === "active") ??
+    weeklyOffRows[0];
+  const apiRules = Array.isArray(activePolicy?.rules_json)
+    ? (activePolicy.rules_json as WeeklyOffRule[])
+    : null;
+  const weeklyOffRules = apiRules?.length
+    ? apiRules
+    : readJson<WeeklyOffRule[]>(WEEKLY_OFF_KEY, ["sunday"]);
+
+  const [rotApi, swapApi] = await Promise.all([
+    resourceService.list("/hr/shift-rotations", { page_size: 200 }).catch(() => ({ data: [] })),
+    resourceService.list("/hr/shift-swaps", { page_size: 200 }).catch(() => ({ data: [] })),
+  ]);
+  const apiRotations = (Array.isArray(rotApi.data) ? rotApi.data : []).map((r) => {
+    const row = r as HrRow;
+    let sequence: string[] = [];
+    let employeeIds: string[] = [];
+    try {
+      sequence = JSON.parse(String(row.sequence_json ?? "[]"));
+    } catch {
+      sequence = [];
+    }
+    try {
+      employeeIds = JSON.parse(String(row.employee_ids_json ?? "[]"));
+    } catch {
+      employeeIds = [];
+    }
+    return {
+      id: String(row.id),
+      name: String(row.rotation_name ?? ""),
+      code: String(row.rotation_code ?? ""),
+      cycle: String(row.cycle ?? "weekly") as ShiftRotation["cycle"],
+      sequence,
+      employeeIds,
+      effectiveFrom: String(row.effective_from ?? ""),
+      status: String(row.status ?? "active"),
+    } satisfies ShiftRotation;
+  });
+  const apiSwaps = (Array.isArray(swapApi.data) ? swapApi.data : []).map((r) => {
+    const row = r as HrRow;
+    const status = String(row.status ?? "draft");
+    const workflowStage =
+      status === "approved"
+        ? "approved"
+        : status === "rejected"
+          ? "rejected"
+          : status === "manager_approved" || status === "submitted"
+            ? "manager"
+            : "pending";
+    return {
+      id: String(row.id),
+      employeeId: String(row.employee_id ?? ""),
+      employeeName: String(row.employee_id ?? ""),
+      currentShiftId: String(row.current_shift_id ?? ""),
+      requestedShiftId: String(row.requested_shift_id ?? ""),
+      swapWithEmployeeId: String(row.swap_with_employee_id ?? ""),
+      reason: String(row.reason ?? ""),
+      workflowStage: workflowStage as ShiftSwapRequest["workflowStage"],
+      createdAt: String(row.created_at ?? new Date().toISOString()),
+    } satisfies ShiftSwapRequest;
+  });
+
   return {
     shifts,
     assignments,
-    rotations: readJson<ShiftRotation[]>(ROTATIONS_KEY, []),
-    swaps: readJson<ShiftSwapRequest[]>(SWAPS_KEY, []),
+    rotations: apiRotations.length ? apiRotations : readJson<ShiftRotation[]>(ROTATIONS_KEY, []),
+    swaps: apiSwaps.length ? apiSwaps : readJson<ShiftSwapRequest[]>(SWAPS_KEY, []),
     rosterCells: readJson<RosterCell[]>(ROSTER_KEY, []),
-    weeklyOffRules: readJson<WeeklyOffRule[]>(WEEKLY_OFF_KEY, ["sunday"]),
+    weeklyOffRules,
     holidays,
     options: {
       branches: branchRows.map((b) => ({
@@ -302,7 +368,28 @@ export async function assignShift(payload: AssignShiftPayload): Promise<void> {
   });
 }
 
-export function saveRotation(rotation: Omit<ShiftRotation, "id"> & { id?: string }): void {
+export async function saveRotation(rotation: Omit<ShiftRotation, "id"> & { id?: string }): Promise<void> {
+  const branchId =
+    readJson<{ branchId?: string }>("erp_ats_api_context_v1", {}).branchId ||
+    readJson<{ defaultBranchId?: string }>("erp_user_profile", {}).defaultBranchId;
+  if (branchId) {
+    try {
+      await resourceService.create("/hr/shift-rotations", {
+        branch_id: branchId,
+        rotation_code: rotation.code,
+        rotation_name: rotation.name,
+        cycle: rotation.cycle,
+        sequence: rotation.sequence,
+        employee_ids: rotation.employeeIds,
+        effective_from: rotation.effectiveFrom,
+        status: rotation.status || "active",
+      });
+      appendShiftAudit({ action: "rotation_saved", detail: rotation.name, actor: actor() });
+      return;
+    } catch (err) {
+      console.warn("Rotation API save failed; local cache kept", err);
+    }
+  }
   const all = readJson<ShiftRotation[]>(ROTATIONS_KEY, []);
   const item: ShiftRotation = {
     ...rotation,
@@ -315,7 +402,33 @@ export function saveRotation(rotation: Omit<ShiftRotation, "id"> & { id?: string
   appendShiftAudit({ action: "rotation_saved", detail: item.name, actor: actor() });
 }
 
-export function submitShiftSwap(req: Omit<ShiftSwapRequest, "id" | "createdAt" | "workflowStage">): void {
+export async function submitShiftSwap(
+  req: Omit<ShiftSwapRequest, "id" | "createdAt" | "workflowStage">,
+): Promise<void> {
+  const branchId =
+    readJson<{ branchId?: string }>("erp_ats_api_context_v1", {}).branchId ||
+    readJson<{ defaultBranchId?: string }>("erp_user_profile", {}).defaultBranchId;
+  const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  if (branchId && uuidRe.test(req.employeeId)) {
+    try {
+      const created = await resourceService.create<{ id?: string }>("/hr/shift-swaps", {
+        branch_id: branchId,
+        employee_id: req.employeeId,
+        swap_with_employee_id: uuidRe.test(req.swapWithEmployeeId) ? req.swapWithEmployeeId : null,
+        current_shift_id: uuidRe.test(req.currentShiftId) ? req.currentShiftId : null,
+        requested_shift_id: uuidRe.test(req.requestedShiftId) ? req.requestedShiftId : null,
+        swap_date: new Date().toISOString().slice(0, 10),
+        reason: req.reason,
+        status: "draft",
+      });
+      const id = created.data?.id;
+      if (id) await resourceService.action("/hr/shift-swaps", id, "submit");
+      appendShiftAudit({ action: "swap_requested", detail: req.reason, actor: actor() });
+      return;
+    } catch (err) {
+      console.warn("Shift swap API failed; local cache kept", err);
+    }
+  }
   const all = readJson<ShiftSwapRequest[]>(SWAPS_KEY, []);
   all.unshift({
     ...req,
@@ -327,7 +440,17 @@ export function submitShiftSwap(req: Omit<ShiftSwapRequest, "id" | "createdAt" |
   appendShiftAudit({ action: "swap_requested", detail: req.reason, actor: actor() });
 }
 
-export function approveSwap(id: string): void {
+export async function approveSwap(id: string): Promise<void> {
+  const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  if (uuidRe.test(id)) {
+    try {
+      await resourceService.action("/hr/shift-swaps", id, "approve");
+      appendShiftAudit({ action: "swap_approved", detail: id, actor: actor() });
+      return;
+    } catch (err) {
+      console.warn("Swap approve API failed; local cache kept", err);
+    }
+  }
   const all = readJson<ShiftSwapRequest[]>(SWAPS_KEY, []);
   const item = all.find((s) => s.id === id);
   if (item) item.workflowStage = "approved";
@@ -335,12 +458,34 @@ export function approveSwap(id: string): void {
   appendShiftAudit({ action: "swap_approved", detail: id, actor: actor() });
 }
 
-export function setRosterCell(cell: RosterCell): void {
+export async function setRosterCell(cell: RosterCell): Promise<void> {
   const all = readJson<RosterCell[]>(ROSTER_KEY, []);
   const idx = all.findIndex((c) => c.date === cell.date && c.employeeId === cell.employeeId);
   if (idx >= 0) all[idx] = cell;
   else all.push(cell);
   writeJson(ROSTER_KEY, all);
+
+  // Persist to API when employee/shift are UUIDs
+  const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  if (uuidRe.test(cell.employeeId) && cell.shiftId && uuidRe.test(cell.shiftId)) {
+    try {
+      const { resourceService } = await import("@/services/api-client");
+      const branchId =
+        readJson<{ branchId?: string }>("erp_ats_api_context_v1", {}).branchId ||
+        readJson<{ defaultBranchId?: string }>("erp_user_profile", {}).defaultBranchId;
+      await resourceService.create("/hr/roster-entries", {
+        branch_id: branchId,
+        employee_id: cell.employeeId,
+        shift_id: cell.shiftId,
+        roster_date: cell.date,
+        status: "published",
+        notes: cell.shiftName || null,
+      });
+    } catch (err) {
+      console.warn("Roster API save failed; local cell kept", err);
+    }
+  }
+
   appendShiftAudit({
     action: "roster_updated",
     detail: `${cell.employeeId} ${cell.date} → ${cell.shiftName}`,
@@ -348,8 +493,27 @@ export function setRosterCell(cell: RosterCell): void {
   });
 }
 
-export function saveWeeklyOffRules(rules: WeeklyOffRule[]): void {
+export async function saveWeeklyOffRules(rules: WeeklyOffRule[]): Promise<void> {
   writeJson(WEEKLY_OFF_KEY, rules);
+  try {
+    const { apiClient } = await import("@/services/api-client");
+    await apiClient("/hr/weekly-off-policies/rules", {
+      method: "PUT",
+      body: { rules_json: rules },
+    });
+  } catch {
+    try {
+      await resourceService.create("/hr/weekly-off-policies", {
+        policy_code: "WOFF-001",
+        policy_name: "Default Weekly Off",
+        rules_json: rules,
+        is_default: true,
+        status: "active",
+      });
+    } catch (err) {
+      console.warn("Weekly-off API save failed; kept local cache", err);
+    }
+  }
   appendShiftAudit({ action: "weekly_off_updated", detail: rules.join(", "), actor: actor() });
 }
 

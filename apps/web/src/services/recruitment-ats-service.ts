@@ -1,7 +1,8 @@
 /**
- * Enterprise ATS service — rich local store + merge recruitment API overview.
+ * Enterprise ATS service — API-first with local cache fallback.
  */
 
+import { resourceService } from "@/services/api-client";
 import { loadRecruitmentOverview, candidateDisplayName, asStatus } from "@/services/recruitment-service";
 import type {
   AtsAuditEntry,
@@ -141,9 +142,11 @@ export async function loadAtsDirectory(): Promise<AtsDirectory> {
     const overview = await loadRecruitmentOverview();
     apiPartial = overview.partial;
 
-    // Seed local store from API when empty (one-way enrich)
-    if (jobs.length === 0 && overview.requisitions.length) {
-      jobs = overview.requisitions.map((r, i) => ({
+    // Prefer API as SoR for lists when overview returns rows (local cache becomes mirror).
+    if (overview.requisitions.length) {
+      const localOnly = jobs.filter((j) => !j.apiId);
+      jobs = [
+        ...overview.requisitions.map((r, i) => ({
         id: String(r.id ?? crypto.randomUUID()),
         jobCode: String(r.document_number ?? `JOB-${String(i + 1).padStart(6, "0")}`),
         title: String(r.requisition_title ?? r.title ?? "Role"),
@@ -160,25 +163,29 @@ export async function loadAtsDirectory(): Promise<AtsDirectory> {
         salaryMax: Number(r.salary_band_max ?? 0),
         experienceMin: Number(r.min_experience_years ?? 0),
         experienceMax: Number(r.max_experience_years ?? 0),
-        skills: [],
+        skills: [] as string[],
         description: String(r.description ?? ""),
         deadline: String(r.target_hire_date ?? ""),
         priority: (String(r.priority ?? "medium").toLowerCase() as JobOpening["priority"]) || "medium",
         status:
           asStatus(r.status).includes("hold")
-            ? "on_hold"
+            ? ("on_hold" as const)
             : asStatus(r.status).includes("close") || asStatus(r.status).includes("filled")
-              ? "closed"
-              : "open",
+              ? ("closed" as const)
+              : ("open" as const),
         createdAt: nowIso(),
         updatedAt: nowIso(),
         apiId: String(r.id ?? ""),
-      }));
+      })),
+        ...localOnly,
+      ];
       saveJobs(jobs);
     }
 
-    if (candidates.length === 0 && overview.candidates.length) {
-      candidates = overview.candidates.map((c, i) => ({
+    if (overview.candidates.length) {
+      const localOnly = candidates.filter((c) => !c.apiId);
+      candidates = [
+        ...overview.candidates.map((c, i) => ({
         id: String(c.id ?? crypto.randomUUID()),
         candidateCode: String(c.candidate_code ?? `CAN-${String(i + 1).padStart(6, "0")}`),
         fullName: candidateDisplayName(c),
@@ -196,16 +203,18 @@ export async function loadAtsDirectory(): Promise<AtsDirectory> {
         resumeName: "",
         portfolioUrl: "",
         linkedinUrl: String(c.linkedin_url ?? ""),
-        source: "other",
+        source: "other" as const,
         recruiter: String(c.recruiter_name ?? ""),
         createdAt: nowIso(),
         updatedAt: nowIso(),
         apiId: String(c.id ?? ""),
-      }));
+      })),
+        ...localOnly,
+      ];
       saveCandidates(candidates);
     }
 
-    if (applications.length === 0 && overview.applications.length) {
+    if (overview.applications.length) {
       applications = overview.applications.map((a, i) => {
         const stageRaw = String(a.current_stage_code ?? a.status ?? "applied").toLowerCase();
         const stage =
@@ -232,7 +241,7 @@ export async function loadAtsDirectory(): Promise<AtsDirectory> {
       saveApps(applications);
     }
 
-    if (offers.length === 0 && overview.offers.length) {
+    if (overview.offers.length) {
       offers = overview.offers.map((o, i) => {
         const s = asStatus(o.status);
         const status: AtsOffer["status"] = s.includes("accept")
@@ -271,11 +280,11 @@ export async function loadAtsDirectory(): Promise<AtsDirectory> {
   ).sort();
 
   return {
-    jobs: loadJobs().length ? loadJobs() : jobs,
-    candidates: loadCandidates().length ? loadCandidates() : candidates,
-    applications: loadApps().length ? loadApps() : applications,
+    jobs,
+    candidates,
+    applications,
     interviews,
-    offers: loadOffers().length ? loadOffers() : offers,
+    offers,
     documents,
     departments,
     apiPartial,
@@ -325,7 +334,7 @@ export function computeAtsStats(dir: AtsDirectory) {
   };
 }
 
-export function createJob(input: CreateJobInput): JobOpening {
+export async function createJob(input: CreateJobInput): Promise<JobOpening> {
   const row: JobOpening = {
     ...input,
     id: crypto.randomUUID(),
@@ -334,34 +343,109 @@ export function createJob(input: CreateJobInput): JobOpening {
     createdAt: nowIso(),
     updatedAt: nowIso(),
   };
+
+  // Persist via Recruitment API when branch + hiring manager UUIDs are available on window context
+  try {
+    const ctx = readJson<{
+      branchId?: string;
+      departmentId?: string;
+      hiringManagerEmployeeId?: string;
+    }>("erp_ats_api_context_v1", {});
+    if (ctx.branchId && ctx.departmentId && ctx.hiringManagerEmployeeId) {
+      const res = await resourceService.create<Record<string, unknown>>("/recruitment/job-requisitions", {
+        branch_id: ctx.branchId,
+        requisition_title: input.title,
+        department_id: ctx.departmentId,
+        employment_type: input.employmentType || "permanent",
+        openings_count: input.positions || 1,
+        hiring_manager_employee_id: ctx.hiringManagerEmployeeId,
+        priority: input.priority || "medium",
+        min_experience_years: input.experienceMin,
+        max_experience_years: input.experienceMax,
+        salary_band_min: input.salaryMin,
+        salary_band_max: input.salaryMax,
+        currency_code: "INR",
+        job_description: input.description,
+        status: "draft",
+      });
+      const apiId = String(res.data?.id ?? "");
+      const doc = String(res.data?.document_number ?? row.jobCode);
+      if (apiId) {
+        row.apiId = apiId;
+        row.jobCode = doc;
+        row.id = apiId;
+      }
+    }
+  } catch (err) {
+    console.warn("ATS createJob API failed; keeping local cache", err);
+  }
+
   const all = loadJobs();
   all.unshift(row);
   saveJobs(all);
   appendAtsAudit({
     action: "create_job",
-    detail: `Created ${row.jobCode} — ${row.title}`,
+    detail: `Created ${row.jobCode} — ${row.title}${row.apiId ? " (API)" : " (local)"}`,
     actor: actor(),
     entityId: row.id,
   });
   return row;
 }
 
-export function updateJob(id: string, patch: Partial<JobOpening>): JobOpening | null {
+export async function updateJob(id: string, patch: Partial<JobOpening>): Promise<JobOpening | null> {
   const all = loadJobs();
   const idx = all.findIndex((j) => j.id === id);
   if (idx < 0) return null;
+  const prev = all[idx];
   all[idx] = { ...all[idx], ...patch, updatedAt: nowIso() };
+  const row = all[idx];
+
+  // Publish / open path: submit → approve requisition, then create+publish posting when apiId present
+  if (row.apiId && patch.status === "open" && prev.status !== "open") {
+    try {
+      const ctx = readJson<{ branchId?: string }>("erp_ats_api_context_v1", {});
+      await resourceService.action("/recruitment/job-requisitions", row.apiId, "submit", {});
+      await resourceService.action("/recruitment/job-requisitions", row.apiId, "approve", {});
+      if (ctx.branchId) {
+        const posting = await resourceService.create<Record<string, unknown>>("/recruitment/job-postings", {
+          branch_id: ctx.branchId,
+          job_requisition_id: row.apiId,
+          posting_title: row.title,
+          channel: "career_site",
+          status: "draft",
+        });
+        const postingId = String(posting.data?.id ?? "");
+        if (postingId) {
+          await resourceService.action("/recruitment/job-postings", postingId, "publish", {});
+        }
+      }
+      appendAtsAudit({
+        action: "publish_job",
+        detail: `Published ${row.jobCode} via API`,
+        actor: actor(),
+        entityId: id,
+      });
+    } catch (err) {
+      console.warn("ATS publishJob API failed; local status still updated", err);
+    }
+  }
+
   saveJobs(all);
   appendAtsAudit({
     action: "update_job",
-    detail: `Updated ${all[idx].jobCode}`,
+    detail: `Updated ${row.jobCode}`,
     actor: actor(),
     entityId: id,
   });
-  return all[idx];
+  return row;
 }
 
-export function createCandidate(input: CreateCandidateInput): AtsCandidate {
+/** Explicit publish helper used by ATS UI actions. */
+export async function publishJob(id: string): Promise<JobOpening | null> {
+  return updateJob(id, { status: "open" });
+}
+
+export async function createCandidate(input: CreateCandidateInput): Promise<AtsCandidate> {
   // Duplicate detection by email
   const existing = loadCandidates().find(
     (c) => c.email && input.email && c.email.toLowerCase() === input.email.toLowerCase(),
@@ -376,6 +460,10 @@ export function createCandidate(input: CreateCandidateInput): AtsCandidate {
     throw new Error(`Duplicate candidate: ${existing.candidateCode} already uses ${input.email}`);
   }
 
+  const nameParts = input.fullName.trim().split(/\s+/);
+  const firstName = nameParts[0] || input.fullName;
+  const lastName = nameParts.slice(1).join(" ") || "-";
+
   const row: AtsCandidate = {
     ...input,
     id: crypto.randomUUID(),
@@ -383,23 +471,47 @@ export function createCandidate(input: CreateCandidateInput): AtsCandidate {
     createdAt: nowIso(),
     updatedAt: nowIso(),
   };
+
+  try {
+    const res = await resourceService.create<Record<string, unknown>>("/recruitment/candidates", {
+      first_name: firstName,
+      last_name: lastName,
+      full_name: input.fullName,
+      email: input.email,
+      mobile: input.phone || null,
+      current_title: input.currentDesignation || null,
+      current_employer: input.currentCompany || null,
+      total_experience_years: input.experienceYears ?? null,
+      status: "prospect",
+    });
+    const apiId = String(res.data?.id ?? "");
+    const code = String(res.data?.candidate_code ?? row.candidateCode);
+    if (apiId) {
+      row.apiId = apiId;
+      row.id = apiId;
+      row.candidateCode = code;
+    }
+  } catch (err) {
+    console.warn("ATS createCandidate API failed; keeping local cache", err);
+  }
+
   const all = loadCandidates();
   all.unshift(row);
   saveCandidates(all);
   appendAtsAudit({
     action: "create_candidate",
-    detail: `Added ${row.candidateCode} — ${row.fullName}`,
+    detail: `Added ${row.candidateCode} — ${row.fullName}${row.apiId ? " (API)" : " (local)"}`,
     actor: actor(),
     entityId: row.id,
   });
   return row;
 }
 
-export function applyCandidateToJob(
+export async function applyCandidateToJob(
   candidateId: string,
   jobId: string,
   stage: PipelineStage = "applied",
-): PipelineApplication {
+): Promise<PipelineApplication> {
   const apps = loadApps();
   const dup = apps.find((a) => a.candidateId === candidateId && a.jobId === jobId && a.stage !== "rejected");
   if (dup) return dup;
@@ -414,6 +526,28 @@ export function applyCandidateToJob(
     notes: "",
     updatedAt: nowIso(),
   };
+
+  try {
+    const ctx = readJson<{ branchId?: string }>("erp_ats_api_context_v1", {});
+    const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+    if (ctx.branchId && uuidRe.test(candidateId) && uuidRe.test(jobId)) {
+      const res = await resourceService.create<Record<string, unknown>>("/recruitment/applications", {
+        branch_id: ctx.branchId,
+        candidate_id: candidateId,
+        job_requisition_id: jobId,
+        status: "applied",
+        current_stage_code: "applied",
+      });
+      const apiId = String(res.data?.id ?? "");
+      if (apiId) {
+        row.id = apiId;
+        row.applicationCode = String(res.data?.document_number ?? row.applicationCode);
+      }
+    }
+  } catch (err) {
+    console.warn("ATS applyCandidateToJob API failed; local cache kept", err);
+  }
+
   apps.unshift(row);
   saveApps(apps);
   appendAtsAudit({
@@ -425,10 +559,43 @@ export function applyCandidateToJob(
   return row;
 }
 
-export function moveApplicationStage(applicationId: string, stage: PipelineStage): PipelineApplication | null {
+const ATS_TO_API_STAGE: Record<PipelineStage, string> = {
+  applied: "applied",
+  resume_screening: "screening",
+  hr_screening: "screening",
+  technical_interview: "interview",
+  manager_interview: "interview",
+  final_interview: "interview",
+  offer: "offer",
+  hired: "hired",
+  rejected: "rejected",
+};
+
+export async function moveApplicationStage(
+  applicationId: string,
+  stage: PipelineStage,
+): Promise<PipelineApplication | null> {
   const apps = loadApps();
   const idx = apps.findIndex((a) => a.id === applicationId);
   if (idx < 0) return null;
+
+  try {
+    const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+    if (uuidRe.test(applicationId)) {
+      if (stage === "rejected") {
+        await resourceService.action("/recruitment/applications", applicationId, "reject", {
+          reason: "Rejected from ATS pipeline",
+        });
+      } else {
+        await resourceService.action("/recruitment/applications", applicationId, "advance", {
+          stage: ATS_TO_API_STAGE[stage] || stage,
+        });
+      }
+    }
+  } catch (err) {
+    console.warn("ATS moveApplicationStage API failed; local cache kept", err);
+  }
+
   apps[idx] = { ...apps[idx], stage, updatedAt: nowIso() };
   saveApps(apps);
 
@@ -454,11 +621,11 @@ export function moveApplicationStage(applicationId: string, stage: PipelineStage
   return apps[idx];
 }
 
-export function scheduleInterview(
+export async function scheduleInterview(
   input: Omit<AtsInterview, "id" | "interviewCode" | "createdAt" | "status"> & {
     status?: AtsInterview["status"];
   },
-): AtsInterview {
+): Promise<AtsInterview> {
   const row: AtsInterview = {
     ...input,
     id: crypto.randomUUID(),
@@ -466,6 +633,49 @@ export function scheduleInterview(
     status: input.status ?? "scheduled",
     createdAt: nowIso(),
   };
+
+  try {
+    const ctx = readJson<{
+      branchId?: string;
+      interviewerEmployeeId?: string;
+    }>("erp_ats_api_context_v1", {});
+    const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+    const interviewerId = ctx.interviewerEmployeeId;
+    if (
+      ctx.branchId &&
+      interviewerId &&
+      uuidRe.test(input.candidateId) &&
+      uuidRe.test(input.applicationId)
+    ) {
+      const scheduledAt = new Date(`${input.date}T${input.time || "10:00"}:00`).toISOString();
+      const typeMap: Record<string, string> = {
+        hr: "hr_round",
+        technical: "technical",
+        manager: "manager",
+        final: "final",
+      };
+      const res = await resourceService.create<Record<string, unknown>>("/recruitment/interviews", {
+        branch_id: ctx.branchId,
+        application_id: input.applicationId,
+        candidate_id: input.candidateId,
+        interview_type: typeMap[input.interviewType] || "other",
+        scheduled_at: scheduledAt,
+        duration_minutes: 60,
+        interviewer_employee_id: interviewerId,
+        location: input.location || null,
+        meeting_url: input.meetingLink || null,
+        status: "scheduled",
+      });
+      const apiId = String(res.data?.id ?? "");
+      if (apiId) {
+        row.id = apiId;
+        row.interviewCode = String(res.data?.document_number ?? row.interviewCode);
+      }
+    }
+  } catch (err) {
+    console.warn("ATS scheduleInterview API failed; local cache kept", err);
+  }
+
   const all = loadInterviews();
   all.unshift(row);
   saveInterviews(all);
@@ -478,26 +688,51 @@ export function scheduleInterview(
   return row;
 }
 
-export function updateInterview(id: string, patch: Partial<AtsInterview>): AtsInterview | null {
+export async function updateInterview(
+  id: string,
+  patch: Partial<AtsInterview>,
+): Promise<AtsInterview | null> {
   const all = loadInterviews();
   const idx = all.findIndex((i) => i.id === id);
   if (idx < 0) return null;
   all[idx] = { ...all[idx], ...patch };
+  const row = all[idx];
+
+  const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  if (uuidRe.test(id)) {
+    try {
+      const body: Record<string, unknown> = {};
+      if (patch.status) body.status = patch.status;
+      if (patch.meetingLink !== undefined) body.meeting_url = patch.meetingLink;
+      if (patch.location !== undefined) body.location = patch.location;
+      if (patch.date || patch.time) {
+        const d = patch.date || row.date;
+        const t = patch.time || row.time || "10:00";
+        body.scheduled_at = new Date(`${d}T${t}:00`).toISOString();
+      }
+      if (Object.keys(body).length) {
+        await resourceService.update("/recruitment/interviews", id, body);
+      }
+    } catch (err) {
+      console.warn("ATS updateInterview API failed; local cache kept", err);
+    }
+  }
+
   saveInterviews(all);
   appendAtsAudit({
     action: "update_interview",
-    detail: `Updated ${all[idx].interviewCode}`,
+    detail: `Updated ${row.interviewCode}`,
     actor: actor(),
     entityId: id,
   });
-  return all[idx];
+  return row;
 }
 
-export function generateOffer(
+export async function generateOffer(
   input: Omit<AtsOffer, "id" | "offerCode" | "createdAt" | "updatedAt" | "status"> & {
     status?: AtsOffer["status"];
   },
-): AtsOffer {
+): Promise<AtsOffer> {
   const row: AtsOffer = {
     ...input,
     id: crypto.randomUUID(),
@@ -506,13 +741,51 @@ export function generateOffer(
     createdAt: nowIso(),
     updatedAt: nowIso(),
   };
+
+  try {
+    const ctx = readJson<{
+      branchId?: string;
+      departmentId?: string;
+      jobRequisitionId?: string;
+    }>("erp_ats_api_context_v1", {});
+    const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+    if (
+      ctx.branchId &&
+      ctx.departmentId &&
+      ctx.jobRequisitionId &&
+      uuidRe.test(input.candidateId) &&
+      uuidRe.test(input.applicationId)
+    ) {
+      const res = await resourceService.create<Record<string, unknown>>("/recruitment/offers", {
+        branch_id: ctx.branchId,
+        application_id: input.applicationId,
+        candidate_id: input.candidateId,
+        job_requisition_id: ctx.jobRequisitionId,
+        department_id: ctx.departmentId,
+        offered_ctc: input.ctc,
+        offered_gross: input.ctc,
+        currency_code: "INR",
+        joining_date: input.joiningDate,
+        offer_valid_until: input.expiryDate || null,
+        employment_type: "permanent",
+        status: "draft",
+      });
+      const apiId = String(res.data?.id ?? "");
+      if (apiId) {
+        row.id = apiId;
+        row.offerCode = String(res.data?.document_number ?? row.offerCode);
+      }
+    }
+  } catch (err) {
+    console.warn("ATS generateOffer API failed; local cache kept", err);
+  }
+
   const all = loadOffers();
   all.unshift(row);
   saveOffers(all);
 
-  // Move pipeline to offer if linked
-  if (row.applicationId) {
-    moveApplicationStage(row.applicationId, "offer");
+    if (row.applicationId) {
+    void moveApplicationStage(row.applicationId, "offer");
   }
 
   appendAtsAudit({
@@ -524,17 +797,40 @@ export function generateOffer(
   return row;
 }
 
-export function updateOfferStatus(id: string, status: AtsOffer["status"]): AtsOffer | null {
+export async function updateOfferStatus(id: string, status: AtsOffer["status"]): Promise<AtsOffer | null> {
   const all = loadOffers();
   const idx = all.findIndex((o) => o.id === id);
   if (idx < 0) return null;
+
+  try {
+    const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+    if (uuidRe.test(id)) {
+      if (status === "sent") {
+        // Advance draft → submitted → approved → sent when possible.
+        for (const action of ["submit", "approve", "send"] as const) {
+          try {
+            await resourceService.action("/recruitment/offers", id, action);
+          } catch {
+            /* already past that step or local-only */
+          }
+        }
+      } else if (status === "accepted") {
+        await resourceService.action("/recruitment/offers", id, "accept");
+      } else if (status === "rejected") {
+        await resourceService.action("/recruitment/offers", id, "reject");
+      }
+    }
+  } catch (err) {
+    console.warn("ATS updateOfferStatus API failed; local cache kept", err);
+  }
+
   all[idx] = { ...all[idx], status, updatedAt: nowIso() };
   saveOffers(all);
   if (status === "accepted" && all[idx].applicationId) {
-    moveApplicationStage(all[idx].applicationId, "hired");
+    void moveApplicationStage(all[idx].applicationId, "hired");
   }
   if (status === "rejected" && all[idx].applicationId) {
-    moveApplicationStage(all[idx].applicationId, "rejected");
+    void moveApplicationStage(all[idx].applicationId, "rejected");
   }
   appendAtsAudit({
     action: "offer_status",
@@ -629,7 +925,7 @@ export function downloadTextFile(filename: string, content: string): void {
   URL.revokeObjectURL(url);
 }
 
-export function importCandidatesCsv(text: string): { created: number; errors: string[] } {
+export async function importCandidatesCsv(text: string): Promise<{ created: number; errors: string[] }> {
   const lines = text.trim().split(/\r?\n/).slice(1);
   let created = 0;
   const errors: string[] = [];
@@ -642,7 +938,7 @@ export function importCandidatesCsv(text: string): { created: number; errors: st
       continue;
     }
     try {
-      const cand = createCandidate({
+      const cand = await createCandidate({
         fullName: name,
         email: email || `${name.replace(/\s+/g, ".").toLowerCase()}@example.com`,
         phone: phone || "",
@@ -661,10 +957,10 @@ export function importCandidatesCsv(text: string): { created: number; errors: st
         source: (source as AtsCandidate["source"]) || "other",
         recruiter: actor(),
       });
-      created += 1;
       void cand;
+      created += 1;
     } catch (e) {
-      errors.push(e instanceof Error ? e.message : "Import failed");
+      errors.push(e instanceof Error ? e.message : "import failed");
     }
   }
   return { created, errors };

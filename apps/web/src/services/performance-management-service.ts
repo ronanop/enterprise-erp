@@ -4,6 +4,7 @@
 
 import { loadHrOverview } from "@/services/hr-service";
 import { loadHrMasterDirectory, type HrMasterOption } from "@/services/hr-master-connector";
+import { resourceService } from "@/services/api-client";
 import type {
   AppraisalRecord,
   ContinuousFeedback,
@@ -33,6 +34,24 @@ const KEYS = {
   audit: "erp_pms_audit_v1",
   seq: "erp_pms_seq_v1",
 } as const;
+
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+function readBranchId(): string | undefined {
+  if (typeof window === "undefined") return undefined;
+  for (const key of ["erp_org_context_v1", "erp_ats_api_context_v1", "erp_pay_api_context_v1"]) {
+    try {
+      const raw = localStorage.getItem(key);
+      if (!raw) continue;
+      const parsed = JSON.parse(raw) as { branchId?: string };
+      if (parsed.branchId && UUID_RE.test(parsed.branchId)) return parsed.branchId;
+    } catch {
+      /* ignore */
+    }
+  }
+  return undefined;
+}
 
 type Seq = { goal: number; review: number; appraisal: number };
 
@@ -139,35 +158,41 @@ export async function loadPerformanceDirectory(): Promise<PerformanceDirectory> 
         }
       }
     }
-    if (goals.length === 0 && overview.goals.length) {
-      goals = overview.goals.map((g, i) => ({
+    if (overview.goals.length) {
+      const localOnly = goals.filter((g) => !UUID_RE.test(g.id));
+      goals = [
+        ...overview.goals.map((g, i) => ({
         id: String(g.id ?? crypto.randomUUID()),
         goalCode: String(g.document_number ?? g.goal_code ?? `GOL-${String(i + 1).padStart(6, "0")}`),
         title: String(g.goal_title ?? g.title ?? "Goal"),
         description: String(g.description ?? ""),
-        goalType: "individual",
-        category: "kpi",
+        goalType: "individual" as const,
+        category: "kpi" as const,
         employeeName: String(g.employee_name ?? g.employee_id ?? "Employee"),
         assignedBy: actor(),
         department: String(g.department_name ?? "—"),
-        priority: "medium",
+        priority: "medium" as const,
         weightage: Number(g.weightage ?? 10),
         targetValue: Number(g.target_value ?? 100),
         currentProgress: Number(g.progress_pct ?? g.current_value ?? 0),
         startDate: String(g.start_date ?? "").slice(0, 10),
         dueDate: String(g.due_date ?? g.end_date ?? "").slice(0, 10),
         status: String(g.status ?? "in_progress").toLowerCase().includes("complete")
-          ? "completed"
+          ? ("completed" as const)
           : String(g.status ?? "").toLowerCase().includes("draft")
-            ? "draft"
-            : "in_progress",
+            ? ("draft" as const)
+            : ("in_progress" as const),
         createdAt: nowIso(),
         updatedAt: nowIso(),
-      }));
+      })),
+        ...localOnly,
+      ];
       save(KEYS.goals, goals);
     }
-    if (reviews.length === 0 && overview.reviews.length) {
-      reviews = overview.reviews.map((r, i) => ({
+    if (overview.reviews.length) {
+      const localOnly = reviews.filter((r) => !UUID_RE.test(r.id));
+      reviews = [
+        ...overview.reviews.map((r, i) => ({
         id: String(r.id ?? crypto.randomUUID()),
         reviewCode: String(r.document_number ?? `REV-${String(i + 1).padStart(6, "0")}`),
         cycleId: "",
@@ -180,20 +205,24 @@ export async function loadPerformanceDirectory(): Promise<PerformanceDirectory> 
         peerReview: "",
         finalComments: "",
         overallRating: Number(r.overall_rating ?? 0),
-        recommendation: "none",
+        recommendation: "none" as const,
         status: String(r.status ?? "draft").toLowerCase().includes("approv")
-          ? "completed"
+          ? ("completed" as const)
           : String(r.status ?? "").toLowerCase().includes("submit")
-            ? "manager_pending"
-            : "draft",
+            ? ("manager_pending" as const)
+            : ("draft" as const),
         attachmentName: "",
         createdAt: nowIso(),
         updatedAt: nowIso(),
-      }));
+      })),
+        ...localOnly,
+      ];
       save(KEYS.reviews, reviews);
     }
-    if (appraisals.length === 0 && overview.appraisals.length) {
-      appraisals = overview.appraisals.map((a, i) => ({
+    if (overview.appraisals.length) {
+      const localOnly = appraisals.filter((a) => !UUID_RE.test(a.id));
+      appraisals = [
+        ...overview.appraisals.map((a, i) => ({
         id: String(a.id ?? crypto.randomUUID()),
         appraisalCode: String(a.document_number ?? `APR-${String(i + 1).padStart(6, "0")}`),
         employeeName: String(a.employee_name ?? a.employee_id ?? "Employee"),
@@ -202,12 +231,75 @@ export async function loadPerformanceDirectory(): Promise<PerformanceDirectory> 
         promotionRecommendation: "",
         bonusRecommendation: "",
         trainingRecommendation: "",
-        workflowStage: String(a.status ?? "").toLowerCase().includes("approv") ? "approved" : "manager",
+        workflowStage: String(a.status ?? "").toLowerCase().includes("approv")
+          ? ("approved" as const)
+          : ("manager" as const),
         overallRating: Number(a.overall_rating ?? 0),
         createdAt: nowIso(),
         updatedAt: nowIso(),
-      }));
+      })),
+        ...localOnly,
+      ];
       save(KEYS.appraisals, appraisals);
+    }
+  } catch {
+    /* offline */
+  }
+
+  let kpis = load<KpiDefinition>(KEYS.kpis);
+  let okrs = load<OkrObjective>(KEYS.okrs);
+  try {
+    const [kpiRes, okrRes] = await Promise.all([
+      resourceService.list("/hr/kpis", { page_size: 200 }).catch(() => ({ data: [] })),
+      resourceService.list("/hr/okrs", { page_size: 200 }).catch(() => ({ data: [] })),
+    ]);
+    const kpiRows = (Array.isArray(kpiRes.data) ? kpiRes.data : []) as Record<string, unknown>[];
+    if (kpiRows.length) {
+      const localOnly = kpis.filter((k) => !UUID_RE.test(k.id));
+      kpis = [
+        ...kpiRows.map((k) => ({
+          id: String(k.id),
+          name: String(k.name ?? ""),
+          department: String(k.department ?? ""),
+          designation: String(k.designation ?? ""),
+          weightage: Number(k.weightage ?? 0),
+          target: Number(k.target ?? 0),
+          measureType: (String(k.measure_type ?? "number") === "percentage"
+            ? "percentage"
+            : String(k.measure_type ?? "") === "currency"
+              ? "currency"
+              : "number") as KpiDefinition["measureType"],
+          ratingScale: Number(k.rating_scale ?? 5),
+          createdAt: String(k.created_at ?? nowIso()),
+        })),
+        ...localOnly,
+      ];
+      save(KEYS.kpis, kpis);
+    }
+    const okrRows = (Array.isArray(okrRes.data) ? okrRes.data : []) as Record<string, unknown>[];
+    if (okrRows.length) {
+      const localOnly = okrs.filter((o) => !UUID_RE.test(o.id));
+      okrs = [
+        ...okrRows.map((o) => ({
+          id: String(o.id),
+          title: String(o.title ?? ""),
+          owner: String(o.owner ?? ""),
+          department: String(o.department ?? ""),
+          weightage: Number(o.weightage ?? 0),
+          progressPct: Number(o.progress_pct ?? 0),
+          keyResults: (Array.isArray(o.key_results) ? o.key_results : []).map(
+            (kr: Record<string, unknown>) => ({
+              id: String(kr.id ?? crypto.randomUUID()),
+              title: String(kr.title ?? ""),
+              progressPct: Number(kr.progress_pct ?? 0),
+              weightage: Number(kr.weightage ?? 1),
+            }),
+          ),
+          createdAt: String(o.created_at ?? nowIso()),
+        })),
+        ...localOnly,
+      ];
+      save(KEYS.okrs, okrs);
     }
   } catch {
     /* offline */
@@ -217,30 +309,29 @@ export async function loadPerformanceDirectory(): Promise<PerformanceDirectory> 
     new Set(
       [
         ...departments,
-        ...load<PerformanceGoal>(KEYS.goals).map((g) => g.department),
-        ...load<KpiDefinition>(KEYS.kpis).map((k) => k.department),
+        ...goals.map((g) => g.department),
+        ...kpis.map((k) => k.department),
       ].filter((d) => d && d !== "—"),
     ),
   ).sort();
 
   return {
-    goals: load(KEYS.goals),
-    kpis: load(KEYS.kpis),
-    okrs: load(KEYS.okrs),
+    goals,
+    kpis,
+    okrs,
     cycles: load(KEYS.cycles),
-    reviews: load(KEYS.reviews),
+    reviews,
     feedback: load(KEYS.feedback),
     meetings: load(KEYS.meetings),
     probation: load(KEYS.probation),
     pips: load(KEYS.pips),
-    appraisals: load(KEYS.appraisals),
+    appraisals,
     departments: goalDepts,
     employees,
   };
 }
 
 export function computePerformanceStats(dir: PerformanceDirectory) {
-  const today = nowIso().slice(0, 10);
   const upcoming = dir.reviews.filter(
     (r) => !["completed", "cancelled"].includes(r.status),
   ).length;
@@ -258,9 +349,9 @@ export function computePerformanceStats(dir: PerformanceDirectory) {
   };
 }
 
-export function createGoal(
+export async function createGoal(
   input: Omit<PerformanceGoal, "id" | "goalCode" | "createdAt" | "updatedAt">,
-): PerformanceGoal {
+): Promise<PerformanceGoal> {
   const row: PerformanceGoal = {
     ...input,
     id: crypto.randomUUID(),
@@ -268,6 +359,80 @@ export function createGoal(
     createdAt: nowIso(),
     updatedAt: nowIso(),
   };
+  try {
+    const branchId = readBranchId();
+    const employeeId = input.employeeId && UUID_RE.test(input.employeeId) ? input.employeeId : undefined;
+    let reviewId =
+      input.performanceReviewId && UUID_RE.test(input.performanceReviewId)
+        ? input.performanceReviewId
+        : load<PerformanceReview>(KEYS.reviews).find(
+            (r) => UUID_RE.test(r.id) && (!employeeId || r.employeeId === employeeId),
+          )?.id;
+
+    if (branchId && employeeId && !reviewId) {
+      const today = nowIso().slice(0, 10);
+      const yearStart = `${today.slice(0, 4)}-01-01`;
+      const yearEnd = `${today.slice(0, 4)}-12-31`;
+      const reviewRes = await resourceService.create<Record<string, unknown>>("/hr/performance-reviews", {
+        branch_id: branchId,
+        employee_id: employeeId,
+        reviewer_employee_id: employeeId,
+        review_cycle: "Goal cycle",
+        period_start: input.startDate || yearStart,
+        period_end: input.dueDate || yearEnd,
+      });
+      reviewId = String(reviewRes.data?.id ?? "");
+      if (reviewId) {
+        const reviewRow: PerformanceReview = {
+          id: reviewId,
+          reviewCode: String(reviewRes.data?.document_number ?? nextCode("review", "REV")),
+          cycleId: "",
+          employeeId,
+          employeeName: input.employeeName,
+          managerName: input.assignedBy,
+          reviewerEmployeeId: employeeId,
+          reviewerName: input.assignedBy,
+          hrName: "HR",
+          selfAssessment: "",
+          managerAssessment: "",
+          peerReview: "",
+          finalComments: "",
+          overallRating: 0,
+          recommendation: "none",
+          status: "draft",
+          attachmentName: "",
+          createdAt: nowIso(),
+          updatedAt: nowIso(),
+        };
+        const reviews = load<PerformanceReview>(KEYS.reviews);
+        reviews.unshift(reviewRow);
+        save(KEYS.reviews, reviews);
+      }
+    }
+
+    if (reviewId && UUID_RE.test(reviewId)) {
+      const seq = load<PerformanceGoal>(KEYS.goals).filter((g) => g.performanceReviewId === reviewId).length + 1;
+      const res = await resourceService.create<Record<string, unknown>>("/hr/goals", {
+        performance_review_id: reviewId,
+        employee_id: employeeId || null,
+        sequence_no: seq,
+        goal_title: input.title,
+        goal_description: input.description || null,
+        target_value: input.targetValue,
+        actual_value: input.currentProgress,
+        weight_percent: input.weightage,
+      });
+      const apiId = String(res.data?.id ?? "");
+      if (apiId) {
+        row.id = apiId;
+        row.performanceReviewId = reviewId;
+        row.employeeId = employeeId;
+        row.goalCode = String(res.data?.document_number ?? row.goalCode);
+      }
+    }
+  } catch (err) {
+    console.warn("createGoal API failed; local cache kept", err);
+  }
   const all = load<PerformanceGoal>(KEYS.goals);
   all.unshift(row);
   save(KEYS.goals, all);
@@ -294,8 +459,39 @@ export function updateGoalProgress(id: string, progress: number, status?: Perfor
   return all[idx];
 }
 
-export function createKpi(input: Omit<KpiDefinition, "id" | "createdAt">): KpiDefinition {
+export async function createKpi(
+  input: Omit<KpiDefinition, "id" | "createdAt">,
+): Promise<KpiDefinition> {
   const row: KpiDefinition = { ...input, id: crypto.randomUUID(), createdAt: nowIso() };
+  try {
+    const branchId = readBranchId();
+    if (branchId) {
+      const measure =
+        input.measureType === "percentage"
+          ? "percentage"
+          : input.measureType === "currency"
+            ? "currency"
+            : "number";
+      const res = await resourceService.create<Record<string, unknown>>("/hr/kpis", {
+        branch_id: branchId,
+        name: input.name,
+        department: input.department || "",
+        designation: input.designation || null,
+        weightage: input.weightage,
+        target: input.target,
+        measure_type: measure,
+        rating_scale: input.ratingScale || 5,
+        status: "active",
+      });
+      const apiId = String(res.data?.id ?? "");
+      if (apiId) {
+        row.id = apiId;
+        row.createdAt = String(res.data?.created_at ?? row.createdAt);
+      }
+    }
+  } catch (err) {
+    console.warn("createKpi API failed; local cache kept", err);
+  }
   const all = load<KpiDefinition>(KEYS.kpis);
   all.unshift(row);
   save(KEYS.kpis, all);
@@ -303,7 +499,9 @@ export function createKpi(input: Omit<KpiDefinition, "id" | "createdAt">): KpiDe
   return row;
 }
 
-export function createOkr(input: Omit<OkrObjective, "id" | "createdAt" | "progressPct">): OkrObjective {
+export async function createOkr(
+  input: Omit<OkrObjective, "id" | "createdAt" | "progressPct">,
+): Promise<OkrObjective> {
   const progress =
     input.keyResults.length === 0
       ? 0
@@ -317,6 +515,42 @@ export function createOkr(input: Omit<OkrObjective, "id" | "createdAt" | "progre
     progressPct: progress,
     createdAt: nowIso(),
   };
+  try {
+    const branchId = readBranchId();
+    if (branchId) {
+      const res = await resourceService.create<Record<string, unknown>>("/hr/okrs", {
+        branch_id: branchId,
+        title: input.title,
+        owner: input.owner || "",
+        department: input.department || "",
+        weightage: input.weightage,
+        status: "active",
+        key_results: input.keyResults.map((kr, i) => ({
+          title: kr.title,
+          progress_pct: kr.progressPct,
+          weightage: kr.weightage || 1,
+          sequence_no: i + 1,
+        })),
+      });
+      const apiId = String(res.data?.id ?? "");
+      if (apiId) {
+        row.id = apiId;
+        row.progressPct = Number(res.data?.progress_pct ?? progress);
+        const apiKrs = Array.isArray(res.data?.key_results) ? res.data.key_results : [];
+        if (apiKrs.length) {
+          row.keyResults = apiKrs.map((kr: Record<string, unknown>) => ({
+            id: String(kr.id ?? crypto.randomUUID()),
+            title: String(kr.title ?? ""),
+            progressPct: Number(kr.progress_pct ?? 0),
+            weightage: Number(kr.weightage ?? 1),
+          }));
+        }
+        row.createdAt = String(res.data?.created_at ?? row.createdAt);
+      }
+    }
+  } catch (err) {
+    console.warn("createOkr API failed; local cache kept", err);
+  }
   const all = load<OkrObjective>(KEYS.okrs);
   all.unshift(row);
   save(KEYS.okrs, all);
@@ -333,9 +567,9 @@ export function createCycle(input: Omit<ReviewCycle, "id" | "createdAt">): Revie
   return row;
 }
 
-export function createReview(
+export async function createReview(
   input: Omit<PerformanceReview, "id" | "reviewCode" | "createdAt" | "updatedAt">,
-): PerformanceReview {
+): Promise<PerformanceReview> {
   const row: PerformanceReview = {
     ...input,
     id: crypto.randomUUID(),
@@ -343,6 +577,38 @@ export function createReview(
     createdAt: nowIso(),
     updatedAt: nowIso(),
   };
+  try {
+    const branchId = readBranchId();
+    const employeeId = input.employeeId && UUID_RE.test(input.employeeId) ? input.employeeId : undefined;
+    const reviewerId =
+      input.reviewerEmployeeId && UUID_RE.test(input.reviewerEmployeeId)
+        ? input.reviewerEmployeeId
+        : employeeId;
+    if (branchId && employeeId && reviewerId) {
+      const today = nowIso().slice(0, 10);
+      const yearStart = `${today.slice(0, 4)}-01-01`;
+      const yearEnd = `${today.slice(0, 4)}-12-31`;
+      const cycle = load<ReviewCycle>(KEYS.cycles).find((c) => c.id === input.cycleId);
+      const res = await resourceService.create<Record<string, unknown>>("/hr/performance-reviews", {
+        branch_id: branchId,
+        employee_id: employeeId,
+        reviewer_employee_id: reviewerId,
+        review_cycle: cycle?.name || "Annual",
+        period_start: cycle?.startDate || yearStart,
+        period_end: cycle?.endDate || yearEnd,
+        overall_rating: input.overallRating || null,
+      });
+      const apiId = String(res.data?.id ?? "");
+      if (apiId) {
+        row.id = apiId;
+        row.employeeId = employeeId;
+        row.reviewerEmployeeId = reviewerId;
+        row.reviewCode = String(res.data?.document_number ?? row.reviewCode);
+      }
+    }
+  } catch (err) {
+    console.warn("createReview API failed; local cache kept", err);
+  }
   const all = load<PerformanceReview>(KEYS.reviews);
   all.unshift(row);
   save(KEYS.reviews, all);
@@ -423,9 +689,9 @@ export function startPip(input: Omit<PipPlan, "id" | "createdAt">): PipPlan {
   return row;
 }
 
-export function createAppraisal(
+export async function createAppraisal(
   input: Omit<AppraisalRecord, "id" | "appraisalCode" | "createdAt" | "updatedAt">,
-): AppraisalRecord {
+): Promise<AppraisalRecord> {
   const row: AppraisalRecord = {
     ...input,
     id: crypto.randomUUID(),
@@ -433,6 +699,83 @@ export function createAppraisal(
     createdAt: nowIso(),
     updatedAt: nowIso(),
   };
+  try {
+    const branchId = readBranchId();
+    const employeeId = input.employeeId && UUID_RE.test(input.employeeId) ? input.employeeId : undefined;
+    let reviewId =
+      input.performanceReviewId && UUID_RE.test(input.performanceReviewId)
+        ? input.performanceReviewId
+        : load<PerformanceReview>(KEYS.reviews).find(
+            (r) => UUID_RE.test(r.id) && (!employeeId || r.employeeId === employeeId),
+          )?.id;
+
+    if (branchId && employeeId && !reviewId) {
+      const today = nowIso().slice(0, 10);
+      const yearStart = `${today.slice(0, 4)}-01-01`;
+      const yearEnd = `${today.slice(0, 4)}-12-31`;
+      const reviewRes = await resourceService.create<Record<string, unknown>>("/hr/performance-reviews", {
+        branch_id: branchId,
+        employee_id: employeeId,
+        reviewer_employee_id: employeeId,
+        review_cycle: input.cycleName || "Appraisal",
+        period_start: yearStart,
+        period_end: yearEnd,
+        overall_rating: input.overallRating || null,
+      });
+      reviewId = String(reviewRes.data?.id ?? "");
+      if (reviewId) {
+        const reviews = load<PerformanceReview>(KEYS.reviews);
+        reviews.unshift({
+          id: reviewId,
+          reviewCode: String(reviewRes.data?.document_number ?? nextCode("review", "REV")),
+          cycleId: "",
+          employeeId,
+          employeeName: input.employeeName,
+          managerName: "Manager",
+          reviewerEmployeeId: employeeId,
+          reviewerName: "Manager",
+          hrName: "HR",
+          selfAssessment: "",
+          managerAssessment: "",
+          peerReview: "",
+          finalComments: "",
+          overallRating: input.overallRating || 0,
+          recommendation: "none",
+          status: "draft",
+          attachmentName: "",
+          createdAt: nowIso(),
+          updatedAt: nowIso(),
+        });
+        save(KEYS.reviews, reviews);
+      }
+    }
+
+    if (reviewId && UUID_RE.test(reviewId)) {
+      const seq =
+        load<AppraisalRecord>(KEYS.appraisals).filter((a) => a.performanceReviewId === reviewId).length + 1;
+      const area =
+        [input.salaryRecommendation, input.promotionRecommendation, input.bonusRecommendation]
+          .filter(Boolean)
+          .join("; ") || "Overall";
+      const res = await resourceService.create<Record<string, unknown>>("/hr/appraisals", {
+        performance_review_id: reviewId,
+        employee_id: employeeId || null,
+        sequence_no: seq,
+        appraisal_area: area.slice(0, 200),
+        rating: Math.max(1, Math.min(5, Math.round(input.overallRating) || 3)),
+        comments: input.trainingRecommendation || null,
+      });
+      const apiId = String(res.data?.id ?? "");
+      if (apiId) {
+        row.id = apiId;
+        row.performanceReviewId = reviewId;
+        row.employeeId = employeeId;
+        row.appraisalCode = String(res.data?.document_number ?? row.appraisalCode);
+      }
+    }
+  } catch (err) {
+    console.warn("createAppraisal API failed; local cache kept", err);
+  }
   const all = load<AppraisalRecord>(KEYS.appraisals);
   all.unshift(row);
   save(KEYS.appraisals, all);

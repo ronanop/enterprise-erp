@@ -377,8 +377,7 @@ export function ShiftRosterManagementPage() {
                     const next = e.target.checked
                       ? [...dir.weeklyOffRules, rule]
                       : dir.weeklyOffRules.filter((r) => r !== rule);
-                    saveWeeklyOffRules(next);
-                    void load();
+                    saveWeeklyOffRules(next).then(() => void load());
                   }}
                 />
                 {rule.replace(/_/g, " ")}
@@ -410,7 +409,7 @@ export function ShiftRosterManagementPage() {
                     <span>{s.employeeName} · {s.reason.slice(0, 40)}</span>
                     <span className="capitalize text-muted-foreground">{s.workflowStage}</span>
                     {s.workflowStage === "manager" ? (
-                      <Button size="sm" className="cursor-pointer h-6 text-[10px]" onClick={() => { approveSwap(s.id); void load(); }}>Approve</Button>
+                      <Button size="sm" className="cursor-pointer h-6 text-[10px]" onClick={() => { void approveSwap(s.id).then(() => void load()); }}>Approve</Button>
                     ) : null}
                   </li>
                 ))}
@@ -501,16 +500,17 @@ function SwapRequestDrawer({
       footer={
         <Button size="sm" className="cursor-pointer" onClick={() => {
           const emp = directory?.options.employees.find((e) => e.id === employeeId);
-          submitShiftSwap({
+          void submitShiftSwap({
             employeeId,
             employeeName: emp?.label ?? "",
             currentShiftId,
             requestedShiftId,
             swapWithEmployeeId: swapWith,
             reason,
+          }).then(() => {
+            toast("Swap submitted", "success");
+            onClose();
           });
-          toast("Swap submitted", "success");
-          onClose();
         }}>Submit</Button>
       }
     >

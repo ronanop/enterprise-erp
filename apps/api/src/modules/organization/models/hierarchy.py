@@ -3,7 +3,7 @@
 from datetime import date
 from uuid import UUID, uuid4
 
-from sqlalchemy import CheckConstraint, ForeignKey, Numeric, String, UniqueConstraint
+from sqlalchemy import CheckConstraint, ForeignKey, Integer, Numeric, String, UniqueConstraint
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -90,6 +90,7 @@ class OrgLocation(Base, AuditMixin, TenantMixin, CompanyMixin, SoftDeleteMixin, 
     location_type: Mapped[str] = mapped_column(String(30), nullable=False, default="office")
     latitude: Mapped[float | None] = mapped_column(Numeric(10, 7), nullable=True)
     longitude: Mapped[float | None] = mapped_column(Numeric(10, 7), nullable=True)
+    geofence_radius_meters: Mapped[int | None] = mapped_column(Integer, nullable=True)
     address_line1: Mapped[str | None] = mapped_column(String(255), nullable=True)
     address_line2: Mapped[str | None] = mapped_column(String(255), nullable=True)
     city: Mapped[str | None] = mapped_column(String(100), nullable=True)

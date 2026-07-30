@@ -42,7 +42,7 @@ export const HR_MODULE_KEY = "hr";
 export const hrWorkspaceGroups: HrWorkspaceGroup[] = [
   {
     key: "workforce",
-    title: "Workforce",
+    title: "Employees",
     description: "Designations, employee profiles, and employment",
     icon: Users,
     resourceKeys: ["designations", "employee-profiles", "employment"],

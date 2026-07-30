@@ -39,7 +39,7 @@ class HRIntegrationService:
                 "currency_code": r.currency_code,
             }
             for r in rows
-            if r.status in {"active", "probation", "confirmed"}
+            if r.status in {"active", "probation", "confirmed", "notice_period", "separated"}
         ]
 
     def payroll_attendance_facts(self, ctx: TenantContext, company_id: UUID | None = None) -> list[dict]:
@@ -52,6 +52,8 @@ class HRIntegrationService:
                 "attendance_status": r.attendance_status,
                 "total_hours": r.total_hours,
                 "status": r.status,
+                "shift_id": getattr(r, "shift_id", None),
+                "overtime_minutes": int(getattr(r, "overtime_minutes", None) or 0),
             }
             for r in self._attendance.list_rows(ctx, cid)
         ]

@@ -84,6 +84,8 @@ export type LeaveTypeRecord = {
   name: string;
   isPaid: boolean;
   maxDays: number;
+  /** Monthly leave credit (API: monthly_credit_days). */
+  daysPerMonth: number;
   requiresAttachment: boolean;
   status: string;
   version: number;
@@ -92,6 +94,7 @@ export type LeaveTypeRecord = {
   approvalRequired: boolean;
   genderRestriction: string;
   eligibility: string;
+  maxCarryForwardDays?: number;
 };
 
 export type CompOffRecord = {
@@ -174,6 +177,7 @@ export const LEAVE_STATUS_LABELS: Record<string, string> = {
   draft: "Draft",
   submitted: "Submitted",
   manager_review: "Manager review",
+  manager_approved: "Manager approved",
   hr_review: "HR review",
   director_review: "Director review",
   approved: "Approved",

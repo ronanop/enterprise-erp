@@ -16,7 +16,7 @@ import {
   Layers,
   Mail,
   MapPin,
-  Network,
+  DoorOpen,
   Shield,
   UserCog,
   Users,
@@ -30,6 +30,7 @@ export type HrSetupTabId =
   | "job-levels"
   | "grades"
   | "work-locations"
+  | "rooms"
   | "employment-types"
   | "reporting"
   | "document-types"
@@ -49,13 +50,7 @@ export type HrSetupTabId =
   | "notification-settings"
   | "roles-permissions";
 
-export type HrSetupSectionId =
-  | "organization"
-  | "employment"
-  | "leave"
-  | "shift"
-  | "payroll"
-  | "workflow";
+export type HrSetupSectionId = "organization" | "employment" | "leave";
 
 export type HrSetupTab = {
   id: HrSetupTabId;
@@ -110,23 +105,33 @@ export const hrSetupSections: HrSetupSection[] = [
         id: "job-levels",
         title: "Job Levels",
         description: "Junior through CXO bands",
-        source: "local",
+        source: "api",
+        apiPath: "/hr/job-levels",
         codePrefix: "LVL",
       },
       {
         id: "grades",
         title: "Grades",
         description: "Pay grades and salary bands",
-        source: "local",
+        source: "api",
+        apiPath: "/hr/grades",
         codePrefix: "GRD",
       },
       {
         id: "work-locations",
-        title: "Work Locations",
-        description: "Offices and site addresses",
+        title: "Base Location",
+        description: "Office / site address and geofence",
         source: "api",
         apiPath: "/locations",
         codePrefix: "LOC",
+      },
+      {
+        id: "rooms",
+        title: "Rooms",
+        description: "Meeting and training rooms with capacity & features",
+        source: "api",
+        apiPath: "/hr/training-rooms",
+        codePrefix: "ROOM",
       },
     ],
   },
@@ -152,7 +157,7 @@ export const hrSetupSections: HrSetupSection[] = [
       {
         id: "document-types",
         title: "Document Types",
-        description: "KYC and HR document catalog",
+        description: "KYC catalog — drives onboarding uploads",
         source: "local",
         codePrefix: "DOC",
       },
@@ -187,121 +192,13 @@ export const hrSetupSections: HrSetupSection[] = [
         apiPath: "/hr/holiday-calendars",
         codePrefix: "HC",
       },
-    ],
-  },
-  {
-    id: "shift",
-    title: "Shift & Attendance",
-    description: "Shifts, rotations, and rules",
-    icon: Clock3,
-    tabs: [
-      {
-        id: "shift-master",
-        title: "Shift Master",
-        description: "Shift definitions",
-        source: "api",
-        apiPath: "/hr/shifts",
-        codePrefix: "SFT",
-      },
-      {
-        id: "shift-rotation",
-        title: "Shift Rotation",
-        description: "Weekly / monthly cycles",
-        source: "local",
-        codePrefix: "ROT",
-      },
-      {
-        id: "shift-assignment",
-        title: "Shift Assignment",
-        description: "Employee shift mapping",
-        source: "api",
-        apiPath: "/hr/shift-assignments",
-        codePrefix: "SA",
-      },
       {
         id: "attendance-rules",
         title: "Attendance Rules",
-        description: "Grace, OT, and marking rules",
-        source: "local",
+        description: "Half-day hours, grace, geofence, miss-punch window",
+        source: "api",
+        apiPath: "/hr/attendance-rules",
         codePrefix: "AR",
-      },
-    ],
-  },
-  {
-    id: "payroll",
-    title: "Payroll Setup",
-    description: "Compensation configuration",
-    icon: Wallet,
-    tabs: [
-      {
-        id: "salary-components",
-        title: "Salary Components",
-        description: "Earnings and deductions",
-        source: "api",
-        apiPath: "/payroll/salary-components",
-        codePrefix: "SC",
-      },
-      {
-        id: "bank-master",
-        title: "Bank Master",
-        description: "Payroll bank catalog",
-        source: "local",
-        codePrefix: "BNK",
-      },
-      {
-        id: "tax-rules",
-        title: "Tax Rules",
-        description: "Income / professional tax",
-        source: "api",
-        apiPath: "/payroll/tax-configurations",
-        codePrefix: "TAX",
-      },
-      {
-        id: "pf-esi",
-        title: "PF / ESI",
-        description: "Statutory contributions",
-        source: "api",
-        apiPath: "/payroll/statutory-contributions",
-        codePrefix: "STAT",
-      },
-    ],
-  },
-  {
-    id: "workflow",
-    title: "Workflow",
-    description: "Approvals, templates, access",
-    icon: GitBranch,
-    tabs: [
-      {
-        id: "approval-flows",
-        title: "Approval Flows",
-        description: "Workflow definitions",
-        source: "api",
-        apiPath: "/workflows/definitions",
-        codePrefix: "WF",
-      },
-      {
-        id: "email-templates",
-        title: "Email Templates",
-        description: "Transactional email content",
-        source: "api",
-        apiPath: "/notifications/templates",
-        codePrefix: "EML",
-      },
-      {
-        id: "notification-settings",
-        title: "Notification Settings",
-        description: "Email · SMS · Push channels",
-        source: "local",
-        codePrefix: "NTF",
-      },
-      {
-        id: "roles-permissions",
-        title: "Roles & Permissions",
-        description: "HR access control",
-        source: "api",
-        apiPath: "/roles",
-        codePrefix: "ROL",
       },
     ],
   },
@@ -311,9 +208,6 @@ export const setupSectionIcons: Record<HrSetupSectionId, LucideIcon> = {
   organization: Building2,
   employment: Briefcase,
   leave: CalendarDays,
-  shift: Clock3,
-  payroll: Wallet,
-  workflow: Network,
 };
 
 export const setupTabIcons: Partial<Record<HrSetupTabId, LucideIcon>> = {
@@ -323,6 +217,7 @@ export const setupTabIcons: Partial<Record<HrSetupTabId, LucideIcon>> = {
   "job-levels": Layers,
   grades: Layers,
   "work-locations": MapPin,
+  rooms: DoorOpen,
   "employment-types": UserCog,
   reporting: Users,
   "document-types": FileText,

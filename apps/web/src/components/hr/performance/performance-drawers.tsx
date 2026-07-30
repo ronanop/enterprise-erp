@@ -51,6 +51,7 @@ export function GoalDrawer({
   const [description, setDescription] = useState("");
   const [goalType, setGoalType] = useState<GoalType>("individual");
   const [category, setCategory] = useState<GoalCategory>("kpi");
+  const [employeeId, setEmployeeId] = useState("");
   const [employeeName, setEmployeeName] = useState("");
   const [department, setDepartment] = useState("");
   const [priority, setPriority] = useState<GoalPriority>("medium");
@@ -68,6 +69,7 @@ export function GoalDrawer({
       description,
       goalType,
       category,
+      employeeId: employeeId || undefined,
       employeeName,
       assignedBy: "HR Manager",
       department: department || "General",
@@ -81,6 +83,7 @@ export function GoalDrawer({
     });
     onClose();
     setTitle("");
+    setEmployeeId("");
   }
 
   return (
@@ -128,10 +131,11 @@ export function GoalDrawer({
         </div>
         <EmployeeSelect
           label="Assigned employee"
-          value={employees.find((e) => e.label.split(" · ")[0] === employeeName)?.id ?? ""}
+          value={employeeId || employees.find((e) => e.label.split(" · ")[0] === employeeName)?.id || ""}
           options={employees}
           required
-          onChange={(_id, opt) => {
+          onChange={(id, opt) => {
+            setEmployeeId(id);
             setEmployeeName(opt ? opt.label.split(" · ")[0] : "");
             if (opt?.department) setDepartment(opt.department);
           }}
@@ -471,8 +475,10 @@ export function ReviewDrawer({
   employees?: HrMasterOption[];
   onSubmit: (input: Omit<PerformanceReview, "id" | "reviewCode" | "createdAt" | "updatedAt">) => void;
 }) {
+  const [employeeId, setEmployeeId] = useState("");
   const [employeeName, setEmployeeName] = useState("");
   const [managerName, setManagerName] = useState("");
+  const [reviewerEmployeeId, setReviewerEmployeeId] = useState("");
   const [cycleId, setCycleId] = useState("");
   const [selfAssessment, setSelfAssessment] = useState("");
   const [managerAssessment, setManagerAssessment] = useState("");
@@ -496,8 +502,10 @@ export function ReviewDrawer({
           onClick={() => {
             onSubmit({
               cycleId,
+              employeeId: employeeId || undefined,
               employeeName,
               managerName,
+              reviewerEmployeeId: reviewerEmployeeId || employeeId || undefined,
               reviewerName: managerName,
               hrName: "HR",
               selfAssessment,
@@ -518,12 +526,24 @@ export function ReviewDrawer({
     >
       <div className="space-y-3">
         <EmployeeSelect
-          value={employees.find((e) => e.label.split(" · ")[0] === employeeName)?.id ?? ""}
+          value={employeeId || employees.find((e) => e.label.split(" · ")[0] === employeeName)?.id || ""}
           options={employees}
           required
-          onChange={(_id, opt) => setEmployeeName(opt ? opt.label.split(" · ")[0] : "")}
+          onChange={(id, opt) => {
+            setEmployeeId(id);
+            setEmployeeName(opt ? opt.label.split(" · ")[0] : "");
+          }}
         />
-        <SetupField label="Manager">
+        <EmployeeSelect
+          label="Reviewer / manager"
+          value={reviewerEmployeeId}
+          options={employees}
+          onChange={(id, opt) => {
+            setReviewerEmployeeId(id);
+            setManagerName(opt ? opt.label.split(" · ")[0] : "");
+          }}
+        />
+        <SetupField label="Manager (display)">
           <SetupInput value={managerName} onChange={(e) => setManagerName(e.target.value)} />
         </SetupField>
         <SetupField label="Review cycle">
@@ -917,6 +937,7 @@ export function AppraisalCreateDrawer({
   employees?: HrMasterOption[];
   onSubmit: (input: Omit<AppraisalRecord, "id" | "appraisalCode" | "createdAt" | "updatedAt">) => void;
 }) {
+  const [employeeId, setEmployeeId] = useState("");
   const [employeeName, setEmployeeName] = useState("");
   const [cycleName, setCycleName] = useState("Annual 2026");
   const [salaryRecommendation, setSalary] = useState("");
@@ -937,6 +958,7 @@ export function AppraisalCreateDrawer({
           disabled={!employeeName}
           onClick={() => {
             onSubmit({
+              employeeId: employeeId || undefined,
               employeeName,
               cycleName,
               salaryRecommendation,
@@ -955,10 +977,13 @@ export function AppraisalCreateDrawer({
     >
       <div className="space-y-3">
         <EmployeeSelect
-          value={employees.find((e) => e.label.split(" · ")[0] === employeeName)?.id ?? ""}
+          value={employeeId || employees.find((e) => e.label.split(" · ")[0] === employeeName)?.id || ""}
           options={employees}
           required
-          onChange={(_id, opt) => setEmployeeName(opt ? opt.label.split(" · ")[0] : "")}
+          onChange={(id, opt) => {
+            setEmployeeId(id);
+            setEmployeeName(opt ? opt.label.split(" · ")[0] : "");
+          }}
         />
         <SetupField label="Cycle">
           <SetupInput value={cycleName} onChange={(e) => setCycleName(e.target.value)} />

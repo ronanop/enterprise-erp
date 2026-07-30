@@ -68,3 +68,13 @@ class OfferService:
             performed_by=ctx.user_id,
         )
         return updated
+
+    def accept(self, ctx: TenantContext, row_id: UUID):
+        row = self.get(ctx, row_id)
+        self._engine.accept(row)
+        return self._repo.update(ctx, row_id, status=row.status)
+
+    def reject(self, ctx: TenantContext, row_id: UUID):
+        row = self.get(ctx, row_id)
+        self._engine.reject(row)
+        return self._repo.update(ctx, row_id, status=row.status)

@@ -671,27 +671,36 @@ export function PerformanceManagementPage() {
         employees={dir?.employees ?? []}
         departments={dir?.departments ?? []}
         onSubmit={(input) => {
-          createGoal(input);
-          toast("Goal assigned");
-          void load();
+          void createGoal(input)
+            .then(() => {
+              toast("Goal assigned");
+              void load();
+            })
+            .catch((e) => toast(e instanceof Error ? e.message : "Failed", "error"));
         }}
       />
       <KpiDrawer
         open={kpiOpen}
         onClose={() => setKpiOpen(false)}
         onSubmit={(input) => {
-          createKpi(input);
-          toast("KPI created");
-          void load();
+          void createKpi(input)
+            .then(() => {
+              toast("KPI created");
+              void load();
+            })
+            .catch((e) => toast(e instanceof Error ? e.message : "Failed", "error"));
         }}
       />
       <OkrDrawer
         open={okrOpen}
         onClose={() => setOkrOpen(false)}
         onSubmit={(input) => {
-          createOkr(input);
-          toast("OKR created");
-          void load();
+          void createOkr(input)
+            .then(() => {
+              toast("OKR created");
+              void load();
+            })
+            .catch((e) => toast(e instanceof Error ? e.message : "Failed", "error"));
         }}
       />
       <CycleDrawer
@@ -709,9 +718,12 @@ export function PerformanceManagementPage() {
         cycles={dir?.cycles ?? []}
         employees={dir?.employees ?? []}
         onSubmit={(input) => {
-          createReview(input);
-          toast("Review started");
-          void load();
+          void createReview(input)
+            .then(() => {
+              toast("Review started");
+              void load();
+            })
+            .catch((e) => toast(e instanceof Error ? e.message : "Failed", "error"));
         }}
       />
       <FeedbackDrawer
@@ -759,9 +771,12 @@ export function PerformanceManagementPage() {
         onClose={() => setAppraisalOpen(false)}
         employees={dir?.employees ?? []}
         onSubmit={(input) => {
-          createAppraisal(input);
-          toast("Appraisal started");
-          void load();
+          void createAppraisal(input)
+            .then(() => {
+              toast("Appraisal started");
+              void load();
+            })
+            .catch((e) => toast(e instanceof Error ? e.message : "Failed", "error"));
         }}
       />
     </div>

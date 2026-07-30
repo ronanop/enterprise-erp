@@ -26,26 +26,65 @@ export function StructureDrawer({
   open,
   onClose,
   onSubmit,
+  initial,
 }: {
   open: boolean;
   onClose: () => void;
   onSubmit: (input: Omit<SalaryStructure, "id" | "createdAt">) => void;
+  initial?: SalaryStructure | null;
 }) {
-  const [name, setName] = useState("Standard CTC");
-  const [basic, setBasic] = useState("30000");
-  const [hra, setHra] = useState("12000");
-  const [special, setSpecial] = useState("8000");
+  const [name, setName] = useState("Engineer Structure");
+  const [basic, setBasic] = useState("35000");
+  const [hra, setHra] = useState("14000");
+  const [special, setSpecial] = useState("10000");
   const [medical, setMedical] = useState("1250");
-  const [travel, setTravel] = useState("1600");
+  const [travel, setTravel] = useState("2400");
   const [food, setFood] = useState("0");
-  const [internet, setInternet] = useState("500");
+  const [internet, setInternet] = useState("1000");
   const [pf, setPf] = useState("1800");
   const [esi, setEsi] = useState("0");
   const [pt, setPt] = useState("200");
-  const [tds, setTds] = useState("2500");
+  const [tds, setTds] = useState("3500");
   const [loan, setLoan] = useState("0");
   const [advance, setAdvance] = useState("0");
   const [insurance, setInsurance] = useState("300");
+
+  useEffect(() => {
+    if (!open) return;
+    if (initial) {
+      setName(initial.name);
+      setBasic(String(initial.basic));
+      setHra(String(initial.hra));
+      setSpecial(String(initial.specialAllowance));
+      setMedical(String(initial.medicalAllowance));
+      setTravel(String(initial.travelAllowance));
+      setFood(String(initial.foodAllowance));
+      setInternet(String(initial.internetAllowance));
+      setPf(String(initial.pf));
+      setEsi(String(initial.esi));
+      setPt(String(initial.professionalTax));
+      setTds(String(initial.tds));
+      setLoan(String(initial.loanRecovery));
+      setAdvance(String(initial.advanceRecovery));
+      setInsurance(String(initial.insurance));
+    } else {
+      setName("Engineer Structure");
+      setBasic("35000");
+      setHra("14000");
+      setSpecial("10000");
+      setMedical("1250");
+      setTravel("2400");
+      setFood("0");
+      setInternet("1000");
+      setPf("1800");
+      setEsi("0");
+      setPt("200");
+      setTds("3500");
+      setLoan("0");
+      setAdvance("0");
+      setInsurance("300");
+    }
+  }, [open, initial]);
 
   function num(v: string) {
     return Number(v) || 0;
@@ -56,7 +95,7 @@ export function StructureDrawer({
       open={open}
       onClose={onClose}
       wide
-      title="Create Salary Structure"
+      title={initial ? "Edit Salary Structure" : "Create Salary Structure"}
       description="Earnings and statutory deductions template."
       footer={
         <Button
@@ -65,6 +104,7 @@ export function StructureDrawer({
           disabled={!name.trim()}
           onClick={() => {
             onSubmit({
+              code: initial?.code,
               name: name.trim(),
               basic: num(basic),
               hra: num(hra),
@@ -73,12 +113,12 @@ export function StructureDrawer({
               travelAllowance: num(travel),
               foodAllowance: num(food),
               internetAllowance: num(internet),
-              bonus: 0,
-              incentives: 0,
-              overtime: 0,
-              arrears: 0,
-              reimbursement: 0,
-              otherEarnings: 0,
+              bonus: initial?.bonus ?? 0,
+              incentives: initial?.incentives ?? 0,
+              overtime: initial?.overtime ?? 0,
+              arrears: initial?.arrears ?? 0,
+              reimbursement: initial?.reimbursement ?? 0,
+              otherEarnings: initial?.otherEarnings ?? 0,
               pf: num(pf),
               esi: num(esi),
               professionalTax: num(pt),
@@ -86,12 +126,12 @@ export function StructureDrawer({
               loanRecovery: num(loan),
               advanceRecovery: num(advance),
               insurance: num(insurance),
-              otherDeductions: 0,
+              otherDeductions: initial?.otherDeductions ?? 0,
             });
             onClose();
           }}
         >
-          Save Structure
+          {initial ? "Save Changes" : "Save Structure"}
         </Button>
       }
     >
@@ -516,7 +556,7 @@ export function BonusDrawer({
           onClick={() => {
             if (!employee) return;
             onSubmit({
-              employeeId: employee.code || employee.id,
+              employeeId: employee.id,
               employeeName: employee.label.split(" · ")[0],
               bonusType,
               amount: Number(amount) || 0,
@@ -537,6 +577,78 @@ export function BonusDrawer({
             <option value="performance">Performance</option>
             <option value="retention">Retention</option>
             <option value="referral">Referral</option>
+          </SetupSelect>
+        </SetupField>
+        <SetupField label="Amount">
+          <SetupInput type="number" value={amount} onChange={(e) => setAmount(e.target.value)} />
+        </SetupField>
+        <SetupField label="Month">
+          <SetupInput type="month" value={month} onChange={(e) => setMonth(e.target.value)} />
+        </SetupField>
+      </div>
+    </SetupDrawer>
+  );
+}
+
+export function AdjustmentDrawer({
+  open,
+  onClose,
+  employees,
+  onSubmit,
+}: {
+  open: boolean;
+  onClose: () => void;
+  employees: HrMasterOption[];
+  onSubmit: (input: {
+    employeeId: string;
+    employeeName: string;
+    kind: "arrears" | "incentive" | "other";
+    amount: number;
+    month: string;
+  }) => void;
+}) {
+  const [employeeKey, setEmployeeKey] = useState("");
+  const [kind, setKind] = useState<"arrears" | "incentive" | "other">("arrears");
+  const [amount, setAmount] = useState("");
+  const [month, setMonth] = useState("");
+  const employee = (employees ?? []).find((e) => e.id === employeeKey);
+
+  return (
+    <SetupDrawer
+      open={open}
+      onClose={onClose}
+      title="Add Arrears / Incentive"
+      footer={
+        <Button
+          type="button"
+          className="cursor-pointer"
+          disabled={!employee || !amount}
+          onClick={() => {
+            if (!employee) return;
+            onSubmit({
+              employeeId: employee.id,
+              employeeName: employee.label.split(" · ")[0],
+              kind,
+              amount: Number(amount) || 0,
+              month: month || new Date().toISOString().slice(0, 7),
+            });
+            onClose();
+          }}
+        >
+          Save Adjustment
+        </Button>
+      }
+    >
+      <div className="space-y-3">
+        <EmployeeSelect value={employeeKey} options={employees} required onChange={setEmployeeKey} />
+        <SetupField label="Kind">
+          <SetupSelect
+            value={kind}
+            onChange={(e) => setKind(e.target.value as "arrears" | "incentive" | "other")}
+          >
+            <option value="arrears">Arrears</option>
+            <option value="incentive">Incentive</option>
+            <option value="other">Other earning</option>
           </SetupSelect>
         </SetupField>
         <SetupField label="Amount">

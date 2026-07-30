@@ -9,6 +9,7 @@ from sqlalchemy import (
     Date,
     DateTime,
     ForeignKey,
+    Integer,
     Numeric,
     String,
     Text,
@@ -31,7 +32,8 @@ class HrAttendance(Base, *HrTransactionMixin):
             name="uk_hr_att_emp_date",
         ),
         CheckConstraint(
-            "attendance_status IN ('present','absent','half_day','work_from_home','holiday')",
+            "attendance_status IN ('present','absent','half_day','work_from_home',"
+            "'holiday','late','week_off','on_duty','miss_punch')",
             name="ck_hr_att_day_status",
         ),
         CheckConstraint(
@@ -64,5 +66,10 @@ class HrAttendance(Base, *HrTransactionMixin):
         nullable=True,
         index=True,
     )
+    latitude: Mapped[Decimal | None] = mapped_column(Numeric(10, 7), nullable=True)
+    longitude: Mapped[Decimal | None] = mapped_column(Numeric(10, 7), nullable=True)
+    late_minutes: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    overtime_minutes: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    early_leave_minutes: Mapped[int | None] = mapped_column(Integer, nullable=True)
     status: Mapped[str] = mapped_column(String(30), nullable=False, default="recorded", index=True)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)

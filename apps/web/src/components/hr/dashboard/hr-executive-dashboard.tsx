@@ -50,7 +50,7 @@ import type {
 import { DASHBOARD_ROLE_LABELS } from "@/types/hr-executive-dashboard";
 
 const QUICK_ACTIONS = [
-  { label: "Add Employee", href: "/hr/workforce/new", icon: UserPlus },
+  { label: "Hire via onboarding", href: "/hr/onboarding", icon: UserPlus },
   { label: "Create Job", href: "/hr/recruitment", icon: Briefcase },
   { label: "Run Payroll", href: "/hr/payroll", icon: Wallet },
   { label: "Mark Attendance", href: "/hr/time", icon: ClipboardCheck },

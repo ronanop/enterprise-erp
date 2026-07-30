@@ -28,6 +28,7 @@ export type PerformanceGoal = {
   description: string;
   goalType: GoalType;
   category: GoalCategory;
+  employeeId?: string;
   employeeName: string;
   assignedBy: string;
   department: string;
@@ -38,6 +39,7 @@ export type PerformanceGoal = {
   startDate: string;
   dueDate: string;
   status: GoalStatus;
+  performanceReviewId?: string;
   createdAt: string;
   updatedAt: string;
 };
@@ -82,8 +84,10 @@ export type PerformanceReview = {
   id: string;
   reviewCode: string;
   cycleId: string;
+  employeeId?: string;
   employeeName: string;
   managerName: string;
+  reviewerEmployeeId?: string;
   reviewerName: string;
   hrName: string;
   selfAssessment: string;
@@ -151,6 +155,7 @@ export type PipPlan = {
 export type AppraisalRecord = {
   id: string;
   appraisalCode: string;
+  employeeId?: string;
   employeeName: string;
   cycleName: string;
   salaryRecommendation: string;
@@ -159,6 +164,7 @@ export type AppraisalRecord = {
   trainingRecommendation: string;
   workflowStage: AppraisalWorkflow;
   overallRating: number;
+  performanceReviewId?: string;
   createdAt: string;
   updatedAt: string;
 };

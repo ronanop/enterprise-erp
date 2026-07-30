@@ -6,7 +6,8 @@ import { useRouter } from "next/navigation";
 import {
   Archive,
   Download,
-  MoreHorizontal,
+  Eye,
+  Pencil,
   Plus,
   RefreshCw,
   Upload,
@@ -33,6 +34,7 @@ import { toast, SetupToastHost } from "@/components/hr/setup/setup-toast";
 import { PageHeader } from "@/components/layout/page-header";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { RowActionsItem, RowActionsMenu } from "@/components/ui/row-actions-menu";
 import { isAuthenticated } from "@/lib/auth";
 import {
   bulkUpdateEmployees,
@@ -153,7 +155,12 @@ export function EmployeeManagementPage() {
             <Link href="/hr/workforce/new">
               <Button size="sm" className="cursor-pointer">
                 <Plus className="size-3.5" />
-                Add Employee
+                Add employee
+              </Button>
+            </Link>
+            <Link href="/hr/onboarding">
+              <Button size="sm" variant="outline" className="cursor-pointer">
+                Hire via onboarding
               </Button>
             </Link>
             <Button
@@ -512,92 +519,59 @@ export function EmployeeManagementPage() {
                             <td className="px-2 py-2">
                               <HrStatusBadge status={row.lifecycleStatus} />
                             </td>
-                            <td className="relative px-2 py-2">
-                              <Button
-                                type="button"
-                                variant="ghost"
-                                size="icon-sm"
-                                className="cursor-pointer"
-                                onClick={() => setMenuId(menuId === row.id ? null : row.id)}
+                            <td className="px-2 py-2">
+                              <RowActionsMenu
+                                open={menuId === row.id}
+                                onOpenChange={(open) => setMenuId(open ? row.id : null)}
                               >
-                                <MoreHorizontal className="size-4" />
-                              </Button>
-                              {menuId === row.id ? (
-                                <div className="absolute right-2 top-10 z-20 min-w-[10rem] rounded-lg border border-border bg-card py-1 text-xs shadow-lg">
-                                  {[
-                                    ["View", `/hr/workforce/${row.id}`],
-                                    ["Edit", `/hr/workforce/${row.id}?edit=1`],
-                                    ["Documents", `/hr/workforce/${row.id}?tab=documents`],
-                                    ["Employment", `/hr/workforce/${row.id}?tab=employment`],
-                                  ].map(([label, href]) => (
-                                    <Link
-                                      key={label}
-                                      href={href}
-                                      className="block cursor-pointer px-3 py-1.5 hover:bg-muted"
-                                      onClick={() => setMenuId(null)}
-                                    >
-                                      {label}
-                                    </Link>
-                                  ))}
-                                  <button
-                                    type="button"
-                                    className="block w-full cursor-pointer px-3 py-1.5 text-left hover:bg-muted"
-                                    onClick={() => {
-                                      toast("Password reset sent to IT workflow (demo).", "info");
-                                      setMenuId(null);
-                                    }}
-                                  >
-                                    Reset password
-                                  </button>
-                                  <button
-                                    type="button"
-                                    className="block w-full cursor-pointer px-3 py-1.5 text-left hover:bg-muted"
-                                    onClick={() => {
-                                      void setEmployeeLifecycleStatus(row, "inactive", "Deactivated").then(load);
-                                      setMenuId(null);
-                                    }}
-                                  >
-                                    Deactivate
-                                  </button>
-                                  <button
-                                    type="button"
-                                    className="block w-full cursor-pointer px-3 py-1.5 text-left hover:bg-muted"
-                                    onClick={() => {
-                                      void setEmployeeLifecycleStatus(row, "archived", "Archived").then(load);
-                                      setMenuId(null);
-                                    }}
-                                  >
-                                    Archive
-                                  </button>
-                                  <button
-                                    type="button"
-                                    className="block w-full cursor-pointer px-3 py-1.5 text-left text-destructive hover:bg-muted"
-                                    onClick={() => {
-                                      setConfirm({
-                                        title: "Archive employee",
-                                        message: "Soft delete — status becomes archived. Record is retained.",
-                                        action: async () => {
-                                          await setEmployeeLifecycleStatus(row, "archived", "Archived");
-                                          await load();
-                                        },
-                                      });
-                                      setMenuId(null);
-                                    }}
-                                  >
-                                    Delete
-                                  </button>
-                                  <button
-                                    type="button"
-                                    className="block w-full cursor-pointer px-3 py-1.5 text-left hover:bg-muted"
-                                    onClick={() => {
-                                      router.push(`/hr/workforce/new?duplicate=${row.id}`);
-                                      setMenuId(null);
-                                    }}
-                                  >
-                                    Duplicate
-                                  </button>
-                                </div>
-                              ) : null}
+                                <RowActionsItem
+                                  onClick={() => {
+                                    setMenuId(null);
+                                    router.push(`/hr/workforce/${row.id}`);
+                                  }}
+                                >
+                                  <Eye className="size-3.5 text-muted-foreground" />
+                                  View
+                                </RowActionsItem>
+                                <RowActionsItem
+                                  onClick={() => {
+                                    setMenuId(null);
+                                    router.push(`/hr/workforce/${row.id}?edit=1`);
+                                  }}
+                                >
+                                  <Pencil className="size-3.5 text-muted-foreground" />
+                                  Edit
+                                </RowActionsItem>
+                                <RowActionsItem
+                                  onClick={() => {
+                                    setMenuId(null);
+                                    void setEmployeeLifecycleStatus(row, "inactive", "Deactivated").then(
+                                      load,
+                                    );
+                                  }}
+                                >
+                                  <UserMinus className="size-3.5 text-muted-foreground" />
+                                  Deactivate
+                                </RowActionsItem>
+                                <RowActionsItem
+                                  destructive
+                                  onClick={() => {
+                                    setConfirm({
+                                      title: "Archive employee",
+                                      message:
+                                        "Soft delete — status becomes archived. Record is retained.",
+                                      action: async () => {
+                                        await setEmployeeLifecycleStatus(row, "archived", "Archived");
+                                        await load();
+                                      },
+                                    });
+                                    setMenuId(null);
+                                  }}
+                                >
+                                  <Archive className="size-3.5" />
+                                  Delete
+                                </RowActionsItem>
+                              </RowActionsMenu>
                             </td>
                           </tr>
                         ))}

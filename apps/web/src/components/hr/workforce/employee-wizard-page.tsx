@@ -696,7 +696,22 @@ function DocumentsStep({
   setDraft: Dispatch<SetStateAction<EmployeeWizardDraft>>;
   onAdd: (file: File, type: string) => Promise<void>;
 }) {
-  const types = ["Offer Letter", "Resume", "Education", "Experience", "Photo", "PAN", "Aadhaar", "Passport", "Other"];
+  const types = [
+    "Resume",
+    "Photo",
+    "PAN",
+    "Aadhaar",
+    "Cancelled Cheque",
+    "Graduation Certificate",
+    "Appointment Letter",
+    "Relieving Letter",
+    "Salary Slips",
+    "Previous Employer Certificate",
+    "Work Experience",
+    "Signature",
+    "Passport",
+    "Other",
+  ];
   return (
     <div className="space-y-3">
       {types.map((t) => (

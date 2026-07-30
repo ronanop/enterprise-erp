@@ -579,6 +579,22 @@ def update_reimbursements(
 ):
     return APIResponse(message="Updated", data=ReimbursementService(db).update(ctx, row_id, **extract_update_fields(body)))
 
+@reimbursements_router.post("/{row_id}/submit", response_model=APIResponse[ReimbursementResponse])
+def submit_reimbursements(
+    row_id: UUID,
+    ctx: Annotated[TenantContext, Depends(require_permission("payroll.reimbursement:create"))],
+    db: Annotated[Session, Depends(get_db)],
+):
+    return APIResponse(message="Submitted", data=ReimbursementService(db).submit(ctx, row_id))
+
+@reimbursements_router.post("/{row_id}/approve", response_model=APIResponse[ReimbursementResponse])
+def approve_reimbursements(
+    row_id: UUID,
+    ctx: Annotated[TenantContext, Depends(require_permission("payroll.reimbursement:create"))],
+    db: Annotated[Session, Depends(get_db)],
+):
+    return APIResponse(message="Approved", data=ReimbursementService(db).approve(ctx, row_id))
+
 @loans_router.get("", response_model=APIResponse[list[LoanResponse]])
 def list_loans(
     ctx: Annotated[TenantContext, Depends(require_permission("payroll.loan:read"))],
@@ -672,6 +688,14 @@ def update_adjustments(
     db: Annotated[Session, Depends(get_db)],
 ):
     return APIResponse(message="Updated", data=PayrollAdjustmentService(db).update(ctx, row_id, **extract_update_fields(body)))
+
+@adjustments_router.post("/{row_id}/apply", response_model=APIResponse[PayrollAdjustmentResponse])
+def apply_adjustments(
+    row_id: UUID,
+    ctx: Annotated[TenantContext, Depends(require_permission("payroll.adjustment:create"))],
+    db: Annotated[Session, Depends(get_db)],
+):
+    return APIResponse(message="Applied", data=PayrollAdjustmentService(db).apply(ctx, row_id))
 
 @postings_router.get("", response_model=APIResponse[list[PayrollPostingResponse]])
 def list_postings(

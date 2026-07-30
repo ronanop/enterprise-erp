@@ -129,7 +129,7 @@ export function CreateRotationDrawer({
   directory: ShiftRosterDirectory | null;
 }) {
   const [name, setName] = useState("");
-  const [code, setCode] = useState(`ROT-${Date.now().toString().slice(-4)}`);
+  const [code, setCode] = useState(() => `ROT-${Date.now().toString().slice(-4)}`);
   const [cycle, setCycle] = useState<"weekly" | "bi_weekly" | "monthly">("weekly");
   const [sequence, setSequence] = useState("");
   const [effectiveFrom, setEffectiveFrom] = useState(() => new Date().toISOString().slice(0, 10));
@@ -153,7 +153,7 @@ export function CreateRotationDrawer({
                 toast("Rotation name required", "error");
                 return;
               }
-              saveRotation({
+              void saveRotation({
                 name,
                 code,
                 cycle,
@@ -161,10 +161,11 @@ export function CreateRotationDrawer({
                 employeeIds,
                 effectiveFrom,
                 status: "active",
+              }).then(() => {
+                toast("Rotation saved", "success");
+                onSaved();
+                onClose();
               });
-              toast("Rotation saved", "success");
-              onSaved();
-              onClose();
             }}
           >
             Save rotation

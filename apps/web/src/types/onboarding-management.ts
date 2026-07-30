@@ -35,7 +35,12 @@ export type DocumentKind =
   | "education"
   | "experience"
   | "cancelled_cheque"
-  | "offer_letter"
+  | "bank_details"
+  | "appointment_letter"
+  | "relieving_letter"
+  | "salary_slips"
+  | "previous_employer"
+  | "signature"
   | "other";
 
 export type DocumentVerifyStatus = "pending" | "verified" | "rejected";
@@ -105,7 +110,9 @@ export type PersonalDetails = {
   nationality: string;
   bloodGroup: string;
   phone: string;
+  /** Personal / candidate email (not company email) */
   email: string;
+  personalEmail: string;
   address: string;
 };
 
@@ -137,6 +144,8 @@ export type EmergencyContact = {
 export type OnboardingDocument = {
   id: string;
   kind: DocumentKind;
+  /** Matches HR Setup Document Types code when driven by catalog. */
+  typeCode?: string;
   fileName: string;
   uploadedAt: string;
   verifyStatus: DocumentVerifyStatus;
@@ -146,6 +155,8 @@ export type OnboardingDocument = {
 export type PolicyAcceptance = {
   agreed: boolean;
   signature: string;
+  signatureFileName?: string;
+  signatureDataUrl?: string;
   acceptedAt?: string;
   policies: string[];
 };
@@ -251,6 +262,7 @@ export function emptyPersonal(): PersonalDetails {
     bloodGroup: "",
     phone: "",
     email: "",
+    personalEmail: "",
     address: "",
   };
 }

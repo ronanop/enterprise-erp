@@ -12,6 +12,7 @@ import {
 
 import {
   AssignSalaryDrawer,
+  AdjustmentDrawer,
   BonusDrawer,
   LoanDrawer,
   LockMonthDrawer,
@@ -35,6 +36,7 @@ import { isAuthenticated } from "@/lib/auth";
 import { cn } from "@/lib/utils";
 import {
   addBonus,
+  addPayrollAdjustment,
   addLoan,
   addReimbursement,
   advancePayrollApproval,
@@ -53,15 +55,17 @@ import {
   listPayrollAudit,
   loadPayrollDirectory,
   lockPayrollMonth,
+  resetStructuresToCacheDigitech,
   runPayroll,
   unlockPayrollMonth,
+  updateStructure,
   type PayrollDirectory,
 } from "@/services/payroll-management-service";
 import {
   loadHrMasterDirectory,
   type HrMasterOption,
 } from "@/services/hr-master-connector";
-import type { PayslipRecord } from "@/types/payroll-management";
+import type { PayslipRecord, SalaryStructure } from "@/types/payroll-management";
 import {
   emptyPayrollFilters,
   RUN_STATUS_LABELS,
@@ -160,12 +164,14 @@ export function PayrollManagementPage() {
   const importRef = useRef<HTMLInputElement>(null);
 
   const [structureOpen, setStructureOpen] = useState(false);
+  const [editingStructure, setEditingStructure] = useState<SalaryStructure | null>(null);
   const [runOpen, setRunOpen] = useState(false);
   const [revisionOpen, setRevisionOpen] = useState(false);
   const [lockOpen, setLockOpen] = useState(false);
   const [unlockOpen, setUnlockOpen] = useState(false);
   const [assignOpen, setAssignOpen] = useState(false);
   const [bonusOpen, setBonusOpen] = useState(false);
+  const [adjOpen, setAdjOpen] = useState(false);
   const [reimbOpen, setReimbOpen] = useState(false);
   const [loanOpen, setLoanOpen] = useState(false);
 
@@ -209,7 +215,7 @@ export function PayrollManagementPage() {
     void load();
   }
 
-  function handleGeneratePayslips() {
+  async function handleGeneratePayslips() {
     const run =
       dir?.runs.find((r) => ["approved", "paid", "pending_finance", "pending_hr"].includes(r.status)) ??
       dir?.runs[0];
@@ -218,7 +224,7 @@ export function PayrollManagementPage() {
       return;
     }
     try {
-      const slips = generatePayslips(run.id);
+      const slips = await generatePayslips(run.id);
       toast(`Generated ${slips.length} payslips`);
       refresh();
       setTab("payslips");
@@ -243,7 +249,10 @@ export function PayrollManagementPage() {
               size="sm"
               variant="outline"
               className="cursor-pointer"
-              onClick={() => setStructureOpen(true)}
+              onClick={() => {
+                setEditingStructure(null);
+                setStructureOpen(true);
+              }}
             >
               <Plus className="size-3.5" />
               Salary Structure
@@ -422,9 +431,28 @@ export function PayrollManagementPage() {
           {tab === "structures" ? (
             <section className="space-y-3">
               <div className="flex flex-wrap gap-2">
-                <Button size="sm" className="cursor-pointer" onClick={() => setStructureOpen(true)}>
+                <Button
+                  size="sm"
+                  className="cursor-pointer"
+                  onClick={() => {
+                    setEditingStructure(null);
+                    setStructureOpen(true);
+                  }}
+                >
                   <Plus className="size-3.5" />
                   Create Salary Structure
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="cursor-pointer"
+                  onClick={() => {
+                    resetStructuresToCacheDigitech();
+                    toast("Loaded Cache Digitech salary structures");
+                    refresh();
+                  }}
+                >
+                  Load Cache Digitech Templates
                 </Button>
                 <Button
                   size="sm"
@@ -464,6 +492,7 @@ export function PayrollManagementPage() {
                         <th className="px-3 py-2 font-medium">Gross</th>
                         <th className="px-3 py-2 font-medium">Deductions</th>
                         <th className="px-3 py-2 font-medium">Net</th>
+                        <th className="px-3 py-2 font-medium">Actions</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -479,6 +508,19 @@ export function PayrollManagementPage() {
                             <td className="px-3 py-2 tabular-nums">{formatInr(d)}</td>
                             <td className="px-3 py-2 tabular-nums font-medium">
                               {formatInr(g - d)}
+                            </td>
+                            <td className="px-3 py-2">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="h-7 cursor-pointer"
+                                onClick={() => {
+                                  setEditingStructure(s);
+                                  setStructureOpen(true);
+                                }}
+                              >
+                                Edit
+                              </Button>
                             </td>
                           </tr>
                         );
@@ -624,13 +666,14 @@ export function PayrollManagementPage() {
                                   variant="outline"
                                   className="h-7 cursor-pointer text-xs"
                                   onClick={() => {
-                                    try {
-                                      const slips = generatePayslips(r.id);
-                                      toast(`${slips.length} payslips`);
-                                      refresh();
-                                    } catch (e) {
-                                      toast(e instanceof Error ? e.message : "Failed", "error");
-                                    }
+                                    void generatePayslips(r.id)
+                                      .then((slips) => {
+                                        toast(`${slips.length} payslips`);
+                                        refresh();
+                                      })
+                                      .catch((e) =>
+                                        toast(e instanceof Error ? e.message : "Failed", "error"),
+                                      );
                                   }}
                                 >
                                   Payslips
@@ -823,12 +866,18 @@ export function PayrollManagementPage() {
 
           {tab === "bonuses" ? (
             <section className="space-y-3">
-              <Button size="sm" className="cursor-pointer" onClick={() => setBonusOpen(true)}>
-                <Plus className="size-3.5" />
-                Add Bonus
-              </Button>
-              {(dir?.bonuses.length ?? 0) === 0 ? (
-                <HrEmptyState title="No bonuses" description="Festival, performance, retention, referral." />
+              <div className="flex flex-wrap gap-2">
+                <Button size="sm" className="cursor-pointer" onClick={() => setBonusOpen(true)}>
+                  <Plus className="size-3.5" />
+                  Add Bonus
+                </Button>
+                <Button size="sm" variant="outline" className="cursor-pointer" onClick={() => setAdjOpen(true)}>
+                  <Plus className="size-3.5" />
+                  Arrears / Incentive
+                </Button>
+              </div>
+              {(dir?.bonuses.length ?? 0) === 0 && (dir?.adjustments.length ?? 0) === 0 ? (
+                <HrEmptyState title="No bonuses" description="Festival, performance, retention, referral, arrears, incentives." />
               ) : (
                 <div className="overflow-x-auto rounded-xl border border-border/70">
                   <table className="w-full min-w-[560px] text-left text-sm">
@@ -847,6 +896,16 @@ export function PayrollManagementPage() {
                           <td className="px-3 py-2 capitalize">{b.bonusType}</td>
                           <td className="px-3 py-2 tabular-nums">{formatInr(b.amount)}</td>
                           <td className="px-3 py-2 text-xs">{b.month}</td>
+                        </tr>
+                      ))}
+                      {dir?.adjustments.map((a) => (
+                        <tr key={a.id} className="border-b border-border/50">
+                          <td className="px-3 py-2 font-medium">{a.employeeName}</td>
+                          <td className="px-3 py-2 capitalize">
+                            {a.kind} · {a.status}
+                          </td>
+                          <td className="px-3 py-2 tabular-nums">{formatInr(a.amount)}</td>
+                          <td className="px-3 py-2 text-xs">{a.month}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -1289,19 +1348,29 @@ export function PayrollManagementPage() {
 
       <StructureDrawer
         open={structureOpen}
-        onClose={() => setStructureOpen(false)}
-        onSubmit={(input) => {
-          createStructure(input);
-          toast("Structure created");
+        initial={editingStructure}
+        onClose={() => {
+          setStructureOpen(false);
+          setEditingStructure(null);
+        }}
+        onSubmit={async (input) => {
+          if (editingStructure) {
+            await updateStructure(editingStructure.id, input);
+            toast("Structure updated");
+          } else {
+            await createStructure(input);
+            toast("Structure created");
+          }
+          setEditingStructure(null);
           refresh();
         }}
       />
       <RunPayrollDrawer
         open={runOpen}
         onClose={() => setRunOpen(false)}
-        onSubmit={(month) => {
+        onSubmit={async (month) => {
           try {
-            runPayroll(month);
+            await runPayroll(month);
             toast(`Payroll run for ${month}`);
             refresh();
             setTab("process");
@@ -1356,8 +1425,8 @@ export function PayrollManagementPage() {
         onClose={() => setAssignOpen(false)}
         structures={dir?.structures ?? []}
         employees={employees}
-        onSubmit={(input) => {
-          assignEmployeeSalary(input);
+        onSubmit={async (input) => {
+          await assignEmployeeSalary(input);
           toast("Salary assigned");
           refresh();
         }}
@@ -1367,9 +1436,25 @@ export function PayrollManagementPage() {
         onClose={() => setBonusOpen(false)}
         employees={employees}
         onSubmit={(input) => {
-          addBonus(input);
-          toast("Bonus added");
-          refresh();
+          void addBonus(input)
+            .then(() => {
+              toast("Bonus added");
+              refresh();
+            })
+            .catch((e) => toast(e instanceof Error ? e.message : "Failed", "error"));
+        }}
+      />
+      <AdjustmentDrawer
+        open={adjOpen}
+        onClose={() => setAdjOpen(false)}
+        employees={employees}
+        onSubmit={(input) => {
+          void addPayrollAdjustment(input)
+            .then(() => {
+              toast("Adjustment applied");
+              refresh();
+            })
+            .catch((e) => toast(e instanceof Error ? e.message : "Failed", "error"));
         }}
       />
       <ReimbDrawer
@@ -1377,7 +1462,7 @@ export function PayrollManagementPage() {
         onClose={() => setReimbOpen(false)}
         employees={employees}
         onSubmit={(input) => {
-          addReimbursement({ ...input, status: "pending" });
+          void addReimbursement({ ...input, status: "pending" });
           toast("Reimbursement submitted");
           refresh();
         }}
@@ -1387,7 +1472,7 @@ export function PayrollManagementPage() {
         onClose={() => setLoanOpen(false)}
         employees={employees}
         onSubmit={(input) => {
-          addLoan(input);
+          void addLoan(input);
           toast("Loan recorded");
           refresh();
         }}

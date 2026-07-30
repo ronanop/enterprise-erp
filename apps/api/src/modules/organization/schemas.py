@@ -95,6 +95,18 @@ class LocationCreateRequest(BaseModel):
     location_code: str
     location_name: str
     location_type: str = "office"
+    latitude: float | None = None
+    longitude: float | None = None
+    geofence_radius_meters: int | None = None
+
+
+class LocationUpdateRequest(BaseModel):
+    location_name: str | None = None
+    location_type: str | None = None
+    latitude: float | None = None
+    longitude: float | None = None
+    geofence_radius_meters: int | None = None
+    status: str | None = None
 
 
 class CostCenterCreateRequest(BaseModel):

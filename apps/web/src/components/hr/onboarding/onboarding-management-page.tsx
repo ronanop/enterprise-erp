@@ -580,16 +580,21 @@ export function OnboardingManagementPage() {
             setDetailCase(d.cases.find((x) => x.id === caseId) ?? null);
           });
         }}
-        onActivate={(caseId) => {
-          const activated = activateEmployee(caseId);
-          if (activated) {
-            toast(`Employee ${activated.employeeId} activated · welcome email queued`);
-            void load().then(async () => {
-              const d = await loadOnboardingDirectory();
-              setDir(d);
-              setDetailCase(d.cases.find((x) => x.id === caseId) ?? null);
+        onActivate={(caseId, opts) => {
+          void activateEmployee(caseId, opts)
+            .then((activated) => {
+              if (activated) {
+                toast(`Employee ${activated.employeeId} activated · payroll eligible`);
+                void load().then(async () => {
+                  const d = await loadOnboardingDirectory();
+                  setDir(d);
+                  setDetailCase(d.cases.find((x) => x.id === caseId) ?? null);
+                });
+              }
+            })
+            .catch((e) => {
+              toast(e instanceof Error ? e.message : "Activation failed", "error");
             });
-          }
         }}
       />
     </div>
