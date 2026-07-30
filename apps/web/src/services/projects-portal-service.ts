@@ -398,6 +398,54 @@ export async function advanceSiteInstallation(
   );
 }
 
+export type SiteStageFollowUpResult = {
+  stage: string;
+  stage_label: string;
+  recipient_employee_id: string;
+  notification_id: string;
+  message: string;
+};
+
+export type SiteStageFollowUp = {
+  id: string;
+  stage: string;
+  stage_label: string;
+  recipient_employee_id: string | null;
+  message: string;
+  note: string | null;
+  site_name: string | null;
+  document_number: string | null;
+  delivery_status: string;
+  status: string;
+  created_at: string | null;
+  sent_at: string | null;
+};
+
+export async function followUpSiteStage(
+  projectId: string,
+  stage: string,
+  note?: string | null,
+): Promise<SiteStageFollowUpResult> {
+  return unwrap(
+    await apiClient<SiteStageFollowUpResult>(
+      `${SITE_INSTALLATIONS_API}/by-project/${projectId}/follow-up`,
+      { method: "POST", body: { stage, note: note || null } },
+    ),
+  );
+}
+
+export async function listSiteStageFollowUps(
+  projectId: string,
+): Promise<SiteStageFollowUp[]> {
+  return asArray(
+    unwrap(
+      await apiClient<SiteStageFollowUp[]>(
+        `${SITE_INSTALLATIONS_API}/by-project/${projectId}/follow-ups`,
+      ),
+    ),
+  );
+}
+
 export async function listSiteInstallations(): Promise<SiteInstallation[]> {
   const res = await resourceService.list<SiteInstallation>(SITE_INSTALLATIONS_API, {
     page_size: 200,
@@ -1105,8 +1153,7 @@ export async function listBranchOptions(): Promise<Option[]> {
 
 function employeeOptionLabel(r: Record<string, unknown>): string {
   const name = [r.first_name, r.last_name].filter(Boolean).join(" ").trim();
-  const code = r.employee_code ? ` (${r.employee_code})` : "";
-  return `${name || String(r.id)}${code}`;
+  return name || String(r.id);
 }
 
 export async function listEmployeeOptions(): Promise<Option[]> {

@@ -68,6 +68,9 @@ from modules.project.schemas import (
     SiteInstallationAdvanceRequest,
     SiteInstallationBlueprintResponse,
     SiteInstallationCreate,
+    SiteInstallationFollowUpRequest,
+    SiteInstallationFollowUpResponse,
+    SiteStageFollowUpItem,
     SiteInstallationResponse,
     SiteInstallationUpdate,
     TaskAssignmentCreate,
@@ -1031,6 +1034,39 @@ def advance_site_installation(
     return APIResponse(
         message="Advanced",
         data=SiteInstallationService(db).advance(ctx, project_id, body.action),
+    )
+
+
+@site_installations_router.post(
+    "/by-project/{project_id}/follow-up",
+    response_model=APIResponse[SiteInstallationFollowUpResponse],
+)
+def follow_up_site_installation_stage(
+    project_id: UUID,
+    body: SiteInstallationFollowUpRequest,
+    ctx: Annotated[TenantContext, Depends(require_permission("project.project:update"))],
+    db: Annotated[Session, Depends(get_db)],
+):
+    return APIResponse(
+        message="Follow-up sent",
+        data=SiteInstallationService(db).follow_up_stage(
+            ctx, project_id, body.stage, body.note
+        ),
+    )
+
+
+@site_installations_router.get(
+    "/by-project/{project_id}/follow-ups",
+    response_model=APIResponse[list[SiteStageFollowUpItem]],
+)
+def list_site_installation_follow_ups(
+    project_id: UUID,
+    ctx: Annotated[TenantContext, Depends(require_permission("project.project:read"))],
+    db: Annotated[Session, Depends(get_db)],
+):
+    return APIResponse(
+        message="OK",
+        data=SiteInstallationService(db).list_follow_ups(ctx, project_id),
     )
 
 

@@ -1074,3 +1074,31 @@ class SiteInstallationBlueprintResponse(BaseModel):
 
 class SiteInstallationAdvanceRequest(BaseModel):
     action: str = Field(min_length=1, max_length=80)
+
+
+class SiteInstallationFollowUpRequest(BaseModel):
+    stage: str = Field(min_length=1, max_length=40)
+    note: str | None = Field(default=None, max_length=1000)
+
+
+class SiteInstallationFollowUpResponse(BaseModel):
+    stage: str
+    stage_label: str
+    recipient_employee_id: UUID
+    notification_id: UUID
+    message: str
+
+
+class SiteStageFollowUpItem(BaseModel):
+    id: UUID
+    stage: str
+    stage_label: str
+    recipient_employee_id: UUID | None = None
+    message: str
+    note: str | None = None
+    site_name: str | None = None
+    document_number: str | None = None
+    delivery_status: str
+    status: str
+    created_at: datetime | None = None
+    sent_at: datetime | None = None

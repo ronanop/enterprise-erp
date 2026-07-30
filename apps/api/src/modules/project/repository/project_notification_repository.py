@@ -27,6 +27,25 @@ class ProjectNotificationRepository(PrjScopedRepository):
         stmt = self.apply_prj_filter(stmt, PrjProjectNotification, ctx, branch_scoped=False)
         return list(self.db.scalars(stmt).all())
 
+    def list_site_follow_ups(self, ctx: TenantContext, project_id: UUID):
+        stmt = (
+            select(PrjProjectNotification)
+            .where(
+                PrjProjectNotification.project_id == project_id,
+                PrjProjectNotification.is_deleted.is_(False),
+                PrjProjectNotification.notification_type == "other",
+            )
+            .order_by(PrjProjectNotification.created_at.desc())
+        )
+        stmt = self.apply_prj_filter(stmt, PrjProjectNotification, ctx, branch_scoped=False)
+        rows = list(self.db.scalars(stmt).all())
+        return [
+            row
+            for row in rows
+            if isinstance(row.payload_json, dict)
+            and row.payload_json.get("kind") == "site_stage_follow_up"
+        ]
+
     def create(self, ctx: TenantContext, **fields) -> PrjProjectNotification:
         row = PrjProjectNotification(
             id=uuid4(),

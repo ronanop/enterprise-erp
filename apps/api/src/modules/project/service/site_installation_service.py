@@ -17,6 +17,7 @@ from modules.project.domain.enums import (
     SiteDeliveryType,
     SiteInstallationStatus,
     SiteWorkflowStage,
+    delivery_is_rack_only,
 )
 from modules.project.domain.exceptions import InvalidSiteInstallationState
 from modules.project.models import PrjProject, PrjProjectTask
@@ -29,6 +30,10 @@ from modules.project.repository.site_installation_repository import SiteInstalla
 from modules.project.service.document_number_service import DocumentNumberService
 from modules.project.service.engines import site_installation_engine as engine
 from modules.project.service.engines.site_installation_template import wbs_for_delivery_type
+from modules.project.service.notification_service import NotificationService
+from modules.project.repository.project_notification_repository import (
+    ProjectNotificationRepository,
+)
 from modules.project.service.project_scope_validator import ProjectScopeValidator
 
 
@@ -332,6 +337,99 @@ class SiteInstallationService:
             performed_by=ctx.user_id,
         )
         return updated
+
+    def follow_up_stage(
+        self,
+        ctx: TenantContext,
+        project_id: UUID,
+        stage: str,
+        note: str | None = None,
+    ) -> dict:
+        """Create a project notification for the assignee of a delivery stage."""
+        row = self.get_by_project(ctx, project_id)
+        stage_key = stage.strip().lower()
+        if stage_key == "configuration":
+            stage_key = SiteWorkflowStage.INSTALLATION.value
+        field = engine.STAGE_ASSIGNEE_FIELDS.get(stage_key)
+        if not field:
+            raise InvalidSiteInstallationState(
+                f"Follow-up is not available for stage '{stage}'"
+            )
+        recipient_id = getattr(row, field, None)
+        if recipient_id is None:
+            raise InvalidSiteInstallationState(
+                f"No assignee set for {engine.STAGE_LABELS.get(stage_key, stage_key)}"
+            )
+
+        stage_label = engine.STAGE_LABELS.get(stage_key, stage_key)
+        if stage_key == SiteWorkflowStage.INSTALLATION.value and delivery_is_rack_only(
+            row.delivery_type
+        ):
+            stage_label = "Installation"
+
+        site_name = row.site_name or row.document_number
+        message = (
+            f"Follow-up requested for {stage_label} on site {site_name}."
+            + (f" Note: {note.strip()}" if note and note.strip() else "")
+        )
+        notification = NotificationService(self._db).create(
+            ctx,
+            company_id=row.company_id,
+            branch_id=row.branch_id,
+            project_id=project_id,
+            notification_type="other",
+            recipient_employee_id=recipient_id,
+            payload_json={
+                "kind": "site_stage_follow_up",
+                "stage": stage_key,
+                "stage_label": stage_label,
+                "site_installation_id": str(row.id),
+                "document_number": row.document_number,
+                "site_name": row.site_name,
+                "message": message,
+                "note": note.strip() if note and note.strip() else None,
+            },
+            status="active",
+        )
+        self._audit.log_entity_change(
+            tenant_id=ctx.tenant_id,
+            entity_name="prj_site_installation",
+            entity_id=row.id,
+            operation=f"follow_up:{stage_key}",
+            performed_by=ctx.user_id,
+        )
+        return {
+            "stage": stage_key,
+            "stage_label": stage_label,
+            "recipient_employee_id": recipient_id,
+            "notification_id": notification.id,
+            "message": message,
+        }
+
+    def list_follow_ups(self, ctx: TenantContext, project_id: UUID) -> list[dict]:
+        """Return site-stage follow-up notifications for a project (newest first)."""
+        self.get_by_project(ctx, project_id)
+        rows = ProjectNotificationRepository(self._db).list_site_follow_ups(ctx, project_id)
+        out: list[dict] = []
+        for row in rows:
+            payload = row.payload_json if isinstance(row.payload_json, dict) else {}
+            out.append(
+                {
+                    "id": row.id,
+                    "stage": str(payload.get("stage") or ""),
+                    "stage_label": str(payload.get("stage_label") or payload.get("stage") or ""),
+                    "recipient_employee_id": row.recipient_employee_id,
+                    "message": str(payload.get("message") or ""),
+                    "note": payload.get("note"),
+                    "site_name": payload.get("site_name"),
+                    "document_number": payload.get("document_number"),
+                    "delivery_status": row.delivery_status,
+                    "status": row.status,
+                    "created_at": row.created_at,
+                    "sent_at": row.sent_at,
+                }
+            )
+        return out
 
     def _sync_phase_status(
         self, ctx: TenantContext, project_id: UUID, new_stage: str
