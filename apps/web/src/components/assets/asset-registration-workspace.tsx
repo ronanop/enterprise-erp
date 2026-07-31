@@ -19,7 +19,6 @@ import {
 } from "@/components/ui/select";
 import { isAuthenticated } from "@/lib/auth";
 import {
-  assetCategoryService,
   filterActiveCategories,
   type AssetCategoryRow,
 } from "@/services/assets-service";
@@ -39,15 +38,19 @@ type AssetRow = {
   version: number;
 };
 
+type CategoryRow = {
+  id: string;
+  category_code: string;
+  category_name: string;
+  status?: string;
+};
+
 type ListPayload<T> = {
   items: T[];
   total: number;
   page: number;
   page_size: number;
 };
-
-/** Backend Asset pagination max (`le=200`); enough for registration dropdown. */
-const CATEGORY_DROPDOWN_PAGE_SIZE = 200;
 
 const STATUS_OPTIONS = ["", "draft", "submitted", "active", "cancelled"] as const;
 const ASSET_TYPES = ["fixed", "consumable", "digital", "leased"] as const;
@@ -59,9 +62,18 @@ function isUuid(value: string): boolean {
   return UUID_RE.test(value.trim());
 }
 
+function parseListItems<T>(data: unknown): T[] {
+  if (Array.isArray(data)) return data as T[];
+  if (data && typeof data === "object" && "items" in data) {
+    const items = (data as ListPayload<T>).items;
+    return Array.isArray(items) ? items : [];
+  }
+  return [];
+}
+
 export function AssetRegistrationWorkspace() {
   const [rows, setRows] = useState<AssetRow[]>([]);
-  const [categories, setCategories] = useState<AssetCategoryRow[]>([]);
+  const [categories, setCategories] = useState<CategoryRow[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [pageSize] = useState(25);
@@ -69,7 +81,6 @@ export function AssetRegistrationWorkspace() {
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [categoryError, setCategoryError] = useState<string | null>(null);
   const [selected, setSelected] = useState<AssetRow | null>(null);
   const [actionLoading, setActionLoading] = useState(false);
   const [draft, setDraft] = useState({
@@ -89,27 +100,20 @@ export function AssetRegistrationWorkspace() {
   });
 
   const apiPath = "/assets/assets";
+  const categoryPath = "/assets/asset-categories";
 
   const loadCategories = useCallback(async () => {
     if (!isAuthenticated()) return;
     try {
-      const payload = await assetCategoryService.search({
-        page: 1,
-        page_size: CATEGORY_DROPDOWN_PAGE_SIZE,
-        status: "active",
-      });
-      setCategories(filterActiveCategories(payload.items));
-      setCategoryError(null);
-    } catch (err) {
-      console.error("Failed to load asset categories for registration", err);
-      setCategories([]);
-      setCategoryError(
-        err instanceof ApiClientError
-          ? err.message
-          : "Failed to load asset categories",
+      const res = await resourceService.list(
+        `${categoryPath}?status=active&page=1&page_size=500`,
       );
+      const items = parseListItems<CategoryRow | AssetCategoryRow>(res.data);
+      setCategories(filterActiveCategories(items));
+    } catch {
+      setCategories([]);
     }
-  }, []);
+  }, [categoryPath]);
 
   const load = useCallback(async () => {
     if (!isAuthenticated()) return;
@@ -269,15 +273,6 @@ export function AssetRegistrationWorkspace() {
           role="alert"
         >
           {error}
-        </p>
-      ) : null}
-
-      {categoryError ? (
-        <p
-          className="rounded-md border border-destructive/40 bg-destructive/5 px-3 py-2 text-sm text-destructive"
-          role="alert"
-        >
-          {categoryError}
         </p>
       ) : null}
 

@@ -214,16 +214,6 @@ export function AssetMaintenanceWorkspace() {
   }, [loadAssets]);
 
   useEffect(() => {
-    if (!prefillAssetId) return;
-    const asset = assetMap.get(prefillAssetId);
-    setDraft((current) => ({
-      ...current,
-      asset_id: prefillAssetId,
-      branch_id: asset?.branch_id ?? current.branch_id,
-    }));
-  }, [prefillAssetId, assetMap]);
-
-  useEffect(() => {
     if (!selected) return;
     setEdit({
       maintenance_type: selected.maintenance_type,

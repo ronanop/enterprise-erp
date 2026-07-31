@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { ChevronLeft, ChevronRight, Loader2 } from "lucide-react";
 
 import { PageHeader } from "@/components/layout/page-header";
-import { Button, buttonVariants } from "@/components/ui/button";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -19,15 +19,11 @@ import {
 } from "@/components/ui/select";
 import { ASSET_PRD_TYPES } from "@/config/asset-prd-types";
 import { isItAssetCategory } from "@/domain/asset-prd";
-import { cn } from "@/lib/utils";
 import { isAuthenticated } from "@/lib/auth";
-import { listBranchOptions, type OrgOption } from "@/lib/org-options";
+import { buildSelfServiceUrl } from "@/services/assets-service";
 import {
   assetCategoryService,
-  assetDiscoveryService,
-  assetLocationService,
   assetRegisterService,
-  buildSelfServiceUrl,
   filterActiveCategories,
   type AssetCategoryRow,
 } from "@/services/assets-service";
@@ -51,7 +47,6 @@ export function AssetAddWizard() {
   const router = useRouter();
   const [step, setStep] = useState(0);
   const [categories, setCategories] = useState<AssetCategoryRow[]>([]);
-  const [branches, setBranches] = useState<OrgOption[]>([]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [form, setForm] = useState({
@@ -88,11 +83,6 @@ export function AssetAddWizard() {
         status: "active",
       });
       setCategories(filterActiveCategories(payload.items));
-      const branchOpts = await listBranchOptions();
-      setBranches(branchOpts);
-      if (branchOpts.length === 1) {
-        setForm((f) => (f.branch_id ? f : { ...f, branch_id: branchOpts[0].id }));
-      }
     })();
   }, []);
 
@@ -111,6 +101,10 @@ export function AssetAddWizard() {
       setError("Asset name is required.");
       return;
     }
+    if (!form.asset_code.trim()) {
+      setError("Asset code is required.");
+      return;
+    }
     if (!form.asset_category_id) {
       setError("Category is required.");
       return;
@@ -125,54 +119,17 @@ export function AssetAddWizard() {
         branch_id: form.branch_id.trim(),
         asset_category_id: form.asset_category_id,
         asset_name: form.asset_name.trim(),
+        asset_code: form.asset_code.trim(),
+        asset_type: form.asset_type,
         serial_number: form.serial_number.trim() || undefined,
         purchase_date: form.purchase_date,
-        purchase_cost: form.purchase_cost ? Number(form.purchase_cost) : 0,
+        purchase_cost: form.purchase_cost ? Number(form.purchase_cost) : undefined,
         currency_code: form.currency_code,
-        asset_type: form.asset_type,
-        barcode: form.asset_code.trim() || undefined,
       });
       const id = String(created.id);
-      let version = Number(created.version ?? 1);
       const qr = typeof window !== "undefined" ? buildSelfServiceUrl(id) : undefined;
       if (qr) {
-        const updated = await assetRegisterService.update(id, { qr_code: qr, version });
-        version = Number(updated.version ?? version);
-      }
-      const locationParts = [
-        form.location_label.trim(),
-        form.building.trim() && `Bldg ${form.building.trim()}`,
-        form.floor.trim() && `Floor ${form.floor.trim()}`,
-        form.room.trim() && `Room ${form.room.trim()}`,
-      ].filter(Boolean);
-      if (locationParts.length) {
-        await assetLocationService
-          .create({
-            asset_id: id,
-            branch_id: form.branch_id.trim(),
-            location_label: locationParts.join(" · "),
-          })
-          .catch(() => undefined);
-      }
-      if (showTechnical && (form.hostname.trim() || form.mac_address.trim())) {
-        const raw = [
-          form.hostname.trim() ? `HOSTNAME=${form.hostname.trim()}` : "",
-          form.mac_address.trim() ? `MAC=${form.mac_address.trim()}` : "",
-        ]
-          .filter(Boolean)
-          .join("\n");
-        try {
-          await assetDiscoveryService.parse(id, { platform: "windows", raw_output: raw });
-          const applied = await assetDiscoveryService.apply(id, {
-            platform: "windows",
-            raw_output: raw,
-            version,
-            preview_confirmed: true,
-          });
-          version = applied.version ?? version;
-        } catch {
-          /* optional IT profile */
-        }
+        await assetRegisterService.update(id, { qr_code: qr });
       }
       await assetRegisterService.action(id, "submit").catch(() => undefined);
       await assetRegisterService.action(id, "approve").catch(() => undefined);
@@ -190,12 +147,9 @@ export function AssetAddWizard() {
         title="Add Asset"
         description={`Step ${step + 1} of ${STEPS.length}: ${STEPS[step]}`}
         actions={
-          <Link
-            href="/assets/assets"
-            className={cn(buttonVariants({ variant: "outline", size: "sm" }), "cursor-pointer")}
-          >
-            Cancel
-          </Link>
+          <Button variant="outline" size="sm" asChild className="cursor-pointer">
+            <Link href="/assets/assets">Cancel</Link>
+          </Button>
         }
       />
 
@@ -224,45 +178,22 @@ export function AssetAddWizard() {
                   onChange={(e) => setForm((f) => ({ ...f, asset_name: e.target.value }))}
                 />
               </Field>
-              <Field label="Asset tag / barcode (optional)">
+              <Field label="Asset code *">
                 <Input
                   value={form.asset_code}
                   onChange={(e) => setForm((f) => ({ ...f, asset_code: e.target.value }))}
-                  placeholder="Printed tag or barcode value"
                 />
-              </Field>
-              <p className="text-xs text-muted-foreground">
-                System asset code is assigned automatically on save.
-              </p>
-              <Field label="Branch *">
-                {branches.length > 0 ? (
-                  <Select
-                    value={form.branch_id}
-                    onValueChange={(v) => setForm((f) => ({ ...f, branch_id: v }))}
-                  >
-                    <SelectTrigger className="cursor-pointer">
-                      <SelectValue placeholder="Select branch" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {branches.map((b) => (
-                        <SelectItem key={b.id} value={b.id}>
-                          {b.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                ) : (
-                  <Input
-                    value={form.branch_id}
-                    onChange={(e) => setForm((f) => ({ ...f, branch_id: e.target.value }))}
-                    placeholder="Branch UUID"
-                  />
-                )}
               </Field>
               <Field label="Serial number">
                 <Input
                   value={form.serial_number}
                   onChange={(e) => setForm((f) => ({ ...f, serial_number: e.target.value }))}
+                />
+              </Field>
+              <Field label="Branch ID (UUID) *">
+                <Input
+                  value={form.branch_id}
+                  onChange={(e) => setForm((f) => ({ ...f, branch_id: e.target.value }))}
                 />
               </Field>
             </>

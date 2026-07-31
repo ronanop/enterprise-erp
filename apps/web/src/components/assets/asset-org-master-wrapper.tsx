@@ -4,8 +4,7 @@ import Link from "next/link";
 
 import { PageHeader } from "@/components/layout/page-header";
 import { ResourceListView } from "@/components/module/resource-list-view";
-import { buttonVariants } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
 
 type Props = {
   kind: "locations" | "departments";
@@ -34,12 +33,9 @@ export function AssetOrgMasterWrapper({ kind }: Props) {
         title={meta.title}
         description={meta.description}
         actions={
-          <Link
-            href={meta.orgHref}
-            className={cn(buttonVariants({ variant: "outline", size: "sm" }), "cursor-pointer")}
-          >
-            Open in Organization
-          </Link>
+          <Button variant="outline" size="sm" asChild className="cursor-pointer">
+            <Link href={meta.orgHref}>Open in Organization</Link>
+          </Button>
         }
       />
       <ResourceListView

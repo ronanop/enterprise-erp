@@ -2,11 +2,11 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { Loader2, Pencil, Plus, QrCode, RefreshCw, UserPlus, Wrench } from "lucide-react";
+import { Loader2, Plus, QrCode, RefreshCw, UserPlus, Wrench } from "lucide-react";
 
 import { PageHeader } from "@/components/layout/page-header";
 import { Badge } from "@/components/ui/badge";
-import { Button, buttonVariants } from "@/components/ui/button";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -24,7 +24,6 @@ import {
   type PrdAssetStatus,
 } from "@/domain/asset-prd";
 import { isAuthenticated } from "@/lib/auth";
-import { cn } from "@/lib/utils";
 import {
   assetCategoryService,
   assetRegisterService,
@@ -127,42 +126,6 @@ export function AssetListWorkspace() {
     });
   }
 
-  function exportSelectedCsv() {
-    const selected = filteredRows.filter((r) => selectedIds.has(String(r.id)));
-    if (selected.length === 0) return;
-    const headers = [
-      "asset_code",
-      "asset_name",
-      "asset_type",
-      "serial_number",
-      "status",
-      "category",
-    ];
-    const lines = [
-      headers.join(","),
-      ...selected.map((row) => {
-        const cat = categoryById.get(String(row.asset_category_id ?? ""));
-        const prd = mapAssetToPrdStatus(row, assignments);
-        const cells = [
-          row.asset_code,
-          row.asset_name,
-          row.asset_type,
-          row.serial_number,
-          prdStatusLabel(prd),
-          cat?.category_name,
-        ].map((v) => `"${String(v ?? "").replace(/"/g, '""')}"`);
-        return cells.join(",");
-      }),
-    ];
-    const blob = new Blob([lines.join("\n")], { type: "text/csv;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `assets-export-${new Date().toISOString().slice(0, 10)}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
-  }
-
   return (
     <div className="space-y-4">
       <PageHeader
@@ -174,13 +137,12 @@ export function AssetListWorkspace() {
               <RefreshCw className="mr-1 size-4" />
               Refresh
             </Button>
-            <Link
-              href="/assets/assets/new"
-              className={cn(buttonVariants({ size: "sm" }), "cursor-pointer")}
-            >
-              <Plus className="mr-1 size-4" />
-              Add Asset
-            </Link>
+            <Button size="sm" asChild className="cursor-pointer">
+              <Link href="/assets/assets/new">
+                <Plus className="mr-1 size-4" />
+                Add Asset
+              </Link>
+            </Button>
           </div>
         }
       />
@@ -199,12 +161,12 @@ export function AssetListWorkspace() {
           </div>
           <div>
             <Label>Category</Label>
-            <Select value={categoryFilter || "__all__"} onValueChange={(v) => setCategoryFilter(v === "__all__" ? "" : v)}>
+            <Select value={categoryFilter} onValueChange={setCategoryFilter}>
               <SelectTrigger className="mt-1 cursor-pointer">
                 <SelectValue placeholder="All categories" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="__all__">All categories</SelectItem>
+                <SelectItem value="">All categories</SelectItem>
                 {categories.map((c) => (
                   <SelectItem key={c.id} value={c.id}>
                     {c.category_name}
@@ -216,15 +178,15 @@ export function AssetListWorkspace() {
           <div>
             <Label>Status</Label>
             <Select
-              value={prdStatusFilter || "__all__"}
-              onValueChange={(v) => setPrdStatusFilter(v === "__all__" ? "" : (v as PrdAssetStatus))}
+              value={prdStatusFilter}
+              onValueChange={(v) => setPrdStatusFilter(v as "" | PrdAssetStatus)}
             >
               <SelectTrigger className="mt-1 cursor-pointer">
                 <SelectValue placeholder="All statuses" />
               </SelectTrigger>
               <SelectContent>
                 {PRD_STATUS_FILTERS.map((o) => (
-                  <SelectItem key={o.label} value={o.value || "__all__"}>
+                  <SelectItem key={o.label} value={o.value}>
                     {o.label}
                   </SelectItem>
                 ))}
@@ -253,17 +215,9 @@ export function AssetListWorkspace() {
       ) : null}
 
       {selectedIds.size > 0 ? (
-        <div className="flex flex-wrap items-center gap-2">
-          <p className="text-xs text-muted-foreground">{selectedIds.size} selected</p>
-          <Button
-            variant="outline"
-            size="sm"
-            className="cursor-pointer"
-            onClick={() => exportSelectedCsv()}
-          >
-            Export CSV
-          </Button>
-        </div>
+        <p className="text-xs text-muted-foreground">
+          {selectedIds.size} selected — bulk actions coming soon.
+        </p>
       ) : null}
 
       <div className="overflow-x-auto rounded-lg border border-border/70">
@@ -326,46 +280,21 @@ export function AssetListWorkspace() {
                     </td>
                     <td className="px-3 py-2">
                       <div className="flex justify-end gap-1">
-                        <Link
-                          href={`/assets/assets/${id}?edit=1`}
-                          title="Edit"
-                          className={cn(
-                            buttonVariants({ variant: "ghost", size: "icon" }),
-                            "cursor-pointer",
-                          )}
-                        >
-                          <Pencil className="size-4" />
-                        </Link>
-                        <Link
-                          href={`/assets/asset-assignments?assetId=${id}`}
-                          title="Assign"
-                          className={cn(
-                            buttonVariants({ variant: "ghost", size: "icon" }),
-                            "cursor-pointer",
-                          )}
-                        >
-                          <UserPlus className="size-4" />
-                        </Link>
-                        <Link
-                          href={`/assets/asset-maintenances?assetId=${id}`}
-                          title="Maintenance"
-                          className={cn(
-                            buttonVariants({ variant: "ghost", size: "icon" }),
-                            "cursor-pointer",
-                          )}
-                        >
-                          <Wrench className="size-4" />
-                        </Link>
-                        <Link
-                          href={`/assets/qr-barcode?assetId=${id}`}
-                          title="QR"
-                          className={cn(
-                            buttonVariants({ variant: "ghost", size: "icon" }),
-                            "cursor-pointer",
-                          )}
-                        >
-                          <QrCode className="size-4" />
-                        </Link>
+                        <Button variant="ghost" size="icon" asChild className="cursor-pointer">
+                          <Link href={`/assets/asset-assignments?assetId=${id}`} title="Assign">
+                            <UserPlus className="size-4" />
+                          </Link>
+                        </Button>
+                        <Button variant="ghost" size="icon" asChild className="cursor-pointer">
+                          <Link href={`/assets/asset-maintenances?assetId=${id}`} title="Maintenance">
+                            <Wrench className="size-4" />
+                          </Link>
+                        </Button>
+                        <Button variant="ghost" size="icon" asChild className="cursor-pointer">
+                          <Link href={`/assets/qr-barcode?assetId=${id}`} title="QR">
+                            <QrCode className="size-4" />
+                          </Link>
+                        </Button>
                       </div>
                     </td>
                   </tr>

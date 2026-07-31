@@ -49,15 +49,6 @@ import { ApiClientError } from "@/services/api-client";
 
 const PAGE_SIZE = 25;
 
-/** PRD §12 report subset (movement excluded — transfers UI removed). */
-const PRD_REPORT_KEYS = new Set([
-  "asset_inventory",
-  "asset_summary",
-  "allocation",
-  "maintenance_due",
-  "warranty_expiry",
-]);
-
 type TabKey = "dashboard" | "run" | "snapshots";
 
 export function AssetReportsWorkspace() {
@@ -89,10 +80,9 @@ export function AssetReportsWorkspace() {
         reportService.catalog(),
       ]);
       setDashboard(dash);
-      setCatalog(cat.filter((c) => PRD_REPORT_KEYS.has(c.key)));
-      const prdCat = cat.filter((c) => PRD_REPORT_KEYS.has(c.key));
-      if (prdCat.length && !prdCat.find((c) => c.key === reportKey)) {
-        setReportKey(prdCat[0].key);
+      setCatalog(cat);
+      if (cat.length && !cat.find((c) => c.key === reportKey)) {
+        setReportKey(cat[0].key);
       }
     } catch (err) {
       setError(err instanceof ApiClientError ? err.message : "Failed to load dashboard");

@@ -3,21 +3,17 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   CheckCircle2,
-  Eye,
   Loader2,
-  Plus,
+  Power,
+  PowerOff,
   RefreshCw,
-  RotateCcw,
   SquarePen,
   Tags,
-  Trash2,
-  X,
 } from "lucide-react";
 
-import { ConfirmDialog } from "@/components/finance/journals/confirm-dialog";
 import { PageHeader } from "@/components/layout/page-header";
 import { Badge } from "@/components/ui/badge";
-import { Button, buttonVariants } from "@/components/ui/button";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -29,7 +25,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { isAuthenticated } from "@/lib/auth";
-import { cn } from "@/lib/utils";
 import {
   type AssetCategoryRow,
   assetCategoryService,
@@ -39,15 +34,11 @@ import { ApiClientError } from "@/services/api-client";
 const STATUS_OPTIONS = ["", "active", "inactive"] as const;
 const DEPR_METHODS = ["", "straight_line", "wdv", "units_of_production"] as const;
 
-type ModalMode = "create" | "edit" | "view";
-
-function deprLabel(method: string | null | undefined) {
-  if (!method) return "None";
-  return method.replace(/_/g, " ");
-}
+type ConfirmAction = "deactivate" | "reactivate" | null;
 
 export function AssetCategoryWorkspace() {
   const [rows, setRows] = useState<AssetCategoryRow[]>([]);
+  const [selected, setSelected] = useState<AssetCategoryRow | null>(null);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [pageSize] = useState(25);
@@ -56,10 +47,7 @@ export function AssetCategoryWorkspace() {
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [modalMode, setModalMode] = useState<ModalMode | null>(null);
-  const [modalRow, setModalRow] = useState<AssetCategoryRow | null>(null);
-  const [deleteTarget, setDeleteTarget] = useState<AssetCategoryRow | null>(null);
-  const [reactivateTarget, setReactivateTarget] = useState<AssetCategoryRow | null>(null);
+  const [confirmAction, setConfirmAction] = useState<ConfirmAction>(null);
   const [draft, setDraft] = useState({
     category_code: "",
     category_name: "",
@@ -71,6 +59,9 @@ export function AssetCategoryWorkspace() {
     default_useful_life_months: "",
     default_depreciation_method: "",
   });
+
+  const canDeactivate = selected?.status === "active";
+  const canReactivate = selected?.status === "inactive";
 
   const load = useCallback(async () => {
     if (!isAuthenticated()) return;
@@ -98,46 +89,31 @@ export function AssetCategoryWorkspace() {
     void load();
   }, [load]);
 
+  useEffect(() => {
+    if (!selected) return;
+    setEdit({
+      category_name: selected.category_name ?? "",
+      default_useful_life_months:
+        selected.default_useful_life_months != null
+          ? String(selected.default_useful_life_months)
+          : "",
+      default_depreciation_method: selected.default_depreciation_method ?? "",
+    });
+    setConfirmAction(null);
+  }, [selected]);
+
   const pageCount = useMemo(
     () => Math.max(1, Math.ceil(total / pageSize)),
     [total, pageSize],
   );
 
-  function openCreate() {
-    setError(null);
-    setModalRow(null);
-    setDraft({
-      category_code: "",
-      category_name: "",
-      default_useful_life_months: "",
-      default_depreciation_method: "",
-    });
-    setModalMode("create");
-  }
-
-  function openView(row: AssetCategoryRow) {
-    setError(null);
-    setModalRow(row);
-    setModalMode("view");
-  }
-
-  function openEdit(row: AssetCategoryRow) {
-    setError(null);
-    setModalRow(row);
-    setEdit({
-      category_name: row.category_name ?? "",
-      default_useful_life_months:
-        row.default_useful_life_months != null ? String(row.default_useful_life_months) : "",
-      default_depreciation_method: row.default_depreciation_method ?? "",
-    });
-    setModalMode("edit");
-  }
-
-  function closeModal() {
-    if (actionLoading) return;
-    setModalMode(null);
-    setModalRow(null);
-    setError(null);
+  async function refreshSelected(id: string) {
+    try {
+      const row = await assetCategoryService.get(id);
+      setSelected(row);
+    } catch {
+      setSelected(null);
+    }
   }
 
   async function createCategory() {
@@ -159,7 +135,12 @@ export function AssetCategoryWorkspace() {
         default_useful_life_months: life ? Number(life) : undefined,
         default_depreciation_method: draft.default_depreciation_method || undefined,
       });
-      closeModal();
+      setDraft({
+        category_code: "",
+        category_name: "",
+        default_useful_life_months: "",
+        default_depreciation_method: "",
+      });
       await load();
     } catch (err) {
       setError(err instanceof ApiClientError ? err.message : "Create failed");
@@ -169,7 +150,7 @@ export function AssetCategoryWorkspace() {
   }
 
   async function saveEdit() {
-    if (!modalRow) return;
+    if (!selected) return;
     if (!edit.category_name.trim()) {
       setError("Category name is required.");
       return;
@@ -178,14 +159,14 @@ export function AssetCategoryWorkspace() {
     setError(null);
     try {
       const life = edit.default_useful_life_months.trim();
-      await assetCategoryService.update(modalRow.id, {
+      await assetCategoryService.update(selected.id, {
         category_name: edit.category_name.trim(),
         default_useful_life_months: life ? Number(life) : null,
         default_depreciation_method: edit.default_depreciation_method || null,
-        version: modalRow.version,
+        version: selected.version,
       });
-      closeModal();
       await load();
+      await refreshSelected(selected.id);
     } catch (err) {
       setError(err instanceof ApiClientError ? err.message : "Update failed");
     } finally {
@@ -193,44 +174,31 @@ export function AssetCategoryWorkspace() {
     }
   }
 
-  async function confirmDeactivate() {
-    if (!deleteTarget) return;
+  async function runConfirmAction() {
+    if (!selected || !confirmAction) return;
     setActionLoading(true);
     setError(null);
     try {
-      await assetCategoryService.deactivate(deleteTarget.id);
-      setDeleteTarget(null);
+      if (confirmAction === "deactivate") {
+        await assetCategoryService.deactivate(selected.id);
+      } else {
+        await assetCategoryService.reactivate(selected.id);
+      }
+      setConfirmAction(null);
       await load();
+      await refreshSelected(selected.id);
     } catch (err) {
-      setError(err instanceof ApiClientError ? err.message : "Deactivate failed");
+      setError(
+        err instanceof ApiClientError
+          ? err.message
+          : confirmAction === "deactivate"
+            ? "Deactivate failed"
+            : "Reactivate failed",
+      );
     } finally {
       setActionLoading(false);
     }
   }
-
-  async function confirmReactivate() {
-    if (!reactivateTarget) return;
-    setActionLoading(true);
-    setError(null);
-    try {
-      await assetCategoryService.reactivate(reactivateTarget.id);
-      setReactivateTarget(null);
-      await load();
-    } catch (err) {
-      setError(err instanceof ApiClientError ? err.message : "Reactivate failed");
-    } finally {
-      setActionLoading(false);
-    }
-  }
-
-  const modalTitle =
-    modalMode === "create"
-      ? "Create category"
-      : modalMode === "edit"
-        ? "Edit category"
-        : modalMode === "view"
-          ? "Category details"
-          : "";
 
   return (
     <div className="space-y-4">
@@ -238,465 +206,403 @@ export function AssetCategoryWorkspace() {
         title="Asset Categories"
         description="Company taxonomy for asset registration — create, edit, deactivate, and reactivate. Business delete is deactivate only."
         actions={
-          <div className="flex flex-wrap gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="cursor-pointer transition-colors duration-200"
-              onClick={() => void load()}
-              disabled={loading || actionLoading}
-            >
-              {loading ? (
-                <Loader2 className="size-4 animate-spin" aria-hidden />
-              ) : (
-                <RefreshCw className="size-4" aria-hidden />
-              )}
-              Refresh
-            </Button>
-            <Button
-              type="button"
-              size="sm"
-              className="cursor-pointer transition-colors duration-200"
-              onClick={openCreate}
-            >
-              <Plus className="size-4" aria-hidden />
-              Add category
-            </Button>
-          </div>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="cursor-pointer transition-colors duration-200"
+            onClick={() => void load()}
+            disabled={loading || actionLoading}
+          >
+            {loading ? (
+              <Loader2 className="size-4 animate-spin" aria-hidden />
+            ) : (
+              <RefreshCw className="size-4" aria-hidden />
+            )}
+            Refresh
+          </Button>
         }
       />
 
-      {error && !modalMode ? (
-        <p className="rounded-md border border-destructive/40 bg-destructive/5 px-3 py-2 text-sm text-destructive" role="alert">
+      {error ? (
+        <p className="rounded-md border border-destructive/40 bg-destructive/5 px-3 py-2 text-sm text-destructive">
           {error}
         </p>
       ) : null}
 
-      <Card>
-        <CardHeader className="space-y-3 pb-3">
-          <CardTitle className="flex items-center gap-2 text-base">
-            <Tags className="size-4" aria-hidden />
-            Categories
-          </CardTitle>
-          <div className="flex flex-wrap gap-2">
-            <Input
-              value={search}
-              onChange={(e) => {
-                setPage(1);
-                setSearch(e.target.value);
-              }}
-              placeholder="Search code or name"
-              className="max-w-xs"
-            />
-            <Select
-              value={statusFilter || "__all"}
-              onValueChange={(v) => {
-                setPage(1);
-                setStatusFilter(v === "__all" ? "" : v);
-              }}
-            >
-              <SelectTrigger className="w-40 cursor-pointer">
-                <SelectValue placeholder="Status" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="__all" className="cursor-pointer">
-                  All statuses
-                </SelectItem>
-                {STATUS_OPTIONS.filter(Boolean).map((s) => (
-                  <SelectItem key={s} value={s} className="cursor-pointer">
-                    {s}
+      <div className="grid gap-4 lg:grid-cols-12">
+        <Card className="lg:col-span-7">
+          <CardHeader className="space-y-3 pb-3">
+            <CardTitle className="flex items-center gap-2 text-base">
+              <Tags className="size-4" aria-hidden />
+              Categories
+            </CardTitle>
+            <div className="flex flex-wrap gap-2">
+              <Input
+                value={search}
+                onChange={(e) => {
+                  setPage(1);
+                  setSearch(e.target.value);
+                }}
+                placeholder="Search code or name"
+                className="max-w-xs"
+              />
+              <Select
+                value={statusFilter || "__all"}
+                onValueChange={(v) => {
+                  setPage(1);
+                  setStatusFilter(v === "__all" ? "" : v);
+                }}
+              >
+                <SelectTrigger className="w-40 cursor-pointer">
+                  <SelectValue placeholder="Status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__all" className="cursor-pointer">
+                    All statuses
                   </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          <div className="overflow-x-auto rounded-md border">
-            <table className="w-full min-w-[720px] text-left text-sm">
-              <thead className="sticky top-0 bg-muted/60 text-xs uppercase tracking-wide text-muted-foreground">
-                <tr>
-                  <th className="px-3 py-2 font-medium">Code</th>
-                  <th className="px-3 py-2 font-medium">Name</th>
-                  <th className="px-3 py-2 font-medium">Life (mo)</th>
-                  <th className="px-3 py-2 font-medium">Depreciation</th>
-                  <th className="px-3 py-2 font-medium">Status</th>
-                  <th className="px-3 py-2 font-medium text-right">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {loading ? (
+                  {STATUS_OPTIONS.filter(Boolean).map((s) => (
+                    <SelectItem key={s} value={s} className="cursor-pointer">
+                      {s}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <div className="overflow-x-auto rounded-md border">
+              <table className="w-full min-w-[520px] text-left text-sm">
+                <thead className="sticky top-0 bg-muted/60 text-xs uppercase tracking-wide text-muted-foreground">
                   <tr>
-                    <td colSpan={6} className="px-3 py-8 text-center text-muted-foreground">
-                      <Loader2 className="mx-auto size-5 animate-spin" aria-hidden />
-                    </td>
+                    <th className="px-3 py-2 font-medium">Code</th>
+                    <th className="px-3 py-2 font-medium">Name</th>
+                    <th className="px-3 py-2 font-medium">Life (mo)</th>
+                    <th className="px-3 py-2 font-medium">Status</th>
                   </tr>
-                ) : rows.length === 0 ? (
-                  <tr>
-                    <td colSpan={6} className="px-3 py-8 text-center text-muted-foreground">
-                      No categories found.
-                    </td>
-                  </tr>
-                ) : (
-                  rows.map((row) => (
-                    <tr
-                      key={row.id}
-                      className="border-t transition-colors duration-150 hover:bg-muted/40"
-                    >
-                      <td className="px-3 py-2 font-mono text-xs">{row.category_code}</td>
-                      <td className="px-3 py-2">{row.category_name}</td>
-                      <td className="px-3 py-2 tabular-nums">
-                        {row.default_useful_life_months ?? "—"}
-                      </td>
-                      <td className="px-3 py-2 text-muted-foreground">
-                        {deprLabel(row.default_depreciation_method)}
-                      </td>
-                      <td className="px-3 py-2">
-                        <Badge
-                          variant="secondary"
-                          className={
-                            row.status === "active"
-                              ? "bg-emerald-100 text-emerald-900"
-                              : "bg-amber-100 text-amber-900"
-                          }
-                        >
-                          {row.status}
-                        </Badge>
-                      </td>
-                      <td className="px-3 py-2">
-                        <div className="flex justify-end gap-1">
-                          <button
-                            type="button"
-                            title="View"
-                            aria-label={`View ${row.category_code}`}
-                            className={cn(
-                              buttonVariants({ variant: "ghost", size: "icon" }),
-                              "cursor-pointer",
-                            )}
-                            onClick={() => openView(row)}
-                          >
-                            <Eye className="size-4" />
-                          </button>
-                          <button
-                            type="button"
-                            title="Edit"
-                            aria-label={`Edit ${row.category_code}`}
-                            className={cn(
-                              buttonVariants({ variant: "ghost", size: "icon" }),
-                              "cursor-pointer",
-                            )}
-                            onClick={() => openEdit(row)}
-                          >
-                            <SquarePen className="size-4" />
-                          </button>
-                          {row.status === "active" ? (
-                            <button
-                              type="button"
-                              title="Deactivate"
-                              aria-label={`Deactivate ${row.category_code}`}
-                              className={cn(
-                                buttonVariants({ variant: "ghost", size: "icon" }),
-                                "cursor-pointer text-destructive hover:text-destructive",
-                              )}
-                              onClick={() => setDeleteTarget(row)}
-                            >
-                              <Trash2 className="size-4" />
-                            </button>
-                          ) : (
-                            <button
-                              type="button"
-                              title="Reactivate"
-                              aria-label={`Reactivate ${row.category_code}`}
-                              className={cn(
-                                buttonVariants({ variant: "ghost", size: "icon" }),
-                                "cursor-pointer",
-                              )}
-                              onClick={() => setReactivateTarget(row)}
-                            >
-                              <RotateCcw className="size-4" />
-                            </button>
-                          )}
-                        </div>
+                </thead>
+                <tbody>
+                  {loading ? (
+                    <tr>
+                      <td colSpan={4} className="px-3 py-8 text-center text-muted-foreground">
+                        <Loader2 className="mx-auto size-5 animate-spin" aria-hidden />
                       </td>
                     </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
-          <div className="flex items-center justify-between text-xs text-muted-foreground">
-            <span>
-              {total} total · page {page} of {pageCount}
-            </span>
-            <div className="flex gap-2">
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                className="cursor-pointer"
-                disabled={page <= 1 || loading}
-                onClick={() => setPage((p) => Math.max(1, p - 1))}
-              >
-                Previous
-              </Button>
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                className="cursor-pointer"
-                disabled={page >= pageCount || loading}
-                onClick={() => setPage((p) => p + 1)}
-              >
-                Next
-              </Button>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      {modalMode ? (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-foreground/40 p-4 motion-safe:animate-in motion-safe:fade-in-0 motion-safe:duration-200"
-          role="presentation"
-          onClick={() => closeModal()}
-        >
-          <div
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="category-modal-title"
-            className="w-full max-w-lg rounded-xl border border-border/80 bg-card p-5 shadow-lg"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex items-start justify-between gap-3">
-              <h2 id="category-modal-title" className="text-sm font-medium tracking-tight">
-                {modalTitle}
-              </h2>
-              <button
-                type="button"
-                aria-label="Close"
-                className={cn(
-                  buttonVariants({ variant: "ghost", size: "icon" }),
-                  "size-8 shrink-0 cursor-pointer",
-                )}
-                onClick={() => closeModal()}
-                disabled={actionLoading}
-              >
-                <X className="size-4" />
-              </button>
-            </div>
-
-            {error && modalMode ? (
-              <p className="mt-3 rounded-md border border-destructive/40 bg-destructive/5 px-3 py-2 text-xs text-destructive" role="alert">
-                {error}
-              </p>
-            ) : null}
-
-            {modalMode === "view" && modalRow ? (
-              <dl className="mt-4 space-y-3 text-sm">
-                <div>
-                  <dt className="text-xs text-muted-foreground">Code</dt>
-                  <dd className="font-mono">{modalRow.category_code}</dd>
-                </div>
-                <div>
-                  <dt className="text-xs text-muted-foreground">Name</dt>
-                  <dd>{modalRow.category_name}</dd>
-                </div>
-                <div>
-                  <dt className="text-xs text-muted-foreground">Useful life (months)</dt>
-                  <dd>{modalRow.default_useful_life_months ?? "—"}</dd>
-                </div>
-                <div>
-                  <dt className="text-xs text-muted-foreground">Depreciation method</dt>
-                  <dd>{deprLabel(modalRow.default_depreciation_method)}</dd>
-                </div>
-                <div>
-                  <dt className="text-xs text-muted-foreground">Status</dt>
-                  <dd className="capitalize">{modalRow.status}</dd>
-                </div>
-              </dl>
-            ) : null}
-
-            {modalMode === "create" ? (
-              <CategoryFormFields
-                codeEditable
-                code={draft.category_code}
-                name={draft.category_name}
-                life={draft.default_useful_life_months}
-                depr={draft.default_depreciation_method}
-                onCodeChange={(v) => setDraft((d) => ({ ...d, category_code: v }))}
-                onNameChange={(v) => setDraft((d) => ({ ...d, category_name: v }))}
-                onLifeChange={(v) => setDraft((d) => ({ ...d, default_useful_life_months: v }))}
-                onDeprChange={(v) => setDraft((d) => ({ ...d, default_depreciation_method: v }))}
-              />
-            ) : null}
-
-            {modalMode === "edit" && modalRow ? (
-              <CategoryFormFields
-                codeEditable={false}
-                code={modalRow.category_code}
-                name={edit.category_name}
-                life={edit.default_useful_life_months}
-                depr={edit.default_depreciation_method}
-                onNameChange={(v) => setEdit((d) => ({ ...d, category_name: v }))}
-                onLifeChange={(v) => setEdit((d) => ({ ...d, default_useful_life_months: v }))}
-                onDeprChange={(v) => setEdit((d) => ({ ...d, default_depreciation_method: v }))}
-              />
-            ) : null}
-
-            <div className="mt-5 flex flex-wrap justify-end gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                className="cursor-pointer"
-                onClick={() => closeModal()}
-                disabled={actionLoading}
-              >
-                {modalMode === "view" ? "Close" : "Cancel"}
-              </Button>
-              {modalMode === "view" && modalRow ? (
-                <Button
-                  type="button"
-                  className="cursor-pointer"
-                  onClick={() => openEdit(modalRow)}
-                >
-                  <SquarePen className="size-4" aria-hidden />
-                  Edit
-                </Button>
-              ) : null}
-              {modalMode === "create" ? (
-                <Button
-                  type="button"
-                  className="cursor-pointer"
-                  disabled={actionLoading}
-                  onClick={() => void createCategory()}
-                >
-                  {actionLoading ? (
-                    <Loader2 className="size-4 animate-spin" aria-hidden />
+                  ) : rows.length === 0 ? (
+                    <tr>
+                      <td colSpan={4} className="px-3 py-8 text-center text-muted-foreground">
+                        No categories found.
+                      </td>
+                    </tr>
                   ) : (
-                    <CheckCircle2 className="size-4" aria-hidden />
+                    rows.map((row) => (
+                      <tr
+                        key={row.id}
+                        className={`cursor-pointer border-t transition-colors duration-150 hover:bg-muted/40 ${
+                          selected?.id === row.id ? "bg-muted/50" : ""
+                        }`}
+                        onClick={() => setSelected(row)}
+                      >
+                        <td className="px-3 py-2 font-mono text-xs">{row.category_code}</td>
+                        <td className="px-3 py-2">{row.category_name}</td>
+                        <td className="px-3 py-2 tabular-nums">
+                          {row.default_useful_life_months ?? "—"}
+                        </td>
+                        <td className="px-3 py-2">
+                          <Badge
+                            variant="secondary"
+                            className={
+                              row.status === "active"
+                                ? "bg-emerald-100 text-emerald-900"
+                                : "bg-amber-100 text-amber-900"
+                            }
+                          >
+                            {row.status}
+                          </Badge>
+                        </td>
+                      </tr>
+                    ))
                   )}
-                  Create
-                </Button>
-              ) : null}
-              {modalMode === "edit" ? (
+                </tbody>
+              </table>
+            </div>
+            <div className="flex items-center justify-between text-xs text-muted-foreground">
+              <span>
+                {total} total · page {page} of {pageCount}
+              </span>
+              <div className="flex gap-2">
                 <Button
                   type="button"
+                  size="sm"
+                  variant="outline"
                   className="cursor-pointer"
-                  disabled={actionLoading}
-                  onClick={() => void saveEdit()}
+                  disabled={page <= 1 || loading}
+                  onClick={() => setPage((p) => Math.max(1, p - 1))}
                 >
-                  {actionLoading ? (
-                    <Loader2 className="size-4 animate-spin" aria-hidden />
-                  ) : (
-                    <CheckCircle2 className="size-4" aria-hidden />
-                  )}
-                  Save
+                  Previous
                 </Button>
-              ) : null}
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="cursor-pointer"
+                  disabled={page >= pageCount || loading}
+                  onClick={() => setPage((p) => p + 1)}
+                >
+                  Next
+                </Button>
+              </div>
             </div>
-          </div>
-        </div>
-      ) : null}
+          </CardContent>
+        </Card>
 
-      <ConfirmDialog
-        open={Boolean(deleteTarget)}
-        title={deleteTarget ? `Deactivate ${deleteTarget.category_code}?` : ""}
-        description="Business delete only — the category stays in the database as inactive. Blocked if operational assets still reference it."
-        confirmLabel="Deactivate"
-        tone="destructive"
-        busy={actionLoading}
-        onConfirm={() => void confirmDeactivate()}
-        onCancel={() => setDeleteTarget(null)}
-      />
+        <div className="space-y-4 lg:col-span-5">
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base">Create category</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="cat_code">Code</Label>
+                <Input
+                  id="cat_code"
+                  value={draft.category_code}
+                  onChange={(e) =>
+                    setDraft((d) => ({ ...d, category_code: e.target.value }))
+                  }
+                  placeholder="IT"
+                  className="font-mono uppercase"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="cat_name">Name</Label>
+                <Input
+                  id="cat_name"
+                  value={draft.category_name}
+                  onChange={(e) =>
+                    setDraft((d) => ({ ...d, category_name: e.target.value }))
+                  }
+                  placeholder="Information Technology"
+                />
+              </div>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="space-y-1.5">
+                  <Label htmlFor="cat_life">Useful life (months)</Label>
+                  <Input
+                    id="cat_life"
+                    type="number"
+                    min={0}
+                    value={draft.default_useful_life_months}
+                    onChange={(e) =>
+                      setDraft((d) => ({
+                        ...d,
+                        default_useful_life_months: e.target.value,
+                      }))
+                    }
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="cat_depr">Depreciation method</Label>
+                  <Select
+                    value={draft.default_depreciation_method || "__none"}
+                    onValueChange={(v) =>
+                      setDraft((d) => ({
+                        ...d,
+                        default_depreciation_method: v === "__none" ? "" : v,
+                      }))
+                    }
+                  >
+                    <SelectTrigger id="cat_depr" className="cursor-pointer">
+                      <SelectValue placeholder="Optional" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__none" className="cursor-pointer">
+                        None
+                      </SelectItem>
+                      {DEPR_METHODS.filter(Boolean).map((m) => (
+                        <SelectItem key={m} value={m} className="cursor-pointer">
+                          {m}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              <Button
+                type="button"
+                className="cursor-pointer transition-colors duration-200"
+                disabled={actionLoading}
+                onClick={() => void createCategory()}
+              >
+                {actionLoading ? (
+                  <Loader2 className="size-4 animate-spin" aria-hidden />
+                ) : (
+                  <CheckCircle2 className="size-4" aria-hidden />
+                )}
+                Create
+              </Button>
+            </CardContent>
+          </Card>
 
-      <ConfirmDialog
-        open={Boolean(reactivateTarget)}
-        title={reactivateTarget ? `Reactivate ${reactivateTarget.category_code}?` : ""}
-        description="Restores the category to active so it appears in registration dropdowns."
-        confirmLabel="Reactivate"
-        busy={actionLoading}
-        onConfirm={() => void confirmReactivate()}
-        onCancel={() => setReactivateTarget(null)}
-      />
-    </div>
-  );
-}
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base">
+                {selected ? "Edit category" : "Select a category"}
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {!selected ? (
+                <p className="text-sm text-muted-foreground">
+                  Select a row to edit, deactivate, or reactivate.
+                </p>
+              ) : (
+                <>
+                  <div className="space-y-1.5">
+                    <Label>Code</Label>
+                    <Input
+                      value={selected.category_code}
+                      disabled
+                      className="font-mono uppercase"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="edit_name">Name</Label>
+                    <Input
+                      id="edit_name"
+                      value={edit.category_name}
+                      onChange={(e) =>
+                        setEdit((d) => ({ ...d, category_name: e.target.value }))
+                      }
+                    />
+                  </div>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <div className="space-y-1.5">
+                      <Label htmlFor="edit_life">Useful life (months)</Label>
+                      <Input
+                        id="edit_life"
+                        type="number"
+                        min={0}
+                        value={edit.default_useful_life_months}
+                        onChange={(e) =>
+                          setEdit((d) => ({
+                            ...d,
+                            default_useful_life_months: e.target.value,
+                          }))
+                        }
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label htmlFor="edit_depr">Depreciation method</Label>
+                      <Select
+                        value={edit.default_depreciation_method || "__none"}
+                        onValueChange={(v) =>
+                          setEdit((d) => ({
+                            ...d,
+                            default_depreciation_method: v === "__none" ? "" : v,
+                          }))
+                        }
+                      >
+                        <SelectTrigger id="edit_depr" className="cursor-pointer">
+                          <SelectValue placeholder="Optional" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="__none" className="cursor-pointer">
+                            None
+                          </SelectItem>
+                          {DEPR_METHODS.filter(Boolean).map((m) => (
+                            <SelectItem key={m} value={m} className="cursor-pointer">
+                              {m}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      type="button"
+                      size="sm"
+                      className="cursor-pointer transition-colors duration-200"
+                      disabled={actionLoading}
+                      onClick={() => void saveEdit()}
+                    >
+                      <SquarePen className="size-4" aria-hidden />
+                      Save
+                    </Button>
+                    {canDeactivate ? (
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        className="cursor-pointer transition-colors duration-200"
+                        disabled={actionLoading}
+                        onClick={() => setConfirmAction("deactivate")}
+                      >
+                        <PowerOff className="size-4" aria-hidden />
+                        Deactivate
+                      </Button>
+                    ) : null}
+                    {canReactivate ? (
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        className="cursor-pointer transition-colors duration-200"
+                        disabled={actionLoading}
+                        onClick={() => setConfirmAction("reactivate")}
+                      >
+                        <Power className="size-4" aria-hidden />
+                        Reactivate
+                      </Button>
+                    ) : null}
+                  </div>
 
-function CategoryFormFields({
-  codeEditable,
-  code,
-  name,
-  life,
-  depr,
-  onCodeChange,
-  onNameChange,
-  onLifeChange,
-  onDeprChange,
-}: {
-  codeEditable?: boolean;
-  code: string;
-  name: string;
-  life: string;
-  depr: string;
-  onCodeChange?: (v: string) => void;
-  onNameChange: (v: string) => void;
-  onLifeChange: (v: string) => void;
-  onDeprChange: (v: string) => void;
-}) {
-  return (
-    <div className="mt-4 space-y-3">
-      <div className="space-y-1.5">
-        <Label htmlFor="cat_code">Code</Label>
-        <Input
-          id="cat_code"
-          value={code}
-          disabled={!codeEditable}
-          onChange={(e) => onCodeChange?.(e.target.value)}
-          placeholder="IT"
-          className="font-mono uppercase"
-        />
-      </div>
-      <div className="space-y-1.5">
-        <Label htmlFor="cat_name">Name</Label>
-        <Input
-          id="cat_name"
-          value={name}
-          onChange={(e) => onNameChange(e.target.value)}
-          placeholder="Information Technology"
-        />
-      </div>
-      <div className="grid gap-3 sm:grid-cols-2">
-        <div className="space-y-1.5">
-          <Label htmlFor="cat_life">Useful life (months)</Label>
-          <Input
-            id="cat_life"
-            type="number"
-            min={0}
-            value={life}
-            onChange={(e) => onLifeChange(e.target.value)}
-          />
-        </div>
-        <div className="space-y-1.5">
-          <Label htmlFor="cat_depr">Depreciation method</Label>
-          <Select
-            value={depr || "__none"}
-            onValueChange={(v) => onDeprChange(v === "__none" ? "" : v)}
-          >
-            <SelectTrigger id="cat_depr" className="cursor-pointer">
-              <SelectValue placeholder="Optional" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="__none" className="cursor-pointer">
-                None
-              </SelectItem>
-              {DEPR_METHODS.filter(Boolean).map((m) => (
-                <SelectItem key={m} value={m} className="cursor-pointer">
-                  {deprLabel(m)}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+                  {confirmAction ? (
+                    <div
+                      role="alertdialog"
+                      aria-labelledby="cat-confirm-title"
+                      className="rounded-md border border-amber-300 bg-amber-50 p-3 space-y-2"
+                    >
+                      <p id="cat-confirm-title" className="text-sm font-medium text-amber-950">
+                        {confirmAction === "deactivate"
+                          ? `Deactivate ${selected.category_code}?`
+                          : `Reactivate ${selected.category_code}?`}
+                      </p>
+                      <p className="text-xs text-amber-900">
+                        {confirmAction === "deactivate"
+                          ? "Business delete only — the category stays in the database as inactive. Blocked if operational assets still reference it."
+                          : "Restores the category to active so it appears in registration dropdowns."}
+                      </p>
+                      <div className="flex gap-2">
+                        <Button
+                          type="button"
+                          size="sm"
+                          className="cursor-pointer"
+                          disabled={actionLoading}
+                          onClick={() => void runConfirmAction()}
+                        >
+                          {actionLoading ? (
+                            <Loader2 className="size-4 animate-spin" aria-hidden />
+                          ) : null}
+                          Confirm
+                        </Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          className="cursor-pointer"
+                          disabled={actionLoading}
+                          onClick={() => setConfirmAction(null)}
+                        >
+                          Cancel
+                        </Button>
+                      </div>
+                    </div>
+                  ) : null}
+                </>
+              )}
+            </CardContent>
+          </Card>
         </div>
       </div>
     </div>

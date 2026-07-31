@@ -33,12 +33,3 @@ describe("filterActiveCategories (CR-001)", () => {
     );
   });
 });
-
-describe("registration category page_size (CR-001 fix)", () => {
-  it("stays within backend Asset pagination max (le=200)", () => {
-    const CATEGORY_DROPDOWN_PAGE_SIZE = 200;
-    assert.ok(CATEGORY_DROPDOWN_PAGE_SIZE <= 200);
-    assert.ok(CATEGORY_DROPDOWN_PAGE_SIZE >= 1);
-    assert.notEqual(CATEGORY_DROPDOWN_PAGE_SIZE, 500);
-  });
-});

@@ -776,15 +776,10 @@ function parseSnapshotList(data: unknown): ReportSnapshotListResult {
 
 export const reportService = {
   async catalog(): Promise<ReportCatalogItem[]> {
-    const res = await resourceService.list<ReportCatalogItem[] | { items?: ReportCatalogItem[] }>(
+    const res = await resourceService.list<ReportCatalogItem[]>(
       `${ASSET_REPORTS_PATH}/catalog`,
     );
-    const data = res.data;
-    if (Array.isArray(data)) return data;
-    if (data && typeof data === "object" && Array.isArray((data as { items?: ReportCatalogItem[] }).items)) {
-      return (data as { items: ReportCatalogItem[] }).items;
-    }
-    return [];
+    return Array.isArray(res.data) ? res.data : [];
   },
 
   async dashboard(params?: {
@@ -1119,16 +1114,6 @@ export const maintenancePlanService = {
     );
     return res.data as MaintenancePlanRow;
   },
-};
-
-export type AssetManagementDashboard = {
-  categories: AssetsRow[];
-  assets: AssetsRow[];
-  assignments: AssetsRow[];
-  maintenances: AssetsRow[];
-  errors: string[];
-  statusCodes: number[];
-  partial: boolean;
 };
 
 export type AssetsOverview = {
@@ -1482,78 +1467,6 @@ export const assetCategoryService = {
       "reactivate",
     );
     return res.data as AssetCategoryRow;
-  },
-};
-
-export async function loadAssetManagementDashboard(): Promise<AssetManagementDashboard> {
-  const [categories, assets, assignments, maintenances] = await Promise.all([
-    safeList("/assets/asset-categories"),
-    safeList("/assets/assets"),
-    safeList("/assets/asset-assignments"),
-    safeList("/assets/asset-maintenances"),
-  ]);
-
-  const results = [categories, assets, assignments, maintenances];
-  const errors = results.map((r) => r.error).filter((e): e is string => Boolean(e));
-  const statusCodes = results
-    .map((r) => r.status)
-    .filter((s): s is number => typeof s === "number");
-
-  return {
-    categories: categories.rows,
-    assets: assets.rows,
-    assignments: assignments.rows,
-    maintenances: maintenances.rows,
-    errors,
-    statusCodes,
-    partial: errors.length > 0,
-  };
-}
-
-const ASSETS_API = "/assets/assets";
-
-export const assetRegisterService = {
-  async search(params: {
-    page?: number;
-    page_size?: number;
-    status?: string;
-    q?: string;
-  }) {
-    const qs = new URLSearchParams();
-    if (params.page) qs.set("page", String(params.page));
-    if (params.page_size) qs.set("page_size", String(params.page_size));
-    if (params.status) qs.set("status", params.status);
-    if (params.q) qs.set("q", params.q);
-    const res = await resourceService.list(`${ASSETS_API}?${qs.toString()}`);
-    const data = res.data as { items?: AssetsRow[]; total?: number } | AssetsRow[];
-    if (data && typeof data === "object" && "items" in data) {
-      return {
-        items: normalizeRows(data.items),
-        total: data.total ?? 0,
-      };
-    }
-    const items = normalizeRows(data);
-    return { items, total: items.length };
-  },
-
-  async get(id: string) {
-    const res = await resourceService.get<AssetsRow>(ASSETS_API, id);
-    return res.data as AssetsRow;
-  },
-
-  async create(body: Record<string, unknown>) {
-    const res = await resourceService.create<AssetsRow>(ASSETS_API, body);
-    return res.data as AssetsRow;
-  },
-
-  async update(id: string, body: Record<string, unknown>) {
-    const res = await resourceService.update<AssetsRow>(ASSETS_API, id, body);
-    return res.data as AssetsRow;
-  },
-
-  async action(id: string, action: string) {
-    const res = await resourceService.action<AssetsRow>(ASSETS_API, id, action);
-    return res.data as AssetsRow;
   },
 };
 

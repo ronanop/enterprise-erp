@@ -2,16 +2,13 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
-import { Loader2, QrCode, Save, UserPlus, Wrench } from "lucide-react";
+import { Loader2, QrCode, UserPlus, Wrench } from "lucide-react";
 
 import { AssetDiscoveryPanel } from "@/components/assets/asset-discovery-panel";
 import { PageHeader } from "@/components/layout/page-header";
 import { Badge } from "@/components/ui/badge";
-import { Button, buttonVariants } from "@/components/ui/button";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import {
   brandModelLabel,
   buildRecentActivity,
@@ -21,11 +18,8 @@ import {
   prdStatusLabel,
 } from "@/domain/asset-prd";
 import { isAuthenticated } from "@/lib/auth";
-import { cn } from "@/lib/utils";
 import {
-  assetLocationService,
   assetRegisterService,
-  documentService,
   type AssetsRow,
 } from "@/services/assets-service";
 import { ApiClientError, resourceService } from "@/services/api-client";
@@ -33,25 +27,14 @@ import { ApiClientError, resourceService } from "@/services/api-client";
 type Tab = "overview" | "assignments" | "maintenance" | "documents" | "activity";
 
 export function AssetDetailWorkspace({ assetId }: { assetId: string }) {
-  const searchParams = useSearchParams();
   const [tab, setTab] = useState<Tab>("overview");
   const [asset, setAsset] = useState<AssetsRow | null>(null);
   const [assignments, setAssignments] = useState<AssetsRow[]>([]);
   const [maintenances, setMaintenances] = useState<AssetsRow[]>([]);
   const [documents, setDocuments] = useState<AssetsRow[]>([]);
-  const [currentLocation, setCurrentLocation] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [returning, setReturning] = useState(false);
-  const [editing, setEditing] = useState(searchParams.get("edit") === "1");
-  const [savingEdit, setSavingEdit] = useState(false);
-  const [editForm, setEditForm] = useState({ asset_name: "", serial_number: "" });
-  const [docForm, setDocForm] = useState({
-    document_name: "",
-    document_type: "other",
-    storage_uri: "",
-  });
-  const [docSaving, setDocSaving] = useState(false);
 
   const load = useCallback(async () => {
     if (!isAuthenticated()) return;
@@ -60,15 +43,10 @@ export function AssetDetailWorkspace({ assetId }: { assetId: string }) {
     try {
       const row = await assetRegisterService.get(assetId);
       setAsset(row);
-      setEditForm({
-        asset_name: String(row.asset_name ?? ""),
-        serial_number: String(row.serial_number ?? ""),
-      });
-      const [asnRes, maintRes, docRes, locRes] = await Promise.all([
+      const [asnRes, maintRes, docRes] = await Promise.all([
         resourceService.list(`/assets/asset-assignments?asset_id=${assetId}&page_size=50`),
         resourceService.list(`/assets/asset-maintenances?asset_id=${assetId}&page_size=50`),
         resourceService.list(`/assets/asset-documents?asset_id=${assetId}&page_size=50`),
-        assetLocationService.search({ asset_id: assetId, page_size: 5, is_current: true }),
       ]);
       const pick = (data: unknown) => {
         if (data && typeof data === "object" && "items" in data) {
@@ -79,8 +57,6 @@ export function AssetDetailWorkspace({ assetId }: { assetId: string }) {
       setAssignments(pick(asnRes.data));
       setMaintenances(pick(maintRes.data));
       setDocuments(pick(docRes.data));
-      const loc = locRes.items[0];
-      setCurrentLocation(loc ? String(loc.location_label ?? "") : null);
     } catch (err) {
       setError(err instanceof ApiClientError ? err.message : "Failed to load asset");
       setAsset(null);
@@ -92,52 +68,6 @@ export function AssetDetailWorkspace({ assetId }: { assetId: string }) {
   useEffect(() => {
     void load();
   }, [load]);
-
-  useEffect(() => {
-    if (searchParams.get("edit") === "1") {
-      setEditing(true);
-      setTab("overview");
-    }
-  }, [searchParams]);
-
-  async function saveEdit() {
-    if (!asset) return;
-    setSavingEdit(true);
-    setError(null);
-    try {
-      await assetRegisterService.update(assetId, {
-        asset_name: editForm.asset_name.trim(),
-        serial_number: editForm.serial_number.trim() || null,
-        version: Number(asset.version ?? 1),
-      });
-      setEditing(false);
-      await load();
-    } catch (err) {
-      setError(err instanceof ApiClientError ? err.message : "Save failed");
-    } finally {
-      setSavingEdit(false);
-    }
-  }
-
-  async function addDocument() {
-    if (!docForm.document_name.trim()) return;
-    setDocSaving(true);
-    try {
-      await documentService.create({
-        asset_id: assetId,
-        document_type: docForm.document_type,
-        document_name: docForm.document_name.trim(),
-        storage_uri: docForm.storage_uri.trim() || undefined,
-      });
-      setDocForm({ document_name: "", document_type: "other", storage_uri: "" });
-      await load();
-      setTab("documents");
-    } catch (err) {
-      setError(err instanceof ApiClientError ? err.message : "Failed to add document");
-    } finally {
-      setDocSaving(false);
-    }
-  }
 
   const prdStatus = useMemo(
     () => (asset ? mapAssetToPrdStatus(asset, assignments) : "available"),
@@ -210,13 +140,12 @@ export function AssetDetailWorkspace({ assetId }: { assetId: string }) {
         description={`${asset.asset_code ?? ""} · ${prdStatusLabel(prdStatus)}`}
         actions={
           <div className="flex flex-wrap gap-2">
-            <Link
-              href={`/assets/asset-assignments?assetId=${assetId}`}
-              className={cn(buttonVariants({ variant: "outline", size: "sm" }), "cursor-pointer")}
-            >
-              <UserPlus className="mr-1 size-4" />
-              Assign
-            </Link>
+            <Button variant="outline" size="sm" asChild className="cursor-pointer">
+              <Link href={`/assets/asset-assignments?assetId=${assetId}`}>
+                <UserPlus className="mr-1 size-4" />
+                Assign
+              </Link>
+            </Button>
             {activeAssignment ? (
               <Button
                 variant="outline"
@@ -228,66 +157,21 @@ export function AssetDetailWorkspace({ assetId }: { assetId: string }) {
                 Return
               </Button>
             ) : null}
-            <Link
-              href={`/assets/asset-maintenances?assetId=${assetId}`}
-              className={cn(buttonVariants({ variant: "outline", size: "sm" }), "cursor-pointer")}
-            >
-              <Wrench className="mr-1 size-4" />
-              Maintenance
-            </Link>
-            <Link
-              href={`/assets/qr-barcode?assetId=${assetId}`}
-              className={cn(buttonVariants({ variant: "outline", size: "sm" }), "cursor-pointer")}
-            >
-              <QrCode className="mr-1 size-4" />
-              QR
-            </Link>
-            <Button
-              variant="outline"
-              size="sm"
-              className="cursor-pointer"
-              onClick={() => setEditing((v) => !v)}
-            >
-              {editing ? "Cancel edit" : "Edit"}
+            <Button variant="outline" size="sm" asChild className="cursor-pointer">
+              <Link href={`/assets/asset-maintenances?assetId=${assetId}`}>
+                <Wrench className="mr-1 size-4" />
+                Maintenance
+              </Link>
+            </Button>
+            <Button variant="outline" size="sm" asChild className="cursor-pointer">
+              <Link href={`/assets/qr-barcode?assetId=${assetId}`}>
+                <QrCode className="mr-1 size-4" />
+                QR
+              </Link>
             </Button>
           </div>
         }
       />
-
-      {editing ? (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Edit asset</CardTitle>
-          </CardHeader>
-          <CardContent className="grid max-w-md gap-3">
-            <div>
-              <Label>Asset name</Label>
-              <Input
-                className="mt-1"
-                value={editForm.asset_name}
-                onChange={(e) => setEditForm((f) => ({ ...f, asset_name: e.target.value }))}
-              />
-            </div>
-            <div>
-              <Label>Serial number</Label>
-              <Input
-                className="mt-1"
-                value={editForm.serial_number}
-                onChange={(e) => setEditForm((f) => ({ ...f, serial_number: e.target.value }))}
-              />
-            </div>
-            <Button
-              size="sm"
-              disabled={savingEdit}
-              onClick={() => void saveEdit()}
-              className="w-fit cursor-pointer"
-            >
-              <Save className="mr-1 size-4" />
-              Save changes
-            </Button>
-          </CardContent>
-        </Card>
-      ) : null}
 
       <div className="flex flex-wrap gap-2 border-b border-border/70 pb-2">
         {(
@@ -337,14 +221,6 @@ export function AssetDetailWorkspace({ assetId }: { assetId: string }) {
                 <span className="text-muted-foreground">Serial: </span>
                 {String(asset.serial_number ?? "—")}
               </p>
-              <p>
-                <span className="text-muted-foreground">Location: </span>
-                {currentLocation ?? "—"}
-              </p>
-              <p>
-                <span className="text-muted-foreground">QR: </span>
-                {String(asset.qr_code ?? "—")}
-              </p>
             </CardContent>
           </Card>
           {showIt ? (
@@ -391,57 +267,10 @@ export function AssetDetailWorkspace({ assetId }: { assetId: string }) {
         />
       ) : null}
       {tab === "documents" ? (
-        <div className="space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base">Add document</CardTitle>
-            </CardHeader>
-            <CardContent className="grid max-w-lg gap-3">
-              <div>
-                <Label htmlFor="doc-name">Name</Label>
-                <Input
-                  id="doc-name"
-                  className="mt-1"
-                  value={docForm.document_name}
-                  onChange={(e) => setDocForm((f) => ({ ...f, document_name: e.target.value }))}
-                />
-              </div>
-              <div>
-                <Label htmlFor="doc-type">Type</Label>
-                <Input
-                  id="doc-type"
-                  className="mt-1"
-                  value={docForm.document_type}
-                  onChange={(e) => setDocForm((f) => ({ ...f, document_type: e.target.value }))}
-                  placeholder="invoice, warranty, other"
-                />
-              </div>
-              <div>
-                <Label htmlFor="doc-uri">Storage URI (optional)</Label>
-                <Input
-                  id="doc-uri"
-                  className="mt-1"
-                  value={docForm.storage_uri}
-                  onChange={(e) => setDocForm((f) => ({ ...f, storage_uri: e.target.value }))}
-                  placeholder="https://…"
-                />
-              </div>
-              <Button
-                size="sm"
-                disabled={docSaving || !docForm.document_name.trim()}
-                onClick={() => void addDocument()}
-                className="w-fit cursor-pointer"
-              >
-                {docSaving ? <Loader2 className="mr-1 size-4 animate-spin" /> : null}
-                Save document
-              </Button>
-            </CardContent>
-          </Card>
-          <HistoryList
-            rows={documents}
-            columns={["document_name", "document_type", "status"]}
-          />
-        </div>
+        <HistoryList
+          rows={documents}
+          columns={["document_name", "document_type", "status"]}
+        />
       ) : null}
       {tab === "activity" ? (
         <Card>

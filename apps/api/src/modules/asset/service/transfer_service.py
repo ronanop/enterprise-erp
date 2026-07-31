@@ -116,7 +116,7 @@ class TransferService:
             from_location_label=getattr(current_location, "location_label", None),
             from_org_location_id=getattr(current_location, "org_location_id", None),
             status=AssetTransferStatus.DRAFT.value,
-            **{k: v for k, v in fields.items() if k != "asset_id"},
+            **fields,
         )
         self._audit.log_entity_change(
             tenant_id=ctx.tenant_id,

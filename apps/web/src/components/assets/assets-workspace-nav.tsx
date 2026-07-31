@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 
 import { cn } from "@/lib/utils";
 
-/** Primary asset screens from FRD-12 screen inventory */
+/** Primary asset screens — aligned with locked sidebar (`config/assets.ts`). */
 const ASSETS_NAV = [
   { title: "Overview", href: "/assets" },
   { title: "Assets", href: "/assets/assets" },
