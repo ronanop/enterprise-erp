@@ -43,7 +43,7 @@ export const hrNavGroups: HrNavGroup[] = [
         description: "Executive HR overview & analytics",
       },
       {
-        title: "Workforce",
+        title: "Employees",
         href: "/hr/workforce",
         icon: Users,
         description: "Employee directory",
@@ -70,6 +70,18 @@ export const hrNavGroups: HrNavGroup[] = [
         href: "/hr/time",
         icon: Clock3,
         description: "Attendance register, calendar & OT",
+      },
+      {
+        title: "On Duty & OT",
+        href: "/hr/time/ot-allotment",
+        icon: Clock3,
+        description: "On Duty, OT/overday & Comp Off approvals",
+      },
+      {
+        title: "Biometric devices",
+        href: "/hr/time/biometric-devices",
+        icon: Clock3,
+        description: "Device registry & punch sync API",
       },
       {
         title: "Shifts & Roster",

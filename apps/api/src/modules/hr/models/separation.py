@@ -24,6 +24,10 @@ class HrSeparation(Base, *HrTransactionMixin):
             "status IN ('draft','submitted','manager_approved','hr_approved','completed','cancelled')",
             name="ck_hr_sep_status",
         ),
+        CheckConstraint(
+            "fnf_status IN ('pending','prepared','calculated','settled','waived')",
+            name="ck_hr_sep_fnf_status",
+        ),
         {"schema": "hr"},
     )
 
@@ -47,3 +51,9 @@ class HrSeparation(Base, *HrTransactionMixin):
         nullable=True,
     )
     clearance_json: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    fnf_status: Mapped[str] = mapped_column(String(30), nullable=False, default="pending")
+    fnf_payroll_run_id: Mapped[UUID | None] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("payroll.pay_payroll_run.id", ondelete="SET NULL"),
+        nullable=True,
+    )

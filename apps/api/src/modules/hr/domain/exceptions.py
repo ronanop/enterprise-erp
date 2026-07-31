@@ -53,6 +53,11 @@ class InvalidLeaveRequestState(ConflictException):
         super().__init__(message)
 
 
+class InvalidLeaveAdjustmentState(ConflictException):
+    def __init__(self, message: str = "Invalid leave adjustment state") -> None:
+        super().__init__(message)
+
+
 class InvalidAttendanceState(ConflictException):
     def __init__(self, message: str = "Invalid attendance state") -> None:
         super().__init__(message)

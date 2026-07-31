@@ -5,6 +5,7 @@ from decimal import ROUND_HALF_UP, Decimal
 
 from modules.hr.domain.enums import AttendanceRecordStatus
 from modules.hr.domain.exceptions import InvalidAttendanceState
+from modules.hr.service.engines.calendar_rules import resolve_status_from_hours
 
 
 def _as_utc(value: datetime) -> datetime:
@@ -36,3 +37,22 @@ class AttendanceEngine:
 
     def compute_hours(self, check_in: datetime, check_out: datetime) -> Decimal:
         return compute_total_hours(check_in, check_out)
+
+    def status_from_hours(
+        self,
+        *,
+        total_hours: Decimal | float | None,
+        half_day_hours: Decimal | float | None = None,
+        full_day_hours: Decimal | float | None = None,
+        current_status: str | None = None,
+        early_leave_minutes: int | None = None,
+        early_leave_half_day_minutes: int = 120,
+    ) -> str:
+        return resolve_status_from_hours(
+            total_hours=total_hours,
+            half_day_hours=half_day_hours,
+            full_day_hours=full_day_hours,
+            current_status=current_status,
+            early_leave_minutes=early_leave_minutes,
+            early_leave_half_day_minutes=early_leave_half_day_minutes,
+        )

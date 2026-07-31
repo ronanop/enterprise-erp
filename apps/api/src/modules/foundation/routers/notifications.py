@@ -6,9 +6,13 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
 from database.session import get_db
-from modules.foundation.dependencies import require_permission
+from modules.foundation.dependencies import get_tenant_context, require_permission
 from modules.foundation.domain.value_objects import TenantContext
-from modules.foundation.schemas import NotificationSendRequest, NotificationTemplateCreateRequest
+from modules.foundation.schemas import (
+    DeviceTokenRegisterRequest,
+    NotificationSendRequest,
+    NotificationTemplateCreateRequest,
+)
 from modules.foundation.service.notification_service import NotificationService
 from shared.schemas import APIResponse
 
@@ -74,4 +78,32 @@ def send_notification(
     return APIResponse(
         message="Notification queued",
         data={"id": str(event.id), "status": event.status},
+    )
+
+
+@router.post("/device-tokens", response_model=APIResponse[dict])
+def register_device_token(
+    body: DeviceTokenRegisterRequest,
+    ctx: Annotated[TenantContext, Depends(get_tenant_context)],
+    db: Annotated[Session, Depends(get_db)],
+) -> APIResponse[dict]:
+    if ctx.user_id is None:
+        from core.exceptions import AppException
+
+        raise AppException("Authenticated user required to register device token")
+    row = NotificationService(db).register_device_token(
+        tenant_id=ctx.tenant_id,
+        user_id=ctx.user_id,
+        token=body.token,
+        platform=body.platform,
+        created_by=ctx.user_id,
+    )
+    db.commit()
+    return APIResponse(
+        message="Device token registered",
+        data={
+            "id": str(row.id),
+            "platform": row.platform,
+            "is_active": row.is_active,
+        },
     )

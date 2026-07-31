@@ -11,7 +11,7 @@ export type SetupRow = Record<string, unknown> & {
   __source?: "api" | "local" | "derived";
 };
 
-const LOCAL_KEY = "erp_hr_setup_local_v1";
+const LOCAL_KEY = "erp_hr_setup_local_v2";
 
 type LocalStore = Record<string, SetupRow[]>;
 
@@ -44,147 +44,272 @@ function normalizeRows(data: unknown): SetupRow[] {
   return [];
 }
 
+/** KYC / HR document catalog — drives onboarding Upload Documents step. */
+export const DEFAULT_DOCUMENT_TYPES: SetupRow[] = [
+  {
+    id: "doc-type-photo",
+    code: "DOC-PHOTO",
+    name: "Photo",
+    kind: "photo",
+    mandatory: true,
+    expiry_required: false,
+    formats: "JPG,PNG",
+    max_size_mb: 5,
+    status: "active",
+  },
+  {
+    id: "doc-type-pan",
+    code: "DOC-PAN",
+    name: "PAN",
+    kind: "pan",
+    mandatory: true,
+    expiry_required: false,
+    formats: "PDF,JPG,PNG",
+    max_size_mb: 5,
+    status: "active",
+  },
+  {
+    id: "doc-type-aadhaar",
+    code: "DOC-AADHAAR",
+    name: "Aadhaar",
+    kind: "aadhaar",
+    mandatory: true,
+    expiry_required: false,
+    formats: "PDF,JPG,PNG",
+    max_size_mb: 5,
+    status: "active",
+  },
+  {
+    id: "doc-type-bank",
+    code: "DOC-BANK",
+    name: "Bank Details / Passbook",
+    kind: "bank_details",
+    mandatory: true,
+    expiry_required: false,
+    formats: "PDF,JPG,PNG",
+    max_size_mb: 5,
+    status: "active",
+  },
+  {
+    id: "doc-type-cheque",
+    code: "DOC-CHEQUE",
+    name: "Cancelled Cheque",
+    kind: "cancelled_cheque",
+    mandatory: true,
+    expiry_required: false,
+    formats: "PDF,JPG,PNG",
+    max_size_mb: 5,
+    status: "active",
+  },
+  {
+    id: "doc-type-graduation",
+    code: "DOC-GRAD",
+    name: "Graduation Certificate",
+    kind: "education",
+    mandatory: true,
+    expiry_required: false,
+    formats: "PDF,JPG,PNG",
+    max_size_mb: 10,
+    status: "active",
+  },
+  {
+    id: "doc-type-appointment",
+    code: "DOC-APPT",
+    name: "Latest Appointment Letter",
+    kind: "appointment_letter",
+    mandatory: true,
+    expiry_required: false,
+    formats: "PDF",
+    max_size_mb: 5,
+    status: "active",
+  },
+  {
+    id: "doc-type-relieving",
+    code: "DOC-REL",
+    name: "Latest Relieving Letter",
+    kind: "relieving_letter",
+    mandatory: true,
+    expiry_required: false,
+    formats: "PDF",
+    max_size_mb: 5,
+    status: "active",
+  },
+  {
+    id: "doc-type-salary-slips",
+    code: "DOC-SLIPS",
+    name: "Last 3 Salary Slips",
+    kind: "salary_slips",
+    mandatory: true,
+    expiry_required: false,
+    formats: "PDF,JPG,PNG",
+    max_size_mb: 15,
+    status: "active",
+  },
+  {
+    id: "doc-type-prev-employer",
+    code: "DOC-PREV-EMP",
+    name: "Previous Employer Certificate",
+    kind: "previous_employer",
+    mandatory: false,
+    expiry_required: false,
+    formats: "PDF,JPG,PNG",
+    max_size_mb: 10,
+    status: "active",
+  },
+  {
+    id: "doc-type-experience",
+    code: "DOC-EXP",
+    name: "Work Experience Certificate",
+    kind: "experience",
+    mandatory: false,
+    expiry_required: false,
+    formats: "PDF,JPG,PNG",
+    max_size_mb: 10,
+    status: "active",
+  },
+  {
+    id: "doc-type-signature",
+    code: "DOC-SIGN",
+    name: "Signature",
+    kind: "signature",
+    mandatory: true,
+    expiry_required: false,
+    formats: "JPG,PNG,PDF",
+    max_size_mb: 2,
+    status: "active",
+  },
+  {
+    id: "doc-type-resume",
+    code: "DOC-RESUME",
+    name: "Resume",
+    kind: "resume",
+    mandatory: false,
+    expiry_required: false,
+    formats: "PDF,DOC,DOCX",
+    max_size_mb: 10,
+    status: "active",
+  },
+  {
+    id: "doc-type-passport",
+    code: "DOC-PASSPORT",
+    name: "Passport",
+    kind: "passport",
+    mandatory: false,
+    expiry_required: true,
+    formats: "PDF,JPG,PNG",
+    max_size_mb: 5,
+    status: "active",
+  },
+];
+
 const DEFAULT_LOCAL: Partial<Record<HrSetupTabId, SetupRow[]>> = {
-  "job-levels": [
-    { id: "lvl-1", code: "LVL-001", name: "Junior", status: "active", sort_order: 1 },
-    { id: "lvl-2", code: "LVL-002", name: "Mid", status: "active", sort_order: 2 },
-    { id: "lvl-3", code: "LVL-003", name: "Senior", status: "active", sort_order: 3 },
-    { id: "lvl-4", code: "LVL-004", name: "Lead", status: "active", sort_order: 4 },
-    { id: "lvl-5", code: "LVL-005", name: "Manager", status: "active", sort_order: 5 },
-    { id: "lvl-6", code: "LVL-006", name: "Director", status: "active", sort_order: 6 },
-    { id: "lvl-7", code: "LVL-007", name: "VP", status: "active", sort_order: 7 },
-    { id: "lvl-8", code: "LVL-008", name: "CXO", status: "active", sort_order: 8 },
-  ],
-  grades: [
-    {
-      id: "grd-1",
-      code: "GRD-001",
-      name: "L1",
-      min_salary: 300000,
-      max_salary: 600000,
-      status: "active",
-      description: "Entry grade",
-    },
-    {
-      id: "grd-2",
-      code: "GRD-002",
-      name: "L2",
-      min_salary: 600000,
-      max_salary: 1200000,
-      status: "active",
-      description: "Mid grade",
-    },
-    {
-      id: "grd-3",
-      code: "GRD-003",
-      name: "L3",
-      min_salary: 1200000,
-      max_salary: 2500000,
-      status: "active",
-      description: "Senior grade",
-    },
-  ],
-  "employment-types": [
-    { id: "et-1", code: "EMP-001", name: "Permanent", status: "active", description: "Full-time permanent" },
-    { id: "et-2", code: "EMP-002", name: "Contract", status: "active", description: "Fixed-term contract" },
-    { id: "et-3", code: "EMP-003", name: "Intern", status: "active", description: "Internship" },
-    { id: "et-4", code: "EMP-004", name: "Consultant", status: "active", description: "External consultant" },
-    { id: "et-5", code: "EMP-005", name: "Temporary", status: "active", description: "Temporary staff" },
-    { id: "et-6", code: "EMP-006", name: "Part Time", status: "active", description: "Part-time employment" },
-  ],
-  "document-types": [
-    { id: "dt-1", code: "DOC-001", name: "Aadhaar", mandatory: true, expiry_required: false, formats: "PDF,JPG", max_size_mb: 5, status: "active" },
-    { id: "dt-2", code: "DOC-002", name: "PAN", mandatory: true, expiry_required: false, formats: "PDF,JPG", max_size_mb: 5, status: "active" },
-    { id: "dt-3", code: "DOC-003", name: "Passport", mandatory: false, expiry_required: true, formats: "PDF,JPG", max_size_mb: 5, status: "active" },
-    { id: "dt-4", code: "DOC-004", name: "Offer Letter", mandatory: true, expiry_required: false, formats: "PDF", max_size_mb: 10, status: "active" },
-    { id: "dt-5", code: "DOC-005", name: "Resume", mandatory: false, expiry_required: false, formats: "PDF,DOCX", max_size_mb: 5, status: "active" },
-  ],
-  "leave-policies": [
-    {
-      id: "lp-1",
-      code: "LP-001",
-      name: "Standard Annual Leave",
-      leave_type: "Annual Leave",
-      leave_days: 18,
-      carry_forward: true,
-      max_carry: 5,
-      negative_balance: false,
-      half_day: true,
-      requires_approval: true,
-      approval_flow: "Manager → HR",
-      status: "active",
-      effective_from: "2026-01-01",
-    },
-    {
-      id: "lp-2",
-      code: "LP-002",
-      name: "Casual Leave Policy",
-      leave_type: "Casual Leave",
-      leave_days: 12,
-      carry_forward: false,
-      max_carry: 0,
-      negative_balance: false,
-      half_day: true,
-      requires_approval: true,
-      approval_flow: "Manager → HR",
-      status: "active",
-      effective_from: "2026-01-01",
-    },
-    {
-      id: "lp-3",
-      code: "LP-003",
-      name: "Sick Leave Policy",
-      leave_type: "Sick Leave",
-      leave_days: 10,
-      carry_forward: false,
-      max_carry: 0,
-      negative_balance: false,
-      half_day: true,
-      requires_approval: true,
-      approval_flow: "Manager → HR",
-      status: "active",
-      effective_from: "2026-01-01",
-    },
-    {
-      id: "lp-4",
-      code: "LP-004",
-      name: "Earned Leave Policy",
-      leave_type: "Earned Leave",
-      leave_days: 18,
-      negative_balance: false,
-      half_day: true,
-      requires_approval: true,
-      approval_flow: "Manager → HR → Director",
-      status: "active",
-      effective_from: "2026-01-01",
-    },
-  ],
+  // Empty defaults — no seeded demo rows; API is SoR where available.
+  "job-levels": [],
+  grades: [],
+  "employment-types": [],
+  "document-types": DEFAULT_DOCUMENT_TYPES,
+  "leave-policies": [],
   "shift-rotation": [],
-  "attendance-rules": [
-    {
-      id: "ar-1",
-      code: "AR-001",
-      name: "Default grace rule",
-      grace_minutes: 15,
-      late_mark_after: 30,
-      half_day_hours: 4,
-      full_day_hours: 8,
-      overtime_allowed: true,
-      status: "active",
-    },
-  ],
-  "bank-master": [
-    { id: "bnk-1", code: "BNK-001", name: "HDFC Bank", bank_code: "HDFC", ifsc_prefix: "HDFC0", status: "active" },
-    { id: "bnk-2", code: "BNK-002", name: "ICICI Bank", bank_code: "ICIC", ifsc_prefix: "ICIC0", status: "active" },
-    { id: "bnk-3", code: "BNK-003", name: "State Bank of India", bank_code: "SBIN", ifsc_prefix: "SBIN0", status: "active" },
-  ],
-  "notification-settings": [
-    { id: "ntf-1", code: "NTF-001", name: "Email channel", channel: "email", enabled: true, status: "active" },
-    { id: "ntf-2", code: "NTF-002", name: "SMS channel", channel: "sms", enabled: false, status: "inactive" },
-    { id: "ntf-3", code: "NTF-003", name: "WhatsApp channel", channel: "whatsapp", enabled: false, status: "inactive" },
-    { id: "ntf-4", code: "NTF-004", name: "Push notifications", channel: "push", enabled: true, status: "active" },
-  ],
+  "attendance-rules": [],
+  "bank-master": [],
+  "notification-settings": [],
 };
+
+const DOCUMENT_KINDS = new Set([
+  "photo",
+  "resume",
+  "pan",
+  "aadhaar",
+  "passport",
+  "education",
+  "experience",
+  "cancelled_cheque",
+  "bank_details",
+  "appointment_letter",
+  "relieving_letter",
+  "salary_slips",
+  "previous_employer",
+  "signature",
+  "other",
+]);
+
+export type PortalDocumentType = {
+  id: string;
+  code: string;
+  name: string;
+  kind: string;
+  mandatory: boolean;
+  accept: string;
+  maxSizeMb: number | null;
+};
+
+/** Map setup "PDF,JPG" → HTML accept string. */
+export function formatsToAccept(formats: unknown): string {
+  const raw = String(formats ?? "").trim();
+  if (!raw) return ".pdf,image/*";
+  const parts = raw
+    .split(/[,;/|\s]+/)
+    .map((p) => p.trim())
+    .filter(Boolean)
+    .flatMap((f) => {
+      const u = f.replace(/^\./, "").toUpperCase();
+      if (u === "PDF") return [".pdf", "application/pdf"];
+      if (u === "JPG" || u === "JPEG") return [".jpg", ".jpeg", "image/jpeg"];
+      if (u === "PNG") return [".png", "image/png"];
+      if (u === "DOC") return [".doc"];
+      if (u === "DOCX") return [".docx"];
+      if (u === "IMAGE" || u === "IMAGES") return ["image/*"];
+      return [`.${u.toLowerCase()}`];
+    });
+  return [...new Set(parts)].join(",") || ".pdf,image/*";
+}
+
+function normalizeDocKind(value: unknown, code: string, name: string): string {
+  const direct = String(value ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, "_");
+  if (DOCUMENT_KINDS.has(direct)) return direct;
+  const blob = `${code} ${name}`.toLowerCase();
+  if (blob.includes("aadhaar") || blob.includes("aadhar")) return "aadhaar";
+  if (blob.includes("pan")) return "pan";
+  if (blob.includes("passport")) return "passport";
+  if (blob.includes("resume") || blob.includes("cv")) return "resume";
+  if (blob.includes("photo") || blob.includes("photograph")) return "photo";
+  if (blob.includes("education") || blob.includes("degree")) return "education";
+  if (blob.includes("experience") || blob.includes("relieving")) return "experience";
+  if (blob.includes("cheque") || blob.includes("check")) return "cancelled_cheque";
+  if (blob.includes("bank") || blob.includes("passbook")) return "bank_details";
+  if (blob.includes("appointment")) return "appointment_letter";
+  if (blob.includes("relieving")) return "relieving_letter";
+  if (blob.includes("salary") || blob.includes("payslip")) return "salary_slips";
+  if (blob.includes("previous") && blob.includes("employer")) return "previous_employer";
+  if (blob.includes("signature") || blob.includes("sign")) return "signature";
+  return "other";
+}
+
+/** Active document types for candidate onboarding uploads. */
+export async function listPortalDocumentTypes(): Promise<PortalDocumentType[]> {
+  const rows = await listLocalSetup("document-types");
+  return rows
+    .filter((r) => String(r.status ?? "active").toLowerCase() === "active")
+    .map((r) => {
+      const code = String(r.code ?? "");
+      const name = String(r.name ?? r.code ?? "Document");
+      return {
+        id: String(r.id),
+        code,
+        name,
+        kind: normalizeDocKind(r.kind, code, name),
+        mandatory: Boolean(r.mandatory),
+        accept: formatsToAccept(r.formats),
+        maxSizeMb:
+          r.max_size_mb == null || r.max_size_mb === ""
+            ? null
+            : Number(r.max_size_mb),
+      };
+    });
+}
 
 function stampDefaults(rows: SetupRow[]): SetupRow[] {
   return rows.map((r) => ({

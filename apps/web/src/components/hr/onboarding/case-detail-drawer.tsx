@@ -30,7 +30,7 @@ type Props = {
     status: OnboardingDocument["verifyStatus"],
   ) => void;
   onReady: (caseId: string) => void;
-  onActivate: (caseId: string) => void;
+  onActivate: (caseId: string, opts: { employeeCode: string; shiftId?: string }) => void;
   onInvite: (caseRow: OnboardingCase) => void;
 };
 
@@ -48,6 +48,7 @@ export function CaseDetailDrawer({
     "overview",
   );
   const [note, setNote] = useState("");
+  const [empCodeInput, setEmpCodeInput] = useState("");
 
   const timeline = useMemo(() => {
     if (!caseRow) return [];
@@ -120,7 +121,16 @@ export function CaseDetailDrawer({
               <Button
                 type="button"
                 className="cursor-pointer"
-                onClick={() => onActivate(caseRow.id)}
+                onClick={() => {
+                  const code = (empCodeInput || caseRow.employeeId || "").trim();
+                  if (!code || code.toUpperCase().startsWith("ONB-")) {
+                    window.alert(
+                      "Enter a permanent Employee ID before activation (e.g. EMP-000101).",
+                    );
+                    return;
+                  }
+                  onActivate(caseRow.id, { employeeCode: code });
+                }}
               >
                 <UserCheck className="size-3.5" />
                 Activate employee
@@ -170,6 +180,23 @@ export function CaseDetailDrawer({
             <Info label="HR owner" value={caseRow.hrOwner} />
             <Info label="Buddy" value={caseRow.buddy || "—"} />
             <Info label="Employee ID" value={caseRow.employeeId || "Pending"} />
+            {caseRow.status !== "joined" ? (
+              <div className="sm:col-span-2 rounded-lg border border-border/60 bg-muted/30 p-3 space-y-2">
+                <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                  Activation — assign permanent Employee ID
+                </p>
+                <input
+                  className="h-8 w-full rounded-md border border-border bg-background px-2 text-xs"
+                  placeholder="e.g. EMP-000101"
+                  value={empCodeInput || (caseRow.employeeId?.startsWith("ONB-") ? "" : caseRow.employeeId) || ""}
+                  onChange={(e) => setEmpCodeInput(e.target.value.toUpperCase())}
+                />
+                <p className="text-[10px] text-muted-foreground">
+                  Employee becomes Active and payroll-eligible only after activation. Temporary ONB-*
+                  codes are replaced here.
+                </p>
+              </div>
+            ) : null}
             <div>
               <p className="text-[10px] uppercase text-muted-foreground">Status</p>
               <HrStatusBadge status={ONBOARDING_STATUS_LABELS[caseRow.status]} />

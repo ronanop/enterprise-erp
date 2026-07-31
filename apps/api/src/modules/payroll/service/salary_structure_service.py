@@ -32,8 +32,13 @@ class SalaryStructureService:
 
     def create(self, ctx: TenantContext, company_id: UUID | None = None, **fields):
         cid = self._scope.resolve_company_id(ctx, company_id)
+        if not fields.get("structure_code"):
+            import uuid as _uuid
 
-        row = self._repo.create(ctx, company_id=cid,  **fields)
+            fields["structure_code"] = f"STR-{str(_uuid.uuid4())[:8].upper()}"
+        fields.setdefault("currency_code", "INR")
+        fields.setdefault("status", "active")
+        row = self._repo.create(ctx, company_id=cid, **fields)
         self._audit.log_entity_change(
             tenant_id=ctx.tenant_id,
             entity_name="pay_salary_structure",

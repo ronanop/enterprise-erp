@@ -25,11 +25,36 @@ class EmploymentType(str, Enum):
 
 class EmploymentStatus(str, Enum):
     DRAFT = "draft"
+    ONBOARDING = "onboarding"
     ACTIVE = "active"
     PROBATION = "probation"
     CONFIRMED = "confirmed"
+    NOTICE_PERIOD = "notice_period"
+    SEPARATED = "separated"
+    EX_EMPLOYEE = "ex_employee"
     ENDED = "ended"
     CANCELLED = "cancelled"
+
+
+class LeaveRequestStatus(str, Enum):
+    DRAFT = "draft"
+    SUBMITTED = "submitted"
+    MANAGER_APPROVED = "manager_approved"
+    APPROVED = "approved"
+    REJECTED = "rejected"
+    CANCELLED = "cancelled"
+
+
+class AttendanceDayStatus(str, Enum):
+    PRESENT = "present"
+    ABSENT = "absent"
+    HALF_DAY = "half_day"
+    WORK_FROM_HOME = "work_from_home"
+    HOLIDAY = "holiday"
+    LATE = "late"
+    WEEK_OFF = "week_off"
+    ON_DUTY = "on_duty"
+    MISS_PUNCH = "miss_punch"
 
 
 class AssignmentStatus(str, Enum):
@@ -60,25 +85,16 @@ class HolidayCalendarStatus(str, Enum):
     ARCHIVED = "archived"
 
 
-class LeaveRequestStatus(str, Enum):
-    DRAFT = "draft"
-    SUBMITTED = "submitted"
-    APPROVED = "approved"
-    REJECTED = "rejected"
-    CANCELLED = "cancelled"
-
-
 class LeaveBalanceStatus(str, Enum):
     OPEN = "open"
     CLOSED = "closed"
 
 
-class AttendanceDayStatus(str, Enum):
-    PRESENT = "present"
-    ABSENT = "absent"
-    HALF_DAY = "half_day"
-    WORK_FROM_HOME = "work_from_home"
-    HOLIDAY = "holiday"
+class LeaveAdjustmentStatus(str, Enum):
+    DRAFT = "draft"
+    SUBMITTED = "submitted"
+    APPROVED = "approved"
+    REJECTED = "rejected"
 
 
 class AttendanceSource(str, Enum):

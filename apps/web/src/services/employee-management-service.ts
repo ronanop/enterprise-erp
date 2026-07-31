@@ -2,7 +2,6 @@ import { apiClient } from "@/services/api-client";
 import { resourceService } from "@/services/api-client";
 import { employeeDisplayName, type HrRow } from "@/services/hr-service";
 import {
-  consumeEmployeeSequence,
   formatEmployeeCode,
   peekNextEmployeeSequence,
   syncSequenceFromCodes,
@@ -365,122 +364,122 @@ export function previewNextEmployeeCode(): string {
   return formatEmployeeCode(peekNextEmployeeSequence());
 }
 
+export async function createExistingEmployee(input: {
+  firstName: string;
+  lastName: string;
+  email: string;
+  mobile: string;
+  joiningDate: string;
+  branchId: string;
+  departmentId: string;
+  designationName: string;
+  employmentType?: string;
+  employeeCode?: string;
+  reportingManagerId?: string;
+}): Promise<EmployeeRecord> {
+  const masterRes = await apiClient<HrRow>("/employees", {
+    method: "POST",
+    body: {
+      branch_id: input.branchId,
+      department_id: input.departmentId,
+      first_name: input.firstName,
+      last_name: input.lastName,
+      email: input.email,
+      mobile: input.mobile,
+      designation: input.designationName,
+      date_of_joining: input.joiningDate,
+      employee_code: input.employeeCode || undefined,
+      reporting_manager_id: input.reportingManagerId || null,
+      bypass_onboarding: true,
+    },
+  });
+  const master = masterRes.data;
+  if (!master?.id) throw new Error("Employee create returned no data");
+
+  await apiClient<HrRow>("/hr/employment", {
+    method: "POST",
+    body: {
+      branch_id: input.branchId,
+      employee_id: master.id,
+      employment_type: input.employmentType || "permanent",
+      date_of_joining: input.joiningDate,
+      status: "active",
+      payroll_eligible: true,
+      lifecycle_source: "direct_add",
+    },
+  }).catch(() => undefined);
+
+  const ext = defaultExtension({
+    personal: {
+      ...emptyPersonal(),
+      firstName: input.firstName,
+      lastName: input.lastName,
+      officialEmail: input.email,
+      mobile: input.mobile,
+    },
+    employment: {
+      ...emptyEmployment(String(master.employee_code ?? input.employeeCode ?? "")),
+      joiningDate: input.joiningDate,
+      branchId: input.branchId,
+      departmentId: input.departmentId,
+      designationName: input.designationName,
+      employmentType: input.employmentType || "permanent",
+      reportingManagerId: input.reportingManagerId || "",
+      lifecycleStatus: "active",
+    },
+  });
+  saveExtension(String(master.id), ext);
+  appendActivity({
+    employeeId: String(master.id),
+    type: "created",
+    title: "Employee added (light hire)",
+    actor: actorLabel(),
+  });
+
+  return {
+    id: String(master.id),
+    masterVersion: Number(master.version ?? 1),
+    employeeCode: String(master.employee_code ?? ""),
+    displayName: `${input.firstName} ${input.lastName}`.trim(),
+    officialEmail: input.email,
+    mobile: input.mobile,
+    departmentId: input.departmentId,
+    departmentName: "—",
+    designationName: input.designationName,
+    branchId: input.branchId,
+    branchName: "—",
+    reportingManagerId: input.reportingManagerId || "",
+    reportingManagerName: "—",
+    employmentType: input.employmentType || "permanent",
+    joiningDate: input.joiningDate,
+    lifecycleStatus: "active",
+    gender: "",
+    isDeleted: false,
+    extension: ext,
+  };
+}
+
 export async function createEmployeeFromWizard(
   draft: EmployeeWizardDraft,
   options: EmployeeDirectoryOptions,
 ): Promise<EmployeeRecord> {
-  const seq = consumeEmployeeSequence();
-  const code = draft.employment.employeeCode || formatEmployeeCode(seq);
-
-  const branchId = draft.employment.branchId || options.branches[0]?.id;
-  const departmentId = draft.employment.departmentId || options.departments[0]?.id;
-  if (!branchId || !departmentId) {
-    throw new Error("Branch and department are required. Configure organization masters first.");
-  }
-
-  const masterRes = await apiClient<HrRow>("/employees", {
-    method: "POST",
-    body: {
-      branch_id: branchId,
-      department_id: departmentId,
-      first_name: draft.personal.firstName,
-      last_name: draft.personal.lastName,
-      email: draft.personal.officialEmail,
-      mobile: draft.personal.mobile,
-      designation: draft.employment.designationName || "Employee",
-      date_of_joining: draft.employment.joiningDate || new Date().toISOString().slice(0, 10),
-      employee_code: code,
-      reporting_manager_id: draft.employment.reportingManagerId || null,
-    },
+  void options;
+  return createExistingEmployee({
+    firstName: draft.personal.firstName.trim(),
+    lastName: draft.personal.lastName.trim(),
+    email: draft.personal.officialEmail.trim(),
+    mobile: draft.personal.mobile.trim(),
+    joiningDate: draft.employment.joiningDate,
+    branchId: draft.employment.branchId,
+    departmentId: draft.employment.departmentId,
+    designationName: draft.employment.designationName || "Staff",
+    employmentType: draft.employment.employmentType || "permanent",
+    employeeCode: draft.employment.employeeCode || undefined,
+    reportingManagerId: draft.employment.reportingManagerId || undefined,
   });
-
-  const master = masterRes.data!;
-  const employeeId = String(master.id);
-
-  await resourceService.create("/hr/employee-profiles", {
-    branch_id: branchId,
-    employee_id: employeeId,
-    date_of_birth: draft.personal.dateOfBirth || null,
-    gender: draft.personal.gender || null,
-    marital_status: draft.personal.maritalStatus || null,
-    nationality: draft.personal.nationality || null,
-    blood_group: draft.personal.bloodGroup || null,
-    emergency_contact_name: draft.personal.emergency.name || null,
-    emergency_contact_mobile: draft.personal.emergency.phone || null,
-    permanent_address_json: addressToJson(draft.personal.permanentAddress),
-    current_address_json: addressToJson(draft.personal.currentAddress),
-    status: draft.employment.lifecycleStatus === "probation" ? "probation" : "active",
-  });
-
-  await resourceService.create("/hr/employment", {
-    branch_id: branchId,
-    employee_id: employeeId,
-    employment_type: draft.employment.employmentType,
-    date_of_joining: draft.employment.joiningDate,
-    probation_end_date: draft.employment.probationPeriodDays
-      ? addDays(draft.employment.joiningDate, Number(draft.employment.probationPeriodDays))
-      : null,
-    confirmation_date: draft.employment.confirmationDate || null,
-    ctc_amount: draft.salary.ctc ? Number(draft.salary.ctc) : null,
-    work_location_text: draft.employment.location || null,
-    status: "active",
-  });
-
-  for (const doc of draft.documents) {
-    await resourceService.create("/hr/employee-documents", {
-      branch_id: branchId,
-      employee_id: employeeId,
-      document_type: doc.documentType,
-      document_number: doc.documentNumber,
-      issue_date: doc.issueDate || null,
-      expiry_date: doc.expiryDate || null,
-      storage_uri: doc.fileName ? `local://${doc.fileName}` : null,
-      status: "active",
-    }).catch(() => undefined);
-  }
-
-  const ext: EmployeeExtension = {
-    personal: { ...draft.personal, officialEmail: draft.personal.officialEmail },
-    employment: {
-      ...draft.employment,
-      employeeCode: code,
-      branchName: options.branches.find((b) => b.id === branchId)?.label ?? "",
-      departmentName: options.departments.find((d) => d.id === departmentId)?.label ?? "",
-    },
-    governmentIds: draft.governmentIds,
-    bank: draft.bank,
-    salary: draft.salary,
-    documents: draft.documents,
-    createdBy: actorLabel(),
-    updatedBy: actorLabel(),
-    updatedAt: nowIso(),
-  };
-  saveExtension(employeeId, ext);
-
-  appendActivity({
-    employeeId,
-    type: "created",
-    title: "Employee created",
-    detail: `${ext.personal.firstName} ${ext.personal.lastName} (${code})`,
-    actor: actorLabel(),
-  });
-
-  const { records } = await loadEmployeeDirectory();
-  const created = getEmployeeById(records, employeeId);
-  if (!created) throw new Error("Employee created but could not reload directory");
-  return created;
 }
 
-function addDays(isoDate: string, days: number): string | null {
-  if (!isoDate) return null;
-  const d = new Date(isoDate);
-  if (Number.isNaN(d.getTime())) return null;
-  d.setDate(d.getDate() + days);
-  return d.toISOString().slice(0, 10);
-}
-
-export async function updateEmployeeRecord(
-  record: EmployeeRecord,
+export async function updateEmployeeRecord(  record: EmployeeRecord,
   patch: Partial<EmployeeWizardDraft>,
 ): Promise<void> {
   const nextExt: EmployeeExtension = {

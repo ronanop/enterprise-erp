@@ -1,15 +1,12 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
-import { createPortal } from "react-dom";
 import {
   Archive,
   CheckSquare,
-  Copy,
   Download,
   Eye,
   History,
-  MoreHorizontal,
   Pencil,
   Plus,
   RefreshCw,
@@ -32,6 +29,7 @@ import { HrStatusBadge } from "@/components/hr/hr-primitives";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { RowActionsItem, RowActionsMenu } from "@/components/ui/row-actions-menu";
 import { nextCode, type HrSetupTab } from "@/config/hr-setup";
 import { ApiClientError, resourceService } from "@/services/api-client";
 import {
@@ -39,7 +37,6 @@ import {
   cell,
   coerceLocalForm,
   createLocalSetup,
-  duplicateLocal,
   exportRowsCsv,
   listLocalSetup,
   listReportingManagers,
@@ -166,7 +163,6 @@ export function SetupEntityPanel({
     ids: string[];
   } | null>(null);
   const [menuId, setMenuId] = useState<string | null>(null);
-  const [menuPos, setMenuPos] = useState<{ top: number; left: number } | null>(null);
   const [orgLookups, setOrgLookups] = useState<{
     companies: { value: string; label: string }[];
     branches: { value: string; label: string; companyId?: string }[];
@@ -176,53 +172,6 @@ export function SetupEntityPanel({
   }>({ companies: [], branches: [], departments: [], employees: [], shifts: [] });
 
   const needsOrgLookups = fields.some((f) => f.optionsSource);
-
-  const closeRowMenu = useCallback(() => {
-    setMenuId(null);
-    setMenuPos(null);
-  }, []);
-
-  const openRowMenu = useCallback((rowId: string, anchor: HTMLElement) => {
-    if (menuId === rowId) {
-      closeRowMenu();
-      return;
-    }
-    const rect = anchor.getBoundingClientRect();
-    const menuWidth = 176;
-    const menuHeight = 220;
-    const gap = 4;
-    const spaceBelow = window.innerHeight - rect.bottom - gap;
-    const openUp = spaceBelow < menuHeight && rect.top > spaceBelow;
-    const top = openUp
-      ? Math.max(8, rect.top - menuHeight - gap)
-      : Math.min(window.innerHeight - menuHeight - 8, rect.bottom + gap);
-    const left = Math.min(
-      window.innerWidth - menuWidth - 8,
-      Math.max(8, rect.right - menuWidth),
-    );
-    setMenuId(rowId);
-    setMenuPos({ top, left });
-  }, [closeRowMenu, menuId]);
-
-  useEffect(() => {
-    if (!menuId) return;
-    function onDocClick(e: MouseEvent) {
-      const t = e.target as HTMLElement | null;
-      if (t?.closest?.("[data-setup-row-menu]")) return;
-      closeRowMenu();
-    }
-    function onScrollOrResize() {
-      closeRowMenu();
-    }
-    document.addEventListener("mousedown", onDocClick);
-    window.addEventListener("scroll", onScrollOrResize, true);
-    window.addEventListener("resize", onScrollOrResize);
-    return () => {
-      document.removeEventListener("mousedown", onDocClick);
-      window.removeEventListener("scroll", onScrollOrResize, true);
-      window.removeEventListener("resize", onScrollOrResize);
-    };
-  }, [closeRowMenu, menuId]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -377,7 +326,7 @@ export function SetupEntityPanel({
     }
     setForm(initial);
     setActive(row);
-    closeRowMenu();
+    setMenuId(null);
     setMode(viewOnly ? "view" : "edit");
   }
 
@@ -457,28 +406,6 @@ export function SetupEntityPanel({
       toast(err instanceof ApiClientError ? err.message : "Action failed", "error");
     } finally {
       setSaving(false);
-    }
-  }
-
-  async function duplicateRow(row: SetupRow) {
-    try {
-      if (tab.source === "local") {
-        await duplicateLocal(tab.id, row.id, tab.codePrefix ?? "CFG");
-      } else if (tab.apiPath) {
-        const { id: _id, version: _version, __source: _src, ...rest } = row;
-        const body: Record<string, unknown> = { ...rest };
-        if (codeKey in body) {
-          body[codeKey] = nextCode(
-            tab.codePrefix ?? "CFG",
-            rows.map((r) => String(r[codeKey] ?? "")),
-          );
-        }
-        await resourceService.create(tab.apiPath, body);
-      }
-      toast("Duplicated");
-      await load();
-    } catch (err) {
-      toast(err instanceof ApiClientError ? err.message : "Duplicate failed", "error");
     }
   }
 
@@ -699,66 +626,59 @@ export function SetupEntityPanel({
                             : cell(row, c.key, ...nameKeys)}
                       </td>
                     ))}
-                    <td className="px-3 py-2" data-setup-row-menu>
-                      <Button
-                        type="button"
-                        size="icon-xs"
-                        variant="ghost"
-                        className="cursor-pointer"
-                        aria-haspopup="menu"
-                        aria-expanded={menuId === row.id}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          openRowMenu(row.id, e.currentTarget);
-                        }}
+                    <td className="px-3 py-2">
+                      <RowActionsMenu
+                        open={menuId === row.id}
+                        onOpenChange={(open) => setMenuId(open ? row.id : null)}
+                        buttonSize="icon-xs"
                       >
-                        <MoreHorizontal className="size-4" />
-                      </Button>
-                      {menuId === row.id && menuPos && typeof document !== "undefined"
-                        ? createPortal(
-                            <div
-                              data-setup-row-menu
-                              role="menu"
-                              className="fixed z-[80] w-44 rounded-lg border border-border bg-card py-1 shadow-lg"
-                              style={{ top: menuPos.top, left: menuPos.left }}
-                            >
-                              {(
-                                [
-                                  { label: "View", icon: Eye, fn: () => openEdit(row, true) },
-                                  { label: "Edit", icon: Pencil, fn: () => openEdit(row) },
-                                  { label: "Duplicate", icon: Copy, fn: () => void duplicateRow(row) },
-                                  { label: "History", icon: History, fn: () => openHistory(row) },
-                                  {
-                                    label: "Archive",
-                                    icon: Archive,
-                                    fn: () => setConfirm({ type: "archive", ids: [row.id] }),
-                                  },
-                                  {
-                                    label: "Delete",
-                                    icon: Trash2,
-                                    fn: () => setConfirm({ type: "delete", ids: [row.id] }),
-                                  },
-                                ] as const
-                              ).map((item) => (
-                                <button
-                                  key={item.label}
-                                  type="button"
-                                  role="menuitem"
-                                  className="flex w-full cursor-pointer items-center gap-2 px-3 py-1.5 text-left text-xs transition-colors duration-200 hover:bg-muted"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    closeRowMenu();
-                                    item.fn();
-                                  }}
-                                >
-                                  <item.icon className="size-3.5 text-muted-foreground" />
-                                  {item.label}
-                                </button>
-                              ))}
-                            </div>,
-                            document.body,
-                          )
-                        : null}
+                        <RowActionsItem
+                          onClick={() => {
+                            setMenuId(null);
+                            openEdit(row, true);
+                          }}
+                        >
+                          <Eye className="size-3.5 text-muted-foreground" />
+                          View
+                        </RowActionsItem>
+                        <RowActionsItem
+                          onClick={() => {
+                            setMenuId(null);
+                            openEdit(row);
+                          }}
+                        >
+                          <Pencil className="size-3.5 text-muted-foreground" />
+                          Edit
+                        </RowActionsItem>
+                        <RowActionsItem
+                          onClick={() => {
+                            setMenuId(null);
+                            openHistory(row);
+                          }}
+                        >
+                          <History className="size-3.5 text-muted-foreground" />
+                          History
+                        </RowActionsItem>
+                        <RowActionsItem
+                          onClick={() => {
+                            setMenuId(null);
+                            setConfirm({ type: "archive", ids: [row.id] });
+                          }}
+                        >
+                          <Archive className="size-3.5 text-muted-foreground" />
+                          Archive
+                        </RowActionsItem>
+                        <RowActionsItem
+                          destructive
+                          onClick={() => {
+                            setMenuId(null);
+                            setConfirm({ type: "delete", ids: [row.id] });
+                          }}
+                        >
+                          <Trash2 className="size-3.5" />
+                          Delete
+                        </RowActionsItem>
+                      </RowActionsMenu>
                     </td>
                   </tr>
                 ))}

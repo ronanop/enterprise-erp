@@ -140,9 +140,9 @@ export function listCorrections(employeeId?: string): AttendanceCorrection[] {
   return employeeId ? all.filter((c) => c.employeeId === employeeId) : all;
 }
 
-export function submitCorrection(
+export async function submitCorrection(
   payload: Omit<AttendanceCorrection, "id" | "createdAt" | "workflowStage" | "createdBy">,
-): AttendanceCorrection {
+): Promise<AttendanceCorrection> {
   const item: AttendanceCorrection = {
     ...payload,
     id: crypto.randomUUID(),
@@ -150,6 +150,40 @@ export function submitCorrection(
     createdBy: actorLabel(),
     createdAt: new Date().toISOString(),
   };
+
+  try {
+    const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+    const branchId =
+      typeof window !== "undefined"
+        ? (JSON.parse(localStorage.getItem("erp_ats_api_context_v1") || "{}") as { branchId?: string })
+            .branchId
+        : undefined;
+    // Prefer org context from employee directory if present
+    const orgCtx =
+      typeof window !== "undefined"
+        ? (JSON.parse(localStorage.getItem("erp_org_context_v1") || "{}") as { branchId?: string })
+        : {};
+    const bid = branchId || orgCtx.branchId;
+    if (bid && uuidRe.test(payload.employeeId)) {
+      const field = payload.field === "check_out" ? "check_out" : "check_in";
+      const res = await resourceService.create<Record<string, unknown>>("/hr/attendance-corrections", {
+        branch_id: bid,
+        employee_id: payload.employeeId,
+        attendance_id: uuidRe.test(payload.attendanceId) ? payload.attendanceId : null,
+        attendance_date: payload.date,
+        field_name: field,
+        old_value: payload.oldTime || null,
+        new_value: payload.newTime || "",
+        reason: payload.reason || null,
+        status: "submitted",
+      });
+      const apiId = String(res.data?.id ?? "");
+      if (apiId) item.id = apiId;
+    }
+  } catch (err) {
+    console.warn("Attendance correction API failed; local cache kept", err);
+  }
+
   const all = readJson<AttendanceCorrection[]>(CORRECTIONS_KEY, []);
   all.unshift(item);
   writeJson(CORRECTIONS_KEY, all);
@@ -700,7 +734,7 @@ export async function applyAttendanceCorrection(input: {
     notes: `${record.notes ? `${record.notes} · ` : ""}Corrected: ${reason}`,
   });
 
-  submitCorrection({
+  await submitCorrection({
     attendanceId: record.id,
     employeeId: record.employeeId,
     date: record.attendanceDate,

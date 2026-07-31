@@ -6,6 +6,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { ChevronRight } from "lucide-react";
 
 import { SetupEntityPanel, type FieldDef } from "@/components/hr/setup/setup-entity-panel";
+import { HolidayCalendarPanel } from "@/components/hr/setup/holiday-calendar-panel";
 import { SetupToastHost } from "@/components/hr/setup/setup-toast";
 import { toApiTimeValue, toTimeInputValue } from "@/components/hr/setup/setup-drawer";
 import { HrStatusBadge } from "@/components/hr/hr-primitives";
@@ -52,6 +53,8 @@ function mapLeaveType(row: SetupRow): SetupRow {
     code: row.leave_type_code,
     name: row.leave_type_name,
     paid: row.is_paid ? "Yes" : "No",
+    max_year: row.max_days_per_year ?? "—",
+    per_month: row.monthly_credit_days ?? "—",
   };
 }
 
@@ -141,6 +144,32 @@ function mapLocation(row: SetupRow): SetupRow {
     ...row,
     code: row.location_code,
     name: row.location_name,
+    branch: row.branch_name ?? row.branch ?? "—",
+  };
+}
+
+function parseEquipmentList(value: unknown): string[] {
+  if (Array.isArray(value)) {
+    return value.map((v) => String(v).trim()).filter(Boolean);
+  }
+  if (typeof value === "string") {
+    return value
+      .split(/[,;|]/)
+      .map((s) => s.trim())
+      .filter(Boolean);
+  }
+  return [];
+}
+
+function mapRoom(row: SetupRow): SetupRow {
+  const features = parseEquipmentList(row.equipment_json ?? row.equipment_features);
+  return {
+    ...row,
+    code: row.room_code,
+    name: row.room_name,
+    capacity: row.capacity ?? 0,
+    equipment_features: features.join(", "),
+    features: features.length ? features.join(", ") : "—",
   };
 }
 
@@ -158,6 +187,17 @@ type TabConfig = {
     deactivate?: string;
     archive?: string;
   };
+};
+
+const ROOM_STATUS_FIELD: FieldDef = {
+  key: "status",
+  label: "Status",
+  type: "select",
+  options: [
+    { value: "active", label: "Active" },
+    { value: "inactive", label: "Inactive" },
+    { value: "maintenance", label: "Maintenance" },
+  ],
 };
 
 const STATUS_FIELD: FieldDef = {
@@ -386,13 +426,14 @@ const TAB_CONFIG: Partial<Record<HrSetupTabId, TabConfig>> = {
     codeKey: "location_code",
     mapApiRow: mapLocation,
     columns: [
-      { key: "name", label: "Location" },
+      { key: "name", label: "Work Location" },
+      { key: "branch", label: "Branch" },
       { key: "code", label: "Code" },
       { key: "location_type", label: "Type" },
       { key: "status", label: "Status" },
     ],
     fields: [
-      { key: "location_name", label: "Location Name", required: true },
+      { key: "location_name", label: "Work Location Name", required: true, placeholder: "e.g. Mumbai, Maharashtra" },
       { key: "location_code", label: "Code", required: true, readOnly: true },
       {
         key: "company_id",
@@ -409,6 +450,7 @@ const TAB_CONFIG: Partial<Record<HrSetupTabId, TabConfig>> = {
         type: "select",
         optionsSource: "branches",
         autoDefault: true,
+        hint: "Parent branch for this work location",
       },
       {
         key: "location_type",
@@ -421,6 +463,14 @@ const TAB_CONFIG: Partial<Record<HrSetupTabId, TabConfig>> = {
           { value: "remote", label: "Remote" },
         ],
       },
+      { key: "latitude", label: "Latitude", type: "number", hint: "For punch geofence" },
+      { key: "longitude", label: "Longitude", type: "number" },
+      {
+        key: "geofence_radius_meters",
+        label: "Geofence Radius (m)",
+        type: "number",
+        hint: "e.g. 200 — employees must punch within this radius",
+      },
       STATUS_FIELD,
     ],
     buildCreateBody: (f) => ({
@@ -429,6 +479,86 @@ const TAB_CONFIG: Partial<Record<HrSetupTabId, TabConfig>> = {
       location_code: f.location_code,
       location_name: f.location_name,
       location_type: f.location_type || "office",
+      latitude: f.latitude != null && f.latitude !== "" ? Number(f.latitude) : null,
+      longitude: f.longitude != null && f.longitude !== "" ? Number(f.longitude) : null,
+      geofence_radius_meters:
+        f.geofence_radius_meters != null && f.geofence_radius_meters !== ""
+          ? Number(f.geofence_radius_meters)
+          : null,
+    }),
+  },
+  rooms: {
+    nameKeys: ["name", "room_name"],
+    codeKey: "room_code",
+    mapApiRow: mapRoom,
+    columns: [
+      { key: "name", label: "Room" },
+      { key: "code", label: "Code" },
+      { key: "capacity", label: "Capacity" },
+      { key: "features", label: "Features" },
+      { key: "status", label: "Status" },
+    ],
+    fields: [
+      { key: "room_name", label: "Room Name", required: true, placeholder: "e.g. Innovation Lab" },
+      {
+        key: "room_code",
+        label: "Room Code",
+        required: true,
+        readOnly: true,
+        hint: "Auto-generated (ROOM-001…)",
+      },
+      {
+        key: "branch_id",
+        label: "Branch",
+        type: "select",
+        optionsSource: "branches",
+        autoDefault: true,
+        hint: "Branch where this room is located",
+      },
+      {
+        key: "capacity",
+        label: "Capacity",
+        type: "number",
+        required: true,
+        placeholder: "20",
+        hint: "Max seating / attendees",
+      },
+      {
+        key: "equipment_features",
+        label: "Room Features",
+        type: "textarea",
+        placeholder: "Projector, Whiteboard, Video Conferencing, AC, Wi-Fi",
+        hint: "Comma-separated amenities and equipment",
+      },
+      {
+        key: "notes",
+        label: "Notes",
+        type: "textarea",
+        placeholder: "Floor, building wing, booking rules…",
+      },
+      ROOM_STATUS_FIELD,
+    ],
+    statusActions: {
+      activate: "active",
+      deactivate: "inactive",
+      archive: "maintenance",
+    },
+    buildCreateBody: (f) => ({
+      branch_id: f.branch_id || null,
+      room_code: f.room_code || null,
+      room_name: f.room_name,
+      capacity: Number(f.capacity) || 10,
+      equipment_json: parseEquipmentList(f.equipment_features),
+      notes: f.notes || null,
+      status: f.status || "active",
+    }),
+    buildUpdateBody: (f) => ({
+      room_name: f.room_name,
+      capacity: Number(f.capacity) || 10,
+      equipment_json: parseEquipmentList(f.equipment_features),
+      notes: f.notes || null,
+      status: f.status || "active",
+      version: f.version ? Number(f.version) : undefined,
     }),
   },
   "employment-types": {
@@ -466,6 +596,7 @@ const TAB_CONFIG: Partial<Record<HrSetupTabId, TabConfig>> = {
     columns: [
       { key: "name", label: "Document" },
       { key: "code", label: "Code" },
+      { key: "kind", label: "Kind" },
       {
         key: "mandatory",
         label: "Mandatory",
@@ -476,6 +607,29 @@ const TAB_CONFIG: Partial<Record<HrSetupTabId, TabConfig>> = {
     fields: [
       { key: "name", label: "Name", required: true },
       { key: "code", label: "Code", required: true, readOnly: true },
+      {
+        key: "kind",
+        label: "Onboarding kind",
+        type: "select",
+        options: [
+          { value: "photo", label: "Photo" },
+          { value: "resume", label: "Resume" },
+          { value: "pan", label: "PAN" },
+          { value: "aadhaar", label: "Aadhaar" },
+          { value: "passport", label: "Passport" },
+          { value: "education", label: "Graduation / Education" },
+          { value: "experience", label: "Work Experience" },
+          { value: "cancelled_cheque", label: "Cancelled Cheque" },
+          { value: "bank_details", label: "Bank Details" },
+          { value: "appointment_letter", label: "Appointment Letter" },
+          { value: "relieving_letter", label: "Relieving Letter" },
+          { value: "salary_slips", label: "Salary Slips" },
+          { value: "previous_employer", label: "Previous Employer Certificate" },
+          { value: "signature", label: "Signature" },
+          { value: "other", label: "Other" },
+        ],
+        hint: "Maps this type to the candidate onboarding upload slot (Offer Letter is ATS-only — not collected here)",
+      },
       { key: "mandatory", label: "Mandatory", type: "checkbox" },
       { key: "expiry_required", label: "Expiry Required", type: "checkbox" },
       { key: "formats", label: "Allowed Formats", placeholder: "PDF,JPG" },
@@ -531,6 +685,8 @@ const TAB_CONFIG: Partial<Record<HrSetupTabId, TabConfig>> = {
       { key: "name", label: "Leave Type" },
       { key: "code", label: "Code" },
       { key: "paid", label: "Paid" },
+      { key: "max_year", label: "Days / Year" },
+      { key: "per_month", label: "Leave / Month" },
       { key: "status", label: "Status" },
     ],
     fields: [
@@ -538,7 +694,15 @@ const TAB_CONFIG: Partial<Record<HrSetupTabId, TabConfig>> = {
       { key: "leave_type_code", label: "Code", required: true, readOnly: true },
       { key: "is_paid", label: "Paid", type: "checkbox" },
       { key: "max_days_per_year", label: "Max Days / Year", type: "number" },
+      {
+        key: "monthly_credit_days",
+        label: "Leave / Month",
+        type: "number",
+        hint: "Days credited each month (monthly accrual)",
+      },
       { key: "requires_attachment", label: "Requires Attachment", type: "checkbox" },
+      { key: "carry_forward_allowed", label: "Carry Forward Allowed", type: "checkbox" },
+      { key: "max_carry_forward_days", label: "Max Carry Forward Days", type: "number" },
       STATUS_FIELD,
     ],
     buildCreateBody: (f) => ({
@@ -546,14 +710,26 @@ const TAB_CONFIG: Partial<Record<HrSetupTabId, TabConfig>> = {
       leave_type_name: f.leave_type_name,
       is_paid: f.is_paid === "true",
       max_days_per_year: f.max_days_per_year ? Number(f.max_days_per_year) : null,
+      monthly_credit_days: f.monthly_credit_days ? Number(f.monthly_credit_days) : null,
       requires_attachment: f.requires_attachment === "true",
+      carry_forward_allowed: f.carry_forward_allowed === "true",
+      max_carry_forward_days: f.max_carry_forward_days
+        ? Number(f.max_carry_forward_days)
+        : null,
       status: f.status || "active",
     }),
     buildUpdateBody: (f) => ({
       leave_type_name: f.leave_type_name,
       is_paid: f.is_paid === "true",
       max_days_per_year: f.max_days_per_year ? Number(f.max_days_per_year) : null,
+      monthly_credit_days: f.monthly_credit_days ? Number(f.monthly_credit_days) : null,
       requires_attachment: f.requires_attachment === "true",
+      carry_forward_allowed:
+        f.carry_forward_allowed != null ? f.carry_forward_allowed === "true" : undefined,
+      max_carry_forward_days:
+        f.max_carry_forward_days != null && f.max_carry_forward_days !== ""
+          ? Number(f.max_carry_forward_days)
+          : undefined,
       status: f.status,
       version: f.version ? Number(f.version) : undefined,
     }),
@@ -746,23 +922,81 @@ const TAB_CONFIG: Partial<Record<HrSetupTabId, TabConfig>> = {
     }),
   },
   "attendance-rules": {
-    nameKeys: ["name"],
+    nameKeys: ["name", "rule_name"],
+    codeKey: "rule_code",
+    mapApiRow: (row) => ({
+      ...row,
+      code: row.rule_code ?? row.code,
+      name: row.rule_name ?? row.name,
+      late_mark_after: row.late_mark_after_minutes ?? row.late_mark_after,
+    }),
     columns: [
       { key: "name", label: "Rule" },
       { key: "code", label: "Code" },
-      { key: "grace_minutes", label: "Grace" },
+      { key: "half_day_hours", label: "Half Day Hrs" },
+      { key: "full_day_hours", label: "Full Day Hrs" },
       { key: "status", label: "Status" },
     ],
     fields: [
-      { key: "name", label: "Rule Name", required: true },
-      { key: "code", label: "Code", required: true, readOnly: true },
+      { key: "rule_name", label: "Rule Name", required: true },
+      { key: "rule_code", label: "Code", required: true, readOnly: true },
       { key: "grace_minutes", label: "Grace Minutes", type: "number" },
-      { key: "late_mark_after", label: "Late Mark After (min)", type: "number" },
+      { key: "late_mark_after_minutes", label: "Late Mark After (min)", type: "number" },
       { key: "half_day_hours", label: "Half Day Hours", type: "number" },
       { key: "full_day_hours", label: "Full Day Hours", type: "number" },
+      { key: "early_leave_half_day_minutes", label: "Early Leave → Half Day (min)", type: "number" },
+      { key: "miss_punch_window_hours", label: "Miss Punch Window (hours)", type: "number" },
+      { key: "compoff_half_day_hours", label: "Comp Off Half Day Hours", type: "number" },
+      { key: "compoff_full_day_hours", label: "Comp Off Full Day Hours", type: "number" },
       { key: "overtime_allowed", label: "Overtime Allowed", type: "checkbox" },
+      { key: "geofence_required", label: "Require GPS on Punch", type: "checkbox" },
+      { key: "compoff_auto_credit", label: "Auto-credit Comp Off from OT", type: "checkbox" },
       STATUS_FIELD,
     ],
+    buildCreateBody: (f) => ({
+      rule_code: f.rule_code || f.code,
+      rule_name: f.rule_name || f.name,
+      grace_minutes: Number(f.grace_minutes || 15),
+      late_mark_after_minutes: Number(f.late_mark_after_minutes || f.late_mark_after || 15),
+      half_day_hours: Number(f.half_day_hours || 4),
+      full_day_hours: Number(f.full_day_hours || 8),
+      early_leave_half_day_minutes: Number(f.early_leave_half_day_minutes || 120),
+      miss_punch_window_hours: Number(f.miss_punch_window_hours || 48),
+      compoff_half_day_hours: Number(f.compoff_half_day_hours || 4),
+      compoff_full_day_hours: Number(f.compoff_full_day_hours || 8),
+      overtime_allowed: Boolean(f.overtime_allowed ?? true),
+      geofence_required: Boolean(f.geofence_required),
+      compoff_auto_credit: Boolean(f.compoff_auto_credit ?? true),
+      status: f.status || "active",
+      is_default: true,
+    }),
+    buildUpdateBody: (f) => ({
+      rule_name: f.rule_name || f.name || undefined,
+      grace_minutes: f.grace_minutes != null ? Number(f.grace_minutes) : undefined,
+      late_mark_after_minutes:
+        f.late_mark_after_minutes != null || f.late_mark_after != null
+          ? Number(f.late_mark_after_minutes ?? f.late_mark_after)
+          : undefined,
+      half_day_hours: f.half_day_hours != null ? Number(f.half_day_hours) : undefined,
+      full_day_hours: f.full_day_hours != null ? Number(f.full_day_hours) : undefined,
+      early_leave_half_day_minutes:
+        f.early_leave_half_day_minutes != null
+          ? Number(f.early_leave_half_day_minutes)
+          : undefined,
+      miss_punch_window_hours:
+        f.miss_punch_window_hours != null ? Number(f.miss_punch_window_hours) : undefined,
+      compoff_half_day_hours:
+        f.compoff_half_day_hours != null ? Number(f.compoff_half_day_hours) : undefined,
+      compoff_full_day_hours:
+        f.compoff_full_day_hours != null ? Number(f.compoff_full_day_hours) : undefined,
+      overtime_allowed:
+        f.overtime_allowed != null ? Boolean(f.overtime_allowed) : undefined,
+      geofence_required:
+        f.geofence_required != null ? Boolean(f.geofence_required) : undefined,
+      compoff_auto_credit:
+        f.compoff_auto_credit != null ? Boolean(f.compoff_auto_credit) : undefined,
+      status: f.status || undefined,
+    }),
   },
   "salary-components": {
     nameKeys: ["name", "component_name"],
@@ -983,6 +1217,9 @@ const TAB_CONFIG: Partial<Record<HrSetupTabId, TabConfig>> = {
 };
 
 function TabPanel({ tab }: { tab: HrSetupTab }) {
+  if (tab.id === "holiday-calendar") {
+    return <HolidayCalendarPanel tab={tab} />;
+  }
   const cfg = TAB_CONFIG[tab.id];
   if (!cfg) {
     return (

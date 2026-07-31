@@ -85,9 +85,14 @@ DEPARTMENTS = [
 ]
 
 LEAVE_TYPES = [
-    ("CL", "Casual Leave", Decimal("12"), True),
-    ("SL", "Sick Leave", Decimal("10"), True),
-    ("EL", "Earned Leave", Decimal("18"), True),
+    # code, name, max_days_per_year, monthly_credit_days, is_paid
+    ("CL", "Casual Leave", Decimal("12"), Decimal("1"), True),
+    ("SL", "Sick Leave", Decimal("10"), Decimal("1"), True),
+    ("EL", "Earned Leave", Decimal("18"), Decimal("1.5"), True),
+    ("ML", "Maternity Leave", Decimal("182"), None, True),
+    ("PL", "Paternity Leave", Decimal("15"), None, True),
+    ("LOP", "Loss of Pay", Decimal("0"), None, False),
+    ("CO", "Comp Off", Decimal("0"), None, True),
 ]
 
 def previous_weekdays(from_day: date, count: int) -> list[date]:
@@ -277,7 +282,7 @@ def seed(db) -> None:
         )
 
     leave_types: dict[str, HrLeaveType] = {}
-    for code, name, max_days, is_paid in LEAVE_TYPES:
+    for code, name, max_days, monthly_days, is_paid in LEAVE_TYPES:
         leave_types[code] = ensure(
             db,
             HrLeaveType,
@@ -286,6 +291,7 @@ def seed(db) -> None:
                 "leave_type_name": name,
                 "is_paid": is_paid,
                 "max_days_per_year": max_days,
+                "monthly_credit_days": monthly_days,
                 "requires_attachment": code == "SL",
                 "status": "active",
                 "created_by": admin_id,
@@ -300,6 +306,7 @@ def seed(db) -> None:
                 "leave_type_name": name,
                 "is_paid": is_paid,
                 "max_days_per_year": max_days,
+                "monthly_credit_days": monthly_days,
                 "requires_attachment": code == "SL",
             },
         )
@@ -332,9 +339,62 @@ def seed(db) -> None:
             "calendar_name": "India National Holidays 2026",
             "calendar_year": 2026,
             "holidays_json": [
-                {"date": "2026-01-26", "name": "Republic Day"},
-                {"date": "2026-08-15", "name": "Independence Day"},
-                {"date": "2026-10-02", "name": "Gandhi Jayanti"},
+                {
+                    "id": "hol-republic",
+                    "title": "Republic Day",
+                    "name": "Republic Day",
+                    "date": "2026-01-26",
+                    "holiday_type": "national",
+                    "kind": "mandatory",
+                    "repeat": "every_year",
+                    "frequency": "yearly",
+                    "half_day": False,
+                    "half_day_session": None,
+                    "applicable_to": ["all"],
+                    "remarks": "National holiday",
+                },
+                {
+                    "id": "hol-independence",
+                    "title": "Independence Day",
+                    "name": "Independence Day",
+                    "date": "2026-08-15",
+                    "holiday_type": "national",
+                    "kind": "mandatory",
+                    "repeat": "every_year",
+                    "frequency": "yearly",
+                    "half_day": False,
+                    "half_day_session": None,
+                    "applicable_to": ["all"],
+                    "remarks": "",
+                },
+                {
+                    "id": "hol-gandhi",
+                    "title": "Gandhi Jayanti",
+                    "name": "Gandhi Jayanti",
+                    "date": "2026-10-02",
+                    "holiday_type": "national",
+                    "kind": "mandatory",
+                    "repeat": "every_year",
+                    "frequency": "yearly",
+                    "half_day": False,
+                    "half_day_session": None,
+                    "applicable_to": ["all"],
+                    "remarks": "",
+                },
+                {
+                    "id": "hol-christmas",
+                    "title": "Christmas Day",
+                    "name": "Christmas Day",
+                    "date": "2026-12-25",
+                    "holiday_type": "optional",
+                    "kind": "optional",
+                    "repeat": "every_year",
+                    "frequency": "yearly",
+                    "half_day": False,
+                    "half_day_session": None,
+                    "applicable_to": ["all"],
+                    "remarks": "Optional company holiday",
+                },
             ],
             "status": "published",
             "created_by": admin_id,

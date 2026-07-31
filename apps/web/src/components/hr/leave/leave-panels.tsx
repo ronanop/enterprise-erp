@@ -190,7 +190,7 @@ export function LeaveTypePolicyPanel({
               </div>
               <p className="mt-2 text-xs text-muted-foreground">{t.eligibility}</p>
               <p className="mt-2 text-xs">
-                Max {t.maxDays || "—"} · Allocated {allocated} · Used {used} · Remaining{" "}
+                Max {t.maxDays || "—"}/yr · {t.daysPerMonth || "—"}/mo · Allocated {allocated} · Used {used} · Remaining{" "}
                 {Math.max(0, allocated - used)}
               </p>
               <p className="mt-1 text-[10px] text-muted-foreground">
@@ -228,6 +228,7 @@ export function LeaveTypeEditDrawer({
 }) {
   const [name, setName] = useState("");
   const [maxDays, setMaxDays] = useState("12");
+  const [daysPerMonth, setDaysPerMonth] = useState("1");
   const [isPaid, setIsPaid] = useState(true);
   const [requiresAttachment, setRequiresAttachment] = useState(false);
   const [status, setStatus] = useState("active");
@@ -243,6 +244,7 @@ export function LeaveTypeEditDrawer({
     if (!open || !leaveType) return;
     setName(leaveType.name);
     setMaxDays(String(leaveType.maxDays || 0));
+    setDaysPerMonth(String(leaveType.daysPerMonth || 0));
     setIsPaid(leaveType.isPaid);
     setRequiresAttachment(leaveType.requiresAttachment);
     setStatus(leaveType.status || "active");
@@ -276,6 +278,7 @@ export function LeaveTypeEditDrawer({
               void updateLeaveTypePolicy(leaveType, {
                 name,
                 maxDays: Number(maxDays) || 0,
+                daysPerMonth: Number(daysPerMonth) || 0,
                 isPaid,
                 requiresAttachment,
                 status,
@@ -305,6 +308,15 @@ export function LeaveTypeEditDrawer({
           </SetupField>
           <SetupField label="Max days / year">
             <SetupInput type="number" min={0} value={maxDays} onChange={(e) => setMaxDays(e.target.value)} />
+          </SetupField>
+          <SetupField label="Leave / month" hint="Days credited each month (accrual)">
+            <SetupInput
+              type="number"
+              min={0}
+              step="0.5"
+              value={daysPerMonth}
+              onChange={(e) => setDaysPerMonth(e.target.value)}
+            />
           </SetupField>
           <SetupField label="Eligibility">
             <SetupInput value={eligibility} onChange={(e) => setEligibility(e.target.value)} />
@@ -416,7 +428,9 @@ export function LeaveApprovalDrawer({
       footer={
         <div className="flex flex-wrap gap-2">
           <Button size="sm" className="cursor-pointer" disabled={loading} onClick={() => void act("approve")}>
-            Approve
+            {request.status === "manager_approved" || request.extension.approvalStage === "hr_review"
+              ? "HR Approve"
+              : "Manager Approve"}
           </Button>
           <Button size="sm" variant="destructive" className="cursor-pointer" disabled={loading} onClick={() => void act("reject")}>
             Reject
@@ -522,8 +536,13 @@ export function LeaveReportsPanel({ directory }: { directory: LeaveDirectory }) 
             variant="outline"
             className="cursor-pointer h-7"
             onClick={() => {
-              generateCarryForward(directory);
-              toast("Carry forward generated from unused balances", "success");
+              void generateCarryForward(directory)
+                .then((rows) =>
+                  toast(`Carry forward: ${rows.length} balance(s)`, "success"),
+                )
+                .catch((err) =>
+                  toast(err instanceof Error ? err.message : "Carry forward failed", "error"),
+                );
             }}
           >
             Generate carry forward
@@ -591,7 +610,7 @@ export function CompOffEncashDrawers({
               const earned = new Date().toISOString().slice(0, 10);
               const exp = new Date();
               exp.setMonth(exp.getMonth() + 3);
-              saveCompOff({
+              void saveCompOff({
                 employeeId,
                 employeeName: emp.label,
                 earnedDate: earned,
@@ -599,10 +618,13 @@ export function CompOffEncashDrawers({
                 expiryDate: exp.toISOString().slice(0, 10),
                 status: "pending",
                 reason,
-              });
-              toast("Comp off created — pending approval", "success");
-              setCompOpen(false);
-              onDone();
+              })
+                .then(() => {
+                  toast("Comp off credited", "success");
+                  setCompOpen(false);
+                  onDone();
+                })
+                .catch((e) => toast(e instanceof Error ? e.message : "Failed", "error"));
             }}
           >
             Save
@@ -642,7 +664,7 @@ export function CompOffEncashDrawers({
                 toast("Employee and leave type required", "error");
                 return;
               }
-              saveEncashment({
+              void saveEncashment({
                 employeeId,
                 employeeName: emp.label,
                 leaveTypeId,
@@ -651,10 +673,13 @@ export function CompOffEncashDrawers({
                 approvedDays: Number(days) || 1,
                 amount: Number(amount) || 0,
                 status: "pending",
-              });
-              toast("Encashment submitted for approval", "success");
-              setEncOpen(false);
-              onDone();
+              })
+                .then(() => {
+                  toast("Encashment submitted", "success");
+                  setEncOpen(false);
+                  onDone();
+                })
+                .catch((e) => toast(e instanceof Error ? e.message : "Failed", "error"));
             }}
           >
             Submit

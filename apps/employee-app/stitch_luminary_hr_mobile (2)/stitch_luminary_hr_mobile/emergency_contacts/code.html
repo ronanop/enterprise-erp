@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0, viewport-fit=cover" name="viewport"/>
+<title>Emergency Contacts</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .glass-effect {
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+        }
+        .safe-pb {
+            padding-bottom: env(safe-area-inset-bottom);
+        }
+        /* Hide scrollbar */
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+    </style>
+<script id="tailwind-config">
+        tailwind.config = {
+          darkMode: "class",
+          theme: {
+            extend: {
+              "colors": {
+                      "on-surface": "#0b1c30",
+                      "error-container": "#ffdad6",
+                      "tertiary-fixed-dim": "#4edea3",
+                      "inverse-surface": "#213145",
+                      "on-secondary-fixed-variant": "#5a00c6",
+                      "secondary": "#712ae2",
+                      "error": "#ba1a1a",
+                      "on-background": "#0b1c30",
+                      "on-secondary-fixed": "#25005a",
+                      "on-tertiary-fixed": "#002113",
+                      "tertiary-container": "#007d55",
+                      "secondary-fixed-dim": "#d2bbff",
+                      "on-primary-fixed": "#00174b",
+                      "inverse-on-surface": "#eaf1ff",
+                      "primary": "#004ac6",
+                      "on-primary-fixed-variant": "#003ea8",
+                      "secondary-fixed": "#eaddff",
+                      "on-secondary-container": "#fffbff",
+                      "surface-container-highest": "#d3e4fe",
+                      "primary-fixed": "#dbe1ff",
+                      "outline": "#737686",
+                      "surface-container-low": "#eff4ff",
+                      "surface-tint": "#0053db",
+                      "on-surface-variant": "#434655",
+                      "primary-container": "#2563eb",
+                      "surface-container": "#e5eeff",
+                      "on-tertiary": "#ffffff",
+                      "surface-dim": "#cbdbf5",
+                      "surface": "#f8f9ff",
+                      "surface-bright": "#f8f9ff",
+                      "on-error": "#ffffff",
+                      "on-tertiary-container": "#bdffdb",
+                      "surface-container-lowest": "#ffffff",
+                      "outline-variant": "#c3c6d7",
+                      "on-primary-container": "#eeefff",
+                      "background": "#f8f9ff",
+                      "on-error-container": "#93000a",
+                      "tertiary-fixed": "#6ffbbe",
+                      "tertiary": "#006242",
+                      "on-primary": "#ffffff",
+                      "surface-container-high": "#dce9ff",
+                      "on-tertiary-fixed-variant": "#005236",
+                      "secondary-container": "#8a4cfc",
+                      "surface-variant": "#d3e4fe",
+                      "on-secondary": "#ffffff",
+                      "primary-fixed-dim": "#b4c5ff",
+                      "inverse-primary": "#b4c5ff"
+              },
+              "borderRadius": {
+                      "DEFAULT": "0.25rem",
+                      "lg": "0.5rem",
+                      "xl": "0.75rem",
+                      "full": "9999px"
+              },
+              "spacing": {
+                      "stack-gap-md": "16px",
+                      "container-padding": "20px",
+                      "unit": "4px",
+                      "stack-gap-lg": "24px",
+                      "stack-gap-sm": "8px",
+                      "section-margin": "32px"
+              },
+              "fontFamily": {
+                      "label-md": ["Inter"],
+                      "headline-sm": ["Inter"],
+                      "label-sm": ["Inter"],
+                      "body-sm": ["Inter"],
+                      "display-lg-mobile": ["Inter"],
+                      "display-lg": ["Inter"],
+                      "title-lg": ["Inter"],
+                      "display-md": ["Inter"],
+                      "body-md": ["Inter"]
+              },
+              "fontSize": {
+                      "label-md": ["14px", {"lineHeight": "20px", "fontWeight": "500"}],
+                      "headline-sm": ["20px", {"lineHeight": "28px", "fontWeight": "600"}],
+                      "label-sm": ["12px", {"lineHeight": "16px", "fontWeight": "600"}],
+                      "body-sm": ["14px", {"lineHeight": "20px", "fontWeight": "400"}],
+                      "display-lg-mobile": ["28px", {"lineHeight": "34px", "fontWeight": "700"}],
+                      "display-lg": ["32px", {"lineHeight": "40px", "letterSpacing": "-0.02em", "fontWeight": "700"}],
+                      "title-lg": ["18px", {"lineHeight": "24px", "fontWeight": "600"}],
+                      "display-md": ["24px", {"lineHeight": "32px", "letterSpacing": "-0.01em", "fontWeight": "700"}],
+                      "body-md": ["16px", {"lineHeight": "24px", "fontWeight": "400"}]
+              }
+            },
+          },
+        }
+    </script>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background text-on-surface font-body-md min-h-screen">
+<!-- Top App Bar -->
+<header class="fixed top-0 w-full z-50 bg-surface/80 backdrop-blur-xl shadow-sm flex items-center justify-between px-container-padding h-16 w-full">
+<div class="flex items-center gap-4">
+<button class="transition-all duration-200 active:scale-95 text-on-surface-variant">
+<span class="material-symbols-outlined">arrow_back</span>
+</button>
+<h1 class="font-headline-sm text-headline-sm-mobile text-on-surface">Emergency Contacts</h1>
+</div>
+<div class="flex items-center gap-2">
+<button class="transition-all duration-200 active:scale-95 text-on-surface-variant p-2 rounded-full hover:bg-surface-container-low">
+<span class="material-symbols-outlined">add</span>
+</button>
+</div>
+</header>
+<main class="pt-24 pb-32 px-container-padding">
+<!-- AI Assistant / Pulse Indicator -->
+<div class="mb-section-margin flex items-center justify-between bg-primary-container/10 p-4 rounded-xl border border-primary/10">
+<div class="flex items-center gap-3">
+<div class="w-10 h-10 rounded-full bg-primary-container flex items-center justify-center text-on-primary-container">
+<span class="material-symbols-outlined">health_metrics</span>
+</div>
+<div>
+<h2 class="font-title-lg text-title-lg text-primary">Critical Care Info</h2>
+<p class="font-body-sm text-body-sm text-on-surface-variant">Ready for rapid response</p>
+</div>
+</div>
+<div class="flex flex-col items-end">
+<span class="font-label-sm text-label-sm px-2 py-1 bg-error-container text-on-error-container rounded-full">Blood Group: B+</span>
+</div>
+</div>
+<!-- Primary Contact -->
+<section class="mb-section-margin">
+<div class="flex items-center justify-between mb-4">
+<h3 class="font-title-lg text-title-lg text-on-surface">Primary Contact</h3>
+<span class="font-label-sm text-label-sm text-primary uppercase tracking-wider">Priority 01</span>
+</div>
+<div class="bg-surface-container-lowest rounded-xl p-5 shadow-[0px_4px_20px_rgba(0,0,0,0.05)] border border-outline-variant transition-all duration-200 active:scale-[0.98]">
+<div class="flex items-start gap-4 mb-6">
+<div class="relative">
+<img class="w-16 h-16 rounded-full object-cover border-2 border-primary-container p-0.5" data-alt="A professional studio portrait of a warm-looking middle-aged man with graying hair and glasses, wearing a soft navy sweater. The background is a clean, minimalist off-white office wall with soft diffused lighting that creates a welcoming and reliable corporate aesthetic. The image is crisp, high-resolution, and perfectly centered." src="https://lh3.googleusercontent.com/aida-public/AB6AXuBvSrtJs0Sjd0wYclh7bMbdYadia5zIT5Cjx2a0Tx3n6H8TLjyq6AX_jcAeHMWQ6AL616anbV9Fz6Zk6tuYoR3rVag7QZTN0kfrucLwSE8tpgzN3cTlST3HetEqIxxrZBR_OczmuUpyiGJx6rnr8TxN20vjSI10SN48SPaOlWft4SHI2tgjiqQbXyRXQMVkDIlWT5qw883uFM_GoVogRD_Yftzpwteii58HGkbFmXwnudPU4LGQCh5Q_oYRq5gcaS77CQ9P3UfH1ic"/>
+<div class="absolute -bottom-1 -right-1 bg-primary text-white p-1 rounded-full border-2 border-white">
+<span class="material-symbols-outlined !text-[14px]">shield_with_heart</span>
+</div>
+</div>
+<div class="flex-1">
+<div class="flex items-center justify-between">
+<h4 class="font-headline-sm text-headline-sm-mobile text-on-surface">Julian Rivera</h4>
+<span class="material-symbols-outlined text-primary cursor-pointer">edit</span>
+</div>
+<p class="font-label-md text-label-md text-primary">Spouse</p>
+</div>
+</div>
+<div class="grid grid-cols-2 gap-4 mb-6">
+<div class="space-y-1">
+<p class="font-label-sm text-label-sm text-on-surface-variant">Email</p>
+<p class="font-body-sm text-body-sm text-on-surface truncate">j.rivera@designmail.com</p>
+</div>
+<div class="space-y-1">
+<p class="font-label-sm text-label-sm text-on-surface-variant">Relationship</p>
+<p class="font-body-sm text-body-sm text-on-surface">Legal Guardian</p>
+</div>
+</div>
+<div class="flex gap-3">
+<button class="flex-1 bg-primary text-on-primary h-12 rounded-full flex items-center justify-center gap-2 transition-all active:scale-95 shadow-lg shadow-primary/20">
+<span class="material-symbols-outlined">call</span>
+<span class="font-label-md text-label-md">Call Now</span>
+</button>
+<button class="flex-1 border border-primary text-primary h-12 rounded-full flex items-center justify-center gap-2 transition-all active:scale-95">
+<span class="material-symbols-outlined">chat</span>
+<span class="font-label-md text-label-md">Message</span>
+</button>
+</div>
+</div>
+</section>
+<!-- Secondary Contacts (Bento Style) -->
+<section class="mb-section-margin">
+<h3 class="font-title-lg text-title-lg text-on-surface mb-4">Secondary Contacts</h3>
+<div class="space-y-4">
+<!-- Secondary Card 1 -->
+<div class="bg-surface-container-low rounded-xl p-5 border border-outline-variant flex flex-col gap-4">
+<div class="flex items-center gap-4">
+<img class="w-12 h-12 rounded-full object-cover" data-alt="A close-up portrait of a friendly woman with a bright smile, wearing a professional gray blazer and a simple gold necklace. The lighting is bright and airy, typical of a modern high-end office environment. The style is minimalist and clean, utilizing a soft focus background to keep the emphasis on the subject's approachable demeanor." src="https://lh3.googleusercontent.com/aida-public/AB6AXuBmEL5IsQV52Nt1kAYg2PVyLbKe7ZVRr4I-onuk9wwlUiAOAqKRzN1uOdNWI897Fk4lg_oWij4oehAzSztb-bY9E06n7x9Jf0wTqI3SMwI4lq97rWE_BI8GQQeDvSF3wJm1di9_a1gUhQvAxMOZbPcFkg1UTvCgU75FHyDnQh6x6Rmel-3gH8qjdBx7LicQpBOLmbWnbwjrkx6UG0btv_KRTGsAlZkggxI-NdqH8P6NlYxzqsY6UmO-IY0YRhHCaokKRav6PsdTTPY"/>
+<div class="flex-1">
+<h4 class="font-title-lg text-title-lg text-on-surface">Elena Vance</h4>
+<p class="font-label-md text-label-md text-on-surface-variant">Sister • Blood: O-</p>
+</div>
+</div>
+<div class="flex items-center gap-3 py-3 border-y border-outline-variant/30">
+<span class="material-symbols-outlined text-on-surface-variant !text-[20px]">mail</span>
+<p class="font-body-sm text-body-sm text-on-surface">elena.vance@workplace.com</p>
+</div>
+<div class="flex gap-2">
+<button class="p-3 bg-surface-container-highest text-primary rounded-xl flex-1 flex items-center justify-center gap-2 transition-all active:scale-95">
+<span class="material-symbols-outlined">call</span>
+<span class="font-label-sm text-label-sm">Call</span>
+</button>
+<button class="p-3 bg-surface-container-highest text-primary rounded-xl flex-1 flex items-center justify-center gap-2 transition-all active:scale-95">
+<span class="material-symbols-outlined">chat</span>
+<span class="font-label-sm text-label-sm">SMS</span>
+</button>
+<button class="p-3 bg-surface-container-highest text-on-surface-variant rounded-xl transition-all active:scale-95">
+<span class="material-symbols-outlined">more_vert</span>
+</button>
+</div>
+</div>
+<!-- Secondary Card 2 -->
+<div class="bg-surface-container-low rounded-xl p-5 border border-outline-variant flex flex-col gap-4">
+<div class="flex items-center gap-4">
+<div class="w-12 h-12 rounded-full bg-secondary-container flex items-center justify-center text-on-secondary-container font-bold">
+                            MK
+                        </div>
+<div class="flex-1">
+<h4 class="font-title-lg text-title-lg text-on-surface">Marcus Kaine</h4>
+<p class="font-label-md text-label-md text-on-surface-variant">Close Friend • Blood: B+</p>
+</div>
+</div>
+<div class="flex items-center gap-3 py-3 border-y border-outline-variant/30">
+<span class="material-symbols-outlined text-on-surface-variant !text-[20px]">mail</span>
+<p class="font-body-sm text-body-sm text-on-surface">m.kaine@provider.net</p>
+</div>
+<div class="flex gap-2">
+<button class="p-3 bg-surface-container-highest text-primary rounded-xl flex-1 flex items-center justify-center gap-2 transition-all active:scale-95">
+<span class="material-symbols-outlined">call</span>
+<span class="font-label-sm text-label-sm">Call</span>
+</button>
+<button class="p-3 bg-surface-container-highest text-primary rounded-xl flex-1 flex items-center justify-center gap-2 transition-all active:scale-95">
+<span class="material-symbols-outlined">chat</span>
+<span class="font-label-sm text-label-sm">SMS</span>
+</button>
+<button class="p-3 bg-surface-container-highest text-on-surface-variant rounded-xl transition-all active:scale-95">
+<span class="material-symbols-outlined">more_vert</span>
+</button>
+</div>
+</div>
+</div>
+</section>
+<!-- Help Info Banner -->
+<div class="bg-inverse-surface text-inverse-on-surface p-5 rounded-2xl flex items-center gap-4">
+<span class="material-symbols-outlined text-tertiary-fixed-dim !text-[32px]">info</span>
+<div class="flex-1">
+<p class="font-body-sm text-body-sm">Your emergency contacts will be notified automatically if an emergency alert is triggered via the SOS feature.</p>
+</div>
+</div>
+</main>
+<!-- Bottom Nav Bar -->
+<nav class="fixed bottom-0 left-0 w-full z-50 flex justify-around items-center px-2 pb-safe h-20 bg-surface/80 dark:bg-on-surface/80 border-t border-outline-variant backdrop-blur-xl shadow-lg">
+<a class="flex flex-col items-center justify-center text-on-surface-variant hover:bg-surface-container-low transition-transform duration-200 active:scale-90 p-2" href="#">
+<span class="material-symbols-outlined">home</span>
+<span class="font-label-sm text-label-sm">Home</span>
+</a>
+<a class="flex flex-col items-center justify-center text-on-surface-variant hover:bg-surface-container-low transition-transform duration-200 active:scale-90 p-2" href="#">
+<span class="material-symbols-outlined">fingerprint</span>
+<span class="font-label-sm text-label-sm">Attendance</span>
+</a>
+<a class="flex flex-col items-center justify-center text-on-surface-variant hover:bg-surface-container-low transition-transform duration-200 active:scale-90 p-2" href="#">
+<span class="material-symbols-outlined">calendar_today</span>
+<span class="font-label-sm text-label-sm">Leave</span>
+</a>
+<a class="flex flex-col items-center justify-center text-on-surface-variant hover:bg-surface-container-low transition-transform duration-200 active:scale-90 p-2" href="#">
+<span class="material-symbols-outlined">payments</span>
+<span class="font-label-sm text-label-sm">Salary</span>
+</a>
+<a class="flex flex-col items-center justify-center text-primary font-bold after:content-[''] after:w-1 after:h-1 after:bg-primary after:rounded-full after:mt-1 p-2" href="#">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">person</span>
+<span class="font-label-sm text-label-sm">Profile</span>
+</a>
+</nav>
+<!-- Floating AI Action Button (SOS Focus for this screen) -->
+<button class="fixed right-6 bottom-24 w-14 h-14 rounded-full bg-gradient-to-br from-secondary to-primary text-white shadow-2xl flex items-center justify-center glass-effect transition-all duration-300 active:scale-90 z-40 border border-white/20">
+<span class="material-symbols-outlined !text-[28px]">emergency_share</span>
+</button>
+<script>
+        // Simple micro-interaction for button feedback
+        document.querySelectorAll('button').forEach(button => {
+            button.addEventListener('mousedown', () => {
+                button.classList.add('scale-95');
+            });
+            button.addEventListener('mouseup', () => {
+                button.classList.remove('scale-95');
+            });
+            button.addEventListener('mouseleave', () => {
+                button.classList.remove('scale-95');
+            });
+        });
+    </script>
+</body></html>

@@ -19,6 +19,13 @@ HR_PERMISSIONS: list[tuple[str, str, str, str]] = [
     ("hr.employment:read", "hr.employment", "read", "hr"),
     ("hr.employment:create", "hr.employment", "create", "hr"),
     ("hr.employment:update", "hr.employment", "update", "hr"),
+    ("hr.employment:confirm", "hr.employment", "confirm", "hr"),
+    ("hr.job_level:read", "hr.job_level", "read", "hr"),
+    ("hr.job_level:create", "hr.job_level", "create", "hr"),
+    ("hr.job_level:update", "hr.job_level", "update", "hr"),
+    ("hr.grade:read", "hr.grade", "read", "hr"),
+    ("hr.grade:create", "hr.grade", "create", "hr"),
+    ("hr.grade:update", "hr.grade", "update", "hr"),
     ("hr.attendance:read", "hr.attendance", "read", "hr"),
     ("hr.attendance:create", "hr.attendance", "create", "hr"),
     ("hr.attendance:update", "hr.attendance", "update", "hr"),
@@ -119,3 +126,11 @@ HR_EXECUTIVE_PERMISSIONS = list(
 )
 
 HR_ADMIN_PERMISSIONS = [p[0] for p in HR_PERMISSIONS]
+
+# Named role packs (checklist Phase 13.2) — codes used by seed/resync migrations
+HR_ROLE_PACKS: list[tuple[str, str, list[str]]] = [
+    ("HR_EMPLOYEE", "Employee", HR_EMPLOYEE_PERMISSIONS),
+    ("HR_MANAGER", "Manager", HR_MANAGER_PERMISSIONS),
+    ("HR_EXECUTIVE", "HR Executive", HR_EXECUTIVE_PERMISSIONS),
+    ("HR_ADMIN", "HR Admin", HR_ADMIN_PERMISSIONS),
+]

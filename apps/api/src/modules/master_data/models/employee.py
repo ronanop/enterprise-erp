@@ -17,7 +17,8 @@ class MasterEmployee(Base, *MasterBranchRecordMixin):
         UniqueConstraint("company_id", "employee_code", name="uk_master_employee_company_code"),
         UniqueConstraint("company_id", "email", name="uk_master_employee_company_email"),
         CheckConstraint(
-            "status IN ('draft','active','on_leave','resigned','terminated')",
+            "status IN ('draft','onboarding','active','probation','on_leave',"
+            "'notice_period','resigned','terminated','ex_employee')",
             name="ck_master_employee_status",
         ),
         {"schema": "master"},

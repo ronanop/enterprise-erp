@@ -500,10 +500,81 @@ export function markReadyToJoin(caseId: string): OnboardingCase | null {
   return next;
 }
 
-/** Activate employee: assign EMP id via Workforce sequence, register in shared directory. */
-export function activateEmployee(caseId: string): OnboardingCase | null {
+/** Complete document handoff then activate with manual Emp ID (Epic 1). */
+export async function activateEmployee(
+  caseId: string,
+  opts?: { employeeCode?: string; shiftId?: string },
+): Promise<OnboardingCase | null> {
   const c = getCaseById(caseId);
   if (!c) return null;
+
+  const employeeCode = (opts?.employeeCode || c.employeeId || "").trim().toUpperCase();
+  if (!employeeCode || employeeCode.startsWith("ONB-")) {
+    throw new Error("Enter a permanent Employee ID at activation (e.g. EMP-000101). Temporary ONB-* codes are not allowed.");
+  }
+
+  const apiOnboardingId = (c as OnboardingCase & { apiOnboardingId?: string }).apiOnboardingId;
+  let employmentId =
+    (c as OnboardingCase & { apiEmploymentId?: string }).apiEmploymentId || "";
+  let employeeUuid = c.employeeId || "";
+
+  if (apiOnboardingId) {
+    try {
+      // Step 1: complete onboarding → creates ONB-* employee in status=onboarding
+      if (!employmentId) {
+        const res = await resourceService.action<Record<string, unknown>>(
+          "/recruitment/onboarding",
+          apiOnboardingId,
+          "complete",
+          { designation: c.designation || "Employee" },
+        );
+        employeeUuid = String(res.data?.employee_id ?? employeeUuid);
+        employmentId = String(res.data?.hr_employment_request_id ?? "");
+      }
+
+      // Step 2: activate with permanent Emp ID + optional shift + payroll eligible
+      if (employmentId) {
+        await resourceService.action("/hr/employment", employmentId, "activate", {
+          employee_code: employeeCode,
+          shift_id: opts?.shiftId || null,
+          start_probation: true,
+          probation_days: 90,
+          mark_payroll_eligible: true,
+        });
+      }
+
+      const checklist = c.checklist.map((item) =>
+        ["GEN_EMP_ID", "CREATE_PROFILE", "APPROVE_INFO", "ASSIGN_SHIFT"].includes(item.code)
+          ? { ...item, status: "done" as const, completedAt: nowIso() }
+          : item,
+      );
+      const next = upsertCase({
+        ...c,
+        employeeId: employeeCode,
+        apiEmploymentId: employmentId,
+        checklist,
+        status: "joined",
+        activatedAt: nowIso(),
+        progressPct: 100,
+      } as OnboardingCase & { apiEmploymentId?: string });
+      appendOnboardingAudit({
+        caseId,
+        action: "activate_employee",
+        detail: `Activated Emp ID ${employeeCode}; employment ${employmentId || "n/a"}`,
+        actor: actor(),
+      });
+      return next;
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Activation failed";
+      appendOnboardingAudit({
+        caseId,
+        action: "activate_employee_failed",
+        detail: msg,
+        actor: actor(),
+      });
+      throw err;
+    }
+  }
 
   const nameParts = c.candidateName.trim().split(/\s+/);
   const firstName = nameParts[0] || c.candidateName;
@@ -522,18 +593,17 @@ export function activateEmployee(caseId: string): OnboardingCase | null {
     employmentType: c.employmentType,
     reportingManager: c.reportingManager,
     joiningDate: c.joiningDate,
-    employeeCode: c.employeeId || undefined,
+    employeeCode,
   });
 
-  const employeeId = local.employeeCode;
   const checklist = c.checklist.map((item) =>
-    ["GEN_EMP_ID", "CREATE_PROFILE", "APPROVE_INFO"].includes(item.code)
+    ["GEN_EMP_ID", "CREATE_PROFILE", "APPROVE_INFO", "ASSIGN_SHIFT"].includes(item.code)
       ? { ...item, status: "done" as const, completedAt: nowIso() }
       : item,
   );
   const next = upsertCase({
     ...c,
-    employeeId,
+    employeeId: local.employeeCode,
     checklist,
     status: "joined",
     activatedAt: nowIso(),
@@ -544,25 +614,13 @@ export function activateEmployee(caseId: string): OnboardingCase | null {
     const key = "erp_onboarding_activated_employees_v1";
     const list = readJson<
       {
-        employeeId: string;
-        workforceId: string;
-        name: string;
-        email: string;
-        department: string;
-        caseCode: string;
+        employeeCode: string;
+        caseId: string;
         at: string;
       }[]
     >(key, []);
-    list.unshift({
-      employeeId,
-      workforceId: local.id,
-      name: c.candidateName,
-      email: c.candidateEmail,
-      department: c.department,
-      caseCode: c.caseCode,
-      at: nowIso(),
-    });
-    writeJson(key, list.slice(0, 500));
+    list.unshift({ employeeCode: local.employeeCode, caseId, at: nowIso() });
+    writeJson(key, list.slice(0, 200));
   } catch {
     /* ignore */
   }
@@ -570,7 +628,7 @@ export function activateEmployee(caseId: string): OnboardingCase | null {
   appendOnboardingAudit({
     caseId,
     action: "activate_employee",
-    detail: `Activated ${employeeId} (workforce ${local.id}); welcome email queued to ${c.candidateEmail}`,
+    detail: `Local activate Emp ID ${local.employeeCode}`,
     actor: actor(),
   });
   return next;

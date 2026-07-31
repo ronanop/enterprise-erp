@@ -139,22 +139,22 @@ export function RecruitmentAtsPage() {
     return candidates.slice(s, s + PAGE);
   }, [candidates, page]);
 
-  function handleCreateJob(input: CreateJobInput) {
+  async function handleCreateJob(input: CreateJobInput) {
     if (editJob) {
-      updateJob(editJob.id, input);
+      await updateJob(editJob.id, input);
       toast("Job updated");
       setEditJob(null);
     } else {
-      createJob(input);
+      await createJob(input);
       toast("Job created");
     }
     void load();
   }
 
-  function handleCreateCandidate(input: CreateCandidateInput, jobId?: string) {
+  async function handleCreateCandidate(input: CreateCandidateInput, jobId?: string) {
     try {
-      const cand = createCandidate(input);
-      if (jobId) applyCandidateToJob(cand.id, jobId, "applied");
+      const cand = await createCandidate(input);
+      if (jobId) await applyCandidateToJob(cand.id, jobId, "applied");
       if (input.resumeName) addDocument(cand.id, "resume", input.resumeName);
       toast(`Candidate ${cand.candidateCode} added`);
       void load();
@@ -424,9 +424,11 @@ export function RecruitmentAtsPage() {
           candidates={dir?.candidates ?? []}
           jobs={dir?.jobs ?? []}
           onMove={(id, stage: PipelineStage) => {
-            moveApplicationStage(id, stage);
-            toast(`Moved to ${PIPELINE_STAGES.find((s) => s.id === stage)?.label ?? stage}`);
-            void load();
+            void (async () => {
+              await moveApplicationStage(id, stage);
+              toast(`Moved to ${PIPELINE_STAGES.find((s) => s.id === stage)?.label ?? stage}`);
+              await load();
+            })();
           }}
         />
       ) : null}
@@ -484,9 +486,11 @@ export function RecruitmentAtsPage() {
                         size="sm"
                         className="h-7 cursor-pointer"
                         onClick={() => {
-                          updateOfferStatus(o.id, "accepted");
-                          toast("Offer accepted — start Onboarding");
-                          void load();
+                          void (async () => {
+                            await updateOfferStatus(o.id, "accepted");
+                            toast("Offer accepted — start Onboarding");
+                            await load();
+                          })();
                         }}
                       >
                         Accept
@@ -497,8 +501,10 @@ export function RecruitmentAtsPage() {
                         variant="outline"
                         className="h-7 cursor-pointer"
                         onClick={() => {
-                          updateOfferStatus(o.id, "rejected");
-                          void load();
+                          void (async () => {
+                            await updateOfferStatus(o.id, "rejected");
+                            await load();
+                          })();
                         }}
                       >
                         Reject
@@ -615,9 +621,11 @@ export function RecruitmentAtsPage() {
         jobs={dir?.jobs ?? []}
         applications={dir?.applications ?? []}
         onSubmit={(input) => {
-          scheduleInterview(input);
-          toast("Interview scheduled");
-          void load();
+          void (async () => {
+            await scheduleInterview(input);
+            toast("Interview scheduled");
+            await load();
+          })();
         }}
       />
       <OfferDrawer
@@ -627,9 +635,11 @@ export function RecruitmentAtsPage() {
         jobs={dir?.jobs ?? []}
         applications={dir?.applications ?? []}
         onSubmit={(input) => {
-          generateOffer(input);
-          toast("Offer generated");
-          void load();
+          void (async () => {
+            await generateOffer(input);
+            toast("Offer generated");
+            await load();
+          })();
         }}
       />
 
@@ -643,11 +653,12 @@ export function RecruitmentAtsPage() {
             type="button"
             className="cursor-pointer"
             onClick={() => {
-              const res = importCandidatesCsv(importText);
-              toast(`Imported ${res.created}${res.errors.length ? ` · ${res.errors.length} errors` : ""}`);
-              setImportOpen(false);
-              setImportText("");
-              void load();
+              void importCandidatesCsv(importText).then((res) => {
+                toast(`Imported ${res.created}${res.errors.length ? ` · ${res.errors.length} errors` : ""}`);
+                setImportOpen(false);
+                setImportText("");
+                void load();
+              });
             }}
           >
             Import

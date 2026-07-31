@@ -102,7 +102,7 @@ export function deriveLeaveAudit(dir: LeaveDirectory | null): LeaveAuditEntry[] 
     id: `type-${t.id}`,
     requestId: t.id,
     action: "leave_type_policy",
-    detail: `${t.name} (${t.code}) · max ${t.maxDays || "—"} · ${t.isPaid ? "paid" : "unpaid"} · CF ${
+    detail: `${t.name} (${t.code}) · max ${t.maxDays || "—"}/yr · ${t.daysPerMonth || "—"}/mo · ${t.isPaid ? "paid" : "unpaid"} · CF ${
       t.carryForwardAllowed ? "yes" : "no"
     } · approval ${t.approvalRequired ? "required" : "optional"}`,
     actor: "system",
@@ -215,14 +215,20 @@ export async function loadLeaveDirectory(): Promise<LeaveDirectory> {
       name: String(row.leave_type_name ?? code),
       isPaid: Boolean(row.is_paid ?? true),
       maxDays: Number(row.max_days_per_year ?? 0),
+      daysPerMonth: Number(row.monthly_credit_days ?? 0),
       requiresAttachment: Boolean(row.requires_attachment),
       status: String(row.status ?? "active"),
       version: Number(row.version ?? 1),
       color: ext.color ?? DEFAULT_LEAVE_COLORS[code] ?? "#059669",
-      carryForwardAllowed: ext.carryForwardAllowed ?? true,
+      carryForwardAllowed:
+        Boolean(row.carry_forward_allowed) || ext.carryForwardAllowed === true,
       approvalRequired: ext.approvalRequired ?? true,
       genderRestriction: ext.genderRestriction ?? "",
       eligibility: ext.eligibility ?? "All employees",
+      maxCarryForwardDays:
+        row.max_carry_forward_days != null
+          ? Number(row.max_carry_forward_days)
+          : ext.maxCarryForwardDays,
     };
   });
 
@@ -234,9 +240,17 @@ export async function loadLeaveDirectory(): Promise<LeaveDirectory> {
     const id = String(row.id);
     const emp = empById.get(String(row.employee_id));
     const lt = typeById.get(String(row.leave_type_id));
-    const ext = reqExt[id] ?? {
+    const apiStatus = String(row.status ?? "draft");
+    const stageFromApi =
+      apiStatus === "submitted"
+        ? "manager_review"
+        : apiStatus === "manager_approved"
+          ? "hr_review"
+          : (apiStatus as LeaveRequestExtension["approvalStage"]);
+    const ext = {
       ...defaultRequestExtension(),
-      approvalStage: (String(row.status) as LeaveRequestExtension["approvalStage"]) || "submitted",
+      ...(reqExt[id] ?? {}),
+      approvalStage: stageFromApi || "submitted",
       color: lt?.color ?? "#059669",
     };
     return {
@@ -254,7 +268,7 @@ export async function loadLeaveDirectory(): Promise<LeaveDirectory> {
       toDate: String(row.end_date ?? ""),
       totalDays: Number(row.days_count ?? 0),
       appliedOn: String(row.created_at ?? row.start_date ?? ""),
-      status: String(row.status ?? "draft"),
+      status: apiStatus,
       approverName: emp?.reportingManagerName ?? "—",
       reason: String(row.reason ?? ""),
       version: Number(row.version ?? 1),
@@ -265,8 +279,8 @@ export async function loadLeaveDirectory(): Promise<LeaveDirectory> {
   const pendingByKey = new Map<string, number>();
   for (const r of requests) {
     if (
-      ["submitted", "draft", "manager_review", "hr_review"].includes(r.status) ||
-      ["submitted", "manager_review", "hr_review"].includes(r.extension.approvalStage)
+      ["submitted", "draft", "manager_review", "manager_approved", "hr_review"].includes(r.status) ||
+      ["submitted", "manager_review", "manager_approved", "hr_review"].includes(r.extension.approvalStage)
     ) {
       const key = `${r.employeeId}:${r.leaveTypeId}`;
       pendingByKey.set(key, (pendingByKey.get(key) ?? 0) + r.totalDays);
@@ -302,20 +316,36 @@ export async function loadLeaveDirectory(): Promise<LeaveDirectory> {
     };
   });
 
-  const holidays: { date: string; name: string }[] = [];
+  const holidays: { date: string; name: string; type?: string; halfDay?: boolean }[] = [];
   for (const cal of holidayRows) {
+    if (String(cal.status ?? "").toLowerCase() === "archived") continue;
     const json = cal.holidays_json;
-    if (Array.isArray(json)) {
-      for (const h of json) {
-        if (h && typeof h === "object" && "date" in h) {
-          holidays.push({
-            date: String((h as { date: string }).date),
-            name: String((h as { name?: string }).name ?? "Holiday"),
-          });
-        }
-      }
+    const items = Array.isArray(json)
+      ? json
+      : json && typeof json === "object" && Array.isArray((json as { holidays?: unknown }).holidays)
+        ? (json as { holidays: unknown[] }).holidays
+        : [];
+    for (const h of items) {
+      if (!h || typeof h !== "object") continue;
+      const row = h as {
+        date?: string;
+        holiday_date?: string;
+        name?: string;
+        title?: string;
+        holiday_type?: string;
+        half_day?: boolean;
+      };
+      const date = String(row.date ?? row.holiday_date ?? "").slice(0, 10);
+      if (!date) continue;
+      holidays.push({
+        date,
+        name: String(row.title ?? row.name ?? "Holiday"),
+        type: row.holiday_type,
+        halfDay: Boolean(row.half_day),
+      });
     }
   }
+  holidays.sort((a, b) => a.date.localeCompare(b.date));
 
   return {
     requests,
@@ -418,7 +448,7 @@ export function validateLeaveApplication(
   const holidaySet = new Set(dir.holidays.map((h) => h.date));
   const weekendOrHoliday = dates.filter((d) => isWeekend(d) || holidaySet.has(d));
   const workingDates = dates.filter((d) => !isWeekend(d) && !holidaySet.has(d));
-  let netDays =
+  const netDays =
     payload.session === "full_day"
       ? workingDates.length
       : workingDates.length === 0
@@ -568,27 +598,22 @@ export async function advanceLeaveApproval(
 ): Promise<void> {
   const all = readJson<Record<string, LeaveRequestExtension>>(EXT_KEY, {});
   const ext = all[request.id] ?? { ...request.extension };
+  const apiStatus = (request.status || ext.approvalStage || "submitted").toLowerCase();
 
   if (action === "approve") {
-    const stage = ext.approvalStage || "manager_review";
-    if (stage === "manager_review" || stage === "submitted") {
-      ext.approvalStage = "hr_review";
-    } else if (stage === "hr_review") {
-      try {
-        await resourceService.action("/hr/leave-requests", request.id, "approve", {});
-      } catch {
-        /* API approve may fail if not submitted */
-      }
+    const isHrStage =
+      apiStatus === "manager_approved" ||
+      apiStatus === "hr_review" ||
+      ext.approvalStage === "hr_review";
+    if (isHrStage) {
+      await resourceService.action("/hr/leave-requests", request.id, "approve", {});
       ext.approvalStage = "approved";
     } else {
-      ext.approvalStage = "approved";
-      try {
-        await resourceService.action("/hr/leave-requests", request.id, "approve", {});
-      } catch {
-        /* ignore */
-      }
+      await resourceService.action("/hr/leave-requests", request.id, "manager-approve", {});
+      ext.approvalStage = "manager_approved";
     }
   } else if (action === "reject") {
+    await resourceService.action("/hr/leave-requests", request.id, "reject", {});
     ext.approvalStage = "rejected";
   } else if (action === "send_back") {
     ext.approvalStage = "send_back";
@@ -621,9 +646,43 @@ export async function advanceLeaveApproval(
   });
 }
 
-export function saveCompOff(record: Omit<CompOffRecord, "id"> & { id?: string }): void {
+export async function saveCompOff(record: Omit<CompOffRecord, "id"> & { id?: string }): Promise<void> {
   const all = readJson<CompOffRecord[]>(COMP_OFF_KEY, []);
   const item: CompOffRecord = { ...record, id: record.id ?? crypto.randomUUID() };
+  try {
+    const UUID_RE =
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+    let branchId: string | undefined;
+    for (const key of ["erp_org_context_v1", "erp_ats_api_context_v1", "erp_pay_api_context_v1"]) {
+      try {
+        const raw = localStorage.getItem(key);
+        if (!raw) continue;
+        const parsed = JSON.parse(raw) as { branchId?: string };
+        if (parsed.branchId && UUID_RE.test(parsed.branchId)) {
+          branchId = parsed.branchId;
+          break;
+        }
+      } catch {
+        /* ignore */
+      }
+    }
+    if (branchId && UUID_RE.test(record.employeeId)) {
+      const res = await resourceService.create<Record<string, unknown>>("/hr/leave-balances/compoff-credit", {
+        branch_id: branchId,
+        employee_id: record.employeeId,
+        days: record.days,
+        reason: record.reason || null,
+        earned_date: record.earnedDate || null,
+      });
+      const apiId = String(res.data?.id ?? "");
+      if (apiId) {
+        item.id = apiId;
+        item.status = "approved";
+      }
+    }
+  } catch (err) {
+    console.warn("saveCompOff API failed; local cache kept", err);
+  }
   const idx = all.findIndex((c) => c.id === item.id);
   if (idx >= 0) all[idx] = item;
   else all.unshift(item);
@@ -631,13 +690,65 @@ export function saveCompOff(record: Omit<CompOffRecord, "id"> & { id?: string })
   appendLeaveAudit({ requestId: item.id, action: "compoff_saved", detail: item.reason, actor: actor() });
 }
 
-export function saveEncashment(record: Omit<EncashmentRecord, "id" | "createdAt"> & { id?: string }): void {
+export async function saveEncashment(
+  record: Omit<EncashmentRecord, "id" | "createdAt"> & { id?: string },
+): Promise<void> {
   const all = readJson<EncashmentRecord[]>(ENCASH_KEY, []);
   const item: EncashmentRecord = {
     ...record,
     id: record.id ?? crypto.randomUUID(),
     createdAt: new Date().toISOString(),
   };
+  try {
+    const UUID_RE =
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+    let branchId: string | undefined;
+    for (const key of ["erp_org_context_v1", "erp_ats_api_context_v1", "erp_pay_api_context_v1"]) {
+      try {
+        const raw = localStorage.getItem(key);
+        if (!raw) continue;
+        const parsed = JSON.parse(raw) as { branchId?: string };
+        if (parsed.branchId && UUID_RE.test(parsed.branchId)) {
+          branchId = parsed.branchId;
+          break;
+        }
+      } catch {
+        /* ignore */
+      }
+    }
+    if (
+      branchId &&
+      UUID_RE.test(record.employeeId) &&
+      UUID_RE.test(record.leaveTypeId) &&
+      record.requestedDays > 0
+    ) {
+      const today = new Date();
+      const monthStart = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-01`;
+      const created = await resourceService.create<Record<string, unknown>>("/hr/leave-adjustments", {
+        branch_id: branchId,
+        employee_id: record.employeeId,
+        leave_type_id: record.leaveTypeId,
+        adjustment_month: monthStart,
+        days_delta: -Math.abs(record.requestedDays),
+        reason: `Leave encashment${record.amount ? ` · amount ${record.amount}` : ""}`,
+        status: "draft",
+      });
+      const adjId = String(created.data?.id ?? "");
+      if (adjId) {
+        try {
+          await resourceService.action("/hr/leave-adjustments", adjId, "submit");
+          await resourceService.action("/hr/leave-adjustments", adjId, "approve");
+          item.status = "approved";
+        } catch {
+          item.status = "pending";
+        }
+        item.id = adjId;
+        item.approvedDays = record.requestedDays;
+      }
+    }
+  } catch (err) {
+    console.warn("saveEncashment API failed; local cache kept", err);
+  }
   all.unshift(item);
   writeJson(ENCASH_KEY, all);
   appendLeaveAudit({
@@ -648,8 +759,53 @@ export function saveEncashment(record: Omit<EncashmentRecord, "id" | "createdAt"
   });
 }
 
-export function generateCarryForward(dir: LeaveDirectory, maxCarry = 5): CarryForwardRecord[] {
-  const year = new Date().getFullYear();
+export async function generateCarryForward(
+  dir: LeaveDirectory,
+  maxCarry = 5,
+): Promise<CarryForwardRecord[]> {
+  const year = new Date().getFullYear() - 1;
+  try {
+    const res = await resourceService.create<{
+      from_year: number;
+      to_year: number;
+      carried: number;
+      closed: number;
+      items?: {
+        employee_id: string;
+        leave_type_id: string;
+        carried_days: number;
+        unused_days: number;
+      }[];
+    }>("/hr/leave-balances/carry-forward", {
+      from_year: year,
+      default_max_days: maxCarry,
+    });
+    const items = res.data?.items ?? [];
+    const empById = new Map(dir.options.employees.map((e) => [e.id, e]));
+    const typeById = new Map(dir.leaveTypes.map((t) => [t.id, t]));
+    const generated: CarryForwardRecord[] = items.map((it) => ({
+      id: crypto.randomUUID(),
+      employeeId: it.employee_id,
+      employeeName: empById.get(it.employee_id)?.label ?? it.employee_id.slice(0, 8),
+      leaveTypeName: typeById.get(it.leave_type_id)?.name ?? "—",
+      unusedDays: it.unused_days,
+      carriedDays: it.carried_days,
+      maxAllowed: maxCarry,
+      expiryDate: `${(res.data?.to_year ?? year + 1)}-03-31`,
+      year: res.data?.from_year ?? year,
+    }));
+    writeJson(CARRY_KEY, generated);
+    appendLeaveAudit({
+      requestId: "batch",
+      action: "carry_forward_generated",
+      detail: `${res.data?.carried ?? generated.length} balance(s) carried via API`,
+      actor: actor(),
+    });
+    return generated;
+  } catch (err) {
+    console.warn("carry-forward API failed; falling back to local preview", err);
+  }
+
   const generated: CarryForwardRecord[] = dir.balances
     .filter((b) => b.available > 0)
     .map((b) => {
@@ -671,7 +827,7 @@ export function generateCarryForward(dir: LeaveDirectory, maxCarry = 5): CarryFo
   appendLeaveAudit({
     requestId: "batch",
     action: "carry_forward_generated",
-    detail: `${generated.length} balance(s)`,
+    detail: `${generated.length} balance(s) (local preview)`,
     actor: actor(),
   });
   return generated;
@@ -731,6 +887,7 @@ export function leaveTrendByMonth(requests: LeaveRequestRecord[]) {
 export type LeaveTypePolicyUpdate = {
   name: string;
   maxDays: number;
+  daysPerMonth: number;
   isPaid: boolean;
   requiresAttachment: boolean;
   status: string;
@@ -750,6 +907,7 @@ export async function updateLeaveTypePolicy(
     leave_type_name: patch.name.trim() || leaveType.name,
     is_paid: patch.isPaid,
     max_days_per_year: patch.maxDays > 0 ? patch.maxDays : null,
+    monthly_credit_days: patch.daysPerMonth > 0 ? patch.daysPerMonth : null,
     requires_attachment: patch.requiresAttachment,
     status: patch.status || "active",
   });
@@ -768,9 +926,9 @@ export async function updateLeaveTypePolicy(
   appendLeaveAudit({
     requestId: leaveType.id,
     action: "leave_type_updated",
-    detail: `${patch.name || leaveType.name} (${leaveType.code}) · max ${patch.maxDays} · ${
-      patch.isPaid ? "paid" : "unpaid"
-    } · CF ${patch.carryForwardAllowed ? "yes" : "no"} · approval ${
+    detail: `${patch.name || leaveType.name} (${leaveType.code}) · max ${patch.maxDays}/yr · ${
+      patch.daysPerMonth
+    }/mo · ${patch.isPaid ? "paid" : "unpaid"} · CF ${patch.carryForwardAllowed ? "yes" : "no"} · approval ${
       patch.approvalRequired ? "required" : "optional"
     }`,
     actor: actor(),
