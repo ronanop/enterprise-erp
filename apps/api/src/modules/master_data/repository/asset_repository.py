@@ -97,7 +97,7 @@ class AssetRepository(MasterScopedRepository):
         if row is None:
             return None
         for key, value in fields.items():
-            if hasattr(row, key) and value is not None:
+            if hasattr(row, key) and (value is not None or key == "custodian_employee_id"):
                 setattr(row, key, value)
         row.updated_at = utcnow()
         row.updated_by = ctx.user_id

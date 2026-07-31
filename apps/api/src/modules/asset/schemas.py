@@ -13,11 +13,27 @@ class OrmModel(BaseModel):
 
 class AssetCategoryCreate(BaseModel):
     company_id: UUID | None = None
+    branch_id: UUID | None = None
+    category_code: str
+    category_name: str
+    default_useful_life_months: int | None = None
+    default_depreciation_method: str | None = None
+    gl_asset_account_id: UUID | None = None
+    gl_accum_depr_account_id: UUID | None = None
+    gl_expense_account_id: UUID | None = None
     status: str | None = None
 
+
 class AssetCategoryUpdate(BaseModel):
-    status: str | None = None
+    category_name: str | None = None
+    default_useful_life_months: int | None = None
+    default_depreciation_method: str | None = None
+    gl_asset_account_id: UUID | None = None
+    gl_accum_depr_account_id: UUID | None = None
+    gl_expense_account_id: UUID | None = None
+    branch_id: UUID | None = None
     version: int | None = None
+
 
 class AssetCategoryResponse(OrmModel):
     id: UUID
@@ -33,14 +49,98 @@ class AssetCategoryResponse(OrmModel):
     company_id: UUID
     version: int
 
+
+class AssetCategoryListResult(BaseModel):
+    items: list[AssetCategoryResponse]
+    total: int
+    page: int
+    page_size: int
+
+
 class AssetCreate(BaseModel):
+    """Alias for asset registration create (FP-ASSET-REG-001)."""
+
     company_id: UUID | None = None
     branch_id: UUID
-    status: str | None = None
+    asset_name: str
+    asset_category_id: UUID
+    asset_type: str
+    purchase_date: date
+    purchase_cost: Decimal
+    currency_code: str = "USD"
+    product_id: UUID | None = None
+    supplier_vendor_id: UUID | None = None
+    serial_number: str | None = None
+    barcode: str | None = None
+    qr_code: str | None = None
+    rfid_tag: str | None = None
+    current_book_value: Decimal | None = None
+    salvage_value: Decimal | None = None
+    depreciation_method: str | None = None
+    useful_life_months: int | None = None
+    department_id: UUID | None = None
+    custodian_employee_id: UUID | None = None
+    purchase_order_id: UUID | None = None
+    grn_id: UUID | None = None
+    inventory_receipt_id: UUID | None = None
+    inventory_issue_id: UUID | None = None
+    project_id: UUID | None = None
+    production_order_id: UUID | None = None
+    quality_inspection_id: UUID | None = None
+    is_shared: bool = False
+
+
+AssetRegistrationCreate = AssetCreate
+
 
 class AssetUpdate(BaseModel):
-    status: str | None = None
+    asset_name: str | None = None
+    asset_category_id: UUID | None = None
+    asset_type: str | None = None
+    purchase_date: date | None = None
+    purchase_cost: Decimal | None = None
+    currency_code: str | None = None
+    product_id: UUID | None = None
+    supplier_vendor_id: UUID | None = None
+    serial_number: str | None = None
+    barcode: str | None = None
+    qr_code: str | None = None
+    rfid_tag: str | None = None
+    current_book_value: Decimal | None = None
+    salvage_value: Decimal | None = None
+    depreciation_method: str | None = None
+    useful_life_months: int | None = None
+    department_id: UUID | None = None
+    custodian_employee_id: UUID | None = None
+    purchase_order_id: UUID | None = None
+    grn_id: UUID | None = None
+    inventory_receipt_id: UUID | None = None
+    inventory_issue_id: UUID | None = None
+    project_id: UUID | None = None
+    production_order_id: UUID | None = None
+    quality_inspection_id: UUID | None = None
+    is_shared: bool | None = None
     version: int | None = None
+
+
+AssetRegistrationUpdate = AssetUpdate
+
+
+class GrnPrefillResponse(BaseModel):
+    grn_id: UUID
+    company_id: UUID
+    branch_id: UUID
+    vendor_id: UUID
+    purchase_order_id: UUID
+    currency_code: str
+    lines: list[dict]
+
+
+class AssetListResult(BaseModel):
+    items: list["AssetResponse"]
+    total: int
+    page: int
+    page_size: int
 
 class AssetResponse(OrmModel):
     id: UUID
@@ -79,14 +179,126 @@ class AssetResponse(OrmModel):
     company_id: UUID
     branch_id: UUID
     version: int
+    discovery_profile_json: dict | None = None
+
+
+class AssetPortalAssignmentSummary(BaseModel):
+    document_number: str | None = None
+    allocation_type: str | None = None
+    status: str | None = None
+    assignee_label: str | None = None
+
+
+class AssetPortalWarrantySummary(BaseModel):
+    warranty_type: str | None = None
+    status: str | None = None
+    start_date: date | None = None
+    end_date: date | None = None
+
+
+class AssetPortalInsuranceSummary(BaseModel):
+    policy_number: str | None = None
+    insurer_name: str | None = None
+    status: str | None = None
+    start_date: date | None = None
+    end_date: date | None = None
+
+
+class AssetInformationPortalResponse(BaseModel):
+    """Redacted asset profile for Information Portal / Self-Service (CR-002).
+
+    Intentionally omits purchase cost, book value, depreciation, workflow,
+    finance refs, and other internal fields.
+    """
+
+    asset_id: UUID
+    asset_code: str
+    asset_name: str
+    category_code: str | None = None
+    category_name: str | None = None
+    manufacturer: str | None = None
+    model: str | None = None
+    serial_number: str | None = None
+    asset_type: str
+    status: str
+    assignment: AssetPortalAssignmentSummary | None = None
+    warranty: AssetPortalWarrantySummary | None = None
+    insurance: AssetPortalInsuranceSummary | None = None
+    self_service_path: str
+    discovery_profile_json: dict | None = None
+    version: int | None = None
+
+
+class DiscoveryCommandResponse(BaseModel):
+    platform: str
+    command: str
+
+
+class DiscoveryParseRequest(BaseModel):
+    platform: str
+    raw_output: str
+
+
+class DiscoveryChangeItem(BaseModel):
+    path: str
+    before: object | None = None
+    after: object | None = None
+
+
+class DiscoveryParseResult(BaseModel):
+    asset_id: UUID
+    platform: str
+    profile: dict
+    changes: list[DiscoveryChangeItem]
+    current_serial_number: str | None = None
+    proposed_serial_number: str | None = None
+    persisted: bool = False
+
+
+class DiscoveryApplyRequest(BaseModel):
+    platform: str
+    raw_output: str
+    version: int
+    preview_confirmed: bool = False
+
+
+class DiscoveryApplyResult(BaseModel):
+    asset_id: UUID
+    version: int
+    serial_number: str | None = None
+    discovery_profile_json: dict | None = None
+    changes: list[DiscoveryChangeItem]
+    applied: bool = True
+
 
 class AssetComponentCreate(BaseModel):
     company_id: UUID | None = None
-    status: str | None = None
+    branch_id: UUID | None = None
+    asset_id: UUID
+    component_code: str
+    component_name: str
+    product_id: UUID | None = None
+    serial_number: str | None = None
+    quantity: Decimal | None = None
+
 
 class AssetComponentUpdate(BaseModel):
-    status: str | None = None
-    version: int | None = None
+    branch_id: UUID | None = None
+    component_name: str | None = None
+    product_id: UUID | None = None
+    serial_number: str | None = None
+    quantity: Decimal | None = None
+    version: int
+
+
+class AssetComponentReplace(BaseModel):
+    component_code: str | None = None
+    component_name: str | None = None
+    product_id: UUID | None = None
+    serial_number: str | None = None
+    quantity: Decimal | None = None
+    branch_id: UUID | None = None
+
 
 class AssetComponentResponse(OrmModel):
     id: UUID
@@ -101,14 +313,78 @@ class AssetComponentResponse(OrmModel):
     company_id: UUID
     version: int
 
+
+class AssetComponentListResult(BaseModel):
+    items: list["AssetComponentResponse"]
+    total: int
+    page: int
+    page_size: int
+
+
+class AssetComponentTreeNode(BaseModel):
+    id: str
+    component_code: str
+    component_name: str
+    serial_number: str | None = None
+    quantity: str | None = None
+    status: str
+    product_id: str | None = None
+    version: int
+
+
+class AssetComponentTreeAsset(BaseModel):
+    id: str
+    asset_code: str
+    asset_name: str
+    status: str
+    company_id: str
+
+
+class AssetComponentTreeResult(BaseModel):
+    asset: AssetComponentTreeAsset
+    components: list[AssetComponentTreeNode]
+    depth: int = 1
+
+
+class AssetComponentHistoryEntry(BaseModel):
+    id: str
+    status: str
+    component_name: str
+    serial_number: str | None = None
+    created_at: str | None = None
+    updated_at: str | None = None
+    version: int
+
+
+class AssetComponentHistoryResult(BaseModel):
+    component_id: str
+    asset_id: str
+    component_code: str
+    current_status: str
+    lineage: list[AssetComponentHistoryEntry]
+
+
+class AssetComponentReplaceResult(BaseModel):
+    replaced: AssetComponentResponse
+    successor: AssetComponentResponse
+
 class AssetAssignmentCreate(BaseModel):
     company_id: UUID | None = None
     branch_id: UUID
-    status: str | None = None
+    asset_id: UUID
+    allocation_type: str
+    employee_id: UUID | None = None
+    department_id: UUID | None = None
+    project_id: UUID | None = None
+    expected_return_at: date | None = None
 
 class AssetAssignmentUpdate(BaseModel):
-    status: str | None = None
-    version: int | None = None
+    allocation_type: str | None = None
+    employee_id: UUID | None = None
+    department_id: UUID | None = None
+    project_id: UUID | None = None
+    expected_return_at: date | None = None
+    version: int
 
 class AssetAssignmentResponse(OrmModel):
     id: UUID
@@ -127,15 +403,38 @@ class AssetAssignmentResponse(OrmModel):
     company_id: UUID
     branch_id: UUID
     version: int
+    created_by: UUID | None = None
+
+
+class AssetAssignmentListResult(BaseModel):
+    items: list["AssetAssignmentResponse"]
+    total: int
+    page: int
+    page_size: int
 
 class AssetTransferCreate(BaseModel):
     company_id: UUID | None = None
     branch_id: UUID
-    status: str | None = None
+    asset_id: UUID
+    to_branch_id: UUID | None = None
+    to_department_id: UUID | None = None
+    to_employee_id: UUID | None = None
+    to_location_label: str | None = None
+    to_org_location_id: UUID | None = None
+    reason: str | None = None
+    effective_date: date | None = None
+    transfer_notes: str | None = None
 
 class AssetTransferUpdate(BaseModel):
-    status: str | None = None
-    version: int | None = None
+    to_branch_id: UUID | None = None
+    to_department_id: UUID | None = None
+    to_employee_id: UUID | None = None
+    to_location_label: str | None = None
+    to_org_location_id: UUID | None = None
+    reason: str | None = None
+    effective_date: date | None = None
+    transfer_notes: str | None = None
+    version: int
 
 class AssetTransferResponse(OrmModel):
     id: UUID
@@ -147,20 +446,48 @@ class AssetTransferResponse(OrmModel):
     to_department_id: UUID | None
     from_employee_id: UUID | None
     to_employee_id: UUID | None
+    from_location_label: str | None
+    to_location_label: str | None
+    from_org_location_id: UUID | None
+    to_org_location_id: UUID | None
+    effective_date: date | None
     transferred_at: datetime | None
+    executed_at: datetime | None
+    executed_by: UUID | None
     reason: str | None
+    transfer_notes: str | None
     status: str
+    workflow_status: str | None
+    workflow_instance_id: UUID | None
     company_id: UUID
     branch_id: UUID
     version: int
+    created_by: UUID | None = None
+
+
+class AssetTransferListResult(BaseModel):
+    items: list["AssetTransferResponse"]
+    total: int
+    page: int
+    page_size: int
 
 class AssetLocationCreate(BaseModel):
     company_id: UUID | None = None
-    status: str | None = None
+    branch_id: UUID | None = None
+    asset_id: UUID
+    location_label: str
+    org_location_id: UUID | None = None
+    effective_from: datetime | None = None
+
 
 class AssetLocationUpdate(BaseModel):
-    status: str | None = None
-    version: int | None = None
+    location_label: str | None = None
+    org_location_id: UUID | None = None
+    effective_from: datetime | None = None
+    effective_to: datetime | None = None
+    branch_id: UUID | None = None
+    version: int
+
 
 class AssetLocationResponse(OrmModel):
     id: UUID
@@ -175,13 +502,37 @@ class AssetLocationResponse(OrmModel):
     company_id: UUID
     version: int
 
+
+class AssetLocationListResult(BaseModel):
+    items: list["AssetLocationResponse"]
+    total: int
+    page: int
+    page_size: int
+
 class AssetWarrantyCreate(BaseModel):
     company_id: UUID | None = None
-    status: str | None = None
+    branch_id: UUID | None = None
+    asset_id: UUID
+    vendor_id: UUID | None = None
+    warranty_type: str
+    start_date: date
+    end_date: date
+    coverage_notes: str | None = None
+
 
 class AssetWarrantyUpdate(BaseModel):
-    status: str | None = None
-    version: int | None = None
+    vendor_id: UUID | None = None
+    warranty_type: str | None = None
+    start_date: date | None = None
+    end_date: date | None = None
+    coverage_notes: str | None = None
+    branch_id: UUID | None = None
+    version: int
+
+
+class AssetWarrantyExtend(BaseModel):
+    new_end_date: date
+
 
 class AssetWarrantyResponse(OrmModel):
     id: UUID
@@ -196,13 +547,40 @@ class AssetWarrantyResponse(OrmModel):
     company_id: UUID
     version: int
 
+
+class AssetWarrantyListResult(BaseModel):
+    items: list["AssetWarrantyResponse"]
+    total: int
+    page: int
+    page_size: int
+
+
 class AssetInsuranceCreate(BaseModel):
     company_id: UUID | None = None
-    status: str | None = None
+    branch_id: UUID | None = None
+    asset_id: UUID
+    policy_number: str
+    insurer_name: str
+    vendor_id: UUID | None = None
+    coverage_amount: Decimal | None = None
+    start_date: date
+    end_date: date
+
 
 class AssetInsuranceUpdate(BaseModel):
-    status: str | None = None
-    version: int | None = None
+    policy_number: str | None = None
+    insurer_name: str | None = None
+    vendor_id: UUID | None = None
+    coverage_amount: Decimal | None = None
+    start_date: date | None = None
+    end_date: date | None = None
+    branch_id: UUID | None = None
+    version: int
+
+
+class AssetInsuranceRenew(BaseModel):
+    new_end_date: date
+
 
 class AssetInsuranceResponse(OrmModel):
     id: UUID
@@ -218,13 +596,34 @@ class AssetInsuranceResponse(OrmModel):
     company_id: UUID
     version: int
 
+
+class AssetInsuranceListResult(BaseModel):
+    items: list["AssetInsuranceResponse"]
+    total: int
+    page: int
+    page_size: int
+
+
 class MaintenancePlanCreate(BaseModel):
     company_id: UUID | None = None
-    status: str | None = None
+    branch_id: UUID | None = None
+    asset_id: UUID
+    plan_name: str
+    maintenance_type: str
+    frequency_days: int | None = None
+    frequency_meter_units: Decimal | None = None
+    next_due_date: date | None = None
+
 
 class MaintenancePlanUpdate(BaseModel):
-    status: str | None = None
-    version: int | None = None
+    plan_name: str | None = None
+    maintenance_type: str | None = None
+    frequency_days: int | None = None
+    frequency_meter_units: Decimal | None = None
+    next_due_date: date | None = None
+    branch_id: UUID | None = None
+    version: int
+
 
 class MaintenancePlanResponse(OrmModel):
     id: UUID
@@ -240,14 +639,34 @@ class MaintenancePlanResponse(OrmModel):
     company_id: UUID
     version: int
 
+
+class MaintenancePlanListResult(BaseModel):
+    items: list["MaintenancePlanResponse"]
+    total: int
+    page: int
+    page_size: int
+
 class AssetMaintenanceCreate(BaseModel):
     company_id: UUID | None = None
     branch_id: UUID
-    status: str | None = None
+    asset_id: UUID
+    maintenance_type: str
+    maintenance_plan_id: UUID | None = None
+    scheduled_date: date | None = None
+    vendor_id: UUID | None = None
+    cost_amount: Decimal | None = None
+    technician_employee_id: UUID | None = None
+    quality_inspection_id: UUID | None = None
 
 class AssetMaintenanceUpdate(BaseModel):
-    status: str | None = None
-    version: int | None = None
+    maintenance_type: str | None = None
+    maintenance_plan_id: UUID | None = None
+    scheduled_date: date | None = None
+    vendor_id: UUID | None = None
+    cost_amount: Decimal | None = None
+    technician_employee_id: UUID | None = None
+    quality_inspection_id: UUID | None = None
+    version: int
 
 class AssetMaintenanceResponse(OrmModel):
     id: UUID
@@ -267,14 +686,28 @@ class AssetMaintenanceResponse(OrmModel):
     company_id: UUID
     branch_id: UUID
     version: int
+    created_by: UUID | None = None
+
+
+class AssetMaintenanceListResult(BaseModel):
+    items: list["AssetMaintenanceResponse"]
+    total: int
+    page: int
+    page_size: int
+
+class MaintenanceScheduleRequest(BaseModel):
+    scheduled_date: date | None = None
 
 class ServiceHistoryCreate(BaseModel):
     company_id: UUID | None = None
-    status: str | None = None
+    branch_id: UUID | None = None
+    asset_id: UUID
+    maintenance_id: UUID
+    service_summary: str
+    parts_replaced_json: dict | list | None = None
+    cost_amount: Decimal | None = None
+    serviced_at: datetime | None = None
 
-class ServiceHistoryUpdate(BaseModel):
-    status: str | None = None
-    version: int | None = None
 
 class ServiceHistoryResponse(OrmModel):
     id: UUID
@@ -282,20 +715,35 @@ class ServiceHistoryResponse(OrmModel):
     asset_id: UUID
     maintenance_id: UUID
     service_summary: str
-    parts_replaced_json: dict | None
+    parts_replaced_json: dict | list | None
     cost_amount: Decimal | None
     serviced_at: datetime | None
     status: str
     company_id: UUID
     version: int
 
+
+class ServiceHistoryListResult(BaseModel):
+    items: list["ServiceHistoryResponse"]
+    total: int
+    page: int
+    page_size: int
+
 class AssetDepreciationCreate(BaseModel):
     company_id: UUID | None = None
-    status: str | None = None
+    asset_id: UUID
+    period_year: int
+    period_month: int
+    method: str | None = None
+    units_produced: Decimal | None = None
+    depreciation_batch_id: UUID | None = None
 
 class AssetDepreciationUpdate(BaseModel):
-    status: str | None = None
-    version: int | None = None
+    period_year: int | None = None
+    period_month: int | None = None
+    method: str | None = None
+    units_produced: Decimal | None = None
+    version: int
 
 class AssetDepreciationResponse(OrmModel):
     id: UUID
@@ -314,15 +762,50 @@ class AssetDepreciationResponse(OrmModel):
     status: str
     company_id: UUID
     version: int
+    created_by: UUID | None = None
+
+
+class AssetDepreciationListResult(BaseModel):
+    items: list["AssetDepreciationResponse"]
+    total: int
+    page: int
+    page_size: int
+
+
+class DepreciationGenerateRunRequest(BaseModel):
+    company_id: UUID | None = None
+    period_year: int
+    period_month: int
+
+
+class DepreciationGenerateRunResult(BaseModel):
+    depreciation_batch_id: UUID
+    period_year: int
+    period_month: int
+    created_count: int
+    skipped_count: int
+    items: list[AssetDepreciationResponse]
+
+
+class DepreciationCalculateRequest(BaseModel):
+    units_produced: Decimal | None = None
+    estimated_total_units: Decimal | None = None
 
 class AssetDisposalCreate(BaseModel):
     company_id: UUID | None = None
     branch_id: UUID
-    status: str | None = None
+    asset_id: UUID
+    disposal_type: str
+    disposal_date: date | None = None
+    proceeds_amount: Decimal | None = None
+    book_value_at_disposal: Decimal | None = None
 
 class AssetDisposalUpdate(BaseModel):
-    status: str | None = None
-    version: int | None = None
+    disposal_type: str | None = None
+    disposal_date: date | None = None
+    proceeds_amount: Decimal | None = None
+    book_value_at_disposal: Decimal | None = None
+    version: int
 
 class AssetDisposalResponse(OrmModel):
     id: UUID
@@ -339,15 +822,28 @@ class AssetDisposalResponse(OrmModel):
     company_id: UUID
     branch_id: UUID
     version: int
+    created_by: UUID | None = None
+
+
+class AssetDisposalListResult(BaseModel):
+    items: list["AssetDisposalResponse"]
+    total: int
+    page: int
+    page_size: int
 
 class AssetRevaluationCreate(BaseModel):
     company_id: UUID | None = None
     branch_id: UUID
-    status: str | None = None
+    asset_id: UUID
+    revaluation_date: date | None = None
+    new_book_value: Decimal
+    reason: str
 
 class AssetRevaluationUpdate(BaseModel):
-    status: str | None = None
-    version: int | None = None
+    revaluation_date: date | None = None
+    new_book_value: Decimal | None = None
+    reason: str | None = None
+    version: int
 
 class AssetRevaluationResponse(OrmModel):
     id: UUID
@@ -364,15 +860,30 @@ class AssetRevaluationResponse(OrmModel):
     company_id: UUID
     branch_id: UUID
     version: int
+    created_by: UUID | None = None
+
+
+class AssetRevaluationListResult(BaseModel):
+    items: list["AssetRevaluationResponse"]
+    total: int
+    page: int
+    page_size: int
 
 class AssetAuditCreate(BaseModel):
     company_id: UUID | None = None
     branch_id: UUID
-    status: str | None = None
+    asset_id: UUID
+    auditor_employee_id: UUID
+    audit_date: date | None = None
+    found_status: str | None = None
+    notes: str | None = None
 
 class AssetAuditUpdate(BaseModel):
-    status: str | None = None
-    version: int | None = None
+    auditor_employee_id: UUID | None = None
+    audit_date: date | None = None
+    found_status: str | None = None
+    notes: str | None = None
+    version: int
 
 class AssetAuditResponse(OrmModel):
     id: UUID
@@ -387,13 +898,30 @@ class AssetAuditResponse(OrmModel):
     branch_id: UUID
     version: int
 
+
+class AssetAuditListResult(BaseModel):
+    items: list["AssetAuditResponse"]
+    total: int
+    page: int
+    page_size: int
+
 class AssetDocumentCreate(BaseModel):
     company_id: UUID | None = None
-    status: str | None = None
+    branch_id: UUID | None = None
+    asset_id: UUID
+    document_type: str
+    document_name: str
+    storage_uri: str | None = None
+    content_hash: str | None = None
+
 
 class AssetDocumentUpdate(BaseModel):
-    status: str | None = None
-    version: int | None = None
+    document_name: str | None = None
+    storage_uri: str | None = None
+    content_hash: str | None = None
+    branch_id: UUID | None = None
+    version: int
+
 
 class AssetDocumentResponse(OrmModel):
     id: UUID
@@ -407,13 +935,37 @@ class AssetDocumentResponse(OrmModel):
     company_id: UUID
     version: int
 
+
+class AssetDocumentListResult(BaseModel):
+    items: list["AssetDocumentResponse"]
+    total: int
+    page: int
+    page_size: int
+
+
+# Planning aliases (DOC naming) — prefer AssetDocument* in OpenAPI to avoid doc_* collision.
+DocumentCreate = AssetDocumentCreate
+DocumentUpdate = AssetDocumentUpdate
+DocumentResponse = AssetDocumentResponse
+DocumentListResult = AssetDocumentListResult
+
 class AssetChecklistCreate(BaseModel):
     company_id: UUID | None = None
-    status: str | None = None
+    branch_id: UUID | None = None
+    asset_id: UUID | None = None
+    maintenance_id: UUID | None = None
+    audit_id: UUID | None = None
+    checklist_code: str
+    checklist_name: str
+    items_json: dict | list | None = None
+
 
 class AssetChecklistUpdate(BaseModel):
-    status: str | None = None
-    version: int | None = None
+    checklist_name: str | None = None
+    items_json: dict | list | None = None
+    branch_id: UUID | None = None
+    version: int
+
 
 class AssetChecklistResponse(OrmModel):
     id: UUID
@@ -423,19 +975,28 @@ class AssetChecklistResponse(OrmModel):
     audit_id: UUID | None
     checklist_code: str
     checklist_name: str
-    items_json: dict | None
+    items_json: dict | list | None
     completed_at: datetime | None
     status: str
     company_id: UUID
     version: int
 
+
+class AssetChecklistListResult(BaseModel):
+    items: list["AssetChecklistResponse"]
+    total: int
+    page: int
+    page_size: int
+
 class MeterReadingCreate(BaseModel):
     company_id: UUID | None = None
-    status: str | None = None
+    branch_id: UUID | None = None
+    asset_id: UUID
+    meter_type: str
+    reading_value: Decimal
+    reading_at: datetime
+    recorded_by_employee_id: UUID | None = None
 
-class MeterReadingUpdate(BaseModel):
-    status: str | None = None
-    version: int | None = None
 
 class MeterReadingResponse(OrmModel):
     id: UUID
@@ -449,13 +1010,30 @@ class MeterReadingResponse(OrmModel):
     company_id: UUID
     version: int
 
+
+class MeterReadingListResult(BaseModel):
+    items: list["MeterReadingResponse"]
+    total: int
+    page: int
+    page_size: int
+
 class AssetNotificationCreate(BaseModel):
     company_id: UUID | None = None
-    status: str | None = None
+    branch_id: UUID | None = None
+    asset_id: UUID
+    notification_type: str
+    recipient_user_id: UUID | None = None
+    recipient_employee_id: UUID | None = None
+    payload_json: dict | None = None
+
 
 class AssetNotificationUpdate(BaseModel):
-    status: str | None = None
-    version: int | None = None
+    branch_id: UUID | None = None
+    recipient_user_id: UUID | None = None
+    recipient_employee_id: UUID | None = None
+    payload_json: dict | None = None
+    version: int
+
 
 class AssetNotificationResponse(OrmModel):
     id: UUID
@@ -471,13 +1049,43 @@ class AssetNotificationResponse(OrmModel):
     company_id: UUID
     version: int
 
+
+class AssetNotificationListResult(BaseModel):
+    items: list["AssetNotificationResponse"]
+    total: int
+    page: int
+    page_size: int
+
 class AssetReportCreate(BaseModel):
     company_id: UUID | None = None
+    branch_id: UUID | None = None
+    report_key: str
+    period_start: date | None = None
+    period_end: date | None = None
+    department_id: UUID | None = None
+    category_id: UUID | None = None
     status: str | None = None
 
-class AssetReportUpdate(BaseModel):
+
+class AssetReportGenerate(BaseModel):
+    company_id: UUID | None = None
+    branch_id: UUID | None = None
+    report_key: str
+    period_start: date | None = None
+    period_end: date | None = None
+    department_id: UUID | None = None
+    category_id: UUID | None = None
     status: str | None = None
-    version: int | None = None
+
+
+class AssetReportUpdate(BaseModel):
+    branch_id: UUID | None = None
+    department_id: UUID | None = None
+    category_id: UUID | None = None
+    period_start: date | None = None
+    period_end: date | None = None
+    version: int
+
 
 class AssetReportResponse(OrmModel):
     id: UUID
@@ -494,7 +1102,57 @@ class AssetReportResponse(OrmModel):
     company_id: UUID
     version: int
 
+
+class AssetReportListResult(BaseModel):
+    items: list["AssetReportResponse"]
+    total: int
+    page: int
+    page_size: int
+
+
+class AssetReportCatalogItem(BaseModel):
+    key: str
+    title: str
+    category: str
+
+
+class AssetReportDashboardResponse(BaseModel):
+    generated_at: str
+    horizon_days: int
+    kpis: dict
+    by_category: list[dict]
+    by_department: list[dict]
+    recent_transfers: list[dict]
+    recent_notifications: list[dict]
+    health: dict
+
+
+class AssetReportRunResult(BaseModel):
+    report_key: str
+    generated_at: str
+    filters: dict
+    totals: dict
+    items: list[dict]
+    total: int
+    page: int
+    page_size: int
+
+
+class AssetReportExportResult(BaseModel):
+    report_key: str
+    generated_at: str
+    format_hints: list[str]
+    columns: list[dict]
+    rows: list[dict]
+    row_count: int
+    filters: dict
+
+
 class FinancePostRequest(BaseModel):
     debit_account_id: UUID
     credit_account_id: UUID
     fiscal_year_id: UUID | None = None
+
+
+class WorkflowActionRequest(BaseModel):
+    comments: str | None = None

@@ -2,57 +2,42 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import {
-  ArrowUpRight,
-  Package,
-  RefreshCw,
-  Scale,
-  Trash2,
-  Wrench,
-} from "lucide-react";
+import { ArrowUpRight, Package, RefreshCw, UserCheck, Wrench } from "lucide-react";
 
-import { AssetsPipelineFunnel } from "@/components/assets/assets-pipeline-funnel";
 import { FinanceKpiCard } from "@/components/finance/finance-kpi-card";
-import { FinanceStatusBadge } from "@/components/finance/finance-status-badge";
 import { PageHeader } from "@/components/layout/page-header";
-import { Badge } from "@/components/ui/badge";
+import { assetsQuickLinks } from "@/config/assets";
 import {
-  assetsQuickLinks,
-  assetsWorkspaceGroups,
-  resolveAssetsGroupResources,
-} from "@/config/assets";
+  buildRecentActivity,
+  mapAssetToPrdStatus,
+  prdStatusLabel,
+  type PrdAssetStatus,
+} from "@/domain/asset-prd";
 import { isAuthenticated } from "@/lib/auth";
 import {
-  asNumber,
-  asStatus,
-  countByStatus,
   countOpenDocs,
-  formatInr,
-  loadAssetsOverview,
-  sumField,
-  type AssetsOverview,
-  type AssetsRow,
+  loadAssetManagementDashboard,
+  type AssetManagementDashboard,
 } from "@/services/assets-service";
 
-function recentAssets(rows: AssetsRow[], limit = 6): AssetsRow[] {
-  return [...rows]
-    .sort((a, b) =>
-      String(b.asset_code ?? b.document_number ?? "").localeCompare(
-        String(a.asset_code ?? a.document_number ?? ""),
-      ),
-    )
-    .slice(0, limit);
-}
+const PRD_STATUSES: PrdAssetStatus[] = [
+  "available",
+  "assigned",
+  "reserved",
+  "under_maintenance",
+  "lost",
+  "disposed",
+];
 
 export function AssetsDashboard() {
-  const [data, setData] = useState<AssetsOverview | null>(null);
+  const [data, setData] = useState<AssetManagementDashboard | null>(null);
   const [loading, setLoading] = useState(true);
   const authenticated = typeof window !== "undefined" ? isAuthenticated() : false;
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      setData(await loadAssetsOverview());
+      setData(await loadAssetManagementDashboard());
     } finally {
       setLoading(false);
     }
@@ -63,69 +48,57 @@ export function AssetsDashboard() {
   }, [load]);
 
   const kpis = useMemo(() => {
-    if (!data) {
-      return {
-        activeAssets: 0,
-        openMaintenance: 0,
-        pendingDepreciation: 0,
-        openDisposals: 0,
-        bookValue: 0,
-        depAmount: 0,
-      };
+    const assets = data?.assets ?? [];
+    const assignments = data?.assignments ?? [];
+    const counts: Record<PrdAssetStatus, number> = {
+      available: 0,
+      assigned: 0,
+      reserved: 0,
+      under_maintenance: 0,
+      lost: 0,
+      disposed: 0,
+    };
+    for (const a of assets) {
+      const prd = mapAssetToPrdStatus(a, assignments);
+      counts[prd] += 1;
     }
     return {
-      activeAssets: countByStatus(data.assets, ["active", "approved", "in_maintenance"]),
-      openMaintenance: countOpenDocs(data.maintenances, ["completed", "cancelled"]),
-      pendingDepreciation: countByStatus(data.depreciations, [
-        "draft",
-        "calculated",
-        "failed",
-      ]),
-      openDisposals: countOpenDocs(data.disposals, ["posted", "cancelled"]),
-      bookValue: sumField(data.assets, "current_book_value"),
-      depAmount: sumField(data.depreciations, "depreciation_amount"),
+      total: assets.length,
+      ...counts,
+      openMaintenance: countOpenDocs(data?.maintenances ?? [], ["completed", "cancelled"]),
     };
   }, [data]);
 
-  const pipelineCounts = useMemo(
-    () => ({
-      "asset-categories": data?.categories.length ?? 0,
-      assets: data?.assets.length ?? 0,
-      "asset-assignments": data?.assignments.length ?? 0,
-      "asset-maintenances": data?.maintenances.length ?? 0,
-      "asset-depreciations": data?.depreciations.length ?? 0,
-      "asset-disposals": data?.disposals.length ?? 0,
-    }),
+  const byCategory = useMemo(() => {
+    const map = new Map<string, number>();
+    const cats = data?.categories ?? [];
+    const catName = new Map(cats.map((c) => [String(c.id), String(c.category_name ?? "—")]));
+    for (const a of data?.assets ?? []) {
+      const label = catName.get(String(a.asset_category_id)) ?? "Uncategorized";
+      map.set(label, (map.get(label) ?? 0) + 1);
+    }
+    return [...map.entries()].sort((a, b) => b[1] - a[1]).slice(0, 6);
+  }, [data]);
+
+  const byDepartment = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const a of data?.assets ?? []) {
+      const id = String(a.department_id ?? "unassigned");
+      map.set(id, (map.get(id) ?? 0) + 1);
+    }
+    return [...map.entries()].slice(0, 6);
+  }, [data]);
+
+  const activity = useMemo(
+    () =>
+      buildRecentActivity(
+        data?.assets ?? [],
+        data?.assignments ?? [],
+        data?.maintenances ?? [],
+        8,
+      ),
     [data],
   );
-
-  const recent = useMemo(() => recentAssets(data?.assets ?? []), [data]);
-
-  const maintenanceWatch = useMemo(() => {
-    const rows = data?.maintenances ?? [];
-    return [...rows]
-      .sort((a, b) =>
-        String(b.document_number ?? "").localeCompare(String(a.document_number ?? "")),
-      )
-      .slice(0, 5);
-  }, [data]);
-
-  const assetStatusMix = useMemo(() => {
-    const rows = data?.assets ?? [];
-    const stages = [
-      { key: "draft", label: "Draft", barClass: "bg-slate-400" },
-      { key: "submitted", label: "Submitted", barClass: "bg-sky-600" },
-      { key: "approved", label: "Approved", barClass: "bg-teal-600" },
-      { key: "active", label: "Active", barClass: "bg-emerald-600" },
-      { key: "in_maintenance", label: "In maintenance", barClass: "bg-amber-500" },
-      { key: "disposed", label: "Disposed", barClass: "bg-slate-600" },
-    ] as const;
-    const total = rows.length || 1;
-    return stages.map((s) => {
-      const count = countByStatus(rows, [s.key]);
-      return { ...s, count, pct: Math.round((count / total) * 100) };
-    });
-  }, [data]);
 
   const authBlocked =
     Boolean(data?.statusCodes.includes(401)) ||
@@ -134,33 +107,18 @@ export function AssetsDashboard() {
   return (
     <div className="space-y-5">
       <PageHeader
-        title="Assets"
-        description="Fixed-asset lifecycle — register, custody, warranty, maintenance, depreciation, disposal, and audits."
+        title="Dashboard"
+        description="Asset Management — registration, custody, maintenance, and QR tracking."
         actions={
-          <div className="flex flex-wrap items-center gap-2">
-            <button
-              type="button"
-              onClick={() => void load()}
-              disabled={loading}
-              className="inline-flex h-8 cursor-pointer items-center gap-1.5 rounded-lg border border-border/80 bg-card px-3 text-sm font-medium shadow-sm transition-colors duration-200 hover:bg-muted disabled:opacity-60"
-            >
-              <RefreshCw className={`size-3.5 ${loading ? "animate-spin" : ""}`} />
-              Refresh
-            </button>
-            <Link
-              href="/assets/assets"
-              className="inline-flex h-8 cursor-pointer items-center gap-1.5 rounded-lg bg-primary px-3 text-sm font-medium text-primary-foreground shadow-sm transition-opacity duration-200 hover:opacity-90"
-            >
-              <Package className="size-3.5" />
-              Assets
-            </Link>
-            <Link
-              href="/assets/asset-maintenances"
-              className="inline-flex h-8 cursor-pointer items-center rounded-lg border border-border/80 bg-card px-3 text-sm font-medium shadow-sm transition-colors duration-200 hover:bg-muted"
-            >
-              Maintenance
-            </Link>
-          </div>
+          <button
+            type="button"
+            onClick={() => void load()}
+            disabled={loading}
+            className="inline-flex h-8 cursor-pointer items-center gap-1.5 rounded-lg border border-border/80 bg-card px-3 text-sm font-medium shadow-sm transition-colors duration-200 hover:bg-muted disabled:opacity-60"
+          >
+            <RefreshCw className={`size-3.5 ${loading ? "animate-spin" : ""}`} />
+            Refresh
+          </button>
         }
       />
 
@@ -175,42 +133,57 @@ export function AssetsDashboard() {
 
       {data?.partial && !authBlocked ? (
         <div className="rounded-xl border border-border/80 bg-muted/40 px-4 py-2.5 text-xs text-muted-foreground">
-          Some asset endpoints returned errors. Showing available records.
+          Some endpoints returned errors. Showing available records.
         </div>
       ) : null}
 
-      <div className="grid gap-2.5 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid gap-2.5 sm:grid-cols-2 xl:grid-cols-4 2xl:grid-cols-7">
         <FinanceKpiCard
-          label="Active assets"
-          value={loading ? "—" : String(kpis.activeAssets)}
-          hint={`${formatInr(kpis.bookValue)} book · ${data?.assets.length ?? 0} register`}
+          label="Total assets"
+          value={loading ? "—" : String(kpis.total)}
+          hint="Register count"
           icon={Package}
-          tone={kpis.activeAssets > 0 ? "default" : "success"}
         />
         <FinanceKpiCard
-          label="Open maintenance"
-          value={loading ? "—" : String(kpis.openMaintenance)}
-          hint={`${countByStatus(data?.maintenances ?? [], ["scheduled", "in_progress"])} in flight · ${data?.maintenances.length ?? 0} jobs`}
+          label="Available"
+          value={loading ? "—" : String(kpis.available)}
+          hint="Ready to assign"
+          icon={Package}
+          tone="success"
+        />
+        <FinanceKpiCard
+          label="Assigned"
+          value={loading ? "—" : String(kpis.assigned)}
+          hint="Active custody"
+          icon={UserCheck}
+        />
+        <FinanceKpiCard
+          label="Under maintenance"
+          value={loading ? "—" : String(kpis.under_maintenance)}
+          hint={`${kpis.openMaintenance} open jobs`}
           icon={Wrench}
           tone={kpis.openMaintenance > 0 ? "warning" : "success"}
         />
         <FinanceKpiCard
-          label="Pending depreciation"
-          value={loading ? "—" : String(kpis.pendingDepreciation)}
-          hint={`${formatInr(kpis.depAmount)} amount · ${data?.depreciations.length ?? 0} runs`}
-          icon={Scale}
-          tone={kpis.pendingDepreciation > 0 ? "warning" : "success"}
+          label="Reserved"
+          value={loading ? "—" : String(kpis.reserved)}
+          hint="Draft / submitted"
+          icon={Package}
         />
         <FinanceKpiCard
-          label="Open disposals"
-          value={loading ? "—" : String(kpis.openDisposals)}
-          hint={`${countByStatus(data?.assets ?? [], ["disposed", "written_off"])} disposed assets · ${data?.disposals.length ?? 0} docs`}
-          icon={Trash2}
-          tone={kpis.openDisposals > 0 ? "danger" : "success"}
+          label="Lost"
+          value={loading ? "—" : String(kpis.lost)}
+          hint="Mapped from cancelled"
+          icon={Package}
+          tone={kpis.lost > 0 ? "danger" : "success"}
+        />
+        <FinanceKpiCard
+          label="Disposed"
+          value={loading ? "—" : String(kpis.disposed)}
+          hint="End of life"
+          icon={Package}
         />
       </div>
-
-      <AssetsPipelineFunnel counts={pipelineCounts} loading={loading} />
 
       <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
         {assetsQuickLinks.map((link) => {
@@ -229,209 +202,103 @@ export function AssetsDashboard() {
                   {link.title}
                   <ArrowUpRight className="size-3 text-muted-foreground opacity-0 transition-opacity duration-200 group-hover:opacity-100" />
                 </span>
-                <span className="block text-[11px] text-muted-foreground">
-                  {link.description}
-                </span>
+                <span className="block text-[11px] text-muted-foreground">{link.description}</span>
               </span>
             </Link>
           );
         })}
       </div>
 
-      <section className="space-y-3">
-        <div className="flex items-center justify-between gap-2">
-          <h2 className="text-sm font-medium tracking-tight">Workspace</h2>
-          <Badge variant="secondary">{assetsWorkspaceGroups.length} areas</Badge>
-        </div>
-        <div className="grid gap-3 lg:grid-cols-3">
-          {assetsWorkspaceGroups.map((group) => {
-            const Icon = group.icon;
-            const resources = resolveAssetsGroupResources(group);
-            return (
-              <div
-                key={group.key}
-                className="rounded-xl border border-border/80 bg-card p-4 shadow-sm"
-              >
-                <div className="mb-3 flex items-start gap-3">
-                  <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-muted text-foreground">
-                    <Icon className="size-4" />
-                  </span>
-                  <div className="min-w-0">
-                    <h3 className="text-sm font-medium tracking-tight">{group.title}</h3>
-                    <p className="mt-0.5 text-[11px] leading-relaxed text-muted-foreground">
-                      {group.description}
-                    </p>
-                  </div>
-                </div>
-                <ul className="space-y-1">
-                  {resources.map((resource) => (
-                    <li key={resource.key}>
-                      <Link
-                        href={`/assets/${resource.key}`}
-                        className="flex cursor-pointer items-center justify-between gap-2 rounded-lg px-2 py-1.5 text-xs transition-colors duration-200 hover:bg-accent/50"
-                      >
-                        <span className="font-medium text-foreground">{resource.title}</span>
-                        <span className="truncate text-[10px] text-muted-foreground">
-                          {resource.description}
-                        </span>
-                      </Link>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            );
-          })}
-        </div>
-      </section>
+      <div className="grid gap-3 xl:grid-cols-3">
+        <ChartCard title="Assets by category" loading={loading}>
+          {byCategory.map(([label, count]) => (
+            <BarRow key={label} label={label} count={count} total={kpis.total || 1} />
+          ))}
+        </ChartCard>
+        <ChartCard title="Assets by status (PRD)" loading={loading}>
+          {PRD_STATUSES.map((s) => (
+            <BarRow
+              key={s}
+              label={prdStatusLabel(s)}
+              count={kpis[s]}
+              total={kpis.total || 1}
+            />
+          ))}
+        </ChartCard>
+        <ChartCard title="Assets by department" loading={loading}>
+          {byDepartment.map(([id, count]) => (
+            <BarRow
+              key={id}
+              label={id === "unassigned" ? "Unassigned" : `Dept ${id.slice(0, 8)}…`}
+              count={count}
+              total={kpis.total || 1}
+            />
+          ))}
+        </ChartCard>
+      </div>
 
-      <div className="grid gap-3 xl:grid-cols-[1.3fr_1fr_1fr]">
-        <div className="overflow-hidden rounded-xl border border-border/80 bg-card shadow-sm">
-          <div className="flex items-center justify-between gap-2 border-b border-border/70 px-4 py-3">
-            <div>
-              <h2 className="text-sm font-medium tracking-tight">Recent assets</h2>
-              <p className="text-[11px] text-muted-foreground">Operational register</p>
-            </div>
-            <Link
-              href="/assets/assets"
-              className="cursor-pointer text-xs font-medium text-primary transition-opacity duration-200 hover:opacity-80"
-            >
-              View all
-            </Link>
-          </div>
-          <div className="erp-scroll overflow-x-auto">
-            <table className="w-full min-w-[480px] text-left text-sm">
-              <thead>
-                <tr className="border-b border-border/70 bg-muted/40 text-[11px] tracking-wide text-muted-foreground uppercase">
-                  <th className="px-4 py-2.5 font-medium">Asset</th>
-                  <th className="px-4 py-2.5 font-medium">Type</th>
-                  <th className="px-4 py-2.5 font-medium">Book value</th>
-                  <th className="px-4 py-2.5 font-medium">Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {loading ? (
-                  <tr>
-                    <td colSpan={4} className="px-4 py-10 text-center text-muted-foreground">
-                      Loading…
-                    </td>
-                  </tr>
-                ) : recent.length === 0 ? (
-                  <tr>
-                    <td colSpan={4} className="px-4 py-10 text-center text-muted-foreground">
-                      No assets yet.
-                    </td>
-                  </tr>
-                ) : (
-                  recent.map((row, idx) => (
-                    <tr
-                      key={String(row.id ?? idx)}
-                      className="border-b border-border/50 transition-colors duration-150 last:border-0 hover:bg-accent/30"
-                    >
-                      <td className="max-w-[200px] truncate px-4 py-2.5">
-                        <p className="font-medium text-foreground">
-                          {String(row.asset_name ?? "—")}
-                        </p>
-                        <p className="truncate text-[11px] text-muted-foreground">
-                          {String(row.asset_code ?? row.document_number ?? "")}
-                        </p>
-                      </td>
-                      <td className="px-4 py-2.5 text-xs capitalize text-muted-foreground">
-                        {String(row.asset_type ?? "—").replaceAll("_", " ")}
-                      </td>
-                      <td className="px-4 py-2.5 font-mono text-xs tabular-nums text-foreground">
-                        {formatInr(asNumber(row.current_book_value))}
-                      </td>
-                      <td className="px-4 py-2.5">
-                        <FinanceStatusBadge
-                          status={asStatus(row.status) || String(row.status ?? "")}
-                        />
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
+      <div className="rounded-xl border border-border/80 bg-card shadow-sm">
+        <div className="border-b border-border/70 px-4 py-3">
+          <h2 className="text-sm font-medium tracking-tight">Recent activity</h2>
         </div>
-
-        <div className="overflow-hidden rounded-xl border border-border/80 bg-card shadow-sm">
-          <div className="flex items-center justify-between gap-2 border-b border-border/70 px-4 py-3">
-            <div>
-              <h2 className="text-sm font-medium tracking-tight">Maintenance watch</h2>
-              <p className="text-[11px] text-muted-foreground">Recent jobs</p>
-            </div>
-            <Link
-              href="/assets/asset-maintenances"
-              className="cursor-pointer text-xs font-medium text-primary transition-opacity duration-200 hover:opacity-80"
-            >
-              View all
-            </Link>
-          </div>
-          <ul className="divide-y divide-border/60">
-            {loading ? (
-              <li className="px-4 py-8 text-center text-sm text-muted-foreground">Loading…</li>
-            ) : maintenanceWatch.length === 0 ? (
-              <li className="px-4 py-8 text-center text-sm text-muted-foreground">
-                No maintenance jobs yet.
-              </li>
-            ) : (
-              maintenanceWatch.map((row, idx) => (
-                <li
-                  key={String(row.id ?? idx)}
-                  className="px-4 py-2.5 transition-colors duration-150 hover:bg-accent/30"
-                >
-                  <div className="flex items-center justify-between gap-2">
-                    <p className="truncate text-sm font-medium">
-                      {String(row.document_number ?? "—")}
-                    </p>
-                    <FinanceStatusBadge
-                      status={asStatus(row.status) || String(row.status ?? "")}
-                    />
-                  </div>
-                  <p className="mt-1 text-[11px] text-muted-foreground">
-                    {String(row.maintenance_type ?? "job").replaceAll("_", " ")}
-                  </p>
-                </li>
-              ))
-            )}
-          </ul>
-        </div>
-
-        <div className="rounded-xl border border-border/80 bg-card p-4 shadow-sm">
-          <div className="mb-3">
-            <h2 className="text-sm font-medium tracking-tight">Asset status mix</h2>
-            <p className="text-[11px] text-muted-foreground">Register lifecycle</p>
-          </div>
+        <ul className="divide-y divide-border/60">
           {loading ? (
-            <p className="py-6 text-center text-sm text-muted-foreground">Loading…</p>
+            <li className="px-4 py-8 text-center text-sm text-muted-foreground">Loading…</li>
+          ) : activity.length === 0 ? (
+            <li className="px-4 py-8 text-center text-sm text-muted-foreground">No activity yet.</li>
           ) : (
-            <div className="space-y-3">
-              {assetStatusMix.map((s) => (
-                <div key={s.key}>
-                  <div className="mb-1 flex items-center justify-between gap-2 text-xs">
-                    <span className="font-medium text-foreground">{s.label}</span>
-                    <span className="font-mono tabular-nums text-muted-foreground">
-                      {s.count} · {s.pct}%
-                    </span>
-                  </div>
-                  <div className="h-1.5 overflow-hidden rounded-full bg-muted">
-                    <div
-                      className={`h-full rounded-full transition-[width] duration-300 ${s.barClass}`}
-                      style={{ width: `${Math.max(4, s.pct)}%` }}
-                      role="presentation"
-                    />
-                  </div>
-                </div>
-              ))}
-              <p className="pt-1 text-[11px] text-muted-foreground">
-                Active warranties {countByStatus(data?.warranties ?? [], ["active"])} · Audits
-                open{" "}
-                {countOpenDocs(data?.audits ?? [], ["completed", "cancelled"])} · Transfers{" "}
-                {countByStatus(data?.transfers ?? [], ["completed"])}
-              </p>
-            </div>
+            activity.map((item) => (
+              <li key={item.id} className="px-4 py-2.5 text-sm">
+                <p className="font-medium">{item.title}</p>
+                <p className="text-xs text-muted-foreground">
+                  {item.assetLabel ? `${item.assetLabel} · ` : ""}
+                  {item.at}
+                </p>
+              </li>
+            ))
           )}
-        </div>
+        </ul>
+      </div>
+    </div>
+  );
+}
+
+function ChartCard({
+  title,
+  loading,
+  children,
+}: {
+  title: string;
+  loading: boolean;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="rounded-xl border border-border/80 bg-card p-4 shadow-sm">
+      <h2 className="mb-3 text-sm font-medium tracking-tight">{title}</h2>
+      {loading ? (
+        <p className="py-6 text-center text-sm text-muted-foreground">Loading…</p>
+      ) : (
+        <div className="space-y-2">{children}</div>
+      )}
+    </div>
+  );
+}
+
+function BarRow({ label, count, total }: { label: string; count: number; total: number }) {
+  const pct = Math.round((count / total) * 100);
+  return (
+    <div>
+      <div className="mb-1 flex justify-between text-xs">
+        <span className="truncate font-medium">{label}</span>
+        <span className="text-muted-foreground">
+          {count} · {pct}%
+        </span>
+      </div>
+      <div className="h-1.5 overflow-hidden rounded-full bg-muted">
+        <div
+          className="h-full rounded-full bg-primary/70 transition-[width] duration-300"
+          style={{ width: `${Math.max(count ? 4 : 0, pct)}%` }}
+        />
       </div>
     </div>
   );

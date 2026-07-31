@@ -1,9 +1,14 @@
-"""Asset component ORM per ERD_15 section 6.3."""
+"""Asset component ORM per ERD_15 section 6.3 (FP-ASSET-019).
+
+Active-code uniqueness is enforced by partial unique index
+``uq_ast_asset_component_active_code`` (migration 0484), not a table UK,
+so replaced/disposed history may retain the same component_code.
+"""
 
 from decimal import Decimal
 from uuid import UUID, uuid4
 
-from sqlalchemy import CheckConstraint, ForeignKey, Numeric, String, UniqueConstraint
+from sqlalchemy import CheckConstraint, ForeignKey, Numeric, String
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -14,7 +19,6 @@ from modules.asset.models.mixins import AstDetailMixin
 class AstAssetComponent(Base, *AstDetailMixin):
     __tablename__ = "ast_asset_component"
     __table_args__ = (
-        UniqueConstraint("asset_id", "component_code", name="uk_ast_asset_component_code"),
         CheckConstraint(
             "status IN ('active','replaced','disposed')",
             name="ck_ast_asset_component_status",

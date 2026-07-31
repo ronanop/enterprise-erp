@@ -37,6 +37,8 @@ class AssetAssignmentStatus(str, Enum):
 
 class AssetTransferStatus(str, Enum):
     DRAFT = "draft"
+    SUBMITTED = "submitted"
+    APPROVED = "approved"
     COMPLETED = "completed"
     CANCELLED = "cancelled"
 
@@ -47,13 +49,17 @@ class AssetLocationStatus(str, Enum):
 
 
 class AssetWarrantyStatus(str, Enum):
+    DRAFT = "draft"
     ACTIVE = "active"
+    EXTENDED = "extended"
     EXPIRED = "expired"
     VOID = "void"
 
 
 class AssetInsuranceStatus(str, Enum):
+    DRAFT = "draft"
     ACTIVE = "active"
+    RENEWED = "renewed"
     EXPIRED = "expired"
     CANCELLED = "cancelled"
 
@@ -132,9 +138,92 @@ class AssetNotificationStatus(str, Enum):
     ARCHIVED = "archived"
 
 
+class AssetNotificationType(str, Enum):
+    MAINTENANCE_DUE = "maintenance_due"
+    WARRANTY_EXPIRY = "warranty_expiry"
+    INSURANCE_EXPIRY = "insurance_expiry"
+    AUDIT_DUE = "audit_due"
+    DEPRECIATION = "depreciation"
+    OTHER = "other"
+
+
+class AssetNotificationDeliveryStatus(str, Enum):
+    PENDING = "pending"
+    SENT = "sent"
+    FAILED = "failed"
+    READ = "read"
+
+
+class AssetNotificationEventSubtype(str, Enum):
+    ASSIGNMENT = "assignment"
+    DISPOSAL = "disposal"
+    CUSTOM = "custom"
+    MAINTENANCE_COMPLETED = "maintenance_completed"
+    ASSET_RETURNED = "asset_returned"
+
+
 class AssetReportStatus(str, Enum):
     DRAFT = "draft"
     FINALIZED = "finalized"
+
+
+class AssetReportSnapshotType(str, Enum):
+    """Persisted ast_asset_report.report_type values (ERD + ADR expansion)."""
+
+    REGISTER = "register"
+    DEPRECIATION_SCHEDULE = "depreciation_schedule"
+    UTILIZATION = "utilization"
+    MAINTENANCE_DUE = "maintenance_due"
+    INSURANCE_EXPIRY = "insurance_expiry"
+    AUDIT_VARIANCE = "audit_variance"
+    WARRANTY_EXPIRY = "warranty_expiry"
+    ALLOCATION = "allocation"
+    TRANSFER = "transfer"
+    DISPOSAL = "disposal"
+    DOCUMENTS = "documents"
+    CHECKLISTS = "checklists"
+    METERS = "meters"
+    NOTIFICATIONS = "notifications"
+
+
+class AssetLiveReportKey(str, Enum):
+    """Live report_key catalog (not constrained by DB CHECK)."""
+
+    ASSET_SUMMARY = "asset_summary"
+    ASSET_INVENTORY = "asset_inventory"
+    ASSET_ALLOCATION = "asset_allocation"
+    ASSET_TRANSFERS = "asset_transfers"
+    ASSET_MAINTENANCE = "asset_maintenance"
+    MAINTENANCE_DUE = "maintenance_due"
+    WARRANTY_EXPIRY = "warranty_expiry"
+    INSURANCE_EXPIRY = "insurance_expiry"
+    ASSET_DEPRECIATION = "asset_depreciation"
+    ASSET_DISPOSAL = "asset_disposal"
+    ASSET_DOCUMENTS = "asset_documents"
+    ASSET_CHECKLISTS = "asset_checklists"
+    ASSET_METER_READINGS = "asset_meter_readings"
+    ASSET_NOTIFICATIONS = "asset_notifications"
+    EXECUTIVE_DASHBOARD = "executive_dashboard"
+
+
+# Live report_key → snapshot report_type
+LIVE_TO_SNAPSHOT_TYPE: dict[str, str] = {
+    AssetLiveReportKey.ASSET_SUMMARY.value: AssetReportSnapshotType.REGISTER.value,
+    AssetLiveReportKey.ASSET_INVENTORY.value: AssetReportSnapshotType.REGISTER.value,
+    AssetLiveReportKey.ASSET_ALLOCATION.value: AssetReportSnapshotType.ALLOCATION.value,
+    AssetLiveReportKey.ASSET_TRANSFERS.value: AssetReportSnapshotType.TRANSFER.value,
+    AssetLiveReportKey.ASSET_MAINTENANCE.value: AssetReportSnapshotType.MAINTENANCE_DUE.value,
+    AssetLiveReportKey.MAINTENANCE_DUE.value: AssetReportSnapshotType.MAINTENANCE_DUE.value,
+    AssetLiveReportKey.WARRANTY_EXPIRY.value: AssetReportSnapshotType.WARRANTY_EXPIRY.value,
+    AssetLiveReportKey.INSURANCE_EXPIRY.value: AssetReportSnapshotType.INSURANCE_EXPIRY.value,
+    AssetLiveReportKey.ASSET_DEPRECIATION.value: AssetReportSnapshotType.DEPRECIATION_SCHEDULE.value,
+    AssetLiveReportKey.ASSET_DISPOSAL.value: AssetReportSnapshotType.DISPOSAL.value,
+    AssetLiveReportKey.ASSET_DOCUMENTS.value: AssetReportSnapshotType.DOCUMENTS.value,
+    AssetLiveReportKey.ASSET_CHECKLISTS.value: AssetReportSnapshotType.CHECKLISTS.value,
+    AssetLiveReportKey.ASSET_METER_READINGS.value: AssetReportSnapshotType.METERS.value,
+    AssetLiveReportKey.ASSET_NOTIFICATIONS.value: AssetReportSnapshotType.NOTIFICATIONS.value,
+    AssetLiveReportKey.EXECUTIVE_DASHBOARD.value: AssetReportSnapshotType.UTILIZATION.value,
+}
 
 
 class AstEntityType(str, Enum):

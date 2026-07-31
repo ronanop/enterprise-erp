@@ -58,6 +58,11 @@ class Settings(BaseSettings):
     account_lockout_threshold: int = Field(default=5, alias="ACCOUNT_LOCKOUT_THRESHOLD")
     account_lockout_minutes: int = Field(default=15, alias="ACCOUNT_LOCKOUT_MINUTES")
 
+    asset_workflow_governance_enabled: bool = Field(
+        default=False,
+        alias="ASSET_WORKFLOW_GOVERNANCE_ENABLED",
+    )
+
     @field_validator("cors_origins", mode="before")
     @classmethod
     def parse_cors_origins(cls, value: str | list[str]) -> list[str]:

@@ -7,7 +7,10 @@ from modules.asset.service.asset_report_service import AssetReportService
 from modules.asset.service.asset_service import AssetService
 from modules.asset.service.assignment_service import AssignmentService
 from modules.asset.service.checklist_service import ChecklistService
-from modules.asset.service.component_service import ComponentService
+from modules.asset.service.component_service import (
+    AssetComponentService,
+    ComponentService,
+)
 from modules.asset.service.depreciation_service import DepreciationService
 from modules.asset.service.disposal_service import DisposalService
 from modules.asset.service.document_service import DocumentService
@@ -17,7 +20,10 @@ from modules.asset.service.location_service import LocationService
 from modules.asset.service.maintenance_plan_service import MaintenancePlanService
 from modules.asset.service.maintenance_service import MaintenanceService
 from modules.asset.service.meter_reading_service import MeterReadingService
-from modules.asset.service.notification_service import NotificationService
+from modules.asset.service.notification_service import (
+    AssetNotificationService,
+    NotificationService,
+)
 from modules.asset.service.revaluation_service import RevaluationService
 from modules.asset.service.service_history_service import ServiceHistoryService
 from modules.asset.service.transfer_service import TransferService
@@ -32,6 +38,7 @@ __all__ = [
     "AssetService",
     "AssignmentService",
     "ChecklistService",
+    "AssetComponentService",
     "ComponentService",
     "DepreciationService",
     "DisposalService",
@@ -41,6 +48,7 @@ __all__ = [
     "MaintenancePlanService",
     "MaintenanceService",
     "MeterReadingService",
+    "AssetNotificationService",
     "NotificationService",
     "RevaluationService",
     "ServiceHistoryService",

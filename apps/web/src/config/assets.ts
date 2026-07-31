@@ -1,121 +1,78 @@
 /**
- * Assets workspace config — aligned with FRD-12 / ERD_15
- * and apps/api asset routers (Category → Disposal).
+ * Asset Management (PRD v1.0) workspace navigation.
  */
 
 import type { LucideIcon } from "lucide-react";
 import {
-  Boxes,
-  ClipboardCheck,
+  BarChart3,
+  FolderTree,
+  LayoutDashboard,
   MapPin,
   Package,
-  Shield,
+  QrCode,
+  Settings,
+  Tags,
+  UserCheck,
   Wrench,
 } from "lucide-react";
 
 import { getModule, type ModuleResource } from "@/config/modules";
 
-export type AssetsWorkspaceGroup = {
-  key: string;
-  title: string;
-  description: string;
-  icon: LucideIcon;
-  resourceKeys: string[];
-};
-
-export type AssetsPipelineStage = {
-  key: string;
-  title: string;
-  href: string;
-  resource:
-    | "asset-categories"
-    | "assets"
-    | "asset-assignments"
-    | "asset-maintenances"
-    | "asset-depreciations"
-    | "asset-disposals";
-};
-
 export const ASSETS_MODULE_KEY = "assets";
 
-export const assetsWorkspaceGroups: AssetsWorkspaceGroup[] = [
-  {
-    key: "register",
-    title: "Register & Structure",
-    description: "Categories, assets, components, and locations",
-    icon: Boxes,
-    resourceKeys: [
-      "asset-categories",
-      "assets",
-      "asset-components",
-      "asset-locations",
-    ],
-  },
-  {
-    key: "custody",
-    title: "Custody & Protection",
-    description: "Assignments, transfers, warranties, and insurance",
-    icon: Shield,
-    resourceKeys: [
-      "asset-assignments",
-      "asset-transfers",
-      "asset-warranties",
-      "asset-insurances",
-    ],
-  },
-  {
-    key: "lifecycle",
-    title: "Maintenance & Valuation",
-    description: "Plans, jobs, depreciation, disposal, audits, meters",
-    icon: Wrench,
-    resourceKeys: [
-      "maintenance-plans",
-      "asset-maintenances",
-      "asset-depreciations",
-      "asset-disposals",
-      "asset-audits",
-      "meter-readings",
-    ],
-  },
-];
+export type AssetManagementNavItem = {
+  title: string;
+  href: string;
+  icon: LucideIcon;
+  /** Match exact path or prefix for nested routes */
+  match?: "exact" | "prefix";
+};
 
-/** ERD_15 asset lifecycle (core operational stages) */
-export const assetsPipelineStages: AssetsPipelineStage[] = [
+export type AssetManagementNavGroup = {
+  title?: string;
+  items: AssetManagementNavItem[];
+};
+
+export const assetManagementNav: AssetManagementNavGroup[] = [
   {
-    key: "category",
-    title: "Category",
-    href: "/assets/asset-categories",
-    resource: "asset-categories",
+    items: [
+      {
+        title: "Dashboard",
+        href: "/assets",
+        icon: LayoutDashboard,
+        match: "exact",
+      },
+    ],
   },
   {
-    key: "asset",
-    title: "Asset",
-    href: "/assets/assets",
-    resource: "assets",
+    title: "Assets",
+    items: [
+      { title: "All Assets", href: "/assets/assets", icon: Package, match: "prefix" },
+      { title: "Add Asset", href: "/assets/assets/new", icon: Package, match: "exact" },
+    ],
   },
   {
-    key: "assignment",
-    title: "Assignment",
-    href: "/assets/asset-assignments",
-    resource: "asset-assignments",
+    title: "Master Data",
+    items: [
+      { title: "Categories", href: "/assets/asset-categories", icon: FolderTree },
+      { title: "Asset Types", href: "/assets/asset-types", icon: Tags },
+      { title: "Locations", href: "/assets/locations", icon: MapPin },
+      { title: "Departments", href: "/assets/departments", icon: UserCheck },
+    ],
   },
   {
-    key: "maintenance",
-    title: "Maintenance",
-    href: "/assets/asset-maintenances",
-    resource: "asset-maintenances",
+    title: "Operations",
+    items: [
+      { title: "Asset Assignment", href: "/assets/asset-assignments", icon: UserCheck },
+      { title: "Maintenance", href: "/assets/asset-maintenances", icon: Wrench },
+      { title: "QR / Barcode", href: "/assets/qr-barcode", icon: QrCode },
+    ],
   },
   {
-    key: "depreciation",
-    title: "Depreciation",
-    href: "/assets/asset-depreciations",
-    resource: "asset-depreciations",
-  },
-  {
-    key: "disposal",
-    title: "Disposal",
-    href: "/assets/asset-disposals",
-    resource: "asset-disposals",
+    items: [
+      { title: "Reports", href: "/assets/reports", icon: BarChart3 },
+      { title: "Settings", href: "/assets/settings", icon: Settings },
+    ],
   },
 ];
 
@@ -123,42 +80,29 @@ export function getAssetsResources(): ModuleResource[] {
   return getModule(ASSETS_MODULE_KEY)?.resources ?? [];
 }
 
-export function resolveAssetsGroupResources(
-  group: AssetsWorkspaceGroup,
-): ModuleResource[] {
-  const all = getAssetsResources();
-  return group.resourceKeys
-    .map((key) => all.find((r) => r.key === key))
-    .filter((r): r is ModuleResource => Boolean(r));
-}
-
 export const assetsQuickLinks = [
   {
-    title: "Assets",
+    title: "All Assets",
     href: "/assets/assets",
-    description: "Operational register",
+    description: "Search and manage register",
     icon: Package,
   },
   {
-    title: "Assignments",
+    title: "Add Asset",
+    href: "/assets/assets/new",
+    description: "Registration wizard",
+    icon: Package,
+  },
+  {
+    title: "Assignment",
     href: "/assets/asset-assignments",
-    description: "Custodian custody",
-    icon: MapPin,
+    description: "Assign or return custody",
+    icon: UserCheck,
   },
   {
     title: "Maintenance",
     href: "/assets/asset-maintenances",
-    description: "Jobs & schedules",
+    description: "Work orders",
     icon: Wrench,
   },
-  {
-    title: "Audits",
-    href: "/assets/asset-audits",
-    description: "Physical verification",
-    icon: ClipboardCheck,
-  },
 ] as const;
-
-export const assetsIcons = {
-  Package,
-} as const;

@@ -21,6 +21,7 @@ import {
   ProjectsRecordForm,
   type FormSection,
   type FormValues,
+  type Lookups,
 } from "@/components/projects/projects-record-form";
 import {
   createProject,
@@ -67,7 +68,7 @@ const EMPTY_EDIT: FormValues = {
 export function ProjectFormPage({ projectId }: { projectId?: string }) {
   const isEdit = Boolean(projectId);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (): Promise<{ values?: FormValues; lookups?: Lookups }> => {
     const [branches, employees, customers, departments, record] = await Promise.all([
       listBranchOptions().catch(() => []),
       listEmployeeOptions().catch(() => []),
@@ -75,6 +76,8 @@ export function ProjectFormPage({ projectId }: { projectId?: string }) {
       listDepartmentOptions().catch(() => []),
       projectId ? getProject(projectId) : Promise.resolve(null),
     ]);
+
+    const lookups: Lookups = { branches, employees, customers, departments };
 
     if (record) {
       return {
@@ -97,14 +100,14 @@ export function ProjectFormPage({ projectId }: { projectId?: string }) {
           health_status: record.health_status ?? "",
           description: record.description ?? "",
           status: record.status,
-        } satisfies FormValues,
-        lookups: { branches, employees, customers, departments },
+        },
+        lookups,
       };
     }
 
     return {
-      values: { branch_id: branches[0]?.id ?? "" },
-      lookups: { branches, employees, customers, departments },
+      values: { ...EMPTY_CREATE, branch_id: branches[0]?.id ?? "" },
+      lookups,
     };
   }, [projectId]);
 

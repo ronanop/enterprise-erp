@@ -1,11 +1,16 @@
 """Asset domain exceptions."""
 
-from core.exceptions import ConflictException
+from core.exceptions import AppException, ConflictException
 
 
 class InvalidAssetCategoryState(ConflictException):
     def __init__(self, message: str = "Invalid assetcategory state") -> None:
         super().__init__(message)
+
+
+class CategoryValidationError(AppException):
+    def __init__(self, message: str) -> None:
+        super().__init__(message, status_code=422)
 
 class InvalidAssetState(ConflictException):
     def __init__(self, message: str = "Invalid asset state") -> None:
@@ -82,3 +87,118 @@ class InvalidAssetNotificationState(ConflictException):
 class InvalidAssetReportState(ConflictException):
     def __init__(self, message: str = "Invalid assetreport state") -> None:
         super().__init__(message)
+
+
+class ReportValidationError(AppException):
+    def __init__(self, message: str) -> None:
+        super().__init__(message, status_code=422)
+
+
+class InvalidAssetWorkflowState(ConflictException):
+    def __init__(self, message: str = "Invalid asset workflow state") -> None:
+        super().__init__(message)
+
+
+class SegregationOfDutiesError(ConflictException):
+    def __init__(self, message: str = "Segregation of duties violation") -> None:
+        super().__init__(message)
+
+
+class RegistrationValidationError(AppException):
+    def __init__(self, message: str) -> None:
+        super().__init__(message, status_code=422)
+
+
+class DuplicateAssetRegistrationError(ConflictException):
+    def __init__(self, message: str = "Duplicate asset registration") -> None:
+        super().__init__(message)
+
+
+class TransferValidationError(AppException):
+    def __init__(self, message: str) -> None:
+        super().__init__(message, status_code=422)
+
+
+class AssignmentValidationError(AppException):
+    def __init__(self, message: str) -> None:
+        super().__init__(message, status_code=422)
+
+
+class MaintenanceValidationError(AppException):
+    def __init__(self, message: str) -> None:
+        super().__init__(message, status_code=422)
+
+
+class DisposalValidationError(AppException):
+    def __init__(self, message: str) -> None:
+        super().__init__(message, status_code=422)
+
+
+class DepreciationValidationError(AppException):
+    def __init__(self, message: str) -> None:
+        super().__init__(message, status_code=422)
+
+
+class RevaluationValidationError(AppException):
+    def __init__(self, message: str) -> None:
+        super().__init__(message, status_code=422)
+
+
+class AssetAuditValidationError(AppException):
+    def __init__(self, message: str) -> None:
+        super().__init__(message, status_code=422)
+
+
+class WarrantyValidationError(AppException):
+    def __init__(self, message: str) -> None:
+        super().__init__(message, status_code=422)
+
+
+class InsuranceValidationError(AppException):
+    def __init__(self, message: str) -> None:
+        super().__init__(message, status_code=422)
+
+
+class MaintenancePlanValidationError(AppException):
+    def __init__(self, message: str) -> None:
+        super().__init__(message, status_code=422)
+
+
+class LocationValidationError(AppException):
+    def __init__(self, message: str) -> None:
+        super().__init__(message, status_code=422)
+
+
+class ServiceHistoryValidationError(AppException):
+    def __init__(self, message: str) -> None:
+        super().__init__(message, status_code=422)
+
+
+class ChecklistValidationError(AppException):
+    def __init__(self, message: str) -> None:
+        super().__init__(message, status_code=422)
+
+
+class MeterReadingValidationError(AppException):
+    def __init__(self, message: str) -> None:
+        super().__init__(message, status_code=422)
+
+
+class DocumentValidationError(AppException):
+    def __init__(self, message: str) -> None:
+        super().__init__(message, status_code=422)
+
+
+class ComponentValidationError(AppException):
+    def __init__(self, message: str) -> None:
+        super().__init__(message, status_code=422)
+
+
+class DiscoveryValidationError(AppException):
+    def __init__(self, message: str) -> None:
+        super().__init__(message, status_code=422)
+
+
+class NotificationValidationError(AppException):
+    def __init__(self, message: str) -> None:
+        super().__init__(message, status_code=422)

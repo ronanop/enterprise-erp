@@ -82,6 +82,8 @@ npm run dev
 
 App: http://localhost:3000
 
+**Asset Management (PRD UI):** `/assets` — dashboard, list, add wizard (`/assets/assets/new`), detail with edit (`?edit=1`), assignment/maintenance/QR flows. See `docs/08_IMPLEMENTATION/Asset_Management_PRD_UI_Map.md`. If asset APIs return 403 for tenant admins, run `alembic upgrade head` (migration `0486_ast_tenant_admin_asset_permissions`).
+
 ## Quality Checks
 
 ### Backend

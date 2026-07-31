@@ -1,24 +1,69 @@
-"""ComponentService application service."""
+"""AssetComponentService — lightweight child components (FP-ASSET-019).
+
+Option B: components are not assets/inventory. Depth-1 under parent asset.
+"""
+
+from __future__ import annotations
 
 from uuid import UUID
 
 from sqlalchemy.orm import Session
 
 from core.exceptions import NotFoundException
+from modules.asset.domain.enums import AssetComponentStatus
 from modules.asset.models import AstAssetComponent
-from modules.asset.repository.asset_component_repository import AssetComponentRepository
+from modules.asset.repository.asset_component_repository import (
+    AssetComponentListFilters,
+    AssetComponentRepository,
+)
 from modules.asset.service.asset_scope_validator import AssetScopeValidator
+from modules.asset.service.component_validator import ComponentValidator
 from modules.asset.service.engines import AssetComponentEngine
 from modules.foundation.domain.value_objects import TenantContext
 from modules.foundation.service.audit_service import AuditService
 
+ENTITY_AST_COMPONENT = "ast_asset_component"
 
-class ComponentService:
+
+class AssetComponentService:
     def __init__(self, db: Session) -> None:
         self._repo = AssetComponentRepository(db)
         self._scope = AssetScopeValidator(db)
         self._engine = AssetComponentEngine()
         self._audit = AuditService(db)
+        self._validator = ComponentValidator(db)
+
+    def search(
+        self,
+        ctx: TenantContext,
+        *,
+        company_id: UUID | None = None,
+        asset_id: UUID | None = None,
+        status: str | None = None,
+        product_id: UUID | None = None,
+        branch_id: UUID | None = None,
+        search: str | None = None,
+        sort: str = "created_at",
+        offset: int = 0,
+        limit: int = 25,
+    ) -> tuple[list[AstAssetComponent], int]:
+        cid = self._scope.resolve_company_id(ctx, company_id)
+        if sort not in {"created_at", "component_code", "component_name"}:
+            sort = "created_at"
+        return self._repo.search(
+            ctx,
+            AssetComponentListFilters(
+                company_id=cid,
+                asset_id=asset_id,
+                status=status,
+                product_id=product_id,
+                branch_id=branch_id,
+                search=search,
+                sort=sort,
+            ),
+            offset=offset,
+            limit=limit,
+        )
 
     def list(self, ctx: TenantContext, company_id: UUID | None = None):
         cid = self._scope.resolve_company_id(ctx, company_id)
@@ -27,25 +72,204 @@ class ComponentService:
     def get(self, ctx: TenantContext, row_id: UUID) -> AstAssetComponent:
         row = self._repo.get(ctx, row_id)
         if row is None:
-            raise NotFoundException("ComponentService not found")
+            raise NotFoundException("Component not found")
         return row
 
-    def create(self, ctx: TenantContext, company_id: UUID | None = None, **fields):
+    def tree(self, ctx: TenantContext, asset_id: UUID, company_id: UUID | None = None) -> dict:
         cid = self._scope.resolve_company_id(ctx, company_id)
+        asset = self._repo.get_parent_asset(ctx, asset_id)
+        if asset is None:
+            raise NotFoundException("Asset not found")
+        if asset.company_id != cid:
+            raise NotFoundException("Asset not found")
+        children = self._repo.list_by_asset(ctx, asset_id, include_inactive=True)
+        return {
+            "asset": {
+                "id": str(asset.id),
+                "asset_code": asset.asset_code,
+                "asset_name": asset.asset_name,
+                "status": asset.status,
+                "company_id": str(asset.company_id),
+            },
+            "components": [
+                {
+                    "id": str(c.id),
+                    "component_code": c.component_code,
+                    "component_name": c.component_name,
+                    "serial_number": c.serial_number,
+                    "quantity": str(c.quantity) if c.quantity is not None else None,
+                    "status": c.status,
+                    "product_id": str(c.product_id) if c.product_id else None,
+                    "version": int(c.version or 1),
+                }
+                for c in children
+            ],
+            "depth": 1,
+        }
 
-        row = self._repo.create(ctx, company_id=cid,  **fields)
+    def history(self, ctx: TenantContext, row_id: UUID) -> dict:
+        row = self.get(ctx, row_id)
+        lineage = self._repo.list_code_history(
+            ctx, asset_id=row.asset_id, component_code=row.component_code
+        )
+        return {
+            "component_id": str(row.id),
+            "asset_id": str(row.asset_id),
+            "component_code": row.component_code,
+            "current_status": row.status,
+            "lineage": [
+                {
+                    "id": str(c.id),
+                    "status": c.status,
+                    "component_name": c.component_name,
+                    "serial_number": c.serial_number,
+                    "created_at": c.created_at.isoformat() if c.created_at else None,
+                    "updated_at": c.updated_at.isoformat() if c.updated_at else None,
+                    "version": int(c.version or 1),
+                }
+                for c in lineage
+            ],
+        }
+
+    def install(self, ctx: TenantContext, company_id: UUID | None = None, **fields):
+        cid = self._scope.resolve_company_id(ctx, company_id)
+        branch_id = fields.get("branch_id")
+        if branch_id is not None:
+            self._scope.validate_branch_access(ctx, branch_id)
+
+        fields.pop("status", None)
+        self._validator.validate_install_fields(ctx, company_id=cid, fields=fields)
+
+        row = self._repo.create(
+            ctx,
+            company_id=cid,
+            branch_id=fields.get("branch_id"),
+            asset_id=fields["asset_id"],
+            component_code=fields["component_code"],
+            component_name=fields["component_name"],
+            product_id=fields.get("product_id"),
+            serial_number=fields.get("serial_number"),
+            quantity=fields.get("quantity"),
+            status=AssetComponentStatus.ACTIVE.value,
+        )
+        self._engine.install_defaults(row)
         self._audit.log_entity_change(
             tenant_id=ctx.tenant_id,
-            entity_name="ast_asset_component",
+            entity_name=ENTITY_AST_COMPONENT,
             entity_id=row.id,
-            operation="create",
+            operation="install",
             performed_by=ctx.user_id,
+            new_value={
+                "asset_id": str(row.asset_id),
+                "component_code": row.component_code,
+                "status": row.status,
+            },
         )
         return row
 
+    def create(self, ctx: TenantContext, company_id: UUID | None = None, **fields):
+        return self.install(ctx, company_id=company_id, **fields)
+
     def update(self, ctx: TenantContext, row_id: UUID, **fields):
-        self.get(ctx, row_id)
-        row = self._repo.update(ctx, row_id, **fields)
-        if row is None:
-            raise NotFoundException("ComponentService not found")
-        return row
+        row = self.get(ctx, row_id)
+        branch_id = fields.get("branch_id")
+        if branch_id is not None:
+            self._scope.validate_branch_access(ctx, branch_id)
+        self._validator.validate_update_fields(ctx, row, fields)
+        allowed = {
+            k: v
+            for k, v in fields.items()
+            if k
+            in {
+                "branch_id",
+                "component_name",
+                "product_id",
+                "serial_number",
+                "quantity",
+                "version",
+            }
+        }
+        updated = self._repo.update(ctx, row_id, **allowed)
+        if updated is None:
+            raise NotFoundException("Component not found")
+        self._audit.log_entity_change(
+            tenant_id=ctx.tenant_id,
+            entity_name=ENTITY_AST_COMPONENT,
+            entity_id=row_id,
+            operation="update",
+            performed_by=ctx.user_id,
+        )
+        return updated
+
+    def replace(self, ctx: TenantContext, row_id: UUID, **successor_fields):
+        row = self.get(ctx, row_id)
+        self._validator.validate_replace_readiness(ctx, row)
+        fields = dict(successor_fields)
+        fields.pop("status", None)
+        fields.pop("asset_id", None)
+        self._validator.validate_successor_fields(
+            ctx, company_id=row.company_id, source=row, fields=fields
+        )
+
+        claimed = self._repo.update(ctx, row_id, version=int(row.version or 1))
+        if claimed is None:
+            raise NotFoundException("Component not found")
+        self._engine.replace(claimed)
+        replaced = self._repo.update(
+            ctx,
+            row_id,
+            status=claimed.status,
+            version=int(claimed.version or 1),
+        )
+        successor = self._repo.create(
+            ctx,
+            company_id=row.company_id,
+            branch_id=fields.get("branch_id", row.branch_id),
+            asset_id=row.asset_id,
+            component_code=fields["component_code"],
+            component_name=fields["component_name"],
+            product_id=fields.get("product_id"),
+            serial_number=fields.get("serial_number"),
+            quantity=fields.get("quantity"),
+            status=AssetComponentStatus.ACTIVE.value,
+        )
+        self._engine.install_defaults(successor)
+        self._audit.log_entity_change(
+            tenant_id=ctx.tenant_id,
+            entity_name=ENTITY_AST_COMPONENT,
+            entity_id=row_id,
+            operation="replace",
+            performed_by=ctx.user_id,
+            new_value={
+                "replaced_component_id": str(row_id),
+                "successor_id": str(successor.id),
+                "component_code": successor.component_code,
+            },
+        )
+        return {"replaced": replaced, "successor": successor}
+
+    def dispose(self, ctx: TenantContext, row_id: UUID):
+        row = self.get(ctx, row_id)
+        self._validator.validate_dispose_readiness(ctx, row)
+        claimed = self._repo.update(ctx, row_id, version=int(row.version or 1))
+        if claimed is None:
+            raise NotFoundException("Component not found")
+        self._engine.dispose(claimed)
+        updated = self._repo.update(
+            ctx,
+            row_id,
+            status=claimed.status,
+            version=int(claimed.version or 1),
+        )
+        self._audit.log_entity_change(
+            tenant_id=ctx.tenant_id,
+            entity_name=ENTITY_AST_COMPONENT,
+            entity_id=row_id,
+            operation="dispose",
+            performed_by=ctx.user_id,
+        )
+        return updated
+
+
+# Backward-compatible alias
+ComponentService = AssetComponentService

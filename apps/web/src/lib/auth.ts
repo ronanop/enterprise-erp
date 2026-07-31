@@ -28,3 +28,19 @@ export function clearTokens() {
 export function isAuthenticated(): boolean {
   return Boolean(getAccessToken());
 }
+
+/** Best-effort JWT `sub` for UI-only checks (SoD hints). Not a security boundary. */
+export function getAccessTokenUserId(): string | null {
+  const token = getAccessToken();
+  if (!token) return null;
+  const parts = token.split(".");
+  if (parts.length < 2) return null;
+  try {
+    const payload = JSON.parse(atob(parts[1].replace(/-/g, "+").replace(/_/g, "/"))) as {
+      sub?: string;
+    };
+    return payload.sub ?? null;
+  } catch {
+    return null;
+  }
+}

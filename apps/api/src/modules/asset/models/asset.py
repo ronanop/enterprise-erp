@@ -14,7 +14,7 @@ from sqlalchemy import (
     String,
     UniqueConstraint,
 )
-from sqlalchemy.dialects.postgresql import UUID as PG_UUID
+from sqlalchemy.dialects.postgresql import JSONB, UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from database.base import Base
@@ -114,4 +114,5 @@ class AstAsset(Base, *AstTransactionMixin):
         ForeignKey("foundation.wf_instance.id", ondelete="SET NULL"),
         nullable=True,
     )
+    discovery_profile_json: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
 
