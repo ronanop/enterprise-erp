@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import {
   Archive,
   CheckSquare,
@@ -165,6 +166,7 @@ export function SetupEntityPanel({
     ids: string[];
   } | null>(null);
   const [menuId, setMenuId] = useState<string | null>(null);
+  const [menuPos, setMenuPos] = useState<{ top: number; left: number } | null>(null);
   const [orgLookups, setOrgLookups] = useState<{
     companies: { value: string; label: string }[];
     branches: { value: string; label: string; companyId?: string }[];
@@ -175,16 +177,52 @@ export function SetupEntityPanel({
 
   const needsOrgLookups = fields.some((f) => f.optionsSource);
 
+  const closeRowMenu = useCallback(() => {
+    setMenuId(null);
+    setMenuPos(null);
+  }, []);
+
+  const openRowMenu = useCallback((rowId: string, anchor: HTMLElement) => {
+    if (menuId === rowId) {
+      closeRowMenu();
+      return;
+    }
+    const rect = anchor.getBoundingClientRect();
+    const menuWidth = 176;
+    const menuHeight = 220;
+    const gap = 4;
+    const spaceBelow = window.innerHeight - rect.bottom - gap;
+    const openUp = spaceBelow < menuHeight && rect.top > spaceBelow;
+    const top = openUp
+      ? Math.max(8, rect.top - menuHeight - gap)
+      : Math.min(window.innerHeight - menuHeight - 8, rect.bottom + gap);
+    const left = Math.min(
+      window.innerWidth - menuWidth - 8,
+      Math.max(8, rect.right - menuWidth),
+    );
+    setMenuId(rowId);
+    setMenuPos({ top, left });
+  }, [closeRowMenu, menuId]);
+
   useEffect(() => {
     if (!menuId) return;
     function onDocClick(e: MouseEvent) {
       const t = e.target as HTMLElement | null;
       if (t?.closest?.("[data-setup-row-menu]")) return;
-      setMenuId(null);
+      closeRowMenu();
+    }
+    function onScrollOrResize() {
+      closeRowMenu();
     }
     document.addEventListener("mousedown", onDocClick);
-    return () => document.removeEventListener("mousedown", onDocClick);
-  }, [menuId]);
+    window.addEventListener("scroll", onScrollOrResize, true);
+    window.addEventListener("resize", onScrollOrResize);
+    return () => {
+      document.removeEventListener("mousedown", onDocClick);
+      window.removeEventListener("scroll", onScrollOrResize, true);
+      window.removeEventListener("resize", onScrollOrResize);
+    };
+  }, [closeRowMenu, menuId]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -339,7 +377,7 @@ export function SetupEntityPanel({
     }
     setForm(initial);
     setActive(row);
-    setMenuId(null);
+    closeRowMenu();
     setMode(viewOnly ? "view" : "edit");
   }
 
@@ -661,55 +699,66 @@ export function SetupEntityPanel({
                             : cell(row, c.key, ...nameKeys)}
                       </td>
                     ))}
-                    <td className="relative px-3 py-2" data-setup-row-menu>
+                    <td className="px-3 py-2" data-setup-row-menu>
                       <Button
                         type="button"
                         size="icon-xs"
                         variant="ghost"
                         className="cursor-pointer"
+                        aria-haspopup="menu"
+                        aria-expanded={menuId === row.id}
                         onClick={(e) => {
                           e.stopPropagation();
-                          setMenuId(menuId === row.id ? null : row.id);
+                          openRowMenu(row.id, e.currentTarget);
                         }}
                       >
                         <MoreHorizontal className="size-4" />
                       </Button>
-                      {menuId === row.id ? (
-                        <div className="absolute right-2 bottom-9 z-30 w-44 rounded-lg border border-border bg-card py-1 shadow-lg">
-                          {(
-                            [
-                              { label: "View", icon: Eye, fn: () => openEdit(row, true) },
-                              { label: "Edit", icon: Pencil, fn: () => openEdit(row) },
-                              { label: "Duplicate", icon: Copy, fn: () => void duplicateRow(row) },
-                              { label: "History", icon: History, fn: () => openHistory(row) },
-                              {
-                                label: "Archive",
-                                icon: Archive,
-                                fn: () => setConfirm({ type: "archive", ids: [row.id] }),
-                              },
-                              {
-                                label: "Delete",
-                                icon: Trash2,
-                                fn: () => setConfirm({ type: "delete", ids: [row.id] }),
-                              },
-                            ] as const
-                          ).map((item) => (
-                            <button
-                              key={item.label}
-                              type="button"
-                              className="flex w-full cursor-pointer items-center gap-2 px-3 py-1.5 text-left text-xs transition-colors hover:bg-muted"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setMenuId(null);
-                                item.fn();
-                              }}
+                      {menuId === row.id && menuPos && typeof document !== "undefined"
+                        ? createPortal(
+                            <div
+                              data-setup-row-menu
+                              role="menu"
+                              className="fixed z-[80] w-44 rounded-lg border border-border bg-card py-1 shadow-lg"
+                              style={{ top: menuPos.top, left: menuPos.left }}
                             >
-                              <item.icon className="size-3.5 text-muted-foreground" />
-                              {item.label}
-                            </button>
-                          ))}
-                        </div>
-                      ) : null}
+                              {(
+                                [
+                                  { label: "View", icon: Eye, fn: () => openEdit(row, true) },
+                                  { label: "Edit", icon: Pencil, fn: () => openEdit(row) },
+                                  { label: "Duplicate", icon: Copy, fn: () => void duplicateRow(row) },
+                                  { label: "History", icon: History, fn: () => openHistory(row) },
+                                  {
+                                    label: "Archive",
+                                    icon: Archive,
+                                    fn: () => setConfirm({ type: "archive", ids: [row.id] }),
+                                  },
+                                  {
+                                    label: "Delete",
+                                    icon: Trash2,
+                                    fn: () => setConfirm({ type: "delete", ids: [row.id] }),
+                                  },
+                                ] as const
+                              ).map((item) => (
+                                <button
+                                  key={item.label}
+                                  type="button"
+                                  role="menuitem"
+                                  className="flex w-full cursor-pointer items-center gap-2 px-3 py-1.5 text-left text-xs transition-colors duration-200 hover:bg-muted"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    closeRowMenu();
+                                    item.fn();
+                                  }}
+                                >
+                                  <item.icon className="size-3.5 text-muted-foreground" />
+                                  {item.label}
+                                </button>
+                              ))}
+                            </div>,
+                            document.body,
+                          )
+                        : null}
                     </td>
                   </tr>
                 ))}
