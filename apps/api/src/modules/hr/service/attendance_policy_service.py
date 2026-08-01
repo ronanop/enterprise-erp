@@ -15,8 +15,11 @@ from modules.hr.repository.attendance_rule_repository import AttendanceRuleRepos
 from modules.hr.repository.holiday_calendar_repository import HolidayCalendarRepository
 from modules.hr.repository.weekly_off_policy_repository import WeeklyOffPolicyRepository
 from modules.hr.service.engines.calendar_rules import (
+    aggregate_biometric_punches,
     holiday_dates_from_json,
     is_weekly_off_day,
+    pick_arrival_window,
+    resolve_arrival_status,
     resolve_status_from_hours,
 )
 from modules.hr.service.hr_scope_validator import HrScopeValidator
@@ -135,6 +138,34 @@ class AttendanceRuleService:
         self._repo = AttendanceRuleRepository(db)
         self._scope = HrScopeValidator(db)
 
+    @staticmethod
+    def _normalize_time_field(value):
+        if value is None or value == "":
+            return None
+        if hasattr(value, "hour"):
+            return value
+        raw = str(value).strip()
+        if len(raw) == 5:
+            raw = f"{raw}:00"
+        from datetime import time as time_cls
+
+        parts = raw.split(":")
+        return time_cls(int(parts[0]), int(parts[1]) if len(parts) > 1 else 0, int(parts[2]) if len(parts) > 2 else 0)
+
+    @staticmethod
+    def _normalize_windows(value):
+        if value is None:
+            return None
+        if isinstance(value, list):
+            out = []
+            for row in value:
+                if hasattr(row, "model_dump"):
+                    out.append(row.model_dump())
+                elif isinstance(row, dict):
+                    out.append(row)
+            return out
+        return value
+
     def list(self, ctx: TenantContext, company_id: UUID | None = None):
         cid = self._scope.resolve_company_id(ctx, company_id)
         return self._repo.list_rows(ctx, cid)
@@ -158,10 +189,21 @@ class AttendanceRuleService:
         if "late_mark_after" in fields and "late_mark_after_minutes" not in fields:
             fields["late_mark_after_minutes"] = fields.pop("late_mark_after")
         fields.pop("late_mark_after", None)
+        if "arrival_window_start" in fields:
+            fields["arrival_window_start"] = self._normalize_time_field(fields["arrival_window_start"])
+        if "arrival_ok_until" in fields:
+            fields["arrival_ok_until"] = self._normalize_time_field(fields["arrival_ok_until"])
+        if "shift_windows_json" in fields:
+            fields["shift_windows_json"] = self._normalize_windows(fields["shift_windows_json"])
+        if "punch_mode" in fields and fields["punch_mode"]:
+            fields["punch_mode"] = str(fields["punch_mode"]).lower()
+        if "arrival_after_status" in fields and fields["arrival_after_status"]:
+            fields["arrival_after_status"] = str(fields["arrival_after_status"]).lower()
         fields.setdefault("status", "active")
         fields.setdefault("is_default", True)
         fields.setdefault("half_day_hours", Decimal("4.00"))
         fields.setdefault("full_day_hours", Decimal("8.00"))
+        fields.setdefault("punch_mode", "first_in_last_out")
         return self._repo.create(ctx, company_id=cid, **fields)
 
     def update(self, ctx: TenantContext, row_id: UUID, **fields):
@@ -173,6 +215,16 @@ class AttendanceRuleService:
         if "late_mark_after" in fields and fields["late_mark_after"] is not None:
             fields["late_mark_after_minutes"] = fields.pop("late_mark_after")
         fields.pop("late_mark_after", None)
+        if "arrival_window_start" in fields:
+            fields["arrival_window_start"] = self._normalize_time_field(fields["arrival_window_start"])
+        if "arrival_ok_until" in fields:
+            fields["arrival_ok_until"] = self._normalize_time_field(fields["arrival_ok_until"])
+        if "shift_windows_json" in fields:
+            fields["shift_windows_json"] = self._normalize_windows(fields["shift_windows_json"])
+        if "punch_mode" in fields and fields["punch_mode"]:
+            fields["punch_mode"] = str(fields["punch_mode"]).lower()
+        if "arrival_after_status" in fields and fields["arrival_after_status"]:
+            fields["arrival_after_status"] = str(fields["arrival_after_status"]).lower()
         row = self._repo.update(ctx, row_id, **fields)
         if row is None:
             raise NotFoundException("Attendance rule not found")
@@ -181,6 +233,43 @@ class AttendanceRuleService:
     def delete(self, ctx: TenantContext, row_id: UUID) -> None:
         if not self._repo.soft_delete(ctx, row_id):
             raise NotFoundException("Attendance rule not found")
+
+    def resolve_checkin_status(
+        self,
+        ctx: TenantContext,
+        company_id: UUID,
+        *,
+        check_in_at,
+        shift_start=None,
+        shift_grace_minutes: int = 0,
+        shift_id: str | None = None,
+        shift_code: str | None = None,
+    ) -> tuple[str, int]:
+        rule = self._repo.get_default(ctx, company_id)
+        if rule is None:
+            return resolve_arrival_status(
+                check_in_at=check_in_at,
+                shift_start=shift_start,
+                grace_minutes=shift_grace_minutes,
+                window=None,
+            )
+        window = pick_arrival_window(
+            arrival_policy_enabled=bool(rule.arrival_policy_enabled),
+            applies_to_all_shifts=bool(rule.applies_to_all_shifts),
+            window_start=rule.arrival_window_start,
+            ok_until=rule.arrival_ok_until,
+            after_status=rule.arrival_after_status,
+            shift_windows_json=rule.shift_windows_json,
+            shift_id=shift_id,
+            shift_code=shift_code,
+        )
+        return resolve_arrival_status(
+            check_in_at=check_in_at,
+            shift_start=shift_start,
+            grace_minutes=shift_grace_minutes,
+            late_mark_after_minutes=int(rule.late_mark_after_minutes or 15),
+            window=window,
+        )
 
     def resolve_checkout_status(
         self,
@@ -208,4 +297,22 @@ class AttendanceRuleService:
             current_status=current_status,
             early_leave_minutes=early_leave_minutes,
             early_leave_half_day_minutes=int(rule.early_leave_half_day_minutes or 120),
+        )
+
+    def aggregate_punches(
+        self,
+        ctx: TenantContext,
+        company_id: UUID,
+        *,
+        events: list,
+        check_in_at=None,
+        check_out_at=None,
+    ) -> dict:
+        rule = self._repo.get_default(ctx, company_id)
+        mode = getattr(rule, "punch_mode", None) if rule else "first_in_last_out"
+        return aggregate_biometric_punches(
+            events or [],
+            punch_mode=str(mode or "first_in_last_out"),
+            check_in_at=check_in_at,
+            check_out_at=check_out_at,
         )

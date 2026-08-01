@@ -10,12 +10,13 @@ import {
   SetupTextarea,
   SetupTimeInput,
   toApiTimeValue,
+  toTimeInputValue,
 } from "@/components/hr/setup/setup-drawer";
 import { toast } from "@/components/hr/setup/setup-toast";
 import { Button } from "@/components/ui/button";
-import { createShift, peekNextShiftCode } from "@/services/shift-roster-service";
+import { createShift, peekNextShiftCode, updateShift } from "@/services/shift-roster-service";
 import type { ShiftRosterDirectory } from "@/services/shift-roster-service";
-import type { ShiftTypeCode } from "@/types/shift-roster-management";
+import type { ShiftRecord, ShiftTypeCode } from "@/types/shift-roster-management";
 import { DEFAULT_SHIFT_EXTENSION, SHIFT_TYPE_LABELS } from "@/types/shift-roster-management";
 
 export function CreateShiftDrawer({
@@ -23,17 +24,16 @@ export function CreateShiftDrawer({
   onClose,
   onSaved,
   directory,
+  initial = null,
 }: {
   open: boolean;
   onClose: () => void;
   onSaved: () => void;
   directory: ShiftRosterDirectory | null;
+  initial?: ShiftRecord | null;
 }) {
+  const isEdit = Boolean(initial);
   const [shiftCode, setShiftCode] = useState("");
-
-  useEffect(() => {
-    if (open) setShiftCode(peekNextShiftCode());
-  }, [open]);
   const [shiftName, setShiftName] = useState("");
   const [shiftType, setShiftType] = useState<ShiftTypeCode>("general");
   const [startTime, setStartTime] = useState("09:00");
@@ -53,7 +53,58 @@ export function CreateShiftDrawer({
   const [color, setColor] = useState("#059669");
   const [weeklyOff, setWeeklyOff] = useState("sunday");
   const [description, setDescription] = useState("");
+  const [status, setStatus] = useState("active");
   const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (!open) return;
+    if (initial) {
+      const ext = { ...DEFAULT_SHIFT_EXTENSION, ...initial.extension };
+      setShiftCode(initial.shiftCode);
+      setShiftName(initial.shiftName);
+      setShiftType(initial.shiftType);
+      setStartTime(toTimeInputValue(initial.startTime) || "09:00");
+      setEndTime(toTimeInputValue(initial.endTime) || "18:00");
+      setBreakStart(toTimeInputValue(ext.breakStart) || "");
+      setBreakEnd(toTimeInputValue(ext.breakEnd) || "");
+      setGraceIn(String(initial.graceMinutes ?? 0));
+      setGraceOut(String(ext.graceOutMinutes ?? 0));
+      setBreakMin(String(initial.breakMinutes ?? 0));
+      setMinH(String(ext.minWorkingHours ?? 8));
+      setMaxH(String(ext.maxWorkingHours ?? 12));
+      setLateAfter(String(ext.lateAfterMinutes ?? 15));
+      setEarlyExit(String(ext.earlyExitBeforeMinutes ?? 15));
+      setOvernight(Boolean(initial.isOvernight));
+      setOtAllowed(ext.overtimeAllowed !== false);
+      setAutoAtt(Boolean(ext.autoAttendance));
+      setColor(ext.color || "#059669");
+      setWeeklyOff(ext.weeklyOffRule || "sunday");
+      setDescription(ext.description || "");
+      setStatus(initial.status || "active");
+      return;
+    }
+    setShiftCode(peekNextShiftCode());
+    setShiftName("");
+    setShiftType("general");
+    setStartTime("09:00");
+    setEndTime("18:00");
+    setBreakStart("13:00");
+    setBreakEnd("13:30");
+    setGraceIn("15");
+    setGraceOut("10");
+    setBreakMin("30");
+    setMinH("8");
+    setMaxH("12");
+    setLateAfter("15");
+    setEarlyExit("15");
+    setOvernight(false);
+    setOtAllowed(true);
+    setAutoAtt(false);
+    setColor("#059669");
+    setWeeklyOff("sunday");
+    setDescription("");
+    setStatus("active");
+  }, [open, initial]);
 
   async function submit() {
     if (!shiftName.trim()) {
@@ -62,37 +113,46 @@ export function CreateShiftDrawer({
     }
     setSaving(true);
     try {
-      await createShift({
-        shiftCode,
-        shiftName,
+      const extension = {
+        ...DEFAULT_SHIFT_EXTENSION,
+        description,
+        breakStart,
+        breakEnd,
+        graceOutMinutes: Number(graceOut) || 0,
+        minWorkingHours: Number(minH) || 8,
+        maxWorkingHours: Number(maxH) || 12,
+        lateAfterMinutes: Number(lateAfter) || 15,
+        earlyExitBeforeMinutes: Number(earlyExit) || 15,
+        overtimeAllowed: otAllowed,
+        autoAttendance: autoAtt,
+        color,
+        weeklyOffRule: weeklyOff as typeof DEFAULT_SHIFT_EXTENSION.weeklyOffRule,
+      };
+      const body = {
+        shiftName: shiftName.trim(),
         shiftType,
         startTime,
         endTime,
         graceMinutes: Number(graceIn) || 0,
         breakMinutes: Number(breakMin) || 0,
         isOvernight: overnight || shiftType === "night",
-        branchId: directory?.options.branches[0]?.id,
-        extension: {
-          ...DEFAULT_SHIFT_EXTENSION,
-          description,
-          breakStart,
-          breakEnd,
-          graceOutMinutes: Number(graceOut) || 0,
-          minWorkingHours: Number(minH) || 8,
-          maxWorkingHours: Number(maxH) || 12,
-          lateAfterMinutes: Number(lateAfter) || 15,
-          earlyExitBeforeMinutes: Number(earlyExit) || 15,
-          overtimeAllowed: otAllowed,
-          autoAttendance: autoAtt,
-          color,
-          weeklyOffRule: weeklyOff as typeof DEFAULT_SHIFT_EXTENSION.weeklyOffRule,
-        },
-      });
-      toast("Shift created", "success");
+        extension,
+      };
+      if (initial) {
+        await updateShift(initial, { ...body, status });
+        toast("Shift updated", "success");
+      } else {
+        await createShift({
+          ...body,
+          shiftCode,
+          branchId: directory?.options.branches[0]?.id,
+        });
+        toast("Shift created", "success");
+      }
       onSaved();
       onClose();
     } catch {
-      toast("Create failed", "error");
+      toast(isEdit ? "Update failed" : "Create failed", "error");
     } finally {
       setSaving(false);
     }
@@ -101,22 +161,42 @@ export function CreateShiftDrawer({
   return (
     <SetupDrawer
       open={open}
-      title="Create shift"
-      description="Shift master — timing, grace, OT, color, weekly off rule."
+      title={isEdit ? "Edit shift" : "Create shift"}
+      description={
+        isEdit
+          ? "Update shift master timing, grace, OT, color, and status."
+          : "Shift master — timing, grace, OT, color, weekly off rule."
+      }
       wide
       onClose={onClose}
       footer={
         <>
-          <Button variant="outline" size="sm" className="cursor-pointer" onClick={onClose}>Cancel</Button>
-          <Button size="sm" className="cursor-pointer" disabled={saving} onClick={() => void submit()}>
-            {saving ? "Saving…" : "Save shift"}
+          <Button
+            variant="outline"
+            size="sm"
+            className="cursor-pointer transition-colors duration-200"
+            onClick={onClose}
+          >
+            Cancel
+          </Button>
+          <Button
+            size="sm"
+            className="cursor-pointer transition-colors duration-200"
+            disabled={saving}
+            onClick={() => void submit()}
+          >
+            {saving ? "Saving…" : isEdit ? "Save changes" : "Save shift"}
           </Button>
         </>
       }
     >
       <div className="grid gap-3 sm:grid-cols-2">
-        <SetupField label="Shift code" hint="Auto-generated">
-          <SetupInput value={shiftCode} onChange={(e) => setShiftCode(e.target.value)} />
+        <SetupField label="Shift code" hint={isEdit ? "Code cannot be changed" : "Auto-generated"}>
+          <SetupInput
+            value={shiftCode}
+            onChange={(e) => setShiftCode(e.target.value)}
+            disabled={isEdit}
+          />
         </SetupField>
         <SetupField label="Shift name" required>
           <SetupInput value={shiftName} onChange={(e) => setShiftName(e.target.value)} />
@@ -124,12 +204,19 @@ export function CreateShiftDrawer({
         <SetupField label="Shift type">
           <SetupSelect value={shiftType} onChange={(e) => setShiftType(e.target.value as ShiftTypeCode)}>
             {Object.entries(SHIFT_TYPE_LABELS).map(([k, v]) => (
-              <option key={k} value={k}>{v}</option>
+              <option key={k} value={k}>
+                {v}
+              </option>
             ))}
           </SetupSelect>
         </SetupField>
         <SetupField label="Color">
-          <input type="color" value={color} className="h-8 w-full cursor-pointer" onChange={(e) => setColor(e.target.value)} />
+          <input
+            type="color"
+            value={color}
+            className="h-8 w-full cursor-pointer"
+            onChange={(e) => setColor(e.target.value)}
+          />
         </SetupField>
         <SetupField label="Start time" required>
           <SetupTimeInput value={startTime} onChange={setStartTime} />
@@ -173,6 +260,14 @@ export function CreateShiftDrawer({
             <option value="custom">Custom</option>
           </SetupSelect>
         </SetupField>
+        {isEdit ? (
+          <SetupField label="Status">
+            <SetupSelect value={status} onChange={(e) => setStatus(e.target.value)}>
+              <option value="active">Active</option>
+              <option value="inactive">Inactive</option>
+            </SetupSelect>
+          </SetupField>
+        ) : null}
         <div className="flex flex-col gap-2 text-xs sm:col-span-2">
           <label className="flex cursor-pointer items-center gap-2">
             <input type="checkbox" checked={overnight} onChange={(e) => setOvernight(e.target.checked)} />
@@ -188,7 +283,11 @@ export function CreateShiftDrawer({
           </label>
         </div>
         <SetupField label="Description" hint={`API times ${toApiTimeValue(startTime)} – ${toApiTimeValue(endTime)}`}>
-          <SetupTextarea value={description} onChange={(e) => setDescription(e.target.value)} className="sm:col-span-2" />
+          <SetupTextarea
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            className="sm:col-span-2"
+          />
         </SetupField>
       </div>
     </SetupDrawer>

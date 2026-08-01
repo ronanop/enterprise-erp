@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   CalendarDays,
   Download,
+  Pencil,
   Plus,
   RefreshCw,
   Repeat,
@@ -13,6 +14,10 @@ import {
 
 import { AssignShiftDrawer, CreateRotationDrawer } from "@/components/hr/shift-roster/assign-rotation-drawers";
 import { CreateShiftDrawer } from "@/components/hr/shift-roster/create-shift-drawer";
+import {
+  DownloadManagerRosterDrawer,
+  UploadManagerRosterDrawer,
+} from "@/components/hr/shift-roster/manager-roster-drawers";
 import { RosterCalendarView } from "@/components/hr/shift-roster/roster-calendar-view";
 import {
   HrAuthBanner,
@@ -42,7 +47,7 @@ import {
   submitShiftSwap,
   type ShiftRosterDirectory,
 } from "@/services/shift-roster-service";
-import type { ShiftFilters } from "@/types/shift-roster-management";
+import type { ShiftFilters, ShiftRecord } from "@/types/shift-roster-management";
 import { emptyShiftFilters, SHIFT_TYPE_LABELS } from "@/types/shift-roster-management";
 
 const PAGE = 10;
@@ -58,9 +63,11 @@ export function ShiftRosterManagementPage() {
   const [page, setPage] = useState(1);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [createShiftOpen, setCreateShiftOpen] = useState(false);
+  const [editingShift, setEditingShift] = useState<ShiftRecord | null>(null);
   const [assignOpen, setAssignOpen] = useState(false);
   const [rotationOpen, setRotationOpen] = useState(false);
-  const [importOpen, setImportOpen] = useState(false);
+  const [downloadManagerOpen, setDownloadManagerOpen] = useState(false);
+  const [uploadManagerOpen, setUploadManagerOpen] = useState(false);
   const [swapOpen, setSwapOpen] = useState(false);
 
   const load = useCallback(async () => {
@@ -91,6 +98,14 @@ export function ShiftRosterManagementPage() {
   const shiftPage = shiftsFiltered.slice((page - 1) * PAGE, page * PAGE);
   const assignPage = assignFiltered.slice((page - 1) * PAGE, page * PAGE);
 
+  const empManagerById = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const e of dir?.options.employees ?? []) {
+      map.set(e.id, e.managerName || e.managerCode || "—");
+    }
+    return map;
+  }, [dir]);
+
   const audit = useMemo(() => listShiftAudit(), [dir, tab]);
   const utilization = useMemo(() => (dir ? shiftUtilizationReport(dir) : []), [dir]);
 
@@ -104,7 +119,7 @@ export function ShiftRosterManagementPage() {
         description="Manage shifts, rotations, weekly offs, and employee assignments."
         actions={
           <HrToolbar onRefresh={() => void load()} loading={loading}>
-            <Button size="sm" className="cursor-pointer" onClick={() => setCreateShiftOpen(true)}>
+            <Button size="sm" className="cursor-pointer" onClick={() => { setEditingShift(null); setCreateShiftOpen(true); }}>
               <Plus className="size-3.5" />
               Create shift
             </Button>
@@ -127,9 +142,13 @@ export function ShiftRosterManagementPage() {
               <CalendarDays className="size-3.5" />
               Roster calendar
             </Button>
-            <Button size="sm" variant="outline" className="cursor-pointer" onClick={() => setImportOpen(true)}>
+            <Button size="sm" variant="outline" className="cursor-pointer" onClick={() => setDownloadManagerOpen(true)}>
+              <Download className="size-3.5" />
+              Manager roster
+            </Button>
+            <Button size="sm" variant="outline" className="cursor-pointer" onClick={() => setUploadManagerOpen(true)}>
               <Upload className="size-3.5" />
-              Import
+              Upload roster
             </Button>
             <Button
               size="sm"
@@ -237,7 +256,7 @@ export function ShiftRosterManagementPage() {
       {tab === "shifts" ? (
         !shiftPage.length ? (
           <HrEmptyState title="No shifts" description="Create shift master records with SHIFT-001 codes." action={
-            <Button size="sm" className="cursor-pointer" onClick={() => setCreateShiftOpen(true)}>Create shift</Button>
+            <Button size="sm" className="cursor-pointer" onClick={() => { setEditingShift(null); setCreateShiftOpen(true); }}>Create shift</Button>
           } />
         ) : (
           <div className="overflow-hidden rounded-xl border border-border/70 bg-card shadow-sm">
@@ -252,6 +271,7 @@ export function ShiftRosterManagementPage() {
                     <th className="px-2 py-2">Grace</th>
                     <th className="px-2 py-2">Night</th>
                     <th className="px-2 py-2">Status</th>
+                    <th className="px-2 py-2 text-right">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -269,6 +289,21 @@ export function ShiftRosterManagementPage() {
                       <td className="px-2 py-2 text-xs">{s.graceMinutes}m</td>
                       <td className="px-2 py-2 text-xs">{s.isOvernight ? "Yes" : "—"}</td>
                       <td className="px-2 py-2"><HrStatusBadge status={s.status} /></td>
+                      <td className="px-2 py-2 text-right">
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          className="h-7 cursor-pointer transition-colors duration-200"
+                          onClick={() => {
+                            setEditingShift(s);
+                            setCreateShiftOpen(true);
+                          }}
+                        >
+                          <Pencil className="size-3.5" />
+                          Edit
+                        </Button>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -281,6 +316,26 @@ export function ShiftRosterManagementPage() {
 
       {tab === "assignments" ? (
         <>
+          <div className="flex flex-wrap gap-2">
+            <Button
+              size="sm"
+              variant="outline"
+              className="cursor-pointer transition-colors duration-200"
+              onClick={() => setDownloadManagerOpen(true)}
+            >
+              <Download className="size-3.5" />
+              Download manager roster
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              className="cursor-pointer transition-colors duration-200"
+              onClick={() => setUploadManagerOpen(true)}
+            >
+              <Upload className="size-3.5" />
+              Upload manager roster
+            </Button>
+          </div>
           {selected.size > 0 ? (
             <div className="flex gap-2 rounded-lg border border-primary/20 bg-primary/5 px-3 py-2 text-xs">
               <span>{selected.size} selected</span>
@@ -295,11 +350,12 @@ export function ShiftRosterManagementPage() {
             } />
           ) : (
             <div className="overflow-hidden rounded-xl border border-border/70 bg-card shadow-sm">
-              <table className="w-full min-w-[960px] text-sm">
+              <table className="w-full min-w-[1080px] text-sm">
                 <thead className="sticky top-0 border-b bg-muted/90">
                   <tr className="text-[10px] uppercase text-muted-foreground">
                     <th className="w-8 px-2 py-2" />
                     <th className="px-2 py-2 text-left">Employee</th>
+                    <th className="px-2 py-2">Manager</th>
                     <th className="px-2 py-2">Department</th>
                     <th className="px-2 py-2">Shift</th>
                     <th className="px-2 py-2">From</th>
@@ -321,6 +377,9 @@ export function ShiftRosterManagementPage() {
                         }} />
                       </td>
                       <td className="px-2 py-2 text-xs font-medium">{a.employeeName}</td>
+                      <td className="px-2 py-2 text-xs text-muted-foreground">
+                        {empManagerById.get(a.employeeId) || "—"}
+                      </td>
                       <td className="px-2 py-2 text-xs">{a.departmentName}</td>
                       <td className="px-2 py-2 text-xs">
                         <span className="inline-flex items-center gap-1">
@@ -461,14 +520,33 @@ export function ShiftRosterManagementPage() {
         </div>
       ) : null}
 
-      <CreateShiftDrawer open={createShiftOpen} directory={dir} onClose={() => setCreateShiftOpen(false)} onSaved={() => void load()} />
+      <CreateShiftDrawer
+        open={createShiftOpen}
+        directory={dir}
+        initial={editingShift}
+        onClose={() => {
+          setCreateShiftOpen(false);
+          setEditingShift(null);
+        }}
+        onSaved={() => void load()}
+      />
       <AssignShiftDrawer open={assignOpen} directory={dir} onClose={() => setAssignOpen(false)} onSaved={() => void load()} />
       <CreateRotationDrawer open={rotationOpen} directory={dir} onClose={() => setRotationOpen(false)} onSaved={() => void load()} />
 
-      <SetupDrawer open={importOpen} title="Import roster" description="Shift assignment or roster Excel/CSV" onClose={() => setImportOpen(false)}>
-        <SetupField label="Upload file"><input type="file" accept=".csv,.xlsx" className="text-xs" /></SetupField>
-        <Button size="sm" variant="outline" className="cursor-pointer mt-2" onClick={() => toast("Import validation runs on employee+date duplicates", "info")}>Validate import</Button>
-      </SetupDrawer>
+      <DownloadManagerRosterDrawer
+        open={downloadManagerOpen}
+        directory={dir}
+        onClose={() => setDownloadManagerOpen(false)}
+      />
+      <UploadManagerRosterDrawer
+        open={uploadManagerOpen}
+        directory={dir}
+        onClose={() => setUploadManagerOpen(false)}
+        onApplied={() => {
+          void load();
+          setTab("calendar");
+        }}
+      />
 
       <SwapRequestDrawer open={swapOpen} directory={dir} onClose={() => { setSwapOpen(false); void load(); }} />
 

@@ -1037,6 +1037,14 @@ class WeeklyOffRulesUpsert(BaseModel):
     custom_weekdays_json: list[int] | None = None
 
 
+class ShiftArrivalWindow(BaseModel):
+    shift_id: UUID | str | None = None
+    shift_code: str | None = None
+    window_start: str | None = None  # HH:MM
+    ok_until: str | None = None
+    after_status: str = "half_day"  # half_day | absent | late
+
+
 class AttendanceRuleCreate(BaseModel):
     company_id: UUID | None = None
     branch_id: UUID | None = None
@@ -1057,6 +1065,13 @@ class AttendanceRuleCreate(BaseModel):
     compoff_half_day_hours: Decimal = Decimal("4.00")
     compoff_full_day_hours: Decimal = Decimal("8.00")
     compoff_auto_credit: bool = True
+    punch_mode: str = "first_in_last_out"
+    arrival_policy_enabled: bool = False
+    applies_to_all_shifts: bool = True
+    arrival_window_start: str | None = None
+    arrival_ok_until: str | None = None
+    arrival_after_status: str = "half_day"
+    shift_windows_json: list[ShiftArrivalWindow] | list[dict] | None = None
     is_default: bool = True
     status: str = "active"
 
@@ -1076,6 +1091,13 @@ class AttendanceRuleUpdate(BaseModel):
     compoff_half_day_hours: Decimal | None = None
     compoff_full_day_hours: Decimal | None = None
     compoff_auto_credit: bool | None = None
+    punch_mode: str | None = None
+    arrival_policy_enabled: bool | None = None
+    applies_to_all_shifts: bool | None = None
+    arrival_window_start: str | None = None
+    arrival_ok_until: str | None = None
+    arrival_after_status: str | None = None
+    shift_windows_json: list[ShiftArrivalWindow] | list[dict] | None = None
     is_default: bool | None = None
     status: str | None = None
     version: int | None = None
@@ -1098,6 +1120,13 @@ class AttendanceRuleResponse(OrmModel):
     compoff_half_day_hours: Decimal = Decimal("4.00")
     compoff_full_day_hours: Decimal = Decimal("8.00")
     compoff_auto_credit: bool = True
+    punch_mode: str = "first_in_last_out"
+    arrival_policy_enabled: bool = False
+    applies_to_all_shifts: bool = True
+    arrival_window_start: time | None = None
+    arrival_ok_until: time | None = None
+    arrival_after_status: str = "half_day"
+    shift_windows_json: list | dict | None = None
     is_default: bool
     status: str
     version: int
@@ -1187,6 +1216,9 @@ class BiometricDeviceCreate(BaseModel):
     branch_id: UUID
     device_code: str
     device_name: str
+    device_model: str = "fingerprint_k40_timelabs"
+    ip_address: str | None = None
+    port: int | None = None
     location_text: str | None = None
     status: str = "active"
     generate_api_key: bool = True
@@ -1198,6 +1230,9 @@ class BiometricDeviceResponse(OrmModel):
     branch_id: UUID
     device_code: str
     device_name: str
+    device_model: str
+    ip_address: str | None = None
+    port: int | None = None
     location_text: str | None = None
     status: str
     version: int
@@ -1211,8 +1246,12 @@ class BiometricPunchIn(BaseModel):
     branch_id: UUID | None = None
     check_in_at: datetime | None = None
     check_out_at: datetime | None = None
+    # Raw punch stream — aggregated by attendance-rule punch_mode
+    punch_events: list[datetime] | None = None
     attendance_status: str | None = None
     notes: str | None = None
+    shift_id: UUID | None = None
+    shift_code: str | None = None
 
 
 class DeviceSyncRequest(BaseModel):

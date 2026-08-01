@@ -127,8 +127,8 @@ export const hrSetupSections: HrSetupSection[] = [
       },
       {
         id: "rooms",
-        title: "Rooms",
-        description: "Meeting and training rooms with capacity & features",
+        title: "Meeting Room",
+        description: "Meeting rooms, conference halls, and training rooms with capacity & features",
         source: "api",
         apiPath: "/hr/training-rooms",
         codePrefix: "ROOM",
@@ -194,8 +194,8 @@ export const hrSetupSections: HrSetupSection[] = [
       },
       {
         id: "attendance-rules",
-        title: "Attendance Rules",
-        description: "Half-day hours, grace, geofence, miss-punch window",
+        title: "Attendance Policy",
+        description: "Arrival windows, half-day rules, biometric punch mode",
         source: "api",
         apiPath: "/hr/attendance-rules",
         codePrefix: "AR",

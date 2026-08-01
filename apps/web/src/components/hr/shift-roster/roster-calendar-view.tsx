@@ -48,25 +48,99 @@ export function RosterCalendarView({
   }, [anchor, mode]);
 
   function cellShift(date: string, employeeId: string) {
+    const holiday = directory.holidays.some((h) => h.date === date);
     const override = directory.rosterCells.find((c) => c.date === date && c.employeeId === employeeId);
     if (override) return override;
+
+    const dow = new Date(`${date}T12:00:00`).getDay();
+    const sundayOff = dow === 0 && directory.weeklyOffRules.includes("sunday");
+    if (holiday) {
+      return {
+        date,
+        employeeId,
+        shiftId: "",
+        shiftName: "Holiday",
+        color: "#f59e0b",
+        isWeeklyOff: false,
+        isHoliday: true,
+      };
+    }
+    if (sundayOff) {
+      return {
+        date,
+        employeeId,
+        shiftId: "",
+        shiftName: "WO",
+        color: "#94a3b8",
+        isWeeklyOff: true,
+        isHoliday: false,
+      };
+    }
+
     const assign = directory.assignments.find(
       (a) =>
         a.employeeId === employeeId &&
         a.effectiveFrom <= date &&
-        (!a.effectiveTo || a.effectiveTo >= date),
+        (!a.effectiveTo || a.effectiveTo >= date) &&
+        a.status !== "inactive",
     );
-    if (!assign) return null;
-    const sh = directory.shifts.find((s) => s.id === assign.shiftId);
-    return {
-      date,
-      employeeId,
-      shiftId: assign.shiftId,
-      shiftName: sh?.shiftName ?? "—",
-      color: sh?.extension.color ?? "#64748b",
-      isWeeklyOff: false,
-      isHoliday: directory.holidays.some((h) => h.date === date),
-    };
+    if (assign) {
+      const sh = directory.shifts.find((s) => s.id === assign.shiftId);
+      return {
+        date,
+        employeeId,
+        shiftId: assign.shiftId,
+        shiftName: sh ? `${sh.shiftCode}` : assign.shiftName || "—",
+        color: sh?.extension.color ?? "#64748b",
+        isWeeklyOff: false,
+        isHoliday: false,
+      };
+    }
+
+    const rot = directory.rotations.find(
+      (r) =>
+        r.status === "active" &&
+        r.employeeIds.includes(employeeId) &&
+        r.effectiveFrom &&
+        r.effectiveFrom <= date &&
+        r.sequence.length > 0,
+    );
+    if (rot) {
+      const start = new Date(`${rot.effectiveFrom}T12:00:00`);
+      const cur = new Date(`${date}T12:00:00`);
+      const dayDiff = Math.floor((cur.getTime() - start.getTime()) / 86_400_000);
+      if (dayDiff >= 0) {
+        const token = String(rot.sequence[dayDiff % rot.sequence.length] ?? "").trim();
+        if (/^(off|wo|weekly.?off)$/i.test(token)) {
+          return {
+            date,
+            employeeId,
+            shiftId: "",
+            shiftName: "WO",
+            color: "#94a3b8",
+            isWeeklyOff: true,
+            isHoliday: false,
+          };
+        }
+        const sh = directory.shifts.find(
+          (s) =>
+            s.shiftCode.toLowerCase() === token.toLowerCase() ||
+            s.shiftName.toLowerCase() === token.toLowerCase() ||
+            s.shiftType.toLowerCase() === token.toLowerCase(),
+        );
+        return {
+          date,
+          employeeId,
+          shiftId: sh?.id ?? "",
+          shiftName: (sh?.shiftCode ?? token) || "—",
+          color: sh?.extension.color ?? "#64748b",
+          isWeeklyOff: false,
+          isHoliday: false,
+        };
+      }
+    }
+
+    return null;
   }
 
   function onDrop(date: string, employeeId: string) {

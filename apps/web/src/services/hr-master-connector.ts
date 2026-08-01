@@ -157,6 +157,8 @@ export function registerLocalEmployee(
       bank: emptyBank(),
       salary: emptySalary(),
       documents: [],
+      education: [],
+      previousEmployment: [],
       createdBy: "Onboarding",
       updatedBy: "Onboarding",
       updatedAt: new Date().toISOString(),

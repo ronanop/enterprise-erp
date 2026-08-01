@@ -50,13 +50,11 @@ import type {
 import { DASHBOARD_ROLE_LABELS } from "@/types/hr-executive-dashboard";
 
 const QUICK_ACTIONS = [
-  { label: "Hire via onboarding", href: "/hr/onboarding", icon: UserPlus },
   { label: "Create Job", href: "/hr/recruitment", icon: Briefcase },
-  { label: "Run Payroll", href: "/hr/payroll", icon: Wallet },
-  { label: "Mark Attendance", href: "/hr/time", icon: ClipboardCheck },
-  { label: "Apply Leave", href: "/hr/leave", icon: CalendarDays },
+  { label: "Onboarding", href: "/hr/onboarding", icon: UserPlus },
   { label: "Assign Shift", href: "/hr/roster", icon: Clock },
-  { label: "Start Onboarding", href: "/hr/onboarding", icon: Users },
+  { label: "Apply Leave", href: "/hr/leave", icon: CalendarDays },
+  { label: "Run Payroll", href: "/hr/payroll", icon: Wallet },
   { label: "Generate Report", href: "/hr/reports", icon: FileText },
 ] as const;
 
@@ -274,22 +272,19 @@ export function HrExecutiveDashboardPage() {
       {/* Quick actions */}
       <section>
         <h2 className="mb-2 text-sm font-semibold tracking-tight">Quick Actions</h2>
-        <div className="grid gap-2 grid-cols-2 sm:grid-cols-4 xl:grid-cols-8">
+        <div className="grid gap-2 grid-cols-2 sm:grid-cols-3 xl:grid-cols-6">
           {QUICK_ACTIONS.filter((a) => {
             if (role === "employee") {
-              return ["Apply Leave", "Mark Attendance", "Generate Report"].includes(a.label);
+              return ["Apply Leave", "Generate Report"].includes(a.label);
             }
             if (role === "recruiter") {
-              return ["Create Job", "Start Onboarding", "Generate Report"].includes(a.label);
+              return ["Create Job", "Onboarding", "Generate Report"].includes(a.label);
             }
             if (role === "finance") {
               return ["Run Payroll", "Generate Report"].includes(a.label);
             }
             if (role === "manager") {
-              return ![
-                "Run Payroll",
-                "Create Job",
-              ].includes(a.label);
+              return !["Run Payroll", "Create Job"].includes(a.label);
             }
             return true;
           }).map((a) => {

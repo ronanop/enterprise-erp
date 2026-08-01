@@ -27,7 +27,35 @@ import type {
   PortalPayload,
   PortalStepId,
 } from "@/types/onboarding-management";
-import { POLICY_DOCS, PORTAL_STEPS } from "@/types/onboarding-management";
+import { POLICY_DOCS, PORTAL_STEPS, emptyEducationMarks } from "@/types/onboarding-management";
+import type { PortalDocumentSection } from "@/services/hr-setup-service";
+
+const DOC_SECTION_META: {
+  id: PortalDocumentSection;
+  title: string;
+  hint: string;
+}[] = [
+  {
+    id: "identity",
+    title: "Identity & bank",
+    hint: "Photo and government / bank proofs",
+  },
+  {
+    id: "education",
+    title: "Education",
+    hint: "Enter marks (10th & 12th required) and upload certificates",
+  },
+  {
+    id: "previous_employment",
+    title: "Previous employment",
+    hint: "Upload up to 3 previous appointment and relieving letters",
+  },
+  {
+    id: "other",
+    title: "Other documents",
+    hint: "Optional supporting documents",
+  },
+];
 
 const AADHAAR_LEN = 16;
 const PAN_RE = /^[A-Z]{5}[0-9]{4}[A-Z]$/;
@@ -93,7 +121,10 @@ export function CandidateOnboardingPortal({ token }: { token: string }) {
       setDone(true);
     }
     setCaseRow(c);
-    setPortal(c.portal);
+    setPortal({
+      ...c.portal,
+      educationMarks: c.portal.educationMarks ?? emptyEducationMarks(),
+    });
   }, [token]);
 
   useEffect(() => {
@@ -149,14 +180,27 @@ export function CandidateOnboardingPortal({ token }: { token: string }) {
         return null;
       }
       case "documents": {
-        const missing = docTypes
-          .filter((t) => t.mandatory)
-          .filter(
-            (t) =>
-              !portal.documents.some(
-                (d) => d.typeCode === t.code || (!d.typeCode && d.kind === t.kind),
-              ),
-          );
+        const marks = portal.educationMarks ?? emptyEducationMarks();
+        if (!marks.tenth.trim()) return "Please enter 10th marks (required).";
+        if (!marks.twelfth.trim()) return "Please enter 12th marks (required).";
+        const excludedFromMandatory = new Set([
+          "DOC-CHEQUE",
+          "DOC-GRAD",
+          "DOC-SLIPS",
+          "doc-type-cheque",
+          "doc-type-grad",
+          "cancelled_cheque",
+          "salary_slips",
+        ]);
+        const missing = docTypes.filter(
+          (t) =>
+            t.mandatory &&
+            !excludedFromMandatory.has(t.code) &&
+            !excludedFromMandatory.has(t.kind) &&
+            !portal.documents.some(
+              (d) => d.typeCode === t.code || (!d.typeCode && d.kind === t.kind),
+            ),
+        );
         if (missing.length) {
           return `Please upload: ${missing.map((m) => m.name).join(", ")}.`;
         }
@@ -704,28 +748,164 @@ export function CandidateOnboardingPortal({ token }: { token: string }) {
         ) : null}
 
         {step.id === "documents" ? (
-          <div className="space-y-3">
+          <div className="space-y-5">
             {docTypes.length === 0 ? (
               <p className="rounded-md border border-dashed border-border/70 px-3 py-4 text-xs text-muted-foreground">
                 No active document types configured. Ask HR to add types under Setup → Document
                 Types.
               </p>
             ) : (
-              docTypes.map((t) => (
-                <FilePickField
-                  key={t.id}
-                  label={t.name}
-                  required={t.mandatory}
-                  accept={t.accept}
-                  fileName={latestDoc(t.code, t.kind)?.fileName}
-                  hint={
-                    t.maxSizeMb
-                      ? `Upload from this device · max ${t.maxSizeMb} MB · ${t.code}`
-                      : `Upload from this device · ${t.code}`
-                  }
-                  onFile={(file) => onPickFile(t, file)}
-                />
-              ))
+              DOC_SECTION_META.map((section) => {
+                const types = docTypes.filter(
+                  (t) =>
+                    t.section === section.id &&
+                    t.code !== "DOC-CHEQUE" &&
+                    t.kind !== "cancelled_cheque" &&
+                    t.code !== "DOC-GRAD",
+                );
+                if (types.length === 0 && section.id !== "education") return null;
+                const marks = portal.educationMarks ?? emptyEducationMarks();
+                return (
+                  <section
+                    key={section.id}
+                    className="space-y-3 rounded-lg border border-border/70 bg-muted/20 p-3 sm:p-4"
+                  >
+                    <div>
+                      <h3 className="text-sm font-semibold text-foreground">{section.title}</h3>
+                      <p className="text-[11px] text-muted-foreground">{section.hint}</p>
+                    </div>
+
+                    {section.id === "identity" ? (
+                      <div className="grid gap-3 sm:grid-cols-2">
+                        {types.map((t) => (
+                          <FilePickField
+                            key={t.id}
+                            label={t.name}
+                            required={t.mandatory}
+                            accept={t.accept || ".pdf,image/*"}
+                            fileName={latestDoc(t.code, t.kind)?.fileName}
+                            hint={
+                              t.maxSizeMb
+                                ? `Upload from this device · max ${t.maxSizeMb} MB · ${t.code}`
+                                : `Upload from this device · ${t.code}`
+                            }
+                            onFile={(file) => onPickFile(t, file)}
+                          />
+                        ))}
+                      </div>
+                    ) : null}
+
+                    {section.id === "education" ? (
+                      <div className="space-y-3">
+                        <div className="grid gap-3 sm:grid-cols-3">
+                          <SetupField label="10th marks" required hint="Percentage or CGPA">
+                            <SetupInput
+                              value={marks.tenth}
+                              placeholder="e.g. 85% or 8.5 CGPA"
+                              onChange={(e) =>
+                                patchPortal({
+                                  educationMarks: { ...marks, tenth: e.target.value },
+                                })
+                              }
+                            />
+                          </SetupField>
+                          <SetupField label="12th marks" required hint="Percentage or CGPA">
+                            <SetupInput
+                              value={marks.twelfth}
+                              placeholder="e.g. 82% or 8.2 CGPA"
+                              onChange={(e) =>
+                                patchPortal({
+                                  educationMarks: { ...marks, twelfth: e.target.value },
+                                })
+                              }
+                            />
+                          </SetupField>
+                          <SetupField label="Graduation marks" hint="Optional">
+                            <SetupInput
+                              value={marks.graduation}
+                              placeholder="e.g. 7.8 CGPA"
+                              onChange={(e) =>
+                                patchPortal({
+                                  educationMarks: { ...marks, graduation: e.target.value },
+                                })
+                              }
+                            />
+                          </SetupField>
+                        </div>
+
+                        {types.map((t) => (
+                          <FilePickField
+                            key={t.id}
+                            label={t.name}
+                            required={t.mandatory}
+                            accept={t.accept || ".pdf,image/*"}
+                            fileName={latestDoc(t.code, t.kind)?.fileName}
+                            hint={
+                              t.maxSizeMb
+                                ? `Upload from this device · max ${t.maxSizeMb} MB · ${t.code}`
+                                : `Upload from this device · ${t.code}`
+                            }
+                            onFile={(file) => onPickFile(t, file)}
+                          />
+                        ))}
+                      </div>
+                    ) : null}
+
+                    {section.id === "previous_employment" ? (
+                      <div className="space-y-3">
+                        <SalarySlipsMultiUploader
+                          portalDocs={portal.documents}
+                          onUpload={(slipNum, file) => {
+                            if (!file) return;
+                            upsertDocument(
+                              "salary_slips",
+                              file.name,
+                              `DOC-SLIPS-${slipNum}`,
+                            );
+                          }}
+                        />
+                        {types
+                          .filter((t) => t.code !== "DOC-SLIPS")
+                          .map((t) => (
+                            <FilePickField
+                              key={t.id}
+                              label={t.name}
+                              required={t.mandatory}
+                              accept={t.accept || ".pdf,image/*"}
+                              fileName={latestDoc(t.code, t.kind)?.fileName}
+                              hint={
+                                t.maxSizeMb
+                                  ? `Upload from this device · max ${t.maxSizeMb} MB · ${t.code}`
+                                  : `Upload from this device · ${t.code}`
+                              }
+                              onFile={(file) => onPickFile(t, file)}
+                            />
+                          ))}
+                      </div>
+                    ) : null}
+
+                    {section.id === "other" ? (
+                      <div className="space-y-3">
+                        {types.map((t) => (
+                          <FilePickField
+                            key={t.id}
+                            label={t.name}
+                            required={t.mandatory}
+                            accept={t.accept || ".pdf,image/*"}
+                            fileName={latestDoc(t.code, t.kind)?.fileName}
+                            hint={
+                              t.maxSizeMb
+                                ? `Upload from this device · max ${t.maxSizeMb} MB · ${t.code}`
+                                : `Upload from this device · ${t.code}`
+                            }
+                            onFile={(file) => onPickFile(t, file)}
+                          />
+                        ))}
+                      </div>
+                    ) : null}
+                  </section>
+                );
+              })
             )}
           </div>
         ) : null}
@@ -833,6 +1013,10 @@ export function CandidateOnboardingPortal({ token }: { token: string }) {
             <ReviewRow label="Bank" value={portal.bank.bankName || "—"} />
             <ReviewRow label="Account" value={portal.bank.accountNumber || "—"} />
             <ReviewRow label="Emergency" value={portal.emergency.name || "—"} />
+            <ReviewRow
+              label="10th / 12th / Grad marks"
+              value={`${portal.educationMarks?.tenth || "—"} / ${portal.educationMarks?.twelfth || "—"} / ${portal.educationMarks?.graduation || "—"}`}
+            />
             <ReviewRow label="Documents" value={String(portal.documents.length)} />
             <ReviewRow
               label="Policies"
@@ -1006,6 +1190,55 @@ function ReviewRow({ label, value }: { label: string; value: string }) {
     <div className="flex justify-between gap-3 rounded-lg border border-border/60 px-3 py-2">
       <span className="text-muted-foreground">{label}</span>
       <span className="font-medium text-foreground">{value}</span>
+    </div>
+  );
+}
+
+
+
+function SalarySlipsMultiUploader({
+  portalDocs,
+  onUpload,
+}: {
+  portalDocs: OnboardingDocument[];
+  onUpload: (slipNum: number, file: File | undefined) => void;
+}) {
+  const getSlipFile = (num: number) => {
+    const code = `DOC-SLIPS-${num}`;
+    const doc = [...portalDocs].reverse().find((d) => d.typeCode === code);
+    if (doc) return doc.fileName;
+    if (num === 1) {
+      const genericDoc = [...portalDocs]
+        .reverse()
+        .find((d) => d.kind === "salary_slips" && !d.typeCode?.startsWith("DOC-SLIPS-"));
+      return genericDoc?.fileName;
+    }
+    return undefined;
+  };
+
+  return (
+    <div className="space-y-3 rounded-lg border border-border/70 bg-card p-3 sm:p-4">
+      <div>
+        <h4 className="text-xs font-semibold text-foreground">
+          Salary Slips (Up to 3 Slips) <span className="font-normal text-muted-foreground">(Optional)</span>
+        </h4>
+        <p className="text-[11px] text-muted-foreground">
+          Upload up to 3 previous salary slips. Accepts PDF, JPG, PNG, JPEG.
+        </p>
+      </div>
+
+      <div className="grid gap-3 sm:grid-cols-3">
+        {[1, 2, 3].map((num) => (
+          <FilePickField
+            key={num}
+            label={`Salary Slip ${num}`}
+            accept=".pdf,image/*,.jpg,.jpeg,.png"
+            fileName={getSlipFile(num)}
+            hint={`Salary slip ${num} (PDF or Image)`}
+            onFile={(file) => onUpload(num, file)}
+          />
+        ))}
+      </div>
     </div>
   );
 }

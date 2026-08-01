@@ -97,8 +97,18 @@ export type ShiftRosterDirectory = {
   holidays: { date: string; name: string; type: string }[];
   options: {
     branches: { id: string; label: string }[];
-    employees: { id: string; label: string; code: string; departmentId: string; departmentName: string }[];
-    shifts: { id: string; label: string; color: string }[];
+    employees: {
+      id: string;
+      label: string;
+      code: string;
+      departmentId: string;
+      departmentName: string;
+      managerId: string;
+      managerCode: string;
+      managerName: string;
+    }[];
+    managers: { id: string; label: string; code: string }[];
+    shifts: { id: string; label: string; color: string; code: string }[];
   };
 };
 
@@ -254,6 +264,32 @@ export async function loadShiftRosterDirectory(): Promise<ShiftRosterDirectory> 
     } satisfies ShiftSwapRequest;
   });
 
+  const employees = empDir.records.map((e) => {
+    const mgr = empById.get(e.reportingManagerId);
+    return {
+      id: e.id,
+      label: e.displayName,
+      code: e.employeeCode,
+      departmentId: e.departmentId,
+      departmentName: e.departmentName,
+      managerId: e.reportingManagerId || "",
+      managerCode: mgr?.employeeCode ?? "",
+      managerName: e.reportingManagerName || mgr?.displayName || "",
+    };
+  });
+
+  const managerIdsWithReports = new Set(
+    employees.map((e) => e.managerId).filter(Boolean),
+  );
+  const managers = empDir.records
+    .filter((e) => managerIdsWithReports.has(e.id))
+    .map((e) => ({
+      id: e.id,
+      label: e.displayName,
+      code: e.employeeCode,
+    }))
+    .sort((a, b) => a.label.localeCompare(b.label));
+
   return {
     shifts,
     assignments,
@@ -267,17 +303,13 @@ export async function loadShiftRosterDirectory(): Promise<ShiftRosterDirectory> 
         id: String(b.id),
         label: String(b.branch_name ?? b.name ?? b.id),
       })),
-      employees: empDir.records.map((e) => ({
-        id: e.id,
-        label: e.displayName,
-        code: e.employeeCode,
-        departmentId: e.departmentId,
-        departmentName: e.departmentName,
-      })),
+      employees,
+      managers,
       shifts: shifts.map((s) => ({
         id: s.id,
         label: `${s.shiftName} (${s.shiftCode})`,
         color: s.extension.color,
+        code: s.shiftCode,
       })),
     },
   };
@@ -343,6 +375,31 @@ export async function createShift(payload: CreateShiftPayload): Promise<void> {
   const id = String((res.data as HrRow).id);
   writeJson(EXT_KEY, { ...readJson(EXT_KEY, {}), [id]: payload.extension });
   appendShiftAudit({ action: "shift_created", detail: `${payload.shiftName} (${code})`, actor: actor() });
+}
+
+export async function updateShift(
+  record: ShiftRecord,
+  payload: Omit<CreateShiftPayload, "shiftCode" | "branchId"> & {
+    status?: string;
+  },
+): Promise<void> {
+  await resourceService.update("/hr/shifts", record.id, {
+    version: record.version,
+    shift_name: payload.shiftName,
+    shift_type: mapApiShiftType(payload.shiftType),
+    start_time: `${payload.startTime}:00`,
+    end_time: `${payload.endTime}:00`,
+    grace_minutes: payload.graceMinutes,
+    break_minutes: payload.breakMinutes || null,
+    is_overnight: payload.isOvernight,
+    status: payload.status || record.status || "active",
+  });
+  writeJson(EXT_KEY, { ...readJson(EXT_KEY, {}), [record.id]: payload.extension });
+  appendShiftAudit({
+    action: "shift_updated",
+    detail: `${payload.shiftName} (${record.shiftCode})`,
+    actor: actor(),
+  });
 }
 
 export async function assignShift(payload: AssignShiftPayload): Promise<void> {
@@ -489,6 +546,505 @@ export async function setRosterCell(cell: RosterCell): Promise<void> {
   appendShiftAudit({
     action: "roster_updated",
     detail: `${cell.employeeId} ${cell.date} → ${cell.shiftName}`,
+    actor: actor(),
+  });
+}
+
+export async function clearRosterCell(date: string, employeeId: string): Promise<void> {
+  const all = readJson<RosterCell[]>(ROSTER_KEY, []);
+  writeJson(
+    ROSTER_KEY,
+    all.filter((c) => !(c.date === date && c.employeeId === employeeId)),
+  );
+}
+
+export type ManagerRosterImportRow = {
+  employeeCode: string;
+  employeeName: string;
+  date: string;
+  value: string;
+};
+
+export type ManagerRosterValidation = {
+  managerCode: string;
+  managerName: string;
+  month: string;
+  ok: number;
+  cleared: number;
+  errors: string[];
+  cells: RosterCell[];
+  clearKeys: { date: string; employeeId: string }[];
+};
+
+function daysInMonth(month: string): string[] {
+  const m = month.match(/^(\d{4})-(\d{2})$/);
+  if (!m) return [];
+  const y = Number(m[1]);
+  const mo = Number(m[2]);
+  const count = new Date(y, mo, 0).getDate();
+  const days: string[] = [];
+  for (let d = 1; d <= count; d++) {
+    days.push(`${m[1]}-${m[2]}-${String(d).padStart(2, "0")}`);
+  }
+  return days;
+}
+
+/** Excel-safe day header (avoids #### / auto date conversion). */
+function dayHeader(day: number): string {
+  return `d${String(day).padStart(2, "0")}`;
+}
+
+function csvEscape(value: string): string {
+  return `"${String(value).replace(/"/g, '""')}"`;
+}
+
+function findShiftByToken(dir: ShiftRosterDirectory, token: string) {
+  const t = token.trim().toLowerCase();
+  if (!t) return undefined;
+  return dir.shifts.find(
+    (s) =>
+      s.shiftCode.toLowerCase() === t ||
+      s.shiftName.toLowerCase() === t ||
+      s.shiftType.toLowerCase() === t ||
+      `${s.shiftName} (${s.shiftCode})`.toLowerCase() === t,
+  );
+}
+
+function shiftCodeForId(dir: ShiftRosterDirectory, shiftId: string, fallbackName = ""): string {
+  const sh = dir.shifts.find((s) => s.id === shiftId);
+  if (sh?.shiftCode) return sh.shiftCode;
+  if (fallbackName) {
+    const byName = findShiftByToken(dir, fallbackName);
+    if (byName?.shiftCode) return byName.shiftCode;
+    // Keep readable name so managers still see something useful in the sheet
+    return fallbackName.trim();
+  }
+  return "";
+}
+
+function resolveRotationCode(
+  dir: ShiftRosterDirectory,
+  date: string,
+  employeeId: string,
+): string | null {
+  const rot = dir.rotations.find(
+    (r) =>
+      r.status === "active" &&
+      r.employeeIds.includes(employeeId) &&
+      r.effectiveFrom &&
+      r.effectiveFrom <= date &&
+      r.sequence.length > 0,
+  );
+  if (!rot) return null;
+  const start = new Date(`${rot.effectiveFrom}T12:00:00`);
+  const cur = new Date(`${date}T12:00:00`);
+  const dayDiff = Math.floor((cur.getTime() - start.getTime()) / 86_400_000);
+  if (dayDiff < 0) return null;
+  const token = String(rot.sequence[dayDiff % rot.sequence.length] ?? "").trim();
+  if (!token) return null;
+  if (/^(off|wo|weekly.?off)$/i.test(token)) return "WO";
+  if (/^(ho|holiday)$/i.test(token)) return "HO";
+  const sh = findShiftByToken(dir, token);
+  return sh?.shiftCode ?? token;
+}
+
+function resolveCellValue(
+  dir: ShiftRosterDirectory,
+  date: string,
+  employeeId: string,
+): string {
+  const holiday = dir.holidays.some((h) => h.date === date);
+  const override = dir.rosterCells.find((c) => c.date === date && c.employeeId === employeeId);
+  if (override) {
+    if (override.isWeeklyOff) return "WO";
+    if (override.isHoliday) return "HO";
+    return shiftCodeForId(dir, override.shiftId, override.shiftName);
+  }
+  if (holiday) return "HO";
+
+  const dow = new Date(`${date}T12:00:00`).getDay();
+  const sundayOff = dow === 0 && dir.weeklyOffRules.includes("sunday");
+
+  const assign = dir.assignments.find(
+    (a) =>
+      a.employeeId === employeeId &&
+      a.effectiveFrom <= date &&
+      (!a.effectiveTo || a.effectiveTo >= date) &&
+      a.status !== "inactive",
+  );
+  if (assign) {
+    if (sundayOff) return "WO";
+    return shiftCodeForId(dir, assign.shiftId, assign.shiftName);
+  }
+
+  const rotated = resolveRotationCode(dir, date, employeeId);
+  if (rotated) {
+    if (sundayOff && rotated !== "HO") return "WO";
+    return rotated;
+  }
+
+  if (sundayOff) return "WO";
+  return "";
+}
+
+/**
+ * Map a CSV day column header back to YYYY-MM-DD.
+ * Accepts: d01 / day_01 / 2025-07-01 / Excel 7/1/2025 / 01-07-2025.
+ */
+function headerToDate(header: string, month: string): string | null {
+  const h = header.trim().replace(/^="+|"+$/g, "").trim();
+  if (!h) return null;
+
+  const dayKey = h.match(/^(?:d|day[_\s-]?)(\d{1,2})$/i);
+  if (dayKey && /^\d{4}-\d{2}$/.test(month)) {
+    const day = Number(dayKey[1]);
+    if (day >= 1 && day <= 31) {
+      return `${month}-${String(day).padStart(2, "0")}`;
+    }
+  }
+
+  if (/^\d{4}-\d{2}-\d{2}$/.test(h)) return h;
+
+  // Excel US: M/D/YYYY
+  const us = h.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (us) {
+    return `${us[3]}-${us[1].padStart(2, "0")}-${us[2].padStart(2, "0")}`;
+  }
+
+  // Excel EU / dash: D-M-YYYY or D/M/YYYY when month column is known
+  const eu = h.match(/^(\d{1,2})[-.](\d{1,2})[-.](\d{4})$/);
+  if (eu && /^\d{4}-\d{2}$/.test(month)) {
+    const a = Number(eu[1]);
+    const b = Number(eu[2]);
+    const y = eu[3];
+    const monthNum = Number(month.slice(5, 7));
+    // Prefer D-M when second part matches roster month
+    if (b === monthNum && a >= 1 && a <= 31) {
+      return `${y}-${String(b).padStart(2, "0")}-${String(a).padStart(2, "0")}`;
+    }
+    if (a === monthNum && b >= 1 && b <= 31) {
+      return `${y}-${String(a).padStart(2, "0")}-${String(b).padStart(2, "0")}`;
+    }
+  }
+
+  return null;
+}
+
+/** Build manager-wise month roster CSV (matrix). */
+export function exportManagerRosterCsv(
+  dir: ShiftRosterDirectory,
+  managerId: string,
+  month: string,
+): { filename: string; csv: string; teamCount: number } {
+  const manager = dir.options.managers.find((m) => m.id === managerId)
+    ?? dir.options.employees.find((e) => e.id === managerId);
+  if (!manager) throw new Error("Manager not found");
+
+  const team = dir.options.employees
+    .filter((e) => e.managerId === managerId)
+    .sort((a, b) => a.code.localeCompare(b.code));
+  if (!team.length) throw new Error("No employees report to this manager");
+
+  const days = daysInMonth(month);
+  if (!days.length) throw new Error("Invalid month (use YYYY-MM)");
+
+  const dayHeaders = days.map((_, i) => dayHeader(i + 1));
+  const header = [
+    "manager_code",
+    "manager_name",
+    "month",
+    "employee_code",
+    "employee_name",
+    "department",
+    ...dayHeaders,
+  ].map((c) => csvEscape(c));
+
+  const activeShifts = dir.shifts.filter((s) => s.status !== "inactive");
+  const legend = [
+    `# Roster month ${month} · ${days.length} days · fill cells with shift CODE (not name)`,
+    `# Special: WO = weekly off · HO = holiday · blank = clear day override`,
+    `# Allowed shifts: ${
+      activeShifts.length
+        ? activeShifts
+            .map((s) => `${s.shiftCode}=${s.shiftName}`)
+            .join(" | ")
+        : "(none configured — add shifts in Shift master)"
+    }`,
+  ];
+
+  const lines = team.map((emp) => {
+    const cells = days.map((d) => resolveCellValue(dir, d, emp.id));
+    return [
+      manager.code,
+      manager.label,
+      month,
+      emp.code,
+      emp.label,
+      emp.departmentName,
+      ...cells,
+    ]
+      .map((c) => csvEscape(String(c)))
+      .join(",");
+  });
+
+  // BOM helps Excel open UTF-8; d01 headers avoid #### date columns
+  const csv = `\uFEFF${[...legend, header.join(","), ...lines].join("\n")}`;
+  const filename = `roster_${manager.code || "MGR"}_${month}.csv`;
+  return { filename, csv, teamCount: team.length };
+}
+
+function parseCsvLine(line: string): string[] {
+  const out: string[] = [];
+  let cur = "";
+  let inQuotes = false;
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i];
+    if (inQuotes) {
+      if (ch === '"') {
+        if (line[i + 1] === '"') {
+          cur += '"';
+          i++;
+        } else {
+          inQuotes = false;
+        }
+      } else {
+        cur += ch;
+      }
+    } else if (ch === '"') {
+      inQuotes = true;
+    } else if (ch === ",") {
+      out.push(cur.trim());
+      cur = "";
+    } else {
+      cur += ch;
+    }
+  }
+  out.push(cur.trim());
+  return out;
+}
+
+/** Validate manager roster CSV and build cells to apply. */
+export function validateManagerRosterCsv(
+  dir: ShiftRosterDirectory,
+  raw: string,
+): ManagerRosterValidation {
+  const lines = raw
+    .replace(/^\uFEFF/, "")
+    .split(/\r?\n/)
+    .map((l) => l.trim())
+    .filter((l) => l && !l.startsWith("#"));
+  if (lines.length < 2) {
+    return {
+      managerCode: "",
+      managerName: "",
+      month: "",
+      ok: 0,
+      cleared: 0,
+      errors: ["File is empty or missing data rows"],
+      cells: [],
+      clearKeys: [],
+    };
+  }
+
+  const header = parseCsvLine(lines[0]).map((h) => h.trim());
+  const headerLower = header.map((h) => h.toLowerCase());
+  const required = ["manager_code", "manager_name", "month", "employee_code", "employee_name", "department"];
+  for (const col of required) {
+    if (!headerLower.includes(col)) {
+      return {
+        managerCode: "",
+        managerName: "",
+        month: "",
+        ok: 0,
+        cleared: 0,
+        errors: [`Missing column: ${col}`],
+        cells: [],
+        clearKeys: [],
+      };
+    }
+  }
+
+  const idx = Object.fromEntries(headerLower.map((h, i) => [h, i]));
+  const firstData = parseCsvLine(lines[1]);
+  const managerCode = firstData[idx.manager_code] ?? "";
+  const managerName = firstData[idx.manager_name] ?? "";
+  const month = firstData[idx.month] ?? "";
+
+  const dateCols = header
+    .map((h, i) => ({ date: headerToDate(h, month), i, raw: h }))
+    .filter((c): c is { date: string; i: number; raw: string } => Boolean(c.date));
+
+  if (!dateCols.length) {
+    return {
+      managerCode,
+      managerName,
+      month,
+      ok: 0,
+      cleared: 0,
+      errors: [
+        "No day columns found. Use d01…d31 (preferred), or YYYY-MM-DD dates.",
+      ],
+      cells: [],
+      clearKeys: [],
+    };
+  }
+
+  const manager =
+    dir.options.managers.find((m) => m.code === managerCode) ||
+    dir.options.employees.find((e) => e.code === managerCode);
+  if (!manager) {
+    return {
+      managerCode,
+      managerName,
+      month,
+      ok: 0,
+      cleared: 0,
+      errors: [`Unknown manager_code: ${managerCode}`],
+      cells: [],
+      clearKeys: [],
+    };
+  }
+
+  const teamByCode = new Map(
+    dir.options.employees
+      .filter((e) => e.managerId === manager.id)
+      .map((e) => [e.code.toUpperCase(), e]),
+  );
+
+  const expectedDays = new Set(daysInMonth(month));
+  const errors: string[] = [];
+  const cells: RosterCell[] = [];
+  const clearKeys: { date: string; employeeId: string }[] = [];
+  let ok = 0;
+  let cleared = 0;
+
+  for (let r = 1; r < lines.length; r++) {
+    const cols = parseCsvLine(lines[r]);
+    const rowMgr = cols[idx.manager_code] ?? "";
+    const rowMonth = cols[idx.month] ?? "";
+    const empCode = (cols[idx.employee_code] ?? "").toUpperCase();
+    if (rowMgr && rowMgr !== managerCode) {
+      errors.push(`Row ${r + 1}: manager_code mismatch (${rowMgr})`);
+      continue;
+    }
+    if (rowMonth && rowMonth !== month) {
+      errors.push(`Row ${r + 1}: month mismatch (${rowMonth})`);
+      continue;
+    }
+    const emp = teamByCode.get(empCode);
+    if (!emp) {
+      errors.push(`Row ${r + 1}: ${empCode || "(blank)"} is not under manager ${managerCode}`);
+      continue;
+    }
+
+    for (const { date, i } of dateCols) {
+      if (month && expectedDays.size && !expectedDays.has(date)) {
+        errors.push(`Row ${r + 1}: date ${date} outside month ${month}`);
+        continue;
+      }
+      const rawVal = (cols[i] ?? "").trim();
+      const value = rawVal.toUpperCase();
+      if (!value) {
+        clearKeys.push({ date, employeeId: emp.id });
+        cleared += 1;
+        continue;
+      }
+      if (value === "WO") {
+        cells.push({
+          date,
+          employeeId: emp.id,
+          shiftId: "",
+          shiftName: "Weekly Off",
+          color: "#94a3b8",
+          isWeeklyOff: true,
+          isHoliday: false,
+        });
+        ok += 1;
+        continue;
+      }
+      if (value === "HO") {
+        cells.push({
+          date,
+          employeeId: emp.id,
+          shiftId: "",
+          shiftName: "Holiday",
+          color: "#f59e0b",
+          isWeeklyOff: false,
+          isHoliday: true,
+        });
+        ok += 1;
+        continue;
+      }
+      const sh = findShiftByToken(dir, rawVal);
+      if (!sh) {
+        errors.push(
+          `Row ${r + 1} ${date}: unknown shift "${rawVal}" (use a Shift master code or name)`,
+        );
+        continue;
+      }
+      cells.push({
+        date,
+        employeeId: emp.id,
+        shiftId: sh.id,
+        shiftName: sh.shiftName,
+        color: sh.extension.color,
+        isWeeklyOff: false,
+        isHoliday: false,
+      });
+      ok += 1;
+    }
+  }
+
+  return {
+    managerCode,
+    managerName: manager.label || managerName,
+    month,
+    ok,
+    cleared,
+    errors,
+    cells,
+    clearKeys,
+  };
+}
+
+export async function applyManagerRosterImport(
+  validation: ManagerRosterValidation,
+): Promise<void> {
+  const all = readJson<RosterCell[]>(ROSTER_KEY, []);
+  const clearSet = new Set(validation.clearKeys.map((k) => `${k.employeeId}|${k.date}`));
+  let next = all.filter((c) => !clearSet.has(`${c.employeeId}|${c.date}`));
+
+  for (const cell of validation.cells) {
+    const idx = next.findIndex((c) => c.date === cell.date && c.employeeId === cell.employeeId);
+    if (idx >= 0) next[idx] = cell;
+    else next.push(cell);
+  }
+  writeJson(ROSTER_KEY, next);
+
+  // Best-effort API sync for real shift assignments (skip WO/HO)
+  const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  const branchId =
+    readJson<{ branchId?: string }>("erp_ats_api_context_v1", {}).branchId ||
+    readJson<{ defaultBranchId?: string }>("erp_user_profile", {}).defaultBranchId;
+  for (const cell of validation.cells) {
+    if (!uuidRe.test(cell.employeeId) || !cell.shiftId || !uuidRe.test(cell.shiftId)) continue;
+    try {
+      await resourceService.create("/hr/roster-entries", {
+        branch_id: branchId,
+        employee_id: cell.employeeId,
+        shift_id: cell.shiftId,
+        roster_date: cell.date,
+        status: "published",
+        notes: cell.shiftName || null,
+      });
+    } catch {
+      // local roster remains source of truth for calendar UI
+    }
+  }
+
+  appendShiftAudit({
+    action: "manager_roster_imported",
+    detail: `${validation.managerCode} ${validation.month}: ${validation.ok} cells, ${validation.cleared} cleared, ${validation.errors.length} errors`,
     actor: actor(),
   });
 }

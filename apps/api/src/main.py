@@ -29,14 +29,15 @@ def create_app() -> FastAPI:
         lifespan=lifespan,
     )
 
+    application.add_middleware(RequestContextMiddleware)
     application.add_middleware(
         CORSMiddleware,
         allow_origins=settings.cors_origins,
+        allow_origin_regex=r"https?://(localhost|127\.0\.0\.1)(:\d+)?",
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
     )
-    application.add_middleware(RequestContextMiddleware)
 
     register_exception_handlers(application)
     application.include_router(api_v1_router, prefix=API_V1_PREFIX)

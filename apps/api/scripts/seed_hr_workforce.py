@@ -570,11 +570,16 @@ def seed(db) -> None:
             },
         )
 
-    # Wire assigned_by after manager employees exist.
+    # Wire reporting_manager_id + assigned_by after manager employees exist.
     for code, *_rest, manager_code in EMPLOYEES:
         if not manager_code:
             continue
         emp = employees[code]
+        mgr = employees.get(manager_code)
+        if not mgr:
+            continue
+        emp.reporting_manager_id = mgr.id
+        emp.updated_by = admin_id
         dept_code = next(row[7] for row in EMPLOYEES if row[0] == code)
         asg = get_one(
             db,
@@ -585,8 +590,8 @@ def seed(db) -> None:
             department_id=departments[dept_code].id,
             effective_from=next(row[8] for row in EMPLOYEES if row[0] == code),
         )
-        if asg and employees.get(manager_code):
-            asg.assigned_by_employee_id = employees[manager_code].id
+        if asg:
+            asg.assigned_by_employee_id = mgr.id
 
     print("Seeding leave balances + leave requests…")
     used_by_employee: dict[str, dict[str, Decimal]] = {

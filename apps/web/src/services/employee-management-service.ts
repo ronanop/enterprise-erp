@@ -66,8 +66,11 @@ function defaultExtension(partial?: Partial<EmployeeExtension>): EmployeeExtensi
     employment: partial?.employment ?? emptyEmployment(),
     governmentIds: partial?.governmentIds ?? emptyGovernmentIds(),
     bank: partial?.bank ?? emptyBank(),
+    companyBank: partial?.companyBank ?? emptyBank(),
     salary: partial?.salary ?? emptySalary(),
     documents: partial?.documents ?? [],
+    education: partial?.education ?? [],
+    previousEmployment: partial?.previousEmployment ?? [],
     createdBy: partial?.createdBy ?? actorLabel(),
     updatedBy: partial?.updatedBy ?? actorLabel(),
     updatedAt: partial?.updatedAt ?? nowIso(),
@@ -276,10 +279,39 @@ export async function loadEmployeeDirectory(): Promise<{
     .filter((m) => !m.is_deleted)
     .map((m) => {
       const id = String(m.id);
-      const ext = extensions[id] ?? defaultExtension();
+      const profile = profileByEmployee.get(id);
+      const stored = extensions[id];
+      const ext = defaultExtension(stored);
+      // Hydrate onboarding bank from HR profile when local store is empty
+      if (profile && !ext.bank.accountNumber && !ext.bank.ifsc) {
+        ext.bank = {
+          ...ext.bank,
+          bankName: String(profile.bank_name ?? ""),
+          accountNumber: String(profile.bank_account_number ?? ""),
+          confirmAccountNumber: String(profile.bank_account_number ?? ""),
+          ifsc: String(profile.bank_ifsc ?? ""),
+          accountHolderName: String(profile.bank_account_holder ?? ""),
+        };
+      }
+      // Hydrate company bank from profile when set and distinct from onboarding store
+      if (
+        profile &&
+        !ext.companyBank.accountNumber &&
+        profile.bank_account_number &&
+        String(profile.bank_account_number) !== ext.bank.accountNumber
+      ) {
+        ext.companyBank = {
+          ...ext.companyBank,
+          bankName: String(profile.bank_name ?? ""),
+          accountNumber: String(profile.bank_account_number ?? ""),
+          confirmAccountNumber: String(profile.bank_account_number ?? ""),
+          ifsc: String(profile.bank_ifsc ?? ""),
+          accountHolderName: String(profile.bank_account_holder ?? ""),
+        };
+      }
       return mergeRow(
         m,
-        profileByEmployee.get(id),
+        profile,
         employmentByEmployee.get(id),
         deptMap,
         branchMap,
@@ -459,24 +491,197 @@ export async function createExistingEmployee(input: {
   };
 }
 
+export function applyOnboardingPortalToEmployee(
+  employeeId: string,
+  draft: EmployeeWizardDraft,
+): void {
+  const existing = loadExtensions()[employeeId];
+  const ext = defaultExtension({
+    ...existing,
+    personal: draft.personal,
+    employment: draft.employment,
+    governmentIds: draft.governmentIds,
+    bank: draft.bank,
+    companyBank: existing?.companyBank ?? draft.companyBank ?? emptyBank(),
+    salary: draft.salary,
+    documents: (draft.documents ?? []).map((d) => ({
+      ...d,
+      source: d.source ?? "onboarding",
+    })),
+    education: draft.education,
+    previousEmployment: draft.previousEmployment,
+    createdBy: existing?.createdBy ?? "Onboarding",
+    updatedBy: "Onboarding",
+    updatedAt: nowIso(),
+  });
+  saveExtension(employeeId, ext);
+  appendActivity({
+    employeeId,
+    type: "onboarding_imported",
+    title: "Onboarding portal details imported",
+    actor: actorLabel(),
+  });
+}
+
+export function findOnboardingLinkedCaseId(employeeCode: string): string | null {
+  try {
+    const list = readJson<{ employeeCode: string; caseId: string }[]>(
+      "erp_onboarding_activated_employees_v1",
+      [],
+    );
+    return list.find((x) => x.employeeCode === employeeCode)?.caseId ?? null;
+  } catch {
+    return null;
+  }
+}
+
 export async function createEmployeeFromWizard(
   draft: EmployeeWizardDraft,
   options: EmployeeDirectoryOptions,
 ): Promise<EmployeeRecord> {
   void options;
-  return createExistingEmployee({
-    firstName: draft.personal.firstName.trim(),
-    lastName: draft.personal.lastName.trim(),
-    email: draft.personal.officialEmail.trim(),
-    mobile: draft.personal.mobile.trim(),
-    joiningDate: draft.employment.joiningDate,
-    branchId: draft.employment.branchId,
-    departmentId: draft.employment.departmentId,
-    designationName: draft.employment.designationName || "Staff",
-    employmentType: draft.employment.employmentType || "permanent",
-    employeeCode: draft.employment.employeeCode || undefined,
-    reportingManagerId: draft.employment.reportingManagerId || undefined,
+  const firstName = draft.personal.firstName.trim();
+  const lastName = draft.personal.lastName.trim();
+  const email = draft.personal.officialEmail.trim();
+  const mobile = draft.personal.mobile.trim();
+  const joiningDate = draft.employment.joiningDate;
+  const branchId = draft.employment.branchId;
+  const departmentId = draft.employment.departmentId;
+  const designationName = draft.employment.designationName || "Staff";
+  const employmentType = draft.employment.employmentType || "permanent";
+  const employeeCode = draft.employment.employeeCode || undefined;
+  const reportingManagerId = draft.employment.reportingManagerId || undefined;
+
+  const masterRes = await apiClient<HrRow>("/employees", {
+    method: "POST",
+    body: {
+      branch_id: branchId,
+      department_id: departmentId,
+      first_name: firstName,
+      last_name: lastName,
+      email,
+      mobile,
+      designation: designationName,
+      date_of_joining: joiningDate,
+      employee_code: employeeCode,
+      reporting_manager_id: reportingManagerId || null,
+      bypass_onboarding: true,
+    },
   });
+  const master = masterRes.data;
+  if (!master?.id) throw new Error("Employee create returned no data");
+  const employeeId = String(master.id);
+
+  await apiClient<HrRow>("/hr/employment", {
+    method: "POST",
+    body: {
+      branch_id: branchId,
+      employee_id: employeeId,
+      employment_type: employmentType,
+      date_of_joining: joiningDate,
+      status: draft.employment.lifecycleStatus || "active",
+      payroll_eligible: true,
+      lifecycle_source: "direct_add",
+      probation_period_days: draft.employment.probationPeriodDays
+        ? Number(draft.employment.probationPeriodDays)
+        : null,
+    },
+  }).catch(() => undefined);
+
+  const educationPayload = draft.education
+    .filter((e) => e.degree.trim() || e.institution.trim())
+    .map(({ id: _id, ...rest }) => rest);
+  const previousPayload = draft.previousEmployment
+    .filter((e) => e.company.trim() || e.designation.trim())
+    .map(({ id: _id, ...rest }) => rest);
+
+  const profileRes = await apiClient<HrRow>("/hr/employee-profiles", {
+    method: "POST",
+    body: {
+      branch_id: branchId,
+      employee_id: employeeId,
+      date_of_birth: draft.personal.dateOfBirth || null,
+      gender: draft.personal.gender || null,
+      marital_status: draft.personal.maritalStatus || null,
+      nationality: draft.personal.nationality || null,
+      blood_group: draft.personal.bloodGroup || null,
+      emergency_contact_name: draft.personal.emergency.name || null,
+      emergency_contact_mobile: draft.personal.emergency.phone || null,
+      permanent_address_json: addressToJson(draft.personal.permanentAddress),
+      current_address_json: addressToJson(draft.personal.currentAddress),
+      aadhaar_number: draft.governmentIds.aadhaar || null,
+      pan_number: draft.governmentIds.pan || null,
+      uan_number: draft.governmentIds.uan || null,
+      bank_account_number: draft.bank.accountNumber || null,
+      bank_ifsc: draft.bank.ifsc || null,
+      bank_name: draft.bank.bankName || null,
+      bank_account_holder: draft.bank.accountHolderName || null,
+      status: draft.employment.lifecycleStatus || "active",
+    },
+  }).catch(() => null);
+
+  if (profileRes?.data?.id && (educationPayload.length || previousPayload.length)) {
+    await resourceService
+      .update("/hr/employee-profiles", String(profileRes.data.id), {
+        version: Number(profileRes.data.version ?? 1),
+        education_json: educationPayload,
+        skills_json: previousPayload.length
+          ? { previous_employment: previousPayload }
+          : null,
+      })
+      .catch(() => undefined);
+  }
+
+  const ext = defaultExtension({
+    personal: draft.personal,
+    employment: {
+      ...draft.employment,
+      employeeCode: String(master.employee_code ?? employeeCode ?? ""),
+      designationName,
+      employmentType,
+      lifecycleStatus: draft.employment.lifecycleStatus || "active",
+    },
+    governmentIds: draft.governmentIds,
+    bank: draft.bank,
+    companyBank: draft.companyBank ?? emptyBank(),
+    salary: draft.salary,
+    documents: draft.documents,
+    education: draft.education,
+    previousEmployment: draft.previousEmployment,
+  });
+  saveExtension(employeeId, ext);
+  appendActivity({
+    employeeId,
+    type: "created",
+    title: "Employee added (HR direct hire — no invitation)",
+    actor: actorLabel(),
+  });
+
+  return {
+    id: employeeId,
+    masterVersion: Number(master.version ?? 1),
+    profileId: profileRes?.data?.id ? String(profileRes.data.id) : undefined,
+    profileVersion: profileRes?.data?.version
+      ? Number(profileRes.data.version)
+      : undefined,
+    employeeCode: String(master.employee_code ?? ""),
+    displayName: `${firstName} ${lastName}`.trim(),
+    officialEmail: email,
+    mobile,
+    departmentId,
+    departmentName: draft.employment.departmentName || "—",
+    designationName,
+    branchId,
+    branchName: draft.employment.branchName || "—",
+    reportingManagerId: reportingManagerId || "",
+    reportingManagerName: draft.employment.reportingManagerName || "—",
+    employmentType,
+    joiningDate,
+    lifecycleStatus: draft.employment.lifecycleStatus || "active",
+    gender: draft.personal.gender,
+    isDeleted: false,
+    extension: ext,
+  };
 }
 
 export async function updateEmployeeRecord(  record: EmployeeRecord,
@@ -492,8 +697,13 @@ export async function updateEmployeeRecord(  record: EmployeeRecord,
       ? { ...record.extension.governmentIds, ...patch.governmentIds }
       : record.extension.governmentIds,
     bank: patch.bank ? { ...record.extension.bank, ...patch.bank } : record.extension.bank,
+    companyBank: patch.companyBank
+      ? { ...record.extension.companyBank, ...patch.companyBank }
+      : (record.extension.companyBank ?? emptyBank()),
     salary: patch.salary ? { ...record.extension.salary, ...patch.salary } : record.extension.salary,
     documents: patch.documents ?? record.extension.documents,
+    education: patch.education ?? record.extension.education ?? [],
+    previousEmployment: patch.previousEmployment ?? record.extension.previousEmployment ?? [],
     updatedBy: actorLabel(),
     updatedAt: nowIso(),
   };
@@ -503,6 +713,7 @@ export async function updateEmployeeRecord(  record: EmployeeRecord,
     "employment",
     "governmentIds",
     "bank",
+    "companyBank",
     "salary",
   ];
   for (const field of auditFields) {
@@ -551,6 +762,15 @@ export async function updateEmployeeRecord(  record: EmployeeRecord,
       emergency_contact_mobile: nextExt.personal.emergency.phone || null,
       permanent_address_json: addressToJson(nextExt.personal.permanentAddress),
       current_address_json: addressToJson(nextExt.personal.currentAddress),
+      aadhaar_number: nextExt.governmentIds.aadhaar || null,
+      pan_number: nextExt.governmentIds.pan || null,
+      uan_number: nextExt.governmentIds.uan || null,
+      // Company salary account (post-hire) is the authoritative payroll bank on profile
+      bank_account_number: nextExt.companyBank.accountNumber || nextExt.bank.accountNumber || null,
+      bank_ifsc: nextExt.companyBank.ifsc || nextExt.bank.ifsc || null,
+      bank_name: nextExt.companyBank.bankName || nextExt.bank.bankName || null,
+      bank_account_holder:
+        nextExt.companyBank.accountHolderName || nextExt.bank.accountHolderName || null,
       status: nextExt.employment.lifecycleStatus,
     }).catch(() => undefined);
   }

@@ -102,11 +102,22 @@ export function HrSection({
 
 export function HrKpiGrid({
   items,
+  className,
 }: {
   items: { label: string; value: string | number; hint?: string }[];
+  className?: string;
 }) {
+  const desktopCols =
+    items.length <= 3
+      ? "lg:grid-cols-3"
+      : items.length === 4
+        ? "lg:grid-cols-4"
+        : items.length === 5
+          ? "lg:grid-cols-5"
+          : "lg:grid-cols-6";
+
   return (
-    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+    <div className={cn("grid grid-cols-2 gap-3", desktopCols, className)}>
       {items.map((item) => (
         <div
           key={item.label}

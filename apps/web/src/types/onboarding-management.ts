@@ -50,8 +50,8 @@ export const PORTAL_STEPS: { id: PortalStepId; label: string; description: strin
   { id: "government_ids", label: "Government IDs", description: "Aadhaar, PAN, and more" },
   { id: "bank", label: "Bank Details", description: "Salary account" },
   { id: "emergency", label: "Emergency Contact", description: "Primary contact" },
-  { id: "documents", label: "Upload Documents", description: "Proofs and certificates" },
-  { id: "policies", label: "Policies", description: "Agree and sign" },
+  { id: "documents", label: "Upload Documents", description: "Identity, education & previous employment" },
+  { id: "policies", label: "Policies", description: "Agree and upload signature" },
   { id: "review", label: "Review & Submit", description: "Confirm all steps" },
 ];
 
@@ -161,11 +161,18 @@ export type PolicyAcceptance = {
   policies: string[];
 };
 
+export type EducationMarks = {
+  tenth: string;
+  twelfth: string;
+  graduation: string;
+};
+
 export type PortalPayload = {
   personal: PersonalDetails;
   governmentIds: GovernmentIds;
   bank: BankDetails;
   emergency: EmergencyContact;
+  educationMarks: EducationMarks;
   documents: OnboardingDocument[];
   policies: PolicyAcceptance;
   currentStep: PortalStepId;
@@ -286,6 +293,10 @@ export function emptyEmergency(): EmergencyContact {
   return { name: "", relationship: "", phone: "", address: "" };
 }
 
+export function emptyEducationMarks(): EducationMarks {
+  return { tenth: "", twelfth: "", graduation: "" };
+}
+
 export function emptyPortal(email = "", phone = "", name = ""): PortalPayload {
   const parts = name.trim().split(/\s+/);
   return {
@@ -299,6 +310,7 @@ export function emptyPortal(email = "", phone = "", name = ""): PortalPayload {
     governmentIds: emptyGovernmentIds(),
     bank: emptyBank(),
     emergency: emptyEmergency(),
+    educationMarks: emptyEducationMarks(),
     documents: [],
     policies: { agreed: false, signature: "", policies: [] },
     currentStep: "personal",

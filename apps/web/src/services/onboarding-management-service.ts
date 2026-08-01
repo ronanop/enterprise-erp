@@ -6,7 +6,9 @@
 
 import { resourceService } from "@/services/api-client";
 import { registerLocalEmployee } from "@/services/hr-master-connector";
+import { applyOnboardingPortalToEmployee } from "@/services/employee-management-service";
 import { loadRecruitmentOverview, type RecruitmentRow } from "@/services/recruitment-service";
+import { portalToWizardDraft } from "@/lib/onboarding-to-employee";
 import {
   DEFAULT_HR_CHECKLIST,
   DEFAULT_MANAGER_CHECKLIST,
@@ -595,6 +597,9 @@ export async function activateEmployee(
     joiningDate: c.joiningDate,
     employeeCode,
   });
+
+  // Persist everything the candidate filled in the portal onto the employee record
+  applyOnboardingPortalToEmployee(local.id, portalToWizardDraft(c, employeeCode));
 
   const checklist = c.checklist.map((item) =>
     ["GEN_EMP_ID", "CREATE_PROFILE", "APPROVE_INFO", "ASSIGN_SHIFT"].includes(item.code)

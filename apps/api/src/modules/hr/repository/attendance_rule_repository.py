@@ -54,8 +54,15 @@ class AttendanceRuleRepository(HrScopedRepository):
         row = self.get(ctx, row_id)
         if row is None:
             return None
+        # Allow clearing nullable policy fields with explicit None
+        clearable = {
+            "arrival_window_start",
+            "arrival_ok_until",
+            "shift_windows_json",
+            "branch_id",
+        }
         for k, v in fields.items():
-            if v is not None:
+            if v is not None or k in clearable:
                 setattr(row, k, v)
         row.updated_at = utcnow()
         row.updated_by = ctx.user_id

@@ -190,6 +190,7 @@ class BiometricDeviceService:
         self._repo = BiometricDeviceRepository(db)
         self._attendance = AttendanceRepository(db)
         self._attendance_svc = AttendanceService(db)
+        self._rules = AttendanceRuleService(db)
         self._scope = HrScopeValidator(db)
         self._master = HrMasterDataAdapter(db)
         self._audit = AuditService(db)
@@ -206,12 +207,21 @@ class BiometricDeviceService:
         device_code: str,
         device_name: str,
         company_id: UUID | None = None,
+        device_model: str = "fingerprint_k40_timelabs",
+        ip_address: str | None = None,
+        port: int | None = None,
         location_text: str | None = None,
         status: str = "active",
         generate_api_key: bool = True,
     ):
         cid = self._scope.resolve_company_id(ctx, company_id)
         self._scope.validate_branch_access(ctx, branch_id)
+        if device_model not in {"fingerprint_k40_timelabs"}:
+            raise AppException(f"Unsupported biometric device model: {device_model}")
+        if ip_address is not None and not str(ip_address).strip():
+            ip_address = None
+        if port is not None and (port < 1 or port > 65535):
+            raise AppException("Port must be between 1 and 65535")
         plaintext: str | None = None
         api_key_hash = None
         if generate_api_key:
@@ -223,6 +233,9 @@ class BiometricDeviceService:
             branch_id=branch_id,
             device_code=device_code,
             device_name=device_name,
+            device_model=device_model,
+            ip_address=ip_address.strip() if ip_address else None,
+            port=port,
             location_text=location_text,
             status=status,
             api_key_hash=api_key_hash,
@@ -302,12 +315,57 @@ class BiometricDeviceService:
                 if cand.employee_id == emp.id and cand.attendance_date == attendance_date:
                     existing = cand
                     break
+
+            events = punch.get("punch_events") or []
+            if not isinstance(events, list):
+                events = []
+            aggregated = self._rules.aggregate_punches(
+                ctx,
+                cid,
+                events=events,
+                check_in_at=punch.get("check_in_at"),
+                check_out_at=punch.get("check_out_at"),
+            )
+            check_in_at = aggregated.get("check_in_at")
+            check_out_at = aggregated.get("check_out_at")
+            total_hours = aggregated.get("total_hours")
+
+            status = punch.get("attendance_status")
+            late_minutes = None
+            if check_in_at and not status:
+                status, late_minutes = self._rules.resolve_checkin_status(
+                    ctx,
+                    cid,
+                    check_in_at=check_in_at if isinstance(check_in_at, datetime) else datetime.fromisoformat(str(check_in_at).replace("Z", "+00:00")),
+                    shift_start=None,
+                    shift_grace_minutes=0,
+                    shift_id=str(punch.get("shift_id") or "") or None,
+                    shift_code=str(punch.get("shift_code") or "") or None,
+                )
+            if total_hours is not None:
+                status = self._rules.resolve_checkout_status(
+                    ctx,
+                    cid,
+                    total_hours=total_hours,
+                    current_status=status or "present",
+                )
+
+            note_parts = [
+                punch.get("notes") or (f"biometric:{device_code}" if device_code else "biometric"),
+            ]
+            if aggregated.get("punch_count"):
+                note_parts.append(f"punches={aggregated['punch_count']}")
+            if aggregated.get("sessions"):
+                note_parts.append(f"mode_sessions={len(aggregated['sessions'])}")
+
             fields = {
-                "attendance_status": punch.get("attendance_status") or "present",
+                "attendance_status": status or "present",
                 "source": AttendanceSource.BIOMETRIC.value,
-                "check_in_at": punch.get("check_in_at"),
-                "check_out_at": punch.get("check_out_at"),
-                "notes": punch.get("notes") or (f"biometric:{device_code}" if device_code else "biometric"),
+                "check_in_at": check_in_at,
+                "check_out_at": check_out_at,
+                "total_hours": Decimal(str(total_hours)) if total_hours is not None else None,
+                "late_minutes": late_minutes,
+                "notes": " | ".join(str(p) for p in note_parts if p),
             }
             fields = {k: v for k, v in fields.items() if v is not None}
             if existing:

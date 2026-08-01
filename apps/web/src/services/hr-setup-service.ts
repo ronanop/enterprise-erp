@@ -51,6 +51,7 @@ export const DEFAULT_DOCUMENT_TYPES: SetupRow[] = [
     code: "DOC-PHOTO",
     name: "Photo",
     kind: "photo",
+    section: "identity",
     mandatory: true,
     expiry_required: false,
     formats: "JPG,PNG",
@@ -62,6 +63,7 @@ export const DEFAULT_DOCUMENT_TYPES: SetupRow[] = [
     code: "DOC-PAN",
     name: "PAN",
     kind: "pan",
+    section: "identity",
     mandatory: true,
     expiry_required: false,
     formats: "PDF,JPG,PNG",
@@ -73,6 +75,7 @@ export const DEFAULT_DOCUMENT_TYPES: SetupRow[] = [
     code: "DOC-AADHAAR",
     name: "Aadhaar",
     kind: "aadhaar",
+    section: "identity",
     mandatory: true,
     expiry_required: false,
     formats: "PDF,JPG,PNG",
@@ -84,6 +87,7 @@ export const DEFAULT_DOCUMENT_TYPES: SetupRow[] = [
     code: "DOC-BANK",
     name: "Bank Details / Passbook",
     kind: "bank_details",
+    section: "identity",
     mandatory: true,
     expiry_required: false,
     formats: "PDF,JPG,PNG",
@@ -95,6 +99,7 @@ export const DEFAULT_DOCUMENT_TYPES: SetupRow[] = [
     code: "DOC-CHEQUE",
     name: "Cancelled Cheque",
     kind: "cancelled_cheque",
+    section: "identity",
     mandatory: true,
     expiry_required: false,
     formats: "PDF,JPG,PNG",
@@ -102,10 +107,11 @@ export const DEFAULT_DOCUMENT_TYPES: SetupRow[] = [
     status: "active",
   },
   {
-    id: "doc-type-graduation",
-    code: "DOC-GRAD",
-    name: "Graduation Certificate",
+    id: "doc-type-10th",
+    code: "DOC-10TH",
+    name: "10th Marksheet",
     kind: "education",
+    section: "education",
     mandatory: true,
     expiry_required: false,
     formats: "PDF,JPG,PNG",
@@ -113,22 +119,108 @@ export const DEFAULT_DOCUMENT_TYPES: SetupRow[] = [
     status: "active",
   },
   {
-    id: "doc-type-appointment",
-    code: "DOC-APPT",
-    name: "Latest Appointment Letter",
-    kind: "appointment_letter",
+    id: "doc-type-12th",
+    code: "DOC-12TH",
+    name: "12th Marksheet",
+    kind: "education",
+    section: "education",
     mandatory: true,
+    expiry_required: false,
+    formats: "PDF,JPG,PNG",
+    max_size_mb: 10,
+    status: "active",
+  },
+  {
+    id: "doc-type-grad-marks",
+    code: "DOC-GRAD-MARKS",
+    name: "Graduation Marksheet",
+    kind: "education",
+    section: "education",
+    mandatory: false,
+    expiry_required: false,
+    formats: "PDF,JPG,PNG",
+    max_size_mb: 10,
+    status: "active",
+  },
+  {
+    id: "doc-type-graduation",
+    code: "DOC-GRAD",
+    name: "Graduation Certificate",
+    kind: "education",
+    section: "education",
+    mandatory: true,
+    expiry_required: false,
+    formats: "PDF,JPG,PNG",
+    max_size_mb: 10,
+    status: "active",
+  },
+  {
+    id: "doc-type-appt-1",
+    code: "DOC-APPT-1",
+    name: "Previous Appointment Letter 1",
+    kind: "appointment_letter",
+    section: "previous_employment",
+    mandatory: false,
     expiry_required: false,
     formats: "PDF",
     max_size_mb: 5,
     status: "active",
   },
   {
-    id: "doc-type-relieving",
-    code: "DOC-REL",
-    name: "Latest Relieving Letter",
+    id: "doc-type-appt-2",
+    code: "DOC-APPT-2",
+    name: "Previous Appointment Letter 2",
+    kind: "appointment_letter",
+    section: "previous_employment",
+    mandatory: false,
+    expiry_required: false,
+    formats: "PDF",
+    max_size_mb: 5,
+    status: "active",
+  },
+  {
+    id: "doc-type-appt-3",
+    code: "DOC-APPT-3",
+    name: "Previous Appointment Letter 3",
+    kind: "appointment_letter",
+    section: "previous_employment",
+    mandatory: false,
+    expiry_required: false,
+    formats: "PDF",
+    max_size_mb: 5,
+    status: "active",
+  },
+  {
+    id: "doc-type-rel-1",
+    code: "DOC-REL-1",
+    name: "Previous Relieving Letter 1",
     kind: "relieving_letter",
-    mandatory: true,
+    section: "previous_employment",
+    mandatory: false,
+    expiry_required: false,
+    formats: "PDF",
+    max_size_mb: 5,
+    status: "active",
+  },
+  {
+    id: "doc-type-rel-2",
+    code: "DOC-REL-2",
+    name: "Previous Relieving Letter 2",
+    kind: "relieving_letter",
+    section: "previous_employment",
+    mandatory: false,
+    expiry_required: false,
+    formats: "PDF",
+    max_size_mb: 5,
+    status: "active",
+  },
+  {
+    id: "doc-type-rel-3",
+    code: "DOC-REL-3",
+    name: "Previous Relieving Letter 3",
+    kind: "relieving_letter",
+    section: "previous_employment",
+    mandatory: false,
     expiry_required: false,
     formats: "PDF",
     max_size_mb: 5,
@@ -139,43 +231,11 @@ export const DEFAULT_DOCUMENT_TYPES: SetupRow[] = [
     code: "DOC-SLIPS",
     name: "Last 3 Salary Slips",
     kind: "salary_slips",
-    mandatory: true,
+    section: "previous_employment",
+    mandatory: false,
     expiry_required: false,
     formats: "PDF,JPG,PNG",
     max_size_mb: 15,
-    status: "active",
-  },
-  {
-    id: "doc-type-prev-employer",
-    code: "DOC-PREV-EMP",
-    name: "Previous Employer Certificate",
-    kind: "previous_employer",
-    mandatory: false,
-    expiry_required: false,
-    formats: "PDF,JPG,PNG",
-    max_size_mb: 10,
-    status: "active",
-  },
-  {
-    id: "doc-type-experience",
-    code: "DOC-EXP",
-    name: "Work Experience Certificate",
-    kind: "experience",
-    mandatory: false,
-    expiry_required: false,
-    formats: "PDF,JPG,PNG",
-    max_size_mb: 10,
-    status: "active",
-  },
-  {
-    id: "doc-type-signature",
-    code: "DOC-SIGN",
-    name: "Signature",
-    kind: "signature",
-    mandatory: true,
-    expiry_required: false,
-    formats: "JPG,PNG,PDF",
-    max_size_mb: 2,
     status: "active",
   },
   {
@@ -183,6 +243,7 @@ export const DEFAULT_DOCUMENT_TYPES: SetupRow[] = [
     code: "DOC-RESUME",
     name: "Resume",
     kind: "resume",
+    section: "other",
     mandatory: false,
     expiry_required: false,
     formats: "PDF,DOC,DOCX",
@@ -194,6 +255,7 @@ export const DEFAULT_DOCUMENT_TYPES: SetupRow[] = [
     code: "DOC-PASSPORT",
     name: "Passport",
     kind: "passport",
+    section: "other",
     mandatory: false,
     expiry_required: true,
     formats: "PDF,JPG,PNG",
@@ -233,11 +295,18 @@ const DOCUMENT_KINDS = new Set([
   "other",
 ]);
 
+export type PortalDocumentSection =
+  | "identity"
+  | "education"
+  | "previous_employment"
+  | "other";
+
 export type PortalDocumentType = {
   id: string;
   code: string;
   name: string;
   kind: string;
+  section: PortalDocumentSection;
   mandatory: boolean;
   accept: string;
   maxSizeMb: number | null;
@@ -276,8 +345,10 @@ function normalizeDocKind(value: unknown, code: string, name: string): string {
   if (blob.includes("passport")) return "passport";
   if (blob.includes("resume") || blob.includes("cv")) return "resume";
   if (blob.includes("photo") || blob.includes("photograph")) return "photo";
-  if (blob.includes("education") || blob.includes("degree")) return "education";
-  if (blob.includes("experience") || blob.includes("relieving")) return "experience";
+  if (blob.includes("education") || blob.includes("degree") || blob.includes("marksheet") || blob.includes("grad")) {
+    return "education";
+  }
+  if (blob.includes("experience")) return "experience";
   if (blob.includes("cheque") || blob.includes("check")) return "cancelled_cheque";
   if (blob.includes("bank") || blob.includes("passbook")) return "bank_details";
   if (blob.includes("appointment")) return "appointment_letter";
@@ -288,19 +359,69 @@ function normalizeDocKind(value: unknown, code: string, name: string): string {
   return "other";
 }
 
-/** Active document types for candidate onboarding uploads. */
+function resolveDocSection(code: string, kind: string, explicit?: unknown): PortalDocumentSection {
+  const s = String(explicit ?? "").toLowerCase();
+  if (s === "identity" || s === "education" || s === "previous_employment" || s === "other") {
+    return s;
+  }
+  if (code.startsWith("DOC-10") || code.startsWith("DOC-12") || code.includes("GRAD") || kind === "education") {
+    return "education";
+  }
+  if (
+    code.includes("APPT") ||
+    code.includes("REL") ||
+    code.includes("SLIPS") ||
+    kind === "appointment_letter" ||
+    kind === "relieving_letter" ||
+    kind === "salary_slips" ||
+    kind === "previous_employer" ||
+    kind === "experience"
+  ) {
+    return "previous_employment";
+  }
+  if (["photo", "pan", "aadhaar", "bank_details", "cancelled_cheque"].includes(kind)) {
+    return "identity";
+  }
+  return "other";
+}
+
+/** Active document types for candidate onboarding uploads (signature is on Policies step). */
 export async function listPortalDocumentTypes(): Promise<PortalDocumentType[]> {
   const rows = await listLocalSetup("document-types");
-  return rows
-    .filter((r) => String(r.status ?? "active").toLowerCase() === "active")
+  const byCode = new Map(
+    rows
+      .filter((r) => String(r.status ?? "active").toLowerCase() === "active")
+      .map((r) => [String(r.code ?? ""), r]),
+  );
+
+  // Ensure portal always has the latest education / previous-employment catalog codes
+  for (const def of DEFAULT_DOCUMENT_TYPES) {
+    const code = String(def.code ?? "");
+    if (!code || byCode.has(code)) continue;
+    byCode.set(code, def);
+  }
+
+  // Drop legacy single appointment/relieving/signature from the portal list when new codes exist
+  const legacyDrop = new Set(["DOC-APPT", "DOC-REL", "DOC-SIGN", "DOC-PREV-EMP", "DOC-EXP"]);
+
+  return [...byCode.values()]
+    .filter((r) => {
+      const code = String(r.code ?? "");
+      const kind = normalizeDocKind(r.kind, code, String(r.name ?? ""));
+      if (kind === "signature") return false;
+      if (legacyDrop.has(code)) return false;
+      return true;
+    })
     .map((r) => {
       const code = String(r.code ?? "");
       const name = String(r.name ?? r.code ?? "Document");
+      const kind = normalizeDocKind(r.kind, code, name);
       return {
         id: String(r.id),
         code,
         name,
-        kind: normalizeDocKind(r.kind, code, name),
+        kind,
+        section: resolveDocSection(code, kind, r.section),
         mandatory: Boolean(r.mandatory),
         accept: formatsToAccept(r.formats),
         maxSizeMb:
@@ -308,6 +429,15 @@ export async function listPortalDocumentTypes(): Promise<PortalDocumentType[]> {
             ? null
             : Number(r.max_size_mb),
       };
+    })
+    .sort((a, b) => {
+      const order: PortalDocumentSection[] = [
+        "identity",
+        "education",
+        "previous_employment",
+        "other",
+      ];
+      return order.indexOf(a.section) - order.indexOf(b.section) || a.name.localeCompare(b.name);
     });
 }
 

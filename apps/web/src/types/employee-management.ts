@@ -81,6 +81,30 @@ export type EmployeeDocumentItem = {
   fileDataUrl?: string;
   uploadedBy: string;
   uploadedAt: string;
+  /** Where the file came from — onboarding portal vs HR/manual. */
+  source?: "onboarding" | "hr" | "manual";
+};
+
+export type EducationEntry = {
+  id: string;
+  degree: string;
+  institution: string;
+  field: string;
+  year: string;
+  grade: string;
+  /** Optional certificate / marksheet upload */
+  certificateFileName?: string;
+  certificateDataUrl?: string;
+};
+
+export type PreviousEmploymentEntry = {
+  id: string;
+  company: string;
+  designation: string;
+  fromDate: string;
+  toDate: string;
+  lastCtc: string;
+  reasonForLeaving: string;
 };
 
 export type PersonalInfo = {
@@ -130,9 +154,14 @@ export type EmployeeExtension = {
   personal: PersonalInfo;
   employment: EmploymentInfo;
   governmentIds: GovernmentIds;
+  /** Bank details the employee provided during onboarding / add-employee. */
   bank: BankDetails;
+  /** Salary account opened by the company after hire (manual HR entry). */
+  companyBank: BankDetails;
   salary: SalaryDetails;
   documents: EmployeeDocumentItem[];
+  education: EducationEntry[];
+  previousEmployment: PreviousEmploymentEntry[];
   createdBy: string;
   updatedBy: string;
   updatedAt: string;
@@ -203,8 +232,11 @@ export type EmployeeWizardDraft = {
   employment: EmploymentInfo;
   governmentIds: GovernmentIds;
   bank: BankDetails;
+  companyBank: BankDetails;
   salary: SalaryDetails;
   documents: EmployeeDocumentItem[];
+  education: EducationEntry[];
+  previousEmployment: PreviousEmploymentEntry[];
 };
 
 export const EMPTY_ADDRESS: AddressBlock = {
@@ -301,13 +333,41 @@ export function emptySalary(): SalaryDetails {
   };
 }
 
+export function emptyEducationEntry(): EducationEntry {
+  return {
+    id: crypto.randomUUID(),
+    degree: "",
+    institution: "",
+    field: "",
+    year: "",
+    grade: "",
+    certificateFileName: "",
+    certificateDataUrl: "",
+  };
+}
+
+export function emptyPreviousEmploymentEntry(): PreviousEmploymentEntry {
+  return {
+    id: crypto.randomUUID(),
+    company: "",
+    designation: "",
+    fromDate: "",
+    toDate: "",
+    lastCtc: "",
+    reasonForLeaving: "",
+  };
+}
+
 export function emptyWizardDraft(nextCode: string): EmployeeWizardDraft {
   return {
     personal: emptyPersonal(),
     employment: emptyEmployment(nextCode),
     governmentIds: emptyGovernmentIds(),
     bank: emptyBank(),
+    companyBank: emptyBank(),
     salary: emptySalary(),
     documents: [],
+    education: [],
+    previousEmployment: [],
   };
 }

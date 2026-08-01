@@ -146,14 +146,14 @@ class OnboardingService:
         return updated
 
     def _assert_mandatory_documents(self, ctx: TenantContext, row) -> None:
-        """Block hire without KYC docs: identity, education, photo, cancelled cheque."""
+        """Block hire without KYC docs: identity, education, photo."""
         from modules.recruitment.repository.candidate_document_repository import (
             CandidateDocumentRepository,
         )
 
         docs = CandidateDocumentRepository(self._db).list_rows(ctx, row.company_id)
         cand_docs = [d for d in docs if d.candidate_id == row.candidate_id and not d.is_deleted]
-        required = {"identity", "education", "photo", "cancelled_cheque"}
+        required = {"identity", "education", "photo"}
         present = {
             d.document_type
             for d in cand_docs
@@ -164,7 +164,7 @@ class OnboardingService:
             raise InvalidOnboardingState(
                 "Mandatory documents missing before employee creation: "
                 + ", ".join(missing)
-                + " (identity=Aadhaar/PAN; photo; cancelled_cheque; education required)"
+                + " (identity=Aadhaar/PAN; photo; education required)"
             )
 
     def _assert_mandatory_tasks(self, ctx: TenantContext, row) -> None:

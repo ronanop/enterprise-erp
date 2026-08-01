@@ -1,5 +1,6 @@
-"""HR attendance rule ORM — half-day hours, geo, early-leave thresholds."""
+"""HR attendance rule ORM — half-day hours, geo, early-leave, arrival window, punch mode."""
 
+from datetime import time
 from decimal import Decimal
 from uuid import UUID, uuid4
 
@@ -10,9 +11,10 @@ from sqlalchemy import (
     Integer,
     Numeric,
     String,
+    Time,
     UniqueConstraint,
 )
-from sqlalchemy.dialects.postgresql import UUID as PG_UUID
+from sqlalchemy.dialects.postgresql import JSONB, UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from database.base import Base
@@ -24,6 +26,14 @@ class HrAttendanceRule(Base, *HrMasterMixin):
     __table_args__ = (
         UniqueConstraint("company_id", "rule_code", name="uk_hr_att_rule_company_code"),
         CheckConstraint("status IN ('active','inactive')", name="ck_hr_att_rule_status"),
+        CheckConstraint(
+            "punch_mode IN ('first_in_last_out','every_punch')",
+            name="ck_hr_att_rule_punch_mode",
+        ),
+        CheckConstraint(
+            "arrival_after_status IN ('half_day','absent','late')",
+            name="ck_hr_att_rule_arrival_after",
+        ),
         {"schema": "hr"},
     )
 
@@ -51,5 +61,14 @@ class HrAttendanceRule(Base, *HrMasterMixin):
         Numeric(5, 2), nullable=False, default=Decimal("8.00")
     )
     compoff_auto_credit: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    # Policy maker — biometric + arrival window
+    punch_mode: Mapped[str] = mapped_column(String(40), nullable=False, default="first_in_last_out")
+    arrival_policy_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    applies_to_all_shifts: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    arrival_window_start: Mapped[time | None] = mapped_column(Time, nullable=True)
+    arrival_ok_until: Mapped[time | None] = mapped_column(Time, nullable=True)
+    arrival_after_status: Mapped[str] = mapped_column(String(30), nullable=False, default="half_day")
+    # Per-shift overrides: [{shift_id, shift_code, window_start, ok_until, after_status}]
+    shift_windows_json: Mapped[list | None] = mapped_column(JSONB, nullable=True)
     is_default: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     status: Mapped[str] = mapped_column(String(30), nullable=False, default="active", index=True)

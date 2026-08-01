@@ -160,7 +160,7 @@ export function EmployeeManagementPage() {
             </Link>
             <Link href="/hr/onboarding">
               <Button size="sm" variant="outline" className="cursor-pointer">
-                Hire via onboarding
+                Onboarding
               </Button>
             </Link>
             <Button

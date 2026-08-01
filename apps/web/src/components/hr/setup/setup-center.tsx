@@ -7,6 +7,7 @@ import { ChevronRight } from "lucide-react";
 
 import { SetupEntityPanel, type FieldDef } from "@/components/hr/setup/setup-entity-panel";
 import { HolidayCalendarPanel } from "@/components/hr/setup/holiday-calendar-panel";
+import { AttendancePolicyPanel } from "@/components/hr/setup/attendance-policy-panel";
 import { SetupToastHost } from "@/components/hr/setup/setup-toast";
 import { toApiTimeValue, toTimeInputValue } from "@/components/hr/setup/setup-drawer";
 import { HrStatusBadge } from "@/components/hr/hr-primitives";
@@ -1219,6 +1220,9 @@ const TAB_CONFIG: Partial<Record<HrSetupTabId, TabConfig>> = {
 function TabPanel({ tab }: { tab: HrSetupTab }) {
   if (tab.id === "holiday-calendar") {
     return <HolidayCalendarPanel tab={tab} />;
+  }
+  if (tab.id === "attendance-rules") {
+    return <AttendancePolicyPanel tab={tab} />;
   }
   const cfg = TAB_CONFIG[tab.id];
   if (!cfg) {

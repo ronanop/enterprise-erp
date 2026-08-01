@@ -7,8 +7,8 @@
 ---
 
 **Project:** Enterprise ERP Platform
-**Generated:** 2026-07-28 10:45:16
-**Category:** Analytics Dashboard
+**Generated:** 2026-07-31 12:21:20
+**Category:** Password Manager
 
 ---
 
@@ -18,30 +18,17 @@
 
 | Role | Hex | CSS Variable |
 |------|-----|--------------|
-| Primary | `#1E40AF` | `--color-primary` |
-| On Primary | `#FFFFFF` | `--color-on-primary` |
+| Primary | `#2563EB` | `--color-primary` |
 | Secondary | `#3B82F6` | `--color-secondary` |
-| Accent/CTA | `#D97706` | `--color-accent` |
+| Accent/CTA | `#F97316` | `--color-accent` |
 | Background | `#F8FAFC` | `--color-background` |
-| Foreground | `#1E3A8A` | `--color-foreground` |
-| Muted | `#E9EEF6` | `--color-muted` |
-| Border | `#DBEAFE` | `--color-border` |
-| Destructive | `#DC2626` | `--color-destructive` |
-| Ring | `#1E40AF` | `--color-ring` |
-
-**Color Notes:** Blue data + amber highlights [Accent adjusted from #F59E0B for WCAG 3:1]
+| Foreground | `#1E293B` | `--color-foreground` |
 
 ### Typography
 
-- **Heading Font:** Fira Code
-- **Body Font:** Fira Sans
-- **Mood:** dashboard, data, analytics, code, technical, precise
-- **Google Fonts:** [Fira Code + Fira Sans](https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600;700&family=Fira+Sans:wght@300;400;500;600;700&display=swap)
-
-**CSS Import:**
-```css
-@import url('https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600;700&family=Fira+Sans:wght@300;400;500;600;700&display=swap');
-```
+- **Heading Font:** Inter
+- **Body Font:** Inter
+- **Mood:** Professional + Clean hierarchy
 
 ### Spacing Variables
 
@@ -73,7 +60,7 @@
 ```css
 /* Primary Button */
 .btn-primary {
-  background: #D97706;
+  background: #F97316;
   color: white;
   padding: 12px 24px;
   border-radius: 8px;
@@ -90,8 +77,8 @@
 /* Secondary Button */
 .btn-secondary {
   background: transparent;
-  color: #1E40AF;
-  border: 2px solid #1E40AF;
+  color: #2563EB;
+  border: 2px solid #2563EB;
   padding: 12px 24px;
   border-radius: 8px;
   font-weight: 600;
@@ -130,9 +117,9 @@
 }
 
 .input:focus {
-  border-color: #1E40AF;
+  border-color: #2563EB;
   outline: none;
-  box-shadow: 0 0 0 3px #1E40AF20;
+  box-shadow: 0 0 0 3px #2563EB20;
 }
 ```
 
@@ -158,28 +145,27 @@
 
 ## Style Guidelines
 
-**Style:** Data-Dense Dashboard
+**Style:** Exaggerated Minimalism
 
-**Keywords:** Multiple charts/widgets, data tables, KPI cards, minimal padding, grid layout, space-efficient, maximum data visibility
+**Keywords:** Bold minimalism, oversized typography, high contrast, negative space, loud minimal, statement design
 
-**Best For:** Business intelligence dashboards, financial analytics, enterprise reporting, operational dashboards, data warehousing
+**Best For:** Fashion, architecture, portfolios, agency landing pages, luxury brands, editorial
 
-**Key Effects:** Hover tooltips, chart zoom on click, row highlighting on hover, smooth filter animations, data loading spinners
+**Key Effects:** font-size: clamp(3rem 10vw 12rem), font-weight: 900, letter-spacing: -0.05em, massive whitespace
 
 ### Page Pattern
 
-**Pattern Name:** Real-Time / Operations Landing
+**Pattern Name:** Trust & Authority + Feature-Rich
 
-- **Conversion Strategy:** For ops/security/iot products. Demo or sandbox link. Trust signals.
-- **CTA Placement:** Primary CTA in nav + After metrics
-- **Section Order:** 1. Hero (product + live preview or status), 2. Key metrics/indicators, 3. How it works, 4. CTA (Start trial / Contact)
+- **CTA Placement:** Above fold
+- **Section Order:** Hero > Features > CTA
 
 ---
 
 ## Anti-Patterns (Do NOT Use)
 
-- ❌ Ornate design
-- ❌ No filtering
+- ❌ Excessive decoration
+- ❌ Color-only indicators
 
 ### Additional Forbidden Patterns
 

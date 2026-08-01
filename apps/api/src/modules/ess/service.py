@@ -322,12 +322,27 @@ class EssService:
         return start, end
 
     def _check_in_status_fields(
-        self, shift: HrShift | None, local_now: datetime
+        self, shift: HrShift | None, local_now: datetime, *, ctx: TenantContext | None = None, company_id: UUID | None = None
     ) -> dict:
         if shift is None:
             return {"attendance_status": "present", "shift_id": None, "late_minutes": None}
         start, _ = self._shift_window(shift, local_now.date(), local_now.tzinfo)  # type: ignore[arg-type]
         grace = int(shift.grace_minutes or 0)
+        if ctx is not None and company_id is not None:
+            status, late_minutes = self._att_rules.resolve_checkin_status(
+                ctx,
+                company_id,
+                check_in_at=local_now,
+                shift_start=shift.start_time,
+                shift_grace_minutes=grace,
+                shift_id=str(shift.id),
+                shift_code=str(shift.shift_code or ""),
+            )
+            return {
+                "attendance_status": status,
+                "shift_id": shift.id,
+                "late_minutes": late_minutes,
+            }
         late_minutes = int((local_now - start).total_seconds() // 60) - grace
         if late_minutes > 0:
             return {
@@ -406,7 +421,9 @@ class EssService:
             geo_fields["longitude"] = Decimal(str(longitude))
 
         shift = self._resolve_shift(ctx, emp, today)
-        check_in_fields = self._check_in_status_fields(shift, local_now)
+        check_in_fields = self._check_in_status_fields(
+            shift, local_now, ctx=ctx, company_id=emp.company_id
+        )
 
         rows = [
             row
