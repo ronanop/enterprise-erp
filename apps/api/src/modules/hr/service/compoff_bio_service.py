@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import hmac
 import secrets
-from datetime import date, datetime, timezone
+import socket
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 from uuid import UUID
 
@@ -17,12 +18,14 @@ from modules.foundation.service.audit_service import AuditService
 from modules.hr.adapters.master_data_port import HrMasterDataAdapter
 from modules.hr.domain.enums import AttendanceSource
 from modules.hr.domain.exceptions import InvalidLeaveRequestState
+from modules.hr.schemas import BiometricDeviceFeedResponse, BiometricDeviceLiveLogItem, BiometricDeviceResponse
 from modules.hr.repository.attendance_repository import AttendanceRepository
 from modules.hr.repository.compoff_bio_repository import (
     BiometricDeviceRepository,
     CompoffRequestRepository,
 )
 from modules.hr.service.attendance_service import AttendanceService
+from modules.hr.service.attendance_policy_apply import AttendancePolicyApplyService
 from modules.hr.service.attendance_policy_service import AttendanceRuleService
 from modules.hr.service.hr_scope_validator import HrScopeValidator
 from modules.hr.service.leave_service import LeaveBalanceService
@@ -190,10 +193,87 @@ class BiometricDeviceService:
         self._repo = BiometricDeviceRepository(db)
         self._attendance = AttendanceRepository(db)
         self._attendance_svc = AttendanceService(db)
-        self._rules = AttendanceRuleService(db)
+        self._policy = AttendancePolicyApplyService(db)
         self._scope = HrScopeValidator(db)
         self._master = HrMasterDataAdapter(db)
         self._audit = AuditService(db)
+
+    @staticmethod
+    def _probe_device(ip: str | None, port: int | None) -> tuple[bool, str]:
+        if not ip or not port:
+            return False, "Configure IP and port to connect to the device."
+        try:
+            with socket.create_connection((str(ip).strip(), int(port)), timeout=3):
+                return True, f"Device reachable at {ip}:{port}"
+        except OSError as exc:
+            return False, f"Cannot reach {ip}:{port} — {exc}"
+
+    def get(self, ctx: TenantContext, row_id: UUID):
+        row = self._repo.get(ctx, row_id)
+        if row is None:
+            raise NotFoundException("Biometric device not found")
+        return row
+
+    def live_feed(self, ctx: TenantContext, row_id: UUID, *, days: int = 14) -> BiometricDeviceFeedResponse:
+        device = self.get(ctx, row_id)
+        reachable, reachability_message = self._probe_device(device.ip_address, device.port)
+        cid = device.company_id
+        cutoff = date.today() - timedelta(days=max(1, min(days, 90)))
+        tag = f"biometric:{device.device_code}"
+        today = date.today()
+        ingested: list[BiometricDeviceLiveLogItem] = []
+        today_count = 0
+
+        for row in self._attendance.list_rows(ctx, cid):
+            if row.source != AttendanceSource.BIOMETRIC.value:
+                continue
+            notes = row.notes or ""
+            if tag not in notes and device.device_code not in notes:
+                continue
+            if row.attendance_date < cutoff:
+                continue
+            emp_name: str | None = None
+            emp_code: str | None = None
+            try:
+                emp = self._master.get_employee(ctx, row.employee_id)
+                emp_name = " ".join(
+                    p for p in (getattr(emp, "first_name", None), getattr(emp, "last_name", None)) if p
+                ).strip() or None
+                emp_code = str(getattr(emp, "employee_code", None) or "") or None
+            except Exception:
+                pass
+            if row.attendance_date == today:
+                today_count += 1
+            ingested.append(
+                BiometricDeviceLiveLogItem(
+                    id=row.id,
+                    employee_id=row.employee_id,
+                    employee_code=emp_code,
+                    employee_name=emp_name,
+                    attendance_date=row.attendance_date,
+                    check_in_at=row.check_in_at,
+                    check_out_at=row.check_out_at,
+                    attendance_status=row.attendance_status,
+                    notes=row.notes,
+                    updated_at=getattr(row, "updated_at", None),
+                )
+            )
+
+        ingested.sort(
+            key=lambda r: (
+                r.attendance_date,
+                r.check_in_at or datetime.min.replace(tzinfo=timezone.utc),
+            ),
+            reverse=True,
+        )
+
+        return BiometricDeviceFeedResponse(
+            device=BiometricDeviceResponse.model_validate(device),
+            reachable=reachable,
+            reachability_message=reachability_message,
+            today_ingested_count=today_count,
+            ingested_records=ingested[:100],
+        )
 
     def list(self, ctx: TenantContext, company_id: UUID | None = None):
         cid = self._scope.resolve_company_id(ctx, company_id)
@@ -319,36 +399,33 @@ class BiometricDeviceService:
             events = punch.get("punch_events") or []
             if not isinstance(events, list):
                 events = []
-            aggregated = self._rules.aggregate_punches(
-                ctx,
-                cid,
+
+            rule = self._policy.resolve_rule_for_employee(ctx, cid, emp.id)
+            shift_id_raw = punch.get("shift_id")
+            aggregated = self._policy.aggregate_punches(
+                rule,
                 events=events,
                 check_in_at=punch.get("check_in_at"),
                 check_out_at=punch.get("check_out_at"),
             )
-            check_in_at = aggregated.get("check_in_at")
-            check_out_at = aggregated.get("check_out_at")
-            total_hours = aggregated.get("total_hours")
-
-            status = punch.get("attendance_status")
-            late_minutes = None
-            if check_in_at and not status:
-                status, late_minutes = self._rules.resolve_checkin_status(
-                    ctx,
-                    cid,
-                    check_in_at=check_in_at if isinstance(check_in_at, datetime) else datetime.fromisoformat(str(check_in_at).replace("Z", "+00:00")),
-                    shift_start=None,
-                    shift_grace_minutes=0,
-                    shift_id=str(punch.get("shift_id") or "") or None,
-                    shift_code=str(punch.get("shift_code") or "") or None,
-                )
-            if total_hours is not None:
-                status = self._rules.resolve_checkout_status(
-                    ctx,
-                    cid,
-                    total_hours=total_hours,
-                    current_status=status or "present",
-                )
+            applied = self._policy.apply_to_fields(
+                ctx,
+                cid,
+                emp.id,
+                {
+                    "check_in_at": aggregated.get("check_in_at") or punch.get("check_in_at"),
+                    "check_out_at": aggregated.get("check_out_at") or punch.get("check_out_at"),
+                    "total_hours": aggregated.get("total_hours"),
+                    "attendance_status": punch.get("attendance_status") or "present",
+                    "shift_id": UUID(str(shift_id_raw)) if shift_id_raw else None,
+                },
+                rule=rule,
+            )
+            check_in_at = applied.get("check_in_at")
+            check_out_at = applied.get("check_out_at")
+            total_hours = applied.get("total_hours")
+            status = applied.get("attendance_status") or "present"
+            late_minutes = applied.get("late_minutes")
 
             note_parts = [
                 punch.get("notes") or (f"biometric:{device_code}" if device_code else "biometric"),
@@ -372,7 +449,7 @@ class BiometricDeviceService:
                 if getattr(existing, "status", None) == "locked":
                     skipped += 1
                     continue
-                self._attendance.update(ctx, existing.id, **fields)
+                self._attendance_svc.update(ctx, existing.id, **fields)
                 updated += 1
             else:
                 self._attendance_svc.create(

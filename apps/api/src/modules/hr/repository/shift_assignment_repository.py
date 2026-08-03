@@ -27,6 +27,14 @@ class ShiftAssignmentRepository(HrScopedRepository):
         stmt = self.apply_hr_filter(stmt, HrShiftAssignment, ctx, branch_scoped=True)
         return list(self.db.scalars(stmt).all())
 
+    def list_for_employee(self, ctx: TenantContext, employee_id: UUID) -> list[HrShiftAssignment]:
+        stmt = select(HrShiftAssignment).where(
+            HrShiftAssignment.employee_id == employee_id,
+            HrShiftAssignment.is_deleted.is_(False),
+        )
+        stmt = self.apply_hr_filter(stmt, HrShiftAssignment, ctx, branch_scoped=True)
+        return list(self.db.scalars(stmt).all())
+
     def create(self, ctx: TenantContext, **fields) -> HrShiftAssignment:
         row = HrShiftAssignment(
             id=uuid4(),

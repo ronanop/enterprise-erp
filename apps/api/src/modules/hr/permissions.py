@@ -56,6 +56,9 @@ HR_PERMISSIONS: list[tuple[str, str, str, str]] = [
     ("hr.separation:complete", "hr.separation", "complete", "hr"),
     ("hr.report:read", "hr.report", "read", "hr"),
     ("hr.report:export", "hr.report", "export", "hr"),
+    ("hr.management_group:read", "hr.management_group", "read", "hr"),
+    ("hr.management_group:create", "hr.management_group", "create", "hr"),
+    ("hr.management_group:update", "hr.management_group", "update", "hr"),
 ]
 
 HR_EMPLOYEE_PERMISSIONS = [
@@ -121,6 +124,9 @@ HR_EXECUTIVE_PERMISSIONS = list(
             "hr.training:assign",
             "hr.separation:complete",
             "hr.report:export",
+            "hr.management_group:read",
+            "hr.management_group:create",
+            "hr.management_group:update",
         ]
     )
 )

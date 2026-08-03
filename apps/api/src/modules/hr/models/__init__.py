@@ -18,7 +18,7 @@ from modules.hr.models.leave_adjustment import HrLeaveAdjustment
 from modules.hr.models.leave_balance import HrLeaveBalance
 from modules.hr.models.leave_request import HrLeaveRequest
 from modules.hr.models.leave_type import HrLeaveType
-from modules.hr.models.lifecycle_event import HrLifecycleEvent
+from modules.hr.models.management_group import HrManagementGroup
 from modules.hr.models.performance_review import HrPerformanceReview
 from modules.hr.models.roster_entry import HrRosterEntry
 from modules.hr.models.separation import HrSeparation
@@ -42,6 +42,7 @@ __all__ = [
     "HrDesignation",
     "HrEmployeeProfile",
     "HrEmployment",
+    "HrManagementGroup",
     "HrDepartmentAssignment",
     "HrDesignationAssignment",
     "HrShift",

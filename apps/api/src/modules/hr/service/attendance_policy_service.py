@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal
 from uuid import UUID
 
@@ -22,6 +22,7 @@ from modules.hr.service.engines.calendar_rules import (
     resolve_arrival_status,
     resolve_status_from_hours,
 )
+from modules.hr.service.attendance_policy_apply import AttendancePolicyApplyService
 from modules.hr.service.hr_scope_validator import HrScopeValidator
 
 _ALLOWED_RULES = {
@@ -92,6 +93,7 @@ class WeeklyOffPolicyService:
         *,
         company_id: UUID | None = None,
         custom_weekdays: list[int] | None = None,
+        alternate_saturday_start: date | None = None,
     ):
         """Create or update the company default weekly-off policy from a rule list."""
         cid = self._scope.resolve_company_id(ctx, company_id)
@@ -99,6 +101,7 @@ class WeeklyOffPolicyService:
         payload = {
             "rules_json": rules,
             "custom_weekdays_json": custom_weekdays,
+            "alternate_saturday_start": alternate_saturday_start,
             "status": "active",
             "is_default": True,
         }
@@ -204,7 +207,15 @@ class AttendanceRuleService:
         fields.setdefault("half_day_hours", Decimal("4.00"))
         fields.setdefault("full_day_hours", Decimal("8.00"))
         fields.setdefault("punch_mode", "first_in_last_out")
-        return self._repo.create(ctx, company_id=cid, **fields)
+        row = self._repo.create(ctx, company_id=cid, **fields)
+        if row.is_default:
+            self._clear_other_defaults(ctx, cid, row.id)
+        return row
+
+    def _clear_other_defaults(self, ctx: TenantContext, company_id: UUID, keep_id: UUID) -> None:
+        for other in self._repo.list_rows(ctx, company_id):
+            if other.id != keep_id and other.is_default:
+                self._repo.update(ctx, other.id, is_default=False)
 
     def update(self, ctx: TenantContext, row_id: UUID, **fields):
         self.get(ctx, row_id)
@@ -228,6 +239,8 @@ class AttendanceRuleService:
         row = self._repo.update(ctx, row_id, **fields)
         if row is None:
             raise NotFoundException("Attendance rule not found")
+        if row.is_default:
+            self._clear_other_defaults(ctx, row.company_id, row.id)
         return row
 
     def delete(self, ctx: TenantContext, row_id: UUID) -> None:
@@ -244,31 +257,23 @@ class AttendanceRuleService:
         shift_grace_minutes: int = 0,
         shift_id: str | None = None,
         shift_code: str | None = None,
+        employee_id: UUID | None = None,
     ) -> tuple[str, int]:
-        rule = self._repo.get_default(ctx, company_id)
-        if rule is None:
-            return resolve_arrival_status(
-                check_in_at=check_in_at,
-                shift_start=shift_start,
-                grace_minutes=shift_grace_minutes,
-                window=None,
-            )
-        window = pick_arrival_window(
-            arrival_policy_enabled=bool(rule.arrival_policy_enabled),
-            applies_to_all_shifts=bool(rule.applies_to_all_shifts),
-            window_start=rule.arrival_window_start,
-            ok_until=rule.arrival_ok_until,
-            after_status=rule.arrival_after_status,
-            shift_windows_json=rule.shift_windows_json,
-            shift_id=shift_id,
-            shift_code=shift_code,
+        apply_svc = AttendancePolicyApplyService(self._db)
+        rule = (
+            apply_svc.resolve_rule_for_employee(ctx, company_id, employee_id)
+            if employee_id
+            else self._repo.get_default(ctx, company_id)
         )
-        return resolve_arrival_status(
+        if isinstance(check_in_at, str):
+            check_in_at = datetime.fromisoformat(str(check_in_at).replace("Z", "+00:00"))
+        return apply_svc.resolve_checkin_status(
+            rule,
             check_in_at=check_in_at,
             shift_start=shift_start,
-            grace_minutes=shift_grace_minutes,
-            late_mark_after_minutes=int(rule.late_mark_after_minutes or 15),
-            window=window,
+            shift_grace_minutes=shift_grace_minutes,
+            shift_id=shift_id,
+            shift_code=shift_code,
         )
 
     def resolve_checkout_status(
@@ -279,24 +284,19 @@ class AttendanceRuleService:
         total_hours: Decimal | float | None,
         current_status: str | None,
         early_leave_minutes: int | None = None,
+        employee_id: UUID | None = None,
     ) -> str:
-        rule = self._repo.get_default(ctx, company_id)
-        if rule is None:
-            return resolve_status_from_hours(
-                total_hours=total_hours,
-                half_day_hours=Decimal("4"),
-                full_day_hours=Decimal("8"),
-                current_status=current_status,
-                early_leave_minutes=early_leave_minutes,
-                early_leave_half_day_minutes=120,
-            )
-        return resolve_status_from_hours(
+        apply_svc = AttendancePolicyApplyService(self._db)
+        rule = (
+            apply_svc.resolve_rule_for_employee(ctx, company_id, employee_id)
+            if employee_id
+            else self._repo.get_default(ctx, company_id)
+        )
+        return apply_svc.resolve_checkout_status(
+            rule,
             total_hours=total_hours,
-            half_day_hours=rule.half_day_hours,
-            full_day_hours=rule.full_day_hours,
             current_status=current_status,
             early_leave_minutes=early_leave_minutes,
-            early_leave_half_day_minutes=int(rule.early_leave_half_day_minutes or 120),
         )
 
     def aggregate_punches(
@@ -307,12 +307,17 @@ class AttendanceRuleService:
         events: list,
         check_in_at=None,
         check_out_at=None,
+        employee_id: UUID | None = None,
     ) -> dict:
-        rule = self._repo.get_default(ctx, company_id)
-        mode = getattr(rule, "punch_mode", None) if rule else "first_in_last_out"
-        return aggregate_biometric_punches(
-            events or [],
-            punch_mode=str(mode or "first_in_last_out"),
+        apply_svc = AttendancePolicyApplyService(self._db)
+        rule = (
+            apply_svc.resolve_rule_for_employee(ctx, company_id, employee_id)
+            if employee_id
+            else self._repo.get_default(ctx, company_id)
+        )
+        return apply_svc.aggregate_punches(
+            rule,
+            events=events,
             check_in_at=check_in_at,
             check_out_at=check_out_at,
         )

@@ -17,6 +17,7 @@ from modules.hr.repository.lifecycle_event_repository import LifecycleEventRepos
 from modules.hr.service.document_number_service import DocumentNumberService
 from modules.hr.service.engines import EmploymentEngine
 from modules.hr.service.hr_scope_validator import HrScopeValidator
+from modules.hr.service.management_group_service import ManagementGroupService
 
 
 class EmploymentService:
@@ -73,13 +74,18 @@ class EmploymentService:
             operation="create",
             performed_by=ctx.user_id,
         )
+        if row.management_group_id:
+            ManagementGroupService(self._db).apply_to_employment(ctx, row)
         return row
 
     def update(self, ctx: TenantContext, row_id: UUID, **fields):
-        self.get(ctx, row_id)
+        prev = self.get(ctx, row_id)
+        prev_mgmt = prev.management_group_id
         row = self._repo.update(ctx, row_id, **fields)
         if row is None:
             raise NotFoundException("Employment not found")
+        if row.management_group_id and row.management_group_id != prev_mgmt:
+            ManagementGroupService(self._db).apply_to_employment(ctx, row)
         return row
 
     def start_onboarding(self, ctx: TenantContext, row_id: UUID):

@@ -187,6 +187,7 @@ class EmploymentCreate(BaseModel):
     lifecycle_source: str | None = None
     payroll_eligible: bool = False
     status: str = "draft"
+    management_group_id: UUID | None = None
 
 
 class EmploymentUpdate(BaseModel):
@@ -201,6 +202,7 @@ class EmploymentUpdate(BaseModel):
     work_location_text: str | None = None
     lifecycle_source: str | None = None
     status: str | None = None
+    management_group_id: UUID | None = None
     version: int | None = None
 
 
@@ -218,8 +220,68 @@ class EmploymentResponse(OrmModel):
     notice_period_days: int | None = None
     lifecycle_source: str | None = None
     payroll_eligible: bool = False
+    management_group_id: UUID | None = None
     status: str
     version: int
+
+
+class ManagementGroupFeatureCatalogSection(BaseModel):
+    id: str
+    title: str
+    features: list[dict]
+
+
+class ManagementGroupCreate(BaseModel):
+    company_id: UUID | None = None
+    group_code: str
+    group_name: str
+    description: str | None = None
+    employment_type: str = "permanent"
+    status: str = "active"
+    default_shift_id: UUID
+    default_shift_rotation_id: UUID | None = None
+    default_attendance_rule_id: UUID | None = None
+    default_holiday_calendar_id: UUID | None = None
+    default_weekly_off_policy_id: UUID | None = None
+    feature_toggles_json: dict[str, bool] | None = None
+
+
+class ManagementGroupUpdate(BaseModel):
+    group_name: str | None = None
+    description: str | None = None
+    employment_type: str | None = None
+    status: str | None = None
+    default_shift_id: UUID | None = None
+    default_shift_rotation_id: UUID | None = None
+    default_attendance_rule_id: UUID | None = None
+    default_holiday_calendar_id: UUID | None = None
+    default_weekly_off_policy_id: UUID | None = None
+    feature_toggles_json: dict[str, bool] | None = None
+    version: int | None = None
+
+
+class ManagementGroupResponse(OrmModel):
+    id: UUID
+    company_id: UUID
+    group_code: str
+    group_name: str
+    description: str | None = None
+    employment_type: str
+    status: str
+    default_shift_id: UUID
+    default_shift_rotation_id: UUID | None = None
+    default_attendance_rule_id: UUID | None = None
+    default_holiday_calendar_id: UUID | None = None
+    default_weekly_off_policy_id: UUID | None = None
+    feature_toggles_json: dict[str, bool]
+    employee_count: int | None = None
+    version: int
+
+
+class EmployeeFeatureAccessResponse(BaseModel):
+    employee_id: UUID
+    management_group_id: UUID | None = None
+    feature_toggles: dict[str, bool]
 
 
 class ProbationStartRequest(BaseModel):
@@ -1035,6 +1097,7 @@ class WeeklyOffRulesUpsert(BaseModel):
     company_id: UUID | None = None
     rules_json: list[str]
     custom_weekdays_json: list[int] | None = None
+    alternate_saturday_start: date | None = None
 
 
 class ShiftArrivalWindow(BaseModel):
@@ -1239,6 +1302,27 @@ class BiometricDeviceResponse(OrmModel):
     api_key: str | None = None
 
 
+class BiometricDeviceLiveLogItem(BaseModel):
+    id: UUID
+    employee_id: UUID
+    employee_code: str | None = None
+    employee_name: str | None = None
+    attendance_date: date
+    check_in_at: datetime | None = None
+    check_out_at: datetime | None = None
+    attendance_status: str
+    notes: str | None = None
+    updated_at: datetime | None = None
+
+
+class BiometricDeviceFeedResponse(BaseModel):
+    device: BiometricDeviceResponse
+    reachable: bool
+    reachability_message: str
+    today_ingested_count: int
+    ingested_records: list[BiometricDeviceLiveLogItem]
+
+
 class BiometricPunchIn(BaseModel):
     employee_id: UUID | None = None
     employee_code: str | None = None
@@ -1406,3 +1490,21 @@ class RosterEntryResponse(OrmModel):
     status: str
     notes: str | None = None
     version: int
+
+
+class HrEssInboxItemResponse(OrmModel):
+    """HR-facing unified inbox row for ESS submissions and approval outcomes."""
+
+    id: str
+    source_id: UUID
+    category: str
+    status: str
+    title: str
+    employee_id: UUID
+    employee_name: str
+    document_number: str | None = None
+    occurred_at: datetime
+    detail: str
+    pending: bool
+    available_actions: list[str]
+    api_path: str

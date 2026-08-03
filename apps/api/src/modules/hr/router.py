@@ -13,6 +13,7 @@ from modules.hr.routers import (
     employee_documents_router,
     employee_profiles_router,
     employment_router,
+    ess_inbox_router,
     goals_router,
     grades_router,
     holiday_calendars_router,
@@ -40,6 +41,7 @@ from modules.hr.routers import (
     training_rooms_router,
     training_router,
     weekly_off_policies_router,
+    management_groups_router,
 )
 
 hr_router = APIRouter(prefix="/hr")
@@ -80,3 +82,5 @@ hr_router.include_router(training_rooms_router)
 hr_router.include_router(training_requests_router)
 hr_router.include_router(separation_router)
 hr_router.include_router(reports_router)
+hr_router.include_router(ess_inbox_router)
+hr_router.include_router(management_groups_router)

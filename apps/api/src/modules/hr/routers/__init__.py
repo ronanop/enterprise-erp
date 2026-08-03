@@ -56,6 +56,7 @@ from modules.hr.schemas import (
     HolidayCalendarCreate,
     HolidayCalendarResponse,
     HolidayCalendarUpdate,
+    HrEssInboxItemResponse,
     JobLevelCreate,
     JobLevelResponse,
     JobLevelUpdate,
@@ -73,6 +74,10 @@ from modules.hr.schemas import (
     LeaveTypeResponse,
     LeaveTypeUpdate,
     LifecycleEventResponse,
+    ManagementGroupCreate,
+    ManagementGroupResponse,
+    ManagementGroupUpdate,
+    EmployeeFeatureAccessResponse,
     OnDutyRequestCreate,
     OnDutyRequestResponse,
     OtAllotmentCreate,
@@ -80,6 +85,7 @@ from modules.hr.schemas import (
     CompoffRequestCreate,
     CompoffRequestResponse,
     BiometricDeviceCreate,
+    BiometricDeviceFeedResponse,
     BiometricDeviceResponse,
     DeviceSyncRequest,
     DeviceSyncResponse,
@@ -158,12 +164,13 @@ from modules.hr.service.attendance_policy_service import (
 from modules.hr.service.on_duty_ot_service import OnDutyRequestService, OtAllotmentService
 from modules.hr.service.compoff_bio_service import BiometricDeviceService, CompoffRequestService
 from modules.hr.service.shift_swap_rotation_service import ShiftRotationService, ShiftSwapService
-from modules.hr.service.kpi_okr_service import KpiService, OkrService
+from modules.hr.service.management_group_service import ManagementGroupService
 from shared.schemas import APIResponse
 
 designations_router = APIRouter(prefix="/designations", tags=["HR - Designations"])
 employee_profiles_router = APIRouter(prefix="/employee-profiles", tags=["HR - Employee Profiles"])
 employment_router = APIRouter(prefix="/employment", tags=["HR - Employment"])
+management_groups_router = APIRouter(prefix="/management-groups", tags=["HR - Management Groups"])
 department_assignments_router = APIRouter(prefix="/department-assignments", tags=["HR - Department Assignments"])
 designation_assignments_router = APIRouter(prefix="/designation-assignments", tags=["HR - Designation Assignments"])
 shifts_router = APIRouter(prefix="/shifts", tags=["HR - Shifts"])
@@ -202,6 +209,7 @@ training_rooms_router = APIRouter(prefix="/training-rooms", tags=["HR - Training
 training_requests_router = APIRouter(prefix="/training-requests", tags=["HR - Training Requests"])
 separation_router = APIRouter(prefix="/separation", tags=["HR - Separation"])
 reports_router = APIRouter(prefix="/reports", tags=["HR - Reports"])
+ess_inbox_router = APIRouter(prefix="/ess-inbox", tags=["HR - ESS Inbox"])
 
 
 @designations_router.get("", response_model=APIResponse[list[DesignationResponse]])
@@ -260,6 +268,74 @@ def update_profile(
     db: Annotated[Session, Depends(get_db)],
 ):
     return APIResponse(message="OK", data=EmployeeProfileService(db).update(ctx, row_id, **extract_update_fields(body)))
+
+
+@management_groups_router.get("/feature-catalog", response_model=APIResponse[list[dict]])
+def management_group_feature_catalog(
+    ctx: Annotated[TenantContext, Depends(require_permission("hr.management_group:read"))],
+    db: Annotated[Session, Depends(get_db)],
+):
+    return APIResponse(message="OK", data=ManagementGroupService(db).feature_catalog())
+
+
+@management_groups_router.get("", response_model=APIResponse[list[ManagementGroupResponse]])
+def list_management_groups(
+    ctx: Annotated[TenantContext, Depends(require_permission("hr.management_group:read"))],
+    db: Annotated[Session, Depends(get_db)],
+    company_id: UUID | None = None,
+):
+    svc = ManagementGroupService(db)
+    rows = svc.list(ctx, company_id)
+    return APIResponse(
+        message="OK",
+        data=[ManagementGroupResponse.model_validate(svc.serialize(ctx, r)) for r in rows],
+    )
+
+
+@management_groups_router.post("", response_model=APIResponse[ManagementGroupResponse])
+def create_management_group(
+    body: ManagementGroupCreate,
+    ctx: Annotated[TenantContext, Depends(require_permission("hr.management_group:create"))],
+    db: Annotated[Session, Depends(get_db)],
+):
+    svc = ManagementGroupService(db)
+    row = svc.create(ctx, **body.model_dump())
+    return APIResponse(message="OK", data=ManagementGroupResponse.model_validate(svc.serialize(ctx, row)))
+
+
+@management_groups_router.patch("/{row_id}", response_model=APIResponse[ManagementGroupResponse])
+def update_management_group(
+    row_id: UUID,
+    body: ManagementGroupUpdate,
+    ctx: Annotated[TenantContext, Depends(require_permission("hr.management_group:update"))],
+    db: Annotated[Session, Depends(get_db)],
+):
+    svc = ManagementGroupService(db)
+    row = svc.update(ctx, row_id, **extract_update_fields(body))
+    return APIResponse(message="OK", data=ManagementGroupResponse.model_validate(svc.serialize(ctx, row)))
+
+
+@management_groups_router.delete("/{row_id}", response_model=APIResponse[None])
+def delete_management_group(
+    row_id: UUID,
+    ctx: Annotated[TenantContext, Depends(require_permission("hr.management_group:update"))],
+    db: Annotated[Session, Depends(get_db)],
+):
+    ManagementGroupService(db).delete(ctx, row_id)
+    return APIResponse(message="Deleted", data=None)
+
+
+@management_groups_router.get(
+    "/employees/{employee_id}/features",
+    response_model=APIResponse[EmployeeFeatureAccessResponse],
+)
+def employee_feature_access(
+    employee_id: UUID,
+    ctx: Annotated[TenantContext, Depends(require_permission("hr.employment:read"))],
+    db: Annotated[Session, Depends(get_db)],
+):
+    svc = ManagementGroupService(db)
+    return APIResponse(message="OK", data=svc.employee_feature_access(ctx, employee_id))
 
 
 @employment_router.get("", response_model=APIResponse[list[EmploymentResponse]])
@@ -848,6 +924,16 @@ def create_attendance(
     return APIResponse(message="OK", data=AttendanceService(db).create(ctx, **body.model_dump()))
 
 
+@attendance_router.post("/jobs/auto-absent", response_model=APIResponse[dict])
+def run_attendance_auto_absent(
+    ctx: Annotated[TenantContext, Depends(require_permission("hr.attendance:update"))],
+):
+    """Run yesterday auto-absent / week-off / holiday backfill (same as Celery beat task)."""
+    from modules.hr.tasks import attendance_auto_absent
+
+    return APIResponse(message="OK", data=attendance_auto_absent())
+
+
 @attendance_router.patch("/{row_id}", response_model=APIResponse[AttendanceResponse])
 def update_attendance(
     row_id: UUID,
@@ -963,6 +1049,7 @@ def upsert_weekly_off_rules(
             body.rules_json,
             company_id=body.company_id,
             custom_weekdays=body.custom_weekdays_json,
+            alternate_saturday_start=body.alternate_saturday_start,
         ),
     )
 
@@ -1227,6 +1314,19 @@ def rotate_biometric_api_key(
 ):
     key = BiometricDeviceService(db).rotate_api_key(ctx, row_id)
     return APIResponse(message="API key rotated", data={"api_key": key})
+
+
+@biometric_devices_router.get("/{row_id}/live-feed", response_model=APIResponse[BiometricDeviceFeedResponse])
+def biometric_device_live_feed(
+    row_id: UUID,
+    ctx: Annotated[TenantContext, Depends(require_permission("hr.attendance:read"))],
+    db: Annotated[Session, Depends(get_db)],
+    days: int = 14,
+):
+    return APIResponse(
+        message="OK",
+        data=BiometricDeviceService(db).live_feed(ctx, row_id, days=days),
+    )
 
 
 @attendance_router.post("/device-sync", response_model=APIResponse[DeviceSyncResponse])
@@ -1856,6 +1956,17 @@ def report_export(
         media_type=media,
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
+
+
+@ess_inbox_router.get("", response_model=APIResponse[list[HrEssInboxItemResponse]])
+def list_hr_ess_inbox(
+    ctx: Annotated[TenantContext, Depends(require_permission("hr.leave:read"))],
+    db: Annotated[Session, Depends(get_db)],
+    company_id: UUID | None = None,
+):
+    from modules.hr.service.ess_inbox_service import HrEssInboxService
+
+    return APIResponse(message="OK", data=HrEssInboxService(db).list_inbox(ctx, company_id=company_id))
 
 
 # --- Job Levels & Grades (Phase 3 masters) ---
