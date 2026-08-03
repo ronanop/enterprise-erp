@@ -423,7 +423,7 @@ export function PerformanceManagementPage() {
           </Button>
           <TableBlock
             empty="No cycles"
-            headers={["Name", "Type", "Window", "Dept", "Manager", "Employees", "Status"]}
+            headers={["Name", "Type", "Window", "Dept", "Reporting manager", "Employees", "Status"]}
             rows={(dir?.cycles ?? []).map((c) => [
               c.name,
               c.reviewType,
@@ -447,7 +447,7 @@ export function PerformanceManagementPage() {
           </Button>
           <TableBlock
             empty="No reviews"
-            headers={["Code", "Employee", "Manager", "Rating", "Recommendation", "Status", ""]}
+            headers={["Code", "Employee", "Reporting manager", "Rating", "Recommendation", "Status", ""]}
             rows={(dir?.reviews ?? []).map((r) => [
               r.reviewCode,
               r.employeeName,
@@ -507,7 +507,7 @@ export function PerformanceManagementPage() {
           </Button>
           <TableBlock
             empty="No 1:1s"
-            headers={["Employee", "Manager", "Date", "Agenda", "Follow-up"]}
+            headers={["Employee", "Reporting manager", "Date", "Agenda", "Follow-up"]}
             rows={(dir?.meetings ?? []).map((m) => [
               m.employeeName,
               m.managerName,
@@ -568,7 +568,7 @@ export function PerformanceManagementPage() {
           </Button>
           <TableBlock
             empty="No PIPs"
-            headers={["Employee", "Reason", "Duration", "Manager", "Status"]}
+            headers={["Employee", "Reason", "Duration", "Reporting manager", "Status"]}
             rows={(dir?.pips ?? []).map((p) => [
               p.employeeName,
               p.reason.slice(0, 40),
@@ -597,7 +597,7 @@ export function PerformanceManagementPage() {
               a.cycleName,
               a.overallRating || "—",
               <span key="w" className="capitalize">
-                Manager → HR → Director → {a.workflowStage}
+                Reporting manager → HR → Director → {a.workflowStage}
               </span>,
               a.workflowStage !== "approved" && a.workflowStage !== "rejected" ? (
                 <Button

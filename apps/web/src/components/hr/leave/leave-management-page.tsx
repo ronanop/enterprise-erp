@@ -258,7 +258,7 @@ export function LeaveManagementPage() {
                   ))}
                 </SetupSelect>
               </SetupField>
-              <SetupField label="Manager">
+              <SetupField label="Reporting manager">
                 <SetupSelect
                   value={filters.managerId}
                   onChange={(e) => setFilters((f) => ({ ...f, managerId: e.target.value }))}

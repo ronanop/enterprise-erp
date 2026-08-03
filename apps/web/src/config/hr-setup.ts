@@ -144,14 +144,15 @@ export const hrSetupSections: HrSetupSection[] = [
       {
         id: "employment-types",
         title: "Employment Types",
-        description: "Permanent, contract, intern…",
-        source: "local",
-        codePrefix: "EMP",
+        description: "Management groups — shifts, calendars, feature toggles",
+        source: "api",
+        apiPath: "/hr/management-groups",
+        codePrefix: "MG",
       },
       {
         id: "reporting",
         title: "Reporting Structure",
-        description: "Managers derived from roles",
+        description: "Reporting managers derived from roles",
         source: "derived",
       },
       {

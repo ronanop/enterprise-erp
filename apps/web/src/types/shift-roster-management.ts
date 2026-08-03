@@ -15,6 +15,7 @@ export type RotationCycle = "weekly" | "bi_weekly" | "monthly";
 
 export type WeeklyOffRule =
   | "sunday"
+  | "saturday"
   | "alternate_saturday"
   | "second_saturday"
   | "rotating"

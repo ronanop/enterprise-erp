@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Download } from "lucide-react";
 
 import { SetupDrawer, SetupField, SetupInput, SetupSelect, SetupTextarea } from "@/components/hr/setup/setup-drawer";
@@ -13,6 +13,15 @@ import {
   type AttendanceDirectory,
 } from "@/services/attendance-management-service";
 import type { AttendanceRecord } from "@/types/attendance-management";
+
+function formatPunchTimeForDisplay(iso: string): string {
+  if (!iso) return "";
+  try {
+    return new Date(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  } catch {
+    return "";
+  }
+}
 
 const SAMPLE = `employee_code,attendance_date,check_in,check_out,status,source
 EMP-001,2026-07-22,09:05,18:10,present,biometric
@@ -123,20 +132,29 @@ export function AttendanceCorrectionDrawer({
   onSaved: () => void;
 }) {
   const [field, setField] = useState<"check_in" | "check_out">("check_in");
-  const [oldTime, setOldTime] = useState("");
   const [newTime, setNewTime] = useState("");
   const [reason, setReason] = useState("");
   const [fileName, setFileName] = useState("");
   const [busy, setBusy] = useState(false);
 
+  const oldTime = useMemo(() => {
+    if (!record) return "";
+    const iso = field === "check_in" ? record.checkIn : record.checkOut;
+    return formatPunchTimeForDisplay(iso);
+  }, [record, field]);
+
   useEffect(() => {
     if (!open || !record) return;
-    setOldTime(record.checkIn ? new Date(record.checkIn).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "");
+    setField("check_in");
     setNewTime("");
     setReason("");
     setFileName("");
     setBusy(false);
   }, [open, record]);
+
+  useEffect(() => {
+    setNewTime("");
+  }, [field]);
 
   return (
     <SetupDrawer

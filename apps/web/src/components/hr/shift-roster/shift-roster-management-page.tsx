@@ -45,10 +45,12 @@ import {
   saveWeeklyOffRules,
   shiftUtilizationReport,
   submitShiftSwap,
+  runAttendanceAutoAbsentJob,
   type ShiftRosterDirectory,
 } from "@/services/shift-roster-service";
 import type { ShiftFilters, ShiftRecord } from "@/types/shift-roster-management";
 import { emptyShiftFilters, SHIFT_TYPE_LABELS } from "@/types/shift-roster-management";
+import { WEEKLY_OFF_RULE_OPTIONS } from "@/lib/hr/weekly-off-rules";
 
 const PAGE = 10;
 
@@ -69,6 +71,8 @@ export function ShiftRosterManagementPage() {
   const [downloadManagerOpen, setDownloadManagerOpen] = useState(false);
   const [uploadManagerOpen, setUploadManagerOpen] = useState(false);
   const [swapOpen, setSwapOpen] = useState(false);
+  const [altSatStart, setAltSatStart] = useState("");
+  const [jobBusy, setJobBusy] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -84,6 +88,12 @@ export function ShiftRosterManagementPage() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  useEffect(() => {
+    if (dir?.weeklyOffAlternateSaturdayStart) {
+      setAltSatStart(dir.weeklyOffAlternateSaturdayStart);
+    }
+  }, [dir?.weeklyOffAlternateSaturdayStart]);
 
   const stats = useMemo(() => (dir ? computeShiftDashboardStats(dir) : null), [dir]);
   const shiftsFiltered = useMemo(
@@ -144,7 +154,7 @@ export function ShiftRosterManagementPage() {
             </Button>
             <Button size="sm" variant="outline" className="cursor-pointer" onClick={() => setDownloadManagerOpen(true)}>
               <Download className="size-3.5" />
-              Manager roster
+              Reporting manager roster
             </Button>
             <Button size="sm" variant="outline" className="cursor-pointer" onClick={() => setUploadManagerOpen(true)}>
               <Upload className="size-3.5" />
@@ -355,7 +365,7 @@ export function ShiftRosterManagementPage() {
                   <tr className="text-[10px] uppercase text-muted-foreground">
                     <th className="w-8 px-2 py-2" />
                     <th className="px-2 py-2 text-left">Employee</th>
-                    <th className="px-2 py-2">Manager</th>
+                    <th className="px-2 py-2">Reporting manager</th>
                     <th className="px-2 py-2">Department</th>
                     <th className="px-2 py-2">Shift</th>
                     <th className="px-2 py-2">From</th>
@@ -427,21 +437,85 @@ export function ShiftRosterManagementPage() {
         <div className="grid gap-4 lg:grid-cols-2">
           <div className="rounded-xl border border-border/70 bg-card p-4 shadow-sm space-y-3">
             <h3 className="text-sm font-semibold">Weekly off rules</h3>
-            {(["sunday", "alternate_saturday", "second_saturday", "rotating", "custom"] as const).map((rule) => (
-              <label key={rule} className="flex cursor-pointer items-center gap-2 text-xs capitalize">
+            <p className="text-[11px] text-muted-foreground">
+              Used for roster WO cells and for auto week-off attendance (Celery / backfill below).
+            </p>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className="cursor-pointer h-7 text-[11px]"
+                onClick={() => {
+                  void saveWeeklyOffRules(["saturday", "sunday"], altSatStart || null).then(() => void load());
+                }}
+              >
+                Sat + Sun
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className="cursor-pointer h-7 text-[11px]"
+                onClick={() => {
+                  void saveWeeklyOffRules(["sunday"], altSatStart || null).then(() => void load());
+                }}
+              >
+                Sunday only
+              </Button>
+            </div>
+            {WEEKLY_OFF_RULE_OPTIONS.map((rule) => (
+              <label key={rule.id} className="flex cursor-pointer items-center gap-2 text-xs">
                 <input
                   type="checkbox"
-                  checked={dir.weeklyOffRules.includes(rule)}
+                  checked={dir.weeklyOffRules.includes(rule.id)}
                   onChange={(e) => {
                     const next = e.target.checked
-                      ? [...dir.weeklyOffRules, rule]
-                      : dir.weeklyOffRules.filter((r) => r !== rule);
-                    saveWeeklyOffRules(next).then(() => void load());
+                      ? [...dir.weeklyOffRules, rule.id]
+                      : dir.weeklyOffRules.filter((r) => r !== rule.id);
+                    void saveWeeklyOffRules(next, altSatStart || null).then(() => void load());
                   }}
                 />
-                {rule.replace(/_/g, " ")}
+                {rule.label}
               </label>
             ))}
+            {dir.weeklyOffRules.includes("alternate_saturday") ? (
+              <SetupField label="Alternate Saturday starts on" hint="First working Saturday off in the cycle">
+                <SetupInput
+                  type="date"
+                  value={altSatStart}
+                  onChange={(e) => setAltSatStart(e.target.value)}
+                  onBlur={() => {
+                    void saveWeeklyOffRules(dir.weeklyOffRules, altSatStart || null).then(() => void load());
+                  }}
+                />
+              </SetupField>
+            ) : null}
+            <div className="border-t border-border/60 pt-3">
+              <h4 className="text-xs font-semibold">Attendance backfill</h4>
+              <p className="mt-1 text-[11px] text-muted-foreground">
+                Creates yesterday&apos;s rows: week off, holiday, or absent when no punch exists (same as hourly Celery job).
+              </p>
+              <Button
+                type="button"
+                size="sm"
+                className="mt-2 cursor-pointer"
+                disabled={jobBusy}
+                onClick={() => {
+                  setJobBusy(true);
+                  void runAttendanceAutoAbsentJob()
+                    .then((r) => {
+                      const wo = r.week_off_created ?? 0;
+                      const ab = r.absent_created ?? 0;
+                      toast(`Backfill done: ${wo} week off, ${ab} absent`, "success");
+                    })
+                    .catch(() => toast("Backfill failed — check permissions / API", "error"))
+                    .finally(() => setJobBusy(false));
+                }}
+              >
+                {jobBusy ? "Running…" : "Run for yesterday"}
+              </Button>
+            </div>
             <h3 className="text-sm font-semibold pt-2">Holiday rules</h3>
             <p className="text-xs text-muted-foreground">
               {dir.holidays.length} holidays loaded from HR holiday calendars (national / company).

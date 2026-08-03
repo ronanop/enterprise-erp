@@ -674,10 +674,10 @@ export function SeparationHub() {
                     className="h-7 cursor-pointer px-2 text-[0.75rem]"
                     disabled={busy}
                     onClick={() =>
-                      void runAction(id, "approve", { stage: "manager" }, "Manager approved")
+                      void runAction(id, "approve", { stage: "manager" }, "Reporting manager approved")
                     }
                   >
-                    Manager Approve
+                    Reporting manager approve
                   </Button>
                 ) : null}
                 {status === "manager_approved" ? (

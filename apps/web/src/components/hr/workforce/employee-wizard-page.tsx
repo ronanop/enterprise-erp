@@ -12,6 +12,7 @@ import { PageHeader } from "@/components/layout/page-header";
 import { Button } from "@/components/ui/button";
 import { loadEmployeeIdConfig, saveEmployeeIdConfig } from "@/config/employee-id";
 import { portalToWizardDraft, summarizePortalDetails } from "@/lib/onboarding-to-employee";
+import { resolveOrgHeadsForEmployment } from "@/lib/hr/org-heads";
 import {
   findUniquenessConflicts,
   validateAadhaar,
@@ -100,18 +101,25 @@ export function EmployeeWizardPage() {
         });
       }
     } else {
-      setDraft((d) => ({
+      setDraft((d) => {
+        const branchId = d.employment.branchId || opts.branches[0]?.id || "";
+        const departmentId = d.employment.departmentId || opts.departments[0]?.id || "";
+        const heads = resolveOrgHeadsForEmployment(branchId, departmentId, opts);
+        return {
         ...d,
         employment: {
           ...d.employment,
           joiningDate: d.employment.joiningDate || new Date().toISOString().slice(0, 10),
-          branchId: d.employment.branchId || opts.branches[0]?.id || "",
+          branchId,
           branchName: d.employment.branchName || opts.branches[0]?.label || "",
-          departmentId: d.employment.departmentId || opts.departments[0]?.id || "",
+          departmentId,
           departmentName: d.employment.departmentName || opts.departments[0]?.label || "",
           designationName: d.employment.designationName || opts.designations[0]?.label || "",
+          branchHeadName: heads.branchHeadName,
+          departmentHeadName: heads.departmentHeadName,
         },
-      }));
+      };
+      });
     }
   }, [duplicateId]);
 
@@ -618,9 +626,18 @@ export function EmployeeWizardPage() {
                   value={draft.employment.branchId}
                   onChange={(e) => {
                     const id = e.target.value;
+                    const heads = options
+                      ? resolveOrgHeadsForEmployment(
+                          id,
+                          draft.employment.departmentId,
+                          options,
+                        )
+                      : { branchHeadName: "", departmentHeadName: "" };
                     patchEmployment({
                       branchId: id,
                       branchName: options?.branches.find((b) => b.id === id)?.label ?? "",
+                      branchHeadName: heads.branchHeadName,
+                      departmentHeadName: heads.departmentHeadName,
                     });
                   }}
                 >
@@ -635,9 +652,18 @@ export function EmployeeWizardPage() {
                   value={draft.employment.departmentId}
                   onChange={(e) => {
                     const id = e.target.value;
+                    const heads = options
+                      ? resolveOrgHeadsForEmployment(
+                          draft.employment.branchId,
+                          id,
+                          options,
+                        )
+                      : { branchHeadName: "", departmentHeadName: "" };
                     patchEmployment({
                       departmentId: id,
                       departmentName: options?.departments.find((d) => d.id === id)?.label ?? "",
+                      branchHeadName: heads.branchHeadName,
+                      departmentHeadName: heads.departmentHeadName,
                     });
                   }}
                 >
@@ -646,6 +672,12 @@ export function EmployeeWizardPage() {
                     <option key={d.id} value={d.id}>{d.label}</option>
                   ))}
                 </SetupSelect>
+              </SetupField>
+              <SetupField label="Branch head" hint="Set in HR Setup → Branches">
+                <SetupInput readOnly value={draft.employment.branchHeadName || "—"} />
+              </SetupField>
+              <SetupField label="Department head" hint="Set in HR Setup → Departments">
+                <SetupInput readOnly value={draft.employment.departmentHeadName || "—"} />
               </SetupField>
               <SetupField label="Designation" required>
                 <SetupSelect
@@ -676,6 +708,40 @@ export function EmployeeWizardPage() {
                   value={draft.employment.location}
                   onChange={(e) => patchEmployment({ location: e.target.value })}
                 />
+              </SetupField>
+              <SetupField label="Management group" hint="Sets shift, calendars, and HRMS features">
+                <SetupSelect
+                  value={draft.employment.managementGroupId}
+                  onChange={(e) => {
+                    const id = e.target.value;
+                    const grp = options?.managementGroups.find((g) => g.id === id);
+                    const shiftLabel = options?.shifts.find((s) => s.id === grp?.shiftId)?.label ?? "";
+                    if (
+                      draft.employment.shiftId &&
+                      grp?.shiftId &&
+                      draft.employment.shiftId !== grp.shiftId &&
+                      !window.confirm(
+                        "Changing management group will update the default attendance shift. Continue?",
+                      )
+                    ) {
+                      return;
+                    }
+                    patchEmployment({
+                      managementGroupId: id,
+                      managementGroupName: grp?.label ?? "",
+                      employmentType: grp?.employmentType ?? draft.employment.employmentType,
+                      shiftId: grp?.shiftId ?? draft.employment.shiftId,
+                      shiftName: shiftLabel,
+                    });
+                  }}
+                >
+                  <option value="">Select group…</option>
+                  {options?.managementGroups.map((g) => (
+                    <option key={g.id} value={g.id}>
+                      {g.label}
+                    </option>
+                  ))}
+                </SetupSelect>
               </SetupField>
               <SetupField label="Employment type">
                 <SetupSelect value={draft.employment.employmentType} onChange={(e) => patchEmployment({ employmentType: e.target.value })}>

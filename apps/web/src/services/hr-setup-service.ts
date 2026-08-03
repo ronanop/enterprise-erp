@@ -573,7 +573,7 @@ export async function listReportingManagers(): Promise<SetupRow[]> {
       ...e,
       id: String(e.id),
       name: `${[e.first_name, e.last_name].filter(Boolean).join(" ")}`.trim() || String(e.employee_code ?? e.id),
-      role: "Manager",
+      role: "Reporting manager",
       status: String(e.status ?? "active"),
       __source: "derived" as const,
     }));

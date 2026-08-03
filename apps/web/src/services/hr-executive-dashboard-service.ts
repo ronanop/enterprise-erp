@@ -22,6 +22,7 @@ import type {
   ApprovalItem,
   CalendarEvent,
   DashboardRole,
+  DashboardTrainingItem,
   HrDashboardCharts,
   HrDashboardStats,
   HrExecutiveDashboard,
@@ -592,6 +593,32 @@ function buildCalendar(
     .slice(0, 16);
 }
 
+function buildTrainingItems(overview: HrOverview): DashboardTrainingItem[] {
+  const now = new Date();
+  const items: DashboardTrainingItem[] = [];
+
+  for (const row of overview.training) {
+    const start = parseDate(row.start_date);
+    if (!start) continue;
+    const diffDays = (start.getTime() - now.getTime()) / 86_400_000;
+    if (diffDays < -14 || diffDays > 90) continue;
+    const status = asStatus(row.status);
+    if (status === "cancelled" || status === "archived") continue;
+    items.push({
+      id: String(row.id),
+      title: String(row.training_name ?? row.program_name ?? row.document_number ?? "Training session"),
+      at: start.toISOString(),
+      meta: [row.training_mode ?? row.mode, row.status]
+        .filter((v) => v != null && String(v).trim() !== "")
+        .join(" · "),
+    });
+  }
+
+  return items
+    .sort((a, b) => new Date(a.at).getTime() - new Date(b.at).getTime())
+    .slice(0, 8);
+}
+
 function buildApprovals(
   overview: HrOverview,
   empById: Map<string, MasterEmployee>,
@@ -693,7 +720,7 @@ function buildActivities(
       id: `act-prf-${String(row.id)}`,
       action: "Performance Review",
       detail: `${employeeNameFromMaster(emp, row)} · rating ${asNumber(row.overall_rating) || "—"} · ${String(row.status)}`,
-      actor: "Manager",
+      actor: "Reporting manager",
       at: String(row.updated_at ?? row.created_at ?? new Date().toISOString()),
     });
   }
@@ -977,6 +1004,7 @@ export async function loadHrExecutiveDashboard(
     stats,
     charts: buildCharts(overview, people, recruitment),
     calendar: buildCalendar(overview, people, empById, recruitment),
+    trainingItems: buildTrainingItems(overview),
     approvals,
     activities: buildActivities(overview, empById),
     notifications: buildNotifications(stats, approvals),

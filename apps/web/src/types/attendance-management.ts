@@ -79,6 +79,7 @@ export type AttendanceFilters = {
   dateFrom: string;
   dateTo: string;
   managerId: string;
+  employeeId: string;
   location: string;
 };
 
@@ -129,7 +130,7 @@ export const ATTENDANCE_STATUS_LABELS: Record<AttendanceStatusCode, string> = {
   leave: "Leave",
   work_from_home: "Work from home",
   holiday: "Holiday",
-  weekend: "Weekend",
+  weekend: "Week off",
   late: "Late",
   early_exit: "Early exit",
   missed_punch: "Missed punch",
@@ -158,6 +159,7 @@ export function emptyAttendanceFilters(today: string): AttendanceFilters {
     dateFrom: today,
     dateTo: today,
     managerId: "",
+    employeeId: "",
     location: "",
   };
 }

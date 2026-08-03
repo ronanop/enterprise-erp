@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { ArrowLeft, Download, Pencil, Save } from "lucide-react";
@@ -76,10 +76,24 @@ function maskAccount(account?: string) {
   return account.length <= 4 ? account : `••••${account.slice(-4)}`;
 }
 
+function formatAttendanceMonthLabel(ym: string): string {
+  const [y, m] = ym.split("-").map(Number);
+  if (!y || !m) return ym;
+  return new Date(y, m - 1, 1).toLocaleString(undefined, { month: "long", year: "numeric" });
+}
+
+function formatAttendanceTime(value: unknown): string {
+  if (value == null || value === "") return "—";
+  const s = String(value);
+  if (s.length >= 16 && s.includes("T")) return s.slice(11, 16);
+  if (/^\d{2}:\d{2}/.test(s)) return s.slice(0, 5);
+  return s;
+}
+
 async function loadLinkedData(employeeId: string, employeeCode: string): Promise<LinkedData> {
   const [attendance, leaveRequests, leaveBalances, hrDocuments, payslips, salaries, separation] =
     await Promise.all([
-      resourceService.list("/hr/attendance", { page_size: 100 }).catch(() => ({ data: [] })),
+      resourceService.list("/hr/attendance", { page_size: 200 }).catch(() => ({ data: [] })),
       resourceService.list("/hr/leave-requests", { page_size: 100 }).catch(() => ({ data: [] })),
       resourceService.list("/hr/leave-balances", { page_size: 100 }).catch(() => ({ data: [] })),
       resourceService.list("/hr/employee-documents", { page_size: 100 }).catch(() => ({ data: [] })),
@@ -92,7 +106,7 @@ async function loadLinkedData(employeeId: string, employeeCode: string): Promise
     rows.filter((r) => matchesEmployee(r, employeeId, employeeCode));
 
   return {
-    attendance: filter(asRows(attendance.data)).slice(0, 60),
+    attendance: filter(asRows(attendance.data)),
     leaveRequests: filter(asRows(leaveRequests.data)),
     leaveBalances: filter(asRows(leaveBalances.data)),
     hrDocuments: filter(asRows(hrDocuments.data)),
@@ -118,6 +132,8 @@ export function EmployeeProfilePage({ employeeId }: { employeeId: string }) {
   const [draft, setDraft] = useState<EmployeeWizardDraft | null>(null);
   const [linked, setLinked] = useState<LinkedData | null>(null);
   const [linkedLoading, setLinkedLoading] = useState(false);
+  const [attendanceMonth, setAttendanceMonth] = useState<string>("all");
+  const [attendanceStatus, setAttendanceStatus] = useState<"all" | "present" | "absent">("all");
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -174,6 +190,33 @@ export function EmployeeProfilePage({ employeeId }: { employeeId: string }) {
     }
   }
 
+  const attendanceMonthOptions = useMemo(() => {
+    const months = new Set<string>();
+    for (const r of linked?.attendance ?? []) {
+      const ym = String(r.attendance_date ?? "").slice(0, 7);
+      if (/^\d{4}-\d{2}$/.test(ym)) months.add(ym);
+    }
+    return Array.from(months).sort().reverse();
+  }, [linked?.attendance]);
+
+  const filteredAttendance = useMemo(() => {
+    let rows = [...(linked?.attendance ?? [])];
+    if (attendanceMonth !== "all") {
+      rows = rows.filter((r) => String(r.attendance_date ?? "").startsWith(attendanceMonth));
+    }
+    if (attendanceStatus !== "all") {
+      rows = rows.filter((r) => {
+        const st = String(r.attendance_status ?? r.status ?? "").toLowerCase();
+        if (attendanceStatus === "present") return st.includes("present");
+        return st.includes("absent");
+      });
+    }
+    rows.sort((a, b) =>
+      String(b.attendance_date ?? "").localeCompare(String(a.attendance_date ?? "")),
+    );
+    return rows;
+  }, [linked?.attendance, attendanceMonth, attendanceStatus]);
+
   if (loading && !record) return <EmsSkeleton rows={8} />;
 
   if (!record) {
@@ -226,7 +269,7 @@ export function EmployeeProfilePage({ employeeId }: { employeeId: string }) {
           <Info label="Employee ID" value={record.employeeCode} />
           <Info label="Department" value={record.departmentName} />
           <Info label="Designation" value={record.designationName} />
-          <Info label="Manager" value={record.reportingManagerName} />
+          <Info label="Reporting manager" value={record.reportingManagerName} />
           <Info label="Branch" value={record.branchName} />
           <Info label="Joined" value={record.joiningDate || "—"} />
           <Info label="Employment type" value={record.employmentType} />
@@ -287,7 +330,7 @@ export function EmployeeProfilePage({ employeeId }: { employeeId: string }) {
             />
             <Info label="Department" value={record.departmentName} />
             <Info label="Designation" value={record.designationName} />
-            <Info label="Manager" value={record.reportingManagerName} />
+            <Info label="Reporting manager" value={record.reportingManagerName} />
             <Info label="Type" value={record.employmentType} />
             <Info label="Joined" value={record.joiningDate || "—"} />
             <Info label="Status" value={record.lifecycleStatus} />
@@ -356,18 +399,63 @@ export function EmployeeProfilePage({ employeeId }: { employeeId: string }) {
         ) : null}
 
         {tab === "attendance" ? (
-          <DataTableTab
-            loading={linkedLoading}
-            empty="No attendance records for this employee."
-            columns={["Date", "Status", "Check-in", "Check-out", "Source"]}
-            rows={(linked?.attendance ?? []).map((r) => [
-              String(r.attendance_date ?? "—"),
-              String(r.attendance_status ?? r.status ?? "—"),
-              String(r.check_in_at ?? "—").slice(11, 16) || String(r.check_in_at ?? "—"),
-              String(r.check_out_at ?? "—").slice(11, 16) || String(r.check_out_at ?? "—"),
-              String(r.source ?? "—"),
-            ])}
-          />
+          <Section title="Attendance log">
+            <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
+              <div className="flex flex-wrap items-center gap-2">
+                <label htmlFor="profile-att-month" className="sr-only">
+                  Month
+                </label>
+                <span className="text-[11px] text-muted-foreground">Month</span>
+                <select
+                  id="profile-att-month"
+                  value={attendanceMonth}
+                  onChange={(e) => setAttendanceMonth(e.target.value)}
+                  className="h-9 min-w-[9.5rem] cursor-pointer rounded-md border border-input bg-background px-2.5 text-xs"
+                >
+                  <option value="all">All months</option>
+                  {attendanceMonthOptions.map((ym) => (
+                    <option key={ym} value={ym}>
+                      {formatAttendanceMonthLabel(ym)}
+                    </option>
+                  ))}
+                </select>
+                <label htmlFor="profile-att-status" className="sr-only">
+                  Status
+                </label>
+                <span className="text-[11px] text-muted-foreground">Status</span>
+                <select
+                  id="profile-att-status"
+                  value={attendanceStatus}
+                  onChange={(e) =>
+                    setAttendanceStatus(e.target.value as "all" | "present" | "absent")
+                  }
+                  className="h-9 min-w-[8rem] cursor-pointer rounded-md border border-input bg-background px-2.5 text-xs"
+                >
+                  <option value="all">All</option>
+                  <option value="present">Present</option>
+                  <option value="absent">Absent</option>
+                </select>
+              </div>
+              <p className="text-[11px] text-muted-foreground tabular-nums">
+                {filteredAttendance.length} record{filteredAttendance.length === 1 ? "" : "s"}
+                {(linked?.attendance.length ?? 0) > filteredAttendance.length
+                  ? ` · ${linked?.attendance.length ?? 0} total`
+                  : null}
+              </p>
+            </div>
+            <DataTableTab
+              loading={linkedLoading}
+              empty="No attendance records match these filters."
+              columns={["Date", "Status", "Check-in", "Check-out", "Source"]}
+              rows={filteredAttendance.map((r) => [
+                String(r.attendance_date ?? "—"),
+                String(r.attendance_status ?? r.status ?? "—"),
+                formatAttendanceTime(r.check_in_at),
+                formatAttendanceTime(r.check_out_at),
+                String(r.source ?? "—"),
+              ])}
+            />
+          </Section>
         ) : null}
 
         {tab === "leave" ? (
@@ -677,7 +765,7 @@ function AllDetailsView({
             <Info label="Designation" value={e.designationName || record.designationName} />
             <Info label="Branch" value={e.branchName || record.branchName} />
             <Info label="Type" value={e.employmentType || "—"} />
-            <Info label="Manager" value={e.reportingManagerName || "—"} />
+            <Info label="Reporting manager" value={e.reportingManagerName || "—"} />
             <Info label="Shift" value={e.shiftName || "—"} />
             <Info label="Status" value={e.lifecycleStatus || "—"} />
           </EmsFormGrid>

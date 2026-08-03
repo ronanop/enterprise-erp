@@ -6,6 +6,7 @@
 import type { LucideIcon } from "lucide-react";
 import {
   BadgeCheck,
+  Bell,
   Briefcase,
   CalendarDays,
   ClipboardList,
@@ -41,6 +42,12 @@ export const hrNavGroups: HrNavGroup[] = [
         href: "/hr",
         icon: LayoutDashboard,
         description: "Executive HR overview & analytics",
+      },
+      {
+        title: "ESS",
+        href: "/hr/ess",
+        icon: Bell,
+        description: "Employee requests & approval notifications",
       },
       {
         title: "Employees",

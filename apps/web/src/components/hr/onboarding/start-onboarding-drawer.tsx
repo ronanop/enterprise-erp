@@ -17,6 +17,7 @@ import {
   type HrMasterOption,
 } from "@/services/hr-master-connector";
 import { validateEmail, validateMobile } from "@/lib/employee-validators";
+import { managerDisplayName } from "@/lib/hr/org-heads";
 import type { StartOnboardingInput } from "@/types/onboarding-management";
 
 type Props = {
@@ -95,6 +96,17 @@ export function StartOnboardingDrawer({ open, onClose, acceptedOffers, onSubmit 
   }, [selected]);
 
   const buddy = masters.employees.find((e) => e.id === buddyId);
+
+  const branchId = masters.branches.find((b) => b.label === branch)?.id ?? "";
+  const departmentId = masters.departments.find((d) => d.label === department)?.id ?? "";
+  const branchHeadName = managerDisplayName(
+    masters.branches.find((b) => b.id === branchId)?.headEmployeeId,
+    masters.managers.map((m) => ({ id: m.id, label: m.label })),
+  );
+  const departmentHeadName = managerDisplayName(
+    masters.departments.find((d) => d.id === departmentId)?.headEmployeeId,
+    masters.managers.map((m) => ({ id: m.id, label: m.label })),
+  );
 
   function validate(): string[] {
     const next: string[] = [];
@@ -332,6 +344,15 @@ export function StartOnboardingDrawer({ open, onClose, acceptedOffers, onSubmit 
             options={masters.branches}
             onChange={(_id, opt) => setBranch(opt?.label || _id)}
           />
+        </div>
+
+        <div className="grid gap-3 sm:grid-cols-2">
+          <SetupField label="Branch head" hint="From HR Setup → Branches">
+            <SetupInput readOnly value={branchHeadName} />
+          </SetupField>
+          <SetupField label="Department head" hint="From HR Setup → Departments">
+            <SetupInput readOnly value={departmentHeadName} />
+          </SetupField>
         </div>
 
         <div className="grid gap-3 sm:grid-cols-2">

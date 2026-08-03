@@ -139,10 +139,14 @@ export type EmploymentInfo = {
   employmentType: string;
   reportingManagerId: string;
   reportingManagerName: string;
+  branchHeadName: string;
+  departmentHeadName: string;
   grade: string;
   jobLevel: string;
   shiftId: string;
   shiftName: string;
+  managementGroupId: string;
+  managementGroupName: string;
   leavePolicyId: string;
   leavePolicyName: string;
   probationPeriodDays: string;
@@ -281,10 +285,14 @@ export function emptyEmployment(code = ""): EmploymentInfo {
     employmentType: "permanent",
     reportingManagerId: "",
     reportingManagerName: "",
+    branchHeadName: "",
+    departmentHeadName: "",
     grade: "",
     jobLevel: "",
     shiftId: "",
     shiftName: "",
+    managementGroupId: "",
+    managementGroupName: "",
     leavePolicyId: "",
     leavePolicyName: "",
     probationPeriodDays: "90",

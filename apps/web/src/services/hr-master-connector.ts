@@ -30,6 +30,7 @@ export type HrMasterOption = {
   departmentId?: string;
   branchId?: string;
   branchName?: string;
+  headEmployeeId?: string;
   shiftId?: string;
   shiftName?: string;
   bankAccount?: string;
@@ -245,6 +246,7 @@ export async function loadHrMasterDirectory(): Promise<HrMasterDirectory> {
     departments: [],
     designations: [],
     managers: [],
+    managementGroups: [],
     shifts: [],
   };
   const errors: string[] = [];
@@ -276,8 +278,17 @@ export async function loadHrMasterDirectory(): Promise<HrMasterDirectory> {
       .filter((r) => !r.isDeleted && r.lifecycleStatus !== "archived")
       .map(recordToOption),
     records,
-    departments: options.departments.map((d) => ({ id: d.id, label: d.label })),
-    branches: options.branches.map((b) => ({ id: b.id, label: b.label })),
+    departments: options.departments.map((d) => ({
+      id: d.id,
+      label: d.label,
+      branchId: d.branchId,
+      headEmployeeId: d.headEmployeeId,
+    })),
+    branches: options.branches.map((b) => ({
+      id: b.id,
+      label: b.label,
+      headEmployeeId: b.headEmployeeId,
+    })),
     designations: options.designations.map((d) => ({ id: d.id, label: d.label })),
     managers: options.managers.map((m) => ({ id: m.id, label: m.label })),
     shifts: options.shifts.map((s) => ({ id: s.id, label: s.label })),

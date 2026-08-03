@@ -197,7 +197,7 @@ export const GOAL_STATUS_LABELS: Record<GoalStatus, string> = {
 export const REVIEW_STATUS_LABELS: Record<ReviewStatus, string> = {
   draft: "Draft",
   self_pending: "Self Assessment",
-  manager_pending: "Manager Review",
+  manager_pending: "Reporting manager review",
   hr_pending: "HR Review",
   completed: "Completed",
   cancelled: "Cancelled",

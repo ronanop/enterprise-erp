@@ -447,7 +447,7 @@ export function CycleDrawer({
         <SetupField label="Departments">
           <SetupInput value={departments} onChange={(e) => setDepartments(e.target.value)} />
         </SetupField>
-        <SetupField label="Manager">
+        <SetupField label="Reporting manager">
           <SetupInput value={manager} onChange={(e) => setManager(e.target.value)} />
         </SetupField>
         <SetupField label="Applicable employees (count)">
@@ -535,7 +535,7 @@ export function ReviewDrawer({
           }}
         />
         <EmployeeSelect
-          label="Reviewer / manager"
+          label="Reviewer / reporting manager"
           value={reviewerEmployeeId}
           options={employees}
           onChange={(id, opt) => {
@@ -543,7 +543,7 @@ export function ReviewDrawer({
             setManagerName(opt ? opt.label.split(" · ")[0] : "");
           }}
         />
-        <SetupField label="Manager (display)">
+        <SetupField label="Reporting manager (display)">
           <SetupInput value={managerName} onChange={(e) => setManagerName(e.target.value)} />
         </SetupField>
         <SetupField label="Review cycle">
@@ -559,7 +559,7 @@ export function ReviewDrawer({
         <SetupField label="Self assessment">
           <SetupTextarea value={selfAssessment} onChange={(e) => setSelfAssessment(e.target.value)} rows={2} />
         </SetupField>
-        <SetupField label="Manager assessment">
+        <SetupField label="Reporting manager assessment">
           <SetupTextarea
             value={managerAssessment}
             onChange={(e) => setManagerAssessment(e.target.value)}
@@ -634,7 +634,7 @@ export function FeedbackDrawer({
           onClick={() => {
             onSubmit({
               employeeName,
-              fromName: "Manager",
+              fromName: "Reporting manager",
               feedbackType,
               category,
               comment,
@@ -678,7 +678,7 @@ export function FeedbackDrawer({
             onChange={(e) => setVisibility(e.target.value as FeedbackVisibility)}
           >
             <option value="private">Private</option>
-            <option value="manager">Manager</option>
+            <option value="manager">Reporting manager</option>
             <option value="hr">HR</option>
             <option value="employee">Employee</option>
           </SetupSelect>
@@ -744,7 +744,7 @@ export function MeetingDrawer({
           required
           onChange={(_id, opt) => setEmployeeName(opt ? opt.label.split(" · ")[0] : "")}
         />
-        <SetupField label="Manager">
+        <SetupField label="Reporting manager">
           <SetupInput value={managerName} onChange={(e) => setManagerName(e.target.value)} />
         </SetupField>
         <SetupField label="Meeting date" required>
@@ -840,7 +840,7 @@ export function PipDrawer({
           <SetupTextarea value={expectedOutcome} onChange={(e) => setExpectedOutcome(e.target.value)} rows={2} />
         </SetupField>
         <div className="grid gap-3 sm:grid-cols-2">
-          <SetupField label="Manager">
+          <SetupField label="Reporting manager">
             <SetupInput value={managerName} onChange={(e) => setManagerName(e.target.value)} />
           </SetupField>
           <SetupField label="HR">
@@ -915,7 +915,7 @@ export function ProbationDrawer({
         <SetupField label="Review date">
           <SetupInput type="date" value={reviewDate} onChange={(e) => setReviewDate(e.target.value)} />
         </SetupField>
-        <SetupField label="Manager feedback">
+        <SetupField label="Reporting manager feedback">
           <SetupTextarea value={managerFeedback} onChange={(e) => setManagerFeedback(e.target.value)} rows={2} />
         </SetupField>
         <SetupField label="HR feedback">

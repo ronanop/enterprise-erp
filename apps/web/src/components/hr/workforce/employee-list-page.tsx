@@ -470,7 +470,7 @@ export function EmployeeManagementPage() {
                             Branch
                           </th>
                           <th className="px-2 py-2 text-[11px] font-medium uppercase text-muted-foreground">
-                            Manager
+                            Reporting manager
                           </th>
                           <th className="px-2 py-2 text-[11px] font-medium uppercase text-muted-foreground">
                             Type

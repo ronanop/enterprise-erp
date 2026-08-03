@@ -254,6 +254,7 @@ export function CreateShiftDrawer({
         <SetupField label="Weekly off rule">
           <SetupSelect value={weeklyOff} onChange={(e) => setWeeklyOff(e.target.value)}>
             <option value="sunday">Sunday</option>
+            <option value="saturday">Saturday (every week)</option>
             <option value="alternate_saturday">Alternate Saturday</option>
             <option value="second_saturday">Second Saturday</option>
             <option value="rotating">Rotating weekly off</option>

@@ -176,8 +176,8 @@ export type LeaveValidationResult = {
 export const LEAVE_STATUS_LABELS: Record<string, string> = {
   draft: "Draft",
   submitted: "Submitted",
-  manager_review: "Manager review",
-  manager_approved: "Manager approved",
+  manager_review: "Reporting manager review",
+  manager_approved: "Reporting manager approved",
   hr_review: "HR review",
   director_review: "Director review",
   approved: "Approved",

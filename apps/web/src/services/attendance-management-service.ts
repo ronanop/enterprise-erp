@@ -44,7 +44,9 @@ function inferDisplayStatus(
   checkIn: string,
   notes: string,
 ): AttendanceStatusCode {
-  const base = (apiStatus || "present") as AttendanceStatusCode;
+  const raw = (apiStatus || "present").toLowerCase();
+  if (raw === "week_off") return "weekend";
+  const base = raw as AttendanceStatusCode;
   if (base === "absent" && /leave/i.test(notes)) return "leave";
   if (base !== "present") return base;
   if (/late arrival/i.test(notes)) return "late";
@@ -198,12 +200,15 @@ export async function submitCorrection(
 
 export function mapToApiStatus(status: AttendanceStatusCode): string {
   switch (status) {
-    case "leave":
     case "weekend":
+      return "week_off";
+    case "leave":
+      return "absent";
     case "late":
     case "early_exit":
+      return "present";
     case "missed_punch":
-      return status === "leave" ? "absent" : status === "weekend" ? "holiday" : "present";
+      return "miss_punch";
     default:
       return status;
   }
@@ -451,6 +456,7 @@ export function filterAttendanceRecords(
     if (filters.location && !r.location.toLowerCase().includes(filters.location.toLowerCase())) {
       return false;
     }
+    if (filters.employeeId && r.employeeId !== filters.employeeId) return false;
     if (filters.departmentId && r.extension.departmentId !== filters.departmentId) return false;
     if (filters.designation && r.extension.designationName !== filters.designation) return false;
     if (filters.managerId && !r.extension.managerName) return false;

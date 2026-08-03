@@ -195,20 +195,22 @@ function mergeRow(
 }
 
 export type EmployeeDirectoryOptions = {
-  branches: { id: string; label: string }[];
-  departments: { id: string; label: string }[];
+  branches: { id: string; label: string; headEmployeeId: string }[];
+  departments: { id: string; label: string; branchId: string; headEmployeeId: string }[];
   designations: { id: string; label: string }[];
   managers: { id: string; label: string }[];
+  managementGroups: { id: string; label: string; employmentType: string; shiftId: string }[];
   shifts: { id: string; label: string }[];
 };
 
 async function loadOptions(): Promise<EmployeeDirectoryOptions> {
-  const [branches, departments, designations, employees, shifts] = await Promise.all([
+  const [branches, departments, designations, employees, shifts, mgmtGroups] = await Promise.all([
     resourceService.list("/branches", { page_size: 200 }).catch(() => ({ data: [] })),
     resourceService.list("/departments", { page_size: 200 }).catch(() => ({ data: [] })),
     resourceService.list("/hr/designations", { page_size: 200 }).catch(() => ({ data: [] })),
     resourceService.list("/employees", { page_size: 200 }).catch(() => ({ data: [] })),
     resourceService.list("/hr/shifts", { page_size: 200 }).catch(() => ({ data: [] })),
+    resourceService.list("/hr/management-groups", { page_size: 200 }).catch(() => ({ data: [] })),
   ]);
 
   const asRows = (d: unknown) =>
@@ -218,10 +220,13 @@ async function loadOptions(): Promise<EmployeeDirectoryOptions> {
     branches: asRows(branches.data).map((r) => ({
       id: String(r.id),
       label: String(r.branch_name ?? r.name ?? r.branch_code ?? r.id),
+      headEmployeeId: String(r.head_employee_id ?? ""),
     })),
     departments: asRows(departments.data).map((r) => ({
       id: String(r.id),
       label: String(r.department_name ?? r.name ?? r.department_code ?? r.id),
+      branchId: String(r.branch_id ?? ""),
+      headEmployeeId: String(r.head_employee_id ?? ""),
     })),
     designations: asRows(designations.data).map((r) => ({
       id: String(r.id),
@@ -234,6 +239,12 @@ async function loadOptions(): Promise<EmployeeDirectoryOptions> {
     shifts: asRows(shifts.data).map((r) => ({
       id: String(r.id),
       label: String(r.shift_name ?? r.shift_code ?? r.id),
+    })),
+    managementGroups: asRows(mgmtGroups.data).map((r) => ({
+      id: String(r.id),
+      label: String(r.group_name ?? r.group_code ?? r.id),
+      employmentType: String(r.employment_type ?? "permanent"),
+      shiftId: String(r.default_shift_id ?? ""),
     })),
   };
 }
@@ -549,6 +560,7 @@ export async function createEmployeeFromWizard(
   const departmentId = draft.employment.departmentId;
   const designationName = draft.employment.designationName || "Staff";
   const employmentType = draft.employment.employmentType || "permanent";
+  const managementGroupId = draft.employment.managementGroupId || undefined;
   const employeeCode = draft.employment.employeeCode || undefined;
   const reportingManagerId = draft.employment.reportingManagerId || undefined;
 
@@ -582,6 +594,7 @@ export async function createEmployeeFromWizard(
       status: draft.employment.lifecycleStatus || "active",
       payroll_eligible: true,
       lifecycle_source: "direct_add",
+      management_group_id: managementGroupId || null,
       probation_period_days: draft.employment.probationPeriodDays
         ? Number(draft.employment.probationPeriodDays)
         : null,
@@ -833,7 +846,7 @@ export function exportEmployeesCsv(records: EmployeeRecord[]): string {
     "Department",
     "Designation",
     "Branch",
-    "Manager",
+    "Reporting manager",
     "Employment Type",
     "Joining Date",
     "Status",

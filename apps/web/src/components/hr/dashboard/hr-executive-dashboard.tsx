@@ -1,22 +1,24 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, Children, type ReactNode } from "react";
 import Link from "next/link";
 import {
   Bell,
   Briefcase,
+  Cake,
   CalendarDays,
   ClipboardCheck,
   Download,
   FileSpreadsheet,
   FileText,
+  LayoutGrid,
   Search,
   UserPlus,
   Users,
   Wallet,
-  Clock,
   ChevronRight,
   RefreshCw,
+  type LucideIcon,
 } from "lucide-react";
 
 import {
@@ -44,19 +46,39 @@ import {
   setDashboardRole,
 } from "@/services/hr-executive-dashboard-service";
 import type {
+  CalendarEvent,
   DashboardRole,
+  DashboardTrainingItem,
   HrExecutiveDashboard,
 } from "@/types/hr-executive-dashboard";
 import { DASHBOARD_ROLE_LABELS } from "@/types/hr-executive-dashboard";
 
 const QUICK_ACTIONS = [
-  { label: "Create Job", href: "/hr/recruitment", icon: Briefcase },
+  { label: "Employee", href: "/hr/workforce", icon: Users },
+  { label: "Payroll", href: "/hr/payroll", icon: Wallet },
+  { label: "Leave", href: "/hr/leave", icon: CalendarDays },
   { label: "Onboarding", href: "/hr/onboarding", icon: UserPlus },
-  { label: "Assign Shift", href: "/hr/roster", icon: Clock },
-  { label: "Apply Leave", href: "/hr/leave", icon: CalendarDays },
-  { label: "Run Payroll", href: "/hr/payroll", icon: Wallet },
-  { label: "Generate Report", href: "/hr/reports", icon: FileText },
+  { label: "Create Job", href: "/hr/recruitment", icon: Briefcase },
+  { label: "Attendance", href: "/hr/time", icon: ClipboardCheck },
 ] as const;
+
+function quickActionsForRole(role: DashboardRole): typeof QUICK_ACTIONS[number][] {
+  if (role === "employee") {
+    return QUICK_ACTIONS.filter((a) => ["Leave", "Attendance"].includes(a.label));
+  }
+  if (role === "recruiter") {
+    return QUICK_ACTIONS.filter((a) =>
+      ["Create Job", "Onboarding", "Employee"].includes(a.label),
+    );
+  }
+  if (role === "finance") {
+    return QUICK_ACTIONS.filter((a) => ["Payroll", "Employee"].includes(a.label));
+  }
+  if (role === "manager") {
+    return QUICK_ACTIONS.filter((a) => !["Create Job", "Payroll"].includes(a.label));
+  }
+  return [...QUICK_ACTIONS];
+}
 
 const EVENT_LABELS: Record<string, string> = {
   birthday: "Birthday",
@@ -124,6 +146,25 @@ export function HrExecutiveDashboardPage() {
       [a.title, a.requester, a.category].join(" ").toLowerCase().includes(q),
     );
   }, [data, query]);
+
+  const birthdayEvents = useMemo(
+    () => filteredCalendar.filter((e) => e.type === "birthday"),
+    [filteredCalendar],
+  );
+
+  const anniversaryEvents = useMemo(
+    () => filteredCalendar.filter((e) => e.type === "anniversary"),
+    [filteredCalendar],
+  );
+
+  const generalEvents = useMemo(
+    () =>
+      filteredCalendar.filter((e) => !["birthday", "anniversary"].includes(e.type)),
+    [filteredCalendar],
+  );
+
+  const trainingItems = data?.trainingItems ?? [];
+  const roleQuickActions = quickActionsForRole(role);
 
   const stats = data?.stats;
   const charts = data?.charts;
@@ -269,47 +310,103 @@ export function HrExecutiveDashboardPage() {
         </div>
       ) : null}
 
-      {/* Quick actions */}
-      <section>
-        <h2 className="mb-2 text-sm font-semibold tracking-tight">Quick Actions</h2>
-        <div className="grid gap-2 grid-cols-2 sm:grid-cols-3 xl:grid-cols-6">
-          {QUICK_ACTIONS.filter((a) => {
-            if (role === "employee") {
-              return ["Apply Leave", "Generate Report"].includes(a.label);
-            }
-            if (role === "recruiter") {
-              return ["Create Job", "Onboarding", "Generate Report"].includes(a.label);
-            }
-            if (role === "finance") {
-              return ["Run Payroll", "Generate Report"].includes(a.label);
-            }
-            if (role === "manager") {
-              return !["Run Payroll", "Create Job"].includes(a.label);
-            }
-            return true;
-          }).map((a) => {
-            const Icon = a.icon;
-            return (
-              <Link
-                key={a.href + a.label}
-                href={a.href}
-                className="group flex cursor-pointer flex-col items-start gap-2 rounded-xl border border-border/70 bg-card px-3 py-3 shadow-sm transition-[border-color,box-shadow] duration-200 hover:border-primary/30 hover:shadow-md"
-              >
-                <span className="flex size-8 items-center justify-center rounded-lg bg-primary/10 text-primary">
-                  <Icon className="size-3.5" />
-                </span>
-                <span className="text-xs font-medium leading-snug">{a.label}</span>
-              </Link>
-            );
-          })}
-        </div>
-      </section>
-
       {loading && !data ? (
         <EmsSkeleton rows={8} />
       ) : (
         <>
-          {/* Slim KPI strip */}
+          {/* Top row — 4 portrait (3:4) boxes, then key metrics below */}
+          <section className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            <DashboardListBox
+              title="Events"
+              subtitle="Interviews, leave, holidays"
+              icon={CalendarDays}
+              footerHref="/hr/reports"
+              footerLabel="Reports"
+              portrait
+            >
+              {generalEvents.length === 0 ? (
+                <p className="py-8 text-center text-xs text-muted-foreground">No upcoming events</p>
+              ) : (
+                <ul className="space-y-2">
+                  {generalEvents.slice(0, 5).map((e) => (
+                    <EventRow key={e.id} event={e} />
+                  ))}
+                </ul>
+              )}
+            </DashboardListBox>
+
+            <DashboardListBox
+              title="Quick Actions"
+              subtitle="Open HR modules"
+              icon={LayoutGrid}
+              portrait
+            >
+              <div className="grid grid-cols-2 gap-2">
+                {roleQuickActions.map((a) => {
+                  const Icon = a.icon;
+                  return (
+                    <Link
+                      key={a.href + a.label}
+                      href={a.href}
+                      className="group flex cursor-pointer flex-col items-start gap-1.5 rounded-lg border border-border/60 bg-muted/30 px-2.5 py-2.5 transition-[border-color,background-color] duration-200 hover:border-primary/35 hover:bg-primary/5"
+                    >
+                      <span className="flex size-7 items-center justify-center rounded-md bg-primary/10 text-primary">
+                        <Icon className="size-3.5" />
+                      </span>
+                      <span className="text-[11px] font-medium leading-tight text-foreground">
+                        {a.label}
+                      </span>
+                    </Link>
+                  );
+                })}
+              </div>
+            </DashboardListBox>
+
+            <DashboardListBox
+              title="People events"
+              subtitle="Birthdays · training · anniversaries"
+              icon={Cake}
+              footerHref="/hr/learning"
+              footerLabel="Learning hub"
+              portrait
+            >
+              <div className="space-y-3">
+                <PeopleEventsGroup title="Birthdays" empty="No birthdays soon">
+                  {birthdayEvents.slice(0, 2).map((e) => (
+                    <EventRow key={e.id} event={e} compact />
+                  ))}
+                </PeopleEventsGroup>
+                <PeopleEventsGroup title="Training" empty="No training scheduled">
+                  {trainingItems.slice(0, 2).map((t) => (
+                    <TrainingRow key={t.id} item={t} compact />
+                  ))}
+                </PeopleEventsGroup>
+                <PeopleEventsGroup title="Anniversaries" empty="No work anniversaries">
+                  {anniversaryEvents.slice(0, 2).map((e) => (
+                    <EventRow key={e.id} event={e} compact />
+                  ))}
+                </PeopleEventsGroup>
+              </div>
+            </DashboardListBox>
+
+            <DashboardListBox
+              title="Attendance calendar"
+              subtitle={now.toLocaleDateString("en-IN", { month: "long", year: "numeric" })}
+              icon={ClipboardCheck}
+              footerHref="/hr/time"
+              footerLabel="Attendance"
+              portrait
+            >
+              <AttendanceMonthCalendar today={now} />
+              <div className="mt-3 grid grid-cols-3 gap-2 border-t border-border/60 pt-3">
+                <AttendanceStat label="Present" value={stats?.presentToday ?? 0} variant="present" />
+                <AttendanceStat label="Absent" value={stats?.absentToday ?? 0} variant="absent" />
+                <AttendanceStat label="On leave" value={stats?.onLeave ?? 0} variant="leave" />
+              </div>
+            </DashboardListBox>
+          </section>
+
+          {/* Key metrics — below top boxes */}
           <section>
             <div className="mb-2 flex items-end justify-between gap-2">
               <h2 className="text-sm font-semibold tracking-tight">Key metrics</h2>
@@ -445,45 +542,8 @@ export function HrExecutiveDashboardPage() {
             </div>
           </section>
 
-          {/* Calendar / Approvals / Notifications */}
-          <div className="grid gap-3 xl:grid-cols-3">
-            <section className="rounded-xl border border-border/70 bg-card shadow-sm">
-              <div className="border-b border-border/70 px-4 py-3">
-                <h2 className="text-sm font-semibold">Today&apos;s Events & Calendar</h2>
-                <p className="text-[11px] text-muted-foreground">
-                  Birthdays, interviews, leaves, holidays, payroll
-                </p>
-              </div>
-              <ul className="divide-y divide-border/60">
-                {filteredCalendar.length === 0 ? (
-                  <li className="p-6">
-                    <HrEmptyState title="No events" description="Nothing scheduled nearby." />
-                  </li>
-                ) : (
-                  filteredCalendar.map((e) => (
-                    <li
-                      key={e.id}
-                      className="flex items-start gap-3 px-4 py-2.5 transition-colors duration-150 hover:bg-muted/40"
-                    >
-                      <span className="mt-0.5 rounded-md border border-border bg-muted px-1.5 py-0.5 text-[10px] font-medium uppercase">
-                        {EVENT_LABELS[e.type] ?? e.type}
-                      </span>
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate text-sm font-medium">{e.title}</p>
-                        <p className="text-[11px] text-muted-foreground">
-                          {new Date(e.at).toLocaleDateString("en-IN", {
-                            day: "numeric",
-                            month: "short",
-                          })}
-                          {e.meta ? ` · ${e.meta}` : ""}
-                        </p>
-                      </div>
-                    </li>
-                  ))
-                )}
-              </ul>
-            </section>
-
+          {/* Approvals / Notifications */}
+          <div className="grid gap-3 lg:grid-cols-2">
             <section className="rounded-xl border border-border/70 bg-card shadow-sm">
               <div className="flex items-center justify-between border-b border-border/70 px-4 py-3">
                 <div>
@@ -492,7 +552,15 @@ export function HrExecutiveDashboardPage() {
                     Leave, attendance, payroll, offers
                   </p>
                 </div>
-                <HrStatusBadge status={`${filteredApprovals.length} open`} />
+                <div className="flex items-center gap-2">
+                  <HrStatusBadge status={`${filteredApprovals.length} open`} />
+                  <Link
+                    href="/hr/ess"
+                    className="cursor-pointer text-[11px] font-medium text-primary hover:underline"
+                  >
+                    ESS inbox
+                  </Link>
+                </div>
               </div>
               <ul className="divide-y divide-border/60">
                 {filteredApprovals.length === 0 ? (
@@ -657,6 +725,212 @@ export function HrExecutiveDashboardPage() {
         </>
       )}
     </div>
+  );
+}
+
+function DashboardListBox({
+  title,
+  subtitle,
+  icon: Icon,
+  children,
+  footerHref,
+  footerLabel,
+  className,
+  portrait = false,
+}: {
+  title: string;
+  subtitle: string;
+  icon: LucideIcon;
+  children: ReactNode;
+  footerHref?: string;
+  footerLabel?: string;
+  className?: string;
+  /** ~3:4 portrait tile on xl screens */
+  portrait?: boolean;
+}) {
+  return (
+    <section
+      className={cn(
+        "flex flex-col rounded-xl border border-border/70 bg-card shadow-sm",
+        portrait
+          ? "min-h-[300px] xl:aspect-[3/4] xl:min-h-0 xl:max-h-[440px]"
+          : "min-h-[280px]",
+        className,
+      )}
+    >
+      <div className="flex items-start justify-between gap-2 border-b border-border/70 px-4 py-3">
+        <div>
+          <h2 className="text-sm font-semibold tracking-tight">{title}</h2>
+          <p className="text-[11px] text-muted-foreground">{subtitle}</p>
+        </div>
+        <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+          <Icon className="size-4" />
+        </span>
+      </div>
+      <div className="flex-1 overflow-y-auto px-4 py-3">{children}</div>
+      {footerHref && footerLabel ? (
+        <div className="border-t border-border/70 px-4 py-2">
+          <Link
+            href={footerHref}
+            className="inline-flex cursor-pointer items-center gap-1 text-[11px] font-medium text-primary transition-colors duration-150 hover:text-primary/80"
+          >
+            {footerLabel}
+            <ChevronRight className="size-3" />
+          </Link>
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
+const WEEKDAY_LABELS = ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"] as const;
+
+function PeopleEventsGroup({
+  title,
+  empty,
+  children,
+}: {
+  title: string;
+  empty: string;
+  children: ReactNode;
+}) {
+  const items = Children.toArray(children).filter(Boolean);
+  return (
+    <div>
+      <p className="mb-1.5 text-[10px] font-bold uppercase tracking-wide text-muted-foreground">
+        {title}
+      </p>
+      {items.length === 0 ? (
+        <p className="text-[10px] text-muted-foreground/80">{empty}</p>
+      ) : (
+        <ul className="space-y-1.5">{items}</ul>
+      )}
+    </div>
+  );
+}
+
+function AttendanceMonthCalendar({ today }: { today: Date }) {
+  const cells = useMemo(() => {
+    const y = today.getFullYear();
+    const m = today.getMonth();
+    const lastDate = new Date(y, m + 1, 0).getDate();
+    const startPad = new Date(y, m, 1).getDay();
+    const out: { day: number | null; isToday: boolean }[] = [];
+    for (let i = 0; i < startPad; i += 1) out.push({ day: null, isToday: false });
+    for (let d = 1; d <= lastDate; d += 1) {
+      out.push({
+        day: d,
+        isToday:
+          d === today.getDate() && m === today.getMonth() && y === today.getFullYear(),
+      });
+    }
+    return out;
+  }, [today]);
+
+  return (
+    <div aria-label="Current month calendar">
+      <div className="mb-1 grid grid-cols-7 gap-0.5 text-center text-[9px] font-medium text-muted-foreground">
+        {WEEKDAY_LABELS.map((w) => (
+          <span key={w}>{w}</span>
+        ))}
+      </div>
+      <div className="grid grid-cols-7 gap-0.5">
+        {cells.map((c, i) => (
+          <span
+            key={`${c.day ?? "pad"}-${i}`}
+            className={cn(
+              "flex aspect-square items-center justify-center rounded-md text-[10px] tabular-nums",
+              c.day == null && "invisible",
+              c.isToday && "bg-primary font-semibold text-primary-foreground shadow-sm",
+              !c.isToday && c.day != null && "text-foreground/80",
+            )}
+          >
+            {c.day ?? ""}
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function AttendanceStat({
+  label,
+  value,
+  variant,
+}: {
+  label: string;
+  value: number;
+  variant: "present" | "absent" | "leave";
+}) {
+  const tones = {
+    present: "border-emerald-200/80 bg-emerald-50 text-emerald-900",
+    absent: "border-red-200/80 bg-red-50 text-red-900",
+    leave: "border-amber-200/80 bg-amber-50 text-amber-950",
+  };
+  return (
+    <div className={cn("rounded-lg border px-1 py-2 text-center", tones[variant])}>
+      <p className="text-lg font-semibold tabular-nums leading-none">
+        {value.toLocaleString("en-IN")}
+      </p>
+      <p className="mt-1 text-[9px] font-medium uppercase tracking-wide opacity-90">{label}</p>
+    </div>
+  );
+}
+
+function EventRow({ event, compact = false }: { event: CalendarEvent; compact?: boolean }) {
+  return (
+    <li
+      className={cn(
+        "flex items-start gap-2 rounded-lg border border-border/50 bg-muted/20",
+        compact ? "px-2 py-1.5" : "px-2.5 py-2",
+      )}
+    >
+      <span className="mt-0.5 shrink-0 rounded border border-border bg-background px-1 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-muted-foreground">
+        {EVENT_LABELS[event.type] ?? event.type}
+      </span>
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-xs font-medium text-foreground">{event.title}</p>
+        <p className="text-[10px] text-muted-foreground">
+          {new Date(event.at).toLocaleDateString("en-IN", {
+            weekday: "short",
+            day: "numeric",
+            month: "short",
+          })}
+          {event.meta ? ` · ${event.meta}` : ""}
+        </p>
+      </div>
+    </li>
+  );
+}
+
+function TrainingRow({
+  item,
+  compact = false,
+}: {
+  item: DashboardTrainingItem;
+  compact?: boolean;
+}) {
+  return (
+    <li
+      className={cn(
+        "flex items-start gap-2 rounded-lg border border-border/50 bg-muted/20",
+        compact ? "px-2 py-1.5" : "px-2.5 py-2",
+      )}
+    >
+      <span className="mt-0.5 shrink-0 rounded bg-primary/10 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-primary">
+        Training
+      </span>
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-xs font-medium text-foreground">{item.title}</p>
+        <p className="text-[10px] text-muted-foreground">
+          {new Date(item.at).toLocaleDateString("en-IN", {
+            day: "numeric",
+            month: "short",
+          })}
+          {item.meta ? ` · ${item.meta}` : ""}
+        </p>
+      </div>
+    </li>
   );
 }
 

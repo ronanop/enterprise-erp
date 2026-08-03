@@ -6,6 +6,7 @@ import { ChevronLeft, ChevronRight } from "lucide-react";
 import { SetupDrawer } from "@/components/hr/setup/setup-drawer";
 import { toast } from "@/components/hr/setup/setup-toast";
 import { Button } from "@/components/ui/button";
+import { isWeeklyOffDay } from "@/lib/hr/weekly-off-rules";
 import { setRosterCell } from "@/services/shift-roster-service";
 import type { ShiftRosterDirectory } from "@/services/shift-roster-service";
 import { cn } from "@/lib/utils";
@@ -52,8 +53,9 @@ export function RosterCalendarView({
     const override = directory.rosterCells.find((c) => c.date === date && c.employeeId === employeeId);
     if (override) return override;
 
-    const dow = new Date(`${date}T12:00:00`).getDay();
-    const sundayOff = dow === 0 && directory.weeklyOffRules.includes("sunday");
+    const weeklyOff = isWeeklyOffDay(date, directory.weeklyOffRules, {
+      alternateSaturdayStart: directory.weeklyOffAlternateSaturdayStart || null,
+    });
     if (holiday) {
       return {
         date,
@@ -65,7 +67,7 @@ export function RosterCalendarView({
         isHoliday: true,
       };
     }
-    if (sundayOff) {
+    if (weeklyOff) {
       return {
         date,
         employeeId,

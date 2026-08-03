@@ -430,7 +430,7 @@ export function LeaveApprovalDrawer({
           <Button size="sm" className="cursor-pointer" disabled={loading} onClick={() => void act("approve")}>
             {request.status === "manager_approved" || request.extension.approvalStage === "hr_review"
               ? "HR Approve"
-              : "Manager Approve"}
+              : "Reporting manager approve"}
           </Button>
           <Button size="sm" variant="destructive" className="cursor-pointer" disabled={loading} onClick={() => void act("reject")}>
             Reject
@@ -449,7 +449,7 @@ export function LeaveApprovalDrawer({
     >
       <div className="space-y-3 text-sm">
         <p className="text-xs text-muted-foreground">
-          Workflow: Employee → Manager → HR → Director (optional) → Approved
+          Workflow: Employee → Reporting manager → HR → Director (optional) → Approved
         </p>
         <p>
           <span className="text-muted-foreground">Dates:</span> {request.fromDate} → {request.toDate} (

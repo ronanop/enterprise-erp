@@ -8,6 +8,7 @@ import { ChevronRight } from "lucide-react";
 import { SetupEntityPanel, type FieldDef } from "@/components/hr/setup/setup-entity-panel";
 import { HolidayCalendarPanel } from "@/components/hr/setup/holiday-calendar-panel";
 import { AttendancePolicyPanel } from "@/components/hr/setup/attendance-policy-panel";
+import { ManagementGroupPanel } from "@/components/hr/setup/management-group-panel";
 import { SetupToastHost } from "@/components/hr/setup/setup-toast";
 import { toApiTimeValue, toTimeInputValue } from "@/components/hr/setup/setup-drawer";
 import { HrStatusBadge } from "@/components/hr/hr-primitives";
@@ -27,6 +28,7 @@ function mapBranch(row: SetupRow): SetupRow {
     code: row.branch_code,
     name: row.branch_name,
     location: [row.city, row.state_code, row.country_code].filter(Boolean).join(", ") || "—",
+    head: row.head_employee_id ?? "—",
   };
 }
 
@@ -233,6 +235,7 @@ const TAB_CONFIG: Partial<Record<HrSetupTabId, TabConfig>> = {
       { key: "name", label: "Branch Name" },
       { key: "code", label: "Code" },
       { key: "location", label: "Location" },
+      { key: "head", label: "Head" },
       { key: "status", label: "Status" },
     ],
     fields: [
@@ -256,6 +259,13 @@ const TAB_CONFIG: Partial<Record<HrSetupTabId, TabConfig>> = {
       { key: "city", label: "City" },
       { key: "state_code", label: "State" },
       { key: "country_code", label: "Country", placeholder: "IN" },
+      {
+        key: "head_employee_id",
+        label: "Branch head",
+        type: "select",
+        optionsSource: "employees",
+        hint: "Employee who leads this branch",
+      },
       STATUS_FIELD,
     ],
     buildCreateBody: (f) => ({
@@ -267,6 +277,7 @@ const TAB_CONFIG: Partial<Record<HrSetupTabId, TabConfig>> = {
       city: f.city || null,
       state_code: f.state_code || null,
       country_code: f.country_code || "IN",
+      head_employee_id: f.head_employee_id || null,
     }),
     buildUpdateBody: (f) => ({
       branch_name: f.branch_name,
@@ -274,6 +285,7 @@ const TAB_CONFIG: Partial<Record<HrSetupTabId, TabConfig>> = {
       status: f.status,
       address_line1: f.address_line1 || undefined,
       city: f.city || undefined,
+      head_employee_id: f.head_employee_id || null,
     }),
   },
   departments: {
@@ -320,6 +332,13 @@ const TAB_CONFIG: Partial<Record<HrSetupTabId, TabConfig>> = {
         optionsSource: "departments",
         hint: "Optional hierarchy parent",
       },
+      {
+        key: "head_employee_id",
+        label: "Department head",
+        type: "select",
+        optionsSource: "employees",
+        hint: "Shown on employee onboarding / add employee",
+      },
       STATUS_FIELD,
     ],
     buildCreateBody: (f) => ({
@@ -328,11 +347,13 @@ const TAB_CONFIG: Partial<Record<HrSetupTabId, TabConfig>> = {
       department_code: f.department_code,
       department_name: f.department_name,
       parent_department_id: f.parent_department_id || null,
+      head_employee_id: f.head_employee_id || null,
     }),
     buildUpdateBody: (f) => ({
       department_name: f.department_name,
       status: f.status,
       parent_department_id: f.parent_department_id || null,
+      head_employee_id: f.head_employee_id || null,
     }),
   },
   designations: {
@@ -580,7 +601,7 @@ const TAB_CONFIG: Partial<Record<HrSetupTabId, TabConfig>> = {
   reporting: {
     nameKeys: ["name"],
     columns: [
-      { key: "name", label: "Manager" },
+      { key: "name", label: "Reporting manager" },
       { key: "employee_code", label: "Code" },
       { key: "role", label: "Role" },
       { key: "status", label: "Status" },
@@ -672,7 +693,7 @@ const TAB_CONFIG: Partial<Record<HrSetupTabId, TabConfig>> = {
       { key: "negative_balance", label: "Negative Balance Allowed", type: "checkbox" },
       { key: "half_day", label: "Half Day Allowed", type: "checkbox" },
       { key: "requires_approval", label: "Requires Approval", type: "checkbox" },
-      { key: "approval_flow", label: "Approval Flow", placeholder: "Manager → HR → Director" },
+      { key: "approval_flow", label: "Approval Flow", placeholder: "Reporting manager → HR → Director" },
       { key: "effective_from", label: "Effective From", type: "date" },
       { key: "effective_to", label: "Effective To", type: "date" },
       STATUS_FIELD,
@@ -1223,6 +1244,9 @@ function TabPanel({ tab }: { tab: HrSetupTab }) {
   }
   if (tab.id === "attendance-rules") {
     return <AttendancePolicyPanel tab={tab} />;
+  }
+  if (tab.id === "employment-types") {
+    return <ManagementGroupPanel tab={tab} />;
   }
   const cfg = TAB_CONFIG[tab.id];
   if (!cfg) {

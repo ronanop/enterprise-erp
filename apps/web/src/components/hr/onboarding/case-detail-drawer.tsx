@@ -173,7 +173,7 @@ export function CaseDetailDrawer({
             <Info label="Joining" value={caseRow.joiningDate} />
             <Info label="Department" value={caseRow.department} />
             <Info label="Designation" value={caseRow.designation} />
-            <Info label="Manager" value={caseRow.reportingManager || "—"} />
+            <Info label="Reporting manager" value={caseRow.reportingManager || "—"} />
             <Info label="Branch" value={caseRow.branch} />
             <Info label="Shift" value={caseRow.shift} />
             <Info label="Leave policy" value={caseRow.leavePolicy} />

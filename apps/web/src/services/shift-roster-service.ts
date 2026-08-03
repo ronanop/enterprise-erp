@@ -1,6 +1,7 @@
 import { resourceService } from "@/services/api-client";
 import { loadEmployeeDirectory } from "@/services/employee-management-service";
 import { cacheRosterAssignments } from "@/services/hr-master-connector";
+import { isWeeklyOffDay } from "@/lib/hr/weekly-off-rules";
 import { consumeShiftCode, syncShiftCodesFromList } from "@/config/shift-id";
 import type { HrRow } from "@/services/hr-service";
 import type {
@@ -26,6 +27,7 @@ const SWAPS_KEY = "erp_shift_swaps_v1";
 const ROSTER_KEY = "erp_roster_cells_v1";
 const AUDIT_KEY = "erp_shift_audit_v1";
 const WEEKLY_OFF_KEY = "erp_weekly_off_rules_v1";
+const WEEKLY_OFF_ALT_START_KEY = "erp_weekly_off_alt_sat_start_v1";
 
 function actor(): string {
   return "HR User";
@@ -94,6 +96,7 @@ export type ShiftRosterDirectory = {
   swaps: ShiftSwapRequest[];
   rosterCells: RosterCell[];
   weeklyOffRules: WeeklyOffRule[];
+  weeklyOffAlternateSaturdayStart: string;
   holidays: { date: string; name: string; type: string }[];
   options: {
     branches: { id: string; label: string }[];
@@ -210,6 +213,9 @@ export async function loadShiftRosterDirectory(): Promise<ShiftRosterDirectory> 
   const weeklyOffRules = apiRules?.length
     ? apiRules
     : readJson<WeeklyOffRule[]>(WEEKLY_OFF_KEY, ["sunday"]);
+  const weeklyOffAlternateSaturdayStart = activePolicy?.alternate_saturday_start
+    ? String(activePolicy.alternate_saturday_start).slice(0, 10)
+    : readJson<string>(WEEKLY_OFF_ALT_START_KEY, "");
 
   const [rotApi, swapApi] = await Promise.all([
     resourceService.list("/hr/shift-rotations", { page_size: 200 }).catch(() => ({ data: [] })),
@@ -297,6 +303,7 @@ export async function loadShiftRosterDirectory(): Promise<ShiftRosterDirectory> 
     swaps: apiSwaps.length ? apiSwaps : readJson<ShiftSwapRequest[]>(SWAPS_KEY, []),
     rosterCells: readJson<RosterCell[]>(ROSTER_KEY, []),
     weeklyOffRules,
+    weeklyOffAlternateSaturdayStart,
     holidays,
     options: {
       branches: branchRows.map((b) => ({
@@ -662,8 +669,9 @@ function resolveCellValue(
   }
   if (holiday) return "HO";
 
-  const dow = new Date(`${date}T12:00:00`).getDay();
-  const sundayOff = dow === 0 && dir.weeklyOffRules.includes("sunday");
+  const weeklyOff = isWeeklyOffDay(date, dir.weeklyOffRules, {
+    alternateSaturdayStart: dir.weeklyOffAlternateSaturdayStart || null,
+  });
 
   const assign = dir.assignments.find(
     (a) =>
@@ -673,17 +681,17 @@ function resolveCellValue(
       a.status !== "inactive",
   );
   if (assign) {
-    if (sundayOff) return "WO";
+    if (weeklyOff) return "WO";
     return shiftCodeForId(dir, assign.shiftId, assign.shiftName);
   }
 
   const rotated = resolveRotationCode(dir, date, employeeId);
   if (rotated) {
-    if (sundayOff && rotated !== "HO") return "WO";
+    if (weeklyOff && rotated !== "HO") return "WO";
     return rotated;
   }
 
-  if (sundayOff) return "WO";
+  if (weeklyOff) return "WO";
   return "";
 }
 
@@ -1049,13 +1057,22 @@ export async function applyManagerRosterImport(
   });
 }
 
-export async function saveWeeklyOffRules(rules: WeeklyOffRule[]): Promise<void> {
+export async function saveWeeklyOffRules(
+  rules: WeeklyOffRule[],
+  alternateSaturdayStart?: string | null,
+): Promise<void> {
   writeJson(WEEKLY_OFF_KEY, rules);
+  if (alternateSaturdayStart !== undefined) {
+    writeJson(WEEKLY_OFF_ALT_START_KEY, alternateSaturdayStart || "");
+  }
   try {
     const { apiClient } = await import("@/services/api-client");
     await apiClient("/hr/weekly-off-policies/rules", {
       method: "PUT",
-      body: { rules_json: rules },
+      body: {
+        rules_json: rules,
+        alternate_saturday_start: alternateSaturdayStart || null,
+      },
     });
   } catch {
     try {
@@ -1063,6 +1080,7 @@ export async function saveWeeklyOffRules(rules: WeeklyOffRule[]): Promise<void> 
         policy_code: "WOFF-001",
         policy_name: "Default Weekly Off",
         rules_json: rules,
+        alternate_saturday_start: alternateSaturdayStart || null,
         is_default: true,
         status: "active",
       });
@@ -1071,6 +1089,14 @@ export async function saveWeeklyOffRules(rules: WeeklyOffRule[]): Promise<void> 
     }
   }
   appendShiftAudit({ action: "weekly_off_updated", detail: rules.join(", "), actor: actor() });
+}
+
+export async function runAttendanceAutoAbsentJob(): Promise<Record<string, unknown>> {
+  const { apiClient } = await import("@/services/api-client");
+  const res = await apiClient<Record<string, unknown>>("/hr/attendance/jobs/auto-absent", {
+    method: "POST",
+  });
+  return res.data ?? {};
 }
 
 export function exportAssignmentsCsv(rows: ShiftAssignmentRecord[]): string {

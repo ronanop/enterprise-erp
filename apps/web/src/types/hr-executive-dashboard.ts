@@ -10,7 +10,7 @@ export type DashboardRole =
 
 export const DASHBOARD_ROLE_LABELS: Record<DashboardRole, string> = {
   hr: "HR Manager",
-  manager: "Manager",
+  manager: "Reporting manager",
   employee: "Employee",
   recruiter: "Recruiter",
   finance: "Finance",
@@ -115,12 +115,20 @@ export type QuickReport = {
   href: string;
 };
 
+export type DashboardTrainingItem = {
+  id: string;
+  title: string;
+  at: string;
+  meta?: string;
+};
+
 export type HrExecutiveDashboard = {
   role: DashboardRole;
   displayName: string;
   stats: HrDashboardStats;
   charts: HrDashboardCharts;
   calendar: CalendarEvent[];
+  trainingItems: DashboardTrainingItem[];
   approvals: ApprovalItem[];
   activities: ActivityItem[];
   notifications: NotificationItem[];

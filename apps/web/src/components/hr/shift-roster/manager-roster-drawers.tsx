@@ -101,7 +101,7 @@ export function DownloadManagerRosterDrawer({
       }
     >
       <div className="space-y-3">
-        <SetupField label="Manager" required hint="Only managers with direct reports are listed">
+        <SetupField label="Reporting manager" required hint="Only reporting managers with direct reports are listed">
           <SetupSelect value={managerId} onChange={(e) => setManagerId(e.target.value)}>
             <option value="">Select manager</option>
             {managers.map((m) => (
@@ -299,7 +299,7 @@ export function UploadManagerRosterDrawer({
         {validation ? (
           <div className="space-y-2 rounded-lg border border-border/70 p-3 text-xs">
             <p>
-              <span className="font-medium">Manager:</span> {validation.managerCode} ·{" "}
+              <span className="font-medium">Reporting manager:</span> {validation.managerCode} ·{" "}
               {validation.managerName}
             </p>
             <p>

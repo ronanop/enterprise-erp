@@ -23,6 +23,7 @@ import {
   AttendanceImportDrawer,
 } from "@/components/hr/attendance/attendance-import-correction";
 import { MarkAttendanceDrawer } from "@/components/hr/attendance/mark-attendance-drawer";
+import { EmployeeAttendanceExplorer } from "@/components/hr/attendance/employee-attendance-explorer";
 import {
   HrAuthBanner,
   HrEmptyState,
@@ -54,7 +55,7 @@ import { ATTENDANCE_STATUS_LABELS, emptyAttendanceFilters } from "@/types/attend
 
 const PAGE_SIZE = 15;
 
-type ViewMode = "table" | "calendar" | "reports" | "audit";
+type ViewMode = "table" | "employee" | "calendar" | "reports" | "audit";
 
 export function AttendanceManagementPage() {
   const [directory, setDirectory] = useState<AttendanceDirectory | null>(null);
@@ -121,7 +122,11 @@ export function AttendanceManagementPage() {
   function formatTime(iso: string) {
     if (!iso) return "—";
     try {
-      return new Date(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+      return new Date(iso).toLocaleTimeString([], {
+        hour: "numeric",
+        minute: "2-digit",
+        hour12: true,
+      });
     } catch {
       return iso;
     }
@@ -208,6 +213,7 @@ export function AttendanceManagementPage() {
             {(
               [
                 ["table", "Register"],
+                ["employee", "By employee"],
                 ["calendar", "Calendar"],
                 ["reports", "Reports"],
                 ["audit", "Audit log"],
@@ -226,6 +232,14 @@ export function AttendanceManagementPage() {
               </button>
             ))}
           </div>
+
+          {view === "employee" ? (
+            <EmployeeAttendanceExplorer
+              directory={directory}
+              loading={loading}
+              onCorrect={(row) => setCorrectionRecord(row)}
+            />
+          ) : null}
 
           {view === "calendar" ? (
             <AttendanceCalendar
@@ -349,6 +363,19 @@ export function AttendanceManagementPage() {
                       <option value="">All</option>
                       {directory?.options.shifts.map((s) => (
                         <option key={s.id} value={s.id}>{s.label}</option>
+                      ))}
+                    </SetupSelect>
+                  </SetupField>
+                  <SetupField label="Employee">
+                    <SetupSelect
+                      value={filters.employeeId}
+                      onChange={(e) => setFilters((f) => ({ ...f, employeeId: e.target.value }))}
+                    >
+                      <option value="">All</option>
+                      {directory?.options.employees.map((e) => (
+                        <option key={e.id} value={e.id}>
+                          {e.label} ({e.code})
+                        </option>
                       ))}
                     </SetupSelect>
                   </SetupField>

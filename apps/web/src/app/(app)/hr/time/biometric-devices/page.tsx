@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Plus, RefreshCw } from "lucide-react";
+import { Activity, Plus, RefreshCw, Wifi, WifiOff } from "lucide-react";
 
 import { PageHeader } from "@/components/layout/page-header";
 import {
@@ -12,7 +12,8 @@ import {
 } from "@/components/hr/setup/setup-drawer";
 import { toast, SetupToastHost } from "@/components/hr/setup/setup-toast";
 import { Button } from "@/components/ui/button";
-import { ApiClientError, resourceService } from "@/services/api-client";
+import { cn } from "@/lib/utils";
+import { ApiClientError, apiClient, resourceService } from "@/services/api-client";
 
 const DEVICE_MODELS = [
   {
@@ -37,8 +38,35 @@ type Device = {
 
 type Option = { id: string; label: string };
 
+type LiveLogItem = {
+  id: string;
+  employee_id: string;
+  employee_code?: string | null;
+  employee_name?: string | null;
+  attendance_date: string;
+  check_in_at?: string | null;
+  check_out_at?: string | null;
+  attendance_status: string;
+  notes?: string | null;
+  updated_at?: string | null;
+};
+
+type LiveFeed = {
+  device: Device;
+  reachable: boolean;
+  reachability_message: string;
+  today_ingested_count: number;
+  ingested_records: LiveLogItem[];
+};
+
 function modelLabel(value?: string | null) {
   return DEVICE_MODELS.find((m) => m.value === value)?.label ?? value ?? "—";
+}
+
+function formatDateTime(value?: string | null) {
+  if (!value) return "—";
+  const d = new Date(value);
+  return Number.isNaN(d.getTime()) ? value : d.toLocaleString();
 }
 
 export default function BiometricDevicesPage() {
@@ -55,6 +83,39 @@ export default function BiometricDevicesPage() {
   const [port, setPort] = useState(DEVICE_MODELS[0].defaultPort);
   const [location, setLocation] = useState("");
   const [createdApiKey, setCreatedApiKey] = useState<string | null>(null);
+  const [feedDevice, setFeedDevice] = useState<Device | null>(null);
+  const [feed, setFeed] = useState<LiveFeed | null>(null);
+  const [feedLoading, setFeedLoading] = useState(false);
+
+  const loadFeed = useCallback(async (deviceId: string) => {
+    setFeedLoading(true);
+    try {
+      const res = await apiClient<LiveFeed>(`/hr/biometric-devices/${deviceId}/live-feed`, {
+        method: "GET",
+        query: { days: 14 },
+      });
+      setFeed(res.data ?? null);
+    } catch {
+      toast("Failed to load device feed", "error");
+      setFeed(null);
+    } finally {
+      setFeedLoading(false);
+    }
+  }, []);
+
+  const openDeviceFeed = useCallback(
+    (device: Device) => {
+      setFeedDevice(device);
+      setFeed(null);
+      void loadFeed(device.id);
+    },
+    [loadFeed],
+  );
+
+  const closeDeviceFeed = useCallback(() => {
+    setFeedDevice(null);
+    setFeed(null);
+  }, []);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -89,6 +150,14 @@ export default function BiometricDevicesPage() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  useEffect(() => {
+    if (!feedDevice) return;
+    const id = window.setInterval(() => {
+      void loadFeed(feedDevice.id);
+    }, 20000);
+    return () => window.clearInterval(id);
+  }, [feedDevice, loadFeed]);
 
   function openCreate() {
     const model = DEVICE_MODELS[0];
@@ -163,7 +232,7 @@ export default function BiometricDevicesPage() {
       <SetupToastHost />
       <PageHeader
         title="Biometric devices"
-        description="Register Fingerprint K40 TimeLabs devices by IP and port. Sync punches via POST /hr/attendance/device-sync."
+        description="Register Fingerprint K40 TimeLabs devices by IP and port. Click a device to view network status and ingested punches."
         actions={
           <div className="flex gap-2">
             <Button
@@ -206,7 +275,11 @@ export default function BiometricDevicesPage() {
               </thead>
               <tbody className="divide-y divide-border">
                 {rows.map((r) => (
-                  <tr key={r.id} className="transition-colors duration-150 hover:bg-muted/30">
+                  <tr
+                    key={r.id}
+                    className="cursor-pointer transition-colors duration-150 hover:bg-muted/30"
+                    onClick={() => openDeviceFeed(r)}
+                  >
                     <td className="px-3 py-2 font-medium">{r.device_code}</td>
                     <td className="px-3 py-2 text-muted-foreground">{modelLabel(r.device_model)}</td>
                     <td className="px-3 py-2">{r.device_name}</td>
@@ -222,6 +295,116 @@ export default function BiometricDevicesPage() {
           </div>
         )}
       </section>
+
+      <SetupDrawer
+        open={!!feedDevice}
+        wide
+        title={feedDevice ? `${feedDevice.device_code} · Live feed` : "Device feed"}
+        description={
+          feedDevice
+            ? `${feedDevice.device_name} · ${feedDevice.ip_address ?? "—"}:${feedDevice.port ?? "—"}`
+            : undefined
+        }
+        onClose={closeDeviceFeed}
+        footer={
+          feedDevice ? (
+            <Button
+              size="sm"
+              variant="outline"
+              className="cursor-pointer transition-colors duration-200"
+              onClick={() => void loadFeed(feedDevice.id)}
+              disabled={feedLoading}
+            >
+              <RefreshCw className={cn("size-3.5", feedLoading && "animate-spin")} />
+              Refresh feed
+            </Button>
+          ) : null
+        }
+      >
+        {feedLoading && !feed ? (
+          <p className="text-sm text-muted-foreground">Loading device data…</p>
+        ) : feed ? (
+          <div className="space-y-4">
+            <div
+              className={cn(
+                "flex gap-3 rounded-lg border px-3 py-2.5 text-sm",
+                feed.reachable
+                  ? "border-emerald-200 bg-emerald-50/80 text-emerald-950"
+                  : "border-amber-200 bg-amber-50/80 text-amber-950",
+              )}
+            >
+              {feed.reachable ? (
+                <Wifi className="mt-0.5 size-4 shrink-0" aria-hidden />
+              ) : (
+                <WifiOff className="mt-0.5 size-4 shrink-0" aria-hidden />
+              )}
+              <div className="min-w-0">
+                <p className="font-medium">{feed.reachable ? "Device reachable" : "Device not reachable"}</p>
+                <p className="mt-0.5 text-xs opacity-90">{feed.reachability_message}</p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 rounded-lg border border-border bg-muted/30 px-3 py-2 text-sm">
+              <Activity className="size-4 text-muted-foreground" aria-hidden />
+              <span>
+                <span className="font-medium tabular-nums">{feed.today_ingested_count}</span>
+                <span className="text-muted-foreground"> punches ingested today (via device-sync)</span>
+              </span>
+            </div>
+
+            <p className="text-xs text-muted-foreground">
+              Punches appear here after they are synced into attendance with this device code. Auto-refresh every 20s
+              while this panel is open.
+            </p>
+
+            {!feed.ingested_records.length ? (
+              <p className="rounded-lg border border-dashed border-border p-4 text-sm text-muted-foreground">
+                No ingested punches for this device in the last 14 days.
+              </p>
+            ) : (
+              <div className="overflow-x-auto rounded-lg border border-border">
+                <table className="w-full min-w-[520px] text-left text-sm">
+                  <thead className="border-b border-border bg-muted/40 text-[11px] uppercase tracking-wide text-muted-foreground">
+                    <tr>
+                      <th className="px-3 py-2 font-medium">Date</th>
+                      <th className="px-3 py-2 font-medium">Employee</th>
+                      <th className="px-3 py-2 font-medium">In</th>
+                      <th className="px-3 py-2 font-medium">Out</th>
+                      <th className="px-3 py-2 font-medium">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border">
+                    {feed.ingested_records.map((row) => (
+                      <tr key={row.id} className="transition-colors duration-150 hover:bg-muted/20">
+                        <td className="px-3 py-2 whitespace-nowrap text-xs">{row.attendance_date}</td>
+                        <td className="px-3 py-2">
+                          <span className="font-medium">{row.employee_name || "—"}</span>
+                          {row.employee_code ? (
+                            <span className="mt-0.5 block font-mono text-[11px] text-muted-foreground">
+                              {row.employee_code}
+                            </span>
+                          ) : null}
+                        </td>
+                        <td className="px-3 py-2 whitespace-nowrap text-xs text-muted-foreground">
+                          {formatDateTime(row.check_in_at)}
+                        </td>
+                        <td className="px-3 py-2 whitespace-nowrap text-xs text-muted-foreground">
+                          {formatDateTime(row.check_out_at)}
+                        </td>
+                        <td className="px-3 py-2 text-xs uppercase text-muted-foreground">
+                          {row.attendance_status}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        ) : (
+          <p className="text-sm text-muted-foreground">Could not load feed.</p>
+        )}
+      </SetupDrawer>
 
       <SetupDrawer
         open={open}

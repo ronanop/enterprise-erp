@@ -1,8 +1,9 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Check, RefreshCw, X } from "lucide-react";
 
+import { HrAuthBanner } from "@/components/hr/hr-primitives";
 import { PageHeader } from "@/components/layout/page-header";
 import {
   SetupDrawer,
@@ -13,7 +14,9 @@ import {
 } from "@/components/hr/setup/setup-drawer";
 import { toast, SetupToastHost } from "@/components/hr/setup/setup-toast";
 import { Button } from "@/components/ui/button";
+import { isAuthenticated } from "@/lib/auth";
 import { ApiClientError, resourceService } from "@/services/api-client";
+import { loadEmployeeDirectory } from "@/services/employee-management-service";
 
 type Row = {
   id: string;
@@ -24,11 +27,24 @@ type Row = {
 
 type Option = { id: string; label: string };
 
+async function listQueue(apiPath: string): Promise<Row[]> {
+  try {
+    const res = await resourceService.list(apiPath, { page_size: 100 });
+    return Array.isArray(res.data) ? (res.data as Row[]) : [];
+  } catch (err) {
+    if (err instanceof ApiClientError && err.status === 401) {
+      throw err;
+    }
+    return [];
+  }
+}
+
 export default function OtAllotmentPage() {
   const [onDuty, setOnDuty] = useState<Row[]>([]);
   const [ot, setOt] = useState<Row[]>([]);
   const [compoff, setCompoff] = useState<Row[]>([]);
   const [loading, setLoading] = useState(true);
+  const [authError, setAuthError] = useState(false);
   const [open, setOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [employees, setEmployees] = useState<Option[]>([]);
@@ -39,57 +55,55 @@ export default function OtAllotmentPage() {
   const [allotmentType, setAllotmentType] = useState("overtime");
   const [allotmentDate, setAllotmentDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [reason, setReason] = useState("");
+  const loadErrorShown = useRef(false);
+
+  const loadLookups = useCallback(async () => {
+    const { options, errors } = await loadEmployeeDirectory();
+    const empOpts = options.managers.map((m) => ({ id: m.id, label: m.label }));
+    const branchOpts = options.branches.map((b) => ({ id: b.id, label: b.label }));
+    setEmployees(empOpts);
+    setBranches(branchOpts);
+    setEmployeeId((prev) => prev || empOpts[0]?.id || "");
+    setBranchId((prev) => prev || branchOpts[0]?.id || "");
+    if (errors.length && !empOpts.length && !branchOpts.length) {
+      return false;
+    }
+    return true;
+  }, []);
 
   const load = useCallback(async () => {
+    if (!isAuthenticated()) {
+      setAuthError(true);
+      setLoading(false);
+      return;
+    }
     setLoading(true);
+    setAuthError(false);
     try {
+      await loadLookups();
       const [od, allot, co] = await Promise.all([
-        resourceService.list("/hr/on-duty-requests", { page_size: 100 }),
-        resourceService.list("/hr/ot-allotments", { page_size: 100 }),
-        resourceService.list("/hr/compoff-requests", { page_size: 100 }),
+        listQueue("/hr/on-duty-requests"),
+        listQueue("/hr/ot-allotments"),
+        listQueue("/hr/compoff-requests"),
       ]);
-      setOnDuty((Array.isArray(od.data) ? od.data : []) as Row[]);
-      setOt((Array.isArray(allot.data) ? allot.data : []) as Row[]);
-      setCompoff((Array.isArray(co.data) ? co.data : []) as Row[]);
-    } catch {
-      toast("Failed to load On Duty / OT / Comp Off queues", "error");
+      setOnDuty(od);
+      setOt(allot);
+      setCompoff(co);
+      loadErrorShown.current = false;
+    } catch (err) {
+      if (err instanceof ApiClientError && err.status === 401) {
+        setAuthError(true);
+      } else if (!loadErrorShown.current) {
+        loadErrorShown.current = true;
+        toast(
+          err instanceof ApiClientError ? err.message : "Failed to load On Duty / OT / Comp Off queues",
+          "error",
+        );
+      }
     } finally {
       setLoading(false);
     }
-  }, []);
-
-  const loadLookups = useCallback(async () => {
-    try {
-      const [empRes, branchRes] = await Promise.all([
-        resourceService.list("/employees", { page_size: 200 }),
-        resourceService.list("/branches", { page_size: 200 }),
-      ]);
-      const empList = Array.isArray(empRes.data) ? empRes.data : [];
-      const branchList = Array.isArray(branchRes.data) ? branchRes.data : [];
-      const empOpts = empList.map((row) => {
-        const r = row as Record<string, unknown>;
-        const name = [r.first_name, r.last_name].filter(Boolean).join(" ").trim();
-        const code = r.employee_code ? String(r.employee_code) : "";
-        return {
-          id: String(r.id),
-          label: [code, name || String(r.display_name ?? r.email ?? r.id)].filter(Boolean).join(" · "),
-        };
-      });
-      const branchOpts = branchList.map((row) => {
-        const r = row as Record<string, unknown>;
-        return {
-          id: String(r.id),
-          label: String(r.branch_name ?? r.name ?? r.branch_code ?? r.id),
-        };
-      });
-      setEmployees(empOpts);
-      setBranches(branchOpts);
-      setEmployeeId((prev) => prev || empOpts[0]?.id || "");
-      setBranchId((prev) => prev || branchOpts[0]?.id || "");
-    } catch {
-      toast("Failed to load employees / branches", "error");
-    }
-  }, []);
+  }, [loadLookups]);
 
   useEffect(() => {
     void load();
@@ -111,7 +125,11 @@ export default function OtAllotmentPage() {
     setAllotmentDate(new Date().toISOString().slice(0, 10));
     setReason("");
     setOpen(true);
-    void loadLookups();
+    if (!employees.length || !branches.length) {
+      void loadLookups().catch(() => {
+        toast("Could not load employees or branches — refresh the page or sign in again", "error");
+      });
+    }
   }
 
   async function submitOt() {
@@ -152,6 +170,8 @@ export default function OtAllotmentPage() {
     }
   }
 
+  const showAuthBanner = authError || (!loading && !isAuthenticated());
+
   return (
     <div className="space-y-5">
       <SetupToastHost />
@@ -174,12 +194,15 @@ export default function OtAllotmentPage() {
               size="sm"
               className="cursor-pointer transition-colors duration-200"
               onClick={openCreate}
+              disabled={showAuthBanner}
             >
               Allot OT / Overday
             </Button>
           </div>
         }
       />
+
+      {showAuthBanner ? <HrAuthBanner /> : null}
 
       <section className="space-y-2 rounded-lg border border-border bg-card p-4">
         <h2 className="text-sm font-semibold">On Duty requests</h2>
@@ -332,7 +355,7 @@ export default function OtAllotmentPage() {
               size="sm"
               className="cursor-pointer transition-colors duration-200"
               onClick={() => void submitOt()}
-              disabled={saving}
+              disabled={saving || !employees.length}
             >
               {saving ? "Submitting…" : "Submit allotment"}
             </Button>
@@ -340,6 +363,11 @@ export default function OtAllotmentPage() {
         }
       >
         <div className="space-y-3">
+          {!employees.length ? (
+            <p className="text-xs text-amber-800">
+              No employees loaded. Use Refresh on the page or sign in again, then reopen this form.
+            </p>
+          ) : null}
           <SetupField label="Employee" required>
             <SetupSelect value={employeeId} onChange={(e) => setEmployeeId(e.target.value)}>
               <option value="">Select employee</option>

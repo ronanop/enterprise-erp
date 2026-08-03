@@ -12,6 +12,9 @@ import { cn } from "@/lib/utils";
 
 function isActive(pathname: string, href: string) {
   if (href === "/hr") return pathname === "/hr";
+  if (href === "/hr/ess") {
+    return pathname === "/hr/ess" || pathname.startsWith("/hr/ess-inbox");
+  }
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
