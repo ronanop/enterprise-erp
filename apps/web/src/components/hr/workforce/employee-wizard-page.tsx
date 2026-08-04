@@ -56,6 +56,8 @@ const STEPS = [
   { id: "review", label: "Review" },
 ];
 
+const CUSTOM_DESIGNATION_VALUE = "__custom_designation__";
+
 export function EmployeeWizardPage() {
   const router = useRouter();
   const params = useSearchParams();
@@ -680,27 +682,43 @@ export function EmployeeWizardPage() {
                 <SetupInput readOnly value={draft.employment.departmentHeadName || "—"} />
               </SetupField>
               <SetupField label="Designation" required>
-                <SetupSelect
-                  value={draft.employment.designationId}
-                  onChange={(e) => {
-                    const id = e.target.value;
-                    patchEmployment({
-                      designationId: id,
-                      designationName: options?.designations.find((d) => d.id === id)?.label ?? "",
-                    });
-                  }}
-                >
-                  <option value="">Select or type below</option>
-                  {options?.designations.map((d) => (
-                    <option key={d.id} value={d.id}>{d.label}</option>
-                  ))}
-                </SetupSelect>
-                <SetupInput
-                  className="mt-1"
-                  placeholder="e.g. Software Engineer"
-                  value={draft.employment.designationName}
-                  onChange={(e) => patchEmployment({ designationName: e.target.value })}
-                />
+                {options?.designations.length ? (
+                  <SetupSelect
+                    value={
+                      draft.employment.designationId ||
+                      (draft.employment.designationName.trim() ? CUSTOM_DESIGNATION_VALUE : "")
+                    }
+                    onChange={(e) => {
+                      const id = e.target.value;
+                      if (id === CUSTOM_DESIGNATION_VALUE) {
+                        patchEmployment({ designationId: "", designationName: "" });
+                        return;
+                      }
+                      patchEmployment({
+                        designationId: id,
+                        designationName: options?.designations.find((d) => d.id === id)?.label ?? "",
+                      });
+                    }}
+                  >
+                    <option value="">Select designation</option>
+                    {options.designations.map((d) => (
+                      <option key={d.id} value={d.id}>
+                        {d.label}
+                      </option>
+                    ))}
+                    <option value={CUSTOM_DESIGNATION_VALUE}>Other (type manually)</option>
+                  </SetupSelect>
+                ) : null}
+                {!options?.designations.length || !draft.employment.designationId ? (
+                  <SetupInput
+                    className={options?.designations.length ? "mt-1" : undefined}
+                    placeholder="e.g. Software Engineer"
+                    value={draft.employment.designationName}
+                    onChange={(e) =>
+                      patchEmployment({ designationName: e.target.value, designationId: "" })
+                    }
+                  />
+                ) : null}
               </SetupField>
               <SetupField label="Location">
                 <SetupInput

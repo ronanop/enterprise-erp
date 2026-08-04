@@ -10,12 +10,19 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 
-function isActive(pathname: string, href: string) {
+function navHrefMatches(pathname: string, href: string): boolean {
   if (href === "/hr") return pathname === "/hr";
   if (href === "/hr/ess") {
     return pathname === "/hr/ess" || pathname.startsWith("/hr/ess-inbox");
   }
   return pathname === href || pathname.startsWith(`${href}/`);
+}
+
+/** When several items match (e.g. /hr/time vs /hr/time/biometric-devices), pick the most specific. */
+function resolveActiveHref(pathname: string, hrefs: string[]): string | null {
+  const matches = hrefs.filter((href) => navHrefMatches(pathname, href));
+  if (!matches.length) return null;
+  return matches.sort((a, b) => b.length - a.length)[0] ?? null;
 }
 
 /** Persistent HRMS-only sidebar (swapped in while on /hr routes). */
@@ -24,6 +31,16 @@ export function HrSidebar() {
   const router = useRouter();
   const [collapsed, setCollapsed] = useState(false);
   const [query, setQuery] = useState("");
+
+  const allNavHrefs = useMemo(
+    () => hrNavGroups.flatMap((group) => group.items.map((item) => item.href)),
+    [],
+  );
+
+  const activeHref = useMemo(
+    () => resolveActiveHref(pathname, allNavHrefs),
+    [pathname, allNavHrefs],
+  );
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -88,7 +105,7 @@ export function HrSidebar() {
             <ul className="space-y-0.5">
               {group.items.map((item) => {
                 const Icon = item.icon;
-                const active = isActive(pathname, item.href);
+                const active = item.href === activeHref;
                 return (
                   <li key={item.href}>
                     <Link
