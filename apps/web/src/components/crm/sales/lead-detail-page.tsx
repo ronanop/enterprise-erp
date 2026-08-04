@@ -195,20 +195,6 @@ export function LeadDetailPage({ leadId }: { leadId: string }) {
         current={converted ? "opportunity" : "lead"}
         lost={lost}
         links={timelineLinks}
-        nextStep={
-          converted && lead.converted_opportunity_id
-            ? {
-                label: "Continue Opportunity",
-                description: "The lead is converted. Continue the blueprint on its opportunity.",
-                href: `/crm/opportunities/${lead.converted_opportunity_id}`,
-              }
-            : canConvert
-              ? {
-                  label: "Convert to Opportunity",
-                  description: "Use the conversion action on this screen to advance the deal.",
-                }
-              : undefined
-        }
       />
       <ApprovalBanner locked={blueprint.locked} label="This lead" />
       {lead.company_account_id ? (

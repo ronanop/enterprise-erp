@@ -269,15 +269,6 @@ export function OvfDetailPage({ ovfId }: { ovfId: string }) {
       <DealTimeline
         current={ovf.deal_won ? "won" : "ovf"}
         links={timelineLinks}
-        nextStep={
-          ovf.deal_won
-            ? undefined
-            : {
-              label: "Complete OVF",
-              description:
-                "Use the blueprint actions on this screen through Share to SCM and Deal Won.",
-            }
-        }
       />
       <ApprovalBanner locked={blueprint.locked} approvalStatus={ovf.approval_status} label="This OVF" />
 

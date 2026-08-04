@@ -117,6 +117,8 @@ type Props = {
   locked?: boolean;
   /** Actions rendered elsewhere by the parent (e.g. gated Create Quote / Create OVF CTAs). */
   excludeActions?: string[];
+  actionLabelOverrides?: Partial<Record<string, string>>;
+  actionDispatchOverrides?: Partial<Record<string, string>>;
   defaultValues?: Partial<Record<string, string | number | null>>;
   onAction: (action: string, payload: BlueprintActionPayload) => Promise<void>;
   disabled?: boolean;
@@ -126,6 +128,8 @@ export function BlueprintActions({
   allowedActions,
   locked,
   excludeActions,
+  actionLabelOverrides,
+  actionDispatchOverrides,
   defaultValues,
   onAction,
   disabled,
@@ -181,11 +185,12 @@ export function BlueprintActions({
   async function confirm() {
     if (!activeAction) return;
     const config = resolveConfig(activeAction);
+    const dispatchAction = actionDispatchOverrides?.[activeAction] ?? activeAction;
     const isMultiFile =
-      activeAction === "attach_boq" ||
-      activeAction === "attach_sow" ||
-      activeAction === "attach_oem_quote" ||
-      activeAction === "attach_po";
+      dispatchAction === "attach_boq" ||
+      dispatchAction === "attach_sow" ||
+      dispatchAction === "attach_oem_quote" ||
+      dispatchAction === "attach_po";
     for (const field of config.fields) {
       if (field.required && field.type !== "file" && !values[field.key]?.trim()) {
         setError(`${field.label} is required`);
@@ -221,7 +226,7 @@ export function BlueprintActions({
       const uploadList = isMultiFile ? files : file ? [file] : [];
       if (uploadList.length > 0) {
         for (const upload of uploadList) {
-          await onAction(activeAction, {
+          await onAction(dispatchAction, {
             ...payloadBase,
             file_name: upload.name,
             content_type: upload.type || "application/octet-stream",
@@ -229,11 +234,11 @@ export function BlueprintActions({
           });
         }
       } else {
-        await onAction(activeAction, payloadBase);
+        await onAction(dispatchAction, payloadBase);
       }
       close();
     } catch (err) {
-      setError(err instanceof ApiClientError ? err.message : `Failed to ${activeAction}`);
+      setError(err instanceof ApiClientError ? err.message : `Failed to ${dispatchAction}`);
     } finally {
       setBusy(false);
     }
@@ -244,10 +249,17 @@ export function BlueprintActions({
     const rank = (action: string) => {
       if (action === "attach_sow") return 0;
       if (action === "attach_boq") return 1;
-      if (action === "deal_reg") return 2;
-      if (action === "lost") return 3;
-      if (action === "send_sow_approval") return 4;
-      return 10;
+      if (action === "send_boq_approval") return 2;
+      if (action === "send_sow_approval") return 3;
+      if (action === "deal_reg") return 4;
+      if (action === "send_to_customer") return 5;
+      if (action === "accept") return 6;
+      if (action === "negotiate") return 7;
+      if (action === "follow_up") return 8;
+      if (action === "attach_po") return 9;
+      if (action === "send_po_approval") return 10;
+      if (action === "lost") return 20;
+      return 15;
     };
     return rank(a) - rank(b);
   });
@@ -260,6 +272,7 @@ export function BlueprintActions({
         </span>
         {orderedActions.map((action, index) => {
           const config = resolveConfig(action);
+          const label = actionLabelOverrides?.[action] ?? config.label;
           return (
             <Fragment key={action}>
               {action === "attach_boq" && orderedActions[index - 1] === "attach_sow" ? (
@@ -275,7 +288,7 @@ export function BlueprintActions({
                 disabled={disabled}
                 onClick={() => openAction(action)}
               >
-                {config.label}
+                {label}
               </Button>
             </Fragment>
           );
@@ -317,9 +330,9 @@ export function BlueprintActions({
                         <Paperclip className="size-3.5" />
                         Choose file
                         {activeAction === "attach_boq" ||
-                        activeAction === "attach_sow" ||
-                        activeAction === "attach_oem_quote" ||
-                        activeAction === "attach_po"
+                          activeAction === "attach_sow" ||
+                          activeAction === "attach_oem_quote" ||
+                          activeAction === "attach_po"
                           ? "s"
                           : ""}
                       </Button>

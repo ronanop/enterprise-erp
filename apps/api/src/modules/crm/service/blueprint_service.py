@@ -106,14 +106,39 @@ class OpportunityBlueprintService:
             # which must never be invoked via the generic opportunity endpoint.
             allowed = [action for action in allowed if action not in {"quote_accepted", "deal_won"}]
         if current == "boq_pending":
-            # BOQ and SOW are alternatives in one document step. Once one is
-            # selected, only surface re-attachment for that document type.
-            if opp.boq_attached and not opp.sow_attached:
-                allowed = [action for action in allowed if action != "attach_sow"]
-            elif opp.sow_attached and not opp.boq_attached:
+            # Symmetric document step:
+            # - only BOQ attached  → Attach SOW + Send BOQ for Approval + Deal Registration
+            # - only SOW attached  → Attach BOQ + Send SOW for Approval + Deal Registration
+            # - both attached      → both approval buttons + Deal Registration, no attach buttons
+            if opp.boq_attached and opp.sow_attached:
+                allowed = [
+                    action for action in allowed if action not in {"attach_boq", "attach_sow"}
+                ]
+            elif opp.boq_attached:
                 allowed = [action for action in allowed if action != "attach_boq"]
-        if opp.sow_approved:
+            elif opp.sow_attached:
+                allowed = [action for action in allowed if action != "attach_sow"]
+            if not opp.boq_attached:
+                allowed = [action for action in allowed if action != "send_boq_approval"]
+            if not opp.sow_attached:
+                allowed = [action for action in allowed if action != "send_sow_approval"]
+            # Deal Registration is available once either document is attached.
+            if not opp.boq_attached and not opp.sow_attached:
+                allowed = [action for action in allowed if action != "deal_reg"]
+        # Hide attach/approval actions once the matching document is already present/approved,
+        # including later stages (e.g. deal_reg still lists attach_sow in the engine).
+        if opp.boq_attached:
+            allowed = [action for action in allowed if action != "attach_boq"]
+        if opp.sow_attached:
+            allowed = [action for action in allowed if action != "attach_sow"]
+        if opp.customer_po_attached:
+            allowed = [action for action in allowed if action != "attach_po"]
+        if opp.boq_approved or not opp.boq_attached:
+            allowed = [action for action in allowed if action != "send_boq_approval"]
+        if opp.sow_approved or not opp.sow_attached:
             allowed = [action for action in allowed if action != "send_sow_approval"]
+        if opp.customer_po_approved or not opp.customer_po_attached:
+            allowed = [action for action in allowed if action != "send_po_approval"]
         return {
             "entity_type": "opportunity",
             "entity_id": opp.id,
@@ -149,15 +174,16 @@ class OpportunityBlueprintService:
             self._attach(ctx, opp, payload, category="boq")
             updates["boq_attached"] = True
         elif action == "send_boq_approval":
-            if not opp.boq_attached and not opp.sow_attached:
-                raise ConflictException("Attach a BOQ or SOW before requesting approval")
-            document_label = "SOW" if opp.sow_attached and not opp.boq_attached else "BOQ"
+            if not opp.boq_attached:
+                raise ConflictException("Attach a BOQ before requesting approval")
+            if opp.boq_approved:
+                raise ConflictException("BOQ is already approved")
             self._raise_approval(
                 ctx,
                 opp,
                 action="approve_boq",
                 team_role=payload.get("team_role", "presales"),
-                title=f"Approve {document_label} — {opp.opportunity_name}",
+                title=f"Approve BOQ — {opp.opportunity_name}",
                 remarks=payload.get("remarks"),
             )
             updates["locked"] = True
@@ -176,16 +202,10 @@ class OpportunityBlueprintService:
             )
             updates["locked"] = True
         elif action == "approve_boq":
-            if opp.sow_attached and not opp.boq_attached:
-                updates["sow_approved"] = True
-            else:
-                updates["boq_approved"] = True
+            updates["boq_approved"] = True
             updates["locked"] = False
         elif action == "reject_boq":
-            if opp.sow_attached and not opp.boq_attached:
-                updates["sow_approved"] = False
-            else:
-                updates["boq_approved"] = False
+            updates["boq_approved"] = False
             updates["locked"] = False
         elif action == "approve_sow":
             updates["sow_approved"] = True

@@ -50,6 +50,8 @@ _TRANSITIONS: dict[str, dict[str, dict[str, str]]] = {
             "attach_boq": "boq_pending",
             "attach_sow": "boq_pending",
             "send_boq_approval": "boq_approval",
+            "send_sow_approval": "boq_approval",
+            "deal_reg": "oem_pending",
             "lost": "lost",
         },
         "boq_approval": {

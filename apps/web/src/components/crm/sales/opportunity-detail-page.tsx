@@ -29,6 +29,7 @@ import { setCrmOpportunityContext, setCrmSidebarFocus } from "@/lib/crm-sidebar-
 import { ApiClientError } from "@/services/api-client";
 import {
   applyOpportunityAction,
+  applyQuoteAction,
   formatInr,
   getCompany,
   getOpportunity,
@@ -38,6 +39,9 @@ import {
   listEmployeeOptions,
   listOvfs,
   listQuotes,
+  markOvfDealWon,
+  sendOvfForApproval,
+  shareOvfToScm,
   type Attachment,
   type BlueprintState,
   type Company,
@@ -48,7 +52,23 @@ import {
   type SalesLead,
 } from "@/services/sales-crm-service";
 
-const CUSTOM_ACTIONS = ["create_quote", "quote_accepted", "create_ovf", "deal_won"];
+const CUSTOM_ACTIONS = ["create_quote", "quote_accepted", "create_ovf"];
+
+/** Quote follow-on actions to surface on the opportunity BlueprintActions strip. */
+const QUOTE_STAGE_ACTIONS: Record<string, string[]> = {
+  approved_internal: ["send_to_customer"],
+  sent_to_customer: ["accept", "negotiate", "follow_up"],
+  negotiation: ["accept", "negotiate", "follow_up"],
+  follow_up: ["accept", "negotiate", "follow_up"],
+};
+
+/** OVF follow-on actions to surface on the opportunity BlueprintActions strip. */
+const OVF_STAGE_ACTIONS: Record<string, string[]> = {
+  draft: ["send_for_approval"],
+  approved: ["share_to_scm"],
+  shared_scm: ["deal_won"],
+};
+const OVF_FOLLOW_ON = new Set(Object.values(OVF_STAGE_ACTIONS).flat());
 
 export function OpportunityDetailPage({ opportunityId }: { opportunityId: string }) {
   const router = useRouter();
@@ -113,7 +133,30 @@ export function OpportunityDetailPage({ opportunityId }: { opportunityId: string
     setBusy(true);
     setBanner(null);
     try {
-      await applyOpportunityAction(opportunityId, action, payload);
+      const accepted = quotes.find((q) => q.quote_stage === "accepted");
+      const quote = accepted ?? quotes[0];
+      const quoteFollowOn = quote ? (QUOTE_STAGE_ACTIONS[quote.quote_stage] ?? []) : [];
+      const ovf = ovfs[0];
+      if (ovf && OVF_FOLLOW_ON.has(action)) {
+        if (action === "send_for_approval") {
+          await sendOvfForApproval(ovf.id, {
+            team_role: typeof payload.team_role === "string" ? payload.team_role : undefined,
+            remarks: typeof payload.remarks === "string" ? payload.remarks : null,
+          });
+        } else if (action === "share_to_scm") {
+          await shareOvfToScm(ovf.id);
+        } else if (action === "deal_won") {
+          const amount = payload.deal_won_amount;
+          if (amount === undefined || amount === null || Number.isNaN(Number(amount))) {
+            throw new ApiClientError("Deal Won amount is required.", 400);
+          }
+          await markOvfDealWon(ovf.id, Number(amount));
+        }
+      } else if (quote && quoteFollowOn.includes(action)) {
+        await applyQuoteAction(quote.id, action, payload);
+      } else {
+        await applyOpportunityAction(opportunityId, action, payload);
+      }
       setBanner({ text: `Action "${action.replaceAll("_", " ")}" applied.`, tone: "success" });
       await load();
     } catch (err) {
@@ -193,42 +236,17 @@ export function OpportunityDetailPage({ opportunityId }: { opportunityId: string
     ...(existingOvf ? { ovf: `/crm/ovf/${existingOvf.id}` } : {}),
     ...(won && existingOvf ? { won: `/crm/ovf/${existingOvf.id}` } : {}),
   };
-  const hasCustomerPo = attachments.some((a) => a.category === "customer_po");
-  const nextStep = existingOvf
-    ? {
-      label: won ? "Review Won Deal" : "Continue OVF",
-      description: won
-        ? "The blueprint is complete. Review the final OVF and deal value."
-        : "Complete approval, SCM sharing, and Deal Won actions on the OVF.",
-      href: `/crm/ovf/${existingOvf.id}`,
-    }
-    : canCreateOvf && acceptedQuote
-      ? {
-        label: "Create OVF",
-        description: "The customer PO is approved. Create the OVF from this screen.",
-        href: `/crm/quotes/${acceptedQuote.id}/ovf/new`,
-      }
-      : acceptedQuote
-        ? {
-          label: "Complete Customer PO",
-          description: "Attach the customer PO and complete its approval using the actions below.",
-        }
-        : activeQuote
-          ? {
-            label: "Continue Quote",
-            description: "Complete quote lines, approval, customer submission, and acceptance.",
-            href: `/crm/quotes/${activeQuote.id}`,
-          }
-          : canCreateQuote
-            ? {
-              label: "Create Quote",
-              description: "The OEM quote is ready. Create the customer quote from this screen.",
-              href: `/crm/opportunities/${opp.id}/quotes/new`,
-            }
-            : {
-              label: "Complete Opportunity Stage",
-              description: "Use the available blueprint action below to advance the deal.",
-            };
+  const quoteFollowOnActions =
+    blueprint.state === "quote_in_progress" && activeQuote
+      ? (QUOTE_STAGE_ACTIONS[activeQuote.quote_stage] ?? [])
+      : [];
+  const ovfFollowOnActions =
+    existingOvf && !existingOvf.locked && !existingOvf.deal_won
+      ? (OVF_STAGE_ACTIONS[existingOvf.blueprint_state] ?? [])
+      : [];
+  const blueprintActions = Array.from(
+    new Set([...blueprint.allowed_actions, ...quoteFollowOnActions, ...ovfFollowOnActions]),
+  );
 
   return (
     <div className="flex min-w-0 items-start gap-0">
@@ -243,238 +261,241 @@ export function OpportunityDetailPage({ opportunityId }: { opportunityId: string
       ) : null}
 
       <div className="min-w-0 flex-1 overflow-x-clip pl-4 sm:pl-6 lg:pl-8">
-      <CrmPage>
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <Link href="/crm/opportunities" className="inline-flex cursor-pointer items-center gap-1 text-xs font-medium text-primary transition-opacity duration-200 hover:opacity-80">
-            <ArrowLeft className="size-3.5" /> Opportunities
-          </Link>
-          <Button type="button" variant="outline" size="sm" className="cursor-pointer" onClick={() => void load()}>
-            <RefreshCw className="size-3.5" /> Refresh
-          </Button>
-        </div>
+        <CrmPage>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <Link href="/crm/opportunities" className="inline-flex cursor-pointer items-center gap-1 text-xs font-medium text-primary transition-opacity duration-200 hover:opacity-80">
+              <ArrowLeft className="size-3.5" /> Opportunities
+            </Link>
+            <Button type="button" variant="outline" size="sm" className="cursor-pointer" onClick={() => void load()}>
+              <RefreshCw className="size-3.5" /> Refresh
+            </Button>
+          </div>
 
-        <DealTimeline current={timelineStage} lost={lost} links={timelineLinks} nextStep={nextStep} />
-        <ApprovalBanner locked={blueprint.locked} approvalStatus={blueprint.state} label="This opportunity" />
+          <DealTimeline current={timelineStage} lost={lost} links={timelineLinks} />
+          <ApprovalBanner locked={blueprint.locked} approvalStatus={blueprint.state} label="This opportunity" />
 
-        <PageHeader
-          title={`${opp.opportunity_name} · ${opp.opportunity_code}`}
-          description={`Expected revenue ${formatInr(opp.expected_revenue)} · Probability ${opp.probability_percent}%`}
-          actions={
-            <div className="flex flex-wrap items-center gap-2">
-              <BlueprintStateBadge state={blueprint.state} />
-              {canCreateQuote ? (
-                <Button type="button" size="sm" className="cursor-pointer" disabled={busy} onClick={onCreateQuote}>
-                  <Plus className="size-3.5" /> Create Quote
-                </Button>
-              ) : null}
-              {canCreateOvf && acceptedQuote ? (
-                <Button
-                  type="button"
-                  size="sm"
-                  className="cursor-pointer"
-                  disabled={busy}
-                  onClick={() => onCreateOvf(acceptedQuote)}
-                >
-                  <Plus className="size-3.5" /> Create OVF
-                </Button>
-              ) : null}
-            </div>
-          }
-        />
-
-        {banner ? (
-          banner.tone === "error" ? (
-            <CrmErrorBanner>{banner.text}</CrmErrorBanner>
-          ) : (
-            <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-2.5 text-sm text-emerald-950">
-              {banner.text}
-            </div>
-          )
-        ) : null}
-        {error ? <CrmErrorBanner>{error}</CrmErrorBanner> : null}
-
-        <BlueprintActions
-          allowedActions={blueprint.allowed_actions}
-          locked={blueprint.locked}
-          excludeActions={[...CUSTOM_ACTIONS, ...(hasCustomerPo ? ["attach_po"] : [])]}
-          onAction={onBlueprintAction}
-          disabled={busy}
-        />
-
-        <CrmMetricStrip className="lg:grid-cols-3">
-          <CrmMetric label="Expected Revenue" value={formatInr(opp.expected_revenue)} />
-          <CrmMetric label="Probability" value={`${opp.probability_percent}%`} />
-          <CrmMetric
-            label="Stage"
-            value={<span className="capitalize">{opp.current_stage.replaceAll("_", " ")}</span>}
-          />
-        </CrmMetricStrip>
-
-        <CrmSection title="Opportunity Details" subtitle="Account, owner, and forecast" icon={Handshake}>
-          <CrmDetailGrid>
-            <CrmDetailItem label="Project Title">
-              {opp.project_title || opp.opportunity_name || "—"}
-            </CrmDetailItem>
-            <CrmDetailItem label="Account Name">{company?.customer_name || "—"}</CrmDetailItem>
-            <CrmDetailItem label="Owner">
-              {employees.find((row) => row.id === opp.owner_employee_id)?.label || "—"}
-            </CrmDetailItem>
-            <CrmDetailItem label="Status">
-              <FinanceStatusBadge status={opp.status} />
-            </CrmDetailItem>
-            <CrmDetailItem label="Legacy Stage">
-              <span className="capitalize">{opp.current_stage.replaceAll("_", " ")}</span>
-            </CrmDetailItem>
-            <CrmDetailItem label="Forecast Amount">
-              {opp.forecast_amount != null ? formatInr(opp.forecast_amount) : "—"}
-            </CrmDetailItem>
-            <CrmDetailItem label="Expected Revenue">{formatInr(opp.expected_revenue)}</CrmDetailItem>
-            <CrmDetailItem label="Probability">{opp.probability_percent}%</CrmDetailItem>
-            <CrmDetailItem label="Version">{opp.version}</CrmDetailItem>
-          </CrmDetailGrid>
-        </CrmSection>
-
-        {showQuotes ? (
-          <CrmListPanel>
-            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border/70 px-4 py-3">
-              <div className="flex items-center gap-2.5">
-                <CrmIconBadge icon={FileText} />
-                <h2 className="text-sm font-medium tracking-tight">Quotes</h2>
+          <PageHeader
+            title={`${opp.opportunity_name} · ${opp.opportunity_code}`}
+            description={`Expected revenue ${formatInr(opp.expected_revenue)} · Probability ${opp.probability_percent}%`}
+            actions={
+              <div className="flex flex-wrap items-center gap-2">
+                <BlueprintStateBadge state={blueprint.state} />
+                {canCreateQuote ? (
+                  <Button type="button" size="sm" className="cursor-pointer" disabled={busy} onClick={onCreateQuote}>
+                    <Plus className="size-3.5" /> Create Quote
+                  </Button>
+                ) : null}
+                {canCreateOvf && acceptedQuote ? (
+                  <Button
+                    type="button"
+                    size="sm"
+                    className="cursor-pointer"
+                    disabled={busy}
+                    onClick={() => onCreateOvf(acceptedQuote)}
+                  >
+                    <Plus className="size-3.5" /> Create OVF
+                  </Button>
+                ) : null}
               </div>
-            </div>
-            {quotes.length === 0 ? (
-              <p className="px-4 py-6 text-xs text-muted-foreground">
-                No quotes yet — use “Create Quote” to draft one.
-              </p>
-            ) : (
-              <div className="erp-scroll overflow-x-auto">
-                <table className="w-full min-w-[640px] text-left text-sm">
-                  <thead>
-                    <tr className="border-b border-border/70 bg-muted/40 text-[11px] tracking-wide text-muted-foreground uppercase">
-                      <th className="px-4 py-2">Quote No.</th>
-                      <th className="px-4 py-2">Stage</th>
-                      <th className="px-4 py-2">Grand Total</th>
-                      <th className="px-4 py-2">Margin</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {quotes.map((q) => (
-                      <tr key={q.id} className="border-b border-border/50 last:border-0 hover:bg-accent/30">
-                        <td className="px-4 py-2 font-medium">
-                          <Link href={`/crm/quotes/${q.id}`} className="cursor-pointer hover:underline">
-                            {q.quote_no}
-                          </Link>
-                        </td>
-                        <td className="px-4 py-2">
-                          <Badge variant="outline" className="capitalize">
-                            {q.quote_stage.replaceAll("_", " ")}
-                          </Badge>
-                        </td>
-                        <td className="px-4 py-2">{formatInr(q.grand_total)}</td>
-                        <td className="px-4 py-2">{q.avg_margin_pct}%</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </CrmListPanel>
-        ) : null}
-
-        {showOvf ? (
-          <CrmListPanel>
-            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border/70 px-4 py-3">
-              <div className="flex items-center gap-2.5">
-                <CrmIconBadge icon={ClipboardCheck} />
-                <h2 className="text-sm font-medium tracking-tight">OVF</h2>
-              </div>
-            </div>
-            {ovfs.length === 0 ? (
-              <p className="px-4 py-6 text-xs text-muted-foreground">
-                {acceptedQuote
-                  ? "No OVF yet — use “Create OVF” after the customer PO is approved."
-                  : "Create OVF once a Quote is accepted and the customer PO is approved."}
-              </p>
-            ) : (
-              <div className="erp-scroll overflow-x-auto">
-                <table className="w-full min-w-[640px] text-left text-sm">
-                  <thead>
-                    <tr className="border-b border-border/70 bg-muted/40 text-[11px] tracking-wide text-muted-foreground uppercase">
-                      <th className="px-4 py-2">OVF No.</th>
-                      <th className="px-4 py-2">State</th>
-                      <th className="px-4 py-2">Deal Won</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {ovfs.map((o) => (
-                      <tr key={o.id} className="border-b border-border/50 last:border-0 hover:bg-accent/30">
-                        <td className="px-4 py-2 font-medium">
-                          <Link href={`/crm/ovf/${o.id}`} className="cursor-pointer hover:underline">
-                            {o.ovf_no}
-                          </Link>
-                        </td>
-                        <td className="px-4 py-2">
-                          <Badge variant="outline" className="capitalize">
-                            {o.blueprint_state.replaceAll("_", " ")}
-                          </Badge>
-                        </td>
-                        <td className="px-4 py-2">
-                          {o.deal_won ? formatInr(o.deal_won_amount ?? 0) : "—"}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </CrmListPanel>
-        ) : null}
-
-        {sourceLead ? (
-          <LeadDetailsCard
-            lead={sourceLead}
-            company={company}
-            employees={employees}
-            headerAction={
-              <Link
-                href={`/crm/leads/${sourceLead.id}`}
-                className="inline-flex h-7 cursor-pointer items-center rounded-md border border-border/80 bg-background px-2.5 text-xs font-medium transition-colors duration-200 hover:bg-muted/50"
-              >
-                Open Lead
-              </Link>
             }
           />
-        ) : opp.lead_id ? (
-          <CrmSection title="Source Lead" icon={Handshake}>
-            <p className="text-xs text-muted-foreground">
-              Source lead could not be loaded.{" "}
-              <Link
-                href={`/crm/leads/${opp.lead_id}`}
-                className="cursor-pointer font-medium text-primary hover:underline"
-              >
-                Open lead
-              </Link>
-            </p>
-          </CrmSection>
-        ) : null}
 
-        <CrmSection title="Attachments" subtitle="BOQ / SOW / OEM / PO files" icon={Paperclip}>
-          {attachments.length === 0 ? (
-            <p className="text-xs text-muted-foreground">No BOQ / SOW / OEM / PO files attached yet.</p>
-          ) : (
-            <ul className="space-y-1.5 text-xs">
-              {attachments.map((a) => (
-                <li key={a.id} className="flex items-center justify-between gap-2 rounded-lg border border-border/60 px-3 py-1.5">
-                  <span className="truncate">{a.file_name}</span>
-                  <Badge variant="secondary" className="capitalize">
-                    {a.category.replaceAll("_", " ")}
-                  </Badge>
-                </li>
-              ))}
-            </ul>
-          )}
-        </CrmSection>
-      </CrmPage>
+          {banner ? (
+            banner.tone === "error" ? (
+              <CrmErrorBanner>{banner.text}</CrmErrorBanner>
+            ) : (
+              <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-2.5 text-sm text-emerald-950">
+                {banner.text}
+              </div>
+            )
+          ) : null}
+          {error ? <CrmErrorBanner>{error}</CrmErrorBanner> : null}
+
+          <BlueprintActions
+            allowedActions={blueprintActions}
+            locked={blueprint.locked}
+            excludeActions={CUSTOM_ACTIONS}
+            defaultValues={{
+              deal_won_amount: activeQuote?.grand_total ?? existingOvf?.deal_won_amount ?? null,
+            }}
+            onAction={onBlueprintAction}
+            disabled={busy}
+          />
+
+          <CrmMetricStrip className="lg:grid-cols-3">
+            <CrmMetric label="Expected Revenue" value={formatInr(opp.expected_revenue)} />
+            <CrmMetric label="Probability" value={`${opp.probability_percent}%`} />
+            <CrmMetric
+              label="Stage"
+              value={<span className="capitalize">{opp.current_stage.replaceAll("_", " ")}</span>}
+            />
+          </CrmMetricStrip>
+
+          <CrmSection title="Opportunity Details" subtitle="Account, owner, and forecast" icon={Handshake}>
+            <CrmDetailGrid>
+              <CrmDetailItem label="Project Title">
+                {opp.project_title || opp.opportunity_name || "—"}
+              </CrmDetailItem>
+              <CrmDetailItem label="Account Name">{company?.customer_name || "—"}</CrmDetailItem>
+              <CrmDetailItem label="Owner">
+                {employees.find((row) => row.id === opp.owner_employee_id)?.label || "—"}
+              </CrmDetailItem>
+              <CrmDetailItem label="Status">
+                <FinanceStatusBadge status={opp.status} />
+              </CrmDetailItem>
+              <CrmDetailItem label="Legacy Stage">
+                <span className="capitalize">{opp.current_stage.replaceAll("_", " ")}</span>
+              </CrmDetailItem>
+              <CrmDetailItem label="Forecast Amount">
+                {opp.forecast_amount != null ? formatInr(opp.forecast_amount) : "—"}
+              </CrmDetailItem>
+              <CrmDetailItem label="Expected Revenue">{formatInr(opp.expected_revenue)}</CrmDetailItem>
+              <CrmDetailItem label="Probability">{opp.probability_percent}%</CrmDetailItem>
+              <CrmDetailItem label="Version">{opp.version}</CrmDetailItem>
+            </CrmDetailGrid>
+          </CrmSection>
+
+          {showQuotes ? (
+            <CrmListPanel>
+              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border/70 px-4 py-3">
+                <div className="flex items-center gap-2.5">
+                  <CrmIconBadge icon={FileText} />
+                  <h2 className="text-sm font-medium tracking-tight">Quotes</h2>
+                </div>
+              </div>
+              {quotes.length === 0 ? (
+                <p className="px-4 py-6 text-xs text-muted-foreground">
+                  No quotes yet — use “Create Quote” to draft one.
+                </p>
+              ) : (
+                <div className="erp-scroll overflow-x-auto">
+                  <table className="w-full min-w-[640px] text-left text-sm">
+                    <thead>
+                      <tr className="border-b border-border/70 bg-muted/40 text-[11px] tracking-wide text-muted-foreground uppercase">
+                        <th className="px-4 py-2">Quote No.</th>
+                        <th className="px-4 py-2">Stage</th>
+                        <th className="px-4 py-2">Grand Total</th>
+                        <th className="px-4 py-2">Margin</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {quotes.map((q) => (
+                        <tr key={q.id} className="border-b border-border/50 last:border-0 hover:bg-accent/30">
+                          <td className="px-4 py-2 font-medium">
+                            <Link href={`/crm/quotes/${q.id}`} className="cursor-pointer hover:underline">
+                              {q.quote_no}
+                            </Link>
+                          </td>
+                          <td className="px-4 py-2">
+                            <Badge variant="outline" className="capitalize">
+                              {q.quote_stage.replaceAll("_", " ")}
+                            </Badge>
+                          </td>
+                          <td className="px-4 py-2">{formatInr(q.grand_total)}</td>
+                          <td className="px-4 py-2">{q.avg_margin_pct}%</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </CrmListPanel>
+          ) : null}
+
+          {showOvf ? (
+            <CrmListPanel>
+              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border/70 px-4 py-3">
+                <div className="flex items-center gap-2.5">
+                  <CrmIconBadge icon={ClipboardCheck} />
+                  <h2 className="text-sm font-medium tracking-tight">OVF</h2>
+                </div>
+              </div>
+              {ovfs.length === 0 ? (
+                <p className="px-4 py-6 text-xs text-muted-foreground">
+                  {acceptedQuote
+                    ? "No OVF yet — use “Create OVF” after the customer PO is approved."
+                    : "Create OVF once a Quote is accepted and the customer PO is approved."}
+                </p>
+              ) : (
+                <div className="erp-scroll overflow-x-auto">
+                  <table className="w-full min-w-[640px] text-left text-sm">
+                    <thead>
+                      <tr className="border-b border-border/70 bg-muted/40 text-[11px] tracking-wide text-muted-foreground uppercase">
+                        <th className="px-4 py-2">OVF No.</th>
+                        <th className="px-4 py-2">State</th>
+                        <th className="px-4 py-2">Deal Won</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {ovfs.map((o) => (
+                        <tr key={o.id} className="border-b border-border/50 last:border-0 hover:bg-accent/30">
+                          <td className="px-4 py-2 font-medium">
+                            <Link href={`/crm/ovf/${o.id}`} className="cursor-pointer hover:underline">
+                              {o.ovf_no}
+                            </Link>
+                          </td>
+                          <td className="px-4 py-2">
+                            <Badge variant="outline" className="capitalize">
+                              {o.blueprint_state.replaceAll("_", " ")}
+                            </Badge>
+                          </td>
+                          <td className="px-4 py-2">
+                            {o.deal_won ? formatInr(o.deal_won_amount ?? 0) : "—"}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </CrmListPanel>
+          ) : null}
+
+          {sourceLead ? (
+            <LeadDetailsCard
+              lead={sourceLead}
+              company={company}
+              employees={employees}
+              headerAction={
+                <Link
+                  href={`/crm/leads/${sourceLead.id}`}
+                  className="inline-flex h-7 cursor-pointer items-center rounded-md border border-border/80 bg-background px-2.5 text-xs font-medium transition-colors duration-200 hover:bg-muted/50"
+                >
+                  Open Lead
+                </Link>
+              }
+            />
+          ) : opp.lead_id ? (
+            <CrmSection title="Source Lead" icon={Handshake}>
+              <p className="text-xs text-muted-foreground">
+                Source lead could not be loaded.{" "}
+                <Link
+                  href={`/crm/leads/${opp.lead_id}`}
+                  className="cursor-pointer font-medium text-primary hover:underline"
+                >
+                  Open lead
+                </Link>
+              </p>
+            </CrmSection>
+          ) : null}
+
+          <CrmSection title="Attachments" subtitle="BOQ / SOW / OEM / PO files" icon={Paperclip}>
+            {attachments.length === 0 ? (
+              <p className="text-xs text-muted-foreground">No BOQ / SOW / OEM / PO files attached yet.</p>
+            ) : (
+              <ul className="space-y-1.5 text-xs">
+                {attachments.map((a) => (
+                  <li key={a.id} className="flex items-center justify-between gap-2 rounded-lg border border-border/60 px-3 py-1.5">
+                    <span className="truncate">{a.file_name}</span>
+                    <Badge variant="secondary" className="capitalize">
+                      {a.category.replaceAll("_", " ")}
+                    </Badge>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </CrmSection>
+        </CrmPage>
       </div>
     </div>
   );
