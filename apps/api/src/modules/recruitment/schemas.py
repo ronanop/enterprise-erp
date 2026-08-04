@@ -14,9 +14,34 @@ class OrmModel(BaseModel):
 class JobRequisitionCreate(BaseModel):
     company_id: UUID | None = None
     branch_id: UUID
-    status: str | None = None
+    requisition_title: str
+    department_id: UUID
+    designation_id: UUID | None = None
+    employment_type: str = "permanent"
+    openings_count: int = 1
+    filled_count: int = 0
+    hiring_manager_employee_id: UUID
+    recruiter_id: UUID | None = None
+    priority: str = "medium"
+    target_hire_date: date | None = None
+    min_experience_years: Decimal | None = None
+    max_experience_years: Decimal | None = None
+    salary_band_min: Decimal | None = None
+    salary_band_max: Decimal | None = None
+    currency_code: str | None = "INR"
+    job_description: str | None = None
+    justification: str | None = None
+    status: str | None = "draft"
+
 
 class JobRequisitionUpdate(BaseModel):
+    requisition_title: str | None = None
+    openings_count: int | None = None
+    priority: str | None = None
+    target_hire_date: date | None = None
+    salary_band_min: Decimal | None = None
+    salary_band_max: Decimal | None = None
+    job_description: str | None = None
     status: str | None = None
     version: int | None = None
 
@@ -49,9 +74,22 @@ class JobRequisitionResponse(OrmModel):
 
 class JobPostingCreate(BaseModel):
     company_id: UUID | None = None
-    status: str | None = None
+    branch_id: UUID | None = None
+    job_requisition_id: UUID
+    posting_title: str
+    channel: str = "career_site"
+    recruitment_source_id: UUID | None = None
+    publish_from: date | None = None
+    publish_to: datetime | None = None
+    external_url: str | None = None
+    status: str | None = "draft"
+
 
 class JobPostingUpdate(BaseModel):
+    posting_title: str | None = None
+    channel: str | None = None
+    publish_from: date | None = None
+    publish_to: datetime | None = None
     status: str | None = None
     version: int | None = None
 
@@ -111,9 +149,30 @@ class RecruiterResponse(OrmModel):
 
 class CandidateCreate(BaseModel):
     company_id: UUID | None = None
-    status: str | None = None
+    branch_id: UUID | None = None
+    first_name: str
+    last_name: str
+    full_name: str | None = None
+    email: str
+    mobile: str | None = None
+    current_title: str | None = None
+    current_employer: str | None = None
+    total_experience_years: Decimal | None = None
+    highest_education: str | None = None
+    recruitment_source_id: UUID | None = None
+    primary_recruiter_id: UUID | None = None
+    status: str | None = "prospect"
+
 
 class CandidateUpdate(BaseModel):
+    first_name: str | None = None
+    last_name: str | None = None
+    full_name: str | None = None
+    email: str | None = None
+    mobile: str | None = None
+    current_title: str | None = None
+    current_employer: str | None = None
+    total_experience_years: Decimal | None = None
     status: str | None = None
     version: int | None = None
 
@@ -184,11 +243,26 @@ class ResumeResponse(OrmModel):
 class ApplicationCreate(BaseModel):
     company_id: UUID | None = None
     branch_id: UUID
+    candidate_id: UUID
+    job_requisition_id: UUID
+    job_posting_id: UUID | None = None
+    recruitment_source_id: UUID | None = None
+    recruiter_id: UUID | None = None
+    applied_at: datetime | None = None
+    current_stage_code: str | None = None
     status: str | None = None
 
 class ApplicationUpdate(BaseModel):
     status: str | None = None
+    current_stage_code: str | None = None
+    rejection_reason: str | None = None
     version: int | None = None
+
+class ApplicationAdvanceRequest(BaseModel):
+    stage: str
+
+class ApplicationRejectRequest(BaseModel):
+    reason: str | None = None
 
 class ApplicationResponse(OrmModel):
     id: UUID
@@ -232,9 +306,26 @@ class ApplicationStageResponse(OrmModel):
 class InterviewCreate(BaseModel):
     company_id: UUID | None = None
     branch_id: UUID
-    status: str | None = None
+    application_id: UUID
+    candidate_id: UUID
+    interview_type: str = "hr_round"
+    scheduled_at: datetime
+    duration_minutes: int = 60
+    interviewer_employee_id: UUID
+    location: str | None = None
+    meeting_url: str | None = None
+    panel_json: dict | None = None
+    result: str | None = "pending"
+    status: str | None = "scheduled"
+
 
 class InterviewUpdate(BaseModel):
+    interview_type: str | None = None
+    scheduled_at: datetime | None = None
+    duration_minutes: int | None = None
+    location: str | None = None
+    meeting_url: str | None = None
+    result: str | None = None
     status: str | None = None
     version: int | None = None
 
@@ -281,9 +372,28 @@ class InterviewFeedbackResponse(OrmModel):
 class OfferCreate(BaseModel):
     company_id: UUID | None = None
     branch_id: UUID
-    status: str | None = None
+    application_id: UUID
+    candidate_id: UUID
+    job_requisition_id: UUID
+    department_id: UUID
+    designation_id: UUID | None = None
+    offered_ctc: Decimal | None = None
+    offered_gross: Decimal | None = None
+    currency_code: str = "INR"
+    joining_date: date
+    offer_valid_until: date | None = None
+    employment_type: str = "permanent"
+    salary_structure_id: UUID | None = None
+    offer_letter_uri: str | None = None
+    status: str | None = "draft"
+
 
 class OfferUpdate(BaseModel):
+    offered_ctc: Decimal | None = None
+    offered_gross: Decimal | None = None
+    joining_date: date | None = None
+    offer_valid_until: date | None = None
+    offer_letter_uri: str | None = None
     status: str | None = None
     version: int | None = None
 

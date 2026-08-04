@@ -17,6 +17,9 @@ class HrMasterDataAdapter:
     def get_employee(self, ctx: TenantContext, employee_id: UUID):
         return self._employees.get_employee(ctx, employee_id)
 
+    def get_employee_by_code(self, ctx: TenantContext, company_id: UUID, employee_code: str):
+        return self._employees.get_employee_by_code(ctx, company_id, employee_code)
+
     def sync_designation_label(self, ctx: TenantContext, employee_id: UUID, designation: str):
         return self._employees.update_employee(ctx, employee_id, designation=designation)
 
@@ -37,3 +40,6 @@ class HrMasterDataAdapter:
             status=status,
             date_of_leaving=date_of_leaving,
         )
+
+    def update_employee_status(self, ctx: TenantContext, employee_id: UUID, status: str):
+        return self._employees.update_employee(ctx, employee_id, status=status)

@@ -162,6 +162,12 @@ class EmailComposeRequest(BaseModel):
     payload_json: dict | None = None
 
 
+class DeviceTokenRegisterRequest(BaseModel):
+    token: str
+    platform: str = "web"
+
+
+
 class SettingUpsertRequest(BaseModel):
     setting_value: str
     value_type: str = "string"

@@ -5,6 +5,7 @@ from decimal import Decimal
 from uuid import UUID, uuid4
 
 from sqlalchemy import (
+    Boolean,
     CheckConstraint,
     Date,
     ForeignKey,
@@ -29,7 +30,8 @@ class HrEmployment(Base, *HrTransactionMixin):
             name="ck_hr_empl_type",
         ),
         CheckConstraint(
-            "status IN ('draft','active','probation','confirmed','ended','cancelled')",
+            "status IN ('draft','onboarding','active','probation','confirmed',"
+            "'notice_period','separated','ex_employee','ended','cancelled')",
             name="ck_hr_empl_status",
         ),
         {"schema": "hr"},
@@ -45,6 +47,7 @@ class HrEmployment(Base, *HrTransactionMixin):
     )
     employment_type: Mapped[str] = mapped_column(String(30), nullable=False)
     date_of_joining: Mapped[date] = mapped_column(Date, nullable=False)
+    probation_start_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     probation_end_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     confirmation_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     contract_end_date: Mapped[date | None] = mapped_column(Date, nullable=True)
@@ -52,4 +55,12 @@ class HrEmployment(Base, *HrTransactionMixin):
     ctc_amount: Mapped[Decimal | None] = mapped_column(Numeric(18, 4), nullable=True)
     currency_code: Mapped[str | None] = mapped_column(String(10), nullable=True)
     work_location_text: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    lifecycle_source: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    payroll_eligible: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    management_group_id: Mapped[UUID | None] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("hr.hr_management_group.id", ondelete="RESTRICT"),
+        nullable=True,
+        index=True,
+    )
     status: Mapped[str] = mapped_column(String(30), nullable=False, default="draft", index=True)

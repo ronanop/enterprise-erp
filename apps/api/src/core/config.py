@@ -50,7 +50,12 @@ class Settings(BaseSettings):
     )
 
     cors_origins: list[str] = Field(
-        default=["http://localhost:3000"],
+        default=[
+            "http://localhost:3000",
+            "http://127.0.0.1:3000",
+            "http://localhost:3001",
+            "http://127.0.0.1:3001",
+        ],
         alias="CORS_ORIGINS",
     )
 
@@ -67,6 +72,10 @@ class Settings(BaseSettings):
     login_rate_window_seconds: int = Field(default=900, alias="LOGIN_RATE_WINDOW_SECONDS")
     account_lockout_threshold: int = Field(default=5, alias="ACCOUNT_LOCKOUT_THRESHOLD")
     account_lockout_minutes: int = Field(default=15, alias="ACCOUNT_LOCKOUT_MINUTES")
+    # Business-day timezone for attendance punch "today" (IST by default)
+    app_timezone: str = Field(default="Asia/Kolkata", alias="APP_TIMEZONE")
+    # Push notifications (legacy FCM). Leave empty to keep stub deliveries.
+    fcm_server_key: str | None = Field(default=None, alias="FCM_SERVER_KEY")
 
     # Microsoft Graph email (Notification Engine — email channel)
     azure_tenant_id: str = Field(default="", alias="AZURE_TENANT_ID")
@@ -94,7 +103,12 @@ class Settings(BaseSettings):
     @classmethod
     def parse_cors_origins(cls, value: str | list[str]) -> list[str]:
         if isinstance(value, str):
-            return [origin.strip() for origin in value.split(",") if origin.strip()]
+            cleaned = value.strip().removeprefix("[").removesuffix("]")
+            return [
+                origin.strip().strip("\"'")
+                for origin in cleaned.split(",")
+                if origin.strip().strip("\"'")
+            ]
         return value
 
     @property

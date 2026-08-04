@@ -65,7 +65,7 @@ python -m venv .venv
 .venv\Scripts\activate        # Windows
 pip install -e ".[dev]"
 alembic upgrade head
-uvicorn main:app --reload --host 0.0.0.0 --port 8000 --app-dir src
+uvicorn main:app --reload --reload-dir src --host 0.0.0.0 --port 8000 --app-dir src
 ```
 
 API: http://localhost:8000/api/v1/health  

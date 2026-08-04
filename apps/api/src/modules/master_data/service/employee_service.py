@@ -49,6 +49,13 @@ class EmployeeService:
         self._scope.validate_branch_access(ctx, employee.branch_id)
         return employee
 
+    def get_employee_by_code(self, ctx: TenantContext, company_id: UUID, employee_code: str):
+        cid = self._scope.resolve_company_id(ctx, company_id)
+        row = self._repo.get_by_code(ctx, cid, employee_code)
+        if row is None:
+            raise NotFoundException(f"Employee code '{employee_code}' not found")
+        return self.get_employee(ctx, row.id)
+
     def create_employee(
         self,
         ctx: TenantContext,
@@ -66,7 +73,16 @@ class EmployeeService:
         reporting_manager_id: UUID | None = None,
         date_of_leaving: date | None = None,
         user_id: UUID | None = None,
+        hire_source: str = "direct",
+        bypass_onboarding: bool = False,
     ):
+        if hire_source != "recruitment_onboarding" and not bypass_onboarding:
+            raise ConflictException(
+                "Employees must be hired via completed recruitment onboarding "
+                "(POST /recruitment/onboarding/{id}/complete). "
+                "Direct workforce create is blocked. "
+                "For data migration only, pass bypass_onboarding=true."
+            )
         resolved_company_id = self._scope.resolve_company_id(ctx, company_id)
         self._scope.validate_branch_access(ctx, branch_id)
         self._validate_department_scope(ctx, branch_id, department_id)
@@ -114,7 +130,11 @@ class EmployeeService:
             entity_id=employee.id,
             operation="create",
             performed_by=ctx.user_id,
-            new_value={"employee_code": employee_code, "branch_id": str(branch_id)},
+            new_value={
+                "employee_code": employee_code,
+                "branch_id": str(branch_id),
+                "hire_source": hire_source,
+            },
         )
         return employee
 
@@ -132,6 +152,16 @@ class EmployeeService:
                 email=fields["email"],
                 exclude_id=employee_id,
             )
+        if "employee_code" in fields and fields["employee_code"] is not None:
+            self._duplicates.ensure_unique_code(
+                model=MasterEmployee,
+                company_id=employee.company_id,
+                code=str(fields["employee_code"]).strip().upper(),
+                code_field="employee_code",
+                label="Employee",
+                exclude_id=employee_id,
+            )
+            fields["employee_code"] = str(fields["employee_code"]).strip().upper()
 
         updated = self._repo.update(ctx, employee_id, **fields)
         if updated is None:

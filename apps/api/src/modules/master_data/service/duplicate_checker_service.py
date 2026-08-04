@@ -20,6 +20,7 @@ class DuplicateCheckerService:
         code: str,
         code_field: str,
         label: str,
+        exclude_id: UUID | None = None,
     ) -> None:
         col = getattr(model, code_field)
         stmt = select(model).where(
@@ -27,6 +28,8 @@ class DuplicateCheckerService:
             col == code,
             model.is_deleted.is_(False),
         )
+        if exclude_id:
+            stmt = stmt.where(model.id != exclude_id)
         if self._db.scalar(stmt) is not None:
             raise ConflictException(f"{label} code already exists")
 

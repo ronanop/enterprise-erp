@@ -1,0 +1,192 @@
+"use client";
+
+import type { ReactNode } from "react";
+import { ChevronLeft, ChevronRight, User } from "lucide-react";
+
+import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
+
+export function EmsSkeleton({ rows = 6 }: { rows?: number }) {
+  return (
+    <div className="space-y-3 animate-pulse">
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+        {Array.from({ length: 5 }).map((_, i) => (
+          <div key={i} className="h-20 rounded-xl bg-muted/60" />
+        ))}
+      </div>
+      <div className="h-10 rounded-lg bg-muted/60" />
+      {Array.from({ length: rows }).map((_, i) => (
+        <div key={i} className="h-12 rounded-lg bg-muted/40" />
+      ))}
+    </div>
+  );
+}
+
+export function EmsAvatar({
+  name,
+  photoUrl,
+  size = "md",
+}: {
+  name: string;
+  photoUrl?: string;
+  size?: "sm" | "md" | "lg";
+}) {
+  const dim =
+    size === "lg" ? "size-16 text-lg" : size === "sm" ? "size-8 text-xs" : "size-10 text-sm";
+  const initials = name
+    .split(" ")
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((p) => p[0]?.toUpperCase())
+    .join("");
+  if (photoUrl) {
+    return (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img src={photoUrl} alt="" className={cn("rounded-full object-cover", dim)} />
+    );
+  }
+  return (
+    <div
+      className={cn(
+        "flex shrink-0 items-center justify-center rounded-full bg-primary/10 font-medium text-primary",
+        dim,
+      )}
+    >
+      {initials || <User className="size-4" />}
+    </div>
+  );
+}
+
+export function EmsPagination({
+  page,
+  pageSize,
+  total,
+  onPageChange,
+}: {
+  page: number;
+  pageSize: number;
+  total: number;
+  onPageChange: (page: number) => void;
+}) {
+  const pages = Math.max(1, Math.ceil(total / pageSize));
+  const start = total === 0 ? 0 : (page - 1) * pageSize + 1;
+  const end = Math.min(page * pageSize, total);
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border/70 px-3 py-2 text-xs text-muted-foreground">
+      <span>
+        {start}–{end} of {total}
+      </span>
+      <div className="flex items-center gap-1">
+        <Button
+          type="button"
+          variant="outline"
+          size="icon-sm"
+          className="cursor-pointer"
+          disabled={page <= 1}
+          onClick={() => onPageChange(page - 1)}
+        >
+          <ChevronLeft className="size-4" />
+        </Button>
+        <span className="min-w-[4rem] text-center">
+          Page {page} / {pages}
+        </span>
+        <Button
+          type="button"
+          variant="outline"
+          size="icon-sm"
+          className="cursor-pointer"
+          disabled={page >= pages}
+          onClick={() => onPageChange(page + 1)}
+        >
+          <ChevronRight className="size-4" />
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+export function EmsFormGrid({ children }: { children: ReactNode }) {
+  return <div className="grid gap-3 sm:grid-cols-2">{children}</div>;
+}
+
+export function EmsStepper({
+  steps,
+  current,
+}: {
+  steps: { id: string; label: string }[];
+  current: number;
+}) {
+  return (
+    <ol className="flex flex-wrap gap-2">
+      {steps.map((step, index) => {
+        const done = index < current;
+        const active = index === current;
+        return (
+          <li
+            key={step.id}
+            className={cn(
+              "rounded-lg border px-2.5 py-1 text-[11px] font-medium tracking-wide uppercase transition-colors",
+              active
+                ? "border-primary bg-primary/5 text-primary"
+                : done
+                  ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+                  : "border-border bg-muted/30 text-muted-foreground",
+            )}
+          >
+            {index + 1}. {step.label}
+          </li>
+        );
+      })}
+    </ol>
+  );
+}
+
+export function EmsTabBar({
+  tabs,
+  active,
+  onChange,
+}: {
+  tabs: { id: string; label: string }[];
+  active: string;
+  onChange: (id: string) => void;
+}) {
+  return (
+    <div className="erp-scroll flex gap-1 overflow-x-auto border-b border-border/70 pb-px">
+      {tabs.map((tab) => (
+        <button
+          key={tab.id}
+          type="button"
+          className={cn(
+            "cursor-pointer shrink-0 rounded-t-lg px-3 py-2 text-xs font-medium transition-colors",
+            active === tab.id
+              ? "border border-b-0 border-border/70 bg-card text-foreground"
+              : "text-muted-foreground hover:bg-muted/50 hover:text-foreground",
+          )}
+          onClick={() => onChange(tab.id)}
+        >
+          {tab.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+export function EmsTimeline({ items }: { items: { title: string; detail?: string; at: string; actor?: string }[] }) {
+  if (!items.length) {
+    return <p className="text-xs text-muted-foreground">No activity recorded yet.</p>;
+  }
+  return (
+    <ul className="space-y-3">
+      {items.map((item, i) => (
+        <li key={i} className="relative border-l-2 border-border/80 pl-4 pb-1">
+          <p className="text-sm font-medium text-foreground">{item.title}</p>
+          {item.detail ? <p className="text-xs text-muted-foreground">{item.detail}</p> : null}
+          <p className="mt-0.5 text-[10px] text-muted-foreground">
+            {item.actor ? `${item.actor} · ` : ""}
+            {new Date(item.at).toLocaleString()}
+          </p>
+        </li>
+      ))}
+    </ul>
+  );
+}

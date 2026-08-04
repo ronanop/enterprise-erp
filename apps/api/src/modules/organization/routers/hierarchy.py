@@ -18,6 +18,7 @@ from modules.organization.schemas import (
     DepartmentCreateRequest,
     DepartmentUpdateRequest,
     LocationCreateRequest,
+    LocationUpdateRequest,
     ProfitCenterCreateRequest,
 )
 from modules.organization.service.branch_service import BranchService
@@ -73,6 +74,7 @@ def get_branch(
 
 
 @branches_router.put("/{branch_id}", response_model=APIResponse[BranchResponse])
+@branches_router.patch("/{branch_id}", response_model=APIResponse[BranchResponse])
 def update_branch(
     branch_id: UUID,
     body: BranchUpdateRequest,
@@ -122,6 +124,7 @@ def create_department(
 
 
 @departments_router.put("/{department_id}", response_model=APIResponse[dict])
+@departments_router.patch("/{department_id}", response_model=APIResponse[dict])
 def update_department(
     department_id: UUID,
     body: DepartmentUpdateRequest,
@@ -174,8 +177,9 @@ def list_locations(
     ctx: Annotated[TenantContext, Depends(require_permission("organization.location:read"))],
     db: Annotated[Session, Depends(get_db)],
     branch_id: UUID | None = None,
+    company_id: UUID | None = None,
 ) -> APIResponse[list]:
-    locs = LocationService(db).list_locations(ctx, branch_id=branch_id)
+    locs = LocationService(db).list_locations(ctx, branch_id=branch_id, company_id=company_id)
     return APIResponse(message="Locations retrieved", data=[loc.__dict__ for loc in locs])
 
 
@@ -188,6 +192,19 @@ def create_location(
     loc = LocationService(db).create_location(ctx, **body.model_dump())
     db.commit()
     return APIResponse(message="Location created", data=loc.__dict__)
+
+
+@locations_router.patch("/{location_id}", response_model=APIResponse[dict])
+def update_location(
+    location_id: UUID,
+    body: LocationUpdateRequest,
+    ctx: Annotated[TenantContext, Depends(require_permission("organization.location:update"))],
+    db: Annotated[Session, Depends(get_db)],
+) -> APIResponse[dict]:
+    payload = {k: v for k, v in body.model_dump().items() if v is not None}
+    loc = LocationService(db).update_location(ctx, location_id, **payload)
+    db.commit()
+    return APIResponse(message="Location updated", data=loc.__dict__)
 
 
 @cost_centers_router.get("", response_model=APIResponse[list])

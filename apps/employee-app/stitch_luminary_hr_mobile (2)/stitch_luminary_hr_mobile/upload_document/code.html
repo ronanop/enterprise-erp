@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0, viewport-fit=cover" name="viewport"/>
+<title>Upload Document | HR Portal</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            "colors": {
+                    "on-surface": "#0b1c30",
+                    "error-container": "#ffdad6",
+                    "tertiary-fixed-dim": "#4edea3",
+                    "inverse-surface": "#213145",
+                    "on-secondary-fixed-variant": "#5a00c6",
+                    "secondary": "#712ae2",
+                    "error": "#ba1a1a",
+                    "on-background": "#0b1c30",
+                    "on-secondary-fixed": "#25005a",
+                    "on-tertiary-fixed": "#002113",
+                    "tertiary-container": "#007d55",
+                    "secondary-fixed-dim": "#d2bbff",
+                    "on-primary-fixed": "#00174b",
+                    "inverse-on-surface": "#eaf1ff",
+                    "primary": "#004ac6",
+                    "on-primary-fixed-variant": "#003ea8",
+                    "secondary-fixed": "#eaddff",
+                    "on-secondary-container": "#fffbff",
+                    "surface-container-highest": "#d3e4fe",
+                    "primary-fixed": "#dbe1ff",
+                    "outline": "#737686",
+                    "surface-container-low": "#eff4ff",
+                    "surface-tint": "#0053db",
+                    "on-surface-variant": "#434655",
+                    "primary-container": "#2563eb",
+                    "surface-container": "#e5eeff",
+                    "on-tertiary": "#ffffff",
+                    "surface-dim": "#cbdbf5",
+                    "surface": "#f8f9ff",
+                    "surface-bright": "#f8f9ff",
+                    "on-error": "#ffffff",
+                    "on-tertiary-container": "#bdffdb",
+                    "surface-container-lowest": "#ffffff",
+                    "outline-variant": "#c3c6d7",
+                    "on-primary-container": "#eeefff",
+                    "background": "#f8f9ff",
+                    "on-error-container": "#93000a",
+                    "tertiary-fixed": "#6ffbbe",
+                    "tertiary": "#006242",
+                    "on-primary": "#ffffff",
+                    "surface-container-high": "#dce9ff",
+                    "on-tertiary-fixed-variant": "#005236",
+                    "secondary-container": "#8a4cfc",
+                    "surface-variant": "#d3e4fe",
+                    "on-secondary": "#ffffff",
+                    "primary-fixed-dim": "#b4c5ff",
+                    "inverse-primary": "#b4c5ff"
+            },
+            "borderRadius": {
+                    "DEFAULT": "0.25rem",
+                    "lg": "0.5rem",
+                    "xl": "0.75rem",
+                    "full": "9999px"
+            },
+            "spacing": {
+                    "stack-gap-md": "16px",
+                    "container-padding": "20px",
+                    "unit": "4px",
+                    "stack-gap-lg": "24px",
+                    "stack-gap-sm": "8px",
+                    "section-margin": "32px"
+            },
+            "fontFamily": {
+                    "label-md": ["Inter"],
+                    "headline-sm": ["Inter"],
+                    "label-sm": ["Inter"],
+                    "body-sm": ["Inter"],
+                    "display-lg-mobile": ["Inter"],
+                    "display-lg": ["Inter"],
+                    "title-lg": ["Inter"],
+                    "display-md": ["Inter"],
+                    "body-md": ["Inter"]
+            },
+            "fontSize": {
+                    "label-md": ["14px", {"lineHeight": "20px", "fontWeight": "500"}],
+                    "headline-sm": ["20px", {"lineHeight": "28px", "fontWeight": "600"}],
+                    "label-sm": ["12px", {"lineHeight": "16px", "fontWeight": "600"}],
+                    "body-sm": ["14px", {"lineHeight": "20px", "fontWeight": "400"}],
+                    "display-lg-mobile": ["28px", {"lineHeight": "34px", "fontWeight": "700"}],
+                    "display-lg": ["32px", {"lineHeight": "40px", "letterSpacing": "-0.02em", "fontWeight": "700"}],
+                    "title-lg": ["18px", {"lineHeight": "24px", "fontWeight": "600"}],
+                    "display-md": ["24px", {"lineHeight": "32px", "letterSpacing": "-0.01em", "fontWeight": "700"}],
+                    "body-md": ["16px", {"lineHeight": "24px", "fontWeight": "400"}]
+            }
+          },
+        },
+      }
+    </script>
+<style>
+        body { font-family: 'Inter', sans-serif; -webkit-tap-highlight-color: transparent; }
+        .glass { background: rgba(255, 255, 255, 0.8); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); }
+        .dashed-border { background-image: url("data:image/svg+xml,%3csvg width='100%25' height='100%25' xmlns='http://www.w3.org/2000/svg'%3e%3crect width='100%25' height='100%25' fill='none' rx='16' ry='16' stroke='%23C3C6D7FF' stroke-width='2' stroke-dasharray='8%2c 8' stroke-dashoffset='0' stroke-linecap='square'/%3e%3c/svg%3e"); }
+        @keyframes scan {
+            0% { top: 0%; opacity: 0; }
+            20% { opacity: 1; }
+            80% { opacity: 1; }
+            100% { top: 100%; opacity: 0; }
+        }
+        .scan-line { animation: scan 2s cubic-bezier(0.4, 0, 0.2, 1) infinite; }
+        .progress-fill { transition: width 1s ease-in-out; }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background text-on-background min-h-screen pb-24">
+<!-- Top Navigation (Shell Implementation) -->
+<header class="fixed top-0 w-full z-50 glass shadow-sm flex items-center justify-between px-container-padding h-16">
+<button class="transition-all duration-200 active:scale-95 text-on-surface-variant">
+<span class="material-symbols-outlined">arrow_back</span>
+</button>
+<h1 class="font-headline-sm text-headline-sm-mobile text-primary text-center flex-1">Upload Document</h1>
+<div class="w-10 h-10 flex items-center justify-end">
+<span class="material-symbols-outlined text-on-surface-variant">help_outline</span>
+</div>
+</header>
+<!-- Main Content Canvas -->
+<main class="pt-24 px-container-padding space-y-section-margin">
+<!-- Header Text Section -->
+<section class="space-y-stack-gap-sm">
+<h2 class="font-display-md text-display-md text-on-surface">Secure Documents</h2>
+<p class="font-body-md text-body-md text-on-surface-variant">Upload your official documents for verification. Our AI will automatically identify and extract relevant details.</p>
+</section>
+<!-- Drop & Tap Area -->
+<section class="relative">
+<div class="dashed-border w-full h-64 rounded-xl flex flex-col items-center justify-center space-y-stack-gap-md transition-all duration-200 active:bg-surface-container hover:bg-surface-container-low cursor-pointer">
+<div class="w-16 h-16 bg-primary-container rounded-full flex items-center justify-center shadow-lg">
+<span class="material-symbols-outlined text-white text-3xl">cloud_upload</span>
+</div>
+<div class="text-center">
+<p class="font-title-lg text-title-lg text-on-surface">Tap to Upload</p>
+<p class="font-body-sm text-body-sm text-on-surface-variant">or drag and drop PDF, JPG, PNG</p>
+</div>
+</div>
+</section>
+<!-- Quick Actions Row -->
+<section class="grid grid-cols-2 gap-stack-gap-md">
+<button class="bg-surface-container-highest rounded-xl p-stack-gap-md flex items-center gap-stack-gap-sm transition-all duration-200 active:scale-95 border border-outline-variant">
+<span class="material-symbols-outlined text-primary">photo_camera</span>
+<span class="font-label-md text-label-md text-on-surface">OCR Scan</span>
+</button>
+<button class="bg-surface-container-highest rounded-xl p-stack-gap-md flex items-center gap-stack-gap-sm transition-all duration-200 active:scale-95 border border-outline-variant">
+<span class="material-symbols-outlined text-primary">image</span>
+<span class="font-label-md text-label-md text-on-surface">Gallery</span>
+</button>
+</section>
+<!-- Active Upload Progress (Passport with AI Detection) -->
+<section class="space-y-stack-gap-md">
+<div class="flex items-center justify-between">
+<h3 class="font-label-md text-label-md uppercase tracking-wider text-on-surface-variant">Active Upload</h3>
+<span class="inline-flex items-center gap-1 bg-secondary-container/10 text-secondary px-2 py-1 rounded-full text-[10px] font-bold uppercase tracking-widest">
+<span class="material-symbols-outlined text-sm" style="font-variation-settings: 'FILL' 1;">auto_awesome</span>
+                    AI Processing
+                </span>
+</div>
+<div class="bg-white rounded-xl p-stack-gap-md shadow-sm border border-outline-variant relative overflow-hidden">
+<!-- Progress Background Glow -->
+<div class="absolute top-0 left-0 h-1 bg-primary/10 w-full"></div>
+<div class="absolute top-0 left-0 h-1 bg-primary progress-fill" style="width: 65%;"></div>
+<div class="flex items-center gap-stack-gap-md">
+<!-- Document Preview Thumbnail with Scanning Effect -->
+<div class="relative w-16 h-20 bg-surface-container-low rounded-lg border border-outline-variant overflow-hidden">
+<div class="w-full h-full bg-cover bg-center opacity-60" data-alt="A macro close-up of a high-security passport document showing intricate guilloche patterns and a holographic emblem. The image is stylized with a tech-focused HR UI aesthetic using a light-mode color palette of soft blues and crisp whites. Professional studio lighting highlights the paper texture and secure elements of the identification card." style="background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuA4h_137G8hp2iYjfxW3V9_Em9ASJ_6yJ5LNkroYJrWqjaY9MC8qYWPtPkzRvElqbrR49I3XeAv8W9x3ggkDjzKCc1YGGvWrRNinwz_v89kEliz70ZmuwWz8Im3A-siTsZ14g2w49RszKZxyRn7Xh5ESUdbU1iW1Aj9YBs34ZMwyLpbs3J94JgymVU2VP8H_uaj5OxxCb9ndiHWjMgfulaU17B8Oeno11Sn6SeTjCup2mlZ9rVtRL-Bj71hE-TD2MSRF6CCWYZB-VU')"></div>
+<!-- Scanning Animation Line -->
+<div class="scan-line absolute left-0 right-0 h-[2px] bg-secondary shadow-[0_0_8px_rgba(113,42,226,0.8)]"></div>
+</div>
+<div class="flex-1 space-y-1">
+<div class="flex items-center gap-2">
+<p class="font-title-lg text-title-lg text-on-surface">Passport_Scan_v2.jpg</p>
+<span class="material-symbols-outlined text-tertiary text-lg">check_circle</span>
+</div>
+<div class="flex flex-wrap gap-2">
+<span class="bg-primary-container/10 text-primary px-2 py-0.5 rounded text-[11px] font-semibold border border-primary/20">IDENTIFIED: PASSPORT</span>
+<span class="bg-surface-container text-on-surface-variant px-2 py-0.5 rounded text-[11px] font-semibold">1.2 MB</span>
+</div>
+</div>
+<button class="w-10 h-10 rounded-full flex items-center justify-center text-error hover:bg-error-container/20 transition-colors">
+<span class="material-symbols-outlined">cancel</span>
+</button>
+</div>
+<!-- Live Feed Extraction Status -->
+<div class="mt-4 pt-4 border-t border-outline-variant grid grid-cols-2 gap-4">
+<div class="space-y-1">
+<p class="text-[10px] text-on-surface-variant font-bold uppercase tracking-tight">Full Name</p>
+<p class="text-body-sm font-medium text-on-surface">Alex Rivera</p>
+</div>
+<div class="space-y-1">
+<p class="text-[10px] text-on-surface-variant font-bold uppercase tracking-tight">Expiry Date</p>
+<p class="text-body-sm font-medium text-on-surface">24 OCT 2029</p>
+</div>
+</div>
+</div>
+</section>
+<!-- Requirements List -->
+<section class="bg-surface-container-low rounded-xl p-stack-gap-md space-y-stack-gap-md border border-outline-variant/50">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-primary text-xl">info</span>
+<p class="font-label-md text-label-md text-on-surface">Upload Requirements</p>
+</div>
+<ul class="space-y-2">
+<li class="flex items-start gap-3">
+<span class="w-1.5 h-1.5 rounded-full bg-outline-variant mt-2"></span>
+<p class="font-body-sm text-body-sm text-on-surface-variant">Ensure all four corners of the document are visible.</p>
+</li>
+<li class="flex items-start gap-3">
+<span class="w-1.5 h-1.5 rounded-full bg-outline-variant mt-2"></span>
+<p class="font-body-sm text-body-sm text-on-surface-variant">High-resolution image (at least 300 DPI recommended).</p>
+</li>
+<li class="flex items-start gap-3">
+<span class="w-1.5 h-1.5 rounded-full bg-outline-variant mt-2"></span>
+<p class="font-body-sm text-body-sm text-on-surface-variant">Maximum file size: 10MB per document.</p>
+</li>
+</ul>
+</section>
+</main>
+<!-- Bottom Navigation Shell Implementation -->
+<nav class="fixed bottom-0 left-0 w-full z-50 glass border-t border-outline-variant flex justify-around items-center px-2 pb-safe h-20">
+<a class="flex flex-col items-center justify-center text-on-surface-variant transition-transform duration-200 active:scale-90" href="#">
+<span class="material-symbols-outlined">home</span>
+<span class="font-label-sm text-label-sm mt-1">Home</span>
+</a>
+<a class="flex flex-col items-center justify-center text-on-surface-variant transition-transform duration-200 active:scale-90" href="#">
+<span class="material-symbols-outlined">fingerprint</span>
+<span class="font-label-sm text-label-sm mt-1">Attendance</span>
+</a>
+<a class="flex flex-col items-center justify-center text-on-surface-variant transition-transform duration-200 active:scale-90" href="#">
+<span class="material-symbols-outlined">calendar_today</span>
+<span class="font-label-sm text-label-sm mt-1">Leave</span>
+</a>
+<!-- Document / Upload considered part of "Salary/Docs" or "Profile" flow in this context -->
+<a class="flex flex-col items-center justify-center text-on-surface-variant transition-transform duration-200 active:scale-90" href="#">
+<span class="material-symbols-outlined">payments</span>
+<span class="font-label-sm text-label-sm mt-1">Salary</span>
+</a>
+<a class="flex flex-col items-center justify-center text-primary font-bold after:content-[''] after:w-1 after:h-1 after:bg-primary after:rounded-full after:mt-1 transition-transform duration-200 active:scale-90" href="#">
+<span class="material-symbols-outlined">person</span>
+<span class="font-label-sm text-label-sm">Profile</span>
+</a>
+</nav>
+<!-- FAB for AI Assistance -->
+<button class="fixed bottom-24 right-container-padding w-14 h-14 rounded-full bg-gradient-to-br from-secondary to-primary shadow-2xl flex items-center justify-center text-white z-40 transition-transform active:scale-90 hover:brightness-110">
+<span class="material-symbols-outlined text-2xl" style="font-variation-settings: 'FILL' 1;">auto_awesome</span>
+</button>
+<script>
+        // Micro-interaction: Progress bar simulation
+        const progressFill = document.querySelector('.progress-fill');
+        let width = 65;
+        const interval = setInterval(() => {
+            if (width >= 98) {
+                clearInterval(interval);
+            } else {
+                width += (Math.random() * 2);
+                progressFill.style.width = width + '%';
+            }
+        }, 3000);
+
+        // Feedback for tap states
+        document.querySelectorAll('button, .dashed-border').forEach(el => {
+            el.addEventListener('touchstart', () => {
+                el.style.opacity = '0.7';
+            });
+            el.addEventListener('touchend', () => {
+                el.style.opacity = '1';
+            });
+        });
+    </script>
+</body></html>

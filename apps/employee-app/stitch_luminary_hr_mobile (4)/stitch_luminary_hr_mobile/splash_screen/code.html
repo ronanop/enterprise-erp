@@ -1,0 +1,309 @@
+<!DOCTYPE html><html class="light" lang="en"><head>
+<meta charset="utf-8">
+<meta content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" name="viewport">
+<title>Employee Portal AI | Splash</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet">
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            "colors": {
+                    "on-surface": "#0b1c30",
+                    "on-tertiary-fixed-variant": "#005236",
+                    "on-secondary-container": "#fffbff",
+                    "tertiary-fixed-dim": "#4edea3",
+                    "tertiary-fixed": "#6ffbbe",
+                    "primary-fixed": "#dbe1ff",
+                    "secondary-fixed": "#eaddff",
+                    "surface-container-high": "#dce9ff",
+                    "tertiary": "#006242",
+                    "secondary-container": "#8a4cfc",
+                    "primary": "#004ac6",
+                    "on-primary-container": "#eeefff",
+                    "error-container": "#ffdad6",
+                    "on-tertiary-fixed": "#002113",
+                    "surface-tint": "#0053db",
+                    "surface-dim": "#cbdbf5",
+                    "surface-bright": "#f8f9ff",
+                    "on-error-container": "#93000a",
+                    "surface-container-highest": "#d3e4fe",
+                    "inverse-surface": "#213145",
+                    "primary-fixed-dim": "#b4c5ff",
+                    "on-background": "#0b1c30",
+                    "surface-container-low": "#eff4ff",
+                    "tertiary-container": "#007d55",
+                    "on-secondary": "#ffffff",
+                    "on-primary": "#ffffff",
+                    "surface-container": "#e5eeff",
+                    "surface-variant": "#d3e4fe",
+                    "on-primary-fixed-variant": "#003ea8",
+                    "primary-container": "#2563eb",
+                    "on-secondary-fixed-variant": "#5a00c6",
+                    "outline-variant": "#c3c6d7",
+                    "inverse-on-surface": "#eaf1ff",
+                    "on-tertiary-container": "#bdffdb",
+                    "error": "#ba1a1a",
+                    "background": "#f8f9ff",
+                    "secondary": "#712ae2",
+                    "on-surface-variant": "#434655",
+                    "on-secondary-fixed": "#25005a",
+                    "on-primary-fixed": "#00174b",
+                    "surface-container-lowest": "#ffffff",
+                    "surface": "#f8f9ff",
+                    "on-tertiary": "#ffffff",
+                    "outline": "#737686",
+                    "secondary-fixed-dim": "#d2bbff",
+                    "inverse-primary": "#b4c5ff",
+                    "on-error": "#ffffff"
+            },
+            "borderRadius": {
+                    "DEFAULT": "0.25rem",
+                    "lg": "0.5rem",
+                    "xl": "0.75rem",
+                    "full": "9999px"
+            },
+            "spacing": {
+                    "unit": "4px",
+                    "container-padding": "20px",
+                    "stack-gap-sm": "8px",
+                    "stack-gap-lg": "24px",
+                    "section-margin": "32px",
+                    "stack-gap-md": "16px"
+            },
+            "fontFamily": {
+                    "body-sm": ["Inter"],
+                    "title-lg": ["Inter"],
+                    "label-sm": ["Inter"],
+                    "display-lg": ["Inter"],
+                    "headline-sm": ["Inter"],
+                    "display-lg-mobile": ["Inter"],
+                    "body-md": ["Inter"],
+                    "label-md": ["Inter"],
+                    "display-md": ["Inter"]
+            },
+            "fontSize": {
+                    "body-sm": ["14px", {"lineHeight": "20px", "fontWeight": "400"}],
+                    "title-lg": ["18px", {"lineHeight": "24px", "fontWeight": "600"}],
+                    "label-sm": ["12px", {"lineHeight": "16px", "fontWeight": "600"}],
+                    "display-lg": ["32px", {"lineHeight": "40px", "letterSpacing": "-0.02em", "fontWeight": "700"}],
+                    "headline-sm": ["20px", {"lineHeight": "28px", "fontWeight": "600"}],
+                    "display-lg-mobile": ["28px", {"lineHeight": "34px", "fontWeight": "700"}],
+                    "body-md": ["16px", {"lineHeight": "24px", "fontWeight": "400"}],
+                    "label-md": ["14px", {"lineHeight": "20px", "fontWeight": "500"}],
+                    "display-md": ["24px", {"lineHeight": "32px", "letterSpacing": "-0.01em", "fontWeight": "700"}]
+            }
+          },
+        },
+      }
+    </script>
+<style>
+        @keyframes float {
+            0% { transform: translateY(0px); }
+            50% { transform: translateY(-15px); }
+            100% { transform: translateY(0px); }
+        }
+        @keyframes pulse-ring {
+            0% { transform: scale(0.9); opacity: 0.8; }
+            50% { transform: scale(1.1); opacity: 0.3; }
+            100% { transform: scale(0.9); opacity: 0.8; }
+        }
+        @keyframes fade-in-up {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .animate-float { animation: float 6s ease-in-out infinite; }
+        .animate-pulse-ring { animation: pulse-ring 3s cubic-bezier(0.4, 0, 0.6, 1) infinite; }
+        .animate-fade-in-up { animation: fade-in-up 1s ease-out forwards; }
+        .glass-card {
+            background: rgba(255, 255, 255, 0.4);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+        }
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+    </style>
+</head>
+<body class="bg-background text-on-background h-screen w-full overflow-hidden font-body-md select-none">
+<!-- WebGL Background -->
+<div class="fixed inset-0 z-0">
+<!-- STITCH_SHADER_START:ANIMATION_35 class="absolute inset-0 w-full h-full" -->
+<div class="absolute inset-0 w-full h-full" style="display:block;">
+<canvas id="shader-canvas-ANIMATION_35" style="display:block;width:100%;height:100%"></canvas>
+<script>
+(function() {
+  const canvas = document.getElementById('shader-canvas-ANIMATION_35');
+
+  // Sync the WebGL drawing-buffer size with the CSS-driven layout size.
+  // This fires on initial layout and whenever the element is resized.
+  function syncSize() {
+    const w = canvas.clientWidth  || 1280;
+    const h = canvas.clientHeight || 720;
+    if (canvas.width !== w || canvas.height !== h) {
+      canvas.width  = w;
+      canvas.height = h;
+    }
+  }
+  if (typeof ResizeObserver !== 'undefined') {
+    new ResizeObserver(syncSize).observe(canvas);
+  }
+  syncSize();
+
+  const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
+  if (!gl) return;
+  const vs = `attribute vec2 a_position;
+varying vec2 v_texCoord;
+void main() {
+  v_texCoord = a_position * 0.5 + 0.5;
+  gl_Position = vec4(a_position, 0.0, 1.0);
+}`;
+  const fs = `precision highp float;
+varying vec2 v_texCoord;
+uniform float u_time;
+uniform vec2 u_resolution;
+
+void main() {
+    vec2 uv = v_texCoord;
+    vec2 center = vec2(0.5, 0.5);
+    
+    // Create a flowing, multi-color gradient mesh
+    float dist = distance(uv, center);
+    
+    // Base colors from the palette
+    vec3 royalBlue = vec3(0.145, 0.388, 0.922); // #2563EB
+    vec3 indigo = vec3(0.388, 0.4, 0.945);    // #6366F1
+    vec3 purple = vec3(0.486, 0.227, 0.929);    // #7C3AED
+    vec3 bg = vec3(0.973, 0.98, 0.988);         // #F8FAFC
+    
+    // Animated noise/flow
+    float noise = sin(uv.x * 3.0 + u_time * 0.5) * cos(uv.y * 3.0 - u_time * 0.3);
+    float noise2 = sin(uv.y * 5.0 - u_time * 0.7) * cos(uv.x * 2.0 + u_time * 0.4);
+    
+    vec3 color = bg;
+    
+    // Layered soft blobs
+    float blob1 = smoothstep(0.6, 0.0, distance(uv + vec2(sin(u_time*0.4)*0.2, cos(u_time*0.3)*0.2), vec2(0.3, 0.3)));
+    float blob2 = smoothstep(0.7, 0.0, distance(uv + vec2(cos(u_time*0.5)*0.3, sin(u_time*0.4)*0.1), vec2(0.7, 0.6)));
+    float blob3 = smoothstep(0.5, 0.0, distance(uv + vec2(sin(u_time*0.6)*0.1, sin(u_time*0.2)*0.3), vec2(0.5, 0.4)));
+    
+    color = mix(color, royalBlue, blob1 * 0.15);
+    color = mix(color, indigo, blob2 * 0.12);
+    color = mix(color, purple, blob3 * 0.1);
+    
+    // Add subtle grain
+    float grain = (fract(sin(dot(uv, vec2(12.9898, 78.233))) * 43758.5453) - 0.5) * 0.02;
+    color += grain;
+    
+    gl_FragColor = vec4(color, 1.0);
+}`;
+  function cs(type, src) {
+    const s = gl.createShader(type);
+    gl.shaderSource(s, src);
+    gl.compileShader(s);
+    return s;
+  }
+  const prog = gl.createProgram();
+  gl.attachShader(prog, cs(gl.VERTEX_SHADER, vs));
+  gl.attachShader(prog, cs(gl.FRAGMENT_SHADER, fs));
+  gl.linkProgram(prog);
+  gl.useProgram(prog);
+  const buf = gl.createBuffer();
+  gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1, 1,-1, -1,1, 1,1]), gl.STATIC_DRAW);
+  const pos = gl.getAttribLocation(prog, 'a_position');
+  gl.enableVertexAttribArray(pos);
+  gl.vertexAttribPointer(pos, 2, gl.FLOAT, false, 0, 0);
+  const uTime = gl.getUniformLocation(prog, 'u_time');
+  const uRes = gl.getUniformLocation(prog, 'u_resolution');
+  const uMouse = gl.getUniformLocation(prog, 'u_mouse');
+
+  // u_mouse is in pixel coordinates matching u_resolution (ShaderToy convention).
+  // Shaders that need normalized coords should use: u_mouse / u_resolution.
+  let mouse = { x: canvas.width / 2, y: canvas.height / 2 };
+  window.addEventListener('mousemove', (event) => {
+    const rect = canvas.getBoundingClientRect();
+    if (rect.width && rect.height) {
+      const nx = (event.clientX - rect.left) / rect.width;
+      const ny = 1.0 - (event.clientY - rect.top) / rect.height;
+      mouse.x = nx * canvas.width;
+      mouse.y = ny * canvas.height;
+    }
+  });
+
+  function render(t) {
+    if (typeof ResizeObserver === 'undefined') syncSize();
+    gl.viewport(0, 0, canvas.width, canvas.height);
+    if (uTime) gl.uniform1f(uTime, t * 0.001);
+    if (uRes) gl.uniform2f(uRes, canvas.width, canvas.height);
+    if (uMouse) gl.uniform2f(uMouse, mouse.x, mouse.y);
+    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+    requestAnimationFrame(render);
+  }
+  render(0);
+})();
+</script>
+</div>
+<!-- STITCH_SHADER_END:ANIMATION_35 -->
+</div>
+<!-- Main Content Wrapper -->
+<main class="relative z-10 flex flex-col items-center justify-center h-full px-container-padding text-center">
+<!-- Logo Section -->
+<div class="animate-fade-in-up" style="animation-delay: 0.2s;">
+<div class="animate-float">
+<div class="glass-card w-32 h-32 md:w-40 md:h-40 rounded-[32px] flex items-center justify-center shadow-2xl overflow-hidden mb-stack-gap-lg">
+<img alt="Employee Portal AI Logo" class="w-full h-full object-cover p-4" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCBmJUKMKLiydFMdqTG6sKOTPron7JiywhQY1-Ny1_uqsKEBr42KaB__xlVgHpFG8HccjqXtq8YbQvg7_7YXzO8Fs5G-S9iVRezERD0QvTFAEjAk7YZYSdsXOX_fIhJA0R4tCVK9r37oyWEMQ69uDoy9yBOYrtFWFMNlCA_yE3HidUHe9SFnWrDRN2QCRTxxQ1IIL5nhiO5_Qc_5S3AxAUdaxaWNOAHKipd5AcTjETmDcZC4fpEypbcFbFwxNBFocM27SPW4AXHWvI">
+</div>
+</div>
+</div>
+<!-- Typography Section -->
+<div class="animate-fade-in-up flex flex-col gap-unit" style="animation-delay: 0.6s;">
+<h1 class="font-display-lg-mobile text-display-lg-mobile md:font-display-lg md:text-display-lg text-primary-fixed-variant tracking-tight font-extrabold">
+                Employee Portal AI
+            </h1>
+<p class="font-body-md text-body-md text-on-surface-variant/80 tracking-wide">
+                Your workplace. Simplified.
+            </p>
+</div>
+<!-- Bottom Loading Section -->
+<div class="absolute bottom-24 left-0 w-full flex flex-col items-center animate-fade-in-up" style="animation-delay: 1.2s;">
+<!-- AI Pulse Indicator -->
+<div class="relative w-12 h-12 mb-stack-gap-md flex items-center justify-center">
+<div class="absolute inset-0 bg-primary/20 rounded-full animate-pulse-ring"></div>
+<div class="absolute inset-2 bg-primary/40 rounded-full animate-pulse-ring" style="animation-delay: -1.5s;"></div>
+<div class="relative z-20 w-4 h-4 bg-primary rounded-full shadow-[0_0_15px_rgba(37,99,235,0.6)]"></div>
+</div>
+<p class="font-label-md text-label-md text-on-surface-variant/60 animate-pulse">
+                Preparing your workspace...
+            </p>
+</div>
+</main>
+<!-- Overlay for transition out -->
+<div class="fixed inset-0 bg-white z-[100] opacity-0 pointer-events-none transition-opacity duration-700" id="transition-overlay"></div>
+<script>
+        // Micro-interaction: Simulate redirection after 3 seconds
+        window.addEventListener('load', () => {
+            setTimeout(() => {
+                const overlay = document.getElementById('transition-overlay');
+                overlay.classList.remove('opacity-0');
+                overlay.classList.add('opacity-100');
+                
+                // Logic for real redirection would go here:
+                // window.location.href = '/dashboard';
+            }, 3000);
+        });
+
+        // Subtle interactive effect: Logo follows mouse slightly
+        document.addEventListener('mousemove', (e) => {
+            const logo = document.querySelector('.animate-float');
+            if (!logo) return;
+            const x = (window.innerWidth / 2 - e.pageX) / 40;
+            const y = (window.innerHeight / 2 - e.pageY) / 40;
+            logo.style.transform = `translate(${x}px, ${y}px)`;
+        });
+    </script>
+</body></html>
