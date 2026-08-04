@@ -6,4 +6,6 @@ export const env = {
   demoEmail: process.env.NEXT_PUBLIC_DEMO_EMAIL ?? "admin@example.com",
   /** Shared default for every demo / module login account. */
   demoPassword: process.env.NEXT_PUBLIC_DEMO_PASSWORD || "Secure1!",
+  /** ElevenLabs Convai widget (authenticated app shell only). */
+  elevenlabsAgentId: process.env.NEXT_PUBLIC_ELEVENLABS_AGENT_ID ?? "",
 } as const;

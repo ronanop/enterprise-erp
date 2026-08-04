@@ -41,6 +41,11 @@ class ConflictException(AppException):
         super().__init__(message, status_code=status.HTTP_409_CONFLICT)
 
 
+class ValidationException(AppException):
+    def __init__(self, message: str = "Validation error") -> None:
+        super().__init__(message, status_code=status.HTTP_422_UNPROCESSABLE_ENTITY)
+
+
 class TooManyRequestsException(AppException):
     def __init__(self, message: str = "Too many requests") -> None:
         super().__init__(message, status_code=status.HTTP_429_TOO_MANY_REQUESTS)

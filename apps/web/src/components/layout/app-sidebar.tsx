@@ -59,7 +59,9 @@ export function AppSidebar() {
             <p className="truncate text-sm font-medium tracking-tight text-sidebar-foreground">
               {env.appName}
             </p>
-            <p className="truncate text-[11px] text-sidebar-foreground/55">23 modules · live API</p>
+            <p className="truncate text-[11px] text-sidebar-foreground/55">
+              {navigation.reduce((n, g) => n + g.items.length, 0)} modules · live API
+            </p>
           </div>
         ) : null}
       </div>

@@ -10,6 +10,8 @@ import {
   Handshake,
   Headphones,
   LayoutDashboard,
+  Mail,
+  Mic,
   Package,
   Plug,
   Scale,
@@ -41,6 +43,8 @@ export type NavGroup = {
 const iconMap: Record<ErpModule["icon"], LucideIcon> = {
   dashboard: LayoutDashboard,
   shield: Shield,
+  mail: Mail,
+  voice: Mic,
   building: Building2,
   boxes: Boxes,
   wallet: Wallet,

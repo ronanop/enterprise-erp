@@ -32,6 +32,16 @@ const REF_KEYS = new Set([
   "journal_number",
   "request_number",
   "channel_number",
+  "policy_number",
+  "risk_number",
+  "capa_number",
+  "assessment_number",
+  "framework_code",
+  "requirement_code",
+  "audit_number",
+  "incident_number",
+  "exception_number",
+  "control_number",
 ]);
 
 function normalizeRows(data: unknown): Record<string, unknown>[] {

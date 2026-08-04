@@ -7,6 +7,7 @@ import { CrmSidebar } from "@/components/crm/crm-workspace-nav";
 import { AppSidebar } from "@/components/layout/app-sidebar";
 import { AppTopbar } from "@/components/layout/app-topbar";
 import { ProjectsSidebar } from "@/components/projects/projects-workspace-nav";
+import { ElevenLabsConvaiWidget } from "@/components/elevenlabs/convai-widget";
 import { useStandaloneChrome } from "@/hooks/use-standalone-chrome";
 
 interface AppShellProps {
@@ -33,6 +34,7 @@ export function AppShell({ children }: AppShellProps) {
           </div>
         </main>
       </div>
+      <ElevenLabsConvaiWidget />
     </div>
   );
 }

@@ -12,6 +12,16 @@ class OrmModel(BaseModel):
 
 class PolicyCreate(BaseModel):
     company_id: UUID | None = None
+    branch_id: UUID | None = None
+    policy_code: str
+    policy_name: str
+    policy_type: str
+    owner_employee_id: UUID
+    department_id: UUID | None = None
+    effective_from: date | None = None
+    effective_to: date | None = None
+    review_due_at: date | None = None
+    document_id: UUID | None = None
     status: str | None = None
 
 class PolicyUpdate(BaseModel):
@@ -82,6 +92,17 @@ class PolicyAcknowledgementResponse(OrmModel):
 
 class ControlCreate(BaseModel):
     company_id: UUID | None = None
+    branch_id: UUID | None = None
+    control_code: str
+    control_name: str
+    control_type: str
+    owner_employee_id: UUID
+    department_id: UUID | None = None
+    policy_id: UUID | None = None
+    risk_id: UUID | None = None
+    frequency: str | None = None
+    description: str | None = None
+    document_id: UUID | None = None
     status: str | None = None
 
 class ControlUpdate(BaseModel):
@@ -151,6 +172,17 @@ class RiskCategoryResponse(OrmModel):
 class RiskRegisterCreate(BaseModel):
     company_id: UUID | None = None
     branch_id: UUID
+    risk_title: str
+    risk_category_id: UUID
+    owner_employee_id: UUID
+    department_id: UUID | None = None
+    description: str | None = None
+    inherent_impact: int | None = None
+    inherent_probability: int | None = None
+    residual_impact: int | None = None
+    residual_probability: int | None = None
+    risk_level: str | None = None
+    next_review_at: date | None = None
     status: str | None = None
 
 class RiskRegisterUpdate(BaseModel):
@@ -237,6 +269,13 @@ class RiskTreatmentResponse(OrmModel):
 
 class ComplianceFrameworkCreate(BaseModel):
     company_id: UUID | None = None
+    framework_code: str
+    framework_name: str
+    framework_type: str
+    jurisdiction: str | None = None
+    description: str | None = None
+    owner_employee_id: UUID | None = None
+    document_id: UUID | None = None
     status: str | None = None
 
 class ComplianceFrameworkUpdate(BaseModel):
@@ -258,6 +297,13 @@ class ComplianceFrameworkResponse(OrmModel):
 
 class ComplianceRequirementCreate(BaseModel):
     company_id: UUID | None = None
+    framework_id: UUID
+    requirement_code: str
+    requirement_name: str
+    description: str | None = None
+    compliance_area: str | None = None
+    owner_employee_id: UUID | None = None
+    due_date: date | None = None
     status: str | None = None
 
 class ComplianceRequirementUpdate(BaseModel):
@@ -280,6 +326,12 @@ class ComplianceRequirementResponse(OrmModel):
 class ComplianceAssessmentCreate(BaseModel):
     company_id: UUID | None = None
     branch_id: UUID
+    requirement_id: UUID
+    assessed_by_employee_id: UUID
+    compliance_status: str | None = None
+    evidence_summary: str | None = None
+    document_id: UUID | None = None
+    next_due_at: date | None = None
     status: str | None = None
 
 class ComplianceAssessmentUpdate(BaseModel):
@@ -519,3 +571,22 @@ class ReportResponse(OrmModel):
     status: str
     company_id: UUID
     version: int
+
+
+class GrcOverviewResponse(BaseModel):
+    kpis: dict
+    compliance_status_mix: dict
+    automated_signal_codes: list[str]
+
+
+class ComplianceMonitorRefreshRequest(BaseModel):
+    company_id: UUID | None = None
+    branch_id: UUID | None = None
+
+
+class ComplianceMonitorRefreshResponse(BaseModel):
+    company_id: str
+    requirements_checked: int
+    assessments_updated: int
+    requirements_skipped: int
+    results: list[dict]

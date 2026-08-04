@@ -153,6 +153,15 @@ class NotificationSendRequest(BaseModel):
     payload_json: dict | None = None
 
 
+class EmailComposeRequest(BaseModel):
+    to_address: str
+    subject: str
+    body_html: str
+    event_type: str = "email.compose"
+    template_id: UUID | None = None
+    payload_json: dict | None = None
+
+
 class SettingUpsertRequest(BaseModel):
     setting_value: str
     value_type: str = "string"
