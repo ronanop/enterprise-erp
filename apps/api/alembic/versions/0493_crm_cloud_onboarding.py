@@ -1,0 +1,35 @@
+"""Cloud opportunity onboarding date and completion flag."""
+
+import sys
+from collections.abc import Sequence
+from pathlib import Path
+
+import sqlalchemy as sa
+from alembic import op
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from helpers import add_column_if_missing  # noqa: E402
+
+revision: str = "0493_crm_cloud_onboarding"
+down_revision: str | None = "0490_crm_cloud_opportunity"
+branch_labels: str | Sequence[str] | None = None
+depends_on: str | Sequence[str] | None = None
+
+
+def upgrade() -> None:
+    add_column_if_missing(
+        "crm_opportunity",
+        sa.Column("onboarding_done", sa.Boolean(), nullable=False, server_default="false"),
+        schema="crm",
+    )
+    add_column_if_missing(
+        "crm_opportunity",
+        sa.Column("onboarding_date", sa.Date(), nullable=True),
+        schema="crm",
+    )
+
+
+def downgrade() -> None:
+    op.drop_column("crm_opportunity", "onboarding_date", schema="crm")
+    op.drop_column("crm_opportunity", "onboarding_done", schema="crm")

@@ -91,6 +91,7 @@ export type BlueprintActionPayload = {
   deal_reg_number?: string;
   valid_until?: string;
   deal_won_amount?: number;
+  onboarding_date?: string;
 };
 
 // ---------------------------------------------------------------------------
@@ -522,6 +523,22 @@ export type Opportunity = {
   oem_quote_attached?: boolean;
   customer_po_attached?: boolean;
   customer_po_approved?: boolean;
+  cloud_blueprint_variant?: string | null;
+  product_type?: string | null;
+  cloud_sub_product?: string | null;
+  customer_mrr?: number | null;
+  customer_arr?: number | null;
+  customer_discount_percent?: number | null;
+  distributor_discount_percent?: number | null;
+  profitability_percent?: number | null;
+  distributor_discount_locked?: boolean;
+  assessment_type?: string | null;
+  migration_credit_phase1?: number | null;
+  migration_credit_phase2?: number | null;
+  migration_credit_phase3?: number | null;
+  contract_attached?: boolean;
+  onboarding_done?: boolean;
+  onboarding_date?: string | null;
   version: number;
   created_at?: string | null;
 };
@@ -539,6 +556,29 @@ export async function listOpportunities(params?: {
 
 export async function getOpportunity(id: string): Promise<Opportunity> {
   return unwrap(await resourceService.get<Opportunity>(CRM_OPPORTUNITIES_API, id));
+}
+
+export type OpportunityUpdateInput = {
+  version: number;
+  opportunity_name?: string;
+  current_stage?: string;
+  expected_revenue?: number;
+  probability_percent?: number;
+  expected_close_date?: string | null;
+  customer_mrr?: number | null;
+  customer_arr?: number | null;
+  customer_discount_percent?: number | null;
+  distributor_discount_percent?: number | null;
+  assessment_type?: string | null;
+  migration_credit_phase1?: number | null;
+  migration_credit_phase2?: number | null;
+  migration_credit_phase3?: number | null;
+};
+
+export async function updateOpportunity(id: string, body: OpportunityUpdateInput): Promise<Opportunity> {
+  return unwrap(
+    await apiClient<Opportunity>(`${CRM_OPPORTUNITIES_API}/${id}`, { method: "PATCH", body }),
+  );
 }
 
 export async function getOpportunityBlueprint(id: string): Promise<BlueprintState> {

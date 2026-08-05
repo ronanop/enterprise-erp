@@ -95,7 +95,7 @@ export function GrcCompliancePage() {
   const mixRows = useMemo(() => {
     const mix = overview?.compliance_status_mix ?? {};
     const total =
-      Object.values(mix).reduce((a, b) => a + (typeof b === "number" ? b : 0), 0) || 1;
+      Object.values(mix).reduce((a: number, b) => a + (typeof b === "number" ? b : 0), 0) || 1;
     return Object.entries(mix).map(([key, count]) => ({
       key,
       label: MIX_LABELS[key] ?? key,

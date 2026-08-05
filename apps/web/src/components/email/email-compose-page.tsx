@@ -47,6 +47,10 @@ export function EmailComposePage() {
         template_id: templateId || null,
         event_type: "email.compose",
       });
+      if (!result) {
+        setError("Send failed — no response from server");
+        return;
+      }
       setMessage(`Email ${result.status} → ${result.recipient_address}`);
       router.push("/email/deliveries");
     } catch (err) {

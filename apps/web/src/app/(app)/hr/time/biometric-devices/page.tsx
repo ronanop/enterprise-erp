@@ -78,9 +78,9 @@ export default function BiometricDevicesPage() {
   const [branchId, setBranchId] = useState("");
   const [deviceModel, setDeviceModel] = useState<string>(DEVICE_MODELS[0].value);
   const [deviceCode, setDeviceCode] = useState("K40-01");
-  const [deviceName, setDeviceName] = useState(DEVICE_MODELS[0].defaultName);
+  const [deviceName, setDeviceName] = useState<string>(DEVICE_MODELS[0].defaultName);
   const [ipAddress, setIpAddress] = useState("");
-  const [port, setPort] = useState(DEVICE_MODELS[0].defaultPort);
+  const [port, setPort] = useState<string>(DEVICE_MODELS[0].defaultPort);
   const [location, setLocation] = useState("");
   const [createdApiKey, setCreatedApiKey] = useState<string | null>(null);
   const [feedDevice, setFeedDevice] = useState<Device | null>(null);

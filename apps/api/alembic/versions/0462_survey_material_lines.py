@@ -1,10 +1,16 @@
 """Add survey type+qty JSON lines for rack delivery materials."""
 
+import sys
 from collections.abc import Sequence
+from pathlib import Path
 
 import sqlalchemy as sa
 from alembic import op
 from sqlalchemy.dialects import postgresql
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from helpers import add_column_if_missing  # noqa: E402
 
 revision: str = "0462_survey_material_lines"
 down_revision: str | None = "0461_site_delivery_scopes"
@@ -16,7 +22,7 @@ SCHEMA = "project"
 
 
 def upgrade() -> None:
-    op.add_column(
+    add_column_if_missing(
         TABLE,
         sa.Column(
             "cable_lines",
@@ -26,7 +32,7 @@ def upgrade() -> None:
         ),
         schema=SCHEMA,
     )
-    op.add_column(
+    add_column_if_missing(
         TABLE,
         sa.Column(
             "lug_lines",
@@ -36,7 +42,7 @@ def upgrade() -> None:
         ),
         schema=SCHEMA,
     )
-    op.add_column(
+    add_column_if_missing(
         TABLE,
         sa.Column(
             "industrial_socket_lines",

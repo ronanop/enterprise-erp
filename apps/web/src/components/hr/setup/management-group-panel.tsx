@@ -119,7 +119,7 @@ export function ManagementGroupPanel({ tab }: { tab: HrSetupTab }) {
   function openCreate() {
     setMode("create");
     setActive(null);
-    setGroupCode(nextCode(tab.codePrefix ?? "MG", rows.length + 1));
+    setGroupCode(nextCode(tab.codePrefix ?? "MG", rows.map((r) => r.group_code)));
     setGroupName("");
     setDescription("");
     setEmploymentType("permanent");

@@ -39,6 +39,9 @@ export type ComplianceMonitorRefreshResult = {
 
 export async function loadGrcOverviewApi(): Promise<GrcOverviewApi> {
   const response = await apiClient<GrcOverviewApi>("/grc/overview", { method: "GET" });
+  if (!response.data) {
+    throw new ApiClientError("GRC overview returned no data", 502);
+  }
   return response.data;
 }
 
@@ -47,6 +50,9 @@ export async function refreshComplianceMonitor(): Promise<ComplianceMonitorRefre
     "/grc/compliance-monitor/refresh",
     { method: "POST", body: {} },
   );
+  if (!response.data) {
+    throw new ApiClientError("Compliance refresh returned no data", 502);
+  }
   return response.data;
 }
 

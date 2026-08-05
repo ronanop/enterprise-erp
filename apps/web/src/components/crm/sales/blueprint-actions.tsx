@@ -14,7 +14,15 @@ import { fileToBase64, type BlueprintActionPayload } from "@/services/sales-crm-
 type FieldType = "text" | "textarea" | "date" | "number" | "file";
 
 type FieldConfig = {
-  key: "remark" | "remarks" | "reason" | "deal_reg_number" | "valid_until" | "deal_won_amount" | "file_name";
+  key:
+    | "remark"
+    | "remarks"
+    | "reason"
+    | "deal_reg_number"
+    | "valid_until"
+    | "deal_won_amount"
+    | "onboarding_date"
+    | "file_name";
   label: string;
   type: FieldType;
   required?: boolean;
@@ -46,6 +54,35 @@ const ACTION_CONFIG: Record<string, ActionConfig> = {
     label: "Attach BOQ",
     fields: [{ key: "file_name", label: "BOQ files", type: "file", required: true }],
   },
+  attach_contract: {
+    label: "Attach Contract",
+    fields: [{ key: "file_name", label: "Contract file", type: "file", required: true }],
+    description: "Optional for cloud deals — customer contract or invoice evidence.",
+  },
+  send_cloud_discount_approval: {
+    label: "Send Cloud Discount for Approval",
+    fields: [REMARK_FIELD],
+    description:
+      "Routes MRR, ARR, customer discount, and profitability to Management via My Jobs.",
+  },
+  skip_map_oem_quote: {
+    label: "Skip MAP OEM Quote",
+    fields: [],
+    description: "Continue to onboarding when migration quote is not available yet.",
+  },
+  mark_onboarding_done: {
+    label: "Mark Onboarding Done",
+    fields: [
+      {
+        key: "onboarding_date",
+        label: "Date of onboarding",
+        type: "date",
+        required: true,
+      },
+    ],
+    description:
+      "Customer is onboarded on the payer account — closes the opportunity for sales; billing continues monthly.",
+  },
   send_boq_approval: {
     label: "Send BOQ for Approval",
     fields: [REMARK_FIELD],
@@ -69,6 +106,8 @@ const ACTION_CONFIG: Record<string, ActionConfig> = {
   attach_oem_quote: {
     label: "Attach OEM Quote",
     fields: [{ key: "file_name", label: "OEM quote file", type: "file", required: true }],
+    description:
+      "Hardware: OEM vendor quote. Cloud MAP migration: AWS migration quotation from the OEM.",
   },
   attach_po: {
     label: "Attach Customer PO",
@@ -117,8 +156,6 @@ type Props = {
   locked?: boolean;
   /** Actions rendered elsewhere by the parent (e.g. gated Create Quote / Create OVF CTAs). */
   excludeActions?: string[];
-  actionLabelOverrides?: Partial<Record<string, string>>;
-  actionDispatchOverrides?: Partial<Record<string, string>>;
   defaultValues?: Partial<Record<string, string | number | null>>;
   onAction: (action: string, payload: BlueprintActionPayload) => Promise<void>;
   disabled?: boolean;
@@ -128,8 +165,6 @@ export function BlueprintActions({
   allowedActions,
   locked,
   excludeActions,
-  actionLabelOverrides,
-  actionDispatchOverrides,
   defaultValues,
   onAction,
   disabled,
@@ -185,12 +220,12 @@ export function BlueprintActions({
   async function confirm() {
     if (!activeAction) return;
     const config = resolveConfig(activeAction);
-    const dispatchAction = actionDispatchOverrides?.[activeAction] ?? activeAction;
     const isMultiFile =
-      dispatchAction === "attach_boq" ||
-      dispatchAction === "attach_sow" ||
-      dispatchAction === "attach_oem_quote" ||
-      dispatchAction === "attach_po";
+      activeAction === "attach_boq" ||
+      activeAction === "attach_sow" ||
+      activeAction === "attach_oem_quote" ||
+      activeAction === "attach_po" ||
+      activeAction === "attach_contract";
     for (const field of config.fields) {
       if (field.required && field.type !== "file" && !values[field.key]?.trim()) {
         setError(`${field.label} is required`);
@@ -218,6 +253,7 @@ export function BlueprintActions({
         if (!raw) continue;
         if (field.key === "deal_won_amount") payloadBase.deal_won_amount = Number(raw);
         else if (field.key === "valid_until") payloadBase.valid_until = raw;
+        else if (field.key === "onboarding_date") payloadBase.onboarding_date = raw;
         else (payloadBase as Record<string, string>)[field.key] = raw;
       }
       if (activeAction === "lost" && values.reason) {
@@ -226,7 +262,7 @@ export function BlueprintActions({
       const uploadList = isMultiFile ? files : file ? [file] : [];
       if (uploadList.length > 0) {
         for (const upload of uploadList) {
-          await onAction(dispatchAction, {
+          await onAction(activeAction, {
             ...payloadBase,
             file_name: upload.name,
             content_type: upload.type || "application/octet-stream",
@@ -234,11 +270,11 @@ export function BlueprintActions({
           });
         }
       } else {
-        await onAction(dispatchAction, payloadBase);
+        await onAction(activeAction, payloadBase);
       }
       close();
     } catch (err) {
-      setError(err instanceof ApiClientError ? err.message : `Failed to ${dispatchAction}`);
+      setError(err instanceof ApiClientError ? err.message : `Failed to ${activeAction}`);
     } finally {
       setBusy(false);
     }
@@ -249,17 +285,10 @@ export function BlueprintActions({
     const rank = (action: string) => {
       if (action === "attach_sow") return 0;
       if (action === "attach_boq") return 1;
-      if (action === "send_boq_approval") return 2;
-      if (action === "send_sow_approval") return 3;
-      if (action === "deal_reg") return 4;
-      if (action === "send_to_customer") return 5;
-      if (action === "accept") return 6;
-      if (action === "negotiate") return 7;
-      if (action === "follow_up") return 8;
-      if (action === "attach_po") return 9;
-      if (action === "send_po_approval") return 10;
-      if (action === "lost") return 20;
-      return 15;
+      if (action === "deal_reg") return 2;
+      if (action === "lost") return 3;
+      if (action === "send_sow_approval") return 4;
+      return 10;
     };
     return rank(a) - rank(b);
   });
@@ -272,7 +301,6 @@ export function BlueprintActions({
         </span>
         {orderedActions.map((action, index) => {
           const config = resolveConfig(action);
-          const label = actionLabelOverrides?.[action] ?? config.label;
           return (
             <Fragment key={action}>
               {action === "attach_boq" && orderedActions[index - 1] === "attach_sow" ? (
@@ -288,7 +316,7 @@ export function BlueprintActions({
                 disabled={disabled}
                 onClick={() => openAction(action)}
               >
-                {label}
+                {config.label}
               </Button>
             </Fragment>
           );
@@ -330,9 +358,10 @@ export function BlueprintActions({
                         <Paperclip className="size-3.5" />
                         Choose file
                         {activeAction === "attach_boq" ||
-                          activeAction === "attach_sow" ||
-                          activeAction === "attach_oem_quote" ||
-                          activeAction === "attach_po"
+                        activeAction === "attach_sow" ||
+                        activeAction === "attach_oem_quote" ||
+                        activeAction === "attach_po" ||
+                        activeAction === "attach_contract"
                           ? "s"
                           : ""}
                       </Button>
@@ -343,7 +372,8 @@ export function BlueprintActions({
                           activeAction === "attach_boq" ||
                           activeAction === "attach_sow" ||
                           activeAction === "attach_oem_quote" ||
-                          activeAction === "attach_po"
+                          activeAction === "attach_po" ||
+                          activeAction === "attach_contract"
                         }
                         className="sr-only"
                         onChange={(e) => {
@@ -352,7 +382,8 @@ export function BlueprintActions({
                             activeAction === "attach_boq" ||
                             activeAction === "attach_sow" ||
                             activeAction === "attach_oem_quote" ||
-                            activeAction === "attach_po"
+                            activeAction === "attach_po" ||
+                            activeAction === "attach_contract"
                           ) {
                             setFiles(selected);
                             setFile(selected[0] ?? null);

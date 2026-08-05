@@ -3,12 +3,15 @@
 from functools import lru_cache
 from pathlib import Path
 
-from pydantic import AliasChoices, Field, field_validator
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-# Resolve .env from apps/api regardless of uvicorn cwd
-_API_ROOT = Path(__file__).resolve().parents[2]  # apps/api
-_REPO_ROOT = _API_ROOT.parents[1]  # monorepo root
+# Resolve .env from apps/api regardless of uvicorn cwd (local: apps/api; Docker: /app)
+_API_ROOT = Path(__file__).resolve().parents[2]
+try:
+    _REPO_ROOT = _API_ROOT.parents[1]
+except IndexError:
+    _REPO_ROOT = _API_ROOT
 _ENV_FILES = (
     str(_API_ROOT / ".env"),
     str(_REPO_ROOT / ".env"),
@@ -58,6 +61,20 @@ class Settings(BaseSettings):
         ],
         alias="CORS_ORIGINS",
     )
+    # Optional regex for LAN/custom hosts (e.g. Coolify). Empty = disabled in production.
+    cors_origin_regex: str | None = Field(default=None, alias="CORS_ORIGIN_REGEX")
+
+    crm_upload_root: str = Field(
+        default="",
+        alias="CRM_UPLOAD_ROOT",
+        description="Directory for CRM attachment files; default apps/api/var/crm-attachments",
+    )
+
+    minio_endpoint: str = Field(default="", alias="MINIO_ENDPOINT")
+    minio_root_user: str = Field(default="", alias="MINIO_ROOT_USER")
+    minio_root_password: str = Field(default="", alias="MINIO_ROOT_PASSWORD")
+    minio_bucket: str = Field(default="erp-documents", alias="MINIO_BUCKET")
+    minio_secure: bool = Field(default=False, alias="MINIO_SECURE")
 
     jwt_secret_key: str = Field(default="change-me-in-production", alias="JWT_SECRET_KEY")
     jwt_algorithm: str = Field(default="HS256", alias="JWT_ALGORITHM")
@@ -85,20 +102,6 @@ class Settings(BaseSettings):
     # sync = deliver in-request (local/dev); async = Celery only
     email_delivery_mode: str = Field(default="sync", alias="EMAIL_DELIVERY_MODE")
 
-    # ElevenLabs Conversational AI (voice agent — server-side only)
-    xi_api_key: str = Field(
-        default="",
-        validation_alias=AliasChoices("XI_API_KEY", "ELEVENLABS_API_KEY"),
-    )
-    elevenlabs_agent_id: str = Field(default="", alias="ELEVENLABS_AGENT_ID")
-
-    # MCP server (ElevenLabs agent tool discovery)
-    mcp_server_base_url: str = Field(
-        default="http://127.0.0.1:8000",
-        alias="MCP_SERVER_BASE_URL",
-    )
-    mcp_auth_token: str = Field(default="", alias="MCP_AUTH_TOKEN")
-
     @field_validator("cors_origins", mode="before")
     @classmethod
     def parse_cors_origins(cls, value: str | list[str]) -> list[str]:
@@ -111,9 +114,30 @@ class Settings(BaseSettings):
             ]
         return value
 
+    @field_validator("cors_origin_regex", mode="before")
+    @classmethod
+    def parse_cors_origin_regex(cls, value: str | None) -> str | None:
+        if value is None or (isinstance(value, str) and not value.strip()):
+            return None
+        return value
+
     @property
     def is_development(self) -> bool:
         return self.environment.lower() == "development"
+
+    @property
+    def resolved_crm_upload_root(self) -> Path:
+        if self.crm_upload_root.strip():
+            return Path(self.crm_upload_root)
+        return _API_ROOT / "var" / "crm-attachments"
+
+    @property
+    def minio_configured(self) -> bool:
+        return bool(
+            self.minio_endpoint.strip()
+            and self.minio_root_user.strip()
+            and self.minio_root_password.strip()
+        )
 
     @property
     def graph_email_configured(self) -> bool:

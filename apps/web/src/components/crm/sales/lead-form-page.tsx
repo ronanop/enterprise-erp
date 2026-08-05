@@ -120,10 +120,12 @@ const SUB_PRODUCT_CATEGORIES: Record<ProductType, readonly string[]> = {
     "Others",
   ],
   Cloud: [
+    "Billing Shift",
+    "Cloud Migration",
+    "POC / Assessment",
     "IaaS",
     "PaaS",
     "SaaS",
-    "Cloud Migration",
     "Managed Cloud",
     "Others",
   ],
@@ -153,6 +155,8 @@ const INDUSTRIES = [
   "Others",
 ];
 
+const DISTRIBUTOR_PRESETS = ["Ingram", "Civics", "Crediton", "Inflow"] as const;
+const NEW_DISTRIBUTOR_VALUE = "__new_distributor__";
 const NEW_OEM_VALUE = "__new_oem__";
 
 type OemDraft = {
@@ -235,6 +239,7 @@ export function LeadFormPage({ companyAccountId }: { companyAccountId: string })
   const [oemDraft, setOemDraft] = useState<OemDraft>(EMPTY_OEM_DRAFT);
   const [oemSaving, setOemSaving] = useState(false);
   const [oemDialogError, setOemDialogError] = useState<string | null>(null);
+  const [distributorPick, setDistributorPick] = useState("");
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -331,6 +336,15 @@ export function LeadFormPage({ companyAccountId }: { companyAccountId: string })
     form.product_type && form.product_type in SUB_PRODUCT_CATEGORIES
       ? SUB_PRODUCT_CATEGORIES[form.product_type as ProductType]
       : [];
+
+  function onDistributorPickChange(value: string) {
+    setDistributorPick(value);
+    if (value === NEW_DISTRIBUTOR_VALUE) {
+      set("distributor_name", "");
+      return;
+    }
+    set("distributor_name", value);
+  }
 
   function onOemPickChange(value: string) {
     if (value === NEW_OEM_VALUE) {
@@ -722,11 +736,39 @@ export function LeadFormPage({ companyAccountId }: { companyAccountId: string })
       <CrmSection title="Distributor Information" icon={Truck}>
         <div className="grid gap-x-10 gap-y-3 md:grid-cols-2">
           <FinanceField label="Distributor Name">
-            <Input
-              value={form.distributor_name ?? ""}
-              onChange={(e) => set("distributor_name", e.target.value)}
-            />
+            <FinanceSelect
+              value={
+                distributorPick ||
+                (form.distributor_name &&
+                DISTRIBUTOR_PRESETS.includes(form.distributor_name as (typeof DISTRIBUTOR_PRESETS)[number])
+                  ? form.distributor_name
+                  : form.distributor_name
+                    ? NEW_DISTRIBUTOR_VALUE
+                    : "")
+              }
+              onChange={(e) => onDistributorPickChange(e.target.value)}
+            >
+              <option value="">None</option>
+              {DISTRIBUTOR_PRESETS.map((name) => (
+                <option key={name} value={name}>
+                  {name}
+                </option>
+              ))}
+              <option value={NEW_DISTRIBUTOR_VALUE}>Other / New</option>
+            </FinanceSelect>
           </FinanceField>
+          {(distributorPick === NEW_DISTRIBUTOR_VALUE ||
+            (form.distributor_name &&
+              !DISTRIBUTOR_PRESETS.includes(
+                form.distributor_name as (typeof DISTRIBUTOR_PRESETS)[number],
+              ))) ? (
+            <FinanceField label="Distributor name (custom)">
+              <Input
+                value={form.distributor_name ?? ""}
+                onChange={(e) => set("distributor_name", e.target.value)}
+              />
+            </FinanceField>
+          ) : null}
           <FinanceField label="Distributor Contact Person">
             <Input
               value={form.distributor_contact_person ?? ""}

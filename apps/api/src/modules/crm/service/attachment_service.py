@@ -13,12 +13,14 @@ from uuid import UUID
 
 from sqlalchemy.orm import Session
 
+from core.config import settings
 from core.exceptions import NotFoundException
 from modules.crm.repository.attachment_repository import AttachmentRepository
 from modules.crm.service.crm_scope_validator import CrmScopeValidator
 from modules.foundation.domain.value_objects import TenantContext
 
-UPLOAD_ROOT = Path(__file__).resolve().parents[4] / "var" / "crm-attachments"
+def _upload_root() -> Path:
+    return settings.resolved_crm_upload_root
 
 
 class AttachmentService:
@@ -51,7 +53,7 @@ class AttachmentService:
         path = Path(row.file_path)
         if not path.is_file():
             # Fallback: file may have been stored relative to the upload root.
-            candidate = UPLOAD_ROOT / path.name
+            candidate = _upload_root() / path.name
             if candidate.is_file():
                 path = candidate
             else:
@@ -78,10 +80,11 @@ class AttachmentService:
         stored_path = file_path
 
         if content_base64:
-            UPLOAD_ROOT.mkdir(parents=True, exist_ok=True)
+            upload_root = _upload_root()
+            upload_root.mkdir(parents=True, exist_ok=True)
             raw = base64.b64decode(content_base64)
             size = len(raw)
-            dest = UPLOAD_ROOT / f"{uuid.uuid4()}_{file_name}"
+            dest = upload_root / f"{uuid.uuid4()}_{file_name}"
             dest.write_bytes(raw)
             stored_path = str(dest)
             source = "upload"

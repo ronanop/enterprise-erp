@@ -8,7 +8,6 @@ import { HrSidebar } from "@/components/hr/hr-sidebar";
 import { AppSidebar } from "@/components/layout/app-sidebar";
 import { AppTopbar } from "@/components/layout/app-topbar";
 import { ProjectsSidebar } from "@/components/projects/projects-workspace-nav";
-import { ElevenLabsConvaiWidget } from "@/components/elevenlabs/convai-widget";
 import { isHrPath } from "@/config/hr-nav";
 import { useStandaloneChrome } from "@/hooks/use-standalone-chrome";
 
@@ -49,7 +48,6 @@ export function AppShell({ children }: AppShellProps) {
           </footer>
         ) : null}
       </div>
-      <ElevenLabsConvaiWidget />
     </div>
   );
 }

@@ -6,7 +6,7 @@ approval-gated steps to :class:`ApprovalTaskService` (My Jobs) and every
 transition to :mod:`sales_blueprint_engine`.
 """
 
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from typing import Any
 from uuid import UUID
 
@@ -17,6 +17,13 @@ from modules.crm.models import CrmOpportunity
 from modules.crm.repository.opportunity_repository import OpportunityRepository
 from modules.crm.repository.state_history_repository import StateHistoryRepository
 from modules.crm.service.attachment_service import AttachmentService
+from modules.crm.service.cloud_flow import (
+    HARDWARE_PIPELINE_ACTIONS,
+    VARIANT_MIGRATION,
+    filter_opportunity_actions,
+    is_cloud_opportunity,
+    uses_cloud_consumption_flow,
+)
 from modules.crm.service.crm_scope_validator import CrmScopeValidator
 from modules.crm.service.engines import sales_blueprint_engine
 from modules.foundation.domain.value_objects import TenantContext
@@ -62,7 +69,16 @@ _GATED_OPPORTUNITY_ACTIONS = {"create_quote", "quote_accepted", "create_ovf", "d
 # exactly what releases the lock (approve) or sends it back for rework
 # (reject). Only invoked by ApprovalTaskService._resume() from a My Jobs
 # decision, never directly by the generic action endpoint pre-lock.
-_UNLOCKING_ACTIONS = {"approve_boq", "reject_boq", "approve_sow", "reject_sow", "approve_po", "reject_po"}
+_UNLOCKING_ACTIONS = {
+    "approve_boq",
+    "reject_boq",
+    "approve_sow",
+    "reject_sow",
+    "approve_po",
+    "reject_po",
+    "approve_cloud_discount",
+    "reject_cloud_discount",
+}
 
 
 class OpportunityBlueprintService:
@@ -105,40 +121,16 @@ class OpportunityBlueprintService:
             # Keep create_quote / create_ovf for UI CTAs; drop quote_accepted / deal_won
             # which must never be invoked via the generic opportunity endpoint.
             allowed = [action for action in allowed if action not in {"quote_accepted", "deal_won"}]
+        allowed = filter_opportunity_actions(opp, allowed)
         if current == "boq_pending":
-            # Symmetric document step:
-            # - only BOQ attached  → Attach SOW + Send BOQ for Approval + Deal Registration
-            # - only SOW attached  → Attach BOQ + Send SOW for Approval + Deal Registration
-            # - both attached      → both approval buttons + Deal Registration, no attach buttons
-            if opp.boq_attached and opp.sow_attached:
-                allowed = [
-                    action for action in allowed if action not in {"attach_boq", "attach_sow"}
-                ]
-            elif opp.boq_attached:
-                allowed = [action for action in allowed if action != "attach_boq"]
-            elif opp.sow_attached:
+            # BOQ and SOW are alternatives in one document step. Once one is
+            # selected, only surface re-attachment for that document type.
+            if opp.boq_attached and not opp.sow_attached:
                 allowed = [action for action in allowed if action != "attach_sow"]
-            if not opp.boq_attached:
-                allowed = [action for action in allowed if action != "send_boq_approval"]
-            if not opp.sow_attached:
-                allowed = [action for action in allowed if action != "send_sow_approval"]
-            # Deal Registration is available once either document is attached.
-            if not opp.boq_attached and not opp.sow_attached:
-                allowed = [action for action in allowed if action != "deal_reg"]
-        # Hide attach/approval actions once the matching document is already present/approved,
-        # including later stages (e.g. deal_reg still lists attach_sow in the engine).
-        if opp.boq_attached:
-            allowed = [action for action in allowed if action != "attach_boq"]
-        if opp.sow_attached:
-            allowed = [action for action in allowed if action != "attach_sow"]
-        if opp.customer_po_attached:
-            allowed = [action for action in allowed if action != "attach_po"]
-        if opp.boq_approved or not opp.boq_attached:
-            allowed = [action for action in allowed if action != "send_boq_approval"]
-        if opp.sow_approved or not opp.sow_attached:
+            elif opp.sow_attached and not opp.boq_attached:
+                allowed = [action for action in allowed if action != "attach_boq"]
+        if opp.sow_approved:
             allowed = [action for action in allowed if action != "send_sow_approval"]
-        if opp.customer_po_approved or not opp.customer_po_attached:
-            allowed = [action for action in allowed if action != "send_po_approval"]
         return {
             "entity_type": "opportunity",
             "entity_id": opp.id,
@@ -167,23 +159,68 @@ class OpportunityBlueprintService:
                 "pending approval via My Jobs"
             )
 
+        if uses_cloud_consumption_flow(opp) and action in HARDWARE_PIPELINE_ACTIONS:
+            raise ConflictException(
+                f"Action '{action}' is not used in the cloud consumption sales flow "
+                "(no DR, BOQ/SOW, or hardware quote path)."
+            )
+        if (
+            action == "attach_oem_quote"
+            and uses_cloud_consumption_flow(opp)
+            and current != "map_oem_pending"
+        ):
+            raise ConflictException(
+                "Attach OEM quote is only for MAP migration opportunities awaiting "
+                "the AWS migration quotation."
+            )
+        if action == "deal_reg" and is_cloud_opportunity(opp):
+            raise ConflictException("Deal registration is not used for cloud consumption opportunities")
+
         next_state = sales_blueprint_engine.transition("opportunity", current, action, ctx)
         updates: dict[str, Any] = {}
 
-        if action == "attach_boq":
+        if action == "attach_contract":
+            self._attach(ctx, opp, payload, category="contract")
+            updates["contract_attached"] = True
+        elif action == "send_cloud_discount_approval":
+            self._validate_cloud_discount_fields(opp)
+            summary = self._cloud_approval_summary(opp)
+            self._raise_approval(
+                ctx,
+                opp,
+                action="approve_cloud_discount",
+                team_role=payload.get("team_role", "management"),
+                title=f"Approve Cloud Discount — {opp.opportunity_name}",
+                remarks=payload.get("remarks") or summary,
+            )
+            updates["locked"] = True
+        elif action == "approve_cloud_discount":
+            updates["locked"] = False
+            if is_cloud_opportunity(opp):
+                next_state = (
+                    "map_oem_pending"
+                    if opp.cloud_blueprint_variant == VARIANT_MIGRATION
+                    else "cloud_onboarding"
+                )
+        elif action == "reject_cloud_discount":
+            updates["locked"] = False
+        elif action == "attach_boq":
             self._attach(ctx, opp, payload, category="boq")
             updates["boq_attached"] = True
         elif action == "send_boq_approval":
-            if not opp.boq_attached:
-                raise ConflictException("Attach a BOQ before requesting approval")
-            if opp.boq_approved:
-                raise ConflictException("BOQ is already approved")
+            if is_cloud_opportunity(opp):
+                raise ConflictException(
+                    "Use Send Cloud Discount for Approval on cloud opportunities"
+                )
+            if not opp.boq_attached and not opp.sow_attached:
+                raise ConflictException("Attach a BOQ or SOW before requesting approval")
+            document_label = "SOW" if opp.sow_attached and not opp.boq_attached else "BOQ"
             self._raise_approval(
                 ctx,
                 opp,
                 action="approve_boq",
                 team_role=payload.get("team_role", "presales"),
-                title=f"Approve BOQ — {opp.opportunity_name}",
+                title=f"Approve {document_label} — {opp.opportunity_name}",
                 remarks=payload.get("remarks"),
             )
             updates["locked"] = True
@@ -202,10 +239,16 @@ class OpportunityBlueprintService:
             )
             updates["locked"] = True
         elif action == "approve_boq":
-            updates["boq_approved"] = True
+            if opp.sow_attached and not opp.boq_attached:
+                updates["sow_approved"] = True
+            else:
+                updates["boq_approved"] = True
             updates["locked"] = False
         elif action == "reject_boq":
-            updates["boq_approved"] = False
+            if opp.sow_attached and not opp.boq_attached:
+                updates["sow_approved"] = False
+            else:
+                updates["boq_approved"] = False
             updates["locked"] = False
         elif action == "approve_sow":
             updates["sow_approved"] = True
@@ -228,6 +271,24 @@ class OpportunityBlueprintService:
         elif action == "attach_oem_quote":
             self._attach(ctx, opp, payload, category="oem_quote")
             updates["oem_quote_attached"] = True
+            if current == "map_oem_pending":
+                next_state = "cloud_onboarding"
+        elif action == "skip_map_oem_quote":
+            if current != "map_oem_pending":
+                raise ConflictException("skip_map_oem_quote is only available during MAP OEM quote step")
+            next_state = "cloud_onboarding"
+        elif action == "mark_onboarding_done":
+            raw_date = payload.get("onboarding_date")
+            if not raw_date:
+                raise ConflictException("onboarding_date is required")
+            onboarding_date = raw_date if isinstance(raw_date, date) else date.fromisoformat(str(raw_date)[:10])
+            updates["onboarding_date"] = onboarding_date
+            updates["onboarding_done"] = True
+            updates["status"] = "won"
+            updates["current_stage"] = "won"
+            updates["probability_percent"] = 100
+            updates["forecast_amount"] = opp.expected_revenue
+            updates["won_at"] = utcnow()
         elif action == "attach_po":
             self._attach(ctx, opp, payload, category="customer_po")
             updates["customer_po_attached"] = True
@@ -330,4 +391,22 @@ class OpportunityBlueprintService:
             company_id=opp.company_id,
             branch_id=opp.branch_id,
             remarks=remarks,
+        )
+
+    def _validate_cloud_discount_fields(self, opp: CrmOpportunity) -> None:
+        if not is_cloud_opportunity(opp):
+            raise ConflictException("Cloud discount approval is only for cloud opportunities")
+        if opp.customer_mrr is None or opp.customer_arr is None:
+            raise ConflictException("Set customer MRR and ARR before sending for approval")
+        if opp.customer_discount_percent is None:
+            raise ConflictException("Set customer discount % before sending for approval")
+        if opp.distributor_discount_percent is None:
+            raise ConflictException("Distributor discount % is required")
+
+    def _cloud_approval_summary(self, opp: CrmOpportunity) -> str:
+        return (
+            f"MRR: {opp.customer_mrr}; ARR: {opp.customer_arr}; "
+            f"Customer discount: {opp.customer_discount_percent}%; "
+            f"Distributor discount: {opp.distributor_discount_percent}%; "
+            f"Profitability: {opp.profitability_percent}%"
         )

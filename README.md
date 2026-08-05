@@ -38,6 +38,8 @@ enterprise-erp-platform/
 │   └── web/          # Next.js frontend
 ├── docs/             # Architecture documentation
 ├── docker-compose.yml
+├── docker-compose.coolify.yml
+├── .env.coolify.example
 └── .env.example
 ```
 
@@ -81,6 +83,10 @@ npm run dev
 ```
 
 App: http://localhost:3000
+
+## Deploy on Coolify
+
+See **[docs/deploy/COOLIFY.md](docs/deploy/COOLIFY.md)** for the full stack (`docker-compose.coolify.yml`, separate Coolify apps, env template `.env.coolify.example`).
 
 ## Quality Checks
 

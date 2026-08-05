@@ -72,6 +72,12 @@ export function EmailDashboard() {
     setTestDetails([]);
     try {
       const result = await testEmailConnection();
+      if (!result) {
+        setTestOk(false);
+        setTestMessage("Failed — no response from server");
+        setTestDetails([]);
+        return;
+      }
       setTestOk(result.ok);
       setTestMessage(result.ok ? `OK — ${result.message}` : `Failed — ${result.message}`);
       const lines: string[] = [];

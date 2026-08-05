@@ -5,6 +5,7 @@ from collections.abc import Sequence
 from pathlib import Path
 
 from alembic import op
+from sqlalchemy import inspect
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
 
@@ -17,7 +18,16 @@ depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:
-    HrEmployment.__table__.create(bind=op.get_bind(), checkfirst=True)
+    bind = op.get_bind()
+    table = HrEmployment.__table__
+    if inspect(bind).has_table("hr_employment", schema="hr"):
+        return
+    col = table.c.management_group_id
+    table._columns.remove(col)
+    try:
+        table.create(bind=bind, checkfirst=True)
+    finally:
+        table._columns.add(col)
 
 
 def downgrade() -> None:

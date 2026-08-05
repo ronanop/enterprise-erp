@@ -44,6 +44,27 @@ _TRANSITIONS: dict[str, dict[str, dict[str, str]]] = {
         "open": {
             "attach_boq": "boq_pending",
             "attach_sow": "boq_pending",
+            "attach_contract": "cloud_docs",
+            "send_cloud_discount_approval": "cloud_discount_approval",
+            "lost": "lost",
+        },
+        "cloud_docs": {
+            "attach_contract": "cloud_docs",
+            "send_cloud_discount_approval": "cloud_discount_approval",
+            "lost": "lost",
+        },
+        "cloud_discount_approval": {
+            "approve_cloud_discount": "cloud_onboarding",
+            "reject_cloud_discount": "cloud_docs",
+            "lost": "lost",
+        },
+        "map_oem_pending": {
+            "attach_oem_quote": "cloud_onboarding",
+            "skip_map_oem_quote": "cloud_onboarding",
+            "lost": "lost",
+        },
+        "cloud_onboarding": {
+            "mark_onboarding_done": "won",
             "lost": "lost",
         },
         "boq_pending": {
