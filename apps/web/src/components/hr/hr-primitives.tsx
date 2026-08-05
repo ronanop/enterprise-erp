@@ -1,8 +1,11 @@
 "use client";
 
 import type { ReactNode } from "react";
+import { useEffect } from "react";
 import Link from "next/link";
 import { Inbox, RefreshCw } from "lucide-react";
+
+import { redirectToLogin } from "@/lib/auth";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -54,9 +57,13 @@ export function HrEmptyState({
 }
 
 export function HrAuthBanner() {
+  useEffect(() => {
+    redirectToLogin();
+  }, []);
+
   return (
     <div className="rounded-xl border border-dashed border-amber-300/80 bg-amber-50 px-4 py-3 text-sm text-amber-950">
-      Sign in to load live HRMS data.{" "}
+      Session not found. Redirecting to sign in…{" "}
       <Link href="/login" className="cursor-pointer font-medium underline underline-offset-2">
         Go to login
       </Link>

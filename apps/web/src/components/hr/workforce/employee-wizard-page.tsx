@@ -129,6 +129,14 @@ export function EmployeeWizardPage() {
     void load();
   }, [load]);
 
+  const reportingManagerOptions = useMemo(() => {
+    const list = options?.managers ?? [];
+    const cur = draft.employment.reportingManagerId;
+    if (!cur || list.some((m) => m.id === cur)) return list;
+    const extra = options?.employees.find((e) => e.id === cur);
+    return extra ? [...list, { id: cur, label: extra.label }] : list;
+  }, [options?.managers, options?.employees, draft.employment.reportingManagerId]);
+
   const stepErrors = useMemo(() => {
     const e: string[] = [];
     if (step === 0) {
@@ -768,19 +776,19 @@ export function EmployeeWizardPage() {
                   ))}
                 </SetupSelect>
               </SetupField>
-              <SetupField label="Reporting manager">
+              <SetupField label="Reporting manager" hint="Only reporting managers (not all employees)">
                 <SetupSelect
                   value={draft.employment.reportingManagerId}
                   onChange={(e) => {
                     const id = e.target.value;
                     patchEmployment({
                       reportingManagerId: id,
-                      reportingManagerName: options?.managers.find((m) => m.id === id)?.label.split(" (")[0] ?? "",
+                      reportingManagerName: reportingManagerOptions.find((m) => m.id === id)?.label.split(" (")[0] ?? "",
                     });
                   }}
                 >
                   <option value="">None</option>
-                  {options?.managers.map((m) => (
+                  {reportingManagerOptions.map((m) => (
                     <option key={m.id} value={m.id}>{m.label}</option>
                   ))}
                 </SetupSelect>

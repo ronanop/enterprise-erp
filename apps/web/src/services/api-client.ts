@@ -1,4 +1,10 @@
-import { clearTokens, getAccessToken, getRefreshToken, setTokens } from "@/lib/auth";
+import {
+  clearTokens,
+  getAccessToken,
+  getRefreshToken,
+  redirectToLogin,
+  setTokens,
+} from "@/lib/auth";
 import { env } from "@/utils/env";
 import type { ApiResponse, ErrorResponse, TokenData, UserProfile } from "@/types/api";
 
@@ -81,14 +87,6 @@ async function refreshAccessToken(): Promise<boolean> {
   return refreshInFlight;
 }
 
-function redirectToLogin(): void {
-  if (typeof window === "undefined") return;
-  const path = window.location.pathname;
-  if (path.startsWith("/login") || path.startsWith("/onboarding")) return;
-  const next = `${path}${window.location.search}`;
-  window.location.assign(`/login?next=${encodeURIComponent(next)}`);
-}
-
 /**
  * Foundation HTTP client for all API communication.
  * UI must never access the database directly (DG-01).
@@ -99,6 +97,12 @@ export async function apiClient<T>(
 ): Promise<ApiResponse<T>> {
   const { body, headers, auth = true, query, _retried = false, ...rest } = options;
   const token = auth ? getAccessToken() : null;
+
+  if (auth && !token) {
+    clearTokens();
+    redirectToLogin();
+    throw new ApiClientError("No active session. Please sign in.", 401);
+  }
 
   let response: Response;
   try {
@@ -120,10 +124,12 @@ export async function apiClient<T>(
     );
   }
 
-  if (response.status === 401 && auth && !_retried) {
-    const refreshed = await refreshAccessToken();
-    if (refreshed) {
-      return apiClient<T>(path, { ...options, _retried: true });
+  if (response.status === 401 && auth) {
+    if (!_retried) {
+      const refreshed = await refreshAccessToken();
+      if (refreshed) {
+        return apiClient<T>(path, { ...options, _retried: true });
+      }
     }
     clearTokens();
     redirectToLogin();
@@ -217,6 +223,12 @@ export async function downloadApiFile(
   _retried = false,
 ): Promise<void> {
   const token = getAccessToken();
+  if (!token) {
+    clearTokens();
+    redirectToLogin();
+    throw new ApiClientError("No active session. Please sign in.", 401);
+  }
+
   let response: Response;
   try {
     response = await fetch(buildUrl(path, query), {
@@ -234,10 +246,12 @@ export async function downloadApiFile(
     );
   }
 
-  if (response.status === 401 && !_retried) {
-    const refreshed = await refreshAccessToken();
-    if (refreshed) {
-      return downloadApiFile(path, query, fallbackName, true);
+  if (response.status === 401) {
+    if (!_retried) {
+      const refreshed = await refreshAccessToken();
+      if (refreshed) {
+        return downloadApiFile(path, query, fallbackName, true);
+      }
     }
     clearTokens();
     redirectToLogin();

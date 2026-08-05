@@ -28,3 +28,12 @@ export function clearTokens() {
 export function isAuthenticated(): boolean {
   return Boolean(getAccessToken());
 }
+
+/** Send user to login with return URL (client-only). */
+export function redirectToLogin(): void {
+  if (typeof window === "undefined") return;
+  const path = window.location.pathname;
+  if (path.startsWith("/login") || path.startsWith("/onboarding")) return;
+  const next = `${path}${window.location.search}`;
+  window.location.assign(`/login?next=${encodeURIComponent(next)}`);
+}

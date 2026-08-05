@@ -1,4 +1,4 @@
-import { resourceService } from "@/services/api-client";
+import { apiClient, resourceService } from "@/services/api-client";
 import { loadEmployeeDirectory } from "@/services/employee-management-service";
 import type { HrRow } from "@/services/hr-service";
 import type {
@@ -300,6 +300,7 @@ export async function loadLeaveDirectory(): Promise<LeaveDirectory> {
       employeeId: String(row.employee_id),
       employeeName: emp?.displayName ?? "",
       employeeCode: emp?.employeeCode ?? "",
+      branchId: String(row.branch_id ?? emp?.branchId ?? ""),
       leaveTypeId: String(row.leave_type_id),
       leaveTypeName: lt?.name ?? "—",
       leaveTypeCode: lt?.code ?? "",
@@ -313,6 +314,7 @@ export async function loadLeaveDirectory(): Promise<LeaveDirectory> {
       opening,
       accrued,
       closing,
+      version: Number(row.version ?? 1),
     };
   });
 
@@ -928,9 +930,74 @@ export async function updateLeaveTypePolicy(
     action: "leave_type_updated",
     detail: `${patch.name || leaveType.name} (${leaveType.code}) · max ${patch.maxDays}/yr · ${
       patch.daysPerMonth
-    }/mo · ${patch.isPaid ? "paid" : "unpaid"} · CF ${patch.carryForwardAllowed ? "yes" : "no"} · approval ${
-      patch.approvalRequired ? "required" : "optional"
-    }`,
+    }/mo · ${patch.isPaid ? "paid" : "unpaid"} · CF ${patch.carryForwardAllowed ? "yes" : "no"    }`,
+    actor: actor(),
+  });
+}
+
+export async function createEmployeeLeaveBalance(input: {
+  branchId: string;
+  employeeId: string;
+  leaveTypeId: string;
+  balanceYear: number;
+  openingBalance?: number;
+  accruedDays?: number;
+}): Promise<void> {
+  await resourceService.create("/hr/leave-balances", {
+    branch_id: input.branchId,
+    employee_id: input.employeeId,
+    leave_type_id: input.leaveTypeId,
+    balance_year: input.balanceYear,
+    opening_balance: input.openingBalance ?? 0,
+    accrued: input.accruedDays ?? 0,
+    used: 0,
+    status: "open",
+  });
+  appendLeaveAudit({
+    requestId: input.employeeId,
+    action: "leave_balance_assigned",
+    detail: `Assigned leave type ${input.leaveTypeId} for ${input.balanceYear}`,
+    actor: actor(),
+  });
+}
+
+export async function removeEmployeeLeaveBalance(balanceId: string): Promise<void> {
+  await resourceService.delete("/hr/leave-balances", balanceId);
+  appendLeaveAudit({
+    requestId: balanceId,
+    action: "leave_balance_removed",
+    detail: `Removed leave balance ${balanceId}`,
+    actor: actor(),
+  });
+}
+
+/** Credit or debit days for a calendar month (posts via leave-adjustments/apply). */
+export async function applyLeaveMonthAdjustment(input: {
+  branchId: string;
+  employeeId: string;
+  leaveTypeId: string;
+  /** YYYY-MM */
+  month: string;
+  daysDelta: number;
+  reason?: string;
+}): Promise<void> {
+  const [y, m] = input.month.split("-").map(Number);
+  const adjustmentMonth = `${y}-${String(m).padStart(2, "0")}-01`;
+  await apiClient("/hr/leave-adjustments/apply", {
+    method: "POST",
+    body: {
+      branch_id: input.branchId,
+      employee_id: input.employeeId,
+      leave_type_id: input.leaveTypeId,
+      adjustment_month: adjustmentMonth,
+      days_delta: input.daysDelta,
+      reason: input.reason ?? null,
+    },
+  });
+  appendLeaveAudit({
+    requestId: input.employeeId,
+    action: "leave_month_adjustment",
+    detail: `${input.month}: ${input.daysDelta > 0 ? "+" : ""}${input.daysDelta}d (${input.leaveTypeId})`,
     actor: actor(),
   });
 }

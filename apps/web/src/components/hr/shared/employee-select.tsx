@@ -55,6 +55,7 @@ export function MasterSelect({
   required,
   placeholder = "Select…",
   allowEmpty = true,
+  hint,
 }: {
   label: string;
   value: string;
@@ -63,9 +64,10 @@ export function MasterSelect({
   required?: boolean;
   placeholder?: string;
   allowEmpty?: boolean;
+  hint?: string;
 }) {
   return (
-    <SetupField label={label} required={required}>
+    <SetupField label={label} required={required} hint={hint}>
       <SetupSelect
         value={value}
         onChange={(e) => {

@@ -3,6 +3,7 @@
  */
 
 import { ApiClientError, resourceService } from "@/services/api-client";
+import { buildReportingManagerOptions } from "@/lib/hr/reporting-managers";
 import { nextCode, type HrSetupTabId } from "@/config/hr-setup";
 
 export type SetupRow = Record<string, unknown> & {
@@ -556,27 +557,18 @@ export async function listReportingManagers(): Promise<SetupRow[]> {
       resourceService.list("/roles").catch(() => ({ data: [] })),
     ]);
     const empRows = normalizeRows(employees.data);
-    // Prefer employees with manager-like designations / titles when roles list is sparse
-    const managers = empRows.filter((e) => {
-      const title = String(e.designation ?? e.job_title ?? e.display_name ?? "").toLowerCase();
-      const code = String(e.employee_code ?? "");
-      return (
-        title.includes("manager") ||
-        title.includes("lead") ||
-        title.includes("head") ||
-        title.includes("director") ||
-        code.endsWith("1") ||
-        code.endsWith("2")
-      );
+    const rows = buildReportingManagerOptions(empRows).map((o) => {
+      const e = empRows.find((r) => String(r.id) === o.id);
+      return {
+        ...(e ?? {}),
+        id: o.id,
+        name: o.label.split(" (")[0]?.trim() || o.label,
+        employee_code: e?.employee_code ?? "",
+        role: "Reporting manager",
+        status: String(e?.status ?? "active"),
+        __source: "derived" as const,
+      };
     });
-    const rows = (managers.length ? managers : empRows.slice(0, 8)).map((e) => ({
-      ...e,
-      id: String(e.id),
-      name: `${[e.first_name, e.last_name].filter(Boolean).join(" ")}`.trim() || String(e.employee_code ?? e.id),
-      role: "Reporting manager",
-      status: String(e.status ?? "active"),
-      __source: "derived" as const,
-    }));
     void roles;
     return rows;
   } catch (err) {

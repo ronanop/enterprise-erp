@@ -5,6 +5,12 @@ import { useMemo } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { ChevronRight } from "lucide-react";
 
+import {
+  formatRoomEquipmentSummary,
+  normalizeRoomEquipment,
+  roomEquipmentForApi,
+  roomEquipmentToJson,
+} from "@/components/hr/setup/room-equipment-editor";
 import { SetupEntityPanel, type FieldDef } from "@/components/hr/setup/setup-entity-panel";
 import { HolidayCalendarPanel } from "@/components/hr/setup/holiday-calendar-panel";
 import { AttendancePolicyPanel } from "@/components/hr/setup/attendance-policy-panel";
@@ -151,28 +157,16 @@ function mapLocation(row: SetupRow): SetupRow {
   };
 }
 
-function parseEquipmentList(value: unknown): string[] {
-  if (Array.isArray(value)) {
-    return value.map((v) => String(v).trim()).filter(Boolean);
-  }
-  if (typeof value === "string") {
-    return value
-      .split(/[,;|]/)
-      .map((s) => s.trim())
-      .filter(Boolean);
-  }
-  return [];
-}
-
 function mapRoom(row: SetupRow): SetupRow {
-  const features = parseEquipmentList(row.equipment_json ?? row.equipment_features);
+  const items = normalizeRoomEquipment(row.equipment_json ?? row.equipment_features);
+  const summary = formatRoomEquipmentSummary(items);
   return {
     ...row,
     code: row.room_code,
     name: row.room_name,
     capacity: row.capacity ?? 0,
-    equipment_features: features.join(", "),
-    features: features.length ? features.join(", ") : "—",
+    equipment_features: roomEquipmentToJson(items),
+    features: summary,
   };
 }
 
@@ -547,10 +541,9 @@ const TAB_CONFIG: Partial<Record<HrSetupTabId, TabConfig>> = {
       },
       {
         key: "equipment_features",
-        label: "Room Features",
-        type: "textarea",
-        placeholder: "Projector, Whiteboard, Video Conferencing, AC, Wi-Fi",
-        hint: "Comma-separated amenities and equipment",
+        label: "Room features",
+        type: "equipment_list",
+        hint: "Add equipment with name, remarks, and optional serial or asset number",
       },
       {
         key: "notes",
@@ -570,14 +563,14 @@ const TAB_CONFIG: Partial<Record<HrSetupTabId, TabConfig>> = {
       room_code: f.room_code || null,
       room_name: f.room_name,
       capacity: Number(f.capacity) || 10,
-      equipment_json: parseEquipmentList(f.equipment_features),
+      equipment_json: roomEquipmentForApi(f.equipment_features),
       notes: f.notes || null,
       status: f.status || "active",
     }),
     buildUpdateBody: (f) => ({
       room_name: f.room_name,
       capacity: Number(f.capacity) || 10,
-      equipment_json: parseEquipmentList(f.equipment_features),
+      equipment_json: roomEquipmentForApi(f.equipment_features),
       notes: f.notes || null,
       status: f.status || "active",
       version: f.version ? Number(f.version) : undefined,

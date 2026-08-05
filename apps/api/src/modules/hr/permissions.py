@@ -32,6 +32,7 @@ HR_PERMISSIONS: list[tuple[str, str, str, str]] = [
     ("hr.attendance:lock", "hr.attendance", "lock", "hr"),
     ("hr.leave:read", "hr.leave", "read", "hr"),
     ("hr.leave:create", "hr.leave", "create", "hr"),
+    ("hr.leave:update", "hr.leave", "update", "hr"),
     ("hr.leave:submit", "hr.leave", "submit", "hr"),
     ("hr.leave:approve", "hr.leave", "approve", "hr"),
     ("hr.shift_assignment:read", "hr.shift_assignment", "read", "hr"),
@@ -86,6 +87,7 @@ HR_MANAGER_PERMISSIONS = list(
         HR_EMPLOYEE_PERMISSIONS
         + [
             "hr.leave:approve",
+            "hr.leave:update",
             "hr.shift_assignment:create",
             "hr.shift_assignment:submit",
             "hr.shift_assignment:approve",

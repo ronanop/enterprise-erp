@@ -246,6 +246,7 @@ export async function loadHrMasterDirectory(): Promise<HrMasterDirectory> {
     departments: [],
     designations: [],
     managers: [],
+    employees: [],
     managementGroups: [],
     shifts: [],
   };

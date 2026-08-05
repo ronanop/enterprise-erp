@@ -1,7 +1,7 @@
 "use client";
 
 import { FormEvent, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 
 import { Button } from "@/components/ui/button";
@@ -18,6 +18,7 @@ import { cn } from "@/lib/utils";
 
 export default function LoginPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [email, setEmail] = useState(env.demoEmail);
   const [password, setPassword] = useState(env.demoPassword || DEMO_PASSWORD);
   const [error, setError] = useState<string | null>(null);
@@ -36,7 +37,12 @@ export default function LoginPage() {
     try {
       const trimmed = email.trim();
       await authService.login(trimmed, password);
-      router.replace(getPostLoginRedirect(trimmed));
+      const next = searchParams.get("next");
+      const destination =
+        next && next.startsWith("/") && !next.startsWith("//")
+          ? next
+          : getPostLoginRedirect(trimmed);
+      router.replace(destination);
       router.refresh();
     } catch (err) {
       setError(err instanceof ApiClientError ? err.message : "Login failed");

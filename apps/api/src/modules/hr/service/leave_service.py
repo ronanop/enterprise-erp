@@ -237,6 +237,39 @@ class LeaveBalanceService:
             pass
         return updated or balance
 
+    def update(self, ctx: TenantContext, row_id: UUID, **fields):
+        row = self.get(ctx, row_id)
+        opening = Decimal(str(fields.get("opening_balance", row.opening_balance or 0)))
+        accrued = Decimal(str(fields.get("accrued", row.accrued or 0)))
+        used = Decimal(str(fields.get("used", row.used or 0)))
+        fields["closing_balance"] = opening + accrued - used
+        updated = self._repo.update(ctx, row_id, **fields)
+        if updated is None:
+            raise NotFoundException("Leave balance not found")
+        self._audit.log_entity_change(
+            tenant_id=ctx.tenant_id,
+            entity_name="hr_leave_balance",
+            entity_id=row_id,
+            operation="update",
+            performed_by=ctx.user_id,
+        )
+        return updated
+
+    def delete(self, ctx: TenantContext, row_id: UUID) -> None:
+        row = self.get(ctx, row_id)
+        used = Decimal(str(row.used or 0))
+        if used > 0:
+            raise AppException("Cannot remove leave type while used balance is greater than zero")
+        if not self._repo.soft_delete(ctx, row_id):
+            raise NotFoundException("Leave balance not found")
+        self._audit.log_entity_change(
+            tenant_id=ctx.tenant_id,
+            entity_name="hr_leave_balance",
+            entity_id=row_id,
+            operation="delete",
+            performed_by=ctx.user_id,
+        )
+
     def carry_forward_year_end(
         self,
         ctx: TenantContext,
@@ -645,6 +678,32 @@ class LeaveAdjustmentService:
             performed_by=ctx.user_id,
         )
         return updated
+
+    def create_and_apply(
+        self,
+        ctx: TenantContext,
+        *,
+        branch_id: UUID,
+        employee_id: UUID,
+        leave_type_id: UUID,
+        adjustment_month: date,
+        days_delta: Decimal,
+        company_id: UUID | None = None,
+        reason: str | None = None,
+    ):
+        """HR shortcut: create a submitted adjustment and approve immediately."""
+        row = self.create(
+            ctx,
+            branch_id=branch_id,
+            employee_id=employee_id,
+            leave_type_id=leave_type_id,
+            adjustment_month=adjustment_month,
+            days_delta=days_delta,
+            company_id=company_id,
+            reason=reason,
+            status=LeaveAdjustmentStatus.SUBMITTED.value,
+        )
+        return self.approve(ctx, row.id)
 
     def reject(self, ctx: TenantContext, row_id: UUID):
         row = self.get(ctx, row_id)

@@ -101,11 +101,11 @@ export function StartOnboardingDrawer({ open, onClose, acceptedOffers, onSubmit 
   const departmentId = masters.departments.find((d) => d.label === department)?.id ?? "";
   const branchHeadName = managerDisplayName(
     masters.branches.find((b) => b.id === branchId)?.headEmployeeId,
-    masters.managers.map((m) => ({ id: m.id, label: m.label })),
+    masters.employees.map((m) => ({ id: m.id, label: m.label })),
   );
   const departmentHeadName = managerDisplayName(
     masters.departments.find((d) => d.id === departmentId)?.headEmployeeId,
-    masters.managers.map((m) => ({ id: m.id, label: m.label })),
+    masters.employees.map((m) => ({ id: m.id, label: m.label })),
   );
 
   function validate(): string[] {
@@ -332,6 +332,7 @@ export function StartOnboardingDrawer({ open, onClose, acceptedOffers, onSubmit 
         <div className="grid gap-3 sm:grid-cols-2">
           <MasterSelect
             label="Reporting manager"
+            hint="Only employees set up as reporting managers"
             value={masters.managers.find((m) => m.label.startsWith(reportingManager))?.id || ""}
             options={masters.managers}
             onChange={(_id, opt) =>

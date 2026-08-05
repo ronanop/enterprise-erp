@@ -227,7 +227,6 @@ export type EmployeeListFilters = {
   reportingManagerId: string;
   location: string;
   joiningFrom: string;
-  joiningTo: string;
   gender: string;
 };
 

@@ -14,6 +14,7 @@ import {
   Trash2,
 } from "lucide-react";
 
+import { RoomEquipmentEditor } from "@/components/hr/setup/room-equipment-editor";
 import { SetupConfirmDialog } from "@/components/hr/setup/setup-confirm";
 import {
   SetupDrawer,
@@ -51,7 +52,7 @@ import { cn } from "@/lib/utils";
 export type FieldDef = {
   key: string;
   label: string;
-  type?: "text" | "number" | "date" | "time" | "select" | "textarea" | "checkbox";
+  type?: "text" | "number" | "date" | "time" | "select" | "textarea" | "checkbox" | "equipment_list";
   required?: boolean;
   readOnly?: boolean;
   options?: { value: string; label: string }[];
@@ -747,9 +748,20 @@ export function SetupEntityPanel({
       >
         <div className="grid gap-3 sm:grid-cols-2">
           {fields.map((f) => (
-            <div key={f.key} className={f.type === "textarea" ? "sm:col-span-2" : undefined}>
+            <div
+              key={f.key}
+              className={
+                f.type === "textarea" || f.type === "equipment_list" ? "sm:col-span-2" : undefined
+              }
+            >
               <SetupField label={f.label} required={f.required} hint={f.hint}>
-                {f.type === "textarea" ? (
+                {f.type === "equipment_list" ? (
+                  <RoomEquipmentEditor
+                    value={form[f.key] ?? "[]"}
+                    disabled={readOnly || f.readOnly}
+                    onChange={(json) => setForm((prev) => ({ ...prev, [f.key]: json }))}
+                  />
+                ) : f.type === "textarea" ? (
                   <SetupTextarea
                     value={form[f.key] ?? ""}
                     disabled={readOnly || f.readOnly}

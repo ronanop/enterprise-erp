@@ -6,7 +6,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, Header
 from sqlalchemy.orm import Session
 
-from modules.foundation.dependencies import require_permission
+from modules.foundation.dependencies import require_any_permission, require_permission
 from modules.foundation.domain.value_objects import TenantContext
 from modules.hr.dependencies import (
     PaginationParams,
@@ -65,6 +65,7 @@ from modules.hr.schemas import (
     LeaveApproveRequest,
     LeaveBalanceCreate,
     LeaveBalanceResponse,
+    LeaveBalanceUpdate,
     CompOffCreditRequest,
     CarryForwardRequest,
     CarryForwardResponse,
@@ -179,6 +180,11 @@ roster_entries_router = APIRouter(prefix="/roster-entries", tags=["HR - Roster E
 holiday_calendars_router = APIRouter(prefix="/holiday-calendars", tags=["HR - Holiday Calendars"])
 leave_types_router = APIRouter(prefix="/leave-types", tags=["HR - Leave Types"])
 leave_balances_router = APIRouter(prefix="/leave-balances", tags=["HR - Leave Balances"])
+_require_leave_balance_manage = require_any_permission(
+    "hr.leave:update",
+    "hr.leave:approve",
+    "hr.leave:create",
+)
 leave_requests_router = APIRouter(prefix="/leave-requests", tags=["HR - Leave Requests"])
 leave_adjustments_router = APIRouter(prefix="/leave-adjustments", tags=["HR - Leave Adjustments"])
 attendance_router = APIRouter(prefix="/attendance", tags=["HR - Attendance"])
@@ -767,10 +773,33 @@ def list_balances(
 @leave_balances_router.post("", response_model=APIResponse[LeaveBalanceResponse])
 def create_balance(
     body: LeaveBalanceCreate,
-    ctx: Annotated[TenantContext, Depends(require_permission("hr.leave:create"))],
+    ctx: Annotated[TenantContext, Depends(_require_leave_balance_manage)],
     db: Annotated[Session, Depends(get_db)],
 ):
     return APIResponse(message="OK", data=LeaveBalanceService(db).create(ctx, **body.model_dump()))
+
+
+@leave_balances_router.patch("/{row_id}", response_model=APIResponse[LeaveBalanceResponse])
+def update_balance(
+    row_id: UUID,
+    body: LeaveBalanceUpdate,
+    ctx: Annotated[TenantContext, Depends(_require_leave_balance_manage)],
+    db: Annotated[Session, Depends(get_db)],
+):
+    return APIResponse(
+        message="OK",
+        data=LeaveBalanceService(db).update(ctx, row_id, **extract_update_fields(body)),
+    )
+
+
+@leave_balances_router.delete("/{row_id}", response_model=APIResponse[None])
+def delete_balance(
+    row_id: UUID,
+    ctx: Annotated[TenantContext, Depends(_require_leave_balance_manage)],
+    db: Annotated[Session, Depends(get_db)],
+):
+    LeaveBalanceService(db).delete(ctx, row_id)
+    return APIResponse(message="Leave balance removed", data=None)
 
 
 @leave_balances_router.post("/compoff-credit", response_model=APIResponse[LeaveBalanceResponse])
@@ -876,6 +905,18 @@ def create_leave_adjustment(
     db: Annotated[Session, Depends(get_db)],
 ):
     return APIResponse(message="OK", data=LeaveAdjustmentService(db).create(ctx, **body.model_dump()))
+
+
+@leave_adjustments_router.post("/apply", response_model=APIResponse[LeaveAdjustmentResponse])
+def apply_leave_adjustment(
+    body: LeaveAdjustmentCreate,
+    ctx: Annotated[TenantContext, Depends(require_any_permission("hr.leave:approve", "hr.leave:update"))],
+    db: Annotated[Session, Depends(get_db)],
+):
+    return APIResponse(
+        message="Leave adjustment applied",
+        data=LeaveAdjustmentService(db).create_and_apply(ctx, **body.model_dump(exclude={"status"})),
+    )
 
 
 @leave_adjustments_router.post("/{row_id}/submit", response_model=APIResponse[LeaveAdjustmentResponse])

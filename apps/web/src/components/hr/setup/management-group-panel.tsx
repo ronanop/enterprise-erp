@@ -446,7 +446,7 @@ export function ManagementGroupPanel({ tab }: { tab: HrSetupTab }) {
                           aria-checked={Boolean(toggles[f.key])}
                           disabled={parentOff}
                           className={cn(
-                            "relative h-6 w-11 shrink-0 cursor-pointer rounded-full transition-colors duration-200",
+                            "inline-flex h-6 w-11 shrink-0 cursor-pointer items-center overflow-hidden rounded-full border-2 border-transparent transition-colors duration-200",
                             toggles[f.key] ? "bg-primary" : "bg-muted",
                             parentOff && "cursor-not-allowed opacity-50",
                           )}
@@ -454,7 +454,7 @@ export function ManagementGroupPanel({ tab }: { tab: HrSetupTab }) {
                         >
                           <span
                             className={cn(
-                              "absolute top-0.5 size-5 rounded-full bg-white shadow transition-transform duration-200",
+                              "pointer-events-none block size-5 shrink-0 rounded-full bg-white shadow-sm transition-transform duration-200",
                               toggles[f.key] ? "translate-x-5" : "translate-x-0.5",
                             )}
                           />

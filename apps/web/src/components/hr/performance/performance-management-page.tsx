@@ -717,6 +717,7 @@ export function PerformanceManagementPage() {
         onClose={() => setReviewOpen(false)}
         cycles={dir?.cycles ?? []}
         employees={dir?.employees ?? []}
+        managers={dir?.managers ?? []}
         onSubmit={(input) => {
           void createReview(input)
             .then(() => {

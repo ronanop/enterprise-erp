@@ -60,7 +60,6 @@ const EMPTY_FILTERS: EmployeeListFilters = {
   reportingManagerId: "",
   location: "",
   joiningFrom: "",
-  joiningTo: "",
   gender: "",
 };
 
@@ -71,7 +70,6 @@ export function EmployeeManagementPage() {
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState("");
   const [filters, setFilters] = useState<EmployeeListFilters>(EMPTY_FILTERS);
-  const [filtersOpen, setFiltersOpen] = useState(true);
   const [page, setPage] = useState(1);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [importOpen, setImportOpen] = useState(false);
@@ -217,155 +215,136 @@ export function EmployeeManagementPage() {
             ]}
           />
 
-          <div className="flex flex-col gap-3 lg:flex-row">
-            <aside
-              className={cn(
-                "lg:w-64 lg:shrink-0",
-                filtersOpen ? "block" : "hidden lg:block",
-              )}
-            >
-              <div className="sticky top-4 space-y-3 rounded-xl border border-border/70 bg-card p-3 shadow-sm">
-                <div className="flex items-center justify-between">
-                  <h3 className="text-xs font-semibold tracking-wide uppercase text-muted-foreground">
-                    Filters
-                  </h3>
-                  <button
-                    type="button"
-                    className="cursor-pointer text-[10px] text-primary hover:underline"
-                    onClick={() => setFilters(EMPTY_FILTERS)}
-                  >
-                    Clear
-                  </button>
-                </div>
-                <SetupField label="Branch">
-                  <SetupSelect
-                    value={filters.branchId}
-                    onChange={(e) => setFilters((f) => ({ ...f, branchId: e.target.value }))}
-                  >
-                    <option value="">All</option>
-                    {options?.branches.map((b) => (
-                      <option key={b.id} value={b.id}>
-                        {b.label}
-                      </option>
-                    ))}
-                  </SetupSelect>
-                </SetupField>
-                <SetupField label="Department">
-                  <SetupSelect
-                    value={filters.departmentId}
-                    onChange={(e) => setFilters((f) => ({ ...f, departmentId: e.target.value }))}
-                  >
-                    <option value="">All</option>
-                    {options?.departments.map((d) => (
-                      <option key={d.id} value={d.id}>
-                        {d.label}
-                      </option>
-                    ))}
-                  </SetupSelect>
-                </SetupField>
-                <SetupField label="Designation">
-                  <SetupSelect
-                    value={filters.designation}
-                    onChange={(e) => setFilters((f) => ({ ...f, designation: e.target.value }))}
-                  >
-                    <option value="">All</option>
-                    {[...new Set(records.map((r) => r.designationName))].map((d) => (
-                      <option key={d} value={d}>
-                        {d}
-                      </option>
-                    ))}
-                  </SetupSelect>
-                </SetupField>
-                <SetupField label="Employment type">
-                  <SetupSelect
-                    value={filters.employmentType}
-                    onChange={(e) => setFilters((f) => ({ ...f, employmentType: e.target.value }))}
-                  >
-                    <option value="">All</option>
-                    {["permanent", "contract", "intern", "consultant"].map((t) => (
-                      <option key={t} value={t}>
-                        {t}
-                      </option>
-                    ))}
-                  </SetupSelect>
-                </SetupField>
-                <SetupField label="Status">
-                  <SetupSelect
-                    value={filters.status}
-                    onChange={(e) => setFilters((f) => ({ ...f, status: e.target.value }))}
-                  >
-                    <option value="">All</option>
-                    {["active", "inactive", "probation", "notice", "resigned", "archived"].map((s) => (
-                      <option key={s} value={s}>
-                        {s}
-                      </option>
-                    ))}
-                  </SetupSelect>
-                </SetupField>
-                <SetupField label="Reporting manager">
-                  <SetupSelect
-                    value={filters.reportingManagerId}
-                    onChange={(e) =>
-                      setFilters((f) => ({ ...f, reportingManagerId: e.target.value }))
-                    }
-                  >
-                    <option value="">All</option>
-                    {options?.managers.map((m) => (
-                      <option key={m.id} value={m.id}>
-                        {m.label}
-                      </option>
-                    ))}
-                  </SetupSelect>
-                </SetupField>
-                <SetupField label="Gender">
-                  <SetupSelect
-                    value={filters.gender}
-                    onChange={(e) => setFilters((f) => ({ ...f, gender: e.target.value }))}
-                  >
-                    <option value="">All</option>
-                    {["male", "female", "other", "prefer_not_to_say"].map((g) => (
-                      <option key={g} value={g}>
-                        {g.replace(/_/g, " ")}
-                      </option>
-                    ))}
-                  </SetupSelect>
-                </SetupField>
-                <SetupField label="Joining from">
-                  <Input
-                    type="date"
-                    value={filters.joiningFrom}
-                    onChange={(e) => setFilters((f) => ({ ...f, joiningFrom: e.target.value }))}
-                  />
-                </SetupField>
-                <SetupField label="Joining to">
-                  <Input
-                    type="date"
-                    value={filters.joiningTo}
-                    onChange={(e) => setFilters((f) => ({ ...f, joiningTo: e.target.value }))}
-                  />
-                </SetupField>
-              </div>
-            </aside>
+          <div className="space-y-3 rounded-xl border border-border/70 bg-card p-3 shadow-sm">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <Input
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Search name, ID, email, phone, department, designation…"
+                className="h-9 w-full sm:max-w-md"
+              />
+              <button
+                type="button"
+                className="cursor-pointer shrink-0 self-start text-xs font-medium text-primary hover:underline sm:self-center"
+                onClick={() => setFilters(EMPTY_FILTERS)}
+              >
+                Clear filters
+              </button>
+            </div>
 
-            <div className="min-w-0 flex-1 space-y-3">
-              <div className="flex flex-wrap items-center gap-2">
-                <Input
-                  value={query}
-                  onChange={(e) => setQuery(e.target.value)}
-                  placeholder="Search name, ID, email, phone, department, designation…"
-                  className="max-w-md flex-1"
-                />
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="cursor-pointer lg:hidden"
-                  onClick={() => setFiltersOpen((v) => !v)}
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-8">
+              <SetupField label="Branch">
+                <SetupSelect
+                  className="h-9 text-xs"
+                  value={filters.branchId}
+                  onChange={(e) => setFilters((f) => ({ ...f, branchId: e.target.value }))}
                 >
-                  Filters
-                </Button>
-              </div>
+                  <option value="">All</option>
+                  {options?.branches.map((b) => (
+                    <option key={b.id} value={b.id}>
+                      {b.label}
+                    </option>
+                  ))}
+                </SetupSelect>
+              </SetupField>
+              <SetupField label="Department">
+                <SetupSelect
+                  className="h-9 text-xs"
+                  value={filters.departmentId}
+                  onChange={(e) => setFilters((f) => ({ ...f, departmentId: e.target.value }))}
+                >
+                  <option value="">All</option>
+                  {options?.departments.map((d) => (
+                    <option key={d.id} value={d.id}>
+                      {d.label}
+                    </option>
+                  ))}
+                </SetupSelect>
+              </SetupField>
+              <SetupField label="Designation">
+                <SetupSelect
+                  className="h-9 text-xs"
+                  value={filters.designation}
+                  onChange={(e) => setFilters((f) => ({ ...f, designation: e.target.value }))}
+                >
+                  <option value="">All</option>
+                  {[...new Set(records.map((r) => r.designationName))].map((d) => (
+                    <option key={d} value={d}>
+                      {d}
+                    </option>
+                  ))}
+                </SetupSelect>
+              </SetupField>
+              <SetupField label="Employment type">
+                <SetupSelect
+                  className="h-9 text-xs"
+                  value={filters.employmentType}
+                  onChange={(e) => setFilters((f) => ({ ...f, employmentType: e.target.value }))}
+                >
+                  <option value="">All</option>
+                  {["permanent", "contract", "intern", "consultant"].map((t) => (
+                    <option key={t} value={t}>
+                      {t}
+                    </option>
+                  ))}
+                </SetupSelect>
+              </SetupField>
+              <SetupField label="Status">
+                <SetupSelect
+                  className="h-9 text-xs"
+                  value={filters.status}
+                  onChange={(e) => setFilters((f) => ({ ...f, status: e.target.value }))}
+                >
+                  <option value="">All</option>
+                  {["active", "inactive", "probation", "notice", "resigned", "archived"].map((s) => (
+                    <option key={s} value={s}>
+                      {s}
+                    </option>
+                  ))}
+                </SetupSelect>
+              </SetupField>
+              <SetupField label="Reporting manager" hint="Managers with direct reports or MGR role">
+                <SetupSelect
+                  className="h-9 text-xs"
+                  value={filters.reportingManagerId}
+                  onChange={(e) =>
+                    setFilters((f) => ({ ...f, reportingManagerId: e.target.value }))
+                  }
+                >
+                  <option value="">All</option>
+                  {options?.managers.map((m) => (
+                    <option key={m.id} value={m.id}>
+                      {m.label}
+                    </option>
+                  ))}
+                </SetupSelect>
+              </SetupField>
+              <SetupField label="Gender">
+                <SetupSelect
+                  className="h-9 text-xs"
+                  value={filters.gender}
+                  onChange={(e) => setFilters((f) => ({ ...f, gender: e.target.value }))}
+                >
+                  <option value="">All</option>
+                  {["male", "female", "other", "prefer_not_to_say"].map((g) => (
+                    <option key={g} value={g}>
+                      {g.replace(/_/g, " ")}
+                    </option>
+                  ))}
+                </SetupSelect>
+              </SetupField>
+              <SetupField label="Joining from">
+                <Input
+                  type="date"
+                  className="h-9 text-xs"
+                  value={filters.joiningFrom}
+                  onChange={(e) => setFilters((f) => ({ ...f, joiningFrom: e.target.value }))}
+                />
+              </SetupField>
+            </div>
+          </div>
 
+          <div className="space-y-3">
               {selected.size > 0 ? (
                 <div className="flex flex-wrap items-center gap-2 rounded-xl border border-primary/20 bg-primary/5 px-3 py-2 text-xs">
                   <span className="font-medium">{selected.size} selected</span>
@@ -586,7 +565,6 @@ export function EmployeeManagementPage() {
                   />
                 </div>
               )}
-            </div>
           </div>
         </>
       )}

@@ -6,6 +6,11 @@ import {
   peekNextEmployeeSequence,
   syncSequenceFromCodes,
 } from "@/config/employee-id";
+import {
+  buildEmployeeLookupOptions,
+  buildReportingManagerOptions,
+  type EmployeeMasterRow,
+} from "@/lib/hr/reporting-managers";
 import type {
   ActivityEvent,
   AuditEntry,
@@ -198,7 +203,10 @@ export type EmployeeDirectoryOptions = {
   branches: { id: string; label: string; headEmployeeId: string }[];
   departments: { id: string; label: string; branchId: string; headEmployeeId: string }[];
   designations: { id: string; label: string }[];
+  /** Reporting managers only — for assignment picklists */
   managers: { id: string; label: string }[];
+  /** All active employees — for name lookup (branch/dept heads, etc.) */
+  employees: { id: string; label: string }[];
   managementGroups: { id: string; label: string; employmentType: string; shiftId: string }[];
   shifts: { id: string; label: string }[];
 };
@@ -216,6 +224,8 @@ async function loadOptions(): Promise<EmployeeDirectoryOptions> {
   const asRows = (d: unknown) =>
     (Array.isArray(d) ? d : []).filter((r): r is HrRow => !!r && typeof r === "object");
 
+  const empRows = asRows(employees.data) as EmployeeMasterRow[];
+
   return {
     branches: asRows(branches.data).map((r) => ({
       id: String(r.id),
@@ -232,10 +242,8 @@ async function loadOptions(): Promise<EmployeeDirectoryOptions> {
       id: String(r.id),
       label: String(r.designation_name ?? r.designation_code ?? r.id),
     })),
-    managers: asRows(employees.data).map((r) => ({
-      id: String(r.id),
-      label: `${[r.first_name, r.last_name].filter(Boolean).join(" ")} (${r.employee_code})`,
-    })),
+    managers: buildReportingManagerOptions(empRows),
+    employees: buildEmployeeLookupOptions(empRows),
     shifts: asRows(shifts.data).map((r) => ({
       id: String(r.id),
       label: String(r.shift_name ?? r.shift_code ?? r.id),
@@ -282,7 +290,7 @@ export async function loadEmployeeDirectory(): Promise<{
 
   const deptMap = new Map(options.departments.map((d) => [d.id, d.label]));
   const branchMap = new Map(options.branches.map((b) => [b.id, b.label]));
-  const managerMap = new Map(options.managers.map((m) => [m.id, m.label.split(" (")[0]]));
+  const employeeNameMap = new Map(options.employees.map((m) => [m.id, m.label.split(" (")[0]]));
 
   const extensions = loadExtensions();
 
@@ -326,7 +334,7 @@ export async function loadEmployeeDirectory(): Promise<{
         employmentByEmployee.get(id),
         deptMap,
         branchMap,
-        managerMap,
+        employeeNameMap,
         ext,
       );
     });
@@ -365,7 +373,6 @@ export function filterEmployees(
     }
     if (filters.gender && r.gender !== filters.gender) return false;
     if (filters.joiningFrom && r.joiningDate && r.joiningDate < filters.joiningFrom) return false;
-    if (filters.joiningTo && r.joiningDate && r.joiningDate > filters.joiningTo) return false;
 
     if (!q) return true;
     const hay = [

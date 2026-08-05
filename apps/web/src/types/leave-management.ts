@@ -63,6 +63,7 @@ export type LeaveBalanceRecord = {
   employeeId: string;
   employeeName: string;
   employeeCode: string;
+  branchId: string;
   leaveTypeId: string;
   leaveTypeName: string;
   leaveTypeCode: string;
@@ -76,6 +77,7 @@ export type LeaveBalanceRecord = {
   opening: number;
   accrued: number;
   closing: number;
+  version: number;
 };
 
 export type LeaveTypeRecord = {

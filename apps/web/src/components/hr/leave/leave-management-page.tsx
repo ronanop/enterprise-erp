@@ -428,7 +428,7 @@ export function LeaveManagementPage() {
         <LeaveCalendarView directory={dir} onSelectRequest={setApprovalRequest} />
       ) : null}
 
-      {tab === "balances" && dir ? <LeaveBalancePanel directory={dir} /> : null}
+      {tab === "balances" && dir ? <LeaveBalancePanel directory={dir} onSaved={() => void load()} /> : null}
 
       {tab === "types" && dir ? (
         <LeaveTypePolicyPanel directory={dir} onSaved={() => void load()} />

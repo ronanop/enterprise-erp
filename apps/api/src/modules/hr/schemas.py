@@ -528,6 +528,14 @@ class LeaveBalanceCreate(BaseModel):
     status: str = "open"
 
 
+class LeaveBalanceUpdate(BaseModel):
+    opening_balance: Decimal | None = None
+    accrued: Decimal | None = None
+    used: Decimal | None = None
+    status: str | None = None
+    version: int | None = None
+
+
 class CompOffCreditRequest(BaseModel):
     company_id: UUID | None = None
     branch_id: UUID
@@ -950,7 +958,7 @@ class TrainingRoomCreate(BaseModel):
     room_code: str | None = None
     room_name: str
     capacity: int = 10
-    equipment_json: list[str] | None = None
+    equipment_json: list | None = None
     notes: str | None = None
     status: str = "active"
 
@@ -958,7 +966,7 @@ class TrainingRoomCreate(BaseModel):
 class TrainingRoomUpdate(BaseModel):
     room_name: str | None = None
     capacity: int | None = None
-    equipment_json: list[str] | None = None
+    equipment_json: list | None = None
     notes: str | None = None
     status: str | None = None
     version: int | None = None
