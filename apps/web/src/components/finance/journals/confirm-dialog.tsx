@@ -13,6 +13,8 @@ type ConfirmDialogProps = {
   cancelLabel?: string;
   tone?: "default" | "destructive";
   busy?: boolean;
+  /** Extra classes for the dialog panel (e.g. wider forms: max-w-2xl). */
+  contentClassName?: string;
   onConfirm: () => void;
   onCancel: () => void;
   children?: ReactNode;
@@ -26,6 +28,7 @@ export function ConfirmDialog({
   cancelLabel = "Cancel",
   tone = "default",
   busy,
+  contentClassName,
   onConfirm,
   onCancel,
   children,
@@ -42,18 +45,31 @@ export function ConfirmDialog({
         role="dialog"
         aria-modal="true"
         aria-labelledby="confirm-dialog-title"
-        className="w-full max-w-md rounded-xl border border-border/80 bg-card p-4 shadow-lg"
+        className={cn(
+          "flex w-full max-w-md max-h-[min(90vh,720px)] flex-col rounded-xl border border-border/80 bg-card p-5 shadow-lg",
+          contentClassName,
+        )}
         onClick={(e) => e.stopPropagation()}
       >
-        <h2 id="confirm-dialog-title" className="text-sm font-medium tracking-tight">
+        <h2 id="confirm-dialog-title" className="shrink-0 text-sm font-medium tracking-tight">
           {title}
         </h2>
         {description ? (
-          <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">{description}</p>
+          <p className="mt-1.5 shrink-0 text-xs leading-relaxed text-muted-foreground">
+            {description}
+          </p>
         ) : null}
-        {children}
-        <div className="mt-4 flex justify-end gap-2">
-          <Button type="button" variant="outline" onClick={onCancel} disabled={busy}>
+        {children ? (
+          <div className="min-h-0 flex-1 overflow-y-auto pr-0.5">{children}</div>
+        ) : null}
+        <div className="mt-4 flex shrink-0 justify-end gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={onCancel}
+            disabled={busy}
+            className="cursor-pointer transition-colors duration-200"
+          >
             {cancelLabel}
           </Button>
           <Button
@@ -61,7 +77,7 @@ export function ConfirmDialog({
             variant={tone === "destructive" ? "destructive" : "default"}
             onClick={onConfirm}
             disabled={busy}
-            className={cn("cursor-pointer")}
+            className="cursor-pointer transition-colors duration-200"
           >
             {busy ? "Working…" : confirmLabel}
           </Button>

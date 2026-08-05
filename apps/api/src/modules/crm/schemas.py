@@ -1125,6 +1125,7 @@ class OvfCreate(BaseModel):
     quote_id: UUID
     branch_id: UUID
     po_number: str | None = None
+    po_date: date | None = None
     delivery_period: str | None = None
     customer_name: str | None = None
     quote_name: str | None = None
@@ -1153,6 +1154,7 @@ class OvfCreate(BaseModel):
 
 class OvfUpdate(BaseModel):
     po_number: str | None = None
+    po_date: date | None = None
     delivery_period: str | None = None
     customer_name: str | None = None
     quote_name: str | None = None
@@ -1189,6 +1191,7 @@ class OvfResponse(OrmModel):
     opportunity_id: UUID
     company_account_id: UUID | None
     po_number: str | None
+    po_date: date | None = None
     delivery_period: str | None
     customer_name: str | None
     quote_name: str | None
@@ -1209,6 +1212,7 @@ class OvfResponse(OrmModel):
     blueprint_state: str
     locked: bool
     shared_to_scm: bool
+    shared_to_scm_at: datetime | None = None
     deal_won: bool
     deal_won_amount: Decimal | None
     vendor_payment_days: int

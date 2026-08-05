@@ -28,7 +28,10 @@ class SessionStore:
         self._client.setex(key, self._ttl, json.dumps(payload))
 
     def get_session(self, session_id: UUID) -> dict[str, Any] | None:
-        raw = cast(str | None, self._client.get(f"session:{session_id}"))
+        try:
+            raw = cast(str | None, self._client.get(f"session:{session_id}"))
+        except redis.RedisError:
+            return None
         if raw is None:
             return None
         return json.loads(raw)
@@ -42,7 +45,10 @@ class SessionStore:
         self._client.setex(key, ttl, json.dumps(list(permissions)))
 
     def get_permissions(self, user_id: UUID) -> set[str] | None:
-        raw = cast(str | None, self._client.get(f"permissions:{user_id}"))
+        try:
+            raw = cast(str | None, self._client.get(f"permissions:{user_id}"))
+        except redis.RedisError:
+            return None
         if raw is None:
             return None
         return set(json.loads(raw))

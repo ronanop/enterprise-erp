@@ -29,12 +29,18 @@ class VendorService:
         *,
         company_id: UUID | None = None,
         branch_id: UUID | None = None,
+        branch_scoped: bool = True,
     ):
         if company_id:
             self._scope.validate_company_access(ctx, company_id)
         if branch_id:
             self._scope.validate_branch_access(ctx, branch_id)
-        return self._repo.list_vendors(ctx, company_id=company_id, branch_id=branch_id)
+        return self._repo.list_vendors(
+            ctx,
+            company_id=company_id,
+            branch_id=branch_id,
+            branch_scoped=branch_scoped,
+        )
 
     def get_vendor(self, ctx: TenantContext, vendor_id: UUID):
         vendor = self._repo.get_by_id(ctx, vendor_id)

@@ -55,7 +55,7 @@ export function AppSidebar() {
           ERP
         </div>
         {!collapsed ? (
-          <div className="min-w-0">
+          <div className="min-w-0" suppressHydrationWarning>
             <p className="truncate text-sm font-medium tracking-tight text-sidebar-foreground">
               {env.appName}
             </p>

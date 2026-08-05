@@ -13,6 +13,20 @@ export class ApiClientError extends Error {
   }
 }
 
+/** Surface API validation lines and non-ApiClientError messages in forms. */
+export function formatApiError(err: unknown, fallback: string): string {
+  if (err instanceof ApiClientError) {
+    if (err.errors.length > 0) {
+      return `${err.message}: ${err.errors.join("; ")}`;
+    }
+    return err.message;
+  }
+  if (err instanceof Error && err.message.trim()) {
+    return err.message;
+  }
+  return fallback;
+}
+
 type RequestOptions = Omit<RequestInit, "body"> & {
   body?: unknown;
   auth?: boolean;
@@ -22,15 +36,94 @@ type RequestOptions = Omit<RequestInit, "body"> & {
 };
 
 function buildUrl(path: string, query?: RequestOptions["query"]): string {
-  const base = `${env.apiUrl}${path}`;
-  if (!query) return base;
+  const normalizedPath = path.startsWith("/") ? path : `/${path}`;
+  const base = env.apiUrl.replace(/\/$/, "");
+  const url = `${base}${normalizedPath}`;
+  if (!query) return url;
   const params = new URLSearchParams();
   for (const [key, value] of Object.entries(query)) {
     if (value === undefined || value === null || value === "") continue;
     params.set(key, String(value));
   }
   const qs = params.toString();
-  return qs ? `${base}?${qs}` : base;
+  return qs ? `${url}?${qs}` : url;
+}
+
+function messageFromUnknownPayload(payload: unknown, fallback: string): string {
+  if (!payload || typeof payload !== "object") return fallback;
+  const record = payload as Record<string, unknown>;
+  if (record.success === false && typeof record.message === "string" && record.message.trim()) {
+    return record.message.trim();
+  }
+  if (typeof record.detail === "string" && record.detail.trim()) {
+    return record.detail.trim();
+  }
+  if (Array.isArray(record.detail)) {
+    const parts = record.detail
+      .map((item) => {
+        if (!item || typeof item !== "object") return "";
+        const row = item as Record<string, unknown>;
+        const msg = typeof row.msg === "string" ? row.msg : "";
+        const loc = Array.isArray(row.loc) ? row.loc.map(String).join(".") : "";
+        return loc && msg ? `${loc}: ${msg}` : msg || loc;
+      })
+      .filter(Boolean);
+    if (parts.length > 0) return parts.join("; ");
+  }
+  if (Array.isArray(record.errors) && record.errors.length > 0) {
+    return record.errors.map(String).join("; ");
+  }
+  return fallback;
+}
+
+async function parseJsonResponse<T>(
+  response: Response,
+): Promise<ApiResponse<T> | ErrorResponse> {
+  const text = await response.text();
+  if (!text.trim()) {
+    if (response.status === 401) {
+      return { success: false, message: "Session expired. Sign in again.", errors: [] };
+    }
+    throw new ApiClientError(
+      response.ok
+        ? "Empty API response"
+        : `API request failed (${response.status})`,
+      response.status,
+    );
+  }
+  try {
+    return JSON.parse(text) as ApiResponse<T> | ErrorResponse;
+  } catch {
+    const snippet = text.trimStart().slice(0, 80).toLowerCase();
+    if (snippet.startsWith("<!doctype") || snippet.startsWith("<html")) {
+      throw new ApiClientError(
+        "Received a web page instead of API data. Check NEXT_PUBLIC_API_URL is /api/v1 and the API is running.",
+        response.status,
+      );
+    }
+    try {
+      const partial = JSON.parse(text) as unknown;
+      const detail = messageFromUnknownPayload(partial, "");
+      if (detail) {
+        throw new ApiClientError(detail, response.status);
+      }
+    } catch (inner) {
+      if (inner instanceof ApiClientError) throw inner;
+    }
+    if (text.trim().toLowerCase() === "internal server error") {
+      throw new ApiClientError(
+        "Internal server error. Restart the ERP API (port 8000) and try again.",
+        response.status,
+      );
+    }
+    const preview = text.trim().replace(/\s+/g, " ").slice(0, 120);
+    throw new ApiClientError(
+      preview
+        ? `Invalid API response (${response.status}): ${preview}`
+        : `Invalid API response (${response.status})`,
+      response.status,
+    );
+  }
 }
 
 let refreshInFlight: Promise<boolean> | null = null;
@@ -51,7 +144,7 @@ async function tryRefreshAccessToken(): Promise<boolean> {
           body: JSON.stringify({ refresh_token: refreshToken }),
           cache: "no-store",
         });
-        const payload = (await response.json()) as ApiResponse<TokenData> | ErrorResponse;
+        const payload = await parseJsonResponse<TokenData>(response);
         if (!response.ok || payload.success === false || !payload.data?.access_token) {
           return false;
         }
@@ -93,8 +186,9 @@ export async function apiClient<T>(
 
   let payload: ApiResponse<T> | ErrorResponse;
   try {
-    payload = (await response.json()) as ApiResponse<T> | ErrorResponse;
-  } catch {
+    payload = await parseJsonResponse<T>(response);
+  } catch (err) {
+    if (err instanceof ApiClientError) throw err;
     throw new ApiClientError("Invalid API response", response.status);
   }
 
@@ -115,8 +209,12 @@ export async function apiClient<T>(
     if (auth && response.status === 401) {
       clearTokens();
     }
+    const fallbackMessage =
+      response.status === 404
+        ? "API route not found. Restart the ERP API on port 8000 after pulling or changing backend code."
+        : "API request failed";
     throw new ApiClientError(
-      errorPayload.message ?? "API request failed",
+      messageFromUnknownPayload(errorPayload, errorPayload.message ?? fallbackMessage),
       response.status,
       errorPayload.errors ?? [],
     );

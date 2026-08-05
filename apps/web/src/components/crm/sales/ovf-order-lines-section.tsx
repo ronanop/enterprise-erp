@@ -7,7 +7,7 @@ import { ChevronDown, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
-import { formatInrPrecise, type OvfLine, type QuoteLine } from "@/services/sales-crm-service";
+import { formatInrPrecise, type OvfLine, type OvfLineFormInput, type QuoteLine } from "@/services/sales-crm-service";
 
 export const GST_PCT = 18;
 
@@ -778,14 +778,8 @@ export async function persistOvfOrderLinesOnUpdate(
   customerRows: CustomerChargeRow[],
   vendorRows: VendorChargeRow[],
   deps: {
-    addOvfLine: (
-      id: string,
-      body: { side?: string; product_name: string; qty?: number; unit_price?: number },
-    ) => Promise<OvfLine>;
-    updateOvfLine: (
-      lineId: string,
-      body: { product_name?: string; qty?: number; unit_price?: number },
-    ) => Promise<OvfLine>;
+    addOvfLine: (id: string, body: OvfLineFormInput) => Promise<OvfLine>;
+    updateOvfLine: (lineId: string, body: OvfLineFormInput) => Promise<OvfLine>;
     createAttachment: (body: {
       entity_type: string;
       entity_id: string;

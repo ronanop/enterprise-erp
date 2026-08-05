@@ -1,7 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { ArrowLeft, Pencil, Plus, RefreshCw } from "lucide-react";
@@ -19,6 +19,7 @@ import {
   setCrmOpportunityContext,
   setCrmSidebarFocus,
 } from "@/lib/crm-sidebar-focus";
+import { cachedFetch, invalidateClientCache } from "@/lib/client-cache";
 import { ApiClientError } from "@/services/api-client";
 import {
   getCompany,
@@ -31,46 +32,78 @@ export function CompanyWorkspaceShell({
   companyAccountId,
   children,
   onCompanyChange,
+  onLeadsChange,
+  refreshKey: refreshKeyProp,
+  onRefresh,
 }: {
   companyAccountId: string;
   children: ReactNode;
   onCompanyChange?: (company: Company | null) => void;
+  onLeadsChange?: (leads: SalesLead[]) => void;
+  /** Controlled refresh counter from parent (keeps overview panels in sync). */
+  refreshKey?: number;
+  onRefresh?: () => void;
 }) {
   const pathname = usePathname();
   const [company, setCompany] = useState<Company | null>(null);
   const [leads, setLeads] = useState<SalesLead[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [refreshKey, setRefreshKey] = useState(0);
+  const [internalRefreshKey, setInternalRefreshKey] = useState(0);
+  const refreshKey = refreshKeyProp ?? internalRefreshKey;
+  const triggerRefresh =
+    onRefresh ??
+    (() => {
+      setInternalRefreshKey((value) => value + 1);
+    });
+  const companyRef = useRef<Company | null>(null);
+  companyRef.current = company;
+  const onCompanyChangeRef = useRef(onCompanyChange);
+  onCompanyChangeRef.current = onCompanyChange;
+  const onLeadsChangeRef = useRef(onLeadsChange);
+  onLeadsChangeRef.current = onLeadsChange;
   const [fromOpportunityId, setFromOpportunityId] = useState<string | null>(() => {
     if (typeof window === "undefined") return null;
     return getCrmSidebarFocus() === "opportunities" ? getCrmOpportunityContext() : null;
   });
 
   const load = useCallback(async () => {
-    setLoading(true);
+    const soft = Boolean(companyRef.current);
+    if (!soft) setLoading(true);
     setError(null);
     try {
+      if (refreshKey > 0) {
+        invalidateClientCache(`crm:company:${companyAccountId}`);
+        invalidateClientCache(`crm:leads:${companyAccountId}`);
+        invalidateClientCache(`crm:nav-counts:${companyAccountId}`);
+        invalidateClientCache(`crm:meetings:${companyAccountId}`);
+        invalidateClientCache(`crm:followups:${companyAccountId}`);
+        invalidateClientCache(`crm:employees`);
+      }
       const [companyRow, leadRows] = await Promise.all([
-        getCompany(companyAccountId),
-        listSalesLeads(companyAccountId).catch(() => [] as SalesLead[]),
+        cachedFetch(`crm:company:${companyAccountId}`, 30_000, () => getCompany(companyAccountId)),
+        cachedFetch(`crm:leads:${companyAccountId}`, 30_000, () =>
+          listSalesLeads(companyAccountId),
+        ).catch(() => [] as SalesLead[]),
       ]);
       setCompany(companyRow);
       setLeads(leadRows);
-      onCompanyChange?.(companyRow);
+      onCompanyChangeRef.current?.(companyRow);
+      onLeadsChangeRef.current?.(leadRows);
     } catch (err) {
       setCompany(null);
-      onCompanyChange?.(null);
+      onCompanyChangeRef.current?.(null);
+      onLeadsChangeRef.current?.([]);
       setError(err instanceof ApiClientError ? err.message : "Failed to load company");
     } finally {
       setLoading(false);
     }
-  }, [companyAccountId, onCompanyChange]);
+  }, [companyAccountId, refreshKey]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => void load(), 0);
     return () => window.clearTimeout(timer);
-  }, [load, refreshKey]);
+  }, [load]);
 
   useEffect(() => {
     // Don't steal Opportunities focus when browsing deal docs from an opportunity.
@@ -160,6 +193,7 @@ export function CompanyWorkspaceShell({
           companyAccountId={company.id}
           scope={backToOpportunity ? "opportunity" : "company"}
           opportunityId={fromOpportunityId ?? undefined}
+          refreshKey={refreshKey}
         />
       )}
 
@@ -203,7 +237,7 @@ export function CompanyWorkspaceShell({
                         variant="outline"
                         size="sm"
                         className="cursor-pointer"
-                        onClick={() => setRefreshKey((value) => value + 1)}
+                        onClick={() => triggerRefresh()}
                       >
                         <RefreshCw className="size-3.5" /> Refresh
                       </Button>

@@ -1,8 +1,9 @@
 """Application exception types and FastAPI handlers."""
 
 from fastapi import FastAPI, Request, status
-from fastapi.exceptions import RequestValidationError
+from fastapi.exceptions import RequestValidationError, ResponseValidationError
 from fastapi.responses import JSONResponse
+from sqlalchemy.exc import IntegrityError
 
 from shared.schemas import ErrorResponse
 
@@ -68,6 +69,42 @@ def register_exception_handlers(app: FastAPI) -> None:
                 message="Validation error",
                 errors=errors,
             ).model_dump(),
+        )
+
+    @app.exception_handler(ResponseValidationError)
+    async def response_validation_exception_handler(
+        _: Request,
+        exc: ResponseValidationError,
+    ) -> JSONResponse:
+        errors = [
+            f"{'.'.join(str(loc) for loc in err.get('loc', []))}: {err.get('msg')}"
+            for err in exc.errors()
+        ]
+        return JSONResponse(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            content=ErrorResponse(
+                message="Response validation failed",
+                errors=errors,
+            ).model_dump(),
+        )
+
+    @app.exception_handler(IntegrityError)
+    async def integrity_exception_handler(_: Request, exc: IntegrityError) -> JSONResponse:
+        detail = str(exc.orig) if exc.orig else str(exc)
+        if "uk_master_vendor_company_code" in detail or "vendor_code" in detail.lower():
+            message = "A vendor with this code already exists. Refresh and try again."
+        elif "ck_crm_attachment_category" in detail or "vendor_invoice" in detail.lower():
+            message = (
+                "Could not store the vendor invoice file (invalid attachment category). "
+                "Run database migrations and try again."
+            )
+        elif "unique" in detail.lower() or "duplicate" in detail.lower():
+            message = "This record conflicts with existing data."
+        else:
+            message = "Database constraint violation."
+        return JSONResponse(
+            status_code=status.HTTP_409_CONFLICT,
+            content=ErrorResponse(message=message).model_dump(),
         )
 
     @app.exception_handler(Exception)

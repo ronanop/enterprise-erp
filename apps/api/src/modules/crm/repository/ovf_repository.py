@@ -48,6 +48,13 @@ class OvfRepository(CrmScopedRepository):
         stmt = stmt.order_by(CrmOvf.updated_at.desc())
         return list(self.db.scalars(stmt).all())
 
+    def list_by_ids(self, ctx: TenantContext, row_ids: list[UUID]) -> list[CrmOvf]:
+        if not row_ids:
+            return []
+        stmt = select(CrmOvf).where(CrmOvf.id.in_(row_ids), CrmOvf.is_deleted.is_(False))
+        stmt = self.apply_crm_filter(stmt, CrmOvf, ctx, branch_scoped=True)
+        return list(self.db.scalars(stmt).all())
+
     def create(self, ctx: TenantContext, **fields) -> CrmOvf:
         row = CrmOvf(
             id=uuid4(),

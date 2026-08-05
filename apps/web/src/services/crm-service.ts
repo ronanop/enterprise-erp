@@ -1,3 +1,4 @@
+import { cachedFetch, invalidateClientCache } from "@/lib/client-cache";
 import { ApiClientError, resourceService } from "@/services/api-client";
 
 export type CrmRow = Record<string, unknown>;
@@ -42,9 +43,14 @@ function normalizeRows(data: unknown): CrmRow[] {
 
 async function safeList(
   apiPath: string,
+  query?: Record<string, string | number | boolean | null | undefined>,
 ): Promise<{ rows: CrmRow[]; error?: string; status?: number }> {
   try {
-    const response = await resourceService.list(apiPath);
+    const response = await resourceService.list(apiPath, {
+      page: 1,
+      page_size: 200,
+      ...query,
+    });
     return { rows: normalizeRows(response.data) };
   } catch (err) {
     if (err instanceof ApiClientError) {
@@ -105,89 +111,54 @@ export function leadDisplayName(row: CrmRow): string {
   return name || String(row.lead_code ?? "—");
 }
 
-export async function loadCrmOverview(): Promise<CrmOverview> {
-  const [
-    leadSources,
-    leads,
-    leadAssignments,
-    leadActivities,
-    pipelines,
-    opportunities,
-    opportunityStages,
-    campaigns,
-    interactions,
-    tasks,
-    followups,
-    meetings,
-    callLogs,
-    emailLogs,
-    visitLogs,
-    feedback,
-    satisfaction,
-  ] = await Promise.all([
-    safeList("/crm/lead-sources"),
-    safeList("/crm/leads"),
-    safeList("/crm/lead-assignments"),
-    safeList("/crm/lead-activities"),
-    safeList("/crm/pipelines"),
-    safeList("/crm/opportunities"),
-    safeList("/crm/opportunity-stages"),
-    safeList("/crm/campaigns"),
-    safeList("/crm/interactions"),
-    safeList("/crm/tasks"),
-    safeList("/crm/followups"),
-    safeList("/crm/meetings"),
-    safeList("/crm/call-logs"),
-    safeList("/crm/email-logs"),
-    safeList("/crm/visit-logs"),
-    safeList("/crm/customer-feedback"),
-    safeList("/crm/customer-satisfaction"),
-  ]);
+export async function loadCrmOverview(force = false): Promise<CrmOverview> {
+  if (force) invalidateClientCache("crm:overview");
+  return cachedFetch("crm:overview", 30_000, async () => {
+    const [
+      leads,
+      opportunities,
+      tasks,
+      followups,
+      meetings,
+      campaigns,
+      pipelines,
+    ] = await Promise.all([
+      safeList("/crm/leads"),
+      safeList("/crm/opportunities"),
+      safeList("/crm/tasks"),
+      safeList("/crm/followups"),
+      safeList("/crm/meetings"),
+      safeList("/crm/campaigns"),
+      safeList("/crm/pipelines"),
+    ]);
 
-  const results = [
-    leadSources,
-    leads,
-    leadAssignments,
-    leadActivities,
-    pipelines,
-    opportunities,
-    opportunityStages,
-    campaigns,
-    interactions,
-    tasks,
-    followups,
-    meetings,
-    callLogs,
-    emailLogs,
-    visitLogs,
-    feedback,
-    satisfaction,
-  ];
-  const errors = results.map((r) => r.error).filter((e): e is string => Boolean(e));
-  const statusCodes = results
-    .map((r) => r.status)
-    .filter((s): s is number => typeof s === "number");
+    const results = [leads, opportunities, tasks, followups, meetings, campaigns, pipelines];
+    const errors = results.map((r) => r.error).filter((e): e is string => Boolean(e));
+    const statusCodes = results
+      .map((r) => r.status)
+      .filter((s): s is number => typeof s === "number");
 
-  return {
-    leadSources: leadSources.rows,
-    leads: leads.rows,
-    leadAssignments: leadAssignments.rows,
-    leadActivities: leadActivities.rows,
-    pipelines: pipelines.rows,
-    opportunities: opportunities.rows,
-    opportunityStages: opportunityStages.rows,
-    campaigns: campaigns.rows,
-    interactions: interactions.rows,
-    tasks: tasks.rows,
-    followups: followups.rows,
-    meetings: meetings.rows,
-    callLogs: callLogs.rows,
-    emailLogs: emailLogs.rows,
-    visitLogs: visitLogs.rows,
-    feedback: feedback.rows,
-    satisfaction: satisfaction.rows,
-    errors,
-    statusCodes,
-    partial: errors.length > 0,
-  };
+    return {
+      leadSources: [],
+      leads: leads.rows,
+      leadAssignments: [],
+      leadActivities: [],
+      pipelines: pipelines.rows,
+      opportunities: opportunities.rows,
+      opportunityStages: [],
+      campaigns: campaigns.rows,
+      interactions: [],
+      tasks: tasks.rows,
+      followups: followups.rows,
+      meetings: meetings.rows,
+      callLogs: [],
+      emailLogs: [],
+      visitLogs: [],
+      feedback: [],
+      satisfaction: [],
+      errors,
+      statusCodes,
+      partial: errors.length > 0,
+    };
+  });
 }

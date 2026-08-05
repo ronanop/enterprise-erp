@@ -58,6 +58,7 @@ import {
 
 type OvfDraft = {
   po_number: string;
+  po_date: string;
   delivery_period: string;
   customer_name: string;
   quote_name: string;
@@ -98,6 +99,7 @@ export function OvfFormPage({ quoteId, ovfId }: { quoteId?: string; ovfId?: stri
   const [opportunity, setOpportunity] = useState<Opportunity | null>(null);
   const [form, setForm] = useState<OvfDraft>({
     po_number: "",
+    po_date: "",
     delivery_period: "",
     customer_name: "",
     quote_name: "",
@@ -158,6 +160,7 @@ export function OvfFormPage({ quoteId, ovfId }: { quoteId?: string; ovfId?: stri
         setVendorRows(vendorRowsFromOvfLines(ovfLines));
         setForm({
           po_number: ovfRow.po_number ?? "",
+          po_date: ovfRow.po_date ? String(ovfRow.po_date).slice(0, 10) : "",
           delivery_period: ovfRow.delivery_period ?? "",
           customer_name: ovfRow.customer_name ?? "",
           quote_name: ovfRow.quote_name ?? "",
@@ -298,6 +301,7 @@ export function OvfFormPage({ quoteId, ovfId }: { quoteId?: string; ovfId?: stri
   function ovfPayload() {
     return {
       po_number: form.po_number.trim(),
+      po_date: form.po_date || null,
       delivery_period: form.delivery_period || null,
       customer_name: form.customer_name.trim() || null,
       quote_name: form.quote_name.trim() || null,
@@ -440,6 +444,7 @@ export function OvfFormPage({ quoteId, ovfId }: { quoteId?: string; ovfId?: stri
           <FinanceField label="Billing Country"><Input value={form.billing_country} onChange={(event) => setField("billing_country", event.target.value)} /></FinanceField>
           <FinanceField label="Shipping State"><Input value={form.shipping_state} onChange={(event) => setField("shipping_state", event.target.value)} /></FinanceField>
           <FinanceField label="PO Number *"><Input value={form.po_number} onChange={(event) => setField("po_number", event.target.value)} /></FinanceField>
+          <FinanceField label="Customer PO Date"><Input type="date" value={form.po_date} onChange={(event) => setField("po_date", event.target.value)} /></FinanceField>
           <FinanceField label="Shipping Contact Person"><Input value={form.shipping_contact_person} onChange={(event) => setField("shipping_contact_person", event.target.value)} /></FinanceField>
           <FinanceField label="Delivery Period *"><Input type="date" value={form.delivery_period} onChange={(event) => setField("delivery_period", event.target.value)} /></FinanceField>
           <FinanceField label="Shipping Country"><Input value={form.shipping_country} onChange={(event) => setField("shipping_country", event.target.value)} /></FinanceField>

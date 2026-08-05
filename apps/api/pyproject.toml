@@ -15,6 +15,9 @@ dependencies = [
     "celery>=5.4.0,<6.0",
     "redis>=5.2.0,<6.0",
     "python-json-logger>=3.2.0,<4.0",
+    "pypdf>=5.1.0,<6.0",
+    "openpyxl>=3.1.0,<4.0",
+    "xlrd>=2.0.0,<3.0",
 ]
 
 [project.optional-dependencies]

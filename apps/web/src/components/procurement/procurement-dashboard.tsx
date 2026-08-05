@@ -4,16 +4,18 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import {
   ArrowUpRight,
+  CircleDot,
   ClipboardList,
   PackageCheck,
-  Receipt,
   RefreshCw,
   ShoppingCart,
+  X,
 } from "lucide-react";
 
 import { FinanceKpiCard } from "@/components/finance/finance-kpi-card";
 import { FinanceStatusBadge } from "@/components/finance/finance-status-badge";
-import { PageHeader } from "@/components/layout/page-header";
+import { ProcurementPageHeader } from "@/components/procurement/procurement-page-header";
+import { procurementUi } from "@/components/procurement/procurement-ui";
 import { ProcurementPipelineFunnel } from "@/components/procurement/procurement-pipeline-funnel";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -25,14 +27,14 @@ import { isAuthenticated } from "@/lib/auth";
 import {
   asNumber,
   asStatus,
-  averageScore,
-  countOpenDocs,
   formatInr,
+  invalidateProcurementListCache,
   loadProcurementOverview,
   sumField,
   type ProcurementOverview,
   type ProcurementRow,
 } from "@/services/procurement-service";
+import { getUnseenScmOvfIds } from "@/utils/scm-queue-seen";
 
 function recentByDate(rows: ProcurementRow[], limit = 6): ProcurementRow[] {
   return [...rows]
@@ -40,19 +42,26 @@ function recentByDate(rows: ProcurementRow[], limit = 6): ProcurementRow[] {
     .slice(0, limit);
 }
 
-function scoreTone(score: number): "success" | "warning" | "danger" | "default" {
-  if (score <= 0) return "default";
-  if (score >= 80) return "success";
-  if (score >= 60) return "warning";
-  return "danger";
+/** Same rule as GrnsListPage — GRN stage = POs with partial/delivered receipt. */
+function isReceiptPo(row: ProcurementRow): boolean {
+  const status = asStatus(row.status);
+  if (status === "draft" || status === "submitted" || status === "cancelled") return false;
+  const grn = asStatus(row.grn_status);
+  return grn === "partial" || grn === "closed" || grn === "delivered";
 }
 
 export function ProcurementDashboard() {
   const [data, setData] = useState<ProcurementOverview | null>(null);
   const [loading, setLoading] = useState(true);
-  const authenticated = typeof window !== "undefined" ? isAuthenticated() : false;
+  const [dismissedArrivalKey, setDismissedArrivalKey] = useState<string | null>(null);
+  const [authenticated, setAuthenticated] = useState(false);
 
-  const load = useCallback(async () => {
+  useEffect(() => {
+    setAuthenticated(isAuthenticated());
+  }, []);
+
+  const load = useCallback(async (force = false) => {
+    if (force) invalidateProcurementListCache();
     setLoading(true);
     try {
       setData(await loadProcurementOverview());
@@ -65,88 +74,196 @@ export function ProcurementDashboard() {
     void load();
   }, [load]);
 
+  // Light poll so newly shared OVFs surface without a manual refresh.
+  useEffect(() => {
+    if (!authenticated) return;
+    const id = window.setInterval(() => {
+      void loadProcurementOverview().then(setData).catch(() => undefined);
+    }, 45_000);
+    return () => window.clearInterval(id);
+  }, [authenticated]);
+
+  const [newQueueItems, setNewQueueItems] = useState<ProcurementRow[]>([]);
+
+  useEffect(() => {
+    const queue = data?.scmQueue ?? [];
+    const ids = queue.map((row) => String(row.ovf_id ?? "")).filter(Boolean);
+    const unseen = new Set(getUnseenScmOvfIds(ids));
+    setNewQueueItems(queue.filter((row) => unseen.has(String(row.ovf_id ?? ""))));
+  }, [data]);
+
+  const arrivalKey = useMemo(
+    () =>
+      newQueueItems
+        .map((row) => String(row.ovf_id ?? ""))
+        .filter(Boolean)
+        .sort()
+        .join(","),
+    [newQueueItems],
+  );
+
+  const showArrivalPopup =
+    newQueueItems.length > 0 && dismissedArrivalKey !== arrivalKey;
+
   const kpis = useMemo(() => {
     if (!data) {
       return {
-        openPrs: 0,
+        scmPending: 0,
         openPos: 0,
-        apOutstanding: 0,
-        avgScore: 0,
-        prValue: 0,
+        draftPos: 0,
+        draftValue: 0,
+        deliveredPos: 0,
         poValue: 0,
-        activeContracts: 0,
       };
     }
+    const scmPending = data.scmQueue.filter((row) => !row.purchase_order_id).length;
+    const closedStatuses = new Set([
+      "draft",
+      "received",
+      "delivered",
+      "closed",
+      "cancelled",
+      "completed",
+    ]);
+    const deliveredStatuses = new Set(["received", "delivered", "closed"]);
+    const openOrders = data.orders.filter((row) => {
+      const status = asStatus(row.status);
+      if (!status) return false;
+      return !closedStatuses.has(status);
+    });
+    const draftOrders = data.orders.filter((row) => {
+      if (asStatus(row.status) !== "draft") return false;
+      // SCM dashboard: only CRM OVF-sourced drafts (ignore seed / non-SCM demos).
+      return asStatus(row.source_module) === "crm";
+    });
+    const deliveredOrders = data.orders.filter((row) => {
+      const status = asStatus(row.status);
+      if (!status || !deliveredStatuses.has(status)) return false;
+      return asStatus(row.source_module) === "crm";
+    });
     return {
-      openPrs: countOpenDocs(data.requisitions, [
-        "approved",
-        "rejected",
-        "converted",
-        "converted_to_rfq",
-        "cancelled",
-        "closed",
-      ]),
-      openPos: countOpenDocs(data.orders, ["received", "closed", "cancelled", "completed"]),
-      apOutstanding: sumField(data.invoices, "balance_due"),
-      avgScore: averageScore(data.performance),
-      prValue: sumField(data.requisitions, "total_amount"),
-      poValue: sumField(data.orders, "total_amount"),
-      activeContracts: countOpenDocs(data.contracts, ["expired", "cancelled", "terminated"]),
+      scmPending,
+      openPos: openOrders.length,
+      draftPos: draftOrders.length,
+      draftValue: sumField(draftOrders, "total_amount"),
+      deliveredPos: deliveredOrders.length,
+      poValue: sumField(openOrders, "total_amount"),
     };
   }, [data]);
 
-  const pipelineCounts = useMemo(
-    () => ({
-      requisitions: data?.requisitions.length ?? 0,
-      rfqs: data?.rfqs.length ?? 0,
-      orders: data?.orders.length ?? 0,
-      grns: data?.grns.length ?? 0,
-      invoices: data?.invoices.length ?? 0,
-    }),
+  const crmOrders = useMemo(
+    () => (data?.orders ?? []).filter((row) => asStatus(row.source_module) === "crm"),
     [data],
   );
 
-  const recentOrders = useMemo(() => recentByDate(data?.orders ?? []), [data]);
-  const recentRequisitions = useMemo(() => recentByDate(data?.requisitions ?? []), [data]);
-  const topVendors = useMemo(() => {
-    const rows = data?.performance ?? [];
-    return [...rows]
-      .sort((a, b) => asNumber(b.overall_score) - asNumber(a.overall_score))
-      .slice(0, 5);
-  }, [data]);
+  const receiptPos = useMemo(
+    () => (data?.vendorPos ?? []).filter(isReceiptPo),
+    [data],
+  );
+
+  const pipelineCounts = useMemo(
+    () => ({
+      scm: data?.scmQueue.length ?? 0,
+      // SCM pipeline: only CRM OVF-sourced POs (exclude seed / non-SCM demos).
+      orders: crmOrders.length,
+      // Align with /procurement/grns — receipt POs, not legacy GRN documents.
+      grns: receiptPos.length,
+      "delivery-challan": 0,
+      "delivery-status": 0,
+    }),
+    [data, crmOrders, receiptPos],
+  );
+
+  const recentOrders = useMemo(() => recentByDate(crmOrders), [crmOrders]);
+  const recentGrns = useMemo(
+    () =>
+      recentByDate(receiptPos).map((row) => ({
+        ...row,
+        status: row.grn_status ?? row.status,
+        subtotal_amount: row.total_amount,
+      })),
+    [receiptPos],
+  );
+  const recentInvoices = useMemo(() => recentByDate(data?.invoices ?? []), [data]);
 
   const authBlocked =
     Boolean(data?.statusCodes.includes(401)) ||
     (!authenticated && Boolean(data?.errors.length));
 
   return (
-    <div className="space-y-5">
-      <PageHeader
+    <div className={procurementUi.page}>
+      <ProcurementPageHeader
         title="Procurement"
-        description="Procure-to-pay workspace — requisitions, RFQs, purchase orders, GRNs, vendor invoices, contracts, and supplier performance."
         actions={
           <div className="flex flex-wrap items-center gap-2">
             <button
               type="button"
-              onClick={() => void load()}
+              onClick={() => void load(true)}
               disabled={loading}
               className="inline-flex h-8 cursor-pointer items-center gap-1.5 rounded-lg border border-border/80 bg-card px-3 text-sm font-medium shadow-sm transition-colors duration-200 hover:bg-muted disabled:opacity-60"
             >
               <RefreshCw className={`size-3.5 ${loading ? "animate-spin" : ""}`} />
               Refresh
             </button>
+            <div className="relative">
+              <Link
+                href="/procurement/scm"
+                className="inline-flex h-8 cursor-pointer items-center gap-1.5 rounded-lg bg-primary px-3 text-sm font-medium text-primary-foreground shadow-sm transition-opacity duration-200 hover:opacity-90"
+              >
+                <ClipboardList className="size-3.5" />
+                SCM Queue
+                {newQueueItems.length > 0 ? (
+                  <span className="ml-0.5 inline-flex min-w-5 items-center justify-center rounded-md bg-amber-400 px-1.5 py-0.5 text-[10px] font-semibold text-slate-900 tabular-nums">
+                    {newQueueItems.length}
+                  </span>
+                ) : null}
+              </Link>
+              {showArrivalPopup ? (
+                <div
+                  role="status"
+                  className="absolute right-0 top-[calc(100%+0.5rem)] z-30 w-[min(22rem,calc(100vw-2rem))] rounded-lg border border-sky-200 bg-card p-3 shadow-md"
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium text-foreground">
+                        {newQueueItems.length === 1
+                          ? "New PO arrived in SCM Queue"
+                          : `${newQueueItems.length} new POs arrived in SCM Queue`}
+                      </p>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        {(() => {
+                          const first = newQueueItems[0];
+                          const label =
+                            String(first?.customer_name ?? first?.ovf_no ?? "OVF").trim() || "OVF";
+                          return newQueueItems.length === 1
+                            ? `${label} is ready for purchase order.`
+                            : `Including ${label} — open the queue to review.`;
+                        })()}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      aria-label="Dismiss notification"
+                      onClick={() => setDismissedArrivalKey(arrivalKey)}
+                      className="cursor-pointer rounded-md p-1 text-muted-foreground transition-colors duration-200 hover:bg-muted hover:text-foreground"
+                    >
+                      <X className="size-3.5" />
+                    </button>
+                  </div>
+                  <Link
+                    href="/procurement/scm"
+                    className="mt-2.5 inline-flex cursor-pointer text-xs font-medium text-sky-700 transition-opacity duration-200 hover:opacity-80"
+                  >
+                    Open SCM Queue →
+                  </Link>
+                </div>
+              ) : null}
+            </div>
             <Link
               href="/procurement/orders"
-              className="inline-flex h-8 cursor-pointer items-center gap-1.5 rounded-lg bg-primary px-3 text-sm font-medium text-primary-foreground shadow-sm transition-opacity duration-200 hover:opacity-90"
-            >
-              <ShoppingCart className="size-3.5" />
-              Orders
-            </Link>
-            <Link
-              href="/procurement/invoices"
               className="inline-flex h-8 cursor-pointer items-center rounded-lg border border-border/80 bg-card px-3 text-sm font-medium shadow-sm transition-colors duration-200 hover:bg-muted"
             >
-              Invoices
+              Purchase Orders
             </Link>
           </div>
         }
@@ -169,11 +286,12 @@ export function ProcurementDashboard() {
 
       <div className="grid gap-2.5 sm:grid-cols-2 xl:grid-cols-4">
         <FinanceKpiCard
-          label="Open requisitions"
-          value={loading ? "—" : String(kpis.openPrs)}
-          hint={`${formatInr(kpis.prValue)} requested value`}
+          label="OVFs awaiting PO"
+          value={loading ? "—" : String(kpis.scmPending)}
+          hint={`${data?.scmQueue.length ?? 0} in SCM queue`}
           icon={ClipboardList}
-          tone={kpis.openPrs > 0 ? "warning" : "success"}
+          tone={kpis.scmPending > 0 ? "warning" : "success"}
+          href="/procurement/scm?filter=open"
         />
         <FinanceKpiCard
           label="Open purchase orders"
@@ -181,20 +299,23 @@ export function ProcurementDashboard() {
           hint={`${formatInr(kpis.poValue)} committed spend`}
           icon={ShoppingCart}
           tone="default"
+          href="/procurement/orders?filter=open"
         />
         <FinanceKpiCard
-          label="AP outstanding"
-          value={loading ? "—" : formatInr(kpis.apOutstanding)}
-          hint={`${data?.invoices.length ?? 0} vendor invoices`}
-          icon={Receipt}
-          tone={kpis.apOutstanding > 0 ? "warning" : "success"}
-        />
-        <FinanceKpiCard
-          label="Avg vendor score"
-          value={loading ? "—" : kpis.avgScore > 0 ? kpis.avgScore.toFixed(1) : "—"}
-          hint={`${kpis.activeContracts} active contracts · ${data?.performance.length ?? 0} scored`}
+          label="Delivered POs"
+          value={loading ? "—" : String(kpis.deliveredPos)}
+          hint="Fully received purchase orders"
           icon={PackageCheck}
-          tone={scoreTone(kpis.avgScore)}
+          tone={kpis.deliveredPos > 0 ? "success" : "default"}
+          href="/procurement/orders?filter=delivered"
+        />
+        <FinanceKpiCard
+          label="Draft purchase orders"
+          value={loading ? "—" : String(kpis.draftPos)}
+          hint={`${formatInr(kpis.draftValue)} draft value`}
+          icon={CircleDot}
+          tone={kpis.draftPos > 0 ? "warning" : "success"}
+          href="/procurement/orders?filter=draft"
         />
       </div>
 
@@ -229,7 +350,7 @@ export function ProcurementDashboard() {
           <h2 className="text-sm font-medium tracking-tight">Workspace</h2>
           <Badge variant="secondary">{procurementWorkspaceGroups.length} areas</Badge>
         </div>
-        <div className="grid gap-3 lg:grid-cols-3">
+        <div className="grid gap-3 lg:grid-cols-2">
           {procurementWorkspaceGroups.map((group) => {
             const Icon = group.icon;
             const resources = resolveProcurementGroupResources(group);
@@ -270,7 +391,7 @@ export function ProcurementDashboard() {
         </div>
       </section>
 
-      <div className="grid gap-3 xl:grid-cols-[1.2fr_1.2fr_0.9fr]">
+      <div className="grid gap-3 xl:grid-cols-3">
         <DocTable
           title="Recent purchase orders"
           subtitle="Latest committed spend"
@@ -278,71 +399,26 @@ export function ProcurementDashboard() {
           loading={loading}
           rows={recentOrders}
           empty="No purchase orders yet."
+          numberField="total_amount"
         />
         <DocTable
-          title="Recent requisitions"
-          subtitle="Latest purchase needs"
-          href="/procurement/requisitions"
+          title="Recent GRNs"
+          subtitle="Latest goods receipts"
+          href="/procurement/grns"
           loading={loading}
-          rows={recentRequisitions}
-          empty="No requisitions yet."
+          rows={recentGrns}
+          empty="No GRNs yet."
+          numberField="subtotal_amount"
         />
-        <div className="overflow-hidden rounded-xl border border-border/80 bg-card shadow-sm">
-          <div className="flex items-center justify-between gap-2 border-b border-border/70 px-4 py-3">
-            <div>
-              <h2 className="text-sm font-medium tracking-tight">Vendor performance</h2>
-              <p className="text-[11px] text-muted-foreground">Top overall scores</p>
-            </div>
-            <Link
-              href="/procurement/performance"
-              className="cursor-pointer text-xs font-medium text-primary transition-opacity duration-200 hover:opacity-80"
-            >
-              View all
-            </Link>
-          </div>
-          <ul className="divide-y divide-border/60">
-            {loading ? (
-              <li className="px-4 py-8 text-center text-sm text-muted-foreground">Loading…</li>
-            ) : topVendors.length === 0 ? (
-              <li className="px-4 py-8 text-center text-sm text-muted-foreground">
-                No performance scores.
-              </li>
-            ) : (
-              topVendors.map((row, idx) => {
-                const score = asNumber(row.overall_score);
-                const pct = Math.min(100, Math.round(score));
-                return (
-                  <li
-                    key={String(row.id ?? idx)}
-                    className="px-4 py-2.5 transition-colors duration-150 hover:bg-accent/30"
-                  >
-                    <div className="flex items-center justify-between gap-2">
-                      <p className="truncate text-sm font-medium">
-                        {String(row.period_code ?? `Vendor ${idx + 1}`)}
-                      </p>
-                      <span className="font-mono text-xs font-medium tabular-nums">
-                        {score.toFixed(1)}
-                      </span>
-                    </div>
-                    <p className="mt-1 text-[11px] text-muted-foreground">
-                      OTD {asNumber(row.on_time_delivery_pct).toFixed(0)}% · Quality{" "}
-                      {asNumber(row.quality_rating).toFixed(1)}
-                    </p>
-                    <div className="mt-1.5 h-1 overflow-hidden rounded-full bg-muted">
-                      <div
-                        className={`h-full rounded-full transition-[width] duration-300 ${
-                          pct >= 80 ? "bg-emerald-600" : pct >= 60 ? "bg-amber-500" : "bg-red-600"
-                        }`}
-                        style={{ width: `${Math.max(4, pct)}%` }}
-                        role="presentation"
-                      />
-                    </div>
-                  </li>
-                );
-              })
-            )}
-          </ul>
-        </div>
+        <DocTable
+          title="Recent vendor invoices"
+          subtitle="Latest payables"
+          href="/procurement/invoices"
+          loading={loading}
+          rows={recentInvoices}
+          empty="No vendor invoices yet."
+          numberField="total_amount"
+        />
       </div>
     </div>
   );
@@ -355,6 +431,7 @@ function DocTable({
   loading,
   rows,
   empty,
+  numberField,
 }: {
   title: string;
   subtitle: string;
@@ -362,6 +439,7 @@ function DocTable({
   loading: boolean;
   rows: ProcurementRow[];
   empty: string;
+  numberField: string;
 }) {
   return (
     <div className="overflow-hidden rounded-xl border border-border/80 bg-card shadow-sm">
@@ -407,13 +485,13 @@ function DocTable({
                   className="border-b border-border/50 transition-colors duration-150 last:border-0 hover:bg-accent/30"
                 >
                   <td className="max-w-[180px] truncate px-4 py-2.5 font-medium text-foreground">
-                    {String(row.document_number ?? "—")}
+                    {String(row.document_number ?? row.ovf_no ?? "—")}
                   </td>
                   <td className="px-4 py-2.5 text-muted-foreground">
                     {String(row.document_date ?? "—")}
                   </td>
                   <td className="px-4 py-2.5 font-mono text-xs tabular-nums text-foreground">
-                    {formatInr(asNumber(row.total_amount))}
+                    {formatInr(asNumber(row[numberField]))}
                   </td>
                   <td className="px-4 py-2.5">
                     <FinanceStatusBadge status={asStatus(row.status) || String(row.status ?? "")} />

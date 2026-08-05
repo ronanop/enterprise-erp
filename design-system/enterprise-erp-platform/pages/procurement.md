@@ -1,8 +1,11 @@
 # Procurement Page Overrides
 
 > **PROJECT:** Enterprise ERP Platform
-> **Page Type:** Procurement procure-to-pay workspace (authenticated app)
-> Rules in this file **override** `MASTER.md`. Only deviations are listed.
+> **Generated:** 2026-08-02 18:49:29
+> **Page Type:** Dashboard / Data View
+
+> ⚠️ **IMPORTANT:** Rules in this file **override** the Master file (`design-system/MASTER.md`).
+> Only deviations from the Master are documented here. For all other rules, refer to the Master.
 
 ---
 
@@ -10,46 +13,40 @@
 
 ### Layout Overrides
 
-- **Structure:** App shell + procurement workspace (page header → KPI strip → lifecycle funnel → workspace groups → recent docs)
-- **Max Width:** Full workspace (~1400px)
-- **Grid:** 12-col for KPIs; horizontal funnel stages; dense tables for PRs/POs/GRNs/invoices
-- **Do not** use marketing hero, 3D configurator, or dark themes
+- **Max Width:** 1400px or full-width
+- **Grid:** 12-column grid for data flexibility
+- **Sections:** 1. Hero headline, 2. Short description, 3. Benefit bullets (3 max), 4. CTA, 5. Footer
 
 ### Spacing Overrides
 
-- **Content Density:** Very high (9/10) — KPI `p-3`, table rows ~36px, funnel gaps `8px`
+- **Content Density:** High — optimize for information display
 
 ### Typography Overrides
 
-- Page title: medium weight ~1.5–1.65rem
-- KPI values: tabular numerals ~1.5rem
-- Funnel labels: 11–12px uppercase tracking
+- No overrides — use Master typography
 
 ### Color Overrides
 
-- Keep MASTER light shell
-- Pipeline stages: slate → sky → teal → emerald with conversion % as text
-- Status: approved/received/posted green · draft/submitted/open amber · rejected/cancelled red
-- Vendor score: red &lt;60 · amber 60–79 · green ≥80
-- No purple gradients; no oversized display type
+- **Strategy:** Minimalist: Brand + white #FFFFFF + accent. Buttons: High contrast 7:1+. Text: Black/Dark grey
 
 ### Component Overrides
 
-- KPI strip: open PRs, open POs, AP outstanding, avg vendor score
-- Secondary nav: Overview · Requisitions · RFQs · Orders · GRNs · Invoices · Contracts · Performance
-- Lifecycle funnel: Requisition → RFQ → PO → GRN → Invoice (counts + conversion %)
-- Prefer Lucide; sticky headers; row hover without layout shift
+- Avoid: Wide tables breaking layout
+- Avoid: Single row actions only
+- Avoid: Auto-play high-res video loops
 
-### Section Order
+---
 
-1. Page header + actions (Refresh, POs, Invoices)
-2. KPI strip (live API aggregates)
-3. Procure-to-pay funnel
-4. Quick links + workspace resource groups
-5. Recent POs + requisitions + vendor performance
+## Page-Specific Components
 
-### Avoid
+- No unique components for this page
 
-- Dark-mode-by-default
-- Fashion/editorial typography
-- Emoji icons, marketing CTAs, pill clusters
+---
+
+## Recommendations
+
+- Effects: Hover tooltips, chart zoom on click, row highlighting on hover, smooth filter animations, data loading spinners
+- Responsive: Use horizontal scroll or card layout
+- Data Entry: Allow multi-select and bulk edit
+- Sustainability: Click-to-play or pause when off-screen
+- CTA Placement: Center, large CTA button

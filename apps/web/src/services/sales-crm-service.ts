@@ -6,9 +6,31 @@
  * All calls go through the shared `apiClient` / `resourceService` — the UI
  * never talks to the database directly (DG-01).
  */
+import { cachedFetch, invalidateClientCache } from "@/lib/client-cache";
 import { ApiClientError, apiClient, resourceService } from "@/services/api-client";
 import { getAccessToken } from "@/lib/auth";
 import { env } from "@/utils/env";
+
+const TTL = {
+  reference: 120_000,
+  catalog: 60_000,
+  entity: 30_000,
+  list: 30_000,
+} as const;
+
+function listCacheKey(api: string, params?: Record<string, string | undefined>): string {
+  if (!params) return `crm:list:${api}`;
+  const parts = Object.entries(params)
+    .filter(([, value]) => value)
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([key, value]) => `${key}=${value}`);
+  return `crm:list:${api}:${parts.join("&") || "all"}`;
+}
+
+/** Bust cached CRM reads after writes (pass `crm:` to clear all). */
+export function invalidateCrmCache(prefix = "crm:"): void {
+  invalidateClientCache(prefix);
+}
 
 function asArray<T>(data: T[] | T | null | undefined): T[] {
   if (Array.isArray(data)) return data;
@@ -170,20 +192,29 @@ export type CompanyFormInput = {
 };
 
 export async function listCompanies(): Promise<Company[]> {
-  const res = await resourceService.list<Company>(CRM_COMPANIES_API);
-  return asArray(res.data);
+  return cachedFetch("crm:list:companies", TTL.list, async () => {
+    const res = await resourceService.list<Company>(CRM_COMPANIES_API);
+    return asArray(res.data);
+  });
 }
 
 export async function getCompany(id: string): Promise<Company> {
-  return unwrap(await resourceService.get<Company>(CRM_COMPANIES_API, id));
+  return cachedFetch(`crm:company:${id}`, TTL.entity, async () =>
+    unwrap(await resourceService.get<Company>(CRM_COMPANIES_API, id)),
+  );
 }
 
 export async function createCompany(body: CompanyFormInput): Promise<Company> {
-  return unwrap(await resourceService.create<Company>(CRM_COMPANIES_API, body));
+  const row = unwrap(await resourceService.create<Company>(CRM_COMPANIES_API, body));
+  invalidateCrmCache("crm:list:companies");
+  return row;
 }
 
 export async function updateCompany(id: string, body: Partial<CompanyFormInput>): Promise<Company> {
-  return unwrap(await resourceService.update<Company>(CRM_COMPANIES_API, id, body));
+  const row = unwrap(await resourceService.update<Company>(CRM_COMPANIES_API, id, body));
+  invalidateCrmCache(`crm:company:${id}`);
+  invalidateCrmCache("crm:list:companies");
+  return row;
 }
 
 export type LeadCreateFromCompanyInput = {
@@ -287,10 +318,16 @@ export type ContactFormInput = {
 };
 
 export async function listContacts(companyAccountId?: string): Promise<Contact[]> {
-  const res = await resourceService.list<Contact>(CRM_CONTACTS_API, {
-    company_account_id: companyAccountId,
-  });
-  return asArray(res.data);
+  return cachedFetch(
+    listCacheKey(CRM_CONTACTS_API, { company_account_id: companyAccountId }),
+    TTL.list,
+    async () => {
+      const res = await resourceService.list<Contact>(CRM_CONTACTS_API, {
+        company_account_id: companyAccountId,
+      });
+      return asArray(res.data);
+    },
+  );
 }
 
 export async function createContact(body: ContactFormInput): Promise<Contact> {
@@ -329,8 +366,10 @@ export type ProductFormInput = {
 };
 
 export async function listProducts(): Promise<Product[]> {
-  const res = await resourceService.list<Product>(CRM_PRODUCTS_API);
-  return asArray(res.data);
+  return cachedFetch("crm:catalog:products", TTL.catalog, async () => {
+    const res = await resourceService.list<Product>(CRM_PRODUCTS_API);
+    return asArray(res.data);
+  });
 }
 
 export async function createProduct(body: ProductFormInput): Promise<Product> {
@@ -369,16 +408,22 @@ export type OemFormInput = {
 };
 
 export async function listOems(): Promise<Oem[]> {
-  const res = await resourceService.list<Oem>(CRM_OEMS_API);
-  return asArray(res.data);
+  return cachedFetch("crm:catalog:oems", TTL.catalog, async () => {
+    const res = await resourceService.list<Oem>(CRM_OEMS_API);
+    return asArray(res.data);
+  });
 }
 
 export async function createOem(body: OemFormInput): Promise<Oem> {
-  return unwrap(await resourceService.create<Oem>(CRM_OEMS_API, body));
+  const row = unwrap(await resourceService.create<Oem>(CRM_OEMS_API, body));
+  invalidateCrmCache("crm:catalog:oems");
+  return row;
 }
 
 export async function updateOem(id: string, body: Partial<OemFormInput>): Promise<Oem> {
-  return unwrap(await resourceService.update<Oem>(CRM_OEMS_API, id, body));
+  const row = unwrap(await resourceService.update<Oem>(CRM_OEMS_API, id, body));
+  invalidateCrmCache("crm:catalog:oems");
+  return row;
 }
 
 // ---------------------------------------------------------------------------
@@ -450,24 +495,34 @@ export type SalesLead = {
 };
 
 export async function listSalesLeads(companyAccountId?: string): Promise<SalesLead[]> {
-  const res = await resourceService.list<SalesLead>(CRM_LEADS_API, {
-    company_account_id: companyAccountId,
-    page_size: 200,
-  });
-  return asArray(res.data).filter(
-    (row) =>
-      Boolean(row.company_account_id) &&
-      row.blueprint_state !== "converted" &&
-      !row.converted_opportunity_id,
+  return cachedFetch(
+    listCacheKey(CRM_LEADS_API, { company_account_id: companyAccountId }),
+    TTL.list,
+    async () => {
+      const res = await resourceService.list<SalesLead>(CRM_LEADS_API, {
+        company_account_id: companyAccountId,
+        page_size: 200,
+      });
+      return asArray(res.data).filter(
+        (row) =>
+          Boolean(row.company_account_id) &&
+          row.blueprint_state !== "converted" &&
+          !row.converted_opportunity_id,
+      );
+    },
   );
 }
 
 export async function getSalesLead(id: string): Promise<SalesLead> {
-  return unwrap(await resourceService.get<SalesLead>(CRM_LEADS_API, id));
+  return cachedFetch(`crm:lead:${id}`, TTL.entity, async () =>
+    unwrap(await resourceService.get<SalesLead>(CRM_LEADS_API, id)),
+  );
 }
 
 export async function getLeadBlueprint(id: string): Promise<BlueprintState> {
-  return unwrap(await apiClient<BlueprintState>(`${CRM_LEADS_API}/${id}/blueprint`));
+  return cachedFetch(`crm:lead:${id}:blueprint`, TTL.entity, async () =>
+    unwrap(await apiClient<BlueprintState>(`${CRM_LEADS_API}/${id}/blueprint`)),
+  );
 }
 
 export async function markLeadLost(id: string, reason?: string): Promise<SalesLead> {
@@ -486,9 +541,14 @@ export type LeadConvertInput = {
 };
 
 export async function convertLead(id: string, body: LeadConvertInput): Promise<Opportunity> {
-  return unwrap(
+  const opp = unwrap(
     await apiClient<Opportunity>(`${CRM_LEADS_API}/${id}/convert`, { method: "POST", body }),
   );
+  invalidateCrmCache(`crm:lead:${id}`);
+  invalidateCrmCache("crm:list:/crm/leads");
+  invalidateCrmCache("crm:list:/crm/opportunities");
+  invalidateCrmCache("crm:nav-counts:");
+  return opp;
 }
 
 // ---------------------------------------------------------------------------
@@ -529,20 +589,32 @@ export type Opportunity = {
 export async function listOpportunities(params?: {
   company_account_id?: string;
 }): Promise<Opportunity[]> {
-  const res = await resourceService.list<Opportunity>(CRM_OPPORTUNITIES_API, params);
-  const rows = asArray(res.data);
-  if (params?.company_account_id) {
-    return rows.filter((row) => row.company_account_id === params.company_account_id);
-  }
-  return rows;
+  return cachedFetch(
+    listCacheKey(CRM_OPPORTUNITIES_API, {
+      company_account_id: params?.company_account_id,
+    }),
+    TTL.list,
+    async () => {
+      const res = await resourceService.list<Opportunity>(CRM_OPPORTUNITIES_API, params);
+      const rows = asArray(res.data);
+      if (params?.company_account_id) {
+        return rows.filter((row) => row.company_account_id === params.company_account_id);
+      }
+      return rows;
+    },
+  );
 }
 
 export async function getOpportunity(id: string): Promise<Opportunity> {
-  return unwrap(await resourceService.get<Opportunity>(CRM_OPPORTUNITIES_API, id));
+  return cachedFetch(`crm:opportunity:${id}`, TTL.entity, async () =>
+    unwrap(await resourceService.get<Opportunity>(CRM_OPPORTUNITIES_API, id)),
+  );
 }
 
 export async function getOpportunityBlueprint(id: string): Promise<BlueprintState> {
-  return unwrap(await apiClient<BlueprintState>(`${CRM_OPPORTUNITIES_API}/${id}/blueprint`));
+  return cachedFetch(`crm:opportunity:${id}:blueprint`, TTL.entity, async () =>
+    unwrap(await apiClient<BlueprintState>(`${CRM_OPPORTUNITIES_API}/${id}/blueprint`)),
+  );
 }
 
 export type OpportunityTimelineEvent = {
@@ -706,16 +778,27 @@ export async function listQuotes(params?: {
   opportunity_id?: string;
   company_account_id?: string;
 }): Promise<Quote[]> {
-  const res = await resourceService.list<Quote>(CRM_QUOTES_API, params);
-  const rows = asArray(res.data);
-  if (params?.company_account_id) {
-    return rows.filter((row) => row.company_account_id === params.company_account_id);
-  }
-  return rows;
+  return cachedFetch(
+    listCacheKey(CRM_QUOTES_API, {
+      opportunity_id: params?.opportunity_id,
+      company_account_id: params?.company_account_id,
+    }),
+    TTL.list,
+    async () => {
+      const res = await resourceService.list<Quote>(CRM_QUOTES_API, params);
+      const rows = asArray(res.data);
+      if (params?.company_account_id) {
+        return rows.filter((row) => row.company_account_id === params.company_account_id);
+      }
+      return rows;
+    },
+  );
 }
 
 export async function getQuote(id: string): Promise<Quote> {
-  return unwrap(await resourceService.get<Quote>(CRM_QUOTES_API, id));
+  return cachedFetch(`crm:quote:${id}`, TTL.entity, async () =>
+    unwrap(await resourceService.get<Quote>(CRM_QUOTES_API, id)),
+  );
 }
 
 export async function createQuote(body: QuoteFormInput): Promise<Quote> {
@@ -810,6 +893,7 @@ export type Ovf = {
   opportunity_id: string;
   company_account_id: string | null;
   po_number: string | null;
+  po_date?: string | null;
   delivery_period: string | null;
   customer_name: string | null;
   quote_name: string | null;
@@ -847,6 +931,7 @@ export type OvfFormInput = {
   quote_id: string;
   branch_id: string;
   po_number?: string | null;
+  po_date?: string | null;
   delivery_period?: string | null;
   customer_name?: string | null;
   quote_name?: string | null;
@@ -896,16 +981,27 @@ export async function listOvfs(params?: {
   opportunity_id?: string;
   company_account_id?: string;
 }): Promise<Ovf[]> {
-  const res = await resourceService.list<Ovf>(CRM_OVF_API, params);
-  const rows = asArray(res.data);
-  if (params?.company_account_id) {
-    return rows.filter((row) => row.company_account_id === params.company_account_id);
-  }
-  return rows;
+  return cachedFetch(
+    listCacheKey(CRM_OVF_API, {
+      opportunity_id: params?.opportunity_id,
+      company_account_id: params?.company_account_id,
+    }),
+    TTL.list,
+    async () => {
+      const res = await resourceService.list<Ovf>(CRM_OVF_API, params);
+      const rows = asArray(res.data);
+      if (params?.company_account_id) {
+        return rows.filter((row) => row.company_account_id === params.company_account_id);
+      }
+      return rows;
+    },
+  );
 }
 
 export async function getOvf(id: string): Promise<Ovf> {
-  return unwrap(await resourceService.get<Ovf>(CRM_OVF_API, id));
+  return cachedFetch(`crm:ovf:${id}`, TTL.entity, async () =>
+    unwrap(await resourceService.get<Ovf>(CRM_OVF_API, id)),
+  );
 }
 
 export async function createOvf(body: OvfFormInput): Promise<Ovf> {
@@ -1186,10 +1282,16 @@ export type MeetingFormInput = {
 };
 
 export async function listMeetings(companyAccountId?: string): Promise<CrmMeeting[]> {
-  const res = await resourceService.list<CrmMeeting>(CRM_MEETINGS_API, {
-    company_account_id: companyAccountId,
-  });
-  return asArray(res.data);
+  return cachedFetch(
+    listCacheKey(CRM_MEETINGS_API, { company_account_id: companyAccountId }),
+    TTL.list,
+    async () => {
+      const res = await resourceService.list<CrmMeeting>(CRM_MEETINGS_API, {
+        company_account_id: companyAccountId,
+      });
+      return asArray(res.data);
+    },
+  );
 }
 
 export async function createMeeting(body: MeetingFormInput): Promise<CrmMeeting> {
@@ -1234,10 +1336,16 @@ export type FollowupFormInput = {
 };
 
 export async function listFollowups(companyAccountId?: string): Promise<CrmFollowup[]> {
-  const res = await resourceService.list<CrmFollowup>(CRM_FOLLOWUPS_API, {
-    company_account_id: companyAccountId,
-  });
-  return asArray(res.data);
+  return cachedFetch(
+    listCacheKey(CRM_FOLLOWUPS_API, { company_account_id: companyAccountId }),
+    TTL.list,
+    async () => {
+      const res = await resourceService.list<CrmFollowup>(CRM_FOLLOWUPS_API, {
+        company_account_id: companyAccountId,
+      });
+      return asArray(res.data);
+    },
+  );
 }
 
 export async function createFollowup(body: FollowupFormInput): Promise<CrmFollowup> {
@@ -1311,39 +1419,47 @@ export async function createTask(body: TaskFormInput): Promise<CrmTask> {
 export type Option = { id: string; label: string; email?: string };
 
 export async function listLeadSourceOptions(): Promise<Option[]> {
-  const res = await resourceService.list("/crm/lead-sources");
-  const rows = asArray(res.data as Record<string, unknown>[] | Record<string, unknown> | null);
-  return rows.map((r) => ({
-    id: String(r.id),
-    label: String(r.source_name ?? r.source_code ?? r.id),
-  }));
+  return cachedFetch("crm:ref:lead-sources", TTL.reference, async () => {
+    const res = await resourceService.list("/crm/lead-sources");
+    const rows = asArray(res.data as Record<string, unknown>[] | Record<string, unknown> | null);
+    return rows.map((r) => ({
+      id: String(r.id),
+      label: String(r.source_name ?? r.source_code ?? r.id),
+    }));
+  });
 }
 
 export async function listPipelineOptions(): Promise<Option[]> {
-  const res = await resourceService.list("/crm/pipelines");
-  const rows = asArray(res.data as Record<string, unknown>[] | Record<string, unknown> | null);
-  return rows.map((r) => ({
-    id: String(r.id),
-    label: String(r.pipeline_name ?? r.pipeline_code ?? r.id),
-  }));
+  return cachedFetch("crm:ref:pipelines", TTL.reference, async () => {
+    const res = await resourceService.list("/crm/pipelines");
+    const rows = asArray(res.data as Record<string, unknown>[] | Record<string, unknown> | null);
+    return rows.map((r) => ({
+      id: String(r.id),
+      label: String(r.pipeline_name ?? r.pipeline_code ?? r.id),
+    }));
+  });
 }
 
 export async function listBranchOptions(): Promise<Option[]> {
-  const res = await resourceService.list("/branches");
-  const rows = asArray(res.data as Record<string, unknown>[] | Record<string, unknown> | null);
-  return rows.map((r) => ({
-    id: String(r.id),
-    label: String(r.branch_name ?? r.name ?? r.id),
-  }));
+  return cachedFetch("crm:ref:branches", TTL.reference, async () => {
+    const res = await resourceService.list("/branches");
+    const rows = asArray(res.data as Record<string, unknown>[] | Record<string, unknown> | null);
+    return rows.map((r) => ({
+      id: String(r.id),
+      label: String(r.branch_name ?? r.name ?? r.id),
+    }));
+  });
 }
 
 export async function listEmployeeOptions(): Promise<Option[]> {
-  const res = await resourceService.list("/employees");
-  const rows = asArray(res.data as Record<string, unknown>[] | Record<string, unknown> | null);
-  return rows.map((r) => ({
-    id: String(r.id),
-    label: `${[r.first_name, r.last_name].filter(Boolean).join(" ")}${r.employee_code ? ` (${r.employee_code})` : ""
-      }`.trim(),
-    email: r.email ? String(r.email) : undefined,
-  }));
+  return cachedFetch("crm:ref:employees", TTL.reference, async () => {
+    const res = await resourceService.list("/employees");
+    const rows = asArray(res.data as Record<string, unknown>[] | Record<string, unknown> | null);
+    return rows.map((r) => ({
+      id: String(r.id),
+      label: `${[r.first_name, r.last_name].filter(Boolean).join(" ")}${r.employee_code ? ` (${r.employee_code})` : ""
+        }`.trim(),
+      email: r.email ? String(r.email) : undefined,
+    }));
+  });
 }

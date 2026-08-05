@@ -7,7 +7,7 @@
 ---
 
 **Project:** Enterprise ERP Platform
-**Generated:** 2026-07-23 10:25:27
+**Generated:** 2026-08-02 18:49:29
 **Category:** B2B Service
 **Design Dials:** Variance 3/10 (Centered / Minimal) | Motion 3/10 (Subtle) | Density 9/10 (Dense / Dashboard)
 
@@ -34,14 +34,14 @@
 
 ### Typography
 
-- **Heading Font:** Fira Code
-- **Body Font:** Fira Sans
-- **Mood:** dashboard, data, analytics, code, technical, precise
-- **Google Fonts:** [Fira Code + Fira Sans](https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600;700&family=Fira+Sans:wght@300;400;500;600;700&display=swap)
+- **Heading Font:** Roboto
+- **Body Font:** Roboto
+- **Mood:** material design 3, md3, android, google, tonal, friendly, rounded, accessible, adaptive
+- **Google Fonts:** [Roboto + Roboto](https://fonts.googleapis.com/css2?family=Roboto:ital,wght@0,300;0,400;0,500;0,700;1,400)
 
 **CSS Import:**
 ```css
-@import url('https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600;700&family=Fira+Sans:wght@300;400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Roboto:ital,wght@0,300;0,400;0,500;0,700;1,400&display=swap');
 ```
 
 ### Spacing Variables
@@ -171,11 +171,11 @@
 
 ### Page Pattern
 
-**Pattern Name:** Interactive 3D Configurator
+**Pattern Name:** Minimal Single Column
 
-- **Conversion Strategy:** Increases ownership feeling. 360 view reduces return rates. Direct add-to-cart.
-- **CTA Placement:** Inside Configurator UI + Sticky Bottom Bar
-- **Section Order:** 1. Hero (Configurator), 2. Feature Highlight (synced), 3. Price/Specs, 4. Purchase
+- **Conversion Strategy:** Single CTA focus. Large typography. Lots of whitespace. No nav clutter. Mobile-first.
+- **CTA Placement:** Center, large CTA button
+- **Section Order:** 1. Hero headline, 2. Short description, 3. Benefit bullets (3 max), 4. CTA, 5. Footer
 
 ---
 

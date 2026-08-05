@@ -81,10 +81,35 @@ export function CrmDashboard() {
   const [loading, setLoading] = useState(true);
   const authenticated = typeof window !== "undefined" ? isAuthenticated() : false;
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (force = false) => {
     setLoading(true);
     try {
-      setData(await loadCrmOverview());
+      setData(await loadCrmOverview(force));
+    } catch {
+      setData((prev) =>
+        prev ?? {
+          leadSources: [],
+          leads: [],
+          leadAssignments: [],
+          leadActivities: [],
+          pipelines: [],
+          opportunities: [],
+          opportunityStages: [],
+          campaigns: [],
+          interactions: [],
+          tasks: [],
+          followups: [],
+          meetings: [],
+          callLogs: [],
+          emailLogs: [],
+          visitLogs: [],
+          feedback: [],
+          satisfaction: [],
+          errors: ["Failed to load CRM dashboard"],
+          statusCodes: [],
+          partial: true,
+        },
+      );
     } finally {
       setLoading(false);
     }
@@ -189,7 +214,7 @@ export function CrmDashboard() {
               variant="outline"
               size="sm"
               className="cursor-pointer"
-              onClick={() => void load()}
+              onClick={() => void load(true)}
               disabled={loading}
             >
               <RefreshCw className={`size-3.5 ${loading ? "animate-spin" : ""}`} />
@@ -223,7 +248,9 @@ export function CrmDashboard() {
 
       {data?.partial && !authBlocked ? (
         <div className="rounded-xl border border-border/80 bg-muted/40 px-4 py-2.5 text-xs text-muted-foreground">
-          Some CRM endpoints returned errors. Showing available records.
+          Some CRM endpoints returned errors
+          {data.errors.length > 0 ? `: ${data.errors.slice(0, 2).join("; ")}` : ""}. Showing
+          available records.
         </div>
       ) : null}
 

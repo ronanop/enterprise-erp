@@ -1,6 +1,7 @@
 """Pydantic schemas for master data APIs."""
 
 from datetime import date, datetime
+from typing import Any
 from uuid import UUID
 
 from pydantic import BaseModel, Field
@@ -144,7 +145,8 @@ class VendorCreateRequest(BaseModel):
     email: str | None = None
     mobile: str | None = None
     payment_terms: str | None = None
-    address_json: AddressJson | None = None
+    # Flexible JSON so SCM can store one or many free-text addresses.
+    address_json: dict[str, Any] | None = None
 
 
 class VendorUpdateRequest(BaseModel):
@@ -156,7 +158,7 @@ class VendorUpdateRequest(BaseModel):
     email: str | None = None
     mobile: str | None = None
     payment_terms: str | None = None
-    address_json: AddressJson | None = None
+    address_json: dict[str, Any] | None = None
     status: str | None = None
 
 
@@ -175,7 +177,7 @@ class VendorResponse(BaseModel):
     email: str | None = None
     mobile: str | None = None
     payment_terms: str | None = None
-    address_json: AddressJson | None = None
+    address_json: dict[str, Any] | None = None
 
 
 class ProductCreateRequest(BaseModel):

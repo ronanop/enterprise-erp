@@ -21,9 +21,9 @@ export function ProcurementPipelineFunnel({ counts, loading }: ProcurementPipeli
     <div className="rounded-xl border border-border/80 bg-card p-4 shadow-sm">
       <div className="mb-3 flex items-baseline justify-between gap-2">
         <h2 className="text-sm font-medium tracking-tight">Procure-to-pay pipeline</h2>
-        <p className="text-[11px] text-muted-foreground">Requisition → Invoice (FRD-07)</p>
+        <p className="text-[11px] text-muted-foreground">SCM Queue → Delivery status</p>
       </div>
-      <ol className="grid gap-2 sm:grid-cols-5">
+      <ol className="grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
         {values.map((stage, index) => {
           const prev = index > 0 ? values[index - 1].count : null;
           const conversion =
@@ -45,10 +45,10 @@ export function ProcurementPipelineFunnel({ counts, loading }: ProcurementPipeli
                   <div
                     className={cn(
                       "h-full rounded-full bg-sky-600 transition-[width] duration-300",
-                      index === 1 && "bg-sky-700",
-                      index === 2 && "bg-teal-600",
-                      index === 3 && "bg-emerald-600",
-                      index === 4 && "bg-slate-500",
+                      index === 1 && "bg-teal-600",
+                      index === 2 && "bg-emerald-600",
+                      index === 3 && "bg-violet-600",
+                      index === 4 && "bg-slate-600",
                     )}
                     style={{ width: `${width}%` }}
                     role="presentation"

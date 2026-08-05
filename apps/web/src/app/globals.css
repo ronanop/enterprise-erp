@@ -159,3 +159,32 @@
     border-radius: 999px;
   }
 }
+
+/*
+ * Next.js dev-only: <nextjs-portal> hosts the dev indicator / error overlay.
+ * Host is non-interactive so it does not steal clicks from the app (e.g. modals at z-200).
+ * Children (issue badge / panel) re-enable pointer-events so they stay clickable.
+ * Not present in production builds.
+ */
+nextjs-portal {
+  position: fixed !important;
+  inset: auto auto 0 0 !important;
+  top: auto !important;
+  width: auto !important;
+  height: auto !important;
+  min-width: 0 !important;
+  min-height: 0 !important;
+  overflow: visible;
+  pointer-events: none;
+  z-index: 40;
+}
+
+/* Hide empty dev portal host (no issue badge / overlay mounted). */
+nextjs-portal:not(:has(*)) {
+  display: none !important;
+  visibility: hidden !important;
+}
+
+nextjs-portal * {
+  pointer-events: auto;
+}

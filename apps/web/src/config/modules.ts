@@ -317,13 +317,6 @@ export const erpModules: ErpModule[] = [
         listable: true,
       },
       {
-        key: "vendor-po",
-        title: "Vendors & PO",
-        description: "Vendor purchase orders with GRN status",
-        apiPath: "/procurement/scm/vendor-pos",
-        listable: true,
-      },
-      {
         key: "requisitions",
         title: "Requisitions",
         description: "Internal purchase requests",
@@ -350,7 +343,7 @@ export const erpModules: ErpModule[] = [
       {
         key: "orders",
         title: "Purchase Orders",
-        description: "Committed purchase orders",
+        description: "All vendor POs — draft, issued, and GRN status",
         apiPath: "/procurement/orders",
       },
       {
@@ -360,10 +353,29 @@ export const erpModules: ErpModule[] = [
         apiPath: "/procurement/grns",
       },
       {
+        key: "delivery-challan",
+        title: "Delivery Challan",
+        description: "Customer delivery challans after GRN",
+        apiPath: "/procurement/delivery-challan",
+      },
+      {
+        key: "delivery-status",
+        title: "Delivery Status",
+        description: "Shipment and delivery tracking",
+        apiPath: "/procurement/delivery-status",
+      },
+      {
         key: "invoices",
         title: "Vendor Invoices",
         description: "AP invoices and balances",
         apiPath: "/procurement/invoices",
+      },
+      {
+        key: "vendors",
+        title: "Vendors",
+        description: "Vendor master list and add vendor",
+        apiPath: "/vendors",
+        listable: true,
       },
       {
         key: "returns",

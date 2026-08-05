@@ -4,12 +4,15 @@ OVF is created only after the customer PO is approved on the opportunity, and
 carries vendor/customer payment terms used to compute the finance cost.
 """
 
+from datetime import date, datetime
 from decimal import Decimal
 from uuid import UUID, uuid4
 
 from sqlalchemy import (
     Boolean,
     CheckConstraint,
+    Date,
+    DateTime,
     ForeignKey,
     Numeric,
     SmallInteger,
@@ -58,6 +61,7 @@ class CrmOvf(Base, *CrmTransactionMixin):
         index=True,
     )
     po_number: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    po_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     delivery_period: Mapped[str | None] = mapped_column(String(100), nullable=True)
     customer_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
     quote_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
@@ -77,6 +81,8 @@ class CrmOvf(Base, *CrmTransactionMixin):
 
     approval_status: Mapped[str] = mapped_column(String(30), nullable=False, default="not_required")
     shared_to_scm: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
+    shared_to_scm_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    scm_on_hold: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
     deal_won: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
     deal_won_amount: Mapped[Decimal | None] = mapped_column(Numeric(18, 4), nullable=True)
 

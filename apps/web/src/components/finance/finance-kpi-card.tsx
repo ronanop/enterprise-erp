@@ -1,4 +1,5 @@
 import type { LucideIcon } from "lucide-react";
+import Link from "next/link";
 
 import { cn } from "@/lib/utils";
 
@@ -8,6 +9,8 @@ interface FinanceKpiCardProps {
   hint?: string;
   icon: LucideIcon;
   tone?: "default" | "success" | "warning" | "danger";
+  /** When set, the card navigates on click. */
+  href?: string;
 }
 
 const toneStyles = {
@@ -23,9 +26,10 @@ export function FinanceKpiCard({
   hint,
   icon: Icon,
   tone = "default",
+  href,
 }: FinanceKpiCardProps) {
-  return (
-    <div className="rounded-xl border border-border/80 bg-card p-3.5 shadow-sm transition-[box-shadow,border-color] duration-200 hover:border-border hover:shadow-md">
+  const body = (
+    <>
       <div className="flex items-start justify-between gap-2">
         <p className="text-[11px] font-medium tracking-wide text-muted-foreground uppercase">{label}</p>
         <span className={cn("flex size-8 items-center justify-center rounded-lg", toneStyles[tone])}>
@@ -36,6 +40,21 @@ export function FinanceKpiCard({
         {value}
       </p>
       {hint ? <p className="mt-1 text-[11px] text-muted-foreground">{hint}</p> : null}
-    </div>
+    </>
   );
+
+  const className = cn(
+    "rounded-xl border border-border/80 bg-card p-3.5 shadow-sm transition-[box-shadow,border-color] duration-200 hover:border-border hover:shadow-md",
+    href && "block cursor-pointer hover:border-primary/30",
+  );
+
+  if (href) {
+    return (
+      <Link href={href} className={className}>
+        {body}
+      </Link>
+    );
+  }
+
+  return <div className={className}>{body}</div>;
 }

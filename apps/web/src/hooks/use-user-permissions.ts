@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 
+import { cachedFetch } from "@/lib/client-cache";
 import { authService } from "@/services/api-client";
 import type { UserProfile } from "@/types/api";
 
@@ -11,16 +12,16 @@ export function useUserPermissions() {
 
   useEffect(() => {
     let cancelled = false;
-    void (async () => {
-      try {
-        const res = await authService.me();
+    void cachedFetch("auth:me", 60_000, () => authService.me())
+      .then((res) => {
         if (!cancelled) setUser(res.data);
-      } catch {
+      })
+      .catch(() => {
         if (!cancelled) setUser(null);
-      } finally {
+      })
+      .finally(() => {
         if (!cancelled) setLoading(false);
-      }
-    })();
+      });
     return () => {
       cancelled = true;
     };

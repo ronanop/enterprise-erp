@@ -35,12 +35,15 @@ def list_orders(
     db: Annotated[Session, Depends(get_db)],
     pagination: Annotated[PaginationParams, Depends(get_pagination)],
     company_id: UUID | None = None,
+    include_commercial: bool = False,
 ) -> APIResponse[list[OrderResponse]]:
-    rows = OrderService(db).list_orders(ctx, company_id)
+    rows = OrderService(db).list_order_responses(
+        ctx, company_id, enrich_commercial=include_commercial
+    )
     page = paginate(rows, pagination)
     return APIResponse(
         message="Orders retrieved",
-        data=[OrderResponse.model_validate(r) for r in page],
+        data=page,
     )
 
 
@@ -60,9 +63,12 @@ def get_order(
     order_id: UUID,
     ctx: Annotated[TenantContext, Depends(require_permission("procurement.order:read"))],
     db: Annotated[Session, Depends(get_db)],
+    include_commercial: bool = True,
 ) -> APIResponse[OrderResponse]:
-    row = OrderService(db).get_order(ctx, order_id)
-    return APIResponse(message="Order retrieved", data=OrderResponse.model_validate(row))
+    row = OrderService(db).get_order_response(
+        ctx, order_id, enrich_commercial=include_commercial
+    )
+    return APIResponse(message="Order retrieved", data=row)
 
 
 @orders_router.patch("/{order_id}", response_model=APIResponse[OrderResponse])

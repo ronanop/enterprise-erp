@@ -3,7 +3,7 @@
 from datetime import date, datetime
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 # --- Requisition ---
 
@@ -276,9 +276,26 @@ class OrderLineResponse(BaseModel):
     product_name: str | None = None
     quantity: float
     quantity_received: float
+    last_receipt_qty: float = 0
+    last_receipt_batch_id: UUID | None = None
+    last_receipt_serial_numbers: list[str] | None = None
     unit_cost: float
     line_total: float
     status: str
+
+    @field_validator("last_receipt_serial_numbers", mode="before")
+    @classmethod
+    def coerce_serial_numbers(cls, value: object) -> list[str] | None:
+        if value is None:
+            return None
+        if not isinstance(value, list):
+            return None
+        out: list[str] = []
+        for item in value:
+            text = str(item).strip()
+            if text:
+                out.append(text)
+        return out or None
 
 
 class OrderResponse(BaseModel):
@@ -304,6 +321,24 @@ class OrderResponse(BaseModel):
     source_module: str | None = None
     source_document_type: str | None = None
     source_document_id: UUID | None = None
+    company_po_number: str | None = None
+    entity_code: str | None = None
+    customer_name: str | None = None
+    ovf_date: date | None = None
+    customer_po_number: str | None = None
+    vendor_total: float = 0
+    customer_total: float = 0
+    customer_tax_amount: float = 0
+    customer_total_with_tax: float = 0
+    vendor_tax_amount: float = 0
+    vendor_total_with_tax: float = 0
+    margin_amount: float = 0
+    margin_pct: float = 0
+    description: str | None = None
+    current_receipt_batch_id: UUID | None = None
+    current_receipt_batch_at: datetime | None = None
+    current_grn_number: str | None = None
+    grn_sequence: int = 0
     version: int
     lines: list[OrderLineResponse] = Field(default_factory=list)
 
@@ -318,25 +353,53 @@ class ScmQueueItemResponse(BaseModel):
     quote_name: str | None = None
     account_name: str | None = None
     po_number: str | None = None
+    company_po_number: str | None = None
     owner_name: str | None = None
     blueprint_state: str
     company_id: UUID
     branch_id: UUID
     vendor_line_count: int = 0
+    vendor_qty: float = 0
     vendor_total: float = 0
+    customer_total: float = 0
+    margin_amount: float = 0
+    vendor_payment_days: int = 0
+    customer_payment_days: int = 0
+    vendor_name: str | None = None
+    oem_name: str | None = None
+    received_at: datetime | None = None
     purchase_order_id: UUID | None = None
     purchase_order_number: str | None = None
     purchase_order_status: str | None = None
+    scm_on_hold: bool = False
     can_create_po: bool = True
+
+
+class ScmNextCompanyPoResponse(BaseModel):
+    entity_code: str
+    company_po_number: str
 
 
 class ScmVendorLinePreview(BaseModel):
     line_id: UUID
     line_no: int
     product_name: str
+    description: str | None = None
     qty: float
     unit_price: float
     line_total: float
+    gst_pct: float = 0
+    gst_amount: float = 0
+    total_with_gst: float = 0
+
+
+class ScmMarginLinePreview(BaseModel):
+    line_no: int
+    product_name: str
+    description: str | None = None
+    qty: float
+    margin_amount: float
+    margin_pct: float
 
 
 class ScmOvfPreviewResponse(BaseModel):
@@ -346,20 +409,47 @@ class ScmOvfPreviewResponse(BaseModel):
     branch_id: UUID
     quote_id: UUID
     opportunity_id: UUID
+    quote_no: str | None = None
     po_number: str | None = None
+    po_date: date | None = None
+    delivery_period: str | None = None
     customer_name: str | None = None
     quote_name: str | None = None
     account_name: str | None = None
     owner_name: str | None = None
+    oem_name: str | None = None
+    oem_contact_person: str | None = None
+    oem_contact_email: str | None = None
+    oem_contact_number: str | None = None
     blueprint_state: str
+    approval_status: str | None = None
     freight: float = 0
     additional_charges: float = 0
     vendor_payment_days: int = 0
+    customer_payment_days: int = 0
+    finance_cost_pct: float = 0
     total_margin_amount: float = 0
+    total_margin_pct: float = 0
+    products_margin_amount: float = 0
+    billing_address: str | None = None
+    shipping_address: str | None = None
+    billing_state: str | None = None
+    shipping_state: str | None = None
+    billing_contact_person: str | None = None
+    shipping_contact_person: str | None = None
+    customer_gst: str | None = None
+    tax_percentage: float = 0
+    ovf_approver: str | None = None
+    vendor_name: str | None = None
+    company_po_number: str | None = None
     vendor_lines: list[ScmVendorLinePreview] = Field(default_factory=list)
+    customer_lines: list[ScmVendorLinePreview] = Field(default_factory=list)
+    margin_lines: list[ScmMarginLinePreview] = Field(default_factory=list)
     purchase_order_id: UUID | None = None
     purchase_order_number: str | None = None
     can_create_po: bool = True
+    scm_on_hold: bool = False
+    purchase_order_status: str | None = None
 
 
 class ScmCreatePoFromOvfRequest(BaseModel):
@@ -368,12 +458,23 @@ class ScmCreatePoFromOvfRequest(BaseModel):
     currency_code: str = "INR"
     payment_terms: str | None = None
     expected_delivery_date: date | None = None
+    entity_code: str
     finalize: bool = False
+    # Hold: create draft then cancel so SCM Queue shows Hold and Create PO stays available.
+    hold: bool = False
+
+
+class ScmUpdateOvfChargesRequest(BaseModel):
+    freight: float = 0
+    additional_charges: float = 0
+    finance_cost_pct: float = 0
 
 
 class ScmLineReceiptUpdateRequest(BaseModel):
     quantity_received: float
     grn_status: str | None = None  # pending | partial | delivered
+    # One value per unit received in this save (use "NA" when not tracked).
+    serial_numbers: list[str] | None = None
 
 
 class ScmVendorPoLineResponse(BaseModel):
@@ -382,6 +483,9 @@ class ScmVendorPoLineResponse(BaseModel):
     product_name: str | None = None
     quantity: float
     quantity_received: float
+    last_receipt_qty: float = 0
+    last_receipt_batch_id: UUID | None = None
+    last_receipt_serial_numbers: list[str] | None = None
     unit_cost: float
     line_total: float
     status: str
@@ -399,9 +503,114 @@ class ScmVendorPoResponse(BaseModel):
     source_module: str | None = None
     source_document_type: str | None = None
     source_document_id: UUID | None = None
+    company_po_number: str | None = None
+    vendor_total: float = 0
+    customer_total: float = 0
+    margin_amount: float = 0
     grn_status: str
+    receipt_saved_at: datetime | None = None
+    current_receipt_batch_id: UUID | None = None
+    current_grn_number: str | None = None
+    grn_sequence: int = 0
     line_count: int = 0
     lines: list[ScmVendorPoLineResponse] = Field(default_factory=list)
+
+
+class ScmReceiptBatchLineResponse(BaseModel):
+    order_line_id: UUID
+    line_number: int
+    product_name: str | None = None
+    quantity: float
+    serial_numbers: list[str] | None = None
+
+    @field_validator("serial_numbers", mode="before")
+    @classmethod
+    def coerce_serial_numbers(cls, value: object) -> list[str] | None:
+        if value is None:
+            return None
+        if not isinstance(value, list):
+            return None
+        out: list[str] = []
+        for item in value:
+            text = str(item).strip()
+            if text:
+                out.append(text)
+        return out or None
+
+
+class ScmProcurementInventoryRowResponse(BaseModel):
+    order_id: UUID | None = None
+    grn_number: str
+    receipt_at: datetime | None = None
+    company_po_number: str
+    vendor_id: UUID | None = None
+    product_name: str | None = None
+    line_number: int = 0
+    unit_index: int
+    serial_number: str
+    source: str = "grn"
+
+
+class ScmInventoryImportLineRequest(BaseModel):
+    product_name: str
+    serial_number: str
+    order_id: UUID | None = None
+
+
+class ScmInventoryImportRequest(BaseModel):
+    lines: list[ScmInventoryImportLineRequest] = Field(default_factory=list)
+
+
+class ScmReceiptBatchAttachmentSummary(BaseModel):
+    id: UUID
+    file_name: str
+    content_type: str | None = None
+    size: int | None = None
+
+
+class ScmReceiptBatchResponse(BaseModel):
+    id: UUID | None = None
+    sequence: int
+    grn_number: str
+    receipt_at: datetime | None = None
+    vendor_invoice_number: str | None = None
+    vendor_invoice_date: date | None = None
+    vendor_invoice_quantity: float | None = None
+    vendor_invoice_subtotal: float | None = None
+    lines: list[ScmReceiptBatchLineResponse] = Field(default_factory=list)
+    attachments: list[ScmReceiptBatchAttachmentSummary] = Field(default_factory=list)
+
+
+class ScmVendorInvoiceExtractRequest(BaseModel):
+    file_name: str = Field(..., min_length=1, max_length=255)
+    content_base64: str = Field(..., min_length=1)
+
+
+class ScmVendorInvoiceExtractResponse(BaseModel):
+    vendor_invoice_number: str | None = None
+    vendor_invoice_date: date | None = None
+    vendor_invoice_quantity: float | None = None
+    vendor_invoice_subtotal: float | None = None
+
+
+class ScmReceiptBatchVendorInvoiceUpdate(BaseModel):
+    vendor_invoice_number: str | None = Field(None, max_length=80)
+    vendor_invoice_date: date | None = None
+    vendor_invoice_quantity: float | None = None
+    vendor_invoice_subtotal: float | None = None
+    file_name: str | None = Field(None, max_length=255)
+    content_base64: str | None = None
+    content_type: str | None = None
+    branch_id: UUID
+    company_id: UUID | None = None
+
+
+class ScmReceiptBatchAttachmentCreate(BaseModel):
+    file_name: str
+    content_base64: str
+    content_type: str | None = None
+    branch_id: UUID
+    company_id: UUID | None = None
 
 
 # --- GRN ---

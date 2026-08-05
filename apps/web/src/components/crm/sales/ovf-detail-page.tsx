@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
@@ -331,6 +331,11 @@ export function OvfDetailPage({ ovfId }: { ovfId: string }) {
           <CrmDetailItem label="Account">{accountName}</CrmDetailItem>
           <CrmDetailItem label="OVF Module Owner">{ownerName}</CrmDetailItem>
           <CrmDetailItem label="PO Number">{textOrDash(ovf.po_number)}</CrmDetailItem>
+          <CrmDetailItem label="Customer PO Date">
+            {ovf.po_date
+              ? String(ovf.po_date).slice(0, 10)
+              : "—"}
+          </CrmDetailItem>
           <CrmDetailItem label="Delivery Period">{textOrDash(ovf.delivery_period)}</CrmDetailItem>
           <CrmDetailItem label="OVF No.">{ovf.ovf_no}</CrmDetailItem>
           <CrmDetailItem label="OVF sent to SCM team">{ovf.shared_to_scm ? "Yes" : "No"}</CrmDetailItem>

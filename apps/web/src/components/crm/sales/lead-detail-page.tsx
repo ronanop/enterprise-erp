@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, RefreshCw, UserPlus } from "lucide-react";
@@ -64,19 +64,29 @@ export function LeadDetailPage({ leadId }: { leadId: string }) {
   });
   const [converting, setConverting] = useState(false);
   const [convertError, setConvertError] = useState<string | null>(null);
+  const hasDataRef = useRef(false);
 
   const load = useCallback(async () => {
-    setLoading(true);
+    const soft = hasDataRef.current;
+    if (!soft) setLoading(true);
     setError(null);
     try {
-      const [leadRow, bp, employeeOptions] = await Promise.all([
+      const [leadRow, bp, employeeOptions, pipelineOptions] = await Promise.all([
         getSalesLead(leadId),
         getLeadBlueprint(leadId),
         listEmployeeOptions().catch(() => [] as Option[]),
+        listPipelineOptions().catch(() => [] as Option[]),
       ]);
       setLead(leadRow);
       setBlueprint(bp);
       setEmployees(employeeOptions);
+      setPipelines(pipelineOptions);
+      if (pipelineOptions[0]) {
+        setConvertForm((form) => ({
+          ...form,
+          pipeline_id: form.pipeline_id || pipelineOptions[0].id,
+        }));
+      }
       setCompany(
         leadRow.company_account_id
           ? await getCompany(leadRow.company_account_id).catch(() => null)
@@ -89,6 +99,7 @@ export function LeadDetailPage({ leadId }: { leadId: string }) {
         expected_revenue:
           form.expected_revenue || (leadRow.expected_amount ? String(leadRow.expected_amount) : ""),
       }));
+      hasDataRef.current = true;
     } catch (err) {
       setLead(null);
       setError(err instanceof ApiClientError ? err.message : "Failed to load lead");
@@ -102,13 +113,8 @@ export function LeadDetailPage({ leadId }: { leadId: string }) {
     return () => window.clearTimeout(timer);
   }, [load]);
 
-  async function openConvert() {
+  function openConvert() {
     setConvertError(null);
-    if (pipelines.length === 0) {
-      const opts = await listPipelineOptions().catch(() => []);
-      setPipelines(opts);
-      if (opts[0]) setConvertForm((f) => ({ ...f, pipeline_id: f.pipeline_id || opts[0].id }));
-    }
     setConvertOpen(true);
   }
 

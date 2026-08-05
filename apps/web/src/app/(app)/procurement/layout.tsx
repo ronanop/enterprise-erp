@@ -4,7 +4,7 @@ import { ProcurementWorkspaceNav } from "@/components/procurement/procurement-wo
 
 export default function ProcurementLayout({ children }: { children: ReactNode }) {
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       <ProcurementWorkspaceNav />
       {children}
     </div>

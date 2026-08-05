@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import {
   Building2,
@@ -28,14 +28,13 @@ import { MeetingFormDialog } from "@/components/crm/sales/meeting-form-dialog";
 import { FinanceStatusBadge } from "@/components/finance/finance-status-badge";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { cachedFetch, invalidateClientCache } from "@/lib/client-cache";
 import { ApiClientError } from "@/services/api-client";
 import {
   fullName,
-  getCompany,
   listEmployeeOptions,
   listFollowups,
   listMeetings,
-  listSalesLeads,
   type Company,
   type CrmFollowup,
   type CrmMeeting,
@@ -88,39 +87,48 @@ export function CompanyDetailPage({ companyAccountId }: { companyAccountId: stri
   const [meetings, setMeetings] = useState<CrmMeeting[]>([]);
   const [followups, setFollowups] = useState<CrmFollowup[]>([]);
   const [employees, setEmployees] = useState<Option[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [panelLoading, setPanelLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [meetingOpen, setMeetingOpen] = useState(false);
   const [followupOpen, setFollowupOpen] = useState(false);
+  const [refreshKey, setRefreshKey] = useState(0);
+  const hasPanelsRef = useRef(false);
 
-  const load = useCallback(async () => {
-    setLoading(true);
+  const loadPanels = useCallback(async () => {
+    const soft = hasPanelsRef.current;
+    if (!soft) setPanelLoading(true);
     setError(null);
     try {
-      const [companyRow, allLeads, employeeOptions, meetingRows, followupRows] = await Promise.all([
-        getCompany(companyAccountId),
-        listSalesLeads(companyAccountId).catch(() => [] as SalesLead[]),
-        listEmployeeOptions().catch(() => [] as Option[]),
-        listMeetings(companyAccountId).catch(() => [] as CrmMeeting[]),
-        listFollowups(companyAccountId).catch(() => [] as CrmFollowup[]),
+      if (refreshKey > 0) {
+        invalidateClientCache(`crm:meetings:${companyAccountId}`);
+        invalidateClientCache(`crm:followups:${companyAccountId}`);
+      }
+      const [employeeOptions, meetingRows, followupRows] = await Promise.all([
+        cachedFetch("crm:employees", 120_000, () => listEmployeeOptions()).catch(
+          () => [] as Option[],
+        ),
+        cachedFetch(`crm:meetings:${companyAccountId}`, 30_000, () =>
+          listMeetings(companyAccountId),
+        ).catch(() => [] as CrmMeeting[]),
+        cachedFetch(`crm:followups:${companyAccountId}`, 30_000, () =>
+          listFollowups(companyAccountId),
+        ).catch(() => [] as CrmFollowup[]),
       ]);
-      setCompany(companyRow);
-      setLeads(allLeads);
       setEmployees(employeeOptions);
       setMeetings(meetingRows);
       setFollowups(followupRows);
+      hasPanelsRef.current = true;
     } catch (err) {
-      setCompany(null);
-      setError(err instanceof ApiClientError ? err.message : "Failed to load company");
+      setError(err instanceof ApiClientError ? err.message : "Failed to load company panels");
     } finally {
-      setLoading(false);
+      setPanelLoading(false);
     }
-  }, [companyAccountId]);
+  }, [companyAccountId, refreshKey]);
 
   useEffect(() => {
-    const timer = window.setTimeout(() => void load(), 0);
+    const timer = window.setTimeout(() => void loadPanels(), 0);
     return () => window.clearTimeout(timer);
-  }, [load]);
+  }, [loadPanels]);
 
   const employeeName = (id: string | null) =>
     id ? employees.find((employee) => employee.id === id)?.label ?? id : "-";
@@ -128,11 +136,19 @@ export function CompanyDetailPage({ companyAccountId }: { companyAccountId: stri
   const openFollowups = followups.filter((f) => f.status === "scheduled");
 
   return (
-    <CompanyWorkspaceShell companyAccountId={companyAccountId}>
-      {loading && !company ? (
+    <CompanyWorkspaceShell
+      companyAccountId={companyAccountId}
+      refreshKey={refreshKey}
+      onRefresh={() => setRefreshKey((value) => value + 1)}
+      onCompanyChange={setCompany}
+      onLeadsChange={setLeads}
+    >
+      {!company && panelLoading ? (
         <div className="h-40 animate-pulse rounded-xl bg-muted/60" />
-      ) : error || !company ? (
-        <CrmErrorBanner>{error ?? "Company not found"}</CrmErrorBanner>
+      ) : error && !company ? (
+        <CrmErrorBanner>{error}</CrmErrorBanner>
+      ) : !company ? (
+        <CrmErrorBanner>Company not found</CrmErrorBanner>
       ) : (
         <CrmPage>
           <CrmSection
@@ -416,13 +432,19 @@ export function CompanyDetailPage({ companyAccountId }: { companyAccountId: stri
             open={meetingOpen}
             companyAccount={company}
             onClose={() => setMeetingOpen(false)}
-            onSaved={() => void load()}
+            onSaved={() => {
+              setMeetingOpen(false);
+              setRefreshKey((value) => value + 1);
+            }}
           />
           <FollowupFormDialog
             open={followupOpen}
             companyAccount={company}
             onClose={() => setFollowupOpen(false)}
-            onSaved={() => void load()}
+            onSaved={() => {
+              setFollowupOpen(false);
+              setRefreshKey((value) => value + 1);
+            }}
           />
         </CrmPage>
       )}
