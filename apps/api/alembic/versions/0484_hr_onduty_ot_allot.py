@@ -1,10 +1,16 @@
 """On-duty requests + OT/overday allotment + Comp Off hour thresholds."""
 
+import sys
 from collections.abc import Sequence
+from pathlib import Path
 
 import sqlalchemy as sa
 from alembic import op
 from sqlalchemy.dialects import postgresql
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from helpers import add_column_if_missing  # noqa: E402
 
 revision: str = "0484_hr_onduty_ot_allot"
 down_revision: str | None = "0483_hr_payroll_eligible"
@@ -13,7 +19,7 @@ depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:
-    op.add_column(
+    add_column_if_missing(
         "hr_attendance_rule",
         sa.Column(
             "compoff_half_day_hours",
@@ -23,7 +29,7 @@ def upgrade() -> None:
         ),
         schema="hr",
     )
-    op.add_column(
+    add_column_if_missing(
         "hr_attendance_rule",
         sa.Column(
             "compoff_full_day_hours",
@@ -33,7 +39,7 @@ def upgrade() -> None:
         ),
         schema="hr",
     )
-    op.add_column(
+    add_column_if_missing(
         "hr_attendance_rule",
         sa.Column(
             "compoff_auto_credit",

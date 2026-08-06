@@ -1,10 +1,16 @@
 """Attendance policy maker: arrival windows + biometric punch mode."""
 
+import sys
 from collections.abc import Sequence
+from pathlib import Path
 
 import sqlalchemy as sa
 from alembic import op
 from sqlalchemy.dialects import postgresql
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from helpers import add_column_if_missing  # noqa: E402
 
 revision: str = "0489_hr_att_policy_maker"
 down_revision: str | None = "0488_hr_bio_device_conn"
@@ -13,7 +19,7 @@ depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:
-    op.add_column(
+    add_column_if_missing(
         "hr_attendance_rule",
         sa.Column(
             "punch_mode",
@@ -23,7 +29,7 @@ def upgrade() -> None:
         ),
         schema="hr",
     )
-    op.add_column(
+    add_column_if_missing(
         "hr_attendance_rule",
         sa.Column(
             "arrival_policy_enabled",
@@ -33,7 +39,7 @@ def upgrade() -> None:
         ),
         schema="hr",
     )
-    op.add_column(
+    add_column_if_missing(
         "hr_attendance_rule",
         sa.Column(
             "applies_to_all_shifts",
@@ -43,17 +49,17 @@ def upgrade() -> None:
         ),
         schema="hr",
     )
-    op.add_column(
+    add_column_if_missing(
         "hr_attendance_rule",
         sa.Column("arrival_window_start", sa.Time(), nullable=True),
         schema="hr",
     )
-    op.add_column(
+    add_column_if_missing(
         "hr_attendance_rule",
         sa.Column("arrival_ok_until", sa.Time(), nullable=True),
         schema="hr",
     )
-    op.add_column(
+    add_column_if_missing(
         "hr_attendance_rule",
         sa.Column(
             "arrival_after_status",
@@ -63,7 +69,7 @@ def upgrade() -> None:
         ),
         schema="hr",
     )
-    op.add_column(
+    add_column_if_missing(
         "hr_attendance_rule",
         sa.Column("shift_windows_json", postgresql.JSONB(), nullable=True),
         schema="hr",

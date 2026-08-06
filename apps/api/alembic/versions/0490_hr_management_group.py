@@ -1,10 +1,20 @@
 """Management groups (employment type policy) + employment link."""
 
+import sys
 from collections.abc import Sequence
+from pathlib import Path
 
 import sqlalchemy as sa
 from alembic import op
 from sqlalchemy.dialects import postgresql
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from helpers import (  # noqa: E402
+    add_column_if_missing,
+    create_fk_if_missing,
+    create_index_if_missing,
+)
 
 revision: str = "0490_hr_management_group"
 down_revision: str | None = "0489_hr_att_policy_maker"
@@ -54,12 +64,12 @@ def upgrade() -> None:
     op.create_index("ix_hr_management_group_company", "hr_management_group", ["company_id"], schema="hr")
     op.create_index("ix_hr_management_group_status", "hr_management_group", ["status"], schema="hr")
 
-    op.add_column(
+    add_column_if_missing(
         "hr_employment",
         sa.Column("management_group_id", postgresql.UUID(as_uuid=True), nullable=True),
         schema="hr",
     )
-    op.create_foreign_key(
+    create_fk_if_missing(
         "fk_hr_employment_mgmt_group",
         "hr_employment",
         "hr_management_group",
@@ -69,7 +79,7 @@ def upgrade() -> None:
         referent_schema="hr",
         ondelete="RESTRICT",
     )
-    op.create_index(
+    create_index_if_missing(
         "ix_hr_employment_management_group",
         "hr_employment",
         ["management_group_id"],

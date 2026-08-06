@@ -1,10 +1,16 @@
 """V2 finish: device tokens, biometric devices, Comp Off requests."""
 
+import sys
 from collections.abc import Sequence
+from pathlib import Path
 
 import sqlalchemy as sa
 from alembic import op
 from sqlalchemy.dialects import postgresql
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from helpers import create_index_if_missing, table_exists  # noqa: E402
 
 revision: str = "0486_hr_v2_finish"
 down_revision: str | None = "0485_hr_kpi_okr"
@@ -13,7 +19,9 @@ depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:
-    op.create_table(
+    bind = op.get_bind()
+    if not table_exists(bind, "ntf_device_token", schema="foundation"):
+        op.create_table(
         "ntf_device_token",
         sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True, nullable=False),
         sa.Column("tenant_id", postgresql.UUID(as_uuid=True), nullable=False),
@@ -31,10 +39,11 @@ def upgrade() -> None:
         sa.UniqueConstraint("tenant_id", "user_id", "token", name="uk_ntf_device_token"),
         sa.CheckConstraint("platform IN ('web','android','ios')", name="ck_ntf_device_platform"),
         schema="foundation",
-    )
-    op.create_index("ix_ntf_device_user", "ntf_device_token", ["user_id"], schema="foundation")
+        )
+    create_index_if_missing("ix_ntf_device_user", "ntf_device_token", ["user_id"], schema="foundation")
 
-    op.create_table(
+    if not table_exists(bind, "hr_biometric_device", schema="hr"):
+        op.create_table(
         "hr_biometric_device",
         sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True, nullable=False),
         sa.Column("tenant_id", postgresql.UUID(as_uuid=True), nullable=False),
@@ -56,9 +65,10 @@ def upgrade() -> None:
         sa.UniqueConstraint("company_id", "device_code", name="uk_hr_bio_device_code"),
         sa.CheckConstraint("status IN ('active','inactive')", name="ck_hr_bio_device_status"),
         schema="hr",
-    )
+        )
 
-    op.create_table(
+    if not table_exists(bind, "hr_compoff_request", schema="hr"):
+        op.create_table(
         "hr_compoff_request",
         sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True, nullable=False),
         sa.Column("tenant_id", postgresql.UUID(as_uuid=True), nullable=False),
@@ -87,9 +97,9 @@ def upgrade() -> None:
             name="ck_hr_compoff_req_status",
         ),
         schema="hr",
-    )
-    op.create_index("ix_hr_compoff_req_emp", "hr_compoff_request", ["employee_id"], schema="hr")
-    op.create_index("ix_hr_compoff_req_status", "hr_compoff_request", ["status"], schema="hr")
+        )
+    create_index_if_missing("ix_hr_compoff_req_emp", "hr_compoff_request", ["employee_id"], schema="hr")
+    create_index_if_missing("ix_hr_compoff_req_status", "hr_compoff_request", ["status"], schema="hr")
 
 
 def downgrade() -> None:

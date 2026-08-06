@@ -1,10 +1,16 @@
 """HR enterprise: lifecycle history, KYC fields, leave dual-approve, masters."""
 
+import sys
 from collections.abc import Sequence
+from pathlib import Path
 
 import sqlalchemy as sa
 from alembic import op
 from sqlalchemy.dialects import postgresql
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from helpers import add_column_if_missing, create_index_if_missing  # noqa: E402
 
 revision: str = "0474_hr_enterprise_lifecycle_kyc"
 down_revision: str | None = "0473_hr_training_rooms_requests"
@@ -22,12 +28,12 @@ def upgrade() -> None:
         "'notice_period','separated','ex_employee','ended','cancelled')",
         schema="hr",
     )
-    op.add_column(
+    add_column_if_missing(
         "hr_employment",
         sa.Column("probation_start_date", sa.Date(), nullable=True),
         schema="hr",
     )
-    op.add_column(
+    add_column_if_missing(
         "hr_employment",
         sa.Column("lifecycle_source", sa.String(50), nullable=True),
         schema="hr",
@@ -44,15 +50,15 @@ def upgrade() -> None:
     )
 
     # --- KYC on employee profile ---
-    op.add_column("hr_employee_profile", sa.Column("aadhaar_number", sa.String(12), nullable=True), schema="hr")
-    op.add_column("hr_employee_profile", sa.Column("pan_number", sa.String(10), nullable=True), schema="hr")
-    op.add_column("hr_employee_profile", sa.Column("uan_number", sa.String(20), nullable=True), schema="hr")
-    op.add_column("hr_employee_profile", sa.Column("bank_account_number", sa.String(30), nullable=True), schema="hr")
-    op.add_column("hr_employee_profile", sa.Column("bank_ifsc", sa.String(11), nullable=True), schema="hr")
-    op.add_column("hr_employee_profile", sa.Column("bank_name", sa.String(100), nullable=True), schema="hr")
-    op.add_column("hr_employee_profile", sa.Column("bank_account_holder", sa.String(255), nullable=True), schema="hr")
-    op.create_index("ix_hr_profile_aadhaar", "hr_employee_profile", ["aadhaar_number"], schema="hr")
-    op.create_index("ix_hr_profile_pan", "hr_employee_profile", ["pan_number"], schema="hr")
+    add_column_if_missing("hr_employee_profile", sa.Column("aadhaar_number", sa.String(12), nullable=True), schema="hr")
+    add_column_if_missing("hr_employee_profile", sa.Column("pan_number", sa.String(10), nullable=True), schema="hr")
+    add_column_if_missing("hr_employee_profile", sa.Column("uan_number", sa.String(20), nullable=True), schema="hr")
+    add_column_if_missing("hr_employee_profile", sa.Column("bank_account_number", sa.String(30), nullable=True), schema="hr")
+    add_column_if_missing("hr_employee_profile", sa.Column("bank_ifsc", sa.String(11), nullable=True), schema="hr")
+    add_column_if_missing("hr_employee_profile", sa.Column("bank_name", sa.String(100), nullable=True), schema="hr")
+    add_column_if_missing("hr_employee_profile", sa.Column("bank_account_holder", sa.String(255), nullable=True), schema="hr")
+    create_index_if_missing("ix_hr_profile_aadhaar", "hr_employee_profile", ["aadhaar_number"], schema="hr")
+    create_index_if_missing("ix_hr_profile_pan", "hr_employee_profile", ["pan_number"], schema="hr")
 
     # --- Leave dual approval ---
     op.drop_constraint("ck_hr_lve_status", "hr_leave_request", schema="hr", type_="check")
@@ -62,39 +68,39 @@ def upgrade() -> None:
         "status IN ('draft','submitted','manager_approved','approved','rejected','cancelled')",
         schema="hr",
     )
-    op.add_column(
+    add_column_if_missing(
         "hr_leave_request",
         sa.Column("manager_approver_id", postgresql.UUID(as_uuid=True), nullable=True),
         schema="hr",
     )
-    op.add_column(
+    add_column_if_missing(
         "hr_leave_request",
         sa.Column("hr_approver_id", postgresql.UUID(as_uuid=True), nullable=True),
         schema="hr",
     )
 
     # --- Leave type policy columns ---
-    op.add_column(
+    add_column_if_missing(
         "hr_leave_type",
         sa.Column("carry_forward_allowed", sa.Boolean(), nullable=False, server_default=sa.text("false")),
         schema="hr",
     )
-    op.add_column(
+    add_column_if_missing(
         "hr_leave_type",
         sa.Column("max_carry_forward_days", sa.Numeric(9, 2), nullable=True),
         schema="hr",
     )
-    op.add_column(
+    add_column_if_missing(
         "hr_leave_type",
         sa.Column("encashment_allowed", sa.Boolean(), nullable=False, server_default=sa.text("false")),
         schema="hr",
     )
-    op.add_column(
+    add_column_if_missing(
         "hr_leave_type",
         sa.Column("monthly_credit_days", sa.Numeric(9, 2), nullable=True),
         schema="hr",
     )
-    op.add_column(
+    add_column_if_missing(
         "hr_leave_type",
         sa.Column("leave_cycle_start_day", sa.SmallInteger(), nullable=False, server_default="1"),
         schema="hr",
@@ -109,10 +115,10 @@ def upgrade() -> None:
         "'holiday','late','week_off','on_duty','miss_punch')",
         schema="hr",
     )
-    op.add_column("hr_attendance", sa.Column("latitude", sa.Numeric(10, 7), nullable=True), schema="hr")
-    op.add_column("hr_attendance", sa.Column("longitude", sa.Numeric(10, 7), nullable=True), schema="hr")
-    op.add_column("hr_attendance", sa.Column("late_minutes", sa.Integer(), nullable=True), schema="hr")
-    op.add_column("hr_attendance", sa.Column("overtime_minutes", sa.Integer(), nullable=True), schema="hr")
+    add_column_if_missing("hr_attendance", sa.Column("latitude", sa.Numeric(10, 7), nullable=True), schema="hr")
+    add_column_if_missing("hr_attendance", sa.Column("longitude", sa.Numeric(10, 7), nullable=True), schema="hr")
+    add_column_if_missing("hr_attendance", sa.Column("late_minutes", sa.Integer(), nullable=True), schema="hr")
+    add_column_if_missing("hr_attendance", sa.Column("overtime_minutes", sa.Integer(), nullable=True), schema="hr")
 
     # --- Lifecycle history ---
     op.create_table(
@@ -194,7 +200,7 @@ def upgrade() -> None:
     )
 
     # --- Org location geofence radius ---
-    op.add_column(
+    add_column_if_missing(
         "org_location",
         sa.Column("geofence_radius_meters", sa.Integer(), nullable=True),
         schema="organization",

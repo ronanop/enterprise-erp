@@ -1,10 +1,21 @@
 """Create training rooms / requests and extend hr_training schedule fields."""
 
+import sys
 from collections.abc import Sequence
+from pathlib import Path
 
 import sqlalchemy as sa
 from alembic import op
+from sqlalchemy import inspect
 from sqlalchemy.dialects import postgresql
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from helpers import (  # noqa: E402
+    add_column_if_missing,
+    create_fk_if_missing,
+    create_index_if_missing,
+)
 
 revision: str = "0473_hr_training_rooms_requests"
 down_revision: str | None = "0472_vascan_checkbox_date"
@@ -41,21 +52,37 @@ def upgrade() -> None:
     op.create_index("ix_hr_trn_room_branch", "hr_training_room", ["branch_id"], schema="hr")
     op.create_index("ix_hr_trn_room_status", "hr_training_room", ["status"], schema="hr")
 
-    op.add_column("hr_training", sa.Column("start_time", sa.Time(), nullable=True), schema="hr")
-    op.add_column("hr_training", sa.Column("end_time", sa.Time(), nullable=True), schema="hr")
-    op.add_column(
+    add_column_if_missing("hr_training", sa.Column("start_time", sa.Time(), nullable=True), schema="hr")
+    add_column_if_missing("hr_training", sa.Column("end_time", sa.Time(), nullable=True), schema="hr")
+    add_column_if_missing(
         "hr_training",
         sa.Column("room_id", postgresql.UUID(as_uuid=True), nullable=True),
         schema="hr",
     )
-    op.add_column(
+    add_column_if_missing(
         "hr_training",
         sa.Column("is_recurring", sa.Boolean(), nullable=False, server_default=sa.text("false")),
         schema="hr",
     )
-    op.add_column("hr_training", sa.Column("recurrence_rule", sa.String(50), nullable=True), schema="hr")
-    op.add_column("hr_training", sa.Column("notes", sa.Text(), nullable=True), schema="hr")
-    op.create_foreign_key(
+    add_column_if_missing(
+        "hr_training", sa.Column("recurrence_rule", sa.String(50), nullable=True), schema="hr"
+    )
+    add_column_if_missing("hr_training", sa.Column("notes", sa.Text(), nullable=True), schema="hr")
+
+    bind = op.get_bind()
+    checks = {
+        c["name"]
+        for c in inspect(bind).get_check_constraints("hr_training", schema="hr")
+    }
+    if "ck_hr_trn_recurrence" not in checks:
+        op.create_check_constraint(
+            "ck_hr_trn_recurrence",
+            "hr_training",
+            "recurrence_rule IS NULL OR recurrence_rule IN ('none','daily','weekly','monthly')",
+            schema="hr",
+        )
+
+    create_fk_if_missing(
         "fk_hr_trn_room",
         "hr_training",
         "hr_training_room",
@@ -65,7 +92,7 @@ def upgrade() -> None:
         referent_schema="hr",
         ondelete="RESTRICT",
     )
-    op.create_index("ix_hr_trn_room_id", "hr_training", ["room_id"], schema="hr")
+    create_index_if_missing("ix_hr_trn_room_id", "hr_training", ["room_id"], schema="hr")
 
     op.create_table(
         "hr_training_request",
