@@ -51,13 +51,24 @@ $env:COOLIFY_SSH = "youruser@172.16.200.26"
 
 | Service | URL |
 |---------|-----|
-| API health | http://172.16.200.26:8080/api/v1/health |
+| API health | http://172.16.200.26:8081/api/v1/health |
 | Admin | http://172.16.200.26:3000 |
 | Employee | http://172.16.200.26:3001 |
 
 ## Firewall
 
-Allow inbound **3000**, **3001**, **8080** on the server for LAN clients.
+Allow inbound **3000**, **3001**, **8081** on the server for LAN clients (Coolify uses **8000** / **8080**).
+
+## Seed demo logins (required after first deploy)
+
+Migrations create schema and permissions only — they do **not** create `admin@example.com`. After the API is healthy:
+
+```bash
+docker compose -f docker-compose.coolify.yml --env-file .env.coolify exec api \
+  python -m scripts.seed_demo_data
+```
+
+Then sign in at http://172.16.200.26:3000 with **admin@example.com** / **Secure1!** (same password for module demo users).
 
 ## If migrations fail on a fresh database
 

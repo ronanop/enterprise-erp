@@ -12,6 +12,7 @@ RUN pip install --no-cache-dir -r requirements-prod.txt
 COPY alembic.ini .
 COPY alembic ./alembic
 COPY src ./src
+COPY scripts ./scripts
 COPY docker/entrypoint.sh /entrypoint.sh
 RUN sed -i 's/\r$//' /entrypoint.sh && chmod +x /entrypoint.sh
 

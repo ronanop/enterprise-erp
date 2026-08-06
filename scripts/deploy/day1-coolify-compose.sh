@@ -58,9 +58,15 @@ set -a
 # shellcheck source=/dev/null
 source "${ENV_FILE}"
 set +a
-HEALTH_URL="http://127.0.0.1:${API_PUBLISH_PORT:-8080}/api/v1/health"
+HEALTH_URL="http://127.0.0.1:${API_PUBLISH_PORT:-8081}/api/v1/health"
 echo "curl -s ${HEALTH_URL}"
-curl -sf "${HEALTH_URL}" && echo "" || echo "Health check failed — run: docker compose -f ${COMPOSE_FILE} --env-file ${ENV_FILE} logs api --tail 100"
+if curl -sf "${HEALTH_URL}" && echo ""; then
+  echo "==> Seeding demo users (admin@example.com / Secure1!)"
+  docker compose -f "${COMPOSE_FILE}" --env-file "${ENV_FILE}" exec -T api \
+    python -m scripts.seed_demo_data || echo "Seed skipped or failed — run manually: docker compose ... exec api python -m scripts.seed_demo_data"
+else
+  echo "Health check failed — run: docker compose -f ${COMPOSE_FILE} --env-file ${ENV_FILE} logs api --tail 100"
+fi
 
 echo ""
 echo "Done. Admin: http://172.16.200.26:${WEB_PUBLISH_PORT:-3000}  Employee: http://172.16.200.26:${EMPLOYEE_PUBLISH_PORT:-3001}"
