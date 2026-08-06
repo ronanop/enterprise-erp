@@ -99,7 +99,7 @@ def _insert_draft_disposal(db, ids, asset_id, *, disposal_type: str = "scrap") -
 @pytest.mark.integration
 def test_int_dsp_submit_creates_workflow_instance(wf_db, tenant_ids) -> None:
     seed_ast_disposal_approval(wf_db, tenant_ids["tenant_id"], tenant_ids["creator_id"])
-    asset = insert_active_asset(wf_db, tenant_ids)
+    asset = insert_active_asset(wf_db, tenant_ids, operational_status="PENDING_DISPOSAL")
     disposal = _insert_draft_disposal(wf_db, tenant_ids, asset.id)
     svc = DisposalService(wf_db)
     creator_ctx = _ctx(tenant_ids)
@@ -127,7 +127,7 @@ def test_int_dsp_submit_creates_workflow_instance(wf_db, tenant_ids) -> None:
 @pytest.mark.integration
 def test_int_dsp_three_step_approve_then_post_disposes_asset(wf_db, tenant_ids) -> None:
     seed_ast_disposal_approval(wf_db, tenant_ids["tenant_id"], tenant_ids["creator_id"])
-    asset = insert_active_asset(wf_db, tenant_ids)
+    asset = insert_active_asset(wf_db, tenant_ids, operational_status="PENDING_DISPOSAL")
     disposal = _insert_draft_disposal(wf_db, tenant_ids, asset.id, disposal_type="sale")
     svc = DisposalService(wf_db)
     creator_ctx = _ctx(tenant_ids)
@@ -172,7 +172,7 @@ def test_int_dsp_three_step_approve_then_post_disposes_asset(wf_db, tenant_ids) 
 @pytest.mark.integration
 def test_int_dsp_second_post_rejected_finance_called_once(wf_db, tenant_ids) -> None:
     seed_ast_disposal_approval(wf_db, tenant_ids["tenant_id"], tenant_ids["creator_id"])
-    asset = insert_active_asset(wf_db, tenant_ids)
+    asset = insert_active_asset(wf_db, tenant_ids, operational_status="PENDING_DISPOSAL")
     disposal = _insert_draft_disposal(wf_db, tenant_ids, asset.id, disposal_type="sale")
     svc = DisposalService(wf_db)
     creator_ctx = _ctx(tenant_ids)
@@ -217,7 +217,7 @@ def test_int_dsp_second_post_rejected_finance_called_once(wf_db, tenant_ids) -> 
 @pytest.mark.integration
 def test_int_dsp_write_off_post_sets_written_off(wf_db, tenant_ids) -> None:
     seed_ast_disposal_approval(wf_db, tenant_ids["tenant_id"], tenant_ids["creator_id"])
-    asset = insert_active_asset(wf_db, tenant_ids)
+    asset = insert_active_asset(wf_db, tenant_ids, operational_status="PENDING_DISPOSAL")
     disposal = _insert_draft_disposal(wf_db, tenant_ids, asset.id, disposal_type="write_off")
     svc = DisposalService(wf_db)
     creator_ctx = _ctx(tenant_ids)
@@ -255,7 +255,7 @@ def test_int_dsp_write_off_post_sets_written_off(wf_db, tenant_ids) -> None:
 @pytest.mark.integration
 def test_int_dsp_reject_reopen_resubmit(wf_db, tenant_ids) -> None:
     seed_ast_disposal_approval(wf_db, tenant_ids["tenant_id"], tenant_ids["creator_id"])
-    asset = insert_active_asset(wf_db, tenant_ids)
+    asset = insert_active_asset(wf_db, tenant_ids, operational_status="PENDING_DISPOSAL")
     disposal = _insert_draft_disposal(wf_db, tenant_ids, asset.id)
     svc = DisposalService(wf_db)
     creator_ctx = _ctx(tenant_ids)
@@ -293,7 +293,7 @@ def test_int_dsp_reject_reopen_resubmit(wf_db, tenant_ids) -> None:
 @pytest.mark.integration
 def test_int_dsp_cancel_draft(wf_db, tenant_ids) -> None:
     seed_ast_disposal_approval(wf_db, tenant_ids["tenant_id"], tenant_ids["creator_id"])
-    asset = insert_active_asset(wf_db, tenant_ids)
+    asset = insert_active_asset(wf_db, tenant_ids, operational_status="PENDING_DISPOSAL")
     disposal = _insert_draft_disposal(wf_db, tenant_ids, asset.id)
     svc = DisposalService(wf_db)
     creator_ctx = _ctx(tenant_ids)
@@ -306,7 +306,7 @@ def test_int_dsp_cancel_draft(wf_db, tenant_ids) -> None:
 @pytest.mark.integration
 def test_int_dsp_open_disposal_exclusivity_blocks_second_create(wf_db, tenant_ids) -> None:
     seed_ast_disposal_approval(wf_db, tenant_ids["tenant_id"], tenant_ids["creator_id"])
-    asset = insert_active_asset(wf_db, tenant_ids)
+    asset = insert_active_asset(wf_db, tenant_ids, operational_status="PENDING_DISPOSAL")
     first = _insert_draft_disposal(wf_db, tenant_ids, asset.id)
     svc = DisposalService(wf_db)
     creator_ctx = _ctx(tenant_ids)
@@ -341,7 +341,7 @@ def test_int_dsp_open_disposal_exclusivity_blocks_second_create(wf_db, tenant_id
 @pytest.mark.integration
 def test_int_dsp_maintenance_gate_blocks_submit(wf_db, tenant_ids) -> None:
     seed_ast_disposal_approval(wf_db, tenant_ids["tenant_id"], tenant_ids["creator_id"])
-    asset = insert_active_asset(wf_db, tenant_ids)
+    asset = insert_active_asset(wf_db, tenant_ids, operational_status="PENDING_DISPOSAL")
     disposal = _insert_draft_disposal(wf_db, tenant_ids, asset.id)
     svc = DisposalService(wf_db)
     creator_ctx = _ctx(tenant_ids)
@@ -370,7 +370,7 @@ def test_int_dsp_maintenance_gate_blocks_submit(wf_db, tenant_ids) -> None:
 @pytest.mark.integration
 def test_int_dsp_assignment_gate_blocks_submit(wf_db, tenant_ids) -> None:
     seed_ast_disposal_approval(wf_db, tenant_ids["tenant_id"], tenant_ids["creator_id"])
-    asset = insert_active_asset(wf_db, tenant_ids)
+    asset = insert_active_asset(wf_db, tenant_ids, operational_status="PENDING_DISPOSAL")
     disposal = _insert_draft_disposal(wf_db, tenant_ids, asset.id)
     svc = DisposalService(wf_db)
     creator_ctx = _ctx(tenant_ids)
@@ -399,7 +399,7 @@ def test_int_dsp_assignment_gate_blocks_submit(wf_db, tenant_ids) -> None:
 @pytest.mark.integration
 def test_int_dsp_transfer_gate_blocks_submit(wf_db, tenant_ids) -> None:
     seed_ast_disposal_approval(wf_db, tenant_ids["tenant_id"], tenant_ids["creator_id"])
-    asset = insert_active_asset(wf_db, tenant_ids)
+    asset = insert_active_asset(wf_db, tenant_ids, operational_status="PENDING_DISPOSAL")
     disposal = _insert_draft_disposal(wf_db, tenant_ids, asset.id)
     svc = DisposalService(wf_db)
     creator_ctx = _ctx(tenant_ids)

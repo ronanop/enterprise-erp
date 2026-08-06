@@ -2,7 +2,7 @@ import { notFound } from "next/navigation";
 
 import { ResourceListView } from "@/components/module/resource-list-view";
 import { AssetAuditWorkspace } from "@/components/assets/asset-audit-workspace";
-import { AssetRegistrationWorkspace } from "@/components/assets/asset-registration-workspace";
+import { AssetInventoryContainer } from "@/components/assets/asset-inventory-container";
 import { AssetAssignmentWorkspace } from "@/components/assets/asset-assignment-workspace";
 import { AssetDepreciationWorkspace } from "@/components/assets/asset-depreciation-workspace";
 import { AssetDisposalWorkspace } from "@/components/assets/asset-disposal-workspace";
@@ -38,7 +38,7 @@ export default async function AssetsResourcePage({ params }: PageProps) {
   if (!mod || !resource) notFound();
 
   if (resourceKey === "assets") {
-    return <AssetRegistrationWorkspace />;
+    return <AssetInventoryContainer />;
   }
 
   if (resourceKey === "asset-categories") {

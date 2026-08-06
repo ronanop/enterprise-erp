@@ -1544,3 +1544,193 @@ export async function loadAssetsOverview(): Promise<AssetsOverview> {
     partial: errors.length > 0,
   };
 }
+
+// --- CR-004 Asset Operations dashboard (read APIs) ---
+
+export type AssetDashboardSummaryDto = {
+  company_id: string;
+  branch_id?: string | null;
+  total_assets: number;
+  ready_to_move: number;
+  assigned: number;
+  retired: number;
+  pending_disposal: number;
+  disposed: number;
+  by_branch?: Array<{
+    branch_id: string;
+    total_assets: number;
+    ready_to_move: number;
+    assigned: number;
+    retired: number;
+    pending_disposal: number;
+    disposed: number;
+  }>;
+};
+
+export type AssetPaginatedListResult = {
+  items: AssetsRow[];
+  total: number;
+  page: number;
+  page_size: number;
+};
+
+function parsePaginatedAssetList(data: unknown): AssetPaginatedListResult {
+  if (data && typeof data === "object" && "items" in data) {
+    const payload = data as AssetPaginatedListResult;
+    return {
+      items: Array.isArray(payload.items) ? payload.items : [],
+      total: asNumber(payload.total),
+      page: asNumber(payload.page) || 1,
+      page_size: asNumber(payload.page_size) || 25,
+    };
+  }
+  return { items: normalizeRows(data), total: normalizeRows(data).length, page: 1, page_size: 25 };
+}
+
+export type AssetOperationsListParams = {
+  page?: number;
+  page_size?: number;
+  branch_id?: string;
+  operational_status?: string;
+  status?: string;
+  asset_category_id?: string;
+  q?: string;
+};
+
+function buildAssetListQuery(params: AssetOperationsListParams): Record<string, string | number> {
+  const query: Record<string, string | number> = {
+    page: params.page ?? 1,
+    page_size: params.page_size ?? 10,
+  };
+  if (params.branch_id) query.branch_id = params.branch_id;
+  if (params.operational_status) query.operational_status = params.operational_status;
+  if (params.status) query.status = params.status;
+  if (params.asset_category_id) query.asset_category_id = params.asset_category_id;
+  if (params.q) query.q = params.q;
+  return query;
+}
+
+export const assetOperationsService = {
+  async getDashboardSummary(params?: {
+    branch_id?: string;
+    company_id?: string;
+  }): Promise<AssetDashboardSummaryDto> {
+    const res = await apiClient<AssetDashboardSummaryDto>("/assets/assets/dashboard-summary", {
+      method: "GET",
+      query: {
+        branch_id: params?.branch_id,
+        company_id: params?.company_id,
+      },
+    });
+    if (!res.data) {
+      throw new ApiClientError("Dashboard summary returned no data", 500);
+    }
+    return res.data;
+  },
+
+  async importExcelRegister(body: {
+    company_id?: string | null;
+    batch_size?: number;
+    confirm_warnings: boolean;
+    defaults: {
+      asset_category_id: string;
+      asset_type?: string;
+      purchase_date?: string | null;
+      purchase_cost?: string;
+      currency_code?: string;
+    };
+    rows: Array<Record<string, unknown>>;
+  }): Promise<{
+    total_rows: number;
+    imported: number;
+    skipped: number;
+    duplicates: number;
+    warnings: number;
+    failed: number;
+    duration_ms: number;
+    batch_count: number;
+    rows: Array<Record<string, unknown>>;
+  }> {
+    const res = await apiClient<{
+      total_rows: number;
+      imported: number;
+      skipped: number;
+      duplicates: number;
+      warnings: number;
+      failed: number;
+      duration_ms: number;
+      batch_count: number;
+      rows: Array<Record<string, unknown>>;
+    }>("/assets/assets/import", {
+      method: "POST",
+      body,
+    });
+    if (!res.data) {
+      throw new ApiClientError("Excel import returned no data", 500);
+    }
+    return res.data;
+  },
+
+  async listAssets(params: AssetOperationsListParams = {}): Promise<AssetPaginatedListResult> {
+    const res = await resourceService.list<AssetPaginatedListResult>(
+      "/assets/assets",
+      buildAssetListQuery(params),
+    );
+    return parsePaginatedAssetList(res.data);
+  },
+
+  async listAssignments(params: {
+    page?: number;
+    page_size?: number;
+    branch_id?: string;
+    status?: string;
+    q?: string;
+  } = {}): Promise<AssetPaginatedListResult> {
+    const query: Record<string, string | number> = {
+      page: params.page ?? 1,
+      page_size: params.page_size ?? 10,
+    };
+    if (params.branch_id) query.branch_id = params.branch_id;
+    if (params.status) query.status = params.status;
+    if (params.q) query.q = params.q;
+    const res = await resourceService.list<AssetPaginatedListResult>(
+      "/assets/asset-assignments",
+      query,
+    );
+    return parsePaginatedAssetList(res.data);
+  },
+};
+
+const ASSETS_REGISTER_PATH = "/assets/assets";
+
+/** Asset register CRUD + search (inventory and detail flows). */
+export const assetRegisterService = {
+  search(params: AssetOperationsListParams = {}): Promise<AssetPaginatedListResult> {
+    return assetOperationsService.listAssets(params);
+  },
+
+  async get(id: string): Promise<AssetsRow> {
+    const res = await resourceService.get<AssetsRow>(ASSETS_REGISTER_PATH, id);
+    return res.data as AssetsRow;
+  },
+
+  async create(body: Record<string, unknown>): Promise<AssetsRow> {
+    const res = await resourceService.create<AssetsRow>(ASSETS_REGISTER_PATH, body);
+    return res.data as AssetsRow;
+  },
+
+  async update(id: string, body: Record<string, unknown>): Promise<AssetsRow> {
+    const res = await resourceService.update<AssetsRow>(ASSETS_REGISTER_PATH, id, body);
+    return res.data as AssetsRow;
+  },
+
+  async action(id: string, actionName: string, body?: unknown): Promise<AssetsRow> {
+    const res = await resourceService.action<AssetsRow>(
+      ASSETS_REGISTER_PATH,
+      id,
+      actionName,
+      body,
+    );
+    return res.data as AssetsRow;
+  },
+};

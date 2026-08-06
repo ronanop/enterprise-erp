@@ -1,7 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from "react";
-import { useSearchParams } from "next/navigation";
+import { useCallback, useEffect, useMemo, useState, type Dispatch, type SetStateAction } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   CheckCircle2,
   Eye,
@@ -39,6 +39,10 @@ import {
 import { cn } from "@/lib/utils";
 import { listProjectOptions } from "@/services/projects-portal-service";
 import { ApiClientError, resourceService } from "@/services/api-client";
+import {
+  buildAssignmentWizardHref,
+  buildReturnWizardHref,
+} from "@/components/assets/navigation/assignment-navigation";
 
 type AssetRow = {
   id: string;
@@ -116,7 +120,9 @@ function optionLabel(map: Map<string, OrgOption>, id?: string | null): string {
 
 export function AssetAssignmentWorkspace() {
   const searchParams = useSearchParams();
+  const router = useRouter();
   const prefillAssetId = searchParams.get("assetId") ?? "";
+  const returnIntent = searchParams.get("intent") === "return";
   const apiPath = "/assets/asset-assignments";
   const assetsPath = "/assets/assets";
 
@@ -138,7 +144,6 @@ export function AssetAssignmentWorkspace() {
   const [error, setError] = useState<string | null>(null);
   const [workflowComments, setWorkflowComments] = useState("");
   const [form, setForm] = useState<AssignmentFormState>(EMPTY_FORM);
-  const prefillOpenedRef = useRef(false);
 
   const employeeMap = useMemo(() => new Map(employees.map((e) => [e.id, e])), [employees]);
   const departmentMap = useMemo(() => new Map(departments.map((d) => [d.id, d])), [departments]);
@@ -275,12 +280,13 @@ export function AssetAssignmentWorkspace() {
   }
 
   useEffect(() => {
-    if (prefillOpenedRef.current || !prefillAssetId) return;
-    const asset = assetMap.get(prefillAssetId);
-    if (!asset) return;
-    prefillOpenedRef.current = true;
-    openCreate({ asset_id: prefillAssetId, branch_id: asset.branch_id });
-  }, [prefillAssetId, assetMap]);
+    if (!prefillAssetId) return;
+    if (returnIntent) {
+      router.replace(buildReturnWizardHref({ assetId: prefillAssetId }));
+      return;
+    }
+    router.replace(buildAssignmentWizardHref({ assetId: prefillAssetId }));
+  }, [prefillAssetId, returnIntent, router]);
 
   function openView(row: AssignmentRow) {
     setError(null);
@@ -466,7 +472,7 @@ export function AssetAssignmentWorkspace() {
               type="button"
               size="sm"
               className="cursor-pointer transition-colors duration-200"
-              onClick={() => openCreate()}
+              onClick={() => router.push(buildAssignmentWizardHref({}))}
             >
               <Plus className="mr-1 size-4" />
               Add assignment

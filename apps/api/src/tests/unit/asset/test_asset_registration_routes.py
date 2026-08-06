@@ -64,6 +64,16 @@ def test_asset_assignment_routes_registered() -> None:
     assert f"{base}/{{row_id}}/return" in paths
 
 
+def test_asset_assignment_return_request_schema_exposed() -> None:
+    schema = app.openapi().get("components", {}).get("schemas", {})
+    assert "AssetAssignmentReturnRequest" in schema
+    props = schema["AssetAssignmentReturnRequest"].get("properties", {})
+    assert "return_condition" in props
+    assert "return_remarks" in props
+    return_path = app.openapi()["paths"]["/api/v1/assets/asset-assignments/{row_id}/return"]["post"]
+    assert "requestBody" in return_path
+
+
 def test_asset_assignment_list_response_schema_documents_pagination() -> None:
     schema = app.openapi().get("components", {}).get("schemas", {})
     assert "AssetAssignmentListResult" in schema

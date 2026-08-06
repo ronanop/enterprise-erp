@@ -44,6 +44,27 @@ class RegistrationValidator:
             raise RegistrationValidationError("New registrations must start in draft status")
         self._validate_common(ctx, company_id=company_id, fields=fields, exclude_id=None)
 
+    def validate_create_for_import_fields(
+        self,
+        ctx: TenantContext,
+        *,
+        company_id: UUID,
+        branch_id: UUID,
+        fields: dict,
+    ) -> None:
+        """Excel import may supply external asset_code (Asset Tag); document_number stays system-assigned."""
+        asset_code = (fields.get("asset_code") or "").strip()
+        if not asset_code:
+            raise RegistrationValidationError("asset_code is required for Excel import")
+        if fields.get("status") and fields["status"] != AssetStatus.DRAFT.value:
+            raise RegistrationValidationError("New registrations must start in draft status")
+        existing = self._assets.find_by_code(ctx, company_id, asset_code)
+        if existing is not None:
+            raise DuplicateAssetRegistrationError(
+                f"Asset tag '{asset_code}' is already registered"
+            )
+        self._validate_common(ctx, company_id=company_id, fields=fields, exclude_id=None)
+
     def validate_update_fields(
         self,
         ctx: TenantContext,

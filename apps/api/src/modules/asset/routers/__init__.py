@@ -19,6 +19,7 @@ from modules.asset.schemas import (
     AssetAssignmentCreate,
     AssetAssignmentListResult,
     AssetAssignmentResponse,
+    AssetAssignmentReturnRequest,
     AssetAssignmentUpdate,
     AssetAuditCreate,
     AssetAuditListResult,
@@ -69,6 +70,9 @@ from modules.asset.schemas import (
     AssetInsuranceResponse,
     AssetInsuranceUpdate,
     AssetListResult,
+    AssetDashboardSummaryResponse,
+    AssetExcelImportRequest,
+    AssetExcelImportSummaryResponse,
     AssetLocationCreate,
     AssetLocationListResult,
     AssetLocationResponse,
@@ -124,6 +128,7 @@ from modules.asset.service import (
     AssetCategoryService,
     AssetReportService,
     AssetService,
+    AssetDashboardSummaryService,
     AssignmentService,
     ChecklistService,
     AssetComponentService,
@@ -238,6 +243,7 @@ def list_assets(
     company_id: UUID | None = None,
     branch_id: UUID | None = None,
     status: str | None = None,
+    operational_status: str | None = None,
     asset_category_id: UUID | None = None,
     q: str | None = None,
 ):
@@ -246,6 +252,7 @@ def list_assets(
         company_id=company_id,
         branch_id=branch_id,
         status=status,
+        operational_status=operational_status,
         asset_category_id=asset_category_id,
         search=q,
         offset=pagination.offset,
@@ -258,6 +265,106 @@ def list_assets(
         page_size=pagination.page_size,
     )
     return APIResponse(message="OK", data=payload)
+
+
+@assets_router.get(
+    "/dashboard-summary",
+    response_model=APIResponse[AssetDashboardSummaryResponse],
+)
+def get_assets_dashboard_summary(
+    ctx: Annotated[TenantContext, Depends(require_permission("asset.asset:read"))],
+    db: Annotated[Session, Depends(get_db)],
+    company_id: UUID | None = None,
+    branch_id: UUID | None = None,
+):
+    return APIResponse(
+        message="OK",
+        data=AssetDashboardSummaryService(db).get_summary(
+            ctx,
+            company_id=company_id,
+            branch_id=branch_id,
+        ),
+    )
+
+
+@assets_router.post(
+    "/import",
+    response_model=APIResponse[AssetExcelImportSummaryResponse],
+)
+def import_assets_from_excel(
+    body: AssetExcelImportRequest,
+    ctx: Annotated[TenantContext, Depends(require_permission("asset.asset:create"))],
+    db: Annotated[Session, Depends(get_db)],
+):
+    """Import preview-validated Excel rows via business services (CR-004 Phase 8B).
+
+    Not a new asset CRUD API — orchestration over AssetService / AssignmentService /
+    AssetOperationalStatusService only.
+    """
+    from modules.asset.domain.excel_import import ExcelImportDefaults, ExcelImportRowInput
+    from modules.asset.service.asset_excel_import_service import AssetExcelImportService
+
+    defaults = ExcelImportDefaults(
+        asset_category_id=body.defaults.asset_category_id,
+        asset_type=body.defaults.asset_type,
+        purchase_date=body.defaults.purchase_date,
+        purchase_cost=body.defaults.purchase_cost,
+        currency_code=body.defaults.currency_code,
+    )
+    rows = [
+        ExcelImportRowInput(
+            row_number=r.row_number,
+            preview_status=r.preview_status,
+            asset_tag=r.asset_tag,
+            asset_name=r.asset_name,
+            branch_id=r.branch_id,
+            operational_status=r.operational_status,
+            employee_id=r.employee_id,
+            department_id=r.department_id,
+            asset_category_id=r.asset_category_id,
+            serial_number=r.serial_number,
+            issue_date=r.issue_date,
+            delivery_reference_number=r.delivery_reference_number,
+            delivery_reference_status=r.delivery_reference_status,
+            assignment_remarks=r.assignment_remarks,
+            company_id=r.company_id or body.company_id,
+        )
+        for r in body.rows
+    ]
+    summary = AssetExcelImportService(db).import_rows(
+        ctx,
+        rows,
+        defaults=defaults,
+        confirm_warnings=body.confirm_warnings,
+        batch_size=body.batch_size,
+        company_id=body.company_id,
+    )
+    return APIResponse(
+        message="Import completed",
+        data=AssetExcelImportSummaryResponse(
+            total_rows=summary.total_rows,
+            imported=summary.imported,
+            skipped=summary.skipped,
+            duplicates=summary.duplicates,
+            warnings=summary.warnings,
+            failed=summary.failed,
+            duration_ms=summary.duration_ms,
+            batch_count=summary.batch_count,
+            rows=[
+                {
+                    "row_number": r.row_number,
+                    "outcome": r.outcome,
+                    "reason": r.reason,
+                    "asset_id": r.asset_id,
+                    "assignment_id": r.assignment_id,
+                    "operational_status": r.operational_status,
+                    "warning": r.warning,
+                }
+                for r in summary.rows
+            ],
+        ),
+    )
+
 
 @assets_router.get("/registration/prefill", response_model=APIResponse[GrnPrefillResponse])
 def prefill_asset_registration_from_grn(
@@ -696,10 +803,20 @@ def resubmit_asset_assignments(
 @asset_assignments_router.post("/{row_id}/return", response_model=APIResponse[AssetAssignmentResponse])
 def return_asset_assignments(
     row_id: UUID,
+    body: AssetAssignmentReturnRequest,
     ctx: Annotated[TenantContext, Depends(require_permission("asset.assignment:return"))],
     db: Annotated[Session, Depends(get_db)],
 ):
-    return APIResponse(message="return", data=AssignmentService(db).return_assignment(ctx, row_id))
+    return APIResponse(
+        message="return",
+        data=AssignmentService(db).return_assignment(
+            ctx,
+            row_id,
+            return_condition=body.return_condition,
+            reason=body.reason,
+            remarks=body.return_remarks,
+        ),
+    )
 
 asset_transfers_router = APIRouter(prefix="/asset-transfers", tags=["Asset — AssetTransfer"])
 

@@ -20,6 +20,21 @@ class AssetStatus(str, Enum):
     CANCELLED = "cancelled"
 
 
+class AssetOperationalStatus(str, Enum):
+    """IT operations status (CR-004). Orthogonal to AssetStatus lifecycle."""
+
+    READY_TO_MOVE = "READY_TO_MOVE"
+    ASSIGNED = "ASSIGNED"
+    RETIRED = "RETIRED"
+    PENDING_DISPOSAL = "PENDING_DISPOSAL"
+    DISPOSED = "DISPOSED"
+
+
+ASSET_OPERATIONAL_STATUS_VALUES: frozenset[str] = frozenset(
+    s.value for s in AssetOperationalStatus
+)
+
+
 class AssetComponentStatus(str, Enum):
     ACTIVE = "active"
     REPLACED = "replaced"
@@ -33,6 +48,20 @@ class AssetAssignmentStatus(str, Enum):
     ACTIVE = "active"
     RETURNED = "returned"
     CANCELLED = "cancelled"
+
+
+class AssignmentDeliveryReferenceStatus(str, Enum):
+    """Delivery reference lifecycle on assignment (CR-004 Phase 5A-1)."""
+
+    NOT_APPLICABLE = "not_applicable"
+    PENDING = "pending"
+    ISSUED = "issued"
+    RECEIVED = "received"
+
+
+ASSIGNMENT_DELIVERY_REFERENCE_STATUS_VALUES: frozenset[str] = frozenset(
+    s.value for s in AssignmentDeliveryReferenceStatus
+)
 
 
 class AssetTransferStatus(str, Enum):

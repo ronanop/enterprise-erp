@@ -116,6 +116,23 @@ class AssetAssignmentRepository(AstScopedRepository):
         self.db.flush()
         return row
 
+    def complete_return(
+        self,
+        ctx: TenantContext,
+        row_id: UUID,
+        *,
+        status: str,
+        returned_at,
+        return_remarks: str | None,
+    ) -> AstAssetAssignment | None:
+        return self.update(
+            ctx,
+            row_id,
+            status=status,
+            returned_at=returned_at,
+            return_remarks=return_remarks,
+        )
+
     def update(self, ctx: TenantContext, row_id: UUID, **fields) -> AstAssetAssignment | None:
         row = self.get(ctx, row_id)
         if row is None:
@@ -131,6 +148,10 @@ class AssetAssignmentRepository(AstScopedRepository):
                 "department_id",
                 "project_id",
                 "expected_return_at",
+                "delivery_reference_number",
+                "delivery_reference_status",
+                "assignment_remarks",
+                "return_remarks",
             }:
                 setattr(row, k, v)
         row.updated_at = utcnow()

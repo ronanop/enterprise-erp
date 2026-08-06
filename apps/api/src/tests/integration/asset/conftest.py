@@ -354,11 +354,17 @@ def insert_draft_asset(db: Session, ids: dict[str, UUID]) -> AstAsset:
     return row
 
 
-def insert_active_asset(db: Session, ids: dict[str, UUID]) -> AstAsset:
+def insert_active_asset(
+    db: Session,
+    ids: dict[str, UUID],
+    *,
+    operational_status: str = "READY_TO_MOVE",
+) -> AstAsset:
     row = insert_draft_asset(db, ids)
     row.status = "active"
     row.department_id = uuid4()
     row.custodian_employee_id = uuid4()
+    row.operational_status = operational_status
     db.flush()
     return row
 

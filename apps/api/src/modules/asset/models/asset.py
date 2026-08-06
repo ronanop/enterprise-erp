@@ -40,6 +40,11 @@ class AstAsset(Base, *AstTransactionMixin):
             name="ck_ast_asset_status",
         ),
         CheckConstraint(
+            "operational_status IS NULL OR operational_status IN "
+            "('READY_TO_MOVE','ASSIGNED','RETIRED','PENDING_DISPOSAL','DISPOSED')",
+            name="ck_ast_asset_operational_status",
+        ),
+        CheckConstraint(
             "purchase_cost IS NULL OR purchase_cost >= 0",
             name="ck_ast_asset_purchase_cost",
         ),
@@ -107,6 +112,7 @@ class AstAsset(Base, *AstTransactionMixin):
     quality_inspection_id: Mapped[UUID | None] = mapped_column(PG_UUID(as_uuid=True), nullable=True)
     is_shared: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     status: Mapped[str] = mapped_column(String(30), nullable=False, default="draft", index=True)
+    operational_status: Mapped[str | None] = mapped_column(String(30), nullable=True, index=True)
 
     workflow_status: Mapped[str | None] = mapped_column(String(30), nullable=True)
     workflow_instance_id: Mapped[UUID | None] = mapped_column(

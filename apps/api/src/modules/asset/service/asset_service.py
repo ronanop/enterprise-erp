@@ -13,10 +13,13 @@ from modules.asset.domain.workflow_codes import ENTITY_AST_ASSET
 from modules.asset.models import AstAsset
 from modules.asset.repository.asset_category_repository import AssetCategoryRepository
 from modules.asset.repository.asset_repository import AssetListFilters, AssetRepository
+from modules.asset.service.asset_dashboard_summary_service import AssetDashboardSummaryService
+from modules.asset.service.asset_operational_status_service import AssetOperationalStatusService
 from modules.asset.service.asset_scope_validator import AssetScopeValidator
 from modules.asset.service.document_number_service import DocumentNumberService
 from modules.asset.service.engines import AssetEngine
 from modules.asset.service.governance_service import AssetGovernanceService
+from modules.asset.service.operational_status_read import coerce_operational_status_filter
 from modules.asset.service.registration_validator import RegistrationValidator
 from modules.asset.service.workflow_governance_settings import asset_workflow_governance_enabled
 from modules.foundation.domain.enums import WorkflowStatus
@@ -37,6 +40,7 @@ class AssetService:
         self._validator = RegistrationValidator(db)
         self._procurement = ProcurementReadPort(db)
         self._db = db
+        self._operational = AssetOperationalStatusService(db)
 
     def search(
         self,
@@ -45,16 +49,19 @@ class AssetService:
         company_id: UUID | None = None,
         branch_id: UUID | None = None,
         status: str | None = None,
+        operational_status: str | None = None,
         asset_category_id: UUID | None = None,
         search: str | None = None,
         offset: int = 0,
         limit: int = 25,
     ) -> tuple[list[AstAsset], int]:
         cid = self._scope.resolve_company_id(ctx, company_id)
+        ops_filter = coerce_operational_status_filter(operational_status)
         filters = AssetListFilters(
             company_id=cid,
             branch_id=branch_id,
             status=status,
+            operational_status=ops_filter,
             asset_category_id=asset_category_id,
             search=search,
         )
@@ -72,6 +79,18 @@ class AssetService:
 
     def prefill_from_grn(self, ctx: TenantContext, grn_id: UUID):
         return self._procurement.prefill_from_grn(ctx, grn_id)
+
+    def find_by_asset_code(
+        self, ctx: TenantContext, asset_code: str, *, company_id: UUID | None = None
+    ) -> AstAsset | None:
+        cid = self._scope.resolve_company_id(ctx, company_id)
+        return self._repo.find_by_code(ctx, cid, asset_code)
+
+    def find_by_serial_number(
+        self, ctx: TenantContext, serial_number: str, *, company_id: UUID | None = None
+    ) -> AstAsset | None:
+        cid = self._scope.resolve_company_id(ctx, company_id)
+        return self._repo.find_by_serial(ctx, cid, serial_number)
 
     def create(self, ctx: TenantContext, *, branch_id: UUID, company_id: UUID | None = None, **fields):
         cid = self._scope.resolve_company_id(ctx, company_id)
@@ -97,6 +116,51 @@ class AssetService:
             entity_id=row.id,
             operation="create",
             performed_by=ctx.user_id,
+        )
+        return row
+
+    def create_for_import(
+        self,
+        ctx: TenantContext,
+        *,
+        branch_id: UUID,
+        asset_code: str,
+        company_id: UUID | None = None,
+        **fields,
+    ):
+        """Create draft asset for Excel import with external Asset Tag as asset_code.
+
+        document_number remains system-assigned. Operational status is not set here —
+        activate via submit → approve (initialize_ready_to_move).
+        """
+        cid = self._scope.resolve_company_id(ctx, company_id)
+        self._scope.validate_branch_access(ctx, branch_id)
+        fields.pop("document_number", None)
+        fields.pop("status", None)
+        code = (asset_code or "").strip()
+        self._validator.validate_create_for_import_fields(
+            ctx,
+            company_id=cid,
+            branch_id=branch_id,
+            fields={**fields, "branch_id": branch_id, "asset_code": code},
+        )
+        doc = self._numbers.generate(AstEntityType.ASSET, cid, AstAsset, "document_number", ctx=ctx)
+        row = self._repo.create(
+            ctx,
+            company_id=cid,
+            branch_id=branch_id,
+            document_number=doc,
+            asset_code=code,
+            status=AssetStatus.DRAFT.value,
+            **fields,
+        )
+        self._audit.log_entity_change(
+            tenant_id=ctx.tenant_id,
+            entity_name=ENTITY_AST_ASSET,
+            entity_id=row.id,
+            operation="create",
+            performed_by=ctx.user_id,
+            new_value={"source": "excel_import", "asset_code": code},
         )
         return row
 
@@ -243,6 +307,12 @@ class AssetService:
                 master_asset_id=master_asset_id,
                 workflow_status=WorkflowStatus.APPROVED.value,
             )
+            self._operational.initialize_ready_to_move(
+                ctx,
+                row_id,
+                expected_version=int(fresh.version or 1),
+                reason="asset_registration",
+            )
             self._audit.log_entity_change(
                 tenant_id=ctx.tenant_id,
                 entity_name=ENTITY_AST_ASSET,
@@ -306,6 +376,12 @@ class AssetService:
             row_id,
             status=row.status,
             master_asset_id=row.master_asset_id,
+        )
+        self._operational.initialize_ready_to_move(
+            ctx,
+            row_id,
+            expected_version=int(updated.version or 1) if updated else None,
+            reason="asset_registration",
         )
         self._audit.log_entity_change(
             tenant_id=ctx.tenant_id,

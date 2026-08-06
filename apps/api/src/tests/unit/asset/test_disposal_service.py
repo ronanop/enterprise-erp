@@ -93,7 +93,7 @@ def test_post_claims_then_calls_finance_then_disposes_asset(_flag) -> None:
         created_by=row.created_by,
     )
     posted = SimpleNamespace(**{**claimed.__dict__, "status": "posted", "finance_journal_id": journal_id, "version": 3})
-    asset = SimpleNamespace(id=asset_id, status="active", master_asset_id=None)
+    asset = SimpleNamespace(id=asset_id, status="active", master_asset_id=None, version=1)
 
     def _update(_ctx, _id, **fields):
         if "finance_journal_id" in fields:
@@ -110,20 +110,24 @@ def test_post_claims_then_calls_finance_then_disposes_asset(_flag) -> None:
                     with patch.object(svc._repo, "update", side_effect=_update) as repo_update:
                         with patch.object(svc._assets, "get", return_value=asset):
                             with patch.object(svc._asset_engine, "dispose") as dispose_fn:
-                                with patch.object(svc._assets, "update") as asset_update:
+                                with patch.object(svc._assets, "update", return_value=asset) as asset_update:
                                     with patch.object(
-                                        svc._audit, "log_entity_change", return_value=None
-                                    ):
-                                        result = svc.post(
-                                            ctx,
-                                            row_id,
-                                            debit_account_id=uuid4(),
-                                            credit_account_id=uuid4(),
-                                        )
+                                        svc._operational, "apply_action", return_value="DISPOSED"
+                                    ) as ops_fn:
+                                        with patch.object(
+                                            svc._audit, "log_entity_change", return_value=None
+                                        ):
+                                            result = svc.post(
+                                                ctx,
+                                                row_id,
+                                                debit_account_id=uuid4(),
+                                                credit_account_id=uuid4(),
+                                            )
     post_fn.assert_called_once()
     engine_post.assert_called_once()
     dispose_fn.assert_called_once_with(asset, disposal_type="scrap")
     asset_update.assert_called_once()
+    ops_fn.assert_called_once()
     assert repo_update.call_count == 2
     assert repo_update.call_args_list[0] == call(ctx, row_id, version=1)
     assert result is posted

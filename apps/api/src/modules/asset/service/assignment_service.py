@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 
 from core.exceptions import NotFoundException
 from modules.asset.adapters.master_data_port import AssetMasterDataAdapter
+from modules.asset.domain.assignment_enrichment import validate_draft_enrichment_fields, validate_return_remarks
 from modules.asset.domain.enums import AssetAssignmentStatus, AstEntityType
 from modules.asset.domain.exceptions import (
     AssignmentValidationError,
@@ -20,6 +21,7 @@ from modules.asset.repository.asset_assignment_repository import (
 )
 from modules.asset.repository.asset_repository import AssetRepository
 from modules.asset.repository.base import utcnow
+from modules.asset.service.asset_operational_status_service import AssetOperationalStatusService
 from modules.asset.service.asset_scope_validator import AssetScopeValidator
 from modules.asset.service.assignment_validator import AssignmentValidator
 from modules.asset.service.document_number_service import DocumentNumberService
@@ -42,6 +44,7 @@ class AssignmentService:
         self._master = AssetMasterDataAdapter(db)
         self._validator = AssignmentValidator(db)
         self._audit = AuditService(db)
+        self._operational = AssetOperationalStatusService(db)
 
     def search(
         self,
@@ -80,7 +83,7 @@ class AssignmentService:
     def create(self, ctx: TenantContext, *, branch_id: UUID, company_id: UUID | None = None, **fields):
         cid = self._scope.resolve_company_id(ctx, company_id)
         self._scope.validate_branch_access(ctx, branch_id)
-        self._validator.validate_create_fields(ctx, company_id=cid, fields=fields)
+        enrichment = self._validator.validate_create_fields(ctx, company_id=cid, fields=fields)
 
         asset = self._assets.get(ctx, fields["asset_id"])
         if asset is None:
@@ -110,29 +113,57 @@ class AssignmentService:
             project_id=fields.get("project_id"),
             expected_return_at=fields.get("expected_return_at"),
             status=AssetAssignmentStatus.DRAFT.value,
+            **{k: v for k, v in enrichment.items() if k != "return_remarks"},
         )
+        audit_payload = {
+            "document_number": row.document_number,
+            "asset_id": str(asset.id),
+            **{k: v for k, v in enrichment.items() if v is not None},
+        }
         self._audit.log_entity_change(
             tenant_id=ctx.tenant_id,
             entity_name=ENTITY_AST_ASSIGNMENT,
             entity_id=row.id,
             operation="create",
             performed_by=ctx.user_id,
-            new_value={"document_number": row.document_number, "asset_id": str(asset.id)},
+            new_value=audit_payload,
         )
         return row
 
     def update(self, ctx: TenantContext, row_id: UUID, **fields):
         row = self.get(ctx, row_id)
         self._validator.validate_update_fields(ctx, row, fields)
+        enrichment_keys = {
+            "delivery_reference_number",
+            "delivery_reference_status",
+            "assignment_remarks",
+        }
+        enrichment_patch = {k: fields[k] for k in enrichment_keys if k in fields}
+        if enrichment_patch:
+            merged = {
+                "delivery_reference_number": enrichment_patch.get(
+                    "delivery_reference_number", row.delivery_reference_number
+                ),
+                "delivery_reference_status": enrichment_patch.get(
+                    "delivery_reference_status", row.delivery_reference_status
+                ),
+                "assignment_remarks": enrichment_patch.get(
+                    "assignment_remarks", row.assignment_remarks
+                ),
+            }
+            enrichment = validate_draft_enrichment_fields(**merged)
+            fields = {**fields, **enrichment}
         updated = self._repo.update(ctx, row_id, **fields)
         if updated is None:
             raise NotFoundException("Asset assignment not found")
+        audit_new = {k: fields[k] for k in enrichment_keys if k in fields}
         self._audit.log_entity_change(
             tenant_id=ctx.tenant_id,
             entity_name=ENTITY_AST_ASSIGNMENT,
             entity_id=row_id,
             operation="update",
             performed_by=ctx.user_id,
+            new_value=audit_new or None,
         )
         return updated
 
@@ -250,8 +281,35 @@ class AssignmentService:
             self.reopen(ctx, row_id)
         return self.submit(ctx, row_id)
 
-    def return_assignment(self, ctx: TenantContext, row_id: UUID):
+    def return_assignment(
+        self,
+        ctx: TenantContext,
+        row_id: UUID,
+        *,
+        return_condition: str = "good",
+        reason: str | None = None,
+        remarks: str | None = None,
+    ):
         row = self.get(ctx, row_id)
+        self._validator.validate_return_readiness(ctx, row)
+        action = self._validator.validate_return_request(
+            return_condition=return_condition,
+            return_remarks=remarks,
+            reason=reason,
+        )
+        asset = self._assets.lock_for_update(ctx, row.asset_id)
+        if asset is None:
+            raise NotFoundException("Asset not found")
+        self._operational.apply_action(
+            ctx,
+            row.asset_id,
+            action=action,
+            expected_version=int(asset.version or 1),
+            reason=reason or return_condition,
+            remarks=remarks,
+            source_entity=ENTITY_AST_ASSIGNMENT,
+            source_entity_id=row_id,
+        )
         self._engine.return_assignment(row)
         now = utcnow()
         asset = self._assets.get(ctx, row.asset_id)
@@ -269,11 +327,13 @@ class AssignmentService:
                     ctx, asset.master_asset_id, custodian_employee_id=None
                 )
 
-        updated = self._repo.update(
+        normalized_remarks = validate_return_remarks(remarks)
+        updated = self._repo.complete_return(
             ctx,
             row_id,
             status=row.status,
             returned_at=now,
+            return_remarks=normalized_remarks,
         )
         self._audit.log_entity_change(
             tenant_id=ctx.tenant_id,
@@ -281,7 +341,11 @@ class AssignmentService:
             entity_id=row_id,
             operation="return",
             performed_by=ctx.user_id,
-            new_value={k: str(v) if v is not None else None for k, v in master_payload.items()},
+            new_value={
+                **{k: str(v) if v is not None else None for k, v in master_payload.items()},
+                "return_condition": return_condition,
+                "return_remarks": normalized_remarks,
+            },
         )
         return updated
 
@@ -313,8 +377,11 @@ class AssignmentService:
                 if asset.company_id == assignment.company_id:
                     asset_updates["branch_id"] = assignment.branch_id
 
+        asset_version = int(asset.version or 1)
         if asset_updates:
-            self._assets.update(ctx, asset.id, **asset_updates)
+            updated_asset = self._assets.update(ctx, asset.id, **asset_updates)
+            if updated_asset is not None:
+                asset_version = int(updated_asset.version or 1)
             if asset.master_asset_id is not None:
                 master_fields = {
                     k: v
@@ -334,11 +401,28 @@ class AssignmentService:
             workflow_status=WorkflowStatus.APPROVED.value,
             allocated_at=now,
         )
+        self._operational.apply_action(
+            ctx,
+            asset.id,
+            action="assign",
+            expected_version=asset_version,
+            reason="assignment_activate",
+            source_entity=ENTITY_AST_ASSIGNMENT,
+            source_entity_id=row_id,
+        )
         self._audit.log_entity_change(
             tenant_id=ctx.tenant_id,
             entity_name=ENTITY_AST_ASSIGNMENT,
             entity_id=row_id,
             operation="assignment_activate",
             performed_by=ctx.user_id,
-            new_value={k: str(v) for k, v in asset_updates.items()},
+            new_value={
+                **{k: str(v) for k, v in asset_updates.items()},
+                "delivery_reference_number": getattr(
+                    assignment, "delivery_reference_number", None
+                ),
+                "delivery_reference_status": getattr(
+                    assignment, "delivery_reference_status", None
+                ),
+            },
         )

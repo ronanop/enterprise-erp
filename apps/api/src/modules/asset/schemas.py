@@ -4,7 +4,7 @@ from decimal import Decimal
 from datetime import date, datetime
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class OrmModel(BaseModel):
@@ -142,6 +142,29 @@ class AssetListResult(BaseModel):
     page: int
     page_size: int
 
+
+class AssetDashboardBranchSummary(BaseModel):
+    branch_id: UUID
+    total_assets: int
+    ready_to_move: int
+    assigned: int
+    retired: int
+    pending_disposal: int
+    disposed: int
+
+
+class AssetDashboardSummaryResponse(BaseModel):
+    company_id: UUID
+    branch_id: UUID | None = None
+    total_assets: int
+    ready_to_move: int
+    assigned: int
+    retired: int
+    pending_disposal: int
+    disposed: int
+    by_branch: list[AssetDashboardBranchSummary] = []
+
+
 class AssetResponse(OrmModel):
     id: UUID
     document_number: str
@@ -174,6 +197,7 @@ class AssetResponse(OrmModel):
     quality_inspection_id: UUID | None
     is_shared: bool
     status: str
+    operational_status: str | None = None
     workflow_status: str | None
     workflow_instance_id: UUID | None
     company_id: UUID
@@ -377,6 +401,9 @@ class AssetAssignmentCreate(BaseModel):
     department_id: UUID | None = None
     project_id: UUID | None = None
     expected_return_at: date | None = None
+    delivery_reference_number: str | None = Field(default=None, max_length=100)
+    delivery_reference_status: str | None = None
+    assignment_remarks: str | None = Field(default=None, max_length=4000)
 
 class AssetAssignmentUpdate(BaseModel):
     allocation_type: str | None = None
@@ -384,7 +411,17 @@ class AssetAssignmentUpdate(BaseModel):
     department_id: UUID | None = None
     project_id: UUID | None = None
     expected_return_at: date | None = None
+    delivery_reference_number: str | None = Field(default=None, max_length=100)
+    delivery_reference_status: str | None = None
+    assignment_remarks: str | None = Field(default=None, max_length=4000)
     version: int
+
+
+class AssetAssignmentReturnRequest(BaseModel):
+    return_condition: str = Field(default="good", description="good | outdated | dead")
+    reason: str | None = Field(default=None, max_length=500)
+    return_remarks: str | None = Field(default=None, max_length=4000)
+
 
 class AssetAssignmentResponse(OrmModel):
     id: UUID
@@ -398,6 +435,10 @@ class AssetAssignmentResponse(OrmModel):
     expected_return_at: date | None
     returned_at: datetime | None
     status: str
+    delivery_reference_number: str | None = None
+    delivery_reference_status: str
+    assignment_remarks: str | None = None
+    return_remarks: str | None = None
     workflow_status: str | None
     workflow_instance_id: UUID | None
     company_id: UUID
@@ -1156,3 +1197,61 @@ class FinancePostRequest(BaseModel):
 
 class WorkflowActionRequest(BaseModel):
     comments: str | None = None
+
+
+class AssetExcelImportDefaults(BaseModel):
+    asset_category_id: UUID
+    asset_type: str = "fixed"
+    purchase_date: date | None = None
+    purchase_cost: Decimal = Decimal("0")
+    currency_code: str = "USD"
+
+
+class AssetExcelImportRow(BaseModel):
+    """Preview-validated row resolved to ERP IDs (Phase 8A → 8B)."""
+
+    row_number: int = Field(ge=1)
+    preview_status: str = Field(description="valid | warning | invalid")
+    asset_tag: str = Field(min_length=1, max_length=100)
+    asset_name: str = Field(min_length=1, max_length=255)
+    branch_id: UUID
+    operational_status: str
+    employee_id: UUID | None = None
+    department_id: UUID | None = None
+    asset_category_id: UUID | None = None
+    serial_number: str | None = Field(default=None, max_length=100)
+    issue_date: date | None = None
+    delivery_reference_number: str | None = Field(default=None, max_length=100)
+    delivery_reference_status: str | None = None
+    assignment_remarks: str | None = Field(default=None, max_length=4000)
+    company_id: UUID | None = None
+
+
+class AssetExcelImportRequest(BaseModel):
+    company_id: UUID | None = None
+    batch_size: int = Field(default=50, ge=1, le=500)
+    confirm_warnings: bool = False
+    defaults: AssetExcelImportDefaults
+    rows: list[AssetExcelImportRow]
+
+
+class AssetExcelImportRowResult(BaseModel):
+    row_number: int
+    outcome: str
+    reason: str | None = None
+    asset_id: UUID | None = None
+    assignment_id: UUID | None = None
+    operational_status: str | None = None
+    warning: bool = False
+
+
+class AssetExcelImportSummaryResponse(BaseModel):
+    total_rows: int
+    imported: int
+    skipped: int
+    duplicates: int
+    warnings: int
+    failed: int
+    duration_ms: int
+    batch_count: int
+    rows: list[AssetExcelImportRowResult] = []

@@ -3,7 +3,7 @@
 from datetime import date, datetime
 from uuid import UUID, uuid4
 
-from sqlalchemy import CheckConstraint, Date, DateTime, ForeignKey, String, UniqueConstraint
+from sqlalchemy import CheckConstraint, Date, DateTime, ForeignKey, String, Text, UniqueConstraint
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -22,6 +22,10 @@ class AstAssetAssignment(Base, *AstTransactionMixin):
         CheckConstraint(
             "status IN ('draft','submitted','approved','active','returned','cancelled')",
             name="ck_ast_asset_assignment_status",
+        ),
+        CheckConstraint(
+            "delivery_reference_status IN ('not_applicable','pending','issued','received')",
+            name="ck_ast_asset_assignment_delivery_reference_status",
         ),
         {"schema": "asset"},
     )
@@ -60,3 +64,11 @@ class AstAssetAssignment(Base, *AstTransactionMixin):
         nullable=True,
     )
 
+    delivery_reference_number: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    delivery_reference_status: Mapped[str] = mapped_column(
+        String(30),
+        nullable=False,
+        default="not_applicable",
+    )
+    assignment_remarks: Mapped[str | None] = mapped_column(Text, nullable=True)
+    return_remarks: Mapped[str | None] = mapped_column(Text, nullable=True)

@@ -4,8 +4,11 @@ from modules.asset.service.application_service import AssetApplicationService
 from modules.asset.service.asset_audit_service import AssetAuditService
 from modules.asset.service.asset_category_service import AssetCategoryService
 from modules.asset.service.asset_report_service import AssetReportService
+from modules.asset.service.asset_dashboard_summary_service import AssetDashboardSummaryService
+from modules.asset.service.asset_excel_import_service import AssetExcelImportService
 from modules.asset.service.asset_service import AssetService
 from modules.asset.service.assignment_service import AssignmentService
+from modules.asset.service.excel_import_engine import AssetExcelImportEngine
 from modules.asset.service.checklist_service import ChecklistService
 from modules.asset.service.component_service import (
     AssetComponentService,
@@ -33,6 +36,9 @@ __all__ = [
     "AssetApplicationService",
     "AssetAuditService",
     "AssetCategoryService",
+    "AssetDashboardSummaryService",
+    "AssetExcelImportService",
+    "AssetExcelImportEngine",
     "AssetIntegrationService",
     "AssetReportService",
     "AssetService",

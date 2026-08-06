@@ -21,6 +21,7 @@ from modules.asset.repository.asset_disposal_repository import (
     AssetDisposalRepository,
 )
 from modules.asset.repository.asset_repository import AssetRepository
+from modules.asset.service.asset_operational_status_service import AssetOperationalStatusService
 from modules.asset.service.asset_scope_validator import AssetScopeValidator
 from modules.asset.service.disposal_validator import DisposalValidator
 from modules.asset.service.document_number_service import DocumentNumberService
@@ -45,6 +46,7 @@ class DisposalService:
         self._audit = AuditService(db)
         self._governance = AssetGovernanceService(db)
         self._validator = DisposalValidator(db)
+        self._operational = AssetOperationalStatusService(db)
 
     def search(
         self,
@@ -307,11 +309,24 @@ class DisposalService:
         )
 
         asset = self._assets.get(ctx, claimed.asset_id)
+        asset_version: int | None = None
         if asset is not None:
+            asset_version = int(asset.version or 1)
             self._asset_engine.dispose(asset, disposal_type=claimed.disposal_type)
-            self._assets.update(ctx, asset.id, status=asset.status)
+            updated_asset = self._assets.update(ctx, asset.id, status=asset.status)
+            if updated_asset is not None:
+                asset_version = int(updated_asset.version or 1)
             if asset.master_asset_id is not None:
                 self._master.mark_master_disposed(ctx, asset.master_asset_id)
+            self._operational.apply_action(
+                ctx,
+                asset.id,
+                action="complete_disposal",
+                expected_version=asset_version,
+                reason="disposal_post",
+                source_entity=ENTITY_AST_DISPOSAL,
+                source_entity_id=row_id,
+            )
 
         self._audit.log_entity_change(
             tenant_id=ctx.tenant_id,

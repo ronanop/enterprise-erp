@@ -7,6 +7,12 @@ from sqlalchemy.orm import Session
 from core.exceptions import NotFoundException
 from modules.asset.adapters.master_data_port import AssetMasterDataAdapter
 from modules.asset.adapters.organization_port import AssetOrganizationAdapter
+from modules.asset.domain.assignment_enrichment import (
+    validate_draft_enrichment_fields,
+    validate_employee_issue_enrichment,
+    validate_return_remarks,
+)
+from modules.asset.domain.assignment_return_condition import operational_action_for_return_condition
 from modules.asset.domain.enums import AssetAssignmentStatus, AssetStatus
 from modules.asset.domain.exceptions import AssignmentValidationError
 from modules.asset.models import AstAssetAssignment
@@ -32,7 +38,7 @@ class AssignmentValidator:
         *,
         company_id: UUID,
         fields: dict,
-    ) -> None:
+    ) -> dict[str, str | None]:
         asset_id = fields.get("asset_id")
         if asset_id is None:
             raise AssignmentValidationError("asset_id is required")
@@ -45,6 +51,56 @@ class AssignmentValidator:
         self._validate_allocation_fields(ctx, company_id=company_id, fields=fields)
         self._validate_exclusive_assignment(ctx, asset, exclude_id=None)
         self._validate_pending_transfer(ctx, asset_id)
+        return self.validate_enrichment_fields(fields, context="create")
+
+    def validate_enrichment_fields(
+        self,
+        fields: dict,
+        *,
+        context: str,
+    ) -> dict[str, str | None]:
+        if context == "return":
+            raise AssignmentValidationError("Use validate_return_request for return context")
+        allow_return = False
+        validated = validate_draft_enrichment_fields(
+            delivery_reference_number=fields.get("delivery_reference_number"),
+            delivery_reference_status=fields.get("delivery_reference_status"),
+            assignment_remarks=fields.get("assignment_remarks"),
+            return_remarks=fields.get("return_remarks"),
+            allow_return_remarks=allow_return,
+        )
+        return validated
+
+    def validate_enrichment_on_row(
+        self,
+        row: AstAssetAssignment,
+        *,
+        require_employee_issue: bool = False,
+    ) -> None:
+        validate_draft_enrichment_fields(
+            delivery_reference_number=row.delivery_reference_number,
+            delivery_reference_status=row.delivery_reference_status,
+            assignment_remarks=row.assignment_remarks,
+            return_remarks=None,
+            allow_return_remarks=False,
+        )
+        if require_employee_issue and row.allocation_type == "employee":
+            validate_employee_issue_enrichment(
+                delivery_reference_status=row.delivery_reference_status,
+            )
+
+    def validate_return_request(
+        self,
+        *,
+        return_condition: str,
+        return_remarks: str | None = None,
+        reason: str | None = None,
+    ) -> str:
+        action = operational_action_for_return_condition(return_condition)
+        validate_return_remarks(return_remarks)
+        if reason is not None and len(reason.strip()) > 500:
+            raise AssignmentValidationError("reason must be at most 500 characters")
+        return action
 
     def validate_update_fields(
         self,
@@ -71,6 +127,17 @@ class AssignmentValidator:
         self._validate_allocation_fields(ctx, company_id=row.company_id, fields=merged)
         self._validate_exclusive_assignment(ctx, asset, exclude_id=row.id)
         self._validate_pending_transfer(ctx, row.asset_id)
+        enrichment_merged = {
+            "delivery_reference_number": fields.get(
+                "delivery_reference_number", row.delivery_reference_number
+            ),
+            "delivery_reference_status": fields.get(
+                "delivery_reference_status", row.delivery_reference_status
+            ),
+            "assignment_remarks": fields.get("assignment_remarks", row.assignment_remarks),
+            "return_remarks": fields.get("return_remarks"),
+        }
+        self.validate_enrichment_fields(enrichment_merged, context="update")
 
     def validate_submit_readiness(self, ctx: TenantContext, row: AstAssetAssignment) -> None:
         if row.status != AssetAssignmentStatus.DRAFT.value:
@@ -88,6 +155,18 @@ class AssignmentValidator:
         self._validate_allocation_fields(ctx, company_id=row.company_id, fields=fields)
         self._validate_exclusive_assignment(ctx, asset, exclude_id=row.id)
         self._validate_pending_transfer(ctx, row.asset_id)
+        self.validate_enrichment_on_row(row, require_employee_issue=True)
+
+    def validate_return_readiness(self, ctx: TenantContext, row: AstAssetAssignment) -> None:
+        if row.status != AssetAssignmentStatus.ACTIVE.value:
+            raise AssignmentValidationError("Only active assignments can be returned")
+        asset = self._assets.get(ctx, row.asset_id)
+        if asset is None:
+            raise NotFoundException("Asset not found")
+
+    @staticmethod
+    def resolve_return_operational_action(return_condition: str) -> str:
+        return operational_action_for_return_condition(return_condition)
 
     def validate_activate_readiness(self, ctx: TenantContext, row: AstAssetAssignment) -> None:
         if row.status != AssetAssignmentStatus.SUBMITTED.value:
@@ -105,6 +184,7 @@ class AssignmentValidator:
         self._validate_allocation_fields(ctx, company_id=row.company_id, fields=fields)
         self._validate_exclusive_assignment(ctx, asset, exclude_id=row.id)
         self._validate_pending_transfer(ctx, row.asset_id)
+        self.validate_enrichment_on_row(row, require_employee_issue=True)
 
     def _validate_allocation_fields(
         self,

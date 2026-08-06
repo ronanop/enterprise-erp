@@ -18,6 +18,15 @@ import {
   prdStatusLabel,
 } from "@/domain/asset-prd";
 import { isAuthenticated } from "@/lib/auth";
+import { listEmployeeOptions } from "@/lib/org-options";
+import {
+  buildRegisterParityExpandable,
+  deriveEarlierUsedBy,
+  formatDeliveryReferenceStatus,
+  mapAssignmentHistoryEntries,
+  pickRegisterAssignment,
+  resolveAssigneeLabel,
+} from "@/components/assets/inventory/register-parity";
 import {
   assetRegisterService,
   type AssetsRow,
@@ -35,6 +44,7 @@ export function AssetDetailWorkspace({ assetId }: { assetId: string }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [returning, setReturning] = useState(false);
+  const [employeeLabels, setEmployeeLabels] = useState<Record<string, string>>({});
 
   const load = useCallback(async () => {
     if (!isAuthenticated()) return;
@@ -43,10 +53,11 @@ export function AssetDetailWorkspace({ assetId }: { assetId: string }) {
     try {
       const row = await assetRegisterService.get(assetId);
       setAsset(row);
-      const [asnRes, maintRes, docRes] = await Promise.all([
+      const [asnRes, maintRes, docRes, empOpts] = await Promise.all([
         resourceService.list(`/assets/asset-assignments?asset_id=${assetId}&page_size=50`),
         resourceService.list(`/assets/asset-maintenances?asset_id=${assetId}&page_size=50`),
         resourceService.list(`/assets/asset-documents?asset_id=${assetId}&page_size=50`),
+        listEmployeeOptions().catch(() => []),
       ]);
       const pick = (data: unknown) => {
         if (data && typeof data === "object" && "items" in data) {
@@ -57,6 +68,7 @@ export function AssetDetailWorkspace({ assetId }: { assetId: string }) {
       setAssignments(pick(asnRes.data));
       setMaintenances(pick(maintRes.data));
       setDocuments(pick(docRes.data));
+      setEmployeeLabels(Object.fromEntries(empOpts.map((e) => [e.id, e.label])));
     } catch (err) {
       setError(err instanceof ApiClientError ? err.message : "Failed to load asset");
       setAsset(null);
@@ -110,6 +122,18 @@ export function AssetDetailWorkspace({ assetId }: { assetId: string }) {
       ),
     [asset, assignments, maintenances],
   );
+
+  const registerParity = useMemo(() => {
+    const expandable = buildRegisterParityExpandable(assignments, employeeLabels);
+    const current = pickRegisterAssignment(assignments);
+    return {
+      expandable,
+      currentHolder: resolveAssigneeLabel(current, employeeLabels),
+      earlierUsedBy: deriveEarlierUsedBy(assignments, employeeLabels),
+      deliveryStatus: formatDeliveryReferenceStatus(current?.delivery_reference_status as string),
+      history: mapAssignmentHistoryEntries(assignments, employeeLabels),
+    };
+  }, [assignments, employeeLabels]);
 
   const profile = asset ? parseDiscoveryProfile(asset) : null;
   const showIt = isItAssetCategory(
@@ -210,6 +234,10 @@ export function AssetDetailWorkspace({ assetId }: { assetId: string }) {
                 <Badge variant="secondary">{prdStatusLabel(prdStatus)}</Badge>
               </p>
               <p>
+                <span className="text-muted-foreground">Operational: </span>
+                {String(asset.operational_status ?? "—")}
+              </p>
+              <p>
                 <span className="text-muted-foreground">Type: </span>
                 {String(asset.asset_type ?? "—")}
               </p>
@@ -220,6 +248,43 @@ export function AssetDetailWorkspace({ assetId }: { assetId: string }) {
               <p>
                 <span className="text-muted-foreground">Serial: </span>
                 {String(asset.serial_number ?? "—")}
+              </p>
+            </CardContent>
+          </Card>
+          <Card data-testid="asset-detail-register-parity">
+            <CardHeader>
+              <CardTitle className="text-base">Register parity</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-2 text-sm">
+              <p>
+                <span className="text-muted-foreground">Current holder: </span>
+                {registerParity.currentHolder}
+              </p>
+              <p>
+                <span className="text-muted-foreground">Earlier used by: </span>
+                <span data-testid="asset-detail-earlier-used-by">{registerParity.earlierUsedBy}</span>
+              </p>
+              <p>
+                <span className="text-muted-foreground">Delivery reference: </span>
+                <span data-testid="asset-detail-delivery-reference">
+                  {registerParity.expandable.deliveryChallan}
+                </span>
+              </p>
+              <p>
+                <span className="text-muted-foreground">Delivery status: </span>
+                {registerParity.deliveryStatus}
+              </p>
+              <p>
+                <span className="text-muted-foreground">Assignment remarks: </span>
+                <span className="whitespace-pre-wrap" data-testid="asset-detail-assignment-remarks">
+                  {registerParity.expandable.assignmentRemarks}
+                </span>
+              </p>
+              <p>
+                <span className="text-muted-foreground">Return remarks: </span>
+                <span className="whitespace-pre-wrap" data-testid="asset-detail-return-remarks">
+                  {registerParity.expandable.returnRemarks}
+                </span>
               </p>
             </CardContent>
           </Card>
@@ -255,10 +320,7 @@ export function AssetDetailWorkspace({ assetId }: { assetId: string }) {
       ) : null}
 
       {tab === "assignments" ? (
-        <HistoryList
-          rows={assignments}
-          columns={["document_number", "status", "allocation_type", "allocated_at"]}
-        />
+        <AssignmentHistoryDetailList entries={registerParity.history} />
       ) : null}
       {tab === "maintenance" ? (
         <HistoryList
@@ -288,6 +350,55 @@ export function AssetDetailWorkspace({ assetId }: { assetId: string }) {
           </CardContent>
         </Card>
       ) : null}
+    </div>
+  );
+}
+
+function AssignmentHistoryDetailList({
+  entries,
+}: {
+  entries: ReturnType<typeof mapAssignmentHistoryEntries>;
+}) {
+  if (entries.length === 0) {
+    return <p className="text-sm text-muted-foreground">No records.</p>;
+  }
+  return (
+    <div className="overflow-x-auto rounded-lg border" data-testid="asset-detail-assignment-history">
+      <table className="w-full text-sm">
+        <thead className="bg-muted/40 text-left text-xs text-muted-foreground">
+          <tr>
+            <th className="px-3 py-2">Document</th>
+            <th className="px-3 py-2">Assignee</th>
+            <th className="px-3 py-2">Status</th>
+            <th className="px-3 py-2">Issued</th>
+            <th className="px-3 py-2">Returned</th>
+            <th className="px-3 py-2">Delivery</th>
+            <th className="px-3 py-2">Assignment remarks</th>
+            <th className="px-3 py-2">Return remarks</th>
+          </tr>
+        </thead>
+        <tbody>
+          {entries.map((row) => (
+            <tr key={row.id} className="border-t">
+              <td className="px-3 py-2 font-mono text-xs">{row.documentNumber}</td>
+              <td className="px-3 py-2">{row.assigneeLabel}</td>
+              <td className="px-3 py-2">{row.status}</td>
+              <td className="px-3 py-2 whitespace-nowrap">{row.allocatedAt}</td>
+              <td className="px-3 py-2 whitespace-nowrap">{row.returnedAt}</td>
+              <td className="px-3 py-2">
+                {row.deliveryReferenceNumber}
+                {row.deliveryReferenceStatus !== "—" ? ` (${row.deliveryReferenceStatus})` : ""}
+              </td>
+              <td className="max-w-[12rem] truncate px-3 py-2" title={row.assignmentRemarks}>
+                {row.assignmentRemarks}
+              </td>
+              <td className="max-w-[12rem] truncate px-3 py-2" title={row.returnRemarks}>
+                {row.returnRemarks}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   );
 }
