@@ -114,10 +114,10 @@ export const hrNavGroups: HrNavGroup[] = [
         description: "Programs and completion",
       },
       {
-        title: "Separation",
+        title: "Offboarding",
         href: "/hr/separation",
         icon: UserMinus,
-        description: "Exit and clearance",
+        description: "Resignation, clearance, exit interview & FNF",
       },
     ],
   },

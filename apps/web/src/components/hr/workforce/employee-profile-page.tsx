@@ -40,7 +40,7 @@ const TABS = [
   { id: "attendance", label: "Attendance" },
   { id: "leave", label: "Leave" },
   { id: "payroll", label: "Payroll" },
-  { id: "separation", label: "Separation" },
+  { id: "separation", label: "Offboarding" },
 ];
 
 type LinkedData = {
@@ -536,7 +536,7 @@ export function EmployeeProfilePage({ employeeId }: { employeeId: string }) {
         {tab === "separation" ? (
           <DataTableTab
             loading={linkedLoading}
-            empty="No separation cases for this employee."
+            empty="No offboarding cases for this employee."
             columns={["Type", "Last day", "Status", "Reason"]}
             rows={(linked?.separation ?? []).map((r) => [
               String(r.separation_type ?? r.type ?? "—"),

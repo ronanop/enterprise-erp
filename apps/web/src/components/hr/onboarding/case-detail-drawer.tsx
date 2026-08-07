@@ -3,6 +3,10 @@
 import { useMemo, useState } from "react";
 import { CheckCircle2, Circle, UserCheck } from "lucide-react";
 
+import {
+  OnboardingDocumentPreviewDialog,
+  OnboardingDocumentRow,
+} from "@/components/hr/onboarding/onboarding-document-preview";
 import { HrStatusBadge } from "@/components/hr/hr-primitives";
 import {
   SetupDrawer,
@@ -49,6 +53,7 @@ export function CaseDetailDrawer({
   );
   const [note, setNote] = useState("");
   const [empCodeInput, setEmpCodeInput] = useState("");
+  const [previewDoc, setPreviewDoc] = useState<OnboardingDocument | null>(null);
 
   const timeline = useMemo(() => {
     if (!caseRow) return [];
@@ -258,44 +263,29 @@ export function CaseDetailDrawer({
 
       {tab === "docs" ? (
         <div className="space-y-2">
+          <p className="text-[11px] text-muted-foreground">
+            Click the file name or View to open a preview (PDF and images).
+          </p>
           {caseRow.portal.documents.length === 0 ? (
             <p className="text-xs text-muted-foreground">No documents uploaded yet.</p>
           ) : (
             caseRow.portal.documents.map((d) => (
-              <div
+              <OnboardingDocumentRow
                 key={d.id}
-                className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border/70 px-3 py-2 text-xs"
-              >
-                <div>
-                  <p className="font-medium">{d.fileName}</p>
-                  <p className="text-[10px] text-muted-foreground uppercase">{d.kind}</p>
-                </div>
-                <div className="flex items-center gap-1">
-                  <HrStatusBadge status={d.verifyStatus} />
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    className="h-7 cursor-pointer"
-                    onClick={() => onVerifyDoc(caseRow.id, d.id, "verified")}
-                  >
-                    Verify
-                  </Button>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="ghost"
-                    className="h-7 cursor-pointer text-destructive"
-                    onClick={() => onVerifyDoc(caseRow.id, d.id, "rejected")}
-                  >
-                    Reject
-                  </Button>
-                </div>
-              </div>
+                doc={d}
+                onView={setPreviewDoc}
+                onVerify={() => onVerifyDoc(caseRow.id, d.id, "verified")}
+                onReject={() => onVerifyDoc(caseRow.id, d.id, "rejected")}
+              />
             ))
           )}
         </div>
       ) : null}
+
+      <OnboardingDocumentPreviewDialog
+        doc={previewDoc}
+        onClose={() => setPreviewDoc(null)}
+      />
 
       {tab === "checklist" ? (
         <div className="space-y-4">

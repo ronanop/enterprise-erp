@@ -187,52 +187,162 @@ export function RunPayrollDrawer({
 }: {
   open: boolean;
   onClose: () => void;
-  onSubmit: (month: string) => void;
+  onSubmit: (month: string, cutoverDay: number) => void;
 }) {
   const now = new Date();
   const defaultMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
   const [month, setMonth] = useState(defaultMonth);
+  const [cutoverDay, setCutoverDay] = useState(20);
+  const [loadingPreview, setLoadingPreview] = useState(false);
+  const [cycleLabel, setCycleLabel] = useState("");
+  const [previewLines, setPreviewLines] = useState<
+    import("@/types/payroll-management").PayrollEmployeeAttendance[]
+  >([]);
 
-  const options = Array.from({ length: 6 }).map((_, i) => {
+  useEffect(() => {
+    if (!open) return;
+    import("@/lib/payroll-cycle").then(({ readPayrollCutoverDay, writePayrollCutoverDay }) => {
+      const d = readPayrollCutoverDay();
+      setCutoverDay(d);
+      writePayrollCutoverDay(d);
+    });
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    setLoadingPreview(true);
+    import("@/services/payroll-management-service").then(({ previewPayrollAttendanceForCycle }) =>
+      previewPayrollAttendanceForCycle(month, cutoverDay)
+        .then(({ cycle, lines }) => {
+          if (cancelled) return;
+          setCycleLabel(cycle.label);
+          setPreviewLines(lines);
+        })
+        .catch(() => {
+          if (!cancelled) {
+            setCycleLabel("");
+            setPreviewLines([]);
+          }
+        })
+        .finally(() => {
+          if (!cancelled) setLoadingPreview(false);
+        }),
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, [open, month, cutoverDay]);
+
+  const options = Array.from({ length: 8 }).map((_, i) => {
     const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
     const ym = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
     return { value: ym, label: monthLabel(ym) };
   });
+
+  function persistCutover(day: number) {
+    setCutoverDay(day);
+    void import("@/lib/payroll-cycle").then(({ writePayrollCutoverDay }) =>
+      writePayrollCutoverDay(day),
+    );
+  }
 
   return (
     <SetupDrawer
       open={open}
       onClose={onClose}
       title="Run Payroll"
-      description="Syncs attendance, leave, OT, bonuses, reimbursements, and loans for the month."
+      description="Pulls attendance and approved leave for the pay cycle, then prorates salary by payable days."
       footer={
         <Button
           type="button"
-          className="cursor-pointer"
+          className="cursor-pointer transition-colors duration-200"
+          disabled={loadingPreview}
           onClick={() => {
-            onSubmit(month);
+            onSubmit(month, cutoverDay);
             onClose();
           }}
         >
-          Run Payroll
+          {loadingPreview ? "Loading attendance…" : "Run Payroll"}
         </Button>
       }
     >
-      <SetupField label="Payroll month">
-        <SetupSelect value={month} onChange={(e) => setMonth(e.target.value)}>
-          {options.map((o) => (
-            <option key={o.value} value={o.value}>
-              {o.label}
-            </option>
-          ))}
-        </SetupSelect>
-      </SetupField>
-      <ul className="mt-3 space-y-1 text-[11px] text-muted-foreground">
-        <li>· Attendance & late deductions</li>
-        <li>· Leave & holidays</li>
-        <li>· Overtime, bonuses, reimbursements</li>
-        <li>· Loan / advance recovery</li>
-      </ul>
+      <div className="space-y-3">
+        <SetupField
+          label="Pay cycle anchor month"
+          hint="Cycle runs from the cutover day of this month through the day before the next cutover."
+        >
+          <SetupSelect value={month} onChange={(e) => setMonth(e.target.value)}>
+            {options.map((o) => (
+              <option key={o.value} value={o.value}>
+                {o.label}
+              </option>
+            ))}
+          </SetupSelect>
+        </SetupField>
+        <SetupField label="Cycle cutover day" hint="Default 20 → 20th to 19th of next month">
+          <SetupSelect
+            value={String(cutoverDay)}
+            onChange={(e) => persistCutover(Number(e.target.value))}
+          >
+            {Array.from({ length: 28 }).map((_, i) => {
+              const day = i + 1;
+              return (
+                <option key={day} value={day}>
+                  {day}
+                  {day === 1 ? "st" : day === 2 ? "nd" : day === 3 ? "rd" : "th"} of month
+                </option>
+              );
+            })}
+          </SetupSelect>
+        </SetupField>
+        <div className="rounded-lg border border-teal-200/80 bg-teal-50/50 px-3 py-2 text-xs text-teal-950">
+          <p className="font-medium">Pay period</p>
+          <p className="mt-0.5 tabular-nums">
+            {loadingPreview ? "Calculating…" : cycleLabel || "—"}
+          </p>
+        </div>
+        <div>
+          <p className="text-[11px] font-medium text-foreground">Attendance preview</p>
+          <p className="text-[10px] text-muted-foreground">
+            Present, leave, and absent from HR attendance + approved leave in this cycle.
+          </p>
+          <div className="mt-2 max-h-48 overflow-auto rounded-lg border border-border/70">
+            <table className="w-full min-w-[420px] text-left text-[11px]">
+              <thead className="sticky top-0 border-b bg-muted/60 text-[10px] uppercase text-muted-foreground">
+                <tr>
+                  <th className="px-2 py-1.5 font-medium">Employee</th>
+                  <th className="px-2 py-1.5 font-medium">Present</th>
+                  <th className="px-2 py-1.5 font-medium">Leave</th>
+                  <th className="px-2 py-1.5 font-medium">Absent</th>
+                  <th className="px-2 py-1.5 font-medium">Payable</th>
+                </tr>
+              </thead>
+              <tbody>
+                {previewLines.length === 0 ? (
+                  <tr>
+                    <td colSpan={5} className="px-2 py-3 text-muted-foreground">
+                      {loadingPreview ? "Loading…" : "No attendance in cycle — full month salary used."}
+                    </td>
+                  </tr>
+                ) : (
+                  previewLines.map((l) => (
+                    <tr key={l.employeeId} className="border-b border-border/40">
+                      <td className="px-2 py-1.5 font-medium">{l.employeeName}</td>
+                      <td className="px-2 py-1.5 tabular-nums">{l.presentDays}</td>
+                      <td className="px-2 py-1.5 tabular-nums">{l.leaveDays}</td>
+                      <td className="px-2 py-1.5 tabular-nums">{l.absentDays}</td>
+                      <td className="px-2 py-1.5 tabular-nums">
+                        {l.payableDays}/{l.workingDaysInCycle}
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
     </SetupDrawer>
   );
 }

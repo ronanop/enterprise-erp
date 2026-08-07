@@ -271,8 +271,12 @@ export type EmployeeSalary = {
 export type PayrollRun = {
   id: string;
   runCode: string;
-  month: string; // YYYY-MM
+  month: string; // YYYY-MM anchor for pay cycle
   monthLabel: string;
+  cycleStart: string;
+  cycleEnd: string;
+  cycleCutoverDay: number;
+  cycleLabel: string;
   employeeCount: number;
   grossTotal: number;
   deductionTotal: number;
@@ -284,6 +288,22 @@ export type PayrollRun = {
   createdAt: string;
   updatedAt: string;
   approvedBy?: string;
+};
+
+export type PayrollEmployeeAttendance = {
+  employeeId: string;
+  employeeCode: string;
+  employeeName: string;
+  department: string;
+  presentDays: number;
+  leaveDays: number;
+  absentDays: number;
+  halfDays: number;
+  holidays: number;
+  weeklyOff: number;
+  payableDays: number;
+  workingDaysInCycle: number;
+  attendanceFactor: number;
 };
 
 export type MonthLock = {

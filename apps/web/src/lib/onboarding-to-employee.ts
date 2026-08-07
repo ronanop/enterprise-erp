@@ -88,6 +88,7 @@ export function portalToWizardDraft(
     issueDate: "",
     expiryDate: "",
     fileName: d.fileName,
+    fileDataUrl: d.fileDataUrl,
     uploadedBy: "Onboarding portal",
     uploadedAt: d.uploadedAt,
     source: "onboarding" as const,

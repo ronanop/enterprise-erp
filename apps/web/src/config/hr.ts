@@ -65,7 +65,7 @@ export const hrWorkspaceGroups: HrWorkspaceGroup[] = [
   {
     key: "talent",
     title: "Talent & Exit",
-    description: "Documents, reviews, goals, appraisals, training, separation",
+    description: "Documents, reviews, goals, appraisals, training, offboarding",
     icon: GraduationCap,
     resourceKeys: [
       "employee-documents",

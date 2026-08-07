@@ -150,6 +150,9 @@ export type OnboardingDocument = {
   uploadedAt: string;
   verifyStatus: DocumentVerifyStatus;
   notes?: string;
+  /** Base64 data URL for HR preview (stored with portal progress in local demo). */
+  fileDataUrl?: string;
+  mimeType?: string;
 };
 
 export type PolicyAcceptance = {

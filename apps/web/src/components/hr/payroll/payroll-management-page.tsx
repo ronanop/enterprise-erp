@@ -51,6 +51,7 @@ import {
   filterRuns,
   formatInr,
   generatePayslips,
+  getPayrollRunAttendance,
   importStructuresCsv,
   listPayrollAudit,
   loadPayrollDirectory,
@@ -161,6 +162,7 @@ export function PayrollManagementPage() {
   const [filters, setFilters] = useState(() => emptyPayrollFilters());
   const [page, setPage] = useState(1);
   const [preview, setPreview] = useState<PayslipRecord | null>(null);
+  const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
   const importRef = useRef<HTMLInputElement>(null);
 
   const [structureOpen, setStructureOpen] = useState(false);
@@ -203,6 +205,14 @@ export function PayrollManagementPage() {
     const s = (page - 1) * PAGE;
     return runs.slice(s, s + PAGE);
   }, [runs, page]);
+  const selectedRun = useMemo(
+    () => dir?.runs.find((r) => r.id === selectedRunId) ?? pageRuns[0] ?? null,
+    [dir, selectedRunId, pageRuns],
+  );
+  const selectedRunAttendance = useMemo(
+    () => (selectedRun ? getPayrollRunAttendance(selectedRun.id) : []),
+    [selectedRun],
+  );
   const audit = useMemo(() => listPayrollAudit(), [dir, tab]);
   const authBlocked =
     !isAuthenticated() &&
@@ -238,7 +248,7 @@ export function PayrollManagementPage() {
       <SetupToastHost />
       <PageHeader
         title="Payroll Management"
-        description="Manage salary structures, monthly payroll processing, payslips, statutory deductions, and payroll approvals."
+        description="Salary processing with attendance-based pay (present, leave, absent) and selectable pay cycles (e.g. 20th to next 20th)."
         actions={
           <HrToolbar onRefresh={() => void load()} loading={loading}>
             <Button size="sm" className="cursor-pointer" onClick={() => setRunOpen(true)}>
@@ -615,30 +625,44 @@ export function PayrollManagementPage() {
               {pageRuns.length === 0 ? (
                 <HrEmptyState
                   title="No payroll runs"
-                  description="Select a month to sync attendance, leave, OT, bonuses, and loans."
+                  description="Choose a pay cycle (e.g. 20th–20th) and run payroll to sync attendance and leave."
                 />
               ) : (
                 <>
                   <div className="overflow-x-auto rounded-xl border border-border/70">
-                    <table className="w-full min-w-[800px] text-left text-sm">
+                    <table className="w-full min-w-[960px] text-left text-sm">
                       <thead className="border-b bg-muted/40 text-[11px] uppercase text-muted-foreground">
                         <tr>
                           <th className="px-3 py-2 font-medium">Run</th>
-                          <th className="px-3 py-2 font-medium">Month</th>
+                          <th className="px-3 py-2 font-medium">Pay cycle</th>
                           <th className="px-3 py-2 font-medium">Employees</th>
                           <th className="px-3 py-2 font-medium">Gross</th>
                           <th className="px-3 py-2 font-medium">Deductions</th>
                           <th className="px-3 py-2 font-medium">Net</th>
-                          <th className="px-3 py-2 font-medium">Synced</th>
+                          <th className="px-3 py-2 font-medium">Attendance</th>
                           <th className="px-3 py-2 font-medium">Status</th>
                           <th className="px-3 py-2 font-medium">Actions</th>
                         </tr>
                       </thead>
                       <tbody>
                         {pageRuns.map((r) => (
-                          <tr key={r.id} className="border-b border-border/50 hover:bg-muted/30">
+                          <tr
+                            key={r.id}
+                            className={cn(
+                              "cursor-pointer border-b border-border/50 hover:bg-muted/30",
+                              selectedRun?.id === r.id && "bg-muted/40",
+                            )}
+                            onClick={() => setSelectedRunId(r.id)}
+                          >
                             <td className="px-3 py-2 font-mono text-xs">{r.runCode}</td>
-                            <td className="px-3 py-2">{r.monthLabel}</td>
+                            <td className="px-3 py-2 text-xs">
+                              <span className="font-medium">{r.cycleLabel || r.monthLabel}</span>
+                              {r.cycleStart && r.cycleEnd ? (
+                                <span className="mt-0.5 block text-[10px] text-muted-foreground tabular-nums">
+                                  {r.cycleStart} → {r.cycleEnd}
+                                </span>
+                              ) : null}
+                            </td>
                             <td className="px-3 py-2 tabular-nums">{r.employeeCount}</td>
                             <td className="px-3 py-2 tabular-nums">{formatInr(r.grossTotal)}</td>
                             <td className="px-3 py-2 tabular-nums">{formatInr(r.deductionTotal)}</td>
@@ -646,13 +670,19 @@ export function PayrollManagementPage() {
                               {formatInr(r.netTotal)}
                             </td>
                             <td className="px-3 py-2 text-[10px] text-muted-foreground">
+                              {r.attendanceSynced ? (
+                                <span className="text-emerald-700">From attendance</span>
+                              ) : (
+                                "Structure only"
+                              )}
                               {[
-                                r.attendanceSynced && "Att",
                                 r.leaveSynced && "Leave",
                                 r.otSynced && "OT",
                               ]
                                 .filter(Boolean)
-                                .join(" · ")}
+                                .length
+                                ? ` · ${[r.leaveSynced && "Leave", r.otSynced && "OT"].filter(Boolean).join(" · ")}`
+                                : null}
                             </td>
                             <td className="px-3 py-2">
                               <HrStatusBadge
@@ -704,6 +734,52 @@ export function PayrollManagementPage() {
                       </tbody>
                     </table>
                   </div>
+                  {selectedRun ? (
+                    <div className="rounded-xl border border-border/70 bg-card p-4 shadow-sm">
+                      <h3 className="text-sm font-semibold">Attendance basis — {selectedRun.runCode}</h3>
+                      <p className="mt-0.5 text-xs text-muted-foreground">
+                        Cycle {selectedRun.cycleLabel}. Net pay is prorated by payable days ÷ working days in
+                        cycle.
+                      </p>
+                      {selectedRunAttendance.length === 0 ? (
+                        <p className="mt-3 text-xs text-muted-foreground">
+                          No stored attendance snapshot for this run. Re-run payroll to refresh from HR
+                          attendance.
+                        </p>
+                      ) : (
+                        <div className="mt-3 overflow-x-auto rounded-lg border border-border/60">
+                          <table className="w-full min-w-[640px] text-left text-xs">
+                            <thead className="border-b bg-muted/40 text-[10px] uppercase text-muted-foreground">
+                              <tr>
+                                <th className="px-2 py-2 font-medium">Employee</th>
+                                <th className="px-2 py-2 font-medium">Present</th>
+                                <th className="px-2 py-2 font-medium">Leave</th>
+                                <th className="px-2 py-2 font-medium">Absent</th>
+                                <th className="px-2 py-2 font-medium">Payable / WD</th>
+                                <th className="px-2 py-2 font-medium">Factor</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {selectedRunAttendance.map((l) => (
+                                <tr key={l.employeeId} className="border-b border-border/40">
+                                  <td className="px-2 py-2 font-medium">{l.employeeName}</td>
+                                  <td className="px-2 py-2 tabular-nums">{l.presentDays}</td>
+                                  <td className="px-2 py-2 tabular-nums">{l.leaveDays}</td>
+                                  <td className="px-2 py-2 tabular-nums">{l.absentDays}</td>
+                                  <td className="px-2 py-2 tabular-nums">
+                                    {l.payableDays}/{l.workingDaysInCycle}
+                                  </td>
+                                  <td className="px-2 py-2 tabular-nums">
+                                    {(l.attendanceFactor * 100).toFixed(1)}%
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+                    </div>
+                  ) : null}
                   <EmsPagination
                     page={page}
                     pageSize={PAGE}
@@ -1126,8 +1202,8 @@ export function PayrollManagementPage() {
                           <p className="text-muted-foreground">Bank: {preview.bankAccount}</p>
                           <p className="text-muted-foreground">
                             Attendance: {preview.presentDays} present · {preview.leaveDays} leave
+                            {preview.monthLabel ? ` · ${preview.monthLabel}` : ""}
                           </p>
-                          <p className="text-muted-foreground">Period: {preview.monthLabel}</p>
                         </div>
                         <div>
                           <p className="mb-1 font-semibold">Earnings</p>
@@ -1368,10 +1444,10 @@ export function PayrollManagementPage() {
       <RunPayrollDrawer
         open={runOpen}
         onClose={() => setRunOpen(false)}
-        onSubmit={async (month) => {
+        onSubmit={async (month, cutoverDay) => {
           try {
-            await runPayroll(month);
-            toast(`Payroll run for ${month}`);
+            await runPayroll(month, cutoverDay);
+            toast(`Payroll run for ${month} (attendance-based)`);
             refresh();
             setTab("process");
           } catch (e) {

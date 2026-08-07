@@ -30,13 +30,27 @@ def create_app() -> FastAPI:
     )
 
     application.add_middleware(RequestContextMiddleware)
+
+    cors_origins = list(settings.cors_origins)
+    dev_origin_regex = r"https?://(localhost|127\.0\.0\.1|192\.168\.\d{1,3}\.\d{1,3}|10\.\d{1,3}\.\d{1,3}\.\d{1,3})(:\d+)?"
+    if settings.is_development:
+        for origin in (
+            "http://localhost:3000",
+            "http://127.0.0.1:3000",
+            "http://localhost:3001",
+            "http://127.0.0.1:3001",
+        ):
+            if origin not in cors_origins:
+                cors_origins.append(origin)
+
     application.add_middleware(
         CORSMiddleware,
-        allow_origins=settings.cors_origins,
-        allow_origin_regex=r"https?://(localhost|127\.0\.0\.1)(:\d+)?",
+        allow_origins=cors_origins,
+        allow_origin_regex=dev_origin_regex if settings.is_development else None,
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
+        expose_headers=["X-Request-ID"],
     )
 
     register_exception_handlers(application)
