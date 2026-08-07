@@ -9,7 +9,6 @@ import {
   IconChevronRight,
   IconClose,
   IconPlus,
-  IconSparkle,
 } from "@/components/icons";
 import {
   AlertBox,
@@ -17,6 +16,7 @@ import {
   ViewportFab,
   leaveStatusTone,
 } from "@/components/ui";
+import { useCanApproveTeamLeave } from "@/context/ess-me-context";
 import { ApiClientError } from "@/services/api-client";
 import { essService } from "@/services/ess-service";
 import type {
@@ -25,6 +25,11 @@ import type {
   EssLeaveType,
   EssMe,
 } from "@/types/api";
+import { MonthRangeCalendar } from "@/components/month-range-calendar";
+import {
+  formatDisplayDateDDMMYYYY,
+  formatLeaveRangeLine,
+} from "@/utils/datetime";
 import "@/app/leave.css";
 import * as ui from "@/theme/classes";
 
@@ -35,6 +40,7 @@ const BALANCE_COLORS = [
 ];
 
 export default function LeavePage() {
+  const canTeamLeave = useCanApproveTeamLeave();
   const [me, setMe] = useState<EssMe | null>(null);
   const [types, setTypes] = useState<EssLeaveType[]>([]);
   const [balances, setBalances] = useState<EssLeaveBalance[]>([]);
@@ -50,6 +56,10 @@ export default function LeavePage() {
   const [showApply, setShowApply] = useState(false);
   const [portalReady, setPortalReady] = useState(false);
   const [step, setStep] = useState(1);
+  const [applyCalendarCursor, setApplyCalendarCursor] = useState(() => {
+    const d = new Date();
+    return new Date(d.getFullYear(), d.getMonth(), 1);
+  });
 
   useEffect(() => {
     setPortalReady(true);
@@ -157,6 +167,8 @@ export default function LeavePage() {
       });
       setMessage("Leave submitted");
       setReason("");
+      setStartDate("");
+      setEndDate("");
       setShowApply(false);
       setStep(1);
       await refresh();
@@ -169,11 +181,21 @@ export default function LeavePage() {
 
   function openApply(typeId?: string) {
     if (typeId) setLeaveTypeId(typeId);
+    setStartDate("");
+    setEndDate("");
     setStep(1);
+    const d = new Date();
+    setApplyCalendarCursor(new Date(d.getFullYear(), d.getMonth(), 1));
     setShowApply(true);
   }
 
-  const calendar = useMemo(() => buildMonthGrid(), []);
+  const dateSummaryLine = useMemo(() => {
+    if (!startDate) return "Tap start day, then end day on the calendar";
+    if (!endDate) {
+      return `${formatDisplayDateDDMMYYYY(startDate)} → select end date`;
+    }
+    return formatLeaveRangeLine(startDate, endDate, daysCount);
+  }, [startDate, endDate, daysCount]);
 
   return (
     <div className="relative space-y-6">
@@ -258,9 +280,11 @@ export default function LeavePage() {
                       </span>
                     </div>
                     <p className="mt-0.5 text-sm text-[#434655]">
-                      {row.start_date}
-                      {row.end_date !== row.start_date ? ` – ${row.end_date}` : ""}{" "}
-                      ({row.days_count} Days)
+                      {formatLeaveRangeLine(
+                        row.start_date,
+                        row.end_date,
+                        row.days_count,
+                      )}
                     </p>
                   </div>
                 </Link>
@@ -272,42 +296,18 @@ export default function LeavePage() {
 
       <section className={`${ui.card} p-5`}>
         <div className="mb-3 flex items-center justify-between">
-          <h2 className="font-semibold text-[#0b1c30]">Holidays Calendar</h2>
-          <Link href="/leave/holidays" className="text-sm font-medium text-[#004ac6]">
-            Open
-          </Link>
+          <h2 className="font-semibold text-[#0b1c30]">Quick apply</h2>
+          <button
+            type="button"
+            onClick={() => openApply()}
+            className="text-sm font-medium text-[#004ac6]"
+          >
+            Open calendar
+          </button>
         </div>
-        <div className="mb-2 grid grid-cols-7 gap-1 text-center text-[10px] font-bold uppercase text-[#434655]">
-          {["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"].map((d) => (
-            <span key={d}>{d}</span>
-          ))}
-        </div>
-        <div className="grid grid-cols-7 gap-1">
-          {calendar.cells.map((cell, i) => {
-            const highlight = cell.day === 14 || cell.day === 18 || cell.day === 25;
-            return (
-              <div
-                key={i}
-                className={`flex h-9 items-center justify-center rounded-full text-sm ${
-                  cell.day === 18
-                    ? "bg-[#004ac6] font-bold text-white"
-                    : cell.day === 14
-                      ? "bg-emerald-100 font-semibold text-emerald-800"
-                      : cell.day === 25
-                        ? "bg-[#eaddff] font-semibold text-[#712ae2]"
-                        : cell.day
-                          ? "text-[#0b1c30]"
-                          : ""
-                }`}
-              >
-                {cell.day || ""}
-                {highlight && cell.day === 22 ? (
-                  <span className="absolute h-1 w-1 rounded-full bg-[#ba1a1a]" />
-                ) : null}
-              </div>
-            );
-          })}
-        </div>
+        <p className="text-sm text-[#434655]">
+          Use the + button to pick leave type and dates on the calendar (dd/mm/yyyy).
+        </p>
       </section>
 
       <section>
@@ -353,9 +353,11 @@ export default function LeavePage() {
         <div className="mb-3 flex items-center justify-between">
           <h2 className="text-lg font-semibold text-[#0b1c30]">History</h2>
           <div className="flex gap-3">
-            <Link href="/leave/team" className="text-sm font-medium text-[#004ac6]">
-              Team
-            </Link>
+            {canTeamLeave ? (
+              <Link href="/leave/team" className="text-sm font-medium text-[#004ac6]">
+                Team
+              </Link>
+            ) : null}
             <Link href="/leave/history" className="text-sm font-medium text-[#004ac6]">
               See all
             </Link>
@@ -386,8 +388,7 @@ export default function LeavePage() {
                         {typeName(row.leave_type_id)}
                       </p>
                       <p className="text-xs text-[#434655]">
-                        {row.start_date}
-                        {row.end_date !== row.start_date ? ` → ${row.end_date}` : ""}
+                        {formatLeaveRangeLine(row.start_date, row.end_date)}
                       </p>
                     </div>
                     <span
@@ -480,103 +481,138 @@ export default function LeavePage() {
                   ))}
                 </div>
 
-                <div className="flex items-start gap-3 rounded-2xl bg-[#eff4ff] p-3">
-                  <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-[#712ae2] to-[#2563eb] text-white">
-                    <IconSparkle size={18} />
-                  </span>
-                  <div className="rounded-2xl rounded-tl-sm bg-white px-3 py-2 text-sm text-[#434655] shadow-sm">
-                    Need leave soon? Pick a type and dates — I&apos;ll help you
-                    submit.
-                  </div>
-                </div>
-
                 <div>
-                  <p className="mb-2 text-xs font-bold uppercase tracking-wide text-[#434655]">
-                    Leave Type
-                  </p>
-                  <div className="flex flex-wrap gap-2">
-                    {types.map((t) => {
-                      const active = leaveTypeId === t.id;
-                      return (
+                  {step === 1 ? (
+                    <div>
+                      <p className="mb-2 text-xs font-bold uppercase tracking-wide text-[#434655]">
+                        Leave type
+                      </p>
+                      <div className="flex flex-wrap gap-2">
+                        {types.map((t) => {
+                          const active = leaveTypeId === t.id;
+                          return (
+                            <button
+                              key={t.id}
+                              type="button"
+                              onClick={() => setLeaveTypeId(t.id)}
+                              className={`rounded-full px-4 py-2 text-sm font-semibold transition ${
+                                active
+                                  ? "bg-[#004ac6] text-white"
+                                  : "border border-[#c3c6d7]/50 bg-white text-[#434655]"
+                              }`}
+                            >
+                              {t.leave_type_name.replace(/ Leave$/i, "")}
+                            </button>
+                          );
+                        })}
+                      </div>
+                      <button
+                        type="button"
+                        className={`${ui.btn} mt-4 w-full`}
+                        disabled={!leaveTypeId}
+                        onClick={() => setStep(2)}
+                      >
+                        Next: Select dates
+                        <IconChevronRight />
+                      </button>
+                    </div>
+                  ) : null}
+
+                  {step === 2 ? (
+                    <div className="space-y-3">
+                      <div
+                        className={`${ui.card} border border-[#c3c6d7]/30 px-4 py-3 !shadow-sm`}
+                      >
+                        <p className="text-[10px] font-bold uppercase tracking-wide text-[#434655]">
+                          Selected dates
+                        </p>
+                        <p className="mt-1 text-base font-semibold text-[#0b1c30]">
+                          {dateSummaryLine}
+                        </p>
+                      </div>
+                      <MonthRangeCalendar
+                        cursor={applyCalendarCursor}
+                        onCursorChange={setApplyCalendarCursor}
+                        startDate={startDate}
+                        endDate={endDate}
+                        onRangeChange={(start, end) => {
+                          setStartDate(start);
+                          setEndDate(end);
+                        }}
+                        maxDate={undefined}
+                      />
+                      <p className="text-center text-xs text-[#434655]">
+                        Tap once for start, again for end (same day = 1 day leave)
+                      </p>
+                      <div className="flex gap-2">
                         <button
-                          key={t.id}
                           type="button"
-                          onClick={() => {
-                            setLeaveTypeId(t.id);
-                            setStep(2);
-                          }}
-                          className={`rounded-full px-4 py-2 text-sm font-semibold transition ${
-                            active
-                              ? "bg-[#004ac6] text-white"
-                              : "border border-[#c3c6d7]/50 bg-white text-[#434655]"
-                          }`}
+                          className="flex-1 rounded-xl border border-[#c3c6d7]/50 py-3 text-sm font-semibold text-[#434655]"
+                          onClick={() => setStep(1)}
                         >
-                          {t.leave_type_name.replace(/ Leave$/i, "")}
+                          Back
                         </button>
-                      );
-                    })}
-                  </div>
-                </div>
+                        <button
+                          type="button"
+                          className={`${ui.btn} flex-[2]`}
+                          disabled={!startDate || !endDate}
+                          onClick={() => setStep(3)}
+                        >
+                          Next: Reason
+                          <IconChevronRight />
+                        </button>
+                      </div>
+                    </div>
+                  ) : null}
 
-                <div className={`${ui.card} space-y-3 p-4 !shadow-sm`}>
-                  <div className="flex items-center justify-between">
-                    <h3 className="font-semibold text-[#004ac6]">Select Dates</h3>
-                    <span className="text-xs text-[#434655]">{daysCount} day(s)</span>
-                  </div>
-                  <div className="grid grid-cols-2 gap-2">
-                    <label className="block space-y-1 text-[11px] font-semibold text-[#434655]">
-                      Start Date
-                      <input
-                        className={ui.input}
-                        type="date"
-                        required
-                        value={startDate}
-                        onChange={(e) => {
-                          setStartDate(e.target.value);
-                          setStep(2);
-                        }}
-                      />
-                    </label>
-                    <label className="block space-y-1 text-[11px] font-semibold text-[#434655]">
-                      End Date
-                      <input
-                        className={ui.input}
-                        type="date"
-                        required
-                        value={endDate}
-                        onChange={(e) => {
-                          setEndDate(e.target.value);
-                          setStep(3);
-                        }}
-                      />
-                    </label>
-                  </div>
+                  {step === 3 ? (
+                    <div className="space-y-3">
+                      <div className="rounded-xl bg-[#eff4ff] px-4 py-3 text-sm">
+                        <p className="font-semibold text-[#004ac6]">
+                          {types.find((t) => t.id === leaveTypeId)?.leave_type_name.replace(
+                            / Leave$/i,
+                            "",
+                          ) ?? "Leave"}
+                        </p>
+                        <p className="mt-1 font-medium text-[#0b1c30]">
+                          {dateSummaryLine}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="mb-2 text-sm text-[#434655]">
+                          Reason (optional)
+                        </p>
+                        <textarea
+                          className={`${ui.input} min-h-[88px] resize-none`}
+                          value={reason}
+                          onChange={(e) => setReason(e.target.value)}
+                          placeholder="Reason for leave"
+                        />
+                      </div>
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          className="flex-1 rounded-xl border border-[#c3c6d7]/50 py-3 text-sm font-semibold text-[#434655]"
+                          onClick={() => setStep(2)}
+                        >
+                          Back
+                        </button>
+                        <button
+                          type="submit"
+                          className={`${ui.btn} flex-[2]`}
+                          disabled={
+                            loading || !leaveTypeId || !startDate || !endDate
+                          }
+                        >
+                          {loading ? "Submitting…" : "Submit leave"}
+                          <IconChevronRight />
+                        </button>
+                      </div>
+                    </div>
+                  ) : null}
                 </div>
-
-                <div>
-                  <p className="mb-2 text-sm text-[#434655]">Any specific reason?</p>
-                  <textarea
-                    className={`${ui.input} min-h-[88px] resize-none`}
-                    value={reason}
-                    onChange={(e) => setReason(e.target.value)}
-                    placeholder="Reason for leave (Optional)"
-                  />
-                </div>
-
-                <p className="flex items-center gap-2 text-sm font-medium text-[#10B981]">
-                  <span className="h-2 w-2 rounded-full bg-[#10B981]" />
-                  Probability of approval: High (94%)
-                </p>
 
                 {error ? <AlertBox>{error}</AlertBox> : null}
-
-                <button
-                  className={`${ui.btn} w-full`}
-                  disabled={loading || !leaveTypeId || !startDate || !endDate}
-                >
-                  {loading ? "Submitting…" : "Submit leave"}
-                  <IconChevronRight />
-                </button>
               </form>
             </div>,
             document.body,
@@ -584,22 +620,4 @@ export default function LeavePage() {
         : null}
     </div>
   );
-}
-
-function buildMonthGrid() {
-  const base = new Date();
-  const year = base.getFullYear();
-  const month = base.getMonth();
-  const label = base.toLocaleString(undefined, {
-    month: "long",
-    year: "numeric",
-  });
-  const first = new Date(year, month, 1);
-  const startPad = (first.getDay() + 6) % 7;
-  const daysInMonth = new Date(year, month + 1, 0).getDate();
-  const cells: { day: number | null }[] = [];
-  for (let i = 0; i < startPad; i++) cells.push({ day: null });
-  for (let d = 1; d <= daysInMonth; d++) cells.push({ day: d });
-  while (cells.length % 7 !== 0) cells.push({ day: null });
-  return { label, cells };
 }

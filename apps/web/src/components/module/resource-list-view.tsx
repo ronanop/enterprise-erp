@@ -272,7 +272,7 @@ export function ResourceListView({
   }, [enrichedRows, query]);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       <PageHeader
         title={title}
         description={description}

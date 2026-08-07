@@ -10,7 +10,9 @@ from modules.payroll.service.employee_salary_service import EmployeeSalaryServic
 from modules.payroll.service.installment_service import LoanInstallmentService
 from modules.payroll.service.integration_service import PayrollIntegrationService
 from modules.payroll.service.loan_service import LoanService
+from modules.payroll.service.payroll_period_day_service import PayrollPeriodDayService
 from modules.payroll.service.payroll_period_service import PayrollPeriodService
+from modules.payroll.service.payroll_policy_service import PayrollPolicyService
 from modules.payroll.service.payroll_posting_service import PayrollPostingService
 from modules.payroll.service.payroll_report_service import PayrollReportService
 from modules.payroll.service.payroll_run_service import PayrollRunService
@@ -35,7 +37,9 @@ __all__ = [
     "PayrollAdjustmentService",
     "PayrollApplicationService",
     "PayrollIntegrationService",
+    "PayrollPeriodDayService",
     "PayrollPeriodService",
+    "PayrollPolicyService",
     "PayrollPostingService",
     "PayrollReportService",
     "PayrollRunLineService",

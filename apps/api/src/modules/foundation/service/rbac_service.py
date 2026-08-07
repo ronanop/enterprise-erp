@@ -2,6 +2,7 @@
 
 from uuid import UUID
 
+import redis
 from sqlalchemy.orm import Session
 
 from core.redis import SessionStore
@@ -14,15 +15,24 @@ class RBACService:
         self._store = session_store or SessionStore()
 
     def get_user_permissions(self, user_id: UUID, tenant_id: UUID) -> set[str]:
-        cached = self._store.get_permissions(user_id)
-        if cached is not None:
-            return cached
+        try:
+            cached = self._store.get_permissions(user_id)
+            if cached is not None:
+                return cached
+        except redis.ConnectionError:
+            pass
         permissions = self._engine.get_user_permission_codes(user_id, tenant_id)
-        self._store.set_permissions(user_id, permissions)
+        try:
+            self._store.set_permissions(user_id, permissions)
+        except redis.ConnectionError:
+            pass
         return permissions
 
     def has_permission(self, user_id: UUID, tenant_id: UUID, permission_code: str) -> bool:
         return permission_code in self.get_user_permissions(user_id, tenant_id)
 
     def invalidate_user(self, user_id: UUID) -> None:
-        self._store.invalidate_permissions(user_id)
+        try:
+            self._store.invalidate_permissions(user_id)
+        except redis.ConnectionError:
+            pass

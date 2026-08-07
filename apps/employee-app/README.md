@@ -8,18 +8,23 @@ It talks **only** to the FastAPI backend at `cache_erp_hrms_payroll` (`/api/v1`)
 
 - Sign in with ERP credentials (`/auth/login`)
 - Profile (`/ess/me`)
-- Leave balances + apply (`/ess/leave-*`)
+- Leave balances + apply + **cancel** pending requests (`POST /ess/leave-requests/{id}/cancel`)
+- **RBAC hints** on `/ess/me` (`ess_role`, `is_manager`, `can_approve_team_leave`, `pending_approvals_count`)
+- **Manager approvals** at `/approvals` (direct reports)
+- **Notification bell** unread count (polls `/ess/notifications/unread-count`)
 - Attendance punch (`/ess/attendance/punch`)
 - Payslips (`/ess/payslips`)
 - Installable PWA (standalone display, offline shell)
 - App icons (192 / 512 / maskable) + branded UI icons in bottom nav
-- **Demo mock data** (`NEXT_PUBLIC_USE_MOCK=true`) for easy walkthroughs
+- **Face verification** (enroll in Profile → Security; required after login when enabled)
+- **Live API** (`NEXT_PUBLIC_USE_MOCK=false`) — syncs with HRMS `/ess/*`
 
 Regenerate icons: `npm run icons`
 
 ### Demo mode
 
-With `NEXT_PUBLIC_USE_MOCK=true` (default in `.env.example`):
+With `NEXT_PUBLIC_USE_MOCK=true`:
+
 
 | Field | Value |
 |-------|--------|
@@ -46,7 +51,7 @@ python -m scripts.seed_ess_employee
 | Field | Value |
 |-------|--------|
 | Email | `employee@example.com` |
-| Password | `Secure1!` |
+| Password | Policy-compliant default: code + `@` + DOB (`DDMMYYYY`), e.g. `Emp004@07051994` for EMP-004 after `seed_hr_workforce` + `seed_ess_employee` (run seed script for exact value) |
 
 Do **not** use `admin@example.com` for the PWA — that account is a platform admin and is not linked to an employee profile.
 
@@ -65,8 +70,11 @@ Open [http://localhost:3001](http://localhost:3001).
 
 | Variable | Default |
 |----------|---------|
-| `NEXT_PUBLIC_API_URL` | `http://localhost:8000/api/v1` |
+| `NEXT_PUBLIC_API_URL` | `/api/v1` (proxied to ERP in dev — use from localhost **or** LAN `:3001`) |
+| `API_PROXY_TARGET` | `http://127.0.0.1:8000` (Next.js rewrite target; set in shell or `.env` when starting `npm run dev`) |
 | `NEXT_PUBLIC_APP_NAME` | `Employee App` |
+
+Direct browser calls to `http://localhost:8000` fail when you open the PWA via your PC’s LAN IP (e.g. on a phone). The `/api/v1` proxy avoids that.
 
 ## Install as PWA
 

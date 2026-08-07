@@ -62,6 +62,7 @@ class Settings(BaseSettings):
     account_lockout_minutes: int = Field(default=15, alias="ACCOUNT_LOCKOUT_MINUTES")
     app_timezone: str = Field(default="Asia/Kolkata", alias="APP_TIMEZONE")
     fcm_server_key: str | None = Field(default=None, alias="FCM_SERVER_KEY")
+    ess_login_captcha_enabled: bool = Field(default=False, alias="ESS_LOGIN_CAPTCHA_ENABLED")
 
     @field_validator("cors_origins", mode="before")
     @classmethod

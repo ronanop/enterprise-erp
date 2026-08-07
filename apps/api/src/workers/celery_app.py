@@ -1,6 +1,7 @@
 """Celery application configuration."""
 
 from celery import Celery
+from celery.schedules import crontab
 
 from core.config import settings
 
@@ -27,6 +28,10 @@ celery_app.conf.update(
         "hr-attendance-auto-lock": {
             "task": "hr.attendance_auto_lock",
             "schedule": 3600.0,
+        },
+        "hr-leave-balance-monthly": {
+            "task": "hr.leave_balance_monthly_credit",
+            "schedule": crontab(day_of_month=1, hour=2, minute=30),
         },
     },
 )

@@ -5,7 +5,6 @@ import {
   CalendarDays,
   Download,
   Plus,
-  RefreshCw,
   Scale,
   Upload,
   Wallet,
@@ -144,9 +143,6 @@ export function LeaveManagementPage() {
             <Button size="sm" variant="outline" className="cursor-pointer" onClick={() => setImportOpen(true)}>
               <Upload className="size-3.5" />
               Import
-            </Button>
-            <Button size="sm" variant="ghost" className="cursor-pointer" onClick={() => void load()}>
-              <RefreshCw className={cn("size-3.5", loading && "animate-spin")} />
             </Button>
           </HrToolbar>
         }

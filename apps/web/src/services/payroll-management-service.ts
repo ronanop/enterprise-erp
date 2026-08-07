@@ -3,7 +3,7 @@
  */
 
 import { formatInr, loadPayrollOverview } from "@/services/payroll-service";
-import { resourceService } from "@/services/api-client";
+import { apiClient, resourceService } from "@/services/api-client";
 import type {
   BonusRecord,
   EmployeeSalary,
@@ -1018,12 +1018,75 @@ export async function addLoan(
   return row;
 }
 
+function mapApiPayslipToRecord(p: Record<string, unknown>, run: PayrollRun): PayslipRecord {
+  const json = (p.payslip_json as Record<string, unknown> | null) ?? {};
+  const att = (json.attendance as Record<string, unknown> | null) ?? {};
+  const emp = (json.employee as Record<string, unknown> | null) ?? {};
+  const earningsRaw = Array.isArray(json.earnings) ? json.earnings : [];
+  const deductionsRaw = Array.isArray(json.deductions) ? json.deductions : [];
+  const gross = Number(p.gross_salary ?? (json.summary as Record<string, unknown>)?.gross ?? 0);
+  const totalDeductions = Number(p.total_deductions ?? (json.summary as Record<string, unknown>)?.total_deductions ?? 0);
+  const net = Number(p.net_salary ?? (json.summary as Record<string, unknown>)?.net_pay ?? 0);
+  return {
+    id: String(p.id ?? crypto.randomUUID()),
+    payslipCode: String(p.document_number ?? nextCode("slip", "PSL")),
+    runId: String(p.payroll_run_id ?? run.id),
+    employeeId: String(p.employee_id ?? emp.id ?? ""),
+    employeeName: String(p.employee_name ?? emp.name ?? p.employee_id ?? ""),
+    month: run.month,
+    monthLabel: run.monthLabel,
+    department: "—",
+    bankAccount: "—",
+    presentDays: Number(att.paid_days ?? 0),
+    leaveDays: Number(att.leave_days ?? 0),
+    earnings: earningsRaw.map((e) => ({
+      label: String((e as Record<string, unknown>).label ?? "Earning"),
+      amount: Number((e as Record<string, unknown>).amount ?? 0),
+    })),
+    deductions: deductionsRaw
+      .filter((d) => (d as Record<string, unknown>).code !== "pf_total")
+      .map((d) => ({
+        label: String((d as Record<string, unknown>).label ?? "Deduction"),
+        amount: Number((d as Record<string, unknown>).amount ?? 0),
+      })),
+    gross,
+    totalDeductions,
+    net,
+    taxRegime: "new",
+    generatedAt: nowIso(),
+    exportText: typeof json.export_text === "string" ? json.export_text : undefined,
+  };
+}
+
 export async function generatePayslips(runId: string): Promise<PayslipRecord[]> {
   const runs = load<PayrollRun>(K.runs);
   const run = runs.find((r) => r.id === runId);
   if (!run) throw new Error("Payroll run not found");
 
   if (UUID_RE.test(runId)) {
+    try {
+      const gen = await resourceService.action<Record<string, unknown>[]>(
+        "/payroll/payroll-runs",
+        runId,
+        "generate-payslips",
+        { issue: true },
+      );
+      const rows = Array.isArray(gen.data) ? gen.data : [];
+      if (rows.length) {
+        const slips = rows.map((p) => mapApiPayslipToRecord(p, run));
+        const all = load<PayslipRecord>(K.payslips);
+        save(K.payslips, [...slips, ...all.filter((p) => p.runId !== runId || !UUID_RE.test(p.id))]);
+        appendPayrollAudit({
+          action: "payslips_generated",
+          detail: `${slips.length} payslips (API) for ${run.monthLabel}`,
+          actor: actor(),
+        });
+        return slips;
+      }
+    } catch (err) {
+      console.warn("generate-payslips API failed; falling back", err);
+    }
+
     try {
       const ctx = readJson<{ branchId?: string }>(PAY_CTX_KEY, {});
       if (ctx.branchId && UUID_RE.test(ctx.branchId)) {
@@ -1184,6 +1247,9 @@ export async function generatePayslips(runId: string): Promise<PayslipRecord[]> 
 }
 
 export function exportPayslipText(slip: PayslipRecord): string {
+  if (slip.exportText?.trim()) {
+    return slip.exportText;
+  }
   const lines = [
     "========================================",
     "           EMPLOYEE PAYSLIP",
@@ -1211,6 +1277,20 @@ export function exportPayslipText(slip: PayslipRecord): string {
     "========================================",
   ];
   return lines.join("\n");
+}
+
+export async function fetchPayrollRunBankExportCsv(runId: string): Promise<string> {
+  if (!UUID_RE.test(runId)) {
+    throw new Error("Payroll run id must be a UUID to export bank file from API");
+  }
+  const res = await apiClient<{ csv: string }>(`/payroll/payroll-runs/${runId}/bank-export`, {
+    method: "GET",
+  });
+  const csv = res.data?.csv;
+  if (!csv) {
+    throw new Error("Bank export returned no CSV data");
+  }
+  return csv;
 }
 
 export function downloadTextFile(filename: string, content: string, mime = "text/plain") {

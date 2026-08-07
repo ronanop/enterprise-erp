@@ -22,6 +22,7 @@ def notify_employee(
     body: str,
     kind: str,
     extra: dict | None = None,
+    notify_manager: bool = True,
 ) -> bool:
     emp = db.get(MasterEmployee, employee_id)
     if emp is None:
@@ -46,7 +47,7 @@ def notify_employee(
         recipient_address=emp.email,
         payload_json=payload,
     )
-    if emp.reporting_manager_id:
+    if notify_manager and emp.reporting_manager_id:
         mgr = db.get(MasterEmployee, emp.reporting_manager_id)
         if mgr is not None:
             notif.send(

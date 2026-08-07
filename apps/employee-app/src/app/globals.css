@@ -46,6 +46,42 @@
   }
 }
 
+@keyframes bell-ring {
+  0% {
+    transform: rotate(0);
+  }
+  15% {
+    transform: rotate(14deg);
+  }
+  30% {
+    transform: rotate(-12deg);
+  }
+  45% {
+    transform: rotate(10deg);
+  }
+  60% {
+    transform: rotate(-8deg);
+  }
+  75% {
+    transform: rotate(4deg);
+  }
+  100% {
+    transform: rotate(0);
+  }
+}
+
+@keyframes badge-pop {
+  0% {
+    transform: scale(1);
+  }
+  40% {
+    transform: scale(1.35);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
 body {
   min-height: 100dvh;
   background: #f8f9ff;
@@ -58,6 +94,22 @@ body {
 
 .success-glow {
   animation: success-glow 2.4s ease-in-out infinite;
+}
+
+.animate-bell-ring {
+  transform-origin: 50% 4%;
+  animation: bell-ring 0.7s ease-in-out;
+}
+
+.animate-badge-pop {
+  animation: badge-pop 0.45s ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-bell-ring,
+  .animate-badge-pop {
+    animation: none;
+  }
 }
 
 .no-scrollbar::-webkit-scrollbar {
@@ -124,6 +176,25 @@ body {
 }
 
 /* Feather image rectangle so objects sit on splash bg (one screen, not a card). */
+/* Single-screen splash: no document scroll */
+html:has(.splash-screen-root),
+html:has(.splash-screen-root) body {
+  overflow: hidden;
+  height: 100dvh;
+  overscroll-behavior: none;
+}
+
+.splash-screen-root {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  height: 100dvh;
+  max-height: 100dvh;
+  overflow: hidden;
+  overscroll-behavior: none;
+  background: #f8f9ff;
+}
+
 .splash-hero-blend {
   mix-blend-mode: multiply;
   -webkit-mask-image:

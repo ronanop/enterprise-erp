@@ -17,6 +17,7 @@ export default function LeaveDetailsPage() {
   const [typeName, setTypeName] = useState("Leave");
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [cancelling, setCancelling] = useState(false);
 
   useEffect(() => {
     if (!params.id) return;
@@ -42,6 +43,27 @@ export default function LeaveDetailsPage() {
   const managerApproved = status === "manager_approved";
   const rejected = status === "rejected" || status === "cancelled";
   const pending = status === "submitted" || status === "draft" || status === "pending";
+  const canCancel =
+    !approved &&
+    !rejected &&
+    (pending || managerApproved);
+
+  async function onCancel() {
+    if (!params.id || !canCancel) return;
+    setCancelling(true);
+    setError(null);
+    try {
+      const res = await essService.cancelLeaveRequest(params.id);
+      setRow(res.data);
+      setMessage("Leave request cancelled.");
+    } catch (err) {
+      setError(
+        err instanceof ApiClientError ? err.message : "Could not cancel leave",
+      );
+    } finally {
+      setCancelling(false);
+    }
+  }
 
   return (
     <div className="space-y-5">
@@ -158,24 +180,23 @@ export default function LeaveDetailsPage() {
             </section>
           ) : null}
 
-          {(approved || pending) && (
+          {canCancel ? (
             <>
               <button
                 type="button"
-                className="inline-flex w-full items-center justify-center gap-2 rounded-full border border-[#c3c6d7]/50 bg-[#eff4ff] px-4 py-3 font-semibold text-[#ba1a1a] transition active:scale-[0.98]"
-                onClick={() =>
-                  setMessage("Cancel request noted — HR will review if needed.")
-                }
+                disabled={cancelling}
+                className="inline-flex w-full items-center justify-center gap-2 rounded-full border border-[#c3c6d7]/50 bg-[#eff4ff] px-4 py-3 font-semibold text-[#ba1a1a] transition active:scale-[0.98] disabled:opacity-60"
+                onClick={() => void onCancel()}
               >
                 <IconClose size={16} />
-                Cancel Leave Request
+                {cancelling ? "Cancelling…" : "Cancel Leave Request"}
               </button>
               <p className="text-center text-xs text-[#434655]">
-                Cancelling an approved leave may require HR review within 48
-                hours of start date.
+                You can cancel before HR final approval. Approved leave cannot be
+                cancelled from the app.
               </p>
             </>
-          )}
+          ) : null}
 
           <Link
             href="/leave/history"

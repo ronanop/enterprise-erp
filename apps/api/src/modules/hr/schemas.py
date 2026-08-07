@@ -1037,6 +1037,39 @@ class TrainingRequestResponse(OrmModel):
     version: int
 
 
+class EssPolicyAdminCreate(BaseModel):
+    company_id: UUID | None = None
+    policy_code: str
+    title: str
+    content_markdown: str
+    is_mandatory: bool = True
+    display_order: int = 0
+    status: str = "draft"
+
+
+class EssPolicyAdminUpdate(BaseModel):
+    title: str | None = None
+    content_markdown: str | None = None
+    is_mandatory: bool | None = None
+    display_order: int | None = None
+    status: str | None = None
+    version: int | None = None
+
+
+class EssPolicyAdminResponse(OrmModel):
+    id: UUID
+    policy_code: str
+    title: str
+    policy_version: int
+    content_markdown: str
+    is_mandatory: bool
+    display_order: int
+    published_at: datetime | None
+    status: str
+    company_id: UUID
+    version: int
+
+
 class AttendanceCorrectionCreate(BaseModel):
     company_id: UUID | None = None
     branch_id: UUID

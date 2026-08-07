@@ -25,10 +25,16 @@ class SessionStore:
 
     def set_session(self, session_id: UUID, payload: dict[str, Any]) -> None:
         key = f"session:{session_id}"
-        self._client.setex(key, self._ttl, json.dumps(payload))
+        try:
+            self._client.setex(key, self._ttl, json.dumps(payload))
+        except redis.ConnectionError:
+            return
 
     def get_session(self, session_id: UUID) -> dict[str, Any] | None:
-        raw = cast(str | None, self._client.get(f"session:{session_id}"))
+        try:
+            raw = cast(str | None, self._client.get(f"session:{session_id}"))
+        except redis.ConnectionError:
+            return None
         if raw is None:
             return None
         return json.loads(raw)

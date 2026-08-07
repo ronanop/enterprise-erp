@@ -6,7 +6,6 @@ import {
   Download,
   FileText,
   Plus,
-  RefreshCw,
   Upload,
 } from "lucide-react";
 
@@ -172,9 +171,6 @@ export function AttendanceManagementPage() {
             >
               <Download className="size-3.5" />
               Export
-            </Button>
-            <Button size="sm" variant="ghost" className="cursor-pointer" onClick={() => void load()}>
-              <RefreshCw className={cn("size-3.5", loading && "animate-spin")} />
             </Button>
           </HrToolbar>
         }

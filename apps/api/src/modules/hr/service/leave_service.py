@@ -270,6 +270,135 @@ class LeaveBalanceService:
             performed_by=ctx.user_id,
         )
 
+    def apply_monthly_accrual_for_balance(
+        self,
+        ctx: TenantContext,
+        balance,
+        *,
+        period_yyyymm: str,
+        leave_type,
+    ) -> Decimal:
+        """Credit monthly_credit_days once per period; returns days credited (0 if skipped)."""
+        if balance.status != "open":
+            return Decimal("0")
+        if getattr(balance, "last_accrual_yyyymm", None) == period_yyyymm:
+            return Decimal("0")
+        monthly = getattr(leave_type, "monthly_credit_days", None)
+        if monthly is None:
+            return Decimal("0")
+        credit = Decimal(str(monthly))
+        if credit <= 0:
+            return Decimal("0")
+
+        max_days = getattr(leave_type, "max_days_per_year", None)
+        if max_days is not None:
+            cap = Decimal(str(max_days))
+            current_total = (
+                Decimal(str(balance.opening_balance or 0)) + Decimal(str(balance.accrued or 0))
+            )
+            headroom = cap - current_total
+            if headroom <= 0:
+                self._repo.update(ctx, balance.id, last_accrual_yyyymm=period_yyyymm)
+                return Decimal("0")
+            credit = min(credit, headroom)
+
+        self._engine.accrue(balance, credit)
+        self._repo.update(
+            ctx,
+            balance.id,
+            accrued=balance.accrued,
+            closing_balance=balance.closing_balance,
+            last_accrual_yyyymm=period_yyyymm,
+        )
+        self._audit.log_entity_change(
+            tenant_id=ctx.tenant_id,
+            entity_name="hr_leave_balance",
+            entity_id=balance.id,
+            operation=f"monthly_accrual_{period_yyyymm}",
+            performed_by=ctx.user_id,
+        )
+        return credit
+
+    def run_monthly_accrual_for_company(
+        self,
+        ctx: TenantContext,
+        *,
+        period_yyyymm: str,
+        balance_year: int,
+        company_id: UUID,
+    ) -> dict:
+        types = {t.id: t for t in self._types.list_rows(ctx, company_id)}
+        credited_rows = 0
+        total_days = Decimal("0")
+        for bal in self._repo.list_rows(ctx, company_id):
+            if bal.balance_year != balance_year or bal.status != "open":
+                continue
+            lt = types.get(bal.leave_type_id)
+            if lt is None:
+                continue
+            days = self.apply_monthly_accrual_for_balance(
+                ctx, bal, period_yyyymm=period_yyyymm, leave_type=lt
+            )
+            if days > 0:
+                credited_rows += 1
+                total_days += days
+        return {
+            "company_id": str(company_id),
+            "credited_rows": credited_rows,
+            "total_days": str(total_days),
+        }
+
+    @staticmethod
+    def run_monthly_accrual_all_tenants(db: Session, *, period_yyyymm: str, balance_year: int) -> dict:
+        """System task: accrue monthly credit for every open balance in the given year."""
+        from uuid import uuid4
+
+        from sqlalchemy import select
+
+        from modules.foundation.domain.value_objects import TenantContext
+        from modules.hr.models import HrLeaveBalance
+
+        open_rows = list(
+            db.scalars(
+                select(HrLeaveBalance).where(
+                    HrLeaveBalance.is_deleted.is_(False),
+                    HrLeaveBalance.status == "open",
+                    HrLeaveBalance.balance_year == balance_year,
+                )
+            ).all()
+        )
+        companies: set[tuple] = {(r.tenant_id, r.company_id) for r in open_rows}
+        system_user = uuid4()
+        total_credited = 0
+        total_days = Decimal("0")
+        svc = LeaveBalanceService(db)
+        for tenant_id, company_id in companies:
+            ctx = TenantContext(
+                tenant_id=tenant_id,
+                user_id=system_user,
+                user_type="super_admin",
+                company_id=company_id,
+            )
+            try:
+                result = svc.run_monthly_accrual_for_company(
+                    ctx,
+                    period_yyyymm=period_yyyymm,
+                    balance_year=balance_year,
+                    company_id=company_id,
+                )
+                total_credited += int(result.get("credited_rows") or 0)
+                total_days += Decimal(str(result.get("total_days") or "0"))
+            except Exception:
+                continue
+        return {
+            "status": "ok",
+            "period": period_yyyymm,
+            "balance_year": balance_year,
+            "credited_rows": total_credited,
+            "total_days": str(total_days),
+            "companies": len(companies),
+        }
+
     def carry_forward_year_end(
         self,
         ctx: TenantContext,
@@ -516,6 +645,23 @@ class LeaveRequestService:
             operation="manager_approve",
             performed_by=ctx.user_id,
         )
+        try:
+            from modules.hr.service.hr_notify import notify_employee
+
+            notify_employee(
+                self._db,
+                tenant_id=ctx.tenant_id,
+                employee_id=row.employee_id,
+                template_code="hr.leave_manager_approved",
+                template_name="Leave Manager Approved",
+                event_type="hr.leave_manager_approved",
+                title="Leave approved by manager",
+                body=f"Leave request {row.document_number} was approved by your manager and is pending HR.",
+                kind="leave",
+                notify_manager=False,
+            )
+        except Exception:
+            pass
         return updated
 
     def approve(self, ctx: TenantContext, row_id: UUID, *, approver_employee_id: UUID | None = None):
@@ -555,6 +701,23 @@ class LeaveRequestService:
             operation="approve",
             performed_by=ctx.user_id,
         )
+        try:
+            from modules.hr.service.hr_notify import notify_employee
+
+            notify_employee(
+                self._db,
+                tenant_id=ctx.tenant_id,
+                employee_id=row.employee_id,
+                template_code="hr.leave_approved",
+                template_name="Leave Approved",
+                event_type="hr.leave_approved",
+                title="Leave approved",
+                body=f"Your leave request {row.document_number} has been approved.",
+                kind="leave",
+                notify_manager=False,
+            )
+        except Exception:
+            pass
         return updated
 
     def reject(self, ctx: TenantContext, row_id: UUID, *, approver_employee_id: UUID | None = None):
@@ -574,6 +737,54 @@ class LeaveRequestService:
             operation="reject",
             performed_by=ctx.user_id,
         )
+        try:
+            from modules.hr.service.hr_notify import notify_employee
+
+            notify_employee(
+                self._db,
+                tenant_id=ctx.tenant_id,
+                employee_id=row.employee_id,
+                template_code="hr.leave_rejected",
+                template_name="Leave Rejected",
+                event_type="hr.leave_rejected",
+                title="Leave rejected",
+                body=f"Your leave request {row.document_number} was rejected.",
+                kind="leave",
+                notify_manager=False,
+            )
+        except Exception:
+            pass
+        return updated
+
+    def cancel(self, ctx: TenantContext, row_id: UUID, *, employee_id: UUID | None = None):
+        row = self.get(ctx, row_id)
+        if employee_id is not None and row.employee_id != employee_id:
+            raise NotFoundException("Leave request not found")
+        self._engine.cancel(row)
+        updated = self._repo.update(ctx, row_id, status=row.status)
+        self._audit.log_entity_change(
+            tenant_id=ctx.tenant_id,
+            entity_name="hr_leave_request",
+            entity_id=row_id,
+            operation="cancel",
+            performed_by=ctx.user_id,
+        )
+        try:
+            from modules.hr.service.hr_notify import notify_employee
+
+            notify_employee(
+                self._db,
+                tenant_id=ctx.tenant_id,
+                employee_id=row.employee_id,
+                template_code="hr.leave_cancelled",
+                template_name="Leave Request Cancelled",
+                event_type="hr.leave_cancelled",
+                title="Leave request cancelled",
+                body=f"Leave request {row.document_number} was cancelled.",
+                kind="leave",
+            )
+        except Exception:
+            pass
         return updated
 
 

@@ -96,8 +96,8 @@ export function IconPunch(props: IconProps) {
 export function IconBell(props: IconProps) {
   return (
     <svg {...base(props)}>
-      <path d="M6 9a6 6 0 1 1 12 0c0 3.5 1.5 5 1.5 5H4.5S6 12.5 6 9" />
-      <path d="M10 19a2 2 0 0 0 4 0" />
+      <path d="M10.3 21a1.94 1.94 0 0 0 3.4 0" />
+      <path d="M4 17h16a1 1 0 0 0 .74-1.673C19.41 13.956 18 12.5 18 8a6 6 0 0 0-12 0c0 4.5-1.41 5.956-2.738 7.327A1 1 0 0 0 4 17z" />
     </svg>
   );
 }
@@ -169,6 +169,16 @@ export function IconAlert(props: IconProps) {
       <path d="M12 4 3.5 19h17L12 4z" />
       <path d="M12 10v4" />
       <path d="M12 16h.01" />
+    </svg>
+  );
+}
+
+export function IconHelp(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M9.5 9.5a2.8 2.8 0 0 1 5 1.7c0 1.8-2.5 2.2-2.5 3.8" />
+      <path d="M12 17h.01" />
     </svg>
   );
 }

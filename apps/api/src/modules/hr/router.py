@@ -43,6 +43,7 @@ from modules.hr.routers import (
     weekly_off_policies_router,
     management_groups_router,
 )
+from modules.hr.routers.ess_policies_router import ess_policies_router
 
 hr_router = APIRouter(prefix="/hr")
 hr_router.include_router(designations_router)
@@ -83,4 +84,5 @@ hr_router.include_router(training_requests_router)
 hr_router.include_router(separation_router)
 hr_router.include_router(reports_router)
 hr_router.include_router(ess_inbox_router)
+hr_router.include_router(ess_policies_router)
 hr_router.include_router(management_groups_router)

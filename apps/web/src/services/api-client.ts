@@ -6,6 +6,7 @@ import {
   setTokens,
 } from "@/lib/auth";
 import { env } from "@/utils/env";
+import { fetchWithRetry } from "@/lib/fetch-retry";
 import type { ApiResponse, ErrorResponse, TokenData, UserProfile } from "@/types/api";
 
 export class ApiClientError extends Error {
@@ -50,7 +51,7 @@ async function refreshAccessToken(): Promise<boolean> {
     if (!refreshToken) return false;
 
     try {
-      const response = await fetch(buildUrl("/auth/refresh"), {
+      const response = await fetchWithRetry(buildUrl("/auth/refresh"), {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -106,7 +107,7 @@ export async function apiClient<T>(
 
   let response: Response;
   try {
-    response = await fetch(buildUrl(path, query), {
+    response = await fetchWithRetry(buildUrl(path, query), {
       ...rest,
       headers: {
         "Content-Type": "application/json",
@@ -231,7 +232,7 @@ export async function downloadApiFile(
 
   let response: Response;
   try {
-    response = await fetch(buildUrl(path, query), {
+    response = await fetchWithRetry(buildUrl(path, query), {
       method: "GET",
       headers: {
         Accept: "*/*",

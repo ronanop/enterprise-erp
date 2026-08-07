@@ -49,6 +49,15 @@ export type EssMe = {
   date_of_joining: string;
   status: string;
   display_name: string;
+  role_codes?: string[];
+  ess_role?: "employee" | "manager" | "admin";
+  is_manager?: boolean;
+  can_approve_team_leave?: boolean;
+  pending_approvals_count?: number;
+  must_change_password?: boolean;
+  pending_policy_count?: number;
+  is_ess_admin?: boolean;
+  admin_use_web_portal?: boolean;
 };
 
 export type EssLeaveType = {
@@ -83,6 +92,18 @@ export type EssLeaveRequest = {
   status: string;
 };
 
+export type EssApprovalItem = {
+  category: "leave" | "on_duty" | "compoff" | "attendance_correction" | "wfh";
+  id: string;
+  employee_id: string;
+  employee_code: string;
+  display_name: string;
+  title: string;
+  detail: string;
+  status: string;
+  occurred_at: string;
+};
+
 export type EssAttendance = {
   id: string;
   attendance_date: string;
@@ -91,6 +112,33 @@ export type EssAttendance = {
   total_hours: string | number | null;
   attendance_status: string;
   source: string;
+  status: string;
+  late_minutes?: number | null;
+  overtime_minutes?: number | null;
+  early_leave_minutes?: number | null;
+};
+
+export type EssAttendanceSummary = {
+  month: string;
+  present_days: number;
+  late_days: number;
+  total_overtime_minutes: number;
+  work_from_home_days: number;
+};
+
+export type EssPunchPolicy = {
+  geofence_required: boolean;
+  selfie_required: boolean;
+  face_at_punch_required: boolean;
+  face_enrolled: boolean;
+};
+
+export type EssWfhRequest = {
+  id: string;
+  wfh_date: string;
+  end_date: string | null;
+  portion: string;
+  reason: string | null;
   status: string;
 };
 
@@ -105,6 +153,9 @@ export type EssPayslip = {
   employee_code: string | null;
   employee_name: string | null;
   payroll_period_id: string;
+  period_name?: string | null;
+  period_start?: string | null;
+  period_end?: string | null;
   gross_salary: string | number;
   total_deductions: string | number;
   net_salary: string | number;
@@ -113,6 +164,10 @@ export type EssPayslip = {
   payment_status: string;
   status: string;
   payslip_json?: Record<string, unknown> | null;
+  export_text?: string | null;
+  attendance_summary?: Record<string, unknown> | null;
+  earnings?: Array<{ code?: string; label?: string; amount?: number }> | null;
+  deductions?: Array<{ code?: string; label?: string; amount?: number }> | null;
   company_id?: string;
   branch_id?: string;
 };
@@ -159,6 +214,7 @@ export type EssNotification = {
   kind: string;
   read: boolean;
   created_at: string;
+  href?: string | null;
 };
 
 export type EssEmergencyContact = {
@@ -166,6 +222,17 @@ export type EssEmergencyContact = {
   mobile: string | null;
   blood_group: string | null;
   relationship: string | null;
+};
+
+export type EssFaceStatus = {
+  enrolled: boolean;
+  enabled: boolean;
+  verification_required: boolean;
+};
+
+export type EssFaceVerifyResult = {
+  verified: boolean;
+  message: string;
 };
 
 export type EssEducationItem = {
@@ -219,6 +286,84 @@ export type EssAsset = {
   serial_number: string | null;
   status: string;
   assignment_status: string | null;
+};
+
+export type EssAssetDetail = EssAsset & {
+  qr_code: string | null;
+  barcode: string | null;
+};
+
+export type EssMeetingRoom = {
+  id: string;
+  room_code: string;
+  room_name: string;
+  capacity: number;
+  equipment_json: string[] | null;
+  notes: string | null;
+  status: string;
+};
+
+export type EssMeetingBooking = {
+  id: string;
+  room_id: string | null;
+  room_name: string | null;
+  title: string;
+  request_date: string;
+  start_time: string | null;
+  end_time: string | null;
+  status: string;
+  requested_by_employee_id: string;
+  requested_by_name?: string | null;
+};
+
+export type EssMeetingRoomAvailability = {
+  room: EssMeetingRoom;
+  is_busy: boolean;
+  bookings: EssMeetingBooking[];
+};
+
+export type EssSupportTicket = {
+  id: string;
+  document_number: string;
+  subject: string;
+  status: string;
+  kind: string;
+  urgency: string | null;
+  created_at: string;
+  asset_id: string | null;
+};
+
+export type EssSupportTicketDetail = EssSupportTicket & {
+  description: string | null;
+  opened_at: string | null;
+  resolved_at: string | null;
+};
+
+export type EssSupportTicketComment = {
+  id: string;
+  body: string;
+  commented_at: string;
+  author_employee_id: string | null;
+};
+
+export type EssPolicyItem = {
+  id: string;
+  policy_code: string;
+  title: string;
+  policy_version: number;
+  is_mandatory: boolean;
+  acknowledged: boolean;
+  step_count: number;
+};
+
+export type EssPolicyStep = {
+  order: number;
+  title: string;
+  body: string;
+};
+
+export type EssPolicyWalkthrough = EssPolicyItem & {
+  steps: EssPolicyStep[];
 };
 
 export type EssTrainingItem = {

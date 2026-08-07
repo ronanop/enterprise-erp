@@ -9,9 +9,26 @@ from modules.payroll.domain.exceptions import (
 
 
 class PayrollPeriodEngine:
+    def reopen(self, row) -> None:
+        if row.status not in {
+            PayrollPeriodStatus.CLOSED.value,
+            PayrollPeriodStatus.CANCELLED.value,
+        }:
+            raise InvalidPayrollPeriodState("Only closed or cancelled periods can be reopened")
+        row.status = PayrollPeriodStatus.OPEN.value
+
+    def cancel(self, row) -> None:
+        if row.status == PayrollPeriodStatus.CLOSED.value:
+            raise InvalidPayrollPeriodState("Closed periods cannot be cancelled")
+        row.status = PayrollPeriodStatus.CANCELLED.value
+
     def open(self, row) -> None:
-        if row.status not in {"open", "processing"}:
+        if row.status not in {
+            PayrollPeriodStatus.CANCELLED.value,
+            PayrollPeriodStatus.PROCESSING.value,
+        }:
             raise InvalidPayrollPeriodState("Period not openable from current status")
+        row.status = PayrollPeriodStatus.OPEN.value
 
     def start_processing(self, row) -> None:
         if row.status != PayrollPeriodStatus.OPEN.value:

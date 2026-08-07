@@ -208,7 +208,7 @@ export function HrToolbar({
   children?: ReactNode;
 }) {
   return (
-    <div className="flex flex-wrap items-center gap-2">
+    <div className="flex w-full min-w-0 flex-wrap items-center gap-2">
       {children}
       {onRefresh ? (
         <Button

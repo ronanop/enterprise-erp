@@ -9,6 +9,7 @@ import { cn } from "@/lib/utils";
 const HR_NAV = [
   { title: "Overview", href: "/hr" },
   { title: "ESS", href: "/hr/ess" },
+  { title: "ESS policies", href: "/hr/ess-policies" },
   { title: "Profiles", href: "/hr/employee-profiles" },
   { title: "Employment", href: "/hr/employment" },
   { title: "Attendance", href: "/hr/attendance" },

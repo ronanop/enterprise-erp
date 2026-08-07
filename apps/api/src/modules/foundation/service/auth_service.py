@@ -3,6 +3,8 @@
 from datetime import datetime, timedelta, timezone
 from uuid import UUID, uuid4
 
+import redis
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from core.config import settings
@@ -13,6 +15,10 @@ from modules.foundation.models.security import SecUser
 from modules.foundation.repository.session_repository import SessionRepository
 from modules.foundation.repository.user_repository import UserRepository
 from modules.foundation.service.audit_service import AuditService
+from modules.master_data.models.employee import MasterEmployee
+from modules.organization.models.company import OrgCompany
+from security.ess_default_password import normalize_employee_code
+from security.ess_login_captcha import verify_challenge
 from security.jwt import JWTService
 from security.password import PasswordHasher
 
@@ -47,6 +53,76 @@ class AuthService:
 
         if user.locked_until and user.locked_until > datetime.now(timezone.utc):
             raise AccountLockedException()
+
+        if user.mfa_enabled:
+            challenge = self._jwt.create_access_token(
+                user_id=user.id,
+                tenant_id=user.tenant_id,
+                user_type=user.user_type,
+                session_id=uuid4(),
+            )
+            return {"mfa_required": True, "mfa_challenge_token": challenge}
+
+        return self._issue_tokens(user, ip_address=ip_address, user_agent=user_agent)
+
+    def login_ess(
+        self,
+        *,
+        company_code: str,
+        employee_code: str,
+        password: str,
+        captcha_id: str | None = None,
+        captcha_answer: str | None = None,
+        ip_address: str | None = None,
+        user_agent: str | None = None,
+    ) -> dict:
+        if not verify_challenge(captcha_id, captcha_answer):
+            raise InvalidCredentialsException("CAPTCHA verification failed")
+
+        code = company_code.strip().upper()
+        emp_code = normalize_employee_code(employee_code)
+        company = self._db.scalar(
+            select(OrgCompany).where(
+                OrgCompany.company_code == code,
+                OrgCompany.is_deleted.is_(False),
+            )
+        )
+        if company is None:
+            raise InvalidCredentialsException()
+
+        candidates = list(
+            self._db.scalars(
+                select(MasterEmployee).where(
+                    MasterEmployee.company_id == company.id,
+                    MasterEmployee.is_deleted.is_(False),
+                )
+            ).all()
+        )
+        employee = None
+        for row in candidates:
+            if normalize_employee_code(row.employee_code) == emp_code:
+                employee = row
+                break
+        if employee is None or not employee.user_id:
+            raise InvalidCredentialsException()
+
+        user = self._db.get(SecUser, employee.user_id)
+        if user is None or user.is_deleted:
+            raise InvalidCredentialsException()
+
+        if user.locked_until and user.locked_until > datetime.now(timezone.utc):
+            raise AccountLockedException(
+                "Account is temporarily locked. Try again later or contact HR."
+            )
+
+        if not PasswordHasher.verify_password(password, user.password_hash):
+            self._users.record_failed_login(user)
+            if user.failed_login_count >= settings.account_lockout_threshold:
+                locked_until = datetime.now(timezone.utc) + timedelta(
+                    minutes=settings.account_lockout_minutes
+                )
+                self._users.lock_account(user, locked_until)
+            raise InvalidCredentialsException()
 
         if user.mfa_enabled:
             challenge = self._jwt.create_access_token(
@@ -157,15 +233,18 @@ class AuthService:
             token=refresh,
             expires_at=datetime.now(timezone.utc) + timedelta(days=refresh_days),
         )
-        self._store.set_session(
-            session.id,
-            {
-                "user_id": str(user.id),
-                "tenant_id": str(user.tenant_id),
-                "ip": ip_address,
-                "user_agent": user_agent,
-            },
-        )
+        try:
+            self._store.set_session(
+                session.id,
+                {
+                    "user_id": str(user.id),
+                    "tenant_id": str(user.tenant_id),
+                    "ip": ip_address,
+                    "user_agent": user_agent,
+                },
+            )
+        except redis.ConnectionError:
+            pass
         self._users.record_successful_login(user)
         self._audit.log_security_event(
             tenant_id=user.tenant_id,

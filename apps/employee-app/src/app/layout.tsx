@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Inter } from "next/font/google";
+import { DevExtensionNoiseInit } from "@/components/dev-extension-noise-init";
 import "./globals.css";
 
 const inter = Inter({
@@ -50,6 +51,9 @@ export default function RootLayout({
     // suppressHydrationWarning: browser extensions (e.g. QuillBot) inject
     // attributes like data-qb-installed onto <html> before React hydrates.
     <html lang="en" suppressHydrationWarning>
+      <head>
+        <DevExtensionNoiseInit />
+      </head>
       <body
         className={`${inter.variable} font-sans antialiased`}
         suppressHydrationWarning

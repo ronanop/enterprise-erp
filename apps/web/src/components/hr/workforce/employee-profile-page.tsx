@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { ArrowLeft, Download, Pencil, Save } from "lucide-react";
+import { ArrowLeft, Download, KeyRound, Pencil, Save } from "lucide-react";
 
 import {
   EmsAvatar,
@@ -22,6 +22,7 @@ import {
   updateEmployeeRecord,
 } from "@/services/employee-management-service";
 import { ApiClientError, resourceService } from "@/services/api-client";
+import { hrEssPoliciesService } from "@/services/hr-ess-policies-service";
 import type {
   BankDetails,
   EmployeeDocumentItem,
@@ -190,6 +191,23 @@ export function EmployeeProfilePage({ employeeId }: { employeeId: string }) {
     }
   }
 
+  async function forceEssPasswordReset() {
+    if (!record) return;
+    const ok = window.confirm(
+      "Require this employee to change their password on the next ESS login?",
+    );
+    if (!ok) return;
+    try {
+      await hrEssPoliciesService.forcePasswordReset(record.id);
+      toast("ESS password reset required on next login", "success");
+    } catch (err) {
+      toast(
+        err instanceof ApiClientError ? err.message : "Force password reset failed",
+        "error",
+      );
+    }
+  }
+
   const attendanceMonthOptions = useMemo(() => {
     const months = new Set<string>();
     for (const r of linked?.attendance ?? []) {
@@ -258,6 +276,15 @@ export function EmployeeProfilePage({ employeeId }: { employeeId: string }) {
             >
               <Pencil className="size-3.5" />
               Edit
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              className="cursor-pointer transition-colors duration-200"
+              onClick={() => void forceEssPasswordReset()}
+            >
+              <KeyRound className="size-3.5" />
+              Require ESS password change
             </Button>
           </div>
         }

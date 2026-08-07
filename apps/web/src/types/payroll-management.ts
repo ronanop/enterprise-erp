@@ -369,6 +369,8 @@ export type PayslipRecord = {
   net: number;
   taxRegime: TaxRegime;
   generatedAt: string;
+  /** Set when loaded from API payslip_json.export_text */
+  exportText?: string;
 };
 
 export type PayrollAudit = {

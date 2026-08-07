@@ -276,6 +276,22 @@ def update_profile(
     return APIResponse(message="OK", data=EmployeeProfileService(db).update(ctx, row_id, **extract_update_fields(body)))
 
 
+@employee_profiles_router.post(
+    "/force-password-reset/{employee_id}",
+    response_model=APIResponse[dict],
+)
+def force_ess_password_reset(
+    employee_id: UUID,
+    ctx: Annotated[TenantContext, Depends(require_permission("hr.employee_profile:update"))],
+    db: Annotated[Session, Depends(get_db)],
+):
+    from modules.hr.service.ess_password_admin import force_ess_password_reset as _force
+
+    data = _force(db, ctx, employee_id)
+    db.commit()
+    return APIResponse(message="Employee must change password on next ESS login", data=data)
+
+
 @management_groups_router.get("/feature-catalog", response_model=APIResponse[list[dict]])
 def management_group_feature_catalog(
     ctx: Annotated[TenantContext, Depends(require_permission("hr.management_group:read"))],

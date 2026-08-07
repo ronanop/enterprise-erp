@@ -44,6 +44,9 @@ class SecUser(Base, AuditMixin, SoftDeleteMixin, TenantMixin, VersionMixin):
     status: Mapped[str] = mapped_column(String(30), nullable=False, default="active")
     mfa_enabled: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
     mfa_secret_encrypted: Mapped[str | None] = mapped_column(Text, nullable=True)
+    must_change_password: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="false", nullable=False
+    )
     last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     failed_login_count: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     locked_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

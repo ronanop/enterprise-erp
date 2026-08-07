@@ -205,23 +205,32 @@ def attendance_auto_absent() -> dict:
 
 
 @celery_app.task(name="hr.leave_balance_accrual")
-def leave_balance_accrual() -> dict:
-    from sqlalchemy import select
+def leave_balance_accrual(period_yyyymm: str | None = None) -> dict:
+    """Credit monthly leave accrual for the last completed calendar month (1–31).
 
+    When ``period_yyyymm`` is omitted, uses the month that fully ended before today
+    (e.g. run on 1 Mar 2026 → ``2026-02``). Independent of payroll 20–20 cycle.
+    """
     from database.session import SessionLocal
-    from modules.hr.models import HrLeaveBalance
+    from modules.hr.domain.leave_accrual_calendar import (
+        balance_year_for_accrual_period,
+        completed_calendar_month_yyyymm,
+    )
+    from modules.hr.service.leave_service import LeaveBalanceService
+
+    period = period_yyyymm or completed_calendar_month_yyyymm()
+    balance_year = balance_year_for_accrual_period(period)
 
     db = SessionLocal()
     try:
-        rows = list(
-            db.scalars(
-                select(HrLeaveBalance).where(
-                    HrLeaveBalance.is_deleted.is_(False),
-                    HrLeaveBalance.status == "open",
-                )
-            ).all()
+        result = LeaveBalanceService.run_monthly_accrual_all_tenants(
+            db, period_yyyymm=period, balance_year=balance_year
         )
-        return {"status": "ok", "open_balances": len(rows)}
+        db.commit()
+        return {"status": "ok", "period_yyyymm": period, **result}
+    except Exception as exc:
+        db.rollback()
+        return {"status": "error", "message": str(exc)}
     finally:
         db.close()
 
@@ -651,23 +660,30 @@ def probation_reminders() -> dict:
 
 
 @celery_app.task(name="hr.leave_balance_monthly_credit")
-def leave_balance_monthly_credit() -> dict:
-    """Apply monthly leave credits from leave type policy and notify employees."""
+def leave_balance_monthly_credit(period_yyyymm: str | None = None) -> dict:
+    """Idempotent monthly leave credit (calendar month) + employee notifications."""
     from decimal import Decimal
 
     from sqlalchemy import select
 
     from database.session import SessionLocal
     from modules.foundation.service.notification_service import NotificationService
+    from modules.hr.domain.leave_accrual_calendar import (
+        balance_year_for_accrual_period,
+        completed_calendar_month_yyyymm,
+    )
     from modules.hr.models import HrLeaveBalance, HrLeaveType
-    from modules.hr.service.engines.leave_balance_engine import LeaveBalanceEngine
+    from modules.hr.service.leave_service import LeaveBalanceService
     from modules.master_data.models.employee import MasterEmployee
 
+    period = period_yyyymm or completed_calendar_month_yyyymm()
+    balance_year = balance_year_for_accrual_period(period)
+
     db = SessionLocal()
-    engine = LeaveBalanceEngine()
-    credited = 0
-    notified = 0
     try:
+        accrual = LeaveBalanceService.run_monthly_accrual_all_tenants(
+            db, period_yyyymm=period, balance_year=balance_year
+        )
         types = {
             t.id: t
             for t in db.scalars(
@@ -683,19 +699,20 @@ def leave_balance_monthly_credit() -> dict:
                 select(HrLeaveBalance).where(
                     HrLeaveBalance.is_deleted.is_(False),
                     HrLeaveBalance.status == "open",
+                    HrLeaveBalance.balance_year == balance_year,
+                    HrLeaveBalance.last_accrual_yyyymm == period,
                 )
             ).all()
         )
         notif = NotificationService(db)
+        notified = 0
         for bal in balances:
             lt = types.get(bal.leave_type_id)
             if lt is None or not lt.monthly_credit_days:
                 continue
             credit = Decimal(str(lt.monthly_credit_days))
-            engine.accrue(bal, credit)
-            credited += 1
             employee = db.get(MasterEmployee, bal.employee_id)
-            if employee is None:
+            if employee is None or not employee.user_id:
                 continue
             tpl = notif.get_or_create_template(
                 tenant_id=bal.tenant_id,
@@ -723,8 +740,9 @@ def leave_balance_monthly_credit() -> dict:
         db.commit()
         return {
             "status": "ok",
-            "balances_credited": credited,
+            "period_yyyymm": period,
             "notifications_sent": notified,
+            **accrual,
         }
     except Exception as exc:
         db.rollback()

@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { AttendancePunchSheet } from "@/components/attendance-punch-sheet";
 import { AppHeader } from "@/components/app-header";
 import {
   IconAlert,
@@ -16,7 +17,7 @@ import {
 import { AlertBox, EmptyState } from "@/components/ui";
 import { ApiClientError } from "@/services/api-client";
 import { essService } from "@/services/ess-service";
-import type { EssAttendance, EssMe } from "@/types/api";
+import type { EssAttendance, EssAttendanceSummary, EssMe, EssPunchPolicy } from "@/types/api";
 import * as ui from "@/theme/classes";
 import {
   formatHours,
@@ -41,14 +42,22 @@ export default function AttendancePage() {
   const [timer, setTimer] = useState("00:00:00");
   const [showSuccess, setShowSuccess] = useState(false);
   const [greeting, setGreeting] = useState("Good day");
+  const [summary, setSummary] = useState<EssAttendanceSummary | null>(null);
+  const [punchPolicy, setPunchPolicy] = useState<EssPunchPolicy | null>(null);
+  const [punchSheet, setPunchSheet] = useState<"in" | "out" | null>(null);
 
   async function refresh() {
-    const [att, meRes] = await Promise.all([
+    const monthKey = (todayStr ?? todayLocalDate()).slice(0, 7);
+    const [att, meRes, sumRes, polRes] = await Promise.all([
       essService.attendance(),
       essService.me(),
+      essService.attendanceSummary(monthKey),
+      essService.punchPolicy(),
     ]);
     setRows(att.data ?? []);
     setMe(meRes.data);
+    setSummary(sumRes.data);
+    setPunchPolicy(polRes.data);
   }
 
   useEffect(() => {
@@ -86,14 +95,12 @@ export default function AttendancePage() {
     return () => window.clearInterval(id);
   }, [today?.check_in_at, today?.check_out_at, today?.total_hours]);
 
-  async function onPunch(kind: "in" | "out") {
-    if (kind === "in" && punchedIn) return;
-    if (kind === "out" && (!punchedIn || done)) return;
+  async function runPunch(kind: "in" | "out", imageBase64: string | null) {
     setLoading(true);
     setError(null);
     setMessage(null);
     try {
-      const res = await essService.punch();
+      const res = await essService.punch({ image_base64: imageBase64 });
       const action = res.data?.action;
       const hours = res.data?.attendance?.total_hours;
       if (action === "check_in") {
@@ -106,6 +113,7 @@ export default function AttendancePage() {
             : "Checked out successfully",
         );
       }
+      setPunchSheet(null);
       await refresh();
     } catch (err) {
       setError(err instanceof ApiClientError ? err.message : "Punch failed");
@@ -114,19 +122,15 @@ export default function AttendancePage() {
     }
   }
 
-  const ringPct = Math.min(100, (workedHours / DAILY_GOAL_H) * 100);
-  const lateDays = useMemo(
-    () =>
-      rows.filter((r) => {
-        if (!r.check_in_at) return false;
-        const h = new Date(r.check_in_at).getHours();
-        const m = new Date(r.check_in_at).getMinutes();
-        return h > 9 || (h === 9 && m > 30);
-      }).length,
-    [rows],
-  );
+  function onPunch(kind: "in" | "out") {
+    if (kind === "in" && punchedIn) return;
+    if (kind === "out" && (!punchedIn || done)) return;
+    setPunchSheet(kind);
+  }
 
-  const overtimeH = Math.max(0, workedHours - DAILY_GOAL_H);
+  const ringPct = Math.min(100, (workedHours / DAILY_GOAL_H) * 100);
+  const lateDays = summary?.late_days ?? 0;
+  const overtimeH = (summary?.total_overtime_minutes ?? 0) / 60;
   const firstName = me?.display_name?.split(/\s+/)[0] ?? "there";
   const recent = rows.slice(0, 5);
   const calendar = useMemo(() => buildMonthGrid(todayStr), [todayStr]);
@@ -146,7 +150,10 @@ export default function AttendancePage() {
     <div className="space-y-6">
       <AppHeader title="Attendance" name={me?.display_name} />
 
-      <div className="flex justify-end">
+      <div className="flex justify-end gap-3">
+        <Link href="/attendance/wfh" className="text-sm font-semibold text-[#004ac6]">
+          WFH
+        </Link>
         <Link
           href="/attendance/history"
           className="text-sm font-semibold text-[#004ac6]"
@@ -162,11 +169,6 @@ export default function AttendancePage() {
             <h2 className="text-xl font-bold text-[#0b1c30]">
               {greeting}, {firstName}
             </h2>
-            {punchedIn ? (
-              <span className="inline-flex items-center gap-1 rounded-full bg-[#dbe1ff] px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-[#004ac6]">
-                <IconFingerprint size={12} /> Face ID Verified
-              </span>
-            ) : null}
           </div>
           <div className="flex flex-wrap items-center justify-center gap-2 text-sm text-[#434655]">
             <span className="inline-flex items-center gap-1">
@@ -269,7 +271,17 @@ export default function AttendancePage() {
               ? rows.find((r) => r.attendance_date === cell.iso)
               : undefined;
             const isToday = cell.iso === todayStr;
-            const present = Boolean(row?.check_in_at);
+            const st = (row?.attendance_status ?? "").toLowerCase();
+            const dotColor =
+              st === "late"
+                ? "bg-[#ba1a1a]"
+                : st === "work_from_home"
+                  ? "bg-[#712ae2]"
+                  : st === "absent"
+                    ? "bg-[#c3c6d7]"
+                    : row?.check_in_at
+                      ? "bg-[#10B981]"
+                      : null;
             return (
               <div
                 key={i}
@@ -282,8 +294,8 @@ export default function AttendancePage() {
                 }`}
               >
                 {cell.day || ""}
-                {present && !isToday ? (
-                  <span className="absolute bottom-0.5 h-1 w-1 rounded-full bg-[#10B981]" />
+                {dotColor && !isToday ? (
+                  <span className={`absolute bottom-0.5 h-1 w-1 rounded-full ${dotColor}`} />
                 ) : null}
                 {isToday ? (
                   <span className="absolute bottom-1 h-1 w-1 rounded-full bg-white" />
@@ -297,10 +309,19 @@ export default function AttendancePage() {
             <span className="h-2 w-2 rounded-full bg-[#10B981]" /> Present
           </span>
           <span className="inline-flex items-center gap-1.5">
-            <span className="h-2 w-2 rounded-full bg-[#712ae2]" /> Leave
+            <span className="h-2 w-2 rounded-full bg-[#712ae2]" /> WFH
           </span>
         </div>
       </section>
+
+      <AttendancePunchSheet
+        open={punchSheet !== null}
+        kind={punchSheet ?? "in"}
+        policy={punchPolicy}
+        loading={loading}
+        onClose={() => setPunchSheet(null)}
+        onConfirm={(img) => void runPunch(punchSheet ?? "in", img)}
+      />
 
       <section className="space-y-3">
         <h3 className="text-lg font-semibold text-[#0b1c30]">Recent Activity</h3>

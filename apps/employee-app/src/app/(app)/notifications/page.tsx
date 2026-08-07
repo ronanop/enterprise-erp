@@ -12,6 +12,9 @@ import {
 import { AiFab, EmptyState } from "@/components/ui";
 import { ApiClientError } from "@/services/api-client";
 import { essService } from "@/services/ess-service";
+import { useNotificationCenter } from "@/context/notification-center-context";
+import { resolveEssNotificationHref } from "@/lib/notification-href";
+import { registerEssWebDeviceToken } from "@/lib/ess-web-push";
 import type { EssNotification } from "@/types/api";
 import * as ui from "@/theme/classes";
 
@@ -61,6 +64,8 @@ export default function NotificationsPage() {
   const [items, setItems] = useState<UiNotification[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const { refreshUnreadCount, requestAlertsPermission, browserPermission } =
+    useNotificationCenter();
 
   useEffect(() => {
     essService
@@ -75,18 +80,7 @@ export default function NotificationsPage() {
       )
       .finally(() => setLoading(false));
 
-    // Register a web device token so NotificationService can fan-out channel=push
-    const key = "ess_web_push_token_v1";
-    let token = typeof window !== "undefined" ? window.localStorage.getItem(key) : null;
-    if (!token && typeof window !== "undefined") {
-      token = `web-${crypto.randomUUID()}`;
-      window.localStorage.setItem(key, token);
-    }
-    if (token) {
-      void essService
-        .registerDeviceToken({ token, platform: "web" })
-        .catch(() => undefined);
-    }
+    registerEssWebDeviceToken();
   }, []);
 
   const groups = useMemo(() => {
@@ -104,10 +98,29 @@ export default function NotificationsPage() {
       .filter((g) => g.rows.length > 0);
   }, [items]);
 
-  function markAllRead() {
+  function markOneRead(id: string) {
     setItems((prev) =>
-      prev.map((n) => ({ ...n, unread: false, read: true })),
+      prev.map((n) =>
+        n.id === id ? { ...n, unread: false, read: true } : n,
+      ),
     );
+    void essService.markNotificationRead(id).then(() => refreshUnreadCount());
+  }
+
+  function markAllRead() {
+    void essService
+      .markAllNotificationsRead()
+      .then(() => {
+        setItems((prev) =>
+          prev.map((n) => ({ ...n, unread: false, read: true })),
+        );
+        void refreshUnreadCount();
+      })
+      .catch(() => {
+        setItems((prev) =>
+          prev.map((n) => ({ ...n, unread: false, read: true })),
+        );
+      });
   }
 
   return (
@@ -126,6 +139,23 @@ export default function NotificationsPage() {
         }
       />
 
+      {browserPermission === "default" ? (
+        <div className={`${ui.card} flex flex-col gap-2 p-4`}>
+          <p className="text-sm font-medium text-[#0b1c30]">Alerts on this device</p>
+          <p className="text-xs text-[#434655]">
+            Allow browser notifications to get popups when leave or HR updates arrive
+            (in-app toasts still work while the portal is open).
+          </p>
+          <button
+            type="button"
+            className="self-start rounded-full bg-[#004ac6] px-4 py-2 text-xs font-semibold text-white"
+            onClick={() => void requestAlertsPermission()}
+          >
+            Enable alerts
+          </button>
+        </div>
+      ) : null}
+
       {error ? (
         <p className="rounded-xl bg-[#ffdad6] px-3 py-2 text-sm text-[#ba1a1a]">{error}</p>
       ) : null}
@@ -141,27 +171,40 @@ export default function NotificationsPage() {
               {g.label}
             </p>
             <ul className="space-y-2">
-              {g.rows.map((n) => (
-                <li key={n.id} className={`${ui.card} relative flex gap-3 p-4`}>
-                  <span
-                    className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-full ${toneBg(n.tone)}`}
-                  >
-                    {iconFor(n)}
-                  </span>
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-start justify-between gap-2">
-                      <p className="font-semibold text-[#0b1c30]">{n.title}</p>
-                      <span className="shrink-0 text-xs text-[#434655]">
-                        {n.when}
+              {g.rows.map((n) => {
+                const href = resolveEssNotificationHref(n);
+                return (
+                  <li key={n.id}>
+                    <Link
+                      href={href}
+                      onClick={() => {
+                        if (n.unread) markOneRead(n.id);
+                      }}
+                      className={`${ui.card} relative flex gap-3 border border-[#d8dce2] bg-[#eceef2] p-4 transition-colors active:bg-[#e2e5ea] ${
+                        n.unread ? "ring-1 ring-[#004ac6]/20" : "opacity-95"
+                      }`}
+                    >
+                      <span
+                        className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-full ${toneBg(n.tone)}`}
+                      >
+                        {iconFor(n)}
                       </span>
-                    </div>
-                    <p className="mt-0.5 text-sm text-[#434655]">{n.body}</p>
-                  </div>
-                  {n.unread ? (
-                    <span className="absolute right-3 top-3 h-2 w-2 rounded-full bg-[#2563eb]" />
-                  ) : null}
-                </li>
-              ))}
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-start justify-between gap-2">
+                          <p className="font-semibold text-[#0b1c30]">{n.title}</p>
+                          <span className="shrink-0 text-xs text-[#5c5f66]">
+                            {n.when}
+                          </span>
+                        </div>
+                        <p className="mt-0.5 text-sm text-[#434655]">{n.body}</p>
+                      </div>
+                      {n.unread ? (
+                        <span className="absolute right-3 top-3 h-2 w-2 rounded-full bg-[#2563eb]" />
+                      ) : null}
+                    </Link>
+                  </li>
+                );
+              })}
             </ul>
           </section>
         ))

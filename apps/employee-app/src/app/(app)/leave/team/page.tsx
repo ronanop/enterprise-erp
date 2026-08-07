@@ -7,6 +7,7 @@ import {
   SearchField,
 } from "@/components/app-header";
 import { AiFab, AlertBox, EmptyState } from "@/components/ui";
+import { ManagerRouteGuard } from "@/components/manager-route-guard";
 import { ApiClientError } from "@/services/api-client";
 import { essService } from "@/services/ess-service";
 import type { EssTeamLeaveItem } from "@/types/api";
@@ -72,6 +73,7 @@ export default function TeamLeaveCalendarPage() {
   }
 
   return (
+    <ManagerRouteGuard>
     <div className="space-y-5">
       <AppHeader title="Team Leave" />
 
@@ -129,5 +131,6 @@ export default function TeamLeaveCalendarPage() {
 
       <AiFab />
     </div>
+    </ManagerRouteGuard>
   );
 }

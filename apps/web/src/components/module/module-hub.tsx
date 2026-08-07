@@ -11,7 +11,7 @@ interface ModuleHubProps {
 
 export function ModuleHub({ module }: ModuleHubProps) {
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       <PageHeader
         title={module.title}
         description={module.description}

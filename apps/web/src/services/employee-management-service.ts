@@ -211,6 +211,21 @@ export type EmployeeDirectoryOptions = {
   shifts: { id: string; label: string }[];
 };
 
+export type EmployeeDirectoryResult = {
+  records: EmployeeRecord[];
+  options: EmployeeDirectoryOptions;
+  errors: string[];
+};
+
+const DIRECTORY_CACHE_TTL_MS = 20_000;
+let directoryCache: { at: number; value: EmployeeDirectoryResult } | null = null;
+let directoryInflight: Promise<EmployeeDirectoryResult> | null = null;
+
+/** Clear cached HR directory after creates/updates (or wait for TTL in dev). */
+export function invalidateEmployeeDirectoryCache(): void {
+  directoryCache = null;
+}
+
 async function loadOptions(): Promise<EmployeeDirectoryOptions> {
   const [branches, departments, designations, employees, shifts, mgmtGroups] = await Promise.all([
     resourceService.list("/branches", { page_size: 200 }).catch(() => ({ data: [] })),
@@ -257,11 +272,7 @@ async function loadOptions(): Promise<EmployeeDirectoryOptions> {
   };
 }
 
-export async function loadEmployeeDirectory(): Promise<{
-  records: EmployeeRecord[];
-  options: EmployeeDirectoryOptions;
-  errors: string[];
-}> {
+async function fetchEmployeeDirectoryUncached(): Promise<EmployeeDirectoryResult> {
   const [masters, profiles, employment, options] = await Promise.all([
     resourceService.list("/employees", { page_size: 200, page: 1 }).catch((e) => ({ data: [], error: e })),
     resourceService.list("/hr/employee-profiles", { page_size: 200, page: 1 }).catch((e) => ({ data: [], error: e })),
@@ -351,6 +362,25 @@ export async function loadEmployeeDirectory(): Promise<{
   }
 
   return { records, options, errors };
+}
+
+export async function loadEmployeeDirectory(): Promise<EmployeeDirectoryResult> {
+  const now = Date.now();
+  if (directoryCache && now - directoryCache.at < DIRECTORY_CACHE_TTL_MS) {
+    return directoryCache.value;
+  }
+  if (directoryInflight) return directoryInflight;
+
+  directoryInflight = fetchEmployeeDirectoryUncached()
+    .then((value) => {
+      directoryCache = { at: Date.now(), value };
+      return value;
+    })
+    .finally(() => {
+      directoryInflight = null;
+    });
+
+  return directoryInflight;
 }
 
 export function filterEmployees(
@@ -485,6 +515,8 @@ export async function createExistingEmployee(input: {
     title: "Employee added (light hire)",
     actor: actorLabel(),
   });
+
+  invalidateEmployeeDirectoryCache();
 
   return {
     id: String(master.id),
@@ -677,6 +709,8 @@ export async function createEmployeeFromWizard(
     actor: actorLabel(),
   });
 
+  invalidateEmployeeDirectoryCache();
+
   return {
     id: employeeId,
     masterVersion: Number(master.version ?? 1),
@@ -801,6 +835,7 @@ export async function updateEmployeeRecord(  record: EmployeeRecord,
     title: "Employee profile updated",
     actor: actorLabel(),
   });
+  invalidateEmployeeDirectoryCache();
 }
 
 export async function setEmployeeLifecycleStatus(
@@ -831,6 +866,7 @@ export async function setEmployeeLifecycleStatus(
     detail: status,
     actor: actorLabel(),
   });
+  invalidateEmployeeDirectoryCache();
 }
 
 export async function bulkUpdateEmployees(

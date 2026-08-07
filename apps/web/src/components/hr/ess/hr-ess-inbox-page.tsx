@@ -1,7 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Check, RefreshCw, Search, X } from "lucide-react";
+import Link from "next/link";
+import { Check, ChevronRight, RefreshCw, Search, X } from "lucide-react";
 
 import { HrAuthBanner, HrStatusBadge } from "@/components/hr/hr-primitives";
 import { toast, SetupToastHost } from "@/components/hr/setup/setup-toast";
@@ -14,6 +15,7 @@ import { isAuthenticated } from "@/lib/auth";
 import { ApiClientError } from "@/services/api-client";
 import {
   INBOX_CATEGORY_LABELS,
+  inboxItemHref,
   loadHrEssInbox,
   runInboxAction,
   type HrEssInboxCategory,
@@ -137,19 +139,6 @@ export function HrEssInboxPage() {
       <PageHeader
         title="ESS"
         description="All employee self-service notifications — leave, comp off, attendance regularization, OT, and on-duty. Filter by type and status."
-        actions={
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            className="cursor-pointer"
-            disabled={loading}
-            onClick={() => void load()}
-          >
-            <RefreshCw className={cn("size-3.5", loading && "animate-spin")} />
-            Refresh
-          </Button>
-        }
       />
 
       {authBlocked ? <HrAuthBanner /> : null}
@@ -204,6 +193,17 @@ export function HrEssInboxPage() {
               ))}
             </select>
           </div>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            className="h-9 cursor-pointer"
+            disabled={loading}
+            onClick={() => void load()}
+          >
+            <RefreshCw className={cn("size-3.5", loading && "animate-spin")} />
+            Refresh
+          </Button>
           <p className="w-full text-right text-[11px] text-muted-foreground sm:w-auto sm:pl-1">
             {filtered.length} / {items.length}
           </p>
@@ -234,7 +234,10 @@ export function HrEssInboxPage() {
                     item.pending && "bg-primary/[0.03]",
                   )}
                 >
-                  <div className="min-w-0 flex-1 space-y-1">
+                  <Link
+                    href={inboxItemHref(item)}
+                    className="group min-w-0 flex-1 cursor-pointer space-y-1 rounded-lg outline-none transition-colors hover:bg-muted/50 focus-visible:ring-2 focus-visible:ring-ring -mx-1 px-1 py-0.5"
+                  >
                     <div className="flex flex-wrap items-center gap-2">
                       <span className="rounded-md border border-border bg-muted px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
                         {INBOX_CATEGORY_LABELS[item.category]}
@@ -244,13 +247,18 @@ export function HrEssInboxPage() {
                         <span className="text-[10px] text-muted-foreground">Decided</span>
                       ) : null}
                     </div>
-                    <p className="text-sm font-medium text-foreground">{item.title}</p>
+                    <div className="flex items-start justify-between gap-2">
+                      <p className="text-sm font-medium text-foreground group-hover:text-primary">
+                        {item.title}
+                      </p>
+                      <ChevronRight className="size-4 shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100" />
+                    </div>
                     <p className="text-xs text-muted-foreground">{item.employee_name}</p>
                     <p className="text-xs text-muted-foreground">{item.detail}</p>
                     <p className="text-[10px] text-muted-foreground/80">
                       {new Date(item.occurred_at).toLocaleString("en-IN")}
                     </p>
-                  </div>
+                  </Link>
                   {item.pending && item.available_actions.length > 0 ? (
                     <div className="flex shrink-0 flex-wrap gap-1.5">
                       {item.available_actions.map((action) => {

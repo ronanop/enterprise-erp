@@ -11,6 +11,20 @@ class LoginRequest(BaseModel):
     password: str = Field(min_length=8)
 
 
+class EssLoginRequest(BaseModel):
+    company_code: str = Field(min_length=1, max_length=50)
+    employee_code: str = Field(min_length=1, max_length=50)
+    password: str = Field(min_length=1)
+    captcha_id: str | None = None
+    captcha_answer: str | None = None
+
+
+class EssCaptchaChallengeResponse(BaseModel):
+    captcha_id: str
+    question: str
+    enabled: bool = True
+
+
 class MfaVerifyRequest(BaseModel):
     email: EmailStr
     otp: str = Field(min_length=6, max_length=6)

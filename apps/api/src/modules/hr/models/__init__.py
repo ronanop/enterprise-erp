@@ -28,6 +28,8 @@ from modules.hr.models.training import HrTraining
 from modules.hr.models.training_attendance import HrTrainingAttendance
 from modules.hr.models.training_request import HrTrainingRequest
 from modules.hr.models.training_room import HrTrainingRoom
+from modules.hr.models.wfh_request import HrWfhRequest
+from modules.hr.models.ess_policy import HrEssPolicy, HrEssPolicyAck
 from modules.hr.models.weekly_off_policy import HrWeeklyOffPolicy
 from modules.hr.models.on_duty_request import HrOnDutyRequest
 from modules.hr.models.ot_allotment import HrOtAllotment
@@ -57,6 +59,9 @@ __all__ = [
     "HrAttendanceRule",
     "HrWeeklyOffPolicy",
     "HrOnDutyRequest",
+    "HrWfhRequest",
+    "HrEssPolicy",
+    "HrEssPolicyAck",
     "HrOtAllotment",
     "HrKpi",
     "HrOkr",

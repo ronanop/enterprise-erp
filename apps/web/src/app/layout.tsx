@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Plus_Jakarta_Sans, Geist_Mono } from "next/font/google";
 
+import { DevExtensionNoiseInit } from "@/components/dev-extension-noise-init";
 import "./globals.css";
 
 const jakartaSans = Plus_Jakarta_Sans({
@@ -29,9 +30,13 @@ export default function RootLayout({
   return (
     <html
       lang="en"
+      data-scroll-behavior="smooth"
       className={`${jakartaSans.variable} ${geistMono.variable} h-full antialiased`}
       suppressHydrationWarning
     >
+      <head>
+        <DevExtensionNoiseInit />
+      </head>
       {/* suppressHydrationWarning: browser extensions (e.g. QuillBot) inject attrs like data-qb-installed */}
       <body className="flex min-h-full flex-col font-sans" suppressHydrationWarning>
         {children}

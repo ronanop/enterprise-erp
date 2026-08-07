@@ -43,3 +43,17 @@ export async function runInboxAction(
   const path = `${item.api_path}/${item.source_id}/${action}`;
   await apiClient(path, { method: "POST", body: {} });
 }
+
+export function inboxItemHref(item: HrEssInboxItem): string {
+  switch (item.category) {
+    case "leave":
+    case "compoff":
+      return "/hr/leave";
+    case "attendance_correction":
+    case "ot_allotment":
+    case "on_duty":
+      return "/hr/time";
+    default:
+      return `/hr/workforce/${item.employee_id}`;
+  }
+}

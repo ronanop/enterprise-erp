@@ -3,6 +3,7 @@
 from fastapi import FastAPI, Request, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
+from sqlalchemy.exc import OperationalError
 
 from shared.schemas import ErrorResponse
 
@@ -67,6 +68,19 @@ def register_exception_handlers(app: FastAPI) -> None:
             content=ErrorResponse(
                 message="Validation error",
                 errors=errors,
+            ).model_dump(),
+        )
+
+    @app.exception_handler(OperationalError)
+    async def database_operational_handler(_: Request, exc: OperationalError) -> JSONResponse:
+        return JSONResponse(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            content=ErrorResponse(
+                message=(
+                    "Database is unavailable. Start Docker Postgres "
+                    "(docker compose up -d) and ensure port 5433 is healthy."
+                ),
+                errors=[str(exc.orig) if exc.orig else str(exc)],
             ).model_dump(),
         )
 

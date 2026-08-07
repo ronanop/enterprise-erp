@@ -41,8 +41,12 @@ from modules.payroll.schemas import (
     PayrollAdjustmentResponse,
     PayrollAdjustmentUpdate,
     PayrollPeriodCreate,
+    PayrollPeriodGenerateRequest,
     PayrollPeriodResponse,
     PayrollPeriodUpdate,
+    PayrollPolicyCreate,
+    PayrollPolicyResponse,
+    PayrollPolicyUpdate,
     PayrollPostingCreate,
     PayrollPostingPostRequest,
     PayrollPostingResponse,
@@ -56,6 +60,7 @@ from modules.payroll.schemas import (
     PayrollSummaryCreate,
     PayrollSummaryResponse,
     PayrollSummaryUpdate,
+    GeneratePayslipsRequest,
     PayslipCreate,
     PayslipResponse,
     PayslipUpdate,
@@ -88,6 +93,8 @@ from modules.payroll.service import (
     LoanService,
     PayrollAdjustmentService,
     PayrollPeriodService,
+    PayrollPolicyService,
+    PayrollPeriodDayService,
     PayrollPostingService,
     PayrollReportService,
     PayrollRunLineService,
@@ -104,6 +111,7 @@ from modules.payroll.service import (
 from shared.schemas import APIResponse
 
 periods_router = APIRouter(prefix="/payroll-periods", tags=["Payroll - PayrollPeriod"])
+policies_router = APIRouter(prefix="/policies", tags=["Payroll - PayrollPolicy"])
 salary_structures_router = APIRouter(prefix="/salary-structures", tags=["Payroll - SalaryStructure"])
 salary_components_router = APIRouter(prefix="/salary-components", tags=["Payroll - SalaryComponent"])
 structure_lines_router = APIRouter(prefix="/structure-lines", tags=["Payroll - SalaryStructureLine"])
@@ -160,6 +168,191 @@ def update_periods(
     db: Annotated[Session, Depends(get_db)],
 ):
     return APIResponse(message="Updated", data=PayrollPeriodService(db).update(ctx, row_id, **extract_update_fields(body)))
+
+@periods_router.post("/generate", response_model=APIResponse[list[PayrollPeriodResponse]])
+def generate_payroll_periods(
+    body: PayrollPeriodGenerateRequest,
+    ctx: Annotated[TenantContext, Depends(require_permission("payroll.period:create"))],
+    db: Annotated[Session, Depends(get_db)],
+):
+    return APIResponse(
+        message="OK",
+        data=PayrollPeriodService(db).generate(ctx, **body.model_dump()),
+    )
+
+
+@periods_router.post("/ensure-current", response_model=APIResponse[PayrollPeriodResponse])
+def ensure_current_payroll_period(
+    ctx: Annotated[TenantContext, Depends(require_permission("payroll.period:create"))],
+    db: Annotated[Session, Depends(get_db)],
+    company_id: UUID | None = None,
+):
+    return APIResponse(message="OK", data=PayrollPeriodService(db).ensure_current_period(ctx, company_id))
+
+
+@periods_router.get("/{row_id}/employee-day-ledger", response_model=APIResponse[dict])
+def payroll_period_employee_day_ledger(
+    row_id: UUID,
+    ctx: Annotated[TenantContext, Depends(require_permission("payroll.period:read"))],
+    db: Annotated[Session, Depends(get_db)],
+    employee_id: UUID,
+):
+    period = PayrollPeriodService(db).get(ctx, row_id)
+    from modules.payroll.adapters.hr_port import PayrollHrAdapter
+
+    hr = PayrollHrAdapter(db)
+    day_svc = PayrollPeriodDayService(db)
+    cache = day_svc.build_cache(ctx, period.company_id, period.start_date, period.end_date)
+    result = day_svc.resolve_employee_pay_days(
+        cache,
+        employee_id,
+        hr.attendance_facts(ctx, period.company_id),
+        hr.leave_facts(ctx, period.company_id),
+    )
+    return APIResponse(
+        message="OK",
+        data={
+            "period_id": str(period.id),
+            "employee_id": str(employee_id),
+            "period_days": float(result.period_days),
+            "paid_days": float(result.paid_days),
+            "lop_days": float(result.lop_days),
+            "leave_days": float(result.leave_days),
+            "paid_leave_days": result.day_summary_json.get("counts", {}).get("paid_leave"),
+            "unpaid_leave_days": result.day_summary_json.get("counts", {}).get("unpaid_leave"),
+            "primary_shift_id": str(result.primary_shift_id) if result.primary_shift_id else None,
+            "day_summary": result.day_summary_json,
+        },
+    )
+
+
+@periods_router.post("/{row_id}/start-processing", response_model=APIResponse[PayrollPeriodResponse])
+def payroll_period_start_processing(
+    row_id: UUID,
+    ctx: Annotated[TenantContext, Depends(require_permission("payroll.period:update"))],
+    db: Annotated[Session, Depends(get_db)],
+):
+    return APIResponse(message="OK", data=PayrollPeriodService(db).start_processing(ctx, row_id))
+
+
+@periods_router.post("/{row_id}/approve", response_model=APIResponse[PayrollPeriodResponse])
+def payroll_period_approve(
+    row_id: UUID,
+    ctx: Annotated[TenantContext, Depends(require_permission("payroll.period:update"))],
+    db: Annotated[Session, Depends(get_db)],
+):
+    return APIResponse(message="OK", data=PayrollPeriodService(db).approve(ctx, row_id))
+
+
+@periods_router.post("/{row_id}/close", response_model=APIResponse[PayrollPeriodResponse])
+def payroll_period_close(
+    row_id: UUID,
+    ctx: Annotated[TenantContext, Depends(require_permission("payroll.period:update"))],
+    db: Annotated[Session, Depends(get_db)],
+):
+    return APIResponse(message="OK", data=PayrollPeriodService(db).close(ctx, row_id))
+
+
+@periods_router.post("/{row_id}/reopen", response_model=APIResponse[PayrollPeriodResponse])
+def payroll_period_reopen(
+    row_id: UUID,
+    ctx: Annotated[TenantContext, Depends(require_permission("payroll.period:update"))],
+    db: Annotated[Session, Depends(get_db)],
+):
+    return APIResponse(message="OK", data=PayrollPeriodService(db).reopen(ctx, row_id))
+
+
+@periods_router.post("/{row_id}/cancel", response_model=APIResponse[PayrollPeriodResponse])
+def payroll_period_cancel(
+    row_id: UUID,
+    ctx: Annotated[TenantContext, Depends(require_permission("payroll.period:update"))],
+    db: Annotated[Session, Depends(get_db)],
+):
+    return APIResponse(message="OK", data=PayrollPeriodService(db).cancel(ctx, row_id))
+
+@policies_router.get("/defaults", response_model=APIResponse[dict])
+def payroll_policy_defaults(
+    ctx: Annotated[TenantContext, Depends(require_permission("payroll.period:read"))],
+):
+    return APIResponse(message="OK", data=PayrollPolicyService.default_template())
+
+
+@policies_router.get("/resolved", response_model=APIResponse[dict])
+def payroll_policy_resolved(
+    ctx: Annotated[TenantContext, Depends(require_permission("payroll.period:read"))],
+    db: Annotated[Session, Depends(get_db)],
+    company_id: UUID | None = None,
+):
+    return APIResponse(
+        message="OK",
+        data=PayrollPolicyService(db).get_active_or_defaults(ctx, company_id),
+    )
+
+
+@policies_router.get("/active", response_model=APIResponse[PayrollPolicyResponse | None])
+def payroll_policy_active(
+    ctx: Annotated[TenantContext, Depends(require_permission("payroll.period:read"))],
+    db: Annotated[Session, Depends(get_db)],
+    company_id: UUID | None = None,
+):
+    return APIResponse(message="OK", data=PayrollPolicyService(db).get_active(ctx, company_id))
+
+
+@policies_router.get("", response_model=APIResponse[list[PayrollPolicyResponse]])
+def list_payroll_policies(
+    ctx: Annotated[TenantContext, Depends(require_permission("payroll.period:read"))],
+    db: Annotated[Session, Depends(get_db)],
+    pagination: Annotated[PaginationParams, Depends(get_pagination)],
+    company_id: UUID | None = None,
+):
+    return APIResponse(
+        message="OK",
+        data=paginate(PayrollPolicyService(db).list(ctx, company_id), pagination),
+    )
+
+
+@policies_router.post("/ensure-default", response_model=APIResponse[PayrollPolicyResponse])
+def ensure_default_payroll_policy(
+    ctx: Annotated[TenantContext, Depends(require_permission("payroll.period:create"))],
+    db: Annotated[Session, Depends(get_db)],
+    company_id: UUID | None = None,
+):
+    return APIResponse(
+        message="OK",
+        data=PayrollPolicyService(db).ensure_default_active(ctx, company_id),
+    )
+
+
+@policies_router.post("", response_model=APIResponse[PayrollPolicyResponse])
+def create_payroll_policy(
+    body: PayrollPolicyCreate,
+    ctx: Annotated[TenantContext, Depends(require_permission("payroll.period:create"))],
+    db: Annotated[Session, Depends(get_db)],
+):
+    return APIResponse(message="Created", data=PayrollPolicyService(db).create(ctx, **body.model_dump()))
+
+
+@policies_router.patch("/{row_id}", response_model=APIResponse[PayrollPolicyResponse])
+def update_payroll_policy(
+    row_id: UUID,
+    body: PayrollPolicyUpdate,
+    ctx: Annotated[TenantContext, Depends(require_permission("payroll.period:update"))],
+    db: Annotated[Session, Depends(get_db)],
+):
+    return APIResponse(
+        message="Updated",
+        data=PayrollPolicyService(db).update(ctx, row_id, **extract_update_fields(body)),
+    )
+
+
+@policies_router.post("/{row_id}/activate", response_model=APIResponse[PayrollPolicyResponse])
+def activate_payroll_policy(
+    row_id: UUID,
+    ctx: Annotated[TenantContext, Depends(require_permission("payroll.period:update"))],
+    db: Annotated[Session, Depends(get_db)],
+):
+    return APIResponse(message="Activated", data=PayrollPolicyService(db).activate(ctx, row_id))
+
 
 @salary_structures_router.get("", response_model=APIResponse[list[SalaryStructureResponse]])
 def list_salary_structures(
@@ -451,6 +644,28 @@ def approve_payroll_runs(
 ):
     return APIResponse(message="Approved", data=PayrollRunService(db).approve(ctx, row_id))
 
+@payroll_runs_router.post("/{row_id}/generate-payslips", response_model=APIResponse[list[PayslipResponse]])
+def generate_payslips_for_run(
+    row_id: UUID,
+    body: GeneratePayslipsRequest,
+    ctx: Annotated[TenantContext, Depends(require_permission("payroll.payslip:create"))],
+    db: Annotated[Session, Depends(get_db)],
+):
+    return APIResponse(
+        message="OK",
+        data=PayslipService(db).generate_for_run(ctx, row_id, issue=body.issue),
+    )
+
+
+@payroll_runs_router.get("/{row_id}/bank-export", response_model=APIResponse[dict])
+def export_payroll_run_bank_file(
+    row_id: UUID,
+    ctx: Annotated[TenantContext, Depends(require_permission("payroll.payslip:read"))],
+    db: Annotated[Session, Depends(get_db)],
+):
+    csv_text = PayslipService(db).generate_bank_export_for_run(ctx, row_id)
+    return APIResponse(message="OK", data={"csv": csv_text, "content_type": "text/csv"})
+
 @run_lines_router.get("", response_model=APIResponse[list[PayrollRunLineResponse]])
 def list_run_lines(
     ctx: Annotated[TenantContext, Depends(require_permission("payroll.run:read"))],
@@ -493,6 +708,15 @@ def create_payslips(
     db: Annotated[Session, Depends(get_db)],
 ):
     return APIResponse(message="Created", data=PayslipService(db).create(ctx, **body.model_dump()))
+
+@payslips_router.get("/{row_id}/export-text", response_model=APIResponse[dict])
+def export_payslip_text(
+    row_id: UUID,
+    ctx: Annotated[TenantContext, Depends(require_permission("payroll.payslip:read"))],
+    db: Annotated[Session, Depends(get_db)],
+):
+    text = PayslipService(db).export_text(ctx, row_id)
+    return APIResponse(message="OK", data={"text": text})
 
 @payslips_router.patch("/{row_id}", response_model=APIResponse[PayslipResponse])
 def update_payslips(

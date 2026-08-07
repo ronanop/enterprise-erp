@@ -98,7 +98,10 @@ class NotificationService:
             event_id=event.id,
             channel="in_app",
         )
-        send_notification_task.delay(str(event.id), str(delivery.id))
+        try:
+            send_notification_task.delay(str(event.id), str(delivery.id))
+        except Exception:
+            send_notification_task(str(event.id), str(delivery.id))
 
         # Fan-out push deliveries when the user has registered device tokens
         if recipient_user_id is not None:

@@ -32,7 +32,13 @@ On Windows you can also use:
 
 ## Migrations
 
+Postgres must be running (`docker compose up -d postgres` from repo root). If you see
+`connection to server at 127.0.0.1, port 5433 failed`, start or restart the container:
+
 ```bash
+cd cache_erp_hrms_payroll
+docker compose up -d postgres
+python -m scripts.wait_for_db    # from apps/api
 alembic upgrade head
 ```
 

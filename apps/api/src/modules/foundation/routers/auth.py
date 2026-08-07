@@ -10,6 +10,8 @@ from modules.foundation.dependencies import get_client_ip, get_current_user, get
 from modules.foundation.domain.value_objects import TenantContext
 from modules.foundation.models.security import SecUser
 from modules.foundation.schemas import (
+    EssCaptchaChallengeResponse,
+    EssLoginRequest,
     LoginRequest,
     MfaVerifyRequest,
     RefreshRequest,
@@ -21,6 +23,42 @@ from modules.foundation.service.rbac_service import RBACService
 from shared.schemas import APIResponse
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
+
+
+@router.get("/ess/captcha", response_model=APIResponse[EssCaptchaChallengeResponse])
+def ess_captcha() -> APIResponse[EssCaptchaChallengeResponse]:
+    from security.ess_login_captcha import captcha_enabled, issue_challenge
+
+    if not captcha_enabled():
+        return APIResponse(
+            message="OK",
+            data=EssCaptchaChallengeResponse(captcha_id="", question="", enabled=False),
+        )
+    cid, question = issue_challenge()
+    return APIResponse(
+        message="OK",
+        data=EssCaptchaChallengeResponse(captcha_id=cid, question=question, enabled=True),
+    )
+
+
+@router.post("/ess/login", response_model=APIResponse[TokenResponse])
+def ess_login(
+    body: EssLoginRequest,
+    request: Request,
+    db: Annotated[Session, Depends(get_db)],
+) -> APIResponse[TokenResponse]:
+    service = AuthService(db)
+    result = service.login_ess(
+        company_code=body.company_code,
+        employee_code=body.employee_code,
+        password=body.password,
+        captcha_id=body.captcha_id,
+        captcha_answer=body.captcha_answer,
+        ip_address=get_client_ip(request),
+        user_agent=request.headers.get("User-Agent"),
+    )
+    db.commit()
+    return APIResponse(message="Login successful", data=TokenResponse(**result))
 
 
 @router.post("/login", response_model=APIResponse[TokenResponse])

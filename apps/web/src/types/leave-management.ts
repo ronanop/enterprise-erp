@@ -6,6 +6,7 @@ export type LeaveApprovalStatus =
   | "draft"
   | "submitted"
   | "manager_review"
+  | "manager_approved"
   | "hr_review"
   | "director_review"
   | "approved"

@@ -71,5 +71,7 @@ class HrAttendance(Base, *HrTransactionMixin):
     late_minutes: Mapped[int | None] = mapped_column(Integer, nullable=True)
     overtime_minutes: Mapped[int | None] = mapped_column(Integer, nullable=True)
     early_leave_minutes: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    check_in_selfie_hash: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    check_out_selfie_hash: Mapped[str | None] = mapped_column(String(32), nullable=True)
     status: Mapped[str] = mapped_column(String(30), nullable=False, default="recorded", index=True)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)

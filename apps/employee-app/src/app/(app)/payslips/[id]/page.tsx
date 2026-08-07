@@ -42,11 +42,42 @@ export default function PayslipViewerPage() {
   const net = Number(row?.net_salary) || 0;
   const gross = Number(row?.gross_salary) || 0;
   const ded = Number(row?.total_deductions) || 0;
-  const basic = Math.round(gross * 0.64);
-  const hra = Math.round(gross * 0.24);
-  const bonus = Math.max(0, gross - basic - hra);
-  const pf = Math.round(ded * 0.26);
-  const tax = Math.max(0, ded - pf);
+
+  const pj = row?.payslip_json as Record<string, unknown> | undefined;
+  const att =
+    row?.attendance_summary ??
+    (pj?.attendance as Record<string, unknown> | undefined) ??
+    {};
+  const earningRows =
+    row?.earnings ??
+    (Array.isArray(pj?.earnings) ? (pj?.earnings as { label?: string; amount?: number }[]) : null);
+  const deductionRows =
+    row?.deductions ??
+    (Array.isArray(pj?.deductions)
+      ? (pj?.deductions as { code?: string; label?: string; amount?: number }[])
+      : null);
+
+  const basic =
+    earningRows?.find((e) => e.label?.toLowerCase().includes("basic"))?.amount ??
+    Math.round(gross * 0.6);
+  const hra =
+    earningRows?.find((e) => e.label?.toLowerCase().includes("hra"))?.amount ??
+    Math.round(gross * 0.3);
+  const special =
+    earningRows?.find((e) => e.label?.toLowerCase().includes("special"))?.amount ??
+    Math.max(0, gross - basic - hra);
+  const pfEmp =
+    deductionRows?.find((d) => d.code === "pf_employee")?.amount ??
+    Math.round(ded * 0.48);
+  const pfEr =
+    deductionRows?.find((d) => d.code === "pf_employer")?.amount ?? pfEmp;
+  const pf = pfEmp + pfEr;
+  const tax = Math.max(0, ded - pfEmp);
+
+  const periodDays = Number(att.period_days ?? 0);
+  const lopDays = Number(att.lop_days ?? 0);
+  const leaveDays = Number(att.leave_days ?? 0);
+  const paidLeave = Number(att.paid_leave ?? 0);
 
   return (
     <div className="space-y-5">
@@ -59,7 +90,7 @@ export default function PayslipViewerPage() {
           <div className="flex items-center justify-between">
             <h1 className="text-2xl font-bold text-[#0b1c30]">Payslip</h1>
             <span className="inline-flex items-center gap-1 rounded-full bg-[#eff4ff] px-3 py-1.5 text-sm font-semibold text-[#004ac6]">
-              {row.document_number.slice(-8)}
+              {row.period_name ?? row.document_number.slice(-8)}
             </span>
           </div>
 
@@ -117,7 +148,7 @@ export default function PayslipViewerPage() {
             </h2>
             <PayRow label="Basic Salary" value={basic} hidden={hidden} />
             <PayRow label="HRA Allowance" value={hra} hidden={hidden} />
-            <PayRow label="Performance Bonus" value={bonus} hidden={hidden} />
+            <PayRow label="Special Allowance" value={special} hidden={hidden} />
           </section>
 
           <section className="rounded-2xl bg-[#eff4ff] p-4">
@@ -131,7 +162,7 @@ export default function PayslipViewerPage() {
               <div className="h-full w-1/2 rounded-full bg-[#2563eb]" />
             </div>
             <p className="mt-2 text-xs text-[#434655]">
-              Employee: ₹{Math.round(pf / 2)} | Employer: ₹{Math.round(pf / 2)}
+              Employee: ₹{Math.round(pfEmp)} | Employer: ₹{Math.round(pfEr)}
             </p>
           </section>
 
@@ -151,9 +182,21 @@ export default function PayslipViewerPage() {
               Attendance Period
             </h2>
             <div className="grid grid-cols-3 divide-x divide-[#c3c6d7]/40 text-center">
-              <Stat value="22" label="Working Days" color="text-[#004ac6]" />
-              <Stat value="1" label="Leaves Taken" color="text-[#10B981]" />
-              <Stat value="0" label="LOP Days" color="text-[#0b1c30]" />
+              <Stat
+                value={periodDays ? String(periodDays) : "—"}
+                label="Scheduled (N)"
+                color="text-[#004ac6]"
+              />
+              <Stat
+                value={leaveDays ? String(leaveDays) : paidLeave ? String(paidLeave) : "0"}
+                label="Leave"
+                color="text-[#10B981]"
+              />
+              <Stat
+                value={String(lopDays)}
+                label="LOP Days"
+                color="text-[#0b1c30]"
+              />
             </div>
           </section>
 

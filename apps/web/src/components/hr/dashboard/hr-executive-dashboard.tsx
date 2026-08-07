@@ -26,6 +26,7 @@ import {
   HrEmptyState,
   HrStatusBadge,
 } from "@/components/hr/hr-primitives";
+import { hrNotificationHref } from "@/lib/hr-notification-href";
 import {
   PremiumAreaChart,
   PremiumBarChart,
@@ -264,15 +265,18 @@ export function HrExecutiveDashboardPage() {
                   <p className="px-2 py-1.5 text-xs font-semibold">Notifications</p>
                   <ul className="max-h-72 space-y-1 overflow-y-auto">
                     {(data?.notifications ?? []).map((n) => (
-                      <li
-                        key={n.id}
-                        className={cn(
-                          "rounded-lg px-2 py-2 text-xs transition-colors duration-150 hover:bg-muted/60",
-                          n.unread && "bg-primary/5",
-                        )}
-                      >
-                        <p className="font-medium">{n.title}</p>
-                        <p className="mt-0.5 text-muted-foreground">{n.body}</p>
+                      <li key={n.id}>
+                        <Link
+                          href={hrNotificationHref(n)}
+                          onClick={() => setNotifOpen(false)}
+                          className={cn(
+                            "block cursor-pointer rounded-lg px-2 py-2 text-xs transition-colors duration-150 hover:bg-muted/60",
+                            n.unread && "bg-muted/80",
+                          )}
+                        >
+                          <p className="font-medium">{n.title}</p>
+                          <p className="mt-0.5 text-muted-foreground">{n.body}</p>
+                        </Link>
                       </li>
                     ))}
                   </ul>
@@ -603,20 +607,25 @@ export function HrExecutiveDashboardPage() {
                   </li>
                 ) : (
                   (data?.notifications ?? []).map((n) => (
-                    <li
-                      key={n.id}
-                      className={cn(
-                        "px-4 py-2.5 transition-colors duration-150 hover:bg-muted/40",
-                        n.unread && "bg-primary/5",
-                      )}
-                    >
-                      <div className="flex items-start justify-between gap-2">
-                        <p className="text-sm font-medium">{n.title}</p>
-                        {n.unread ? (
-                          <span className="mt-1 size-1.5 shrink-0 rounded-full bg-primary" />
-                        ) : null}
-                      </div>
-                      <p className="mt-0.5 text-[11px] text-muted-foreground">{n.body}</p>
+                    <li key={n.id}>
+                      <Link
+                        href={hrNotificationHref(n)}
+                        className={cn(
+                          "flex cursor-pointer items-start justify-between gap-2 px-4 py-2.5 transition-colors duration-150 hover:bg-muted/40",
+                          n.unread && "bg-muted/60",
+                        )}
+                      >
+                        <div className="min-w-0 flex-1">
+                          <p className="text-sm font-medium">{n.title}</p>
+                          <p className="mt-0.5 text-[11px] text-muted-foreground">{n.body}</p>
+                        </div>
+                        <div className="flex shrink-0 items-center gap-1.5 pt-0.5">
+                          {n.unread ? (
+                            <span className="size-1.5 rounded-full bg-primary" />
+                          ) : null}
+                          <ChevronRight className="size-3.5 text-muted-foreground" />
+                        </div>
+                      </Link>
                     </li>
                   ))
                 )}

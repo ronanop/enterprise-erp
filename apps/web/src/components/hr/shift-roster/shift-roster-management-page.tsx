@@ -6,7 +6,6 @@ import {
   Download,
   Pencil,
   Plus,
-  RefreshCw,
   Repeat,
   Upload,
   UserPlus,
@@ -175,9 +174,6 @@ export function ShiftRosterManagementPage() {
             >
               <Download className="size-3.5" />
               Export
-            </Button>
-            <Button size="sm" variant="ghost" className="cursor-pointer" onClick={() => void load()}>
-              <RefreshCw className={cn("size-3.5", loading && "animate-spin")} />
             </Button>
           </HrToolbar>
         }

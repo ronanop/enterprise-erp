@@ -7,7 +7,6 @@ import {
   CalendarDays,
   Check,
   Plus,
-  RefreshCw,
   Users,
   X,
 } from "lucide-react";
@@ -119,9 +118,6 @@ export function TrainingManagementPage() {
             <Button size="sm" variant="outline" className="cursor-pointer" onClick={() => setRequestOpen(true)}>
               <CalendarDays className="size-3.5" />
               Request meeting
-            </Button>
-            <Button size="sm" variant="ghost" className="cursor-pointer" onClick={() => void load()}>
-              <RefreshCw className={cn("size-3.5", loading && "animate-spin")} />
             </Button>
           </HrToolbar>
         }

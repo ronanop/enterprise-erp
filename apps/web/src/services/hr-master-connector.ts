@@ -156,6 +156,7 @@ export function registerLocalEmployee(
       employment,
       governmentIds: emptyGovernmentIds(),
       bank: emptyBank(),
+      companyBank: emptyBank(),
       salary: emptySalary(),
       documents: [],
       education: [],

@@ -188,13 +188,24 @@ def grant_all_to_roles(db, tenant_id, role_ids: list[str], perm_ids: list[str]) 
 
 
 def invalidate_user_caches(db, tenant_id) -> None:
+    import redis as redis_lib
+
     rbac = RBACService(db)
     users = db.scalars(
         select(SecUser).where(SecUser.tenant_id == tenant_id, SecUser.is_deleted.is_(False))
     ).all()
+    invalidated = 0
     for user in users:
-        rbac.invalidate_user(user.id)
-    print(f"Invalidated permission cache for {len(users)} users")
+        try:
+            rbac.invalidate_user(user.id)
+            invalidated += 1
+        except redis_lib.ConnectionError:
+            print(
+                "Warning: Redis unavailable — skipped permission cache invalidation. "
+                "Start Redis or ignore if caches are cold."
+            )
+            return
+    print(f"Invalidated permission cache for {invalidated} users")
 
 
 def main() -> None:

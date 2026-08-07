@@ -7,7 +7,7 @@ from uuid import UUID
 
 from sqlalchemy.orm import Session
 
-from core.exceptions import NotFoundException
+from core.exceptions import AppException, NotFoundException
 from modules.foundation.domain.value_objects import TenantContext
 from modules.foundation.service.audit_service import AuditService
 from modules.payroll.adapters.hr_port import PayrollHrAdapter
@@ -22,9 +22,9 @@ from modules.payroll.repository.bonus_repository import BonusRepository
 from modules.payroll.repository.payroll_adjustment_repository import PayrollAdjustmentRepository
 from modules.payroll.service.document_number_service import DocumentNumberService
 from modules.payroll.service.engines import PayrollRunEngine
+from modules.payroll.service.payroll_period_day_service import PayrollPeriodDayService
+from modules.payroll.service.payroll_policy_service import PayrollPolicyService
 from modules.payroll.service.payroll_scope_validator import PayrollScopeValidator
-
-_STANDARD_DAYS = Decimal("30")
 
 
 class PayrollRunService:
@@ -74,8 +74,16 @@ class PayrollRunService:
         leave_facts = self._hr.leave_facts(ctx, row.company_id)
 
         period = self._period_repo.get(ctx, row.payroll_period_id)
-        period_start = period.start_date if period else None
-        period_end = period.end_date if period else None
+        if period is None:
+            raise NotFoundException("Payroll period not found for this run")
+        if period.start_date is None or period.end_date is None:
+            raise AppException("Payroll period must have start_date and end_date (generate 20–20 period first)")
+        period_start = period.start_date
+        period_end = period.end_date
+
+        day_svc = PayrollPeriodDayService(self._db)
+        day_cache = day_svc.build_cache(ctx, row.company_id, period_start, period_end)
+        pay_policy = PayrollPolicyService(self._db).get_active_or_defaults(ctx, row.company_id)
 
         employment_by_employee = {
             fact["employee_id"]: fact for fact in employment_facts
@@ -98,23 +106,24 @@ class PayrollRunService:
                 emp_fact = employment_by_employee[target_id]
                 gross_input = emp_fact.get("ctc_amount")
                 if gross_input:
-                    paid_days, lop_days, leave_days, has_attendance, overtime_minutes = self._resolve_days(
-                        target_id,
-                        attendance_facts,
-                        leave_facts,
-                        period_start=period_start,
-                        period_end=period_end,
+                    pay = day_svc.resolve_employee_pay_days(
+                        day_cache, target_id, attendance_facts, leave_facts
                     )
                     amounts = self._engine.compute_salary_breakdown(
                         gross_input,
-                        paid_days=paid_days,
-                        prorate=has_attendance,
-                        overtime_minutes=overtime_minutes,
+                        paid_days=pay.paid_days,
+                        period_days=pay.period_days,
+                        prorate=pay.has_attendance,
+                        overtime_minutes=pay.overtime_minutes,
                         bonus_amount=bonus_by_employee.get(target_id, Decimal("0")),
                         earning_adjustments=earn_adj_by_employee.get(target_id, Decimal("0")),
                         deduction_adjustments=ded_adj_by_employee.get(target_id, Decimal("0")),
                         adjustment_labels=adj_labels_by_employee.get(target_id),
+                        policy=pay_policy,
                     )
+                    breakdown = amounts["component_breakdown_json"] or {}
+                    breakdown["day_summary"] = pay.day_summary_json
+                    amounts["component_breakdown_json"] = breakdown
                     self._line_repo.create(
                         ctx,
                         company_id=row.company_id,
@@ -124,9 +133,12 @@ class PayrollRunService:
                         employee_salary_id=None,
                         department_id=emp_fact.get("department_id"),
                         employment_id=emp_fact.get("employment_id"),
-                        paid_days=paid_days,
-                        lop_days=lop_days,
-                        leave_days=leave_days,
+                        paid_days=pay.paid_days,
+                        lop_days=pay.lop_days,
+                        leave_days=pay.leave_days,
+                        period_days=pay.period_days,
+                        primary_shift_id=pay.primary_shift_id,
+                        day_summary_json=pay.day_summary_json,
                         gross_earnings=amounts["gross_earnings"],
                         total_deductions=amounts["total_deductions"],
                         net_pay=amounts["net_pay"],
@@ -168,12 +180,8 @@ class PayrollRunService:
 
         for salary in salaries:
             emp_fact = employment_by_employee.get(salary.employee_id)
-            paid_days, lop_days, leave_days, has_attendance, overtime_minutes = self._resolve_days(
-                salary.employee_id,
-                attendance_facts,
-                leave_facts,
-                period_start=period_start,
-                period_end=period_end,
+            pay = day_svc.resolve_employee_pay_days(
+                day_cache, salary.employee_id, attendance_facts, leave_facts
             )
 
             gross_input = salary.gross_amount or salary.ctc_amount
@@ -184,14 +192,19 @@ class PayrollRunService:
 
             amounts = self._engine.compute_salary_breakdown(
                 gross_input,
-                paid_days=paid_days,
-                prorate=has_attendance,
-                overtime_minutes=overtime_minutes,
+                paid_days=pay.paid_days,
+                period_days=pay.period_days,
+                prorate=pay.has_attendance,
+                overtime_minutes=pay.overtime_minutes,
                 bonus_amount=bonus_by_employee.get(salary.employee_id, Decimal("0")),
                 earning_adjustments=earn_adj_by_employee.get(salary.employee_id, Decimal("0")),
                 deduction_adjustments=ded_adj_by_employee.get(salary.employee_id, Decimal("0")),
                 adjustment_labels=adj_labels_by_employee.get(salary.employee_id),
+                policy=pay_policy,
             )
+            breakdown = amounts["component_breakdown_json"] or {}
+            breakdown["day_summary"] = pay.day_summary_json
+            amounts["component_breakdown_json"] = breakdown
 
             employment_id = salary.employment_id
             if emp_fact and emp_fact.get("employment_id"):
@@ -206,9 +219,12 @@ class PayrollRunService:
                 employee_salary_id=salary.id,
                 department_id=salary.department_id,
                 employment_id=employment_id,
-                paid_days=paid_days,
-                lop_days=lop_days,
-                leave_days=leave_days,
+                paid_days=pay.paid_days,
+                lop_days=pay.lop_days,
+                leave_days=pay.leave_days,
+                period_days=pay.period_days,
+                primary_shift_id=pay.primary_shift_id,
+                day_summary_json=pay.day_summary_json,
                 gross_earnings=amounts["gross_earnings"],
                 total_deductions=amounts["total_deductions"],
                 net_pay=amounts["net_pay"],
@@ -279,63 +295,6 @@ class PayrollRunService:
         except Exception:
             pass
         return updated
-
-    @staticmethod
-    def _resolve_days(
-        employee_id: UUID,
-        attendance_facts: list[dict],
-        leave_facts: list[dict],
-        *,
-        period_start=None,
-        period_end=None,
-    ) -> tuple[Decimal, Decimal, Decimal, bool, int]:
-        emp_attendance = [
-            a
-            for a in attendance_facts
-            if a.get("employee_id") == employee_id
-            and (
-                period_start is None
-                or period_end is None
-                or a.get("attendance_date") is None
-                or (period_start <= a["attendance_date"] <= period_end)
-            )
-        ]
-        emp_leave = [
-            leave
-            for leave in leave_facts
-            if leave.get("employee_id") == employee_id
-            and (
-                period_start is None
-                or period_end is None
-                or leave.get("end_date") is None
-                or leave.get("start_date") is None
-                or not (leave["end_date"] < period_start or leave["start_date"] > period_end)
-            )
-        ]
-
-        leave_days = sum(
-            (Decimal(str(leave.get("days_count") or 0)) for leave in emp_leave),
-            Decimal("0"),
-        )
-
-        overtime_minutes = sum(int(a.get("overtime_minutes") or 0) for a in emp_attendance)
-
-        if not emp_attendance:
-            return _STANDARD_DAYS, Decimal("0"), leave_days, False, overtime_minutes
-
-        lop_days = Decimal("0")
-        for record in emp_attendance:
-            status = record.get("attendance_status")
-            if status == "absent":
-                lop_days += Decimal("1")
-            elif status == "half_day":
-                lop_days += Decimal("0.5")
-
-        paid_days = _STANDARD_DAYS - lop_days
-        if paid_days < 0:
-            paid_days = Decimal("0")
-
-        return paid_days, lop_days, leave_days, True, overtime_minutes
 
     def _period_add_ons(
         self,

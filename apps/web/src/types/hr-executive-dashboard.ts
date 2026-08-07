@@ -106,6 +106,7 @@ export type NotificationItem = {
   body: string;
   at: string;
   unread: boolean;
+  href?: string;
 };
 
 export type QuickReport = {

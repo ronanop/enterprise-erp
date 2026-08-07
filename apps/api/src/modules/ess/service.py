@@ -1,5 +1,7 @@
 """Employee self-service application logic."""
 
+import base64
+import binascii
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 from math import asin, cos, radians, sin, sqrt
@@ -11,6 +13,11 @@ from sqlalchemy.orm import Session
 
 from core.config import get_settings
 from core.exceptions import AppException, ConflictException, ForbiddenException, NotFoundException
+from modules.ess.employee_document_storage import (
+    guess_media_type,
+    resolve_document_path,
+    save_employee_document_bytes,
+)
 from modules.ess.schemas import (
     EssAnnouncementItem,
     EssAssetItem,
@@ -18,6 +25,7 @@ from modules.ess.schemas import (
     EssBankResponse,
     EssBankUpdate,
     EssDocumentResponse,
+    EssDocumentUploadBody,
     EssEducationItem,
     EssEducationSkillsResponse,
     EssEducationSkillsUpdate,
@@ -31,6 +39,7 @@ from modules.ess.schemas import (
     EssLeaveTypeResponse,
     EssMeResponse,
     EssNotificationResponse,
+    EssNotificationPollResponse,
     EssPayslipDetail,
     EssPayslipSummary,
     EssPerformanceItem,
@@ -63,7 +72,6 @@ from modules.master_data.repository.employee_repository import EmployeeRepositor
 from modules.organization.models.hierarchy import OrgLocation
 from modules.payroll.service.payslip_service import PayslipService
 
-
 def _business_now() -> datetime:
     """Current time in the configured business timezone (aware)."""
     try:
@@ -83,6 +91,9 @@ def _attendance_response(row) -> EssAttendanceResponse:
         attendance_status=row.attendance_status,
         source=row.source,
         status=row.status,
+        late_minutes=getattr(row, "late_minutes", None),
+        overtime_minutes=getattr(row, "overtime_minutes", None),
+        early_leave_minutes=getattr(row, "early_leave_minutes", None),
     )
 
 
@@ -105,6 +116,20 @@ def _mask_id(value: str | None, *, keep: int = 4) -> str | None:
     if len(value) <= keep:
         return "*" * len(value)
     return ("*" * (len(value) - keep)) + value[-keep:]
+
+
+def _payslip_ess_fields(payslip_json: dict | None) -> dict:
+    pj = payslip_json if isinstance(payslip_json, dict) else {}
+    period = pj.get("period") if isinstance(pj.get("period"), dict) else {}
+    return {
+        "period_name": period.get("name"),
+        "period_start": period.get("start"),
+        "period_end": period.get("end"),
+        "export_text": pj.get("export_text"),
+        "attendance_summary": pj.get("attendance") if isinstance(pj.get("attendance"), dict) else None,
+        "earnings": pj.get("earnings") if isinstance(pj.get("earnings"), list) else None,
+        "deductions": pj.get("deductions") if isinstance(pj.get("deductions"), list) else None,
+    }
 
 
 def _haversine_meters(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
@@ -131,6 +156,20 @@ class EssService:
         self._att_rules = AttendanceRuleService(db)
         self._corrections = AttendanceCorrectionService(db)
 
+    @staticmethod
+    def _notification_from_event(row: NtfEvent) -> EssNotificationResponse:
+        payload = row.payload_json or {}
+        href_raw = payload.get("href") or payload.get("action_href")
+        return EssNotificationResponse(
+            id=row.id,
+            title=str(payload.get("title") or row.event_type),
+            body=str(payload.get("body") or ""),
+            kind=str(payload.get("kind") or row.event_type),
+            read=row.status in {"delivered", "read"},
+            created_at=row.created_at,
+            href=str(href_raw) if href_raw else None,
+        )
+
     def resolve_employee(self, ctx: TenantContext) -> EmployeeEntity:
         employee = self._employees.get_by_user_id(ctx, ctx.user_id)
         if employee is None:
@@ -138,7 +177,49 @@ class EssService:
         return employee
 
     def get_me(self, ctx: TenantContext) -> EssMeResponse:
+        from modules.foundation.models.security import SecRole, SecUserRole, SecUser
+        from modules.foundation.service.rbac_service import RBACService
+        from modules.master_data.models.employee import MasterEmployee
+
         emp = self.resolve_employee(ctx)
+        role_codes = list(
+            self._db.scalars(
+                select(SecRole.role_code)
+                .join(SecUserRole, SecUserRole.role_id == SecRole.id)
+                .where(
+                    SecUserRole.user_id == ctx.user_id,
+                    SecRole.tenant_id == ctx.tenant_id,
+                    SecRole.is_deleted.is_(False),
+                )
+            ).all()
+        )
+        perms = RBACService(self._db).get_user_permissions(ctx.user_id, ctx.tenant_id)
+        direct_reports = self._db.scalar(
+            select(MasterEmployee.id)
+            .where(
+                MasterEmployee.reporting_manager_id == emp.id,
+                MasterEmployee.is_deleted.is_(False),
+            )
+            .limit(1)
+        )
+        is_manager = direct_reports is not None
+        admin_roles = {"SUPER_ADMIN", "TENANT_ADMIN", "HR_MANAGER", "HR_ADMIN"}
+        is_admin = bool(admin_roles.intersection(role_codes)) or "hr.leave:approve" in perms
+        if is_admin:
+            ess_role = "admin"
+        elif is_manager:
+            ess_role = "manager"
+        else:
+            ess_role = "employee"
+        can_approve_team_leave = is_manager or "hr.leave:approve" in perms
+        pending_approvals_count = (
+            self.count_pending_approvals(ctx) if can_approve_team_leave else 0
+        )
+        user = self._db.get(SecUser, ctx.user_id)
+        must_change_password = bool(user and getattr(user, "must_change_password", False))
+        pending_policy_count = self._compliance().pending_policy_count(ctx)
+        is_ess_admin = ess_role == "admin"
+
         return EssMeResponse(
             employee_id=emp.id,
             company_id=emp.company_id,
@@ -153,6 +234,15 @@ class EssService:
             date_of_joining=emp.date_of_joining,
             status=emp.status,
             display_name=f"{emp.first_name} {emp.last_name}".strip(),
+            role_codes=role_codes,
+            ess_role=ess_role,
+            is_manager=is_manager,
+            can_approve_team_leave=can_approve_team_leave,
+            pending_approvals_count=pending_approvals_count,
+            must_change_password=must_change_password,
+            pending_policy_count=pending_policy_count,
+            is_ess_admin=is_ess_admin,
+            admin_use_web_portal=is_ess_admin,
         )
 
     def update_me(self, ctx: TenantContext, *, mobile: str | None = None) -> EssMeResponse:
@@ -210,6 +300,18 @@ class EssService:
         submitted = self._leave_requests.submit(ctx, row.id)
         return _leave_request_response(submitted)
 
+    def get_leave_request(self, ctx: TenantContext, request_id: UUID) -> EssLeaveRequestResponse:
+        emp = self.resolve_employee(ctx)
+        row = self._leave_requests.get(ctx, request_id)
+        if row.employee_id != emp.id:
+            raise NotFoundException("Leave request not found")
+        return _leave_request_response(row)
+
+    def cancel_leave_request(self, ctx: TenantContext, request_id: UUID) -> EssLeaveRequestResponse:
+        emp = self.resolve_employee(ctx)
+        row = self._leave_requests.cancel(ctx, request_id, employee_id=emp.id)
+        return _leave_request_response(row)
+
     def list_attendance(
         self,
         ctx: TenantContext,
@@ -230,6 +332,80 @@ class EssService:
             result.append(_attendance_response(row))
         result.sort(key=lambda r: r.attendance_date, reverse=True)
         return result
+
+    def attendance_summary(self, ctx: TenantContext, *, month: str):
+        from modules.ess.schemas import EssAttendanceSummaryResponse
+
+        emp = self.resolve_employee(ctx)
+        year_s, mon_s = month.split("-", 1)
+        year, mon = int(year_s), int(mon_s)
+        rows = self.list_attendance(ctx)
+        present = late = wfh = 0
+        ot_minutes = 0
+        for row in rows:
+            if row.attendance_date.year != year or row.attendance_date.month != mon:
+                continue
+            st = (row.attendance_status or "").lower()
+            if st in {"present", "late", "on_duty", "half_day"} or row.check_in_at:
+                present += 1
+            if st == "late" or (row.late_minutes or 0) > 0:
+                late += 1
+            if st == "work_from_home":
+                wfh += 1
+            ot_minutes += int(row.overtime_minutes or 0)
+        return EssAttendanceSummaryResponse(
+            month=month,
+            present_days=present,
+            late_days=late,
+            total_overtime_minutes=ot_minutes,
+            work_from_home_days=wfh,
+        )
+
+    def get_punch_policy(self, ctx: TenantContext):
+        from modules.ess.schemas import EssPunchPolicyResponse
+
+        emp = self.resolve_employee(ctx)
+        rule = self._att_rules.get_active(ctx, emp.company_id)
+        profile = self._profiles.get_orm_by_employee_id(ctx, emp.id)
+        face_enrolled = bool(getattr(profile, "face_auth_fingerprint", None))
+        face_enabled = bool(getattr(profile, "face_auth_enabled", False))
+        selfie = bool(rule and getattr(rule, "ess_selfie_required", False))
+        face_punch = bool(rule and getattr(rule, "ess_face_at_punch_required", False))
+        return EssPunchPolicyResponse(
+            geofence_required=bool(rule and rule.geofence_required),
+            selfie_required=selfie,
+            face_at_punch_required=face_punch or face_enabled,
+            face_enrolled=face_enrolled,
+        )
+
+    def _approved_wfh_today(self, ctx: TenantContext, emp, day: date) -> bool:
+        from modules.hr.service.wfh_service import WfhRequestService
+
+        rows = WfhRequestService(self._db).list(ctx, emp.company_id)
+        return WfhRequestService.is_approved_wfh_day(rows, emp.id, day)
+
+    def _validate_punch_image(self, ctx: TenantContext, body: EssPunchRequest | None, policy) -> str | None:
+        """Returns selfie fingerprint hash when image provided / required."""
+        from modules.ess.face_utils import fingerprints_match, image_fingerprint
+
+        image = body.image_base64 if body else None
+        need_selfie = policy.selfie_required
+        need_face = policy.face_at_punch_required
+        if (need_selfie or need_face) and not image:
+            raise AppException("Camera capture required for punch")
+        if not image:
+            return None
+        try:
+            fp = image_fingerprint(image)
+        except ValueError as exc:
+            raise AppException(str(exc)) from exc
+        if need_face and policy.face_enrolled:
+            emp = self.resolve_employee(ctx)
+            profile = self._profiles.get_orm_by_employee_id(ctx, emp.id)
+            stored = getattr(profile, "face_auth_fingerprint", None)
+            if stored and not fingerprints_match(stored, fp):
+                raise ForbiddenException("Face does not match enrolled profile")
+        return fp
 
     def _geofence_locations(self, ctx: TenantContext, emp: EmployeeEntity) -> list[OrgLocation]:
         stmt = select(OrgLocation).where(
@@ -406,24 +582,31 @@ class EssService:
         body: EssPunchRequest | None = None,
     ) -> EssPunchResponse:
         emp = self.resolve_employee(ctx)
-        latitude = body.latitude if body else None
-        longitude = body.longitude if body else None
-        self._validate_geofence(ctx, emp, latitude, longitude)
-
-        # Business-local "today" so IST midnight matches the work day employees expect.
         local_now = _business_now()
         today = local_now.date()
-        # Persist timestamps in UTC (timestamptz).
+        policy = self.get_punch_policy(ctx)
+        selfie_hash = self._validate_punch_image(ctx, body, policy)
+
+        wfh_day = self._approved_wfh_today(ctx, emp, today)
+        latitude = body.latitude if body else None
+        longitude = body.longitude if body else None
+        if not wfh_day:
+            self._validate_geofence(ctx, emp, latitude, longitude)
+
         now_utc = local_now.astimezone(timezone.utc)
         geo_fields: dict = {}
         if latitude is not None and longitude is not None:
             geo_fields["latitude"] = Decimal(str(latitude))
             geo_fields["longitude"] = Decimal(str(longitude))
 
+        punch_source = "web" if wfh_day else "mobile"
+
         shift = self._resolve_shift(ctx, emp, today)
         check_in_fields = self._check_in_status_fields(
             shift, local_now, ctx=ctx, company_id=emp.company_id
         )
+        if wfh_day:
+            check_in_fields["attendance_status"] = "work_from_home"
 
         rows = [
             row
@@ -439,7 +622,8 @@ class EssService:
                 attendance_date=today,
                 check_in_at=now_utc,
                 total_hours=None,
-                source="mobile",
+                source=punch_source,
+                check_in_selfie_hash=selfie_hash,
                 **check_in_fields,
                 **geo_fields,
             )
@@ -460,6 +644,8 @@ class EssService:
                 current.id,
                 check_in_at=now_utc,
                 total_hours=None,
+                source=punch_source,
+                check_in_selfie_hash=selfie_hash,
                 **check_in_fields,
                 **geo_fields,
             )
@@ -467,7 +653,6 @@ class EssService:
                 action="check_in", attendance=_attendance_response(updated_in)
             )
 
-        # Freeze total hours at checkout (check-in → now).
         total_hours = compute_total_hours(check_in, now_utc)
         checkout_fields = self._check_out_ot_fields(
             shift,
@@ -482,6 +667,7 @@ class EssService:
             current.id,
             check_out_at=now_utc,
             total_hours=total_hours,
+            check_out_selfie_hash=selfie_hash,
             **checkout_fields,
             **geo_fields,
         )
@@ -621,6 +807,57 @@ class EssService:
             status="draft",
         )
         return svc.submit(ctx, row.id)
+
+    def list_wfh(self, ctx: TenantContext):
+        from modules.hr.service.wfh_service import WfhRequestService
+
+        emp = self.resolve_employee(ctx)
+        rows = WfhRequestService(self._db).list(ctx, emp.company_id)
+        return [r for r in rows if r.employee_id == emp.id]
+
+    def create_wfh(
+        self,
+        ctx: TenantContext,
+        *,
+        wfh_date: date,
+        end_date: date | None = None,
+        portion: str = "full_day",
+        reason: str | None = None,
+    ):
+        from modules.hr.service.wfh_service import WfhRequestService
+
+        emp = self.resolve_employee(ctx)
+        svc = WfhRequestService(self._db)
+        row = svc.create(
+            ctx,
+            company_id=emp.company_id,
+            branch_id=emp.branch_id,
+            employee_id=emp.id,
+            wfh_date=wfh_date,
+            end_date=end_date,
+            portion=portion,
+            reason=reason,
+            status="draft",
+        )
+        return svc.submit(ctx, row.id)
+
+    def manager_approve_team_wfh(self, ctx: TenantContext, row_id: UUID):
+        from modules.hr.service.wfh_service import WfhRequestService
+
+        emp = self.resolve_employee(ctx)
+        row = WfhRequestService(self._db).get(ctx, row_id)
+        self._ensure_direct_report(ctx, row.employee_id)
+        return WfhRequestService(self._db).manager_approve(
+            ctx, row_id, approver_employee_id=emp.id
+        )
+
+    def reject_team_wfh(self, ctx: TenantContext, row_id: UUID):
+        from modules.hr.service.wfh_service import WfhRequestService
+
+        emp = self.resolve_employee(ctx)
+        row = WfhRequestService(self._db).get(ctx, row_id)
+        self._ensure_direct_report(ctx, row.employee_id)
+        return WfhRequestService(self._db).reject(ctx, row_id, approver_employee_id=emp.id)
 
     def list_compoff(self, ctx: TenantContext):
         from modules.hr.service.compoff_bio_service import CompoffRequestService
@@ -770,6 +1007,70 @@ class EssService:
             if row.employee_id == emp.id and getattr(row, "status", "active") != "archived"
         ]
 
+    _ESS_DOC_TYPES = frozenset(
+        {"id_proof", "address_proof", "contract", "certificate", "other"}
+    )
+
+    def get_document(self, ctx: TenantContext, document_id: UUID) -> EssDocumentResponse:
+        emp = self.resolve_employee(ctx)
+        row = self._documents.get(ctx, document_id)
+        if row.employee_id != emp.id:
+            raise ForbiddenException("Document does not belong to this employee")
+        if getattr(row, "status", "active") == "archived":
+            raise NotFoundException("Document not found")
+        return EssDocumentResponse.model_validate(row)
+
+    def upload_document(
+        self, ctx: TenantContext, body: EssDocumentUploadBody
+    ) -> EssDocumentResponse:
+        emp = self.resolve_employee(ctx)
+        doc_type = body.document_type.strip().lower()
+        if doc_type not in self._ESS_DOC_TYPES:
+            raise AppException(
+                "document_type must be one of: id_proof, address_proof, contract, certificate, other"
+            )
+        payload = body.content_base64.strip()
+        if payload.startswith("data:") and "," in payload:
+            payload = payload.split(",", 1)[1]
+        try:
+            raw = base64.b64decode(payload, validate=True)
+        except (binascii.Error, ValueError) as exc:
+            raise AppException("Invalid file content (base64)") from exc
+        if not raw:
+            raise AppException("Empty file")
+
+        storage_uri = save_employee_document_bytes(
+            company_id=emp.company_id,
+            employee_id=emp.id,
+            file_name=body.file_name,
+            raw=raw,
+        )
+        row = self._documents.create(
+            ctx,
+            branch_id=emp.branch_id,
+            employee_id=emp.id,
+            company_id=emp.company_id,
+            document_type=doc_type,
+            document_name=body.document_name.strip(),
+            storage_uri=storage_uri,
+            issued_on=body.issued_on,
+            expires_on=body.expires_on,
+            verification_status="pending",
+            status="active",
+        )
+        return EssDocumentResponse.model_validate(row)
+
+    def resolve_document_download(
+        self, ctx: TenantContext, document_id: UUID
+    ) -> tuple[str, str, str]:
+        """Return (filesystem_path, media_type, download_filename)."""
+        doc = self.get_document(ctx, document_id)
+        path = resolve_document_path(doc.storage_uri)
+        download_name = doc.document_name
+        if path.suffix and not download_name.lower().endswith(path.suffix.lower()):
+            download_name = f"{download_name}{path.suffix}"
+        return str(path), guess_media_type(path.name), download_name
+
     def list_holidays(self, ctx: TenantContext) -> list[EssHolidayCalendarResponse]:
         emp = self.resolve_employee(ctx)
         rows = self._holidays.list(ctx, emp.company_id)
@@ -798,52 +1099,57 @@ class EssService:
         )
         out: list[EssNotificationResponse] = []
         for row in rows:
-            payload = row.payload_json or {}
-            out.append(
-                EssNotificationResponse(
-                    id=row.id,
-                    title=str(payload.get("title") or row.event_type),
-                    body=str(payload.get("body") or ""),
-                    kind=str(payload.get("kind") or row.event_type),
-                    read=row.status in {"delivered", "read"},
-                    created_at=row.created_at,
-                )
-            )
+            out.append(self._notification_from_event(row))
         return out
 
     def list_payslips(self, ctx: TenantContext) -> list[EssPayslipSummary]:
         emp = self.resolve_employee(ctx)
         rows = self._payslips.list(ctx, emp.company_id)
-        return [
-            EssPayslipSummary(
-                id=row.id,
-                document_number=row.document_number,
-                employee_code=row.employee_code,
-                employee_name=row.employee_name,
-                payroll_period_id=row.payroll_period_id,
-                gross_salary=row.gross_salary,
-                total_deductions=row.total_deductions,
-                net_salary=row.net_salary,
-                issued_at=row.issued_at,
-                delivery_status=row.delivery_status,
-                payment_status=row.payment_status,
-                status=row.status,
+        out: list[EssPayslipSummary] = []
+        for row in rows:
+            if row.employee_id != emp.id:
+                continue
+            if row.status != "issued":
+                continue
+            meta = _payslip_ess_fields(row.payslip_json)
+            out.append(
+                EssPayslipSummary(
+                    id=row.id,
+                    document_number=row.document_number,
+                    employee_code=row.employee_code,
+                    employee_name=row.employee_name,
+                    payroll_period_id=row.payroll_period_id,
+                    period_name=meta.get("period_name"),
+                    period_start=meta.get("period_start"),
+                    period_end=meta.get("period_end"),
+                    gross_salary=row.gross_salary,
+                    total_deductions=row.total_deductions,
+                    net_salary=row.net_salary,
+                    issued_at=row.issued_at,
+                    delivery_status=row.delivery_status,
+                    payment_status=row.payment_status,
+                    status=row.status,
+                )
             )
-            for row in rows
-            if row.employee_id == emp.id
-        ]
+        return out
 
     def get_payslip(self, ctx: TenantContext, payslip_id: UUID) -> EssPayslipDetail:
         emp = self.resolve_employee(ctx)
         row = self._payslips.get(ctx, payslip_id)
         if row.employee_id != emp.id:
             raise ForbiddenException("Payslip does not belong to this employee")
+        if row.status != "issued":
+            raise ForbiddenException("Payslip is not available until issued")
+        meta = _payslip_ess_fields(row.payslip_json)
         return EssPayslipDetail(
             id=row.id,
             document_number=row.document_number,
             employee_code=row.employee_code,
             employee_name=row.employee_name,
             payroll_period_id=row.payroll_period_id,
+            period_name=meta.get("period_name"),
+            period_start=meta.get("period_start"),
+            period_end=meta.get("period_end"),
             gross_salary=row.gross_salary,
             total_deductions=row.total_deductions,
             net_salary=row.net_salary,
@@ -852,9 +1158,19 @@ class EssService:
             payment_status=row.payment_status,
             status=row.status,
             payslip_json=row.payslip_json,
+            export_text=meta.get("export_text"),
+            attendance_summary=meta.get("attendance_summary"),
+            earnings=meta.get("earnings"),
+            deductions=meta.get("deductions"),
             company_id=row.company_id,
             branch_id=row.branch_id,
         )
+
+    def get_payslip_export_text(self, ctx: TenantContext, payslip_id: UUID) -> str:
+        detail = self.get_payslip(ctx, payslip_id)
+        if detail.export_text:
+            return detail.export_text
+        return self._payslips.export_text(ctx, payslip_id)
 
     def get_emergency(self, ctx: TenantContext) -> EssEmergencyContactResponse:
         emp = self.resolve_employee(ctx)
@@ -1017,6 +1333,254 @@ class EssService:
         if row.employee_id not in reports:
             raise ForbiddenException("Not a direct report leave request")
         return self._leave_requests.reject(ctx, row_id, approver_employee_id=emp.id)
+
+    def _direct_reports(
+        self, ctx: TenantContext, manager_employee_id: UUID
+    ) -> tuple[set[UUID], dict]:
+        from modules.master_data.models.employee import MasterEmployee
+
+        reports = list(
+            self._db.scalars(
+                select(MasterEmployee).where(
+                    MasterEmployee.reporting_manager_id == manager_employee_id,
+                    MasterEmployee.is_deleted.is_(False),
+                )
+            ).all()
+        )
+        ids = {r.id for r in reports}
+        by_id = {r.id: r for r in reports}
+        return ids, by_id
+
+    def _ensure_direct_report(self, ctx: TenantContext, employee_id: UUID) -> None:
+        emp = self.resolve_employee(ctx)
+        report_ids, _ = self._direct_reports(ctx, emp.id)
+        if employee_id not in report_ids:
+            raise ForbiddenException("Not a direct report")
+
+    def list_pending_approvals(self, ctx: TenantContext) -> list:
+        from modules.ess.schemas import EssApprovalItem
+        from modules.hr.service.compoff_bio_service import CompoffRequestService
+        from modules.hr.service.on_duty_ot_service import OnDutyRequestService
+
+        emp = self.resolve_employee(ctx)
+        report_ids, by_id = self._direct_reports(ctx, emp.id)
+        if not report_ids:
+            return []
+
+        items: list[EssApprovalItem] = []
+
+        def _name(member) -> str:
+            return f"{member.first_name} {member.last_name}".strip()
+
+        for row in self._leave_requests.list(ctx, emp.company_id):
+            if row.employee_id not in report_ids or row.status != "submitted":
+                continue
+            member = by_id[row.employee_id]
+            created = getattr(row, "created_at", None) or datetime.now(timezone.utc)
+            items.append(
+                EssApprovalItem(
+                    category="leave",
+                    id=row.id,
+                    employee_id=row.employee_id,
+                    employee_code=member.employee_code,
+                    display_name=_name(member),
+                    title=f"Leave {row.document_number}",
+                    detail=f"{row.start_date} → {row.end_date} · {row.days_count} day(s)",
+                    status=row.status,
+                    occurred_at=created,
+                )
+            )
+
+        compoff_svc = CompoffRequestService(self._db)
+        for row in compoff_svc.list(ctx, emp.company_id):
+            if row.employee_id not in report_ids or row.status != "submitted":
+                continue
+            member = by_id[row.employee_id]
+            created = getattr(row, "created_at", None) or datetime.now(timezone.utc)
+            items.append(
+                EssApprovalItem(
+                    category="compoff",
+                    id=row.id,
+                    employee_id=row.employee_id,
+                    employee_code=member.employee_code,
+                    display_name=_name(member),
+                    title="Comp Off request",
+                    detail=(
+                        f"{row.earned_date} · {row.extra_hours}h → {row.requested_days} day(s)"
+                    ),
+                    status=row.status,
+                    occurred_at=created,
+                )
+            )
+
+        on_duty_svc = OnDutyRequestService(self._db)
+        for row in on_duty_svc.list(ctx, emp.company_id):
+            if row.employee_id not in report_ids or row.status != "submitted":
+                continue
+            member = by_id[row.employee_id]
+            created = getattr(row, "created_at", None) or datetime.now(timezone.utc)
+            items.append(
+                EssApprovalItem(
+                    category="on_duty",
+                    id=row.id,
+                    employee_id=row.employee_id,
+                    employee_code=member.employee_code,
+                    display_name=_name(member),
+                    title="On duty request",
+                    detail=f"{row.duty_date} · {row.portion}",
+                    status=row.status,
+                    occurred_at=created,
+                )
+            )
+
+        from modules.hr.service.wfh_service import WfhRequestService
+
+        wfh_svc = WfhRequestService(self._db)
+        for row in wfh_svc.list(ctx, emp.company_id):
+            if row.employee_id not in report_ids or row.status != "submitted":
+                continue
+            member = by_id[row.employee_id]
+            created = getattr(row, "created_at", None) or datetime.now(timezone.utc)
+            items.append(
+                EssApprovalItem(
+                    category="wfh",
+                    id=row.id,
+                    employee_id=row.employee_id,
+                    employee_code=member.employee_code,
+                    display_name=_name(member),
+                    title="Work from home",
+                    detail=f"{row.wfh_date} · {row.portion}",
+                    status=row.status,
+                    occurred_at=created,
+                )
+            )
+
+        for row in self._corrections.list(ctx, emp.company_id):
+            if row.employee_id not in report_ids or row.status != "submitted":
+                continue
+            member = by_id[row.employee_id]
+            created = getattr(row, "created_at", None) or datetime.now(timezone.utc)
+            items.append(
+                EssApprovalItem(
+                    category="attendance_correction",
+                    id=row.id,
+                    employee_id=row.employee_id,
+                    employee_code=member.employee_code,
+                    display_name=_name(member),
+                    title="Attendance correction",
+                    detail=f"{row.attendance_date} · {row.field_name} → {row.new_value}",
+                    status=row.status,
+                    occurred_at=created,
+                )
+            )
+
+        items.sort(key=lambda x: -x.occurred_at.timestamp())
+        return items
+
+    def count_pending_approvals(self, ctx: TenantContext) -> int:
+        return len(self.list_pending_approvals(ctx))
+
+    def manager_approve_team_compoff(self, ctx: TenantContext, row_id: UUID):
+        from modules.hr.service.compoff_bio_service import CompoffRequestService
+
+        emp = self.resolve_employee(ctx)
+        svc = CompoffRequestService(self._db)
+        row = svc.get(ctx, row_id)
+        self._ensure_direct_report(ctx, row.employee_id)
+        return svc.manager_approve(ctx, row_id, approver_employee_id=emp.id)
+
+    def reject_team_compoff(self, ctx: TenantContext, row_id: UUID):
+        from modules.hr.service.compoff_bio_service import CompoffRequestService
+
+        emp = self.resolve_employee(ctx)
+        svc = CompoffRequestService(self._db)
+        row = svc.get(ctx, row_id)
+        self._ensure_direct_report(ctx, row.employee_id)
+        return svc.reject(ctx, row_id, approver_employee_id=emp.id)
+
+    def approve_team_on_duty(self, ctx: TenantContext, row_id: UUID):
+        from modules.hr.service.on_duty_ot_service import OnDutyRequestService
+
+        row = OnDutyRequestService(self._db).get(ctx, row_id)
+        self._ensure_direct_report(ctx, row.employee_id)
+        return OnDutyRequestService(self._db).approve(ctx, row_id)
+
+    def reject_team_on_duty(self, ctx: TenantContext, row_id: UUID):
+        from modules.hr.service.on_duty_ot_service import OnDutyRequestService
+
+        row = OnDutyRequestService(self._db).get(ctx, row_id)
+        self._ensure_direct_report(ctx, row.employee_id)
+        return OnDutyRequestService(self._db).reject(ctx, row_id)
+
+    def approve_team_correction(self, ctx: TenantContext, row_id: UUID):
+        row = self._corrections.get(ctx, row_id)
+        self._ensure_direct_report(ctx, row.employee_id)
+        return self._corrections.approve(ctx, row_id)
+
+    def reject_team_correction(self, ctx: TenantContext, row_id: UUID):
+        row = self._corrections.get(ctx, row_id)
+        self._ensure_direct_report(ctx, row.employee_id)
+        return self._corrections.reject(ctx, row_id)
+
+    def notification_unread_count(self, ctx: TenantContext) -> int:
+        from sqlalchemy import func
+
+        emp = self.resolve_employee(ctx)
+        if not emp.user_id:
+            return 0
+        count = self._db.scalar(
+            select(func.count())
+            .select_from(NtfEvent)
+            .where(
+                NtfEvent.tenant_id == ctx.tenant_id,
+                NtfEvent.recipient_user_id == emp.user_id,
+                NtfEvent.status.notin_(("delivered", "read")),
+            )
+        )
+        return int(count or 0)
+
+    def notification_poll(self, ctx: TenantContext) -> EssNotificationPollResponse:
+        count = self.notification_unread_count(ctx)
+        emp = self.resolve_employee(ctx)
+        latest: EssNotificationResponse | None = None
+        if emp.user_id and count > 0:
+            row = self._db.scalar(
+                select(NtfEvent)
+                .where(
+                    NtfEvent.tenant_id == ctx.tenant_id,
+                    NtfEvent.recipient_user_id == emp.user_id,
+                    NtfEvent.status.notin_(("delivered", "read")),
+                )
+                .order_by(NtfEvent.created_at.desc())
+                .limit(1)
+            )
+            if row is not None:
+                latest = self._notification_from_event(row)
+        return EssNotificationPollResponse(unread_count=count, latest=latest)
+
+    def mark_notification_read(self, ctx: TenantContext, notification_id: UUID) -> None:
+        emp = self.resolve_employee(ctx)
+        row = self._db.get(NtfEvent, notification_id)
+        if row is None or row.recipient_user_id != emp.user_id:
+            raise NotFoundException("Notification not found")
+        row.status = "read"
+
+    def mark_all_notifications_read(self, ctx: TenantContext) -> int:
+        emp = self.resolve_employee(ctx)
+        if not emp.user_id:
+            return 0
+        rows = list(
+            self._db.scalars(
+                select(NtfEvent).where(
+                    NtfEvent.tenant_id == ctx.tenant_id,
+                    NtfEvent.recipient_user_id == emp.user_id,
+                    NtfEvent.status.notin_(("delivered", "read")),
+                )
+            ).all()
+        )
+        for row in rows:
+            row.status = "read"
+        return len(rows)
 
     def list_announcements(self, ctx: TenantContext) -> list[EssAnnouncementItem]:
         """Holiday-derived announcements until a dedicated announcements module exists."""
@@ -1201,3 +1765,135 @@ class EssService:
             status=row.status,
             fnf_status=getattr(row, "fnf_status", None),
         )
+
+    def _profile_orm(self, ctx: TenantContext, emp: EmployeeEntity):
+        profile = self._profiles.get_orm_by_employee_id(ctx, emp.id)
+        if profile is None:
+            raise NotFoundException("Employee profile not found")
+        return profile
+
+    def face_status(self, ctx: TenantContext):
+        from modules.ess.schemas import EssFaceStatusResponse
+
+        emp = self.resolve_employee(ctx)
+        profile = self._profile_orm(ctx, emp)
+        fp = getattr(profile, "face_auth_fingerprint", None)
+        enabled = bool(getattr(profile, "face_auth_enabled", False))
+        enrolled = bool(fp)
+        return EssFaceStatusResponse(
+            enrolled=enrolled,
+            enabled=enabled,
+            verification_required=enabled and enrolled,
+        )
+
+    def face_enroll(self, ctx: TenantContext, image_base64: str, *, enable: bool = True):
+        from modules.ess.face_utils import image_fingerprint
+        from modules.ess.schemas import EssFaceStatusResponse
+
+        emp = self.resolve_employee(ctx)
+        profile = self._profile_orm(ctx, emp)
+        try:
+            fp = image_fingerprint(image_base64)
+        except ValueError as exc:
+            raise AppException(str(exc)) from exc
+        self._profiles.update(
+            ctx,
+            profile.id,
+            face_auth_fingerprint=fp,
+            face_auth_enabled=enable,
+        )
+        return EssFaceStatusResponse(
+            enrolled=True,
+            enabled=enable,
+            verification_required=enable,
+        )
+
+    def face_verify(self, ctx: TenantContext, image_base64: str):
+        from modules.ess.face_utils import fingerprints_match, image_fingerprint
+        from modules.ess.schemas import EssFaceVerifyResponse
+
+        emp = self.resolve_employee(ctx)
+        profile = self._profile_orm(ctx, emp)
+        stored = getattr(profile, "face_auth_fingerprint", None)
+        if not stored or not getattr(profile, "face_auth_enabled", False):
+            return EssFaceVerifyResponse(verified=True, message="Face verification not required")
+        try:
+            candidate = image_fingerprint(image_base64)
+        except ValueError as exc:
+            raise AppException(str(exc)) from exc
+        if fingerprints_match(stored, candidate):
+            return EssFaceVerifyResponse(verified=True, message="Face verified")
+        raise ForbiddenException("Face does not match the enrolled profile")
+
+    def face_set_enabled(self, ctx: TenantContext, enabled: bool):
+        from modules.ess.schemas import EssFaceStatusResponse
+
+        emp = self.resolve_employee(ctx)
+        profile = self._profile_orm(ctx, emp)
+        if enabled and not getattr(profile, "face_auth_fingerprint", None):
+            raise AppException("Enroll your face before enabling verification")
+        self._profiles.update(ctx, profile.id, face_auth_enabled=enabled)
+        enrolled = bool(getattr(profile, "face_auth_fingerprint", None))
+        return EssFaceStatusResponse(
+            enrolled=enrolled,
+            enabled=enabled,
+            verification_required=enabled and enrolled,
+        )
+
+    def _workplace(self):
+        from modules.ess.workplace_service import EssWorkplaceService
+
+        return EssWorkplaceService(self._db, self)
+
+    def list_meeting_rooms(self, ctx: TenantContext):
+        return self._workplace().list_meeting_rooms(ctx)
+
+    def meeting_room_availability(self, ctx: TenantContext, *, on_date: date):
+        return self._workplace().meeting_room_availability(ctx, on_date=on_date)
+
+    def list_meeting_bookings(self, ctx: TenantContext, *, on_date: date | None = None):
+        return self._workplace().list_meeting_bookings(ctx, on_date=on_date)
+
+    def create_meeting_booking(self, ctx: TenantContext, body):
+        return self._workplace().create_meeting_booking(ctx, body)
+
+    def get_asset(self, ctx: TenantContext, asset_id: UUID):
+        return self._workplace().get_asset(ctx, asset_id)
+
+    def lookup_asset(self, ctx: TenantContext, *, code: str):
+        return self._workplace().lookup_asset(ctx, code=code)
+
+    def create_asset_ticket(self, ctx: TenantContext, asset_id: UUID, **fields):
+        return self._workplace().create_asset_ticket(ctx, asset_id, **fields)
+
+    def list_support_tickets(self, ctx: TenantContext):
+        return self._workplace().list_support_tickets(ctx)
+
+    def get_support_ticket(self, ctx: TenantContext, ticket_id: UUID):
+        return self._workplace().get_support_ticket(ctx, ticket_id)
+
+    def create_support_ticket(self, ctx: TenantContext, body):
+        return self._workplace().create_support_ticket(ctx, body)
+
+    def list_support_ticket_comments(self, ctx: TenantContext, ticket_id: UUID):
+        return self._workplace().list_support_ticket_comments(ctx, ticket_id)
+
+    def add_support_ticket_comment(self, ctx: TenantContext, ticket_id: UUID, body):
+        return self._workplace().add_support_ticket_comment(ctx, ticket_id, body)
+
+    def _compliance(self):
+        from modules.ess.compliance_service import EssComplianceService
+
+        return EssComplianceService(self._db, self)
+
+    def list_policies(self, ctx: TenantContext):
+        return self._compliance().list_policies(ctx)
+
+    def get_policy_walkthrough(self, ctx: TenantContext, policy_id: UUID):
+        return self._compliance().get_policy_walkthrough(ctx, policy_id)
+
+    def acknowledge_policy(self, ctx: TenantContext, policy_id: UUID):
+        return self._compliance().acknowledge_policy(ctx, policy_id)
+
+    def change_password(self, ctx: TenantContext, body):
+        return self._compliance().change_password(ctx, body)
