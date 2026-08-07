@@ -658,7 +658,7 @@ class LeaveRequestService:
                 title="Leave approved by manager",
                 body=f"Leave request {row.document_number} was approved by your manager and is pending HR.",
                 kind="leave",
-                notify_manager=False,
+                cc_reporting_manager=False,
             )
         except Exception:
             pass
@@ -714,7 +714,7 @@ class LeaveRequestService:
                 title="Leave approved",
                 body=f"Your leave request {row.document_number} has been approved.",
                 kind="leave",
-                notify_manager=False,
+                cc_reporting_manager=False,
             )
         except Exception:
             pass
@@ -750,7 +750,7 @@ class LeaveRequestService:
                 title="Leave rejected",
                 body=f"Your leave request {row.document_number} was rejected.",
                 kind="leave",
-                notify_manager=False,
+                cc_reporting_manager=False,
             )
         except Exception:
             pass

@@ -11,6 +11,10 @@ import {
 } from "lucide-react";
 
 import { CaseDetailDrawer } from "@/components/hr/onboarding/case-detail-drawer";
+import {
+  OnboardingDocumentPreviewDialog,
+  OnboardingDocumentRow,
+} from "@/components/hr/onboarding/onboarding-document-preview";
 import { InvitationDrawer } from "@/components/hr/onboarding/invitation-drawer";
 import { StartOnboardingDrawer } from "@/components/hr/onboarding/start-onboarding-drawer";
 import {
@@ -46,6 +50,7 @@ import {
 import type {
   InvitationChannel,
   OnboardingCase,
+  OnboardingDocument,
   OnboardingFilters,
   StartOnboardingInput,
 } from "@/types/onboarding-management";
@@ -69,6 +74,7 @@ export function OnboardingManagementPage() {
   const [startOpen, setStartOpen] = useState(false);
   const [inviteCase, setInviteCase] = useState<OnboardingCase | null>(null);
   const [detailCase, setDetailCase] = useState<OnboardingCase | null>(null);
+  const [previewDoc, setPreviewDoc] = useState<OnboardingDocument | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -371,34 +377,30 @@ export function OnboardingManagementPage() {
 
       {tab === "documents" ? (
         <div className="space-y-2">
+          <p className="text-[11px] text-muted-foreground">
+            Click a file name or <span className="font-medium text-foreground">View</span> to
+            preview. Files uploaded before this update may need to be re-uploaded from the candidate
+            portal.
+          </p>
           {(dir?.cases ?? []).flatMap((c) =>
             c.portal.documents.map((d) => (
-              <div
+              <OnboardingDocumentRow
                 key={`${c.id}-${d.id}`}
                 className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-border/70 bg-card px-3 py-2 text-xs"
-              >
-                <div>
-                  <p className="font-medium">{d.fileName}</p>
-                  <p className="text-[10px] text-muted-foreground">
-                    {c.candidateName} · {d.kind}
-                  </p>
-                </div>
-                <div className="flex items-center gap-2">
-                  <HrStatusBadge status={d.verifyStatus} />
-                  <Button
-                    type="button"
-                    size="sm"
-                    className="h-7 cursor-pointer"
-                    onClick={() => {
-                      verifyDocument(c.id, d.id, "verified");
-                      toast("Document verified");
-                      void load();
-                    }}
-                  >
-                    Verify
-                  </Button>
-                </div>
-              </div>
+                doc={d}
+                subtitle={`${c.candidateName} · ${d.kind}`}
+                onView={setPreviewDoc}
+                onVerify={() => {
+                  verifyDocument(c.id, d.id, "verified");
+                  toast("Document verified");
+                  void load();
+                }}
+                onReject={() => {
+                  verifyDocument(c.id, d.id, "rejected");
+                  toast("Document rejected");
+                  void load();
+                }}
+              />
             )),
           )}
           {(dir?.cases ?? []).every((c) => c.portal.documents.length === 0) ? (
@@ -531,6 +533,23 @@ export function OnboardingManagementPage() {
           </label>
         </div>
       </SetupDrawer>
+
+      <OnboardingDocumentPreviewDialog
+        doc={previewDoc}
+        subtitle={
+          previewDoc
+            ? (dir?.cases ?? [])
+                .flatMap((c) =>
+                  c.portal.documents.map((d) => ({
+                    d,
+                    label: `${c.candidateName} · ${d.kind}`,
+                  })),
+                )
+                .find((x) => x.d.id === previewDoc.id)?.label
+            : undefined
+        }
+        onClose={() => setPreviewDoc(null)}
+      />
 
       <StartOnboardingDrawer
         open={startOpen}

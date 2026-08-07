@@ -19,6 +19,7 @@ import {
   type ManagerRosterValidation,
   type ShiftRosterDirectory,
 } from "@/services/shift-roster-service";
+import { downloadManagerRosterXlsx } from "@/lib/roster-xlsx-export";
 
 function currentMonth(): string {
   const d = new Date();
@@ -52,6 +53,8 @@ export function DownloadManagerRosterDrawer({
     return directory.options.employees.filter((e) => e.managerId === managerId).length;
   }, [directory, managerId]);
 
+  const [downloading, setDownloading] = useState(false);
+
   function download() {
     if (!directory) return;
     if (!managerId) {
@@ -62,21 +65,23 @@ export function DownloadManagerRosterDrawer({
       toast("Month must be YYYY-MM", "error");
       return;
     }
-    try {
-      const { filename, csv, teamCount: n } = exportManagerRosterCsv(directory, managerId, month);
-      downloadTextFile(filename, csv, "text/csv");
-      toast(`Downloaded roster for ${n} employees`, "success");
-      onClose();
-    } catch (err) {
-      toast(err instanceof Error ? err.message : "Download failed", "error");
-    }
+    setDownloading(true);
+    void downloadManagerRosterXlsx(directory, managerId, month)
+      .then(({ teamCount: n }) => {
+        toast(`Downloaded Excel roster for ${n} employees`, "success");
+        onClose();
+      })
+      .catch((err) => {
+        toast(err instanceof Error ? err.message : "Download failed", "error");
+      })
+      .finally(() => setDownloading(false));
   }
 
   return (
     <SetupDrawer
       open={open}
       title="Download manager roster"
-      description="Export a month calendar CSV for one manager’s team. Send it to the manager to fill shift codes."
+      description="Export a formatted Excel workbook with shift dropdowns on each day. Upload still accepts CSV after filling."
       onClose={onClose}
       footer={
         <>
@@ -85,17 +90,41 @@ export function DownloadManagerRosterDrawer({
             variant="outline"
             className="cursor-pointer transition-colors duration-200"
             onClick={onClose}
+            disabled={downloading}
           >
             Cancel
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            className="cursor-pointer transition-colors duration-200"
+            disabled={!managerId || teamCount === 0 || downloading}
+            onClick={() => {
+              if (!directory) return;
+              try {
+                const { filename, csv, teamCount: n } = exportManagerRosterCsv(
+                  directory,
+                  managerId,
+                  month,
+                );
+                downloadTextFile(filename, csv, "text/csv");
+                toast(`Downloaded plain CSV for ${n} employees`, "success");
+              } catch (err) {
+                toast(err instanceof Error ? err.message : "CSV failed", "error");
+              }
+            }}
+          >
+            Plain CSV
           </Button>
           <Button
             size="sm"
             className="cursor-pointer transition-colors duration-200"
             onClick={download}
-            disabled={!managerId || teamCount === 0}
+            disabled={!managerId || teamCount === 0 || downloading}
           >
             <Download className="size-3.5" />
-            Download CSV
+            {downloading ? "Building…" : "Download Excel"}
           </Button>
         </>
       }
@@ -117,7 +146,7 @@ export function DownloadManagerRosterDrawer({
         <p className="text-xs text-muted-foreground">
           {managerId
             ? teamCount
-              ? `${teamCount} employee(s) included for ${month || "selected month"}. Day columns are d01–d31 (Excel-safe). Fill cells with shift codes, WO, or HO.`
+              ? `${teamCount} employee(s) for ${month || "selected month"}. Day cells use dropdowns (shift codes, WO, HO).`
               : "No employees report to this manager."
             : "Pick a manager to see team size."}
         </p>
@@ -139,10 +168,10 @@ export function DownloadManagerRosterDrawer({
           </div>
         ) : null}
         <div className="rounded-lg border border-border/60 bg-muted/30 px-3 py-2 text-[11px] text-muted-foreground">
-          <p className="font-medium text-foreground">CSV columns</p>
+          <p className="font-medium text-foreground">Excel layout</p>
           <p className="mt-1">
-            manager_code, manager_name, month, employee_code, employee_name, department, then{" "}
-            <strong>d01…d31</strong> (Excel-safe day headers — not calendar dates).
+            Teal header row, color-coded days, frozen employee columns. Lists sheet powers the shift
+            dropdown. Columns <strong>d01…d31</strong> are day-of-month.
           </p>
         </div>
       </div>

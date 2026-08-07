@@ -16,6 +16,7 @@ import {
   savePortalProgress,
   submitPortal,
 } from "@/services/onboarding-management-service";
+import { readFileAsDataUrl } from "@/services/employee-management-service";
 import {
   listPortalDocumentTypes,
   type PortalDocumentType,
@@ -265,15 +266,24 @@ export function CandidateOnboardingPortal({ token }: { token: string }) {
     if (i > 0) go(PORTAL_STEPS[i - 1].id);
   }
 
-  function upsertDocument(kind: DocumentKind, fileName: string, typeCode?: string) {
-    if (!portal || !fileName) return;
+  async function upsertDocument(kind: DocumentKind, file: File, typeCode?: string) {
+    if (!portal) return;
+    let fileDataUrl: string;
+    try {
+      fileDataUrl = await readFileAsDataUrl(file);
+    } catch {
+      setStepError("Could not read the selected file. Try again.");
+      return;
+    }
     const doc: OnboardingDocument = {
       id: crypto.randomUUID(),
       kind,
       typeCode,
-      fileName,
+      fileName: file.name,
       uploadedAt: new Date().toISOString(),
       verifyStatus: "pending",
+      fileDataUrl,
+      mimeType: file.type || undefined,
     };
     const rest = portal.documents.filter((d) => {
       if (typeCode) {
@@ -282,17 +292,20 @@ export function CandidateOnboardingPortal({ token }: { token: string }) {
       }
       return d.kind !== kind;
     });
-    patchPortal({ documents: [...rest, doc] });
+    const documents = [...rest, doc];
+    const next = { ...portal, documents };
+    setPortal(next);
+    savePortalProgress(token, next);
   }
 
-  function onPickFile(docType: PortalDocumentType, file: File | undefined) {
+  async function onPickFile(docType: PortalDocumentType, file: File | undefined) {
     if (!file) return;
     if (docType.maxSizeMb && file.size > docType.maxSizeMb * 1024 * 1024) {
       setStepError(`${docType.name} must be under ${docType.maxSizeMb} MB.`);
       return;
     }
     setStepError(null);
-    upsertDocument(asDocumentKind(docType.kind), file.name, docType.code);
+    await upsertDocument(asDocumentKind(docType.kind), file, docType.code);
   }
 
   async function handleSave() {
@@ -539,7 +552,7 @@ export function CandidateOnboardingPortal({ token }: { token: string }) {
                 onFile={(file) => {
                   if (!file) return;
                   patchPortal({ personal: { ...portal.personal, photoName: file.name } });
-                  upsertDocument("photo", file.name, "DOC-PHOTO");
+                  void upsertDocument("photo", file, "DOC-PHOTO");
                 }}
               />
             </div>
@@ -857,11 +870,7 @@ export function CandidateOnboardingPortal({ token }: { token: string }) {
                           portalDocs={portal.documents}
                           onUpload={(slipNum, file) => {
                             if (!file) return;
-                            upsertDocument(
-                              "salary_slips",
-                              file.name,
-                              `DOC-SLIPS-${slipNum}`,
-                            );
+                            void upsertDocument("salary_slips", file, `DOC-SLIPS-${slipNum}`);
                           }}
                         />
                         {types
@@ -977,7 +986,7 @@ export function CandidateOnboardingPortal({ token }: { token: string }) {
                           signature: portal.policies.signature || file.name.replace(/\.[^.]+$/, ""),
                         },
                       });
-                      upsertDocument("signature", file.name, "DOC-SIGN");
+                      void upsertDocument("signature", file, "DOC-SIGN");
                     };
                     reader.readAsDataURL(file);
                   }}

@@ -66,15 +66,24 @@ class Settings(BaseSettings):
 
     @field_validator("cors_origins", mode="before")
     @classmethod
-    def parse_cors_origins(cls, value: str | list[str]) -> list[str]:
+    def parse_cors_origins(cls, value: str | list[str] | None) -> list[str]:
+        defaults = [
+            "http://localhost:3000",
+            "http://127.0.0.1:3000",
+            "http://localhost:3001",
+            "http://127.0.0.1:3001",
+        ]
+        if value is None or (isinstance(value, str) and not value.strip()):
+            return defaults
         if isinstance(value, str):
             cleaned = value.strip().removeprefix("[").removesuffix("]")
-            return [
+            parsed = [
                 origin.strip().strip("\"'")
                 for origin in cleaned.split(",")
                 if origin.strip().strip("\"'")
             ]
-        return value
+            return parsed if parsed else defaults
+        return value if value else defaults
 
     @property
     def is_development(self) -> bool:

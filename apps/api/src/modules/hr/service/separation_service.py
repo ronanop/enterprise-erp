@@ -1,11 +1,10 @@
 """Separation service — completes via Master Data identity sync; FNF via payroll."""
 
+import copy
 from datetime import date
 from uuid import UUID
 
 from sqlalchemy.orm import Session
-
-from core.exceptions import AppException, NotFoundException
 from modules.foundation.domain.value_objects import TenantContext
 from modules.foundation.service.audit_service import AuditService
 from modules.hr.adapters.master_data_port import HrMasterDataAdapter
@@ -82,9 +81,11 @@ class SeparationService:
                 template_code="hr.separation_submitted",
                 template_name="Separation Submitted",
                 event_type="hr.separation_submitted",
-                title="Separation request submitted",
-                body=f"Separation {row.document_number} was submitted and is pending approval.",
+                title="Exit request submitted",
+                body=f"Your offboarding case {row.document_number} was submitted and is pending manager approval.",
                 kind="separation",
+                extra={"separation_id": str(row.id), "document_number": row.document_number},
+                cc_reporting_manager=True,
             )
         except Exception:
             pass
@@ -98,20 +99,56 @@ class SeparationService:
             self._engine.hr_approve(row)
         updated = self._repo.update(ctx, row_id, status=row.status)
         try:
-            from modules.hr.service.hr_notify import notify_employee
+            from modules.hr.service.hr_notify import notify_employee, notify_users_with_permission
 
-            label = "manager" if stage == "manager" else "HR"
-            notify_employee(
-                self._db,
-                tenant_id=ctx.tenant_id,
-                employee_id=row.employee_id,
-                template_code=f"hr.separation_{stage}_approved",
-                template_name=f"Separation {label.title()} Approved",
-                event_type=f"hr.separation_{stage}_approved",
-                title=f"Separation {label}-approved",
-                body=f"Separation {row.document_number} was approved by {label}.",
-                kind="separation",
-            )
+            doc = row.document_number
+            if stage == "manager":
+                notify_employee(
+                    self._db,
+                    tenant_id=ctx.tenant_id,
+                    employee_id=row.employee_id,
+                    template_code="hr.separation_manager_approved",
+                    template_name="Exit Manager Approved",
+                    event_type="hr.separation_manager_approved",
+                    title="Exit request approved by manager",
+                    body=(
+                        f"Your offboarding case {doc} was approved by your reporting manager. "
+                        "HR approval is pending."
+                    ),
+                    kind="separation",
+                    extra={"separation_id": str(row.id), "document_number": doc},
+                    cc_reporting_manager=False,
+                )
+                notify_users_with_permission(
+                    self._db,
+                    tenant_id=ctx.tenant_id,
+                    permission_code="hr.separation:approve",
+                    template_code="hr.separation_pending_hr",
+                    template_name="Exit Pending HR",
+                    event_type="hr.separation_pending_hr",
+                    title="Exit approved by manager — HR action needed",
+                    body=f"Offboarding {doc} was approved by the reporting manager. Please complete HR approval.",
+                    kind="separation",
+                    extra={"separation_id": str(row.id), "document_number": doc},
+                    exclude_user_ids={ctx.user_id} if ctx.user_id else None,
+                )
+            else:
+                notify_employee(
+                    self._db,
+                    tenant_id=ctx.tenant_id,
+                    employee_id=row.employee_id,
+                    template_code="hr.separation_hr_approved",
+                    template_name="Exit HR Approved",
+                    event_type="hr.separation_hr_approved",
+                    title="Exit request approved by HR",
+                    body=(
+                        f"Your offboarding case {doc} was approved by HR. "
+                        "Clearance and full & final settlement will follow."
+                    ),
+                    kind="separation",
+                    extra={"separation_id": str(row.id), "document_number": doc},
+                    cc_reporting_manager=False,
+                )
         except Exception:
             pass
         return updated
@@ -124,6 +161,10 @@ class SeparationService:
                 clearance["exit_interview"] = None
         return clearance
 
+    def _clearance_for_update(self, row: HrSeparation) -> dict:
+        """Deep copy so JSONB mutations always persist (avoid in-place ORM aliasing)."""
+        return copy.deepcopy(self._ensure_clearance(row))
+
     def update_checklist(
         self,
         ctx: TenantContext,
@@ -134,19 +175,21 @@ class SeparationService:
         notes: str | None = None,
     ):
         row = self.get(ctx, row_id)
-        clearance = self._ensure_clearance(row)
-        checklist = list(clearance.get("checklist") or [])
+        clearance = self._clearance_for_update(row)
+        checklist = clearance.get("checklist") or []
         found = False
+        new_checklist: list[dict] = []
         for item in checklist:
-            if str(item.get("key")) == item_key:
-                item["done"] = bool(done)
+            entry = dict(item)
+            if str(entry.get("key")) == item_key:
+                entry["done"] = bool(done)
                 if notes is not None:
-                    item["notes"] = notes
+                    entry["notes"] = notes
                 found = True
-                break
+            new_checklist.append(entry)
         if not found:
             raise AppException(f"Unknown checklist item '{item_key}'")
-        clearance["checklist"] = checklist
+        clearance["checklist"] = new_checklist
         updated = self._repo.update(ctx, row_id, clearance_json=clearance)
         self._audit.log_entity_change(
             tenant_id=ctx.tenant_id,
@@ -167,17 +210,20 @@ class SeparationService:
         interviewer_notes: str | None = None,
     ):
         row = self.get(ctx, row_id)
-        clearance = self._ensure_clearance(row)
+        clearance = self._clearance_for_update(row)
         clearance["exit_interview"] = {
             "answers": answers,
             "interviewer_notes": interviewer_notes,
             "completed_at": date.today().isoformat(),
             "completed_by": str(ctx.user_id) if ctx.user_id else None,
         }
+        new_checklist: list[dict] = []
         for item in clearance.get("checklist") or []:
-            if str(item.get("key")) == "exit_interview":
-                item["done"] = True
-                break
+            entry = dict(item)
+            if str(entry.get("key")) == "exit_interview":
+                entry["done"] = True
+            new_checklist.append(entry)
+        clearance["checklist"] = new_checklist
         updated = self._repo.update(ctx, row_id, clearance_json=clearance)
         self._audit.log_entity_change(
             tenant_id=ctx.tenant_id,
@@ -187,6 +233,47 @@ class SeparationService:
             performed_by=ctx.user_id,
         )
         return updated
+
+    def _ensure_open_payroll_period(self, ctx: TenantContext, company_id: UUID, anchor: date):
+        from sqlalchemy import select
+
+        from modules.payroll.models import PayPayrollPeriod
+        from modules.payroll.service.payroll_period_service import PayrollPeriodService
+
+        period = self._db.scalar(
+            select(PayPayrollPeriod)
+            .where(
+                PayPayrollPeriod.company_id == company_id,
+                PayPayrollPeriod.is_deleted.is_(False),
+                PayPayrollPeriod.status.in_(("open", "processing")),
+            )
+            .order_by(PayPayrollPeriod.start_date.desc())
+        )
+        if period is not None:
+            return period
+
+        y, m = anchor.year, anchor.month
+        if m == 12:
+            end = date(y, 12, 31)
+        else:
+            end = date(y, m + 1, 1)
+            from datetime import timedelta
+
+            end = end - timedelta(days=1)
+        start = date(y, m, 1)
+        code = f"{y}-{m:02d}"
+        return PayrollPeriodService(self._db).create(
+            ctx,
+            company_id=company_id,
+            branch_id=None,
+            period_code=code,
+            period_name=f"Payroll {anchor.strftime('%B %Y')}",
+            payroll_year=y,
+            payroll_month=m,
+            start_date=start,
+            end_date=end,
+            status="open",
+        )
 
     def prepare_fnf(self, ctx: TenantContext, row_id: UUID):
         """Create a final_settlement payroll run, calculate salary, add encashment + gratuity."""
@@ -201,7 +288,7 @@ class SeparationService:
             compute_leave_encashment,
             daily_rate_from_gross,
         )
-        from modules.payroll.models import PayPayrollPeriod, PayPayrollRunLine
+        from modules.payroll.models import PayPayrollRunLine
         from modules.payroll.service.payroll_run_service import PayrollRunService
 
         row = self.get(ctx, row_id)
@@ -212,21 +299,8 @@ class SeparationService:
         if row.fnf_status in {"settled", "waived"}:
             raise InvalidSeparationState(f"FNF already {row.fnf_status}")
 
-        period = self._db.scalar(
-            select(PayPayrollPeriod)
-            .where(
-                PayPayrollPeriod.company_id == row.company_id,
-                PayPayrollPeriod.is_deleted.is_(False),
-                PayPayrollPeriod.status.in_(("open", "processing")),
-            )
-            .order_by(PayPayrollPeriod.start_date.desc())
-        )
-        if period is None:
-            raise AppException(
-                "No open payroll period found — create an open period before preparing FNF"
-            )
-
         lwd = row.approved_last_working_date or row.requested_last_working_date
+        period = self._ensure_open_payroll_period(ctx, row.company_id, lwd)
         pay = PayrollRunService(self._db)
         run = pay.create(
             ctx,

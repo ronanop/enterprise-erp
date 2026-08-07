@@ -738,12 +738,27 @@ function headerToDate(header: string, month: string): string | null {
   return null;
 }
 
-/** Build manager-wise month roster CSV (matrix). */
-export function exportManagerRosterCsv(
+/** Build manager-wise month roster matrix (shared by CSV / Excel export). */
+export type ManagerRosterExportData = {
+  manager: { code: string; label: string };
+  month: string;
+  days: string[];
+  dayHeaders: string[];
+  rows: {
+    code: string;
+    name: string;
+    department: string;
+    dayValues: string[];
+  }[];
+  activeShifts: ShiftRecord[];
+  teamCount: number;
+};
+
+export function buildManagerRosterExportData(
   dir: ShiftRosterDirectory,
   managerId: string,
   month: string,
-): { filename: string; csv: string; teamCount: number } {
+): ManagerRosterExportData {
   const manager = dir.options.managers.find((m) => m.id === managerId)
     ?? dir.options.employees.find((e) => e.id === managerId);
   if (!manager) throw new Error("Manager not found");
@@ -757,6 +772,33 @@ export function exportManagerRosterCsv(
   if (!days.length) throw new Error("Invalid month (use YYYY-MM)");
 
   const dayHeaders = days.map((_, i) => dayHeader(i + 1));
+  const activeShifts = dir.shifts.filter((s) => s.status !== "inactive");
+
+  const rows = team.map((emp) => ({
+    code: emp.code,
+    name: emp.label,
+    department: emp.departmentName,
+    dayValues: days.map((d) => resolveCellValue(dir, d, emp.id)),
+  }));
+
+  return {
+    manager: { code: manager.code, label: manager.label },
+    month,
+    days,
+    dayHeaders,
+    rows,
+    activeShifts,
+    teamCount: team.length,
+  };
+}
+
+/** Build manager-wise month roster CSV (matrix). */
+export function exportManagerRosterCsv(
+  dir: ShiftRosterDirectory,
+  managerId: string,
+  month: string,
+): { filename: string; csv: string; teamCount: number } {
+  const data = buildManagerRosterExportData(dir, managerId, month);
   const header = [
     "manager_code",
     "manager_name",
@@ -764,41 +806,36 @@ export function exportManagerRosterCsv(
     "employee_code",
     "employee_name",
     "department",
-    ...dayHeaders,
+    ...data.dayHeaders,
   ].map((c) => csvEscape(c));
 
-  const activeShifts = dir.shifts.filter((s) => s.status !== "inactive");
   const legend = [
-    `# Roster month ${month} · ${days.length} days · fill cells with shift CODE (not name)`,
+    `# Roster month ${month} · ${data.days.length} days · fill cells with shift CODE (not name)`,
     `# Special: WO = weekly off · HO = holiday · blank = clear day override`,
     `# Allowed shifts: ${
-      activeShifts.length
-        ? activeShifts
-            .map((s) => `${s.shiftCode}=${s.shiftName}`)
-            .join(" | ")
+      data.activeShifts.length
+        ? data.activeShifts.map((s) => `${s.shiftCode}=${s.shiftName}`).join(" | ")
         : "(none configured — add shifts in Shift master)"
     }`,
   ];
 
-  const lines = team.map((emp) => {
-    const cells = days.map((d) => resolveCellValue(dir, d, emp.id));
-    return [
-      manager.code,
-      manager.label,
+  const lines = data.rows.map((emp) =>
+    [
+      data.manager.code,
+      data.manager.label,
       month,
       emp.code,
-      emp.label,
-      emp.departmentName,
-      ...cells,
+      emp.name,
+      emp.department,
+      ...emp.dayValues,
     ]
       .map((c) => csvEscape(String(c)))
-      .join(",");
-  });
+      .join(","),
+  );
 
-  // BOM helps Excel open UTF-8; d01 headers avoid #### date columns
   const csv = `\uFEFF${[...legend, header.join(","), ...lines].join("\n")}`;
-  const filename = `roster_${manager.code || "MGR"}_${month}.csv`;
-  return { filename, csv, teamCount: team.length };
+  const filename = `roster_${data.manager.code || "MGR"}_${month}.csv`;
+  return { filename, csv, teamCount: data.teamCount };
 }
 
 function parseCsvLine(line: string): string[] {

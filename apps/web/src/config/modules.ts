@@ -888,8 +888,8 @@ export const erpModules: ErpModule[] = [
       },
       {
         key: "separation",
-        title: "Separation",
-        description: "Resignation and exit process",
+        title: "Offboarding",
+        description: "Employee exit — resignation, clearance, FNF",
         apiPath: "/hr/separation",
       },
     ],
