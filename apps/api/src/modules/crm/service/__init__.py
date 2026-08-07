@@ -17,7 +17,7 @@ from modules.crm.service.campaign_service import CampaignService
 from modules.crm.service.company_service import CompanyService
 from modules.crm.service.contact_service import ContactService
 from modules.crm.service.feedback_service import CustomerSatisfactionService, FeedbackService
-from modules.crm.service.integration_service import CRMIntegrationService
+from modules.crm.service.kyc_record_service import KycRecordService
 from modules.crm.service.lead_service import (
     LeadActivityService,
     LeadAssignmentService,
@@ -50,6 +50,7 @@ __all__ = [
     "FeedbackService",
     "FollowupService",
     "InteractionService",
+    "KycRecordService",
     "LeadActivityService",
     "LeadAssignmentService",
     "LeadService",

@@ -85,6 +85,7 @@ export type BlueprintActionPayload = {
   content_base64?: string;
   content_type?: string;
   team_role?: string;
+  assigned_user_id?: string;
   remarks?: string;
   remark?: string;
   reason?: string;
@@ -136,6 +137,7 @@ export type Company = {
   locked: boolean;
   version: number;
   created_at?: string | null;
+  updated_at?: string | null;
 };
 
 export type CompanyFormInput = {
@@ -174,6 +176,14 @@ export async function listCompanies(): Promise<Company[]> {
   return asArray(res.data);
 }
 
+export async function peekNextCompanyAccountNumber(): Promise<string> {
+  const res = await resourceService.get<{ account_number: string }>(
+    CRM_COMPANIES_API,
+    "next-account-number",
+  );
+  return unwrap(res).account_number;
+}
+
 export async function getCompany(id: string): Promise<Company> {
   return unwrap(await resourceService.get<Company>(CRM_COMPANIES_API, id));
 }
@@ -186,15 +196,54 @@ export async function updateCompany(id: string, body: Partial<CompanyFormInput>)
   return unwrap(await resourceService.update<Company>(CRM_COMPANIES_API, id, body));
 }
 
+export async function deleteCompany(id: string): Promise<void> {
+  await resourceService.delete(CRM_COMPANIES_API, id);
+}
+
+export function companyToFormInput(company: Company, customerName?: string): CompanyFormInput {
+  const name = customerName ?? company.customer_name;
+  return {
+    branch_id: company.branch_id,
+    customer_name: name,
+    account_owner_id: company.account_owner_id,
+    account_type: company.account_type ?? "customer",
+    industry: company.industry,
+    other_industries: company.other_industries,
+    portal_id: company.portal_id,
+    source: company.source,
+    rating: company.rating,
+    first_name: company.first_name?.trim() || name,
+    last_name: company.last_name?.trim() || "—",
+    customer_email: company.customer_email?.trim() || "noreply@example.com",
+    phone: company.phone?.trim() || "—",
+    website: company.website,
+    account_ownership_id: company.account_ownership_id,
+    customer_id_ext: company.customer_id_ext,
+    role: company.role ?? "User",
+    billing_street: company.billing_street,
+    billing_city: company.billing_city,
+    billing_state: company.billing_state,
+    billing_code: company.billing_code,
+    billing_country: company.billing_country,
+    shipping_street: company.shipping_street,
+    shipping_city: company.shipping_city,
+    shipping_state: company.shipping_state,
+    shipping_code: company.shipping_code,
+    shipping_country: company.shipping_country,
+    description: company.description,
+  };
+}
+
 export type LeadCreateFromCompanyInput = {
   branch_id: string;
   first_name?: string | null;
   last_name?: string | null;
+  designation?: string | null;
   salutation?: string | null;
   mobile?: string | null;
   email?: string | null;
   lead_source_id: string;
-  owner_employee_id: string;
+  owner_employee_id?: string | null;
   assign_to_id?: string | null;
   assigned_date?: string | null;
   expected_amount?: number | null;
@@ -382,6 +431,34 @@ export async function updateOem(id: string, body: Partial<OemFormInput>): Promis
 }
 
 // ---------------------------------------------------------------------------
+// Selling entities (billing entity master for leads)
+// ---------------------------------------------------------------------------
+
+export const CRM_SELLING_ENTITIES_API = "/crm/selling-entities";
+
+export type SellingEntity = {
+  id: string;
+  company_id: string;
+  entity_code: string;
+  entity_name: string;
+  entity_email: string | null;
+  entity_contact: string | null;
+  entity_gst: string | null;
+  entity_address: string | null;
+  status: string;
+  version: number;
+};
+
+export async function listSellingEntities(): Promise<SellingEntity[]> {
+  const res = await resourceService.list<SellingEntity>(CRM_SELLING_ENTITIES_API);
+  return asArray(res.data);
+}
+
+export async function getSellingEntity(id: string): Promise<SellingEntity> {
+  return unwrap(await resourceService.get<SellingEntity>(CRM_SELLING_ENTITIES_API, id));
+}
+
+// ---------------------------------------------------------------------------
 // Sales Leads (legacy /crm/leads endpoints, filtered to sales-blueprint rows)
 // ---------------------------------------------------------------------------
 
@@ -394,9 +471,11 @@ export type SalesLead = {
   lead_code: string;
   first_name: string;
   last_name: string | null;
+  designation?: string | null;
   salutation?: string | null;
   mobile: string;
   email: string | null;
+  lead_source_id: string;
   status: string;
   blueprint_state: string;
   locked: boolean;
@@ -477,7 +556,7 @@ export async function markLeadLost(id: string, reason?: string): Promise<SalesLe
 }
 
 export type LeadConvertInput = {
-  pipeline_id: string;
+  pipeline_id?: string | null;
   opportunity_name: string;
   expected_revenue?: number;
   existing_customer_id?: string | null;
@@ -524,6 +603,7 @@ export type Opportunity = {
   customer_po_approved?: boolean;
   version: number;
   created_at?: string | null;
+  notes?: string | null;
 };
 
 export async function listOpportunities(params?: {
@@ -760,7 +840,7 @@ export async function getQuoteBlueprint(quoteId: string): Promise<BlueprintState
 
 export async function sendQuoteForApproval(
   quoteId: string,
-  body: { team_role?: string; remarks?: string | null },
+  body: { team_role?: string; assigned_user_id: string; remarks?: string | null },
 ): Promise<Quote> {
   return unwrap(
     await apiClient<Quote>(`${CRM_QUOTES_API}/${quoteId}/send-for-approval`, {
@@ -939,7 +1019,7 @@ export async function getOvfBlueprint(id: string): Promise<BlueprintState> {
 
 export async function sendOvfForApproval(
   id: string,
-  body: { team_role?: string; remarks?: string | null },
+  body: { team_role?: string; assigned_user_id: string; remarks?: string | null },
 ): Promise<Ovf> {
   return unwrap(
     await apiClient<Ovf>(`${CRM_OVF_API}/${id}/send-for-approval`, { method: "POST", body }),
@@ -974,6 +1054,30 @@ export async function applyOvfAction(
 // ---------------------------------------------------------------------------
 
 export const CRM_MY_JOBS_API = "/crm/my-jobs";
+
+export type CrmApprovalUser = {
+  id: string;
+  display_name: string;
+  email: string;
+};
+
+export async function listCrmApprovalUsers(): Promise<CrmApprovalUser[]> {
+  const res = await apiClient<CrmApprovalUser[]>(`${CRM_MY_JOBS_API}/approval-users`);
+  return asArray(res.data);
+}
+
+export type CrmApprovalInboxItem = {
+  id: string;
+  event_type: string;
+  status: string;
+  created_at: string | null;
+  payload_json: Record<string, unknown> | null;
+};
+
+export async function listCrmApprovalInbox(): Promise<CrmApprovalInboxItem[]> {
+  const res = await apiClient<CrmApprovalInboxItem[]>(`${CRM_MY_JOBS_API}/inbox`);
+  return asArray(res.data);
+}
 
 export type ApprovalTask = {
   id: string;
@@ -1093,6 +1197,10 @@ export async function createAttachment(body: AttachmentFormInput): Promise<Attac
   return unwrap(await resourceService.create<Attachment>(CRM_ATTACHMENTS_API, body));
 }
 
+export async function deleteAttachment(attachmentId: string): Promise<void> {
+  await unwrap(await resourceService.delete(CRM_ATTACHMENTS_API, attachmentId));
+}
+
 /** Open an attachment: external links/cloud URLs open directly; uploads stream via API. */
 export async function openAttachmentInNewTab(attachment: Attachment | string): Promise<void> {
   if (typeof attachment !== "string") {
@@ -1122,6 +1230,46 @@ export async function openAttachmentInNewTab(attachment: Attachment | string): P
   // returns `null` even when the new tab opened successfully.
   window.open(url, "_blank", "noopener,noreferrer");
   window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+}
+
+/** Download attachment bytes with the original file name. */
+export async function downloadAttachment(
+  attachmentId: string,
+  fileName: string,
+  attachment?: Pick<Attachment, "source" | "file_path">,
+): Promise<void> {
+  if (attachment) {
+    const source = attachment.source ?? "upload";
+    const path = attachment.file_path?.trim() ?? "";
+    if (source !== "upload" || /^https?:\/\//i.test(path)) {
+      const a = document.createElement("a");
+      a.href = path;
+      a.download = fileName;
+      a.target = "_blank";
+      a.rel = "noopener noreferrer";
+      a.click();
+      return;
+    }
+  }
+
+  const token = getAccessToken();
+  const response = await fetch(`${env.apiUrl}${CRM_ATTACHMENTS_API}/${attachmentId}/content`, {
+    headers: {
+      Accept: "*/*",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    cache: "no-store",
+  });
+  if (!response.ok) {
+    throw new Error(`Failed to download attachment (${response.status})`);
+  }
+  const blob = await response.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = fileName || "download";
+  a.click();
+  URL.revokeObjectURL(url);
 }
 
 // ---------------------------------------------------------------------------
@@ -1346,4 +1494,53 @@ export async function listEmployeeOptions(): Promise<Option[]> {
       }`.trim(),
     email: r.email ? String(r.email) : undefined,
   }));
+}
+
+// ---------------------------------------------------------------------------
+// KYC records
+// ---------------------------------------------------------------------------
+
+const CRM_KYC_API = "/crm/kyc-records";
+
+export type CrmKycRecord = {
+  id: string;
+  kyc_code: string;
+  company_account_id: string;
+  owner_employee_id: string;
+  quote_id?: string | null;
+  form_data: Record<string, unknown>;
+  status: string;
+  company_id: string;
+  branch_id: string;
+  version: number;
+};
+
+export type KycRecordFormInput = {
+  branch_id: string;
+  company_account_id: string;
+  owner_employee_id: string;
+  quote_id?: string | null;
+  form_data: Record<string, unknown>;
+};
+
+export async function listKycRecords(companyAccountId?: string): Promise<CrmKycRecord[]> {
+  const res = await resourceService.list<CrmKycRecord>(CRM_KYC_API, {
+    company_account_id: companyAccountId,
+  });
+  return asArray(res.data);
+}
+
+export async function getKycRecord(kycId: string): Promise<CrmKycRecord> {
+  return unwrap(await resourceService.get<CrmKycRecord>(CRM_KYC_API, kycId));
+}
+
+export async function createKycRecord(body: KycRecordFormInput): Promise<CrmKycRecord> {
+  return unwrap(await resourceService.create<CrmKycRecord>(CRM_KYC_API, body));
+}
+
+export async function updateKycRecord(
+  kycId: string,
+  body: Partial<KycRecordFormInput>,
+): Promise<CrmKycRecord> {
+  return unwrap(await resourceService.update<CrmKycRecord>(CRM_KYC_API, kycId, body));
 }

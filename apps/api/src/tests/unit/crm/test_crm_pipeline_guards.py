@@ -80,6 +80,29 @@ def test_quote_approve_internally_blocks_low_margin_without_force() -> None:
         service.approve_internally(ctx, quote.id, force=False)
 
 
+def test_blueprint_shows_attach_boq_after_sow_approved_without_boq() -> None:
+    service = OpportunityBlueprintService(MagicMock())
+    ctx = MagicMock()
+    opp = SimpleNamespace(
+        id=uuid4(),
+        company_id=uuid4(),
+        branch_id=uuid4(),
+        blueprint_state="deal_reg",
+        locked=False,
+        boq_attached=False,
+        sow_attached=True,
+        boq_approved=False,
+        sow_approved=True,
+        customer_po_attached=False,
+        customer_po_approved=False,
+        opportunity_name="Test Opp",
+    )
+    service.get = MagicMock(return_value=opp)
+    allowed = service.state(ctx, opp.id)["allowed_actions"]
+    assert "attach_boq" in allowed
+    assert "send_sow_approval" not in allowed
+
+
 def test_attach_requires_file_content() -> None:
     service = OpportunityBlueprintService(MagicMock())
     ctx = MagicMock()

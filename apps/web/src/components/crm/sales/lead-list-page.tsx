@@ -2,15 +2,14 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { RefreshCw, UserPlus } from "lucide-react";
+import { UserPlus } from "lucide-react";
 
-import { CrmErrorBanner, CrmListPanel, CrmPage } from "@/components/crm/crm-ui";
+import { CrmErrorBanner, CrmListPanel, CrmPage, CRM_TABLE_HEAD_ROW } from "@/components/crm/crm-ui";
 import { FinanceStatusBadge } from "@/components/finance/finance-status-badge";
 import { CrmListToolbar } from "@/components/crm/sales/crm-list-toolbar";
 import { CrmSortableTh, sortRows, useTableSort } from "@/components/crm/sales/crm-table-sort";
 import { PageHeader } from "@/components/layout/page-header";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { ApiClientError } from "@/services/api-client";
 import { formatInr, fullName, listSalesLeads, type SalesLead } from "@/services/sales-crm-service";
 
@@ -75,12 +74,6 @@ export function LeadListPage({
         <PageHeader
           title="Leads"
           description="Active sales-blueprint leads. After conversion, the deal continues under Opportunities only."
-          actions={
-            <Button type="button" variant="outline" size="sm" className="cursor-pointer" onClick={() => void load()} disabled={loading}>
-              <RefreshCw className={`size-3.5 ${loading ? "animate-spin" : ""}`} />
-              Refresh
-            </Button>
-          }
         />
       ) : null}
 
@@ -92,21 +85,6 @@ export function LeadListPage({
           subtitle="Active sales leads"
           icon={UserPlus}
           count={sorted.length}
-          actions={
-            embedded ? (
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="cursor-pointer"
-                onClick={() => void load()}
-                disabled={loading}
-              >
-                <RefreshCw className={`size-3.5 ${loading ? "animate-spin" : ""}`} />
-                Refresh
-              </Button>
-            ) : null
-          }
           search={{
             value: query,
             onChange: setQuery,
@@ -117,7 +95,7 @@ export function LeadListPage({
         <div className="erp-scroll overflow-x-auto">
           <table className="w-full min-w-[800px] text-left text-sm">
             <thead>
-              <tr className="border-b border-border/70 bg-muted/40 text-[11px] tracking-wide text-muted-foreground uppercase">
+              <tr className={CRM_TABLE_HEAD_ROW}>
                 <CrmSortableTh label="Lead" sortKey="lead" activeKey={sortBy} dir={sortDir} onSort={onSort} />
                 <CrmSortableTh label="Mobile" sortKey="mobile" activeKey={sortBy} dir={sortDir} onSort={onSort} />
                 <CrmSortableTh label="Expected Amount" sortKey="expected_amount" activeKey={sortBy} dir={sortDir} onSort={onSort} />

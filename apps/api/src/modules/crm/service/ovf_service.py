@@ -424,15 +424,24 @@ class OvfService:
         self._repo.update(ctx, ovf_id, total_margin_amount=margin_amount, total_margin_pct=margin_pct)
 
     # -- blueprint / approval workflow ------------------------------------
-    def send_for_approval(self, ctx: TenantContext, ovf_id: UUID, *, team_role: str = "management", remarks: str | None = None) -> CrmOvf:
+    def send_for_approval(
+        self,
+        ctx: TenantContext,
+        ovf_id: UUID,
+        *,
+        team_role: str = "management",
+        assigned_user_id: UUID,
+        remarks: str | None = None,
+    ) -> CrmOvf:
         ovf = self.get(ctx, ovf_id)
         sales_blueprint_engine.assert_not_locked(ovf)
         next_state = sales_blueprint_engine.transition("ovf", ovf.blueprint_state, "send_for_approval")
 
         from modules.crm.service.approval_task_service import ApprovalTaskService
 
-        ApprovalTaskService(self._db).create_task(
+        ApprovalTaskService(self._db).route_approval(
             ctx,
+            assigned_user_id=assigned_user_id,
             title=f"Approve OVF {ovf.ovf_no}",
             entity_type="ovf",
             entity_id=ovf.id,

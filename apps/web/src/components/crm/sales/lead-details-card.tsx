@@ -1,11 +1,10 @@
 "use client";
 
-import type { ReactNode } from "react";
-import Link from "next/link";
+import { Building2, FileText, MapPin, Package, Truck, UserPlus, Users } from "lucide-react";
 
-import { BlueprintStateBadge } from "@/components/crm/sales/blueprint-actions";
-import { FinanceStatusBadge } from "@/components/finance/finance-status-badge";
-import { formatInr, fullName, type Company, type Option, type SalesLead } from "@/services/sales-crm-service";
+import { CrmSection } from "@/components/crm/crm-ui";
+import { FinanceField } from "@/components/finance/journals/finance-form-field";
+import { formatInr, type Company, type Option, type SalesLead } from "@/services/sales-crm-service";
 
 function textOrDash(value: string | number | null | undefined): string {
   if (value === null || value === undefined) return "—";
@@ -13,162 +12,178 @@ function textOrDash(value: string | number | null | undefined): string {
   return text || "—";
 }
 
-function DetailItem({ label, children }: { label: string; children: ReactNode }) {
+function ReadOnlyValue({ value }: { value: string }) {
   return (
-    <div className="min-w-0">
-      <dt className="text-xs text-muted-foreground">{label}</dt>
-      <dd className="mt-1 break-words text-sm text-foreground">{children}</dd>
+    <div className="flex min-h-8 w-full items-center rounded-lg border border-input bg-muted/20 px-2.5 text-sm text-foreground">
+      {value}
     </div>
   );
+}
+
+function LeadReadOnlyField({ label, value }: { label: string; value: string }) {
+  return (
+    <FinanceField label={label}>
+      <ReadOnlyValue value={value} />
+    </FinanceField>
+  );
+}
+
+function formatLeadStatus(status: string): string {
+  if (status === "new") return "New";
+  return status.replaceAll("_", " ").replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
 type Props = {
   lead: SalesLead;
   company?: Company | null;
   employees?: Option[];
-  /** Compact header actions (e.g. link back to lead). */
-  headerAction?: ReactNode;
+  leadSources?: Option[];
 };
 
-export function LeadDetailsCard({ lead, company, employees = [], headerAction }: Props) {
-  const employeeName = (id: string | null | undefined) =>
-    id ? employees.find((employee) => employee.id === id)?.label ?? id : "—";
+export function LeadDetailsCard({
+  lead,
+  company,
+  employees = [],
+  leadSources = [],
+}: Props) {
+  const employeeName = (id: string | null | undefined) => {
+    if (!id) return "None";
+    return employees.find((employee) => employee.id === id)?.label ?? "—";
+  };
+
+  const leadSourceName = (id: string | null | undefined) => {
+    if (!id) return "None";
+    return leadSources.find((source) => source.id === id)?.label ?? "—";
+  };
+
+  const companyName = company?.customer_name ?? "—";
+  const salutation = lead.salutation?.trim() || "None";
 
   return (
-    <section className="space-y-3 rounded-xl border border-border/80 bg-card p-4 shadow-sm">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <h2 className="text-sm font-medium tracking-tight">
-          Lead Details
-          <span className="ml-2 text-xs font-normal text-muted-foreground">
-            {fullName(lead)} · {lead.lead_code}
-          </span>
-        </h2>
-        {headerAction}
-      </div>
+    <div className="space-y-5">
+      <CrmSection title="Lead Information" icon={UserPlus}>
+        <div className="grid gap-x-10 gap-y-3 md:grid-cols-2">
+          <LeadReadOnlyField label="Company" value={companyName} />
+          <LeadReadOnlyField
+            label="Project Title *"
+            value={textOrDash(lead.project_title)}
+          />
 
-      <h3 className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
-        Lead Information
-      </h3>
-      <dl className="grid grid-cols-2 gap-3 text-xs lg:grid-cols-3">
-        <DetailItem label="Lead Code">{lead.lead_code}</DetailItem>
-        <DetailItem label="Blueprint State">
-          <BlueprintStateBadge state={lead.blueprint_state} />
-        </DetailItem>
-        <DetailItem label="Status">
-          <FinanceStatusBadge status={lead.status} />
-        </DetailItem>
-        <DetailItem label="Salutation">{textOrDash(lead.salutation)}</DetailItem>
-        <DetailItem label="First Name">{textOrDash(lead.first_name)}</DetailItem>
-        <DetailItem label="Last Name">{textOrDash(lead.last_name)}</DetailItem>
-        <DetailItem label="Mobile">{textOrDash(lead.mobile)}</DetailItem>
-        <DetailItem label="Email">{textOrDash(lead.email)}</DetailItem>
-        <DetailItem label="Owner">{employeeName(lead.owner_employee_id)}</DetailItem>
-        <DetailItem label="Assign To">{employeeName(lead.assign_to_id)}</DetailItem>
-        <DetailItem label="Assigned Date">{textOrDash(lead.assigned_date)}</DetailItem>
-        <DetailItem label="Company Account">
-          {lead.company_account_id ? (
-            <Link
-              href={`/crm/companies/${lead.company_account_id}`}
-              className="cursor-pointer font-medium text-primary hover:underline"
-            >
-              {company?.customer_name ?? lead.company_account_id}
-            </Link>
-          ) : (
-            "—"
-          )}
-        </DetailItem>
-        <DetailItem label="Expected Amount">
-          {lead.expected_amount != null ? formatInr(lead.expected_amount) : "—"}
-        </DetailItem>
-        <DetailItem label="Expected Closure">{textOrDash(lead.expected_closure_date)}</DetailItem>
-        <DetailItem label="Engagement Score">{textOrDash(lead.engagement_score)}</DetailItem>
-        <DetailItem label="Portal Link">{textOrDash(lead.portal_link)}</DetailItem>
-      </dl>
+          <LeadReadOnlyField label="Email *" value={textOrDash(lead.email)} />
+          <LeadReadOnlyField label="Lead Source *" value={leadSourceName(lead.lead_source_id)} />
 
-      <h3 className="border-t border-border/70 pt-3 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
-        Opportunity / Product
-      </h3>
-      <dl className="grid grid-cols-2 gap-3 text-xs lg:grid-cols-3">
-        <DetailItem label="Project Title">{textOrDash(lead.project_title)}</DetailItem>
-        <DetailItem label="Product Type">{textOrDash(lead.product_type)}</DetailItem>
-        <DetailItem label="Sub Product Category">{textOrDash(lead.sub_product_category)}</DetailItem>
-        <DetailItem label="Sub Product">{textOrDash(lead.sub_product)}</DetailItem>
-        <DetailItem label="Sub Product Other">{textOrDash(lead.sub_product_other)}</DetailItem>
-        <DetailItem label="Requirement Type">{textOrDash(lead.requirement_type)}</DetailItem>
-        <DetailItem label="Purchase Model">{textOrDash(lead.purchase_model)}</DetailItem>
-        <DetailItem label="Deal Type">{textOrDash(lead.deal_type)}</DetailItem>
-        <DetailItem label="DR Number">{textOrDash(lead.dr_number)}</DetailItem>
-        <DetailItem label="New DR Number">{textOrDash(lead.new_dr_number)}</DetailItem>
-        <DetailItem label="Industry">{textOrDash(lead.industry)}</DetailItem>
-        <DetailItem label="Territory">{textOrDash(lead.territory)}</DetailItem>
-        <DetailItem label="Region">{textOrDash(lead.region)}</DetailItem>
-      </dl>
+          <FinanceField label="First Name *">
+            <div className="flex gap-2">
+              <div className="w-24 shrink-0">
+                <ReadOnlyValue value={salutation} />
+              </div>
+              <div className="min-w-0 flex-1">
+                <ReadOnlyValue value={textOrDash(lead.first_name)} />
+              </div>
+            </div>
+          </FinanceField>
+          <LeadReadOnlyField label="Last Name *" value={textOrDash(lead.last_name)} />
+          <LeadReadOnlyField label="Designation" value={textOrDash(lead.designation)} />
 
-      <h3 className="border-t border-border/70 pt-3 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
-        Address
-      </h3>
-      <dl className="grid grid-cols-2 gap-3 text-xs lg:grid-cols-3">
-        <DetailItem label="Street">{textOrDash(lead.street)}</DetailItem>
-        <DetailItem label="City">{textOrDash(lead.city)}</DetailItem>
-        <DetailItem label="State">{textOrDash(lead.state)}</DetailItem>
-        <DetailItem label="Zip">{textOrDash(lead.zip)}</DetailItem>
-        <DetailItem label="Country">{textOrDash(lead.country)}</DetailItem>
-      </dl>
+          <LeadReadOnlyField label="Product Type *" value={textOrDash(lead.product_type)} />
+          <LeadReadOnlyField label="Mobile *" value={textOrDash(lead.mobile)} />
 
-      <h3 className="border-t border-border/70 pt-3 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
-        OEM
-      </h3>
-      <dl className="grid grid-cols-2 gap-3 text-xs lg:grid-cols-3">
-        <DetailItem label="OEM Name">{textOrDash(lead.oem_name)}</DetailItem>
-        <DetailItem label="OEM Contact Person">{textOrDash(lead.oem_contact_person)}</DetailItem>
-        <DetailItem label="OEM Contact Number">{textOrDash(lead.oem_contact_number)}</DetailItem>
-        <DetailItem label="OEM Contact Email">{textOrDash(lead.oem_contact_email)}</DetailItem>
-      </dl>
+          <LeadReadOnlyField
+            label="Sub Product Category"
+            value={textOrDash(lead.sub_product_category)}
+          />
+          <LeadReadOnlyField label="Requirement Type *" value={textOrDash(lead.requirement_type)} />
 
-      <h3 className="border-t border-border/70 pt-3 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
-        Distributor
-      </h3>
-      <dl className="grid grid-cols-2 gap-3 text-xs lg:grid-cols-3">
-        <DetailItem label="Distributor Name">{textOrDash(lead.distributor_name)}</DetailItem>
-        <DetailItem label="Contact Person">{textOrDash(lead.distributor_contact_person)}</DetailItem>
-        <DetailItem label="Contact">{textOrDash(lead.distributor_contact)}</DetailItem>
-        <DetailItem label="Contact Email">{textOrDash(lead.distributor_contact_email)}</DetailItem>
-        <DetailItem label="Department">{textOrDash(lead.distributor_department)}</DetailItem>
-      </dl>
+          <LeadReadOnlyField label="Sub Product" value={textOrDash(lead.sub_product)} />
+          <LeadReadOnlyField label="Purchase Model *" value={textOrDash(lead.purchase_model)} />
 
-      <h3 className="border-t border-border/70 pt-3 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
-        End Customer
-      </h3>
-      <dl className="grid grid-cols-2 gap-3 text-xs lg:grid-cols-3">
-        <DetailItem label="End Customer Name">{textOrDash(lead.end_customer_name)}</DetailItem>
-        <DetailItem label="End Customer Location">{textOrDash(lead.end_customer_location)}</DetailItem>
-      </dl>
+          <LeadReadOnlyField label="Engagement Score" value={textOrDash(lead.engagement_score)} />
+          <LeadReadOnlyField label="DR Number" value={textOrDash(lead.dr_number)} />
 
-      <h3 className="border-t border-border/70 pt-3 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
-        Entity
-      </h3>
-      <dl className="grid grid-cols-2 gap-3 text-xs lg:grid-cols-3">
-        <DetailItem label="Entity Name">{textOrDash(lead.entity_name)}</DetailItem>
-        <DetailItem label="Entity Email">{textOrDash(lead.entity_email)}</DetailItem>
-        <DetailItem label="Entity Contact">{textOrDash(lead.entity_contact)}</DetailItem>
-        <DetailItem label="Entity GST">{textOrDash(lead.entity_gst)}</DetailItem>
-        <DetailItem label="Entity Address">
-          <span className="whitespace-pre-wrap">{textOrDash(lead.entity_address)}</span>
-        </DetailItem>
-      </dl>
+          <LeadReadOnlyField label="Portal Link" value={textOrDash(lead.portal_link)} />
+          <LeadReadOnlyField label="New DR Number" value={textOrDash(lead.new_dr_number)} />
 
-      <h3 className="border-t border-border/70 pt-3 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
-        Notes
-      </h3>
-      <dl className="grid gap-3 text-xs">
-        <DetailItem label="Notes">
-          <span className="whitespace-pre-wrap">{textOrDash(lead.notes)}</span>
-        </DetailItem>
-        <DetailItem label="Convert Remark">
-          <span className="whitespace-pre-wrap">{textOrDash(lead.convert_remark)}</span>
-        </DetailItem>
-        <DetailItem label="Lost Reason">{textOrDash(lead.lost_reason)}</DetailItem>
-      </dl>
-    </section>
+          <LeadReadOnlyField label="Fulfillment Type" value={textOrDash(lead.deal_type)} />
+          <LeadReadOnlyField label="Lead Owner *" value={employeeName(lead.owner_employee_id)} />
+
+          <LeadReadOnlyField
+            label="Expected Business Amount *"
+            value={lead.expected_amount != null ? formatInr(lead.expected_amount) : "—"}
+          />
+          <LeadReadOnlyField label="Lead Status" value={formatLeadStatus(lead.status)} />
+
+          <LeadReadOnlyField
+            label="Expected Closure Date *"
+            value={textOrDash(lead.expected_closure_date)}
+          />
+        </div>
+      </CrmSection>
+
+      <CrmSection title="Customer Address Information" icon={MapPin}>
+        <div className="grid gap-x-10 gap-y-3 md:grid-cols-2">
+          <LeadReadOnlyField label="Street" value={textOrDash(lead.street)} />
+          <LeadReadOnlyField label="City" value={textOrDash(lead.city)} />
+          <LeadReadOnlyField label="State" value={textOrDash(lead.state)} />
+          <LeadReadOnlyField label="Zip Code" value={textOrDash(lead.zip)} />
+          <LeadReadOnlyField label="Country" value={textOrDash(lead.country)} />
+        </div>
+      </CrmSection>
+
+      <CrmSection title="OEM Information" icon={Package}>
+        <div className="grid gap-x-10 gap-y-3 md:grid-cols-2">
+          <LeadReadOnlyField label="OEM Name *" value={textOrDash(lead.oem_name)} />
+          <LeadReadOnlyField label="OEM Contact Person" value={textOrDash(lead.oem_contact_person)} />
+          <LeadReadOnlyField label="OEM Contact Number" value={textOrDash(lead.oem_contact_number)} />
+          <LeadReadOnlyField label="OEM Contact Email" value={textOrDash(lead.oem_contact_email)} />
+        </div>
+      </CrmSection>
+
+      <CrmSection title="Distributor Information" icon={Truck}>
+        <div className="grid gap-x-10 gap-y-3 md:grid-cols-2">
+          <LeadReadOnlyField label="Distributor Name" value={textOrDash(lead.distributor_name)} />
+          <LeadReadOnlyField
+            label="Distributor Contact Person"
+            value={textOrDash(lead.distributor_contact_person)}
+          />
+          <LeadReadOnlyField
+            label="Distributor Contact Number"
+            value={textOrDash(lead.distributor_contact)}
+          />
+          <LeadReadOnlyField
+            label="Distributor Contact Email"
+            value={textOrDash(lead.distributor_contact_email)}
+          />
+        </div>
+      </CrmSection>
+
+      <CrmSection title="Customer & Industry Information" icon={Users}>
+        <div className="grid gap-x-10 gap-y-3 md:grid-cols-2">
+          <LeadReadOnlyField label="End Customer *" value={textOrDash(lead.end_customer_name)} />
+          <LeadReadOnlyField label="Industry" value={textOrDash(lead.industry) || "None"} />
+        </div>
+      </CrmSection>
+
+      <CrmSection title="Entity Information" icon={Building2}>
+        <div className="grid gap-x-10 gap-y-3 md:grid-cols-2">
+          <LeadReadOnlyField label="Entity Name *" value={textOrDash(lead.entity_name)} />
+          <LeadReadOnlyField label="Entity Email" value={textOrDash(lead.entity_email)} />
+          <LeadReadOnlyField label="Entity Address *" value={textOrDash(lead.entity_address)} />
+          <LeadReadOnlyField label="Organization" value={companyName} />
+          <LeadReadOnlyField label="Entity GST No." value={textOrDash(lead.entity_gst)} />
+          <LeadReadOnlyField
+            label="Entity Contact Number"
+            value={textOrDash(lead.entity_contact)}
+          />
+        </div>
+      </CrmSection>
+
+      <CrmSection title="Additional Information" icon={FileText}>
+        <FinanceField label="Description">
+          <div className="flex min-h-[72px] w-full rounded-lg border border-input bg-muted/20 px-2.5 py-2 text-sm whitespace-pre-wrap text-foreground">
+            {textOrDash(lead.notes)}
+          </div>
+        </FinanceField>
+      </CrmSection>
+    </div>
   );
 }

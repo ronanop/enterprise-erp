@@ -8,6 +8,16 @@ import { ArrowUpRight } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 
+/** CRM data table column header row — high contrast, readable at a glance. */
+export const CRM_TABLE_HEAD_ROW = cn(
+  "border-b border-border/80 bg-muted/60 text-xs font-extrabold tracking-wide text-foreground uppercase sm:text-[13px]",
+);
+
+/** Use on plain `<th>` cells (non-sortable columns). */
+export const CRM_TABLE_HEAD_CELL = cn(
+  "px-4 py-2.5 text-xs font-extrabold text-foreground sm:text-[13px]",
+);
+
 /** Page vertical rhythm — matches CRM dashboard. */
 export function CrmPage({
   children,

@@ -68,6 +68,7 @@ class UserResponse(BaseModel):
     tenant_id: UUID
     email: str
     display_name: str
+    employee_id: UUID | None = None
     user_type: str
     status: str
     mfa_enabled: bool

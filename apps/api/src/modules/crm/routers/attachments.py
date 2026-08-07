@@ -67,3 +67,13 @@ def get_attachment(
     db: Annotated[Session, Depends(get_db)],
 ):
     return APIResponse(message="OK", data=AttachmentService(db).get(ctx, attachment_id))
+
+
+@attachments_router.delete("/{attachment_id}", response_model=APIResponse[None])
+def delete_attachment(
+    attachment_id: UUID,
+    ctx: Annotated[TenantContext, Depends(require_permission("crm.attachment:delete"))],
+    db: Annotated[Session, Depends(get_db)],
+):
+    AttachmentService(db).delete(ctx, attachment_id)
+    return APIResponse(message="Deleted", data=None)

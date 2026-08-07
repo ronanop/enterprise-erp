@@ -1,9 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { CalendarDays, Plus, RefreshCw } from "lucide-react";
+import { CalendarDays, Plus } from "lucide-react";
 
-import { CrmErrorBanner, CrmListPanel, CrmPage } from "@/components/crm/crm-ui";
+import { CrmErrorBanner, CrmListPanel, CrmPage, CRM_TABLE_HEAD_ROW } from "@/components/crm/crm-ui";
 import { MeetingFormDialog } from "@/components/crm/sales/meeting-form-dialog";
 import { CrmListToolbar } from "@/components/crm/sales/crm-list-toolbar";
 import { CrmSortableTh, sortRows, useTableSort } from "@/components/crm/sales/crm-table-sort";
@@ -112,25 +112,14 @@ export function MeetingsListPage({
   );
 
   const actions = (
-    <div className="flex shrink-0 flex-nowrap items-center gap-2">
-      <Button
-        type="button"
-        variant="outline"
-        size="sm"
-        className="cursor-pointer"
-        onClick={() => void load()}
-      >
-        <RefreshCw className="size-3.5" /> Refresh
-      </Button>
-      <Button
-        type="button"
-        size="sm"
-        className="cursor-pointer"
-        onClick={() => setDialogOpen(true)}
-      >
-        <Plus className="size-3.5" /> New Meeting
-      </Button>
-    </div>
+    <Button
+      type="button"
+      size="sm"
+      className="cursor-pointer"
+      onClick={() => setDialogOpen(true)}
+    >
+      <Plus className="size-3.5" /> New Meeting
+    </Button>
   );
 
   return (
@@ -162,7 +151,7 @@ export function MeetingsListPage({
         <div className="erp-scroll overflow-x-auto">
           <table className="w-full min-w-[880px] text-left text-sm">
             <thead>
-              <tr className="border-b border-border/70 bg-muted/40 text-[11px] tracking-wide text-muted-foreground uppercase">
+              <tr className={CRM_TABLE_HEAD_ROW}>
                 <CrmSortableTh label="Meeting" sortKey="title" activeKey={sortBy} dir={sortDir} onSort={onSort} />
                 <CrmSortableTh label="When" sortKey="when" activeKey={sortBy} dir={sortDir} onSort={onSort} />
                 <CrmSortableTh label="Venue" sortKey="venue" activeKey={sortBy} dir={sortDir} onSort={onSort} />

@@ -4,14 +4,14 @@ import type { ReactNode } from "react";
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { ArrowLeft, Pencil, Plus, RefreshCw } from "lucide-react";
+import { ArrowLeft, Pencil } from "lucide-react";
 
 import { CrmErrorBanner, CrmPage } from "@/components/crm/crm-ui";
 import { ApprovalBanner } from "@/components/crm/sales/approval-banner";
+import { CompanyAccountActionsMenu } from "@/components/crm/sales/company-account-actions-menu";
 import { CompanyWorkspaceNav } from "@/components/crm/company-workspace-nav";
 import { DealTimeline, type DealStage } from "@/components/crm/sales/deal-timeline";
 import { PageHeader } from "@/components/layout/page-header";
-import { Button } from "@/components/ui/button";
 import {
   getCrmOpportunityContext,
   getCrmSidebarFocus,
@@ -41,7 +41,6 @@ export function CompanyWorkspaceShell({
   const [leads, setLeads] = useState<SalesLead[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [refreshKey, setRefreshKey] = useState(0);
   const [fromOpportunityId, setFromOpportunityId] = useState<string | null>(() => {
     if (typeof window === "undefined") return null;
     return getCrmSidebarFocus() === "opportunities" ? getCrmOpportunityContext() : null;
@@ -70,7 +69,7 @@ export function CompanyWorkspaceShell({
   useEffect(() => {
     const timer = window.setTimeout(() => void load(), 0);
     return () => window.clearTimeout(timer);
-  }, [load, refreshKey]);
+  }, [load]);
 
   useEffect(() => {
     // Don't steal Opportunities focus when browsing deal docs from an opportunity.
@@ -198,39 +197,13 @@ export function CompanyWorkspaceShell({
                 actions={
                   hideWorkspaceNav ? undefined : (
                     <div className="flex flex-wrap items-center gap-2">
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        className="cursor-pointer"
-                        onClick={() => setRefreshKey((value) => value + 1)}
-                      >
-                        <RefreshCw className="size-3.5" /> Refresh
-                      </Button>
                       <Link
                         href={`/crm/companies/${company.id}/edit`}
                         className="inline-flex h-7 cursor-pointer items-center gap-1.5 rounded-lg border border-border bg-background px-2.5 text-[0.8rem] font-medium text-foreground shadow-sm transition-colors duration-200 hover:bg-muted/60"
                       >
                         <Pencil className="size-3.5" /> Edit
                       </Link>
-                      {company.status !== "active" ? (
-                        <Button
-                          type="button"
-                          size="sm"
-                          className="cursor-pointer"
-                          disabled
-                          title="Company account must be active to create a lead"
-                        >
-                          <Plus className="size-3.5" /> Create Lead
-                        </Button>
-                      ) : (
-                        <Link
-                          href={`/crm/companies/${company.id}/leads/new`}
-                          className="inline-flex h-7 cursor-pointer items-center gap-1.5 rounded-lg bg-primary px-2.5 text-[0.8rem] font-medium text-primary-foreground shadow-sm transition-opacity duration-200 hover:opacity-90"
-                        >
-                          <Plus className="size-3.5" /> Create Lead
-                        </Link>
-                      )}
+                      <CompanyAccountActionsMenu company={company} />
                     </div>
                   )
                 }

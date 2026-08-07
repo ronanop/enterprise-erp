@@ -55,7 +55,7 @@ from modules.foundation.models.security import (  # noqa: E402
 from modules.foundation.service.rbac_service import RBACService  # noqa: E402
 from modules.foundation.service.user_service import UserService  # noqa: E402
 from modules.organization.models.branch import OrgBranch  # noqa: E402
-from modules.organization.models.company import OrgCompany  # noqa: E402
+from modules.master_data.models.employee import MasterEmployee  # noqa: E402
 from security.password import PasswordHasher  # noqa: E402
 
 DEMO_PASSWORD = "Secure1!"
@@ -230,6 +230,33 @@ def seed_team_users(
     return users
 
 
+def link_crm_demo_users_to_employee(
+    db,
+    tenant_id,
+    company_id,
+    users: dict[str, SecUser],
+) -> MasterEmployee | None:
+    """Point CRM demo logins at a real master_employee row (required for lead owner FK)."""
+    employee = db.scalar(
+        select(MasterEmployee)
+        .where(
+            MasterEmployee.tenant_id == tenant_id,
+            MasterEmployee.company_id == company_id,
+            MasterEmployee.is_deleted.is_(False),
+        )
+        .order_by(MasterEmployee.employee_code)
+    )
+    if employee is None:
+        return None
+    sales = users.get("sales.user@example.com")
+    for user in users.values():
+        user.employee_id = employee.id
+    if sales and not employee.user_id:
+        employee.user_id = sales.id
+    db.flush()
+    return employee
+
+
 def seed_products(db, ctx: TenantContext, company: OrgCompany) -> list[CrmProduct]:
     svc = ProductService(db)
     rows: list[CrmProduct] = []
@@ -343,6 +370,7 @@ def main() -> None:
         db.commit()
 
         users = seed_team_users(db, tenant, company, branch, perm_map)
+        link_crm_demo_users_to_employee(db, tenant.id, company.id, users)
         db.commit()
 
         rbac = RBACService(db)

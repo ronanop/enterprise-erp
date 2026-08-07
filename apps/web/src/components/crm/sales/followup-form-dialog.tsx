@@ -1,7 +1,8 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { Paperclip, X } from "lucide-react";
 
 import {
   FinanceField,
@@ -16,12 +17,17 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ApiClientError } from "@/services/api-client";
 import {
+  createAttachment,
   createFollowup,
+  createTask,
+  fileToBase64,
   listBranchOptions,
   listEmployeeOptions,
+  listOpportunities,
   type Company,
   type CrmFollowup,
   type FollowupFormInput,
+  type Opportunity,
   type Option,
 } from "@/services/sales-crm-service";
 
@@ -45,6 +51,7 @@ type Props = {
   onClose: () => void;
   onSaved: (followup: CrmFollowup) => void;
   companyAccount?: Company | null;
+  companyAccountId?: string | null;
   defaultBranchId?: string | null;
   opportunityId?: string | null;
 };
@@ -52,21 +59,35 @@ type Props = {
 type FormState = {
   branch_id: string;
   customer_name: string;
-  followup_date: string;
-  followup_time: string;
+  opportunity_id: string;
+  task_deadline_date: string;
+  task_deadline_time: string;
   notes: string;
   owner_employee_id: string;
 };
 
-function emptyForm(branchId = "", customerName = "", ownerId = ""): FormState {
+function emptyForm(
+  branchId = "",
+  customerName = "",
+  ownerId = "",
+  opportunityId = "",
+): FormState {
   return {
     branch_id: branchId,
     customer_name: customerName,
-    followup_date: todayIsoDate(),
-    followup_time: defaultTime(1),
+    opportunity_id: opportunityId,
+    task_deadline_date: todayIsoDate(),
+    task_deadline_time: defaultTime(24),
     notes: "",
     owner_employee_id: ownerId,
   };
+}
+
+function opportunityLabel(opp: Opportunity): string {
+  const name = opp.opportunity_name?.trim() || "";
+  const code = opp.opportunity_code?.trim() || "";
+  if (name && code && name !== code) return `${name} (${code})`;
+  return name || code;
 }
 
 function FieldRow({
@@ -88,28 +109,37 @@ export function FollowupFormDialog({
   onClose,
   onSaved,
   companyAccount,
+  companyAccountId,
   defaultBranchId,
   opportunityId,
 }: Props) {
+  const resolvedAccountId = companyAccount?.id ?? companyAccountId ?? "";
   const [branches, setBranches] = useState<Option[]>([]);
   const [employees, setEmployees] = useState<Option[]>([]);
+  const [opportunities, setOpportunities] = useState<Opportunity[]>([]);
   const [form, setForm] = useState<FormState>(() => emptyForm());
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [mandateOpen, setMandateOpen] = useState(false);
   const [mandateMessage, setMandateMessage] = useState("");
+  const [pendingFiles, setPendingFiles] = useState<File[]>([]);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (!open) return;
     let cancelled = false;
     void (async () => {
-      const [branchRows, employeeRows] = await Promise.all([
+      const [branchRows, employeeRows, opportunityRows] = await Promise.all([
         listBranchOptions().catch(() => [] as Option[]),
         listEmployeeOptions().catch(() => [] as Option[]),
+        resolvedAccountId
+          ? listOpportunities({ company_account_id: resolvedAccountId }).catch(() => [] as Opportunity[])
+          : Promise.resolve([] as Opportunity[]),
       ]);
       if (cancelled) return;
       setBranches(branchRows);
       setEmployees(employeeRows);
+      setOpportunities(opportunityRows);
       const branchId =
         defaultBranchId ||
         companyAccount?.branch_id ||
@@ -119,23 +149,34 @@ export function FollowupFormDialog({
         companyAccount?.account_owner_id ||
         employeeRows[0]?.id ||
         "";
+      const presetOpportunity =
+        opportunityId && opportunityRows.some((row) => row.id === opportunityId)
+          ? opportunityId
+          : opportunityRows[0]?.id ?? "";
       setForm(
-        emptyForm(branchId, companyAccount?.customer_name ?? "", ownerId),
+        emptyForm(
+          branchId,
+          companyAccount?.customer_name ?? "",
+          ownerId,
+          presetOpportunity,
+        ),
       );
+      setPendingFiles([]);
+      if (fileInputRef.current) fileInputRef.current.value = "";
       setError(null);
     })();
     return () => {
       cancelled = true;
     };
-  }, [open, companyAccount, defaultBranchId]);
+  }, [open, companyAccount, companyAccountId, defaultBranchId, opportunityId, resolvedAccountId]);
 
   if (!open) return null;
 
   async function onSubmit() {
     const missing: string[] = [];
     if (!form.customer_name.trim()) missing.push("Customer Name");
-    if (!form.followup_date) missing.push("Date");
-    if (!form.followup_time) missing.push("Time");
+    if (!form.task_deadline_date) missing.push("Task deadline date");
+    if (!form.task_deadline_time) missing.push("Task deadline time");
     if (!form.owner_employee_id) missing.push("Team Member");
     if (!form.branch_id) missing.push("Branch");
     if (missing.length > 0) {
@@ -146,18 +187,48 @@ export function FollowupFormDialog({
     setSaving(true);
     setError(null);
     try {
-      const followupAt = new Date(`${form.followup_date}T${form.followup_time}:00`).toISOString();
+      const scheduledAt = new Date(
+        `${form.task_deadline_date}T${form.task_deadline_time}:00`,
+      ).toISOString();
+      const selectedOpportunity =
+        opportunities.find((row) => row.id === form.opportunity_id) ?? null;
       const payload: FollowupFormInput = {
         branch_id: form.branch_id,
         owner_employee_id: form.owner_employee_id,
-        followup_at: followupAt,
+        followup_at: scheduledAt,
         followup_type: "call",
-        company_account_id: companyAccount?.id ?? null,
+        company_account_id: resolvedAccountId || null,
         customer_name: form.customer_name.trim(),
         notes: form.notes.trim() || null,
-        opportunity_id: opportunityId ?? null,
+        opportunity_id: form.opportunity_id || opportunityId || null,
       };
       const saved = await createFollowup(payload);
+      const taskDueAt = scheduledAt;
+      await createTask({
+        branch_id: form.branch_id,
+        title: `Follow-up: ${form.customer_name.trim()}`,
+        description: form.notes.trim() || null,
+        owner_employee_id: form.owner_employee_id,
+        assigned_to_employee_id: form.owner_employee_id,
+        due_at: taskDueAt,
+        priority: "medium",
+        opportunity_id: form.opportunity_id || opportunityId || null,
+        account_name: form.customer_name.trim(),
+        opportunity_name: selectedOpportunity?.opportunity_name ?? null,
+      });
+      for (const file of pendingFiles) {
+        const content_base64 = await fileToBase64(file);
+        await createAttachment({
+          entity_type: "followup",
+          entity_id: saved.id,
+          branch_id: form.branch_id,
+          company_id: companyAccount?.company_id ?? null,
+          file_name: file.name,
+          category: "other",
+          content_base64,
+          content_type: file.type || "application/octet-stream",
+        });
+      }
       onSaved(saved);
       onClose();
     } catch (err) {
@@ -206,24 +277,42 @@ export function FollowupFormDialog({
             />
           </FieldRow>
 
-          <div className="grid gap-3 sm:grid-cols-2">
-            <FieldRow label="Date" required>
+          <FieldRow label="Opportunity Name">
+            <FinanceSelect
+              value={form.opportunity_id}
+              onChange={(e) => setForm((f) => ({ ...f, opportunity_id: e.target.value }))}
+            >
+              <option value="">Select opportunity</option>
+              {opportunities.map((opp) => (
+                <option key={opp.id} value={opp.id}>
+                  {opportunityLabel(opp)}
+                </option>
+              ))}
+            </FinanceSelect>
+          </FieldRow>
+
+          <FieldRow label="Task deadline" required>
+            <div className="grid gap-3 sm:grid-cols-2">
               <Input
                 type="date"
-                value={form.followup_date}
-                onChange={(e) => setForm((f) => ({ ...f, followup_date: e.target.value }))}
+                value={form.task_deadline_date}
+                onChange={(e) =>
+                  setForm((f) => ({ ...f, task_deadline_date: e.target.value }))
+                }
                 className="h-8"
+                aria-label="Task deadline date"
               />
-            </FieldRow>
-            <FieldRow label="Time" required>
               <Input
                 type="time"
-                value={form.followup_time}
-                onChange={(e) => setForm((f) => ({ ...f, followup_time: e.target.value }))}
+                value={form.task_deadline_time}
+                onChange={(e) =>
+                  setForm((f) => ({ ...f, task_deadline_time: e.target.value }))
+                }
                 className="h-8"
+                aria-label="Task deadline time"
               />
-            </FieldRow>
-          </div>
+            </div>
+          </FieldRow>
 
           <FieldRow label="Remark">
             <FinanceTextarea
@@ -231,6 +320,57 @@ export function FollowupFormDialog({
               onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))}
               rows={3}
             />
+            <div className="mt-2 space-y-2">
+              <input
+                ref={fileInputRef}
+                type="file"
+                className="sr-only"
+                multiple
+                disabled={saving}
+                onChange={(e) => {
+                  const picked = Array.from(e.target.files ?? []);
+                  if (picked.length === 0) return;
+                  setPendingFiles((current) => [...current, ...picked]);
+                  e.target.value = "";
+                }}
+              />
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="cursor-pointer"
+                disabled={saving}
+                onClick={() => fileInputRef.current?.click()}
+              >
+                <Paperclip className="size-3.5" aria-hidden="true" />
+                Attachment
+              </Button>
+              {pendingFiles.length > 0 ? (
+                <ul className="space-y-1 text-xs text-muted-foreground">
+                  {pendingFiles.map((file, index) => (
+                    <li
+                      key={`${file.name}-${file.size}-${index}`}
+                      className="flex items-center justify-between gap-2 rounded-md border border-border/60 px-2 py-1"
+                    >
+                      <span className="min-w-0 truncate text-foreground">{file.name}</span>
+                      <button
+                        type="button"
+                        className="cursor-pointer shrink-0 text-muted-foreground transition-colors duration-200 hover:text-foreground"
+                        disabled={saving}
+                        aria-label={`Remove ${file.name}`}
+                        onClick={() =>
+                          setPendingFiles((current) =>
+                            current.filter((_, fileIndex) => fileIndex !== index),
+                          )
+                        }
+                      >
+                        <X className="size-3.5" />
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
+            </div>
           </FieldRow>
 
           <FieldRow label="Internal Team Member" required>
@@ -282,7 +422,7 @@ export function FollowupFormDialog({
             disabled={saving}
             onClick={() => void onSubmit()}
           >
-            {saving ? "Saving…" : "Save Follow-up"}
+            {saving ? "Saving…" : "Create Follow-up"}
           </Button>
         </div>
       </div>

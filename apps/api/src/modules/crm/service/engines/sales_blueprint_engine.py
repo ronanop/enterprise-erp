@@ -67,9 +67,11 @@ _TRANSITIONS: dict[str, dict[str, dict[str, str]]] = {
             "lost": "lost",
         },
         "deal_reg": {
+            "attach_boq": "deal_reg",
             "attach_sow": "deal_reg",
             "deal_reg": "oem_pending",
             "lost": "lost",
+            "send_boq_approval": "boq_approval",
             "send_sow_approval": "boq_approval",
         },
         "oem_pending": {"oem_received": "oem_attached", "lost": "lost"},

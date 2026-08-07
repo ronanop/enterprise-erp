@@ -94,6 +94,7 @@ def me(
             tenant_id=user.tenant_id,
             email=user.email,
             display_name=user.display_name,
+            employee_id=user.employee_id,
             user_type=user.user_type,
             status=user.status,
             mfa_enabled=user.mfa_enabled,

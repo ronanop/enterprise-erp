@@ -1,5 +1,6 @@
 "use client";
 
+import { CRM_TABLE_HEAD_ROW } from "@/components/crm/crm-ui";
 import { useState } from "react";
 import { Pencil, Plus, Trash2, X } from "lucide-react";
 
@@ -233,7 +234,7 @@ export function QuoteLineTable({
       <div className="erp-scroll overflow-x-auto">
         <table className="w-full min-w-[960px] text-left text-sm">
           <thead>
-            <tr className="border-b border-border/70 bg-muted/40 text-[11px] tracking-wide text-muted-foreground uppercase">
+            <tr className={CRM_TABLE_HEAD_ROW}>
               <th className="px-3 py-2">#</th>
               <th className="px-3 py-2">Product</th>
               <th className="px-3 py-2">HSN</th>

@@ -50,6 +50,32 @@ class ApprovalTaskRepository(CrmScopedRepository):
         stmt = self.apply_crm_filter(stmt, CrmApprovalTask, ctx, branch_scoped=True)
         return list(self.db.scalars(stmt).all())
 
+    def cancel_pending_siblings(
+        self,
+        ctx: TenantContext,
+        entity_type: str,
+        entity_id: UUID,
+        action: str | None,
+        *,
+        except_id: UUID,
+    ) -> None:
+        if not action:
+            return
+        stmt = select(CrmApprovalTask).where(
+            CrmApprovalTask.entity_type == entity_type,
+            CrmApprovalTask.entity_id == entity_id,
+            CrmApprovalTask.action == action,
+            CrmApprovalTask.status == "pending",
+            CrmApprovalTask.id != except_id,
+            CrmApprovalTask.is_deleted.is_(False),
+        )
+        stmt = self.apply_crm_filter(stmt, CrmApprovalTask, ctx, branch_scoped=True)
+        for row in self.db.scalars(stmt).all():
+            row.status = "cancelled"
+            row.updated_by = ctx.user_id
+            row.updated_at = utcnow()
+        self.db.flush()
+
     def find_open_for_entity(self, ctx: TenantContext, entity_type: str, entity_id: UUID) -> CrmApprovalTask | None:
         stmt = select(CrmApprovalTask).where(
             CrmApprovalTask.entity_type == entity_type,

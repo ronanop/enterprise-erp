@@ -3,6 +3,7 @@
 from datetime import date, datetime, timezone
 from uuid import UUID
 
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from core.exceptions import ConflictException, NotFoundException
@@ -23,7 +24,10 @@ from modules.crm.service.engines import (
 )
 from modules.crm.service.integration_service import CRMIntegrationService
 from modules.foundation.domain.value_objects import TenantContext
+from modules.foundation.models.security import SecUser
 from modules.foundation.service.audit_service import AuditService
+from modules.master_data.models.employee import MasterEmployee
+from modules.master_data.repository.employee_repository import EmployeeRepository
 
 
 class LeadSourceService:
@@ -142,9 +146,70 @@ class LeadService:
         if patched:
             self._db.flush()
 
+    def _resolve_owner_employee_id(self, ctx: TenantContext, candidate: UUID | None) -> UUID:
+        """Ensure lead owner references a real master_employee row (FK on crm_lead)."""
+        repo = EmployeeRepository(self._db)
+        if candidate is not None:
+            row = repo.get_by_id(ctx, candidate)
+            if row is not None:
+                return candidate
+
+        linked = repo.get_by_user_id(ctx, ctx.user_id) if ctx.user_id else None
+        if linked is not None:
+            return linked.id
+
+        user: SecUser | None = None
+        if ctx.user_id:
+            user = self._db.scalar(
+                select(SecUser).where(
+                    SecUser.id == ctx.user_id,
+                    SecUser.tenant_id == ctx.tenant_id,
+                    SecUser.is_deleted.is_(False),
+                )
+            )
+
+        if user and user.employee_id:
+            row = repo.get_by_id(ctx, user.employee_id)
+            if row is not None:
+                return user.employee_id
+
+        if user and user.email:
+            email_row = self._db.scalar(
+                select(MasterEmployee).where(
+                    MasterEmployee.tenant_id == ctx.tenant_id,
+                    MasterEmployee.is_deleted.is_(False),
+                    func.lower(MasterEmployee.email) == user.email.lower(),
+                )
+            )
+            if email_row is not None:
+                if user.employee_id != email_row.id:
+                    user.employee_id = email_row.id
+                if email_row.user_id != user.id:
+                    email_row.user_id = user.id
+                    email_row.updated_by = ctx.user_id
+                self._db.flush()
+                return email_row.id
+
+        company_id = ctx.company_id
+        if company_id:
+            scoped = repo.list_employees(ctx, company_id=company_id)
+            if len(scoped) == 1:
+                return scoped[0].id
+
+        scoped = repo.list_employees(ctx)
+        if len(scoped) == 1:
+            return scoped[0].id
+
+        raise ConflictException(
+            "Lead owner must be a valid employee. Select an owner from the list, or ask an admin "
+            "to link your login to an employee in master data."
+        )
+
     def create(self, ctx: TenantContext, *, branch_id: UUID, company_id: UUID | None = None, **fields):
         cid = self._scope.resolve_company_id(ctx, company_id)
         self._scope.validate_branch_access(ctx, branch_id)
+        fields.pop("owner_employee_id", None)
+        fields["owner_employee_id"] = self._resolve_owner_employee_id(ctx, None)
         code = self._numbers.generate(CrmEntityType.LEAD, cid, CrmLead, "lead_code")
         fields.setdefault("document_date", date.today())
         fields.setdefault("status", LeadStatus.NEW.value)
@@ -200,7 +265,7 @@ class LeadService:
         ctx: TenantContext,
         lead_id: UUID,
         *,
-        pipeline_id: UUID,
+        pipeline_id: UUID | None,
         opportunity_name: str,
         expected_revenue: float = 0,
         existing_customer_id: UUID | None = None,
@@ -208,6 +273,13 @@ class LeadService:
         remark: str | None = None,
     ):
         lead = self.get(ctx, lead_id)
+        if pipeline_id is None:
+            from modules.crm.repository.pipeline_repository import PipelineRepository
+
+            pipelines = PipelineRepository(self._db).list_pipelines(ctx, lead.company_id)
+            if not pipelines:
+                raise ConflictException("No sales pipeline is configured for this company")
+            pipeline_id = pipelines[0].id
         if lead.company_account_id is not None:
             # Sales-blueprint lead (rule #1/#2): lifecycle is governed by
             # ``blueprint_state``, not the legacy ``status`` qualification
@@ -244,7 +316,7 @@ class LeadService:
             "customer_id": customer_id,
             "expected_revenue": expected_revenue or lead.expected_amount or 0,
             "expected_close_date": lead.expected_closure_date,
-            "probability_percent": 25,
+            "probability_percent": lead.engagement_score if lead.engagement_score is not None else 25,
             "current_stage": "qualification",
         }
         # Rule #2: an Opportunity is only ever created "for the sales process"

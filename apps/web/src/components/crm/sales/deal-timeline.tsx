@@ -3,7 +3,9 @@
 import Link from "next/link";
 import { ArrowRight, Building2, Check, FileText, Handshake, Target, Trophy, X } from "lucide-react";
 
+import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
+import type { OpportunityTimelineEvent } from "@/services/sales-crm-service";
 
 export type DealStage = "company" | "lead" | "opportunity" | "quote" | "ovf" | "won";
 type DealLinks = Partial<Record<DealStage, string>>;
@@ -21,6 +23,55 @@ const STEPS: Array<{ key: DealStage; label: string; icon: typeof Building2 }> = 
   { key: "ovf", label: "OVF", icon: FileText },
   { key: "won", label: "Won", icon: Trophy },
 ];
+
+export function getDealStageLabel(stage: DealStage): string {
+  return STEPS.find((step) => step.key === stage)?.label ?? stage;
+}
+
+function humanizeToken(value: string): string {
+  return value.replaceAll("_", " ").replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+/** Status label aligned with the deal stepper and opportunity history timeline. */
+export function resolveDealTimelineStatusLabel(options: {
+  stage: DealStage;
+  lost?: boolean;
+  timelineEvents?: OpportunityTimelineEvent[] | null;
+}): string {
+  if (options.lost) return "Lost";
+  const events = options.timelineEvents ?? [];
+  const latest = events.length > 0 ? events[events.length - 1] : null;
+  if (latest?.title?.trim()) return latest.title.trim();
+  if (latest?.to_state?.trim()) return humanizeToken(latest.to_state);
+  return getDealStageLabel(options.stage);
+}
+
+export function DealTimelineStatusBadge({
+  stage,
+  lost,
+  timelineEvents,
+  className,
+}: {
+  stage: DealStage;
+  lost?: boolean;
+  timelineEvents?: OpportunityTimelineEvent[] | null;
+  className?: string;
+}) {
+  const label = resolveDealTimelineStatusLabel({ stage, lost, timelineEvents });
+  return (
+    <Badge
+      variant="outline"
+      className={cn(
+        "font-medium",
+        lost && "border-destructive/50 text-destructive",
+        className,
+      )}
+      title={label}
+    >
+      {label}
+    </Badge>
+  );
+}
 
 /**
  * Navigable stepper for the sales blueprint. Existing records become links,

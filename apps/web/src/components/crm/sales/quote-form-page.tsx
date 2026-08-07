@@ -190,19 +190,19 @@ export function QuoteFormPage({
         const mappedLines =
           lineRows.length > 0
             ? lineRows.map((line) => ({
-                key: line.id,
-                serverId: line.id,
-                product_name: line.product_name,
-                hsn_sac: line.hsn_sac ?? "",
-                description: line.description ?? "",
-                line_type: line.line_type || "hardware",
-                qty: String(line.qty ?? 1),
-                unit_cost: String(line.unit_cost ?? 0),
-                unit_sell: String(line.unit_cost ?? 0),
-                margin_pct: String(line.margin_pct ?? 0),
-                gst_pct: String(line.gst_pct ?? 0),
-                vendorFile: null,
-              }))
+              key: line.id,
+              serverId: line.id,
+              product_name: line.product_name,
+              hsn_sac: line.hsn_sac ?? "",
+              description: line.description ?? "",
+              line_type: line.line_type || "hardware",
+              qty: String(line.qty ?? 1),
+              unit_cost: String(line.unit_cost ?? 0),
+              unit_sell: String(line.unit_cost ?? 0),
+              margin_pct: String(line.margin_pct ?? 0),
+              gst_pct: String(line.gst_pct ?? 0),
+              vendorFile: null,
+            }))
             : [newLine()];
         setLines(mappedLines);
         setInitialLineIds(lineRows.map((line) => line.id));
@@ -243,14 +243,14 @@ export function QuoteFormPage({
 
       const billingAddress = companyRow
         ? [
-            companyRow.billing_street,
-            companyRow.billing_city,
-            companyRow.billing_state,
-            companyRow.billing_code,
-            companyRow.billing_country,
-          ]
-            .filter(Boolean)
-            .join(", ")
+          companyRow.billing_street,
+          companyRow.billing_city,
+          companyRow.billing_state,
+          companyRow.billing_code,
+          companyRow.billing_country,
+        ]
+          .filter(Boolean)
+          .join(", ")
         : "";
       const primaryContact = contactRows.find((contact) => contact.is_primary) ?? contactRows[0];
       const ownerLabel =
@@ -522,7 +522,7 @@ export function QuoteFormPage({
 
       <CrmSection title="Quote Information" icon={FileText} className="min-w-0 overflow-x-clip">
         <div className="grid min-w-0 gap-x-6 gap-y-3 md:grid-cols-2">
-          <FinanceField label="Customer's Project Title">
+          <FinanceField label="Project Title">
             <Input
               value={form.project_title}
               onChange={(event) => setField("project_title", event.target.value)}
@@ -598,17 +598,6 @@ export function QuoteFormPage({
           <FinanceField label="Version">
             <Input value={isEdit ? String(quote?.version ?? 1) : "1"} disabled />
           </FinanceField>
-          <FinanceField label="Approval Status">
-            <Input
-              value={
-                isEdit
-                  ? (quote?.approval_status ?? "").replaceAll("_", " ") || "-"
-                  : "Not required"
-              }
-              disabled
-              className="capitalize"
-            />
-          </FinanceField>
         </div>
       </CrmSection>
 
@@ -623,11 +612,12 @@ export function QuoteFormPage({
       </CrmSection>
 
       <CrmSection title="Additional Information" icon={FileText} className="min-w-0 overflow-x-clip">
-        <div className="min-w-0 space-y-3">
-          <FinanceField label="Sales Order ID"><Input value={opportunity?.sales_order_id ?? ""} disabled /></FinanceField>
-          <FinanceField label="Description"><FinanceTextarea value={form.description} onChange={(e) => setField("description", e.target.value)} /></FinanceField>
-          <FinanceField label="Reason For Discount"><FinanceTextarea value={form.reason_for_discount} onChange={(e) => setField("reason_for_discount", e.target.value)} /></FinanceField>
-        </div>
+        <FinanceField label="Remark">
+          <FinanceTextarea
+            value={form.description}
+            onChange={(e) => setField("description", e.target.value)}
+          />
+        </FinanceField>
       </CrmSection>
 
       <CrmSection title="Terms and Conditions" icon={Scale} className="min-w-0 overflow-x-clip">

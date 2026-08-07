@@ -2,20 +2,23 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, ClipboardCheck, Pencil, RefreshCw, Trophy } from "lucide-react";
+import { ArrowLeft, ClipboardCheck, Download, IndianRupee, Pencil, Trophy } from "lucide-react";
 
 import {
-  CrmDetailGrid,
-  CrmDetailItem,
   CrmErrorBanner,
   CrmHeadlineBand,
   CrmHeadlineStat,
   CrmPage,
   CrmSection,
 } from "@/components/crm/crm-ui";
+import {
+  CrmReadOnlyField,
+  CrmReadOnlyTextarea,
+  textOrDash,
+} from "@/components/crm/sales/crm-readonly-field";
 import { ApprovalBanner } from "@/components/crm/sales/approval-banner";
-import { BlueprintActions, BlueprintStateBadge } from "@/components/crm/sales/blueprint-actions";
-import { DealTimeline } from "@/components/crm/sales/deal-timeline";
+import { BlueprintActions } from "@/components/crm/sales/blueprint-actions";
+import { DealTimeline, DealTimelineStatusBadge } from "@/components/crm/sales/deal-timeline";
 import {
   OvfOrderLinesSection,
   customerRowsFromOvfLines,
@@ -23,9 +26,9 @@ import {
   type CustomerChargeRow,
   type VendorChargeRow,
 } from "@/components/crm/sales/ovf-order-lines-section";
-import { FinanceStatusBadge } from "@/components/finance/finance-status-badge";
 import { PageHeader } from "@/components/layout/page-header";
 import { Button } from "@/components/ui/button";
+import { exportOvfPdf } from "@/lib/crm/export-ovf-pdf";
 import { ApiClientError } from "@/services/api-client";
 import {
   applyOvfAction,
@@ -50,10 +53,14 @@ import {
   type Quote,
 } from "@/services/sales-crm-service";
 
-function textOrDash(value: string | number | null | undefined): string {
-  if (value === null || value === undefined) return "—";
-  const text = String(value).trim();
-  return text || "—";
+function formatOvfApprovalStatus(status: string): string {
+  const map: Record<string, string> = {
+    not_required: "None",
+    pending: "Pending",
+    approved: "Approved",
+    rejected: "Rejected",
+  };
+  return map[status] ?? status.replaceAll("_", " ");
 }
 
 export function OvfDetailPage({ ovfId }: { ovfId: string }) {
@@ -69,6 +76,7 @@ export function OvfDetailPage({ ovfId }: { ovfId: string }) {
   const [error, setError] = useState<string | null>(null);
   const [banner, setBanner] = useState<{ text: string; tone: "success" | "error" } | null>(null);
   const [busy, setBusy] = useState(false);
+  const [exporting, setExporting] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -113,7 +121,15 @@ export function OvfDetailPage({ ovfId }: { ovfId: string }) {
     setError(null);
     try {
       if (action === "send_for_approval") {
-        await sendOvfForApproval(ovfId, { team_role: payload.team_role, remarks: payload.remarks });
+        const assignedUserId = payload.assigned_user_id;
+        if (typeof assignedUserId !== "string" || !assignedUserId.trim()) {
+          throw new ApiClientError("Select an approver before sending for approval.", 400);
+        }
+        await sendOvfForApproval(ovfId, {
+          team_role: typeof payload.team_role === "string" ? payload.team_role : undefined,
+          assigned_user_id: assignedUserId,
+          remarks: typeof payload.remarks === "string" ? payload.remarks : null,
+        });
       } else if (action === "share_to_scm") {
         await shareOvfToScm(ovfId);
       } else if (action === "deal_won") {
@@ -157,6 +173,7 @@ export function OvfDetailPage({ ovfId }: { ovfId: string }) {
   }
 
   if (!ovf || !blueprint) return null;
+  const ovfRecord = ovf;
 
   const ownerFromEmployee = opportunity?.owner_employee_id
     ? employees.find((row) => row.id === opportunity.owner_employee_id)?.label
@@ -199,9 +216,9 @@ export function OvfDetailPage({ ovfId }: { ovfId: string }) {
   );
   const shippingCountry = textOrDash(
     ovf.shipping_country ||
-      quote?.shipping_country ||
-      company?.shipping_country ||
-      company?.billing_country,
+    quote?.shipping_country ||
+    company?.shipping_country ||
+    company?.billing_country,
   );
   const shippingContact = textOrDash(ovf.shipping_contact_person || quote?.entity_contact);
   const timelineLinks = {
@@ -215,32 +232,54 @@ export function OvfDetailPage({ ovfId }: { ovfId: string }) {
     ...(ovf.deal_won ? { won: `/crm/ovf/${ovf.id}` } : {}),
   };
 
+  function onExportPdf() {
+    setExporting(true);
+    setError(null);
+    try {
+      exportOvfPdf({
+        ovf: ovfRecord,
+        quote,
+        opportunity,
+        customerName: customerName === "—" ? "-" : customerName,
+        accountName: accountName === "—" ? "-" : accountName,
+        quoteName: quoteName === "—" ? "-" : quoteName,
+        ownerName: ownerName === "—" ? "-" : ownerName,
+        billingAddress: billingAddress === "—" ? "-" : billingAddress,
+        billingState: billingState === "—" ? "-" : billingState,
+        billingCountry: billingCountry === "—" ? "-" : billingCountry,
+        billingContact: billingContact === "—" ? "-" : billingContact,
+        shippingAddress: shippingAddress === "—" ? "-" : shippingAddress,
+        shippingState: shippingState === "—" ? "-" : shippingState,
+        shippingCountry: shippingCountry === "—" ? "-" : shippingCountry,
+        shippingContact: shippingContact === "—" ? "-" : shippingContact,
+        customerRows,
+        vendorRows,
+        createdBy: ownerName === "—" ? null : ownerName,
+        modifiedBy: ownerName === "—" ? null : ownerName,
+      });
+      setBanner({ text: "OVF PDF exported.", tone: "success" });
+    } catch (err) {
+      const message = err instanceof ApiClientError ? err.message : "Failed to export OVF PDF";
+      setBanner({ text: message, tone: "error" });
+    } finally {
+      setExporting(false);
+    }
+  }
+
   return (
     <CrmPage>
-      <div className="flex flex-wrap items-center justify-between gap-2">
+      <div>
         <Link
           href="/crm/ovf"
           className="inline-flex cursor-pointer items-center gap-1 text-xs font-medium text-primary transition-opacity duration-200 hover:opacity-80"
         >
           <ArrowLeft className="size-3.5" /> OVF
         </Link>
-        <Button type="button" variant="outline" size="sm" className="cursor-pointer" onClick={() => void load()}>
-          <RefreshCw className="size-3.5" /> Refresh
-        </Button>
       </div>
 
       <DealTimeline
         current={ovf.deal_won ? "won" : "ovf"}
         links={timelineLinks}
-        nextStep={
-          ovf.deal_won
-            ? undefined
-            : {
-                label: "Complete OVF",
-                description:
-                  "Use the blueprint actions on this screen through Share to SCM and Deal Won.",
-              }
-        }
       />
       <ApprovalBanner locked={blueprint.locked} approvalStatus={ovf.approval_status} label="This OVF" />
 
@@ -256,7 +295,18 @@ export function OvfDetailPage({ ovfId }: { ovfId: string }) {
         description={quote ? `From Quote ${quote.quote_no}` : "Order Value Form"}
         actions={
           <div className="flex shrink-0 flex-wrap items-center gap-2">
-            <BlueprintStateBadge state={blueprint.state} />
+            <DealTimelineStatusBadge stage={ovf.deal_won ? "won" : "ovf"} />
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-7 cursor-pointer px-2.5 text-[0.8rem] transition-colors duration-200"
+              disabled={exporting || loading}
+              onClick={() => onExportPdf()}
+            >
+              <Download className={`size-3.5 ${exporting ? "animate-pulse" : ""}`} />
+              {exporting ? "Exporting…" : "Export PDF"}
+            </Button>
             {!ovf.locked && !ovf.deal_won && !ovf.shared_to_scm ? (
               <Link
                 href={`/crm/ovf/${ovf.id}/edit`}
@@ -320,85 +370,84 @@ export function OvfDetailPage({ ovfId }: { ovfId: string }) {
         </div>
       </CrmHeadlineBand>
 
-      <CrmSection title="OVF Details" subtitle="Module, shipping, and commercial charges" icon={ClipboardCheck}>
-        <h3 className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
-          OVF Module Information
-        </h3>
-        <CrmDetailGrid className="mt-3">
-          <CrmDetailItem label="Customer Name">{customerName}</CrmDetailItem>
-          <CrmDetailItem label="Quote Name">{quoteName}</CrmDetailItem>
-          <CrmDetailItem label="Quote No.">{textOrDash(quote?.quote_no)}</CrmDetailItem>
-          <CrmDetailItem label="Account">{accountName}</CrmDetailItem>
-          <CrmDetailItem label="OVF Module Owner">{ownerName}</CrmDetailItem>
-          <CrmDetailItem label="PO Number">{textOrDash(ovf.po_number)}</CrmDetailItem>
-          <CrmDetailItem label="Delivery Period">{textOrDash(ovf.delivery_period)}</CrmDetailItem>
-          <CrmDetailItem label="OVF No.">{ovf.ovf_no}</CrmDetailItem>
-          <CrmDetailItem label="OVF sent to SCM team">{ovf.shared_to_scm ? "Yes" : "No"}</CrmDetailItem>
-          <CrmDetailItem label="Approval Status">
-            <FinanceStatusBadge status={ovf.approval_status} />
-          </CrmDetailItem>
-          <CrmDetailItem label="Blueprint State">
-            <span className="capitalize">{ovf.blueprint_state.replaceAll("_", " ")}</span>
-          </CrmDetailItem>
-          <CrmDetailItem label="Opportunity">
-            {opportunity ? (
-              <Link
-                href={`/crm/opportunities/${opportunity.id}`}
-                className="cursor-pointer font-medium text-primary underline underline-offset-2 transition-opacity duration-200 hover:opacity-80"
-              >
-                {opportunity.opportunity_name}
-              </Link>
-            ) : (
-              "—"
-            )}
-          </CrmDetailItem>
-          <CrmDetailItem label="Billing Address">
-            <span className="whitespace-pre-wrap">{billingAddress}</span>
-          </CrmDetailItem>
-          <CrmDetailItem label="Billing State">{billingState}</CrmDetailItem>
-          <CrmDetailItem label="Billing Country">{billingCountry}</CrmDetailItem>
-          <CrmDetailItem label="Billing Contact Person">{billingContact}</CrmDetailItem>
-          <CrmDetailItem label="Shipping Address">
-            <span className="whitespace-pre-wrap">{shippingAddress}</span>
-          </CrmDetailItem>
-          <CrmDetailItem label="Shipping State">{shippingState}</CrmDetailItem>
-          <CrmDetailItem label="Shipping Country">{shippingCountry}</CrmDetailItem>
-          <CrmDetailItem label="Shipping Contact Person">{shippingContact}</CrmDetailItem>
-          <CrmDetailItem label="Installation/Service Details">
-            <span className="whitespace-pre-wrap">{textOrDash(ovf.installation_details)}</span>
-          </CrmDetailItem>
-        </CrmDetailGrid>
-
-        <h3 className="mt-4 border-t border-border/70 pt-3 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
-          Technology Segment &amp; Sub Technology Segment
-        </h3>
-        <CrmDetailGrid className="mt-3">
-          <CrmDetailItem label="Technology Segment">{textOrDash(ovf.technology_segment)}</CrmDetailItem>
-          <CrmDetailItem label="Sub Technology Segment">{textOrDash(ovf.sub_technology_segment)}</CrmDetailItem>
-        </CrmDetailGrid>
-
-        <h3 className="mt-4 border-t border-border/70 pt-3 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
-          Charges and Details
-        </h3>
-        <CrmDetailGrid className="mt-3">
-          <CrmDetailItem label="Vendor Payment Terms (days)">{ovf.vendor_payment_days}</CrmDetailItem>
-          <CrmDetailItem label="Customer Payment Term (days)">{ovf.customer_payment_days}</CrmDetailItem>
-          <CrmDetailItem label="Finance Cost (%)">{ovf.finance_cost_pct}%</CrmDetailItem>
-          <CrmDetailItem label="Total Margin in Percentage">{ovf.total_margin_pct}%</CrmDetailItem>
-          <CrmDetailItem label="Total Margin in Amount">
-            {formatInrPrecise(ovf.total_margin_amount)}
-          </CrmDetailItem>
-          <CrmDetailItem label="Freight Charges (₹)">{formatInr(ovf.freight)}</CrmDetailItem>
-          <CrmDetailItem label="Additional Charges (₹)">{formatInr(ovf.additional_charges)}</CrmDetailItem>
-          <CrmDetailItem label="Deal Won">{ovf.deal_won ? "Yes" : "No"}</CrmDetailItem>
-          <CrmDetailItem label="Deal Won Amount">
-            {ovf.deal_won_amount != null ? formatInr(ovf.deal_won_amount) : "—"}
-          </CrmDetailItem>
-          <CrmDetailItem label="Version">{ovf.version}</CrmDetailItem>
-        </CrmDetailGrid>
+      <CrmSection title="OVF Module Information" icon={ClipboardCheck}>
+        <div className="grid gap-x-10 gap-y-3 md:grid-cols-2">
+          <CrmReadOnlyField label="Customer Name" value={textOrDash(ovf.customer_name)} />
+          <CrmReadOnlyField label="Quote Name" value={textOrDash(ovf.quote_name)} />
+          <CrmReadOnlyField label="Billing Address" value={textOrDash(ovf.billing_address)} />
+          <CrmReadOnlyField label="Quote No" value={textOrDash(quote?.quote_no)} />
+          <CrmReadOnlyField label="Billing State" value={textOrDash(ovf.billing_state)} />
+          <CrmReadOnlyField label="OVF Module Owner" value={textOrDash(ovf.owner_name)} />
+          <CrmReadOnlyField
+            label="Billing Contact Person"
+            value={textOrDash(ovf.billing_contact_person)}
+          />
+          <CrmReadOnlyField label="Shipping Address *" value={textOrDash(ovf.shipping_address)} />
+          <CrmReadOnlyField label="Billing Country" value={textOrDash(ovf.billing_country)} />
+          <CrmReadOnlyField label="Shipping State" value={textOrDash(ovf.shipping_state)} />
+          <CrmReadOnlyField label="PO Number *" value={textOrDash(ovf.po_number)} />
+          <CrmReadOnlyField
+            label="Shipping Contact Person"
+            value={textOrDash(ovf.shipping_contact_person)}
+          />
+          <CrmReadOnlyField label="Delivery Period *" value={textOrDash(ovf.delivery_period)} />
+          <CrmReadOnlyField label="Shipping Country" value={textOrDash(ovf.shipping_country)} />
+          <CrmReadOnlyTextarea
+            label="Installation/Service Details"
+            value={textOrDash(ovf.installation_details)}
+          />
+          <CrmReadOnlyField label="Account" value={textOrDash(ovf.account_name)} />
+          <CrmReadOnlyField
+            label="Technology Segment"
+            value={textOrDash(ovf.technology_segment) || "None"}
+          />
+          <CrmReadOnlyField
+            label="Sub Technology Segment"
+            value={textOrDash(ovf.sub_technology_segment) || "None"}
+          />
+          <CrmReadOnlyField
+            label="OVF sent to SCM team"
+            value={ovf.shared_to_scm ? "Yes" : "No"}
+          />
+        </div>
       </CrmSection>
 
       <OvfOrderLinesSection customerRows={customerRows} vendorRows={vendorRows} disabled />
+
+      <CrmSection title="Charges and Details" icon={IndianRupee}>
+        <div className="grid gap-x-10 gap-y-3 md:grid-cols-2">
+          <CrmReadOnlyField
+            label="Total Margin in Amount"
+            value={formatInrPrecise(ovf.total_margin_amount)}
+          />
+          <CrmReadOnlyField
+            label="Vendor Payments Terms"
+            value={String(ovf.vendor_payment_days)}
+          />
+          <CrmReadOnlyField
+            label="Total Margin in Percentage"
+            value={`${ovf.total_margin_pct}%`}
+          />
+          <CrmReadOnlyField
+            label="Customer Payment Term"
+            value={String(ovf.customer_payment_days)}
+          />
+          <CrmReadOnlyField
+            label="Opportunity"
+            value={textOrDash(opportunity?.opportunity_name)}
+          />
+          <CrmReadOnlyField label="Freight Charges (₹)" value={formatInr(ovf.freight)} />
+          <CrmReadOnlyField
+            label="Approval Status"
+            value={formatOvfApprovalStatus(ovf.approval_status)}
+          />
+          <CrmReadOnlyField label="Finance Cost (%)" value={`${ovf.finance_cost_pct}%`} />
+          <CrmReadOnlyField
+            label="Additional Charges (₹)"
+            value={formatInr(ovf.additional_charges)}
+          />
+        </div>
+      </CrmSection>
     </CrmPage>
   );
 }

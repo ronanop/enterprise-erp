@@ -45,6 +45,7 @@ class CrmLead(Base, *CrmTransactionMixin):
     document_date: Mapped[date] = mapped_column(Date, nullable=False)
     first_name: Mapped[str] = mapped_column(String(100), nullable=False)
     last_name: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    designation: Mapped[str | None] = mapped_column(String(100), nullable=True)
     company_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
     email: Mapped[str | None] = mapped_column(String(255), nullable=True)
     mobile: Mapped[str] = mapped_column(String(50), nullable=False)

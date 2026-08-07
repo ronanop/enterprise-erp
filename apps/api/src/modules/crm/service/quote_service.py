@@ -384,15 +384,24 @@ class QuoteService:
         }
 
     # -- blueprint / approval workflow ---------------------------------
-    def send_for_approval(self, ctx: TenantContext, quote_id: UUID, *, team_role: str = "management", remarks: str | None = None) -> CrmQuote:
+    def send_for_approval(
+        self,
+        ctx: TenantContext,
+        quote_id: UUID,
+        *,
+        team_role: str = "management",
+        assigned_user_id: UUID,
+        remarks: str | None = None,
+    ) -> CrmQuote:
         quote = self.get(ctx, quote_id)
         sales_blueprint_engine.assert_not_locked(quote)
         next_state = sales_blueprint_engine.transition("quote", quote.quote_stage, "send_for_approval")
 
         from modules.crm.service.approval_task_service import ApprovalTaskService
 
-        ApprovalTaskService(self._db).create_task(
+        ApprovalTaskService(self._db).route_approval(
             ctx,
+            assigned_user_id=assigned_user_id,
             title=f"Approve Quote {quote.quote_no} — margin review",
             entity_type="quote",
             entity_id=quote.id,
@@ -438,6 +447,14 @@ class QuoteService:
                     "Reject is only available for quotes pending Management approval via My Jobs"
                 )
             next_state = sales_blueprint_engine.transition("quote", quote.quote_stage, "reject_internally")
+            from modules.crm.service.attachment_service import AttachmentService
+
+            AttachmentService(self._db).remove_entity_attachments_by_category(
+                ctx,
+                "quote",
+                quote_id,
+                "vendor_quote",
+            )
             row = self._repo.update(ctx, quote_id, quote_stage=next_state, approval_status="rejected", locked=False)
             self._log(ctx, quote, quote.quote_stage, next_state, "reject_internally", payload.get("remark"))
             return row

@@ -1,9 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { ClipboardList, Plus, RefreshCw } from "lucide-react";
+import { ClipboardList, Plus } from "lucide-react";
 
-import { CrmErrorBanner, CrmListPanel, CrmPage } from "@/components/crm/crm-ui";
+import { CrmErrorBanner, CrmListPanel, CrmPage, CRM_TABLE_HEAD_ROW } from "@/components/crm/crm-ui";
 import { FollowupFormDialog } from "@/components/crm/sales/followup-form-dialog";
 import { CrmListToolbar } from "@/components/crm/sales/crm-list-toolbar";
 import { CrmSortableTh, sortRows, useTableSort } from "@/components/crm/sales/crm-table-sort";
@@ -21,7 +21,7 @@ import {
   type Option,
 } from "@/services/sales-crm-service";
 
-type SortKey = "customer_name" | "date" | "time" | "remark" | "team_member" | "status";
+type SortKey = "customer_name" | "date" | "time" | "remark" | "task_deadline" | "team_member" | "status";
 
 function formatDate(iso: string): string {
   const d = new Date(iso);
@@ -33,6 +33,13 @@ function formatTime(iso: string): string {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return iso.length >= 16 ? iso.slice(11, 16) : "—";
   return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+}
+
+function formatTaskDeadline(iso: string): string {
+  const date = formatDate(iso);
+  const time = formatTime(iso);
+  if (date === "—" || !iso) return "—";
+  return time === "—" ? date : `${date} ${time}`;
 }
 
 export function FollowupsListPage({
@@ -98,6 +105,7 @@ export function FollowupsListPage({
         date: (r) => r.followup_at,
         time: (r) => formatTime(r.followup_at),
         remark: (r) => r.notes,
+        task_deadline: (r) => r.followup_at,
         team_member: (r) => employeeName(r.owner_employee_id),
         status: (r) => r.status,
       }),
@@ -106,25 +114,14 @@ export function FollowupsListPage({
   );
 
   const actions = (
-    <div className="flex shrink-0 flex-nowrap items-center gap-2">
-      <Button
-        type="button"
-        variant="outline"
-        size="sm"
-        className="cursor-pointer"
-        onClick={() => void load()}
-      >
-        <RefreshCw className="size-3.5" /> Refresh
-      </Button>
-      <Button
-        type="button"
-        size="sm"
-        className="cursor-pointer"
-        onClick={() => setDialogOpen(true)}
-      >
-        <Plus className="size-3.5" /> Follow Up
-      </Button>
-    </div>
+    <Button
+      type="button"
+      size="sm"
+      className="cursor-pointer"
+      onClick={() => setDialogOpen(true)}
+    >
+      <Plus className="size-3.5" /> Create Follow Up
+    </Button>
   );
 
   return (
@@ -154,13 +151,14 @@ export function FollowupsListPage({
         />
 
         <div className="erp-scroll overflow-x-auto">
-          <table className="w-full min-w-[800px] text-left text-sm">
+          <table className="w-full min-w-[960px] text-left text-sm">
             <thead>
-              <tr className="border-b border-border/70 bg-muted/40 text-[11px] tracking-wide text-muted-foreground uppercase">
+              <tr className={CRM_TABLE_HEAD_ROW}>
                 <CrmSortableTh label="Customer Name" sortKey="customer_name" activeKey={sortBy} dir={sortDir} onSort={onSort} />
                 <CrmSortableTh label="Date" sortKey="date" activeKey={sortBy} dir={sortDir} onSort={onSort} />
                 <CrmSortableTh label="Time" sortKey="time" activeKey={sortBy} dir={sortDir} onSort={onSort} />
                 <CrmSortableTh label="Remark" sortKey="remark" activeKey={sortBy} dir={sortDir} onSort={onSort} />
+                <CrmSortableTh label="Task deadline" sortKey="task_deadline" activeKey={sortBy} dir={sortDir} onSort={onSort} />
                 <CrmSortableTh label="Team Member" sortKey="team_member" activeKey={sortBy} dir={sortDir} onSort={onSort} />
                 <CrmSortableTh label="Status" sortKey="status" activeKey={sortBy} dir={sortDir} onSort={onSort} />
               </tr>
@@ -168,13 +166,13 @@ export function FollowupsListPage({
             <tbody>
               {loading && sorted.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="px-4 py-8 text-center text-muted-foreground">
+                  <td colSpan={7} className="px-4 py-8 text-center text-muted-foreground">
                     Loading…
                   </td>
                 </tr>
               ) : sorted.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="px-4 py-8 text-center text-muted-foreground">
+                  <td colSpan={7} className="px-4 py-8 text-center text-muted-foreground">
                     No follow-ups yet.
                   </td>
                 </tr>
@@ -191,6 +189,9 @@ export function FollowupsListPage({
                     <td className="px-4 py-2.5 text-muted-foreground">{formatTime(row.followup_at)}</td>
                     <td className="max-w-[240px] px-4 py-2.5 text-muted-foreground">
                       <span className="line-clamp-2">{row.notes || "—"}</span>
+                    </td>
+                    <td className="px-4 py-2.5 text-muted-foreground whitespace-nowrap">
+                      {formatTaskDeadline(row.followup_at)}
                     </td>
                     <td className="px-4 py-2.5">
                       <Badge variant="outline" className="font-normal">
@@ -213,6 +214,7 @@ export function FollowupsListPage({
         onClose={() => setDialogOpen(false)}
         onSaved={() => void load()}
         companyAccount={companyAccount}
+        companyAccountId={companyAccountId}
         defaultBranchId={companyAccount?.branch_id}
       />
     </CrmPage>

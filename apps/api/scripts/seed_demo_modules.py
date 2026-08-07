@@ -6237,6 +6237,11 @@ def main() -> None:
 
         print("Seeding organization…")
         dept, _bu, loc, cc, _pc = seed_org(db, tenant.id, company.id, branch.id, admin.id)
+        from scripts.platform_admin_employee import ensure_platform_admin_employee
+
+        ensure_platform_admin_employee(
+            db, tenant=tenant, company=company, branch=branch, admin=admin
+        )
         print("Seeding master data…")
         (
             uom,

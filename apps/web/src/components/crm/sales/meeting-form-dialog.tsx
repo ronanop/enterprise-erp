@@ -35,18 +35,9 @@ const VENUES = [
 ] as const;
 
 const RELATED_TO = [
-  { value: "others", label: "Others" },
-  { value: "leads", label: "Leads" },
-  { value: "contacts", label: "Contacts" },
-  { value: "opportunities", label: "Opportunities" },
-] as const;
-
-const REPEAT_OPTIONS = [
-  { value: "none", label: "None" },
-  { value: "daily", label: "Daily" },
-  { value: "weekly", label: "Weekly" },
-  { value: "monthly", label: "Monthly" },
-  { value: "yearly", label: "Yearly" },
+  { value: "company", label: "Company" },
+  { value: "oem", label: "OEM" },
+  { value: "distributor", label: "Distributor" },
 ] as const;
 
 const REMINDER_OPTIONS = [
@@ -58,12 +49,6 @@ const REMINDER_OPTIONS = [
   { value: "30_minutes", label: "30 minutes before" },
   { value: "1_hour", label: "1 hour before" },
   { value: "1_day", label: "1 day before" },
-] as const;
-
-const PARTICIPANT_REMINDER_OPTIONS = [
-  { value: "none", label: "None" },
-  { value: "email", label: "Email" },
-  { value: "popup", label: "Popup" },
 ] as const;
 
 function todayIsoDate(): string {
@@ -85,7 +70,7 @@ type Props = {
   open: boolean;
   onClose: () => void;
   onSaved: (meeting: CrmMeeting) => void;
-  /** Prefill Account when opened from a company detail page. */
+  /** Prefill company when opened from a company detail page. */
   companyAccount?: Company | null;
   defaultBranchId?: string | null;
 };
@@ -104,12 +89,9 @@ type FormState = {
   tagged_employee_id: string;
   participants_text: string;
   related_to: string;
-  repeat_rule: string;
-  participants_reminder: string;
   company_account_id: string;
   notes: string;
   reminder_primary: string;
-  reminder_secondary: string;
 };
 
 function emptyForm(branchId = "", accountId = "", hostId = ""): FormState {
@@ -127,13 +109,10 @@ function emptyForm(branchId = "", accountId = "", hostId = ""): FormState {
     organizer_employee_id: hostId,
     tagged_employee_id: "",
     participants_text: "",
-    related_to: "others",
-    repeat_rule: "none",
-    participants_reminder: "none",
+    related_to: "company",
     company_account_id: accountId,
     notes: "",
     reminder_primary: "15_minutes",
-    reminder_secondary: "none",
   };
 }
 
@@ -242,10 +221,10 @@ export function MeetingFormDialog({
     setTouched(true);
     const missing: string[] = [];
     if (!form.title.trim()) missing.push("Title");
-    if (!form.meeting_mode) missing.push("Meeting Venue");
+    if (!form.meeting_mode) missing.push("Meeting Type");
     if (!form.meeting_date) missing.push("From");
     if (!form.end_date) missing.push("To");
-    if (!form.company_account_id) missing.push("Account");
+    if (!form.company_account_id) missing.push("Company Name");
     if (!form.organizer_employee_id) missing.push("Host");
     if (!form.branch_id) missing.push("Branch");
     if (missing.length > 0) {
@@ -269,11 +248,11 @@ export function MeetingFormDialog({
         all_day: form.all_day,
         location: form.location.trim() || null,
         meeting_mode: form.meeting_mode,
-        related_to: form.related_to || "others",
-        repeat_rule: form.repeat_rule || "none",
-        participants_reminder: form.participants_reminder || "none",
+        related_to: form.related_to || "company",
+        repeat_rule: "none",
+        participants_reminder: "none",
         reminder_primary: form.reminder_primary || "none",
-        reminder_secondary: form.reminder_secondary || "none",
+        reminder_secondary: "none",
         company_account_id: form.company_account_id,
         organizer_employee_id: form.organizer_employee_id,
         tagged_employee_id: form.tagged_employee_id || null,
@@ -329,7 +308,7 @@ export function MeetingFormDialog({
             />
           </FieldRow>
 
-          <FieldRow label="Meeting Venue" required>
+          <FieldRow label="Meeting Type" required>
             <FinanceSelect
               value={form.meeting_mode}
               onChange={(e) => set("meeting_mode", e.target.value)}
@@ -480,35 +459,7 @@ export function MeetingFormDialog({
             </FinanceSelect>
           </FieldRow>
 
-          <FieldRow label="Repeat">
-            <FinanceSelect
-              value={form.repeat_rule}
-              onChange={(e) => set("repeat_rule", e.target.value)}
-              className="h-9 rounded-none border-0 border-b border-border px-0 shadow-none focus-visible:border-primary focus-visible:ring-0"
-            >
-              {REPEAT_OPTIONS.map((item) => (
-                <option key={item.value} value={item.value}>
-                  {item.label}
-                </option>
-              ))}
-            </FinanceSelect>
-          </FieldRow>
-
-          <FieldRow label="Participants Reminder">
-            <FinanceSelect
-              value={form.participants_reminder}
-              onChange={(e) => set("participants_reminder", e.target.value)}
-              className="h-9 rounded-none border-0 border-b border-border px-0 shadow-none focus-visible:border-primary focus-visible:ring-0"
-            >
-              {PARTICIPANT_REMINDER_OPTIONS.map((item) => (
-                <option key={item.value} value={item.value}>
-                  {item.label}
-                </option>
-              ))}
-            </FinanceSelect>
-          </FieldRow>
-
-          <FieldRow label="Account" required>
+          <FieldRow label="Company Name" required>
             <div className="relative">
               <div
                 className={cn(
@@ -527,7 +478,7 @@ export function MeetingFormDialog({
                     setAccountQuery(selectedAccount?.customer_name ?? "");
                   }}
                   className="h-8 flex-1 rounded-none border-0 px-0 shadow-none focus-visible:ring-0"
-                  placeholder="Search account"
+                  placeholder="Search company name"
                   aria-invalid={accountInvalid}
                 />
                 <Search className="size-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
@@ -535,7 +486,7 @@ export function MeetingFormDialog({
               {accountOpen ? (
                 <ul className="absolute z-10 mt-1 max-h-48 w-full overflow-auto rounded-lg border border-border/80 bg-card py-1 shadow-md">
                   {filteredAccounts.length === 0 ? (
-                    <li className="px-3 py-2 text-xs text-muted-foreground">No accounts found</li>
+                    <li className="px-3 py-2 text-xs text-muted-foreground">No companies found</li>
                   ) : (
                     filteredAccounts.map((account) => (
                       <li key={account.id}>
@@ -572,30 +523,17 @@ export function MeetingFormDialog({
           </FieldRow>
 
           <FieldRow label="Reminder">
-            <div className="space-y-2">
-              <FinanceSelect
-                value={form.reminder_primary}
-                onChange={(e) => set("reminder_primary", e.target.value)}
-                className="h-9 rounded-none border-0 border-b border-border px-0 shadow-none focus-visible:border-primary focus-visible:ring-0"
-              >
-                {REMINDER_OPTIONS.map((item) => (
-                  <option key={item.value} value={item.value}>
-                    {item.label}
-                  </option>
-                ))}
-              </FinanceSelect>
-              <FinanceSelect
-                value={form.reminder_secondary}
-                onChange={(e) => set("reminder_secondary", e.target.value)}
-                className="h-9 rounded-none border-0 border-b border-border px-0 shadow-none focus-visible:border-primary focus-visible:ring-0"
-              >
-                {REMINDER_OPTIONS.map((item) => (
-                  <option key={`sec-${item.value}`} value={item.value}>
-                    {item.label}
-                  </option>
-                ))}
-              </FinanceSelect>
-            </div>
+            <FinanceSelect
+              value={form.reminder_primary}
+              onChange={(e) => set("reminder_primary", e.target.value)}
+              className="h-9 rounded-none border-0 border-b border-border px-0 shadow-none focus-visible:border-primary focus-visible:ring-0"
+            >
+              {REMINDER_OPTIONS.map((item) => (
+                <option key={item.value} value={item.value}>
+                  {item.label}
+                </option>
+              ))}
+            </FinanceSelect>
           </FieldRow>
         </div>
 

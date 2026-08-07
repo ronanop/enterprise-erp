@@ -27,18 +27,20 @@ import {
 } from "@/components/finance/journals/finance-form-field";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { ApiClientError } from "@/services/api-client";
+import { ApiClientError, authService } from "@/services/api-client";
+import type { UserProfile } from "@/types/api";
 import {
   createLeadFromCompany,
   createOem,
   getCompany,
-  listEmployeeOptions,
   listLeadSourceOptions,
   listOems,
+  listSellingEntities,
   type Company,
   type LeadCreateFromCompanyInput,
   type Oem,
   type Option,
+  type SellingEntity,
 } from "@/services/sales-crm-service";
 
 const SALUTATIONS = ["Mr.", "Ms.", "Mrs.", "Dr."] as const;
@@ -174,6 +176,7 @@ const EMPTY: LeadCreateFromCompanyInput = {
   salutation: "",
   first_name: "",
   last_name: "",
+  designation: "",
   mobile: "",
   email: "",
   lead_source_id: "",
@@ -222,7 +225,8 @@ export function LeadFormPage({ companyAccountId }: { companyAccountId: string })
   const router = useRouter();
   const [company, setCompany] = useState<Company | null>(null);
   const [leadSources, setLeadSources] = useState<Option[]>([]);
-  const [employees, setEmployees] = useState<Option[]>([]);
+  const [leadOwnerLabel, setLeadOwnerLabel] = useState("");
+  const [industryOther, setIndustryOther] = useState("");
   const [form, setForm] = useState<LeadCreateFromCompanyInput>(EMPTY);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -235,34 +239,47 @@ export function LeadFormPage({ companyAccountId }: { companyAccountId: string })
   const [oemDraft, setOemDraft] = useState<OemDraft>(EMPTY_OEM_DRAFT);
   const [oemSaving, setOemSaving] = useState(false);
   const [oemDialogError, setOemDialogError] = useState<string | null>(null);
+  const [entityCatalog, setEntityCatalog] = useState<SellingEntity[]>([]);
+  const [entityPick, setEntityPick] = useState("");
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [companyRow, sources, emps, oems] = await Promise.all([
+      const [companyRow, sources, meResponse, oems, entities] = await Promise.all([
         getCompany(companyAccountId),
         listLeadSourceOptions().catch(() => []),
-        listEmployeeOptions().catch(() => []),
+        authService.me().catch(() => null),
         listOems().catch(() => []),
+        listSellingEntities().catch(() => []),
       ]);
+      const mePayload = meResponse?.data;
+      let meUser: UserProfile | undefined;
+      if (mePayload && typeof mePayload === "object" && "user" in mePayload) {
+        meUser = (mePayload as { user?: UserProfile }).user;
+      } else {
+        meUser = mePayload as UserProfile | undefined;
+      }
+      const loggedInLabel =
+        meUser?.display_name?.trim() ||
+        meUser?.full_name?.trim() ||
+        meUser?.email?.trim() ||
+        "";
+      setLeadOwnerLabel(loggedInLabel);
       setCompany(companyRow);
       setLeadSources(sources);
-      setEmployees(emps);
       setOemCatalog(oems);
+      setEntityCatalog(entities);
+      const rawIndustry = companyRow.industry ?? "";
+      if (rawIndustry && !INDUSTRIES.includes(rawIndustry)) {
+        setIndustryOther(rawIndustry);
+      } else {
+        setIndustryOther("");
+      }
       const sourceLabel = companyRow.source.replaceAll("_", " ").toLowerCase();
       const inheritedSource = sources.find(
         (source) => source.label.trim().toLowerCase() === sourceLabel,
       );
       setForm((f) => {
-        const billingAddress = [
-          companyRow.billing_street,
-          companyRow.billing_city,
-          companyRow.billing_state,
-          companyRow.billing_code,
-          companyRow.billing_country,
-        ]
-          .filter(Boolean)
-          .join(", ");
         return {
           ...f,
           branch_id: companyRow.branch_id,
@@ -271,25 +288,15 @@ export function LeadFormPage({ companyAccountId }: { companyAccountId: string })
           mobile: companyRow.phone ?? "",
           email: companyRow.customer_email ?? "",
           lead_source_id: f.lead_source_id || inheritedSource?.id || "",
-          industry: companyRow.industry,
+          industry:
+            rawIndustry && !INDUSTRIES.includes(rawIndustry) ? rawIndustry : companyRow.industry,
           portal_link: f.portal_link || companyRow.website || "",
-          owner_employee_id:
-            f.owner_employee_id ||
-            companyRow.account_owner_id ||
-            companyRow.account_ownership_id ||
-            emps[0]?.id ||
-            "",
           street: companyRow.billing_street,
           city: companyRow.billing_city,
           state: companyRow.billing_state,
           zip: companyRow.billing_code,
           country: companyRow.billing_country,
           end_customer_name: f.end_customer_name || "",
-          entity_name: companyRow.customer_name || "",
-          entity_email: companyRow.customer_email ?? "",
-          entity_address: billingAddress,
-          entity_contact: companyRow.phone ?? "",
-          entity_gst: f.entity_gst || "",
           notes: f.notes || companyRow.description || "",
         };
       });
@@ -361,6 +368,31 @@ export function LeadFormPage({ companyAccountId }: { companyAccountId: string })
     }));
   }
 
+  function onEntityPickChange(value: string) {
+    setEntityPick(value);
+    if (!value) {
+      setForm((f) => ({
+        ...f,
+        entity_name: "",
+        entity_email: "",
+        entity_address: "",
+        entity_gst: "",
+        entity_contact: "",
+      }));
+      return;
+    }
+    const entity = entityCatalog.find((entry) => entry.id === value);
+    if (!entity) return;
+    setForm((f) => ({
+      ...f,
+      entity_name: entity.entity_name,
+      entity_email: entity.entity_email ?? "",
+      entity_address: entity.entity_address ?? "",
+      entity_gst: entity.entity_gst ?? "",
+      entity_contact: entity.entity_contact ?? "",
+    }));
+  }
+
   function closeOemDialog() {
     setOemDialogOpen(false);
     setOemDraft(EMPTY_OEM_DRAFT);
@@ -414,16 +446,14 @@ export function LeadFormPage({ companyAccountId }: { companyAccountId: string })
     if (!form.lead_source_id) missing.push("Lead Source");
     if (!form.requirement_type) missing.push("Requirement Type");
     if (!form.purchase_model) missing.push("Purchase Model");
-    if (!form.owner_employee_id) missing.push("Lead Owner");
     if (form.expected_amount === undefined || form.expected_amount === null || Number.isNaN(Number(form.expected_amount))) {
       missing.push("Expected Business Amount");
     }
     if (!form.expected_closure_date?.trim()) missing.push("Expected Closure Date");
     if (!form.end_customer_name?.trim()) missing.push("End Customer");
     if (!form.entity_name?.trim()) missing.push("Entity Name");
-    if (!form.entity_email?.trim()) missing.push("Entity Email");
     if (!form.entity_address?.trim()) missing.push("Entity Address");
-    if (!form.entity_contact?.trim()) missing.push("Entity Contact Number");
+    if (!form.oem_name?.trim()) missing.push("OEM Name");
     if (missing.length > 0) {
       setMandateMessage(missingRequiredMessage(missing));
       setMandateOpen(true);
@@ -432,8 +462,9 @@ export function LeadFormPage({ companyAccountId }: { companyAccountId: string })
     setSaving(true);
     setError(null);
     try {
+      const { owner_employee_id: _owner, ...leadBody } = form;
       const lead = await createLeadFromCompany(companyAccountId, {
-        ...form,
+        ...leadBody,
         assign_to_id: null,
         assigned_date: null,
         expected_amount: form.expected_amount ? Number(form.expected_amount) : null,
@@ -472,7 +503,7 @@ export function LeadFormPage({ companyAccountId }: { companyAccountId: string })
           <FinanceField label="Company">
             <Input value={company?.customer_name ?? ""} disabled aria-readonly="true" />
           </FinanceField>
-          <FinanceField label="Customer's Project Title *">
+          <FinanceField label="Project Title *">
             <Input value={form.project_title ?? ""} onChange={(e) => set("project_title", e.target.value)} />
           </FinanceField>
 
@@ -509,6 +540,9 @@ export function LeadFormPage({ companyAccountId }: { companyAccountId: string })
           </FinanceField>
           <FinanceField label="Last Name *">
             <Input value={form.last_name ?? ""} onChange={(e) => set("last_name", e.target.value)} />
+          </FinanceField>
+          <FinanceField label="Designation">
+            <Input value={form.designation ?? ""} onChange={(e) => set("designation", e.target.value)} />
           </FinanceField>
 
           <FinanceField label="Product Type *">
@@ -608,7 +642,7 @@ export function LeadFormPage({ companyAccountId }: { companyAccountId: string })
             <Input value={form.new_dr_number ?? ""} onChange={(e) => set("new_dr_number", e.target.value)} />
           </FinanceField>
 
-          <FinanceField label="Type">
+          <FinanceField label="Fulfillment Type">
             <FinanceSelect value={form.deal_type ?? ""} onChange={(e) => set("deal_type", e.target.value)}>
               <option value="">None</option>
               {DEAL_TYPES.map((type) => (
@@ -620,17 +654,12 @@ export function LeadFormPage({ companyAccountId }: { companyAccountId: string })
           </FinanceField>
 
           <FinanceField label="Lead Owner *">
-            <FinanceSelect
-              value={form.owner_employee_id}
-              onChange={(e) => set("owner_employee_id", e.target.value)}
-            >
-              <option value="">None</option>
-              {employees.map((employee) => (
-                <option key={employee.id} value={employee.id}>
-                  {employee.label}
-                </option>
-              ))}
-            </FinanceSelect>
+            <Input
+              value={leadOwnerLabel || "—"}
+              disabled
+              aria-readonly="true"
+              title="Assigned from your logged-in user account"
+            />
           </FinanceField>
 
           <FinanceField label="Expected Business Amount *">
@@ -677,11 +706,12 @@ export function LeadFormPage({ companyAccountId }: { companyAccountId: string })
 
       <CrmSection title="OEM Information" icon={Package}>
         <div className="grid gap-x-10 gap-y-3 md:grid-cols-2">
-          <FinanceField label="OEM Name">
+          <FinanceField label="OEM Name *">
             <FinanceSelect
               value={oemPick}
               onChange={(e) => onOemPickChange(e.target.value)}
               aria-label="Select OEM"
+              required
             >
               <option value="">None</option>
               {oemCatalog.map((oem) => (
@@ -756,7 +786,22 @@ export function LeadFormPage({ companyAccountId }: { companyAccountId: string })
             />
           </FinanceField>
           <FinanceField label="Industry">
-            <FinanceSelect value={form.industry ?? ""} onChange={(e) => set("industry", e.target.value)}>
+            <FinanceSelect
+              value={
+                !form.industry || INDUSTRIES.includes(form.industry)
+                  ? (form.industry ?? "")
+                  : "Others"
+              }
+              onChange={(e) => {
+                const value = e.target.value;
+                if (value === "Others") {
+                  set("industry", industryOther.trim() || "Others");
+                } else {
+                  setIndustryOther("");
+                  set("industry", value);
+                }
+              }}
+            >
               <option value="">None</option>
               {INDUSTRIES.map((industry) => (
                 <option key={industry} value={industry}>
@@ -765,15 +810,46 @@ export function LeadFormPage({ companyAccountId }: { companyAccountId: string })
               ))}
             </FinanceSelect>
           </FinanceField>
+          {form.industry === "Others" ||
+            (form.industry && !INDUSTRIES.includes(form.industry)) ? (
+            <FinanceField label="Specify industry">
+              <Input
+                value={
+                  form.industry === "Others"
+                    ? industryOther
+                    : INDUSTRIES.includes(form.industry ?? "")
+                      ? ""
+                      : (form.industry ?? "")
+                }
+                onChange={(e) => {
+                  const value = e.target.value;
+                  setIndustryOther(value);
+                  set("industry", value.trim() || "Others");
+                }}
+              />
+            </FinanceField>
+          ) : null}
         </div>
       </CrmSection>
 
       <CrmSection title="Entity Information" icon={Building2}>
         <div className="grid gap-x-10 gap-y-3 md:grid-cols-2">
           <FinanceField label="Entity Name *">
-            <Input value={form.entity_name ?? ""} onChange={(e) => set("entity_name", e.target.value)} />
+            <FinanceSelect
+              value={entityPick}
+              onChange={(e) => onEntityPickChange(e.target.value)}
+              aria-label="Select selling entity"
+              required
+            >
+              <option value="">Select entity</option>
+              {entityCatalog.map((entity) => (
+                <option key={entity.id} value={entity.id}>
+                  {entity.entity_name}
+                </option>
+              ))}
+            </FinanceSelect>
           </FinanceField>
-          <FinanceField label="Entity Email *">
+          <FinanceField label="Entity Email">
             <Input
               type="email"
               value={form.entity_email ?? ""}
@@ -786,13 +862,10 @@ export function LeadFormPage({ companyAccountId }: { companyAccountId: string })
               onChange={(e) => set("entity_address", e.target.value)}
             />
           </FinanceField>
-          <FinanceField label="Organization">
-            <Input value={company?.customer_name ?? ""} disabled aria-readonly="true" />
-          </FinanceField>
           <FinanceField label="Entity GST No.">
             <Input value={form.entity_gst ?? ""} onChange={(e) => set("entity_gst", e.target.value)} />
           </FinanceField>
-          <FinanceField label="Entity Contact Number *">
+          <FinanceField label="Entity Contact Number">
             <Input
               value={form.entity_contact ?? ""}
               onChange={(e) => set("entity_contact", e.target.value)}

@@ -2,14 +2,13 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { ClipboardCheck, RefreshCw } from "lucide-react";
+import { ClipboardCheck } from "lucide-react";
 
-import { CrmErrorBanner, CrmInfoBanner, CrmListPanel, CrmPage } from "@/components/crm/crm-ui";
+import { CrmErrorBanner, CrmInfoBanner, CrmListPanel, CrmPage, CRM_TABLE_HEAD_ROW } from "@/components/crm/crm-ui";
 import { CrmListToolbar } from "@/components/crm/sales/crm-list-toolbar";
 import { CrmSortableTh, sortRows, useTableSort } from "@/components/crm/sales/crm-table-sort";
 import { PageHeader } from "@/components/layout/page-header";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { ApiClientError } from "@/services/api-client";
 import { formatInr, listOvfs, type Ovf } from "@/services/sales-crm-service";
 
@@ -91,12 +90,6 @@ export function OvfListPage({
         <PageHeader
           title="OVF"
           description="Order Value Forms — approval, SCM share, and deal-won. Created only from an eligible Opportunity once the customer PO is approved."
-          actions={
-            <Button type="button" variant="outline" size="sm" className="cursor-pointer" onClick={() => void load()} disabled={loading}>
-              <RefreshCw className={`size-3.5 ${loading ? "animate-spin" : ""}`} />
-              Refresh
-            </Button>
-          }
         />
       ) : null}
 
@@ -115,14 +108,6 @@ export function OvfListPage({
           subtitle="Order value forms"
           icon={ClipboardCheck}
           count={sorted.length}
-          actions={
-            embedded ? (
-              <Button type="button" variant="outline" size="sm" className="cursor-pointer" onClick={() => void load()} disabled={loading}>
-                <RefreshCw className={`size-3.5 ${loading ? "animate-spin" : ""}`} />
-                Refresh
-              </Button>
-            ) : null
-          }
           search={{
             value: query,
             onChange: setQuery,
@@ -133,7 +118,7 @@ export function OvfListPage({
         <div className="erp-scroll overflow-x-auto">
           <table className="w-full min-w-[860px] text-left text-sm">
             <thead>
-              <tr className="border-b border-border/70 bg-muted/40 text-[11px] tracking-wide text-muted-foreground uppercase">
+              <tr className={CRM_TABLE_HEAD_ROW}>
                 <CrmSortableTh label="OVF No." sortKey="ovf_no" activeKey={sortBy} dir={sortDir} onSort={onSort} />
                 <CrmSortableTh label="State" sortKey="blueprint_state" activeKey={sortBy} dir={sortDir} onSort={onSort} />
                 <CrmSortableTh label="PO Number" sortKey="po_number" activeKey={sortBy} dir={sortDir} onSort={onSort} />

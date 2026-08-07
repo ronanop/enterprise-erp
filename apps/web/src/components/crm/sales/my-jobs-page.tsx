@@ -2,9 +2,9 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { Briefcase, Check, RefreshCw, X } from "lucide-react";
+import { Briefcase, Check, X } from "lucide-react";
 
-import { CrmErrorBanner, CrmListPanel, CrmPage } from "@/components/crm/crm-ui";
+import { CrmErrorBanner, CrmListPanel, CrmPage, CRM_TABLE_HEAD_ROW } from "@/components/crm/crm-ui";
 import { ConfirmDialog } from "@/components/finance/journals/confirm-dialog";
 import { FinanceSelect, FinanceTextarea } from "@/components/finance/journals/finance-form-field";
 import { CrmListToolbar } from "@/components/crm/sales/crm-list-toolbar";
@@ -146,12 +146,6 @@ export function MyJobsPage({
         <PageHeader
           title="My Jobs"
           description="Team approval inbox — approve or reject requests routed from the sales blueprint, with remarks."
-          actions={
-            <Button type="button" variant="outline" size="sm" className="cursor-pointer" onClick={() => void load()} disabled={loading}>
-              <RefreshCw className={`size-3.5 ${loading ? "animate-spin" : ""}`} />
-              Refresh
-            </Button>
-          }
         />
       ) : null}
 
@@ -187,12 +181,6 @@ export function MyJobsPage({
           />
           Assigned to me only
         </label>
-        {embedded ? (
-          <Button type="button" variant="outline" size="sm" className="ml-auto cursor-pointer" onClick={() => void load()} disabled={loading}>
-            <RefreshCw className={`size-3.5 ${loading ? "animate-spin" : ""}`} />
-            Refresh
-          </Button>
-        ) : null}
       </div>
 
       {error ? <CrmErrorBanner>{error}</CrmErrorBanner> : null}
@@ -208,7 +196,7 @@ export function MyJobsPage({
         <div className="erp-scroll overflow-x-auto">
           <table className="w-full min-w-[980px] text-left text-sm">
             <thead>
-              <tr className="border-b border-border/70 bg-muted/40 text-[11px] tracking-wide text-muted-foreground uppercase">
+              <tr className={CRM_TABLE_HEAD_ROW}>
                 <CrmSortableTh label="Task" sortKey="title" activeKey={sortBy} dir={sortDir} onSort={onSort} />
                 <CrmSortableTh label="Entity" sortKey="entity_type" activeKey={sortBy} dir={sortDir} onSort={onSort} />
                 <CrmSortableTh label="Team" sortKey="team_role" activeKey={sortBy} dir={sortDir} onSort={onSort} />

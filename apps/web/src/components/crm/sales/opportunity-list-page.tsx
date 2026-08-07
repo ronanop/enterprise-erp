@@ -2,15 +2,14 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { Handshake, RefreshCw } from "lucide-react";
+import { Handshake } from "lucide-react";
 
-import { CrmErrorBanner, CrmInfoBanner, CrmListPanel, CrmPage } from "@/components/crm/crm-ui";
+import { CrmErrorBanner, CrmInfoBanner, CrmListPanel, CrmPage, CRM_TABLE_HEAD_ROW } from "@/components/crm/crm-ui";
 import { FinanceStatusBadge } from "@/components/finance/finance-status-badge";
 import { CrmListToolbar } from "@/components/crm/sales/crm-list-toolbar";
 import { CrmSortableTh, sortRows, useTableSort } from "@/components/crm/sales/crm-table-sort";
 import { PageHeader } from "@/components/layout/page-header";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { setCrmSidebarFocus } from "@/lib/crm-sidebar-focus";
 import { ApiClientError } from "@/services/api-client";
 import { formatInr, listOpportunities, type Opportunity } from "@/services/sales-crm-service";
@@ -92,12 +91,6 @@ export function OpportunityListPage({
         <PageHeader
           title="Opportunities"
           description="Deals converted from a Lead — BOQ to Won/Lost sales blueprint."
-          actions={
-            <Button type="button" variant="outline" size="sm" className="cursor-pointer" onClick={() => void load()} disabled={loading}>
-              <RefreshCw className={`size-3.5 ${loading ? "animate-spin" : ""}`} />
-              Refresh
-            </Button>
-          }
         />
       ) : null}
 
@@ -115,21 +108,6 @@ export function OpportunityListPage({
           subtitle="Open and closed deals"
           icon={Handshake}
           count={sorted.length}
-          actions={
-            embedded ? (
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="cursor-pointer"
-                onClick={() => void load()}
-                disabled={loading}
-              >
-                <RefreshCw className={`size-3.5 ${loading ? "animate-spin" : ""}`} />
-                Refresh
-              </Button>
-            ) : null
-          }
           search={{
             value: query,
             onChange: setQuery,
@@ -140,7 +118,7 @@ export function OpportunityListPage({
         <div className="erp-scroll overflow-x-auto">
           <table className="w-full min-w-[800px] text-left text-sm">
             <thead>
-              <tr className="border-b border-border/70 bg-muted/40 text-[11px] tracking-wide text-muted-foreground uppercase">
+              <tr className={CRM_TABLE_HEAD_ROW}>
                 <CrmSortableTh label="Opportunity" sortKey="opportunity_name" activeKey={sortBy} dir={sortDir} onSort={onSort} />
                 <CrmSortableTh label="Stage" sortKey="current_stage" activeKey={sortBy} dir={sortDir} onSort={onSort} />
                 <CrmSortableTh label="Expected Revenue" sortKey="expected_revenue" activeKey={sortBy} dir={sortDir} onSort={onSort} />
