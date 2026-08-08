@@ -26,6 +26,7 @@ import {
 } from "@/components/crm/crm-ui";
 import { FollowupFormDialog } from "@/components/crm/sales/followup-form-dialog";
 import { MeetingFormDialog } from "@/components/crm/sales/meeting-form-dialog";
+import { MeetingsDataTable } from "@/components/crm/sales/meetings-data-table";
 import {
   buildCompanyDocumentPreviewRows,
   enrichCompanyOvfsWithTotals,
@@ -96,22 +97,6 @@ function formatSourceLabel(source: string): string {
     return source === "other" ? "other" : source.replaceAll("_", " ");
   }
   return source;
-}
-
-const VENUE_LABELS: Record<string, string> = {
-  client_location: "Client location",
-  office: "Office",
-  online: "Online",
-  phone: "Phone",
-};
-
-function formatMeetingWhen(row: CrmMeeting): string {
-  if (row.all_day) return `${row.meeting_date} · All day`;
-  const start = row.start_time?.slice(0, 5) ?? "";
-  const end = row.end_time?.slice(0, 5) ?? "";
-  if (start && end) return `${row.meeting_date} · ${start} – ${end}`;
-  if (start) return `${row.meeting_date} · ${start}`;
-  return row.meeting_date;
 }
 
 function formatFollowupDate(row: CrmFollowup): string {
@@ -339,54 +324,11 @@ export function CompanyDetailPage({ companyAccountId }: { companyAccountId: stri
                   <CrmViewAllLink href={`/crm/companies/${company.id}/meetings`} />
                 </div>
               </div>
-              <div className="erp-scroll overflow-x-auto">
-                <table className="w-full min-w-[640px] text-left text-sm">
-                  <thead>
-                    <tr className={CRM_TABLE_HEAD_ROW}>
-                      <th className={CRM_TABLE_HEAD_CELL}>Title</th>
-                      <th className={CRM_TABLE_HEAD_CELL}>Date</th>
-                      <th className={CRM_TABLE_HEAD_CELL}>Venue</th>
-                      <th className={CRM_TABLE_HEAD_CELL}>Host</th>
-                      <th className={CRM_TABLE_HEAD_CELL}>Status</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {meetings.length === 0 ? (
-                      <tr>
-                        <td colSpan={5} className="px-4 py-8 text-center text-muted-foreground">
-                          No meetings yet — use “Meeting” above to schedule one.
-                        </td>
-                      </tr>
-                    ) : (
-                      meetings.slice(0, 5).map((meeting) => (
-                        <tr
-                          key={meeting.id}
-                          className="border-b border-border/50 last:border-0 hover:bg-accent/30"
-                        >
-                          <td className="px-4 py-2.5 font-medium text-foreground">
-                            {meeting.title}
-                            <div className="text-[11px] font-normal text-muted-foreground">
-                              {meeting.meeting_code}
-                            </div>
-                          </td>
-                          <td className="px-4 py-2.5 text-muted-foreground">
-                            {formatMeetingWhen(meeting)}
-                          </td>
-                          <td className="px-4 py-2.5 text-muted-foreground">
-                            {VENUE_LABELS[meeting.meeting_mode ?? ""] ?? meeting.meeting_mode ?? "—"}
-                          </td>
-                          <td className="px-4 py-2.5 text-muted-foreground">
-                            {employeeName(meeting.organizer_employee_id)}
-                          </td>
-                          <td className="px-4 py-2.5">
-                            <FinanceStatusBadge status={meeting.status} />
-                          </td>
-                        </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
-              </div>
+              <MeetingsDataTable
+                rows={meetings.slice(0, 5)}
+                hostName={employeeName}
+                emptyMessage='No meetings yet — use "Meeting" above to schedule one.'
+              />
             </CrmListPanel>
           </div>
 
