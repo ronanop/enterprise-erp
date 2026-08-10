@@ -86,14 +86,16 @@ export function SidebarUserIdentity({
             {subtitle}
           </p>
         ) : null}
-        <p
-          className={cn(
-            "truncate text-[10px]",
-            variant === "marketing" ? "text-muted-foreground/80" : "text-sidebar-foreground/45",
-          )}
-        >
-          {profile.email}
-        </p>
+        {variant !== "marketing" ? (
+          <p
+            className={cn(
+              "truncate text-[10px]",
+              "text-sidebar-foreground/45",
+            )}
+          >
+            {profile.email}
+          </p>
+        ) : null}
       </div>
     </div>
   );

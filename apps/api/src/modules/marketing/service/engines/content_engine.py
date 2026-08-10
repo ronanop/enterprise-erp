@@ -12,7 +12,13 @@ def _utcnow() -> datetime:
 
 
 class ContentItemEngine:
+    @staticmethod
+    def assert_editable(row: MktContentItem) -> None:
+        if row.status in {ContentStatus.PUBLISHED.value, ContentStatus.ARCHIVED.value}:
+            raise InvalidMarketingState("Published and archived content is read-only")
+
     def submit(self, row: MktContentItem) -> None:
+        self.assert_editable(row)
         if row.status not in {ContentStatus.DRAFT.value, ContentStatus.CHANGES_REQUIRED.value}:
             raise InvalidMarketingState("Only draft or changes-required content can be submitted for review")
         row.status = ContentStatus.IN_REVIEW.value

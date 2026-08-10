@@ -81,6 +81,18 @@ export type MarketingContentItem = {
   color_codes?: string | null;
   workflow_stage?: string | null;
   final_head_approved_at?: string | null;
+  linkedin_head_sections?: Record<
+    string,
+    { status: string; comments?: string | null; reviewed_at?: string | null }
+  > | null;
+  linkedin_final_draft?: {
+    content_text?: string | null;
+    poster_media_asset_id?: string | null;
+    status?: string;
+    comments?: string | null;
+    submitted_at?: string | null;
+    reviewed_at?: string | null;
+  } | null;
 };
 
 export type MarketingPublication = {
@@ -436,6 +448,10 @@ export type MarketingLinkedAsset = {
   };
 };
 
+export function linkedAssetMediaId(link: MarketingLinkedAsset): string {
+  return link.asset.id;
+}
+
 export type MarketingHeadVerificationDashboard = {
   items: Array<{
     content_id: string;
@@ -476,6 +492,42 @@ export function headReviewVerificationItem(
   body: { verifier_role: string; item_key: string; status: string; comments?: string },
 ) {
   return unwrap<MarketingContentWorkflow>(`${API}/content-items/${contentId}/verifications/head-review`, {
+    method: "POST",
+    body,
+  });
+}
+
+export function linkedInHeadReviewSection(
+  contentId: string,
+  body: { section: string; status: string; comments?: string },
+) {
+  return unwrap<MarketingContentItem>(`${API}/content-items/${contentId}/linkedin/head-review-section`, {
+    method: "POST",
+    body,
+  });
+}
+
+export function linkedInSendToPublisher(contentId: string) {
+  return unwrap<MarketingContentItem>(`${API}/content-items/${contentId}/linkedin/send-to-publisher`, {
+    method: "POST",
+  });
+}
+
+export function linkedInSubmitFinalDraftToHead(
+  contentId: string,
+  body: { content_text?: string | null; poster_media_asset_id?: string | null },
+) {
+  return unwrap<MarketingContentItem>(`${API}/content-items/${contentId}/linkedin/submit-final-draft-to-head`, {
+    method: "POST",
+    body,
+  });
+}
+
+export function linkedInHeadReviewFinalDraft(
+  contentId: string,
+  body: { status: string; comments?: string },
+) {
+  return unwrap<MarketingContentItem>(`${API}/content-items/${contentId}/linkedin/head-review-final-draft`, {
     method: "POST",
     body,
   });
@@ -587,6 +639,9 @@ export function canUserReportPosting(
   perms: { canSubmit: boolean; canPublish: boolean; canApprove?: boolean; canVerify?: boolean },
 ): boolean {
   if (perms.canApprove) return false;
+  if (item.content_type === "social_post" && item.linkedin_head_sections) {
+    return false;
+  }
   const postReady =
     item.status === "approved" ||
     item.status === "scheduled" ||

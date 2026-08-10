@@ -101,6 +101,7 @@ class WorkflowStage(str, Enum):
     DRAFT = "draft"
     CAMPAIGN_HANDLER_REVIEW = "campaign_handler_review"
     LINKEDIN_HANDLER_REVIEW = "linkedin_handler_review"
+    LINKEDIN_FINAL_DRAFT_HEAD_REVIEW = "linkedin_final_draft_head_review"
     VIDEO_EDITOR_REVIEW = "video_editor_review"
     PUBLISHER_REVIEW = "publisher_review"
     HEAD_FINAL_REVIEW = "head_final_review"
@@ -186,13 +187,7 @@ ROLE_VERIFICATION_ITEMS: dict[str, list[tuple[str, str]]] = {
         ("branding_guidelines", "Branding Guidelines"),
         ("other_design", "Ad / Creative Design"),
     ],
-    VerifierRole.LINKEDIN_HANDLER.value: [
-        ("text_copy", "Text / Copy"),
-        ("content", "Content"),
-        ("hashtags", "Hashtags"),
-        ("image_dimensions", "Image Dimensions"),
-        ("branding_guidelines", "Branding Guidelines"),
-    ],
+    VerifierRole.LINKEDIN_HANDLER.value: [],
     VerifierRole.VIDEO_EDITOR.value: [
         ("text_copy", "Text / Copy"),
         ("hashtags", "Hashtags"),
@@ -224,6 +219,13 @@ VIDEO_VERIFICATION_ITEM_KEYS: set[str] = {
     "video_branding",
     "thumbnail",
     "audio_quality",
+}
+
+# Asset roles that satisfy the LinkedIn handler "Content" checklist item
+LINKEDIN_CONTENT_ASSET_ROLES: set[str] = {
+    "linkedin_content",
+    "image_dimensions",
+    "content",
 }
 
 

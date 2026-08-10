@@ -72,6 +72,9 @@ MARKETING_LINKEDIN_HANDLER_PERMISSIONS = [
     "marketing.content:verify",
     "marketing.content:schedule",
     "marketing.publication:read",
+    "marketing.asset:read",
+    "marketing.asset:create",
+    "marketing.asset:update",
     "marketing.report:read",
 ] + MARKETING_ORG_READ_PERMISSIONS
 MARKETING_VIDEO_EDITOR_PERMISSIONS = [

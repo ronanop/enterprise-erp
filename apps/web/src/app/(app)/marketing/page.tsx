@@ -1,5 +1,5 @@
-import { MarketingDashboard } from "@/components/marketing/marketing-dashboard";
+import { redirect } from "next/navigation";
 
 export default function MarketingPage() {
-  return <MarketingDashboard />;
+  redirect("/marketing/pipeline");
 }

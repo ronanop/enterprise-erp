@@ -18,6 +18,18 @@ import {
   uploadContentAssetForItem,
 } from "@/lib/marketing-content-upload";
 import { isLinkedInHandler, isMarketingHead } from "@/lib/marketing-verification";
+import {
+  canLinkedInHandlerSendToPublisher,
+  canLinkedInHandlerSubmitFinalDraftToHead,
+  canMarkLinkedInAsPublished,
+  hasLinkedInSectionApproval,
+  isMarketingContentLocked,
+  linkedInFinalDraftAwaitingHead,
+  linkedInHandlerAwaitingPublisher,
+  linkedInPublishStatusLabel,
+  usesLinkedInSectionWorkflow,
+} from "@/lib/linkedin-section-approval";
+import { cn } from "@/lib/utils";
 import { apiClient } from "@/services/api-client";
 import {
   ApiClientError,
@@ -27,6 +39,7 @@ import {
   getContentTimeline,
   listContentItems,
   submitContentItem,
+  submitVerificationItem,
   type MarketingActivityLog,
   type MarketingContentItem,
 } from "@/services/marketing-service";
@@ -39,11 +52,20 @@ const CONTENT_KINDS = [
   { value: "ad_creative", label: "Banner / ad creative" },
 ] as const;
 
+const LINKEDIN_DRAFT_TABS = [
+  { id: "content", label: "Content" },
+  { id: "theme", label: "Theme" },
+  { id: "fonts", label: "Fonts" },
+] as const;
+
+type LinkedInDraftSection = (typeof LINKEDIN_DRAFT_TABS)[number]["id"];
+
 export function MarketingContentPage() {
   const searchParams = useSearchParams();
   const perms = useMarketingPermissions();
   const linkedInMode = isLinkedInHandler(perms);
   const canCreatePost = perms.canCreate && !isMarketingHead(perms);
+  const canSendToHead = perms.canSubmit || (linkedInMode && perms.canVerify);
   const contentKinds = linkedInMode
     ? CONTENT_KINDS.filter((k) => k.value === "social_post")
     : CONTENT_KINDS;
@@ -60,6 +82,14 @@ export function MarketingContentPage() {
   const [branchId, setBranchId] = useState("");
   const [bannerFile, setBannerFile] = useState<File | null>(null);
   const [bannerPreview, setBannerPreview] = useState<string | null>(null);
+  const [linkedInSection, setLinkedInSection] = useState<LinkedInDraftSection>("content");
+  const [theme, setTheme] = useState("");
+  const [fontName, setFontName] = useState("");
+  const [fontSize, setFontSize] = useState("");
+  const [colorCodes, setColorCodes] = useState("");
+  const [postMediaFile, setPostMediaFile] = useState<File | null>(null);
+  const [postMediaPreview, setPostMediaPreview] = useState<string | null>(null);
+  const [postMediaIsVideo, setPostMediaIsVideo] = useState(false);
   const [creating, setCreating] = useState(false);
   const [reviewItem, setReviewItem] = useState<MarketingContentItem | null>(null);
   const [reviewOpen, setReviewOpen] = useState(false);
@@ -69,12 +99,17 @@ export function MarketingContentPage() {
     setError(null);
     try {
       setRows(
-        await listContentItems({
+        (await listContentItems({
           q: q || undefined,
           status: status || undefined,
           page_size: 200,
           mine: linkedInMode || undefined,
-        }),
+        })).filter(
+          (row) =>
+            status === "archived" ||
+            status === "published" ||
+            (row.status !== "archived" && row.status !== "published"),
+        ),
       );
     } catch (err) {
       setRows([]);
@@ -101,8 +136,9 @@ export function MarketingContentPage() {
   useEffect(() => {
     return () => {
       if (bannerPreview) URL.revokeObjectURL(bannerPreview);
+      if (postMediaPreview) URL.revokeObjectURL(postMediaPreview);
     };
-  }, [bannerPreview]);
+  }, [bannerPreview, postMediaPreview]);
 
   const resetForm = () => {
     setTitle("");
@@ -112,6 +148,15 @@ export function MarketingContentPage() {
     setBannerFile(null);
     if (bannerPreview) URL.revokeObjectURL(bannerPreview);
     setBannerPreview(null);
+    setLinkedInSection("content");
+    setTheme("");
+    setFontName("");
+    setFontSize("");
+    setColorCodes("");
+    setPostMediaFile(null);
+    if (postMediaPreview) URL.revokeObjectURL(postMediaPreview);
+    setPostMediaPreview(null);
+    setPostMediaIsVideo(false);
     setShowForm(false);
   };
 
@@ -119,6 +164,13 @@ export function MarketingContentPage() {
     setBannerFile(file);
     if (bannerPreview) URL.revokeObjectURL(bannerPreview);
     setBannerPreview(URL.createObjectURL(file));
+  };
+
+  const onPostMediaSelected = (file: File) => {
+    setPostMediaFile(file);
+    setPostMediaIsVideo(file.type.startsWith("video/"));
+    if (postMediaPreview) URL.revokeObjectURL(postMediaPreview);
+    setPostMediaPreview(URL.createObjectURL(file));
   };
 
   const onCreate = async (submitAfterCreate: boolean) => {
@@ -135,13 +187,20 @@ export function MarketingContentPage() {
     setCreating(true);
     setError(null);
     try {
-      const created = await createContentItem({
+      const payload: Record<string, unknown> = {
         title: title.trim(),
         branch_id: branchId,
         content_type: contentType,
         body: body.trim() || null,
         hashtags: hashtags.trim() || null,
-      });
+      };
+      if (linkedInMode) {
+        if (theme.trim()) payload.theme = theme.trim();
+        if (fontName.trim()) payload.font_name = fontName.trim();
+        if (fontSize.trim()) payload.font_size = fontSize.trim();
+        if (colorCodes.trim()) payload.color_codes = colorCodes.trim();
+      }
+      const created = await createContentItem(payload);
       if (isBanner && bannerFile) {
         await uploadContentAssetForItem(
           created.id,
@@ -150,14 +209,19 @@ export function MarketingContentPage() {
           BANNER_VERIFICATION_ITEM_KEY,
         );
       }
-      if (submitAfterCreate && perms.canSubmit) {
-        const submitted = await submitContentItem(created.id);
+      if (linkedInMode && postMediaFile) {
+        await uploadContentAssetForItem(
+          created.id,
+          created.company_id,
+          postMediaFile,
+          "linkedin_content",
+          postMediaIsVideo ? "video" : "image",
+        );
+      }
+      if (submitAfterCreate && canSendToHead) {
+        await submitContentItem(created.id);
         resetForm();
         await load();
-        if (isBanner) {
-          setReviewItem(submitted);
-          setReviewOpen(true);
-        }
         return;
       }
       resetForm();
@@ -190,7 +254,14 @@ export function MarketingContentPage() {
               Refresh
             </Button>
             {canCreatePost ? (
-              <Button type="button" size="sm" onClick={() => setShowForm((v) => !v)}>
+              <Button
+                type="button"
+                size="sm"
+                onClick={() => {
+                  setLinkedInSection("content");
+                  setShowForm((v) => !v);
+                }}
+              >
                 <Plus className="size-3.5" />
                 {linkedInMode ? "New LinkedIn draft" : "New post"}
               </Button>
@@ -201,78 +272,171 @@ export function MarketingContentPage() {
 
       {showForm && canCreatePost ? (
         <div className="space-y-3 rounded-xl border border-border/80 bg-card p-4">
+          {linkedInMode ? (
+            <div className="flex flex-wrap gap-2">
+              {LINKEDIN_DRAFT_TABS.map((tab) => (
+                <Button
+                  key={tab.id}
+                  type="button"
+                  size="sm"
+                  variant={linkedInSection === tab.id ? "default" : "outline"}
+                  className={cn(linkedInSection !== tab.id && "bg-background")}
+                  onClick={() => setLinkedInSection(tab.id)}
+                >
+                  {tab.label}
+                </Button>
+              ))}
+            </div>
+          ) : null}
           <p className="text-sm font-medium">
             {linkedInMode ? "New LinkedIn post draft" : "New content for verification"}
           </p>
-          <div className="grid gap-3 sm:grid-cols-2">
-            {!linkedInMode ? (
-              <div>
-                <label className="mb-1 block text-xs text-muted-foreground">Content type</label>
-                <select
-                  value={contentType}
-                  onChange={(e) => {
-                    setContentType(e.target.value);
-                    if (!isBannerContentType(e.target.value)) {
-                      setBannerFile(null);
-                      if (bannerPreview) URL.revokeObjectURL(bannerPreview);
-                      setBannerPreview(null);
-                    }
-                  }}
-                  className="h-9 w-full rounded-md border border-input bg-background px-2 text-sm"
-                >
-                  {contentKinds.map((k) => (
-                    <option key={k.value} value={k.value}>
-                      {k.label}
-                    </option>
-                  ))}
-                </select>
+          {linkedInMode ? (
+            <>
+              {linkedInSection === "content" ? (
+                <div className="space-y-3">
+                  <div>
+                    <label className="mb-1 block text-xs text-muted-foreground">Post title</label>
+                    <Input
+                      value={title}
+                      onChange={(e) => setTitle(e.target.value)}
+                      placeholder="e.g. Q1 product launch — LinkedIn"
+                    />
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-xs text-muted-foreground">LinkedIn post copy</label>
+                    <textarea
+                      value={body}
+                      onChange={(e) => setBody(e.target.value)}
+                      rows={5}
+                      placeholder="Write your LinkedIn post. Marketing head will review before publishing."
+                      className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                    />
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-xs text-muted-foreground">Hashtags</label>
+                    <Input
+                      value={hashtags}
+                      onChange={(e) => setHashtags(e.target.value)}
+                      placeholder="#launch #product #B2B"
+                    />
+                  </div>
+                  <MarketingBannerUploadField
+                    disabled={creating}
+                    previewUrl={postMediaPreview}
+                    previewIsVideo={postMediaIsVideo}
+                    accept="image/*,video/*"
+                    title="Post image or video"
+                    chooseLabel="Choose image or video"
+                    hint="Upload the visual that will accompany this LinkedIn post (image or short video)."
+                    onFileSelected={onPostMediaSelected}
+                  />
+                </div>
+              ) : null}
+              {linkedInSection === "theme" ? (
+                <div>
+                  <label className="mb-1 block text-xs text-muted-foreground">Visual theme</label>
+                  <textarea
+                    value={theme}
+                    onChange={(e) => setTheme(e.target.value)}
+                    rows={5}
+                    placeholder="Describe the mood, layout, and visual direction for the post image or video (e.g. minimal corporate, product launch, festive)."
+                    className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                  />
+                </div>
+              ) : null}
+              {linkedInSection === "fonts" ? (
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div className="sm:col-span-2">
+                    <label className="mb-1 block text-xs text-muted-foreground">Font family</label>
+                    <Input
+                      value={fontName}
+                      onChange={(e) => setFontName(e.target.value)}
+                      placeholder="e.g. Inter, Helvetica Neue"
+                    />
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-xs text-muted-foreground">Font size</label>
+                    <Input
+                      value={fontSize}
+                      onChange={(e) => setFontSize(e.target.value)}
+                      placeholder="e.g. 24px headline, 16px body"
+                    />
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-xs text-muted-foreground">Color codes</label>
+                    <Input
+                      value={colorCodes}
+                      onChange={(e) => setColorCodes(e.target.value)}
+                      placeholder="#0A66C2, #FFFFFF"
+                    />
+                  </div>
+                </div>
+              ) : null}
+            </>
+          ) : (
+            <>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div>
+                  <label className="mb-1 block text-xs text-muted-foreground">Content type</label>
+                  <select
+                    value={contentType}
+                    onChange={(e) => {
+                      setContentType(e.target.value);
+                      if (!isBannerContentType(e.target.value)) {
+                        setBannerFile(null);
+                        if (bannerPreview) URL.revokeObjectURL(bannerPreview);
+                        setBannerPreview(null);
+                      }
+                    }}
+                    className="h-9 w-full rounded-md border border-input bg-background px-2 text-sm"
+                  >
+                    {contentKinds.map((k) => (
+                      <option key={k.value} value={k.value}>
+                        {k.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs text-muted-foreground">Title</label>
+                  <Input
+                    value={title}
+                    onChange={(e) => setTitle(e.target.value)}
+                    placeholder="LinkedIn post — product launch"
+                  />
+                </div>
               </div>
-            ) : null}
-            <div className={linkedInMode ? "sm:col-span-2" : ""}>
-              <label className="mb-1 block text-xs text-muted-foreground">
-                {linkedInMode ? "Post title" : "Title"}
-              </label>
-              <Input
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-                placeholder={linkedInMode ? "e.g. Q1 product launch — LinkedIn" : "LinkedIn post — product launch"}
-              />
-            </div>
-          </div>
-          {isBannerContentType(contentType) ? (
-            <MarketingBannerUploadField
-              disabled={creating}
-              previewUrl={bannerPreview}
-              onFileSelected={onBannerSelected}
-              hint="Required for banner posts. You can also add caption text below (optional)."
-            />
-          ) : null}
-          <div>
-            <label className="mb-1 block text-xs text-muted-foreground">
-              {linkedInMode
-                ? "LinkedIn post copy"
-                : isBannerContentType(contentType)
-                  ? "Caption / copy (optional)"
-                  : "Post text (for verification)"}
-            </label>
-            <textarea
-              value={body}
-              onChange={(e) => setBody(e.target.value)}
-              rows={5}
-              placeholder={
-                linkedInMode
-                  ? "Write your LinkedIn post. Marketing head will review before publishing."
-                  : isBannerContentType(contentType)
-                    ? "Optional caption or notes for the banner…"
-                    : "Write the full post copy here. Media and marketing head will verify this text in the pipeline."
-              }
-              className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-            />
-          </div>
-          <div>
-            <label className="mb-1 block text-xs text-muted-foreground">Hashtags</label>
-            <Input value={hashtags} onChange={(e) => setHashtags(e.target.value)} placeholder="#launch #product #B2B" />
-          </div>
+              {isBannerContentType(contentType) ? (
+                <MarketingBannerUploadField
+                  disabled={creating}
+                  previewUrl={bannerPreview}
+                  onFileSelected={onBannerSelected}
+                  hint="Required for banner posts. You can also add caption text below (optional)."
+                />
+              ) : null}
+              <div>
+                <label className="mb-1 block text-xs text-muted-foreground">
+                  {isBannerContentType(contentType) ? "Caption / copy (optional)" : "Post text (for verification)"}
+                </label>
+                <textarea
+                  value={body}
+                  onChange={(e) => setBody(e.target.value)}
+                  rows={5}
+                  placeholder={
+                    isBannerContentType(contentType)
+                      ? "Optional caption or notes for the banner…"
+                      : "Write the full post copy here. Media and marketing head will verify this text in the pipeline."
+                  }
+                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs text-muted-foreground">Hashtags</label>
+                <Input value={hashtags} onChange={(e) => setHashtags(e.target.value)} placeholder="#launch #product #B2B" />
+              </div>
+            </>
+          )}
           <div className="flex flex-wrap gap-2">
             <Button
               type="button"
@@ -283,7 +447,7 @@ export function MarketingContentPage() {
             >
               Save as draft
             </Button>
-            {perms.canSubmit ? (
+            {canSendToHead ? (
               <Button type="button" size="sm" onClick={() => void onCreate(true)} disabled={!branchId || creating}>
                 {linkedInMode ? "Send to marketing head" : "Submit for verification"}
               </Button>
@@ -356,7 +520,10 @@ export function MarketingContentPage() {
         item={reviewItem}
         open={reviewOpen}
         onOpenChange={setReviewOpen}
-        onDone={() => void load()}
+        onDone={(updated) => {
+          void load();
+          if (updated) setReviewItem(updated);
+        }}
       />
     </div>
   );
@@ -365,8 +532,26 @@ export function MarketingContentPage() {
 function contentActionLabel(
   row: MarketingContentItem,
   perms: ReturnType<typeof useMarketingPermissions>,
-): { label: string; variant: "default" | "outline" } | null {
+): { label: string; variant: "default" | "outline"; href?: string } | null {
+  if (isMarketingContentLocked(row)) {
+    return { label: "View in archive", variant: "outline" };
+  }
+
   const linkedInMode = isLinkedInHandler(perms);
+
+  if (canLinkedInHandlerSubmitFinalDraftToHead(row, perms.userId)) {
+    return { label: "Send final draft to head", variant: "default" };
+  }
+  if (canLinkedInHandlerSendToPublisher(row, perms.userId)) {
+    return { label: "Send to publisher", variant: "default" };
+  }
+  if (canMarkLinkedInAsPublished(perms, row)) {
+    return { label: "Mark as published", variant: "default" };
+  }
+  if (linkedInHandlerAwaitingPublisher(row) && linkedInMode) {
+    return { label: "View status", variant: "outline" };
+  }
+
   const needsPostingReport = canUserReportPosting(row, perms.userId, {
     canSubmit: perms.canSubmit,
     canPublish: perms.canPublish,
@@ -376,13 +561,23 @@ function contentActionLabel(
   if (needsPostingReport) {
     return { label: "Tell head: Posted?", variant: "default" };
   }
-  if (perms.canApproveMedia && row.status === "in_review") {
+  if (
+    perms.canApprove &&
+    usesLinkedInSectionWorkflow(row) &&
+    (row.status === "in_review" || row.status === "changes_required")
+  ) {
+    return { label: "Approve sections", variant: "default", href: `/marketing/approvals/${row.id}` };
+  }
+  if (perms.canApproveMedia && row.status === "in_review" && !usesLinkedInSectionWorkflow(row)) {
     return { label: "Review & feedback", variant: "default" };
   }
   if (perms.canApprove && row.status === "media_approved") {
     return { label: "Head approve", variant: "default" };
   }
   if (perms.canPublish && (row.status === "approved" || row.status === "scheduled")) {
+    if (hasLinkedInSectionApproval(row)) {
+      return null;
+    }
     return { label: "Post & confirm", variant: "default" };
   }
   if (
@@ -445,13 +640,24 @@ function ContentRow({
         <td className="px-3 py-2">{formatMarketingStatus(row.content_type)}</td>
         <td className="px-3 py-2">
           <FinanceStatusBadge status={row.status} />
+          {linkedInPublishStatusLabel(row) ? (
+            <p className="mt-1 text-[11px] text-muted-foreground">{linkedInPublishStatusLabel(row)}</p>
+          ) : null}
         </td>
         <td className="max-w-[200px] truncate px-3 py-2 text-xs text-muted-foreground">{preview}</td>
         <td className="px-3 py-2">
           {action ? (
-            <Button type="button" size="sm" variant={action.variant} onClick={onVerify}>
-              {action.label}
-            </Button>
+            action.href ? (
+              <Link href={action.href}>
+                <Button type="button" size="sm" variant={action.variant}>
+                  {action.label}
+                </Button>
+              </Link>
+            ) : (
+              <Button type="button" size="sm" variant={action.variant} onClick={onVerify}>
+                {action.label}
+              </Button>
+            )
           ) : (
             <span className="text-xs text-muted-foreground">—</span>
           )}

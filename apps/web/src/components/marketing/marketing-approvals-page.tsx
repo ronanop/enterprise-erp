@@ -7,75 +7,43 @@ import { RefreshCw } from "lucide-react";
 import { FinanceStatusBadge } from "@/components/finance/finance-status-badge";
 import { MarketingContentReviewDialog } from "@/components/marketing/marketing-content-review-dialog";
 import { PageHeader } from "@/components/layout/page-header";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { useMarketingPermissions } from "@/hooks/use-marketing-permissions";
 import { VERIFIER_ROLE_LABELS } from "@/lib/marketing-verification";
+import { usesLinkedInSectionWorkflow } from "@/lib/linkedin-section-approval";
+import { buildChecklistRows, MARKETING_TEAM_ROLE_KEYS, teamRoleHref } from "@/lib/marketing-team-queue";
+import { cn } from "@/lib/utils";
 import {
   ApiClientError,
   formatMarketingStatus,
-  getContentItem,
   getHeadVerificationDashboard,
   listContentItems,
   type MarketingContentItem,
-  type MarketingVerification,
 } from "@/services/marketing-service";
 
 const POLL_MS = 10_000;
 
-const ROLE_ORDER = ["creator", "campaign_handler", "linkedin_handler", "video_editor"] as const;
-
-type HeadApprovalRow = {
-  contentId: string;
-  contentNumber: string;
-  title: string;
-  status: string;
-  verifierRole: string;
-  submitterName: string;
-  pendingLabels: string[];
-};
-
-function buildHeadApprovalRows(
-  items: Array<{
-    content_id: string;
-    content_number: string;
-    title: string;
-    status: string;
-    pending_head_items: number;
-    verifications: MarketingVerification[];
-  }>,
-): HeadApprovalRow[] {
-  const rows: HeadApprovalRow[] = [];
-  for (const item of items) {
-    if (item.pending_head_items <= 0) continue;
-    for (const verification of item.verifications) {
-      const pendingItems = verification.items.filter((i) => i.status === "submitted");
-      if (pendingItems.length === 0) continue;
-      rows.push({
-        contentId: item.content_id,
-        contentNumber: item.content_number,
-        title: item.title,
-        status: item.status,
-        verifierRole: verification.verifier_role,
-        submitterName: verification.requested_by_name ?? verification.items.find((i) => i.submitted_by_name)?.submitted_by_name ?? "Team member",
-        pendingLabels: pendingItems.map((i) => i.item_label),
-      });
-    }
-  }
-  return rows;
-}
+type HeadApprovalRow = ReturnType<typeof buildChecklistRows>[number];
 
 function HeadApprovalTable({
   title,
   rows,
-  onReview,
+  queueHref,
 }: {
   title: string;
   rows: HeadApprovalRow[];
-  onReview: (contentId: string) => void;
+  queueHref?: string;
 }) {
   return (
     <div className="space-y-2">
-      <h3 className="text-sm font-medium">{title}</h3>
+      <div className="flex items-center justify-between gap-2">
+        <h3 className="text-sm font-medium">{title}</h3>
+        {queueHref ? (
+          <Link href={queueHref} className="text-xs font-medium text-primary hover:underline">
+            View full queue
+          </Link>
+        ) : null}
+      </div>
       <div className="overflow-x-auto rounded-xl border border-border/80">
         <table className="w-full min-w-[760px] text-left text-sm">
           <thead className="border-b border-border/70 bg-muted/30 text-xs uppercase text-muted-foreground">
@@ -100,9 +68,12 @@ function HeadApprovalTable({
                   <FinanceStatusBadge status={row.status} />
                 </td>
                 <td className="px-3 py-2">
-                  <Button type="button" size="sm" variant="default" onClick={() => onReview(row.contentId)}>
-                    Review & approve
-                  </Button>
+                  <Link
+                    href={`/marketing/approvals/${row.contentId}`}
+                    className={cn(buttonVariants({ variant: "outline", size: "sm" }))}
+                  >
+                    Review post
+                  </Link>
                 </td>
               </tr>
             ))}
@@ -202,10 +173,10 @@ export function MarketingApprovalsPage() {
         : Promise.resolve(null);
 
       const [media, dashboard] = await Promise.all([mediaPromise, dashboardPromise]);
-      setMediaQueue(media ?? []);
+      setMediaQueue((media ?? []).filter((item) => !usesLinkedInSectionWorkflow(item)));
 
       if (dashboard) {
-        const rows = buildHeadApprovalRows(dashboard.items);
+        const rows = buildChecklistRows(dashboard.items);
         setHeadRows(rows);
         setPendingCount(dashboard.summary.pending_head_reviews ?? rows.length);
       } else {
@@ -236,9 +207,10 @@ export function MarketingApprovalsPage() {
       list.push(row);
       groups.set(row.verifierRole, list);
     }
-    return ROLE_ORDER.filter((role) => groups.has(role)).map((role) => ({
+    return MARKETING_TEAM_ROLE_KEYS.filter((role) => groups.has(role)).map((role) => ({
       role,
       label: VERIFIER_ROLE_LABELS[role] ?? formatMarketingStatus(role),
+      href: teamRoleHref(role),
       rows: groups.get(role) ?? [],
     }));
   }, [headRows]);
@@ -246,15 +218,6 @@ export function MarketingApprovalsPage() {
   const openReview = (item: MarketingContentItem) => {
     setReviewItem(item);
     setReviewOpen(true);
-  };
-
-  const openReviewById = async (contentId: string) => {
-    try {
-      const item = await getContentItem(contentId);
-      openReview(item);
-    } catch (err) {
-      setError(err instanceof ApiClientError ? err.message : "Failed to open content");
-    }
   };
 
   return (
@@ -301,7 +264,7 @@ export function MarketingApprovalsPage() {
               key={group.role}
               title={group.label}
               rows={group.rows}
-              onReview={(id) => void openReviewById(id)}
+              queueHref={group.href}
             />
           ))}
           {groupedHeadRows.length === 0 && !loading ? (
@@ -316,12 +279,17 @@ export function MarketingApprovalsPage() {
         <ApprovalTable title="Media / banner review" items={mediaQueue} onReview={openReview} />
       ) : null}
 
-      <MarketingContentReviewDialog
-        item={reviewItem}
-        open={reviewOpen}
-        onOpenChange={setReviewOpen}
-        onDone={() => void load()}
-      />
+      {perms.canApproveMedia ? (
+        <MarketingContentReviewDialog
+          item={reviewItem}
+          open={reviewOpen}
+          onOpenChange={setReviewOpen}
+          onDone={(updated) => {
+            void load();
+            if (updated) setReviewItem(updated);
+          }}
+        />
+      ) : null}
     </div>
   );
 }

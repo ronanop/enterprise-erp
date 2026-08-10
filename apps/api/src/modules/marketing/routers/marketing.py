@@ -49,6 +49,9 @@ from modules.marketing.schemas import (
     PublicationResponse,
     ReportSummary,
     HeadReviewItemPayload,
+    LinkedInHeadSectionReviewPayload,
+    LinkedInHeadFinalDraftReviewPayload,
+    LinkedInSubmitFinalDraftPayload,
     PostingTimelinePayload,
     PublisherUploadReportPayload,
     SendToPublisherPayload,
@@ -60,6 +63,7 @@ from modules.marketing.service.campaign_service import CampaignService
 from modules.marketing.service.channel_service import ChannelService
 from modules.marketing.service.content_service import ContentItemService
 from modules.marketing.service.dashboard_service import DashboardService
+from modules.marketing.service.linkedin_section_service import LinkedInSectionService
 from modules.marketing.service.pipeline_service import PipelineService
 from modules.marketing.service.report_service import ReportService
 from modules.marketing.service.verification_service import VerificationService
@@ -566,6 +570,69 @@ def head_review_verification_item(
     )
     db.commit()
     return APIResponse(message="Head review saved", data=data)
+
+
+@content_router.post("/{row_id}/linkedin/head-review-section", response_model=APIResponse[ContentItemResponse])
+def linkedin_head_review_section(
+    row_id: UUID,
+    body: LinkedInHeadSectionReviewPayload,
+    ctx: Annotated[TenantContext, Depends(require_permission("marketing.content:approve"))],
+    db: Annotated[Session, Depends(get_db)],
+):
+    row = LinkedInSectionService(db).head_review_section(
+        ctx,
+        row_id,
+        section_id=body.section,
+        status=body.status,
+        comments=body.comments,
+    )
+    db.commit()
+    return APIResponse(message="Section review saved", data=ContentItemResponse.model_validate(row))
+
+
+@content_router.post("/{row_id}/linkedin/submit-final-draft-to-head", response_model=APIResponse[ContentItemResponse])
+def linkedin_submit_final_draft_to_head(
+    row_id: UUID,
+    body: LinkedInSubmitFinalDraftPayload,
+    ctx: Annotated[TenantContext, Depends(require_permission("marketing.content:submit"))],
+    db: Annotated[Session, Depends(get_db)],
+):
+    row = LinkedInSectionService(db).submit_final_draft_to_head(
+        ctx,
+        row_id,
+        content_text=body.content_text,
+        poster_media_asset_id=body.poster_media_asset_id,
+    )
+    db.commit()
+    return APIResponse(message="Final draft sent to marketing head", data=ContentItemResponse.model_validate(row))
+
+
+@content_router.post("/{row_id}/linkedin/head-review-final-draft", response_model=APIResponse[ContentItemResponse])
+def linkedin_head_review_final_draft(
+    row_id: UUID,
+    body: LinkedInHeadFinalDraftReviewPayload,
+    ctx: Annotated[TenantContext, Depends(require_permission("marketing.content:approve"))],
+    db: Annotated[Session, Depends(get_db)],
+):
+    row = LinkedInSectionService(db).head_review_final_draft(
+        ctx,
+        row_id,
+        status=body.status,
+        comments=body.comments,
+    )
+    db.commit()
+    return APIResponse(message="Final draft review saved", data=ContentItemResponse.model_validate(row))
+
+
+@content_router.post("/{row_id}/linkedin/send-to-publisher", response_model=APIResponse[ContentItemResponse])
+def linkedin_send_to_publisher(
+    row_id: UUID,
+    ctx: Annotated[TenantContext, Depends(require_permission("marketing.content:submit"))],
+    db: Annotated[Session, Depends(get_db)],
+):
+    row = LinkedInSectionService(db).send_final_draft_to_publisher(ctx, row_id)
+    db.commit()
+    return APIResponse(message="Final draft sent to publisher", data=ContentItemResponse.model_validate(row))
 
 
 @content_router.post("/{row_id}/verifications/posting-timeline", response_model=APIResponse[dict])

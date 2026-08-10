@@ -49,7 +49,6 @@ export function canAccessMarketingApprovals(perms: MarketingNavAccessInput): boo
 
 export function canShowMarketingNavHref(href: string, perms: MarketingNavAccessInput): boolean {
   switch (href) {
-    case "/marketing":
     case "/marketing/pipeline":
     case "/marketing/workflow":
       return true;
@@ -66,12 +65,15 @@ export function canShowMarketingNavHref(href: string, perms: MarketingNavAccessI
     case "/marketing/approvals":
       return canAccessMarketingApprovals(perms);
     case "/marketing/archive":
-      return perms.canArchive;
+      return perms.canReadContent;
     case "/marketing/assets":
       return perms.canReadAsset;
     case "/marketing/reports":
       return perms.canReadReport;
     default:
+      if (href.startsWith("/marketing/team/")) {
+        return perms.canApprove;
+      }
       return true;
   }
 }

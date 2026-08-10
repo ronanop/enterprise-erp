@@ -155,7 +155,10 @@ export function MarketingWorkflowPage() {
         item={selected}
         open={open}
         onOpenChange={setOpen}
-        onDone={() => void refresh()}
+        onDone={(updated) => {
+          void refresh();
+          if (updated) setSelected(updated);
+        }}
       />
     </div>
   );

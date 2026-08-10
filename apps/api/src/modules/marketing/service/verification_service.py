@@ -12,6 +12,7 @@ from modules.foundation.models.security import SecUser
 from modules.foundation.service.rbac_service import RBACService
 from modules.marketing.domain.enums import (
     IMAGE_VERIFICATION_ITEM_KEYS,
+    LINKEDIN_CONTENT_ASSET_ROLES,
     ROLE_VERIFICATION_ITEMS,
     SUBMITTER_ROLES,
     VIDEO_VERIFICATION_ITEM_KEYS,
@@ -27,6 +28,7 @@ from modules.marketing.models import MktContentItem, MktContentVerification, Mkt
 from modules.marketing.models.content_asset_link import MktContentAssetLink
 from modules.marketing.repository.marketing_repository import ContentItemRepository
 from modules.marketing.service.activity_log_service import ActivityLogService
+from modules.marketing.service.linkedin_section_service import LinkedInSectionService
 
 
 def _utcnow() -> datetime:
@@ -99,30 +101,51 @@ class VerificationService:
             )
         )
         if existing:
-            existing_keys = {
-                i.item_key
-                for i in self._db.scalars(
+            valid_keys = {key for key, _ in ROLE_VERIFICATION_ITEMS[role]}
+            label_map = dict(ROLE_VERIFICATION_ITEMS[role])
+            existing_items = self._db.scalars(
+                select(MktVerificationItem).where(
+                    MktVerificationItem.verification_id == existing.id,
+                    MktVerificationItem.is_deleted.is_(False),
+                )
+            ).all()
+            existing_keys = {i.item_key for i in existing_items}
+            for item in existing_items:
+                if item.item_key not in valid_keys:
+                    item.is_deleted = True
+                    item.updated_by = ctx.user_id
+                elif item.item_label != label_map[item.item_key]:
+                    item.item_label = label_map[item.item_key]
+                    item.updated_by = ctx.user_id
+            for key, label in ROLE_VERIFICATION_ITEMS[role]:
+                if key in existing_keys:
+                    continue
+                archived = self._db.scalar(
                     select(MktVerificationItem).where(
                         MktVerificationItem.verification_id == existing.id,
-                        MktVerificationItem.is_deleted.is_(False),
+                        MktVerificationItem.item_key == key,
+                        MktVerificationItem.is_deleted.is_(True),
                     )
-                ).all()
-            }
-            for key, label in ROLE_VERIFICATION_ITEMS[role]:
-                if key not in existing_keys:
-                    self._db.add(
-                        MktVerificationItem(
-                            id=uuid4(),
-                            tenant_id=ctx.tenant_id,
-                            company_id=row.company_id,
-                            created_by=ctx.user_id,
-                            updated_by=ctx.user_id,
-                            verification_id=existing.id,
-                            item_key=key,
-                            item_label=label,
-                            status=VerificationItemStatus.PENDING.value,
-                        )
+                )
+                if archived is not None:
+                    archived.is_deleted = False
+                    archived.item_label = label
+                    archived.status = VerificationItemStatus.PENDING.value
+                    archived.updated_by = ctx.user_id
+                    continue
+                self._db.add(
+                    MktVerificationItem(
+                        id=uuid4(),
+                        tenant_id=ctx.tenant_id,
+                        company_id=row.company_id,
+                        created_by=ctx.user_id,
+                        updated_by=ctx.user_id,
+                        verification_id=existing.id,
+                        item_key=key,
+                        item_label=label,
+                        status=VerificationItemStatus.PENDING.value,
                     )
+                )
             self._db.flush()
             return existing
         verification = MktContentVerification(
@@ -154,6 +177,50 @@ class VerificationService:
         self._db.flush()
         return verification
 
+    def _ensure_verification_item(
+        self,
+        ctx: TenantContext,
+        content_id: UUID,
+        verifier_role: str,
+        item_key: str,
+    ) -> tuple[MktContentVerification, MktVerificationItem]:
+        verification = self.ensure_role_verification(ctx, content_id, verifier_role)
+        item = self._db.scalar(
+            select(MktVerificationItem).where(
+                MktVerificationItem.verification_id == verification.id,
+                MktVerificationItem.item_key == item_key,
+                MktVerificationItem.is_deleted.is_(False),
+            )
+        )
+        if item is not None:
+            return verification, item
+
+        archived = self._db.scalar(
+            select(MktVerificationItem).where(
+                MktVerificationItem.verification_id == verification.id,
+                MktVerificationItem.item_key == item_key,
+                MktVerificationItem.is_deleted.is_(True),
+            )
+        )
+        if archived is not None:
+            archived.is_deleted = False
+            archived.status = VerificationItemStatus.PENDING.value
+            archived.updated_by = ctx.user_id
+            self._db.flush()
+            return verification, archived
+
+        verification = self.ensure_role_verification(ctx, content_id, verifier_role)
+        item = self._db.scalar(
+            select(MktVerificationItem).where(
+                MktVerificationItem.verification_id == verification.id,
+                MktVerificationItem.item_key == item_key,
+                MktVerificationItem.is_deleted.is_(False),
+            )
+        )
+        if item is None:
+            raise NotFoundException(f"Checklist item not found: {item_key}")
+        return verification, item
+
     def initialize_verifications(self, ctx: TenantContext, content_id: UUID) -> None:
         """On content submit — init verification for submitting user's role only."""
         role = self.role_for_user(ctx)
@@ -174,6 +241,138 @@ class VerificationService:
         ).all()
         return {role for role in rows if role}
 
+    @staticmethod
+    def _fonts_complete(row: MktContentItem) -> bool:
+        return all(
+            bool((getattr(row, field) or "").strip())
+            for field in ("font_name", "font_size", "color_codes")
+        )
+
+    _LINKEDIN_CONTENT_KEYS = frozenset({"linkedin_content", "content", "hashtags", "text_copy"})
+    _LINKEDIN_THEME_KEYS = frozenset({"theme"})
+    _LINKEDIN_FONTS_KEYS = frozenset({"fonts", "font_name", "font_size", "color_codes"})
+
+    def _verification_items(self, verification_id: UUID) -> list[MktVerificationItem]:
+        return list(
+            self._db.scalars(
+                select(MktVerificationItem).where(
+                    MktVerificationItem.verification_id == verification_id,
+                    MktVerificationItem.is_deleted.is_(False),
+                )
+            ).all()
+        )
+
+    def _linkedin_content_approved(self, items: list[MktVerificationItem]) -> bool:
+        by_key = {i.item_key: i for i in items}
+        linkedin = by_key.get("linkedin_content")
+        if linkedin is not None:
+            return linkedin.status == VerificationItemStatus.APPROVED.value
+        legacy = [by_key[k] for k in ("content", "hashtags", "text_copy") if k in by_key]
+        if not legacy:
+            return False
+        return all(i.status == VerificationItemStatus.APPROVED.value for i in legacy)
+
+    def _linkedin_theme_approved(self, items: list[MktVerificationItem]) -> bool:
+        theme = next((i for i in items if i.item_key == "theme"), None)
+        return theme is not None and theme.status == VerificationItemStatus.APPROVED.value
+
+    def _linkedin_fonts_approved(self, items: list[MktVerificationItem]) -> bool:
+        by_key = {i.item_key: i for i in items}
+        if "fonts" in by_key:
+            return by_key["fonts"].status == VerificationItemStatus.APPROVED.value
+        font_items = [by_key[k] for k in ("font_name", "font_size", "color_codes") if k in by_key]
+        if not font_items:
+            return False
+        return all(i.status == VerificationItemStatus.APPROVED.value for i in font_items)
+
+    def _linkedin_head_prior_section_satisfied(
+        self, verification: MktContentVerification, item_key: str
+    ) -> bool:
+        """Marketing head must approve Content, then Theme, then Fonts."""
+        if verification.verifier_role != VerifierRole.LINKEDIN_HANDLER.value:
+            return True
+        items = self._verification_items(verification.id)
+        if item_key in self._LINKEDIN_THEME_KEYS:
+            return self._linkedin_content_approved(items)
+        if item_key in self._LINKEDIN_FONTS_KEYS:
+            return self._linkedin_theme_approved(items)
+        return True
+
+    def _queue_linkedin_item_for_head_review(
+        self,
+        ctx: TenantContext,
+        content_id: UUID,
+        verification: MktContentVerification,
+        item: MktVerificationItem,
+        row: MktContentItem,
+        linked_roles: set[str],
+    ) -> None:
+        if item.status == VerificationItemStatus.SUBMITTED.value:
+            return
+        if item.status == VerificationItemStatus.APPROVED.value:
+            return
+        if item.status != VerificationItemStatus.PENDING.value:
+            raise InvalidMarketingState(f"This item cannot be reviewed (status: {item.status})")
+        if verification.verifier_role != VerifierRole.LINKEDIN_HANDLER.value:
+            raise InvalidMarketingState("This item has not been submitted to head yet")
+        if not self._item_ready_for_auto_submit(row, item.item_key, linked_roles):
+            label = item.item_label or item.item_key.replace("_", " ").title()
+            raise InvalidMarketingState(f"Complete the {label} section before it can be reviewed")
+        self._mark_item_submitted_to_head(ctx, content_id, verification, item, log_activity=False)
+
+    def _advance_linkedin_queue_after_approval(
+        self,
+        ctx: TenantContext,
+        content_id: UUID,
+        verification: MktContentVerification,
+        approved_item_key: str,
+    ) -> None:
+        if verification.verifier_role != VerifierRole.LINKEDIN_HANDLER.value:
+            return
+        row = self._get_content(ctx, content_id)
+        linked_roles = self._linked_asset_roles(content_id)
+        items = {i.item_key: i for i in self._verification_items(verification.id)}
+        next_key: str | None = None
+        if approved_item_key in self._LINKEDIN_CONTENT_KEYS:
+            next_key = "theme"
+        elif approved_item_key in self._LINKEDIN_THEME_KEYS:
+            next_key = "fonts"
+        if not next_key:
+            return
+        next_item = items.get(next_key)
+        if next_item is None or next_item.status != VerificationItemStatus.PENDING.value:
+            return
+        if self._item_ready_for_auto_submit(row, next_key, linked_roles):
+            self._mark_item_submitted_to_head(ctx, content_id, verification, next_item, log_activity=True)
+
+    @staticmethod
+    def _linkedin_content_has_media(linked_roles: set[str]) -> bool:
+        return bool(linked_roles & LINKEDIN_CONTENT_ASSET_ROLES)
+
+    def _linkedin_content_complete(self, row: MktContentItem, linked_roles: set[str]) -> bool:
+        body = (row.body or "").strip()
+        hashtags = (row.hashtags or "").strip()
+        return bool(body) and bool(hashtags)
+
+    def _validate_item_before_submit(
+        self, row: MktContentItem, item_key: str, linked_roles: set[str]
+    ) -> None:
+        if item_key == "linkedin_content":
+            if not (row.body or "").strip():
+                raise InvalidMarketingState("Add post copy before submitting Content to head")
+            if not (row.hashtags or "").strip():
+                raise InvalidMarketingState("Add hashtags before submitting Content to head")
+            return
+        if item_key == "theme":
+            if not (row.theme or "").strip():
+                raise InvalidMarketingState("Add a theme before submitting to head")
+            return
+        if item_key == "fonts":
+            if not self._fonts_complete(row):
+                raise InvalidMarketingState(
+                    "Complete font name, size, and color codes before submitting Fonts to head"
+                )
+
     def _item_ready_for_auto_submit(self, row: MktContentItem, item_key: str, linked_roles: set[str]) -> bool:
         if item_key in IMAGE_VERIFICATION_ITEM_KEYS or item_key in VIDEO_VERIFICATION_ITEM_KEYS:
             return item_key in linked_roles
@@ -192,6 +391,10 @@ class VerificationService:
             return bool((row.font_size or "").strip())
         if item_key == "color_codes":
             return bool((row.color_codes or "").strip())
+        if item_key == "linkedin_content":
+            return self._linkedin_content_complete(row, linked_roles)
+        if item_key == "fonts":
+            return self._fonts_complete(row)
         return False
 
     def _mark_item_submitted_to_head(
@@ -276,16 +479,16 @@ class VerificationService:
         role = verifier_role or self.role_for_user(ctx)
         if role is None:
             raise ForbiddenException("You are not assigned to submit verifications for this content")
-        verification = self.ensure_role_verification(ctx, content_id, role)
-        item = self._db.scalar(
-            select(MktVerificationItem).where(
-                MktVerificationItem.verification_id == verification.id,
-                MktVerificationItem.item_key == item_key,
-                MktVerificationItem.is_deleted.is_(False),
-            )
-        )
-        if item is None:
-            raise NotFoundException("Checklist item not found")
+        verification, item = self._ensure_verification_item(ctx, content_id, role, item_key)
+        if item.status in (
+            VerificationItemStatus.SUBMITTED.value,
+            VerificationItemStatus.APPROVED.value,
+        ):
+            return self.get_workflow_dashboard(ctx, content_id)
+        row = self._get_content(ctx, content_id)
+        linked_roles = self._linked_asset_roles(content_id)
+        if item_key in {"linkedin_content", "theme", "fonts"}:
+            self._validate_item_before_submit(row, item_key, linked_roles)
         if item_key in IMAGE_VERIFICATION_ITEM_KEYS or item_key in VIDEO_VERIFICATION_ITEM_KEYS:
             linked = self._db.scalar(
                 select(MktContentAssetLink).where(
@@ -298,7 +501,6 @@ class VerificationService:
                 kind = "image/banner" if item_key in IMAGE_VERIFICATION_ITEM_KEYS else "video"
                 raise InvalidMarketingState(f"Upload a {kind} file for this item before submitting to head")
         self._mark_item_submitted_to_head(ctx, content_id, verification, item, log_activity=True)
-        row = self._get_content(ctx, content_id)
         row.workflow_stage = WorkflowStage.HEAD_FINAL_REVIEW.value
         row.status = ContentStatus.IN_REVIEW.value
         self._db.flush()
@@ -316,25 +518,41 @@ class VerificationService:
     ) -> dict:
         if not self.is_head(ctx):
             raise ForbiddenException("Only marketing head can review submitted items")
-        verification = self._db.scalar(
-            select(MktContentVerification).where(
-                MktContentVerification.content_item_id == content_id,
-                MktContentVerification.verifier_role == verifier_role,
-                MktContentVerification.is_deleted.is_(False),
+        row = self._get_content(ctx, content_id)
+        if LinkedInSectionService.is_linkedin_section_workflow(row):
+            section_map = {
+                "linkedin_content": "content",
+                "content": "content",
+                "hashtags": "content",
+                "text_copy": "content",
+                "theme": "theme",
+                "fonts": "fonts",
+            }
+            section_id = section_map.get(item_key)
+            if section_id is None:
+                raise InvalidMarketingState("Use section-based approval for LinkedIn posts")
+            LinkedInSectionService(self._db).head_review_section(
+                ctx,
+                content_id,
+                section_id=section_id,
+                status=status,
+                comments=comments,
             )
-        )
-        if verification is None:
-            raise NotFoundException("Verification record not found")
-        item = self._db.scalar(
-            select(MktVerificationItem).where(
-                MktVerificationItem.verification_id == verification.id,
-                MktVerificationItem.item_key == item_key,
-                MktVerificationItem.is_deleted.is_(False),
+            self._db.flush()
+            return self.get_workflow_dashboard(ctx, content_id)
+        verification, item = self._ensure_verification_item(ctx, content_id, verifier_role, item_key)
+        linked_roles = self._linked_asset_roles(content_id)
+        if not self._linkedin_head_prior_section_satisfied(verification, item_key):
+            if item_key in self._LINKEDIN_THEME_KEYS:
+                raise InvalidMarketingState("Approve Content before reviewing Theme")
+            if item_key in self._LINKEDIN_FONTS_KEYS:
+                raise InvalidMarketingState("Approve Theme before reviewing Fonts")
+            raise InvalidMarketingState("The previous section must be approved first")
+        if verification.verifier_role == VerifierRole.LINKEDIN_HANDLER.value:
+            self._queue_linkedin_item_for_head_review(
+                ctx, content_id, verification, item, row, linked_roles
             )
-        )
-        if item is None:
-            raise NotFoundException("Checklist item not found")
-        if item.status != VerificationItemStatus.SUBMITTED.value:
+        elif item.status != VerificationItemStatus.SUBMITTED.value:
             raise InvalidMarketingState("This item has not been submitted to head yet")
         now = _utcnow()
         item.status = status
@@ -343,9 +561,15 @@ class VerificationService:
         item.reviewed_at = now
         item.updated_by = ctx.user_id
         self._sync_verification_status(verification)
-        row = self._get_content(ctx, content_id)
-        if status == VerificationItemStatus.CHANGES_REQUESTED.value:
-            verification.overall_status = VerificationOverallStatus.CHANGES_REQUESTED.value
+        if status in (
+            VerificationItemStatus.CHANGES_REQUESTED.value,
+            VerificationItemStatus.REJECTED.value,
+        ):
+            verification.overall_status = (
+                VerificationOverallStatus.CHANGES_REQUESTED.value
+                if status == VerificationItemStatus.CHANGES_REQUESTED.value
+                else VerificationOverallStatus.REJECTED.value
+            )
             verification.overall_comments = comments
             row.workflow_stage = WorkflowStage.CHANGES_REQUIRED.value
             row.status = ContentStatus.CHANGES_REQUIRED.value
@@ -358,6 +582,14 @@ class VerificationService:
             details=f"{verifier_role}/{item_key}: {comments or status}",
             company_id=row.company_id,
         )
+        if (
+            verification.verifier_role == VerifierRole.LINKEDIN_HANDLER.value
+            and status == VerificationItemStatus.APPROVED.value
+        ):
+            self._advance_linkedin_queue_after_approval(
+                ctx, content_id, verification, item_key
+            )
+            self.auto_submit_ready_items(ctx, content_id, role=verification.verifier_role)
         self._db.flush()
         return self.get_workflow_dashboard(ctx, content_id)
 
@@ -605,6 +837,17 @@ class VerificationService:
             )
         ).all()
         for verification in verification_rows:
+            self.ensure_role_verification(ctx, content_id, verification.verifier_role)
+            if verification.verifier_role == VerifierRole.LINKEDIN_HANDLER.value:
+                items = self._verification_items(verification.id)
+                if self._linkedin_content_approved(items):
+                    self._advance_linkedin_queue_after_approval(
+                        ctx, content_id, verification, "linkedin_content"
+                    )
+                if self._linkedin_theme_approved(items):
+                    self._advance_linkedin_queue_after_approval(
+                        ctx, content_id, verification, "theme"
+                    )
             self._notify_publisher_if_ready(verification)
         self._db.flush()
         verifications = self.list_verifications(ctx, content_id)
@@ -629,6 +872,8 @@ class VerificationService:
         }
 
     def can_publish(self, row: MktContentItem) -> bool:
+        from modules.marketing.service.linkedin_section_service import LinkedInSectionService
+
         verifications = self._db.scalars(
             select(MktContentVerification).where(
                 MktContentVerification.content_item_id == row.id,
@@ -636,11 +881,18 @@ class VerificationService:
                 MktContentVerification.sent_to_publisher_at.isnot(None),
             )
         ).all()
-        return len(verifications) > 0 and all(
-            v.publisher_upload_status == "uploaded" for v in verifications if v.sent_to_publisher_at
-        )
+        if not verifications:
+            return False
+        if LinkedInSectionService.is_linkedin_section_workflow(row) and row.linkedin_head_sections:
+            return (
+                row.workflow_stage == WorkflowStage.PUBLISHER_REVIEW.value
+                and row.status != ContentStatus.PUBLISHED.value
+            )
+        return all(v.publisher_upload_status == "uploaded" for v in verifications if v.sent_to_publisher_at)
 
     def assert_can_publish(self, row: MktContentItem) -> None:
+        from modules.marketing.service.linkedin_section_service import LinkedInSectionService
+
         sent = self._db.scalars(
             select(MktContentVerification).where(
                 MktContentVerification.content_item_id == row.id,
@@ -650,6 +902,10 @@ class VerificationService:
         ).all()
         if not sent:
             raise InvalidMarketingState("Nothing has been sent to publisher yet")
+        if LinkedInSectionService.is_linkedin_section_workflow(row) and row.linkedin_head_sections:
+            if row.workflow_stage != WorkflowStage.PUBLISHER_REVIEW.value:
+                raise InvalidMarketingState("This post is not with the publisher yet")
+            return
         pending = [v for v in sent if v.publisher_upload_status != "uploaded"]
         if pending:
             raise InvalidMarketingState("Publisher must confirm upload before final publish")
@@ -669,7 +925,122 @@ class VerificationService:
             ],
         )
         items: list[dict] = []
+        linkedin_svc = LinkedInSectionService(self._db)
         for row in rows:
+            if linkedin_svc.ensure_sections_initialized(ctx, row):
+                self._db.flush()
+        linkedin_rows = linkedin_svc.list_pending_for_head(list(rows))
+        final_draft_rows = linkedin_svc.list_pending_final_draft_for_head(list(rows))
+        linkedin_by_id = {r["content_id"]: r for r in linkedin_rows}
+        final_draft_by_id = {r["content_id"]: r for r in final_draft_rows}
+
+        for row in rows:
+            if str(row.id) in final_draft_by_id:
+                li = final_draft_by_id[str(row.id)]
+                items.append(
+                    {
+                        "content_id": li["content_id"],
+                        "content_number": li["content_number"],
+                        "title": li["title"],
+                        "workflow_stage": li["workflow_stage"],
+                        "status": li["status"],
+                        "pending_head_items": 1,
+                        "linkedin_head_sections": li.get("linkedin_head_sections"),
+                        "linkedin_final_draft": li.get("linkedin_final_draft"),
+                        "verifications": [
+                            {
+                                "id": "final_draft",
+                                "verifier_role": VerifierRole.LINKEDIN_HANDLER.value,
+                                "verifier_user_id": None,
+                                "requested_by_user_id": None,
+                                "requested_by_name": None,
+                                "overall_status": "submitted_to_head",
+                                "overall_comments": None,
+                                "started_at": None,
+                                "completed_at": None,
+                                "posting_planned_at": None,
+                                "posting_timeline_notes": None,
+                                "posting_confirmed": False,
+                                "sent_to_publisher_at": None,
+                                "publisher_upload_status": None,
+                                "publisher_upload_notes": None,
+                                "publisher_reported_at": None,
+                                "items": [
+                                    {
+                                        "id": "final_draft",
+                                        "item_key": "final_draft",
+                                        "item_label": "Final draft (poster + content)",
+                                        "status": "submitted",
+                                        "comments": None,
+                                        "submitted_to_head_at": None,
+                                        "submitted_by_user_id": None,
+                                        "submitted_by_name": None,
+                                        "reviewed_at": None,
+                                    }
+                                ],
+                            }
+                        ],
+                    }
+                )
+                continue
+            if str(row.id) in linkedin_by_id:
+                li = linkedin_by_id[str(row.id)]
+                pending_labels = [
+                    label
+                    for sid, label in (("content", "Content"), ("theme", "Theme"), ("fonts", "Fonts"))
+                    if li["linkedin_head_sections"].get(sid, {}).get("status") == "awaiting_head"
+                ]
+                items.append(
+                    {
+                        "content_id": li["content_id"],
+                        "content_number": li["content_number"],
+                        "title": li["title"],
+                        "workflow_stage": li["workflow_stage"],
+                        "status": li["status"],
+                        "pending_head_items": li["pending_head_items"],
+                        "linkedin_head_sections": li["linkedin_head_sections"],
+                        "verifications": [
+                            {
+                                "id": "",
+                                "verifier_role": VerifierRole.LINKEDIN_HANDLER.value,
+                                "verifier_user_id": None,
+                                "requested_by_user_id": None,
+                                "requested_by_name": None,
+                                "overall_status": "submitted_to_head",
+                                "overall_comments": None,
+                                "started_at": None,
+                                "completed_at": None,
+                                "posting_planned_at": None,
+                                "posting_timeline_notes": None,
+                                "posting_confirmed": False,
+                                "sent_to_publisher_at": None,
+                                "publisher_upload_status": None,
+                                "publisher_upload_notes": None,
+                                "publisher_reported_at": None,
+                                "items": [
+                                    {
+                                        "id": sid,
+                                        "item_key": sid,
+                                        "item_label": label,
+                                        "status": "submitted",
+                                        "comments": None,
+                                        "submitted_to_head_at": None,
+                                        "submitted_by_user_id": None,
+                                        "submitted_by_name": None,
+                                        "reviewed_at": None,
+                                    }
+                                    for sid, label in (
+                                        ("content", "Content"),
+                                        ("theme", "Theme"),
+                                        ("fonts", "Fonts"),
+                                    )
+                                    if li["linkedin_head_sections"].get(sid, {}).get("status") == "awaiting_head"
+                                ],
+                            }
+                        ],
+                    }
+                )
+                continue
             verifications = self.list_verifications(ctx, row.id)
             if not verifications:
                 continue

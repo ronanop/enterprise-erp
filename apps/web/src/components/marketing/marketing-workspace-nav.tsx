@@ -9,18 +9,27 @@ import {
   BarChart3,
   CheckCircle2,
   FileImage,
-  GitBranch,
   ListChecks,
   Globe,
   LayoutDashboard,
   Megaphone,
   Newspaper,
+  PenLine,
   Radio,
+  Share2,
+  Video,
 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
+import { useMarketingHeadTeamNav } from "@/hooks/use-marketing-head-team-nav";
 import { useMarketingPermissions } from "@/hooks/use-marketing-permissions";
 import { detectMarketingPersona, marketingNavTitle, marketingWorkspaceLabels } from "@/lib/marketing-role-ui";
+import {
+  MARKETING_TEAM_ROLE_KEYS,
+  teamRoleHref,
+  teamRoleLabel,
+  type MarketingTeamRoleKey,
+} from "@/lib/marketing-team-queue";
 import { SidebarUserIdentity } from "@/components/layout/sidebar-user-identity";
 
 type MarketingNavItem = {
@@ -30,8 +39,7 @@ type MarketingNavItem = {
 };
 
 export const MARKETING_NAV: readonly MarketingNavItem[] = [
-  { title: "Overview", href: "/marketing", icon: LayoutDashboard },
-  { title: "My Pipeline", href: "/marketing/pipeline", icon: GitBranch },
+  { title: "Overview", href: "/marketing/pipeline", icon: LayoutDashboard },
   { title: "Workflow", href: "/marketing/workflow", icon: ListChecks },
   { title: "Campaigns", href: "/marketing/campaigns", icon: Megaphone },
   { title: "Content", href: "/marketing/content", icon: Newspaper },
@@ -58,9 +66,7 @@ export function MarketingWorkspaceNav() {
       <ul className="flex min-w-max items-center gap-0.5 border-b border-border/70 pb-px">
         {visibleNav.map((item) => {
           const active =
-            item.href === "/marketing"
-              ? pathname === "/marketing"
-              : pathname === item.href || pathname.startsWith(`${item.href}/`);
+            pathname === item.href || pathname.startsWith(`${item.href}/`);
           return (
             <li key={item.href}>
               <Link
@@ -88,6 +94,14 @@ export function MarketingSidebar() {
   const persona = detectMarketingPersona(perms);
   const workspace = marketingWorkspaceLabels(persona);
   const visibleNav = MARKETING_NAV.filter((item) => perms.canShowNav(item.href));
+  const { roleQueues } = useMarketingHeadTeamNav(perms.canApprove);
+
+  const teamRoleIcons: Record<MarketingTeamRoleKey, LucideIcon> = {
+    creator: PenLine,
+    campaign_handler: Megaphone,
+    linkedin_handler: Share2,
+    video_editor: Video,
+  };
 
   if (perms.loading) {
     return null;
@@ -105,9 +119,7 @@ export function MarketingSidebar() {
           const Icon = item.icon;
           const label = marketingNavTitle(item.href, persona, item.title);
           const active =
-            item.href === "/marketing"
-              ? pathname === "/marketing"
-              : pathname === item.href || pathname.startsWith(`${item.href}/`);
+            pathname === item.href || pathname.startsWith(`${item.href}/`);
           return (
             <Link
               key={item.href}
@@ -124,6 +136,41 @@ export function MarketingSidebar() {
             </Link>
           );
         })}
+
+        {perms.canApprove ? (
+          <>
+            <p className="px-2.5 pb-1 pt-4 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+              Team queues
+            </p>
+            {MARKETING_TEAM_ROLE_KEYS.map((role) => {
+              const href = teamRoleHref(role);
+              const active = pathname === href || pathname.startsWith(`${href}/`);
+              const label = teamRoleLabel(role);
+              const Icon = teamRoleIcons[role];
+              const pendingCount = roleQueues.find((queue) => queue.role === role)?.pendingCount ?? 0;
+              return (
+                <Link
+                  key={href}
+                  href={href}
+                  className={cn(
+                    "flex items-center gap-2 rounded-md px-2.5 py-2 text-sm transition-colors",
+                    active
+                      ? "bg-primary/10 font-medium text-primary"
+                      : "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
+                  )}
+                >
+                  <Icon className="size-4 shrink-0" aria-hidden />
+                  <span className="min-w-0 flex-1 truncate">{label}</span>
+                  {pendingCount > 0 ? (
+                    <span className="rounded-full bg-primary/15 px-1.5 py-0.5 text-[10px] font-semibold tabular-nums text-primary">
+                      {pendingCount}
+                    </span>
+                  ) : null}
+                </Link>
+              );
+            })}
+          </>
+        ) : null}
       </nav>
     </aside>
   );

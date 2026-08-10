@@ -40,8 +40,7 @@ export function isLinkedInHandler(
 
 const NAV_LABELS: Partial<Record<MarketingPersona, Partial<Record<string, string>>>> = {
   linkedin_handler: {
-    "/marketing": "Dashboard",
-    "/marketing/pipeline": "My queue",
+    "/marketing/pipeline": "Overview",
     "/marketing/workflow": "Checklist",
     "/marketing/content": "LinkedIn posts",
     "/marketing/calendar": "Schedule",
@@ -50,8 +49,7 @@ const NAV_LABELS: Partial<Record<MarketingPersona, Partial<Record<string, string
     "/marketing/reports": "Insights",
   },
   head: {
-    "/marketing": "Overview",
-    "/marketing/pipeline": "Team pipeline",
+    "/marketing/pipeline": "Overview",
     "/marketing/workflow": "Workflow",
     "/marketing/content": "All content",
     "/marketing/approvals": "Approvals",

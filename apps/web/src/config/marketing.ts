@@ -62,8 +62,7 @@ export const MARKETING_CONTENT_PIPELINE = [
 ] as const;
 
 export const MARKETING_NAV_ITEMS = [
-  { title: "Overview", href: "/marketing" },
-  { title: "My Pipeline", href: "/marketing/pipeline" },
+  { title: "Overview", href: "/marketing/pipeline" },
   { title: "Campaigns", href: "/marketing/campaigns" },
   { title: "Content", href: "/marketing/content" },
   { title: "Calendar", href: "/marketing/calendar" },

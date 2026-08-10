@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 from modules.foundation.domain.value_objects import TenantContext
 from modules.foundation.models.security import SecUser
 from modules.foundation.service.rbac_service import RBACService
-from modules.marketing.domain.enums import CampaignStatus, ContentStatus
+from modules.marketing.domain.enums import CampaignStatus, ContentStatus, PostingReportStatus, WorkflowStage
 from modules.marketing.models import MktCampaign, MktContentItem
 from modules.marketing.repository.marketing_repository import CampaignRepository, ContentItemRepository
 from modules.marketing.schemas import (
@@ -20,7 +20,12 @@ from modules.marketing.schemas import (
     PipelineWorkResponse,
     PipelineWorkStage,
 )
+from modules.marketing.service.linkedin_section_service import LinkedInSectionService
 from modules.marketing.service.marketing_scope_validator import MarketingScopeValidator
+
+
+def _is_linkedin_section_row(row: MktContentItem) -> bool:
+    return LinkedInSectionService.is_linkedin_section_workflow(row) and bool(row.linkedin_head_sections)
 
 
 def _utcnow() -> datetime:
@@ -87,7 +92,7 @@ class PipelineService:
             ):
                 if row.created_by_id != ctx.user_id:
                     seen.setdefault(row.id, row)
-        return list(seen.values())
+        return [r for r in seen.values() if not _is_linkedin_section_row(r)]
 
     def get_funnel(self, ctx: TenantContext, company_id: UUID | None = None) -> list[PipelineFunnelStage]:
         cid = self._scope.resolve_company_id(ctx, company_id)
@@ -189,6 +194,8 @@ class PipelineService:
             if perm and perm not in perms:
                 continue
             rows = self._content.list_rows(ctx, cid, statuses=statuses, mine=mine)
+            if key == "ready_to_post":
+                rows = [r for r in rows if not _is_linkedin_section_row(r)]
             if rows or perm in perms:
                 stages.append(
                     PipelineWorkStage(
@@ -201,6 +208,70 @@ class PipelineService:
                 )
                 if hint not in role_hints:
                     role_hints.append(hint)
+
+        linkedin_svc = LinkedInSectionService(self._db)
+        if self._has(ctx, "marketing.content:submit"):
+            handler_send_draft = [
+                r
+                for r in self._content.list_rows(ctx, cid, statuses=[ContentStatus.APPROVED.value], mine=True)
+                if linkedin_svc.can_handler_submit_final_draft_to_head(r)
+            ]
+            if handler_send_draft:
+                stages.append(
+                    PipelineWorkStage(
+                        key="linkedin_send_final_draft_to_head",
+                        label="Send final draft to marketing head",
+                        description="Upload the final poster image and content (or NA), then send to marketing head for approval.",
+                        count=len(handler_send_draft),
+                        items=self._to_items(handler_send_draft),
+                    )
+                )
+                if "creator" not in role_hints:
+                    role_hints.append("creator")
+
+            handler_send = [
+                r
+                for r in self._content.list_rows(ctx, cid, statuses=[ContentStatus.APPROVED.value], mine=True)
+                if linkedin_svc.can_handler_send_to_publisher(r)
+            ]
+            if handler_send:
+                stages.append(
+                    PipelineWorkStage(
+                        key="linkedin_send_to_publisher",
+                        label="Send final draft to publisher",
+                        description="Marketing head approved your fields. Review the final draft and send it to the publisher.",
+                        count=len(handler_send),
+                        items=self._to_items(handler_send),
+                    )
+                )
+                if "creator" not in role_hints:
+                    role_hints.append("creator")
+
+        is_publisher_only = self._has(ctx, "marketing.content:publish") and not self._has(
+            ctx, "marketing.content:approve"
+        ) and not self._has(ctx, "marketing.content:submit") and not self._has(
+            ctx, "marketing.channel:update"
+        )
+        if is_publisher_only:
+            publisher_queue = [
+                r
+                for r in self._content.list_rows(ctx, cid, statuses=[ContentStatus.APPROVED.value])
+                if _is_linkedin_section_row(r)
+                and r.workflow_stage == WorkflowStage.PUBLISHER_REVIEW.value
+                and r.status != ContentStatus.PUBLISHED.value
+            ]
+            if publisher_queue:
+                stages.append(
+                    PipelineWorkStage(
+                        key="linkedin_publisher_queue",
+                        label="Mark as published",
+                        description="LinkedIn final drafts sent to you — mark each as published when live.",
+                        count=len(publisher_queue),
+                        items=self._to_items(publisher_queue),
+                    )
+                )
+                if "publisher" not in role_hints:
+                    role_hints.append("publisher")
 
         post_ready = [
             ContentStatus.APPROVED.value,
@@ -233,18 +304,61 @@ class PipelineService:
                 role_hints.append("creator")
 
         if self._has(ctx, "marketing.content:approve"):
+            linkedin_awaiting = [
+                r
+                for r in self._content.list_rows(ctx, cid, statuses=[ContentStatus.IN_REVIEW.value])
+                if _is_linkedin_section_row(r)
+                and r.workflow_stage == WorkflowStage.LINKEDIN_FINAL_DRAFT_HEAD_REVIEW.value
+            ]
+            if linkedin_awaiting:
+                stages.append(
+                    PipelineWorkStage(
+                        key="head_final_draft_review",
+                        label="Final draft approval — poster & content",
+                        description="LinkedIn handler sent the final poster and copy. Approve before they send to publisher.",
+                        count=len(linkedin_awaiting),
+                        items=self._to_items(linkedin_awaiting),
+                    )
+                )
+
+            linkedin_awaiting_pub = [
+                r
+                for r in self._content.list_rows(ctx, cid, statuses=[ContentStatus.APPROVED.value])
+                if _is_linkedin_section_row(r)
+                and r.workflow_stage == WorkflowStage.PUBLISHER_REVIEW.value
+                and r.posting_report_status == PostingReportStatus.NOT_POSTED.value
+            ]
+            if linkedin_awaiting_pub:
+                stages.append(
+                    PipelineWorkStage(
+                        key="head_awaiting_publisher",
+                        label="Awaiting publisher — not marked published yet",
+                        description="Final draft was sent to publisher. Follow up if still not marked published.",
+                        count=len(linkedin_awaiting_pub),
+                        items=self._to_items(linkedin_awaiting_pub),
+                    )
+                )
+
             reported = [
                 r
                 for r in self._content.list_rows(ctx, cid, statuses=post_ready)
                 if r.posting_report_status in {"posted", "not_posted", "pending"}
+                and not _is_linkedin_section_row(r)
             ]
+            linkedin_published = [
+                r
+                for r in self._content.list_rows(ctx, cid, statuses=post_ready)
+                if _is_linkedin_section_row(r)
+                and r.posting_report_status in {PostingReportStatus.POSTED.value, PostingReportStatus.NOT_POSTED.value}
+            ]
+            all_reported = reported + linkedin_published
             stages.append(
                 PipelineWorkStage(
                     key="team_posting_reports",
                     label="Posting confirmations from team",
-                    description="Submitter updates after your approval — posted or not posted yet.",
-                    count=len(reported),
-                    items=self._to_items(reported),
+                    description="Publisher status — posted or not published yet.",
+                    count=len(all_reported),
+                    items=self._to_items(all_reported),
                 )
             )
             if "head" not in role_hints:

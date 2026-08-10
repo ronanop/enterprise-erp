@@ -4,7 +4,7 @@ from datetime import datetime
 from uuid import UUID
 
 from sqlalchemy import DateTime, ForeignKey, String, Text
-from sqlalchemy.dialects.postgresql import UUID as PG_UUID
+from sqlalchemy.dialects.postgresql import JSONB, UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from database.base import Base
@@ -40,6 +40,8 @@ class MktContentItem(Base, *MktTransactionMixin):
     font_name: Mapped[str | None] = mapped_column(String(120), nullable=True)
     font_size: Mapped[str | None] = mapped_column(String(60), nullable=True)
     color_codes: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    linkedin_head_sections: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    linkedin_final_draft: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     workflow_stage: Mapped[str | None] = mapped_column(String(40), nullable=True)
     final_head_approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_by_id: Mapped[UUID | None] = mapped_column(PG_UUID(as_uuid=True), nullable=True)

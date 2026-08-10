@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 from core.exceptions import ForbiddenException, NotFoundException
 from modules.foundation.domain.value_objects import TenantContext
 from modules.foundation.service.rbac_service import RBACService
-from modules.marketing.domain.enums import ContentStatus, MktEntityType, PostingReportStatus
+from modules.marketing.domain.enums import ContentStatus, ContentType, MktEntityType, PostingReportStatus, VerifierRole
 from modules.marketing.domain.exceptions import InvalidMarketingState
 from modules.marketing.models.content_item import MktContentItem
 from modules.marketing.repository.base import utcnow
@@ -75,6 +75,17 @@ class ContentItemService:
 
     def get_content(self, ctx: TenantContext, row_id: UUID) -> ContentItemResponse:
         row = self._get(ctx, row_id)
+        from modules.marketing.service.linkedin_section_service import LinkedInSectionService
+
+        linkedin_svc = LinkedInSectionService(self._repo.db)
+        if linkedin_svc.ensure_sections_initialized(ctx, row):
+            row = self._repo.update(
+                ctx,
+                row_id,
+                linkedin_head_sections=row.linkedin_head_sections,
+                linkedin_final_draft=row.linkedin_final_draft,
+                workflow_stage=row.workflow_stage,
+            )
         return ContentItemResponse.model_validate(row)
 
     def create_content(self, ctx: TenantContext, branch_id: UUID, company_id: UUID | None = None, **fields) -> ContentItemResponse:
@@ -86,7 +97,8 @@ class ContentItemService:
         return ContentItemResponse.model_validate(row)
 
     def update_content(self, ctx: TenantContext, row_id: UUID, **fields) -> ContentItemResponse:
-        self._get(ctx, row_id)
+        row = self._get(ctx, row_id)
+        self._engine.assert_editable(row)
         row = self._repo.update(ctx, row_id, **fields)
         if row is None:
             raise NotFoundException("Content not found")
@@ -104,9 +116,35 @@ class ContentItemService:
             rejection_reason=row.rejection_reason,
         )
         verification = VerificationService(self._repo.db)
+        role = verification.role_for_user(ctx)
         if was_changes:
-            verification.reset_verifications(ctx, row_id)
-        verification.initialize_verifications(ctx, row_id)
+            uses_linkedin = (
+                role == VerifierRole.LINKEDIN_HANDLER.value
+                or row.content_type == ContentType.SOCIAL_POST.value
+            )
+            if uses_linkedin:
+                from modules.marketing.service.linkedin_section_service import LinkedInSectionService
+
+                LinkedInSectionService(self._repo.db).reset_on_resubmit(ctx, row)
+            else:
+                verification.reset_verifications(ctx, row_id)
+        uses_linkedin_sections = (
+            role == VerifierRole.LINKEDIN_HANDLER.value
+            or row.content_type == ContentType.SOCIAL_POST.value
+        )
+        if uses_linkedin_sections:
+            from modules.marketing.service.linkedin_section_service import LinkedInSectionService
+
+            LinkedInSectionService(self._repo.db).initialize_on_submit(ctx, row)
+            self._repo.update(
+                ctx,
+                row_id,
+                linkedin_head_sections=row.linkedin_head_sections,
+                linkedin_final_draft=row.linkedin_final_draft,
+                workflow_stage=row.workflow_stage,
+            )
+        else:
+            verification.initialize_verifications(ctx, row_id)
         self._approval.create(
             ctx,
             company_id=row.company_id,
@@ -276,7 +314,11 @@ class ContentItemService:
             "published_at": row.published_at,
             "published_by_id": row.published_by_id,
         }
-        if row.posting_report_status in {PostingReportStatus.PENDING.value, None}:
+        if row.posting_report_status in {
+            PostingReportStatus.PENDING.value,
+            PostingReportStatus.NOT_POSTED.value,
+            None,
+        }:
             posting_fields.update(
                 {
                     "posting_report_status": PostingReportStatus.POSTED.value,
@@ -314,6 +356,9 @@ class ContentItemService:
                 details=notes or "Logged as posted",
                 company_id=row.company_id,
             )
+        self._engine.archive(row)
+        row = self._repo.update(ctx, row_id, status=row.status, archived_at=row.archived_at)
+        self._activity.log(ctx, entity_type="content", entity_id=row.id, action="archived", company_id=row.company_id)
         return ContentItemResponse.model_validate(row)
 
     def archive_content(self, ctx: TenantContext, row_id: UUID) -> ContentItemResponse:
