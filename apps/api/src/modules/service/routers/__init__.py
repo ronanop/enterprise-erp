@@ -859,8 +859,9 @@ def list_service_notifications(
     db: Annotated[Session, Depends(get_db)],
     pagination: Annotated[PaginationParams, Depends(get_pagination)],
     company_id: UUID | None = None,
+    mine: bool = False,
 ):
-    items = ServiceNotificationService(db).list(ctx, company_id=company_id)
+    items = ServiceNotificationService(db).list(ctx, company_id=company_id, mine=mine)
     return APIResponse(message="OK", data=paginate(items, pagination))
 
 @service_notifications_router.get("/{row_id}", response_model=APIResponse[ServiceNotificationResponse])

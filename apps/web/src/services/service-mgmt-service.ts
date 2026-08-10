@@ -3,20 +3,7 @@ import { ApiClientError, resourceService } from "@/services/api-client";
 export type ServiceRow = Record<string, unknown>;
 
 export type ServiceOverview = {
-  categories: ServiceRow[];
-  requests: ServiceRow[];
-  tickets: ServiceRow[];
-  assignments: ServiceRow[];
-  schedules: ServiceRow[];
-  workOrders: ServiceRow[];
-  tasks: ServiceRow[];
-  visits: ServiceRow[];
-  materials: ServiceRow[];
-  timeEntries: ServiceRow[];
-  slas: ServiceRow[];
-  escalations: ServiceRow[];
-  contracts: ServiceRow[];
-  feedback: ServiceRow[];
+  requestTickets: ServiceRow[];
   errors: string[];
   statusCodes: number[];
   partial: boolean;
@@ -53,15 +40,6 @@ async function safeList(
   }
 }
 
-export function asNumber(value: unknown): number {
-  if (typeof value === "number" && Number.isFinite(value)) return value;
-  if (typeof value === "string" && value.trim() !== "") {
-    const n = Number(value);
-    return Number.isFinite(n) ? n : 0;
-  }
-  return 0;
-}
-
 export function asStatus(value: unknown): string {
   return typeof value === "string" ? value.toLowerCase() : "";
 }
@@ -84,74 +62,13 @@ export function countOpenDocs(
 }
 
 export async function loadServiceOverview(): Promise<ServiceOverview> {
-  const [
-    categories,
-    requests,
-    tickets,
-    assignments,
-    schedules,
-    workOrders,
-    tasks,
-    visits,
-    materials,
-    timeEntries,
-    slas,
-    escalations,
-    contracts,
-    feedback,
-  ] = await Promise.all([
-    safeList("/service/service-categories"),
-    safeList("/service/service-requests"),
-    safeList("/service/service-tickets"),
-    safeList("/service/service-assignments"),
-    safeList("/service/service-schedules"),
-    safeList("/service/work-orders"),
-    safeList("/service/service-tasks"),
-    safeList("/service/service-visits"),
-    safeList("/service/service-materials"),
-    safeList("/service/time-entries"),
-    safeList("/service/service-slas"),
-    safeList("/service/service-escalations"),
-    safeList("/service/service-contracts"),
-    safeList("/service/service-feedback"),
-  ]);
+  const requestTickets = await safeList("/service/service-request-tickets");
 
-  const results = [
-    categories,
-    requests,
-    tickets,
-    assignments,
-    schedules,
-    workOrders,
-    tasks,
-    visits,
-    materials,
-    timeEntries,
-    slas,
-    escalations,
-    contracts,
-    feedback,
-  ];
-  const errors = results.map((r) => r.error).filter((e): e is string => Boolean(e));
-  const statusCodes = results
-    .map((r) => r.status)
-    .filter((s): s is number => typeof s === "number");
+  const errors = requestTickets.error ? [requestTickets.error] : [];
+  const statusCodes = requestTickets.status ? [requestTickets.status] : [];
 
   return {
-    categories: categories.rows,
-    requests: requests.rows,
-    tickets: tickets.rows,
-    assignments: assignments.rows,
-    schedules: schedules.rows,
-    workOrders: workOrders.rows,
-    tasks: tasks.rows,
-    visits: visits.rows,
-    materials: materials.rows,
-    timeEntries: timeEntries.rows,
-    slas: slas.rows,
-    escalations: escalations.rows,
-    contracts: contracts.rows,
-    feedback: feedback.rows,
+    requestTickets: requestTickets.rows,
     errors,
     statusCodes,
     partial: errors.length > 0,

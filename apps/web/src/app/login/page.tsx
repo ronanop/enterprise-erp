@@ -10,7 +10,9 @@ import {
   DEMO_PASSWORD,
   adminLoginAccounts,
   getPostLoginRedirect,
+  marketingTeamLoginAccounts,
   moduleLoginAccounts,
+  serviceTeamLoginAccounts,
 } from "@/config/module-logins";
 import { ApiClientError, authService } from "@/services/api-client";
 import { env } from "@/utils/env";
@@ -27,6 +29,22 @@ export default function LoginPage() {
     setEmail(nextEmail);
     setPassword(DEMO_PASSWORD);
     setError(null);
+  }
+
+  async function quickLogin(nextEmail: string) {
+    setEmail(nextEmail);
+    setPassword(DEMO_PASSWORD);
+    setError(null);
+    setLoading(true);
+    try {
+      await authService.login(nextEmail.trim(), DEMO_PASSWORD);
+      router.replace(getPostLoginRedirect(nextEmail));
+      router.refresh();
+    } catch (err) {
+      setError(err instanceof ApiClientError ? err.message : "Login failed");
+    } finally {
+      setLoading(false);
+    }
   }
 
   async function onSubmit(event: FormEvent) {
@@ -166,6 +184,70 @@ export default function LoginPage() {
                   >
                     <p className="text-xs font-medium text-foreground">{account.displayName}</p>
                     <p className="mt-0.5 truncate text-[11px] text-muted-foreground">{account.email}</p>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          <div className="mb-4 space-y-1.5">
+            <p className="text-[10px] font-medium tracking-[0.14em] text-muted-foreground uppercase">
+              Service team
+            </p>
+            <p className="text-[11px] text-muted-foreground">
+              Head assigns tickets · engineers solve · contacts see status only
+            </p>
+            <div className="grid gap-1.5 sm:grid-cols-2">
+              {serviceTeamLoginAccounts.map((account) => {
+                const selected = email.trim().toLowerCase() === account.email.toLowerCase();
+                return (
+                  <button
+                    key={account.email}
+                    type="button"
+                    disabled={loading}
+                    onClick={() => void quickLogin(account.email)}
+                    className={cn(
+                      "rounded-lg border px-3 py-2.5 text-left transition-colors",
+                      selected
+                        ? "border-primary/40 bg-accent/50"
+                        : "border-border/70 bg-background/50 hover:border-primary/25 hover:bg-accent/30",
+                    )}
+                  >
+                    <p className="text-xs font-medium text-foreground">{account.displayName}</p>
+                    <p className="mt-0.5 truncate text-[11px] text-muted-foreground">{account.email}</p>
+                    <p className="mt-0.5 text-[10px] text-muted-foreground/80">{account.role}</p>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          <div className="mb-4 space-y-1.5">
+            <p className="text-[10px] font-medium tracking-[0.14em] text-muted-foreground uppercase">
+              Marketing team
+            </p>
+            <p className="text-[11px] text-muted-foreground">
+              Creator submits · media/banner approves · head signs off · publisher posts · archive
+            </p>
+            <div className="grid gap-1.5 sm:grid-cols-2">
+              {marketingTeamLoginAccounts.map((account) => {
+                const selected = email.trim().toLowerCase() === account.email.toLowerCase();
+                return (
+                  <button
+                    key={account.email}
+                    type="button"
+                    disabled={loading}
+                    onClick={() => void quickLogin(account.email)}
+                    className={cn(
+                      "rounded-lg border px-3 py-2.5 text-left transition-colors",
+                      selected
+                        ? "border-primary/40 bg-accent/50"
+                        : "border-border/70 bg-background/50 hover:border-primary/25 hover:bg-accent/30",
+                    )}
+                  >
+                    <p className="text-xs font-medium text-foreground">{account.displayName}</p>
+                    <p className="mt-0.5 truncate text-[11px] text-muted-foreground">{account.email}</p>
+                    <p className="mt-0.5 text-[10px] text-muted-foreground/80">{account.role}</p>
                   </button>
                 );
               })}

@@ -1,9 +1,30 @@
 """Environment-backed application settings."""
 
 from functools import lru_cache
+from typing import Annotated
 
-from pydantic import Field, field_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic import BeforeValidator, Field
+from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
+
+
+def _parse_cors_origins(value: object) -> list[str]:
+    if isinstance(value, list):
+        return [str(origin).strip() for origin in value if str(origin).strip()]
+    if value is None:
+        return []
+    raw = str(value).strip()
+    if not raw:
+        return []
+    if raw.startswith("["):
+        import json
+
+        try:
+            parsed = json.loads(raw)
+            if isinstance(parsed, list):
+                return [str(origin).strip() for origin in parsed if str(origin).strip()]
+        except json.JSONDecodeError:
+            pass
+    return [origin.strip() for origin in raw.split(",") if origin.strip()]
 
 
 class Settings(BaseSettings):
@@ -39,7 +60,7 @@ class Settings(BaseSettings):
         alias="CELERY_RESULT_BACKEND",
     )
 
-    cors_origins: list[str] = Field(
+    cors_origins: Annotated[list[str], NoDecode, BeforeValidator(_parse_cors_origins)] = Field(
         default=["http://localhost:3000"],
         alias="CORS_ORIGINS",
     )
@@ -58,12 +79,33 @@ class Settings(BaseSettings):
     account_lockout_threshold: int = Field(default=5, alias="ACCOUNT_LOCKOUT_THRESHOLD")
     account_lockout_minutes: int = Field(default=15, alias="ACCOUNT_LOCKOUT_MINUTES")
 
-    @field_validator("cors_origins", mode="before")
-    @classmethod
-    def parse_cors_origins(cls, value: str | list[str]) -> list[str]:
-        if isinstance(value, str):
-            return [origin.strip() for origin in value.split(",") if origin.strip()]
-        return value
+    # Email → Service Request Ticket automation
+    email_ticket_enabled: bool = Field(default=False, alias="EMAIL_TICKET_ENABLED")
+    email_inbound_webhook_secret: str = Field(default="", alias="EMAIL_INBOUND_WEBHOOK_SECRET")
+    email_ticket_default_branch_id: str | None = Field(default=None, alias="EMAIL_TICKET_DEFAULT_BRANCH_ID")
+    email_ticket_default_category_id: str | None = Field(default=None, alias="EMAIL_TICKET_DEFAULT_CATEGORY_ID")
+    email_ticket_default_customer_id: str | None = Field(default=None, alias="EMAIL_TICKET_DEFAULT_CUSTOMER_ID")
+    smtp_host: str = Field(default="", alias="SMTP_HOST")
+    smtp_port: int = Field(default=587, alias="SMTP_PORT")
+    smtp_user: str = Field(default="", alias="SMTP_USER")
+    smtp_password: str = Field(default="", alias="SMTP_PASSWORD")
+    smtp_from_address: str = Field(default="", alias="SMTP_FROM_ADDRESS")
+    smtp_use_tls: bool = Field(default=True, alias="SMTP_USE_TLS")
+    imap_enabled: bool = Field(default=False, alias="IMAP_ENABLED")
+    imap_host: str = Field(default="", alias="IMAP_HOST")
+    imap_port: int = Field(default=993, alias="IMAP_PORT")
+    imap_user: str = Field(default="", alias="IMAP_USER")
+    imap_password: str = Field(default="", alias="IMAP_PASSWORD")
+    imap_mailbox: str = Field(default="INBOX", alias="IMAP_MAILBOX")
+    imap_poll_interval_seconds: int = Field(default=120, alias="IMAP_POLL_INTERVAL_SECONDS")
+
+    @property
+    def smtp_configured(self) -> bool:
+        return bool(self.smtp_host and self.smtp_from_address)
+
+    @property
+    def imap_configured(self) -> bool:
+        return bool(self.imap_enabled and self.imap_host and self.imap_user and self.imap_password)
 
     @property
     def is_development(self) -> bool:

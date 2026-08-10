@@ -1,0 +1,191 @@
+SOP for Create a Service Request Ticket
+s 
+Purpose
+To log and track customer service requests, hardware issues, field engineer visits, and managed service activities in the Cache Portal.
+ 
+Step 1: Navigate to Ticket Creation
+Login to the Cache Portal.
+Go to 
+Tickets
+.
+Click 
+Add Service Request Ticket
+.
+Select the appropriate 
+Service Request Ticket Template
+.
+Step 2: Fill Basic Information
+Mandatory Fields (*)
+Field
+Description
+Mode of Action*
+Select Remote Support / Onsite Support
+Service Request Type*
+Select appropriate service category (e.g., Managed Services)
+Subject*
+Brief description of the issue/request
+Contact Name*
+Customer contact person
+Status*
+Default: Ticket Registered
+Priority*
+Select P1/P2/P3/P4 as applicable
+Additional Details
+Account
+Email
+Mobile Number
+Alternate Email
+Service Request Ticket Owner
+Product Name
+Step 3: Select Contact Information
+Click 
+Choose Contact
+ from the right panel.
+Select the customer contact.
+Verify: 
+Contact Name
+Email
+Phone Number
+Step 4: Enter Asset Details
+Fill the available asset information:
+Field
+Details
+Asset Name or ID
+Asset identifier
+Asset Name
+Device name
+Serial Number
+Hardware serial number
+Warranty Start Date
+Start of warranty
+Warranty End Date
+Expiry of warranty
+AMC End Date
+AMC validity
+Asset Status
+New Asset / Existing Asset
+Is Mail Sent for AMC
+Check if AMC mail sent
+Step 5: Enter Ticket Information
+Mandatory Fields
+Field
+Description
+Category of Ticket*
+Hardware / Software / Network
+SLA Status*
+Select applicable SLA
+Additional Fields
+S/W Version
+Issue / Challenges description
+Step 6: Enter Ticket Reference Details
+If available, fill:
+Service Request Number
+End Customer Reference / LSI
+Step 7: Enter End Customer Site Details
+Provide customer location information:
+Field
+Details
+End Customer Name
+E-mail
+Local Coordinator Name
+Local Contact Number
+Street Address
+State
+City Type
+City
+GST Number
+Other City
+Postal Code
+Step 8: Fill Additional Information
+Field
+Description
+Start Work Date
+Ticket 
+start
+ date and time
+Due Date
+Expected closure date
+Channel*
+Phone / Email / Portal
+Classifications
+Question / Incident / Service Request
+Escalation Reason
+If applicable
+Next Plan
+Next action
+Description
+Detailed issue description
+Step 9: Upload Attachments
+Click 
+Attachment(s)
+.
+Upload supporting files.
+Maximum file size: 
+40 MB
+.
+Examples:
+Error screenshots
+Logs
+Customer emails
+Device photos
+Step 10: Field Engineer Visit Details (If Onsite Support Required)
+Fill the following details:
+Field
+Description
+Field Engineer Name
+Contact Number
+Distance from FE Location
+Number of Visits
+Engineer Carrying Spares Tools
+Site Visit Date
+HW Replacement
+Mode of Transport
+Movement Charges
+Visit Charges
+Total Charges
+Remarks
+Payment Approval
+Step 9: OEM Support Details (If OEM Case Raised)
+If the issue requires escalation to the Original Equipment Manufacturer (OEM) or Technical Assistance 
+Center
+ (TAC), complete the OEM Support section.
+OEM Support Fields
+Field
+Description
+OEM Name
+Name of the OEM vendor (e.g., Fortinet, Cisco, Aruba, Dell, HP, Sophos)
+OEM Ticket Number / Case ID
+OEM-generated case number or ticket reference
+Customer Reference Number
+Customer-provided reference related to the OEM case
+Type of Ticket
+Select Technical / RMA / Configuration / Hardware / Software as applicable
+OEM Support Engineer Name / Contact
+Name and contact details of the OEM support engineer handling the case
+OEM TAC Response Summary
+Summary of troubleshooting steps or recommendations provided by OEM TAC
+OEM TAC Resolution
+Resolution provided by the OEM team
+Ticket Status
+Current OEM ticket status (Open / Pending Customer / Pending OEM / Monitoring / Resolved / Closed)
+Last Checked Date and Time
+Date and time when the OEM case was last reviewed or updated
+Step 11: Review and Submit
+Before submitting, verify:
+✅
+ Subject is clear and meaningful
+✅
+ Contact details are correct
+✅
+ Asset details are accurate
+✅
+ SLA selected correctly
+✅
+ Issue description is detailed
+✅
+ Attachments uploaded (if required)
+✅
+ FE details updated (for onsite visits)
+Click 
+Submit
+ to create the ticket.

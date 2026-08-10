@@ -1,160 +1,62 @@
 /**
- * Service workspace config — aligned with FRD-16 / ERD_16
- * and apps/api service routers (Request → Contract).
+ * Service workspace config — SOP request ticket workflow only.
  */
 
 import type { LucideIcon } from "lucide-react";
-import {
-  ClipboardList,
-  FileSignature,
-  Headphones,
-  MapPin,
-  Ticket,
-  Wrench,
-} from "lucide-react";
-
-import { getModule, type ModuleResource } from "@/config/modules";
-
-export type ServiceWorkspaceGroup = {
-  key: string;
-  title: string;
-  description: string;
-  icon: LucideIcon;
-  resourceKeys: string[];
-};
+import { CheckCircle2, Clock, Ticket } from "lucide-react";
 
 export type ServicePipelineStage = {
   key: string;
   title: string;
   href: string;
-  resource:
-    | "service-requests"
-    | "service-tickets"
-    | "service-assignments"
-    | "work-orders"
-    | "service-visits"
-    | "service-contracts";
+  resource: "service-request-tickets" | "service-slas" | "resolved-tickets";
 };
 
 export const SERVICE_MODULE_KEY = "service";
 
-export const serviceWorkspaceGroups: ServiceWorkspaceGroup[] = [
-  {
-    key: "intake",
-    title: "Catalog & Intake",
-    description: "Categories, requests, and tickets",
-    icon: Headphones,
-    resourceKeys: ["service-categories", "service-requests", "service-tickets"],
-  },
-  {
-    key: "execution",
-    title: "Dispatch & Execution",
-    description: "Assignments, schedules, WOs, tasks, visits",
-    icon: Wrench,
-    resourceKeys: [
-      "service-assignments",
-      "service-schedules",
-      "work-orders",
-      "service-tasks",
-      "service-visits",
-    ],
-  },
-  {
-    key: "governance",
-    title: "SLA & Commercial",
-    description: "Materials, time, SLAs, escalations, contracts, feedback",
-    icon: FileSignature,
-    resourceKeys: [
-      "service-materials",
-      "time-entries",
-      "service-slas",
-      "service-escalations",
-      "service-contracts",
-      "service-feedback",
-    ],
-  },
-];
-
-/** ERD_16 service delivery lifecycle (core operational stages) */
+/** SOP ticket lifecycle stages shown on the overview funnel */
 export const servicePipelineStages: ServicePipelineStage[] = [
   {
-    key: "request",
-    title: "Request",
-    href: "/service/service-requests",
-    resource: "service-requests",
+    key: "request-ticket",
+    title: "Request Tickets",
+    href: "/service/service-request-tickets",
+    resource: "service-request-tickets",
   },
   {
-    key: "ticket",
-    title: "Ticket",
-    href: "/service/service-tickets",
-    resource: "service-tickets",
+    key: "sla",
+    title: "Active SLAs",
+    href: "/service/service-slas",
+    resource: "service-slas",
   },
   {
-    key: "assignment",
-    title: "Assignment",
-    href: "/service/service-assignments",
-    resource: "service-assignments",
-  },
-  {
-    key: "work-order",
-    title: "Work Order",
-    href: "/service/work-orders",
-    resource: "work-orders",
-  },
-  {
-    key: "visit",
-    title: "Visit",
-    href: "/service/service-visits",
-    resource: "service-visits",
-  },
-  {
-    key: "contract",
-    title: "Contract",
-    href: "/service/service-contracts",
-    resource: "service-contracts",
+    key: "resolved",
+    title: "Resolved",
+    href: "/service/resolved-tickets",
+    resource: "resolved-tickets",
   },
 ];
-
-export function getServiceResources(): ModuleResource[] {
-  return getModule(SERVICE_MODULE_KEY)?.resources ?? [];
-}
-
-export function resolveServiceGroupResources(
-  group: ServiceWorkspaceGroup,
-): ModuleResource[] {
-  const all = getServiceResources();
-  return group.resourceKeys
-    .map((key) => all.find((r) => r.key === key))
-    .filter((r): r is ModuleResource => Boolean(r));
-}
 
 export const serviceQuickLinks = [
   {
-    title: "Requests",
-    href: "/service/service-requests",
-    description: "Customer intake",
-    icon: ClipboardList,
-  },
-  {
-    title: "Tickets",
-    href: "/service/service-tickets",
-    description: "Queue & ownership",
+    title: "Request Tickets",
+    href: "/service/service-request-tickets",
+    description: "SOP intake & tracking",
     icon: Ticket,
   },
   {
-    title: "Work Orders",
-    href: "/service/work-orders",
-    description: "Field execution",
-    icon: Wrench,
+    title: "Active SLAs",
+    href: "/service/service-slas",
+    description: "Live ticket SLA clocks",
+    icon: Clock,
   },
   {
-    title: "Visits",
-    href: "/service/service-visits",
-    description: "On-site check-ins",
-    icon: MapPin,
+    title: "Resolved",
+    href: "/service/resolved-tickets",
+    description: "Closed & resolved tickets",
+    icon: CheckCircle2,
   },
 ] as const;
 
 export const serviceIcons = {
-  Headphones,
+  Ticket,
 } as const;

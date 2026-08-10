@@ -24,6 +24,7 @@ from modules.project.router import project_router
 from modules.quality.router import quality_router
 from modules.recruitment.router import recruitment_router
 from modules.sales.router import sales_router
+from modules.marketing.router import marketing_router
 from modules.service.router import service_router
 from shared.health import router as health_router
 
@@ -47,6 +48,7 @@ api_v1_router.include_router(payroll_router)
 api_v1_router.include_router(recruitment_router)
 api_v1_router.include_router(project_router)
 api_v1_router.include_router(service_router)
+api_v1_router.include_router(marketing_router)
 api_v1_router.include_router(helpdesk_router)
 api_v1_router.include_router(document_router)
 api_v1_router.include_router(grc_router)

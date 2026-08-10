@@ -88,6 +88,8 @@ def require_permission(permission_code: str) -> Callable:
         ctx: Annotated[TenantContext, Depends(get_tenant_context)],
         db: Annotated[Session, Depends(get_db)],
     ) -> TenantContext:
+        if ctx.user_type in {"super_admin", "tenant_admin"}:
+            return ctx
         rbac = RBACService(db)
         if not rbac.has_permission(ctx.user_id, ctx.tenant_id, permission_code):
             raise ForbiddenException(f"Missing permission: {permission_code}")

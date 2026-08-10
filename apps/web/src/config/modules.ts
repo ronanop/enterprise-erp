@@ -30,6 +30,7 @@ export type ErpModule = {
   | "factory"
   | "quality"
   | "crm"
+  | "marketing"
   | "hr"
   | "payroll"
   | "recruit"
@@ -790,6 +791,21 @@ export const erpModules: ErpModule[] = [
     ],
   },
   {
+    key: "marketing",
+    title: "Marketing",
+    description: "Campaigns, content, and marketing operations.",
+    href: "/marketing",
+    group: "operations",
+    icon: "marketing",
+    resources: [
+      { key: "campaigns", title: "Campaigns", description: "Marketing campaigns", apiPath: "/marketing/campaigns" },
+      { key: "content", title: "Content", description: "Content items and workflow", apiPath: "/marketing/content-items" },
+      { key: "channels", title: "Channels", description: "Publishing channels", apiPath: "/marketing/channels" },
+      { key: "assets", title: "Assets", description: "Media asset library", apiPath: "/marketing/assets" },
+      { key: "reports", title: "Reports", description: "Marketing summaries", apiPath: "/marketing/reports/summary" },
+    ],
+  },
+  {
     key: "hr",
     title: "HRMS",
     description:
@@ -1266,6 +1282,12 @@ export const erpModules: ErpModule[] = [
         title: "Categories",
         description: "Service category catalog",
         apiPath: "/service/service-categories",
+      },
+      {
+        key: "service-request-tickets",
+        title: "Request Tickets",
+        description: "SOP service request tickets",
+        apiPath: "/service/service-request-tickets",
       },
       {
         key: "service-requests",

@@ -8,6 +8,7 @@ import { ChevronLeft, ChevronRight, Search } from "lucide-react";
 import { navigation } from "@/config/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { SidebarUserIdentity } from "@/components/layout/sidebar-user-identity";
 import { cn } from "@/lib/utils";
 import { env } from "@/utils/env";
 
@@ -63,6 +64,8 @@ export function AppSidebar() {
           </div>
         ) : null}
       </div>
+
+      <SidebarUserIdentity collapsed={collapsed} className="shrink-0" />
 
       {!collapsed ? (
         <div className="px-3 pb-3">

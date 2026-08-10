@@ -24,8 +24,12 @@ from modules.service.routers import (
     time_entries_router,
     work_orders_router,
 )
+from modules.service.routers.email_inbound import email_inbound_router
+from modules.service.routers.service_request_tickets import service_request_tickets_router
 
 service_router = APIRouter(prefix="/service")
+service_router.include_router(email_inbound_router)
+service_router.include_router(service_request_tickets_router)
 service_router.include_router(service_categories_router)
 service_router.include_router(service_requests_router)
 service_router.include_router(service_tickets_router)

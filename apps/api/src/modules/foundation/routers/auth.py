@@ -3,12 +3,13 @@
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Request
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from database.session import get_db
 from modules.foundation.dependencies import get_client_ip, get_current_user, get_tenant_context
 from modules.foundation.domain.value_objects import TenantContext
-from modules.foundation.models.security import SecUser
+from modules.foundation.models.security import SecRole, SecUser, SecUserRole
 from modules.foundation.schemas import (
     LoginRequest,
     MfaVerifyRequest,
@@ -18,6 +19,7 @@ from modules.foundation.schemas import (
 )
 from modules.foundation.service.auth_service import AuthService
 from modules.foundation.service.rbac_service import RBACService
+from modules.master_data.models.employee import MasterEmployee
 from shared.schemas import APIResponse
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
@@ -88,6 +90,30 @@ def me(
 ) -> APIResponse[dict]:
     rbac = RBACService(db)
     permissions = sorted(rbac.get_user_permissions(ctx.user_id, ctx.tenant_id))
+
+    designation = None
+    if user.employee_id:
+        emp = db.scalar(
+            select(MasterEmployee).where(
+                MasterEmployee.id == user.employee_id,
+                MasterEmployee.is_deleted.is_(False),
+            )
+        )
+        if emp:
+            designation = emp.designation
+
+    role_rows = db.execute(
+        select(SecRole.role_name)
+        .join(SecUserRole, SecUserRole.role_id == SecRole.id)
+        .where(
+            SecUserRole.user_id == user.id,
+            SecRole.tenant_id == user.tenant_id,
+            SecRole.is_deleted.is_(False),
+        )
+        .order_by(SecRole.role_name)
+    ).all()
+    role_names = [str(r[0]) for r in role_rows]
+
     data = {
         "user": UserResponse(
             id=user.id,
@@ -99,5 +125,9 @@ def me(
             mfa_enabled=user.mfa_enabled,
         ),
         "permissions": permissions,
+        "employee_id": str(user.employee_id) if user.employee_id else None,
+        "designation": designation,
+        "role_name": role_names[0] if role_names else None,
+        "role_names": role_names,
     }
     return APIResponse(message="Current user", data=data)

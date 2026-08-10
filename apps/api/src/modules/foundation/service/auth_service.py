@@ -121,6 +121,7 @@ class AuthService:
     def logout(self, session_id: UUID, user_id: UUID, tenant_id: UUID) -> None:
         self._sessions.revoke(session_id, revoked_by=user_id)
         self._store.delete_session(session_id)
+        self._store.invalidate_permissions(user_id)
         self._audit.log_security_event(
             tenant_id=tenant_id,
             event_type="auth.logout",
@@ -168,6 +169,8 @@ class AuthService:
                 "user_agent": user_agent,
             },
         )
+        # Always reload RBAC from DB on login so newly seeded permissions apply immediately.
+        self._store.invalidate_permissions(user.id)
         self._users.record_successful_login(user)
         self._audit.log_security_event(
             tenant_id=user.tenant_id,

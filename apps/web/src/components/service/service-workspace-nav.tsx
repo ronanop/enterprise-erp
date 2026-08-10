@@ -5,16 +5,12 @@ import { usePathname } from "next/navigation";
 
 import { cn } from "@/lib/utils";
 
-/** Primary service screens from FRD-16 screen inventory */
+/** SOP service request ticket workflow only */
 const SERVICE_NAV = [
   { title: "Overview", href: "/service" },
-  { title: "Requests", href: "/service/service-requests" },
-  { title: "Tickets", href: "/service/service-tickets" },
-  { title: "Work Orders", href: "/service/work-orders" },
-  { title: "Visits", href: "/service/service-visits" },
+  { title: "Request Tickets", href: "/service/service-request-tickets" },
   { title: "SLAs", href: "/service/service-slas" },
-  { title: "Escalations", href: "/service/service-escalations" },
-  { title: "Contracts", href: "/service/service-contracts" },
+  { title: "Resolved", href: "/service/resolved-tickets" },
 ] as const;
 
 export function ServiceWorkspaceNav() {
