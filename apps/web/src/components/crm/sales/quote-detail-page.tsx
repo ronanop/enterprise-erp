@@ -207,6 +207,33 @@ export function QuoteDetailPage({ quoteId }: { quoteId: string }) {
     ...(existingOvf ? { ovf: `/crm/ovf/${existingOvf.id}` } : {}),
     ...(existingOvf?.deal_won ? { won: `/crm/ovf/${existingOvf.id}` } : {}),
   };
+  const nextStep = existingOvf
+    ? {
+        label: existingOvf.deal_won ? "Review Won Deal" : "Continue OVF",
+        description: existingOvf.deal_won
+          ? "The deal is complete. Review its final OVF and value."
+          : "Continue approval, SCM sharing, and Deal Won on the OVF.",
+        href: `/crm/ovf/${existingOvf.id}`,
+      }
+    : quote.quote_stage === "accepted" &&
+        opportunity?.blueprint_state === "ovf_ready" &&
+        opportunity.customer_po_approved
+      ? {
+          label: "Create OVF",
+          description: "Customer PO is approved. Create the OVF to continue the deal.",
+          href: `/crm/quotes/${quote.id}/ovf/new`,
+        }
+      : quote.quote_stage === "accepted"
+        ? {
+            label: "Attach Customer PO",
+            description:
+              "The quote is accepted. Continue on the opportunity to attach and approve the customer PO.",
+            href: `/crm/opportunities/${quote.opportunity_id}`,
+          }
+        : {
+            label: "Complete Quote",
+            description: "Use the quote actions and line editor on this screen to advance the deal.",
+          };
 
   const canCreateOvf =
     quote.quote_stage === "accepted" &&
@@ -248,7 +275,7 @@ export function QuoteDetailPage({ quoteId }: { quoteId: string }) {
         </Link>
       </div>
 
-      <DealTimeline current={timelineStage} lost={lost} links={timelineLinks} />
+      <DealTimeline current={timelineStage} lost={lost} links={timelineLinks} nextStep={nextStep} />
       <ApprovalBanner locked={blueprint.locked} approvalStatus={quote.approval_status} label="This quote" />
 
       <PageHeader

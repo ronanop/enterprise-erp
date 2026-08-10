@@ -94,13 +94,17 @@ export function CrmSection({
   bodyClassName?: string;
 }) {
   return (
-    <section className={cn("rounded-xl border border-border/80 bg-card p-4 shadow-sm", className)}>
-      <div className="mb-3 flex items-center justify-between gap-2">
-        <div className="flex min-w-0 items-center gap-2.5">
+    <section className={cn("rounded-xl border border-border/80 bg-card p-4 shadow-sm sm:p-5", className)}>
+      <div className="mb-4 flex items-start justify-between gap-2">
+        <div className="flex min-w-0 items-start gap-2.5">
           {icon ? <CrmIconBadge icon={icon} /> : null}
           <div className="min-w-0">
-            <h2 className="truncate text-sm font-medium tracking-tight">{title}</h2>
-            {subtitle ? <p className="text-[11px] text-muted-foreground">{subtitle}</p> : null}
+            <h2 className="text-sm font-medium tracking-tight break-words">{title}</h2>
+            {subtitle ? (
+              <p className="mt-0.5 text-[11px] leading-snug text-muted-foreground break-words">
+                {subtitle}
+              </p>
+            ) : null}
           </div>
         </div>
         <div className="flex shrink-0 items-center gap-2">
@@ -108,7 +112,7 @@ export function CrmSection({
           {actions}
         </div>
       </div>
-      <div className={bodyClassName}>{children}</div>
+      <div className={cn("min-w-0", bodyClassName)}>{children}</div>
     </section>
   );
 }

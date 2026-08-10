@@ -19,30 +19,30 @@ export type ErpModule = {
   href: string;
   group: "platform" | "foundation" | "organization" | "master-data" | "operations";
   icon:
-    | "dashboard"
-    | "shield"
-    | "building"
-    | "boxes"
-    | "wallet"
-    | "cart"
-    | "truck"
-    | "package"
-    | "factory"
-    | "quality"
-    | "crm"
-    | "hr"
-    | "payroll"
-    | "recruit"
-    | "project"
-    | "asset"
-    | "service"
-    | "helpdesk"
-    | "document"
-    | "grc"
-    | "analytics"
-    | "integration"
-    | "ecommerce"
-    | "portal";
+  | "dashboard"
+  | "shield"
+  | "building"
+  | "boxes"
+  | "wallet"
+  | "cart"
+  | "truck"
+  | "package"
+  | "factory"
+  | "quality"
+  | "crm"
+  | "hr"
+  | "payroll"
+  | "recruit"
+  | "project"
+  | "asset"
+  | "service"
+  | "helpdesk"
+  | "document"
+  | "grc"
+  | "analytics"
+  | "integration"
+  | "ecommerce"
+  | "portal";
   resources: ModuleResource[];
 };
 
@@ -1096,7 +1096,7 @@ export const erpModules: ErpModule[] = [
     key: "projects",
     title: "Projects",
     description:
-      "PMO delivery — portfolio, WBS, tasks, timesheets, resources, budgets, costs, issues, risks, and change control.",
+      "Site installation delivery — projects, RFAI intake, survey, SCM, installation, configuration, and acceptance.",
     href: "/projects",
     group: "operations",
     icon: "project",
@@ -1104,86 +1104,56 @@ export const erpModules: ErpModule[] = [
       {
         key: "projects",
         title: "Projects",
-        description: "Portfolio / project register",
+        description: "Project register",
         apiPath: "/projects/projects",
       },
       {
-        key: "project-phases",
-        title: "Phases",
-        description: "WBS phase structure",
-        apiPath: "/projects/project-phases",
+        key: "site-installations",
+        title: "All Sites",
+        description: "Site installation register",
+        apiPath: "/projects/site-installations",
       },
       {
-        key: "project-milestones",
-        title: "Milestones",
-        description: "Delivery checkpoints",
-        apiPath: "/projects/project-milestones",
+        key: "intake",
+        title: "Intake & RFAI",
+        description: "Intake stage sites",
+        apiPath: "/projects/site-installations",
       },
       {
-        key: "project-tasks",
-        title: "Tasks",
-        description: "Work breakdown tasks",
-        apiPath: "/projects/project-tasks",
+        key: "survey",
+        title: "Survey",
+        description: "Survey stage sites",
+        apiPath: "/projects/site-installations",
       },
       {
-        key: "timesheets",
-        title: "Timesheets",
-        description: "Time capture headers",
-        apiPath: "/projects/timesheets",
+        key: "scm",
+        title: "SCM / Logistics",
+        description: "SCM stage sites",
+        apiPath: "/projects/site-installations",
       },
       {
-        key: "timesheet-entries",
-        title: "Timesheet Entries",
-        description: "Daily hour lines",
-        apiPath: "/projects/timesheet-entries",
+        key: "installation",
+        title: "Installation",
+        description: "Installation stage sites",
+        apiPath: "/projects/site-installations",
       },
       {
-        key: "resource-plans",
-        title: "Resource Plans",
-        description: "Capacity planning",
-        apiPath: "/projects/resource-plans",
+        key: "configuration",
+        title: "Configuration",
+        description: "Configuration stage sites",
+        apiPath: "/projects/site-installations",
       },
       {
-        key: "resource-allocations",
-        title: "Resource Allocations",
-        description: "Named allocations",
-        apiPath: "/projects/resource-allocations",
+        key: "acceptance",
+        title: "Acceptance",
+        description: "Acceptance stage sites",
+        apiPath: "/projects/site-installations",
       },
       {
-        key: "project-budgets",
-        title: "Budgets",
-        description: "Budget lines by type",
-        apiPath: "/projects/project-budgets",
-      },
-      {
-        key: "project-costs",
-        title: "Costs",
-        description: "Actual cost postings",
-        apiPath: "/projects/project-costs",
-      },
-      {
-        key: "project-issues",
-        title: "Issues",
-        description: "Issue register",
-        apiPath: "/projects/project-issues",
-      },
-      {
-        key: "project-risks",
-        title: "Risks",
-        description: "Risk register",
-        apiPath: "/projects/project-risks",
-      },
-      {
-        key: "change-requests",
-        title: "Change Requests",
-        description: "Scope / change board",
-        apiPath: "/projects/change-requests",
-      },
-      {
-        key: "project-documents",
-        title: "Documents",
-        description: "Project document library",
-        apiPath: "/projects/project-documents",
+        key: "completed",
+        title: "Completed",
+        description: "Completed site installations",
+        apiPath: "/projects/site-installations",
       },
     ],
   },

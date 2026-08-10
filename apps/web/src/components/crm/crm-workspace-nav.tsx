@@ -3,7 +3,33 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useMemo, useState } from "react";
-import { ChevronLeft, ChevronRight, Handshake, Search } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
+import {
+  BriefcaseBusiness,
+  Building2,
+  CalendarDays,
+  ChevronLeft,
+  ChevronRight,
+  ClipboardList,
+  Factory,
+  FileSpreadsheet,
+  FileText,
+  Handshake,
+  Landmark,
+  LayoutDashboard,
+  ListTodo,
+  Package,
+  Receipt,
+  ScrollText,
+  Search,
+  ShieldCheck,
+  ShoppingCart,
+  Target,
+  Truck,
+  UserPlus,
+  Users,
+  UserRound,
+} from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -16,29 +42,35 @@ import {
 } from "@/lib/crm-sidebar-focus";
 import { cn } from "@/lib/utils";
 
+type CrmNavItem = {
+  title: string;
+  href: string;
+  icon: LucideIcon;
+};
+
 /** Sales CRM (Zoho-replacement) teamspace navigation. */
-export const CRM_NAV = [
-  { title: "Dashboard", href: "/crm" },
-  { title: "My Jobs", href: "/crm/my-jobs" },
-  { title: "Company", href: "/crm/companies" },
-  { title: "Leads", href: "/crm/leads" },
-  { title: "Opportunities", href: "/crm/opportunities" },
-  { title: "OEM Quote", href: "/crm/oem-quotes" },
-  { title: "Quotes", href: "/crm/quotes" },
-  { title: "Purchase Order", href: "/crm/purchase-orders" },
-  { title: "OVF", href: "/crm/ovf" },
-  { title: "Contacts", href: "/crm/contacts" },
-  { title: "Products", href: "/crm/products" },
-  { title: "Meetings", href: "/crm/meetings" },
-  { title: "Customer Follow Ups", href: "/crm/customer-followups" },
-  { title: "KYC - Account Mapping", href: "/crm/kyc-account-mapping" },
-  { title: "OEM", href: "/crm/oem" },
-  { title: "Distributor", href: "/crm/distributors" },
-  { title: "BOQ", href: "/crm/boq" },
-  { title: "SOW", href: "/crm/sow" },
-  { title: "Entity", href: "/crm/entities" },
-  { title: "End Customer", href: "/crm/end-customers" },
-] as const;
+export const CRM_NAV: readonly CrmNavItem[] = [
+  { title: "Dashboard", href: "/crm", icon: LayoutDashboard },
+  { title: "My Jobs", href: "/crm/my-jobs", icon: ListTodo },
+  { title: "Company", href: "/crm/companies", icon: Building2 },
+  { title: "Leads", href: "/crm/leads", icon: UserPlus },
+  { title: "Opportunities", href: "/crm/opportunities", icon: Target },
+  { title: "OEM Quote", href: "/crm/oem-quotes", icon: FileSpreadsheet },
+  { title: "Quotes", href: "/crm/quotes", icon: FileText },
+  { title: "Purchase Order", href: "/crm/purchase-orders", icon: ShoppingCart },
+  { title: "OVF", href: "/crm/ovf", icon: Receipt },
+  { title: "Contacts", href: "/crm/contacts", icon: Users },
+  { title: "Products", href: "/crm/products", icon: Package },
+  { title: "Meetings", href: "/crm/meetings", icon: CalendarDays },
+  { title: "Customer Follow Ups", href: "/crm/customer-followups", icon: BriefcaseBusiness },
+  { title: "KYC - Account Mapping", href: "/crm/kyc-account-mapping", icon: ShieldCheck },
+  { title: "OEM", href: "/crm/oem", icon: Factory },
+  { title: "Distributor", href: "/crm/distributors", icon: Truck },
+  { title: "BOQ", href: "/crm/boq", icon: ClipboardList },
+  { title: "SOW", href: "/crm/sow", icon: ScrollText },
+  { title: "Entity", href: "/crm/entities", icon: Landmark },
+  { title: "End Customer", href: "/crm/end-customers", icon: UserRound },
+];
 
 function focusForHref(href: string): CrmSidebarFocus | null {
   if (href === "/crm") return "dashboard";
@@ -99,17 +131,19 @@ export function CrmWorkspaceNav() {
         <ul className="flex w-max items-center gap-0.5 border-b border-border/70 pb-px">
           {CRM_NAV.map((item) => {
             const active = isCrmNavActive(pathname, item.href);
+            const Icon = item.icon;
             return (
               <li key={item.href} className="shrink-0">
                 <Link
                   href={item.href}
                   className={cn(
-                    "relative inline-flex h-8 cursor-pointer items-center rounded-lg px-2.5 text-xs font-medium transition-[color,background-color] duration-200",
+                    "relative inline-flex h-8 cursor-pointer items-center gap-1.5 rounded-lg px-2.5 text-xs font-medium transition-[color,background-color] duration-200",
                     active
                       ? "bg-muted/60 font-semibold text-foreground after:absolute after:inset-x-2 after:bottom-0.5 after:h-0.5 after:rounded-full after:bg-primary"
                       : "text-muted-foreground hover:bg-muted/50 hover:text-foreground",
                   )}
                 >
+                  <Icon className="size-3.5 shrink-0" aria-hidden />
                   {item.title}
                 </Link>
               </li>
@@ -181,6 +215,7 @@ export function CrmSidebar() {
         <ul className="space-y-0.5">
           {filtered.map((item) => {
             const active = isCrmNavActive(pathname, item.href);
+            const Icon = item.icon;
             return (
               <li key={item.href}>
                 <Link
@@ -202,12 +237,19 @@ export function CrmSidebar() {
                   {active ? (
                     <span className="absolute inset-y-1.5 left-0 w-0.5 rounded-full bg-sidebar-primary" />
                   ) : null}
+                  <Icon
+                    className={cn(
+                      "size-4 shrink-0 transition-colors duration-200",
+                      active
+                        ? "text-sidebar-primary"
+                        : "text-sidebar-foreground/50 group-hover:text-sidebar-foreground/80",
+                    )}
+                    aria-hidden
+                  />
                   {!collapsed ? (
                     <span className="min-w-0 flex-1 truncate font-medium">{item.title}</span>
                   ) : (
-                    <span className="text-[10px] font-semibold tracking-wide">
-                      {item.title.slice(0, 2).toUpperCase()}
-                    </span>
+                    <span className="sr-only">{item.title}</span>
                   )}
                 </Link>
               </li>

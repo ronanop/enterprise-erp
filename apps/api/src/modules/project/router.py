@@ -19,6 +19,7 @@ from modules.project.routers import (
     reports_router,
     resource_allocations_router,
     resource_plans_router,
+    site_installations_router,
     task_assignments_router,
     task_dependencies_router,
     timesheet_entries_router,
@@ -46,3 +47,4 @@ project_router.include_router(project_comments_router)
 project_router.include_router(project_status_history_router)
 project_router.include_router(project_notifications_router)
 project_router.include_router(reports_router)
+project_router.include_router(site_installations_router)

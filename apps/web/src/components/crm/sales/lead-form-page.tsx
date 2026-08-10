@@ -453,6 +453,7 @@ export function LeadFormPage({ companyAccountId }: { companyAccountId: string })
     if (!form.end_customer_name?.trim()) missing.push("End Customer");
     if (!form.entity_name?.trim()) missing.push("Entity Name");
     if (!form.entity_address?.trim()) missing.push("Entity Address");
+    if (!form.entity_contact?.trim()) missing.push("Entity Contact Number");
     if (!form.oem_name?.trim()) missing.push("OEM Name");
     if (missing.length > 0) {
       setMandateMessage(missingRequiredMessage(missing));

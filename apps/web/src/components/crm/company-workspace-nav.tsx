@@ -178,7 +178,7 @@ async function loadCompanyNavCounts(
   };
 }
 
-/** Internal company/opportunity sidebar — fixed, vertically centered, docked to primary sidebar. */
+/** Internal company/opportunity sidebar — fixed under the app topbar, full remaining height. */
 export function CompanyWorkspaceNav({
   companyAccountId,
   scope = "company",
@@ -358,10 +358,11 @@ export function CompanyWorkspaceNav({
       />
 
       <aside
-        className="fixed z-30 flex w-[220px] flex-col overflow-hidden rounded-none border-y border-r border-border/80 bg-card"
+        className="fixed z-20 flex w-[220px] flex-col overflow-hidden rounded-none border-r border-b border-border/80 bg-card"
         style={{
-          top: "50%",
-          transform: "translateY(-50%)",
+          /* Sit under AppTopbar (h-14) and stretch to the viewport bottom. */
+          top: "3.5rem",
+          bottom: 0,
           left: left ?? -9999,
           visibility: left === null ? "hidden" : "visible",
         }}
@@ -385,7 +386,7 @@ export function CompanyWorkspaceNav({
         </div>
         <nav
           aria-label={isOpportunityScope ? "Opportunity workspace" : "Company workspace"}
-          className="px-1.5 py-2"
+          className="erp-scroll min-h-0 flex-1 overflow-y-auto px-1.5 py-2"
         >
           <ul className="space-y-0.5">
             {items.map((item) => {

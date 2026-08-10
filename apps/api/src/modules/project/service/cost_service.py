@@ -40,6 +40,8 @@ class CostService:
         cid = self._scope.resolve_company_id(ctx, company_id)
         self._scope.validate_branch_access(ctx, branch_id)
         doc = self._numbers.generate(PrjEntityType.PROJECT_COST, cid, PrjProjectCost, "document_number")
+        if not fields.get("idempotency_key"):
+            fields["idempotency_key"] = doc
         return self._repo.create(ctx, company_id=cid, branch_id=branch_id, document_number=doc, **fields)
 
     def update(self, ctx: TenantContext, row_id: UUID, **fields):
