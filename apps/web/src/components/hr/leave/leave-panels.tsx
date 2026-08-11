@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Pencil } from "lucide-react";
 
+import { LeaveStatusBadge } from "@/components/hr/leave/leave-status-badge";
 import { SetupDrawer, SetupField, SetupInput, SetupSelect, SetupTextarea } from "@/components/hr/setup/setup-drawer";
 import { toast } from "@/components/hr/setup/setup-toast";
 import { Button } from "@/components/ui/button";
@@ -329,9 +330,12 @@ export function LeaveApprovalDrawer({
           <span className="text-muted-foreground">Dates:</span> {request.fromDate} → {request.toDate} (
           {request.totalDays} days, {request.extension.session.replace(/_/g, " ")})
         </p>
-        <p>
-          <span className="text-muted-foreground">Status:</span>{" "}
-          {LEAVE_STATUS_LABELS[request.extension.approvalStage] ?? request.status}
+        <p className="flex flex-wrap items-center gap-2">
+          <span className="text-muted-foreground">Status:</span>
+          <LeaveStatusBadge status={request.extension.approvalStage || request.status} />
+          <span className="text-xs text-muted-foreground">
+            ({LEAVE_STATUS_LABELS[request.extension.approvalStage] ?? request.status})
+          </span>
         </p>
         <p>
           <span className="text-muted-foreground">Reason:</span> {request.reason || "—"}

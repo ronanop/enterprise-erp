@@ -110,9 +110,13 @@ export function HrSection({
 export function HrKpiGrid({
   items,
   className,
+  activeKey,
+  onItemClick,
 }: {
-  items: { label: string; value: string | number; hint?: string }[];
+  items: { key?: string; label: string; value: string | number; hint?: string }[];
   className?: string;
+  activeKey?: string;
+  onItemClick?: (key: string) => void;
 }) {
   const desktopCols =
     items.length <= 3
@@ -125,22 +129,49 @@ export function HrKpiGrid({
 
   return (
     <div className={cn("grid grid-cols-2 gap-3", desktopCols, className)}>
-      {items.map((item) => (
-        <div
-          key={item.label}
-          className="rounded-xl border border-border/70 bg-card px-4 py-3 shadow-sm"
-        >
-          <p className="text-[11px] font-medium tracking-wide text-muted-foreground uppercase">
-            {item.label}
-          </p>
-          <p className="mt-1 text-2xl font-semibold tracking-tight text-foreground">
-            {item.value}
-          </p>
-          {item.hint ? (
-            <p className="mt-0.5 text-[11px] text-muted-foreground">{item.hint}</p>
-          ) : null}
-        </div>
-      ))}
+      {items.map((item) => {
+        const itemKey = item.key ?? item.label;
+        const clickable = Boolean(onItemClick);
+        const active = activeKey === itemKey;
+        const inner = (
+          <>
+            <p className="text-[11px] font-medium tracking-wide text-muted-foreground uppercase">
+              {item.label}
+            </p>
+            <p className="mt-1 text-2xl font-semibold tracking-tight text-foreground">
+              {item.value}
+            </p>
+            {item.hint ? (
+              <p className="mt-0.5 text-[11px] text-muted-foreground">{item.hint}</p>
+            ) : null}
+          </>
+        );
+        if (!clickable) {
+          return (
+            <div
+              key={itemKey}
+              className="rounded-xl border border-border/70 bg-card px-4 py-3 shadow-sm"
+            >
+              {inner}
+            </div>
+          );
+        }
+        return (
+          <button
+            key={itemKey}
+            type="button"
+            onClick={() => onItemClick?.(itemKey)}
+            className={cn(
+              "cursor-pointer rounded-xl border bg-card px-4 py-3 text-left shadow-sm transition-colors",
+              active
+                ? "border-primary bg-primary/5 ring-1 ring-primary/30"
+                : "border-border/70 hover:border-primary/40 hover:bg-muted/30",
+            )}
+          >
+            {inner}
+          </button>
+        );
+      })}
     </div>
   );
 }

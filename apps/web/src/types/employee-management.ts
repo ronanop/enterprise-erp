@@ -135,6 +135,7 @@ export type EmploymentInfo = {
   designationName: string;
   branchId: string;
   branchName: string;
+  locationId: string;
   location: string;
   employmentType: string;
   reportingManagerId: string;
@@ -147,6 +148,8 @@ export type EmploymentInfo = {
   shiftName: string;
   managementGroupId: string;
   managementGroupName: string;
+  entityId: string;
+  entityName: string;
   leavePolicyId: string;
   leavePolicyName: string;
   probationPeriodDays: string;
@@ -207,6 +210,8 @@ export type EmployeeRecord = {
   designationName: string;
   branchId: string;
   branchName: string;
+  locationId: string;
+  locationName: string;
   reportingManagerId: string;
   reportingManagerName: string;
   employmentType: string;
@@ -220,6 +225,7 @@ export type EmployeeRecord = {
 
 export type EmployeeListFilters = {
   branchId: string;
+  entityId: string;
   departmentId: string;
   designation: string;
   employmentType: string;
@@ -280,6 +286,7 @@ export function emptyEmployment(code = ""): EmploymentInfo {
     designationName: "",
     branchId: "",
     branchName: "",
+    locationId: "",
     location: "",
     employmentType: "permanent",
     reportingManagerId: "",
@@ -292,6 +299,8 @@ export function emptyEmployment(code = ""): EmploymentInfo {
     shiftName: "",
     managementGroupId: "",
     managementGroupName: "",
+    entityId: "",
+    entityName: "",
     leavePolicyId: "",
     leavePolicyName: "",
     probationPeriodDays: "90",

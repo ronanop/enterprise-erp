@@ -1,11 +1,10 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState, Children, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import Link from "next/link";
 import {
   Bell,
   Briefcase,
-  Cake,
   CalendarDays,
   ClipboardCheck,
   Download,
@@ -47,9 +46,9 @@ import {
   setDashboardRole,
 } from "@/services/hr-executive-dashboard-service";
 import type {
+  ApprovalItem,
   CalendarEvent,
   DashboardRole,
-  DashboardTrainingItem,
   HrExecutiveDashboard,
 } from "@/types/hr-executive-dashboard";
 import { DASHBOARD_ROLE_LABELS } from "@/types/hr-executive-dashboard";
@@ -84,11 +83,21 @@ function quickActionsForRole(role: DashboardRole): typeof QUICK_ACTIONS[number][
 const EVENT_LABELS: Record<string, string> = {
   birthday: "Birthday",
   anniversary: "Anniversary",
-  interview: "Interview",
-  leave: "Leave",
   holiday: "Holiday",
-  meeting: "Meeting",
+};
+
+const REQUEST_LABELS: Record<string, string> = {
+  leave: "Leave",
+  attendance: "Attendance",
+  onboarding: "Onboarding",
   payroll: "Payroll",
+  expense: "Expense",
+  asset: "Asset",
+  offer: "Offer",
+  compoff: "Compensatory",
+  on_duty: "On Duty",
+  ot_allotment: "OT / Overday",
+  attendance_correction: "Attendance correction",
 };
 
 function useClock() {
@@ -148,33 +157,41 @@ export function HrExecutiveDashboardPage() {
     );
   }, [data, query]);
 
-  const birthdayEvents = useMemo(
-    () => filteredCalendar.filter((e) => e.type === "birthday"),
-    [filteredCalendar],
-  );
-
-  const anniversaryEvents = useMemo(
-    () => filteredCalendar.filter((e) => e.type === "anniversary"),
-    [filteredCalendar],
-  );
-
-  const generalEvents = useMemo(
+  const upcomingEvents = useMemo(
     () =>
-      filteredCalendar.filter((e) => !["birthday", "anniversary"].includes(e.type)),
+      filteredCalendar.filter((e) => ["birthday", "anniversary", "holiday"].includes(e.type)),
     [filteredCalendar],
   );
 
-  const trainingItems = data?.trainingItems ?? [];
+  const requestItems = filteredApprovals;
   const roleQuickActions = quickActionsForRole(role);
 
   const stats = data?.stats;
   const charts = data?.charts;
 
-  const kpiCards = [
+  const kpiCards: {
+    label: string;
+    value: number | undefined;
+    icon: typeof Users;
+    hint: string;
+    href?: string;
+  }[] = [
     { label: "Headcount", value: stats?.totalEmployees, icon: Users, hint: "Active workforce" },
     { label: "Present Today", value: stats?.presentToday, icon: ClipboardCheck, hint: "Attendance" },
-    { label: "On Leave", value: stats?.onLeave, icon: CalendarDays, hint: "Approved today" },
-    { label: "Pending Approvals", value: stats?.pendingApprovals, icon: ClipboardCheck, hint: "Leave / shifts" },
+    {
+      label: "On Leave",
+      value: stats?.onLeave,
+      icon: CalendarDays,
+      hint: "Approved today",
+      href: "/hr/leave?view=on-leave-today",
+    },
+    {
+      label: "Pending Approvals",
+      value: stats?.pendingApprovals,
+      icon: ClipboardCheck,
+      hint: "Leave requests",
+      href: "/hr/leave?status=pending",
+    },
     { label: "Open Roles", value: stats?.openPositions, icon: Briefcase, hint: "Requisitions" },
     { label: "Pipeline", value: stats?.candidatesInPipeline, icon: Users, hint: "Active applicants" },
   ];
@@ -321,18 +338,18 @@ export function HrExecutiveDashboardPage() {
           {/* Top row — 4 portrait (3:4) boxes, then key metrics below */}
           <section className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
             <DashboardListBox
-              title="Events"
-              subtitle="Interviews, leave, holidays"
+              title="Upcoming events"
+              subtitle="Holidays, birthdays, anniversaries"
               icon={CalendarDays}
-              footerHref="/hr/reports"
-              footerLabel="Reports"
+              footerHref="/hr/setup?section=leave&tab=holiday-calendar"
+              footerLabel="Holiday calendar"
               portrait
             >
-              {generalEvents.length === 0 ? (
+              {upcomingEvents.length === 0 ? (
                 <p className="py-8 text-center text-xs text-muted-foreground">No upcoming events</p>
               ) : (
                 <ul className="space-y-2">
-                  {generalEvents.slice(0, 5).map((e) => (
+                  {upcomingEvents.slice(0, 6).map((e) => (
                     <EventRow key={e.id} event={e} />
                   ))}
                 </ul>
@@ -367,45 +384,51 @@ export function HrExecutiveDashboardPage() {
             </DashboardListBox>
 
             <DashboardListBox
-              title="People events"
-              subtitle="Birthdays · training · anniversaries"
-              icon={Cake}
-              footerHref="/hr/learning"
-              footerLabel="Learning hub"
+              title="Requests"
+              subtitle="Leave, compensatory, on duty & more"
+              icon={FileText}
+              footerHref="/hr/ess"
+              footerLabel="ESS inbox"
               portrait
             >
-              <div className="space-y-3">
-                <PeopleEventsGroup title="Birthdays" empty="No birthdays soon">
-                  {birthdayEvents.slice(0, 2).map((e) => (
-                    <EventRow key={e.id} event={e} compact />
+              {requestItems.length === 0 ? (
+                <p className="py-8 text-center text-xs text-muted-foreground">No open requests</p>
+              ) : (
+                <ul className="space-y-2">
+                  {requestItems.slice(0, 6).map((a) => (
+                    <RequestRow key={a.id} item={a} />
                   ))}
-                </PeopleEventsGroup>
-                <PeopleEventsGroup title="Training" empty="No training scheduled">
-                  {trainingItems.slice(0, 2).map((t) => (
-                    <TrainingRow key={t.id} item={t} compact />
-                  ))}
-                </PeopleEventsGroup>
-                <PeopleEventsGroup title="Anniversaries" empty="No work anniversaries">
-                  {anniversaryEvents.slice(0, 2).map((e) => (
-                    <EventRow key={e.id} event={e} compact />
-                  ))}
-                </PeopleEventsGroup>
-              </div>
+                </ul>
+              )}
             </DashboardListBox>
 
             <DashboardListBox
-              title="Attendance calendar"
-              subtitle={now.toLocaleDateString("en-IN", { month: "long", year: "numeric" })}
+              title="Today's attendance"
+              subtitle={now.toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "short" })}
               icon={ClipboardCheck}
               footerHref="/hr/time"
               footerLabel="Attendance"
               portrait
             >
-              <AttendanceMonthCalendar today={now} />
-              <div className="mt-3 grid grid-cols-3 gap-2 border-t border-border/60 pt-3">
-                <AttendanceStat label="Present" value={stats?.presentToday ?? 0} variant="present" />
-                <AttendanceStat label="Absent" value={stats?.absentToday ?? 0} variant="absent" />
-                <AttendanceStat label="On leave" value={stats?.onLeave ?? 0} variant="leave" />
+              <div className="flex flex-col gap-3">
+                <AttendanceStat
+                  label="Today's present"
+                  value={stats?.presentToday ?? 0}
+                  variant="present"
+                  vertical
+                />
+                <AttendanceStat
+                  label="Today's absent"
+                  value={stats?.absentToday ?? 0}
+                  variant="absent"
+                  vertical
+                />
+                <AttendanceStat
+                  label="On duty"
+                  value={stats?.onDutyToday ?? 0}
+                  variant="onDuty"
+                  vertical
+                />
               </div>
             </DashboardListBox>
           </section>
@@ -421,10 +444,12 @@ export function HrExecutiveDashboardPage() {
             <div className="grid gap-2.5 grid-cols-2 sm:grid-cols-3 xl:grid-cols-6">
               {kpiCards.map((k) => {
                 const Icon = k.icon;
-                return (
+                const card = (
                   <div
-                    key={k.label}
-                    className="rounded-xl border border-border/70 bg-card px-3 py-3 shadow-sm transition-shadow duration-200 hover:shadow-md"
+                    className={cn(
+                      "rounded-xl border border-border/70 bg-card px-3 py-3 shadow-sm transition-shadow duration-200",
+                      k.href && "hover:border-primary/40 hover:shadow-md",
+                    )}
                   >
                     <div className="flex items-start justify-between gap-2">
                       <div>
@@ -439,6 +464,13 @@ export function HrExecutiveDashboardPage() {
                       {loading ? "—" : (k.value ?? 0).toLocaleString("en-IN")}
                     </p>
                   </div>
+                );
+                return k.href ? (
+                  <Link key={k.label} href={k.href} className="cursor-pointer">
+                    {card}
+                  </Link>
+                ) : (
+                  <div key={k.label}>{card}</div>
                 );
               })}
             </div>
@@ -792,97 +824,57 @@ function DashboardListBox({
   );
 }
 
-const WEEKDAY_LABELS = ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"] as const;
-
-function PeopleEventsGroup({
-  title,
-  empty,
-  children,
-}: {
-  title: string;
-  empty: string;
-  children: ReactNode;
-}) {
-  const items = Children.toArray(children).filter(Boolean);
-  return (
-    <div>
-      <p className="mb-1.5 text-[10px] font-bold uppercase tracking-wide text-muted-foreground">
-        {title}
-      </p>
-      {items.length === 0 ? (
-        <p className="text-[10px] text-muted-foreground/80">{empty}</p>
-      ) : (
-        <ul className="space-y-1.5">{items}</ul>
-      )}
-    </div>
-  );
-}
-
-function AttendanceMonthCalendar({ today }: { today: Date }) {
-  const cells = useMemo(() => {
-    const y = today.getFullYear();
-    const m = today.getMonth();
-    const lastDate = new Date(y, m + 1, 0).getDate();
-    const startPad = new Date(y, m, 1).getDay();
-    const out: { day: number | null; isToday: boolean }[] = [];
-    for (let i = 0; i < startPad; i += 1) out.push({ day: null, isToday: false });
-    for (let d = 1; d <= lastDate; d += 1) {
-      out.push({
-        day: d,
-        isToday:
-          d === today.getDate() && m === today.getMonth() && y === today.getFullYear(),
-      });
-    }
-    return out;
-  }, [today]);
-
-  return (
-    <div aria-label="Current month calendar">
-      <div className="mb-1 grid grid-cols-7 gap-0.5 text-center text-[9px] font-medium text-muted-foreground">
-        {WEEKDAY_LABELS.map((w) => (
-          <span key={w}>{w}</span>
-        ))}
-      </div>
-      <div className="grid grid-cols-7 gap-0.5">
-        {cells.map((c, i) => (
-          <span
-            key={`${c.day ?? "pad"}-${i}`}
-            className={cn(
-              "flex aspect-square items-center justify-center rounded-md text-[10px] tabular-nums",
-              c.day == null && "invisible",
-              c.isToday && "bg-primary font-semibold text-primary-foreground shadow-sm",
-              !c.isToday && c.day != null && "text-foreground/80",
-            )}
-          >
-            {c.day ?? ""}
-          </span>
-        ))}
-      </div>
-    </div>
-  );
-}
-
 function AttendanceStat({
   label,
   value,
   variant,
+  vertical = false,
 }: {
   label: string;
   value: number;
-  variant: "present" | "absent" | "leave";
+  variant: "present" | "absent" | "leave" | "onDuty";
+  vertical?: boolean;
 }) {
   const tones = {
     present: "border-emerald-200/80 bg-emerald-50 text-emerald-900",
     absent: "border-red-200/80 bg-red-50 text-red-900",
     leave: "border-amber-200/80 bg-amber-50 text-amber-950",
+    onDuty: "border-sky-200/80 bg-sky-50 text-sky-950",
   };
   return (
-    <div className={cn("rounded-lg border px-1 py-2 text-center", tones[variant])}>
-      <p className="text-lg font-semibold tabular-nums leading-none">
+    <div
+      className={cn(
+        "rounded-lg border px-3 py-3",
+        tones[variant],
+        vertical ? "text-left" : "text-center",
+      )}
+    >
+      <p className={cn("font-semibold tabular-nums leading-none", vertical ? "text-2xl" : "text-lg")}>
         {value.toLocaleString("en-IN")}
       </p>
-      <p className="mt-1 text-[9px] font-medium uppercase tracking-wide opacity-90">{label}</p>
+      <p className="mt-1.5 text-[10px] font-medium uppercase tracking-wide opacity-90">{label}</p>
     </div>
+  );
+}
+
+function RequestRow({ item }: { item: ApprovalItem }) {
+  return (
+    <li>
+      <Link
+        href={item.href}
+        className="flex cursor-pointer items-start gap-2 rounded-lg border border-border/50 bg-muted/20 px-2.5 py-2 transition-colors hover:bg-muted/40"
+      >
+        <span className="mt-0.5 shrink-0 rounded border border-border bg-background px-1 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-muted-foreground">
+          {REQUEST_LABELS[item.category] ?? item.category}
+        </span>
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-xs font-medium text-foreground">{item.title}</p>
+          <p className="text-[10px] text-muted-foreground">
+            {item.requester} · {item.status}
+          </p>
+        </div>
+      </Link>
+    </li>
   );
 }
 
@@ -906,37 +898,6 @@ function EventRow({ event, compact = false }: { event: CalendarEvent; compact?: 
             month: "short",
           })}
           {event.meta ? ` · ${event.meta}` : ""}
-        </p>
-      </div>
-    </li>
-  );
-}
-
-function TrainingRow({
-  item,
-  compact = false,
-}: {
-  item: DashboardTrainingItem;
-  compact?: boolean;
-}) {
-  return (
-    <li
-      className={cn(
-        "flex items-start gap-2 rounded-lg border border-border/50 bg-muted/20",
-        compact ? "px-2 py-1.5" : "px-2.5 py-2",
-      )}
-    >
-      <span className="mt-0.5 shrink-0 rounded bg-primary/10 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-primary">
-        Training
-      </span>
-      <div className="min-w-0 flex-1">
-        <p className="truncate text-xs font-medium text-foreground">{item.title}</p>
-        <p className="text-[10px] text-muted-foreground">
-          {new Date(item.at).toLocaleDateString("en-IN", {
-            day: "numeric",
-            month: "short",
-          })}
-          {item.meta ? ` · ${item.meta}` : ""}
         </p>
       </div>
     </li>

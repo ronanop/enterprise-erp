@@ -3,11 +3,6 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import {
-  FilterChips,
-  SearchField,
-  SubHeader,
-} from "@/components/app-header";
-import {
   IconChevronRight,
   IconClock,
   IconFingerprint,
@@ -260,16 +255,9 @@ export default function AttendanceHistoryPage() {
         </Link>
         <Link
           href="/attendance/on-duty"
-          className={`${ui.card} flex items-center justify-between px-3 py-3 text-sm font-semibold text-[#0b1c30]`}
-        >
-          On Duty
-          <IconChevronRight size={16} className="text-[#434655]" />
-        </Link>
-        <Link
-          href="/attendance/compoff"
           className={`${ui.card} col-span-2 flex items-center justify-between px-3 py-3 text-sm font-semibold text-[#0b1c30]`}
         >
-          Comp Off request
+          On Duty
           <IconChevronRight size={16} className="text-[#434655]" />
         </Link>
       </section>

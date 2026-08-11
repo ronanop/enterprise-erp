@@ -171,6 +171,10 @@ function mergeRow(
 
   const departmentId = String(master.department_id ?? ext.employment.departmentId ?? "");
   const branchId = String(master.branch_id ?? ext.employment.branchId ?? profile?.branch_id ?? "");
+  const locationName = String(
+    employment?.work_location_text ?? ext.employment.location ?? "",
+  );
+  const locationId = String(ext.employment.locationId ?? "");
 
   return {
     id,
@@ -194,6 +198,8 @@ function mergeRow(
       String(master.designation ?? profile?.designation ?? "—"),
     branchId,
     branchName: ext.employment.branchName || branchMap.get(branchId) || "—",
+    locationId,
+    locationName: locationName || "—",
     reportingManagerId: String(master.reporting_manager_id ?? ext.employment.reportingManagerId ?? ""),
     reportingManagerName:
       ext.employment.reportingManagerName ||
@@ -220,6 +226,7 @@ function mergeRow(
 export type EmployeeDirectoryOptions = {
   branches: { id: string; label: string; headEmployeeId: string }[];
   departments: { id: string; label: string; branchId: string; headEmployeeId: string }[];
+  locations: { id: string; label: string; branchId: string; code: string }[];
   designations: { id: string; label: string }[];
   /** Reporting managers only — for assignment picklists */
   managers: { id: string; label: string }[];
@@ -245,9 +252,11 @@ export function invalidateEmployeeDirectoryCache(): void {
 }
 
 async function loadOptions(): Promise<EmployeeDirectoryOptions> {
-  const [branches, departments, designations, employees, shifts, mgmtGroups] = await Promise.all([
+  const [branches, departments, locations, designations, employees, shifts, mgmtGroups] =
+    await Promise.all([
     resourceService.list("/branches", { page_size: 200 }).catch(() => ({ data: [] })),
     resourceService.list("/departments", { page_size: 200 }).catch(() => ({ data: [] })),
+    resourceService.list("/locations", { page_size: 500 }).catch(() => ({ data: [] })),
     resourceService.list("/hr/designations", { page_size: 200 }).catch(() => ({ data: [] })),
     resourceService.list("/employees", { page_size: 200 }).catch(() => ({ data: [] })),
     resourceService.list("/hr/shifts", { page_size: 200 }).catch(() => ({ data: [] })),
@@ -270,6 +279,12 @@ async function loadOptions(): Promise<EmployeeDirectoryOptions> {
       label: String(r.department_name ?? r.name ?? r.department_code ?? r.id),
       branchId: String(r.branch_id ?? ""),
       headEmployeeId: String(r.head_employee_id ?? ""),
+    })),
+    locations: asRows(locations.data).map((r) => ({
+      id: String(r.id),
+      label: String(r.location_name ?? r.name ?? r.location_code ?? r.id),
+      branchId: String(r.branch_id ?? ""),
+      code: String(r.location_code ?? ""),
     })),
     designations: asRows(designations.data).map((r) => ({
       id: String(r.id),
@@ -411,6 +426,7 @@ export function filterEmployees(
   const q = query.trim().toLowerCase();
   return records.filter((r) => {
     if (filters.branchId && r.branchId !== filters.branchId) return false;
+    if (filters.entityId && r.extension.employment.entityId !== filters.entityId) return false;
     if (filters.departmentId && r.departmentId !== filters.departmentId) return false;
     if (filters.designation && r.designationName !== filters.designation) return false;
     if (filters.employmentType && r.employmentType !== filters.employmentType) return false;
@@ -419,8 +435,13 @@ export function filterEmployees(
       return false;
     }
     if (filters.location) {
-      const loc = r.extension?.employment?.location;
-      if (!loc || !loc.includes(filters.location)) return false;
+      const locId = r.locationId;
+      const locName = r.locationName;
+      if (filters.location.length === 36 && locId) {
+        if (locId !== filters.location) return false;
+      } else if (!locName || !locName.toLowerCase().includes(filters.location.toLowerCase())) {
+        return false;
+      }
     }
     if (filters.gender && r.gender !== filters.gender) return false;
     if (filters.joiningFrom && r.joiningDate && r.joiningDate < filters.joiningFrom) return false;
@@ -551,6 +572,8 @@ export async function createExistingEmployee(input: {
     designationName: input.designationName,
     branchId: input.branchId,
     branchName: "—",
+    locationId: "",
+    locationName: "—",
     reportingManagerId: input.reportingManagerId || "",
     reportingManagerName: "—",
     employmentType: input.employmentType || "permanent",
@@ -656,6 +679,7 @@ export async function createEmployeeFromWizard(
       payroll_eligible: true,
       lifecycle_source: "direct_add",
       management_group_id: managementGroupId || null,
+      work_location_text: draft.employment.location || null,
       probation_period_days: draft.employment.probationPeriodDays
         ? Number(draft.employment.probationPeriodDays)
         : null,
@@ -749,6 +773,8 @@ export async function createEmployeeFromWizard(
     designationName,
     branchId,
     branchName: draft.employment.branchName || "—",
+    locationId: draft.employment.locationId || "",
+    locationName: draft.employment.location || "—",
     reportingManagerId: reportingManagerId || "",
     reportingManagerName: draft.employment.reportingManagerName || "—",
     employmentType,
@@ -849,6 +875,15 @@ export async function updateEmployeeRecord(  record: EmployeeRecord,
         nextExt.companyBank.accountHolderName || nextExt.bank.accountHolderName || null,
       status: nextExt.employment.lifecycleStatus,
     }).catch(() => undefined);
+  }
+
+  if (record.employmentId && patch.employment) {
+    await resourceService
+      .update("/hr/employment", record.employmentId, {
+        version: record.employmentVersion,
+        work_location_text: nextExt.employment.location || null,
+      })
+      .catch(() => undefined);
   }
 
   appendActivity({
@@ -955,7 +990,8 @@ export async function readFileAsDataUrl(file: File): Promise<string> {
   });
 }
 
-export const MAX_DOCUMENT_BYTES = 5 * 1024 * 1024;
+export const MAX_PHOTO_BYTES = 300 * 1024;
+export const MAX_DOCUMENT_BYTES = 2 * 1024 * 1024;
 export const ALLOWED_DOC_TYPES = ["application/pdf", "image/png", "image/jpeg"];
 
 export function uniquenessSnapshot(records: EmployeeRecord[]) {

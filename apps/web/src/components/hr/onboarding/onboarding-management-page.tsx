@@ -33,6 +33,7 @@ import { isAuthenticated } from "@/lib/auth";
 import { cn } from "@/lib/utils";
 import {
   activateEmployee,
+  approveCandidateReview,
   computeOnboardingStats,
   downloadTextFile,
   exportOnboardingCsv,
@@ -40,7 +41,6 @@ import {
   joiningThisWeek,
   listOnboardingAudit,
   loadOnboardingDirectory,
-  markReadyToJoin,
   sendInvitation,
   startOnboarding,
   updateChecklistItem,
@@ -58,6 +58,7 @@ import {
   emptyOnboardingFilters,
   ONBOARDING_STATUS_LABELS,
 } from "@/types/onboarding-management";
+import { resolveOnboardingDisplayStatus } from "@/lib/onboarding-display-status";
 
 const PAGE = 10;
 
@@ -238,7 +239,7 @@ export function OnboardingManagementPage() {
           {pageRows.length === 0 ? (
             <HrEmptyState
               title="No onboarding cases"
-              description="Start onboarding after an offer is accepted in Recruitment."
+              description="Start onboarding for a new candidate joining the organization."
               action={
                 <Button size="sm" className="cursor-pointer" onClick={() => setStartOpen(true)}>
                   <UserPlus className="size-3.5" />
@@ -285,7 +286,7 @@ export function OnboardingManagementPage() {
                         </div>
                       </td>
                       <td className="px-3 py-2">
-                        <HrStatusBadge status={ONBOARDING_STATUS_LABELS[row.status]} />
+                        <HrStatusBadge status={resolveOnboardingDisplayStatus(row.status, row.joiningDate)} />
                       </td>
                       <td className="px-3 py-2">
                         <div className="flex flex-wrap gap-1">
@@ -329,7 +330,7 @@ export function OnboardingManagementPage() {
       {tab === "checklist" ? (
         <div className="grid gap-3 lg:grid-cols-2">
           {(dir?.cases ?? [])
-            .filter((c) => !["joined", "cancelled"].includes(c.status))
+            .filter((c) => c.status === "joined" && c.checklist.length > 0)
             .slice(0, 8)
             .map((c) => (
               <div key={c.id} className="rounded-xl border border-border/70 bg-card p-3">
@@ -338,7 +339,7 @@ export function OnboardingManagementPage() {
                     <p className="text-sm font-medium">{c.candidateName}</p>
                     <p className="text-[10px] text-muted-foreground">{c.caseCode}</p>
                   </div>
-                  <HrStatusBadge status={ONBOARDING_STATUS_LABELS[c.status]} />
+                  <HrStatusBadge status={resolveOnboardingDisplayStatus(c.status, c.joiningDate)} />
                 </div>
                 <ul className="space-y-1">
                   {c.checklist.slice(0, 6).map((t) => (
@@ -370,7 +371,7 @@ export function OnboardingManagementPage() {
             ))}
           {(dir?.cases ?? []).filter((c) => !["joined", "cancelled"].includes(c.status)).length ===
           0 ? (
-            <HrEmptyState title="No active checklists" description="Open cases appear here." />
+            <HrEmptyState title="No post-join checklists" description="Checklists appear after onboarding is completed and the employee is created." />
           ) : null}
         </div>
       ) : null}
@@ -439,7 +440,8 @@ export function OnboardingManagementPage() {
           </div>
           <div className="rounded-xl border border-border/70 bg-card p-4 md:col-span-2">
             <p className="text-xs text-muted-foreground">
-              Pipeline: Recruitment (Offer Accepted) → Onboarding portal → HR verification →{" "}
+              Pipeline: Start onboarding → Candidate portal → HR verification → Employee created →
+              Workforce assignment in{" "}
               <Link href="/hr/workforce" className="cursor-pointer text-primary underline">
                 Employee Management
               </Link>
@@ -554,7 +556,6 @@ export function OnboardingManagementPage() {
       <StartOnboardingDrawer
         open={startOpen}
         onClose={() => setStartOpen(false)}
-        acceptedOffers={dir?.acceptedOffers ?? []}
         onSubmit={handleStart}
       />
 
@@ -590,20 +591,24 @@ export function OnboardingManagementPage() {
             setDetailCase(d.cases.find((x) => x.id === caseId) ?? null);
           });
         }}
-        onReady={(caseId) => {
-          markReadyToJoin(caseId);
-          toast("Marked ready to join");
-          void load().then(async () => {
-            const d = await loadOnboardingDirectory();
-            setDir(d);
-            setDetailCase(d.cases.find((x) => x.id === caseId) ?? null);
-          });
+        onApprove={(caseId) => {
+          try {
+            approveCandidateReview(caseId);
+            toast("Candidate submission approved");
+            void load().then(async () => {
+              const d = await loadOnboardingDirectory();
+              setDir(d);
+              setDetailCase(d.cases.find((x) => x.id === caseId) ?? null);
+            });
+          } catch (e) {
+            toast(e instanceof Error ? e.message : "Approval failed", "error");
+          }
         }}
-        onActivate={(caseId, opts) => {
-          void activateEmployee(caseId, opts)
+        onComplete={(caseId) => {
+          void activateEmployee(caseId)
             .then((activated) => {
               if (activated) {
-                toast(`Employee ${activated.employeeId} activated · payroll eligible`);
+                toast(`Employee ${activated.employeeId} created — complete assignments in Workforce`);
                 void load().then(async () => {
                   const d = await loadOnboardingDirectory();
                   setDir(d);
@@ -612,7 +617,7 @@ export function OnboardingManagementPage() {
               }
             })
             .catch((e) => {
-              toast(e instanceof Error ? e.message : "Activation failed", "error");
+              toast(e instanceof Error ? e.message : "Completion failed", "error");
             });
         }}
       />

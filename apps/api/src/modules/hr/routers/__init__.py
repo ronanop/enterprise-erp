@@ -247,6 +247,16 @@ def update_designation(
     return APIResponse(message="OK", data=DesignationService(db).update(ctx, row_id, **extract_update_fields(body)))
 
 
+@designations_router.delete("/{row_id}", response_model=APIResponse[None])
+def delete_designation(
+    row_id: UUID,
+    ctx: Annotated[TenantContext, Depends(require_permission("hr.designation:update"))],
+    db: Annotated[Session, Depends(get_db)],
+):
+    DesignationService(db).delete(ctx, row_id)
+    return APIResponse(message="Deleted", data=None)
+
+
 @employee_profiles_router.get("", response_model=APIResponse[list[EmployeeProfileResponse]])
 def list_profiles(
     ctx: Annotated[TenantContext, Depends(require_permission("hr.employee_profile:read"))],

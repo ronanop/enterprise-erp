@@ -1,6 +1,7 @@
 import withPWAInit from "@ducanh2912/next-pwa";
 import type { NextConfig } from "next";
 import path from "node:path";
+import { allowedDevOriginsForPort } from "../../scripts/next-dev-origins";
 
 const withPWA = withPWAInit({
   dest: "public",
@@ -16,7 +17,10 @@ const apiProxyTarget =
 
 const projectRoot = path.resolve(__dirname);
 
+const DEV_PORT = Number(process.env.PORT ?? 3001);
+
 const nextConfig: NextConfig = {
+  allowedDevOrigins: allowedDevOriginsForPort(DEV_PORT),
   reactStrictMode: true,
   devIndicators: false,
   logging: {

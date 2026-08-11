@@ -30,6 +30,7 @@ import {
   formatDisplayDateDDMMYYYY,
   formatLeaveRangeLine,
 } from "@/utils/datetime";
+import { leaveStatusDisplay } from "@/utils/leave-status";
 import "@/app/leave.css";
 import * as ui from "@/theme/classes";
 
@@ -119,12 +120,17 @@ export default function LeavePage() {
       essService.leaveRequests(),
       essService.me(),
     ]);
-    setTypes(t.data ?? []);
+    const visibleTypes = (t.data ?? []).filter((row) => {
+        const code = (row.leave_type_code ?? "").toUpperCase();
+        const name = (row.leave_type_name ?? "").toLowerCase();
+        return code !== "CO" && !name.includes("comp off");
+      });
+    setTypes(visibleTypes);
     setBalances(b.data ?? []);
     setRequests(r.data ?? []);
     setMe(meRes.data);
-    if (!leaveTypeId && (t.data?.length ?? 0) > 0) {
-      setLeaveTypeId(t.data![0].id);
+    if (!leaveTypeId && visibleTypes.length > 0) {
+      setLeaveTypeId(visibleTypes[0].id);
     }
   }
 
@@ -276,7 +282,7 @@ export default function LeavePage() {
                         {typeName(row.leave_type_id)}
                       </p>
                       <span className="shrink-0 rounded-full bg-[#dbe1ff] px-2.5 py-0.5 text-[10px] font-bold text-[#004ac6]">
-                        • {row.status}
+                        • {leaveStatusDisplay(row.status)}
                       </span>
                     </div>
                     <p className="mt-0.5 text-sm text-[#434655]">

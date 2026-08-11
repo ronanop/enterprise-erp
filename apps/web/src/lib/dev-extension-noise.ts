@@ -4,7 +4,7 @@ export const DEV_EXTENSION_NOISE_SCRIPT = `
   if (window.__erpDevExtNoiseFilter) return;
   window.__erpDevExtNoiseFilter = true;
   var RE =
-    /Content already injected|Injection error|runInjection|Crypto site not identified|reading 'location'|sendHistory|keyboard-shortcuts|site-signal\\.top|api\\/finish|superior-grabber/i;
+    /Content already injected|Injection error|runInjection|Crypto site not identified|reading 'location'|sendHistory|keyboard-shortcuts|site-signal\\.top|api\\/finish|superior-grabber|mimi\\.saghirmohamed19|Access-Control-Allow-Origin|Failed to fetch/i;
   function isExtNoise(text) {
     return RE.test(String(text || ""));
   }

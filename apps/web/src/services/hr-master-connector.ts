@@ -43,6 +43,7 @@ export type HrMasterDirectory = {
   records: EmployeeRecord[];
   departments: HrMasterOption[];
   branches: HrMasterOption[];
+  locations: HrMasterOption[];
   designations: HrMasterOption[];
   managers: HrMasterOption[];
   shifts: HrMasterOption[];
@@ -144,6 +145,8 @@ export function registerLocalEmployee(
     designationName: employment.designationName,
     branchId: "",
     branchName: employment.branchName,
+    locationId: "",
+    locationName: employment.location || "—",
     reportingManagerId: "",
     reportingManagerName: employment.reportingManagerName,
     employmentType: employment.employmentType,
@@ -245,6 +248,7 @@ export async function loadHrMasterDirectory(): Promise<HrMasterDirectory> {
   let options: EmployeeDirectoryOptions = {
     branches: [],
     departments: [],
+    locations: [],
     designations: [],
     managers: [],
     employees: [],
@@ -290,6 +294,12 @@ export async function loadHrMasterDirectory(): Promise<HrMasterDirectory> {
       id: b.id,
       label: b.label,
       headEmployeeId: b.headEmployeeId,
+    })),
+    locations: options.locations.map((l) => ({
+      id: l.id,
+      label: l.label,
+      branchId: l.branchId,
+      code: l.code,
     })),
     designations: options.designations.map((d) => ({ id: d.id, label: d.label })),
     managers: options.managers.map((m) => ({ id: m.id, label: m.label })),

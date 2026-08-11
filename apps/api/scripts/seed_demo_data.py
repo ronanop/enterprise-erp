@@ -38,9 +38,9 @@ CACHE_ORG_ROWS: list[dict[str, str]] = [
         "company_name": "Cache Digitech",
         "legal_name": "Cache Digitech",
         "branch_code": "MUM",
-        "branch_name": "Mumbai Branch",
+        "branch_name": "Mumbai – West",
         "location_code": "LOC-MUM",
-        "location_name": "Mumbai, Maharashtra",
+        "location_name": "Mumbai – West",
         "city": "Mumbai",
         "state_code": "MH",
     },
@@ -49,9 +49,9 @@ CACHE_ORG_ROWS: list[dict[str, str]] = [
         "company_name": "Cache Digitech",
         "legal_name": "Cache Digitech",
         "branch_code": "SUL",
-        "branch_name": "Sultanpur Branch",
+        "branch_name": "Sultanpur – South Delhi",
         "location_code": "LOC-SUL",
-        "location_name": "Sultanpur, New Delhi",
+        "location_name": "Sultanpur – South Delhi",
         "city": "New Delhi",
         "state_code": "DL",
         "address_line1": "Sultanpur",
@@ -61,9 +61,9 @@ CACHE_ORG_ROWS: list[dict[str, str]] = [
         "company_name": "Cache Technologies & Infotech",
         "legal_name": "Cache Technologies & Infotech",
         "branch_code": "GK",
-        "branch_name": "Greater Kailash Branch",
+        "branch_name": "Greater Kailash – South Delhi",
         "location_code": "LOC-GK",
-        "location_name": "Greater Kailash, New Delhi",
+        "location_name": "Greater Kailash – South Delhi",
         "city": "New Delhi",
         "state_code": "DL",
         "address_line1": "Greater Kailash",
@@ -350,30 +350,21 @@ def seed_demo_operating_branches(
     specs = [
         {
             "branch_code": "MUM",
-            "branch_name": "Mumbai Branch",
+            "branch_name": "Mumbai – West",
             "city": "Mumbai",
             "state_code": "MH",
             "address_line1": "Mumbai, Maharashtra",
             "location_code": "LOC-MUM",
-            "location_name": "Mumbai, Maharashtra",
+            "location_name": "Mumbai – West",
         },
         {
             "branch_code": "SUL",
-            "branch_name": "Sultanpur Branch",
+            "branch_name": "Sultanpur – South Delhi",
             "city": "New Delhi",
             "state_code": "DL",
             "address_line1": "Sultanpur",
             "location_code": "LOC-SUL",
-            "location_name": "Sultanpur, New Delhi",
-        },
-        {
-            "branch_code": "GK",
-            "branch_name": "Greater Kailash Branch",
-            "city": "New Delhi",
-            "state_code": "DL",
-            "address_line1": "Greater Kailash",
-            "location_code": "LOC-GK",
-            "location_name": "Greater Kailash, New Delhi",
+            "location_name": "Sultanpur – South Delhi",
         },
     ]
     out: list[OrgBranch] = []
@@ -447,13 +438,162 @@ def seed_demo_operating_branches(
     return out
 
 
-# Extra Cache companies (older seed). DEMOCO is now "Cache Digitech" with
-# Mumbai / Sultanpur / Greater Kailash branches + work locations — keep that as SoT.
-DUPLICATE_CACHE_COMPANY_CODES = ("CACHEDIG", "CACHETECH")
+# Legacy duplicate company codes cleaned up on seed; CACHETECH is the second operating company.
+DUPLICATE_CACHE_COMPANY_CODES = ("CACHEDIG",)
+
+
+def _ensure_user_org_scope(
+    db,
+    tenant: SecTenant,
+    admin: SecUser,
+    user: SecUser,
+    company: OrgCompany,
+    branch: OrgBranch,
+    *,
+    is_default: bool = False,
+) -> None:
+    scope = db.scalar(
+        select(SecUserOrgScope).where(
+            SecUserOrgScope.user_id == user.id,
+            SecUserOrgScope.company_id == company.id,
+        )
+    )
+    if scope:
+        scope.branch_id = branch.id
+        scope.is_default = is_default
+        return
+    db.add(
+        SecUserOrgScope(
+            id=uuid4(),
+            tenant_id=tenant.id,
+            user_id=user.id,
+            company_id=company.id,
+            branch_id=branch.id,
+            is_default=is_default,
+            assigned_at=utcnow(),
+            assigned_by=admin.id,
+        )
+    )
+
+
+def seed_second_cache_company(
+    db, tenant: SecTenant, admin: SecUser
+) -> tuple[OrgCompany, OrgBranch, OrgLocation] | None:
+    """Cache Technologies & Infotech — second selectable company (Greater Kailash)."""
+    row = next((r for r in CACHE_ORG_ROWS if r["company_code"] == "CACHETECH"), None)
+    if not row:
+        return None
+
+    company = db.scalar(
+        select(OrgCompany).where(
+            OrgCompany.tenant_id == tenant.id,
+            OrgCompany.company_code == row["company_code"],
+            OrgCompany.is_deleted.is_(False),
+        )
+    )
+    if not company:
+        company = OrgCompany(
+            id=uuid4(),
+            tenant_id=tenant.id,
+            company_code=row["company_code"],
+            company_name=row["company_name"],
+            legal_name=row["legal_name"],
+            country_code="IN",
+            currency_code="INR",
+            fiscal_year_start_month=4,
+            timezone="Asia/Kolkata",
+            status="active",
+            created_by=admin.id,
+            updated_by=admin.id,
+        )
+        db.add(company)
+        db.flush()
+    else:
+        company.company_name = row["company_name"]
+        company.legal_name = row["legal_name"]
+        company.status = "active"
+        company.updated_by = admin.id
+
+    branch = db.scalar(
+        select(OrgBranch).where(
+            OrgBranch.company_id == company.id,
+            OrgBranch.branch_code == row["branch_code"],
+            OrgBranch.is_deleted.is_(False),
+        )
+    )
+    if not branch:
+        branch = OrgBranch(
+            id=uuid4(),
+            tenant_id=tenant.id,
+            company_id=company.id,
+            branch_code=row["branch_code"],
+            branch_name=row["branch_name"],
+            branch_type="regional",
+            address_line1=row.get("address_line1", row["location_name"]),
+            city=row["city"],
+            state_code=row["state_code"],
+            country_code="IN",
+            status="active",
+            created_by=admin.id,
+            updated_by=admin.id,
+        )
+        db.add(branch)
+        db.flush()
+    else:
+        branch.branch_name = row["branch_name"]
+        branch.city = row["city"]
+        branch.state_code = row["state_code"]
+        branch.status = "active"
+
+    location = db.scalar(
+        select(OrgLocation).where(
+            OrgLocation.branch_id == branch.id,
+            OrgLocation.location_code == row["location_code"],
+            OrgLocation.is_deleted.is_(False),
+        )
+    )
+    if not location:
+        location = OrgLocation(
+            id=uuid4(),
+            tenant_id=tenant.id,
+            company_id=company.id,
+            branch_id=branch.id,
+            location_code=row["location_code"],
+            location_name=row["location_name"],
+            location_type="office",
+            address_line1=row.get("address_line1", row["location_name"]),
+            city=row["city"],
+            state_code=row["state_code"],
+            country_code="IN",
+            status="active",
+            created_by=admin.id,
+            updated_by=admin.id,
+        )
+        db.add(location)
+        db.flush()
+    else:
+        location.location_name = row["location_name"]
+        location.city = row["city"]
+        location.state_code = row["state_code"]
+        location.status = "active"
+
+    for user in db.scalars(
+        select(SecUser).where(SecUser.tenant_id == tenant.id, SecUser.is_deleted.is_(False))
+    ).all():
+        _ensure_user_org_scope(db, tenant, admin, user, company, branch, is_default=False)
+
+    return company, branch, location
+
+
+def seed_cache_org(db, tenant: SecTenant, admin: SecUser) -> list[tuple[OrgCompany, OrgBranch, OrgLocation]]:
+    """Ensure second Cache company exists; remove stale duplicate CACHEDIG trees."""
+    soft_delete_duplicate_cache_org(db, tenant, admin)
+    second = seed_second_cache_company(db, tenant, admin)
+    return [second] if second else []
 
 
 def soft_delete_duplicate_cache_org(db, tenant: SecTenant, admin: SecUser) -> int:
-    """Remove duplicate Cache Digitech / Cache Technologies trees that double work locations."""
+    """Remove duplicate legacy CACHEDIG company trees that double work locations."""
     companies = db.scalars(
         select(OrgCompany).where(
             OrgCompany.tenant_id == tenant.id,
@@ -485,12 +625,6 @@ def soft_delete_duplicate_cache_org(db, tenant: SecTenant, admin: SecUser) -> in
         company.updated_by = admin.id
         removed += 1
     return removed
-
-
-def seed_cache_org(db, tenant: SecTenant, admin: SecUser) -> list[tuple[OrgCompany, OrgBranch, OrgLocation]]:
-    """Legacy no-op — Cache Digitech operating units live on DEMOCO now."""
-    soft_delete_duplicate_cache_org(db, tenant, admin)
-    return []
 
 
 def seed_master_data(

@@ -28,6 +28,7 @@ import {
   type ManagementGroup,
 } from "@/services/management-group-service";
 import { cn } from "@/lib/utils";
+import { EMPLOYMENT_TYPE_OPTIONS } from "@/config/hr-master-options";
 
 type Lookup = { id: string; label: string };
 
@@ -227,7 +228,7 @@ export function ManagementGroupPanel({ tab }: { tab: HrSetupTab }) {
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-xs text-muted-foreground">
-          Management groups (employment types) control default shifts, calendars, and HRMS feature toggles.
+          Management groups (employment groups) control default shifts, calendars, and HRMS feature toggles.
         </p>
         <div className="flex gap-2">
           <Button
@@ -321,7 +322,7 @@ export function ManagementGroupPanel({ tab }: { tab: HrSetupTab }) {
         open={mode !== null}
         wide
         title={mode === "edit" ? "Edit management group" : "Add management group"}
-        description="General info, attendance defaults, and feature toggles for this employment type."
+        description="General info, attendance defaults, and feature toggles for this employment group."
         onClose={() => setMode(null)}
         footer={
           <>
@@ -355,9 +356,9 @@ export function ManagementGroupPanel({ tab }: { tab: HrSetupTab }) {
             <div className="grid gap-3 sm:grid-cols-2">
               <SetupField label="Linked employment type">
                 <SetupSelect value={employmentType} onChange={(e) => setEmploymentType(e.target.value)}>
-                  {["permanent", "contract", "intern", "consultant"].map((t) => (
-                    <option key={t} value={t}>
-                      {t}
+                  {EMPLOYMENT_TYPE_OPTIONS.map((t) => (
+                    <option key={t.value} value={t.value}>
+                      {t.label}
                     </option>
                   ))}
                 </SetupSelect>

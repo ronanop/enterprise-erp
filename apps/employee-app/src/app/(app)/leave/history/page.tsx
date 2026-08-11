@@ -13,6 +13,7 @@ import { ApiClientError } from "@/services/api-client";
 import { essService } from "@/services/ess-service";
 import type { EssLeaveRequest, EssLeaveType, EssMe } from "@/types/api";
 import { formatLeaveRangeLine } from "@/utils/datetime";
+import { leaveStatusDisplay } from "@/utils/leave-status";
 import * as ui from "@/theme/classes";
 
 const FILTERS = ["All", "Approved", "Pending", "Rejected"];
@@ -93,13 +94,15 @@ export default function LeaveHistoryPage() {
               </p>
               <ul className="space-y-2">
                 {g.rows.map((row) => {
-                  const status = row.status.toLowerCase();
+                  const displayStatus = leaveStatusDisplay(row.status);
                   const badge =
-                    status === "approved"
+                    displayStatus === "Approved"
                       ? "bg-emerald-500 text-white"
-                      : status === "rejected"
+                      : displayStatus === "Rejected"
                         ? "bg-[#ba1a1a] text-white"
-                        : "bg-amber-500 text-white";
+                        : displayStatus === "Cancelled"
+                          ? "bg-slate-500 text-white"
+                          : "bg-amber-500 text-white";
                   const iconBg =
                     typeName(row.leave_type_id).toLowerCase().includes("sick")
                       ? "bg-[#ffdad6] text-[#ba1a1a]"
@@ -129,7 +132,7 @@ export default function LeaveHistoryPage() {
                               <span
                                 className={`rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase ${badge}`}
                               >
-                                {status === "submitted" ? "Pending" : row.status}
+                                {displayStatus}
                               </span>
                             </div>
                             <div className="mt-3 flex items-center justify-between border-t border-[#c3c6d7]/25 pt-3 text-sm">

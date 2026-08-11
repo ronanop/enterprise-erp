@@ -190,6 +190,28 @@ export const LEAVE_STATUS_LABELS: Record<string, string> = {
   info_requested: "Info requested",
 };
 
+export type LeaveStatusDisplay = "Pending" | "Approved" | "Rejected" | "Cancelled";
+
+/** Simplified leave status for list views and employee-facing badges. */
+export function leaveStatusDisplay(status: string): LeaveStatusDisplay {
+  const s = status.toLowerCase();
+  if (s === "approved") return "Approved";
+  if (s === "rejected") return "Rejected";
+  if (s === "cancelled") return "Cancelled";
+  return "Pending";
+}
+
+/** Comp-off is de-scoped from HR/ESS leave flows (Phase 4). */
+export function isCompOffLeaveType(code: string, name?: string): boolean {
+  const c = code.trim().toUpperCase();
+  const n = (name ?? "").toLowerCase();
+  return c === "CO" || n.includes("comp off") || n.includes("comp-off");
+}
+
+export function isVisibleLeaveType(code: string, name?: string): boolean {
+  return !isCompOffLeaveType(code, name);
+}
+
 export const DEFAULT_LEAVE_COLORS: Record<string, string> = {
   AL: "#059669",
   CL: "#0ea5e9",
@@ -199,6 +221,8 @@ export const DEFAULT_LEAVE_COLORS: Record<string, string> = {
   PL: "#6366f1",
   MR: "#14b8a6",
   BL: "#64748b",
+  CLWP: "#dc2626",
+  LOP: "#dc2626",
 };
 
 export function emptyLeaveFilters(): LeaveFilters {

@@ -32,7 +32,24 @@ class OrgContextService:
         }
 
     def list_accessible_companies(self, ctx: TenantContext):
-        return self._companies.list_companies(ctx)
+        if ctx.user_type in {"super_admin", "tenant_admin"}:
+            return self._companies.list_companies(ctx)
+
+        scopes = self._scopes.list_user_scopes(ctx.user_id, ctx.tenant_id)
+        company_ids = {s.company_id for s in scopes}
+        if not company_ids:
+            return self._companies.list_companies(ctx)
+
+        companies = []
+        seen: set[UUID] = set()
+        for company_id in company_ids:
+            if company_id in seen:
+                continue
+            company = self._companies.get_by_id(ctx, company_id)
+            if company is not None:
+                companies.append(company)
+                seen.add(company_id)
+        return companies
 
     def list_accessible_branches(self, ctx: TenantContext, company_id: UUID):
         from modules.organization.repository.branch_repository import BranchRepository

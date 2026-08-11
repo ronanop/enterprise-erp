@@ -33,11 +33,14 @@ export default function HomePage() {
   const [today, setToday] = useState<EssAttendance | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [timer, setTimer] = useState("00:00:00");
-  const [greeting, setGreeting] = useState("Good day");
+  const [now, setNow] = useState(() => new Date());
 
   useEffect(() => {
-    setGreeting(greetingForNow());
+    const id = window.setInterval(() => setNow(new Date()), 1000);
+    return () => window.clearInterval(id);
   }, []);
+
+  const greeting = greetingForNow(now);
 
   useEffect(() => {
     let cancelled = false;
@@ -120,9 +123,24 @@ export default function HomePage() {
           <h1 className="text-[1.75rem] font-bold leading-tight tracking-tight text-[#0b1c30]">
             {greeting}, {firstName}
           </h1>
-          <p className="mt-1 text-base text-[#434655]">
-            Ready for a productive day?
-          </p>
+          <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-sm text-[#434655]">
+            <span>
+              {now.toLocaleDateString("en-IN", {
+                weekday: "long",
+                day: "numeric",
+                month: "long",
+                year: "numeric",
+              })}
+            </span>
+            <span aria-hidden>·</span>
+            <span className="font-mono tabular-nums">
+              {now.toLocaleTimeString("en-IN", {
+                hour: "2-digit",
+                minute: "2-digit",
+                second: "2-digit",
+              })}
+            </span>
+          </div>
         </div>
         {me?.can_approve_team_leave ? (
           <Link
@@ -132,7 +150,7 @@ export default function HomePage() {
             <div>
               <p className="font-semibold text-[#0b1c30]">Team approvals</p>
               <p className="text-sm text-[#434655]">
-                Leave, on-duty, comp off, attendance corrections
+                Leave, on-duty, attendance corrections
               </p>
             </div>
             {(me.pending_approvals_count ?? 0) > 0 ? (

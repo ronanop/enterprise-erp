@@ -35,7 +35,6 @@ type StatusFilter =
 const CATEGORY_FILTERS: { id: CategoryFilter; label: string }[] = [
   { id: "all", label: "All types" },
   { id: "leave", label: "Leave" },
-  { id: "compoff", label: "Comp off" },
   { id: "attendance_correction", label: "Attendance" },
   { id: "ot_allotment", label: "OT" },
   { id: "on_duty", label: "On duty" },

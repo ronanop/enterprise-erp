@@ -28,6 +28,7 @@ import {
   getEmployeeById,
   loadEmployeeDirectory,
   MAX_DOCUMENT_BYTES,
+  MAX_PHOTO_BYTES,
   previewNextEmployeeCode,
   readFileAsDataUrl,
   uniquenessSnapshot,
@@ -43,6 +44,13 @@ import {
   emptyWizardDraft,
 } from "@/types/employee-management";
 import { ONBOARDING_STATUS_LABELS } from "@/types/onboarding-management";
+import {
+  EMPLOYMENT_TYPE_OPTIONS,
+  GENDER_OPTIONS,
+  LIFECYCLE_STATUS_OPTIONS,
+  MARITAL_STATUS_OPTIONS,
+  RELATIONSHIP_OPTIONS,
+} from "@/config/hr-master-options";
 
 const STEPS = [
   { id: "personal", label: "Personal" },
@@ -150,6 +158,9 @@ export function EmployeeWizardPage() {
     if (step === 1) {
       if (!draft.employment.joiningDate) e.push("Joining date is required");
       if (!draft.employment.branchId && !options?.branches[0]) e.push("Branch is required");
+      if (!draft.employment.locationId && !draft.employment.location.trim()) {
+        e.push("Location is required");
+      }
       if (!draft.employment.departmentId && !options?.departments[0]) e.push("Department is required");
       if (!draft.employment.designationName.trim()) e.push("Designation is required");
     }
@@ -200,8 +211,8 @@ export function EmployeeWizardPage() {
 
   async function onPhoto(file: File | null) {
     if (!file) return;
-    if (file.size > MAX_DOCUMENT_BYTES) {
-      toast("Photo max 5 MB", "error");
+    if (file.size > MAX_PHOTO_BYTES) {
+      toast("Photo max 300 KB", "error");
       return;
     }
     patchPersonal({ profilePhotoDataUrl: await readFileAsDataUrl(file) });
@@ -213,7 +224,7 @@ export function EmployeeWizardPage() {
       return;
     }
     if (file.size > MAX_DOCUMENT_BYTES) {
-      toast("Max file size 5 MB", "error");
+      toast("Max file size 2 MB", "error");
       return;
     }
     const dataUrl = await readFileAsDataUrl(file);
@@ -470,8 +481,8 @@ export function EmployeeWizardPage() {
               <SetupField label="Gender">
                 <SetupSelect value={draft.personal.gender} onChange={(e) => patchPersonal({ gender: e.target.value })}>
                   <option value="">Select gender</option>
-                  {["male", "female", "other", "prefer_not_to_say"].map((g) => (
-                    <option key={g} value={g}>{g.replace(/_/g, " ")}</option>
+                  {GENDER_OPTIONS.map((g) => (
+                    <option key={g.value} value={g.value}>{g.label}</option>
                   ))}
                 </SetupSelect>
               </SetupField>
@@ -481,8 +492,8 @@ export function EmployeeWizardPage() {
               <SetupField label="Marital status">
                 <SetupSelect value={draft.personal.maritalStatus} onChange={(e) => patchPersonal({ maritalStatus: e.target.value })}>
                   <option value="">Select status</option>
-                  {["single", "married", "divorced", "widowed"].map((s) => (
-                    <option key={s} value={s}>{s}</option>
+                  {MARITAL_STATUS_OPTIONS.map((s) => (
+                    <option key={s.value} value={s.value}>{s.label}</option>
                   ))}
                 </SetupSelect>
               </SetupField>
@@ -596,11 +607,15 @@ export function EmployeeWizardPage() {
                 />
               </SetupField>
               <SetupField label="Relationship">
-                <SetupInput
-                  placeholder="e.g. Spouse / Parent"
+                <SetupSelect
                   value={draft.personal.emergency.relationship}
                   onChange={(e) => patchPersonal({ emergency: { ...draft.personal.emergency, relationship: e.target.value } })}
-                />
+                >
+                  <option value="">Select relationship</option>
+                  {RELATIONSHIP_OPTIONS.map((r) => (
+                    <option key={r.value} value={r.value}>{r.label}</option>
+                  ))}
+                </SetupSelect>
               </SetupField>
             </EmsFormGrid>
           </div>
@@ -646,6 +661,8 @@ export function EmployeeWizardPage() {
                     patchEmployment({
                       branchId: id,
                       branchName: options?.branches.find((b) => b.id === id)?.label ?? "",
+                      locationId: "",
+                      location: "",
                       branchHeadName: heads.branchHeadName,
                       departmentHeadName: heads.departmentHeadName,
                     });
@@ -728,12 +745,30 @@ export function EmployeeWizardPage() {
                   />
                 ) : null}
               </SetupField>
-              <SetupField label="Location">
-                <SetupInput
-                  placeholder="e.g. Bengaluru HQ"
-                  value={draft.employment.location}
-                  onChange={(e) => patchEmployment({ location: e.target.value })}
-                />
+              <SetupField label="Location" required>
+                <SetupSelect
+                  value={draft.employment.locationId}
+                  onChange={(e) => {
+                    const id = e.target.value;
+                    const loc = options?.locations.find((l) => l.id === id);
+                    patchEmployment({
+                      locationId: id,
+                      location: loc?.label ?? "",
+                    });
+                  }}
+                >
+                  <option value="">Select location</option>
+                  {options?.locations
+                    .filter(
+                      (loc) =>
+                        !draft.employment.branchId || loc.branchId === draft.employment.branchId,
+                    )
+                    .map((loc) => (
+                      <option key={loc.id} value={loc.id}>
+                        {loc.label}
+                      </option>
+                    ))}
+                </SetupSelect>
               </SetupField>
               <SetupField label="Management group" hint="Sets shift, calendars, and HRMS features">
                 <SetupSelect
@@ -771,8 +806,8 @@ export function EmployeeWizardPage() {
               </SetupField>
               <SetupField label="Employment type">
                 <SetupSelect value={draft.employment.employmentType} onChange={(e) => patchEmployment({ employmentType: e.target.value })}>
-                  {["permanent", "contract", "intern", "consultant"].map((t) => (
-                    <option key={t} value={t}>{t}</option>
+                  {EMPLOYMENT_TYPE_OPTIONS.map((t) => (
+                    <option key={t.value} value={t.value}>{t.label}</option>
                   ))}
                 </SetupSelect>
               </SetupField>
@@ -837,8 +872,8 @@ export function EmployeeWizardPage() {
               </SetupField>
               <SetupField label="Employee status">
                 <SetupSelect value={draft.employment.lifecycleStatus} onChange={(e) => patchEmployment({ lifecycleStatus: e.target.value as EmployeeWizardDraft["employment"]["lifecycleStatus"] })}>
-                  {["active", "inactive", "probation", "notice", "resigned"].map((s) => (
-                    <option key={s} value={s}>{s}</option>
+                  {LIFECYCLE_STATUS_OPTIONS.map((s) => (
+                    <option key={s.value} value={s.value}>{s.label}</option>
                   ))}
                 </SetupSelect>
               </SetupField>
@@ -1040,13 +1075,6 @@ function BankStep({
           placeholder="Optional SWIFT code"
           value={b.swift}
           onChange={(e) => set({ swift: e.target.value })}
-        />
-      </SetupField>
-      <SetupField label="UPI ID">
-        <SetupInput
-          placeholder="name@upi"
-          value={b.upiId}
-          onChange={(e) => set({ upiId: e.target.value })}
         />
       </SetupField>
     </EmsFormGrid>

@@ -20,7 +20,8 @@ import type {
   OnboardingCase,
   OnboardingDocument,
 } from "@/types/onboarding-management";
-import { ONBOARDING_STATUS_LABELS, PORTAL_STEPS } from "@/types/onboarding-management";
+import { PORTAL_STEPS } from "@/types/onboarding-management";
+import { resolveOnboardingDisplayStatus } from "@/lib/onboarding-display-status";
 import { cn } from "@/lib/utils";
 
 type Props = {
@@ -33,8 +34,8 @@ type Props = {
     docId: string,
     status: OnboardingDocument["verifyStatus"],
   ) => void;
-  onReady: (caseId: string) => void;
-  onActivate: (caseId: string, opts: { employeeCode: string; shiftId?: string }) => void;
+  onApprove: (caseId: string) => void;
+  onComplete: (caseId: string) => void;
   onInvite: (caseRow: OnboardingCase) => void;
 };
 
@@ -44,15 +45,14 @@ export function CaseDetailDrawer({
   onClose,
   onChecklist,
   onVerifyDoc,
-  onReady,
-  onActivate,
+  onApprove,
+  onComplete,
   onInvite,
 }: Props) {
   const [tab, setTab] = useState<"overview" | "portal" | "docs" | "checklist" | "timeline">(
     "overview",
   );
   const [note, setNote] = useState("");
-  const [empCodeInput, setEmpCodeInput] = useState("");
   const [previewDoc, setPreviewDoc] = useState<OnboardingDocument | null>(null);
 
   const timeline = useMemo(() => {
@@ -76,11 +76,11 @@ export function CaseDetailDrawer({
         done: Boolean(caseRow.portal.submittedAt),
       },
       {
-        label: "Ready to join",
+        label: "HR verified",
         done: ["ready_to_join", "joined"].includes(caseRow.status),
       },
       {
-        label: "Employee activated",
+        label: "Employee created",
         at: caseRow.activatedAt,
         done: caseRow.status === "joined",
       },
@@ -92,6 +92,19 @@ export function CaseDetailDrawer({
 
   const hrTasks = caseRow.checklist.filter((t) => t.owner === "hr");
   const mgrTasks = caseRow.checklist.filter((t) => t.owner === "manager");
+  const showChecklist = caseRow.status === "joined" && caseRow.checklist.length > 0;
+  const canApprove = caseRow.status === "hr_review" && Boolean(caseRow.portal.submittedAt);
+  const canComplete = ["hr_review", "ready_to_join"].includes(caseRow.status);
+
+  const tabs = (
+    [
+      ["overview", "Overview"],
+      ["portal", "Portal"],
+      ["docs", "Documents"],
+      ...(showChecklist ? [["checklist", "Checklist"] as const] : []),
+      ["timeline", "Timeline"],
+    ] as const
+  );
 
   return (
     <SetupDrawer
@@ -99,7 +112,7 @@ export function CaseDetailDrawer({
       onClose={onClose}
       wide
       title={caseRow.candidateName}
-      description={`${caseRow.caseCode} · ${ONBOARDING_STATUS_LABELS[caseRow.status]} · ${caseRow.progressPct}%`}
+      description={`${caseRow.caseCode} · ${resolveOnboardingDisplayStatus(caseRow.status, caseRow.joiningDate)} · ${caseRow.progressPct}%`}
       footer={
         <>
           <Button type="button" variant="outline" className="cursor-pointer" onClick={onClose}>
@@ -113,48 +126,31 @@ export function CaseDetailDrawer({
           >
             Invitation
           </Button>
-          {caseRow.status !== "joined" ? (
-            <>
-              <Button
-                type="button"
-                variant="outline"
-                className="cursor-pointer"
-                onClick={() => onReady(caseRow.id)}
-              >
-                Mark ready
-              </Button>
-              <Button
-                type="button"
-                className="cursor-pointer"
-                onClick={() => {
-                  const code = (empCodeInput || caseRow.employeeId || "").trim();
-                  if (!code || code.toUpperCase().startsWith("ONB-")) {
-                    window.alert(
-                      "Enter a permanent Employee ID before activation (e.g. EMP-000101).",
-                    );
-                    return;
-                  }
-                  onActivate(caseRow.id, { employeeCode: code });
-                }}
-              >
-                <UserCheck className="size-3.5" />
-                Activate employee
-              </Button>
-            </>
+          {canApprove ? (
+            <Button
+              type="button"
+              variant="outline"
+              className="cursor-pointer"
+              onClick={() => onApprove(caseRow.id)}
+            >
+              Approve submission
+            </Button>
+          ) : null}
+          {canComplete && caseRow.status !== "joined" ? (
+            <Button
+              type="button"
+              className="cursor-pointer"
+              onClick={() => onComplete(caseRow.id)}
+            >
+              <UserCheck className="size-3.5" />
+              Complete onboarding
+            </Button>
           ) : null}
         </>
       }
     >
       <div className="mb-3 flex flex-wrap gap-1">
-        {(
-          [
-            ["overview", "Overview"],
-            ["portal", "Portal"],
-            ["docs", "Documents"],
-            ["checklist", "Checklist"],
-            ["timeline", "Timeline"],
-          ] as const
-        ).map(([id, label]) => (
+        {tabs.map(([id, label]) => (
           <button
             key={id}
             type="button"
@@ -174,39 +170,24 @@ export function CaseDetailDrawer({
       {tab === "overview" ? (
         <div className="space-y-3 text-xs">
           <div className="grid gap-2 sm:grid-cols-2">
-            <Info label="Offer" value={caseRow.offerCode} />
             <Info label="Joining" value={caseRow.joiningDate} />
             <Info label="Department" value={caseRow.department} />
             <Info label="Designation" value={caseRow.designation} />
             <Info label="Reporting manager" value={caseRow.reportingManager || "—"} />
             <Info label="Branch" value={caseRow.branch} />
-            <Info label="Shift" value={caseRow.shift} />
-            <Info label="Leave policy" value={caseRow.leavePolicy} />
             <Info label="HR owner" value={caseRow.hrOwner} />
-            <Info label="Buddy" value={caseRow.buddy || "—"} />
-            <Info label="Employee ID" value={caseRow.employeeId || "Pending"} />
-            {caseRow.status !== "joined" ? (
-              <div className="sm:col-span-2 rounded-lg border border-border/60 bg-muted/30 p-3 space-y-2">
-                <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-                  Activation — assign permanent Employee ID
-                </p>
-                <input
-                  className="h-8 w-full rounded-md border border-border bg-background px-2 text-xs"
-                  placeholder="e.g. EMP-000101"
-                  value={empCodeInput || (caseRow.employeeId?.startsWith("ONB-") ? "" : caseRow.employeeId) || ""}
-                  onChange={(e) => setEmpCodeInput(e.target.value.toUpperCase())}
-                />
-                <p className="text-[10px] text-muted-foreground">
-                  Employee becomes Active and payroll-eligible only after activation. Temporary ONB-*
-                  codes are replaced here.
-                </p>
-              </div>
-            ) : null}
+            <Info label="Employee ID" value={caseRow.employeeId || "Assigned after completion"} />
             <div>
               <p className="text-[10px] uppercase text-muted-foreground">Status</p>
-              <HrStatusBadge status={ONBOARDING_STATUS_LABELS[caseRow.status]} />
+              <HrStatusBadge status={resolveOnboardingDisplayStatus(caseRow.status, caseRow.joiningDate)} />
             </div>
           </div>
+          {caseRow.status !== "joined" ? (
+            <p className="rounded-lg border border-border/60 bg-muted/30 px-3 py-2 text-[11px] text-muted-foreground">
+              After verification, complete onboarding to create the employee record. Assign shift,
+              leave policy, and other details from Workforce once the employee is active.
+            </p>
+          ) : null}
           <div className="h-2 overflow-hidden rounded-full bg-muted">
             <div
               className="h-full rounded-full bg-emerald-500 transition-all duration-300"
@@ -287,8 +268,11 @@ export function CaseDetailDrawer({
         onClose={() => setPreviewDoc(null)}
       />
 
-      {tab === "checklist" ? (
+      {tab === "checklist" && showChecklist ? (
         <div className="space-y-4">
+          <p className="text-[11px] text-muted-foreground">
+            Post-join tasks — complete assignment details in Workforce as each item is done.
+          </p>
           <ChecklistGroup
             title="HR Tasks"
             items={hrTasks}

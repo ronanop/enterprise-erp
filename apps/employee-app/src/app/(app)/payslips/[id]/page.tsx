@@ -194,7 +194,7 @@ export default function PayslipViewerPage() {
               />
               <Stat
                 value={String(lopDays)}
-                label="LOP Days"
+                label="CLWP Days"
                 color="text-[#0b1c30]"
               />
             </div>

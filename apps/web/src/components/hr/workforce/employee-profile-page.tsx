@@ -23,6 +23,12 @@ import {
 } from "@/services/employee-management-service";
 import { ApiClientError, resourceService } from "@/services/api-client";
 import { hrEssPoliciesService } from "@/services/hr-ess-policies-service";
+import {
+  formatEmploymentTypeLabel,
+  formatMaritalStatusLabel,
+  formatRelationshipLabel,
+  LIFECYCLE_STATUS_OPTIONS,
+} from "@/config/hr-master-options";
 import type {
   BankDetails,
   EmployeeDocumentItem,
@@ -299,7 +305,7 @@ export function EmployeeProfilePage({ employeeId }: { employeeId: string }) {
           <Info label="Reporting manager" value={record.reportingManagerName} />
           <Info label="Branch" value={record.branchName} />
           <Info label="Joined" value={record.joiningDate || "—"} />
-          <Info label="Employment type" value={record.employmentType} />
+          <Info label="Employment type" value={formatEmploymentTypeLabel(record.employmentType)} />
           <Info label="Status" value={<HrStatusBadge status={record.lifecycleStatus} />} />
           <Info label="Email" value={record.officialEmail} />
           <Info label="Phone" value={record.mobile} />
@@ -346,7 +352,7 @@ export function EmployeeProfilePage({ employeeId }: { employeeId: string }) {
             <Info label="Grade" value={record.extension.employment.grade || "—"} />
             <Info label="Job level" value={record.extension.employment.jobLevel || "—"} />
             <Info label="Shift" value={record.extension.employment.shiftName || "—"} />
-            <Info label="Location" value={record.extension.employment.location || "—"} />
+            <Info label="Location" value={record.locationName || record.extension.employment.location || "—"} />
             <Info
               label="Probation days"
               value={record.extension.employment.probationPeriodDays || "—"}
@@ -358,7 +364,7 @@ export function EmployeeProfilePage({ employeeId }: { employeeId: string }) {
             <Info label="Department" value={record.departmentName} />
             <Info label="Designation" value={record.designationName} />
             <Info label="Reporting manager" value={record.reportingManagerName} />
-            <Info label="Type" value={record.employmentType} />
+            <Info label="Type" value={formatEmploymentTypeLabel(record.employmentType)} />
             <Info label="Joined" value={record.joiningDate || "—"} />
             <Info label="Status" value={record.lifecycleStatus} />
           </EmsFormGrid>
@@ -389,7 +395,6 @@ export function EmployeeProfilePage({ employeeId }: { employeeId: string }) {
                   <Info label="IFSC" value={record.extension.bank.ifsc || "—"} />
                   <Info label="Account" value={maskAccount(record.extension.bank.accountNumber)} />
                   <Info label="Branch" value={record.extension.bank.branchName || "—"} />
-                  <Info label="UPI" value={record.extension.bank.upiId || "—"} />
                 </EmsFormGrid>
               ) : (
                 <p className="text-xs text-muted-foreground">No onboarding bank details on file.</p>
@@ -406,7 +411,6 @@ export function EmployeeProfilePage({ employeeId }: { employeeId: string }) {
                   <Info label="IFSC" value={companyBank.ifsc || "—"} />
                   <Info label="Account" value={maskAccount(companyBank.accountNumber)} />
                   <Info label="Branch" value={companyBank.branchName || "—"} />
-                  <Info label="UPI" value={companyBank.upiId || "—"} />
                 </EmsFormGrid>
               ) : (
                 <p className="text-xs text-muted-foreground">
@@ -664,9 +668,9 @@ export function EmployeeProfilePage({ employeeId }: { employeeId: string }) {
                     })
                   }
                 >
-                  {["active", "inactive", "probation", "notice", "resigned", "archived"].map((s) => (
-                    <option key={s} value={s}>
-                      {s}
+                  {LIFECYCLE_STATUS_OPTIONS.map((s) => (
+                    <option key={s.value} value={s.value}>
+                      {s.label}
                     </option>
                   ))}
                 </SetupSelect>
@@ -767,7 +771,7 @@ function AllDetailsView({
             <Info label="Mobile" value={p.mobile || "—"} />
             <Info label="DOB" value={p.dateOfBirth || "—"} />
             <Info label="Gender" value={p.gender || "—"} />
-            <Info label="Marital status" value={p.maritalStatus || "—"} />
+            <Info label="Marital status" value={formatMaritalStatusLabel(p.maritalStatus)} />
             <Info label="Nationality" value={p.nationality || "—"} />
             <Info label="Blood group" value={p.bloodGroup || "—"} />
             <Info
@@ -780,7 +784,7 @@ function AllDetailsView({
             />
             <Info
               label="Emergency"
-              value={`${p.emergency.name || "—"} (${p.emergency.relationship || "—"}) ${p.emergency.phone || ""}`}
+              value={`${p.emergency.name || "—"} (${formatRelationshipLabel(p.emergency.relationship)}) ${p.emergency.phone || ""}`}
             />
           </EmsFormGrid>
         </Section>
@@ -791,7 +795,7 @@ function AllDetailsView({
             <Info label="Department" value={e.departmentName || record.departmentName} />
             <Info label="Designation" value={e.designationName || record.designationName} />
             <Info label="Branch" value={e.branchName || record.branchName} />
-            <Info label="Type" value={e.employmentType || "—"} />
+            <Info label="Type" value={formatEmploymentTypeLabel(e.employmentType)} />
             <Info label="Reporting manager" value={e.reportingManagerName || "—"} />
             <Info label="Shift" value={e.shiftName || "—"} />
             <Info label="Status" value={e.lifecycleStatus || "—"} />

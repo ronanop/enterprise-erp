@@ -7,6 +7,7 @@ import { SetupDrawer } from "@/components/hr/setup/setup-drawer";
 import { Button } from "@/components/ui/button";
 import type { LeaveDirectory } from "@/services/leave-management-service";
 import type { LeaveRequestRecord } from "@/types/leave-management";
+import { leaveStatusDisplay } from "@/types/leave-management";
 import { cn } from "@/lib/utils";
 
 export function LeaveCalendarView({
@@ -163,8 +164,8 @@ export function LeaveCalendarView({
                   <p className="text-muted-foreground">
                     {r.leaveTypeName} · {r.fromDate}–{r.toDate} · {r.totalDays}d
                   </p>
-                  <p className="capitalize text-muted-foreground">
-                    {r.extension.approvalStage || r.status}
+                  <p className="text-muted-foreground">
+                    {leaveStatusDisplay(r.extension.approvalStage || r.status)}
                   </p>
                 </button>
               </li>

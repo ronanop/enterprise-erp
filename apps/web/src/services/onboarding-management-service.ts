@@ -9,9 +9,10 @@ import { registerLocalEmployee } from "@/services/hr-master-connector";
 import { applyOnboardingPortalToEmployee } from "@/services/employee-management-service";
 import { loadRecruitmentOverview, type RecruitmentRow } from "@/services/recruitment-service";
 import { portalToWizardDraft } from "@/lib/onboarding-to-employee";
+import { previewNextEmployeeCode } from "@/services/employee-management-service";
 import {
-  DEFAULT_HR_CHECKLIST,
   DEFAULT_MANAGER_CHECKLIST,
+  POST_JOIN_HR_CHECKLIST,
   emptyPortal,
   PORTAL_STEPS,
   type ChecklistItem,
@@ -60,9 +61,14 @@ function readJson<T>(key: string, fallback: T): T {
   }
 }
 
-function writeJson(key: string, value: unknown): void {
-  if (typeof window === "undefined") return;
-  localStorage.setItem(key, JSON.stringify(value));
+function writeJson(key: string, value: unknown): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    localStorage.setItem(key, JSON.stringify(value));
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 export function appendOnboardingAudit(entry: Omit<OnboardingAuditEntry, "id" | "at">): void {
@@ -82,14 +88,13 @@ function nextCaseCode(): string {
   return `ONB-${String(n).padStart(6, "0")}`;
 }
 
-function buildDefaultChecklist(): ChecklistItem[] {
-  const hr = DEFAULT_HR_CHECKLIST.map((t, i) => ({
+function buildPostJoinChecklist(): ChecklistItem[] {
+  const hr = POST_JOIN_HR_CHECKLIST.map((t) => ({
     id: crypto.randomUUID(),
     code: t.code,
     name: t.name,
     owner: "hr" as const,
     status: "pending" as const,
-    dueDate: undefined,
   }));
   const mgr = DEFAULT_MANAGER_CHECKLIST.map((t) => ({
     id: crypto.randomUUID(),
@@ -101,15 +106,21 @@ function buildDefaultChecklist(): ChecklistItem[] {
   return [...hr, ...mgr];
 }
 
-function calcProgress(portal: PortalPayload, checklist: ChecklistItem[]): number {
+function buildDefaultChecklist(): ChecklistItem[] {
+  return [];
+}
+
+function calcProgress(portal: PortalPayload, checklist: ChecklistItem[], status: OnboardingCaseStatus): number {
   const stepIdx = PORTAL_STEPS.findIndex((s) => s.id === portal.currentStep);
   const portalPct = portal.submittedAt
-    ? 70
-    : Math.round(((Math.max(stepIdx, 0) + 1) / PORTAL_STEPS.length) * 55);
+    ? 85
+    : Math.round(((Math.max(stepIdx, 0) + 1) / PORTAL_STEPS.length) * 80);
+  if (status !== "joined") {
+    return Math.min(100, portalPct);
+  }
   const done = checklist.filter((c) => c.status === "done").length;
-  const checkPct = checklist.length ? Math.round((done / checklist.length) * 30) : 0;
-  const joinedBonus = 0;
-  return Math.min(100, portalPct + checkPct + joinedBonus);
+  const checkPct = checklist.length ? Math.round((done / checklist.length) * 15) : 0;
+  return Math.min(100, portalPct + checkPct);
 }
 
 function refreshCaseDerived(c: OnboardingCase): OnboardingCase {
@@ -125,7 +136,7 @@ function refreshCaseDerived(c: OnboardingCase): OnboardingCase {
   return {
     ...c,
     status,
-    progressPct: c.status === "joined" ? 100 : calcProgress(c.portal, c.checklist),
+    progressPct: c.status === "joined" ? 100 : calcProgress(c.portal, c.checklist, c.status),
     updatedAt: c.updatedAt,
   };
 }
@@ -134,17 +145,17 @@ function loadCases(): OnboardingCase[] {
   return readJson<OnboardingCase[]>(CASES_KEY, []).map(refreshCaseDerived);
 }
 
-function saveCases(cases: OnboardingCase[]): void {
-  writeJson(CASES_KEY, cases);
+function saveCases(cases: OnboardingCase[]): boolean {
+  return writeJson(CASES_KEY, cases);
 }
 
-function upsertCase(next: OnboardingCase): OnboardingCase {
+function upsertCase(next: OnboardingCase): OnboardingCase | null {
   const all = loadCases();
   const idx = all.findIndex((c) => c.id === next.id);
   const refreshed = refreshCaseDerived({ ...next, updatedAt: nowIso() });
   if (idx >= 0) all[idx] = refreshed;
   else all.unshift(refreshed);
-  saveCases(all);
+  if (!saveCases(all)) return null;
   return refreshed;
 }
 
@@ -286,17 +297,17 @@ export async function startOnboarding(input: StartOnboardingInput): Promise<Onbo
     candidateName: input.candidateName,
     candidateEmail: input.candidateEmail,
     candidatePhone: input.candidatePhone,
-    offerId: input.offerId || crypto.randomUUID(),
-    offerCode: input.offerCode || `OFF-${Date.now().toString().slice(-6)}`,
+    offerId: "",
+    offerCode: "",
     joiningDate: input.joiningDate,
     department: input.department,
     designation: input.designation,
     reportingManager: input.reportingManager,
     branch: input.branch,
-    shift: input.shift,
-    leavePolicy: input.leavePolicy,
+    shift: "",
+    leavePolicy: "",
     employmentType: input.employmentType,
-    buddy: input.buddy,
+    buddy: undefined,
     hrOwner: input.hrOwner || actor(),
     status: "draft",
     portal: emptyPortal(input.candidateEmail, input.candidatePhone, input.candidateName),
@@ -399,6 +410,7 @@ export function savePortalProgress(
   const nextStatus: OnboardingCaseStatus =
     advanceStatus && c.status === "invitation_sent" ? "in_progress" : c.status;
   const next = upsertCase({ ...c, portal, status: nextStatus });
+  if (!next) return null;
   appendOnboardingAudit({
     caseId: c.id,
     action: "portal_save",
@@ -450,11 +462,9 @@ export function updateChecklistItem(
         }
       : item,
   );
-  const allDone = checklist.every((i) => i.status === "done");
   const next = upsertCase({
     ...c,
     checklist,
-    status: allDone && c.portal.submittedAt ? "ready_to_join" : c.status,
   });
   appendOnboardingAudit({
     caseId,
@@ -502,7 +512,34 @@ export function markReadyToJoin(caseId: string): OnboardingCase | null {
   return next;
 }
 
-/** Complete document handoff then activate with manual Emp ID (Epic 1). */
+export function approveCandidateReview(caseId: string): OnboardingCase | null {
+  const c = getCaseById(caseId);
+  if (!c) return null;
+  if (!c.portal.submittedAt) {
+    throw new Error("Candidate has not submitted the onboarding portal yet.");
+  }
+  const pendingDocs = c.portal.documents.filter((d) => d.verifyStatus === "pending");
+  if (pendingDocs.length > 0) {
+    throw new Error("Verify or reject all uploaded documents before approving.");
+  }
+  const rejected = c.portal.documents.filter((d) => d.verifyStatus === "rejected");
+  if (rejected.length > 0) {
+    throw new Error("Some documents were rejected — ask the candidate to re-upload.");
+  }
+  const today = new Date().toISOString().slice(0, 10);
+  const nextStatus: OnboardingCaseStatus =
+    c.joiningDate && c.joiningDate > today ? "ready_to_join" : "ready_to_join";
+  const next = upsertCase({ ...c, status: nextStatus });
+  appendOnboardingAudit({
+    caseId,
+    action: "approve_review",
+    detail: "HR approved candidate information and documents",
+    actor: actor(),
+  });
+  return next;
+}
+
+/** Complete onboarding after HR verification — creates employee; HR assigns details in Workforce. */
 export async function activateEmployee(
   caseId: string,
   opts?: { employeeCode?: string; shiftId?: string },
@@ -510,10 +547,14 @@ export async function activateEmployee(
   const c = getCaseById(caseId);
   if (!c) return null;
 
-  const employeeCode = (opts?.employeeCode || c.employeeId || "").trim().toUpperCase();
-  if (!employeeCode || employeeCode.startsWith("ONB-")) {
-    throw new Error("Enter a permanent Employee ID at activation (e.g. EMP-000101). Temporary ONB-* codes are not allowed.");
+  if (!["hr_review", "ready_to_join"].includes(c.status)) {
+    throw new Error("Approve the candidate submission before completing onboarding.");
   }
+  if (!c.portal.submittedAt) {
+    throw new Error("Candidate has not submitted the onboarding portal yet.");
+  }
+
+  const employeeCode = (opts?.employeeCode || previewNextEmployeeCode()).trim().toUpperCase();
 
   const apiOnboardingId = (c as OnboardingCase & { apiOnboardingId?: string }).apiOnboardingId;
   let employmentId =
@@ -545,8 +586,8 @@ export async function activateEmployee(
         });
       }
 
-      const checklist = c.checklist.map((item) =>
-        ["GEN_EMP_ID", "CREATE_PROFILE", "APPROVE_INFO", "ASSIGN_SHIFT"].includes(item.code)
+      const checklist = buildPostJoinChecklist().map((item) =>
+        ["GEN_EMP_ID", "CREATE_PROFILE", "APPROVE_INFO"].includes(item.code)
           ? { ...item, status: "done" as const, completedAt: nowIso() }
           : item,
       );
@@ -601,8 +642,8 @@ export async function activateEmployee(
   // Persist everything the candidate filled in the portal onto the employee record
   await applyOnboardingPortalToEmployee(local.id, portalToWizardDraft(c, employeeCode));
 
-  const checklist = c.checklist.map((item) =>
-    ["GEN_EMP_ID", "CREATE_PROFILE", "APPROVE_INFO", "ASSIGN_SHIFT"].includes(item.code)
+  const checklist = buildPostJoinChecklist().map((item) =>
+    ["GEN_EMP_ID", "CREATE_PROFILE", "APPROVE_INFO"].includes(item.code)
       ? { ...item, status: "done" as const, completedAt: nowIso() }
       : item,
   );

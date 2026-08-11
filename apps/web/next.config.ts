@@ -1,10 +1,14 @@
 import type { NextConfig } from "next";
 import path from "node:path";
+import { allowedDevOriginsForPort } from "../../scripts/next-dev-origins";
 
 /** App package root — stable when cwd differs from apps/web (avoids Turbopack 404 / ChunkLoadError). */
 const projectRoot = path.resolve(__dirname);
 
+const DEV_PORT = Number(process.env.PORT ?? 3000);
+
 const nextConfig: NextConfig = {
+  allowedDevOrigins: allowedDevOriginsForPort(DEV_PORT),
   devIndicators: false,
   logging: {
     browserToTerminal: process.env.NEXT_BROWSER_LOGS === "1",

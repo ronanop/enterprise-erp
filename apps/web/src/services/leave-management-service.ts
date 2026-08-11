@@ -17,6 +17,8 @@ import type {
 import {
   DEFAULT_LEAVE_COLORS,
   defaultRequestExtension,
+  isVisibleLeaveType,
+  leaveStatusDisplay,
 } from "@/types/leave-management";
 
 const EXT_KEY = "erp_leave_request_ext_v1";
@@ -379,7 +381,9 @@ export async function loadLeaveDirectory(): Promise<LeaveDirectory> {
         joiningDate: e.joiningDate,
         branchId: e.branchId,
       })),
-      leaveTypes: leaveTypes.map((t) => ({
+      leaveTypes: leaveTypes
+        .filter((t) => isVisibleLeaveType(t.code, t.name))
+        .map((t) => ({
         id: t.id,
         label: t.name,
         code: t.code,
@@ -415,10 +419,22 @@ export function filterLeaveRequests(
   query: string,
   filters: LeaveFilters,
   employees: LeaveDirectory["options"]["employees"],
+  options?: { statusBucket?: string | null; onLeaveToday?: boolean },
 ): LeaveRequestRecord[] {
   const q = query.trim().toLowerCase();
   const empMap = new Map(employees.map((e) => [e.id, e]));
+  const today = new Date().toISOString().slice(0, 10);
   return rows.filter((r) => {
+    if (options?.statusBucket) {
+      const bucket = leaveStatusDisplay(r.extension.approvalStage || r.status);
+      if (bucket.toLowerCase() !== options.statusBucket.toLowerCase()) return false;
+    }
+    if (options?.onLeaveToday) {
+      const approved =
+        leaveStatusDisplay(r.extension.approvalStage || r.status) === "Approved" ||
+        r.status === "approved";
+      if (!approved || r.fromDate > today || r.toDate < today) return false;
+    }
     if (filters.branchId && r.branchId !== filters.branchId) return false;
     if (filters.leaveTypeId && r.leaveTypeId !== filters.leaveTypeId) return false;
     if (filters.status) {

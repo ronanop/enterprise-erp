@@ -591,6 +591,39 @@ const TAB_CONFIG: Partial<Record<HrSetupTabId, TabConfig>> = {
       STATUS_FIELD,
     ],
   },
+  entities: {
+    nameKeys: ["name"],
+    columns: [
+      { key: "name", label: "Entity" },
+      { key: "code", label: "Code" },
+      { key: "status", label: "Status" },
+    ],
+    fields: [
+      { key: "name", label: "Entity name", required: true },
+      { key: "code", label: "Code", required: true, readOnly: true },
+      STATUS_FIELD,
+    ],
+  },
+  "employment-type": {
+    nameKeys: ["name"],
+    columns: [
+      { key: "name", label: "Type" },
+      { key: "value", label: "Value key" },
+      { key: "code", label: "Code" },
+      { key: "status", label: "Status" },
+    ],
+    fields: [
+      { key: "name", label: "Display name", required: true },
+      {
+        key: "value",
+        label: "Value key",
+        required: true,
+        hint: "Stored on employee profile (e.g. permanent, contract)",
+      },
+      { key: "code", label: "Code", required: true, readOnly: true },
+      STATUS_FIELD,
+    ],
+  },
   reporting: {
     nameKeys: ["name"],
     columns: [

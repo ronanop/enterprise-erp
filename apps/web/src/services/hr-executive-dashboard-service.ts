@@ -17,6 +17,11 @@ import {
 import { ApiClientError, resourceService } from "@/services/api-client";
 import { loadPayrollOverview } from "@/services/payroll-service";
 import { loadRecruitmentOverview } from "@/services/recruitment-service";
+import {
+  inboxItemHref,
+  loadHrEssInbox,
+  type HrEssInboxItem,
+} from "@/services/hr-ess-inbox-service";
 import type {
   ActivityItem,
   ApprovalItem,
@@ -239,6 +244,7 @@ function buildStats(
     "half_day",
   ]);
   const absentToday = countByAttendanceStatus(todayAttendance, ["absent"]);
+  const onDutyToday = countByAttendanceStatus(todayAttendance, ["on_duty"]);
   const lateArrivals = todayAttendance.filter((r) => {
     const checkIn = parseDate(r.check_in_at);
     if (!checkIn) return false;
@@ -308,6 +314,7 @@ function buildStats(
     onLeave,
     presentToday,
     absentToday,
+    onDutyToday,
     lateArrivals,
     openPositions,
     candidatesInPipeline,
@@ -679,6 +686,19 @@ function buildApprovals(
   return items.slice(0, 12);
 }
 
+function buildRequestsFromInbox(items: HrEssInboxItem[]): ApprovalItem[] {
+  return items
+    .filter((item) => item.pending)
+    .map((item) => ({
+      id: `inbox-${item.id}`,
+      category: item.category,
+      title: item.title,
+      requester: item.employee_name,
+      status: item.status,
+      href: inboxItemHref(item),
+    }));
+}
+
 function buildActivities(
   overview: HrOverview,
   empById: Map<string, MasterEmployee>,
@@ -897,6 +917,7 @@ export function filterDashboardByRole(
         ...data.stats,
         presentToday: 0,
         absentToday: 0,
+        onDutyToday: 0,
         lateArrivals: 0,
         onLeave: 0,
         payrollProcessed: 0,
@@ -947,22 +968,25 @@ export async function loadHrExecutiveDashboard(
   let departments: Department[] = [];
   let recruitment: Awaited<ReturnType<typeof loadRecruitmentOverview>> | null = null;
   let payroll: Awaited<ReturnType<typeof loadPayrollOverview>> | null = null;
+  let essInbox: HrEssInboxItem[] = [];
   let partial = false;
   let authBlocked = false;
 
   try {
-    const [ov, empRows, deptRows, rec, pay] = await Promise.all([
+    const [ov, empRows, deptRows, rec, pay, inbox] = await Promise.all([
       loadHrOverview(),
       safeRows("/employees"),
       safeRows("/departments"),
       loadRecruitmentOverview().catch(() => null),
       loadPayrollOverview().catch(() => null),
+      loadHrEssInbox({ includeCompoff: true }).catch(() => [] as HrEssInboxItem[]),
     ]);
     overview = ov;
     employees = empRows as MasterEmployee[];
     departments = deptRows as Department[];
     recruitment = rec;
     payroll = pay;
+    essInbox = inbox;
     partial = Boolean(overview.partial);
     authBlocked =
       overview.statusCodes.includes(401) ||
@@ -997,7 +1021,10 @@ export async function loadHrExecutiveDashboard(
 
   const { people, empById } = buildJoinedPeople(overview, employees, departments);
   const stats = buildStats(overview, people, recruitment, payroll);
-  const approvals = buildApprovals(overview, empById, recruitment);
+  const approvals = [
+    ...buildApprovals(overview, empById, recruitment),
+    ...buildRequestsFromInbox(essInbox),
+  ].slice(0, 16);
   const base: HrExecutiveDashboard = {
     role,
     displayName: greetingName(role),

@@ -31,9 +31,11 @@ export const INBOX_CATEGORY_LABELS: Record<HrEssInboxCategory, string> = {
   on_duty: "On duty",
 };
 
-export async function loadHrEssInbox(): Promise<HrEssInboxItem[]> {
+export async function loadHrEssInbox(opts?: { includeCompoff?: boolean }): Promise<HrEssInboxItem[]> {
   const res = await apiClient<HrEssInboxItem[]>("/hr/ess-inbox");
-  return Array.isArray(res.data) ? res.data : [];
+  const rows = Array.isArray(res.data) ? res.data : [];
+  if (opts?.includeCompoff) return rows;
+  return rows.filter((item) => item.category !== "compoff");
 }
 
 export async function runInboxAction(

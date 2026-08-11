@@ -50,61 +50,25 @@ export const DEFAULT_DOCUMENT_TYPES: SetupRow[] = [
   {
     id: "doc-type-photo",
     code: "DOC-PHOTO",
-    name: "Photo",
+    name: "Passport photo",
     kind: "photo",
     section: "identity",
     mandatory: true,
     expiry_required: false,
     formats: "JPG,PNG",
-    max_size_mb: 5,
+    max_size_mb: 0.3,
     status: "active",
   },
   {
-    id: "doc-type-pan",
-    code: "DOC-PAN",
-    name: "PAN",
-    kind: "pan",
-    section: "identity",
+    id: "doc-type-resume",
+    code: "DOC-RESUME",
+    name: "Resume",
+    kind: "resume",
+    section: "previous_employment",
     mandatory: true,
     expiry_required: false,
-    formats: "PDF,JPG,PNG",
-    max_size_mb: 5,
-    status: "active",
-  },
-  {
-    id: "doc-type-aadhaar",
-    code: "DOC-AADHAAR",
-    name: "Aadhaar",
-    kind: "aadhaar",
-    section: "identity",
-    mandatory: true,
-    expiry_required: false,
-    formats: "PDF,JPG,PNG",
-    max_size_mb: 5,
-    status: "active",
-  },
-  {
-    id: "doc-type-bank",
-    code: "DOC-BANK",
-    name: "Bank Details / Passbook",
-    kind: "bank_details",
-    section: "identity",
-    mandatory: true,
-    expiry_required: false,
-    formats: "PDF,JPG,PNG",
-    max_size_mb: 5,
-    status: "active",
-  },
-  {
-    id: "doc-type-cheque",
-    code: "DOC-CHEQUE",
-    name: "Cancelled Cheque",
-    kind: "cancelled_cheque",
-    section: "identity",
-    mandatory: true,
-    expiry_required: false,
-    formats: "PDF,JPG,PNG",
-    max_size_mb: 5,
+    formats: "PDF,DOC,DOCX",
+    max_size_mb: 2,
     status: "active",
   },
   {
@@ -116,7 +80,7 @@ export const DEFAULT_DOCUMENT_TYPES: SetupRow[] = [
     mandatory: true,
     expiry_required: false,
     formats: "PDF,JPG,PNG",
-    max_size_mb: 10,
+    max_size_mb: 2,
     status: "active",
   },
   {
@@ -128,139 +92,58 @@ export const DEFAULT_DOCUMENT_TYPES: SetupRow[] = [
     mandatory: true,
     expiry_required: false,
     formats: "PDF,JPG,PNG",
-    max_size_mb: 10,
-    status: "active",
-  },
-  {
-    id: "doc-type-grad-marks",
-    code: "DOC-GRAD-MARKS",
-    name: "Graduation Marksheet",
-    kind: "education",
-    section: "education",
-    mandatory: false,
-    expiry_required: false,
-    formats: "PDF,JPG,PNG",
-    max_size_mb: 10,
+    max_size_mb: 2,
     status: "active",
   },
   {
     id: "doc-type-graduation",
     code: "DOC-GRAD",
-    name: "Graduation Certificate",
+    name: "Graduation Degree",
     kind: "education",
     section: "education",
     mandatory: true,
     expiry_required: false,
     formats: "PDF,JPG,PNG",
-    max_size_mb: 10,
+    max_size_mb: 2,
+    status: "active",
+  },
+];
+
+const DEFAULT_ENTITIES: SetupRow[] = [
+  {
+    id: "ent-cache-digitech",
+    code: "ENT-001",
+    name: "Cache Digitech Pvt Ltd",
     status: "active",
   },
   {
-    id: "doc-type-appt-1",
-    code: "DOC-APPT-1",
-    name: "Previous Appointment Letter 1",
-    kind: "appointment_letter",
-    section: "previous_employment",
-    mandatory: false,
-    expiry_required: false,
-    formats: "PDF",
-    max_size_mb: 5,
+    id: "ent-cache-tech",
+    code: "ENT-002",
+    name: "Cache Technologies",
+    status: "active",
+  },
+];
+
+const DEFAULT_EMPLOYMENT_TYPES: SetupRow[] = [
+  {
+    id: "et-permanent",
+    code: "ET-001",
+    name: "Permanent",
+    value: "permanent",
     status: "active",
   },
   {
-    id: "doc-type-appt-2",
-    code: "DOC-APPT-2",
-    name: "Previous Appointment Letter 2",
-    kind: "appointment_letter",
-    section: "previous_employment",
-    mandatory: false,
-    expiry_required: false,
-    formats: "PDF",
-    max_size_mb: 5,
+    id: "et-contract",
+    code: "ET-002",
+    name: "Contract",
+    value: "contract",
     status: "active",
   },
   {
-    id: "doc-type-appt-3",
-    code: "DOC-APPT-3",
-    name: "Previous Appointment Letter 3",
-    kind: "appointment_letter",
-    section: "previous_employment",
-    mandatory: false,
-    expiry_required: false,
-    formats: "PDF",
-    max_size_mb: 5,
-    status: "active",
-  },
-  {
-    id: "doc-type-rel-1",
-    code: "DOC-REL-1",
-    name: "Previous Relieving Letter 1",
-    kind: "relieving_letter",
-    section: "previous_employment",
-    mandatory: false,
-    expiry_required: false,
-    formats: "PDF",
-    max_size_mb: 5,
-    status: "active",
-  },
-  {
-    id: "doc-type-rel-2",
-    code: "DOC-REL-2",
-    name: "Previous Relieving Letter 2",
-    kind: "relieving_letter",
-    section: "previous_employment",
-    mandatory: false,
-    expiry_required: false,
-    formats: "PDF",
-    max_size_mb: 5,
-    status: "active",
-  },
-  {
-    id: "doc-type-rel-3",
-    code: "DOC-REL-3",
-    name: "Previous Relieving Letter 3",
-    kind: "relieving_letter",
-    section: "previous_employment",
-    mandatory: false,
-    expiry_required: false,
-    formats: "PDF",
-    max_size_mb: 5,
-    status: "active",
-  },
-  {
-    id: "doc-type-salary-slips",
-    code: "DOC-SLIPS",
-    name: "Last 3 Salary Slips",
-    kind: "salary_slips",
-    section: "previous_employment",
-    mandatory: false,
-    expiry_required: false,
-    formats: "PDF,JPG,PNG",
-    max_size_mb: 15,
-    status: "active",
-  },
-  {
-    id: "doc-type-resume",
-    code: "DOC-RESUME",
-    name: "Resume",
-    kind: "resume",
-    section: "other",
-    mandatory: false,
-    expiry_required: false,
-    formats: "PDF,DOC,DOCX",
-    max_size_mb: 10,
-    status: "active",
-  },
-  {
-    id: "doc-type-passport",
-    code: "DOC-PASSPORT",
-    name: "Passport",
-    kind: "passport",
-    section: "other",
-    mandatory: false,
-    expiry_required: true,
-    formats: "PDF,JPG,PNG",
-    max_size_mb: 5,
+    id: "et-trainee",
+    code: "ET-003",
+    name: "Trainee (Intern)",
+    value: "trainee_intern",
     status: "active",
   },
 ];
@@ -270,6 +153,8 @@ const DEFAULT_LOCAL: Partial<Record<HrSetupTabId, SetupRow[]>> = {
   "job-levels": [],
   grades: [],
   "employment-types": [],
+  entities: DEFAULT_ENTITIES,
+  "employment-type": DEFAULT_EMPLOYMENT_TYPES,
   "document-types": DEFAULT_DOCUMENT_TYPES,
   "leave-policies": [],
   "shift-rotation": [],
@@ -409,8 +294,10 @@ export async function listPortalDocumentTypes(): Promise<PortalDocumentType[]> {
     .filter((r) => {
       const code = String(r.code ?? "");
       const kind = normalizeDocKind(r.kind, code, String(r.name ?? ""));
-      if (kind === "signature") return false;
+      if (kind === "signature" || kind === "photo") return false;
       if (legacyDrop.has(code)) return false;
+      // Documents step: education marksheets + resume only
+      if (!["education", "resume"].includes(kind)) return false;
       return true;
     })
     .map((r) => {
@@ -688,4 +575,34 @@ export function cell(row: SetupRow, ...keys: string[]): string {
     if (v != null && String(v).trim() !== "") return String(v);
   }
   return "—";
+}
+
+export type SetupMasterOption = { value: string; label: string };
+
+/** Legal entities configured in HR Setup → Legal Entities. */
+export async function listEntityOptions(): Promise<SetupMasterOption[]> {
+  const rows = await listLocalSetup("entities");
+  return rows
+    .filter((r) => String(r.status ?? "active").toLowerCase() === "active")
+    .map((r) => ({
+      value: String(r.id),
+      label: String(r.name ?? r.code ?? "Entity"),
+    }));
+}
+
+/** Employment types (Permanent, Contract, etc.) from HR Setup → Employment Type. */
+export async function listEmploymentTypeOptions(): Promise<SetupMasterOption[]> {
+  const rows = await listLocalSetup("employment-type");
+  const active = rows.filter((r) => String(r.status ?? "active").toLowerCase() === "active");
+  if (!active.length) {
+    return [
+      { value: "permanent", label: "Permanent" },
+      { value: "contract", label: "Contract" },
+      { value: "trainee_intern", label: "Trainee (Intern)" },
+    ];
+  }
+  return active.map((r) => ({
+    value: String(r.value ?? r.code ?? r.id).toLowerCase(),
+    label: String(r.name ?? r.code ?? "Type"),
+  }));
 }

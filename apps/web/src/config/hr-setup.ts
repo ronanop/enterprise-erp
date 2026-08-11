@@ -31,7 +31,9 @@ export type HrSetupTabId =
   | "grades"
   | "work-locations"
   | "rooms"
+  | "entities"
   | "employment-types"
+  | "employment-type"
   | "reporting"
   | "document-types"
   | "leave-policies"
@@ -133,6 +135,13 @@ export const hrSetupSections: HrSetupSection[] = [
         apiPath: "/hr/training-rooms",
         codePrefix: "ROOM",
       },
+      {
+        id: "entities",
+        title: "Legal Entities",
+        description: "Company / legal entities for employee assignment",
+        source: "local",
+        codePrefix: "ENT",
+      },
     ],
   },
   {
@@ -143,11 +152,18 @@ export const hrSetupSections: HrSetupSection[] = [
     tabs: [
       {
         id: "employment-types",
-        title: "Employment Types",
+        title: "Employment Group",
         description: "Management groups — shifts, calendars, feature toggles",
         source: "api",
         apiPath: "/hr/management-groups",
         codePrefix: "MG",
+      },
+      {
+        id: "employment-type",
+        title: "Employment Type",
+        description: "Permanent, contract, trainee — used in profiles and onboarding",
+        source: "local",
+        codePrefix: "ET",
       },
       {
         id: "reporting",
@@ -219,7 +235,9 @@ export const setupTabIcons: Partial<Record<HrSetupTabId, LucideIcon>> = {
   grades: Layers,
   "work-locations": MapPin,
   rooms: DoorOpen,
+  entities: Building2,
   "employment-types": UserCog,
+  "employment-type": Briefcase,
   reporting: Users,
   "document-types": FileText,
   "leave-policies": Shield,

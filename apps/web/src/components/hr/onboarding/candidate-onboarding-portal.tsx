@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { CheckCircle2, ChevronLeft, ChevronRight, FileText, Upload, X } from "lucide-react";
 
 import {
@@ -12,11 +12,16 @@ import {
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import {
+  GENDER_OPTIONS,
+  MARITAL_STATUS_OPTIONS,
+  RELATIONSHIP_OPTIONS,
+} from "@/config/hr-master-options";
+import {
   getCaseByToken,
   savePortalProgress,
   submitPortal,
 } from "@/services/onboarding-management-service";
-import { readFileAsDataUrl } from "@/services/employee-management-service";
+import { MAX_PHOTO_BYTES, readFileAsDataUrl } from "@/services/employee-management-service";
 import {
   listPortalDocumentTypes,
   type PortalDocumentType,
@@ -31,38 +36,134 @@ import type {
 import { POLICY_DOCS, PORTAL_STEPS, emptyEducationMarks } from "@/types/onboarding-management";
 import type { PortalDocumentSection } from "@/services/hr-setup-service";
 
+const AADHAAR_LEN = 16;
+const PAN_RE = /^[A-Z]{5}[0-9]{4}[A-Z]$/;
+const ACCOUNT_MIN = 9;
+const ACCOUNT_MAX = 18;
+const IFSC_RE = /^[A-Z]{4}0[A-Z0-9]{6}$/;
+
+function digitsOnly(value: string) {
+  return value.replace(/\D/g, "");
+}
+
+function hasPassportPhoto(data: PortalPayload): boolean {
+  return Boolean(
+    data.personal.photoName ||
+      data.documents.some((d) => d.kind === "photo" || d.typeCode === "DOC-PHOTO"),
+  );
+}
+
+function validateStep(
+  stepId: PortalStepId,
+  portal: PortalPayload,
+  docTypes: PortalDocumentType[],
+): string | null {
+  switch (stepId) {
+    case "personal": {
+      if (!portal.personal.firstName.trim() || !portal.personal.lastName.trim()) {
+        return "First and last name are required.";
+      }
+      const email = (portal.personal.personalEmail || portal.personal.email).trim();
+      if (!email) return "Personal email is required.";
+      if (!portal.personal.phone.trim()) return "Phone number is required.";
+      if (!portal.personal.address.trim()) return "Current address is required.";
+      if (!portal.personal.gender.trim()) return "Gender is required.";
+      if (!portal.personal.maritalStatus.trim()) return "Marital status is required.";
+      if (!hasPassportPhoto(portal)) return "Passport photo is required.";
+      return null;
+    }
+    case "government_ids": {
+      const aadhaar = digitsOnly(portal.governmentIds.aadhaar);
+      const pan = portal.governmentIds.pan.trim().toUpperCase();
+      if (aadhaar.length !== AADHAAR_LEN) {
+        return `Aadhaar must be exactly ${AADHAAR_LEN} digits.`;
+      }
+      if (!PAN_RE.test(pan)) {
+        return "PAN must be 10 characters (e.g. ABCDE1234F).";
+      }
+      return null;
+    }
+    case "bank": {
+      const account = digitsOnly(portal.bank.accountNumber);
+      const ifsc = portal.bank.ifsc.trim().toUpperCase();
+      if (!portal.bank.bankName.trim() || !portal.bank.accountHolder.trim()) {
+        return "Bank name and account holder are required.";
+      }
+      if (account.length < ACCOUNT_MIN || account.length > ACCOUNT_MAX) {
+        return `Account number must be ${ACCOUNT_MIN}–${ACCOUNT_MAX} digits.`;
+      }
+      if (!IFSC_RE.test(ifsc)) {
+        return "IFSC must be 11 characters (e.g. HDFC0001234).";
+      }
+      return null;
+    }
+    case "emergency": {
+      if (!portal.emergency.name.trim()) return "Emergency contact name is required.";
+      return null;
+    }
+    case "documents": {
+      if (!portal.documents.some((d) => d.kind === "resume")) {
+        return "Please upload your Resume (required).";
+      }
+      const hasGraduation = portal.documents.some(
+        (d) => d.typeCode === "DOC-GRAD" || d.kind === "education",
+      );
+      if (!hasGraduation) {
+        return "Please upload your Graduation Degree (required).";
+      }
+      const excludedFromMandatory = new Set([
+        "DOC-CHEQUE",
+        "DOC-GRAD",
+        "DOC-SLIPS",
+        "doc-type-cheque",
+        "doc-type-grad",
+        "cancelled_cheque",
+        "salary_slips",
+      ]);
+      const missing = docTypes.filter(
+        (t) =>
+          t.mandatory &&
+          !excludedFromMandatory.has(t.code) &&
+          !excludedFromMandatory.has(t.kind) &&
+          !portal.documents.some(
+            (d) => d.typeCode === t.code || (!d.typeCode && d.kind === t.kind),
+          ),
+      );
+      if (missing.length) {
+        return `Please upload: ${missing.map((m) => m.name).join(", ")}.`;
+      }
+      return null;
+    }
+    case "policies": {
+      if (!portal.policies.agreed) {
+        return "Please agree to the policies before continuing.";
+      }
+      if (!portal.policies.signature.trim() && !portal.policies.signatureDataUrl) {
+        return "Digital signature is required before continuing.";
+      }
+      return null;
+    }
+    default:
+      return null;
+  }
+}
+
 const DOC_SECTION_META: {
   id: PortalDocumentSection;
   title: string;
   hint: string;
 }[] = [
   {
-    id: "identity",
-    title: "Identity & bank",
-    hint: "Photo and government / bank proofs",
-  },
-  {
     id: "education",
     title: "Education",
-    hint: "Enter marks (10th & 12th required) and upload certificates",
+    hint: "Upload 10th, 12th marksheets and graduation degree",
   },
   {
     id: "previous_employment",
-    title: "Previous employment",
-    hint: "Upload up to 3 previous appointment and relieving letters",
-  },
-  {
-    id: "other",
-    title: "Other documents",
-    hint: "Optional supporting documents",
+    title: "Resume",
+    hint: "Upload your latest resume (PDF or Word)",
   },
 ];
-
-const AADHAAR_LEN = 16;
-const PAN_RE = /^[A-Z]{5}[0-9]{4}[A-Z]$/;
-const ACCOUNT_MIN = 9;
-const ACCOUNT_MAX = 18;
-const IFSC_RE = /^[A-Z]{4}0[A-Z0-9]{6}$/;
 
 const DEMO_POLICY_BODY: Record<string, string> = {
   handbook:
@@ -106,6 +207,21 @@ export function CandidateOnboardingPortal({ token }: { token: string }) {
   const [done, setDone] = useState(false);
   const [policyPreview, setPolicyPreview] = useState<(typeof POLICY_DOCS)[number] | null>(null);
   const [docTypes, setDocTypes] = useState<PortalDocumentType[]>([]);
+  const [photoUploading, setPhotoUploading] = useState(false);
+  const portalRef = useRef<PortalPayload | null>(null);
+
+  useEffect(() => {
+    portalRef.current = portal;
+  }, [portal]);
+
+  function currentPortal(): PortalPayload | null {
+    return portalRef.current ?? portal;
+  }
+
+  function applyPortal(next: PortalPayload) {
+    portalRef.current = next;
+    setPortal(next);
+  }
 
   useEffect(() => {
     const c = getCaseByToken(token);
@@ -141,122 +257,79 @@ export function CandidateOnboardingPortal({ token }: { token: string }) {
   }, [portal]);
 
   function patchPortal(partial: Partial<PortalPayload>) {
-    setPortal((p) => (p ? { ...p, ...partial } : p));
+    setPortal((p) => {
+      if (!p) return p;
+      const next = { ...p, ...partial };
+      portalRef.current = next;
+      return next;
+    });
   }
 
   function go(step: PortalStepId) {
-    if (!portal) return;
-    const next = { ...portal, currentStep: step };
-    setPortal(next);
+    const p = currentPortal();
+    if (!p) return;
+    const targetIdx = PORTAL_STEPS.findIndex((s) => s.id === step);
+    const currentIdx = PORTAL_STEPS.findIndex((s) => s.id === p.currentStep);
+    if (targetIdx > currentIdx) {
+      for (let i = currentIdx; i < targetIdx; i += 1) {
+        const msg = validateStep(PORTAL_STEPS[i].id, p, docTypes);
+        if (msg) {
+          setStepError(msg);
+          return;
+        }
+      }
+    }
+    const next = { ...p, currentStep: step };
+    applyPortal(next);
     setStepError(null);
-    savePortalProgress(token, next);
+    const saved = savePortalProgress(token, next);
+    if (!saved) setStepError("Could not save progress. Please try again.");
   }
 
   function validateCurrentStep(): string | null {
-    if (!portal) return "Portal not loaded.";
-    switch (portal.currentStep) {
-      case "government_ids": {
-        const aadhaar = digitsOnly(portal.governmentIds.aadhaar);
-        const pan = portal.governmentIds.pan.trim().toUpperCase();
-        if (aadhaar.length !== AADHAAR_LEN) {
-          return `Aadhaar must be exactly ${AADHAAR_LEN} digits.`;
-        }
-        if (!PAN_RE.test(pan)) {
-          return "PAN must be 10 characters (e.g. ABCDE1234F).";
-        }
-        return null;
-      }
-      case "bank": {
-        const account = digitsOnly(portal.bank.accountNumber);
-        const ifsc = portal.bank.ifsc.trim().toUpperCase();
-        if (!portal.bank.bankName.trim() || !portal.bank.accountHolder.trim()) {
-          return "Bank name and account holder are required.";
-        }
-        if (account.length < ACCOUNT_MIN || account.length > ACCOUNT_MAX) {
-          return `Account number must be ${ACCOUNT_MIN}–${ACCOUNT_MAX} digits.`;
-        }
-        if (!IFSC_RE.test(ifsc)) {
-          return "IFSC must be 11 characters (e.g. HDFC0001234).";
-        }
-        return null;
-      }
-      case "documents": {
-        const marks = portal.educationMarks ?? emptyEducationMarks();
-        if (!marks.tenth.trim()) return "Please enter 10th marks (required).";
-        if (!marks.twelfth.trim()) return "Please enter 12th marks (required).";
-        const excludedFromMandatory = new Set([
-          "DOC-CHEQUE",
-          "DOC-GRAD",
-          "DOC-SLIPS",
-          "doc-type-cheque",
-          "doc-type-grad",
-          "cancelled_cheque",
-          "salary_slips",
-        ]);
-        const missing = docTypes.filter(
-          (t) =>
-            t.mandatory &&
-            !excludedFromMandatory.has(t.code) &&
-            !excludedFromMandatory.has(t.kind) &&
-            !portal.documents.some(
-              (d) => d.typeCode === t.code || (!d.typeCode && d.kind === t.kind),
-            ),
-        );
-        if (missing.length) {
-          return `Please upload: ${missing.map((m) => m.name).join(", ")}.`;
-        }
-        return null;
-      }
-      case "policies": {
-        if (!portal.policies.agreed) {
-          return "Please agree to the policies before continuing.";
-        }
-        if (!portal.policies.signature.trim() && !portal.policies.signatureDataUrl) {
-          return "Digital signature is required before continuing.";
-        }
-        return null;
-      }
-      default:
-        return null;
-    }
+    const p = currentPortal();
+    if (!p) return "Portal not loaded.";
+    return validateStep(p.currentStep, p, docTypes);
   }
 
   function nextStep() {
-    if (!portal) return;
+    const p = currentPortal();
+    if (!p) return;
     const msg = validateCurrentStep();
     if (msg) {
       setStepError(msg);
       return;
     }
     setStepError(null);
-    let nextPortal = portal;
-    if (portal.currentStep === "government_ids") {
+    let nextPortal = p;
+    if (p.currentStep === "government_ids") {
       nextPortal = {
-        ...portal,
+        ...p,
         governmentIds: {
-          ...portal.governmentIds,
-          aadhaar: digitsOnly(portal.governmentIds.aadhaar),
-          pan: portal.governmentIds.pan.trim().toUpperCase(),
+          ...p.governmentIds,
+          aadhaar: digitsOnly(p.governmentIds.aadhaar),
+          pan: p.governmentIds.pan.trim().toUpperCase(),
         },
       };
-    } else if (portal.currentStep === "bank") {
+    } else if (p.currentStep === "bank") {
       nextPortal = {
-        ...portal,
+        ...p,
         bank: {
-          ...portal.bank,
-          accountNumber: digitsOnly(portal.bank.accountNumber),
-          ifsc: portal.bank.ifsc.trim().toUpperCase(),
+          ...p.bank,
+          accountNumber: digitsOnly(p.bank.accountNumber),
+          ifsc: p.bank.ifsc.trim().toUpperCase(),
         },
       };
     }
-    const i = PORTAL_STEPS.findIndex((s) => s.id === portal.currentStep);
+    const i = PORTAL_STEPS.findIndex((s) => s.id === p.currentStep);
     if (i >= PORTAL_STEPS.length - 1) {
-      setPortal(nextPortal);
+      applyPortal(nextPortal);
       return;
     }
     const advanced = { ...nextPortal, currentStep: PORTAL_STEPS[i + 1].id };
-    setPortal(advanced);
-    savePortalProgress(token, advanced);
+    applyPortal(advanced);
+    const saved = savePortalProgress(token, advanced);
+    if (!saved) setStepError("Could not save progress. Please try again.");
   }
 
   function prevStep() {
@@ -266,14 +339,18 @@ export function CandidateOnboardingPortal({ token }: { token: string }) {
     if (i > 0) go(PORTAL_STEPS[i - 1].id);
   }
 
-  async function upsertDocument(kind: DocumentKind, file: File, typeCode?: string) {
-    if (!portal) return;
+  async function upsertDocument(
+    kind: DocumentKind,
+    file: File,
+    typeCode?: string,
+    personalPatch?: Partial<PortalPayload["personal"]>,
+  ): Promise<boolean> {
     let fileDataUrl: string;
     try {
       fileDataUrl = await readFileAsDataUrl(file);
     } catch {
       setStepError("Could not read the selected file. Try again.");
-      return;
+      return false;
     }
     const doc: OnboardingDocument = {
       id: crypto.randomUUID(),
@@ -285,17 +362,30 @@ export function CandidateOnboardingPortal({ token }: { token: string }) {
       fileDataUrl,
       mimeType: file.type || undefined,
     };
-    const rest = portal.documents.filter((d) => {
+
+    const p = currentPortal();
+    if (!p) return false;
+
+    const rest = p.documents.filter((d) => {
       if (typeCode) {
         if (d.typeCode) return d.typeCode !== typeCode;
         return d.kind !== kind;
       }
       return d.kind !== kind;
     });
-    const documents = [...rest, doc];
-    const next = { ...portal, documents };
-    setPortal(next);
-    savePortalProgress(token, next);
+    const nextPortal: PortalPayload = {
+      ...p,
+      personal: personalPatch ? { ...p.personal, ...personalPatch } : p.personal,
+      documents: [...rest, doc],
+    };
+
+    applyPortal(nextPortal);
+    const saved = savePortalProgress(token, nextPortal);
+    if (!saved) {
+      setStepError("Could not save the file. Try a smaller image or clear browser storage.");
+      return false;
+    }
+    return true;
   }
 
   async function onPickFile(docType: PortalDocumentType, file: File | undefined) {
@@ -309,29 +399,39 @@ export function CandidateOnboardingPortal({ token }: { token: string }) {
   }
 
   async function handleSave() {
-    if (!portal) return;
+    const p = currentPortal();
+    if (!p) return;
     setSaving(true);
     try {
-      savePortalProgress(token, portal);
+      const saved = savePortalProgress(token, p);
+      if (!saved) setStepError("Could not save progress. Please try again.");
     } finally {
       setSaving(false);
     }
   }
 
   async function handleSubmit() {
-    if (!portal) return;
-    if (!portal.policies.agreed || (!portal.policies.signature.trim() && !portal.policies.signatureDataUrl)) {
-      setError("Please accept policies and provide a digital signature before submitting.");
-      return;
+    const p = currentPortal();
+    if (!p) return;
+    for (const s of PORTAL_STEPS) {
+      const msg = validateStep(s.id, p, docTypes);
+      if (msg) {
+        setError(msg);
+        setStepError(msg);
+        return;
+      }
     }
     setSaving(true);
     setError(null);
+    setStepError(null);
     try {
-      const submitted = submitPortal(token, portal);
+      const submitted = submitPortal(token, p);
       if (submitted) {
         setDone(true);
         setCaseRow(submitted);
-        setPortal(submitted.portal);
+        applyPortal(submitted.portal);
+      } else {
+        setError("Could not submit onboarding. Please try again.");
       }
     } finally {
       setSaving(false);
@@ -463,7 +563,7 @@ export function CandidateOnboardingPortal({ token }: { token: string }) {
                 }
               />
             </SetupField>
-            <SetupField label="Gender">
+            <SetupField label="Gender" required>
               <SetupSelect
                 value={portal.personal.gender}
                 onChange={(e) =>
@@ -471,9 +571,11 @@ export function CandidateOnboardingPortal({ token }: { token: string }) {
                 }
               >
                 <option value="">Select</option>
-                <option value="female">Female</option>
-                <option value="male">Male</option>
-                <option value="other">Other</option>
+                {GENDER_OPTIONS.map((g) => (
+                  <option key={g.value} value={g.value}>
+                    {g.label}
+                  </option>
+                ))}
               </SetupSelect>
             </SetupField>
             <SetupField label="Date of birth">
@@ -485,31 +587,22 @@ export function CandidateOnboardingPortal({ token }: { token: string }) {
                 }
               />
             </SetupField>
-            <SetupField label="Marital status">
-              <SetupInput
+            <SetupField label="Marital status" required>
+              <SetupSelect
                 value={portal.personal.maritalStatus}
                 onChange={(e) =>
                   patchPortal({ personal: { ...portal.personal, maritalStatus: e.target.value } })
                 }
-              />
+              >
+                <option value="">Select status</option>
+                {MARITAL_STATUS_OPTIONS.map((s) => (
+                  <option key={s.value} value={s.value}>
+                    {s.label}
+                  </option>
+                ))}
+              </SetupSelect>
             </SetupField>
-            <SetupField label="Nationality">
-              <SetupInput
-                value={portal.personal.nationality}
-                onChange={(e) =>
-                  patchPortal({ personal: { ...portal.personal, nationality: e.target.value } })
-                }
-              />
-            </SetupField>
-            <SetupField label="Blood group">
-              <SetupInput
-                value={portal.personal.bloodGroup}
-                onChange={(e) =>
-                  patchPortal({ personal: { ...portal.personal, bloodGroup: e.target.value } })
-                }
-              />
-            </SetupField>
-            <SetupField label="Phone">
+            <SetupField label="Phone" required>
               <SetupInput
                 value={portal.personal.phone}
                 onChange={(e) =>
@@ -533,7 +626,7 @@ export function CandidateOnboardingPortal({ token }: { token: string }) {
               />
             </SetupField>
             <div className="sm:col-span-2">
-              <SetupField label="Address">
+              <SetupField label="Current address" required>
                 <SetupTextarea
                   value={portal.personal.address}
                   onChange={(e) =>
@@ -545,14 +638,42 @@ export function CandidateOnboardingPortal({ token }: { token: string }) {
             </div>
             <div className="sm:col-span-2">
               <FilePickField
-                label="Photo"
-                accept="image/*"
-                fileName={portal.personal.photoName}
-                hint="Upload from this device (PC or phone) — images only"
-                onFile={(file) => {
+                label="Passport photo"
+                required
+                accept="image/jpeg,image/png,image/webp,.jpg,.jpeg,.png,.webp"
+                fileName={
+                  portal.personal.photoName ||
+                  [...portal.documents]
+                    .reverse()
+                    .find((d) => d.kind === "photo" || d.typeCode === "DOC-PHOTO")?.fileName
+                }
+                hint={
+                  photoUploading
+                    ? "Uploading passport photo…"
+                    : "Upload from this device (PC or phone) — max 300 KB, JPG or PNG only"
+                }
+                disabled={photoUploading}
+                onFile={async (file) => {
                   if (!file) return;
-                  patchPortal({ personal: { ...portal.personal, photoName: file.name } });
-                  void upsertDocument("photo", file, "DOC-PHOTO");
+                  if (!file.type.startsWith("image/")) {
+                    setStepError("Passport photo must be an image file (JPG or PNG).");
+                    return;
+                  }
+                  if (file.size > MAX_PHOTO_BYTES) {
+                    setStepError("Passport photo must be under 300 KB.");
+                    return;
+                  }
+                  setStepError(null);
+                  setPhotoUploading(true);
+                  try {
+                    const ok = await upsertDocument("photo", file, "DOC-PHOTO", {
+                      photoName: file.name,
+                    });
+                    if (!ok) return;
+                    setStepError(null);
+                  } finally {
+                    setPhotoUploading(false);
+                  }
                 }}
               />
             </div>
@@ -708,13 +829,6 @@ export function CandidateOnboardingPortal({ token }: { token: string }) {
                 }
               />
             </SetupField>
-            <SetupField label="UPI">
-              <SetupInput
-                placeholder="name@upi"
-                value={portal.bank.upi}
-                onChange={(e) => patchPortal({ bank: { ...portal.bank, upi: e.target.value } })}
-              />
-            </SetupField>
           </div>
         ) : null}
 
@@ -729,14 +843,21 @@ export function CandidateOnboardingPortal({ token }: { token: string }) {
               />
             </SetupField>
             <SetupField label="Relationship">
-              <SetupInput
+              <SetupSelect
                 value={portal.emergency.relationship}
                 onChange={(e) =>
                   patchPortal({
                     emergency: { ...portal.emergency, relationship: e.target.value },
                   })
                 }
-              />
+              >
+                <option value="">Select relationship</option>
+                {RELATIONSHIP_OPTIONS.map((r) => (
+                  <option key={r.value} value={r.value}>
+                    {r.label}
+                  </option>
+                ))}
+              </SetupSelect>
             </SetupField>
             <SetupField label="Phone">
               <SetupInput
@@ -769,15 +890,8 @@ export function CandidateOnboardingPortal({ token }: { token: string }) {
               </p>
             ) : (
               DOC_SECTION_META.map((section) => {
-                const types = docTypes.filter(
-                  (t) =>
-                    t.section === section.id &&
-                    t.code !== "DOC-CHEQUE" &&
-                    t.kind !== "cancelled_cheque" &&
-                    t.code !== "DOC-GRAD",
-                );
-                if (types.length === 0 && section.id !== "education") return null;
-                const marks = portal.educationMarks ?? emptyEducationMarks();
+                const types = docTypes.filter((t) => t.section === section.id);
+                if (!types.length) return null;
                 return (
                   <section
                     key={section.id}
@@ -787,131 +901,23 @@ export function CandidateOnboardingPortal({ token }: { token: string }) {
                       <h3 className="text-sm font-semibold text-foreground">{section.title}</h3>
                       <p className="text-[11px] text-muted-foreground">{section.hint}</p>
                     </div>
-
-                    {section.id === "identity" ? (
-                      <div className="grid gap-3 sm:grid-cols-2">
-                        {types.map((t) => (
-                          <FilePickField
-                            key={t.id}
-                            label={t.name}
-                            required={t.mandatory}
-                            accept={t.accept || ".pdf,image/*"}
-                            fileName={latestDoc(t.code, t.kind)?.fileName}
-                            hint={
-                              t.maxSizeMb
-                                ? `Upload from this device · max ${t.maxSizeMb} MB · ${t.code}`
-                                : `Upload from this device · ${t.code}`
-                            }
-                            onFile={(file) => onPickFile(t, file)}
-                          />
-                        ))}
-                      </div>
-                    ) : null}
-
-                    {section.id === "education" ? (
-                      <div className="space-y-3">
-                        <div className="grid gap-3 sm:grid-cols-3">
-                          <SetupField label="10th marks" required hint="Percentage or CGPA">
-                            <SetupInput
-                              value={marks.tenth}
-                              placeholder="e.g. 85% or 8.5 CGPA"
-                              onChange={(e) =>
-                                patchPortal({
-                                  educationMarks: { ...marks, tenth: e.target.value },
-                                })
-                              }
-                            />
-                          </SetupField>
-                          <SetupField label="12th marks" required hint="Percentage or CGPA">
-                            <SetupInput
-                              value={marks.twelfth}
-                              placeholder="e.g. 82% or 8.2 CGPA"
-                              onChange={(e) =>
-                                patchPortal({
-                                  educationMarks: { ...marks, twelfth: e.target.value },
-                                })
-                              }
-                            />
-                          </SetupField>
-                          <SetupField label="Graduation marks" hint="Optional">
-                            <SetupInput
-                              value={marks.graduation}
-                              placeholder="e.g. 7.8 CGPA"
-                              onChange={(e) =>
-                                patchPortal({
-                                  educationMarks: { ...marks, graduation: e.target.value },
-                                })
-                              }
-                            />
-                          </SetupField>
-                        </div>
-
-                        {types.map((t) => (
-                          <FilePickField
-                            key={t.id}
-                            label={t.name}
-                            required={t.mandatory}
-                            accept={t.accept || ".pdf,image/*"}
-                            fileName={latestDoc(t.code, t.kind)?.fileName}
-                            hint={
-                              t.maxSizeMb
-                                ? `Upload from this device · max ${t.maxSizeMb} MB · ${t.code}`
-                                : `Upload from this device · ${t.code}`
-                            }
-                            onFile={(file) => onPickFile(t, file)}
-                          />
-                        ))}
-                      </div>
-                    ) : null}
-
-                    {section.id === "previous_employment" ? (
-                      <div className="space-y-3">
-                        <SalarySlipsMultiUploader
-                          portalDocs={portal.documents}
-                          onUpload={(slipNum, file) => {
-                            if (!file) return;
-                            void upsertDocument("salary_slips", file, `DOC-SLIPS-${slipNum}`);
-                          }}
+                    <div className="space-y-3">
+                      {types.map((t) => (
+                        <FilePickField
+                          key={t.id}
+                          label={t.name}
+                          required={t.mandatory}
+                          accept={t.accept || ".pdf,image/*"}
+                          fileName={latestDoc(t.code, t.kind)?.fileName}
+                          hint={
+                            t.maxSizeMb
+                              ? `Upload from this device · max ${t.maxSizeMb} MB · ${t.code}`
+                              : `Upload from this device · ${t.code}`
+                          }
+                          onFile={(file) => onPickFile(t, file)}
                         />
-                        {types
-                          .filter((t) => t.code !== "DOC-SLIPS")
-                          .map((t) => (
-                            <FilePickField
-                              key={t.id}
-                              label={t.name}
-                              required={t.mandatory}
-                              accept={t.accept || ".pdf,image/*"}
-                              fileName={latestDoc(t.code, t.kind)?.fileName}
-                              hint={
-                                t.maxSizeMb
-                                  ? `Upload from this device · max ${t.maxSizeMb} MB · ${t.code}`
-                                  : `Upload from this device · ${t.code}`
-                              }
-                              onFile={(file) => onPickFile(t, file)}
-                            />
-                          ))}
-                      </div>
-                    ) : null}
-
-                    {section.id === "other" ? (
-                      <div className="space-y-3">
-                        {types.map((t) => (
-                          <FilePickField
-                            key={t.id}
-                            label={t.name}
-                            required={t.mandatory}
-                            accept={t.accept || ".pdf,image/*"}
-                            fileName={latestDoc(t.code, t.kind)?.fileName}
-                            hint={
-                              t.maxSizeMb
-                                ? `Upload from this device · max ${t.maxSizeMb} MB · ${t.code}`
-                                : `Upload from this device · ${t.code}`
-                            }
-                            onFile={(file) => onPickFile(t, file)}
-                          />
-                        ))}
-                      </div>
-                    ) : null}
+                      ))}
+                    </div>
                   </section>
                 );
               })
@@ -976,19 +982,25 @@ export function CandidateOnboardingPortal({ token }: { token: string }) {
                   onChange={(e) => {
                     const file = e.target.files?.[0];
                     if (!file) return;
-                    const reader = new FileReader();
-                    reader.onload = () => {
-                      patchPortal({
-                        policies: {
-                          ...portal.policies,
-                          signatureFileName: file.name,
-                          signatureDataUrl: String(reader.result ?? ""),
-                          signature: portal.policies.signature || file.name.replace(/\.[^.]+$/, ""),
-                        },
-                      });
-                      void upsertDocument("signature", file, "DOC-SIGN");
-                    };
-                    reader.readAsDataURL(file);
+                    void (async () => {
+                      let fileDataUrl = "";
+                      try {
+                        fileDataUrl = await readFileAsDataUrl(file);
+                      } catch {
+                        setStepError("Could not read signature file. Try again.");
+                        return;
+                      }
+                      const policies = {
+                        ...portal.policies,
+                        signatureFileName: file.name,
+                        signatureDataUrl: fileDataUrl,
+                        signature: portal.policies.signature || file.name.replace(/\.[^.]+$/, ""),
+                      };
+                      patchPortal({ policies });
+                      const ok = await upsertDocument("signature", file, "DOC-SIGN");
+                      if (!ok) return;
+                      setStepError(null);
+                    })();
                   }}
                 />
                 {portal.policies.signatureFileName ? (
@@ -1023,8 +1035,13 @@ export function CandidateOnboardingPortal({ token }: { token: string }) {
             <ReviewRow label="Account" value={portal.bank.accountNumber || "—"} />
             <ReviewRow label="Emergency" value={portal.emergency.name || "—"} />
             <ReviewRow
-              label="10th / 12th / Grad marks"
-              value={`${portal.educationMarks?.tenth || "—"} / ${portal.educationMarks?.twelfth || "—"} / ${portal.educationMarks?.graduation || "—"}`}
+              label="Education"
+              value={
+                portal.documents
+                  .filter((d) => d.kind === "education" || ["DOC-GRAD", "DOC-PG", "DOC-CERT"].includes(d.typeCode ?? ""))
+                  .map((d) => d.fileName)
+                  .join(", ") || "—"
+              }
             />
             <ReviewRow label="Documents" value={String(portal.documents.length)} />
             <ReviewRow
@@ -1034,7 +1051,7 @@ export function CandidateOnboardingPortal({ token }: { token: string }) {
               }
             />
             <p className="text-muted-foreground">
-              After submit, HR will verify documents and activate your employee profile.
+              After submit, HR will verify your documents. Employment details are assigned after you join.
             </p>
           </div>
         ) : null}
@@ -1138,16 +1155,13 @@ export function CandidateOnboardingPortal({ token }: { token: string }) {
   );
 }
 
-function digitsOnly(value: string) {
-  return value.replace(/\D/g, "");
-}
-
 function FilePickField({
   label,
   required,
   accept,
   fileName,
   hint,
+  disabled,
   onFile,
 }: {
   label: string;
@@ -1155,7 +1169,8 @@ function FilePickField({
   accept: string;
   fileName?: string;
   hint?: string;
-  onFile: (file: File | undefined) => void;
+  disabled?: boolean;
+  onFile: (file: File | undefined) => void | Promise<void>;
 }) {
   const inputId = `file-${label.replace(/\s+/g, "-").toLowerCase()}`;
   return (
@@ -1163,8 +1178,9 @@ function FilePickField({
       <label
         htmlFor={inputId}
         className={cn(
-          "flex h-10 w-full cursor-pointer items-center gap-2 rounded-lg border border-dashed border-input bg-transparent px-2.5 text-sm transition-colors",
-          "hover:border-ring hover:bg-muted/40",
+          "flex h-10 w-full items-center gap-2 rounded-lg border border-dashed border-input bg-transparent px-2.5 text-sm transition-colors",
+          disabled ? "cursor-not-allowed opacity-60" : "cursor-pointer hover:border-ring hover:bg-muted/40",
+          fileName && "border-emerald-300 bg-emerald-50/50",
         )}
       >
         <Upload className="size-3.5 shrink-0 text-muted-foreground" />
@@ -1175,9 +1191,10 @@ function FilePickField({
           id={inputId}
           type="file"
           accept={accept}
+          disabled={disabled}
           className="sr-only"
           onChange={(e) => {
-            onFile(e.target.files?.[0]);
+            void onFile(e.target.files?.[0]);
             e.target.value = "";
           }}
         />

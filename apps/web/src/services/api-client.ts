@@ -7,7 +7,13 @@ import {
 } from "@/lib/auth";
 import { env } from "@/utils/env";
 import { fetchWithRetry } from "@/lib/fetch-retry";
+import { clearStoredOrgContext } from "@/lib/org-context-storage";
 import type { ApiResponse, ErrorResponse, TokenData, UserProfile } from "@/types/api";
+import type {
+  OrgBranchOption,
+  OrgCompanyOption,
+  OrgSessionContext,
+} from "@/types/org-context";
 
 export class ApiClientError extends Error {
   constructor(
@@ -180,9 +186,27 @@ export const authService = {
     try {
       await apiClient<null>("/auth/logout", { method: "POST" });
     } finally {
+      clearStoredOrgContext();
       clearTokens();
     }
   },
+};
+
+export const contextService = {
+  getContext: () => apiClient<OrgSessionContext>("/auth/context"),
+  listCompanies: () => apiClient<OrgCompanyOption[]>("/auth/context/companies"),
+  listBranches: (companyId: string) =>
+    apiClient<OrgBranchOption[]>("/auth/context/branches", {
+      query: { company_id: companyId },
+    }),
+  switchContext: (body: { company_id: string; branch_id?: string | null }) =>
+    apiClient<{ company_id: string; branch_id: string | null }>("/auth/context/switch", {
+      method: "POST",
+      body: {
+        company_id: body.company_id,
+        branch_id: body.branch_id ?? null,
+      },
+    }),
 };
 
 export type ListQuery = Record<string, string | number | boolean | null | undefined>;

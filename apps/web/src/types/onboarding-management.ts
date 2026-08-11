@@ -50,7 +50,7 @@ export const PORTAL_STEPS: { id: PortalStepId; label: string; description: strin
   { id: "government_ids", label: "Government IDs", description: "Aadhaar, PAN, and more" },
   { id: "bank", label: "Bank Details", description: "Salary account" },
   { id: "emergency", label: "Emergency Contact", description: "Primary contact" },
-  { id: "documents", label: "Upload Documents", description: "Identity, education & previous employment" },
+  { id: "documents", label: "Upload Documents", description: "Education marksheets and resume" },
   { id: "policies", label: "Policies", description: "Agree and upload signature" },
   { id: "review", label: "Review & Submit", description: "Confirm all steps" },
 ];
@@ -72,8 +72,23 @@ export const DEFAULT_HR_CHECKLIST: { code: string; name: string }[] = [
   { code: "SCHEDULE_ORIENT", name: "Schedule Orientation" },
 ];
 
+/** HR tasks deferred until after the candidate joins and becomes an employee. */
+export const POST_JOIN_HR_CHECKLIST: { code: string; name: string }[] = [
+  { code: "GEN_EMP_ID", name: "Generate Employee ID" },
+  { code: "CREATE_PROFILE", name: "Create Employee Profile" },
+  { code: "ASSIGN_DEPT", name: "Assign Department" },
+  { code: "ASSIGN_SHIFT", name: "Assign Shift" },
+  { code: "ASSIGN_LEAVE", name: "Assign Leave Policy" },
+  { code: "ASSIGN_ROLE", name: "Assign Role" },
+  { code: "GEN_EMAIL", name: "Generate Company Email" },
+  { code: "GEN_ID_CARD", name: "Generate ID Card" },
+  { code: "CREATE_PAYROLL", name: "Create Payroll Record" },
+  { code: "ISSUE_LAPTOP", name: "Issue Laptop" },
+  { code: "ISSUE_ASSETS", name: "Issue Assets" },
+  { code: "SCHEDULE_ORIENT", name: "Schedule Orientation" },
+];
+
 export const DEFAULT_MANAGER_CHECKLIST: { code: string; name: string }[] = [
-  { code: "ASSIGN_BUDDY", name: "Assign Buddy" },
   { code: "CREATE_GOALS", name: "Create Goals" },
   { code: "WELCOME_MEETING", name: "Welcome Meeting" },
   { code: "TEAM_INTRO", name: "Team Introduction" },
@@ -325,17 +340,12 @@ export type StartOnboardingInput = {
   candidateName: string;
   candidateEmail: string;
   candidatePhone: string;
-  offerId: string;
-  offerCode: string;
   joiningDate: string;
   department: string;
   designation: string;
   reportingManager: string;
   branch: string;
-  shift: string;
-  leavePolicy: string;
   employmentType: string;
-  buddy?: string;
-  hrOwner: string;
+  hrOwner?: string;
   invitationExpiryDays: number;
 };

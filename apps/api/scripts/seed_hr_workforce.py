@@ -79,6 +79,7 @@ DEPARTMENTS = [
     ("FIN", "Finance"),
     ("SAL", "Sales"),
     ("IT", "Information Technology"),
+    ("TD", "Technical Delivery"),
     ("OPS", "Operations"),
     ("QA", "Quality Assurance"),
     ("CS", "Customer Support"),
@@ -91,8 +92,7 @@ LEAVE_TYPES = [
     ("EL", "Earned Leave", Decimal("18"), Decimal("1.5"), True),
     ("ML", "Maternity Leave", Decimal("182"), None, True),
     ("PL", "Paternity Leave", Decimal("15"), None, True),
-    ("LOP", "Loss of Pay", Decimal("0"), None, False),
-    ("CO", "Comp Off", Decimal("0"), None, True),
+    ("CLWP", "Leave Without Pay (CLWP)", Decimal("0"), None, False),
 ]
 
 def previous_weekdays(from_day: date, count: int) -> list[date]:

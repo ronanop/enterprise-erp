@@ -1,15 +1,16 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   Archive,
+  ChevronDown,
   Download,
   Eye,
   Pencil,
   Plus,
-  RefreshCw,
+  SlidersHorizontal,
   Upload,
   UserCheck,
   UserMinus,
@@ -48,11 +49,23 @@ import {
 } from "@/services/employee-management-service";
 import type { EmployeeListFilters, EmployeeRecord } from "@/types/employee-management";
 import { cn } from "@/lib/utils";
+import {
+  EMPLOYMENT_TYPE_FILTER_OPTIONS,
+  formatEmploymentTypeLabel,
+  GENDER_OPTIONS,
+  LIFECYCLE_STATUS_OPTIONS,
+} from "@/config/hr-master-options";
+import {
+  listEmploymentTypeOptions,
+  listEntityOptions,
+  type SetupMasterOption,
+} from "@/services/hr-setup-service";
 
 const PAGE_SIZE = 12;
 
 const EMPTY_FILTERS: EmployeeListFilters = {
   branchId: "",
+  entityId: "",
   departmentId: "",
   designation: "",
   employmentType: "",
@@ -62,6 +75,12 @@ const EMPTY_FILTERS: EmployeeListFilters = {
   joiningFrom: "",
   gender: "",
 };
+
+const ADVANCED_FILTER_KEYS: (keyof EmployeeListFilters)[] = ["entityId", "gender"];
+
+function countAdvancedFilters(filters: EmployeeListFilters): number {
+  return ADVANCED_FILTER_KEYS.filter((key) => Boolean(filters[key])).length;
+}
 
 export function EmployeeManagementPage() {
   const router = useRouter();
@@ -80,13 +99,25 @@ export function EmployeeManagementPage() {
   } | null>(null);
   const [confirmLoading, setConfirmLoading] = useState(false);
   const [menuId, setMenuId] = useState<string | null>(null);
+  const [entityOptions, setEntityOptions] = useState<SetupMasterOption[]>([]);
+  const [employmentTypeOptions, setEmploymentTypeOptions] = useState<SetupMasterOption[]>(
+    EMPLOYMENT_TYPE_FILTER_OPTIONS,
+  );
+  const [moreFiltersOpen, setMoreFiltersOpen] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const { records: rows, options: opts, errors } = await loadEmployeeDirectory();
+      const [{ records: rows, options: opts, errors }, entities, employmentTypes] =
+        await Promise.all([
+          loadEmployeeDirectory(),
+          listEntityOptions(),
+          listEmploymentTypeOptions(),
+        ]);
       setRecords(rows);
       setOptions(opts);
+      setEntityOptions(entities);
+      setEmploymentTypeOptions(employmentTypes);
       if (errors.length) toast(errors.join(" · "), "info");
     } catch {
       toast("Failed to load employee directory", "error");
@@ -103,7 +134,8 @@ export function EmployeeManagementPage() {
     () => filterEmployees(records, query, filters),
     [records, query, filters],
   );
-  const stats = useMemo(() => computeEmployeeStats(filtered), [filtered]);
+  const stats = useMemo(() => computeEmployeeStats(records), [records]);
+  const advancedFilterCount = useMemo(() => countAdvancedFilters(filters), [filters]);
   const pageRows = useMemo(() => {
     const start = (page - 1) * PAGE_SIZE;
     return filtered.slice(start, start + PAGE_SIZE);
@@ -112,6 +144,10 @@ export function EmployeeManagementPage() {
   useEffect(() => {
     setPage(1);
   }, [query, filters]);
+
+  useEffect(() => {
+    if (advancedFilterCount > 0) setMoreFiltersOpen(true);
+  }, [advancedFilterCount]);
 
   const authBlocked = !isAuthenticated() && !loading && records.length === 0;
 
@@ -186,15 +222,6 @@ export function EmployeeManagementPage() {
               <Download className="size-3.5" />
               Export
             </Button>
-            <Button
-              size="sm"
-              variant="ghost"
-              className="cursor-pointer"
-              onClick={() => void load()}
-            >
-              <RefreshCw className={cn("size-3.5", loading && "animate-spin")} />
-              Refresh
-            </Button>
           </HrToolbar>
         }
       />
@@ -206,143 +233,92 @@ export function EmployeeManagementPage() {
       ) : (
         <>
           <HrKpiGrid
+            activeKey={filters.status || "all"}
+            onItemClick={(key) =>
+              setFilters((f) => ({ ...f, status: key === "all" ? "" : key }))
+            }
             items={[
-              { label: "Total employees", value: stats.total },
-              { label: "Active", value: stats.active },
-              { label: "Inactive", value: stats.inactive },
-              { label: "Probation", value: stats.probation },
-              { label: "Notice period", value: stats.notice },
+              { key: "all", label: "Total employees", value: stats.total },
+              { key: "active", label: "Active employees", value: stats.active },
+              { key: "inactive", label: "Ex employees", value: stats.inactive },
+              { key: "probation", label: "Probation", value: stats.probation },
+              { key: "notice", label: "Notice period", value: stats.notice },
             ]}
           />
 
-          <div className="space-y-3 rounded-xl border border-border/70 bg-card p-3 shadow-sm">
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <Input
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                placeholder="Search name, ID, email, phone, department, designation…"
-                className="h-9 w-full sm:max-w-md"
+          <div className="flex flex-wrap items-center gap-2">
+            <Input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search name, ID, email, phone…"
+              className="h-8 w-full max-w-xs text-xs"
+            />
+            <Button
+              type="button"
+              size="sm"
+              variant={moreFiltersOpen ? "secondary" : "outline"}
+              className="cursor-pointer h-8"
+              onClick={() => setMoreFiltersOpen((open) => !open)}
+            >
+              <SlidersHorizontal className="size-3.5" />
+              More filters
+              {advancedFilterCount > 0 ? (
+                <span className="ml-1 rounded-full bg-primary px-1.5 py-0.5 text-[10px] font-semibold text-primary-foreground">
+                  {advancedFilterCount}
+                </span>
+              ) : null}
+              <ChevronDown
+                className={cn("size-3.5 transition-transform", moreFiltersOpen && "rotate-180")}
               />
-              <button
-                type="button"
-                className="cursor-pointer shrink-0 self-start text-xs font-medium text-primary hover:underline sm:self-center"
-                onClick={() => setFilters(EMPTY_FILTERS)}
-              >
-                Clear filters
-              </button>
-            </div>
-
-            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-8">
-              <SetupField label="Branch">
-                <SetupSelect
-                  className="h-9 text-xs"
-                  value={filters.branchId}
-                  onChange={(e) => setFilters((f) => ({ ...f, branchId: e.target.value }))}
-                >
-                  <option value="">All</option>
-                  {options?.branches.map((b) => (
-                    <option key={b.id} value={b.id}>
-                      {b.label}
-                    </option>
-                  ))}
-                </SetupSelect>
-              </SetupField>
-              <SetupField label="Department">
-                <SetupSelect
-                  className="h-9 text-xs"
-                  value={filters.departmentId}
-                  onChange={(e) => setFilters((f) => ({ ...f, departmentId: e.target.value }))}
-                >
-                  <option value="">All</option>
-                  {options?.departments.map((d) => (
-                    <option key={d.id} value={d.id}>
-                      {d.label}
-                    </option>
-                  ))}
-                </SetupSelect>
-              </SetupField>
-              <SetupField label="Designation">
-                <SetupSelect
-                  className="h-9 text-xs"
-                  value={filters.designation}
-                  onChange={(e) => setFilters((f) => ({ ...f, designation: e.target.value }))}
-                >
-                  <option value="">All</option>
-                  {[...new Set(records.map((r) => r.designationName))].map((d) => (
-                    <option key={d} value={d}>
-                      {d}
-                    </option>
-                  ))}
-                </SetupSelect>
-              </SetupField>
-              <SetupField label="Employment type">
-                <SetupSelect
-                  className="h-9 text-xs"
-                  value={filters.employmentType}
-                  onChange={(e) => setFilters((f) => ({ ...f, employmentType: e.target.value }))}
-                >
-                  <option value="">All</option>
-                  {["permanent", "contract", "intern", "consultant"].map((t) => (
-                    <option key={t} value={t}>
-                      {t}
-                    </option>
-                  ))}
-                </SetupSelect>
-              </SetupField>
-              <SetupField label="Status">
-                <SetupSelect
-                  className="h-9 text-xs"
-                  value={filters.status}
-                  onChange={(e) => setFilters((f) => ({ ...f, status: e.target.value }))}
-                >
-                  <option value="">All</option>
-                  {["active", "inactive", "probation", "notice", "resigned", "archived"].map((s) => (
-                    <option key={s} value={s}>
-                      {s}
-                    </option>
-                  ))}
-                </SetupSelect>
-              </SetupField>
-              <SetupField label="Reporting manager" hint="Managers with direct reports or MGR role">
-                <SetupSelect
-                  className="h-9 text-xs"
-                  value={filters.reportingManagerId}
-                  onChange={(e) =>
-                    setFilters((f) => ({ ...f, reportingManagerId: e.target.value }))
-                  }
-                >
-                  <option value="">All</option>
-                  {options?.managers.map((m) => (
-                    <option key={m.id} value={m.id}>
-                      {m.label}
-                    </option>
-                  ))}
-                </SetupSelect>
-              </SetupField>
-              <SetupField label="Gender">
-                <SetupSelect
-                  className="h-9 text-xs"
-                  value={filters.gender}
-                  onChange={(e) => setFilters((f) => ({ ...f, gender: e.target.value }))}
-                >
-                  <option value="">All</option>
-                  {["male", "female", "other", "prefer_not_to_say"].map((g) => (
-                    <option key={g} value={g}>
-                      {g.replace(/_/g, " ")}
-                    </option>
-                  ))}
-                </SetupSelect>
-              </SetupField>
-              <SetupField label="Joining from">
-                <Input
-                  type="date"
-                  className="h-9 text-xs"
-                  value={filters.joiningFrom}
-                  onChange={(e) => setFilters((f) => ({ ...f, joiningFrom: e.target.value }))}
-                />
-              </SetupField>
-            </div>
+            </Button>
+            <button
+              type="button"
+              className="cursor-pointer text-xs font-medium text-primary hover:underline"
+              onClick={() => {
+                setFilters(EMPTY_FILTERS);
+                setMoreFiltersOpen(false);
+              }}
+            >
+              Clear filters
+            </button>
           </div>
+
+          {moreFiltersOpen ? (
+            <div className="flex flex-wrap gap-2 rounded-lg border border-border/60 bg-muted/20 p-2">
+              <div className="w-44">
+                <SetupField label="Entity">
+                  <SetupSelect
+                    className="h-8 text-xs"
+                    value={filters.entityId}
+                    onChange={(e) => setFilters((f) => ({ ...f, entityId: e.target.value }))}
+                  >
+                    <option value="">All entities</option>
+                    {entityOptions.map((ent) => (
+                      <option key={ent.value} value={ent.value}>
+                        {ent.label}
+                      </option>
+                    ))}
+                  </SetupSelect>
+                </SetupField>
+              </div>
+              <div className="w-36">
+                <SetupField label="Gender">
+                  <SetupSelect
+                    className="h-8 text-xs"
+                    value={filters.gender}
+                    onChange={(e) => setFilters((f) => ({ ...f, gender: e.target.value }))}
+                  >
+                    <option value="">All</option>
+                    {GENDER_OPTIONS.map((g) => (
+                      <option key={g.value} value={g.value}>
+                        {g.label}
+                      </option>
+                    ))}
+                  </SetupSelect>
+                </SetupField>
+              </div>
+            </div>
+          ) : null}
 
           <div className="space-y-3">
               {selected.size > 0 ? (
@@ -370,7 +346,7 @@ export function EmployeeManagementPage() {
                     onClick={() =>
                       setConfirm({
                         title: "Deactivate employees",
-                        message: "Set selected employees to inactive?",
+                        message: "Set selected employees to ex-employee status?",
                         action: () => runBulk("inactive", "Deactivated"),
                       })
                     }
@@ -422,10 +398,10 @@ export function EmployeeManagementPage() {
               ) : (
                 <div className="overflow-hidden rounded-xl border border-border/70 bg-card shadow-sm">
                   <div className="erp-scroll max-h-[calc(100vh-18rem)] overflow-auto">
-                    <table className="w-full min-w-[1100px] text-left text-sm">
-                      <thead className="sticky top-0 z-10 border-b border-border/70 bg-muted/90 backdrop-blur-sm">
+                    <table className="w-full min-w-[1200px] text-left text-sm">
+                      <thead className="sticky top-0 z-10 border-b border-border/70 bg-muted/95 backdrop-blur-sm">
                         <tr>
-                          <th className="w-10 px-2 py-2">
+                          <th className="w-10 px-2 py-2 align-bottom">
                             <input
                               type="checkbox"
                               className="cursor-pointer"
@@ -433,33 +409,81 @@ export function EmployeeManagementPage() {
                               onChange={(e) => toggleAll(e.target.checked)}
                             />
                           </th>
-                          <th className="px-2 py-2 text-[11px] font-medium uppercase text-muted-foreground">
-                            Employee
-                          </th>
-                          <th className="px-2 py-2 text-[11px] font-medium uppercase text-muted-foreground">
-                            ID
-                          </th>
-                          <th className="px-2 py-2 text-[11px] font-medium uppercase text-muted-foreground">
-                            Department
-                          </th>
-                          <th className="px-2 py-2 text-[11px] font-medium uppercase text-muted-foreground">
-                            Designation
-                          </th>
-                          <th className="px-2 py-2 text-[11px] font-medium uppercase text-muted-foreground">
-                            Branch
-                          </th>
-                          <th className="px-2 py-2 text-[11px] font-medium uppercase text-muted-foreground">
-                            Reporting manager
-                          </th>
-                          <th className="px-2 py-2 text-[11px] font-medium uppercase text-muted-foreground">
-                            Type
-                          </th>
-                          <th className="px-2 py-2 text-[11px] font-medium uppercase text-muted-foreground">
-                            Joined
-                          </th>
-                          <th className="px-2 py-2 text-[11px] font-medium uppercase text-muted-foreground">
-                            Status
-                          </th>
+                          <HeaderFilterTh label="Employee" />
+                          <HeaderFilterTh label="ID" />
+                          <HeaderFilterTh label="Department">
+                            <HeaderFilterSelect
+                              value={filters.departmentId}
+                              onChange={(v) => setFilters((f) => ({ ...f, departmentId: v }))}
+                              options={options?.departments.map((d) => ({ value: d.id, label: d.label })) ?? []}
+                            />
+                          </HeaderFilterTh>
+                          <HeaderFilterTh label="Designation">
+                            <HeaderFilterSelect
+                              value={filters.designation}
+                              onChange={(v) => setFilters((f) => ({ ...f, designation: v }))}
+                              options={[...new Set(records.map((r) => r.designationName))]
+                                .filter(Boolean)
+                                .map((d) => ({ value: d, label: d }))}
+                            />
+                          </HeaderFilterTh>
+                          <HeaderFilterTh label="Branch">
+                            <HeaderFilterSelect
+                              value={filters.branchId}
+                              onChange={(v) =>
+                                setFilters((f) => ({ ...f, branchId: v, location: "" }))
+                              }
+                              options={options?.branches.map((b) => ({ value: b.id, label: b.label })) ?? []}
+                            />
+                          </HeaderFilterTh>
+                          <HeaderFilterTh label="Location">
+                            <HeaderFilterSelect
+                              value={filters.location}
+                              onChange={(v) => setFilters((f) => ({ ...f, location: v }))}
+                              options={
+                                options?.locations
+                                  .filter((loc) => !filters.branchId || loc.branchId === filters.branchId)
+                                  .map((loc) => ({ value: loc.id, label: loc.label })) ?? []
+                              }
+                            />
+                          </HeaderFilterTh>
+                          <HeaderFilterTh label="Reporting manager">
+                            <HeaderFilterSelect
+                              value={filters.reportingManagerId}
+                              onChange={(v) => setFilters((f) => ({ ...f, reportingManagerId: v }))}
+                              options={options?.managers.map((m) => ({ value: m.id, label: m.label })) ?? []}
+                            />
+                          </HeaderFilterTh>
+                          <HeaderFilterTh label="Type">
+                            <HeaderFilterSelect
+                              value={filters.employmentType}
+                              onChange={(v) => setFilters((f) => ({ ...f, employmentType: v }))}
+                              options={employmentTypeOptions.map((t) => ({
+                                value: t.value,
+                                label: t.label,
+                              }))}
+                            />
+                          </HeaderFilterTh>
+                          <HeaderFilterTh label="Joined">
+                            <Input
+                              type="date"
+                              className="h-7 w-full min-w-[110px] text-[10px]"
+                              value={filters.joiningFrom}
+                              onChange={(e) =>
+                                setFilters((f) => ({ ...f, joiningFrom: e.target.value }))
+                              }
+                            />
+                          </HeaderFilterTh>
+                          <HeaderFilterTh label="Status">
+                            <HeaderFilterSelect
+                              value={filters.status}
+                              onChange={(v) => setFilters((f) => ({ ...f, status: v }))}
+                              options={LIFECYCLE_STATUS_OPTIONS.map((s) => ({
+                                value: s.value,
+                                label: s.label,
+                              }))}
+                            />
+                          </HeaderFilterTh>
                           <th className="w-12 px-2 py-2" />
                         </tr>
                       </thead>
@@ -492,8 +516,9 @@ export function EmployeeManagementPage() {
                             <td className="px-2 py-2 text-xs">{row.departmentName}</td>
                             <td className="px-2 py-2 text-xs">{row.designationName}</td>
                             <td className="px-2 py-2 text-xs">{row.branchName}</td>
+                            <td className="px-2 py-2 text-xs">{row.locationName}</td>
                             <td className="px-2 py-2 text-xs">{row.reportingManagerName}</td>
-                            <td className="px-2 py-2 text-xs capitalize">{row.employmentType}</td>
+                            <td className="px-2 py-2 text-xs">{formatEmploymentTypeLabel(row.employmentType)}</td>
                             <td className="px-2 py-2 text-xs">{row.joiningDate || "—"}</td>
                             <td className="px-2 py-2">
                               <HrStatusBadge status={row.lifecycleStatus} />
@@ -588,5 +613,52 @@ export function EmployeeManagementPage() {
         }}
       />
     </div>
+  );
+}
+
+function HeaderFilterTh({
+  label,
+  children,
+}: {
+  label: string;
+  children?: ReactNode;
+}) {
+  return (
+    <th className="px-1.5 py-2 align-bottom">
+      <div className="space-y-1">
+        <span className="block whitespace-nowrap text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+          {label}
+        </span>
+        {children ?? <span className="block h-7" />}
+      </div>
+    </th>
+  );
+}
+
+function HeaderFilterSelect({
+  value,
+  onChange,
+  options,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  options: { value: string; label: string }[];
+}) {
+  return (
+    <SetupSelect
+      className={cn(
+        "h-7 w-full min-w-[88px] max-w-[130px] cursor-pointer px-1.5 text-[10px]",
+        value && "border-primary/40 bg-primary/5 font-medium",
+      )}
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+    >
+      <option value="">All</option>
+      {options.map((opt) => (
+        <option key={opt.value} value={opt.value}>
+          {opt.label}
+        </option>
+      ))}
+    </SetupSelect>
   );
 }

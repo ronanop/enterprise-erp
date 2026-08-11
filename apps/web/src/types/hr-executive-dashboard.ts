@@ -26,6 +26,7 @@ export type HrDashboardStats = {
   onLeave: number;
   presentToday: number;
   absentToday: number;
+  onDutyToday: number;
   lateArrivals: number;
   openPositions: number;
   candidatesInPipeline: number;
@@ -77,7 +78,11 @@ export type ApprovalItem = {
     | "payroll"
     | "expense"
     | "asset"
-    | "offer";
+    | "offer"
+    | "compoff"
+    | "on_duty"
+    | "ot_allotment"
+    | "attendance_correction";
   title: string;
   requester: string;
   status: string;

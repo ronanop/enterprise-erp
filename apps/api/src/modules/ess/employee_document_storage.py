@@ -9,7 +9,8 @@ from pathlib import Path
 from core.exceptions import AppException, NotFoundException
 
 ESS_DOC_PREFIX = "ess-doc:"
-MAX_UPLOAD_BYTES = 10 * 1024 * 1024
+MAX_PHOTO_BYTES = 300 * 1024
+MAX_UPLOAD_BYTES = 2 * 1024 * 1024
 ALLOWED_EXTENSIONS = {".pdf", ".png", ".jpg", ".jpeg"}
 
 UPLOAD_ROOT = Path(__file__).resolve().parents[3] / "var" / "ess-documents"

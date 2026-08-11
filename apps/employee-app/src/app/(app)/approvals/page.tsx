@@ -29,7 +29,7 @@ export default function ApprovalsPage() {
 
   const load = useCallback(async () => {
     const res = await essService.approvals();
-    setRows(res.data ?? []);
+    setRows((res.data ?? []).filter((row) => row.category !== "compoff"));
   }, []);
 
   useEffect(() => {

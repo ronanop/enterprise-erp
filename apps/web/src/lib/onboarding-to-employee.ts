@@ -68,7 +68,6 @@ export function portalToWizardDraft(
     confirmAccountNumber: p.bank.accountNumber || "",
     ifsc: p.bank.ifsc || "",
     branchName: p.bank.branch || "",
-    upiId: p.bank.upi || "",
   };
 
   const employment = emptyEmployment(employeeCode || previewNextEmployeeCode());
@@ -156,12 +155,13 @@ export function summarizePortalDetails(portal: PortalPayload): {
       ].filter(Boolean),
     },
     {
-      title: "Education marks",
-      lines: [
-        portal.educationMarks?.tenth && `10th: ${portal.educationMarks.tenth}`,
-        portal.educationMarks?.twelfth && `12th: ${portal.educationMarks.twelfth}`,
-        portal.educationMarks?.graduation && `Graduation: ${portal.educationMarks.graduation}`,
-      ].filter(Boolean) as string[],
+      title: "Education",
+      lines: (() => {
+        const docs = portal.documents
+          .filter((d) => d.kind === "education" || ["DOC-GRAD", "DOC-PG", "DOC-CERT"].includes(d.typeCode ?? ""))
+          .map((d) => d.fileName);
+        return docs.length ? docs : ["None uploaded"];
+      })(),
     },
     {
       title: "Documents",

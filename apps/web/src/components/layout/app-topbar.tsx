@@ -7,6 +7,7 @@ import { Bell, LogIn, LogOut } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useHealthCheck } from "@/hooks/use-health-check";
+import { CompanyContextBadge } from "@/components/layout/company-context-badge";
 import { clearTokens, isAuthenticated } from "@/lib/auth";
 import { authService } from "@/services/api-client";
 
@@ -47,6 +48,7 @@ export function AppTopbar() {
       </div>
 
       <div className="flex items-center gap-2">
+        {signedIn ? <CompanyContextBadge /> : null}
         <Badge variant={healthVariant} className="hidden sm:inline-flex">
           <span
             className={`mr-1.5 size-1.5 rounded-full ${

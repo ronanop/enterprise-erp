@@ -70,7 +70,7 @@ export const hrNavGroups: HrNavGroup[] = [
         title: "Leave",
         href: "/hr/leave",
         icon: CalendarDays,
-        description: "Requests, balances & approvals",
+        description: "Leave requests & approvals",
       },
       {
         title: "Attendance",
@@ -82,7 +82,7 @@ export const hrNavGroups: HrNavGroup[] = [
         title: "On Duty & OT",
         href: "/hr/time/ot-allotment",
         icon: Clock3,
-        description: "On Duty, OT/overday & Comp Off approvals",
+        description: "On Duty & OT/overday approvals",
       },
       {
         title: "Biometric devices",

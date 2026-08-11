@@ -9,9 +9,9 @@ import { Input } from "@/components/ui/input";
 import {
   DEMO_PASSWORD,
   adminLoginAccounts,
-  getPostLoginRedirect,
   moduleLoginAccounts,
 } from "@/config/module-logins";
+import { resolvePostLoginNavigation } from "@/lib/post-login";
 import { ApiClientError, authService } from "@/services/api-client";
 import { env } from "@/utils/env";
 import { cn } from "@/lib/utils";
@@ -38,10 +38,7 @@ export function LoginForm() {
       const trimmed = email.trim();
       await authService.login(trimmed, password);
       const next = searchParams.get("next");
-      const destination =
-        next && next.startsWith("/") && !next.startsWith("//")
-          ? next
-          : getPostLoginRedirect(trimmed);
+      const destination = await resolvePostLoginNavigation(trimmed, next);
       router.replace(destination);
       router.refresh();
     } catch (err) {
