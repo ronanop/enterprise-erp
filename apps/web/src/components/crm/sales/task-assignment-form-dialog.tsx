@@ -14,12 +14,14 @@ import {
 } from "@/components/crm/sales/required-fields-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { useAuthUser } from "@/hooks/use-auth-user";
+import { resolveSessionEmployeeId } from "@/lib/crm/session-employee";
 import { ApiClientError } from "@/services/api-client";
 import {
   createTask,
   getCompany,
   getOpportunity,
-  listEmployeeOptions,
+  listCrmMemberOptions,
   type Company,
   type CrmTask,
   type Opportunity,
@@ -159,6 +161,7 @@ export function TaskAssignmentFormDialog({
   const [loading, setLoading] = useState(false);
   const [mandateOpen, setMandateOpen] = useState(false);
   const [mandateMessage, setMandateMessage] = useState("");
+  const { user } = useAuthUser();
 
   const ownerName = useMemo(
     () => employeeLabel(employees, form.owner_employee_id),
@@ -196,7 +199,7 @@ export function TaskAssignmentFormDialog({
           accountId
             ? getCompany(accountId).catch(() => companyProp ?? null)
             : Promise.resolve(companyProp ?? null),
-          listEmployeeOptions().catch(() => [] as Option[]),
+          listCrmMemberOptions().catch(() => [] as Option[]),
         ]);
         if (cancelled) return;
 
@@ -216,6 +219,7 @@ export function TaskAssignmentFormDialog({
           employeeRows[0]?.id ||
           "";
         const assigneeId =
+          resolveSessionEmployeeId(employeeRows, user) ||
           employeeRows.find((row) => row.id !== ownerId)?.id ||
           employeeRows[0]?.id ||
           ownerId;
@@ -249,7 +253,7 @@ export function TaskAssignmentFormDialog({
     return () => {
       cancelled = true;
     };
-  }, [open, opportunityId, companyAccountId, opportunityProp, companyProp]);
+  }, [open, opportunityId, companyAccountId, opportunityProp, companyProp, user]);
 
   function onAssignToChange(employeeId: string) {
     const email = employees.find((row) => row.id === employeeId)?.email ?? "";

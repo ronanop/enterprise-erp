@@ -17,7 +17,7 @@ import { CrmSortableTh, sortRows, useTableSort } from "@/components/crm/sales/cr
 import { ApiClientError } from "@/services/api-client";
 import {
   listCompanies,
-  listEmployeeOptions,
+  listCrmMemberOptions,
   type Company,
   type Option,
 } from "@/services/sales-crm-service";
@@ -57,7 +57,7 @@ export function CompanyListPage() {
     try {
       const [companies, employeeOptions] = await Promise.all([
         listCompanies(),
-        listEmployeeOptions().catch(() => [] as Option[]),
+        listCrmMemberOptions().catch(() => [] as Option[]),
       ]);
       setRows(companies);
       setEmployees(employeeOptions);

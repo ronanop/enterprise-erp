@@ -1089,6 +1089,17 @@ class SiteInstallationFollowUpResponse(BaseModel):
     message: str
 
 
+class SiteStageFollowUpReplyItem(BaseModel):
+    id: UUID
+    body: str
+    created_at: datetime
+    employee_id: UUID
+
+
+class SiteInstallationFollowUpReplyRequest(BaseModel):
+    body: str = Field(min_length=1, max_length=2000)
+
+
 class SiteStageFollowUpItem(BaseModel):
     id: UUID
     stage: str
@@ -1098,7 +1109,31 @@ class SiteStageFollowUpItem(BaseModel):
     note: str | None = None
     site_name: str | None = None
     document_number: str | None = None
-    delivery_status: str
-    status: str
+    delivery_status: str | None = None
+    status: str | None = None
     created_at: datetime | None = None
     sent_at: datetime | None = None
+    replies: list[SiteStageFollowUpReplyItem] = Field(default_factory=list)
+    has_reply: bool = False
+    latest_reply: str | None = None
+    latest_reply_at: datetime | None = None
+
+
+class ProjectPortfolioFollowUpItem(SiteStageFollowUpItem):
+    project_id: UUID
+    project_name: str
+
+
+class ProjectMyJobItem(BaseModel):
+    """Delivery step assigned to the signed-in user (one row per stage ownership)."""
+
+    site_installation_id: UUID
+    project_id: UUID
+    project_name: str
+    document_number: str
+    site_name: str | None = None
+    assigned_stage: str
+    workflow_stage: str
+    stage_label: str
+    delivery_type: str
+    form_path: str

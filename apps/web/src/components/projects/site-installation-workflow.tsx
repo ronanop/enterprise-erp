@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import {
+  ArrowUpRight,
   Bell,
   Check,
   Cable,
@@ -29,18 +30,25 @@ import {
 } from "@/components/projects/projects-ui";
 import { ConfirmDialog } from "@/components/finance/journals/confirm-dialog";
 import { Button } from "@/components/ui/button";
+import { useAuthUser } from "@/hooks/use-auth-user";
 import { cn } from "@/lib/utils";
 import { ApiClientError } from "@/services/api-client";
+import { loadIntakeSummaryLookups } from "@/components/projects/site-intake-summary";
 import {
   getSiteInstallationBlueprint,
   getSiteInstallationByProject,
   followUpSiteStage,
+  getProject,
   listEmployeeOptions,
   listSiteStageFollowUps,
   type SiteInstallation,
   type SiteInstallationBlueprint,
   type SiteStageFollowUp,
 } from "@/services/projects-portal-service";
+import { parseAuthMe } from "@/lib/auth-user";
+import { resolveSessionEmployeeId } from "@/lib/crm/session-employee";
+import { canOpenCurrentStageForm } from "@/lib/projects/site-stage-form-access";
+import { authService } from "@/services/api-client";
 
 type StageKey =
   | "intake"
@@ -87,6 +95,7 @@ const STAGE_FORM_LINKS: Partial<
 };
 
 export function SiteInstallationTrackingSummary({ projectId }: { projectId: string }) {
+  const { projectModuleAdmin } = useAuthUser();
   const [blueprint, setBlueprint] = useState<SiteInstallationBlueprint | null>(null);
   const [site, setSite] = useState<SiteInstallation | null>(null);
   const [employeeOptions, setEmployeeOptions] = useState<Array<{ id: string; label: string }>>([]);
@@ -101,6 +110,21 @@ export function SiteInstallationTrackingSummary({ projectId }: { projectId: stri
   const [followUpBusy, setFollowUpBusy] = useState(false);
   const [followUpFeedback, setFollowUpFeedback] = useState<string | null>(null);
   const [followUps, setFollowUps] = useState<SiteStageFollowUp[]>([]);
+
+  const refreshFollowUpsOnly = useCallback(async () => {
+    const rows = await listSiteStageFollowUps(projectId).catch(() => []);
+    setFollowUps(Array.isArray(rows) ? rows : []);
+  }, [projectId]);
+
+  const latestFollowUpByStage = useMemo(() => {
+    const map = new Map<string, SiteStageFollowUp>();
+    for (const fu of followUps) {
+      if (fu.stage && !map.has(fu.stage)) {
+        map.set(fu.stage, fu);
+      }
+    }
+    return map;
+  }, [followUps]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -130,6 +154,12 @@ export function SiteInstallationTrackingSummary({ projectId }: { projectId: stri
   useEffect(() => {
     void load();
   }, [load]);
+
+  useEffect(() => {
+    if (!projectModuleAdmin) return;
+    const id = window.setInterval(() => void refreshFollowUpsOnly(), 20_000);
+    return () => window.clearInterval(id);
+  }, [projectModuleAdmin, refreshFollowUpsOnly]);
 
   if (loading && !blueprint) {
     return <div className="h-28 animate-pulse rounded-xl bg-muted/60" />;
@@ -352,7 +382,13 @@ export function SiteInstallationTrackingSummary({ projectId }: { projectId: stri
                 <th className="px-3 py-2 font-medium">Date Assigned</th>
                 <th className="px-3 py-2 font-medium">Date Completed</th>
                 <th className="px-3 py-2 font-medium">Status</th>
-                <th className="px-3 py-2 font-medium">Follow up</th>
+                {projectModuleAdmin ? (
+                  <>
+                    <th className="px-3 py-2 font-medium">Follow-up</th>
+                    <th className="px-3 py-2 font-medium">Assignee reply</th>
+                    <th className="px-3 py-2 font-medium">Follow up</th>
+                  </>
+                ) : null}
               </tr>
             </thead>
             <tbody>
@@ -362,10 +398,27 @@ export function SiteInstallationTrackingSummary({ projectId }: { projectId: stri
                   : "Unassigned";
                 const canFollowUp =
                   Boolean(sa.assignee_employee_id) && sa.work_status !== "done";
+                const stageFollowUp = latestFollowUpByStage.get(sa.stage);
 
                 return (
                   <tr key={sa.stage} className="border-b border-border/50 last:border-0">
-                    <td className="px-3 py-2 font-medium text-foreground">{sa.label}</td>
+                    <td className="px-3 py-2 font-medium text-foreground">
+                      <span className="inline-flex items-center gap-1.5">
+                        {sa.label}
+                        {projectModuleAdmin &&
+                          sa.work_status === "done" &&
+                          STAGE_FORM_LINKS[sa.stage as StageKey] ? (
+                          <Link
+                            href={STAGE_FORM_LINKS[sa.stage as StageKey]!.href(projectId)}
+                            title={`View ${sa.label} progress`}
+                            aria-label={`View ${sa.label} progress`}
+                            className="inline-flex cursor-pointer text-primary transition-colors duration-200 hover:text-primary/80"
+                          >
+                            <ArrowUpRight className="size-3.5 shrink-0" aria-hidden />
+                          </Link>
+                        ) : null}
+                      </span>
+                    </td>
                     <td className="px-3 py-2 text-muted-foreground">{assigneeLabel}</td>
                     <td className="px-3 py-2 text-muted-foreground">
                       {displayDate(sa.assigned_date)}
@@ -374,27 +427,54 @@ export function SiteInstallationTrackingSummary({ projectId }: { projectId: stri
                       {displayDate(sa.completed_date)}
                     </td>
                     <td className="px-3 py-2 text-muted-foreground">{statusText(sa.work_status)}</td>
-                    <td className="px-3 py-2">
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="xs"
-                        className="cursor-pointer gap-1 transition-colors duration-200"
-                        disabled={!canFollowUp}
-                        onClick={() => {
-                          setFollowUpFeedback(null);
-                          setFollowUpNote("");
-                          setFollowUpTarget({
-                            stage: sa.stage,
-                            label: sa.label,
-                            assigneeName: assigneeLabel,
-                          });
-                        }}
-                      >
-                        <Bell className="size-3" />
-                        Follow up
-                      </Button>
-                    </td>
+                    {projectModuleAdmin ? (
+                      <>
+                        <td className="px-3 py-2 text-muted-foreground">
+                          {stageFollowUp ? (
+                            stageFollowUp.has_reply ? (
+                              <span className="font-medium text-foreground">Replied</span>
+                            ) : (
+                              <span className="text-amber-700 dark:text-amber-500">Awaiting reply</span>
+                            )
+                          ) : (
+                            "—"
+                          )}
+                        </td>
+                        <td className="max-w-52 px-3 py-2 text-muted-foreground">
+                          {stageFollowUp?.latest_reply?.trim() ? (
+                            <span
+                              className="line-clamp-2 text-sm text-foreground"
+                              title={stageFollowUp.latest_reply}
+                            >
+                              {stageFollowUp.latest_reply}
+                            </span>
+                          ) : (
+                            "—"
+                          )}
+                        </td>
+                        <td className="px-3 py-2">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="xs"
+                            className="cursor-pointer gap-1 transition-colors duration-200"
+                            disabled={!canFollowUp}
+                            onClick={() => {
+                              setFollowUpFeedback(null);
+                              setFollowUpNote("");
+                              setFollowUpTarget({
+                                stage: sa.stage,
+                                label: sa.label,
+                                assigneeName: assigneeLabel,
+                              });
+                            }}
+                          >
+                            <Bell className="size-3" />
+                            Follow up
+                          </Button>
+                        </td>
+                      </>
+                    ) : null}
                   </tr>
                 );
               })}
@@ -402,48 +482,64 @@ export function SiteInstallationTrackingSummary({ projectId }: { projectId: stri
           </table>
         </div>
 
-        <div className="erp-scroll overflow-x-auto rounded-lg border border-border/70">
-          <table className="w-full min-w-180 text-left text-sm">
-            <thead>
-              <tr className="border-b border-border/70 bg-muted/20 text-[11px] uppercase tracking-wide text-muted-foreground">
-                <th className="px-3 py-2 font-medium">Follow-up date</th>
-                <th className="px-3 py-2 font-medium">Step</th>
-                <th className="px-3 py-2 font-medium">Assigned To</th>
-                <th className="px-3 py-2 font-medium">Note</th>
-                <th className="px-3 py-2 font-medium">Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {followUps.length > 0 ? (
-                followUps.map((fu) => (
-                  <tr key={fu.id} className="border-b border-border/50 last:border-0">
-                    <td className="px-3 py-2 text-muted-foreground">
-                      {displayDateTime(fu.created_at)}
-                    </td>
-                    <td className="px-3 py-2 font-medium text-foreground">
-                      {fu.stage_label || fu.stage || "—"}
-                    </td>
-                    <td className="px-3 py-2 text-muted-foreground">
-                      {employeeName(fu.recipient_employee_id)}
-                    </td>
-                    <td className="max-w-48 px-3 py-2 text-muted-foreground">
-                      {fu.note?.trim() ? fu.note : "—"}
-                    </td>
-                    <td className="px-3 py-2 text-muted-foreground capitalize">
-                      {fu.delivery_status || fu.status || "—"}
+        {projectModuleAdmin ? (
+          <div className="erp-scroll overflow-x-auto rounded-lg border border-border/70">
+            <table className="w-full min-w-180 text-left text-sm">
+              <thead>
+                <tr className="border-b border-border/70 bg-muted/20 text-[11px] uppercase tracking-wide text-muted-foreground">
+                  <th className="px-3 py-2 font-medium">Follow-up date</th>
+                  <th className="px-3 py-2 font-medium">Step</th>
+                  <th className="px-3 py-2 font-medium">Assigned To</th>
+                  <th className="px-3 py-2 font-medium">Note</th>
+                  <th className="px-3 py-2 font-medium">Reply</th>
+                  <th className="px-3 py-2 font-medium">Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {followUps.length > 0 ? (
+                  followUps.map((fu) => (
+                    <tr key={fu.id} className="border-b border-border/50 last:border-0">
+                      <td className="px-3 py-2 text-muted-foreground">
+                        {displayDateTime(fu.created_at)}
+                      </td>
+                      <td className="px-3 py-2 font-medium text-foreground">
+                        {fu.stage_label || fu.stage || "—"}
+                      </td>
+                      <td className="px-3 py-2 text-muted-foreground">
+                        {employeeName(fu.recipient_employee_id)}
+                      </td>
+                      <td className="max-w-48 px-3 py-2 text-muted-foreground">
+                        {fu.note?.trim() ? (
+                          <span className="line-clamp-3 whitespace-pre-wrap">{fu.note}</span>
+                        ) : (
+                          "—"
+                        )}
+                      </td>
+                      <td className="max-w-56 px-3 py-2 text-muted-foreground">
+                        {fu.latest_reply?.trim() ? (
+                          <span className="line-clamp-2" title={fu.latest_reply}>
+                            {fu.latest_reply}
+                          </span>
+                        ) : (
+                          <span className="text-xs italic">Awaiting reply</span>
+                        )}
+                      </td>
+                      <td className="px-3 py-2 text-muted-foreground capitalize">
+                        {fu.has_reply ? "Replied" : fu.delivery_status || fu.status || "—"}
+                      </td>
+                    </tr>
+                  ))
+                ) : (
+                  <tr>
+                    <td colSpan={6} className="px-3 py-3 text-xs text-muted-foreground">
+                      No follow-ups sent yet.
                     </td>
                   </tr>
-                ))
-              ) : (
-                <tr>
-                  <td colSpan={5} className="px-3 py-3 text-xs text-muted-foreground">
-                    No follow-ups sent yet.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
+                )}
+              </tbody>
+            </table>
+          </div>
+        ) : null}
 
         <div className="erp-scroll overflow-x-auto rounded-lg border border-border/70">
           <table className="w-full min-w-180 text-left text-sm">
@@ -480,59 +576,60 @@ export function SiteInstallationTrackingSummary({ projectId }: { projectId: stri
         </div>
       </div>
 
-      <ConfirmDialog
-        open={Boolean(followUpTarget)}
-        title="Send stage follow-up"
-        description={
-          followUpTarget
-            ? `Notify ${followUpTarget.assigneeName} about ${followUpTarget.label}.`
-            : undefined
-        }
-        confirmLabel="Send follow-up"
-        cancelLabel="Cancel"
-        busy={followUpBusy}
-        onCancel={() => {
-          if (followUpBusy) return;
-          setFollowUpTarget(null);
-          setFollowUpNote("");
-        }}
-        onConfirm={() => {
-          if (!followUpTarget) return;
-          setFollowUpBusy(true);
-          void followUpSiteStage(projectId, followUpTarget.stage, followUpNote)
-            .then(async (result) => {
-              setFollowUpFeedback(result.message);
-              setFollowUpTarget(null);
-              setFollowUpNote("");
-              const rows = await listSiteStageFollowUps(projectId).catch(() => []);
-              setFollowUps(Array.isArray(rows) ? rows : []);
-            })
-            .catch((err) => {
-              setFollowUpFeedback(
-                err instanceof ApiClientError
-                  ? err.message
-                  : err instanceof Error
+      {projectModuleAdmin ? (
+        <ConfirmDialog
+          open={Boolean(followUpTarget)}
+          title="Send stage follow-up"
+          description={
+            followUpTarget
+              ? `Notify ${followUpTarget.assigneeName} about ${followUpTarget.label}.`
+              : undefined
+          }
+          confirmLabel="Send follow-up"
+          cancelLabel="Cancel"
+          busy={followUpBusy}
+          onCancel={() => {
+            if (followUpBusy) return;
+            setFollowUpTarget(null);
+            setFollowUpNote("");
+          }}
+          onConfirm={() => {
+            if (!followUpTarget) return;
+            setFollowUpBusy(true);
+            void followUpSiteStage(projectId, followUpTarget.stage, followUpNote)
+              .then(async (result) => {
+                setFollowUpFeedback(result.message);
+                setFollowUpTarget(null);
+                setFollowUpNote("");
+                await refreshFollowUpsOnly();
+              })
+              .catch((err) => {
+                setFollowUpFeedback(
+                  err instanceof ApiClientError
                     ? err.message
-                    : "Failed to send follow-up",
-              );
-            })
-            .finally(() => setFollowUpBusy(false));
-        }}
-      >
-        <label className="mt-3 block space-y-1.5">
-          <span className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-            Note (optional)
-          </span>
-          <textarea
-            value={followUpNote}
-            onChange={(e) => setFollowUpNote(e.target.value)}
-            rows={3}
-            placeholder="Add a short follow-up note…"
-            className="w-full rounded-md border border-border/80 bg-background px-2.5 py-2 text-sm text-foreground outline-none transition-colors duration-200 focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/40"
-            disabled={followUpBusy}
-          />
-        </label>
-      </ConfirmDialog>
+                    : err instanceof Error
+                      ? err.message
+                      : "Failed to send follow-up",
+                );
+              })
+              .finally(() => setFollowUpBusy(false));
+          }}
+        >
+          <label className="mt-3 block space-y-1.5">
+            <span className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+              Note (optional)
+            </span>
+            <textarea
+              value={followUpNote}
+              onChange={(e) => setFollowUpNote(e.target.value)}
+              rows={3}
+              placeholder="Add a short follow-up note…"
+              className="w-full rounded-md border border-border/80 bg-background px-2.5 py-2 text-sm text-foreground outline-none transition-colors duration-200 focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/40"
+              disabled={followUpBusy}
+            />
+          </label>
+        </ConfirmDialog>
+      ) : null}
     </ProjectsSection>
   );
 }
@@ -543,17 +640,26 @@ export function SiteInstallationWorkflow({ projectId }: { projectId: string }) {
   const [blueprint, setBlueprint] = useState<SiteInstallationBlueprint | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [canOpenForm, setCanOpenForm] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const [site, bp] = await Promise.all([
+      const [site, bp, project, lookups, meRes] = await Promise.all([
         getSiteInstallationByProject(projectId),
         getSiteInstallationBlueprint(projectId),
+        getProject(projectId),
+        loadIntakeSummaryLookups(),
+        authService.me(),
       ]);
       setRow(site);
       setBlueprint(bp);
+      const parsed = parseAuthMe(meRes.data);
+      const employeeId = resolveSessionEmployeeId(lookups.employees, parsed.user);
+      setCanOpenForm(
+        canOpenCurrentStageForm(project, site, employeeId, parsed.projectModuleAdmin),
+      );
     } catch (err) {
       setError(
         err instanceof ApiClientError ? err.message : "Failed to load site installation workflow",
@@ -598,7 +704,7 @@ export function SiteInstallationWorkflow({ projectId }: { projectId: string }) {
       {error ? <ProjectsErrorBanner>{error}</ProjectsErrorBanner> : null}
 
       <div className="flex flex-wrap items-center gap-2">
-        {formLink && !locked ? (
+        {formLink && !locked && canOpenForm ? (
           <Link
             href={formLink.href(projectId)}
             className="inline-flex h-8 cursor-pointer items-center justify-center rounded-md bg-primary px-3 text-xs font-medium text-primary-foreground transition-colors duration-200 hover:bg-primary/90"
@@ -609,6 +715,12 @@ export function SiteInstallationWorkflow({ projectId }: { projectId: string }) {
         {stage === "intake" && !locked ? (
           <p className="text-xs text-muted-foreground">
             Intake fields are edited from Edit Project. Use Assign owners after intake is complete.
+          </p>
+        ) : null}
+        {formLink && !locked && !canOpenForm && stage !== "intake" ? (
+          <p className="text-xs text-muted-foreground">
+            This step is assigned to a stage owner. Track progress below; only the assignee can open
+            the workflow form.
           </p>
         ) : null}
         {locked ? (

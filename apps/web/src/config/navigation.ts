@@ -17,6 +17,7 @@ import {
   ShoppingCart,
   Store,
   Truck,
+  Users,
   Wallet,
   Briefcase,
   UserPlus,
@@ -31,6 +32,8 @@ export type NavItem = {
   href: string;
   description?: string;
   icon?: LucideIcon;
+  /** Navigate inside the main shell (same tab) instead of standalone module tab. */
+  inApp?: boolean;
 };
 
 export type NavGroup = {
@@ -82,18 +85,32 @@ export const navigation: NavGroup[] = [
         href: "/",
         description: "Platform status and all modules",
         icon: LayoutDashboard,
+        inApp: true,
       },
     ],
   },
   ...(["foundation", "organization", "master-data", "operations"] as const).map((group) => ({
     title: groupTitles[group],
-    items: erpModules
-      .filter((m) => m.group === group)
-      .map((m) => ({
-        title: m.title,
-        href: m.href,
-        description: m.description,
-        icon: iconMap[m.icon],
-      })),
+    items: [
+      ...erpModules
+        .filter((m) => m.group === group)
+        .map((m) => ({
+          title: m.title,
+          href: m.href,
+          description: m.description,
+          icon: iconMap[m.icon],
+        })),
+      ...(group === "organization"
+        ? [
+            {
+              title: "Users",
+              href: "/organization/users",
+              description: "ERP users in your organization tenant",
+              icon: Users,
+              inApp: true,
+            } satisfies NavItem,
+          ]
+        : []),
+    ],
   })),
 ];

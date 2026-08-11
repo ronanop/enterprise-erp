@@ -31,6 +31,7 @@ import {
   resolveStageOwnerDisplay,
   stageOwnerBannerSection,
 } from "@/components/projects/site-stage-assignments";
+import { useSiteStageFormReadOnly } from "@/components/projects/site-stage-form-read-only-context";
 
 const EMPTY: FormValues = {
   ...INTAKE_SUMMARY_EMPTY,
@@ -65,6 +66,7 @@ function dateOrEmpty(v: string | null | undefined): string {
 }
 
 export function SiteInstallFormPage({ projectId }: { projectId: string }) {
+  const adminProgressView = useSiteStageFormReadOnly();
   const [deliveryType, setDeliveryType] = useState("server_os_rack");
   const isRackOnly = deliveryIsRackOnly(deliveryType);
   const hasRack = deliveryIncludesRack(deliveryType);
@@ -162,7 +164,7 @@ export function SiteInstallFormPage({ projectId }: { projectId: string }) {
         await advanceSiteInstallation(projectId, "complete_installation");
       }
 
-      return `/projects/projects/${projectId}/acceptance`;
+      return `/projects/my-jobs`;
     },
     [deliveryType, projectId],
   );
@@ -351,11 +353,15 @@ export function SiteInstallFormPage({ projectId }: { projectId: string }) {
           ? "Step 5 — Confirm rack installation, then continue to Acceptance."
           : "Step 5 — Installation and configuration in one step. Next: Acceptance."
       }
-      backHref={`/projects/projects/${projectId}`}
-      backLabel="Back to project"
-      submitLabel={
-        isRackOnly ? "Complete installation" : "Complete & continue to Acceptance"
+      backHref={
+        adminProgressView ? `/projects/projects/${projectId}` : `/projects/my-jobs`
       }
+      backLabel={adminProgressView ? "Back to project" : "Back to My Jobs"}
+      readOnly={adminProgressView}
+      readOnlyBanner={
+        adminProgressView ? "Viewing completed step progress (read-only)." : undefined
+      }
+      submitLabel="Save"
       sections={sections}
       emptyValues={EMPTY}
       load={load}

@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { ArrowLeft, Building2, FileText, ListOrdered, Paperclip, Plus, Scale, Trash2 } from "lucide-react";
 
 import { CrmErrorBanner, CrmIconBadge, CrmListPanel, CrmPage, CrmSection } from "@/components/crm/crm-ui";
+import { CrmSessionEmployeeField } from "@/components/crm/sales/crm-session-employee-field";
 import {
   FinanceField,
   FinanceSelect,
@@ -18,6 +19,8 @@ import {
 import { PageHeader } from "@/components/layout/page-header";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { useAuthUser } from "@/hooks/use-auth-user";
+import { resolveSessionEmployeeLabel } from "@/lib/crm/session-employee";
 import { ApiClientError } from "@/services/api-client";
 import {
   addQuoteLine,
@@ -33,7 +36,7 @@ import {
   getQuote,
   getSalesLead,
   listContacts,
-  listEmployeeOptions,
+  listCrmMemberOptions,
   listQuoteLines,
   updateQuote,
   updateQuoteLine,
@@ -129,10 +132,10 @@ export function QuoteFormPage({
 }) {
   const router = useRouter();
   const isEdit = Boolean(quoteId);
+  const { user } = useAuthUser();
   const [quote, setQuote] = useState<Quote | null>(null);
   const [opportunity, setOpportunity] = useState<Opportunity | null>(null);
   const [contacts, setContacts] = useState<Contact[]>([]);
-  const [employees, setEmployees] = useState<Option[]>([]);
   const [form, setForm] = useState<QuoteDraft>(EMPTY_FORM);
   const [lines, setLines] = useState<LineDraft[]>([]);
   const [initialLineIds, setInitialLineIds] = useState<string[]>([]);
@@ -161,12 +164,11 @@ export function QuoteFormPage({
           quoteRow.company_account_id
             ? listContacts(quoteRow.company_account_id).catch(() => [])
             : Promise.resolve([]),
-          listEmployeeOptions().catch(() => []),
+          listCrmMemberOptions().catch(() => []),
         ]);
         setQuote(quoteRow);
         setOpportunity(opportunityRow);
         setContacts(contactRows);
-        setEmployees(employeeRows);
         setForm({
           project_title: quoteRow.project_title ?? "",
           account_name: quoteRow.account_name ?? "",
@@ -224,7 +226,7 @@ export function QuoteFormPage({
         opportunityRow.company_account_id
           ? listContacts(opportunityRow.company_account_id).catch(() => [])
           : Promise.resolve([]),
-        listEmployeeOptions().catch(() => []),
+        listCrmMemberOptions().catch(() => []),
         getOpportunityBlueprint(opportunityId).catch(() => null),
       ]);
       if (
@@ -239,7 +241,6 @@ export function QuoteFormPage({
       }
       setOpportunity(opportunityRow);
       setContacts(contactRows);
-      setEmployees(employeeRows);
 
       const billingAddress = companyRow
         ? [
@@ -254,7 +255,8 @@ export function QuoteFormPage({
         : "";
       const primaryContact = contactRows.find((contact) => contact.is_primary) ?? contactRows[0];
       const ownerLabel =
-        employeeRows.find((employee) => employee.id === opportunityRow.owner_employee_id)?.label ??
+        resolveSessionEmployeeLabel(employeeRows, user) ||
+        employeeRows.find((employee) => employee.id === opportunityRow.owner_employee_id)?.label ||
         "";
       setForm({
         project_title: opportunityRow.project_title || opportunityRow.opportunity_name || "",
@@ -283,7 +285,7 @@ export function QuoteFormPage({
     } finally {
       setLoading(false);
     }
-  }, [isEdit, opportunityId, quoteId]);
+  }, [isEdit, opportunityId, quoteId, user]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => void load(), 0);
@@ -557,19 +559,7 @@ export function QuoteFormPage({
               ))}
             </FinanceSelect>
           </FinanceField>
-          <FinanceField label="Quote Owner">
-            <FinanceSelect
-              value={form.owner_name}
-              onChange={(event) => setField("owner_name", event.target.value)}
-            >
-              <option value="">Select owner</option>
-              {employees.map((employee) => (
-                <option key={employee.id} value={employee.label}>
-                  {employee.label}
-                </option>
-              ))}
-            </FinanceSelect>
-          </FinanceField>
+          <CrmSessionEmployeeField label="Quote Owner" value={form.owner_name} />
           <FinanceField label="Service Type *">
             <FinanceSelect
               value={form.service_type}

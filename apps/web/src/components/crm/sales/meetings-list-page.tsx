@@ -20,7 +20,7 @@ import { Button } from "@/components/ui/button";
 import { ApiClientError } from "@/services/api-client";
 import {
   getCompany,
-  listEmployeeOptions,
+  listCrmMemberOptions,
   listMeetings,
   type Company,
   type CrmMeeting,
@@ -49,7 +49,7 @@ export function MeetingsListPage({
     try {
       const [meetings, employeeOptions, company] = await Promise.all([
         listMeetings(companyAccountId),
-        listEmployeeOptions().catch(() => [] as Option[]),
+        listCrmMemberOptions().catch(() => [] as Option[]),
         companyAccountId
           ? getCompany(companyAccountId).catch(() => null)
           : Promise.resolve(null),

@@ -35,6 +35,8 @@ class UserEntity:
     failed_login_count: int = 0
     locked_until: datetime | None = None
     role_ids: list[UUID] = field(default_factory=list)
+    assigned_module_keys: list[str] = field(default_factory=list)
+    employee_id: UUID | None = None
 
 
 @dataclass

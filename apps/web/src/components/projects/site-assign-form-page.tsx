@@ -76,7 +76,7 @@ export function SiteAssignFormPage({ projectId }: { projectId: string }) {
         await advanceSiteInstallation(projectId, "complete_assignment");
       }
 
-      return `/projects/projects/${projectId}/survey`;
+      return `/projects/projects/${projectId}`;
     },
     [projectId],
   );

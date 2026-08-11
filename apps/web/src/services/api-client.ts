@@ -160,6 +160,25 @@ export const authService = {
       clearTokens();
     }
   },
+  microsoftConfig: () =>
+    apiClient<{ enabled: boolean; authorization_path: string }>("/auth/microsoft/config", {
+      auth: false,
+    }),
+  microsoftLoginUrl: (returnTo = "/organization") => {
+    const path = `/auth/microsoft/login?return_to=${encodeURIComponent(returnTo)}`;
+    return `${env.apiUrl}${path}`;
+  },
+  exchangeMicrosoftCode: (code: string) =>
+    apiClient<TokenData>("/auth/microsoft/exchange", {
+      method: "POST",
+      auth: false,
+      body: { code },
+    }).then((res) => {
+      if (res.data?.access_token) {
+        setTokens(res.data.access_token, res.data.refresh_token);
+      }
+      return res;
+    }),
 };
 
 export type ListQuery = Record<string, string | number | boolean | null | undefined>;

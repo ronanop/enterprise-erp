@@ -186,28 +186,9 @@ class ApprovalTaskService:
         return list(ids)
 
     def list_approval_user_options(self, ctx: TenantContext) -> list[dict]:
-        from sqlalchemy import select
+        from modules.crm.service.crm_member_service import CrmMemberService
 
-        from modules.foundation.models.security import SecUser
-        from security.rbac import RBACEngine
-
-        user_ids = set(RBACEngine(self._db).list_user_ids_with_crm_access(ctx.tenant_id))
-        if not user_ids:
-            return []
-        stmt = (
-            select(SecUser)
-            .where(
-                SecUser.tenant_id == ctx.tenant_id,
-                SecUser.id.in_(user_ids),
-                SecUser.is_deleted.is_(False),
-                SecUser.status == "active",
-            )
-            .order_by(SecUser.display_name.asc())
-        )
-        return [
-            {"id": row.id, "display_name": row.display_name, "email": row.email}
-            for row in self._db.scalars(stmt).all()
-        ]
+        return CrmMemberService(self._db).list_approval_user_options(ctx)
 
     def _send_notification_stub(self, task: CrmApprovalTask) -> None:
         """Notification-engine stub: mark as dispatched.

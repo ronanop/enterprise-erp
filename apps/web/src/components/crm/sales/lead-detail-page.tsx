@@ -27,7 +27,7 @@ import {
   getCompany,
   getLeadBlueprint,
   getSalesLead,
-  listEmployeeOptions,
+  listCrmMemberOptions,
   listLeadSourceOptions,
   markLeadLost,
   type BlueprintState,
@@ -63,7 +63,7 @@ export function LeadDetailPage({ leadId }: { leadId: string }) {
       const [leadRow, bp, employeeOptions, leadSourceOptions] = await Promise.all([
         getSalesLead(leadId),
         getLeadBlueprint(leadId),
-        listEmployeeOptions().catch(() => [] as Option[]),
+        listCrmMemberOptions().catch(() => [] as Option[]),
         listLeadSourceOptions().catch(() => [] as Option[]),
       ]);
       setLead(leadRow);

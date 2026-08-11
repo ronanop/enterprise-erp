@@ -5,8 +5,11 @@ import { usePathname } from "next/navigation";
 import { useMemo, useState } from "react";
 import { ChevronLeft, ChevronRight, FolderKanban, Search } from "lucide-react";
 
+import { SidebarAccountSection } from "@/components/layout/sidebar-account-section";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { useAuthUser } from "@/hooks/use-auth-user";
+import { filterProjectsNavGroups } from "@/lib/projects/project-module-nav";
 import { cn } from "@/lib/utils";
 
 export type ProjectsNavItem = {
@@ -30,6 +33,8 @@ export const PROJECTS_NAV_GROUPS: readonly ProjectsNavGroup[] = [
     label: "Workspace",
     items: [
       { title: "Dashboard", href: "/projects" },
+      { title: "My Jobs", href: "/projects/my-jobs" },
+      { title: "Follow ups", href: "/projects/follow-ups" },
       { title: "Projects", href: "/projects/projects" },
       { title: "All Sites", href: "/projects/site-installations" },
     ],
@@ -61,6 +66,11 @@ function isProjectsNavActive(pathname: string, href: string): boolean {
 /** Horizontal tab strip (used when Projects shares the main app sidebar). */
 export function ProjectsWorkspaceNav() {
   const pathname = usePathname();
+  const { projectModuleAdmin } = useAuthUser();
+  const navItems = useMemo(
+    () => filterProjectsNavGroups(PROJECTS_NAV_GROUPS, projectModuleAdmin).flatMap((g) => g.items),
+    [projectModuleAdmin],
+  );
 
   return (
     <div className="grid min-w-0 max-w-full grid-cols-1">
@@ -69,7 +79,7 @@ export function ProjectsWorkspaceNav() {
         className="erp-scroll min-w-0 overflow-x-auto overscroll-x-contain"
       >
         <ul className="flex w-max items-center gap-0.5 border-b border-border/70 pb-px">
-          {PROJECTS_NAV.map((item) => {
+          {navItems.map((item) => {
             const active = isProjectsNavActive(pathname, item.href);
             return (
               <li key={item.href} className="shrink-0">
@@ -98,17 +108,21 @@ export function ProjectsSidebar() {
   const pathname = usePathname();
   const [collapsed, setCollapsed] = useState(false);
   const [query, setQuery] = useState("");
+  const { signedIn, projectModuleAdmin } = useAuthUser();
 
   const filteredGroups = useMemo(() => {
+    const groups = filterProjectsNavGroups(PROJECTS_NAV_GROUPS, projectModuleAdmin);
     const q = query.trim().toLowerCase();
-    if (!q) return PROJECTS_NAV_GROUPS;
-    return PROJECTS_NAV_GROUPS.map((group) => ({
-      ...group,
-      items: group.items.filter((item) => item.title.toLowerCase().includes(q)),
-    })).filter((group) => group.items.length > 0);
-  }, [query]);
+    if (!q) return groups;
+    return groups
+      .map((group) => ({
+        ...group,
+        items: group.items.filter((item) => item.title.toLowerCase().includes(q)),
+      }))
+      .filter((group) => group.items.length > 0);
+  }, [query, projectModuleAdmin]);
 
-  const paneCount = PROJECTS_NAV.length;
+  const paneCount = filteredGroups.reduce((n, g) => n + g.items.length, 0);
 
   return (
     <aside
@@ -118,21 +132,35 @@ export function ProjectsSidebar() {
         collapsed ? "w-[72px]" : "w-[260px]",
       )}
     >
-      <div className={cn("flex items-center gap-3 px-4 py-5", collapsed && "justify-center px-2")}>
-        <div className="flex size-9 items-center justify-center rounded-xl bg-sidebar-primary text-sidebar-primary-foreground shadow-sm">
-          <FolderKanban className="size-4" aria-hidden />
-        </div>
-        {!collapsed ? (
-          <div className="min-w-0">
-            <p className="truncate text-sm font-medium tracking-tight text-sidebar-foreground">
-              Project Delivery
-            </p>
-            <p className="truncate text-[11px] text-sidebar-foreground/55">
-              Site installation · {paneCount} panes
-            </p>
+      {signedIn ? (
+        <SidebarAccountSection collapsed={collapsed}>
+          <div className="flex items-center gap-2">
+            <FolderKanban className="size-3.5 shrink-0 text-sidebar-primary" aria-hidden />
+            <div className="min-w-0">
+              <p className="truncate text-xs font-medium text-sidebar-foreground">Project Delivery</p>
+              <p className="truncate text-[10px] text-sidebar-foreground/55">
+                Site installation · {paneCount} panes
+              </p>
+            </div>
           </div>
-        ) : null}
-      </div>
+        </SidebarAccountSection>
+      ) : (
+        <div className={cn("flex items-center gap-3 px-4 py-5", collapsed && "justify-center px-2")}>
+          <div className="flex size-9 items-center justify-center rounded-xl bg-sidebar-primary text-sidebar-primary-foreground shadow-sm">
+            <FolderKanban className="size-4" aria-hidden />
+          </div>
+          {!collapsed ? (
+            <div className="min-w-0">
+              <p className="truncate text-sm font-medium tracking-tight text-sidebar-foreground">
+                Project Delivery
+              </p>
+              <p className="truncate text-[11px] text-sidebar-foreground/55">
+                Site installation · {paneCount} panes
+              </p>
+            </div>
+          ) : null}
+        </div>
+      )}
 
       {!collapsed ? (
         <div className="px-3 pb-3">

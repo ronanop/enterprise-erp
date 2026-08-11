@@ -15,7 +15,7 @@ import {
   createCompany,
   deleteCompany,
   listCompanies,
-  listEmployeeOptions,
+  listCrmMemberOptions,
   type Company,
 } from "@/services/sales-crm-service";
 
@@ -53,7 +53,7 @@ export function CompanyAccountActionsMenu({ company }: { company: Company }) {
     setBusy(true);
     setError(null);
     try {
-      const employees = await listEmployeeOptions().catch(() => []);
+      const employees = await listCrmMemberOptions().catch(() => []);
       const nameFor = (id: string | null) => {
         if (!id) return "—";
         return employees.find((e) => e.id === id)?.label ?? "—";

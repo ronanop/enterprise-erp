@@ -34,7 +34,7 @@ import {
   getOpportunityTimeline,
   getSalesLead,
   listAttachments,
-  listEmployeeOptions,
+  listCrmMemberOptions,
   listLeadSourceOptions,
   listOvfs,
   listQuotes,
@@ -94,7 +94,7 @@ export function OpportunityDetailPage({ opportunityId }: { opportunityId: string
       const [oppRow, bp, employeeOptions, leadSourceOptions] = await Promise.all([
         getOpportunity(opportunityId),
         getOpportunityBlueprint(opportunityId),
-        listEmployeeOptions().catch(() => [] as Option[]),
+        listCrmMemberOptions().catch(() => [] as Option[]),
         listLeadSourceOptions().catch(() => [] as Option[]),
       ]);
       setOpp(oppRow);

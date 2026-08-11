@@ -21,7 +21,6 @@ import {
   getSiteInstallationByProject,
   listBranchOptions,
   listCustomerOptions,
-  listEmployeeOptions,
   listProjectManagementTeamOptions,
   updateProject,
   updateSiteInstallationByProject,
@@ -66,17 +65,15 @@ export function ProjectFormPage({ projectId }: { projectId?: string }) {
   const isEdit = Boolean(projectId);
 
   const load = useCallback(async (): Promise<{ values?: FormValues; lookups?: Lookups }> => {
-    const [branches, employees, pmTeam, customers, record] = await Promise.all([
+    const [branches, team, customers, record] = await Promise.all([
       listBranchOptions().catch(() => []),
-      listEmployeeOptions().catch(() => []),
       listProjectManagementTeamOptions().catch(() => []),
       listCustomerOptions().catch(() => []),
       projectId ? getProject(projectId) : Promise.resolve(null),
     ]);
-    const team = pmTeam.length > 0 ? pmTeam : employees;
     const lookups: Lookups = {
       branches,
-      employees,
+      employees: team,
       pmTeam: team,
       customers,
     };

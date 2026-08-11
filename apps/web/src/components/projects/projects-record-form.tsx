@@ -145,6 +145,8 @@ export function ProjectsRecordForm({
   emptyValues,
   load,
   onSave,
+  readOnly = false,
+  readOnlyBanner,
 }: {
   title: string;
   description?: string;
@@ -153,12 +155,22 @@ export function ProjectsRecordForm({
   submitLabel: string;
   sections: FormSection[];
   emptyValues: FormValues;
-  load: () => Promise<{ values?: FormValues; lookups?: Lookups }>;
+  load: () => Promise<{
+    values?: FormValues;
+    lookups?: Lookups;
+    readOnly?: boolean;
+    readOnlyBanner?: string;
+  }>;
   onSave: (values: FormValues) => Promise<string>;
+  /** When true, fields are disabled and save is hidden (stage owner view). */
+  readOnly?: boolean;
+  readOnlyBanner?: string;
 }) {
   const router = useRouter();
   const [values, setValues] = useState<FormValues>(emptyValues);
   const [lookups, setLookups] = useState<Lookups>({});
+  const [formReadOnly, setFormReadOnly] = useState(readOnly);
+  const [formReadOnlyBanner, setFormReadOnlyBanner] = useState(readOnlyBanner ?? "");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -179,6 +191,8 @@ export function ProjectsRecordForm({
       const result = await load();
       setLookups(result.lookups ?? {});
       if (result.values) setValues((v) => ({ ...v, ...result.values }));
+      if (result.readOnly !== undefined) setFormReadOnly(result.readOnly);
+      if (result.readOnlyBanner !== undefined) setFormReadOnlyBanner(result.readOnlyBanner);
     } catch (err) {
       setError(err instanceof ApiClientError ? err.message : "Failed to load form data");
     } finally {
@@ -232,6 +246,7 @@ export function ProjectsRecordForm({
           addLabel={field.addLabel ?? "Add type"}
           showDate={field.showDate !== false}
           datesOnly={Boolean(field.datesOnly)}
+          disabled={formReadOnly}
           onChange={(next) => set(field.name, next)}
         />
       );
@@ -413,6 +428,7 @@ export function ProjectsRecordForm({
   }
 
   async function save() {
+    if (formReadOnly) return;
     const missing = sections
       .flatMap((s) => s.fields)
       .filter((f) => {
@@ -475,6 +491,12 @@ export function ProjectsRecordForm({
 
       {error ? <ProjectsErrorBanner>{error}</ProjectsErrorBanner> : null}
 
+      {formReadOnlyBanner ? (
+        <p className="rounded-md border border-border/70 bg-muted/30 px-3 py-2 text-sm text-muted-foreground">
+          {formReadOnlyBanner}
+        </p>
+      ) : null}
+
       {sections.map((section) => (
         <ProjectsSection
           key={section.title}
@@ -530,17 +552,19 @@ export function ProjectsRecordForm({
           onClick={() => router.push(backHref)}
           disabled={saving}
         >
-          Cancel
+          {formReadOnly ? backLabel : "Cancel"}
         </Button>
-        <Button
-          type="button"
-          size="sm"
-          className="cursor-pointer"
-          onClick={() => void save()}
-          disabled={saving}
-        >
-          {saving ? "Saving…" : submitLabel}
-        </Button>
+        {!formReadOnly ? (
+          <Button
+            type="button"
+            size="sm"
+            className="cursor-pointer"
+            onClick={() => void save()}
+            disabled={saving}
+          >
+            {saving ? "Saving…" : submitLabel}
+          </Button>
+        ) : null}
       </div>
 
       <ConfirmDialog

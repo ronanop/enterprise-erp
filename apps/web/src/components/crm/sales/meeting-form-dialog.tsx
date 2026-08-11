@@ -19,13 +19,15 @@ import {
   createMeeting,
   listBranchOptions,
   listCompanies,
-  listEmployeeOptions,
+  listCrmMemberOptions,
   type Company,
   type CrmMeeting,
   type MeetingFormInput,
   type Option,
 } from "@/services/sales-crm-service";
 import { cn } from "@/lib/utils";
+import { useAuthUser } from "@/hooks/use-auth-user";
+import { resolveSessionEmployeeId, resolveSessionEmployeeLabel } from "@/lib/crm/session-employee";
 
 const VENUES = [
   { value: "client_location", label: "Client location" },
@@ -165,6 +167,11 @@ export function MeetingFormDialog({
   const [touched, setTouched] = useState(false);
   const [mandateOpen, setMandateOpen] = useState(false);
   const [mandateMessage, setMandateMessage] = useState("");
+  const { user } = useAuthUser();
+
+  const hostLabel =
+    employees.find((e) => e.id === form.organizer_employee_id)?.label ||
+    resolveSessionEmployeeLabel(employees, user);
 
   useEffect(() => {
     if (!open) return;
@@ -175,18 +182,21 @@ export function MeetingFormDialog({
 
     void Promise.all([
       listBranchOptions(),
-      listEmployeeOptions(),
+      listCrmMemberOptions(),
       listCompanies().catch(() => [] as Company[]),
     ]).then(([branches, employeeOptions, companyRows]) => {
       setEmployees(employeeOptions);
       setCompanies(companyRows);
       const branchId = companyAccount?.branch_id || defaultBranchId || branches[0]?.id || "";
-      const hostId = companyAccount?.account_owner_id || employeeOptions[0]?.id || "";
+      const hostId =
+        resolveSessionEmployeeId(employeeOptions, user) ||
+        companyAccount?.account_owner_id ||
+        "";
       setForm(
         emptyForm(branchId, companyAccount?.id ?? "", hostId),
       );
     });
-  }, [open, companyAccount, defaultBranchId]);
+  }, [open, companyAccount, defaultBranchId, user]);
 
   const selectedAccount = useMemo(
     () => companies.find((c) => c.id === form.company_account_id) ?? companyAccount ?? null,
@@ -393,18 +403,15 @@ export function MeetingFormDialog({
           </FieldRow>
 
           <FieldRow label="Host">
-            <FinanceSelect
-              value={form.organizer_employee_id}
-              onChange={(e) => set("organizer_employee_id", e.target.value)}
-              className="h-9 rounded-none border-0 border-b border-border px-0 shadow-none focus-visible:border-primary focus-visible:ring-0"
-            >
-              <option value="">Select host</option>
-              {employees.map((e) => (
-                <option key={e.id} value={e.id}>
-                  {e.label}
-                </option>
-              ))}
-            </FinanceSelect>
+            <Input
+              value={hostLabel || "—"}
+              disabled
+              aria-readonly="true"
+              title="Set from your logged-in user account"
+              className={cn(
+                "h-9 rounded-none border-0 border-b border-border px-0 shadow-none",
+              )}
+            />
           </FieldRow>
 
           <FieldRow label="Tag Internal Member">

@@ -14,7 +14,7 @@ import { Button } from "@/components/ui/button";
 import { ApiClientError } from "@/services/api-client";
 import {
   getCompany,
-  listEmployeeOptions,
+  listCrmMemberOptions,
   listFollowups,
   type Company,
   type CrmFollowup,
@@ -64,7 +64,7 @@ export function FollowupsListPage({
     try {
       const [followups, employeeOptions, company] = await Promise.all([
         listFollowups(companyAccountId),
-        listEmployeeOptions().catch(() => [] as Option[]),
+        listCrmMemberOptions().catch(() => [] as Option[]),
         companyAccountId
           ? getCompany(companyAccountId).catch(() => null)
           : Promise.resolve(null),

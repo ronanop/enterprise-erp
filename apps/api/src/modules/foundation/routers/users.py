@@ -12,6 +12,8 @@ from modules.foundation.domain.value_objects import TenantContext
 from modules.foundation.schemas import (
     AssignRoleRequest,
     UserCreateRequest,
+    UserModulesResponse,
+    UserModulesUpdateRequest,
     UserResponse,
     UserUpdateRequest,
 )
@@ -29,7 +31,7 @@ def list_users(
     users = UserService(db).list_users(ctx.tenant_id)
     return APIResponse(
         message="Users retrieved",
-        data=[UserResponse(**u.__dict__) for u in users],
+        data=[UserService.to_response(u) for u in users],
     )
 
 
@@ -48,7 +50,7 @@ def create_user(
         created_by=ctx.user_id,
     )
     db.commit()
-    return APIResponse(message="User created", data=UserResponse(**user.__dict__))
+    return APIResponse(message="User created", data=UserService.to_response(user))
 
 
 @router.get("/{user_id}", response_model=APIResponse[UserResponse])
@@ -58,7 +60,7 @@ def get_user(
     db: Annotated[Session, Depends(get_db)],
 ) -> APIResponse[UserResponse]:
     user = UserService(db).get_user(ctx.tenant_id, user_id)
-    return APIResponse(message="User retrieved", data=UserResponse(**user.__dict__))
+    return APIResponse(message="User retrieved", data=UserService.to_response(user))
 
 
 @router.put("/{user_id}", response_model=APIResponse[UserResponse])
@@ -75,7 +77,7 @@ def update_user(
         **body.model_dump(exclude_unset=True),
     )
     db.commit()
-    return APIResponse(message="User updated", data=UserResponse(**user.__dict__))
+    return APIResponse(message="User updated", data=UserService.to_response(user))
 
 
 @router.delete("/{user_id}", response_model=APIResponse[None])
@@ -115,3 +117,38 @@ def revoke_sessions(
     UserService(db).revoke_all_sessions(ctx.tenant_id, user_id, revoked_by=ctx.user_id)
     db.commit()
     return APIResponse(message="Sessions revoked", data=None)
+
+
+@router.get("/{user_id}/modules", response_model=APIResponse[UserModulesResponse])
+def get_user_modules(
+    user_id: UUID,
+    ctx: Annotated[TenantContext, Depends(require_permission("foundation.user:read"))],
+    db: Annotated[Session, Depends(get_db)],
+) -> APIResponse[UserModulesResponse]:
+    service = UserService(db)
+    user, assigned, effective = service.get_user_modules(ctx.tenant_id, user_id)
+    return APIResponse(
+        message="User modules retrieved",
+        data=UserModulesResponse(
+            user_id=user.id,
+            assigned_module_keys=assigned,
+            effective_module_keys=effective,
+        ),
+    )
+
+
+@router.put("/{user_id}/modules", response_model=APIResponse[UserResponse])
+def set_user_modules(
+    user_id: UUID,
+    body: UserModulesUpdateRequest,
+    ctx: Annotated[TenantContext, Depends(require_permission("foundation.user:update"))],
+    db: Annotated[Session, Depends(get_db)],
+) -> APIResponse[UserResponse]:
+    user = UserService(db).set_user_modules(
+        tenant_id=ctx.tenant_id,
+        user_id=user_id,
+        module_keys=body.module_keys,
+        updated_by=ctx.user_id,
+    )
+    db.commit()
+    return APIResponse(message="User modules updated", data=UserService.to_response(user))

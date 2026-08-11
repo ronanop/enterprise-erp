@@ -30,6 +30,7 @@ import {
   SiteInstallationWorkflow,
 } from "@/components/projects/site-installation-workflow";
 import { useProjectsLookups } from "@/components/projects/use-projects-lookups";
+import { useAuthUser } from "@/hooks/use-auth-user";
 import { Button } from "@/components/ui/button";
 import { ApiClientError } from "@/services/api-client";
 import {
@@ -45,6 +46,7 @@ import {
 const LOOKUPS = ["employees", "customers", "departments"] as const;
 
 export function ProjectDetailPage({ projectId }: { projectId: string }) {
+  const { projectModuleAdmin } = useAuthUser();
   const [project, setProject] = useState<Project | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -135,13 +137,15 @@ export function ProjectDetailPage({ projectId }: { projectId: string }) {
             <RefreshCw className={`size-3.5 ${loading ? "animate-spin" : ""}`} />
             Refresh
           </Button>
-          <Link
-            href={`/projects/projects/${project.id}/edit`}
-            className="inline-flex h-8 cursor-pointer items-center gap-1.5 rounded-lg border border-border/80 bg-card px-3 text-sm font-medium shadow-sm transition-colors duration-200 hover:bg-muted"
-          >
-            <Pencil className="size-3.5" />
-            Edit
-          </Link>
+          {projectModuleAdmin ? (
+            <Link
+              href={`/projects/projects/${project.id}/edit`}
+              className="inline-flex h-8 cursor-pointer items-center gap-1.5 rounded-lg border border-border/80 bg-card px-3 text-sm font-medium shadow-sm transition-colors duration-200 hover:bg-muted"
+            >
+              <Pencil className="size-3.5" />
+              Edit
+            </Link>
+          ) : null}
         </div>
       </div>
 
@@ -151,43 +155,47 @@ export function ProjectDetailPage({ projectId }: { projectId: string }) {
           project.planned_start_date,
         )} → ${formatDate(project.planned_end_date)}`}
         actions={
-          <div className="flex flex-wrap items-center gap-2">
+          projectModuleAdmin ? (
+            <div className="flex flex-wrap items-center gap-2">
+              <FinanceStatusBadge status={project.status} />
+              {canSubmit ? (
+                <Button
+                  type="button"
+                  size="sm"
+                  className="cursor-pointer"
+                  disabled={busy}
+                  onClick={() => void runAction("submit")}
+                >
+                  Submit for approval
+                </Button>
+              ) : null}
+              {canApprove ? (
+                <Button
+                  type="button"
+                  size="sm"
+                  className="cursor-pointer"
+                  disabled={busy}
+                  onClick={() => void runAction("approve")}
+                >
+                  Approve
+                </Button>
+              ) : null}
+              {canClose ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="cursor-pointer"
+                  disabled={busy}
+                  onClick={() => void runAction("close")}
+                >
+                  Close
+                </Button>
+              ) : null}
+            </div>
+          ) : (
             <FinanceStatusBadge status={project.status} />
-            {canSubmit ? (
-              <Button
-                type="button"
-                size="sm"
-                className="cursor-pointer"
-                disabled={busy}
-                onClick={() => void runAction("submit")}
-              >
-                Submit for approval
-              </Button>
-            ) : null}
-            {canApprove ? (
-              <Button
-                type="button"
-                size="sm"
-                className="cursor-pointer"
-                disabled={busy}
-                onClick={() => void runAction("approve")}
-              >
-                Approve
-              </Button>
-            ) : null}
-            {canClose ? (
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="cursor-pointer"
-                disabled={busy}
-                onClick={() => void runAction("close")}
-              >
-                Close
-              </Button>
-            ) : null}
-          </div>
+          )
         }
       />
 

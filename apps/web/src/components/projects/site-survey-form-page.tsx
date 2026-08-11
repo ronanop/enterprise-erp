@@ -31,6 +31,7 @@ import {
   resolveStageOwnerDisplay,
   stageOwnerBannerSection,
 } from "@/components/projects/site-stage-assignments";
+import { useSiteStageFormReadOnly } from "@/components/projects/site-stage-form-read-only-context";
 import {
   advanceSiteInstallation,
   getProject,
@@ -72,6 +73,7 @@ function dateOrNull(v: string | undefined): string | null {
 }
 
 export function SiteSurveyFormPage({ projectId }: { projectId: string }) {
+  const adminProgressView = useSiteStageFormReadOnly();
   const load = useCallback(async () => {
     const [project, site, lookups] = await Promise.all([
       getProject(projectId),
@@ -159,7 +161,7 @@ export function SiteSurveyFormPage({ projectId }: { projectId: string }) {
         await advanceSiteInstallation(projectId, "complete_survey");
       }
 
-      return `/projects/projects/${projectId}/scm`;
+      return `/projects/my-jobs`;
     },
     [projectId],
   );
@@ -170,7 +172,7 @@ export function SiteSurveyFormPage({ projectId }: { projectId: string }) {
       stageOwnerBannerSection(),
       {
         title: "Survey",
-        subtitle: "Step 3 — Site readiness checks. Next: SCM / Logistics.",
+        subtitle: "Step 3 — Site readiness checks for your assigned survey work.",
         icon: MapPin,
         fields: [
           {
@@ -265,10 +267,16 @@ export function SiteSurveyFormPage({ projectId }: { projectId: string }) {
   return (
     <ProjectsRecordForm
       title="Survey"
-      description="Step 3 — Site readiness checks. Next: SCM / Logistics."
-      backHref={`/projects/projects/${projectId}`}
-      backLabel="Back to project"
-      submitLabel="Save & continue to SCM"
+      description="Complete your assigned survey checks for this site."
+      backHref={
+        adminProgressView ? `/projects/projects/${projectId}` : `/projects/my-jobs`
+      }
+      backLabel={adminProgressView ? "Back to project" : "Back to My Jobs"}
+      readOnly={adminProgressView}
+      readOnlyBanner={
+        adminProgressView ? "Viewing completed step progress (read-only)." : undefined
+      }
+      submitLabel="Save"
       sections={sections}
       emptyValues={EMPTY}
       load={load}

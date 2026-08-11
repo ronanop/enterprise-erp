@@ -31,6 +31,7 @@ import {
   UserRound,
 } from "lucide-react";
 
+import { SidebarAccountSection } from "@/components/layout/sidebar-account-section";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -41,6 +42,7 @@ import {
   type CrmSidebarFocus,
 } from "@/lib/crm-sidebar-focus";
 import { cn } from "@/lib/utils";
+import { useAuthUser } from "@/hooks/use-auth-user";
 
 type CrmNavItem = {
   title: string;
@@ -160,6 +162,7 @@ export function CrmSidebar() {
   const pathname = usePathname();
   const [collapsed, setCollapsed] = useState(false);
   const [query, setQuery] = useState("");
+  const { signedIn } = useAuthUser();
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -175,21 +178,37 @@ export function CrmSidebar() {
         collapsed ? "w-[72px]" : "w-[260px]",
       )}
     >
-      <div className={cn("flex items-center gap-3 px-4 py-5", collapsed && "justify-center px-2")}>
-        <div className="flex size-9 items-center justify-center rounded-xl bg-sidebar-primary text-sidebar-primary-foreground shadow-sm">
-          <Handshake className="size-4" aria-hidden />
-        </div>
-        {!collapsed ? (
-          <div className="min-w-0">
-            <p className="truncate text-sm font-medium tracking-tight text-sidebar-foreground">
-              Sales CRM
-            </p>
-            <p className="truncate text-[11px] text-sidebar-foreground/55">
-              {CRM_NAV.length} workspace panes
-            </p>
+      {signedIn ? (
+        <SidebarAccountSection collapsed={collapsed}>
+          <div className="flex items-center gap-2">
+            <Handshake className="size-3.5 shrink-0 text-sidebar-primary" aria-hidden />
+            <div className="min-w-0">
+              <p className="truncate text-xs font-medium text-sidebar-foreground">Sales CRM</p>
+              <p className="truncate text-[10px] text-sidebar-foreground/55">
+                {CRM_NAV.length} workspace panes
+              </p>
+            </div>
           </div>
-        ) : null}
-      </div>
+        </SidebarAccountSection>
+      ) : (
+        <div className={cn("px-4 py-4", collapsed && "px-2")}>
+          <div className={cn("flex items-center gap-3", collapsed && "justify-center")}>
+            <div className="flex size-9 items-center justify-center rounded-xl bg-sidebar-primary text-sidebar-primary-foreground shadow-sm">
+              <Handshake className="size-4" aria-hidden />
+            </div>
+            {!collapsed ? (
+              <div className="min-w-0">
+                <p className="truncate text-sm font-medium tracking-tight text-sidebar-foreground">
+                  Sales CRM
+                </p>
+                <p className="truncate text-[11px] text-sidebar-foreground/55">
+                  {CRM_NAV.length} workspace panes
+                </p>
+              </div>
+            ) : null}
+          </div>
+        </div>
+      )}
 
       {!collapsed ? (
         <div className="px-3 pb-3">

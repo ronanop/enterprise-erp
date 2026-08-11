@@ -19,10 +19,12 @@ export function AppShell({ children }: AppShellProps) {
   const standalone = useStandaloneChrome();
   const isCrm = pathname === "/crm" || pathname.startsWith("/crm/");
   const isProjects = pathname === "/projects" || pathname.startsWith("/projects/");
+  const useModulePrimarySidebar = standalone && (isCrm || isProjects);
+  const showAppSidebar = !standalone || !useModulePrimarySidebar;
 
   return (
     <div className="flex min-h-dvh w-full max-w-[100dvw] overflow-x-clip bg-background">
-      {!standalone ? <AppSidebar /> : null}
+      {showAppSidebar ? <AppSidebar /> : null}
       {standalone && isCrm ? <CrmSidebar /> : null}
       {standalone && isProjects ? <ProjectsSidebar /> : null}
       <div className="flex min-w-0 flex-1 flex-col overflow-x-clip">

@@ -13,6 +13,7 @@ type ConfirmDialogProps = {
   cancelLabel?: string;
   tone?: "default" | "destructive";
   busy?: boolean;
+  confirmDisabled?: boolean;
   onConfirm: () => void;
   onCancel: () => void;
   children?: ReactNode;
@@ -26,6 +27,7 @@ export function ConfirmDialog({
   cancelLabel = "Cancel",
   tone = "default",
   busy,
+  confirmDisabled,
   onConfirm,
   onCancel,
   children,
@@ -60,7 +62,7 @@ export function ConfirmDialog({
             type="button"
             variant={tone === "destructive" ? "destructive" : "default"}
             onClick={onConfirm}
-            disabled={busy}
+            disabled={busy || confirmDisabled}
             className={cn("cursor-pointer")}
           >
             {busy ? "Working…" : confirmLabel}

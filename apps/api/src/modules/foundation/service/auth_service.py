@@ -8,11 +8,15 @@ from sqlalchemy.orm import Session
 from core.config import settings
 from core.exceptions import UnauthorizedException
 from core.redis import SessionStore
-from modules.foundation.domain.exceptions import AccountLockedException, InvalidCredentialsException
+from modules.foundation.domain.exceptions import (
+    AccountLockedException,
+    InvalidCredentialsException,
+)
 from modules.foundation.models.security import SecUser
 from modules.foundation.repository.session_repository import SessionRepository
 from modules.foundation.repository.user_repository import UserRepository
 from modules.foundation.service.audit_service import AuditService
+from modules.foundation.service.microsoft_oauth_service import MicrosoftOAuthService
 from security.jwt import JWTService
 from security.password import PasswordHasher
 
@@ -76,6 +80,58 @@ class AuthService:
         if not totp.verify(otp, valid_window=1):
             raise InvalidCredentialsException()
         return self._issue_tokens(user, ip_address=ip_address, user_agent=user_agent)
+
+    def login_with_microsoft(
+        self,
+        *,
+        email: str,
+        ip_address: str | None = None,
+        user_agent: str | None = None,
+    ) -> dict:
+        user = self._users.get_active_by_email(email)
+        if user is None:
+            raise InvalidCredentialsException("No ERP account is linked to this Microsoft identity")
+
+        if user.locked_until and user.locked_until > datetime.now(timezone.utc):
+            raise AccountLockedException()
+
+        return self._issue_tokens(user, ip_address=ip_address, user_agent=user_agent)
+
+    def complete_microsoft_oauth(
+        self,
+        *,
+        code: str,
+        state: str,
+        ip_address: str | None = None,
+        user_agent: str | None = None,
+    ) -> tuple[str, str]:
+        oauth = MicrosoftOAuthService()
+        stored = self._store.pop_oauth_state(state)
+        if stored is None:
+            raise InvalidCredentialsException("Microsoft sign-in session expired. Try again.")
+
+        return_to = (
+            stored.get("return_to") if isinstance(stored.get("return_to"), str) else "/"
+        )
+        claims = oauth.exchange_authorization_code(code)
+        email = MicrosoftOAuthService.email_from_claims(claims)
+        if not email:
+            raise InvalidCredentialsException("Microsoft account did not include an email address")
+
+        tokens = self.login_with_microsoft(
+            email=email,
+            ip_address=ip_address,
+            user_agent=user_agent,
+        )
+        exchange_code = oauth.create_exchange_code()
+        self._store.set_oauth_exchange(exchange_code, {**tokens, "return_to": return_to})
+        return exchange_code, return_to
+
+    def redeem_microsoft_exchange(self, exchange_code: str) -> dict:
+        payload = self._store.pop_oauth_exchange(exchange_code)
+        if payload is None:
+            raise InvalidCredentialsException("Sign-in code expired or already used")
+        return payload
 
     def refresh(self, refresh_token: str) -> dict:
         payload = self._jwt.decode_token(refresh_token, expected_type="refresh")
@@ -159,15 +215,24 @@ class AuthService:
             token=refresh,
             expires_at=datetime.now(timezone.utc) + timedelta(days=refresh_days),
         )
-        self._store.set_session(
-            session.id,
-            {
-                "user_id": str(user.id),
-                "tenant_id": str(user.tenant_id),
-                "ip": ip_address,
-                "user_agent": user_agent,
-            },
+        from modules.foundation.service.org_context_service import OrgContextService
+
+        company_id, branch_id = OrgContextService(self._db).resolve_company_and_branch(
+            user_id=user.id,
+            tenant_id=user.tenant_id,
+            user_type=user.user_type,
         )
+        session_payload: dict[str, str | None] = {
+            "user_id": str(user.id),
+            "tenant_id": str(user.tenant_id),
+            "ip": ip_address,
+            "user_agent": user_agent,
+        }
+        if company_id:
+            session_payload["company_id"] = str(company_id)
+        if branch_id:
+            session_payload["branch_id"] = str(branch_id)
+        self._store.set_session(session.id, session_payload)
         self._users.record_successful_login(user)
         self._audit.log_security_event(
             tenant_id=user.tenant_id,

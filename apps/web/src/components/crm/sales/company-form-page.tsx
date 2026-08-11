@@ -1,11 +1,12 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, Building2, Copy, FileText, MapPin } from "lucide-react";
 
 import { CrmErrorBanner, CrmPage, CrmSection } from "@/components/crm/crm-ui";
+import { CrmSessionEmployeeField } from "@/components/crm/sales/crm-session-employee-field";
 import {
   FinanceField,
   FinanceSelect,
@@ -18,12 +19,17 @@ import {
 import { PageHeader } from "@/components/layout/page-header";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { useAuthUser } from "@/hooks/use-auth-user";
+import {
+  resolveSessionEmployeeId,
+  resolveSessionEmployeeLabel,
+} from "@/lib/crm/session-employee";
 import { ApiClientError } from "@/services/api-client";
 import {
   createCompany,
   getCompany,
   listBranchOptions,
-  listEmployeeOptions,
+  listCrmMemberOptions,
   peekNextCompanyAccountNumber,
   updateCompany,
   type Company,
@@ -78,6 +84,7 @@ const EMPTY_FORM: CompanyFormInput = {
 export function CompanyFormPage({ companyId }: { companyId?: string }) {
   const router = useRouter();
   const isEdit = Boolean(companyId);
+  const { user } = useAuthUser();
   const [company, setCompany] = useState<Company | null>(null);
   const [form, setForm] = useState<CompanyFormInput>(EMPTY_FORM);
   const [otherSource, setOtherSource] = useState("");
@@ -98,7 +105,7 @@ export function CompanyFormPage({ companyId }: { companyId?: string }) {
     try {
       const [branches, emps, companyRow] = await Promise.all([
         listBranchOptions(),
-        listEmployeeOptions(),
+        listCrmMemberOptions(),
         companyId ? getCompany(companyId) : Promise.resolve(null),
       ]);
       setEmployees(emps);
@@ -138,9 +145,11 @@ export function CompanyFormPage({ companyId }: { companyId?: string }) {
         setOtherSource(knownSource ? "" : companyRow.source);
       } else {
         setCompany(null);
+        const sessionOwnerId = resolveSessionEmployeeId(emps, user);
         setForm({
           ...EMPTY_FORM,
           branch_id: branches[0]?.id ?? "",
+          account_owner_id: sessionOwnerId,
         });
         setOtherSource("");
         const nextNo = await peekNextCompanyAccountNumber().catch(() => "");
@@ -151,7 +160,15 @@ export function CompanyFormPage({ companyId }: { companyId?: string }) {
     } finally {
       setLoading(false);
     }
-  }, [companyId]);
+  }, [companyId, user]);
+
+  const accountManagerLabel = useMemo(() => {
+    if (form.account_owner_id) {
+      const fromList = employees.find((e) => e.id === form.account_owner_id)?.label;
+      if (fromList) return fromList;
+    }
+    return resolveSessionEmployeeLabel(employees, user);
+  }, [employees, form.account_owner_id, user]);
 
   useEffect(() => {
     void load();
@@ -270,19 +287,10 @@ export function CompanyFormPage({ companyId }: { companyId?: string }) {
       <CrmSection title="Account Information" icon={Building2}>
         <div className="grid gap-4 lg:grid-cols-2 lg:gap-x-10">
           <div className="space-y-3">
-            <FinanceField label="Account Manager Owner">
-              <FinanceSelect
-                value={form.account_owner_id ?? ""}
-                onChange={(e) => set("account_owner_id", e.target.value)}
-              >
-                <option value="">Unassigned</option>
-                {employees.map((employee) => (
-                  <option key={employee.id} value={employee.id}>
-                    {employee.label}
-                  </option>
-                ))}
-              </FinanceSelect>
-            </FinanceField>
+            <CrmSessionEmployeeField
+              label="Account Manager Owner"
+              value={accountManagerLabel}
+            />
             <FinanceField label="Company Name *">
               <Input value={form.customer_name} onChange={(e) => set("customer_name", e.target.value)} />
             </FinanceField>

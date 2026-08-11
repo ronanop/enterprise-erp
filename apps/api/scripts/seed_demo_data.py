@@ -101,26 +101,11 @@ MODULE_DEMO_USERS = [
 
 DEMO_USERS = [
     {
-        "email": "admin@example.com",
-        "display_name": "Platform Admin",
+        "email": "techbank@cachedigitech.com",
+        "display_name": "TechBank",
         "user_type": "super_admin",
         "role_code": "SUPER_ADMIN",
     },
-    {
-        "email": "tenant.admin@example.com",
-        "display_name": "Tenant Admin",
-        "user_type": "tenant_admin",
-        "role_code": "TENANT_ADMIN",
-    },
-    *[
-        {
-            "email": f"{module_key}.user@example.com",
-            "display_name": display_name,
-            "user_type": "employee",
-            "role_code": "TENANT_ADMIN",
-        }
-        for module_key, display_name in MODULE_DEMO_USERS
-    ],
 ]
 
 

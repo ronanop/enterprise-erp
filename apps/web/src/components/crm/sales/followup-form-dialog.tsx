@@ -15,6 +15,8 @@ import {
 } from "@/components/crm/sales/required-fields-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { useAuthUser } from "@/hooks/use-auth-user";
+import { resolveSessionEmployeeId, resolveSessionEmployeeLabel } from "@/lib/crm/session-employee";
 import { ApiClientError } from "@/services/api-client";
 import {
   createAttachment,
@@ -22,7 +24,7 @@ import {
   createTask,
   fileToBase64,
   listBranchOptions,
-  listEmployeeOptions,
+  listCrmMemberOptions,
   listOpportunities,
   type Company,
   type CrmFollowup,
@@ -124,6 +126,11 @@ export function FollowupFormDialog({
   const [mandateMessage, setMandateMessage] = useState("");
   const [pendingFiles, setPendingFiles] = useState<File[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const { user } = useAuthUser();
+
+  const teamMemberLabel =
+    employees.find((employee) => employee.id === form.owner_employee_id)?.label ||
+    resolveSessionEmployeeLabel(employees, user);
 
   useEffect(() => {
     if (!open) return;
@@ -131,7 +138,7 @@ export function FollowupFormDialog({
     void (async () => {
       const [branchRows, employeeRows, opportunityRows] = await Promise.all([
         listBranchOptions().catch(() => [] as Option[]),
-        listEmployeeOptions().catch(() => [] as Option[]),
+        listCrmMemberOptions().catch(() => [] as Option[]),
         resolvedAccountId
           ? listOpportunities({ company_account_id: resolvedAccountId }).catch(() => [] as Opportunity[])
           : Promise.resolve([] as Opportunity[]),
@@ -146,8 +153,8 @@ export function FollowupFormDialog({
         branchRows[0]?.id ||
         "";
       const ownerId =
+        resolveSessionEmployeeId(employeeRows, user) ||
         companyAccount?.account_owner_id ||
-        employeeRows[0]?.id ||
         "";
       const presetOpportunity =
         opportunityId && opportunityRows.some((row) => row.id === opportunityId)
@@ -168,7 +175,7 @@ export function FollowupFormDialog({
     return () => {
       cancelled = true;
     };
-  }, [open, companyAccount, companyAccountId, defaultBranchId, opportunityId, resolvedAccountId]);
+  }, [open, companyAccount, companyAccountId, defaultBranchId, opportunityId, resolvedAccountId, user]);
 
   if (!open) return null;
 
@@ -374,17 +381,13 @@ export function FollowupFormDialog({
           </FieldRow>
 
           <FieldRow label="Internal Team Member" required>
-            <FinanceSelect
-              value={form.owner_employee_id}
-              onChange={(e) => setForm((f) => ({ ...f, owner_employee_id: e.target.value }))}
-            >
-              <option value="">Select team member</option>
-              {employees.map((employee) => (
-                <option key={employee.id} value={employee.id}>
-                  {employee.label}
-                </option>
-              ))}
-            </FinanceSelect>
+            <Input
+              value={teamMemberLabel || "—"}
+              disabled
+              aria-readonly="true"
+              title="Set from your logged-in user account"
+              className="h-9 rounded-none border-0 border-b border-border px-0 shadow-none"
+            />
           </FieldRow>
 
           {branches.length > 1 ? (

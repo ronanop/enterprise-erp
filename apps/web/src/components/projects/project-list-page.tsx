@@ -12,6 +12,7 @@ import {
   type RecordColumn,
 } from "@/components/projects/projects-record-list";
 import { useProjectsLookups } from "@/components/projects/use-projects-lookups";
+import { useAuthUser } from "@/hooks/use-auth-user";
 import {
   formatDate,
   formatInr,
@@ -22,6 +23,7 @@ import {
 const LOOKUPS = ["employees", "customers"] as const;
 
 export function ProjectListPage() {
+  const { projectModuleAdmin } = useAuthUser();
   const { loadLookups, labels } = useProjectsLookups(LOOKUPS);
 
   const load = useCallback(async () => {
@@ -107,11 +109,15 @@ export function ProjectListPage() {
   return (
     <ProjectsRecordList
       title="Projects"
-      description="Delivery portfolio — every project from request through approval, execution, and closure. Open a project to manage its WBS, resources, budget, and risks."
+      description={
+        projectModuleAdmin
+          ? "Delivery portfolio — every project from request through approval, execution, and closure. Open a project to manage its WBS, resources, budget, and risks."
+          : "Projects you are assigned to. Open My Jobs to complete your delivery steps."
+      }
       panelTitle="Portfolio"
-      panelSubtitle="Project register"
+      panelSubtitle={projectModuleAdmin ? "Project register" : "Assigned projects"}
       icon={FolderKanban}
-      newHref="/projects/projects/new"
+      newHref={projectModuleAdmin ? "/projects/projects/new" : undefined}
       newLabel="New Project"
       searchPlaceholder="Search projects…"
       loadingMessage="Loading projects…"

@@ -44,7 +44,7 @@ import {
   getCompany,
   listAttachmentsByCategory,
   listContacts,
-  listEmployeeOptions,
+  listCrmMemberOptions,
   listFollowups,
   listMeetings,
   listOpportunities,
@@ -229,7 +229,7 @@ export function CompanyDetailPage({ companyAccountId }: { companyAccountId: stri
       ] = await Promise.all([
         getCompany(companyAccountId),
         listSalesLeads(companyAccountId).catch(() => [] as SalesLead[]),
-        listEmployeeOptions().catch(() => [] as Option[]),
+        listCrmMemberOptions().catch(() => [] as Option[]),
         listMeetings(companyAccountId).catch(() => [] as CrmMeeting[]),
         listFollowups(companyAccountId).catch(() => [] as CrmFollowup[]),
         listOpportunities({ company_account_id: companyAccountId }).catch(() => [] as Opportunity[]),

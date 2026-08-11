@@ -20,6 +20,15 @@ class RefreshRequest(BaseModel):
     refresh_token: str
 
 
+class MicrosoftExchangeRequest(BaseModel):
+    code: str = Field(min_length=8)
+
+
+class MicrosoftLoginConfigResponse(BaseModel):
+    enabled: bool
+    authorization_path: str = "/auth/microsoft/login"
+
+
 class TokenResponse(BaseModel):
     access_token: str | None = None
     refresh_token: str | None = None
@@ -27,6 +36,7 @@ class TokenResponse(BaseModel):
     session_id: str | None = None
     mfa_required: bool = False
     mfa_challenge_token: str | None = None
+    redirect_to: str | None = None
 
 
 class TenantCreateRequest(BaseModel):
@@ -73,6 +83,17 @@ class UserResponse(BaseModel):
     status: str
     mfa_enabled: bool
     role_ids: list[UUID] = Field(default_factory=list)
+    assigned_module_keys: list[str] = Field(default_factory=list)
+
+
+class UserModulesUpdateRequest(BaseModel):
+    module_keys: list[str] = Field(default_factory=list)
+
+
+class UserModulesResponse(BaseModel):
+    user_id: UUID
+    assigned_module_keys: list[str] = Field(default_factory=list)
+    effective_module_keys: list[str] = Field(default_factory=list)
 
 
 class RoleCreateRequest(BaseModel):
@@ -104,6 +125,15 @@ class PermissionResponse(BaseModel):
     action: str
     module: str
     description: str | None = None
+
+
+class ModuleMemberOption(BaseModel):
+    """Selectable team member (master_employee id) for module-scoped pickers."""
+
+    id: UUID
+    label: str
+    email: str
+    user_id: UUID
 
 
 class AssignRoleRequest(BaseModel):

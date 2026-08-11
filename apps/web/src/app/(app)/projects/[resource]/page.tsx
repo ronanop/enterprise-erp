@@ -5,6 +5,8 @@ import { ProjectBudgetListPage } from "@/components/projects/project-budget-list
 import { ProjectCostListPage } from "@/components/projects/project-cost-list-page";
 import { ProjectDocumentListPage } from "@/components/projects/project-document-list-page";
 import { ProjectIssueListPage } from "@/components/projects/project-issue-list-page";
+import { ProjectFollowUpsPage } from "@/components/projects/project-follow-ups-page";
+import { ProjectMyJobsPage } from "@/components/projects/project-my-jobs-page";
 import { ProjectListPage } from "@/components/projects/project-list-page";
 import { ProjectMilestoneListPage } from "@/components/projects/project-milestone-list-page";
 import { ProjectPhaseListPage } from "@/components/projects/project-phase-list-page";
@@ -44,6 +46,10 @@ export default async function ProjectsResourcePage({ params }: PageProps) {
   }
 
   switch (resourceKey) {
+    case "my-jobs":
+      return <ProjectMyJobsPage />;
+    case "follow-ups":
+      return <ProjectFollowUpsPage />;
     case "projects":
       return <ProjectListPage />;
     case "project-phases":

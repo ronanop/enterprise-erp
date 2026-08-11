@@ -12,6 +12,7 @@ from modules.project.models import PrjProjectPhase
 from modules.project.repository.project_phase_repository import ProjectPhaseRepository
 from modules.project.service.document_number_service import DocumentNumberService
 from modules.project.service.engines import ProjectPhaseEngine
+from modules.project.service.project_assignment_scope import ProjectAssignmentScope
 from modules.project.service.project_scope_validator import ProjectScopeValidator
 
 
@@ -22,10 +23,12 @@ class PhaseService:
         self._numbers = DocumentNumberService(db)
         self._engine = ProjectPhaseEngine()
         self._audit = AuditService(db)
+        self._assignment = ProjectAssignmentScope(db)
 
     def list(self, ctx: TenantContext, company_id: UUID | None = None):
         cid = self._scope.resolve_company_id(ctx, company_id)
-        return self._repo.list_rows(ctx, cid)
+        rows = self._repo.list_rows(ctx, cid)
+        return self._assignment.filter_project_child_rows(ctx, cid, rows)
 
     def get(self, ctx: TenantContext, row_id: UUID) -> PrjProjectPhase:
         row = self._repo.get(ctx, row_id)

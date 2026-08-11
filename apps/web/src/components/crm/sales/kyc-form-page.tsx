@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 
 import { CrmErrorBanner, CrmPage, CrmSection, CRM_TABLE_HEAD_CELL, CRM_TABLE_HEAD_ROW } from "@/components/crm/crm-ui";
+import { CrmSessionEmployeeField } from "@/components/crm/sales/crm-session-employee-field";
 import { KycContactDesignationField } from "@/components/crm/sales/kyc-contact-designation-field";
 import { KycTableProductField } from "@/components/crm/sales/kyc-table-product-field";
 import {
@@ -29,6 +30,8 @@ import {
 import { PageHeader } from "@/components/layout/page-header";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { useAuthUser } from "@/hooks/use-auth-user";
+import { resolveSessionEmployeeId, resolveSessionEmployeeLabel } from "@/lib/crm/session-employee";
 import {
   emptyKycFormData,
   emptyKycContactRow,
@@ -46,7 +49,7 @@ import {
   createKycRecord,
   getCompany,
   getKycRecord,
-  listEmployeeOptions,
+  listCrmMemberOptions,
   updateKycRecord,
   type Company,
   type Option,
@@ -132,6 +135,7 @@ function parseKycFormData(raw: Record<string, unknown>, fallback: CrmKycFormData
 export function KycFormPage({ companyAccountId, kycId }: KycFormPageProps) {
   const router = useRouter();
   const isEdit = Boolean(kycId);
+  const { user } = useAuthUser();
 
   const [company, setCompany] = useState<Company | null>(null);
   const [form, setForm] = useState<CrmKycFormData>(() => emptyKycFormData());
@@ -159,7 +163,7 @@ export function KycFormPage({ companyAccountId, kycId }: KycFormPageProps) {
       const [companyRow, kycRow, employeeOptions] = await Promise.all([
         companyAccountId ? getCompany(companyAccountId) : Promise.resolve(null),
         kycId ? getKycRecord(kycId) : Promise.resolve(null),
-        listEmployeeOptions(),
+        listCrmMemberOptions(),
       ]);
 
       setEmployees(employeeOptions);
@@ -175,6 +179,10 @@ export function KycFormPage({ companyAccountId, kycId }: KycFormPageProps) {
         accountId = companyRow.id;
         branch = companyRow.branch_id;
         owner = companyRow.account_owner_id ?? "";
+        if (!isEdit) {
+          const sessionOwner = resolveSessionEmployeeId(employeeOptions, user);
+          if (sessionOwner) owner = sessionOwner;
+        }
         formBase = emptyKycFormData(
           companyRow.customer_name,
           `${companyRow.customer_name} (${companyRow.account_number})`,
@@ -198,6 +206,8 @@ export function KycFormPage({ companyAccountId, kycId }: KycFormPageProps) {
         selectedQuoteId = kycRow.quote_id ?? "";
         accountId = kycRow.company_account_id;
         formBase = parseKycFormData(kycRow.form_data, formBase);
+      } else if (!owner) {
+        owner = resolveSessionEmployeeId(employeeOptions, user);
       }
 
       setCompanyAccountIdState(accountId);
@@ -211,7 +221,15 @@ export function KycFormPage({ companyAccountId, kycId }: KycFormPageProps) {
     } finally {
       setLoading(false);
     }
-  }, [companyAccountId, kycId]);
+  }, [companyAccountId, kycId, isEdit, user]);
+
+  const kycOwnerLabel = useMemo(() => {
+    if (ownerEmployeeId) {
+      const fromList = employees.find((e) => e.id === ownerEmployeeId)?.label;
+      if (fromList) return fromList;
+    }
+    return resolveSessionEmployeeLabel(employees, user);
+  }, [employees, ownerEmployeeId, user]);
 
   useEffect(() => {
     void load();
@@ -410,19 +428,7 @@ export function KycFormPage({ companyAccountId, kycId }: KycFormPageProps) {
               />
             </div>
           </FinanceField>
-          <FinanceField label="KYC Owner *">
-            <FinanceSelect
-              value={ownerEmployeeId}
-              onChange={(e) => setOwnerEmployeeId(e.target.value)}
-            >
-              <option value="">Select owner</option>
-              {employees.map((employee) => (
-                <option key={employee.id} value={employee.id}>
-                  {employee.label}
-                </option>
-              ))}
-            </FinanceSelect>
-          </FinanceField>
+          <CrmSessionEmployeeField label="KYC Owner" value={kycOwnerLabel} required />
           <FinanceField label="TAN">
             <Input value={form.tan} onChange={(e) => setField("tan", e.target.value)} />
           </FinanceField>

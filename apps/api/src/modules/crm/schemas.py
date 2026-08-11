@@ -1370,6 +1370,15 @@ class CrmApprovalUserOption(BaseModel):
     email: str
 
 
+class CrmMemberOption(BaseModel):
+    """Selectable CRM team member (master_employee id for owner/assignee fields)."""
+
+    id: UUID
+    label: str
+    email: str
+    user_id: UUID
+
+
 class ApprovalTaskDecisionRequest(BaseModel):
     decision: str = Field(pattern="^(approved|rejected)$")
     remark: str | None = None

@@ -40,6 +40,7 @@ import {
   resolveStageOwnerDisplay,
   stageOwnerBannerSection,
 } from "@/components/projects/site-stage-assignments";
+import { useSiteStageFormReadOnly } from "@/components/projects/site-stage-form-read-only-context";
 
 const EMPTY_LINES = serializeTypeQtyLines([{ type: "", quantity: "", date: "" }]);
 
@@ -89,6 +90,7 @@ function isRackOnly(values: FormValues): boolean {
 }
 
 export function SiteScmFormPage({ projectId }: { projectId: string }) {
+  const adminProgressView = useSiteStageFormReadOnly();
   const load = useCallback(async () => {
     const [project, site, lookups] = await Promise.all([
       getProject(projectId),
@@ -186,7 +188,7 @@ export function SiteScmFormPage({ projectId }: { projectId: string }) {
         await advanceSiteInstallation(projectId, "complete_scm");
       }
 
-      return `/projects/projects/${projectId}/installation`;
+      return `/projects/my-jobs`;
     },
     [projectId],
   );
@@ -372,9 +374,15 @@ export function SiteScmFormPage({ projectId }: { projectId: string }) {
     <ProjectsRecordForm
       title="SCM / Logistics"
       description="Step 4 — Track MO request, warehouse and on-site delivery for in-scope materials, IM material, and handover."
-      backHref={`/projects/projects/${projectId}`}
-      backLabel="Back to project"
-      submitLabel="Complete SCM"
+      backHref={
+        adminProgressView ? `/projects/projects/${projectId}` : `/projects/my-jobs`
+      }
+      backLabel={adminProgressView ? "Back to project" : "Back to My Jobs"}
+      readOnly={adminProgressView}
+      readOnlyBanner={
+        adminProgressView ? "Viewing completed step progress (read-only)." : undefined
+      }
+      submitLabel="Save"
       sections={sections}
       emptyValues={EMPTY}
       load={load}

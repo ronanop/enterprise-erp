@@ -30,6 +30,7 @@ import {
   resolveStageOwnerDisplay,
   stageOwnerBannerSection,
 } from "@/components/projects/site-stage-assignments";
+import { useSiteStageFormReadOnly } from "@/components/projects/site-stage-form-read-only-context";
 
 const EMPTY: FormValues = {
   ...INTAKE_SUMMARY_EMPTY,
@@ -55,6 +56,7 @@ function dateOrEmpty(v: string | null | undefined): string {
 }
 
 export function SiteAcceptanceFormPage({ projectId }: { projectId: string }) {
+  const adminProgressView = useSiteStageFormReadOnly();
   const [deliveryType, setDeliveryType] = useState("server_os_rack");
   const needsHwat = deliveryNeedsHwat(deliveryType);
   const showOsStatus = deliveryIncludesOs(deliveryType);
@@ -119,7 +121,7 @@ export function SiteAcceptanceFormPage({ projectId }: { projectId: string }) {
         await advanceSiteInstallation(projectId, "complete_acceptance");
       }
 
-      return `/projects/projects/${projectId}`;
+      return `/projects/my-jobs`;
     },
     [deliveryType, projectId],
   );
@@ -217,9 +219,15 @@ export function SiteAcceptanceFormPage({ projectId }: { projectId: string }) {
           ? "Step 6 — Complete HWAT, Circle sign-off, and Handover to Application Team."
           : "Step 6 — Rack Installation only — complete Handover to Application Team to close."
       }
-      backHref={`/projects/projects/${projectId}`}
-      backLabel="Back to project"
-      submitLabel="Complete Acceptance"
+      backHref={
+        adminProgressView ? `/projects/projects/${projectId}` : `/projects/my-jobs`
+      }
+      backLabel={adminProgressView ? "Back to project" : "Back to My Jobs"}
+      readOnly={adminProgressView}
+      readOnlyBanner={
+        adminProgressView ? "Viewing completed step progress (read-only)." : undefined
+      }
+      submitLabel="Save"
       sections={sections}
       emptyValues={EMPTY}
       load={load}

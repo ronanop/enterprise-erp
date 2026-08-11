@@ -29,6 +29,7 @@ class EmployeeRepository(MasterScopedRepository):
             stmt = stmt.where(MasterEmployee.company_id == company_id)
         if branch_id:
             stmt = stmt.where(MasterEmployee.branch_id == branch_id)
+        stmt = stmt.where(~MasterEmployee.email.ilike("%@example.com"))
         return [self._to_entity(r) for r in self.db.scalars(stmt).all()]
 
     def get_by_id(self, ctx: TenantContext, employee_id: UUID) -> EmployeeEntity | None:

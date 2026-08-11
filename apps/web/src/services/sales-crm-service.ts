@@ -1497,6 +1497,17 @@ export async function listEmployeeOptions(): Promise<Option[]> {
   }));
 }
 
+/** CRM module–assigned users with linked employee records (for owner/assignee pickers). */
+export async function listCrmMemberOptions(): Promise<Option[]> {
+  const res = await resourceService.list("/crm/members");
+  const rows = asArray(res.data as Record<string, unknown>[] | Record<string, unknown> | null);
+  return rows.map((r) => ({
+    id: String(r.id),
+    label: String(r.label ?? r.id),
+    email: r.email ? String(r.email) : undefined,
+  }));
+}
+
 // ---------------------------------------------------------------------------
 // KYC records
 // ---------------------------------------------------------------------------

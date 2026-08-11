@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
 from uuid import UUID
 
 from sqlalchemy.orm import Session
 
-from core.exceptions import ConflictException, NotFoundException
+from core.exceptions import ConflictException, ForbiddenException, NotFoundException
 from modules.foundation.domain.value_objects import TenantContext
 from modules.foundation.service.audit_service import AuditService
 from modules.project.domain.enums import (
@@ -34,6 +34,8 @@ from modules.project.service.notification_service import NotificationService
 from modules.project.repository.project_notification_repository import (
     ProjectNotificationRepository,
 )
+from modules.project.service.project_assignment_scope import ProjectAssignmentScope
+from modules.project.service.project_module_admin import ProjectModuleAdminService
 from modules.project.service.project_scope_validator import ProjectScopeValidator
 
 
@@ -48,21 +50,26 @@ class SiteInstallationService:
         self._scope = ProjectScopeValidator(db)
         self._numbers = DocumentNumberService(db)
         self._audit = AuditService(db)
+        self._assignment = ProjectAssignmentScope(db)
+        self._module_admin = ProjectModuleAdminService(db)
 
     def list(self, ctx: TenantContext, company_id: UUID | None = None):
         cid = self._scope.resolve_company_id(ctx, company_id)
-        return self._repo.list_rows(ctx, cid)
+        rows = self._repo.list_rows(ctx, cid)
+        return self._assignment.filter_site_installations(ctx, rows)
 
     def get(self, ctx: TenantContext, row_id: UUID) -> PrjSiteInstallation:
         row = self._repo.get(ctx, row_id)
         if row is None:
             raise NotFoundException("Site installation not found")
+        self._assignment.ensure_project_access(ctx, row.project_id, row.company_id)
         return row
 
     def get_by_project(self, ctx: TenantContext, project_id: UUID) -> PrjSiteInstallation:
         project = self._projects.get(ctx, project_id)
         if project is None:
             raise NotFoundException("Project not found")
+        self._assignment.ensure_project_access(ctx, project_id, project.company_id)
         row = self._repo.get_by_project(ctx, project_id)
         if row is None:
             raise NotFoundException("Site installation not found for project")
@@ -75,14 +82,17 @@ class SiteInstallationService:
         project = self._projects.get(ctx, project_id)
         if project is None:
             raise NotFoundException("Project not found")
+        self._assignment.ensure_project_access(ctx, project_id, project.company_id)
         existing = self._repo.get_by_project(ctx, project_id)
         if existing is not None:
             return existing
+        self._module_admin.ensure_admin(ctx)
         return self._create_for_project(ctx, project, **fields)
 
     def create_for_project(
         self, ctx: TenantContext, project_id: UUID, **fields
     ) -> PrjSiteInstallation:
+        self._module_admin.ensure_admin(ctx)
         project = self._projects.get(ctx, project_id)
         if project is None:
             raise NotFoundException("Project not found")
@@ -220,8 +230,69 @@ class SiteInstallationService:
                     status="open",
                 )
 
+    def _ensure_current_stage_editor(
+        self, ctx: TenantContext, site: PrjSiteInstallation, project: PrjProject
+    ) -> None:
+        employee_id = self._assignment.resolve_employee_id(ctx)
+        if employee_id is None:
+            raise ForbiddenException("Employee profile required to edit site workflow")
+
+        stage = site.workflow_stage
+        if stage in {
+            SiteWorkflowStage.INTAKE.value,
+            SiteWorkflowStage.ASSIGNMENT.value,
+        }:
+            self._module_admin.ensure_admin(ctx)
+            return
+
+        lookup_stage = stage
+        if lookup_stage == SiteWorkflowStage.CONFIGURATION.value:
+            lookup_stage = SiteWorkflowStage.INSTALLATION.value
+
+        field = engine.STAGE_ASSIGNEE_FIELDS.get(lookup_stage)
+        if not field:
+            raise ForbiddenException("This workflow stage cannot be edited")
+
+        assignee_id = getattr(site, field, None)
+        if assignee_id != employee_id:
+            raise ForbiddenException("Only the assigned stage owner can update this workflow step")
+
+    def _ensure_can_run_advance_action(
+        self, ctx: TenantContext, site: PrjSiteInstallation, project: PrjProject, action: str
+    ) -> None:
+        employee_id = self._assignment.resolve_employee_id(ctx)
+        if employee_id is None:
+            raise ForbiddenException("Employee profile required to advance site workflow")
+
+        if action in {"complete_intake", "complete_assignment"}:
+            self._module_admin.ensure_admin(ctx)
+            return
+
+        action_stage: dict[str, str] = {
+            "complete_survey": SiteWorkflowStage.SURVEY.value,
+            "complete_scm": SiteWorkflowStage.SCM.value,
+            "complete_installation": SiteWorkflowStage.INSTALLATION.value,
+            "complete_installation_rack_only": SiteWorkflowStage.INSTALLATION.value,
+            "complete_acceptance": SiteWorkflowStage.ACCEPTANCE.value,
+        }
+        required_stage = action_stage.get(action)
+        if required_stage is None:
+            return
+
+        lookup_stage = required_stage
+        field = engine.STAGE_ASSIGNEE_FIELDS.get(lookup_stage)
+        if not field:
+            raise ForbiddenException("Invalid workflow action")
+        assignee_id = getattr(site, field, None)
+        if assignee_id != employee_id:
+            raise ForbiddenException("Only the assigned stage owner can complete this step")
+
     def update(self, ctx: TenantContext, row_id: UUID, **fields) -> PrjSiteInstallation:
         row = self.get(ctx, row_id)
+        project = self._projects.get(ctx, row.project_id)
+        if project is None:
+            raise NotFoundException("Project not found")
+        self._ensure_current_stage_editor(ctx, row, project)
         if row.status == SiteInstallationStatus.COMPLETED.value:
             raise InvalidSiteInstallationState("Completed site installation cannot be edited")
         if "workflow_stage" in fields or "status" in fields:
@@ -293,6 +364,10 @@ class SiteInstallationService:
         self, ctx: TenantContext, project_id: UUID, action: str
     ) -> PrjSiteInstallation:
         row = self.get_by_project(ctx, project_id)
+        project = self._projects.get(ctx, project_id)
+        if project is None:
+            raise NotFoundException("Project not found")
+        self._ensure_can_run_advance_action(ctx, row, project, action)
         if row.status == SiteInstallationStatus.CANCELLED.value:
             raise InvalidSiteInstallationState("Cancelled site installation cannot advance")
 
@@ -346,6 +421,7 @@ class SiteInstallationService:
         note: str | None = None,
     ) -> dict:
         """Create a project notification for the assignee of a delivery stage."""
+        self._module_admin.ensure_admin(ctx)
         row = self.get_by_project(ctx, project_id)
         stage_key = stage.strip().lower()
         if stage_key == "configuration":
@@ -368,10 +444,8 @@ class SiteInstallationService:
             stage_label = "Installation"
 
         site_name = row.site_name or row.document_number
-        message = (
-            f"Follow-up requested for {stage_label} on site {site_name}."
-            + (f" Note: {note.strip()}" if note and note.strip() else "")
-        )
+        note_text = note.strip() if note and note.strip() else None
+        message = f"Follow-up requested for {stage_label} on site {site_name}."
         notification = NotificationService(self._db).create(
             ctx,
             company_id=row.company_id,
@@ -387,8 +461,11 @@ class SiteInstallationService:
                 "document_number": row.document_number,
                 "site_name": row.site_name,
                 "message": message,
-                "note": note.strip() if note and note.strip() else None,
+                "note": note_text,
+                "sender_user_id": str(ctx.user_id) if ctx.user_id else None,
             },
+            delivery_status="sent",
+            sent_at=datetime.now(timezone.utc),
             status="active",
         )
         self._audit.log_entity_change(
@@ -410,26 +487,270 @@ class SiteInstallationService:
         """Return site-stage follow-up notifications for a project (newest first)."""
         self.get_by_project(ctx, project_id)
         rows = ProjectNotificationRepository(self._db).list_site_follow_ups(ctx, project_id)
+        return [self._follow_up_item_dict(row) for row in rows]
+
+    def list_portfolio_follow_ups(self, ctx: TenantContext) -> list[dict]:
+        """Module admin: follow-ups sent. Members: follow-ups received for their employee."""
+        cid = self._scope.resolve_company_id(ctx, None)
+        repo = ProjectNotificationRepository(self._db)
+        if self._module_admin.is_admin(ctx):
+            if ctx.user_id is None:
+                return []
+            rows = repo.list_site_stage_follow_up_rows(
+                ctx, cid, created_by_user_id=ctx.user_id
+            )
+        else:
+            employee_id = self._assignment.resolve_employee_id(ctx)
+            if employee_id is None:
+                return []
+            rows = repo.list_site_stage_follow_up_rows(
+                ctx, cid, recipient_employee_id=employee_id
+            )
+            allowed = self._assignment.assigned_project_ids(ctx, cid)
+            rows = [r for r in rows if r.project_id in allowed]
+
         out: list[dict] = []
         for row in rows:
-            payload = row.payload_json if isinstance(row.payload_json, dict) else {}
+            project = self._projects.get(ctx, row.project_id)
+            if project is None:
+                continue
+            item = self._follow_up_item_dict(row)
+            item["project_id"] = row.project_id
+            item["project_name"] = project.project_name
+            out.append(item)
+        return out
+
+    def reply_to_follow_up(self, ctx: TenantContext, notification_id: UUID, body: str) -> dict:
+        """Stage assignee replies to an admin follow-up notification."""
+        from uuid import uuid4
+
+        repo = ProjectNotificationRepository(self._db)
+        row = repo.get(ctx, notification_id)
+        if row is None:
+            raise NotFoundException("Follow-up not found")
+        payload = row.payload_json if isinstance(row.payload_json, dict) else {}
+        if payload.get("kind") != "site_stage_follow_up":
+            raise NotFoundException("Follow-up not found")
+
+        employee_id = self._assignment.resolve_employee_id(ctx)
+        if employee_id is None:
+            raise ForbiddenException("Employee profile required to reply")
+        recipient_id = row.recipient_employee_id
+        if recipient_id is None or UUID(str(recipient_id)) != UUID(str(employee_id)):
+            raise ForbiddenException("Only the assigned stage owner can reply")
+
+        text = body.strip()
+        if not text:
+            raise InvalidSiteInstallationState("Reply cannot be empty")
+
+        now = datetime.now(timezone.utc)
+        replies = list(payload.get("replies") or [])
+        replies.append(
+            {
+                "id": str(uuid4()),
+                "body": text,
+                "created_at": now.isoformat(),
+                "employee_id": str(employee_id),
+            }
+        )
+        payload["replies"] = replies
+        updated = repo.update(
+            ctx,
+            notification_id,
+            payload_json=payload,
+            delivery_status="read",
+        )
+        if updated is None:
+            raise NotFoundException("Follow-up not found")
+
+        project = self._projects.get(ctx, row.project_id)
+        item = self._follow_up_item_dict(updated)
+        item["project_id"] = row.project_id
+        item["project_name"] = project.project_name if project else ""
+        self._audit.log_entity_change(
+            tenant_id=ctx.tenant_id,
+            entity_name="prj_project_notification",
+            entity_id=row.id,
+            operation="follow_up_reply",
+            performed_by=ctx.user_id,
+        )
+        return item
+
+    @staticmethod
+    def _follow_up_replies(payload: dict) -> list[dict]:
+        out: list[dict] = []
+        for raw in payload.get("replies") or []:
+            if not isinstance(raw, dict):
+                continue
+            body = str(raw.get("body") or "").strip()
+            if not body:
+                continue
+            try:
+                reply_id = UUID(str(raw.get("id")))
+                employee_id = UUID(str(raw.get("employee_id")))
+            except (TypeError, ValueError):
+                continue
+            created_raw = raw.get("created_at")
+            if isinstance(created_raw, datetime):
+                created_at = created_raw
+            elif created_raw:
+                try:
+                    created_at = datetime.fromisoformat(str(created_raw).replace("Z", "+00:00"))
+                except ValueError:
+                    created_at = datetime.now(timezone.utc)
+            else:
+                created_at = datetime.now(timezone.utc)
             out.append(
                 {
-                    "id": row.id,
-                    "stage": str(payload.get("stage") or ""),
-                    "stage_label": str(payload.get("stage_label") or payload.get("stage") or ""),
-                    "recipient_employee_id": row.recipient_employee_id,
-                    "message": str(payload.get("message") or ""),
-                    "note": payload.get("note"),
-                    "site_name": payload.get("site_name"),
-                    "document_number": payload.get("document_number"),
-                    "delivery_status": row.delivery_status,
-                    "status": row.status,
-                    "created_at": row.created_at,
-                    "sent_at": row.sent_at,
+                    "id": reply_id,
+                    "body": body,
+                    "created_at": created_at,
+                    "employee_id": employee_id,
                 }
             )
         return out
+
+    @classmethod
+    def _follow_up_item_dict(cls, row) -> dict:
+        payload = row.payload_json if isinstance(row.payload_json, dict) else {}
+        replies = cls._follow_up_replies(payload)
+        latest = replies[-1] if replies else None
+        return {
+            "id": row.id,
+            "stage": str(payload.get("stage") or ""),
+            "stage_label": str(payload.get("stage_label") or payload.get("stage") or ""),
+            "recipient_employee_id": row.recipient_employee_id,
+            "message": str(payload.get("message") or ""),
+            "note": payload.get("note"),
+            "site_name": payload.get("site_name"),
+            "document_number": payload.get("document_number"),
+            "delivery_status": row.delivery_status,
+            "status": row.status,
+            "created_at": row.created_at,
+            "sent_at": row.sent_at,
+            "replies": replies,
+            "has_reply": bool(replies),
+            "latest_reply": latest["body"] if latest else None,
+            "latest_reply_at": latest["created_at"] if latest else None,
+        }
+
+    def list_my_jobs(self, ctx: TenantContext) -> list[dict]:
+        """All delivery steps assigned to the signed-in employee (any stage owner role)."""
+        if ctx.user_id is None:
+            return []
+
+        from sqlalchemy import select
+
+        from modules.foundation.models.security import SecUser
+        from modules.foundation.service.user_employee_link_service import UserEmployeeLinkService
+
+        user = self._db.scalar(
+            select(SecUser).where(
+                SecUser.id == ctx.user_id,
+                SecUser.tenant_id == ctx.tenant_id,
+                SecUser.is_deleted.is_(False),
+            )
+        )
+        if user is None:
+            return []
+
+        linker = UserEmployeeLinkService(self._db)
+        employee = linker.find_employee_for_user(ctx, user)
+        if employee is None:
+            employee = linker.ensure_employee_for_user(ctx, user)
+        if employee is None:
+            return []
+
+        employee_id = employee.id
+        cid = self._scope.resolve_company_id(ctx, None)
+        sites = self.list(ctx, cid)
+        jobs: list[dict] = []
+
+        stage_form_segments = {
+            SiteWorkflowStage.ASSIGNMENT.value: "assign",
+            SiteWorkflowStage.SURVEY.value: "survey",
+            SiteWorkflowStage.SCM.value: "scm",
+            SiteWorkflowStage.INSTALLATION.value: "installation",
+            SiteWorkflowStage.ACCEPTANCE.value: "acceptance",
+        }
+
+        stage_rank = {s: i for i, s in enumerate(engine.STAGE_ORDER)}
+
+        for site in sites:
+            if site.workflow_stage == SiteWorkflowStage.COMPLETED.value:
+                continue
+            if site.status == SiteInstallationStatus.COMPLETED.value:
+                continue
+
+            project = self._projects.get(ctx, site.project_id)
+            if project is None:
+                continue
+
+            current_stage = site.workflow_stage
+
+            if self._module_admin.is_admin(ctx) and current_stage in {
+                SiteWorkflowStage.INTAKE.value,
+                SiteWorkflowStage.ASSIGNMENT.value,
+            }:
+                assigned_stage = SiteWorkflowStage.ASSIGNMENT.value
+                segment = stage_form_segments[assigned_stage]
+                jobs.append(
+                    self._my_job_row(
+                        site,
+                        project,
+                        assigned_stage,
+                        current_stage,
+                        stage_form_segments,
+                    )
+                )
+
+            for assigned_stage, field in engine.STAGE_ASSIGNEE_FIELDS.items():
+                if getattr(site, field, None) != employee_id:
+                    continue
+                jobs.append(
+                    self._my_job_row(
+                        site,
+                        project,
+                        assigned_stage,
+                        current_stage,
+                        stage_form_segments,
+                    )
+                )
+
+        jobs.sort(
+            key=lambda row: (
+                row["document_number"],
+                stage_rank.get(row["assigned_stage"], 99),
+            )
+        )
+        return jobs
+
+    @staticmethod
+    def _my_job_row(
+        site: PrjSiteInstallation,
+        project: PrjProject,
+        assigned_stage: str,
+        current_stage: str,
+        stage_form_segments: dict[str, str],
+    ) -> dict:
+        segment = stage_form_segments.get(assigned_stage, "")
+        form_path = (
+            f"/projects/projects/{site.project_id}/{segment}"
+            if segment
+            else f"/projects/projects/{site.project_id}"
+        )
+        return {
+            "site_installation_id": site.id,
+            "project_id": site.project_id,
+            "project_name": project.project_name,
+            "document_number": site.document_number,
+            "site_name": site.site_name,
+            "assigned_stage": assigned_stage,
+            "workflow_stage": current_stage,
+            "stage_label": engine.STAGE_LABELS.get(assigned_stage, assigned_stage),
+            "delivery_type": site.delivery_type,
+            "form_path": form_path,
+        }
 
     def _sync_phase_status(
         self, ctx: TenantContext, project_id: UUID, new_stage: str

@@ -14,7 +14,7 @@ import { cn } from "@/lib/utils";
 import { ApiClientError } from "@/services/api-client";
 import {
   listCompanies,
-  listEmployeeOptions,
+  listCrmMemberOptions,
   type Company,
   type Option,
 } from "@/services/sales-crm-service";
@@ -48,7 +48,7 @@ export function KycAccountMappingPage({
     try {
       const [companies, employeeOptions] = await Promise.all([
         listCompanies(),
-        listEmployeeOptions().catch(() => [] as Option[]),
+        listCrmMemberOptions().catch(() => [] as Option[]),
       ]);
       setRows(
         companyAccountId

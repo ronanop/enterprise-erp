@@ -11,6 +11,7 @@ from modules.foundation.models.security import (
     SecSession,
     SecTenant,
     SecUser,
+    SecUserModule,
     SecUserOrgScope,
     SecUserRole,
 )
@@ -30,6 +31,7 @@ __all__ = [
     "SecSession",
     "SecTenant",
     "SecUser",
+    "SecUserModule",
     "SecUserOrgScope",
     "SecUserRole",
     "WfAction",

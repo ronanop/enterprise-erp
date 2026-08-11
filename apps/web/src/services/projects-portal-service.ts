@@ -406,8 +406,17 @@ export type SiteStageFollowUpResult = {
   message: string;
 };
 
+export type SiteStageFollowUpReply = {
+  id: string;
+  body: string;
+  created_at: string;
+  employee_id: string;
+};
+
 export type SiteStageFollowUp = {
   id: string;
+  project_id?: string;
+  project_name?: string;
   stage: string;
   stage_label: string;
   recipient_employee_id: string | null;
@@ -419,7 +428,34 @@ export type SiteStageFollowUp = {
   status: string;
   created_at: string | null;
   sent_at: string | null;
+  replies?: SiteStageFollowUpReply[];
+  has_reply?: boolean;
+  latest_reply?: string | null;
+  latest_reply_at?: string | null;
 };
+
+export type ProjectPortfolioFollowUp = SiteStageFollowUp & {
+  project_id: string;
+  project_name: string;
+};
+
+export async function listPortfolioFollowUps(): Promise<ProjectPortfolioFollowUp[]> {
+  return asArray(
+    unwrap(await apiClient<ProjectPortfolioFollowUp[]>("/projects/follow-ups")),
+  );
+}
+
+export async function replyToPortfolioFollowUp(
+  notificationId: string,
+  body: string,
+): Promise<ProjectPortfolioFollowUp> {
+  return unwrap(
+    await apiClient<ProjectPortfolioFollowUp>(`/projects/follow-ups/${notificationId}/reply`, {
+      method: "POST",
+      body: { body },
+    }),
+  );
+}
 
 export async function followUpSiteStage(
   projectId: string,
@@ -444,6 +480,24 @@ export async function listSiteStageFollowUps(
       ),
     ),
   );
+}
+
+export type ProjectMyJob = {
+  site_installation_id: string;
+  project_id: string;
+  project_name: string;
+  document_number: string;
+  site_name: string | null;
+  assigned_stage: string;
+  workflow_stage: string;
+  stage_label: string;
+  delivery_type: string;
+  form_path: string;
+};
+
+export async function listProjectMyJobs(): Promise<ProjectMyJob[]> {
+  const res = await resourceService.list<ProjectMyJob>("/projects/my-jobs");
+  return asArray(res.data);
 }
 
 export async function listSiteInstallations(): Promise<SiteInstallation[]> {
@@ -1156,52 +1210,24 @@ function employeeOptionLabel(r: Record<string, unknown>): string {
   return name || String(r.id);
 }
 
-export async function listEmployeeOptions(): Promise<Option[]> {
-  const res = await resourceService.list("/employees", { page_size: 200 });
-  return toOptions(res.data, employeeOptionLabel);
+export async function listProjectMemberOptions(): Promise<Option[]> {
+  const res = await resourceService.list("/projects/members");
+  const rows = asArray(res.data as Record<string, unknown>[] | Record<string, unknown> | null);
+  return rows.map((r) => ({
+    id: String(r.id),
+    label: String(r.label ?? r.id),
+    email: r.email ? String(r.email) : undefined,
+  }));
 }
 
-/**
- * Employees in Project Management departments (or with a project-related
- * designation). Falls back to the full employee list when no match exists.
- */
+/** Users assigned to the Projects module (for PM assignee / owner pickers). */
+export async function listEmployeeOptions(): Promise<Option[]> {
+  return listProjectMemberOptions();
+}
+
+/** @deprecated Use listProjectMemberOptions — same module-assigned user list. */
 export async function listProjectManagementTeamOptions(): Promise<Option[]> {
-  const [empRes, deptRes] = await Promise.all([
-    resourceService.list("/employees", { page_size: 200 }),
-    resourceService.list("/departments", { page_size: 200 }),
-  ]);
-  const employees = asArray(
-    empRes.data as Record<string, unknown>[] | Record<string, unknown> | null,
-  ).filter((r) => r && typeof r === "object" && r.id);
-  const departments = asArray(
-    deptRes.data as Record<string, unknown>[] | Record<string, unknown> | null,
-  );
-  const pmDeptIds = new Set(
-    departments
-      .filter((d) => {
-        const name = String(d.department_name ?? d.name ?? "").toLowerCase();
-        const code = String(d.department_code ?? "").toLowerCase();
-        return (
-          name.includes("project") ||
-          code.includes("project") ||
-          code === "pm" ||
-          code === "pmo"
-        );
-      })
-      .map((d) => String(d.id)),
-  );
-  const team = employees.filter((r) => {
-    if (String(r.status ?? "").toLowerCase() === "terminated") return false;
-    if (pmDeptIds.has(String(r.department_id ?? ""))) return true;
-    const designation = String(r.designation ?? "").toLowerCase();
-    return (
-      designation.includes("project") ||
-      designation.includes("pmo") ||
-      designation.includes("delivery manager")
-    );
-  });
-  const source = team.length > 0 ? team : employees;
-  return source.map((r) => ({ id: String(r.id), label: employeeOptionLabel(r) }));
+  return listProjectMemberOptions();
 }
 
 export async function listCustomerOptions(): Promise<Option[]> {
@@ -1385,21 +1411,25 @@ export async function loadProjectsOverview(): Promise<ProjectsOverview> {
     safe(listProjectDocuments),
   ]);
 
+  const projectIds = new Set(projects.map((p) => p.id));
+  const byAssignedProject = <T extends { project_id?: string | null }>(rows: T[]): T[] =>
+    rows.filter((row) => row.project_id != null && projectIds.has(row.project_id));
+
   return {
     projects,
-    siteInstallations,
-    phases,
-    milestones,
-    tasks,
-    timesheets,
-    entries,
-    allocations,
-    budgets,
-    costs,
-    issues,
-    risks,
-    changeRequests,
-    documents,
+    siteInstallations: siteInstallations.filter((s) => projectIds.has(s.project_id)),
+    phases: byAssignedProject(phases),
+    milestones: byAssignedProject(milestones),
+    tasks: byAssignedProject(tasks),
+    timesheets: byAssignedProject(timesheets),
+    entries: byAssignedProject(entries),
+    allocations: byAssignedProject(allocations),
+    budgets: byAssignedProject(budgets),
+    costs: byAssignedProject(costs),
+    issues: byAssignedProject(issues),
+    risks: byAssignedProject(risks),
+    changeRequests: byAssignedProject(changeRequests),
+    documents: byAssignedProject(documents),
     partial: statusCodes.length > 0,
     statusCodes,
   };

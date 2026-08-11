@@ -58,6 +58,40 @@ class Settings(BaseSettings):
     account_lockout_threshold: int = Field(default=5, alias="ACCOUNT_LOCKOUT_THRESHOLD")
     account_lockout_minutes: int = Field(default=15, alias="ACCOUNT_LOCKOUT_MINUTES")
 
+    frontend_url: str = Field(default="http://localhost:3000", alias="FRONTEND_URL")
+
+    microsoft_tenant_id: str = Field(default="", alias="MICROSOFT_TENANT_ID")
+    microsoft_client_id: str = Field(default="", alias="MICROSOFT_CLIENT_ID")
+    microsoft_client_secret: str = Field(default="", alias="MICROSOFT_CLIENT_SECRET")
+    microsoft_redirect_uri: str = Field(
+        default="http://localhost:8000/api/v1/auth/microsoft/callback",
+        alias="MICROSOFT_REDIRECT_URI",
+    )
+
+    @property
+    def microsoft_login_enabled(self) -> bool:
+        return bool(
+            self.microsoft_client_id.strip()
+            and self.microsoft_client_secret.strip()
+            and self.microsoft_redirect_uri.strip()
+        )
+
+    microsoft_user_email_domain: str = Field(
+        default="cachedigitech.com",
+        alias="MICROSOFT_USER_EMAIL_DOMAIN",
+    )
+    microsoft_platform_admin_emails: str = Field(
+        default="techbank@cachedigitech.com",
+        alias="MICROSOFT_PLATFORM_ADMIN_EMAILS",
+    )
+
+    def microsoft_platform_admin_email_set(self) -> set[str]:
+        return {
+            email.strip().lower()
+            for email in self.microsoft_platform_admin_emails.split(",")
+            if email.strip()
+        }
+
     @field_validator("cors_origins", mode="before")
     @classmethod
     def parse_cors_origins(cls, value: str | list[str]) -> list[str]:

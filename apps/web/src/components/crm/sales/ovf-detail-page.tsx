@@ -1,4 +1,4 @@
-ï»¿"use client";
+"use client";
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
@@ -39,7 +39,7 @@ import {
   getOvf,
   getOvfBlueprint,
   getQuote,
-  listEmployeeOptions,
+  listCrmMemberOptions,
   listOvfLines,
   markOvfDealWon,
   sendOvfForApproval,
@@ -95,7 +95,7 @@ export function OvfDetailPage({ ovfId }: { ovfId: string }) {
       const [quoteRow, oppRow, employeeRows] = await Promise.all([
         getQuote(ovfRow.quote_id).catch(() => null),
         getOpportunity(ovfRow.opportunity_id).catch(() => null),
-        listEmployeeOptions().catch(() => [] as Option[]),
+        listCrmMemberOptions().catch(() => [] as Option[]),
       ]);
       setQuote(quoteRow);
       setOpportunity(oppRow);
@@ -240,22 +240,22 @@ export function OvfDetailPage({ ovfId }: { ovfId: string }) {
         ovf: ovfRecord,
         quote,
         opportunity,
-        customerName: customerName === "â€”" ? "-" : customerName,
-        accountName: accountName === "â€”" ? "-" : accountName,
-        quoteName: quoteName === "â€”" ? "-" : quoteName,
-        ownerName: ownerName === "â€”" ? "-" : ownerName,
-        billingAddress: billingAddress === "â€”" ? "-" : billingAddress,
-        billingState: billingState === "â€”" ? "-" : billingState,
-        billingCountry: billingCountry === "â€”" ? "-" : billingCountry,
-        billingContact: billingContact === "â€”" ? "-" : billingContact,
-        shippingAddress: shippingAddress === "â€”" ? "-" : shippingAddress,
-        shippingState: shippingState === "â€”" ? "-" : shippingState,
-        shippingCountry: shippingCountry === "â€”" ? "-" : shippingCountry,
-        shippingContact: shippingContact === "â€”" ? "-" : shippingContact,
+        customerName: customerName === "—" ? "-" : customerName,
+        accountName: accountName === "—" ? "-" : accountName,
+        quoteName: quoteName === "—" ? "-" : quoteName,
+        ownerName: ownerName === "—" ? "-" : ownerName,
+        billingAddress: billingAddress === "—" ? "-" : billingAddress,
+        billingState: billingState === "—" ? "-" : billingState,
+        billingCountry: billingCountry === "—" ? "-" : billingCountry,
+        billingContact: billingContact === "—" ? "-" : billingContact,
+        shippingAddress: shippingAddress === "—" ? "-" : shippingAddress,
+        shippingState: shippingState === "—" ? "-" : shippingState,
+        shippingCountry: shippingCountry === "—" ? "-" : shippingCountry,
+        shippingContact: shippingContact === "—" ? "-" : shippingContact,
         customerRows,
         vendorRows,
-        createdBy: ownerName === "â€”" ? null : ownerName,
-        modifiedBy: ownerName === "â€”" ? null : ownerName,
+        createdBy: ownerName === "—" ? null : ownerName,
+        modifiedBy: ownerName === "—" ? null : ownerName,
       });
       setBanner({ text: "OVF PDF exported.", tone: "success" });
     } catch (err) {
@@ -294,7 +294,7 @@ export function OvfDetailPage({ ovfId }: { ovfId: string }) {
 
       {ovf.deal_won ? (
         <div className="flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-2.5 text-sm text-emerald-950">
-          <Trophy className="size-4" /> Deal Won at {formatInr(ovf.deal_won_amount ?? 0)} â€” the opportunity is now
+          <Trophy className="size-4" /> Deal Won at {formatInr(ovf.deal_won_amount ?? 0)} — the opportunity is now
           closed-won.
         </div>
       ) : null}
@@ -314,7 +314,7 @@ export function OvfDetailPage({ ovfId }: { ovfId: string }) {
               onClick={() => onExportPdf()}
             >
               <Download className={`size-3.5 ${exporting ? "animate-pulse" : ""}`} />
-              {exporting ? "Exportingâ€¦" : "Export PDF"}
+              {exporting ? "Exporting…" : "Export PDF"}
             </Button>
             {!ovf.locked && !ovf.deal_won && !ovf.shared_to_scm ? (
               <Link
@@ -368,7 +368,7 @@ export function OvfDetailPage({ ovfId }: { ovfId: string }) {
           />
           <CrmHeadlineStat
             label="PO Number"
-            value={ovf.po_number?.trim() || "â€”"}
+            value={ovf.po_number?.trim() || "—"}
             sub={`Finance ${ovf.finance_cost_pct}%`}
           />
           <CrmHeadlineStat
@@ -445,14 +445,14 @@ export function OvfDetailPage({ ovfId }: { ovfId: string }) {
             label="Opportunity"
             value={textOrDash(opportunity?.opportunity_name)}
           />
-          <CrmReadOnlyField label="Freight Charges (â‚¹)" value={formatInr(ovf.freight)} />
+          <CrmReadOnlyField label="Freight Charges (?)" value={formatInr(ovf.freight)} />
           <CrmReadOnlyField
             label="Approval Status"
             value={formatOvfApprovalStatus(ovf.approval_status)}
           />
           <CrmReadOnlyField label="Finance Cost (%)" value={`${ovf.finance_cost_pct}%`} />
           <CrmReadOnlyField
-            label="Additional Charges (â‚¹)"
+            label="Additional Charges (?)"
             value={formatInr(ovf.additional_charges)}
           />
         </div>

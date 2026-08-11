@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useState } from "react";
 
+import { parseAuthMe } from "@/lib/auth-user";
+import { isAuthenticated } from "@/lib/auth";
 import { authService } from "@/services/api-client";
 import type { UserProfile } from "@/types/api";
 
@@ -10,11 +12,29 @@ export function useUserPermissions() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    if (!isAuthenticated()) {
+      setUser(null);
+      setLoading(false);
+      return;
+    }
+
     let cancelled = false;
     void (async () => {
       try {
         const res = await authService.me();
-        if (!cancelled) setUser(res.data);
+        const { user: parsed, permissions } = parseAuthMe(res.data);
+        if (!cancelled) {
+          setUser(
+            parsed
+              ? ({
+                id: parsed.id,
+                email: parsed.email,
+                display_name: parsed.displayName,
+                permissions,
+              } as UserProfile)
+              : null,
+          );
+        }
       } catch {
         if (!cancelled) setUser(null);
       } finally {
