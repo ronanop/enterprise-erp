@@ -50,3 +50,6 @@ logs/
 # Alembic
 # Keep versions tracked; ignore local scratch
 alembic/versions/*.pyc
+
+
+apps/api/var/crm-attachments/
