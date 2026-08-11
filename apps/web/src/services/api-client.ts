@@ -224,3 +224,61 @@ export const resourceService = {
       body: body ?? {},
     }),
 };
+
+/** Download a binary/file endpoint (CSV/PDF export). */
+export async function downloadApiFile(
+  path: string,
+  query?: Record<string, string | number | boolean | null | undefined>,
+  fallbackName = "export.bin",
+  _retried = false,
+): Promise<void> {
+  const token = getAccessToken();
+  let response: Response;
+  try {
+    response = await fetch(buildUrl(path, query), {
+      method: "GET",
+      headers: {
+        Accept: "*/*",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      cache: "no-store",
+    });
+  } catch {
+    throw new ApiClientError(
+      "Cannot reach the API. Confirm the backend is running on port 8000.",
+      0,
+    );
+  }
+
+  if (response.status === 401 && !_retried) {
+    const refreshed = await tryRefreshAccessToken();
+    if (refreshed) {
+      return downloadApiFile(path, query, fallbackName, true);
+    }
+    clearTokens();
+    throw new ApiClientError("Session expired. Please sign in again.", 401);
+  }
+
+  if (!response.ok) {
+    let message = "Download failed";
+    try {
+      const payload = (await response.json()) as ErrorResponse;
+      message = payload.message ?? message;
+    } catch {
+      /* ignore */
+    }
+    throw new ApiClientError(message, response.status);
+  }
+  const blob = await response.blob();
+  const cd = response.headers.get("Content-Disposition") ?? "";
+  const match = /filename="?([^";]+)"?/i.exec(cd);
+  const filename = match?.[1] ?? fallbackName;
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}

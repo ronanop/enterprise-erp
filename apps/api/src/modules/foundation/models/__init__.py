@@ -3,6 +3,7 @@
 from modules.foundation.models.audit import AuditEvent, AuditLog
 from modules.foundation.models.config import CfgSetting
 from modules.foundation.models.notification import NtfDelivery, NtfEvent, NtfTemplate
+from modules.foundation.models.device_token import NtfDeviceToken
 from modules.foundation.models.security import (
     SecPermission,
     SecRefreshToken,
@@ -24,6 +25,7 @@ __all__ = [
     "NtfDelivery",
     "NtfEvent",
     "NtfTemplate",
+    "NtfDeviceToken",
     "SecPermission",
     "SecRefreshToken",
     "SecRole",

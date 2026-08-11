@@ -16,7 +16,9 @@ from modules.recruitment.dependencies import (
     paginate,
 )
 from modules.recruitment.schemas import (
+    ApplicationAdvanceRequest,
     ApplicationCreate,
+    ApplicationRejectRequest,
     ApplicationResponse,
     ApplicationStageCreate,
     ApplicationStageResponse,
@@ -343,7 +345,16 @@ def create_applications(
     ctx: Annotated[TenantContext, Depends(require_permission("recruitment.application:create"))],
     db: Annotated[Session, Depends(get_db)],
 ):
-    return APIResponse(message="Created", data=ApplicationService(db).create(ctx, **body.model_dump()))
+    data = body.model_dump(exclude_none=True)
+    if "applied_at" not in data:
+        from datetime import datetime, timezone
+
+        data["applied_at"] = datetime.now(timezone.utc)
+    if "status" not in data:
+        data["status"] = "applied"
+    if "current_stage_code" not in data:
+        data["current_stage_code"] = data.get("status", "applied")
+    return APIResponse(message="Created", data=ApplicationService(db).create(ctx, **data))
 
 @applications_router.patch("/{row_id}", response_model=APIResponse[ApplicationResponse])
 def update_applications(
@@ -353,6 +364,24 @@ def update_applications(
     db: Annotated[Session, Depends(get_db)],
 ):
     return APIResponse(message="Updated", data=ApplicationService(db).update(ctx, row_id, **extract_update_fields(body)))
+
+@applications_router.post("/{row_id}/advance", response_model=APIResponse[ApplicationResponse])
+def advance_applications(
+    row_id: UUID,
+    body: ApplicationAdvanceRequest,
+    ctx: Annotated[TenantContext, Depends(require_permission("recruitment.application:advance"))],
+    db: Annotated[Session, Depends(get_db)],
+):
+    return APIResponse(message="Advanced", data=ApplicationService(db).advance(ctx, row_id, stage=body.stage))
+
+@applications_router.post("/{row_id}/reject", response_model=APIResponse[ApplicationResponse])
+def reject_applications(
+    row_id: UUID,
+    body: ApplicationRejectRequest,
+    ctx: Annotated[TenantContext, Depends(require_permission("recruitment.application:advance"))],
+    db: Annotated[Session, Depends(get_db)],
+):
+    return APIResponse(message="Rejected", data=ApplicationService(db).reject(ctx, row_id, reason=body.reason))
 
 @application_stages_router.get("", response_model=APIResponse[list[ApplicationStageResponse]])
 def list_application_stages(
@@ -481,6 +510,22 @@ def send_offers(
     db: Annotated[Session, Depends(get_db)],
 ):
     return APIResponse(message="Sent", data=OfferService(db).send(ctx, row_id))
+
+@offers_router.post("/{row_id}/accept", response_model=APIResponse[OfferResponse])
+def accept_offers(
+    row_id: UUID,
+    ctx: Annotated[TenantContext, Depends(require_permission("recruitment.offer:send"))],
+    db: Annotated[Session, Depends(get_db)],
+):
+    return APIResponse(message="Accepted", data=OfferService(db).accept(ctx, row_id))
+
+@offers_router.post("/{row_id}/reject", response_model=APIResponse[OfferResponse])
+def reject_offers(
+    row_id: UUID,
+    ctx: Annotated[TenantContext, Depends(require_permission("recruitment.offer:approve"))],
+    db: Annotated[Session, Depends(get_db)],
+):
+    return APIResponse(message="Rejected", data=OfferService(db).reject(ctx, row_id))
 
 @offer_approvals_router.get("", response_model=APIResponse[list[OfferApprovalResponse]])
 def list_offer_approvals(

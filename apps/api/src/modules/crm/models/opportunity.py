@@ -129,3 +129,27 @@ class CrmOpportunity(Base, *CrmTransactionMixin):
     has_hardware: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
     has_software: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
     has_services: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
+
+    # Cloud-specific sales path (billing shift, migration, POC/assessment).
+    cloud_blueprint_variant: Mapped[str | None] = mapped_column(String(30), nullable=True, index=True)
+    product_type: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    cloud_sub_product: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    customer_mrr: Mapped[Decimal | None] = mapped_column(Numeric(18, 4), nullable=True)
+    customer_arr: Mapped[Decimal | None] = mapped_column(Numeric(18, 4), nullable=True)
+    customer_discount_percent: Mapped[Decimal | None] = mapped_column(Numeric(5, 2), nullable=True)
+    distributor_discount_percent: Mapped[Decimal | None] = mapped_column(Numeric(5, 2), nullable=True)
+    profitability_percent: Mapped[Decimal | None] = mapped_column(Numeric(5, 2), nullable=True)
+    distributor_discount_locked: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="false"
+    )
+    assessment_type: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    migration_credit_phase1: Mapped[Decimal | None] = mapped_column(Numeric(18, 4), nullable=True)
+    migration_credit_phase2: Mapped[Decimal | None] = mapped_column(Numeric(18, 4), nullable=True)
+    migration_credit_phase3: Mapped[Decimal | None] = mapped_column(Numeric(18, 4), nullable=True)
+    contract_attached: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="false"
+    )
+    onboarding_done: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="false"
+    )
+    onboarding_date: Mapped[date | None] = mapped_column(Date, nullable=True)

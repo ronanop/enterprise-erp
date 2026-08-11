@@ -34,6 +34,8 @@ class CandidateService:
     def create(self, ctx: TenantContext, company_id: UUID | None = None, **fields):
         cid = self._scope.resolve_company_id(ctx, company_id)
         code = self._numbers.generate(RecEntityType.CANDIDATE, cid, RecCandidate, "candidate_code")
+        if not fields.get("full_name"):
+            fields["full_name"] = f"{fields.get('first_name', '')} {fields.get('last_name', '')}".strip()
         return self._repo.create(ctx, company_id=cid, candidate_code=code, **fields)
 
     def update(self, ctx: TenantContext, row_id: UUID, **fields):

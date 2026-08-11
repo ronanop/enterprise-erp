@@ -14,6 +14,7 @@ from modules.organization.domain.entities import (
     LocationEntity,
     ProfitCenterEntity,
 )
+from modules.organization.models.branch import OrgBranch
 from modules.organization.models.hierarchy import (
     OrgBusinessUnit,
     OrgCostCenter,
@@ -191,13 +192,23 @@ class LocationRepository(OrgScopedRepository):
     def __init__(self, db: Session) -> None:
         super().__init__(db)
 
-    def list_locations(self, ctx: TenantContext, *, branch_id: UUID | None = None):
-        stmt = select(OrgLocation).where(
-            OrgLocation.tenant_id == ctx.tenant_id,
-            OrgLocation.is_deleted.is_(False),
+    def list_locations(
+        self, ctx: TenantContext, *, branch_id: UUID | None = None, company_id: UUID | None = None
+    ):
+        stmt = (
+            select(OrgLocation, OrgBranch.branch_name)
+            .outerjoin(OrgBranch, OrgBranch.id == OrgLocation.branch_id)
+            .where(
+                OrgLocation.tenant_id == ctx.tenant_id,
+                OrgLocation.is_deleted.is_(False),
+            )
         )
         if branch_id:
             stmt = stmt.where(OrgLocation.branch_id == branch_id)
+        elif company_id:
+            stmt = stmt.where(OrgLocation.company_id == company_id)
+        elif ctx.company_id:
+            stmt = stmt.where(OrgLocation.company_id == ctx.company_id)
         return [
             LocationEntity(
                 id=r.id,
@@ -209,8 +220,12 @@ class LocationRepository(OrgScopedRepository):
                 location_type=r.location_type,
                 status=r.status,
                 version=r.version,
+                branch_name=branch_name,
+                latitude=float(r.latitude) if r.latitude is not None else None,
+                longitude=float(r.longitude) if r.longitude is not None else None,
+                geofence_radius_meters=r.geofence_radius_meters,
             )
-            for r in self.db.scalars(stmt).all()
+            for r, branch_name in self.db.execute(stmt).all()
         ]
 
     def create(
@@ -222,6 +237,9 @@ class LocationRepository(OrgScopedRepository):
         location_code: str,
         location_name: str,
         location_type: str = "office",
+        latitude: float | None = None,
+        longitude: float | None = None,
+        geofence_radius_meters: int | None = None,
     ) -> LocationEntity:
         row = OrgLocation(
             id=uuid4(),
@@ -231,6 +249,9 @@ class LocationRepository(OrgScopedRepository):
             location_code=location_code,
             location_name=location_name,
             location_type=location_type,
+            latitude=latitude,
+            longitude=longitude,
+            geofence_radius_meters=geofence_radius_meters,
             status="draft",
             created_by=ctx.user_id,
             updated_by=ctx.user_id,
@@ -247,6 +268,40 @@ class LocationRepository(OrgScopedRepository):
             location_type=row.location_type,
             status=row.status,
             version=row.version,
+            latitude=float(row.latitude) if row.latitude is not None else None,
+            longitude=float(row.longitude) if row.longitude is not None else None,
+            geofence_radius_meters=row.geofence_radius_meters,
+        )
+
+    def update(self, ctx: TenantContext, location_id: UUID, **fields) -> LocationEntity | None:
+        row = self.db.scalar(
+            select(OrgLocation).where(
+                OrgLocation.id == location_id,
+                OrgLocation.tenant_id == ctx.tenant_id,
+                OrgLocation.is_deleted.is_(False),
+            )
+        )
+        if row is None:
+            return None
+        for k, v in fields.items():
+            if v is not None:
+                setattr(row, k, v)
+        row.updated_by = ctx.user_id
+        row.version = int(row.version or 1) + 1
+        self.db.flush()
+        return LocationEntity(
+            id=row.id,
+            tenant_id=row.tenant_id,
+            company_id=row.company_id,
+            branch_id=row.branch_id,
+            location_code=row.location_code,
+            location_name=row.location_name,
+            location_type=row.location_type,
+            status=row.status,
+            version=row.version,
+            latitude=float(row.latitude) if row.latitude is not None else None,
+            longitude=float(row.longitude) if row.longitude is not None else None,
+            geofence_radius_meters=row.geofence_radius_meters,
         )
 
 

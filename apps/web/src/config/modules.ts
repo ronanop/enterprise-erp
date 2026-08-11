@@ -21,6 +21,7 @@ export type ErpModule = {
   icon:
     | "dashboard"
     | "shield"
+    | "mail"
     | "building"
     | "boxes"
     | "wallet"
@@ -84,6 +85,48 @@ export const erpModules: ErpModule[] = [
       },
       { key: "audit", title: "Audit", description: "Audit logs and events", apiPath: "/audit/logs" },
       { key: "settings", title: "Settings", description: "System settings", apiPath: "/settings" },
+    ],
+  },
+  {
+    key: "email",
+    title: "Email",
+    description: "Graph-powered email notifications, templates, and delivery logs.",
+    href: "/email",
+    group: "foundation",
+    icon: "mail",
+    resources: [
+      {
+        key: "overview",
+        title: "Overview",
+        description: "Provider status and delivery KPIs",
+        apiPath: "/notifications/email/overview",
+        listable: false,
+      },
+      {
+        key: "compose",
+        title: "Compose",
+        description: "Send an email via Microsoft Graph",
+        apiPath: "/notifications/email/send",
+        listable: false,
+      },
+      {
+        key: "templates",
+        title: "Templates",
+        description: "Email notification templates",
+        apiPath: "/notifications/templates",
+      },
+      {
+        key: "deliveries",
+        title: "Deliveries",
+        description: "Email delivery attempts and status",
+        apiPath: "/notifications/deliveries",
+      },
+      {
+        key: "events",
+        title: "Events",
+        description: "Notification events queue",
+        apiPath: "/notifications/events",
+      },
     ],
   },
   {
@@ -1583,6 +1626,12 @@ export const erpModules: ErpModule[] = [
         apiPath: "/grc/policy-versions",
       },
       {
+        key: "policy-acknowledgements",
+        title: "Policy Acknowledgements",
+        description: "Employee policy acknowledgements",
+        apiPath: "/grc/policy-acknowledgements",
+      },
+      {
         key: "controls",
         title: "Controls",
         description: "Internal controls",
@@ -1623,6 +1672,12 @@ export const erpModules: ErpModule[] = [
         title: "Compliance Frameworks",
         description: "Standards & frameworks",
         apiPath: "/grc/compliance-frameworks",
+      },
+      {
+        key: "compliance-requirements",
+        title: "Compliance Requirements",
+        description: "Regulatory obligations catalog",
+        apiPath: "/grc/compliance-requirements",
       },
       {
         key: "compliance-assessments",

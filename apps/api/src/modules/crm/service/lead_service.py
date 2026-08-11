@@ -1,6 +1,7 @@
 """Lead application services."""
 
 from datetime import date, datetime, timezone
+from decimal import Decimal
 from uuid import UUID
 
 from sqlalchemy import func, select
@@ -14,6 +15,11 @@ from modules.crm.repository.lead_activity_repository import LeadActivityReposito
 from modules.crm.repository.lead_assignment_repository import LeadAssignmentRepository
 from modules.crm.repository.lead_repository import LeadRepository
 from modules.crm.repository.lead_source_repository import LeadSourceRepository
+from modules.crm.service.cloud_flow import (
+    DEFAULT_DISTRIBUTOR_DISCOUNT_PERCENT,
+    cloud_sub_product_label,
+    cloud_variant_from_lead,
+)
 from modules.crm.service.crm_scope_validator import CrmScopeValidator
 from modules.crm.service.document_number_service import DocumentNumberService
 from modules.crm.service.engines import (
@@ -326,6 +332,13 @@ class LeadService:
             opp_fields["company_account_id"] = lead.company_account_id
             opp_fields["blueprint_state"] = "open"
             opp_fields["project_title"] = lead.project_title
+            cloud_variant = cloud_variant_from_lead(lead)
+            if cloud_variant:
+                opp_fields["cloud_blueprint_variant"] = cloud_variant
+                opp_fields["product_type"] = lead.product_type
+                opp_fields["cloud_sub_product"] = cloud_sub_product_label(lead)
+                opp_fields["distributor_discount_percent"] = DEFAULT_DISTRIBUTOR_DISCOUNT_PERCENT
+                opp_fields["distributor_discount_locked"] = True
 
         opportunity = opp_svc.create(ctx, **opp_fields)
         now = datetime.now(timezone.utc)

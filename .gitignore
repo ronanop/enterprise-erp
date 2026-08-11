@@ -1,7 +1,12 @@
 # Environment
 .env
 .env.local
+.env.coolify
 .env.*.local
+
+# Local CRM uploads (not for repo)
+apps/api/var/crm-attachments/*
+!apps/api/var/crm-attachments/.gitkeep
 
 # Python
 __pycache__/

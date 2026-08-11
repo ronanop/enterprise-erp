@@ -1,6 +1,5 @@
-import * as XLSX from "xlsx";
-
 import { formatInrPrecise } from "@/services/finance-service";
+import { downloadCsv, downloadXlsx } from "@/lib/spreadsheet";
 
 export type ExportColumn<T> = {
   key: keyof T | string;
@@ -8,15 +7,6 @@ export type ExportColumn<T> = {
   align?: "left" | "right";
   format?: (value: unknown, row: T) => string;
 };
-
-function downloadBlob(filename: string, blob: Blob) {
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = filename;
-  a.click();
-  URL.revokeObjectURL(url);
-}
 
 function cellValue<T extends Record<string, unknown>>(
   row: T,
@@ -36,8 +26,7 @@ function rowsForExport<T extends Record<string, unknown>>(
   return rows.map((row) => {
     const out: Record<string, string | number> = {};
     for (const col of columns) {
-      const val = cellValue(row, col);
-      out[col.label] = val;
+      out[col.label] = cellValue(row, col);
     }
     return out;
   });
@@ -48,32 +37,18 @@ export function exportTabularCsv<T extends Record<string, unknown>>(
   rows: T[],
   columns: ExportColumn<T>[],
 ) {
-  const data = rowsForExport(rows, columns);
-  const ws = XLSX.utils.json_to_sheet(data);
-  const csv = XLSX.utils.sheet_to_csv(ws);
-  downloadBlob(
-    filename,
-    new Blob([`\uFEFF${csv}`], { type: "text/csv;charset=utf-8" }),
-  );
+  downloadCsv(filename, rowsForExport(rows, columns));
 }
 
-export function exportTabularXlsx<T extends Record<string, unknown>>(
+export async function exportTabularXlsx<T extends Record<string, unknown>>(
   filename: string,
   sheetName: string,
   rows: T[],
   columns: ExportColumn<T>[],
 ) {
-  const data = rowsForExport(rows, columns);
-  const ws = XLSX.utils.json_to_sheet(data);
-  const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, sheetName.slice(0, 31));
-  const buffer = XLSX.write(wb, { bookType: "xlsx", type: "array" });
-  downloadBlob(
-    filename,
-    new Blob([buffer], {
-      type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-    }),
-  );
+  await downloadXlsx(filename, [
+    { name: sheetName, rows: rowsForExport(rows, columns) },
+  ]);
 }
 
 export function printTabularTable<T extends Record<string, unknown>>(

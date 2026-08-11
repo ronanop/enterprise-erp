@@ -1,9 +1,15 @@
 """Add SCM checkbox completion dates for MO and material handover."""
 
+import sys
 from collections.abc import Sequence
+from pathlib import Path
 
 import sqlalchemy as sa
 from alembic import op
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from helpers import add_column_if_missing  # noqa: E402
 
 revision: str = "0464_scm_checkbox_dates"
 down_revision: str | None = "0463_survey_dates"
@@ -22,7 +28,7 @@ COLUMNS = (
 
 def upgrade() -> None:
     for name in COLUMNS:
-        op.add_column(
+        add_column_if_missing(
             TABLE,
             sa.Column(name, sa.Date(), nullable=True),
             schema=SCHEMA,

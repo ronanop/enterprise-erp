@@ -44,6 +44,25 @@ def test_opportunity_forecast():
     assert engine.compute_forecast(opp) == Decimal("250.0000")
 
 
+def test_cloud_opportunity_contract_and_discount_approval_states():
+    actions = sales_blueprint_engine.allowed_actions("opportunity", "open")
+    assert "attach_contract" in actions
+    assert "send_cloud_discount_approval" in actions
+    assert sales_blueprint_engine.transition("opportunity", "open", "attach_contract") == "cloud_docs"
+    assert (
+        sales_blueprint_engine.transition("opportunity", "open", "send_cloud_discount_approval")
+        == "cloud_discount_approval"
+    )
+    assert (
+        sales_blueprint_engine.transition("opportunity", "cloud_discount_approval", "approve_cloud_discount")
+        == "cloud_onboarding"
+    )
+    assert (
+        sales_blueprint_engine.transition("opportunity", "cloud_onboarding", "mark_onboarding_done")
+        == "won"
+    )
+
+
 def test_opportunity_document_step_offers_boq_or_sow():
     actions = sales_blueprint_engine.allowed_actions("opportunity", "open")
 

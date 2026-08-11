@@ -7,9 +7,11 @@ from sqlalchemy.orm import Session
 from core.exceptions import NotFoundException
 from modules.foundation.domain.value_objects import TenantContext
 from modules.foundation.service.audit_service import AuditService
+from modules.grc.domain.enums import GrcEntityType
 from modules.grc.models import GrcControl
 from modules.grc.repository.control_repository import ControlRepository
 from modules.grc.service.engines import ControlEngine
+from modules.grc.service.grc_number_service import GrcNumberService
 from modules.grc.service.grc_scope_validator import GrcScopeValidator
 
 
@@ -17,6 +19,7 @@ class ControlService:
     def __init__(self, db: Session) -> None:
         self._repo = ControlRepository(db)
         self._scope = GrcScopeValidator(db)
+        self._numbers = GrcNumberService(db)
         self._engine = ControlEngine()
         self._audit = AuditService(db)
 
@@ -32,8 +35,8 @@ class ControlService:
 
     def create(self, ctx: TenantContext, company_id: UUID | None = None, **fields):
         cid = self._scope.resolve_company_id(ctx, company_id)
-
-        row = self._repo.create(ctx, company_id=cid,  **fields)
+        doc = self._numbers.generate(GrcEntityType.CONTROL, cid, GrcControl, "control_number")
+        row = self._repo.create(ctx, company_id=cid, control_number=doc, **fields)
         self._audit.log_entity_change(
             tenant_id=ctx.tenant_id,
             entity_name="grc_control",

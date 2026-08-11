@@ -11,7 +11,7 @@ const GRC_NAV = [
   { title: "Policies", href: "/grc/policies" },
   { title: "Risks", href: "/grc/risk-registers" },
   { title: "Controls", href: "/grc/controls" },
-  { title: "Compliance", href: "/grc/compliance-assessments" },
+  { title: "Compliance", href: "/grc/compliance" },
   { title: "Audits", href: "/grc/audits" },
   { title: "CAPA", href: "/grc/corrective-actions" },
   { title: "Incidents", href: "/grc/incidents" },
@@ -27,7 +27,9 @@ export function GrcWorkspaceNav() {
           const active =
             item.href === "/grc"
               ? pathname === "/grc"
-              : pathname === item.href || pathname.startsWith(`${item.href}/`);
+              : item.href === "/grc/compliance"
+                ? pathname === "/grc/compliance" || pathname.startsWith("/grc/compliance-")
+                : pathname === item.href || pathname.startsWith(`${item.href}/`);
           return (
             <li key={item.href}>
               <Link

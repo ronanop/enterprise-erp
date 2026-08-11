@@ -28,3 +28,9 @@ FOUNDATION_PERMISSIONS: list[tuple[str, str, str, str]] = [
 ]
 
 SYSTEM_ROLE_CODES = ("SUPER_ADMIN", "TENANT_ADMIN")
+
+# Checklist Phase 13.2.1 — system role packs
+SYSTEM_ROLE_PACKS: list[tuple[str, str]] = [
+    ("SUPER_ADMIN", "Super Admin"),
+    ("TENANT_ADMIN", "Tenant Admin"),
+]

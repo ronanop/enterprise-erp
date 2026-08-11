@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0, viewport-fit=cover" name="viewport"/>
+<title>Company Announcements | Kinetic ESS</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@100..900&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            "colors": {
+                    "surface-container-lowest": "#ffffff",
+                    "on-secondary-container": "#fffbff",
+                    "error": "#ba1a1a",
+                    "surface-container-high": "#dce9ff",
+                    "surface-container-low": "#eff4ff",
+                    "tertiary-fixed-dim": "#4edea3",
+                    "tertiary": "#006242",
+                    "surface-variant": "#d3e4fe",
+                    "tertiary-fixed": "#6ffbbe",
+                    "primary-container": "#2563eb",
+                    "on-tertiary": "#ffffff",
+                    "secondary-container": "#8a4cfc",
+                    "primary-fixed": "#dbe1ff",
+                    "on-primary": "#ffffff",
+                    "error-container": "#ffdad6",
+                    "on-primary-fixed": "#00174b",
+                    "outline-variant": "#c3c6d7",
+                    "on-tertiary-container": "#bdffdb",
+                    "surface-dim": "#cbdbf5",
+                    "surface-container": "#e5eeff",
+                    "secondary": "#712ae2",
+                    "inverse-surface": "#213145",
+                    "outline": "#737686",
+                    "secondary-fixed-dim": "#d2bbff",
+                    "secondary-fixed": "#eaddff",
+                    "inverse-on-surface": "#eaf1ff",
+                    "surface": "#f8f9ff",
+                    "tertiary-container": "#007d55",
+                    "on-secondary": "#ffffff",
+                    "on-tertiary-fixed-variant": "#005236",
+                    "background": "#f8f9ff",
+                    "on-tertiary-fixed": "#002113",
+                    "on-secondary-fixed": "#25005a",
+                    "inverse-primary": "#b4c5ff",
+                    "on-secondary-fixed-variant": "#5a00c6",
+                    "primary": "#004ac6",
+                    "surface-container-highest": "#d3e4fe",
+                    "on-surface-variant": "#434655",
+                    "surface-bright": "#f8f9ff",
+                    "on-primary-container": "#eeefff",
+                    "on-error-container": "#93000a",
+                    "on-background": "#0b1c30",
+                    "on-error": "#ffffff",
+                    "primary-fixed-dim": "#b4c5ff",
+                    "on-primary-fixed-variant": "#003ea8",
+                    "surface-tint": "#0053db",
+                    "on-surface": "#0b1c30"
+            },
+            "borderRadius": {
+                    "DEFAULT": "0.25rem",
+                    "lg": "0.5rem",
+                    "xl": "0.75rem",
+                    "full": "9999px"
+            },
+            "spacing": {
+                    "container-padding": "20px",
+                    "unit": "4px",
+                    "stack-gap-sm": "8px",
+                    "stack-gap-md": "16px",
+                    "section-margin": "32px",
+                    "stack-gap-lg": "24px"
+            },
+            "fontFamily": {
+                    "label-md": ["Inter"],
+                    "headline-sm": ["Inter"],
+                    "display-lg": ["Inter"],
+                    "display-md": ["Inter"],
+                    "display-lg-mobile": ["Inter"],
+                    "label-sm": ["Inter"],
+                    "body-sm": ["Inter"],
+                    "title-lg": ["Inter"],
+                    "body-md": ["Inter"]
+            },
+            "fontSize": {
+                    "label-md": ["14px", {"lineHeight": "20px", "fontWeight": "500"}],
+                    "headline-sm": ["20px", {"lineHeight": "28px", "fontWeight": "600"}],
+                    "display-lg": ["32px", {"lineHeight": "40px", "letterSpacing": "-0.02em", "fontWeight": "700"}],
+                    "display-md": ["24px", {"lineHeight": "32px", "letterSpacing": "-0.01em", "fontWeight": "700"}],
+                    "display-lg-mobile": ["28px", {"lineHeight": "34px", "fontWeight": "700"}],
+                    "label-sm": ["12px", {"lineHeight": "16px", "fontWeight": "600"}],
+                    "body-sm": ["14px", {"lineHeight": "20px", "fontWeight": "400"}],
+                    "title-lg": ["18px", {"lineHeight": "24px", "fontWeight": "600"}],
+                    "body-md": ["16px", {"lineHeight": "24px", "fontWeight": "400"}]
+            }
+          },
+        },
+      }
+    </script>
+<style>
+        body { font-family: 'Inter', sans-serif; -webkit-tap-highlight-color: transparent; }
+        .glass { backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); }
+        .hide-scrollbar::-webkit-scrollbar { display: none; }
+        .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        .scale-interaction:active { transform: scale(0.98); transition: transform 0.2s ease; }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background text-on-background">
+<!-- TopAppBar -->
+<header class="fixed top-0 w-full z-50 backdrop-blur-xl bg-surface/80 flex justify-between items-center px-container-padding h-16">
+<div class="flex items-center gap-stack-gap-md">
+<div class="w-10 h-10 rounded-full overflow-hidden bg-surface-container-high ring-2 ring-primary/10">
+<img class="w-full h-full object-cover" data-alt="A professional headshot of a corporate employee for a user profile avatar. The subject is a woman with a confident smile, set against a soft-focus office background with warm, natural lighting. The style is modern and clean, aligning with a premium enterprise application aesthetic with high contrast and clarity." src="https://lh3.googleusercontent.com/aida-public/AB6AXuB2sL6uUJ064LijNpjKSiiQJya3yBIz8zjjwmNQTMVLzD95CXnpOlZMXZnoXue5vA4wacnx_H0FVx8WeHyFUoAQlDNi9ga73--TwzBtv9jMB1NAlX3zcgg5HxZWc45eYBq0-qdincZlf1vOeLHFsTxWrbAFqHEHeVXQ3n6PoJe_NvVFVarVXGVdDDrnhkRCga7wgkwd7_d_SiwFA8x6R9QycCT-mBn9gSM3JE1hu50Y6qIAdc6ESNLcJBUG8KavpLrjOq0B2Ak1Oh8"/>
+</div>
+<h1 class="font-headline-sm text-headline-sm-mobile text-on-surface">Announcements</h1>
+</div>
+<div class="flex items-center gap-stack-gap-md">
+<button class="material-symbols-outlined text-on-surface-variant hover:opacity-80 transition-opacity">search</button>
+<button class="material-symbols-outlined text-primary hover:opacity-80 transition-opacity">notifications</button>
+</div>
+</header>
+<main class="pt-20 pb-32 px-container-padding space-y-section-margin max-w-2xl mx-auto">
+<!-- Categories Filter -->
+<section class="hide-scrollbar overflow-x-auto flex gap-stack-gap-md -mx-container-padding px-container-padding">
+<button class="flex-shrink-0 px-5 py-2.5 rounded-full bg-primary text-on-primary font-label-md text-label-md scale-interaction">All</button>
+<button class="flex-shrink-0 px-5 py-2.5 rounded-full bg-surface-container-low text-on-surface-variant font-label-md text-label-md scale-interaction hover:bg-surface-container">News</button>
+<button class="flex-shrink-0 px-5 py-2.5 rounded-full bg-surface-container-low text-on-surface-variant font-label-md text-label-md scale-interaction hover:bg-surface-container">Events</button>
+<button class="flex-shrink-0 px-5 py-2.5 rounded-full bg-surface-container-low text-on-surface-variant font-label-md text-label-md scale-interaction hover:bg-surface-container">Policy</button>
+<button class="flex-shrink-0 px-5 py-2.5 rounded-full bg-surface-container-low text-on-surface-variant font-label-md text-label-md scale-interaction hover:bg-surface-container">Celebrations</button>
+</section>
+<!-- Pinned Section -->
+<section>
+<div class="flex items-center gap-2 mb-stack-gap-md">
+<span class="material-symbols-outlined text-primary text-[18px]" style="font-variation-settings: 'FILL' 1;">push_pin</span>
+<h2 class="font-title-lg text-title-lg text-on-surface">Pinned Updates</h2>
+</div>
+<div class="relative group cursor-pointer overflow-hidden rounded-xl bg-surface-container-lowest shadow-[0px_4px_20px_rgba(0,0,0,0.05)] border border-outline-variant/30 transition-all duration-300 hover:shadow-md">
+<div class="aspect-video w-full overflow-hidden relative">
+<img class="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105" data-alt="A modern architectural office building with floor-to-ceiling glass windows at sunset. The lighting is warm and golden, reflecting off the clean lines of the building. This image represents a company-wide expansion announcement. The aesthetic is professional, airy, and high-end, utilizing a clean, corporate photography style." src="https://lh3.googleusercontent.com/aida-public/AB6AXuA9QHo-0gGcGz1sXkpXqCAlFkw-zspjz_0PZ1E2TFuP8TlRbkOAkcL39Fue7YcnFFJSCQ4TIYm4vkUCwpUkoD0Lc6lvtqVX0eLFBpiIdNYJaTV1RYnJdJVVnfHtU7Y1yqTDtY0zDmXJGPfGS69yZvXeAA9IzipRPYBVsLT77BlIk7k21gZx2u_UaNRPCKtE2QEnkJqq2C0jEyX8jxwDM3WcN-0Muf6WDspnY2VFHSZjfjqXWy5q3ReaSVjDDpmICWSaSBzV6aVgE2U"/>
+<div class="absolute top-4 left-4 bg-error text-on-error font-label-sm text-label-sm px-3 py-1 rounded-full shadow-sm">CRITICAL</div>
+</div>
+<div class="p-stack-gap-md">
+<h3 class="font-title-lg text-title-lg text-on-background mb-1">Global HQ Expansion Strategy 2025</h3>
+<p class="font-body-sm text-body-sm text-on-surface-variant line-clamp-2">We are thrilled to share the blueprint for our new regional hubs designed for hybrid collaboration and innovation across four major continents...</p>
+<div class="mt-stack-gap-md flex items-center justify-between">
+<span class="text-primary font-label-md text-label-md">Read full brief</span>
+<span class="font-label-sm text-label-sm text-outline">2h ago</span>
+</div>
+</div>
+</div>
+</section>
+<!-- Main Stream -->
+<section class="space-y-stack-gap-lg">
+<h2 class="font-title-lg text-title-lg text-on-surface">Latest News</h2>
+<!-- Announcement Card 1 -->
+<article class="bg-surface-container-lowest rounded-xl shadow-[0px_4px_20px_rgba(0,0,0,0.05)] border border-outline-variant/30 overflow-hidden">
+<div class="aspect-[21/9] w-full">
+<img class="w-full h-full object-cover" data-alt="A diverse group of cheerful employees celebrating a success in a modern, plant-filled lounge area. Soft natural light pours through large windows. The scene captures authentic smiles and a vibrant culture. The style is bright and clean with a focus on human connection and corporate wellness, aligned with a modern professional app UI." src="https://lh3.googleusercontent.com/aida-public/AB6AXuCa4lTzvxgvdSbX0FlU-3lugwgaFzkJBsDn_nanr0i8pDBWtn4vN_Q53OpCaESQlQaxvFjfV_U-5TcR2Lnp7lesceAKk7Jz3jpfNaE5-EfETcpwaw8vPldJU5zvGOC_AXM9s6UZ7rx_WycvOWnx_66A97BydgzvwapWU9j8L2SsoLMJjeDegoUbhgyhwJNQDMCYwVZ9yjWgKGaBLXPlZIOUdCcF9p9wkq0AdwSfVnqOQ7aNaftFWA0NRMhbHKV4oT_uy0b5Xq4yaiQ"/>
+</div>
+<div class="p-stack-gap-md">
+<div class="flex items-center gap-2 mb-2">
+<span class="bg-secondary/10 text-secondary font-label-sm text-label-sm px-2 py-0.5 rounded">Celebrations</span>
+</div>
+<h3 class="font-title-lg text-title-lg text-on-background mb-2">Q3 Performance Awards Winners</h3>
+<p class="font-body-sm text-body-sm text-on-surface-variant mb-stack-gap-md">Join us in congratulating the teams who went above and beyond this quarter. Their dedication has been truly inspiring...</p>
+<div class="flex items-center justify-between border-t border-outline-variant/10 pt-stack-gap-md">
+<div class="flex items-center gap-4">
+<button class="flex items-center gap-1.5 text-on-surface-variant scale-interaction">
+<span class="material-symbols-outlined text-[20px]">favorite</span>
+<span class="font-label-md text-label-md">124</span>
+</button>
+<button class="flex items-center gap-1.5 text-on-surface-variant scale-interaction">
+<span class="material-symbols-outlined text-[20px]">chat_bubble</span>
+<span class="font-label-md text-label-md">18</span>
+</button>
+</div>
+<a class="font-label-md text-label-md text-primary font-bold" href="#">Read More</a>
+</div>
+</div>
+</article>
+<!-- Announcement Card 2 -->
+<article class="bg-surface-container-lowest rounded-xl shadow-[0px_4px_20px_rgba(0,0,0,0.05)] border border-outline-variant/30 overflow-hidden">
+<div class="aspect-[21/9] w-full">
+<img class="w-full h-full object-cover" data-alt="A conceptual image representing new company policies, featuring a close-up of a tablet with digital documents and a sleek stylus on a minimalist wooden desk. The background is blurred, showing a high-end corporate environment. The lighting is soft and professional, with a focus on efficiency and digital transformation." src="https://lh3.googleusercontent.com/aida-public/AB6AXuB_vDPbvDfCc51Z7Dk_Vah6EQe4yQOwBJLWwTytoTx_rUvdEZfAVeRFjFO02yth_9Wgu_G-9yPsGE8xGjvyY5YMOxN3ILa7BS6cjgplApam0XCuwHvaD41Y6HCdocV9XTCVixQwBIHujAUnDyX72Prr4Se5tm9PHa25Z5cvtEAmLhNjrvAoH1z2LC0oXufFWxeMOGABvABrpL7COPAvaU3EIc2aVDZaryPeUgU1N43JNLAnSD3iwF0rM_b2PjuZB1gccRizfcIC_-0"/>
+</div>
+<div class="p-stack-gap-md">
+<div class="flex items-center gap-2 mb-2">
+<span class="bg-tertiary-container/10 text-tertiary-container font-label-sm text-label-sm px-2 py-0.5 rounded">Policy</span>
+</div>
+<h3 class="font-title-lg text-title-lg text-on-background mb-2">Updated Remote Work Guidelines</h3>
+<p class="font-body-sm text-body-sm text-on-surface-variant mb-stack-gap-md">We've refined our flexibility policy to better support work-life balance while maintaining our collaborative spirit. Check the new handbook...</p>
+<div class="flex items-center justify-between border-t border-outline-variant/10 pt-stack-gap-md">
+<div class="flex items-center gap-4">
+<button class="flex items-center gap-1.5 text-on-surface-variant scale-interaction">
+<span class="material-symbols-outlined text-[20px]">favorite</span>
+<span class="font-label-md text-label-md">89</span>
+</button>
+<button class="flex items-center gap-1.5 text-on-surface-variant scale-interaction">
+<span class="material-symbols-outlined text-[20px]">chat_bubble</span>
+<span class="font-label-md text-label-md">42</span>
+</button>
+</div>
+<a class="font-label-md text-label-md text-primary font-bold" href="#">Read More</a>
+</div>
+</div>
+</article>
+</section>
+</main>
+<!-- FAB for AI assistant as per style guide -->
+<button class="fixed right-6 bottom-24 w-14 h-14 rounded-full bg-gradient-to-tr from-secondary to-primary-container text-white shadow-lg flex items-center justify-center scale-interaction z-40 glass">
+<span class="material-symbols-outlined">auto_awesome</span>
+</button>
+<!-- BottomNavBar -->
+<nav class="fixed bottom-0 left-0 w-full z-50 flex justify-around items-center px-4 pb-safe h-20 bg-surface/80 backdrop-blur-xl border-t border-outline-variant/20 shadow-sm">
+<button class="flex flex-col items-center justify-center text-primary after:content-[''] after:w-1 after:h-1 after:bg-primary after:rounded-full after:mt-1 hover:bg-surface-container-low transition-colors px-4 py-2 rounded-lg">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">home</span>
+<span class="font-label-sm text-label-sm">Home</span>
+</button>
+<button class="flex flex-col items-center justify-center text-on-surface-variant hover:bg-surface-container-low transition-colors px-4 py-2 rounded-lg">
+<span class="material-symbols-outlined">fingerprint</span>
+<span class="font-label-sm text-label-sm">Attendance</span>
+</button>
+<button class="flex flex-col items-center justify-center text-on-surface-variant hover:bg-surface-container-low transition-colors px-4 py-2 rounded-lg">
+<span class="material-symbols-outlined">calendar_today</span>
+<span class="font-label-sm text-label-sm">Leave</span>
+</button>
+<button class="flex flex-col items-center justify-center text-on-surface-variant hover:bg-surface-container-low transition-colors px-4 py-2 rounded-lg">
+<span class="material-symbols-outlined">payments</span>
+<span class="font-label-sm text-label-sm">Salary</span>
+</button>
+<button class="flex flex-col items-center justify-center text-on-surface-variant hover:bg-surface-container-low transition-colors px-4 py-2 rounded-lg">
+<span class="material-symbols-outlined">person</span>
+<span class="font-label-sm text-label-sm">Profile</span>
+</button>
+</nav>
+<script>
+        // Micro-interaction for category selection
+        const categoryButtons = document.querySelectorAll('section:first-of-type button');
+        categoryButtons.forEach(btn => {
+            btn.addEventListener('click', () => {
+                categoryButtons.forEach(b => {
+                    b.classList.remove('bg-primary', 'text-on-primary');
+                    b.classList.add('bg-surface-container-low', 'text-on-surface-variant');
+                });
+                btn.classList.add('bg-primary', 'text-on-primary');
+                btn.classList.remove('bg-surface-container-low', 'text-on-surface-variant');
+            });
+        });
+
+        // Toggle Like functionality mockup
+        document.querySelectorAll('button:has(.material-symbols-outlined:contains("favorite"))').forEach(btn => {
+            btn.addEventListener('click', function() {
+                const icon = this.querySelector('.material-symbols-outlined');
+                const count = this.querySelector('span:not(.material-symbols-outlined)');
+                const isLiked = icon.style.fontVariationSettings.includes("'FILL' 1");
+                
+                if (isLiked) {
+                    icon.style.fontVariationSettings = "'FILL' 0";
+                    this.classList.replace('text-error', 'text-on-surface-variant');
+                    count.textContent = parseInt(count.textContent) - 1;
+                } else {
+                    icon.style.fontVariationSettings = "'FILL' 1";
+                    this.classList.replace('text-on-surface-variant', 'text-error');
+                    count.textContent = parseInt(count.textContent) + 1;
+                }
+            });
+        });
+    </script>
+</body></html>

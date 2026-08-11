@@ -54,6 +54,7 @@ def get_company(
 
 
 @router.put("/{company_id}", response_model=APIResponse[CompanyResponse])
+@router.patch("/{company_id}", response_model=APIResponse[CompanyResponse])
 def update_company(
     company_id: UUID,
     body: CompanyUpdateRequest,

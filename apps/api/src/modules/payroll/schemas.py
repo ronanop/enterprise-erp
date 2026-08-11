@@ -35,9 +35,19 @@ class PayrollPeriodResponse(OrmModel):
 
 class SalaryStructureCreate(BaseModel):
     company_id: UUID | None = None
-    status: str | None = None
+    branch_id: UUID | None = None
+    structure_code: str | None = None
+    structure_name: str
+    effective_from: date
+    effective_to: date | None = None
+    currency_code: str = "INR"
+    status: str | None = "active"
 
 class SalaryStructureUpdate(BaseModel):
+    structure_name: str | None = None
+    effective_from: date | None = None
+    effective_to: date | None = None
+    currency_code: str | None = None
     status: str | None = None
     version: int | None = None
 
@@ -102,9 +112,25 @@ class SalaryStructureLineResponse(OrmModel):
 class EmployeeSalaryCreate(BaseModel):
     company_id: UUID | None = None
     branch_id: UUID
-    status: str | None = None
+    employee_id: UUID
+    salary_structure_id: UUID
+    employment_id: UUID
+    department_id: UUID | None = None
+    effective_from: date
+    effective_to: date | None = None
+    ctc_amount: Decimal
+    gross_amount: Decimal
+    currency_code: str = "INR"
+    status: str | None = "active"
+    document_number: str | None = None
 
 class EmployeeSalaryUpdate(BaseModel):
+    salary_structure_id: UUID | None = None
+    effective_from: date | None = None
+    effective_to: date | None = None
+    ctc_amount: Decimal | None = None
+    gross_amount: Decimal | None = None
+    currency_code: str | None = None
     status: str | None = None
     version: int | None = None
 
@@ -248,6 +274,11 @@ class StatutoryContributionResponse(OrmModel):
 class PayrollRunCreate(BaseModel):
     company_id: UUID | None = None
     branch_id: UUID
+    payroll_period_id: UUID | None = None
+    run_date: date | None = None
+    run_type: str | None = None
+    currency_code: str | None = None
+    target_employee_id: UUID | None = None
     status: str | None = None
 
 class PayrollRunUpdate(BaseModel):
@@ -305,10 +336,23 @@ class PayrollRunLineResponse(OrmModel):
 class PayslipCreate(BaseModel):
     company_id: UUID | None = None
     branch_id: UUID
-    status: str | None = None
+    payroll_run_id: UUID
+    payroll_run_line_id: UUID
+    employee_id: UUID
+    payroll_period_id: UUID
+    gross_salary: Decimal
+    total_deductions: Decimal
+    net_salary: Decimal
+    payslip_json: dict | None = None
+    delivery_status: str | None = "pending"
+    payment_status: str | None = "unpaid"
+    status: str | None = "generated"
 
 class PayslipUpdate(BaseModel):
     status: str | None = None
+    delivery_status: str | None = None
+    payment_status: str | None = None
+    payslip_json: dict | None = None
     version: int | None = None
 
 class PayslipResponse(OrmModel):
@@ -336,10 +380,17 @@ class PayslipResponse(OrmModel):
 class BonusCreate(BaseModel):
     company_id: UUID | None = None
     branch_id: UUID
-    status: str | None = None
+    employee_id: UUID
+    payroll_period_id: UUID | None = None
+    bonus_type: str = "other"
+    amount: Decimal
+    status: str | None = "draft"
 
 class BonusUpdate(BaseModel):
     status: str | None = None
+    amount: Decimal | None = None
+    bonus_type: str | None = None
+    payroll_period_id: UUID | None = None
     version: int | None = None
 
 class BonusResponse(OrmModel):
@@ -359,10 +410,15 @@ class BonusResponse(OrmModel):
 class ReimbursementCreate(BaseModel):
     company_id: UUID | None = None
     branch_id: UUID
+    employee_id: UUID
+    reimbursement_type: str
+    claim_amount: Decimal
+    payroll_period_id: UUID | None = None
     status: str | None = None
 
 class ReimbursementUpdate(BaseModel):
     status: str | None = None
+    approved_amount: Decimal | None = None
     version: int | None = None
 
 class ReimbursementResponse(OrmModel):
@@ -383,6 +439,15 @@ class ReimbursementResponse(OrmModel):
 class LoanCreate(BaseModel):
     company_id: UUID | None = None
     branch_id: UUID
+    employee_id: UUID
+    loan_type: str = "personal"
+    principal_amount: Decimal
+    emi_amount: Decimal
+    interest_rate: Decimal = Decimal("0")
+    installment_count: int
+    start_date: date
+    end_date: date | None = None
+    outstanding_amount: Decimal | None = None
     status: str | None = None
 
 class LoanUpdate(BaseModel):
@@ -435,10 +500,19 @@ class LoanInstallmentResponse(OrmModel):
 class PayrollAdjustmentCreate(BaseModel):
     company_id: UUID | None = None
     branch_id: UUID
-    status: str | None = None
+    employee_id: UUID
+    payroll_period_id: UUID
+    salary_component_id: UUID | None = None
+    adjustment_type: str = "earning"
+    amount: Decimal
+    reason: str | None = None
+    status: str | None = "draft"
 
 class PayrollAdjustmentUpdate(BaseModel):
     status: str | None = None
+    amount: Decimal | None = None
+    reason: str | None = None
+    adjustment_type: str | None = None
     version: int | None = None
 
 class PayrollAdjustmentResponse(OrmModel):

@@ -1,6 +1,5 @@
 """FastAPI application entry point."""
 
-from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -15,7 +14,7 @@ from shared.router import api_v1_router
 
 
 @asynccontextmanager
-async def lifespan(_: FastAPI) -> AsyncIterator[None]:
+async def lifespan(application: FastAPI):
     setup_logging()
     yield
 
@@ -29,14 +28,20 @@ def create_app() -> FastAPI:
         lifespan=lifespan,
     )
 
-    application.add_middleware(
-        CORSMiddleware,
-        allow_origins=settings.cors_origins,
-        allow_credentials=True,
-        allow_methods=["*"],
-        allow_headers=["*"],
-    )
     application.add_middleware(RequestContextMiddleware)
+
+    cors_kwargs: dict = {
+        "allow_origins": settings.cors_origins,
+        "allow_credentials": True,
+        "allow_methods": ["*"],
+        "allow_headers": ["*"],
+    }
+    if settings.cors_origin_regex:
+        cors_kwargs["allow_origin_regex"] = settings.cors_origin_regex
+    elif settings.is_development:
+        cors_kwargs["allow_origin_regex"] = r"https?://(localhost|127\.0\.0\.1)(:\d+)?"
+
+    application.add_middleware(CORSMiddleware, **cors_kwargs)
 
     register_exception_handlers(application)
     application.include_router(api_v1_router, prefix=API_V1_PREFIX)

@@ -17,7 +17,7 @@ from helpers import (  # noqa: E402
 )
 
 revision: str = "0490_hr_management_group"
-down_revision: str | None = "0472_vascan_checkbox_date"
+down_revision: str | None = "0489_hr_att_policy_maker"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 

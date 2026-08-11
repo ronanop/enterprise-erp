@@ -3,7 +3,7 @@
 from decimal import Decimal
 from uuid import UUID, uuid4
 
-from sqlalchemy import Boolean, CheckConstraint, ForeignKey, Numeric, String, UniqueConstraint
+from sqlalchemy import Boolean, CheckConstraint, ForeignKey, Numeric, SmallInteger, String, UniqueConstraint
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -31,4 +31,10 @@ class HrLeaveType(Base, *HrMasterMixin):
     is_paid: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     max_days_per_year: Mapped[Decimal | None] = mapped_column(Numeric(9, 2), nullable=True)
     requires_attachment: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    carry_forward_allowed: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    max_carry_forward_days: Mapped[Decimal | None] = mapped_column(Numeric(9, 2), nullable=True)
+    encashment_allowed: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    monthly_credit_days: Mapped[Decimal | None] = mapped_column(Numeric(9, 2), nullable=True)
+    leave_cycle_start_day: Mapped[int] = mapped_column(SmallInteger, nullable=False, default=1)
+    sandwich_rule_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     status: Mapped[str] = mapped_column(String(30), nullable=False, default="active", index=True)

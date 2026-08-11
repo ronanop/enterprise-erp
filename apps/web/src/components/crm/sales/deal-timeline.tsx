@@ -1,13 +1,34 @@
 "use client";
 
 import Link from "next/link";
-import { ArrowRight, Building2, Check, FileText, Handshake, Target, Trophy, X } from "lucide-react";
+import {
+  ArrowRight,
+  Building2,
+  Check,
+  Cloud,
+  FileText,
+  Handshake,
+  Target,
+  Trophy,
+  X,
+} from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import type { OpportunityTimelineEvent } from "@/services/sales-crm-service";
 
-export type DealStage = "company" | "lead" | "opportunity" | "quote" | "ovf" | "won";
+export type DealFlow = "hardware" | "cloud" | "cloud_migration";
+
+export type DealStage =
+  | "company"
+  | "lead"
+  | "opportunity"
+  | "quote"
+  | "ovf"
+  | "map_quote"
+  | "onboarding"
+  | "won";
+
 type DealLinks = Partial<Record<DealStage, string>>;
 type NextStep = {
   label: string;
@@ -15,7 +36,9 @@ type NextStep = {
   href?: string;
 };
 
-const STEPS: Array<{ key: DealStage; label: string; icon: typeof Building2 }> = [
+type StepDef = { key: DealStage; label: string; icon: typeof Building2 };
+
+const HARDWARE_STEPS: StepDef[] = [
   { key: "company", label: "Company", icon: Building2 },
   { key: "lead", label: "Lead", icon: Target },
   { key: "opportunity", label: "Opportunity", icon: Handshake },
@@ -24,8 +47,41 @@ const STEPS: Array<{ key: DealStage; label: string; icon: typeof Building2 }> = 
   { key: "won", label: "Won", icon: Trophy },
 ];
 
+/** Billing Shift, POC/Assessment — no quote, DR, or OVF. */
+const CLOUD_CONSUMPTION_STEPS: StepDef[] = [
+  { key: "company", label: "Company", icon: Building2 },
+  { key: "lead", label: "Lead", icon: Target },
+  { key: "opportunity", label: "Opportunity", icon: Handshake },
+  { key: "onboarding", label: "Onboarding", icon: Cloud },
+  { key: "won", label: "Active", icon: Trophy },
+];
+
+/** MAP / Cloud Migration — optional OEM migration quote before onboarding. */
+const CLOUD_MIGRATION_STEPS: StepDef[] = [
+  { key: "company", label: "Company", icon: Building2 },
+  { key: "lead", label: "Lead", icon: Target },
+  { key: "opportunity", label: "Opportunity", icon: Handshake },
+  { key: "map_quote", label: "MAP Quote", icon: FileText },
+  { key: "onboarding", label: "Onboarding", icon: Cloud },
+  { key: "won", label: "Active", icon: Trophy },
+];
+
+function stepsForFlow(flow: DealFlow): StepDef[] {
+  if (flow === "cloud") return CLOUD_CONSUMPTION_STEPS;
+  if (flow === "cloud_migration") return CLOUD_MIGRATION_STEPS;
+  return HARDWARE_STEPS;
+}
+
+function findStepLabel(stage: DealStage): string | undefined {
+  for (const steps of [HARDWARE_STEPS, CLOUD_CONSUMPTION_STEPS, CLOUD_MIGRATION_STEPS]) {
+    const match = steps.find((step) => step.key === stage);
+    if (match) return match.label;
+  }
+  return undefined;
+}
+
 export function getDealStageLabel(stage: DealStage): string {
-  return STEPS.find((step) => step.key === stage)?.label ?? stage;
+  return findStepLabel(stage) ?? stage;
 }
 
 function humanizeToken(value: string): string {
@@ -73,6 +129,17 @@ export function DealTimelineStatusBadge({
   );
 }
 
+export function resolveCloudTimelineStage(
+  blueprintState: string,
+  won: boolean,
+  variant: string | null | undefined,
+): DealStage {
+  if (won) return "won";
+  if (blueprintState === "cloud_onboarding") return "onboarding";
+  if (variant === "migration" && blueprintState === "map_oem_pending") return "map_quote";
+  return "opportunity";
+}
+
 /**
  * Navigable stepper for the sales blueprint. Existing records become links,
  * and an optional handoff prompt keeps the user moving without using the CRM
@@ -83,18 +150,24 @@ export function DealTimeline({
   lost,
   links,
   nextStep,
+  flow = "hardware",
 }: {
   current: DealStage;
   lost?: boolean;
   links?: DealLinks;
   nextStep?: NextStep;
+  flow?: DealFlow;
 }) {
-  const currentIdx = STEPS.findIndex((s) => s.key === current);
+  const steps = stepsForFlow(flow);
+  const currentIdx = Math.max(
+    0,
+    steps.findIndex((s) => s.key === current),
+  );
 
   return (
     <section className="overflow-hidden rounded-xl border border-border/80 bg-card shadow-sm">
       <div className="erp-scroll flex items-center gap-0.5 overflow-x-auto px-3 py-2.5">
-        {STEPS.map((step, idx) => {
+        {steps.map((step, idx) => {
           const isDone = idx < currentIdx && !lost;
           const isCurrent = idx === currentIdx && !lost;
           const isLostHere = lost && idx === currentIdx;
@@ -153,13 +226,13 @@ export function DealTimeline({
                   {content}
                 </div>
               )}
-              {idx < STEPS.length - 1 ? (
+              {idx < steps.length - 1 ? (
                 <div
-                className={cn(
-                  "h-px w-4 shrink-0",
-                  isDone ? "bg-emerald-500" : "bg-border/70",
-                )}
-              />
+                  className={cn(
+                    "h-px w-4 shrink-0",
+                    isDone ? "bg-emerald-500" : "bg-border/70",
+                  )}
+                />
               ) : null}
             </div>
           );

@@ -1,0 +1,336 @@
+You are a senior full-stack engineer and product designer. Build a production-ready SALES CRM (web app) that replaces Zoho CRM for our sales process only. Do NOT build distributors/projects/full ERP. Scope = Company → Lead → Opportunity → Quote → OVF → Deal Won, plus My Jobs approvals, Contacts, Products, role-based access.
+
+============================================================
+A. PRODUCT PRINCIPLES
+============================================================
+1. Repositories: global list views for Company, Contacts, Opportunities, Leads, Quotes, OVF, Products — searchable across the org — BUT child records must be created FROM the parent Company (or from Opportunity/Quote blueprint where specified) so account/address/entity data auto-fetches.
+2. Do NOT allow standalone “Create Opportunity” from Opportunities home. Opportunity is created ONLY via Lead → “Convert to Opportunity”.
+3. Do NOT allow Create Quote until Opportunity has completed OEM Quotation Received + Attach OEM Quote.
+4. “Lost Lead” / “Lost Deal” is available at almost every stage (not Closed Won). Won only happens at the end as Deal Won.
+5. Approvals: merge Zoho’s dual “send email” + “send for approval” into ONE action: “Send for approval to {Team}”. This creates a My Jobs task, sends email/in-app notification, and can lock the record until approved/rejected.
+6. Prefer ONE deal timeline / breadcrumb UI so users don’t hop Quote ↔ Opp ↔ OVF blindly. Still keep separate modules as repositories.
+7. Currency: INR (₹). Support GST/HSN where quote line items need it.
+8. Demo-first: implement full happy path + Lost exits + My Jobs approve/reject. Deep approval hierarchy can be stubbed with roles but margin lock rules MUST work.
+
+============================================================
+B. MODULES (NAV)
+============================================================
+Home | Workqueue (optional) | Reports (stub) | Analytics (stub) | My Requests (optional)
+CRM Teamspace:
+- My Jobs
+- Company (Accounts)
+- Leads
+- Opportunities
+- Quotes
+- OVF Module
+- Contacts
+- Calls / Tasks / Meetings (lightweight or stub)
+- KYC (stub module ok for demo)
+- Products
+
+============================================================
+C. ROLES & MY JOBS
+============================================================
+Roles: Sales, Pre-sales, Project (services/SoW), Management, Accounts (PO), SCM (receive OVF), Admin.
+My Jobs = task inbox filtered by KRA/role. Pre-sales only sees BoQ approval tasks — NOT full opportunity/contact dumps.
+On assign/approve/reject: email + in-app popup notification. Strong alert UI when something awaits approval (do not let users miss it).
+Practice leaders later get group access to team opportunities (design for groups; can stub).
+
+============================================================
+D. END-TO-END WORKFLOW (MANDATORY STATE MACHINE)
+============================================================
+
+### 1) COMPANY (Account) — START HERE
+Create Company first.
+List view columns: Customer Name, Phone, Customer Email, Account Owner, Modified Time, Last Activity. Filters by Account Number, Owner, Ownership, Account Type, etc.
+
+CREATE COMPANY — Account Information (2 columns)
+LEFT (required marked *):
+- Account Owner* (lookup, default current user)
+- Customer Name*
+- Account Number
+- Account Type (picklist)
+- Industry* (picklist)
+- Other Industries (text)
+- Portal Id
+- Source* (picklist)
+RIGHT:
+- Rating (picklist)
+- First Name, Last Name
+- Customer Email, Phone, Website
+- Account Ownership (user lookup)
+- Customer ID
+- Role (picklist, default User)
+
+Address Information:
+Billing* (Street, City, State, Code, Country) — all required
+Shipping (Street, City, State, Code, Country)
+Button: Copy Address (billing → shipping)
+Description (textarea)
+
+From Company detail: ONLY place to create Lead (and later related records). Creating Lead from Company MUST auto-fill address and company/org fields.
+
+### 2) LEAD — created from Company only
+After save, Lead appears under that Company. Address auto from Company.
+
+Lead header / commercial:
+- Assigned Date* (date)
+- Lead Owner (user)
+- Expected Business Amount (₹)
+- Lead Status (picklist; may be system-driven)
+- Expected Closure Date (date)
+
+Lead Information (2 columns) — required *:
+LEFT:
+- Company* (prefilled from parent; lookup)
+- Email*
+- First Name* (+ salutation picklist)
+- Product Type (picklist: Hardware / Software / …) — cascading
+- Sub Product Category* (depends on Product Type)
+- Sub Product* (text; ALWAYS support “Others” free text when not in list)
+- Engagement Score
+- Portal Link
+- Assign To (user lookup)
+- Assigned Date*
+RIGHT:
+- Customer’s Project Title
+- Lead Source
+- Last Name
+- Mobile (10-digit placeholder)
+- Requirement Type, Purchase Model
+- DR Number, New DR Number (can also be set later at Deal Reg stage)
+- Type (picklist, e.g. Back to Back)
+- Lead Owner
+
+Customer Address Information (auto-fetch editable):
+Street*, City, State*, Zip, Country*
+
+OEM Information:
+OEM Name*, OEM Contact Person, OEM Contact Number, OEM Contact Email
+
+Distributor Information:
+Distributor Name, Contact Person, Contact Number, Contact Email, Department
+
+Customer & Industry:
+End Customer* (final recipient of product; may equal Company if direct sale)
+Industry*
+
+Entity Information (seller = our company, e.g. Calipers Consulting):
+Entity Name*
+Organization (lookup to Company/account context)
+Entity Email, Entity Address, Entity GST No., Entity Contact Number — often LOCKED/auto from Entity master
+
+Description (textarea)
+
+Product cascade rule:
+- Hardware → hardware-related sub categories
+- Software → software-related sub categories
+- Always allow Others free text (e.g. VCF, monitor)
+
+LEAD ACTIONS (blueprint buttons):
+1. Convert to Opportunity (require remark: e.g. eligible / BoQ received)
+2. Lead Lost
+
+On Convert:
+- Create Opportunity linked to same Company/Contact
+- Move Lead out of active Lead stage (no duplicate Lead+Opp sitting as active lead)
+- Prefill Opp from Lead
+
+### 3) OPPORTUNITY — post convert
+No manual create from module +. Show current state always.
+
+Initial actions (show as blocks):
+- Attach BoQ
+- Attach SoW
+- Lost Lead (always)
+
+#### 3a BoQ path (product / infra / cloud)
+- Attach BoQ: upload ANY file type (xlsx, doc, pdf, image, screenshot)
+- Then: “Send for approval to Pre-sales team” (single merged step)
+- Pre-sales gets My Jobs task → Approve/Reject
+- Sales gets notification; record unlocks to next options
+- Wait/block further commercial steps that depend on BoQ until approved (or allow parallel SoW design — prefer sequential for demo)
+
+#### 3b SoW path (services — Cashy/project team)
+- Attach SoW (manpower, deployment, implementation, managed services, etc.)
+- Send for approval to Project team
+- SKIP SoW if deal is product-only
+- If BOTH product + services: complete BoQ then SoW then continue
+
+#### 3c Deal Registration
+- Action: Deal Reg
+- Fields: DR Number OR “NA” (allow alphanumeric/text — OEM DR numbers can be words)
+- Optional amount if needed
+
+#### 3d OEM Quotation Received — HARD GATE
+- Transition: OEM Quotation Received (Yes/No) + Lost Lead
+- If No → stay on same step (cannot proceed)
+- If Yes → Attach OEM Quote (file required) + Lost Lead
+- ONLY after OEM quote attached → show Create Quote + Lost Lead
+
+Business rule: Sales never invents cost price. Cost comes from OEM/vendor quote OR from project team for SoW services. We are middle/channel.
+
+### 4) QUOTE — created from Opportunity blueprint only
+Open Quote form; fetch from Opportunity/Company/Entity.
+
+Quote Information:
+- Customer’s Project Title (from Opp/Lead)
+- Account Name* (Company lookup)
+- Contact Name (lookup)
+- Service Type / Product Type (picklist) — for demo: Product Type + Service Type only; NO deep sub-product on quote
+- Quote Stage (system locked, e.g. Quote Create → …)
+- Approval Status (system locked)
+- Subject*
+- Valid Until*
+- Quote Owner
+- Quote No. (auto, e.g. CC/YY-YY/Vx)
+- Version (auto)
+
+Entity Information (seller, often prefilled/locked):
+- Entity Name, Address, Email, Contact Number, GST No.
+
+Address: Billing Country (default India), Shipping Country — from Company
+
+Quoted Items (line table, + Add row):
+- S.No
+- Product Name (lookup/search Products)
+- HSN/SAC Code
+- Item Description
+- Quantity
+- Unit Price (₹)  [= vendor/cost basis for margin calc — clarify UX: cost vs sell]
+- Margin % (number only → auto Margin Amount)
+- ALSO support REVERSE CALC: enter customer sell price → auto compute Margin % / amount
+  Example: cost 2000, margin 10% → sell 2200; OR enter sell 2200 with cost 2000 → margin 10%
+- GST %, Total GST, Total Amount with GST
+- Vendor Quote Attach (file) — MANDATORY proof of vendor/OEM price per line or quote-level (mandate before submit)
+
+Quote totals:
+- Margin in Avg (%)
+- Total Margin Amount
+- Grand Total
+- Freight Charges (₹)
+- Grand Total including Freight
+
+Additional:
+- Sales Order id
+- Description
+- Reason For Discount
+- Terms and Conditions
+- BOQ Attachment (optional on quote)
+
+QUOTE BLUEPRINT after save:
+1. Send Quote to Internal Team for Approval  (ONE merged step; creates My Jobs + notify)
+2. Margin hierarchy gate:
+   - Hardware/Software minimum margin: 7%
+   - Services (any type: managed, manpower, deployment, implementation): 20%
+   - If margin ≤ threshold (including “up to” threshold) → LOCK quote → Management approval required
+   - If margin ABOVE threshold → Sales can “Approve Internally”
+   - Mixed HW+Services: apply the stricter/max rule (if HW below 7% even when services high → still lock)
+3. Quotation Approved Internally
+4. Send Quotation to Customer
+   - THIS IS INTERNAL STAGE ONLY — do not actually email customer/OEM from CRM in this step (stage marker)
+5. Then transitions:
+   - Negotiation → loop (stay/repeat customer stage)
+   - Follow Up → loop
+   - Quote Accepted → Yes/No confirm → proceed
+   - Lost Deal still available
+
+### 5) AFTER QUOTE ACCEPTED → back on OPPORTUNITY
+Actions:
+- Attach PO (customer purchase order file)
+- Lost Deal (still possible even after accept)
+
+Then:
+- Send for approval to Accounting (merge email+approval; Accounts role / Namit)
+- Record LOCKS until PO approved
+- Strong pending-approval notification
+
+### 6) OVF MODULE — create from Quote after PO approved
+OVF must be LOCKED/unavailable until PO is attached & approved on Opportunity.
+On create: auto-fetch from Opportunity/Quote/Company/Entity:
+Customer Name, Billing/Shipping addresses, Quote Name, Quote No, Account, Opportunity*, Owner, Entity fields, products/qty from quote (NOT quote unit prices for customer PO lines — prices entered manually against PO).
+
+OVF fields:
+- Ovf sent to SCM team (system Yes/No, locked; flips on share)
+- Technology Segment* (multi-select picklist + Others) 
+- Sub Technology Segment* (depends on segment; multi + Others)
+- PO Number*
+- Delivery Period / validity date*
+- Installation/Service Details
+- Contact persons / countries (billing vs shipping)
+- Opportunity* (lookup)
+- Approval Status (locked/system)
+- Total Margin Amount / Total Margin %
+- Additional Charges (₹), Freight Charges (₹)
+- Vendor Payment Terms (days)
+- Customer Payment Terms (days)
+- Finance Cost (%): auto from payment gap
+  Rule of thumb: 0.5% per 15 days gap (30d≈1%, 45d≈1.5%, 2.5 months≈2.5%). If vendor due earlier than customer collection, finance cost increases and should feed margin calc.
+- Customer PO line prices: MANUAL entry (qty fetched; price not blindly fetched from quote because PO price may change after negotiation)
+- Attach Customer PO* (mandatory)
+- Vendor section: same products implied; enter vendor qty/price; Attach Vendor Quote*
+- Approval Status workflow
+
+OVF BLUEPRINT:
+1. Send OVF for Approval (merged single step)
+2. On approve → “OVF Share to SCM Team”
+3. Then Deal Won (no Lost at this terminal share step)
+4. On Deal Won click: MANDATORY prompt for Deal Won Amount (people forget — force field)
+5. Sales CRM path ENDS at Share to SCM / Deal Won
+
+Future gap (note in code comments / TODO): if deal includes services/SoW, also route to Project/services team (not only SCM). Not required for first demo but design hooks.
+
+============================================================
+E. DATA MODEL (MIN)
+============================================================
+Company, Contact, Lead, Opportunity, Quote, QuoteLineItem, OVF, OVFLineItem (customer PO + vendor), Attachment, ApprovalTask (My Jobs), Product, User, Role, Notification, Audit/StateHistory.
+Every record: owner_id, company_id where relevant, current_state, locked boolean, timestamps.
+State transitions table-driven (blueprint) with allowed actions per state.
+
+============================================================
+F. UX REQUIREMENTS
+============================================================
+- Always show CURRENT STATE + available TRANSITION BUTTONS (Zoho blueprint style).
+- Lost available on stages until Deal Won terminal.
+- File uploads any common type.
+- Reverse margin calculator on quote lines.
+- Auto-fetch banners: “Synced from Company/Opportunity”.
+- My Jobs page for approvers.
+- Company-centric creation for Lead.
+- Mobile-responsive enough for demo; desktop-first.
+
+============================================================
+G. DEMO ACCEPTANCE CRITERIA (MUST PASS)
+============================================================
+1. Create Company with required fields + billing address.
+2. From Company create Lead; address auto-filled; product Others works; End Customer + Entity set.
+3. Convert Lead → Opportunity with remark; Lead no longer active as lead; Lost works.
+4. Attach BoQ → Send to Pre-sales → approve in My Jobs → sales notified.
+5. Skip SoW → Deal Reg NA → OEM Quotation Received Yes → Attach OEM quote → Create Quote enabled.
+6. Quote fetches Opp/Company/Entity; line margin % and reverse calc; vendor attach required; save.
+7. Send to internal approval; if margin ≥7% HW and no services, Approve Internally; Send to Customer → Quote Accepted.
+8. Opp: Attach PO → Accounts approve → Quote: Create OVF (fetched) → fill PO#/segments/terms → attach PO+vendor quote → approve → Share to SCM → Deal Won requires amount.
+9. Cannot create Opp from thin air; cannot create Quote before OEM attach; OVF locked without approved PO.
+
+============================================================
+H. OUT OF SCOPE / LATER
+============================================================
+- Tally invoice attach/sync onto Deal Won for salesperson visibility
+- Full KYC, deep Reports/Analytics
+- Full Calls/Meetings parity
+- Complex multi-level approval matrices beyond margin lock + role My Jobs
+- Real customer email sending from “Send Quotation to Customer”
+
+============================================================
+I. DELIVERABLES
+============================================================
+1. App architecture + DB schema
+2. Working UI for all forms/fields above
+3. Blueprint state machine implemented
+4. Seed users: Sales, Pre-sales, Accounts, Management
+5. README with demo script matching the happy path
+6. Clear TODOs for services→project share and Tally invoice
+
+Tech preference: modern web stack (Next.js/React + Node/API + Postgres) unless repo already dictates otherwise. Use clean domain naming: Company (not only Account), OVF, My Jobs.
+
+Build now. Start with schema + state machine + Company/Lead/Opp happy path, then Quote/OVF.

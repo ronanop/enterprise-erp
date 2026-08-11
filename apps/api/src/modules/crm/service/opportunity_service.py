@@ -12,6 +12,7 @@ from modules.crm.models import CrmOpportunity, CrmPipeline
 from modules.crm.repository.opportunity_repository import OpportunityRepository
 from modules.crm.repository.opportunity_stage_repository import OpportunityStageRepository
 from modules.crm.repository.pipeline_repository import PipelineRepository
+from modules.crm.service.cloud_flow import compute_profitability_percent
 from modules.crm.service.crm_scope_validator import CrmScopeValidator
 from modules.crm.service.document_number_service import DocumentNumberService
 from modules.crm.service.engines import OpportunityEngine, OpportunityStageEngine, PipelineEngine
@@ -110,6 +111,20 @@ class OpportunityService:
 
     def update(self, ctx: TenantContext, opportunity_id: UUID, **fields):
         opp = self.get(ctx, opportunity_id)
+        if opp.distributor_discount_locked and "distributor_discount_percent" in fields:
+            fields.pop("distributor_discount_percent", None)
+        if (
+            "customer_discount_percent" in fields
+            or "distributor_discount_percent" in fields
+            or "customer_mrr" in fields
+            or "customer_arr" in fields
+        ):
+            dist = Decimal(
+                str(fields.get("distributor_discount_percent", opp.distributor_discount_percent or 0))
+            )
+            cust = fields.get("customer_discount_percent", opp.customer_discount_percent)
+            if cust is not None:
+                fields["profitability_percent"] = compute_profitability_percent(dist, Decimal(str(cust)))
         if "current_stage" in fields and fields["current_stage"] != opp.current_stage:
             self._stage_engine.validate_transition(opp.current_stage, fields["current_stage"])
             seq = len([s for s in self._stages.list_stages(ctx, opp.company_id) if s.opportunity_id == opportunity_id]) + 1

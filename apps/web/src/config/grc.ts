@@ -44,7 +44,7 @@ export const grcWorkspaceGroups: GrcWorkspaceGroup[] = [
     title: "Policy & Controls",
     description: "Policies, versions, controls, and control tests",
     icon: FileCheck2,
-    resourceKeys: ["policies", "policy-versions", "controls", "control-tests"],
+    resourceKeys: ["policies", "policy-versions", "policy-acknowledgements", "controls", "control-tests"],
   },
   {
     key: "risk",
@@ -57,6 +57,7 @@ export const grcWorkspaceGroups: GrcWorkspaceGroup[] = [
       "risk-assessments",
       "risk-treatments",
       "compliance-frameworks",
+      "compliance-requirements",
       "compliance-assessments",
     ],
   },
@@ -99,7 +100,7 @@ export const grcPipelineStages: GrcPipelineStage[] = [
   {
     key: "compliance",
     title: "Compliance",
-    href: "/grc/compliance-assessments",
+    href: "/grc/compliance",
     resource: "compliance-assessments",
   },
   {

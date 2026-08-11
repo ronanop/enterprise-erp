@@ -194,6 +194,14 @@ class OpportunityUpdate(BaseModel):
     probability_percent: Decimal | None = None
     expected_close_date: date | None = None
     customer_id: UUID | None = None
+    customer_mrr: Decimal | None = None
+    customer_arr: Decimal | None = None
+    customer_discount_percent: Decimal | None = None
+    distributor_discount_percent: Decimal | None = None
+    assessment_type: str | None = None
+    migration_credit_phase1: Decimal | None = None
+    migration_credit_phase2: Decimal | None = None
+    migration_credit_phase3: Decimal | None = None
     version: int | None = None
 
 
@@ -231,6 +239,22 @@ class OpportunityResponse(OrmModel):
     oem_quote_attached: bool = False
     customer_po_attached: bool = False
     customer_po_approved: bool = False
+    cloud_blueprint_variant: str | None = None
+    product_type: str | None = None
+    cloud_sub_product: str | None = None
+    customer_mrr: Decimal | None = None
+    customer_arr: Decimal | None = None
+    customer_discount_percent: Decimal | None = None
+    distributor_discount_percent: Decimal | None = None
+    profitability_percent: Decimal | None = None
+    distributor_discount_locked: bool = False
+    assessment_type: str | None = None
+    migration_credit_phase1: Decimal | None = None
+    migration_credit_phase2: Decimal | None = None
+    migration_credit_phase3: Decimal | None = None
+    contract_attached: bool = False
+    onboarding_done: bool = False
+    onboarding_date: date | None = None
     version: int
     created_at: datetime | None = None
 
@@ -1426,6 +1450,7 @@ class BlueprintActionRequest(BaseModel):
     deal_reg_number: str | None = None
     valid_until: date | None = None
     deal_won_amount: Decimal | None = None
+    onboarding_date: date | None = None
 
     def to_payload(self) -> dict:
         return self.model_dump(exclude_none=True)

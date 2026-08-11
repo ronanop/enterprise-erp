@@ -44,7 +44,7 @@ class EmploymentRepository(HrScopedRepository):
         if row is None:
             return None
         for k, v in fields.items():
-            if v is not None:
+            if v is not None or k == "payroll_eligible":
                 setattr(row, k, v)
         row.updated_at = utcnow()
         row.updated_by = ctx.user_id

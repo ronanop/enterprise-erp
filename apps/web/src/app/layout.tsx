@@ -32,6 +32,7 @@ export default function RootLayout({
       className={`${jakartaSans.variable} ${geistMono.variable} h-full antialiased`}
       suppressHydrationWarning
     >
+      {/* suppressHydrationWarning: browser extensions (e.g. QuillBot) inject attrs like data-qb-installed */}
       <body
         className="flex min-h-full min-w-0 flex-col overflow-x-clip font-sans"
         suppressHydrationWarning

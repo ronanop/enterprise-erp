@@ -132,26 +132,6 @@ export function CompanyWorkspaceShell({
       ? { opportunity: `/crm/opportunities/${activeLead.converted_opportunity_id}` }
       : {}),
   };
-  const nextStep = activeLead?.converted_opportunity_id
-    ? {
-        label: "Continue Opportunity",
-        description: "Resume BOQ, OEM, Quote, Customer PO, and OVF actions.",
-        href: `/crm/opportunities/${activeLead.converted_opportunity_id}`,
-      }
-    : activeLead
-      ? {
-          label: "Continue Lead",
-          description: "Review this lead and convert it to an opportunity when qualified.",
-          href: `/crm/leads/${activeLead.id}`,
-        }
-      : company.status === "active"
-        ? {
-            label: "Create Lead",
-            description: "Start the sales blueprint from this company account.",
-            href: `/crm/companies/${company.id}/leads/new`,
-          }
-        : undefined;
-
   return (
     <div className="flex min-w-0 items-start gap-0">
       {hideWorkspaceNav ? null : (
@@ -181,7 +161,7 @@ export function CompanyWorkspaceShell({
 
             {hideWorkspaceNav ? null : (
               <div className="mt-3 space-y-3">
-                <DealTimeline current={timelineStage} links={timelineLinks} nextStep={nextStep} />
+                <DealTimeline current={timelineStage} links={timelineLinks} />
                 <ApprovalBanner locked={company.locked} label="This company account" />
               </div>
             )}
