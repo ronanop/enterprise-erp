@@ -33,8 +33,15 @@ class ProcurementCrmAdapter:
     def get_commercial_export(self, ctx: TenantContext, ovf_id: UUID) -> dict[str, Any]:
         return self._ovfs.get_scm_commercial_export(ctx, ovf_id)
 
-    def set_scm_on_hold(self, ctx: TenantContext, ovf_id: UUID, *, on_hold: bool) -> Any:
-        return self._ovfs.set_scm_on_hold(ctx, ovf_id, on_hold=on_hold)
+    def set_scm_on_hold(
+        self,
+        ctx: TenantContext,
+        ovf_id: UUID,
+        *,
+        on_hold: bool,
+        remark: str | None = None,
+    ) -> Any:
+        return self._ovfs.set_scm_on_hold(ctx, ovf_id, on_hold=on_hold, remark=remark)
 
     def update_scm_charges(
         self,

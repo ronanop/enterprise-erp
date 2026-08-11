@@ -3,6 +3,7 @@
 from modules.procurement.models.contract import ProcVendorContract, ProcVendorContractLine
 from modules.procurement.models.grn import ProcGrnHeader, ProcGrnLine
 from modules.procurement.models.inventory_import import ProcInventoryImportLine
+from modules.procurement.models.inventory_stock import ProcInventoryStockUnit
 from modules.procurement.models.invoice import ProcInvoiceHeader, ProcInvoiceLine
 from modules.procurement.models.order import ProcOrderHeader, ProcOrderLine
 from modules.procurement.models.receipt_batch import (
@@ -25,6 +26,7 @@ __all__ = [
     "ProcGrnHeader",
     "ProcGrnLine",
     "ProcInventoryImportLine",
+    "ProcInventoryStockUnit",
     "ProcInvoiceHeader",
     "ProcInvoiceLine",
     "ProcOrderHeader",

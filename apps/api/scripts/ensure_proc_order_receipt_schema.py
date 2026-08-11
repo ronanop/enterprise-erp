@@ -43,6 +43,10 @@ def main() -> None:
           ADD COLUMN IF NOT EXISTS current_grn_number VARCHAR(80)
         """,
         """
+        ALTER TABLE procurement.proc_order_header
+          ADD COLUMN IF NOT EXISTS approved_by_name VARCHAR(255)
+        """,
+        """
         ALTER TABLE procurement.proc_order_line
           ADD COLUMN IF NOT EXISTS last_receipt_qty NUMERIC(18, 4) NOT NULL DEFAULT 0
         """,
@@ -165,6 +169,22 @@ def main() -> None:
         """
         ALTER TABLE procurement.proc_order_receipt_batch
           ADD COLUMN IF NOT EXISTS vendor_invoice_subtotal NUMERIC(18, 4)
+        """,
+        """
+        ALTER TABLE procurement.proc_order_line
+          ADD COLUMN IF NOT EXISTS last_receipt_billing BOOLEAN NOT NULL DEFAULT true
+        """,
+        """
+        ALTER TABLE procurement.proc_order_line
+          ADD COLUMN IF NOT EXISTS last_receipt_billing_quantity NUMERIC(18, 4) NOT NULL DEFAULT 0
+        """,
+        """
+        ALTER TABLE procurement.proc_order_receipt_batch_line
+          ADD COLUMN IF NOT EXISTS billing BOOLEAN NOT NULL DEFAULT true
+        """,
+        """
+        ALTER TABLE procurement.proc_order_receipt_batch_line
+          ADD COLUMN IF NOT EXISTS billing_quantity NUMERIC(18, 4) NOT NULL DEFAULT 0
         """,
     ]
     with engine.begin() as conn:

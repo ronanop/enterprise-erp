@@ -26,6 +26,7 @@ import {
   listPurchaseOrders,
   listVendorOptions,
   invalidateProcurementListCache,
+  peekPurchaseOrdersFromCache,
   type ProcOrder,
 } from "@/services/procurement-service";
 import {
@@ -36,6 +37,7 @@ import {
   formatGrnStatusBadgeLabel,
   grnStatusMatchesSearch,
 } from "@/utils/grn-status-display";
+import { deriveGrnStatus } from "@/utils/procurement-po-buckets";
 import { downloadOrderPdf } from "@/utils/purchase-order-pdf";
 
 type StatusFilter =
@@ -60,6 +62,12 @@ const CLOSED_STATUSES = new Set([
 
 const DELIVERED_STATUSES = new Set(["received", "delivered", "closed"]);
 
+function orderCustomerOrApproverLabel(order: ProcOrder): string {
+  const customer = (order.customer_name || "").trim();
+  if (customer) return customer;
+  return (order.approved_by_name || "").trim();
+}
+
 function parseStatusFilter(value: string | null): StatusFilter {
   const allowed: StatusFilter[] = [
     "all",
@@ -74,27 +82,6 @@ function parseStatusFilter(value: string | null): StatusFilter {
   ];
   if (value && (allowed as string[]).includes(value)) return value as StatusFilter;
   return "all";
-}
-
-function deriveGrnStatus(order: ProcOrder): "pending" | "partial" | "closed" {
-  const lines = order.lines || [];
-  if (lines.length === 0) return "pending";
-  const badges = new Set<"pending" | "partial" | "delivered">();
-  for (const ln of lines) {
-    const qty = Number(ln.quantity) || 0;
-    const recv = Number(ln.quantity_received) || 0;
-    const lineStatus = (ln.status || "").toLowerCase();
-    if (lineStatus === "received" || lineStatus === "closed" || (qty > 0 && recv >= qty)) {
-      badges.add("delivered");
-    } else if (recv > 0) {
-      badges.add("partial");
-    } else {
-      badges.add("pending");
-    }
-  }
-  if (badges.size === 1 && badges.has("delivered")) return "closed";
-  if (badges.has("partial") || badges.has("delivered")) return "partial";
-  return "pending";
 }
 
 function grnTone(status: string): "default" | "secondary" | "destructive" | "outline" {
@@ -131,10 +118,12 @@ export function OrdersListPage() {
   const searchParams = useSearchParams();
   const statusFilter = parseStatusFilter(searchParams.get("filter"));
 
-  const [rows, setRows] = useState<ProcOrder[]>([]);
+  const cachedOrdersOnMount = peekPurchaseOrdersFromCache();
+  const [rows, setRows] = useState<ProcOrder[]>(() => cachedOrdersOnMount ?? []);
   const [vendors, setVendors] = useState<Record<string, { label: string; address: string }>>({});
   const [query, setQuery] = useState("");
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(() => cachedOrdersOnMount === null);
+  const [refreshing, setRefreshing] = useState(false);
   const [pdfBusyId, setPdfBusyId] = useState<string | null>(null);
   const [exportBusy, setExportBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -152,7 +141,12 @@ export function OrdersListPage() {
 
   const load = useCallback(async (force = false) => {
     if (force) invalidateProcurementListCache();
-    setLoading(true);
+    const hadInstant = !force && peekPurchaseOrdersFromCache() !== null;
+    if (!hadInstant) {
+      setLoading(true);
+    } else {
+      setRefreshing(true);
+    }
     setError(null);
     void listVendorOptions()
       .then((vendorRows) => {
@@ -169,10 +163,13 @@ export function OrdersListPage() {
       const orders = await listPurchaseOrders();
       setRows(orders);
     } catch (err) {
-      setRows([]);
+      if (!hadInstant) {
+        setRows([]);
+      }
       setError(err instanceof ApiClientError ? err.message : "Failed to load purchase orders");
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
   }, []);
 
@@ -240,9 +237,10 @@ export function OrdersListPage() {
       return (
         (row.company_po_number || "").toLowerCase().includes(q) ||
         (row.customer_name || "").toLowerCase().includes(q) ||
+        (row.approved_by_name || "").toLowerCase().includes(q) ||
         row.document_number.toLowerCase().includes(q) ||
         row.status.toLowerCase().includes(q) ||
-        grnStatusMatchesSearch(row.grn_status, q) ||
+        grnStatusMatchesSearch(row.grn_status ?? "pending", q) ||
         vendor.toLowerCase().includes(q)
       );
     });
@@ -321,9 +319,14 @@ export function OrdersListPage() {
               variant="outline"
               className="cursor-pointer transition-colors duration-200"
               onClick={() => void load(true)}
-              disabled={loading}
+              disabled={loading && rows.length === 0}
             >
-              <RefreshCw className={`mr-1.5 size-3.5 ${loading ? "animate-spin" : ""}`} />
+              <RefreshCw
+                className={cn(
+                  "mr-1.5 size-3.5",
+                  (loading || refreshing) && "animate-spin",
+                )}
+              />
               Refresh
             </Button>
           </div>
@@ -403,7 +406,7 @@ export function OrdersListPage() {
                 <th className="px-3 py-2 font-medium">Company PO number</th>
                 <th className="px-3 py-2 font-medium">PO date</th>
                 <th className="px-3 py-2 font-medium">Vendor</th>
-                <th className="px-3 py-2 font-medium">Customer</th>
+                <th className="px-3 py-2 font-medium">Customer / approved by</th>
                 <th className="px-3 py-2 font-medium">Amount</th>
                 <th className="px-3 py-2 font-medium">GRN</th>
                 <th className="px-3 py-2 font-medium">Action</th>
@@ -446,11 +449,11 @@ export function OrdersListPage() {
                   <td className="px-3 py-2">
                     {vendors[row.vendor_id]?.label || row.vendor_id.slice(0, 8)}
                   </td>
-                  <td className="px-3 py-2">{row.customer_name || "—"}</td>
+                  <td className="px-3 py-2">{orderCustomerOrApproverLabel(row) || "—"}</td>
                   <td className="px-3 py-2 tabular-nums">{formatInr(row.total_amount)}</td>
                   <td className="px-3 py-2">
-                    <Badge variant={grnTone(row.grn_status)} className="uppercase">
-                      {formatGrnStatusBadgeLabel(row.grn_status)}
+                    <Badge variant={grnTone(row.grn_status ?? "pending")} className="uppercase">
+                      {formatGrnStatusBadgeLabel(row.grn_status ?? "pending")}
                     </Badge>
                   </td>
                   <td className="px-3 py-2" onClick={(e) => e.stopPropagation()}>

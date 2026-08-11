@@ -19,7 +19,7 @@ from sqlalchemy import (
     String,
     Text,
 )
-from sqlalchemy.dialects.postgresql import UUID as PG_UUID
+from sqlalchemy.dialects.postgresql import JSONB, UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from database.base import Base
@@ -83,6 +83,16 @@ class CrmOvf(Base, *CrmTransactionMixin):
     shared_to_scm: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
     shared_to_scm_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     scm_on_hold: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
+    scm_on_hold_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    scm_hold_blocked: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="false"
+    )
+    scm_last_hold_since: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    scm_last_hold_released_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    scm_hold_history: Mapped[list | None] = mapped_column(JSONB, nullable=True)
+    scm_on_hold_remark: Mapped[str | None] = mapped_column(Text, nullable=True)
     deal_won: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
     deal_won_amount: Mapped[Decimal | None] = mapped_column(Numeric(18, 4), nullable=True)
 

@@ -12,6 +12,7 @@ import {
   CircleCheckBig,
 } from "lucide-react";
 
+import { ScmCreatePoEntry } from "@/components/procurement/scm-create-po-entry";
 import { FinanceKpiCard } from "@/components/finance/finance-kpi-card";
 import { ProcurementPageHeader } from "@/components/procurement/procurement-page-header";
 import { procurementUi } from "@/components/procurement/procurement-ui";
@@ -20,17 +21,17 @@ import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { ApiClientError } from "@/services/api-client";
-import { formatInrPrecise } from "@/services/finance-service";
 import {
   formatInr,
   listScmQueue,
   invalidateProcurementListCache,
+  peekScmQueueFromCache,
   type ScmQueueItem,
 } from "@/services/procurement-service";
 import { getUnseenScmOvfIds, markScmQueueSeen } from "@/utils/scm-queue-seen";
 
 type QueueFilter = "all" | "open" | "close" | "hold";
-type OvfStatus = "open" | "close" | "hold";
+type OvfStatus = "open" | "close" | "hold" | "draft";
 
 function formatReceivedDate(value?: string | null): string {
   if (!value) return "—";
@@ -68,15 +69,19 @@ function parseQueueFilter(value: string | null): QueueFilter {
 
 /**
  * OVF status for SCM queue:
- * - Open  = no PO yet, or draft / not finalized
- * - Close = PO finalized (issued) — independent of GRN delivery
- * - Hold  = SCM parked the OVF (or cancelled PO) — can create PO later
+ * - Open   = no vendor PO yet
+ * - Draft  = draft vendor PO created from OVF (not finalized)
+ * - Close  = PO finalized (issued)
+ * - Hold   = SCM parked the OVF without a live PO (or cancelled PO)
  */
 function deriveOvfStatus(row: ScmQueueItem): OvfStatus {
   const status = (row.purchase_order_status || "").toLowerCase();
+  if (status === "draft" && row.purchase_order_id && !row.can_create_po) {
+    return "draft";
+  }
   if (row.scm_on_hold || status === "hold" || status === "cancelled") return "hold";
   if (!row.purchase_order_id || row.can_create_po) return "open";
-  if (status === "draft" || status === "submitted" || status === "") return "open";
+  if (status === "submitted" || status === "") return "open";
   return "close";
 }
 
@@ -86,8 +91,47 @@ function payTermsLabel(days: number | null | undefined): string {
   return `Net ${value} days`;
 }
 
+function formatNetMarginPct(margin: number | null | undefined, customerTotal: number | null | undefined): string {
+  const customer = Number(customerTotal) || 0;
+  if (customer <= 0) return "—";
+  const pct = ((Number(margin) || 0) / customer) * 100;
+  return `${pct.toFixed(2)}%`;
+}
+
+function scmQueueRowMatchesSearch(
+  row: ScmQueueItem & { ovf_status?: OvfStatus },
+  rawQuery: string,
+): boolean {
+  const tokens = rawQuery.trim().toLowerCase().split(/\s+/).filter(Boolean);
+  if (tokens.length === 0) return true;
+
+  const poNumber = String(row.company_po_number ?? "").toLowerCase();
+  const customerName = String(row.customer_name ?? "").toLowerCase();
+  const vendorName = String(row.vendor_name ?? row.oem_name ?? "").toLowerCase();
+
+  return tokens.every((token) => {
+    if (/^\d+$/.test(token)) {
+      if (!poNumber) return false;
+      if (poNumber.includes(token)) return true;
+      const poDigits = poNumber.replace(/\D/g, "");
+      return poDigits.includes(token) || poDigits.endsWith(token);
+    }
+
+    const nameHit = customerName.includes(token) || vendorName.includes(token);
+    const poHit = poNumber.includes(token);
+    return nameHit || poHit;
+  });
+}
+
 function OvfStatusBadge({ status }: { status: OvfStatus }) {
-  const label = status === "open" ? "Open" : status === "close" ? "Close" : "Hold";
+  const label =
+    status === "open"
+      ? "Open"
+      : status === "close"
+        ? "Close"
+        : status === "draft"
+          ? "Draft"
+          : "Hold";
   return (
     <Badge
       variant="outline"
@@ -95,6 +139,7 @@ function OvfStatusBadge({ status }: { status: OvfStatus }) {
         "font-medium",
         status === "open" && "border-amber-300 bg-amber-50 text-amber-900",
         status === "close" && "border-emerald-300 bg-emerald-50 text-emerald-900",
+        status === "draft" && "border-sky-300 bg-sky-50 text-sky-900",
         status === "hold" && "border-red-300 bg-red-50 text-red-800",
       )}
     >
@@ -109,8 +154,10 @@ export function ScmQueuePage() {
   const searchParams = useSearchParams();
   const filter = parseQueueFilter(searchParams.get("filter"));
 
-  const [rows, setRows] = useState<ScmQueueItem[]>([]);
-  const [loading, setLoading] = useState(true);
+  const cachedOnMount = peekScmQueueFromCache();
+  const [rows, setRows] = useState<ScmQueueItem[]>(() => cachedOnMount ?? []);
+  const [loading, setLoading] = useState(() => cachedOnMount === null);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [newOvfIds, setNewOvfIds] = useState<Set<string>>(new Set());
   const [query, setQuery] = useState("");
@@ -129,16 +176,24 @@ export function ScmQueuePage() {
 
   const load = useCallback(async (force = false) => {
     if (force) invalidateProcurementListCache();
-    setLoading(true);
+    const hadInstant = !force && peekScmQueueFromCache() !== null;
+    if (!hadInstant) {
+      setLoading(true);
+    } else {
+      setRefreshing(true);
+    }
     setError(null);
     try {
       const queue = await listScmQueue();
       setRows(queue);
     } catch (err) {
-      setRows([]);
+      if (!hadInstant) {
+        setRows([]);
+      }
       setError(err instanceof ApiClientError ? err.message : "Failed to load SCM queue");
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
   }, []);
 
@@ -167,7 +222,7 @@ export function ScmQueuePage() {
   );
 
   const kpis = useMemo(() => {
-    const open = enriched.filter((r) => r.ovf_status === "open").length;
+    const open = enriched.filter((r) => r.ovf_status === "open" || r.ovf_status === "draft").length;
     const close = enriched.filter((r) => r.ovf_status === "close").length;
     const hold = enriched.filter((r) => r.ovf_status === "hold").length;
     return { open, close, hold, total: rows.length };
@@ -175,30 +230,14 @@ export function ScmQueuePage() {
 
   const filtered = useMemo(() => {
     let list = enriched;
-    if (filter === "open" || filter === "close" || filter === "hold") {
+    if (filter === "open") {
+      list = enriched.filter((r) => r.ovf_status === "open" || r.ovf_status === "draft");
+    } else if (filter === "close" || filter === "hold") {
       list = enriched.filter((r) => r.ovf_status === filter);
     }
-    const q = query.trim().toLowerCase();
+    const q = query.trim();
     if (q) {
-      list = list.filter((row) => {
-        const haystack = [
-          row.company_po_number,
-          row.purchase_order_number,
-          row.po_number,
-          row.ovf_no,
-          row.vendor_name,
-          row.oem_name,
-          row.customer_name,
-          row.account_name,
-          row.quote_name,
-          row.ovf_status,
-          row.received_at,
-        ]
-          .filter(Boolean)
-          .join(" ")
-          .toLowerCase();
-        return haystack.includes(q);
-      });
+      list = list.filter((row) => scmQueueRowMatchesSearch(row, q));
     }
     return [...list].sort((a, b) => {
       const byDate = queueDateMs(b.received_at) - queueDateMs(a.received_at);
@@ -221,9 +260,14 @@ export function ScmQueuePage() {
               size="sm"
               className="cursor-pointer transition-colors duration-200"
               onClick={() => void load(true)}
-              disabled={loading}
+              disabled={loading && rows.length === 0}
             >
-              <RefreshCw className={`mr-1.5 size-3.5 ${loading ? "animate-spin" : ""}`} />
+              <RefreshCw
+                className={cn(
+                  "mr-1.5 size-3.5",
+                  (loading || refreshing) && "animate-spin",
+                )}
+              />
               Refresh
             </Button>
             <Link
@@ -245,27 +289,27 @@ export function ScmQueuePage() {
           label="Total OVF"
           value={String(kpis.total)}
           icon={ClipboardList}
-          href="/procurement/scm"
+          onClick={() => setFilter("all")}
         />
         <FinanceKpiCard
           label="Open"
           value={String(kpis.open)}
           tone="warning"
           icon={ShoppingCart}
-          href="/procurement/scm?filter=open"
+          onClick={() => setFilter("open")}
         />
         <FinanceKpiCard
           label="Close"
           value={String(kpis.close)}
           tone="success"
           icon={CircleCheckBig}
-          href="/procurement/scm?filter=close"
+          onClick={() => setFilter("close")}
         />
         <FinanceKpiCard
           label="Hold"
           value={String(kpis.hold)}
           icon={PauseCircle}
-          href="/procurement/scm?filter=hold"
+          onClick={() => setFilter("hold")}
         />
       </div>
 
@@ -292,7 +336,7 @@ export function ScmQueuePage() {
           <Input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search PO #, vendor, customer…"
+            placeholder="Search PO # or customer / vendor name…"
             aria-label="Search SCM queue"
             className="h-8 bg-card pl-8 shadow-none transition-colors duration-200"
           />
@@ -310,23 +354,24 @@ export function ScmQueuePage() {
         className={cn("scroll-mt-24", procurementUi.tableShell)}
       >
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[1360px] text-left text-sm">
+          <table className="w-full min-w-[1440px] text-left text-sm">
             <thead className="border-b border-border bg-muted/40 text-xs uppercase tracking-wide text-muted-foreground">
               <tr>
                 <th className="px-3 py-2 font-medium">PO number</th>
-                <th className="px-3 py-2 font-medium">Vendor name</th>
-                <th className="px-3 py-2 font-medium">Vendor pay terms</th>
                 <th className="px-3 py-2 font-medium">Customer name</th>
                 <th className="px-3 py-2 font-medium">Customer pay terms</th>
-                <th className="px-3 py-2 font-medium">Date</th>
+                <th className="px-3 py-2 font-medium">Vendor name</th>
+                <th className="px-3 py-2 font-medium">Vendor pay terms</th>
+                <th className="px-3 py-2 font-medium">OVF date</th>
                 <th className="px-3 py-2 font-medium text-right">Customer amt</th>
-                <th className="px-3 py-2 font-medium text-right">Vendor amt (ex-GST)</th>
+                <th className="px-3 py-2 font-medium text-right">Vendor amt</th>
                 <th
                   className="px-3 py-2 font-medium text-right"
                   title="Product margin minus freight, additional charges, and finance cost"
                 >
                   Net margin
                 </th>
+                <th className="px-3 py-2 font-medium text-right">Margin %</th>
                 <th className="px-3 py-2 font-medium">OVF status</th>
                 <th className="px-3 py-2 font-medium">View OVF</th>
                 <th className="px-3 py-2 font-medium">Action</th>
@@ -335,14 +380,14 @@ export function ScmQueuePage() {
             <tbody>
               {loading && filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={12} className="px-3 py-8 text-center text-muted-foreground">
+                  <td colSpan={13} className="px-3 py-8 text-center text-muted-foreground">
                     Loading SCM queue…
                   </td>
                 </tr>
               ) : null}
               {!loading && filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={12} className="px-3 py-8 text-center text-muted-foreground">
+                  <td colSpan={13} className="px-3 py-8 text-center text-muted-foreground">
                     {query.trim()
                       ? "No queue rows match your search."
                       : filter === "open"
@@ -379,15 +424,15 @@ export function ScmQueuePage() {
                         ) : null}
                       </span>
                     </td>
+                    <td className="px-3 py-2">{row.customer_name || "—"}</td>
+                    <td className="px-3 py-2 text-muted-foreground">
+                      {payTermsLabel(row.customer_payment_days)}
+                    </td>
                     <td className="px-3 py-2">
                       {row.vendor_name?.trim() || row.oem_name?.trim() || "—"}
                     </td>
                     <td className="px-3 py-2 text-muted-foreground">
                       {payTermsLabel(row.vendor_payment_days)}
-                    </td>
-                    <td className="px-3 py-2">{row.customer_name || "—"}</td>
-                    <td className="px-3 py-2 text-muted-foreground">
-                      {payTermsLabel(row.customer_payment_days)}
                     </td>
                     <td className="px-3 py-2 tabular-nums text-muted-foreground">
                       {formatReceivedDate(row.received_at)}
@@ -399,7 +444,10 @@ export function ScmQueuePage() {
                       {formatInr(row.vendor_total || 0)}
                     </td>
                     <td className="px-3 py-2 text-right tabular-nums">
-                      {formatInrPrecise(row.margin_amount || 0)}
+                      {formatInr(row.margin_amount || 0)}
+                    </td>
+                    <td className="px-3 py-2 text-right tabular-nums text-muted-foreground">
+                      {formatNetMarginPct(row.margin_amount, row.customer_total)}
                     </td>
                     <td className="px-3 py-2">
                       <OvfStatusBadge status={ovfStatus} />
@@ -417,16 +465,14 @@ export function ScmQueuePage() {
                     </td>
                     <td className="px-3 py-2">
                       {ovfStatus === "hold" || (ovfStatus === "open" && row.can_create_po) ? (
-                        <Link
-                          href={`/procurement/scm/ovf/${row.ovf_id}/po`}
-                          className={cn(
-                            buttonVariants({ size: "sm" }),
-                            "cursor-pointer transition-colors duration-200",
-                          )}
-                        >
-                          Create PO
-                        </Link>
-                      ) : ovfStatus === "open" && row.purchase_order_id ? (
+                        <ScmCreatePoEntry
+                          ovfId={row.ovf_id}
+                          scmOnHold={ovfStatus === "hold" && Boolean(row.scm_on_hold)}
+                          scmOnHoldAt={row.scm_on_hold_at}
+                          className="cursor-pointer transition-colors duration-200"
+                        />
+                      ) : ovfStatus === "draft" ||
+                        (ovfStatus === "open" && row.purchase_order_id) ? (
                         <Link
                           href={`/procurement/orders/${row.purchase_order_id}`}
                           className={cn(

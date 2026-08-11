@@ -20,7 +20,7 @@ import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { DeliverySectionCard } from "@/components/procurement/delivery-section-card";
-import { ApiClientError } from "@/services/api-client";
+import { ApiClientError, formatApiError } from "@/services/api-client";
 import {
   getPurchaseOrder,
   getScmOvfPreview,
@@ -31,8 +31,8 @@ import {
   type ScmReceiptBatch,
   type VendorOption,
 } from "@/services/procurement-service";
+import { ChallanGrnMultiSelect } from "@/components/procurement/challan-grn-multi-select";
 import {
-  defaultSelectedGrnKeys,
   fullPoChallanLines,
   mergeSelectedGrnChallanLines,
   receiptBatchKey,
@@ -393,22 +393,23 @@ export function DeliveryChallanFormPage({ challanId, embedded }: DeliveryChallan
       try {
         const { order, vendor, poNumber, batches, ovf } = await loadOrderContext(orderIdParam);
         if (cancelled) return;
-        const resolvedBatches = resolveChallanReceiptBatches(batches, order);
-        const grnKeys = defaultSelectedGrnKeys(resolvedBatches);
         setOrderId(orderIdParam);
         setLoadedOrder(order);
         setOvfContext(ovf);
         setGrnBatches(batches);
         applyPrefillHeader(order, ovf, poNumber, vendor?.label || "");
         setItemsSourceMode("full_po");
-        setSelectedGrnKeys(grnKeys);
+        setSelectedGrnKeys([]);
         skipAutoApplyLinesRef.current = false;
         const itemLines = fullPoChallanLines(order, "");
         setLines(itemLines.length > 0 ? itemLines : [emptyChallanLine()]);
       } catch (err) {
         if (!cancelled) {
           setLoadError(
-            err instanceof ApiClientError ? err.message : "Failed to load purchase order",
+            formatApiError(
+              err,
+              "Failed to load purchase order. If this persists, run: cd apps/api && alembic upgrade head",
+            ),
           );
         }
       } finally {
@@ -546,11 +547,8 @@ export function DeliveryChallanFormPage({ challanId, embedded }: DeliveryChallan
     }
   }
 
-  function toggleGrnKey(key: string) {
+  function onSelectedGrnKeysChange(next: string[]) {
     linesLockedFromSaveRef.current = false;
-    const next = selectedGrnKeys.includes(key)
-      ? selectedGrnKeys.filter((k) => k !== key)
-      : [...selectedGrnKeys, key];
     setSelectedGrnKeys(next);
     if (itemsSourceMode === "selected_grns" && loadedOrder) {
       applyLinesFromSource("selected_grns", next, effectiveGrnBatches);
@@ -559,34 +557,12 @@ export function DeliveryChallanFormPage({ challanId, embedded }: DeliveryChallan
 
   function onItemsSourceModeChange(mode: ChallanItemsSourceMode) {
     linesLockedFromSaveRef.current = false;
-    if (mode === "selected_grns") {
-      const keys =
-        selectedGrnKeys.length > 0
-          ? selectedGrnKeys
-          : defaultSelectedGrnKeys(effectiveGrnBatches);
-      setItemsSourceMode(mode);
-      setSelectedGrnKeys(keys);
-      applyLinesFromSource(mode, keys, effectiveGrnBatches);
-      return;
-    }
     setItemsSourceMode(mode);
     applyLinesFromSource(mode, selectedGrnKeys, effectiveGrnBatches);
   }
 
-  const headerActions = (
-    <div className="flex flex-wrap items-center gap-2">
-      {!embedded ? (
-        <Link
-          href={backHref}
-          className={cn(
-            buttonVariants({ size: "sm", variant: "outline" }),
-            "cursor-pointer transition-colors duration-200",
-          )}
-        >
-          <ArrowLeft className="mr-1.5 size-3.5" />
-          Back
-        </Link>
-      ) : null}
+  const pdfActions = (
+    <div className="flex flex-wrap items-center justify-end gap-2">
       <Button
         type="button"
         size="sm"
@@ -609,6 +585,23 @@ export function DeliveryChallanFormPage({ challanId, embedded }: DeliveryChallan
         <FileDown className="mr-1.5 size-3.5" />
         Download PDF
       </Button>
+    </div>
+  );
+
+  const headerActions = (
+    <div className="flex flex-wrap items-center gap-2">
+      {!embedded ? (
+        <Link
+          href={backHref}
+          className={cn(
+            buttonVariants({ size: "sm", variant: "outline" }),
+            "cursor-pointer transition-colors duration-200",
+          )}
+        >
+          <ArrowLeft className="mr-1.5 size-3.5" />
+          Back
+        </Link>
+      ) : null}
       {!embedded && !isLocked ? (
         <Button
           type="button"
@@ -629,19 +622,14 @@ export function DeliveryChallanFormPage({ challanId, embedded }: DeliveryChallan
 
   return (
     <div className={cn("space-y-4", embedded && "rounded-lg border border-border bg-card p-4")}>
-      {embedded ? (
-        <div className="flex min-w-0 flex-col gap-3 border-b border-border/60 pb-4 sm:flex-row sm:items-end sm:justify-between">
-          <p className="text-sm text-muted-foreground">Fill challan details for this purchase order.</p>
-          {headerActions}
-        </div>
-      ) : (
+      {!embedded ? (
         <PageHeader
           backHref={backHref}
           backLabel={backLabel}
           title={isLocked ? challanNumber || "Delivery challan" : isNew ? "Create delivery challan" : challanNumber || "Delivery challan"}
           actions={headerActions}
         />
-      )}
+      ) : null}
 
       {loadError ? (
         <div className="rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">
@@ -760,29 +748,20 @@ export function DeliveryChallanFormPage({ challanId, embedded }: DeliveryChallan
       </DeliverySectionCard>
 
       {loadedOrder ? (
-        <DeliverySectionCard
-          title="Items on challan"
-          icon={ListChecks}
-          subtitle="Full PO = ordered qty & vendor rate. GRN mode = selected receipts only."
-        >
+        <DeliverySectionCard title="Items on challan" icon={ListChecks}>
           <div className="space-y-4">
             <fieldset className="space-y-2">
               <legend className="text-xs font-medium text-muted-foreground">Source</legend>
               <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:gap-4">
-                <label className="flex cursor-pointer items-start gap-2 text-sm">
+                <label className="flex cursor-pointer items-center gap-2 text-sm">
                   <input
                     type="radio"
                     name="challan-items-source"
-                    className="mt-0.5 size-4 cursor-pointer accent-primary"
+                    className="size-4 cursor-pointer accent-primary"
                     checked={itemsSourceMode === "full_po"}
                     onChange={() => onItemsSourceModeChange("full_po")}
                   />
-                  <span>
-                    <span className="font-medium text-foreground">All PO line items</span>
-                    <span className="mt-0.5 block text-xs text-muted-foreground">
-                      Ordered qty & vendor unit cost on each line.
-                    </span>
-                  </span>
+                  <span className="font-medium text-foreground">All PO line items</span>
                 </label>
                 <label className="flex cursor-pointer items-start gap-2 text-sm">
                   <input
@@ -806,50 +785,18 @@ export function DeliveryChallanFormPage({ challanId, embedded }: DeliveryChallan
               </div>
             </fieldset>
             {itemsSourceMode === "selected_grns" && effectiveGrnBatches.length > 0 ? (
-              <ul className="divide-y divide-border/70 rounded-md border border-border">
-                {effectiveGrnBatches.map((batch) => {
-                  const key = receiptBatchKey(batch);
-                  const checked = selectedGrnKeys.includes(key);
-                  const hasLines = (batch.lines || []).some((ln) => Number(ln.quantity) > 0);
-                  return (
-                    <li key={key} className="px-3 py-2.5">
-                      <label className="flex cursor-pointer items-start gap-2.5">
-                        <input
-                          type="checkbox"
-                          className="mt-0.5 size-4 shrink-0 cursor-pointer accent-primary"
-                          checked={checked}
-                          onChange={() => toggleGrnKey(key)}
-                        />
-                        <span className="min-w-0 flex-1">
-                          <span className="block font-mono text-sm font-medium">
-                            {batch.grn_number}
-                          </span>
-                          {batch.receipt_at ? (
-                            <span className="text-xs text-muted-foreground">
-                              {String(batch.receipt_at).slice(0, 10)}
-                            </span>
-                          ) : null}
-                          {!hasLines ? (
-                            <span className="mt-0.5 block text-xs text-muted-foreground">
-                              No saved line qty for this GRN (select only if you have paper GRN).
-                            </span>
-                          ) : null}
-                        </span>
-                      </label>
-                    </li>
-                  );
-                })}
-              </ul>
+              <ChallanGrnMultiSelect
+                batches={effectiveGrnBatches}
+                selectedKeys={selectedGrnKeys}
+                disabled={isLocked}
+                onChange={onSelectedGrnKeysChange}
+              />
             ) : null}
           </div>
         </DeliverySectionCard>
       ) : null}
 
-      <DeliverySectionCard
-        title="Line items"
-        icon={Package}
-        subtitle="Vendor rate (unit cost) — not customer price"
-      >
+      <DeliverySectionCard title="Line items" icon={Package}>
         <div className="erp-scroll overflow-x-auto rounded-md border border-border">
           <table className="w-full min-w-[700px] text-left text-sm">
             <thead className="border-b border-border bg-muted/40 text-xs uppercase tracking-wide text-muted-foreground">
@@ -1038,6 +985,8 @@ export function DeliveryChallanFormPage({ challanId, embedded }: DeliveryChallan
         </div>
       </DeliverySectionCard>
       </fieldset>
+
+      <div className="border-t border-border/60 pt-4">{pdfActions}</div>
     </div>
   );
 }

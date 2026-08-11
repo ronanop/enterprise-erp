@@ -14,10 +14,13 @@ from modules.foundation.dependencies import require_permission
 from modules.foundation.domain.value_objects import TenantContext
 from modules.procurement.schemas import (
     OrderResponse,
+    ScmCreateInventoryPoRequest,
     ScmCreatePoFromOvfRequest,
     ScmInventoryImportRequest,
+    ScmInventorySerialUpdate,
     ScmLineReceiptUpdateRequest,
     ScmNextCompanyPoResponse,
+    ScmOvfHoldRequest,
     ScmOvfPreviewResponse,
     ScmProcurementInventoryRowResponse,
     ScmQueueItemResponse,
@@ -85,13 +88,28 @@ def get_scm_ovf_preview(
 @scm_router.post("/ovf/{ovf_id}/hold", response_model=APIResponse[ScmOvfPreviewResponse])
 def hold_scm_ovf(
     ovf_id: UUID,
+    body: ScmOvfHoldRequest,
     ctx: Annotated[TenantContext, Depends(require_permission("procurement.order:create"))],
     db: Annotated[Session, Depends(get_db)],
 ) -> APIResponse[ScmOvfPreviewResponse]:
-    row = ScmHandoffService(db).hold_ovf(ctx, ovf_id)
+    row = ScmHandoffService(db).hold_ovf(ctx, ovf_id, remark=body.remark)
     db.commit()
     return APIResponse(
         message="OVF placed on Hold",
+        data=ScmOvfPreviewResponse.model_validate(row),
+    )
+
+
+@scm_router.post("/ovf/{ovf_id}/release-hold", response_model=APIResponse[ScmOvfPreviewResponse])
+def release_scm_ovf_hold(
+    ovf_id: UUID,
+    ctx: Annotated[TenantContext, Depends(require_permission("procurement.order:create"))],
+    db: Annotated[Session, Depends(get_db)],
+) -> APIResponse[ScmOvfPreviewResponse]:
+    row = ScmHandoffService(db).release_ovf_hold(ctx, ovf_id)
+    db.commit()
+    return APIResponse(
+        message="OVF removed from SCM hold",
         data=ScmOvfPreviewResponse.model_validate(row),
     )
 
@@ -173,6 +191,23 @@ def list_procurement_inventory(
 
 
 @scm_router.post(
+    "/inventory/clear-stock",
+    response_model=APIResponse[dict],
+)
+def clear_procurement_inventory_stock(
+    ctx: Annotated[TenantContext, Depends(require_permission("procurement.order:update"))],
+    db: Annotated[Session, Depends(get_db)],
+    company_id: UUID | None = None,
+) -> APIResponse[dict]:
+    removed = ScmHandoffService(db).clear_procurement_inventory_stock(ctx, company_id)
+    db.commit()
+    return APIResponse(
+        message="Procurement stock cleared",
+        data={"removed": removed},
+    )
+
+
+@scm_router.post(
     "/inventory/import",
     response_model=APIResponse[dict],
 )
@@ -189,6 +224,73 @@ def import_procurement_inventory(
     )
     db.commit()
     return APIResponse(message="Inventory imported", data={"imported": count})
+
+
+@scm_router.patch(
+    "/inventory/stock-units/{unit_id}/serial",
+    response_model=APIResponse[dict],
+)
+def update_inventory_stock_serial(
+    unit_id: UUID,
+    body: ScmInventorySerialUpdate,
+    ctx: Annotated[TenantContext, Depends(require_permission("procurement.order:update"))],
+    db: Annotated[Session, Depends(get_db)],
+) -> APIResponse[dict]:
+    ScmHandoffService(db).update_inventory_stock_serial(
+        ctx,
+        unit_id,
+        serial_number=body.serial_number,
+    )
+    db.commit()
+    return APIResponse(message="Serial number updated", data={"updated": True})
+
+
+@scm_router.patch(
+    "/inventory/import-lines/{line_id}/serial",
+    response_model=APIResponse[dict],
+)
+def update_inventory_import_serial(
+    line_id: UUID,
+    body: ScmInventorySerialUpdate,
+    ctx: Annotated[TenantContext, Depends(require_permission("procurement.order:update"))],
+    db: Annotated[Session, Depends(get_db)],
+) -> APIResponse[dict]:
+    ScmHandoffService(db).update_inventory_import_serial(
+        ctx,
+        line_id,
+        serial_number=body.serial_number,
+    )
+    db.commit()
+    return APIResponse(message="Serial number updated", data={"updated": True})
+
+
+@scm_router.post(
+    "/inventory/purchase-orders",
+    response_model=APIResponse[OrderResponse],
+)
+def create_po_from_inventory(
+    body: ScmCreateInventoryPoRequest,
+    ctx: Annotated[TenantContext, Depends(require_permission("procurement.order:create"))],
+    db: Annotated[Session, Depends(get_db)],
+    company_id: UUID | None = None,
+) -> APIResponse[OrderResponse]:
+    row = ScmHandoffService(db).create_po_from_inventory(
+        ctx,
+        vendor_id=body.vendor_id,
+        entity_code=body.entity_code,
+        document_date=body.document_date,
+        currency_code=body.currency_code,
+        payment_terms=body.payment_terms,
+        expected_delivery_date=body.expected_delivery_date,
+        company_id=company_id,
+        lines=[line.model_dump() for line in body.lines],
+        approved_by_name=body.approved_by_name,
+    )
+    db.commit()
+    return APIResponse(
+        message="Purchase order created",
+        data=OrderService(db).get_order_response(ctx, row.id),
+    )
 
 
 @scm_router.get(
@@ -240,6 +342,8 @@ def update_line_receipt(
         quantity_received=body.quantity_received,
         grn_status=body.grn_status,
         serial_numbers=body.serial_numbers,
+        billing=body.billing,
+        billing_quantity=body.billing_quantity,
     )
     db.commit()
     data = OrderService(db).get_order_response(ctx, order_id, enrich_commercial=True)

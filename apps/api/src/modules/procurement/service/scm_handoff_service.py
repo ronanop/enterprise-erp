@@ -5,10 +5,11 @@ from datetime import date, timedelta, timezone
 from decimal import Decimal
 from uuid import UUID, uuid4
 
-from sqlalchemy import inspect
-from sqlalchemy.orm import Session
+from sqlalchemy import inspect, select
+from sqlalchemy.orm import Session, load_only
 
 from core.exceptions import ConflictException, NotFoundException
+from modules.crm.service.ovf_service import resolve_scm_hold_started_at
 from modules.foundation.domain.value_objects import TenantContext
 from modules.foundation.service.audit_service import AuditService
 from modules.procurement.adapters.crm_adapter import ProcurementCrmAdapter
@@ -16,12 +17,13 @@ from modules.procurement.adapters.master_data_adapter import ProcurementMasterDa
 from modules.procurement.domain.enums import OrderStatus
 from modules.procurement.domain.exceptions import InvalidDocumentState
 from modules.procurement.models.inventory_import import ProcInventoryImportLine
+from modules.procurement.models.inventory_stock import ProcInventoryStockUnit
 from modules.procurement.models.order import ProcOrderHeader, ProcOrderLine
 from modules.procurement.models.receipt_batch import (
     ProcOrderReceiptBatch,
     ProcOrderReceiptBatchLine,
 )
-from modules.procurement.repository.base import utcnow
+from modules.procurement.repository.base import ProcScopedRepository, utcnow
 from modules.procurement.repository.order_repository import OrderRepository
 from modules.procurement.service.company_po_number_service import (
     normalize_entity_code,
@@ -78,6 +80,8 @@ class ScmHandoffService:
         self._db = db
         self._receipt_batch_storage_ready: bool | None = None
         self._inventory_import_table_ready: bool | None = None
+        self._inventory_stock_table_ready: bool | None = None
+        self._batch_line_billing_quantity_ready: bool | None = None
         self._crm = ProcurementCrmAdapter(db)
         self._master = ProcurementMasterDataAdapter(db)
         self._orders = OrderRepository(db)
@@ -101,6 +105,27 @@ class ScmHandoffService:
             )
         return self._inventory_import_table_ready
 
+    def _inventory_stock_table_exists(self) -> bool:
+        if self._inventory_stock_table_ready is None:
+            self._inventory_stock_table_ready = inspect(self._db.get_bind()).has_table(
+                "proc_inventory_stock_unit",
+                schema="procurement",
+            )
+        return self._inventory_stock_table_ready
+
+    def _receipt_batch_line_has_billing_quantity(self) -> bool:
+        if self._batch_line_billing_quantity_ready is None:
+            bind = self._db.get_bind()
+            cols = {
+                c["name"]
+                for c in inspect(bind).get_columns(
+                    "proc_order_receipt_batch_line",
+                    schema="procurement",
+                )
+            }
+            self._batch_line_billing_quantity_ready = "billing_quantity" in cols
+        return self._batch_line_billing_quantity_ready
+
     def list_scm_queue(self, ctx: TenantContext, company_id: UUID | None = None) -> list[dict]:
         cid = self._scope.resolve_company_id(ctx, company_id)
         ovfs = self._crm.list_shared_ovfs(ctx, cid)
@@ -119,20 +144,32 @@ class ScmHandoffService:
             vendor_total = 0.0
             vendor_qty = 0.0
             customer_total = 0.0
+            customer_total_with_tax = 0.0
             margin_amount = 0.0
             vendor_payment_days = 0
             customer_payment_days = 0
             vendor_name: str | None = None
             oem_name: str | None = None
+            handoff: dict = {}
             try:
                 handoff = self._crm.get_handoff(ctx, ovf.id)
                 oem_name = (handoff.get("oem_name") or "").strip() or None
                 vendor_lines = handoff.get("vendor_lines") or []
                 customer_lines = handoff.get("customer_lines") or []
-                # line_total is ex-GST on OVF handoff lines
-                vendor_total = sum(float(ln["line_total"]) for ln in vendor_lines)
-                vendor_qty = sum(float(ln["qty"]) for ln in vendor_lines)
-                customer_total = sum(float(ln["line_total"]) for ln in customer_lines)
+
+                def _handoff_line_total(ln: dict) -> float:
+                    if ln.get("line_total") is not None:
+                        return float(ln["line_total"])
+                    return float(ln.get("qty") or 0) * float(ln.get("unit_price") or 0)
+
+                vendor_total = sum(_handoff_line_total(ln) for ln in vendor_lines)
+                vendor_qty = sum(float(ln.get("qty") or 0) for ln in vendor_lines)
+                customer_total = sum(_handoff_line_total(ln) for ln in customer_lines)
+                customer_total_with_tax = sum(
+                    float(ln.get("total_with_gst") or 0) for ln in customer_lines
+                )
+                if customer_total_with_tax <= 0 and customer_total > 0:
+                    customer_total_with_tax = customer_total
                 margin_amount = scm_total_margin_amount(
                     handoff,
                     customer_total=customer_total,
@@ -142,6 +179,8 @@ class ScmHandoffService:
                 customer_payment_days = int(handoff.get("customer_payment_days") or 0)
             except ConflictException:
                 continue
+            except Exception:
+                handoff = {}
             if existing is not None:
                 try:
                     vendor = self._master.get_vendor(ctx, existing.vendor_id)
@@ -182,7 +221,7 @@ class ScmHandoffService:
                         else None
                     ),
                     "owner_name": ovf.owner_name,
-                    "blueprint_state": ovf.blueprint_state,
+                    "blueprint_state": ovf.blueprint_state or "shared_scm",
                     "company_id": ovf.company_id,
                     "branch_id": ovf.branch_id,
                     "oem_name": oem_name,
@@ -190,6 +229,7 @@ class ScmHandoffService:
                     "vendor_qty": vendor_qty,
                     "vendor_total": vendor_total,
                     "customer_total": customer_total,
+                    "customer_total_with_tax": customer_total_with_tax,
                     "margin_amount": margin_amount,
                     "vendor_payment_days": vendor_payment_days,
                     "customer_payment_days": customer_payment_days,
@@ -197,6 +237,12 @@ class ScmHandoffService:
                     "received_at": getattr(ovf, "shared_to_scm_at", None)
                     or getattr(ovf, "updated_at", None)
                     or getattr(ovf, "created_at", None),
+                    "delivery_period": getattr(ovf, "delivery_period", None),
+                    "expected_delivery_date": (
+                        existing.expected_delivery_date
+                        if existing is not None and not is_cancelled
+                        else None
+                    ),
                     "purchase_order_id": (
                         None if is_cancelled else (existing.id if existing else None)
                     ),
@@ -210,6 +256,7 @@ class ScmHandoffService:
                         else _queue_po_status(existing)
                     ),
                     "scm_on_hold": scm_on_hold,
+                    "scm_on_hold_at": resolve_scm_hold_started_at(ovf),
                     "can_create_po": can_create,
                 }
             )
@@ -224,9 +271,14 @@ class ScmHandoffService:
         items.sort(key=_queue_received_sort_key, reverse=True)
         return items
 
-    def hold_ovf(self, ctx: TenantContext, ovf_id: UUID) -> dict:
+    def hold_ovf(self, ctx: TenantContext, ovf_id: UUID, *, remark: str) -> dict:
         """Put OVF on Hold without creating a vendor PO (vendor not required)."""
-        self._crm.set_scm_on_hold(ctx, ovf_id, on_hold=True)
+        self._crm.set_scm_on_hold(ctx, ovf_id, on_hold=True, remark=remark)
+        return self.get_ovf_preview(ctx, ovf_id)
+
+    def release_ovf_hold(self, ctx: TenantContext, ovf_id: UUID) -> dict:
+        """Remove SCM hold without creating a PO (one-time hold cycle)."""
+        self._crm.set_scm_on_hold(ctx, ovf_id, on_hold=False)
         return self.get_ovf_preview(ctx, ovf_id)
 
     def update_ovf_charges(
@@ -315,6 +367,95 @@ class ScmHandoffService:
                 self._db, company_id=cid, entity_code=code
             ),
         }
+
+    def create_po_from_inventory(
+        self,
+        ctx: TenantContext,
+        *,
+        vendor_id: UUID,
+        entity_code: str,
+        document_date: date | None = None,
+        currency_code: str = "INR",
+        payment_terms: str | None = None,
+        expected_delivery_date: date | None = None,
+        company_id: UUID | None = None,
+        lines: list[dict] | None = None,
+        approved_by_name: str | None = None,
+    ) -> ProcOrderHeader:
+        """Draft PO with the next company PO number for the entity (e.g. PO/CDT/007)."""
+        cid = self._scope.resolve_company_id(ctx, company_id)
+        branch_id = ctx.branch_id
+        if branch_id is None:
+            raise ConflictException("Select a branch in your session before creating a purchase order")
+        code = normalize_entity_code(entity_code)
+        self._master.get_vendor(ctx, vendor_id)
+        approver = (approved_by_name or "").strip() or None
+        company_po_number = peek_next_company_po_number(
+            self._db, company_id=cid, entity_code=code
+        )
+        order = self._order_service.create(
+            ctx,
+            branch_id=branch_id,
+            document_date=document_date or date.today(),
+            vendor_id=vendor_id,
+            currency_code=currency_code,
+            company_id=cid,
+            payment_terms=payment_terms,
+            expected_delivery_date=expected_delivery_date,
+            source_module="procurement",
+            source_document_type="inventory_initiated",
+            source_document_id=None,
+            entity_code=code,
+            company_po_number=company_po_number,
+            approved_by_name=approver,
+        )
+        line_rows = list(lines or [])
+        if line_rows:
+            uom_id = self._master.resolve_default_uom_id(ctx, cid)
+            product_map = self._master.resolve_products_by_names(
+                ctx,
+                company_id=cid,
+                branch_id=branch_id,
+                product_names=[str(row.get("product_name") or "") for row in line_rows],
+                uom_id=uom_id,
+            )
+            line_payloads: list[dict] = []
+            for idx, raw in enumerate(line_rows, start=1):
+                product_name = str(raw.get("product_name") or "").strip()
+                qty = float(raw.get("quantity") or 0)
+                if qty <= 0:
+                    continue
+                unit_cost = float(raw.get("unit_cost") or 0)
+                product = product_map[(product_name or "").strip().lower() or "scm line item"]
+                line_payloads.append(
+                    {
+                        "line_number": idx,
+                        "product_id": product.id,
+                        "product_code": getattr(product, "product_code", None),
+                        "product_name": product_name[:255],
+                        "quantity": qty,
+                        "uom_id": getattr(product, "uom_id", None) or uom_id,
+                        "unit_cost": unit_cost,
+                    }
+                )
+            if not line_payloads:
+                raise ConflictException("Select at least one stock line with quantity > 0")
+            self._order_service.add_lines(ctx, order.id, line_payloads)
+
+        self._audit.log_entity_change(
+            tenant_id=ctx.tenant_id,
+            entity_name="proc_order_header",
+            entity_id=order.id,
+            operation="create_from_inventory",
+            performed_by=ctx.user_id,
+            new_value={
+                "company_po_number": company_po_number,
+                "entity_code": code,
+                "vendor_id": str(vendor_id),
+                "line_count": len(line_rows),
+            },
+        )
+        return self._order_service.get_order(ctx, order.id)
 
     def create_po_from_ovf(
         self,
@@ -550,6 +691,12 @@ class ScmHandoffService:
                             "last_receipt_serial_numbers": getattr(
                                 ln, "last_receipt_serial_numbers", None
                             ),
+                            "last_receipt_billing": bool(
+                                getattr(ln, "last_receipt_billing", True)
+                            ),
+                            "last_receipt_billing_quantity": float(
+                                getattr(ln, "last_receipt_billing_quantity", 0) or 0
+                            ),
                             "unit_cost": float(ln.unit_cost),
                             "line_total": float(ln.line_total),
                             "status": ln.status,
@@ -574,6 +721,8 @@ class ScmHandoffService:
         quantity_received: float,
         grn_status: str | None = None,
         serial_numbers: list[str] | None = None,
+        billing: bool = True,
+        billing_quantity: float | None = None,
     ) -> ProcOrderHeader:
         order = self._order_service.get_order(ctx, order_id)
         if order.status in {
@@ -642,6 +791,21 @@ class ScmHandoffService:
                     )
                 normalized_serials.append(value)
 
+            if billing_quantity is not None:
+                bill_qty = float(billing_quantity)
+            else:
+                bill_qty = float(unit_count) if billing else 0.0
+            if bill_qty < 0:
+                raise ConflictException("billing_quantity cannot be negative")
+            if bill_qty > unit_count:
+                raise ConflictException(
+                    f"billing_quantity cannot exceed units received ({unit_count})"
+                )
+            if bill_qty != int(bill_qty):
+                raise ConflictException("billing_quantity must be a whole number")
+            bill_qty_int = int(bill_qty)
+            line_billing = bill_qty_int > 0
+
             batch_at = getattr(order, "current_receipt_batch_at", None)
             batch_id = getattr(order, "current_receipt_batch_id", None)
             if batch_at is not None and batch_at.tzinfo is None:
@@ -664,6 +828,10 @@ class ScmHandoffService:
             line.last_receipt_batch_id = batch_id
             if hasattr(line, "last_receipt_serial_numbers"):
                 line.last_receipt_serial_numbers = normalized_serials
+            if hasattr(line, "last_receipt_billing"):
+                line.last_receipt_billing = line_billing
+            if hasattr(line, "last_receipt_billing_quantity"):
+                line.last_receipt_billing_quantity = float(bill_qty_int)
             if self._receipt_batch_tables_exist():
                 if not starting_new_batch and self._db.get(ProcOrderReceiptBatch, batch_id) is None:
                     starting_new_batch = True
@@ -677,6 +845,8 @@ class ScmHandoffService:
                     sequence=int(getattr(order, "grn_sequence", 0) or 0),
                     grn_number=str(order.current_grn_number or ""),
                     serial_numbers=normalized_serials,
+                    billing=line_billing,
+                    billing_quantity=bill_qty_int,
                 )
         else:
             line.last_receipt_qty = 0
@@ -684,6 +854,10 @@ class ScmHandoffService:
             line.last_receipt_batch_id = None
             if hasattr(line, "last_receipt_serial_numbers"):
                 line.last_receipt_serial_numbers = None
+            if hasattr(line, "last_receipt_billing"):
+                line.last_receipt_billing = True
+            if hasattr(line, "last_receipt_billing_quantity"):
+                line.last_receipt_billing_quantity = 0.0
 
         active = [ln for ln in order.lines if not ln.is_deleted]
         orderable = [ln for ln in active if float(ln.quantity or 0) > 0]
@@ -735,6 +909,8 @@ class ScmHandoffService:
         sequence: int,
         grn_number: str,
         serial_numbers: list[str] | None = None,
+        billing: bool = True,
+        billing_quantity: float = 0,
     ) -> None:
         if starting_new_batch:
             header = ProcOrderReceiptBatch(
@@ -767,6 +943,8 @@ class ScmHandoffService:
                 order_line_id=line.id,
                 quantity=qty,
                 serial_numbers=serial_numbers,
+                billing=billing_quantity > 0,
+                billing_quantity=float(billing_quantity),
                 tenant_id=order.tenant_id,
                 company_id=order.company_id,
                 branch_id=order.branch_id,
@@ -779,8 +957,28 @@ class ScmHandoffService:
             if serial_numbers:
                 existing = list(batch_line.serial_numbers or [])
                 batch_line.serial_numbers = existing + serial_numbers
+            batch_line.billing_quantity = float(batch_line.billing_quantity or 0) + float(
+                billing_quantity
+            )
+            batch_line.billing = batch_line.billing_quantity > 0
             batch_line.updated_by = ctx.user_id
             batch_line.updated_at = receipt_at
+
+        if self._inventory_stock_table_exists():
+            # Stock units FK receipt_batch_id — persist batch header/line before insert.
+            self._db.flush()
+
+        self._append_stock_units_for_receipt(
+            ctx,
+            order=order,
+            line=line,
+            batch_id=batch_id,
+            grn_number=grn_number,
+            receipt_at=receipt_at,
+            receive_qty=qty,
+            billing_quantity=billing_quantity,
+            serial_numbers=serial_numbers,
+        )
 
     RECEIPT_BATCH_ATTACHMENT_ENTITY = "procurement_receipt_batch"
 
@@ -1042,6 +1240,10 @@ class ScmHandoffService:
                             "product_name": ln.product_name,
                             "quantity": qty,
                             "serial_numbers": None,
+                            "billing": bool(getattr(ln, "last_receipt_billing", True)),
+                            "billing_quantity": float(
+                                getattr(ln, "last_receipt_billing_quantity", 0) or 0
+                            ),
                         }
                     )
             row_batch_id = batch_id if s == seq else None
@@ -1084,84 +1286,394 @@ class ScmHandoffService:
                     "product_name": ol.product_name,
                     "quantity": qty,
                     "serial_numbers": list(bl.serial_numbers or []) or None,
+                    "billing": bool(getattr(bl, "billing", True)),
+                    "billing_quantity": float(getattr(bl, "billing_quantity", 0) or 0),
                 }
             )
         rows.sort(key=lambda r: r["line_number"])
         return rows
 
-    def list_procurement_inventory(
-        self, ctx: TenantContext, company_id: UUID | None = None
-    ) -> list[dict]:
-        """One row per received unit with serial, grouped by persisted GRN receipt batch."""
-        cid = self._scope.resolve_company_id(ctx, company_id)
-        batches = (
-            self._db.query(ProcOrderReceiptBatch)
-            .join(ProcOrderHeader, ProcOrderReceiptBatch.order_header_id == ProcOrderHeader.id)
-            .filter(
-                ProcOrderReceiptBatch.tenant_id == ctx.tenant_id,
-                ProcOrderReceiptBatch.company_id == cid,
-                ProcOrderReceiptBatch.is_deleted.is_(False),
-                ProcOrderHeader.is_deleted.is_(False),
+    @staticmethod
+    def _inventory_stock_units_from_batch_line(
+        batch_line: ProcOrderReceiptBatchLine,
+    ) -> list[tuple[int, str]]:
+        """Units not yet billed on vendor invoice — available in procurement stock."""
+        qty = int(float(batch_line.quantity or 0))
+        if qty <= 0:
+            return []
+        bill_qty = int(float(getattr(batch_line, "billing_quantity", 0) or 0))
+        bill_qty = max(0, min(bill_qty, qty))
+        stock_count = qty - bill_qty
+        if stock_count <= 0:
+            return []
+        serials = [str(s).strip() for s in (batch_line.serial_numbers or []) if str(s).strip()]
+        units: list[tuple[int, str]] = []
+        for i in range(stock_count):
+            global_index = bill_qty + i
+            unit_index = global_index + 1
+            serial = serials[global_index] if global_index < len(serials) else "—"
+            units.append((unit_index, serial))
+        return units
+
+    def _append_stock_units_for_receipt(
+        self,
+        ctx: TenantContext,
+        *,
+        order: ProcOrderHeader,
+        line: ProcOrderLine,
+        batch_id: UUID,
+        grn_number: str,
+        receipt_at,
+        receive_qty: float,
+        billing_quantity: float,
+        serial_numbers: list[str] | None,
+    ) -> None:
+        if not self._inventory_stock_table_exists():
+            return
+        unit_count = int(receive_qty)
+        if unit_count <= 0:
+            return
+        bill_delta = int(billing_quantity)
+        stock_delta = unit_count - bill_delta
+        if stock_delta <= 0:
+            return
+        serials = [str(s).strip() for s in (serial_numbers or []) if str(s).strip()]
+        grn_label = (grn_number or "").strip() or "—"
+        product = (line.product_name or "").strip() or "Unnamed product"
+        for i in range(stock_delta):
+            serial_idx = bill_delta + i
+            serial = serials[serial_idx] if serial_idx < len(serials) else "—"
+            unit_index = int(float(line.quantity_received or 0)) - stock_delta + i + 1
+            self._db.add(
+                ProcInventoryStockUnit(
+                    order_header_id=order.id,
+                    order_line_id=line.id,
+                    receipt_batch_id=batch_id,
+                    product_name=product,
+                    grn_number=grn_label,
+                    receipt_at=receipt_at,
+                    unit_index=unit_index,
+                    serial_number=serial,
+                    tenant_id=order.tenant_id,
+                    company_id=order.company_id,
+                    branch_id=order.branch_id,
+                    created_by=ctx.user_id,
+                    updated_by=ctx.user_id,
+                )
             )
-            .order_by(
-                ProcOrderReceiptBatch.receipt_at.desc(),
-                ProcOrderReceiptBatch.grn_number.desc(),
+
+    def clear_procurement_inventory_stock(
+        self, ctx: TenantContext, company_id: UUID | None = None
+    ) -> int:
+        """Soft-delete explicit stock units (GRN not-billed ledger). Does not change GRN receipts."""
+        if not self._inventory_stock_table_exists():
+            return 0
+        cid = self._scope.resolve_company_id(ctx, company_id)
+        now = utcnow()
+        units = (
+            self._db.query(ProcInventoryStockUnit)
+            .filter(
+                ProcInventoryStockUnit.tenant_id == ctx.tenant_id,
+                ProcInventoryStockUnit.company_id == cid,
+                ProcInventoryStockUnit.is_deleted.is_(False),
             )
             .all()
         )
+        for unit in units:
+            unit.is_deleted = True
+            unit.deleted_at = now
+            unit.deleted_by = ctx.user_id
+            unit.updated_by = ctx.user_id
+            unit.updated_at = now
+        return len(units)
 
+    def update_inventory_stock_serial(
+        self,
+        ctx: TenantContext,
+        stock_unit_id: UUID,
+        *,
+        serial_number: str,
+    ) -> None:
+        if not self._inventory_stock_table_exists():
+            raise ConflictException("Inventory stock is not available on this database.")
+        serial = str(serial_number or "").strip()
+        if not serial:
+            raise ConflictException("Serial number is required")
+        unit = self._db.get(ProcInventoryStockUnit, stock_unit_id)
+        if unit is None or unit.is_deleted:
+            raise NotFoundException("Stock unit not found")
+        if unit.tenant_id != ctx.tenant_id:
+            raise NotFoundException("Stock unit not found")
+        cid = self._scope.resolve_company_id(ctx, None)
+        if unit.company_id != cid:
+            raise NotFoundException("Stock unit not found")
+
+        unit.serial_number = serial
+        unit.updated_by = ctx.user_id
+        unit.updated_at = utcnow()
+
+        batch_line = (
+            self._db.query(ProcOrderReceiptBatchLine)
+            .filter(
+                ProcOrderReceiptBatchLine.receipt_batch_id == unit.receipt_batch_id,
+                ProcOrderReceiptBatchLine.order_line_id == unit.order_line_id,
+                ProcOrderReceiptBatchLine.is_deleted.is_(False),
+            )
+            .first()
+        )
+        if batch_line is not None:
+            serials = [str(s).strip() for s in (batch_line.serial_numbers or [])]
+            idx = max(0, int(unit.unit_index) - 1)
+            while len(serials) <= idx:
+                serials.append("—")
+            serials[idx] = serial
+            batch_line.serial_numbers = serials
+            batch_line.updated_by = ctx.user_id
+            batch_line.updated_at = utcnow()
+
+        line = self._db.get(ProcOrderLine, unit.order_line_id)
+        if line is not None and not line.is_deleted:
+            if line.last_receipt_batch_id == unit.receipt_batch_id:
+                last_serials = [str(s).strip() for s in (line.last_receipt_serial_numbers or [])]
+                idx = max(0, int(unit.unit_index) - 1)
+                while len(last_serials) <= idx:
+                    last_serials.append("—")
+                last_serials[idx] = serial
+                line.last_receipt_serial_numbers = last_serials
+                line.updated_by = ctx.user_id
+                line.updated_at = utcnow()
+
+    def update_inventory_import_serial(
+        self,
+        ctx: TenantContext,
+        import_line_id: UUID,
+        *,
+        serial_number: str,
+    ) -> None:
+        if not self._inventory_import_table_exists():
+            raise ConflictException("Inventory import is not available on this database.")
+        serial = str(serial_number or "").strip()
+        if not serial:
+            raise ConflictException("Serial number is required")
+        row = self._db.get(ProcInventoryImportLine, import_line_id)
+        if row is None or row.is_deleted:
+            raise NotFoundException("Import line not found")
+        if row.tenant_id != ctx.tenant_id:
+            raise NotFoundException("Import line not found")
+        cid = self._scope.resolve_company_id(ctx, None)
+        if row.company_id != cid:
+            raise NotFoundException("Import line not found")
+        row.serial_number = serial
+        row.updated_by = ctx.user_id
+        row.updated_at = utcnow()
+
+    def _inventory_order_headers(
+        self,
+        ctx: TenantContext,
+        company_id: UUID,
+        order_ids: list[UUID],
+    ) -> dict[UUID, ProcOrderHeader]:
+        if not order_ids:
+            return {}
+        stmt = select(ProcOrderHeader).where(
+            ProcOrderHeader.company_id == company_id,
+            ProcOrderHeader.is_deleted.is_(False),
+            ProcOrderHeader.id.in_(order_ids),
+        )
+        stmt = ProcScopedRepository.apply_proc_filter(stmt, ProcOrderHeader, ctx, branch_scoped=True)
+        stmt = stmt.options(
+            load_only(
+                ProcOrderHeader.id,
+                ProcOrderHeader.vendor_id,
+                ProcOrderHeader.company_po_number,
+                ProcOrderHeader.document_number,
+                ProcOrderHeader.tenant_id,
+                ProcOrderHeader.company_id,
+                ProcOrderHeader.branch_id,
+            )
+        )
+        rows = list(self._db.scalars(stmt).all())
+        return {row.id: row for row in rows}
+
+    def _inventory_order_lines(
+        self,
+        ctx: TenantContext,
+        line_ids: list[UUID],
+    ) -> dict[UUID, ProcOrderLine]:
+        if not line_ids:
+            return {}
+        stmt = select(ProcOrderLine).where(
+            ProcOrderLine.is_deleted.is_(False),
+            ProcOrderLine.id.in_(line_ids),
+        )
+        stmt = ProcScopedRepository.apply_proc_filter(stmt, ProcOrderLine, ctx, branch_scoped=True)
+        stmt = stmt.options(
+            load_only(
+                ProcOrderLine.id,
+                ProcOrderLine.product_name,
+                ProcOrderLine.product_code,
+                ProcOrderLine.line_number,
+                ProcOrderLine.unit_cost,
+                ProcOrderLine.tenant_id,
+                ProcOrderLine.company_id,
+                ProcOrderLine.branch_id,
+                ProcOrderLine.is_deleted,
+            )
+        )
+        rows = list(self._db.scalars(stmt).all())
+        return {row.id: row for row in rows}
+
+    def list_procurement_inventory(
+        self, ctx: TenantContext, company_id: UUID | None = None
+    ) -> list[dict]:
+        """One row per stock unit on hand (ledger) plus optional Excel import lines."""
+        cid = self._scope.resolve_company_id(ctx, company_id)
         order_cache: dict[UUID, ProcOrderHeader] = {}
         result: list[dict] = []
 
-        for batch in batches:
-            order_id = batch.order_header_id
-            if order_id not in order_cache:
-                order_cache[order_id] = self._order_service.get_order(ctx, order_id)
-            order = order_cache[order_id]
-            line_by_id = {
-                ln.id: ln
-                for ln in (order.lines or [])
-                if not getattr(ln, "is_deleted", False)
-            }
-            po_number = (order.company_po_number or order.document_number or "").strip()
-
-            batch_lines = (
-                self._db.query(ProcOrderReceiptBatchLine)
+        if self._inventory_stock_table_exists():
+            stock_rows = (
+                self._db.query(ProcInventoryStockUnit)
                 .filter(
-                    ProcOrderReceiptBatchLine.receipt_batch_id == batch.id,
-                    ProcOrderReceiptBatchLine.is_deleted.is_(False),
+                    ProcInventoryStockUnit.tenant_id == ctx.tenant_id,
+                    ProcInventoryStockUnit.company_id == cid,
+                    ProcInventoryStockUnit.is_deleted.is_(False),
+                )
+                .order_by(
+                    ProcInventoryStockUnit.receipt_at.desc(),
+                    ProcInventoryStockUnit.grn_number.desc(),
+                )
+                .all()
+            )
+            order_ids = list({row.order_header_id for row in stock_rows})
+            order_cache = self._inventory_order_headers(ctx, cid, order_ids)
+            line_by_id = self._inventory_order_lines(
+                ctx,
+                list({row.order_line_id for row in stock_rows}),
+            )
+            for stock in stock_rows:
+                order = order_cache.get(stock.order_header_id)
+                if order is None:
+                    continue
+                ol = line_by_id.get(stock.order_line_id)
+                po_number = (order.company_po_number or order.document_number or "").strip() or "—"
+                unit_cost = float(getattr(ol, "unit_cost", 0) or 0) if ol else 0.0
+                line_number = int(ol.line_number) if ol else 0
+                product_code = (getattr(ol, "product_code", None) or "").strip() if ol else ""
+                result.append(
+                    {
+                        "order_id": order.id,
+                        "order_line_id": stock.order_line_id,
+                        "receipt_batch_id": stock.receipt_batch_id,
+                        "grn_number": stock.grn_number,
+                        "receipt_at": stock.receipt_at,
+                        "company_po_number": po_number,
+                        "vendor_id": order.vendor_id,
+                        "product_name": stock.product_name,
+                        "line_number": line_number,
+                        "unit_index": stock.unit_index,
+                        "serial_number": stock.serial_number,
+                        "source": "grn",
+                        "received_quantity": 1,
+                        "billing_quantity": 0,
+                        "unit_cost": unit_cost,
+                        "description": product_code or None,
+                        "stock_unit_id": stock.id,
+                        "import_line_id": None,
+                    }
+                )
+        else:
+            batches = (
+                self._db.query(ProcOrderReceiptBatch)
+                .join(ProcOrderHeader, ProcOrderReceiptBatch.order_header_id == ProcOrderHeader.id)
+                .filter(
+                    ProcOrderReceiptBatch.tenant_id == ctx.tenant_id,
+                    ProcOrderReceiptBatch.company_id == cid,
+                    ProcOrderReceiptBatch.is_deleted.is_(False),
+                    ProcOrderHeader.is_deleted.is_(False),
+                )
+                .order_by(
+                    ProcOrderReceiptBatch.receipt_at.desc(),
+                    ProcOrderReceiptBatch.grn_number.desc(),
                 )
                 .all()
             )
 
-            for bl in batch_lines:
-                qty = float(bl.quantity or 0)
-                if qty <= 0:
-                    continue
-                ol = line_by_id.get(bl.order_line_id)
-                if ol is None:
-                    continue
-                serials = [str(s).strip() for s in (bl.serial_numbers or []) if str(s).strip()]
-                unit_count = max(len(serials), int(qty) if qty == int(qty) else int(round(qty)))
-                if unit_count <= 0:
-                    unit_count = max(1, int(qty))
-
-                for i in range(unit_count):
-                    serial = serials[i] if i < len(serials) else "—"
-                    result.append(
-                        {
-                            "order_id": order.id,
-                            "grn_number": batch.grn_number,
-                            "receipt_at": batch.receipt_at,
-                            "company_po_number": po_number,
-                            "vendor_id": order.vendor_id,
-                            "product_name": ol.product_name,
-                            "line_number": int(ol.line_number),
-                            "unit_index": i + 1,
-                            "serial_number": serial,
-                            "source": "grn",
-                        }
+            batch_ids = [batch.id for batch in batches]
+            all_batch_lines: list[ProcOrderReceiptBatchLine] = []
+            lines_by_batch: dict[UUID, list[ProcOrderReceiptBatchLine]] = defaultdict(list)
+            if batch_ids:
+                batch_line_load = [
+                    ProcOrderReceiptBatchLine.id,
+                    ProcOrderReceiptBatchLine.receipt_batch_id,
+                    ProcOrderReceiptBatchLine.order_line_id,
+                    ProcOrderReceiptBatchLine.quantity,
+                    ProcOrderReceiptBatchLine.serial_numbers,
+                    ProcOrderReceiptBatchLine.is_deleted,
+                ]
+                if self._receipt_batch_line_has_billing_quantity():
+                    batch_line_load.append(ProcOrderReceiptBatchLine.billing_quantity)
+                all_batch_lines = (
+                    self._db.query(ProcOrderReceiptBatchLine)
+                    .options(load_only(*batch_line_load))
+                    .filter(
+                        ProcOrderReceiptBatchLine.receipt_batch_id.in_(batch_ids),
+                        ProcOrderReceiptBatchLine.is_deleted.is_(False),
                     )
+                    .all()
+                )
+                for bl in all_batch_lines:
+                    lines_by_batch[bl.receipt_batch_id].append(bl)
+
+            order_ids = list({batch.order_header_id for batch in batches})
+            order_cache = self._inventory_order_headers(ctx, cid, order_ids)
+            line_by_id = self._inventory_order_lines(
+                ctx,
+                list({bl.order_line_id for bl in all_batch_lines}),
+            )
+
+            for batch in batches:
+                order_id = batch.order_header_id
+                order = order_cache.get(order_id)
+                if order is None:
+                    continue
+                po_number = (order.company_po_number or order.document_number or "").strip() or "—"
+                grn_label = (batch.grn_number or "").strip() or "—"
+
+                for bl in lines_by_batch.get(batch.id, []):
+                    qty = float(bl.quantity or 0)
+                    if qty <= 0:
+                        continue
+                    ol = line_by_id.get(bl.order_line_id)
+                    if ol is None:
+                        continue
+                    bill_qty = float(getattr(bl, "billing_quantity", 0) or 0)
+                    unit_cost = float(getattr(ol, "unit_cost", 0) or 0)
+                    product_code = (getattr(ol, "product_code", None) or "").strip()
+                    stock_units = self._inventory_stock_units_from_batch_line(bl)
+                    for unit_index, serial in stock_units:
+                        result.append(
+                            {
+                                "order_id": order.id,
+                                "order_line_id": ol.id,
+                                "receipt_batch_id": batch.id,
+                                "grn_number": grn_label,
+                                "receipt_at": batch.receipt_at,
+                                "company_po_number": po_number,
+                                "vendor_id": order.vendor_id,
+                                "product_name": ol.product_name,
+                                "line_number": int(ol.line_number),
+                                "unit_index": unit_index,
+                                "serial_number": serial,
+                                "source": "grn",
+                                "received_quantity": qty,
+                                "billing_quantity": bill_qty,
+                                "unit_cost": unit_cost,
+                                "description": product_code or None,
+                                "stock_unit_id": None,
+                                "import_line_id": None,
+                            }
+                        )
 
         if self._inventory_import_table_exists():
             imports = (
@@ -1178,15 +1690,16 @@ class ScmHandoffService:
                 vendor_id = None
                 po_label = (row.company_po_number or "").strip() or "Without PO"
                 if row.order_header_id:
-                    linked_order = None
-                    if row.order_header_id in order_cache:
-                        linked_order = order_cache[row.order_header_id]
-                    else:
-                        try:
-                            linked_order = self._order_service.get_order(ctx, row.order_header_id)
+                    linked_order = order_cache.get(row.order_header_id)
+                    if linked_order is None:
+                        extra = self._inventory_order_headers(
+                            ctx,
+                            cid,
+                            [row.order_header_id],
+                        )
+                        linked_order = extra.get(row.order_header_id)
+                        if linked_order is not None:
                             order_cache[row.order_header_id] = linked_order
-                        except NotFoundException:
-                            linked_order = None
                     if linked_order:
                         vendor_id = linked_order.vendor_id
                         po_label = (
@@ -1195,6 +1708,8 @@ class ScmHandoffService:
                 result.append(
                     {
                         "order_id": row.order_header_id,
+                        "order_line_id": None,
+                        "receipt_batch_id": None,
                         "grn_number": "Imported",
                         "receipt_at": row.created_at,
                         "company_po_number": po_label,
@@ -1204,6 +1719,12 @@ class ScmHandoffService:
                         "unit_index": 1,
                         "serial_number": row.serial_number,
                         "source": "import",
+                        "received_quantity": 1,
+                        "billing_quantity": 0,
+                        "unit_cost": 0,
+                        "description": None,
+                        "stock_unit_id": None,
+                        "import_line_id": row.id,
                     }
                 )
 

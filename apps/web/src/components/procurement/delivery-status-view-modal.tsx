@@ -12,8 +12,7 @@ import {
   deliveryStatusToFormValue,
   type DeliveryStatusFormValue,
 } from "@/components/procurement/delivery-status-form";
-import { Button, buttonVariants } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
 import type { DeliveryChallanRecord } from "@/utils/delivery-challan-storage";
 import {
   isDeliveryStatusPersisted,
@@ -99,22 +98,6 @@ export function DeliveryStatusViewModal({
         <DeliverySectionCard title="From delivery challan" icon={FileText}>
           <DeliveryChallanReadOnlyPanel challan={challan} />
         </DeliverySectionCard>
-
-        {!trackingOnly ? (
-          <div className="rounded-md border border-border/80 bg-muted/30 px-3 py-2 text-sm text-muted-foreground">
-            Dispatch dates and reminder email are not set up yet.{" "}
-            <Link
-              href={deliveryStatusUpdateHref(challan.id)}
-              className={cn(
-                buttonVariants({ variant: "link", size: "sm" }),
-                "h-auto p-0 text-[#0369A1]",
-              )}
-              onClick={onClose}
-            >
-              Set up delivery status
-            </Link>
-          </div>
-        ) : null}
 
         {form && trackingOnly ? (
           <>

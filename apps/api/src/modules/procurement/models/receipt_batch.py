@@ -3,7 +3,7 @@
 from datetime import date, datetime
 from uuid import UUID, uuid4
 
-from sqlalchemy import Date, DateTime, ForeignKey, Integer, Numeric, String, UniqueConstraint
+from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Integer, Numeric, String, UniqueConstraint
 from sqlalchemy.dialects.postgresql import JSONB, UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -65,5 +65,7 @@ class ProcOrderReceiptBatchLine(Base, *ProcTransactionMixin):
     )
     quantity: Mapped[float] = mapped_column(Numeric(18, 4), nullable=False)
     serial_numbers: Mapped[list | None] = mapped_column(JSONB, nullable=True)
+    billing: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    billing_quantity: Mapped[float] = mapped_column(Numeric(18, 4), nullable=False, default=0)
 
     receipt_batch: Mapped[ProcOrderReceiptBatch] = relationship(back_populates="lines")

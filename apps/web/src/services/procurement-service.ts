@@ -1,10 +1,21 @@
 import { ApiClientError, apiClient, resourceService } from "@/services/api-client";
 import { getAccessToken } from "@/lib/auth";
-import { cachedFetch, invalidateClientCache } from "@/lib/client-cache";
+import { cachedFetch, invalidateClientCache, peekCachedValue } from "@/lib/client-cache";
 import { env } from "@/utils/env";
 
 /** Short TTL so tab switches reuse in-flight / recent list responses. */
 const PROCUREMENT_LIST_TTL_MS = 45_000;
+
+export const PROCUREMENT_INVENTORY_CACHE_KEY = "erp.procurement.inventory";
+export const PROCUREMENT_OVERVIEW_CACHE_KEY = "erp.procurement.overview";
+export const PROCUREMENT_SCM_QUEUE_CACHE_KEY = "erp.procurement.scm-queue";
+export const PROCUREMENT_ORDERS_CACHE_KEY = "erp.procurement.orders";
+export const PROCUREMENT_VENDOR_POS_CACHE_KEY = "erp.procurement.vendor-pos";
+export const PROCUREMENT_VENDOR_OPTIONS_CACHE_KEY = "erp.procurement.vendor-options";
+
+export function peekProcurementInventoryFromCache(): ProcurementInventoryRow[] | null {
+  return peekCachedValue<ProcurementInventoryRow[]>(PROCUREMENT_INVENTORY_CACHE_KEY);
+}
 
 export function invalidateProcurementListCache(): void {
   invalidateClientCache("erp.procurement.");
@@ -21,6 +32,7 @@ export function prefetchProcurementTab(href: string): void {
   const path = (href.split("?")[0] ?? href).replace(/\/$/, "") || "/";
   if (path === "/procurement") {
     prefetchQuiet(loadProcurementOverview());
+    prefetchQuiet(listProcurementInventory());
     return;
   }
   if (path === "/procurement/scm" || path.startsWith("/procurement/scm/")) {
@@ -35,6 +47,17 @@ export function prefetchProcurementTab(href: string): void {
   }
   if (path === "/procurement/grns") {
     prefetchQuiet(listVendorPos());
+    prefetchQuiet(listVendorOptions());
+    return;
+  }
+  if (path === "/procurement/delivery-challan" || path.startsWith("/procurement/delivery-challan/")) {
+    prefetchQuiet(listVendorPos());
+    prefetchQuiet(listPurchaseOrders());
+    prefetchQuiet(listVendorOptions());
+    return;
+  }
+  if (path === "/procurement/delivery-status" || path.startsWith("/procurement/delivery-status/")) {
+    prefetchQuiet(listPurchaseOrders());
     prefetchQuiet(listVendorOptions());
     return;
   }
@@ -131,8 +154,12 @@ export function averageScore(rows: ProcurementRow[]): number {
   return total / rows.length;
 }
 
+export function peekProcurementOverviewFromCache(): ProcurementOverview | null {
+  return peekCachedValue<ProcurementOverview>(PROCUREMENT_OVERVIEW_CACHE_KEY);
+}
+
 export async function loadProcurementOverview(): Promise<ProcurementOverview> {
-  return cachedFetch("erp.procurement.overview", PROCUREMENT_LIST_TTL_MS, async () => {
+  return cachedFetch(PROCUREMENT_OVERVIEW_CACHE_KEY, PROCUREMENT_LIST_TTL_MS, async () => {
     const [scmQueue, orders, grns, invoices, vendorPos] = await Promise.all([
       safeList("/procurement/scm/queue"),
       safeList("/procurement/orders"),
@@ -184,6 +211,7 @@ export type ScmQueueItem = {
   vendor_qty: number;
   vendor_total: number;
   customer_total?: number;
+  customer_total_with_tax?: number;
   margin_amount?: number;
   vendor_payment_days?: number;
   customer_payment_days?: number;
@@ -191,10 +219,13 @@ export type ScmQueueItem = {
   oem_name: string | null;
   /** When the OVF/PO arrived in the SCM queue (shared to SCM). */
   received_at?: string | null;
+  delivery_period?: string | null;
+  expected_delivery_date?: string | null;
   purchase_order_id: string | null;
   purchase_order_number: string | null;
   purchase_order_status: string | null;
   scm_on_hold?: boolean;
+  scm_on_hold_at?: string | null;
   can_create_po: boolean;
 };
 
@@ -269,7 +300,19 @@ export type ScmOvfPreview = {
   purchase_order_number: string | null;
   can_create_po: boolean;
   scm_on_hold?: boolean;
+  scm_on_hold_at?: string | null;
+  scm_hold_blocked?: boolean;
+  scm_last_hold_since?: string | null;
+  scm_last_hold_released_at?: string | null;
+  scm_hold_history?: ScmOvfHoldHistoryEntry[];
+  scm_on_hold_remark?: string | null;
   purchase_order_status?: string | null;
+};
+
+export type ScmOvfHoldHistoryEntry = {
+  started_at: string;
+  released_at: string;
+  remark?: string | null;
 };
 
 export type ScmVendorPoLine = {
@@ -328,6 +371,7 @@ export type ProcOrder = {
   company_po_number: string | null;
   entity_code?: string | null;
   customer_name: string | null;
+  approved_by_name?: string | null;
   customer_po_number?: string | null;
   ovf_date?: string | null;
   vendor_total?: number;
@@ -355,6 +399,7 @@ export type ProcOrder = {
     last_receipt_qty?: number;
     last_receipt_batch_id?: string | null;
     last_receipt_serial_numbers?: string[] | null;
+    last_receipt_billing?: boolean;
     unit_cost: number;
     line_total: number;
     status: string;
@@ -368,8 +413,12 @@ function unwrapData<T>(payload: { data?: T | null }): T {
   return payload.data;
 }
 
+export function peekScmQueueFromCache(): ScmQueueItem[] | null {
+  return peekCachedValue<ScmQueueItem[]>(PROCUREMENT_SCM_QUEUE_CACHE_KEY);
+}
+
 export async function listScmQueue(): Promise<ScmQueueItem[]> {
-  return cachedFetch("erp.procurement.scm-queue", PROCUREMENT_LIST_TTL_MS, async () => {
+  return cachedFetch(PROCUREMENT_SCM_QUEUE_CACHE_KEY, PROCUREMENT_LIST_TTL_MS, async () => {
     const res = await apiClient<ScmQueueItem[]>(`${SCM_API}/queue`);
     return unwrapData(res);
   });
@@ -380,8 +429,17 @@ export async function getScmOvfPreview(ovfId: string): Promise<ScmOvfPreview> {
   return unwrapData(res);
 }
 
-export async function holdScmOvf(ovfId: string): Promise<ScmOvfPreview> {
+export async function holdScmOvf(ovfId: string, remark: string): Promise<ScmOvfPreview> {
   const res = await apiClient<ScmOvfPreview>(`${SCM_API}/ovf/${ovfId}/hold`, {
+    method: "POST",
+    body: { remark: remark.trim() },
+  });
+  invalidateProcurementListCache();
+  return unwrapData(res);
+}
+
+export async function releaseScmOvfHold(ovfId: string): Promise<ScmOvfPreview> {
+  const res = await apiClient<ScmOvfPreview>(`${SCM_API}/ovf/${ovfId}/release-hold`, {
     method: "POST",
     body: {},
   });
@@ -446,8 +504,12 @@ export async function finalizeScmOrder(orderId: string): Promise<ProcOrder> {
   return unwrapData(res);
 }
 
+export function peekVendorPosFromCache(): ScmVendorPo[] | null {
+  return peekCachedValue<ScmVendorPo[]>(PROCUREMENT_VENDOR_POS_CACHE_KEY);
+}
+
 export async function listVendorPos(): Promise<ScmVendorPo[]> {
-  return cachedFetch("erp.procurement.vendor-pos", PROCUREMENT_LIST_TTL_MS, async () => {
+  return cachedFetch(PROCUREMENT_VENDOR_POS_CACHE_KEY, PROCUREMENT_LIST_TTL_MS, async () => {
     const res = await apiClient<ScmVendorPo[]>(`${SCM_API}/vendor-pos`);
     return unwrapData(res);
   });
@@ -455,6 +517,8 @@ export async function listVendorPos(): Promise<ScmVendorPo[]> {
 
 export type ProcurementInventoryRow = {
   order_id: string | null;
+  order_line_id?: string | null;
+  receipt_batch_id?: string | null;
   grn_number: string;
   receipt_at: string | null;
   company_po_number: string;
@@ -464,13 +528,72 @@ export type ProcurementInventoryRow = {
   unit_index: number;
   serial_number: string;
   source: "grn" | "import" | string;
+  received_quantity?: number;
+  billing_quantity?: number;
+  unit_cost?: number;
+  description?: string | null;
+  stock_unit_id?: string | null;
+  import_line_id?: string | null;
 };
 
+export async function createPoFromInventory(payload: {
+  vendor_id: string;
+  entity_code: string;
+  document_date?: string;
+  payment_terms?: string | null;
+  approved_by_name?: string | null;
+  lines?: Array<{ product_name: string; quantity: number; unit_cost?: number }>;
+}): Promise<ProcOrder> {
+  const res = await apiClient<ProcOrder>(`${SCM_API}/inventory/purchase-orders`, {
+    method: "POST",
+    body: {
+      vendor_id: payload.vendor_id,
+      entity_code: payload.entity_code,
+      document_date: payload.document_date || null,
+      payment_terms: payload.payment_terms ?? null,
+      approved_by_name: payload.approved_by_name?.trim() || null,
+      lines: payload.lines ?? [],
+    },
+  });
+  invalidateProcurementListCache();
+  return unwrapData(res);
+}
+
 export async function listProcurementInventory(): Promise<ProcurementInventoryRow[]> {
-  return cachedFetch("erp.procurement.inventory", PROCUREMENT_LIST_TTL_MS, async () => {
+  return cachedFetch(PROCUREMENT_INVENTORY_CACHE_KEY, PROCUREMENT_LIST_TTL_MS, async () => {
     const res = await apiClient<ProcurementInventoryRow[]>(`${SCM_API}/inventory`);
     return unwrapData(res);
   });
+}
+
+export async function updateInventoryStockSerial(
+  stockUnitId: string,
+  serial_number: string,
+): Promise<void> {
+  await apiClient(`${SCM_API}/inventory/stock-units/${stockUnitId}/serial`, {
+    method: "PATCH",
+    body: { serial_number },
+  });
+  invalidateProcurementListCache();
+}
+
+export async function updateInventoryImportSerial(
+  importLineId: string,
+  serial_number: string,
+): Promise<void> {
+  await apiClient(`${SCM_API}/inventory/import-lines/${importLineId}/serial`, {
+    method: "PATCH",
+    body: { serial_number },
+  });
+  invalidateProcurementListCache();
+}
+
+export async function clearProcurementInventoryStock(): Promise<{ removed: number }> {
+  const res = await apiClient<{ removed: number }>(`${SCM_API}/inventory/clear-stock`, {
+    method: "POST",
+  });
+  invalidateProcurementListCache();
+  return unwrapData(res);
 }
 
 export async function importProcurementInventory(
@@ -497,6 +620,8 @@ export type ScmReceiptBatchLine = {
   product_name: string | null;
   quantity: number;
   serial_numbers?: string[] | null;
+  billing?: boolean;
+  billing_quantity?: number;
 };
 
 export type ScmReceiptBatch = {
@@ -616,10 +741,14 @@ export async function listPurchaseOrders(options?: {
     });
     return normalizeRows(res.data) as unknown as ProcOrder[];
   }
-  return cachedFetch("erp.procurement.orders", PROCUREMENT_LIST_TTL_MS, async () => {
+  return cachedFetch(PROCUREMENT_ORDERS_CACHE_KEY, PROCUREMENT_LIST_TTL_MS, async () => {
     const res = await resourceService.list<ProcOrder>("/procurement/orders");
     return normalizeRows(res.data) as unknown as ProcOrder[];
   });
+}
+
+export function peekPurchaseOrdersFromCache(): ProcOrder[] | null {
+  return peekCachedValue<ProcOrder[]>(PROCUREMENT_ORDERS_CACHE_KEY);
 }
 
 export type ProcGrn = {
@@ -659,6 +788,8 @@ export async function updateLineReceipt(
     quantity_received: number;
     grn_status?: string | null;
     serial_numbers?: string[] | null;
+    billing?: boolean;
+    billing_quantity?: number;
   },
 ): Promise<ProcOrder> {
   const res = await apiClient<ProcOrder>(
@@ -1001,8 +1132,12 @@ function toVendorOption(
   };
 }
 
+export function peekVendorOptionsFromCache(): VendorOption[] | null {
+  return peekCachedValue<VendorOption[]>(PROCUREMENT_VENDOR_OPTIONS_CACHE_KEY);
+}
+
 export async function listVendorOptions(): Promise<VendorOption[]> {
-  return cachedFetch("erp.procurement.vendor-options", 5 * 60_000, async () => {
+  return cachedFetch(PROCUREMENT_VENDOR_OPTIONS_CACHE_KEY, 5 * 60_000, async () => {
     const res = await resourceService.list<Record<string, unknown>>("/vendors");
     const rows = normalizeRows(res.data);
     return rows.map((row) => toVendorOption(row)).filter((v) => v.id);

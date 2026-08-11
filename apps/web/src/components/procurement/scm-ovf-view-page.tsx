@@ -5,7 +5,9 @@ import Link from "next/link";
 import {
   Building2,
   ClipboardList,
+  FileDown,
   Package,
+  PauseCircle,
   Percent,
   RefreshCw,
   ShoppingCart,
@@ -13,15 +15,26 @@ import {
   type LucideIcon,
 } from "lucide-react";
 
+import { ScmCreatePoEntry } from "@/components/procurement/scm-create-po-entry";
+import { ConfirmDialog } from "@/components/finance/journals/confirm-dialog";
 import { FinanceStatusBadge } from "@/components/finance/finance-status-badge";
 import { FinanceField } from "@/components/finance/journals/finance-form-field";
 import { PageHeader } from "@/components/layout/page-header";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
+import {
+  scmHoldDayCountBetweenDisplay,
+  scmHoldDayCountDisplay,
+  scmHoldSinceDisplay,
+} from "@/utils/scm-ovf-hold";
+import { downloadScmOvfPdf } from "@/utils/scm-ovf-pdf";
 import { ApiClientError } from "@/services/api-client";
 import {
   getScmOvfPreview,
+  holdScmOvf,
+  releaseScmOvfHold,
   updateScmOvfCharges,
   type ScmOvfPreview,
   type ScmVendorLine,
@@ -74,6 +87,43 @@ function parseChargeInput(raw: string): string | null {
 function normalizeChargeOnBlur(value: string): string {
   if (value.trim() === "" || value === ".") return "0";
   return value;
+}
+
+type ScmOvfQueueStatus = "open" | "close" | "hold" | "draft";
+
+function deriveScmOvfQueueStatus(preview: ScmOvfPreview): ScmOvfQueueStatus {
+  const poStatus = (preview.purchase_order_status || "").toLowerCase();
+  if (poStatus === "draft" && preview.purchase_order_id && !preview.can_create_po) {
+    return "draft";
+  }
+  if (preview.scm_on_hold || poStatus === "hold" || poStatus === "cancelled") return "hold";
+  if (!preview.purchase_order_id || preview.can_create_po) return "open";
+  if (poStatus === "submitted" || poStatus === "") return "open";
+  return "close";
+}
+
+function ScmOvfStatusBadge({ status }: { status: ScmOvfQueueStatus }) {
+  const label =
+    status === "open"
+      ? "Open"
+      : status === "close"
+        ? "Close"
+        : status === "draft"
+          ? "Draft"
+          : "Hold";
+  return (
+    <span
+      className={cn(
+        "inline-flex rounded-md border px-2 py-0.5 text-xs font-medium",
+        status === "open" && "border-amber-300 bg-amber-50 text-amber-900",
+        status === "close" && "border-emerald-300 bg-emerald-50 text-emerald-900",
+        status === "draft" && "border-sky-300 bg-sky-50 text-sky-900",
+        status === "hold" && "border-red-300 bg-red-50 text-red-800",
+      )}
+    >
+      {label}
+    </span>
+  );
 }
 
 function DetailItem({
@@ -147,23 +197,38 @@ function ChargeTable({
     );
   }, [rows]);
 
-  const gstLabel =
-    rows.length > 0 ? `GST (${Number(rows[0]?.gst_pct || 18).toFixed(0)}%)` : "GST";
-
   return (
     <div className="overflow-hidden rounded-md border border-border">
       <div className="overflow-x-auto">
-        <table className="w-full min-w-[900px] text-left text-sm">
+        <table className="w-full min-w-[900px] table-fixed text-sm">
+          <colgroup>
+            <col className="w-12" />
+            <col className="min-w-[120px]" />
+            <col className="min-w-[140px]" />
+            <col className="w-16" />
+            <col className="w-[7.25rem]" />
+            <col className="w-[7.25rem]" />
+            <col className="w-[7.25rem]" />
+            <col className="w-[8.5rem]" />
+          </colgroup>
           <thead className="border-b border-border bg-muted/40 text-xs uppercase tracking-wide text-muted-foreground">
             <tr>
-              <th className="px-3 py-2 font-medium">S No.</th>
-              <th className="px-3 py-2 font-medium">Product</th>
-              <th className="px-3 py-2 font-medium">Description</th>
-              <th className="px-3 py-2 font-medium text-right">Qty</th>
-              <th className="px-3 py-2 font-medium text-right">Unit (INR)</th>
-              <th className="px-3 py-2 font-medium text-right">Total (INR)</th>
-              <th className="px-3 py-2 font-medium text-right">{gstLabel}</th>
-              <th className="px-3 py-2 font-medium text-right">With GST (INR)</th>
+              <th className="px-3 py-2 text-left font-medium">S No.</th>
+              <th className="px-3 py-2 text-left font-medium">Product</th>
+              <th className="px-3 py-2 text-left font-medium">Description</th>
+              <th className="px-3 py-2 text-right font-medium tabular-nums">Qty</th>
+              <th className="px-3 py-2 text-right font-medium tabular-nums whitespace-nowrap">
+                Unit (INR)
+              </th>
+              <th className="px-3 py-2 text-right font-medium tabular-nums whitespace-nowrap">
+                Total (INR)
+              </th>
+              <th className="px-3 py-2 text-right font-medium tabular-nums whitespace-nowrap">
+                Tax amount
+              </th>
+              <th className="px-3 py-2 text-right font-medium tabular-nums whitespace-nowrap">
+                With GST (INR)
+              </th>
             </tr>
           </thead>
           <tbody>
@@ -188,10 +253,10 @@ function ChargeTable({
                   <td className="px-3 py-2 text-right tabular-nums">
                     {moneyPrecise(row.line_total)}
                   </td>
-                  <td className="px-3 py-2 text-right tabular-nums">
+                  <td className="px-3 py-2 text-right tabular-nums whitespace-nowrap">
                     {moneyPrecise(row.gst_amount)}
                   </td>
-                  <td className="px-3 py-2 text-right tabular-nums font-medium">
+                  <td className="px-3 py-2 text-right tabular-nums whitespace-nowrap font-medium">
                     {moneyPrecise(row.total_with_gst)}
                   </td>
                 </tr>
@@ -204,9 +269,15 @@ function ChargeTable({
                 <td colSpan={5} className="px-3 py-2 text-right">
                   Totals
                 </td>
-                <td className="px-3 py-2 text-right tabular-nums">{moneyPrecise(totals.total)}</td>
-                <td className="px-3 py-2 text-right tabular-nums">{moneyPrecise(totals.gst)}</td>
-                <td className="px-3 py-2 text-right tabular-nums">{moneyPrecise(totals.withGst)}</td>
+                <td className="px-3 py-2 text-right tabular-nums whitespace-nowrap">
+                  {moneyPrecise(totals.total)}
+                </td>
+                <td className="px-3 py-2 text-right tabular-nums whitespace-nowrap">
+                  {moneyPrecise(totals.gst)}
+                </td>
+                <td className="px-3 py-2 text-right tabular-nums whitespace-nowrap">
+                  {moneyPrecise(totals.withGst)}
+                </td>
               </tr>
             </tfoot>
           ) : null}
@@ -219,32 +290,50 @@ function ChargeTable({
 export function ScmOvfViewPage({ ovfId }: { ovfId: string }) {
   const [preview, setPreview] = useState<ScmOvfPreview | null>(null);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [chargesBusy, setChargesBusy] = useState(false);
   const [chargesBanner, setChargesBanner] = useState<string | null>(null);
+  const [holdDialogOpen, setHoldDialogOpen] = useState(false);
+  const [unholdDialogOpen, setUnholdDialogOpen] = useState(false);
+  const [unholdBusy, setUnholdBusy] = useState(false);
+  const [holdBusy, setHoldBusy] = useState(false);
+  const [holdRemark, setHoldRemark] = useState("");
+  const [pdfBusy, setPdfBusy] = useState(false);
   const [freight, setFreight] = useState("0");
-  const [additionalCharges, setAdditionalCharges] = useState("0");
   const [financeCostPct, setFinanceCostPct] = useState("0");
 
   const syncChargesFromPreview = useCallback((row: ScmOvfPreview) => {
     setFreight(String(Number(row.freight) || 0));
-    setAdditionalCharges(String(Number(row.additional_charges) || 0));
     setFinanceCostPct(String(Number(row.finance_cost_pct) || 0));
   }, []);
 
-  const load = useCallback(async () => {
-    setLoading(true);
+  const load = useCallback(async (options?: { soft?: boolean }) => {
+    const soft = Boolean(options?.soft);
+    if (soft) {
+      setRefreshing(true);
+    } else {
+      setLoading(true);
+    }
     setError(null);
-    setChargesBanner(null);
+    if (!soft) {
+      setChargesBanner(null);
+    }
     try {
       const row = await getScmOvfPreview(ovfId);
       setPreview(row);
       syncChargesFromPreview(row);
     } catch (err) {
-      setPreview(null);
+      if (!soft) {
+        setPreview(null);
+      }
       setError(err instanceof ApiClientError ? err.message : "Failed to load OVF from CRM");
     } finally {
-      setLoading(false);
+      if (soft) {
+        setRefreshing(false);
+      } else {
+        setLoading(false);
+      }
     }
   }, [ovfId, syncChargesFromPreview]);
 
@@ -254,13 +343,17 @@ export function ScmOvfViewPage({ ovfId }: { ovfId: string }) {
 
   async function saveCharges() {
     if (!preview || preview.purchase_order_id) return;
+    if (preview.scm_on_hold) {
+      setError("Unhold this OVF before changing freight and finance.");
+      return;
+    }
     setChargesBusy(true);
     setError(null);
     setChargesBanner(null);
     try {
       const row = await updateScmOvfCharges(ovfId, {
         freight: Number(freight) || 0,
-        additional_charges: Number(additionalCharges) || 0,
+        additional_charges: Number(preview.additional_charges) || 0,
         finance_cost_pct: Number(financeCostPct) || 0,
       });
       setPreview(row);
@@ -272,6 +365,45 @@ export function ScmOvfViewPage({ ovfId }: { ovfId: string }) {
       );
     } finally {
       setChargesBusy(false);
+    }
+  }
+
+  async function confirmHold() {
+    const remark = holdRemark.trim();
+    if (!remark) {
+      setError("Please enter a hold remark.");
+      return;
+    }
+    setHoldBusy(true);
+    setError(null);
+    try {
+      const row = await holdScmOvf(ovfId, remark);
+      setPreview(row);
+      syncChargesFromPreview(row);
+      setHoldDialogOpen(false);
+      setHoldRemark("");
+    } catch (err) {
+      setError(err instanceof ApiClientError ? err.message : "Failed to put OVF on hold");
+      setHoldDialogOpen(false);
+    } finally {
+      setHoldBusy(false);
+    }
+  }
+
+  async function confirmUnhold() {
+    setUnholdBusy(true);
+    setError(null);
+    try {
+      const row = await releaseScmOvfHold(ovfId);
+      setPreview(row);
+      syncChargesFromPreview(row);
+      setUnholdDialogOpen(false);
+      setChargesBanner("OVF unheld. You can edit freight and finance or put on hold again if needed.");
+    } catch (err) {
+      setError(err instanceof ApiClientError ? err.message : "Failed to unhold OVF");
+      setUnholdDialogOpen(false);
+    } finally {
+      setUnholdBusy(false);
     }
   }
 
@@ -298,16 +430,43 @@ export function ScmOvfViewPage({ ovfId }: { ovfId: string }) {
       0,
     );
     const freightAmount = Number(freight) || 0;
-    const additionalAmount = Number(additionalCharges) || 0;
+    const additionalAmount = Number(preview.additional_charges) || 0;
     const financePct = Number(financeCostPct) || 0;
     const financeAmount = (vendorTotal * financePct) / 100;
     const margin =
       customerTotal - vendorTotal - freightAmount - additionalAmount - financeAmount;
     const marginPct = customerTotal ? (margin / customerTotal) * 100 : 0;
     return { customerTotal, vendorTotal, margin, marginPct };
-  }, [preview, freight, additionalCharges, financeCostPct]);
+  }, [preview, freight, financeCostPct]);
 
-  const chargesLocked = Boolean(preview?.purchase_order_id);
+  const queueStatus = preview ? deriveScmOvfQueueStatus(preview) : null;
+  const chargesLockedByPo = Boolean(preview?.purchase_order_id);
+  const chargesLockedByHold = Boolean(preview?.scm_on_hold || queueStatus === "hold");
+  const chargesLocked = chargesLockedByPo || chargesLockedByHold;
+  const canHoldOvf = Boolean(preview?.can_create_po && !preview?.scm_on_hold);
+  const canUnholdOvf = Boolean(
+    preview?.can_create_po && preview?.scm_on_hold && !chargesLockedByPo,
+  );
+  const showActiveHold = Boolean(preview?.scm_on_hold || queueStatus === "hold");
+  const holdHistory = useMemo(() => {
+    if (!preview?.scm_hold_history?.length) return [];
+    return [...preview.scm_hold_history].sort(
+      (a, b) => new Date(a.started_at).getTime() - new Date(b.started_at).getTime(),
+    );
+  }, [preview]);
+
+  async function downloadPdf() {
+    if (!preview) return;
+    setPdfBusy(true);
+    setError(null);
+    try {
+      await downloadScmOvfPdf(preview);
+    } catch {
+      setError("Could not generate OVF PDF. Try again.");
+    } finally {
+      setPdfBusy(false);
+    }
+  }
 
   return (
     <div className="space-y-4">
@@ -322,23 +481,66 @@ export function ScmOvfViewPage({ ovfId }: { ovfId: string }) {
               variant="outline"
               size="sm"
               className="cursor-pointer transition-colors duration-200"
-              onClick={() => void load()}
-              disabled={loading}
+              onClick={() => void load({ soft: Boolean(preview) })}
+              disabled={loading || holdBusy || unholdBusy || refreshing || pdfBusy}
             >
-              <RefreshCw className={`mr-1.5 size-3.5 ${loading ? "animate-spin" : ""}`} />
+              <RefreshCw
+                className={`mr-1.5 size-3.5 ${loading || refreshing ? "animate-spin" : ""}`}
+              />
               Refresh
             </Button>
-            {preview?.can_create_po ? (
-              <Link
-                href={`/procurement/scm/ovf/${ovfId}/po`}
-                className={cn(
-                  buttonVariants({ size: "sm" }),
-                  "cursor-pointer transition-colors duration-200",
-                )}
+            {preview ? (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="cursor-pointer transition-colors duration-200"
+                disabled={loading || pdfBusy}
+                onClick={() => void downloadPdf()}
               >
-                <ShoppingCart className="mr-1.5 size-3.5" />
-                Create PO
-              </Link>
+                <FileDown className={`mr-1.5 size-3.5 ${pdfBusy ? "opacity-50" : ""}`} />
+                {pdfBusy ? "Preparing…" : "Download PDF"}
+              </Button>
+            ) : null}
+            {canUnholdOvf ? (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="cursor-pointer border-amber-300 bg-amber-50 text-amber-900 transition-colors duration-200 hover:bg-amber-100"
+                disabled={loading || unholdBusy}
+                onClick={() => {
+                  setError(null);
+                  setUnholdDialogOpen(true);
+                }}
+              >
+                Unhold
+              </Button>
+            ) : null}
+            {canHoldOvf ? (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="cursor-pointer border-slate-300 bg-slate-50 text-slate-800 transition-colors duration-200 hover:bg-slate-100 hover:text-slate-900"
+                disabled={loading || holdBusy}
+                onClick={() => {
+                  setError(null);
+                  setHoldDialogOpen(true);
+                }}
+              >
+                <PauseCircle className="mr-1.5 size-3.5" />
+                Hold
+              </Button>
+            ) : null}
+            {preview?.can_create_po ? (
+              <ScmCreatePoEntry
+                ovfId={ovfId}
+                scmOnHold={Boolean(preview.scm_on_hold) || queueStatus === "hold"}
+                scmOnHoldAt={preview.scm_on_hold_at}
+                className="cursor-pointer transition-colors duration-200"
+                icon={<ShoppingCart className="mr-1.5 size-3.5" />}
+              />
             ) : preview?.purchase_order_id ? (
               <Link
                 href={`/procurement/orders/${preview.purchase_order_id}`}
@@ -391,19 +593,93 @@ export function ScmOvfViewPage({ ovfId }: { ovfId: string }) {
               <DetailItem label="Margin (total)">{moneyPrecise(preview.total_margin_amount)}</DetailItem>
               <DetailItem label="Margin %">{pct(preview.total_margin_pct)}</DetailItem>
             </dl>
+            <dl
+              className={cn(
+                "mt-3 grid gap-3 border-t border-border/60 pt-3 sm:grid-cols-2",
+                showActiveHold ? "lg:grid-cols-3" : "lg:grid-cols-4",
+              )}
+            >
+              <DetailItem label="OVF status">
+                {queueStatus ? <ScmOvfStatusBadge status={queueStatus} /> : "—"}
+              </DetailItem>
+              {showActiveHold ? (
+                <>
+                  <DetailItem label="Hold duration">
+                    {scmHoldDayCountDisplay(preview.scm_on_hold_at)}
+                  </DetailItem>
+                  <DetailItem label="Hold since">
+                    <span className="tabular-nums">
+                      {scmHoldSinceDisplay(preview.scm_on_hold_at)}
+                    </span>
+                  </DetailItem>
+                  {preview.scm_on_hold_remark?.trim() ? (
+                    <DetailItem label="Hold remark" className="sm:col-span-2 lg:col-span-3">
+                      <span className="whitespace-pre-wrap font-medium text-foreground">
+                        {preview.scm_on_hold_remark.trim()}
+                      </span>
+                    </DetailItem>
+                  ) : null}
+                </>
+              ) : null}
+            </dl>
+            {holdHistory.length > 0 ? (
+              <div className="mt-3 border-t border-border/60 pt-3">
+                <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+                  Hold history
+                </p>
+                <div className="mt-2 overflow-hidden rounded-md border border-border">
+                  <table className="w-full text-left text-sm">
+                    <thead className="border-b border-border bg-muted/40 text-xs uppercase tracking-wide text-muted-foreground">
+                      <tr>
+                        <th className="px-3 py-2 font-medium">#</th>
+                        <th className="px-3 py-2 font-medium">Held since</th>
+                        <th className="px-3 py-2 font-medium">Released on</th>
+                        <th className="px-3 py-2 font-medium">Remark</th>
+                        <th className="px-3 py-2 font-medium text-right">Days on hold</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {holdHistory.map((entry, index) => (
+                        <tr key={`${entry.started_at}-${index}`} className="border-b border-border/70">
+                          <td className="px-3 py-2 tabular-nums text-muted-foreground">
+                            {index + 1}
+                          </td>
+                          <td className="px-3 py-2 tabular-nums">
+                            {scmHoldSinceDisplay(entry.started_at)}
+                          </td>
+                          <td className="px-3 py-2 tabular-nums">
+                            {scmHoldSinceDisplay(entry.released_at)}
+                          </td>
+                          <td className="px-3 py-2 max-w-[220px] text-muted-foreground">
+                            <span className="line-clamp-2" title={entry.remark ?? ""}>
+                              {entry.remark?.trim() || "—"}
+                            </span>
+                          </td>
+                          <td className="px-3 py-2 text-right tabular-nums">
+                            {scmHoldDayCountBetweenDisplay(entry.started_at, entry.released_at)}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            ) : null}
           </SectionCard>
 
           <SectionCard title="Customer details" icon={Building2}>
             <div className="space-y-4">
               <dl className="grid gap-x-6 gap-y-3 sm:grid-cols-2 lg:grid-cols-4">
-                <DetailItem label="Customer (company name)">
+                <DetailItem label="Customer name">
                   {textOrDash(preview.customer_name || preview.account_name)}
                 </DetailItem>
                 <DetailItem label="Recipient / contact">
                   {textOrDash(preview.billing_contact_person || preview.shipping_contact_person)}
                 </DetailItem>
                 <DetailItem label="Customer PO number">{textOrDash(preview.po_number)}</DetailItem>
-                <DetailItem label="Customer PO date">{formatPoDate(preview.po_date)}</DetailItem>
+                <DetailItem label="Customer PO date">
+                  {formatPoDate(preview.po_date)}
+                </DetailItem>
               </dl>
               <div className="grid gap-3 sm:grid-cols-2">
                 <div className="rounded-md border border-border/70 bg-muted/20 p-3 space-y-3">
@@ -462,7 +738,13 @@ export function ScmOvfViewPage({ ovfId }: { ovfId: string }) {
 
           <SectionCard title="Freight & finance" icon={Wallet}>
             <div className="rounded-md border border-sky-200 bg-sky-50/60 p-3">
-              <div className="grid gap-3 sm:grid-cols-3">
+              {chargesLockedByHold ? (
+                <p className="mb-3 text-xs font-medium text-amber-900">
+                  This OVF is on hold. Use <span className="font-semibold">Unhold</span> above
+                  before editing freight and finance.
+                </p>
+              ) : null}
+              <div className="grid gap-3 sm:grid-cols-2">
                 <FinanceField label="Freight charges (₹)">
                   <Input
                     type="text"
@@ -475,23 +757,6 @@ export function ScmOvfViewPage({ ovfId }: { ovfId: string }) {
                       setFreight(next);
                     }}
                     onBlur={() => setFreight((v) => normalizeChargeOnBlur(v))}
-                    disabled={chargesBusy || chargesLocked}
-                    readOnly={chargesLocked}
-                    className={cn("h-8 tabular-nums", CHARGE_NO_SPINNER)}
-                  />
-                </FinanceField>
-                <FinanceField label="Additional charges (₹)">
-                  <Input
-                    type="text"
-                    inputMode="decimal"
-                    value={additionalCharges}
-                    onFocus={(e) => e.currentTarget.select()}
-                    onChange={(e) => {
-                      const next = parseChargeInput(e.target.value);
-                      if (next === null) return;
-                      setAdditionalCharges(next);
-                    }}
-                    onBlur={() => setAdditionalCharges((v) => normalizeChargeOnBlur(v))}
                     disabled={chargesBusy || chargesLocked}
                     readOnly={chargesLocked}
                     className={cn("h-8 tabular-nums", CHARGE_NO_SPINNER)}
@@ -535,6 +800,52 @@ export function ScmOvfViewPage({ ovfId }: { ovfId: string }) {
           </SectionCard>
         </>
       ) : null}
+
+      <ConfirmDialog
+        open={holdDialogOpen}
+        title="Put this OVF on hold?"
+        description="Add a short remark so others know why this OVF is on hold."
+        confirmLabel="Yes, put on hold"
+        busy={holdBusy}
+        contentClassName="max-w-lg"
+        onConfirm={() => void confirmHold()}
+        onCancel={() => {
+          if (!holdBusy) {
+            setHoldDialogOpen(false);
+            setHoldRemark("");
+          }
+        }}
+      >
+        <div className="mt-3 space-y-1.5">
+          <label htmlFor="scm-hold-remark" className="text-xs font-medium text-foreground">
+            Hold remark <span className="text-destructive">*</span>
+          </label>
+          <Textarea
+            id="scm-hold-remark"
+            value={holdRemark}
+            onChange={(e) => setHoldRemark(e.target.value)}
+            placeholder="e.g. Waiting for customer confirmation on delivery date"
+            rows={3}
+            className="resize-y text-sm"
+            disabled={holdBusy}
+          />
+        </div>
+      </ConfirmDialog>
+
+      <ConfirmDialog
+        open={unholdDialogOpen}
+        title="Unhold this OVF?"
+        confirmLabel="Unhold"
+        busy={unholdBusy}
+        onConfirm={() => void confirmUnhold()}
+        onCancel={() => {
+          if (!unholdBusy) setUnholdDialogOpen(false);
+        }}
+      >
+        <div className="mt-1.5 text-xs leading-relaxed text-muted-foreground">
+          <p>After this, you can create the purchase order.</p>
+        </div>
+      </ConfirmDialog>
     </div>
   );
 }

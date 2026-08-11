@@ -26,6 +26,7 @@ import {
   invalidateProcurementListCache,
   listPurchaseOrders,
   listVendorOptions,
+  peekVendorOptionsFromCache,
   resolveVendorOrgScope,
   updateVendorOption,
   type ProcOrder,
@@ -56,10 +57,18 @@ function groupOrdersByVendor(orders: ProcOrder[]): Record<string, VendorPoSummar
 }
 
 export function VendorsListPage() {
-  const [rows, setRows] = useState<VendorOption[]>([]);
+  const cachedVendorsOnMount = peekVendorOptionsFromCache();
+  const [rows, setRows] = useState<VendorOption[]>(() =>
+    cachedVendorsOnMount
+      ? [...cachedVendorsOnMount].sort((a, b) =>
+          a.label.localeCompare(b.label, undefined, { sensitivity: "base" }),
+        )
+      : [],
+  );
   const [orders, setOrders] = useState<ProcOrder[]>([]);
   const [query, setQuery] = useState("");
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(() => cachedVendorsOnMount === null);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [orgScope, setOrgScope] = useState<{ company_id: string; branch_id: string } | null>(null);
   const [expandedVendorId, setExpandedVendorId] = useState<string | null>(null);
@@ -72,7 +81,12 @@ export function VendorsListPage() {
 
   const load = useCallback(async (force = false) => {
     if (force) invalidateProcurementListCache();
-    setLoading(true);
+    const hadInstant = !force && peekVendorOptionsFromCache() !== null;
+    if (!hadInstant) {
+      setLoading(true);
+    } else {
+      setRefreshing(true);
+    }
     setError(null);
     try {
       const [vendors, scope, purchaseOrders] = await Promise.all([
@@ -88,11 +102,14 @@ export function VendorsListPage() {
       setOrgScope(scope);
       setOrders(purchaseOrders);
     } catch (err) {
-      setRows([]);
-      setOrders([]);
+      if (!hadInstant) {
+        setRows([]);
+        setOrders([]);
+      }
       setError(formatApiError(err, "Failed to load vendors"));
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
   }, []);
 
@@ -248,9 +265,14 @@ export function VendorsListPage() {
               variant="outline"
               className="cursor-pointer transition-colors duration-200"
               onClick={() => void load(true)}
-              disabled={loading}
+              disabled={loading && rows.length === 0}
             >
-              <RefreshCw className={`mr-1.5 size-3.5 ${loading ? "animate-spin" : ""}`} />
+              <RefreshCw
+                className={cn(
+                  "mr-1.5 size-3.5",
+                  (loading || refreshing) && "animate-spin",
+                )}
+              />
               Refresh
             </Button>
           </div>

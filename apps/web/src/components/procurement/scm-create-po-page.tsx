@@ -19,6 +19,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
+import { scmHoldCreatePoNotice } from "@/utils/scm-ovf-hold";
 import { ApiClientError } from "@/services/api-client";
 import {
   createPoFromOvf,
@@ -26,7 +27,6 @@ import {
   emptyPostalAddress,
   formatInr,
   getScmOvfPreview,
-  holdScmOvf,
   listVendorOptions,
   peekNextCompanyPoNumber,
   updateVendorAddresses,
@@ -110,16 +110,16 @@ function sortVendorsForOem(vendors: VendorOption[], oemName: string): VendorOpti
 }
 /** Selectable issuing entities for our company on vendor POs. */
 const KAILASH_ADDRESS_LINES = [
-  "L-31 Ground Floor, Kailash Colony,",
+  "L-31, Kailash Colony,",
   "New Delhi,",
   "Delhi-110048,",
   "India",
 ] as const;
 
 const SULTANPUR_ADDRESS_LINES = [
-  "Crc 2 building ,",
-  "sultanpur",
-  "Delhi - 110030",
+  "CRC-2 , Ground Floor , Khasra No 337 ,",
+  "M.G Road , Sultanpur",
+  "New Delhi - 110030",
 ] as const;
 
 const MUMBAI_ADDRESS_LINES = [
@@ -133,8 +133,8 @@ const MUMBAI_ADDRESS_LINES = [
 const COMPANY_LOCATIONS = [
   {
     id: "kailash-colony",
-    label: "Cache DigiTech",
-    addressHeader: "Cache DigiTech",
+    label: "Cache DigiTech Pvt. Ltd.",
+    addressHeader: "Cache DigiTech Pvt. Ltd.",
     entityCode: "CDT",
     gstState: "Delhi",
     addressLines: KAILASH_ADDRESS_LINES,
@@ -142,8 +142,8 @@ const COMPANY_LOCATIONS = [
   },
   {
     id: "cache-technology",
-    label: "Cache Technology",
-    addressHeader: "Cache Technology",
+    label: "Cache Technologies",
+    addressHeader: "Cache Technologies",
     entityCode: "CT",
     gstState: "Delhi",
     addressLines: KAILASH_ADDRESS_LINES,
@@ -151,8 +151,8 @@ const COMPANY_LOCATIONS = [
   },
   {
     id: "cache-digitech-mumbai",
-    label: "Cache DigiTech - Mumbai",
-    addressHeader: "Cache DigiTech",
+    label: "Cache DigiTech Pvt. Ltd. - Mumbai",
+    addressHeader: "Cache DigiTech Pvt. Ltd.",
     entityCode: "CMT",
     gstState: "Maharashtra",
     addressLines: MUMBAI_ADDRESS_LINES,
@@ -169,7 +169,7 @@ const SHIPPING_ADDRESS_OPTIONS = [
   },
   {
     id: "sultanpur",
-    label: "Crc 2, Sultanpur, Delhi",
+    label: "CRC-2, Sultanpur, New Delhi",
     addressLines: SULTANPUR_ADDRESS_LINES,
   },
   {
@@ -459,7 +459,7 @@ export function ScmCreatePoPage({ ovfId }: { ovfId: string }) {
   const [vendorDialogOpen, setVendorDialogOpen] = useState(false);
   const [vendorDialogBusy, setVendorDialogBusy] = useState(false);
   const [vendorDialogError, setVendorDialogError] = useState<string | null>(null);
-  const [holdDialogOpen, setHoldDialogOpen] = useState(false);
+  const [draftDialogOpen, setDraftDialogOpen] = useState(false);
   const [vendorDraft, setVendorDraft] = useState<VendorFormDraft>(emptyVendorFormDraft());
   const [customShippingOpen, setCustomShippingOpen] = useState(false);
   const [customShippingError, setCustomShippingError] = useState<string | null>(null);
@@ -471,6 +471,10 @@ export function ScmCreatePoPage({ ovfId }: { ovfId: string }) {
   const actionErrorRef = useRef<HTMLDivElement>(null);
 
   const oemName = (preview?.oem_name || "").trim();
+  const scmHoldBanner = useMemo(() => {
+    if (!preview?.scm_on_hold || !preview.can_create_po) return null;
+    return scmHoldCreatePoNotice(preview.scm_on_hold_at);
+  }, [preview]);
   const selectedVendor = useMemo(
     () => vendors.find((row) => row.id === form.vendorId) ?? null,
     [vendors, form.vendorId],
@@ -619,6 +623,8 @@ export function ScmCreatePoPage({ ovfId }: { ovfId: string }) {
 
       if (!ovf.can_create_po && ovf.purchase_order_id) {
         setBanner(`PO ${ovf.purchase_order_number} already exists for this OVF.`);
+      } else if (ovf.scm_on_hold && ovf.can_create_po) {
+        setBanner(null);
       } else {
         setBanner(null);
       }
@@ -1120,23 +1126,6 @@ export function ScmCreatePoPage({ ovfId }: { ovfId: string }) {
     }
   }
 
-  async function confirmHold() {
-    setBusy(true);
-    setError(null);
-    try {
-      await holdScmOvf(ovfId);
-      setHoldDialogOpen(false);
-      window.location.assign("/procurement/scm");
-    } catch (err) {
-      setError(err instanceof ApiClientError ? err.message : "Failed to hold purchase order");
-      setBusy(false);
-      setHoldDialogOpen(false);
-      requestAnimationFrame(() => {
-        actionErrorRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
-      });
-    }
-  }
-
   async function onPreviewPoPdf() {
     setPdfPreviewBusy(true);
     setError(null);
@@ -1237,6 +1226,12 @@ export function ScmCreatePoPage({ ovfId }: { ovfId: string }) {
           </div>
         }
       />
+
+      {scmHoldBanner ? (
+        <div className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-950">
+          {scmHoldBanner}
+        </div>
+      ) : null}
 
       {banner ? (
         <div className="rounded-md border border-sky-200 bg-sky-50 px-3 py-2 text-sm text-sky-900">
@@ -2042,10 +2037,10 @@ export function ScmCreatePoPage({ ovfId }: { ovfId: string }) {
                   disabled={busy || pdfPreviewBusy}
                   onClick={() => {
                     setError(null);
-                    setHoldDialogOpen(true);
+                    setDraftDialogOpen(true);
                   }}
                 >
-                  Hold
+                  Draft
                 </Button>
                 <Button
                   type="button"
@@ -2072,15 +2067,17 @@ export function ScmCreatePoPage({ ovfId }: { ovfId: string }) {
       ) : null}
 
       <ConfirmDialog
-        open={holdDialogOpen}
-        title="Hold this PO?"
-        description="Are you sure you want to hold this PO? No vendor is required. It will show as Hold on the SCM Queue, and you can create the PO later."
-        confirmLabel="Yes, hold PO"
-        cancelLabel="No, go back"
+        open={draftDialogOpen}
+        title="Save PO as draft?"
+        confirmLabel="Save draft"
+        cancelLabel="Cancel"
         busy={busy}
-        onConfirm={() => void confirmHold()}
+        onConfirm={() => {
+          setDraftDialogOpen(false);
+          void submit("draft");
+        }}
         onCancel={() => {
-          if (!busy) setHoldDialogOpen(false);
+          if (!busy) setDraftDialogOpen(false);
         }}
       />
 

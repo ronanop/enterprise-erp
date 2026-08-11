@@ -20,13 +20,15 @@ export type GoodsReceiptPdfInput = {
     qtyReceived: number;
     qtyRejected?: number;
     status?: string;
+    billing?: boolean;
+    billingQuantity?: number;
   }>;
 };
 
 const DEFAULT_COMPANY = {
   name: "CACHE DIGITECH PVT LTD",
   addressLines: [
-    "L-31 Ground Floor, Kailash Colony,",
+    "L-31, Kailash Colony,",
     "New Delhi,",
     "Delhi-110048,",
     "India",
@@ -83,11 +85,13 @@ export async function downloadGoodsReceiptPdf(
     doc.addImage(logo.dataUrl, "JPEG", margin, y, logoW, logoH);
   }
 
+  doc.setFontSize(14);
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(16);
   doc.setTextColor(40, 40, 40);
-  doc.text("GRN copy", rightEdge, y + logoH / 2 + 1.5, { align: "right" });
+  doc.text("GRN copy", rightEdge, y + logoH / 2 + 2, { align: "right" });
   y += logoH + 14;
+
+  const grnHeader = dash(input.grnNumber);
 
   // —— Company (left under logo) | Vendor (right side) ——
   const leftX = margin;
@@ -134,9 +138,9 @@ export async function downloadGoodsReceiptPdf(
   doc.line(margin, y, rightEdge, y);
   y += 8;
 
-  // —— Items table: S No. | ITEM | RECEIVED QTY ——
-  const cols = [18, contentW - 18 - 36, 36];
-  const headers = ["S No.", "ITEM", "RECEIVED QTY"];
+  // —— Items table: S No. | ITEM | RECEIVED QTY | BILLING ——
+  const cols = [16, contentW - 16 - 32 - 28, 32, 28];
+  const headers = ["S No.", "ITEM", "RECEIVED QTY", "BILLING"];
   doc.setFillColor(241, 245, 249);
   doc.setDrawColor(180, 180, 180);
   doc.rect(margin, y, contentW, 9, "FD");
@@ -145,8 +149,13 @@ export async function downloadGoodsReceiptPdf(
   doc.setTextColor(40, 40, 40);
   let x = margin;
   headers.forEach((h, i) => {
-    const align = i === 0 ? "center" : i === 2 ? "right" : "left";
-    const tx = align === "center" ? x + cols[i] / 2 : align === "right" ? x + cols[i] - 3 : x + 3;
+    const align = i === 0 || i === 3 ? "center" : i === 2 ? "right" : "left";
+    const tx =
+      align === "center"
+        ? x + cols[i] / 2
+        : align === "right"
+          ? x + cols[i] - 3
+          : x + 3;
     doc.text(h, tx, y + 6, { align: align as "left" | "center" | "right" });
     x += cols[i];
   });
@@ -169,6 +178,12 @@ export async function downloadGoodsReceiptPdf(
     doc.rect(margin, y, contentW, h);
     doc.line(margin + cols[0], y, margin + cols[0], y + h);
     doc.line(margin + cols[0] + cols[1], y, margin + cols[0] + cols[1], y + h);
+    doc.line(
+      margin + cols[0] + cols[1] + cols[2],
+      y,
+      margin + cols[0] + cols[1] + cols[2],
+      y + h,
+    );
 
     x = margin;
     doc.text(String(ln.lineNo || "—"), x + cols[0] / 2, y + 6.5, { align: "center" });
@@ -179,11 +194,24 @@ export async function downloadGoodsReceiptPdf(
       dy += 4.2;
     }
     x += cols[1];
+    const received = Number(ln.qtyReceived) || 0;
     const qty =
       Number.isFinite(ln.qtyReceived) && !Number.isInteger(ln.qtyReceived)
         ? String(ln.qtyReceived)
         : String(Math.round(Number(ln.qtyReceived) || 0));
     doc.text(qty, x + cols[2] - 3, y + 6.5, { align: "right" });
+    x += cols[2];
+    const billQty = ln.billingQuantity;
+    let billingLabel = "No";
+    if (billQty != null && Number.isFinite(billQty)) {
+      const b = Math.round(billQty);
+      if (b <= 0) billingLabel = "No";
+      else if (b >= received && received > 0) billingLabel = "Yes";
+      else billingLabel = String(b);
+    } else if (ln.billing) {
+      billingLabel = received > 0 ? "Yes" : "No";
+    }
+    doc.text(billingLabel, x + cols[3] / 2, y + 6.5, { align: "center" });
     y += h;
   }
 
@@ -196,11 +224,12 @@ export async function downloadGoodsReceiptPdf(
   doc.setFont("helvetica", "normal");
   doc.setFontSize(8.5);
   doc.setTextColor(100, 100, 100);
-  doc.text(`GRN: ${dash(input.grnNumber)}`, margin, y);
-  y += 5;
-  doc.text(`PO: ${dash(input.poNumber)}`, margin, y);
-  y += 5;
   doc.text(`Date: ${formatGrnFooterDate(input.grnDate)}`, margin, y);
+  y += 6;
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(14);
+  doc.setTextColor(40, 40, 40);
+  doc.text(grnHeader, margin, y);
 
   doc.save(fileName || `GRN-${input.grnNumber || "draft"}.pdf`);
 }

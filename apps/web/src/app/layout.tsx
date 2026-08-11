@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Plus_Jakarta_Sans, Geist_Mono } from "next/font/google";
 
+import { NextJsPortalIsolation } from "@/components/layout/next-js-portal-isolation";
 import "./globals.css";
 
 const jakartaSans = Plus_Jakarta_Sans({
@@ -32,7 +33,10 @@ export default function RootLayout({
       data-scroll-behavior="smooth"
       className={`${jakartaSans.variable} ${geistMono.variable} h-full antialiased`}
     >
-      <body className="flex min-h-full min-w-0 flex-col overflow-x-clip font-sans">{children}</body>
+      <body className="min-h-full min-w-0 overflow-x-clip font-sans antialiased">
+        <NextJsPortalIsolation />
+        <div className="flex min-h-full min-w-0 flex-col">{children}</div>
+      </body>
     </html>
   );
 }

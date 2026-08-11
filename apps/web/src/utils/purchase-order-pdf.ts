@@ -27,6 +27,7 @@ export type PurchaseOrderPdfInput = {
   shippingAddress: string;
   currency: "INR";
   paymentTerms: string;
+  authorizedSignatoryName?: string;
   lines: Array<{
     partNo: string;
     description: string;
@@ -49,7 +50,7 @@ export const CACHE_PO_TERMS = [
 const DEFAULT_CACHE_COMPANY = {
   name: "CACHE DIGITECH PVT LTD",
   addressLines: [
-    "L-31 Ground Floor, Kailash Colony,",
+    "L-31, Kailash Colony,",
     "New Delhi, Delhi-110048, India",
   ],
   phone: "011-47105700-25",
@@ -60,7 +61,7 @@ const DEFAULT_CACHE_COMPANY = {
 
 const KAILASH_BILLING = [
   "CACHE DIGITECH PVT LTD",
-  "L-31 Ground Floor, Kailash Colony,",
+  "L-31, Kailash Colony,",
   "New Delhi, Delhi-110048, India",
 ].join("\n");
 
@@ -154,6 +155,7 @@ export function purchaseOrderPdfInputFromOrder(
     document_number: string;
     document_date: string;
     payment_terms?: string | null;
+    approved_by_name?: string | null;
     lines?: Array<{
       product_code?: string | null;
       product_name?: string | null;
@@ -195,6 +197,7 @@ export function purchaseOrderPdfInputFromOrder(
     shippingAddress: KAILASH_BILLING,
     currency: "INR",
     paymentTerms: order.payment_terms || "Net 30 Days",
+    authorizedSignatoryName: (order.approved_by_name || "").trim() || undefined,
     lines,
     taxes: buildDefaultPoTaxes({ taxableAmount, taxPct }),
     termsAndConditions: [...CACHE_PO_TERMS],
@@ -573,6 +576,12 @@ export async function downloadPurchaseOrderPdf(
   doc.setFont("helvetica", "normal");
   doc.setFontSize(10);
   doc.text(`For ${payload.company.name}`, R - 4, y + 8, { align: "right" });
+  const signatoryName = (payload.authorizedSignatoryName || "").trim();
+  if (signatoryName) {
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(10);
+    doc.text(signatoryName, R - 4, y + Math.min(signH - 10, 18), { align: "right" });
+  }
   doc.setFont("helvetica", "bold");
   doc.setFontSize(10);
   doc.text("Authorized Signatory", R - 4, y + Math.min(signH - 6, 26), { align: "right" });

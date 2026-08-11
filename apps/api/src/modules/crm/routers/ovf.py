@@ -52,7 +52,14 @@ def get_ovf(
     ctx: Annotated[TenantContext, Depends(require_permission("crm.ovf:read"))],
     db: Annotated[Session, Depends(get_db)],
 ):
-    return APIResponse(message="OK", data=OvfService(db).get(ctx, ovf_id))
+    svc = OvfService(db)
+    ovf = svc.get(ctx, ovf_id)
+    resp = OvfResponse.model_validate(ovf)
+    if resp.po_date is None:
+        resolved = svc.resolve_customer_po_display_date(ctx, ovf)
+        if resolved is not None:
+            resp = resp.model_copy(update={"po_date": resolved})
+    return APIResponse(message="OK", data=resp)
 
 
 @ovf_router.patch("/{ovf_id}", response_model=APIResponse[OvfResponse])

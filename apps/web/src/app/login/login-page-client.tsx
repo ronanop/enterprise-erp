@@ -1,7 +1,6 @@
 "use client";
 
 import { FormEvent, useState } from "react";
-import { useRouter } from "next/navigation";
 import Link from "next/link";
 
 import { Button } from "@/components/ui/button";
@@ -13,11 +12,11 @@ import {
   moduleLoginAccounts,
 } from "@/config/module-logins";
 import { ApiClientError, authService } from "@/services/api-client";
+import { getAccessToken } from "@/lib/auth";
 import { env } from "@/utils/env";
 import { cn } from "@/lib/utils";
 
 export default function LoginPageClient() {
-  const router = useRouter();
   const [email, setEmail] = useState(env.demoEmail);
   const [password, setPassword] = useState(env.demoPassword || DEMO_PASSWORD);
   const [error, setError] = useState<string | null>(null);
@@ -35,10 +34,32 @@ export default function LoginPageClient() {
     setError(null);
     try {
       const trimmed = email.trim();
-      await authService.login(trimmed, password);
-      router.replace(getPostLoginRedirect(trimmed));
-      router.refresh();
+      const res = await authService.login(trimmed, password);
+      if (res.data?.mfa_required) {
+        setError(
+          "This account requires MFA. Use admin@example.com or run seed_demo_data for module demo users.",
+        );
+        return;
+      }
+      if (!getAccessToken()) {
+        setError(
+          "Login succeeded but no session token was stored. Ensure the API on port 8000 is running and reachable via /api/v1.",
+        );
+        return;
+      }
+      const target = getPostLoginRedirect(trimmed);
+      window.location.assign(target);
     } catch (err) {
+      if (err instanceof ApiClientError && err.status === 401) {
+        setError(
+          "Invalid email or password. Demo password is Secure1! — run apps/api seed_demo_data if accounts are missing.",
+        );
+        return;
+      }
+      if (err instanceof ApiClientError && err.status === 0) {
+        setError(err.message);
+        return;
+      }
       setError(err instanceof ApiClientError ? err.message : "Login failed");
     } finally {
       setLoading(false);

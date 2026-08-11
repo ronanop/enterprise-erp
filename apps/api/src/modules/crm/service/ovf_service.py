@@ -20,6 +20,7 @@ from modules.crm.models import CrmOpportunity, CrmOvf, CrmOvfLine, CrmQuote
 from modules.crm.repository.company_repository import CompanyRepository
 from modules.crm.repository.lead_repository import LeadRepository
 from modules.crm.repository.opportunity_repository import OpportunityRepository
+from modules.crm.repository.attachment_repository import AttachmentRepository
 from modules.crm.repository.ovf_repository import OvfLineRepository, OvfRepository
 from modules.crm.repository.quote_repository import QuoteLineRepository, QuoteRepository
 from modules.crm.service.blueprint_service import log_state_history
@@ -40,6 +41,55 @@ def _first(*values: Any) -> Any:
     return None
 
 
+def resolve_scm_hold_started_at(ovf: CrmOvf) -> datetime | None:
+    """When hold started; falls back to updated_at for legacy rows without scm_on_hold_at."""
+    if not bool(getattr(ovf, "scm_on_hold", False)):
+        return None
+    explicit = getattr(ovf, "scm_on_hold_at", None)
+    if explicit is not None:
+        return explicit
+    return getattr(ovf, "updated_at", None)
+
+
+def _scm_hold_event_payload(
+    started: datetime,
+    released: datetime,
+    remark: str | None = None,
+) -> dict[str, str]:
+    payload: dict[str, str] = {
+        "started_at": started.isoformat(),
+        "released_at": released.isoformat(),
+    }
+    text = (remark or "").strip()
+    if text:
+        payload["remark"] = text
+    return payload
+
+
+def serialize_scm_hold_history(ovf: CrmOvf) -> list[dict[str, Any]]:
+    """Completed SCM hold cycles for SCM OVF preview."""
+    events: list[dict[str, Any]] = []
+    raw = getattr(ovf, "scm_hold_history", None) or []
+    if isinstance(raw, list):
+        for item in raw:
+            if not isinstance(item, dict):
+                continue
+            started = item.get("started_at")
+            released = item.get("released_at")
+            if started and released:
+                entry: dict[str, Any] = {"started_at": started, "released_at": released}
+                remark = item.get("remark")
+                if isinstance(remark, str) and remark.strip():
+                    entry["remark"] = remark.strip()
+                events.append(entry)
+    if not events:
+        since = getattr(ovf, "scm_last_hold_since", None)
+        released = getattr(ovf, "scm_last_hold_released_at", None)
+        if since and released:
+            events.append({"started_at": since, "released_at": released})
+    return events
+
+
 class OvfService:
     def __init__(self, db: Session) -> None:
         self._db = db
@@ -53,6 +103,29 @@ class OvfService:
         self._employees = EmployeeService(db)
         self._scope = CrmScopeValidator(db)
         self._numbers = DocumentNumberService(db)
+        self._attachments = AttachmentRepository(db)
+
+    def resolve_customer_po_display_date(self, ctx: TenantContext, ovf: CrmOvf) -> date | None:
+        """PO date on the OVF, or when the customer PO file was attached on the opportunity."""
+        return self._resolve_customer_po_display_date(ctx, ovf)
+
+    def _resolve_customer_po_display_date(self, ctx: TenantContext, ovf: CrmOvf) -> date | None:
+        """PO date on the OVF, or when the customer PO file was attached on the opportunity."""
+        if ovf.po_date is not None:
+            return ovf.po_date
+        attachments = self._attachments.list_for_entity(ctx, "opportunity", ovf.opportunity_id)
+        po_files = [
+            row
+            for row in attachments
+            if row.category == "customer_po" and getattr(row, "created_at", None) is not None
+        ]
+        if not po_files:
+            return None
+        latest = max(po_files, key=lambda row: row.created_at)
+        created = latest.created_at
+        if isinstance(created, datetime):
+            return created.date()
+        return None
 
     def list(self, ctx: TenantContext, company_id: UUID | None = None, opportunity_id: UUID | None = None):
         cid = self._scope.resolve_company_id(ctx, company_id)
@@ -72,7 +145,7 @@ class OvfService:
             row.id: {
                 "po_number": row.po_number,
                 "customer_name": row.customer_name,
-                "po_date": row.po_date,
+                "po_date": self._resolve_customer_po_display_date(ctx, row),
             }
             for row in rows
         }
@@ -186,7 +259,7 @@ class OvfService:
             "opportunity_id": ovf.opportunity_id,
             "quote_no": getattr(quote, "quote_no", None),
             "po_number": ovf.po_number,
-            "po_date": getattr(ovf, "po_date", None),
+            "po_date": self._resolve_customer_po_display_date(ctx, ovf),
             "delivery_period": ovf.delivery_period,
             "customer_name": ovf.customer_name,
             "quote_name": ovf.quote_name,
@@ -199,6 +272,12 @@ class OvfService:
             "blueprint_state": ovf.blueprint_state,
             "approval_status": ovf.approval_status,
             "scm_on_hold": bool(getattr(ovf, "scm_on_hold", False)),
+            "scm_on_hold_at": resolve_scm_hold_started_at(ovf),
+            "scm_hold_blocked": False,
+            "scm_last_hold_since": getattr(ovf, "scm_last_hold_since", None),
+            "scm_last_hold_released_at": getattr(ovf, "scm_last_hold_released_at", None),
+            "scm_hold_history": serialize_scm_hold_history(ovf),
+            "scm_on_hold_remark": getattr(ovf, "scm_on_hold_remark", None),
             "freight": freight,
             "additional_charges": float(ovf.additional_charges or 0),
             "vendor_payment_days": int(ovf.vendor_payment_days or 0),
@@ -294,7 +373,7 @@ class OvfService:
             "margin_pct": round(margin_pct, 3),
             "description": "; ".join(desc_parts) if desc_parts else None,
             "customer_po_number": ovf.po_number,
-            "customer_po_date": ovf.po_date,
+            "customer_po_date": self._resolve_customer_po_display_date(ctx, ovf),
         }
 
     def _resolve_oem_context(self, ctx: TenantContext, opportunity_id: UUID) -> dict[str, str | None]:
@@ -703,12 +782,49 @@ class OvfService:
         self._log(ctx, ovf, ovf.blueprint_state, next_state, "share_to_scm", None)
         return row
 
-    def set_scm_on_hold(self, ctx: TenantContext, ovf_id: UUID, *, on_hold: bool) -> CrmOvf:
+    def set_scm_on_hold(
+        self,
+        ctx: TenantContext,
+        ovf_id: UUID,
+        *,
+        on_hold: bool,
+        remark: str | None = None,
+    ) -> CrmOvf:
         """SCM may park an OVF without creating a vendor PO (no vendor required)."""
         ovf = self.get(ctx, ovf_id)
         if not ovf.shared_to_scm:
             raise ConflictException("OVF has not been shared to SCM")
-        row = self._repo.update(ctx, ovf_id, scm_on_hold=bool(on_hold))
+        now = datetime.now(timezone.utc)
+        if on_hold:
+            if bool(ovf.scm_on_hold):
+                raise ConflictException("OVF is already on SCM hold")
+            remark_text = (remark or "").strip()
+            if not remark_text:
+                raise ConflictException("Hold remark is required")
+            hold_at = now
+            row = self._repo.update(
+                ctx,
+                ovf_id,
+                scm_on_hold=True,
+                scm_on_hold_at=hold_at,
+                scm_on_hold_remark=remark_text,
+            )
+        else:
+            was_on_hold = bool(ovf.scm_on_hold)
+            update_fields: dict[str, Any] = {
+                "scm_on_hold": False,
+                "scm_on_hold_at": None,
+                "scm_on_hold_remark": None,
+            }
+            if was_on_hold:
+                hold_since = resolve_scm_hold_started_at(ovf) or now
+                hold_remark = getattr(ovf, "scm_on_hold_remark", None)
+                history = list(getattr(ovf, "scm_hold_history", None) or [])
+                history.append(_scm_hold_event_payload(hold_since, now, hold_remark))
+                update_fields["scm_hold_history"] = history
+                update_fields["scm_last_hold_since"] = hold_since
+                update_fields["scm_last_hold_released_at"] = now
+            row = self._repo.update(ctx, ovf_id, **update_fields)
         self._log(
             ctx,
             ovf,
@@ -735,6 +851,10 @@ class OvfService:
         ovf = self.get(ctx, ovf_id)
         if not ovf.shared_to_scm:
             raise ConflictException("OVF has not been shared to SCM")
+        if bool(getattr(ovf, "scm_on_hold", False)):
+            raise ConflictException(
+                "Freight and finance cannot be changed while the OVF is on SCM hold. Unhold first."
+            )
 
         fields: dict[str, Decimal] = {}
         if freight is not None:

@@ -100,6 +100,11 @@ def register_exception_handlers(app: FastAPI) -> None:
             )
         elif "unique" in detail.lower() or "duplicate" in detail.lower():
             message = "This record conflicts with existing data."
+        elif "fk_proc_isu_receipt_batch" in detail or "proc_order_receipt_batch" in detail:
+            message = (
+                "Could not add stock for this GRN (receipt batch not saved). "
+                "Refresh the page and save the receipt again."
+            )
         else:
             message = "Database constraint violation."
         return JSONResponse(

@@ -19,6 +19,8 @@ export async function downloadBatchGrnPdf(
       lineNo: ln.line_number,
       description: ln.product_name || `Line ${ln.line_number}`,
       qtyReceived: Number(ln.quantity) || 0,
+      billing: (ln.billing_quantity ?? 0) > 0,
+      billingQuantity: Number(ln.billing_quantity) || 0,
     }));
   if (lines.length === 0) {
     throw new Error("No received lines in this GRN to print.");

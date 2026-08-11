@@ -1,7 +1,7 @@
 /** Entity branding for PO / delivery challan (aligned with SCM create PO). */
 
 const KAILASH_LINES = [
-  "L-31 Ground Floor, Kailash Colony,",
+  "L-31, Kailash Colony,",
   "New Delhi,",
   "Delhi-110048,",
   "India",

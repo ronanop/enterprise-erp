@@ -20,6 +20,7 @@ export type ReceiptSerialDialogLine = {
   lineNo: number;
   productLabel: string;
   additional: number;
+  billingQuantity: number;
 };
 
 export type VendorInvoiceDraft = {
@@ -40,12 +41,13 @@ export const emptyVendorInvoiceDraft = (): VendorInvoiceDraft => ({
 
 type ReceiptSerialsDialogProps = {
   open: boolean;
-  poLabel: string;
+  grnLabel: string;
   lines: ReceiptSerialDialogLine[];
   serialDraft: Record<string, string[]>;
   busy?: boolean;
   error?: string | null;
   onSerialDraftChange: (lineId: string, slots: string[]) => void;
+  onBillingQuantityChange?: (lineId: string, billingQuantity: number) => void;
   onSerialImportError?: (message: string | null) => void;
   vendorInvoice: VendorInvoiceDraft;
   onVendorInvoiceChange: Dispatch<SetStateAction<VendorInvoiceDraft>>;
@@ -55,12 +57,13 @@ type ReceiptSerialsDialogProps = {
 
 export function ReceiptSerialsDialog({
   open,
-  poLabel,
+  grnLabel,
   lines,
   serialDraft,
   busy,
   error,
   onSerialDraftChange,
+  onBillingQuantityChange,
   onSerialImportError,
   vendorInvoice,
   onVendorInvoiceChange,
@@ -181,27 +184,32 @@ export function ReceiptSerialsDialog({
         className="flex max-h-[min(90vh,720px)] w-full max-w-3xl flex-col rounded-xl border border-border/80 bg-card shadow-lg"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex shrink-0 items-start justify-between gap-3 border-b border-border/60 px-5 py-4">
-          <div className="min-w-0">
-            <h2
-              id="receipt-serials-dialog-title"
-              className="text-sm font-medium tracking-tight text-foreground"
-            >
-              Update receipt &amp; vendor invoice
-            </h2>
-            <p className="mt-1 text-xs leading-relaxed text-muted-foreground">{poLabel}</p>
-          </div>
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            className="size-8 shrink-0 cursor-pointer"
-            aria-label="Close"
-            disabled={busy}
-            onClick={onClose}
+        <div className="grid shrink-0 grid-cols-[1fr_auto_1fr] items-center gap-3 border-b border-border/60 px-5 py-4">
+          <h2
+            id="receipt-serials-dialog-title"
+            className="text-sm font-medium tracking-tight text-foreground"
           >
-            <X className="size-4" />
-          </Button>
+            Update receipt &amp; vendor invoice
+          </h2>
+          <p
+            className="text-center text-sm font-semibold tabular-nums tracking-tight text-foreground"
+            title="GRN number for this receipt"
+          >
+            {grnLabel}
+          </p>
+          <div className="flex justify-end">
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="size-8 shrink-0 cursor-pointer"
+              aria-label="Close"
+              disabled={busy}
+              onClick={onClose}
+            >
+              <X className="size-4" />
+            </Button>
+          </div>
         </div>
 
         <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
@@ -343,6 +351,7 @@ export function ReceiptSerialsDialog({
                 serialDraft={serialDraft}
                 disabled={busy}
                 onChange={onSerialDraftChange}
+                onBillingQuantityChange={onBillingQuantityChange}
                 onImportError={onSerialImportError}
               />
             )}

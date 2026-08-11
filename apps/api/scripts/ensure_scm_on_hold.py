@@ -1,4 +1,4 @@
-"""Ensure crm.crm_ovf.scm_on_hold exists."""
+"""Ensure crm.crm_ovf SCM hold columns exist."""
 
 from pathlib import Path
 
@@ -35,7 +35,32 @@ def main() -> None:
                 """
             )
         )
-        print("scm_on_hold ready")
+        conn.execute(
+            text(
+                """
+                ALTER TABLE crm.crm_ovf
+                  ADD COLUMN IF NOT EXISTS scm_on_hold_at TIMESTAMPTZ
+                """
+            )
+        )
+        conn.execute(
+            text(
+                """
+                UPDATE crm.crm_ovf
+                SET scm_on_hold_at = updated_at
+                WHERE scm_on_hold = true AND scm_on_hold_at IS NULL
+                """
+            )
+        )
+        conn.execute(
+            text(
+                """
+                ALTER TABLE crm.crm_ovf
+                  ADD COLUMN IF NOT EXISTS scm_hold_blocked BOOLEAN NOT NULL DEFAULT false
+                """
+            )
+        )
+        print("scm_on_hold + scm_on_hold_at + scm_hold_blocked ready")
 
 
 if __name__ == "__main__":

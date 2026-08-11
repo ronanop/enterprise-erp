@@ -10,6 +10,7 @@ import { cachedFetch, invalidateClientCache } from "@/lib/client-cache";
 import { ApiClientError, apiClient, resourceService } from "@/services/api-client";
 import { getAccessToken } from "@/lib/auth";
 import { env } from "@/utils/env";
+import { loadCrmOverview } from "@/services/crm-service";
 
 const TTL = {
   reference: 120_000,
@@ -1462,4 +1463,80 @@ export async function listEmployeeOptions(): Promise<Option[]> {
       email: r.email ? String(r.email) : undefined,
     }));
   });
+}
+
+function prefetchQuiet(promise: Promise<unknown>): void {
+  void promise.catch(() => {
+    /* Prefetch only; destination pages surface errors when they await the same cache key. */
+  });
+}
+
+/** Warm list APIs before CRM tab navigation (hover / layout idle). */
+export function prefetchCrmTab(href: string): void {
+  const path = (href.split("?")[0] ?? href).replace(/\/$/, "") || "/";
+
+  switch (path) {
+    case "/crm":
+      prefetchQuiet(loadCrmOverview());
+      return;
+    case "/crm/my-jobs":
+      prefetchQuiet(listMyJobs());
+      return;
+    case "/crm/companies":
+    case "/crm/kyc-account-mapping":
+      prefetchQuiet(listCompanies());
+      return;
+    case "/crm/leads":
+      prefetchQuiet(listSalesLeads());
+      return;
+    case "/crm/opportunities":
+      prefetchQuiet(listOpportunities());
+      return;
+    case "/crm/oem-quotes":
+      prefetchQuiet(listAttachmentsByCategory("oem_quote"));
+      prefetchQuiet(listOpportunities());
+      return;
+    case "/crm/quotes":
+      prefetchQuiet(listQuotes());
+      return;
+    case "/crm/purchase-orders":
+      prefetchQuiet(listAttachmentsByCategory("customer_po"));
+      prefetchQuiet(listOpportunities());
+      return;
+    case "/crm/ovf":
+      prefetchQuiet(listOvfs());
+      return;
+    case "/crm/contacts":
+      prefetchQuiet(listContacts());
+      prefetchQuiet(listCompanies());
+      return;
+    case "/crm/products":
+      prefetchQuiet(listProducts());
+      return;
+    case "/crm/meetings":
+      prefetchQuiet(listMeetings());
+      return;
+    case "/crm/customer-followups":
+      prefetchQuiet(listFollowups());
+      return;
+    case "/crm/oem":
+      prefetchQuiet(listSalesLeads());
+      prefetchQuiet(listOems());
+      return;
+    case "/crm/distributors":
+    case "/crm/entities":
+    case "/crm/end-customers":
+      prefetchQuiet(listSalesLeads());
+      return;
+    case "/crm/boq":
+      prefetchQuiet(listAttachmentsByCategory("boq"));
+      prefetchQuiet(listOpportunities());
+      return;
+    case "/crm/sow":
+      prefetchQuiet(listAttachmentsByCategory("sow"));
+      prefetchQuiet(listOpportunities());
+      return;
+    default:
+      break;
+  }
 }

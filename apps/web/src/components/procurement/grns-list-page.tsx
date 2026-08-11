@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { ChevronDown, CircleDot, FileSpreadsheet, Layers, PackageCheck, RefreshCw } from "lucide-react";
 
 import { FinanceKpiCard } from "@/components/finance/finance-kpi-card";
+import { GrnStockSummaryTable } from "@/components/procurement/grn-stock-summary-table";
 import { GrnDeliveryChallanMenu } from "@/components/procurement/grn-delivery-challan-menu";
 import {
   GrnReceiptHistoryDialog,
@@ -21,8 +22,11 @@ import { formatApiError } from "@/services/api-client";
 import {
   formatInr,
   invalidateProcurementListCache,
+  listProcurementInventory,
   listVendorOptions,
   listVendorPos,
+  peekVendorPosFromCache,
+  type ProcurementInventoryRow,
   type ScmVendorPo,
   type VendorOption,
 } from "@/services/procurement-service";
@@ -41,6 +45,7 @@ import {
 import { formatGrnStatusBadgeLabel } from "@/utils/grn-status-display";
 
 type GrnFilter = "all" | "partial" | "closed";
+type GrnPageView = "po-list" | "grn-list";
 
 function grnTone(status: string): "default" | "secondary" | "destructive" | "outline" {
   if (status === "closed" || status === "delivered") return "default";
@@ -99,19 +104,31 @@ function challansByOrderIdMap(): Record<string, DeliveryChallanRecord[]> {
   return map;
 }
 
+function grnReceiptRowsFromVendorPos(pos: ScmVendorPo[]): ScmVendorPo[] {
+  return pos.filter(
+    (row) => isReceiptEligible(row.status) && isPartialOrDelivered(row.grn_status),
+  );
+}
+
 export function GrnsListPage() {
   const router = useRouter();
-  const [rows, setRows] = useState<ScmVendorPo[]>([]);
+  const cachedPosOnMount = peekVendorPosFromCache();
+  const initialGrnRows = cachedPosOnMount ? grnReceiptRowsFromVendorPos(cachedPosOnMount) : [];
+  const [rows, setRows] = useState<ScmVendorPo[]>(() => initialGrnRows);
   const [vendors, setVendors] = useState<Record<string, VendorOption>>({});
   const [filter, setFilter] = useState<GrnFilter>("all");
   const [query, setQuery] = useState("");
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(() => cachedPosOnMount === null);
+  const [refreshing, setRefreshing] = useState(false);
   const [challanPdfBusyId, setChallanPdfBusyId] = useState<string | null>(null);
   const [challansByOrder, setChallansByOrder] = useState<Record<string, DeliveryChallanRecord[]>>(
     () => (typeof window === "undefined" ? {} : challansByOrderIdMap()),
   );
   const [error, setError] = useState<string | null>(null);
   const [exportOpen, setExportOpen] = useState(false);
+  const [pageView, setPageView] = useState<GrnPageView>("po-list");
+  const [stockRows, setStockRows] = useState<ProcurementInventoryRow[]>([]);
+  const [stockLoading, setStockLoading] = useState(false);
   const exportMenuRef = useRef<HTMLDivElement | null>(null);
   const [historyOrder, setHistoryOrder] = useState<{
     id: string;
@@ -122,22 +139,25 @@ export function GrnsListPage() {
 
   const load = useCallback(async (force = false) => {
     if (force) invalidateProcurementListCache();
-    setLoading(true);
+    const hadInstant = !force && peekVendorPosFromCache() !== null;
+    if (!hadInstant) {
+      setLoading(true);
+    } else {
+      setRefreshing(true);
+    }
     setError(null);
     try {
       const [pos, vendorRows] = await Promise.all([
         listVendorPos(),
         listVendorOptions().catch(() => [] as VendorOption[]),
       ]);
-      setRows(
-        pos.filter(
-          (row) => isReceiptEligible(row.status) && isPartialOrDelivered(row.grn_status),
-        ),
-      );
+      setRows(grnReceiptRowsFromVendorPos(pos));
       setVendors(Object.fromEntries(vendorRows.map((v) => [v.id, v])));
       setChallansByOrder(challansByOrderIdMap());
     } catch (err) {
-      setRows([]);
+      if (!hadInstant) {
+        setRows([]);
+      }
       const message = formatApiError(err, "Failed to load GRN status");
       const hint =
         /sign in|session expired|unauthorized|missing authentication/i.test(message)
@@ -149,12 +169,32 @@ export function GrnsListPage() {
       setError(`${message}${hint}`);
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
   }, []);
 
   useEffect(() => {
     void load();
   }, [load]);
+
+  const loadStockList = useCallback(async (force = false) => {
+    if (force) invalidateProcurementListCache();
+    setStockLoading(true);
+    setError(null);
+    try {
+      const data = await listProcurementInventory();
+      setStockRows(data);
+    } catch (err) {
+      setStockRows([]);
+      setError(formatApiError(err, "Failed to load GRN list"));
+    } finally {
+      setStockLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (pageView === "grn-list") void loadStockList();
+  }, [pageView, loadStockList]);
 
   useEffect(() => {
     if (!exportOpen) return;
@@ -301,10 +341,18 @@ export function GrnsListPage() {
               size="sm"
               variant="outline"
               className="cursor-pointer transition-colors duration-200"
-              onClick={() => void load(true)}
-              disabled={loading}
+              onClick={() => {
+                if (pageView === "grn-list") void loadStockList(true);
+                else void load(true);
+              }}
+              disabled={(loading && rows.length === 0) || stockLoading}
             >
-              <RefreshCw className={`mr-1.5 size-3.5 ${loading ? "animate-spin" : ""}`} />
+              <RefreshCw
+                className={cn(
+                  "mr-1.5 size-3.5",
+                  (loading || refreshing || stockLoading) && "animate-spin",
+                )}
+              />
               Refresh
             </Button>
           </div>
@@ -328,26 +376,60 @@ export function GrnsListPage() {
       </div>
 
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex flex-wrap gap-1.5">
-          {(["all", "partial", "closed"] as const).map((key) => (
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="flex flex-wrap gap-1.5 rounded-md border border-border/80 bg-muted/20 p-0.5">
             <button
-              key={key}
               type="button"
-              onClick={() => setFilter(key)}
-              className={`cursor-pointer rounded-md border px-2.5 py-1 text-xs font-medium transition-colors duration-200 ${
-                filter === key
-                  ? "border-primary bg-primary text-primary-foreground"
-                  : "border-border bg-card text-muted-foreground hover:bg-muted/50 hover:text-foreground"
-              }`}
+              onClick={() => setPageView("po-list")}
+              className={cn(
+                "cursor-pointer rounded px-2.5 py-1 text-xs font-medium transition-colors duration-200",
+                pageView === "po-list"
+                  ? "bg-card text-foreground shadow-sm"
+                  : "text-muted-foreground hover:text-foreground",
+              )}
             >
-              {key === "all" ? "All" : key === "closed" ? "Delivered" : "Partial"}
+              PO list
             </button>
-          ))}
+            <button
+              type="button"
+              onClick={() => setPageView("grn-list")}
+              className={cn(
+                "cursor-pointer rounded px-2.5 py-1 text-xs font-medium transition-colors duration-200",
+                pageView === "grn-list"
+                  ? "bg-card text-foreground shadow-sm"
+                  : "text-muted-foreground hover:text-foreground",
+              )}
+            >
+              GRN list
+            </button>
+          </div>
+          {pageView === "po-list" ? (
+            <>
+              {(["all", "partial", "closed"] as const).map((key) => (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={() => setFilter(key)}
+                  className={`cursor-pointer rounded-md border px-2.5 py-1 text-xs font-medium transition-colors duration-200 ${
+                    filter === key
+                      ? "border-primary bg-primary text-primary-foreground"
+                      : "border-border bg-card text-muted-foreground hover:bg-muted/50 hover:text-foreground"
+                  }`}
+                >
+                  {key === "all" ? "All" : key === "closed" ? "Delivered" : "Partial"}
+                </button>
+              ))}
+            </>
+          ) : null}
         </div>
         <Input
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder="Filter POs / vendors…"
+          placeholder={
+            pageView === "grn-list"
+              ? "Search GRN, PO, vendor, product, serial…"
+              : "Filter POs / vendors…"
+          }
           className="h-8 max-w-xs shadow-none"
         />
       </div>
@@ -358,6 +440,14 @@ export function GrnsListPage() {
         </div>
       ) : null}
 
+      {pageView === "grn-list" ? (
+        <GrnStockSummaryTable
+          rows={stockRows}
+          vendors={vendors}
+          loading={stockLoading}
+          query={query}
+        />
+      ) : (
       <div className={procurementUi.tableShell}>
         <div className={procurementUi.tableScroll}>
           <table
@@ -504,6 +594,7 @@ export function GrnsListPage() {
           </table>
         </div>
       </div>
+      )}
 
       {historyOrder ? (
         <GrnReceiptHistoryDialog

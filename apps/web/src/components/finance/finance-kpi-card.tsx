@@ -11,6 +11,8 @@ interface FinanceKpiCardProps {
   tone?: "default" | "success" | "warning" | "danger";
   /** When set, the card navigates on click. */
   href?: string;
+  /** Client-side action (e.g. filter chips) — avoids slow same-route navigation. */
+  onClick?: () => void;
 }
 
 const toneStyles = {
@@ -27,6 +29,7 @@ export function FinanceKpiCard({
   icon: Icon,
   tone = "default",
   href,
+  onClick,
 }: FinanceKpiCardProps) {
   const body = (
     <>
@@ -36,17 +39,31 @@ export function FinanceKpiCard({
           <Icon className="size-3.5" aria-hidden />
         </span>
       </div>
-      <p className="mt-2 font-mono text-xl font-medium tracking-tight text-foreground tabular-nums">
-        {value}
-      </p>
-      {hint ? <p className="mt-1 text-[11px] text-muted-foreground">{hint}</p> : null}
+      <div className="mt-2 space-y-3">
+        <p className="font-mono text-xl font-medium tracking-tight text-foreground tabular-nums">
+          {value}
+        </p>
+        {hint ? (
+          <p className="text-[11px] font-semibold leading-relaxed text-muted-foreground">{hint}</p>
+        ) : null}
+      </div>
     </>
   );
 
   const className = cn(
     "rounded-xl border border-border/80 bg-card p-3.5 shadow-sm transition-[box-shadow,border-color] duration-200 hover:border-border hover:shadow-md",
-    href && "block cursor-pointer hover:border-primary/30",
+    (href || onClick) && "flex h-full min-h-[11rem] cursor-pointer flex-col hover:border-primary/30",
+    onClick && "w-full text-left",
+    href && "block",
   );
+
+  if (onClick) {
+    return (
+      <button type="button" onClick={onClick} className={className}>
+        {body}
+      </button>
+    );
+  }
 
   if (href) {
     return (

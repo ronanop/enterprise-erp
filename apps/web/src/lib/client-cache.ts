@@ -33,6 +33,15 @@ export function cachedFetch<T>(
   return promise;
 }
 
+/** Return a fresh cached value when still within TTL (for instant UI paint). */
+export function peekCachedValue<T>(key: string): T | null {
+  const hit = store.get(key);
+  if (hit && hit.expiresAt > Date.now()) {
+    return hit.value as T;
+  }
+  return null;
+}
+
 export function invalidateClientCache(prefix?: string): void {
   if (!prefix) {
     store.clear();

@@ -102,7 +102,7 @@ function normalizeRecord(raw: DeliveryChallanRecord): DeliveryChallanRecord {
 }
 
 export function formatDeliveryModeLabel(mode: DeliveryChallanMode): string {
-  return mode === "RGP" ? "RGP (Returnable)" : "NRGP (Non-returnable)";
+  return mode === "RGP" ? "RGP" : "NRGP";
 }
 
 function readAll(): DeliveryChallanRecord[] {

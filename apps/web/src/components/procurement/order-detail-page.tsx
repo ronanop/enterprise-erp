@@ -44,12 +44,13 @@ import {
   listDeliveryChallansByOrderId,
   type DeliveryChallanRecord,
 } from "@/utils/delivery-challan-storage";
+import { downloadOrderPdf } from "@/utils/purchase-order-pdf";
 import {
   getDeliveryStatus,
   shipmentStatusBadgeVariant,
 } from "@/utils/delivery-status-storage";
 import { deliveryStatusUpdateHref } from "@/utils/delivery-status-routes";
-import { downloadOrderPdf } from "@/utils/purchase-order-pdf";
+import { receiptGrnLabelForOrder } from "@/utils/receipt-grn-label";
 import {
   resizeSerialSlots,
   receiptSerialSlotsWithNaDefaults,
@@ -201,7 +202,7 @@ export function OrderDetailPage({ orderId }: { orderId: string }) {
       const row = await loadOrderWithCommercial(orderId);
       setOrder(row);
       // Draft is "receive now" qty (additional), not cumulative total.
-      setQtyDraft(Object.fromEntries((row.lines || []).map((ln) => [ln.id, ""])));
+      setQtyDraft(Object.fromEntries((row.lines || []).map((ln) => [ln.id, "" ])));
       setSerialDraft({});
       setLoading(false);
       void listVendorOptions()
@@ -285,6 +286,8 @@ export function OrderDetailPage({ orderId }: { orderId: string }) {
       qty: number;
       status: ReceiptStatus;
       serials: string[];
+      billing: boolean;
+      billingQuantity: number;
     };
 
     const pending: PendingLine[] = [];
@@ -307,6 +310,8 @@ export function OrderDetailPage({ orderId }: { orderId: string }) {
         qty,
         status: receiptStatusFromQty(orderedQty, qty),
         serials: serialSlotsForSave(slots),
+        billing: row.billingQuantity > 0,
+        billingQuantity: row.billingQuantity,
       });
     }
 
@@ -343,6 +348,8 @@ export function OrderDetailPage({ orderId }: { orderId: string }) {
           quantity_received: item.qty,
           grn_status: item.status,
           serial_numbers: item.serials,
+          billing: item.billingQuantity > 0,
+          billing_quantity: item.billingQuantity,
         });
       }
       const refreshed = await loadOrderWithCommercial(latest.id);
@@ -403,7 +410,7 @@ export function OrderDetailPage({ orderId }: { orderId: string }) {
             );
             setOrder(refreshed);
             setQtyDraft(
-              Object.fromEntries((refreshed.lines || []).map((ln) => [ln.id, ""])),
+              Object.fromEntries((refreshed.lines || []).map((ln) => [ln.id, "" ])),
             );
             setSerialDraft({});
             setPendingReceiptLines([]);
@@ -417,7 +424,7 @@ export function OrderDetailPage({ orderId }: { orderId: string }) {
 
       setOrder(refreshed);
       setQtyDraft(
-        Object.fromEntries((refreshed.lines || []).map((ln) => [ln.id, ""])),
+        Object.fromEntries((refreshed.lines || []).map((ln) => [ln.id, "" ])),
       );
       setSerialDraft({});
       setPendingReceiptLines([]);
@@ -472,6 +479,8 @@ export function OrderDetailPage({ orderId }: { orderId: string }) {
         lineNo: line.line_number,
         productLabel: label,
         additional,
+        // Default: bill full receive qty on vendor invoice; lower billing to add remainder to stock.
+        billingQuantity: additional,
       });
     }
 
@@ -559,6 +568,10 @@ export function OrderDetailPage({ orderId }: { orderId: string }) {
       vendorGstNumber: vendorGst || undefined,
     };
   }, [order, vendorAddress, vendorName, vendorGst]);
+  const receiptGrnLabel = useMemo(
+    () => (order ? receiptGrnLabelForOrder(order) : ""),
+    [order],
+  );
   const tableMinWidth = showReceiptColumns ? "min-w-[1000px]" : "min-w-[860px]";
   const emptyColSpan = showReceiptColumns ? 9 : 8;
 
@@ -896,7 +909,7 @@ export function OrderDetailPage({ orderId }: { orderId: string }) {
       {order ? (
         <ReceiptSerialsDialog
           open={receiptSerialOpen}
-          poLabel={order.company_po_number?.trim() || order.document_number}
+          grnLabel={receiptGrnLabel}
           lines={pendingReceiptLines}
           serialDraft={serialDraft}
           busy={savingReceipts}
@@ -904,6 +917,13 @@ export function OrderDetailPage({ orderId }: { orderId: string }) {
           onSerialDraftChange={(lineId, slots) =>
             setSerialDraft((prev) => ({ ...prev, [lineId]: slots }))
           }
+          onBillingQuantityChange={(lineId, billingQuantity) => {
+            setPendingReceiptLines((prev) =>
+              prev.map((row) =>
+                row.lineId === lineId ? { ...row, billingQuantity } : row,
+              ),
+            );
+          }}
           onSerialImportError={setReceiptModalError}
           vendorInvoice={vendorInvoiceDraft}
           onVendorInvoiceChange={setVendorInvoiceDraft}

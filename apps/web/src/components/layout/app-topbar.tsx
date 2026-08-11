@@ -1,19 +1,15 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
 import { Bell, LogIn, LogOut } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import { clearTokens, isAuthenticated } from "@/lib/auth";
+import { clearTokens } from "@/lib/auth";
+import { useClientAuth } from "@/hooks/use-client-auth";
 import { authService } from "@/services/api-client";
 
 export function AppTopbar() {
-  const [signedIn, setSignedIn] = useState(false);
-
-  useEffect(() => {
-    setSignedIn(isAuthenticated());
-  }, []);
+  const signedIn = useClientAuth();
 
   async function handleLogout() {
     try {
@@ -21,7 +17,6 @@ export function AppTopbar() {
     } catch {
       clearTokens();
     }
-    setSignedIn(false);
   }
 
   return (

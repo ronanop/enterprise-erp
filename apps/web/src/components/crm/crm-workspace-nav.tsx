@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import { ChevronLeft, ChevronRight, Handshake, Search } from "lucide-react";
 
@@ -15,6 +15,7 @@ import {
   type CrmSidebarFocus,
 } from "@/lib/crm-sidebar-focus";
 import { cn } from "@/lib/utils";
+import { prefetchCrmTab } from "@/services/sales-crm-service";
 
 /** Sales CRM (Zoho-replacement) teamspace navigation. */
 export const CRM_NAV = [
@@ -89,6 +90,7 @@ function isCrmNavActive(pathname: string, href: string): boolean {
 /** Horizontal tab strip (used when CRM shares the main app sidebar). */
 export function CrmWorkspaceNav() {
   const pathname = usePathname();
+  const router = useRouter();
 
   return (
     <div className="grid min-w-0 max-w-full grid-cols-1">
@@ -103,6 +105,15 @@ export function CrmWorkspaceNav() {
               <li key={item.href} className="shrink-0">
                 <Link
                   href={item.href}
+                  prefetch
+                  onMouseEnter={() => {
+                    router.prefetch(item.href);
+                    prefetchCrmTab(item.href);
+                  }}
+                  onFocus={() => {
+                    router.prefetch(item.href);
+                    prefetchCrmTab(item.href);
+                  }}
                   className={cn(
                     "relative inline-flex h-8 cursor-pointer items-center rounded-lg px-2.5 text-xs font-medium transition-[color,background-color] duration-200",
                     active
@@ -124,6 +135,7 @@ export function CrmWorkspaceNav() {
 /** Left sidebar chrome for standalone CRM tabs (replaces AppSidebar). */
 export function CrmSidebar() {
   const pathname = usePathname();
+  const router = useRouter();
   const [collapsed, setCollapsed] = useState(false);
   const [query, setQuery] = useState("");
 
@@ -185,7 +197,16 @@ export function CrmSidebar() {
               <li key={item.href}>
                 <Link
                   href={item.href}
+                  prefetch
                   title={item.title}
+                  onMouseEnter={() => {
+                    router.prefetch(item.href);
+                    prefetchCrmTab(item.href);
+                  }}
+                  onFocus={() => {
+                    router.prefetch(item.href);
+                    prefetchCrmTab(item.href);
+                  }}
                   onClick={() => {
                     const focus = focusForHref(item.href);
                     if (focus) setCrmSidebarFocus(focus);

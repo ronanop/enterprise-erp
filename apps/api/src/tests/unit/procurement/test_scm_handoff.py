@@ -93,3 +93,20 @@ def test_create_po_blocks_duplicate(monkeypatch):
             vendor_id=uuid4(),
             document_date=date.today(),
         )
+
+
+def test_inventory_stock_units_excludes_billed_portion():
+    bl = SimpleNamespace(
+        quantity=5,
+        billing_quantity=3,
+        serial_numbers=["S1", "S2", "S3", "S4", "S5"],
+    )
+    units = ScmHandoffService._inventory_stock_units_from_batch_line(bl)
+    assert len(units) == 2
+    assert units[0] == (4, "S4")
+    assert units[1] == (5, "S5")
+
+
+def test_inventory_stock_units_all_billed_empty():
+    bl = SimpleNamespace(quantity=5, billing_quantity=5, serial_numbers=["S1"])
+    assert ScmHandoffService._inventory_stock_units_from_batch_line(bl) == []

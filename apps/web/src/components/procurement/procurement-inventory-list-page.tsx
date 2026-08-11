@@ -1,7 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Boxes, Package, RefreshCw, Upload } from "lucide-react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { Boxes, Package, Plus, RefreshCw, Upload } from "lucide-react";
 
 import { FinanceKpiCard } from "@/components/finance/finance-kpi-card";
 import {
@@ -9,6 +11,7 @@ import {
   INVENTORY_WITHOUT_PO,
   type InventoryImportDraftRow,
 } from "@/components/procurement/procurement-inventory-import-dialog";
+import { InventorySerialEditor } from "@/components/procurement/inventory-serial-editor";
 import {
   ProcurementListSearch,
   ProcurementPageHeader,
@@ -18,64 +21,69 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { formatApiError } from "@/services/api-client";
 import {
+  formatInr,
   importProcurementInventory,
   invalidateProcurementListCache,
   listProcurementInventory,
   listPurchaseOrders,
   listVendorOptions,
+  peekProcurementInventoryFromCache,
   type ProcOrder,
   type ProcurementInventoryRow,
   type VendorOption,
 } from "@/services/procurement-service";
-import { buildProcurementInventoryStockSummary } from "@/utils/procurement-inventory-report";
-import {
-  formatGrnProductSummary,
-  formatGrnSerialSummary,
-  groupInventoryByPoAndGrn,
-} from "@/utils/procurement-inventory-grouping";
-
-function formatReceiptDate(value: string | null): string {
-  if (!value) return "—";
-  const iso = /^(\d{4})-(\d{2})-(\d{2})/.exec(value.trim());
-  if (iso) return `${iso[3]}-${iso[2]}-${iso[1]}`;
-  const d = new Date(value);
-  if (Number.isNaN(d.getTime())) return "—";
-  const day = String(d.getUTCDate()).padStart(2, "0");
-  const month = String(d.getUTCMonth() + 1).padStart(2, "0");
-  const year = d.getUTCFullYear();
-  return `${day}-${month}-${year}`;
-}
+import { buildProcurementInventoryStockSummary, isGrnNonBilledStockRow } from "@/utils/procurement-inventory-report";
 
 export function ProcurementInventoryListPage() {
-  const [rows, setRows] = useState<ProcurementInventoryRow[]>([]);
+  const router = useRouter();
+  const cachedOnMount = peekProcurementInventoryFromCache();
+  const [rows, setRows] = useState<ProcurementInventoryRow[]>(() => cachedOnMount ?? []);
   const [vendors, setVendors] = useState<Record<string, VendorOption>>({});
+  const [vendorList, setVendorList] = useState<VendorOption[]>([]);
   const [query, setQuery] = useState("");
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(() => cachedOnMount === null);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [importOpen, setImportOpen] = useState(false);
   const [importBusy, setImportBusy] = useState(false);
   const [importError, setImportError] = useState<string | null>(null);
+  const [serialSaveError, setSerialSaveError] = useState<string | null>(null);
   const [purchaseOrders, setPurchaseOrders] = useState<ProcOrder[]>([]);
 
   const load = useCallback(async (force = false) => {
     if (force) invalidateProcurementListCache();
-    setLoading(true);
+    const hadInstantData = peekProcurementInventoryFromCache() !== null;
+    if (!hadInstantData) {
+      setLoading(true);
+    } else {
+      setRefreshing(true);
+    }
     setError(null);
     try {
-      const [inventory, vendorRows, orders] = await Promise.all([
-        listProcurementInventory(),
-        listVendorOptions().catch(() => [] as VendorOption[]),
-        listPurchaseOrders().catch(() => [] as ProcOrder[]),
-      ]);
+      const inventory = await listProcurementInventory();
       setRows(inventory);
-      setVendors(Object.fromEntries(vendorRows.map((v) => [v.id, v])));
-      setPurchaseOrders(orders);
     } catch (err) {
-      setRows([]);
+      if (!hadInstantData) {
+        setRows([]);
+      }
       setError(formatApiError(err, "Failed to load procurement inventory"));
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
+
+    void listVendorOptions()
+      .then((vendorRows) => {
+        setVendorList(vendorRows);
+        setVendors(Object.fromEntries(vendorRows.map((v) => [v.id, v])));
+      })
+      .catch(() => {
+        setVendorList([]);
+      });
+
+    void listPurchaseOrders()
+      .then((orders) => setPurchaseOrders(orders))
+      .catch(() => setPurchaseOrders([]));
   }, []);
 
   useEffect(() => {
@@ -95,12 +103,14 @@ export function ProcurementInventoryListPage() {
   }, [rows, query, vendors]);
 
   const reportSource = query.trim() ? filtered : rows;
-  const stockSummary = useMemo(
-    () => buildProcurementInventoryStockSummary(reportSource),
+  const grnStockRows = useMemo(
+    () => reportSource.filter(isGrnNonBilledStockRow),
     [reportSource],
   );
-
-  const poGroups = useMemo(() => groupInventoryByPoAndGrn(filtered), [filtered]);
+  const stockSummary = useMemo(
+    () => buildProcurementInventoryStockSummary(grnStockRows),
+    [grnStockRows],
+  );
 
   async function onConfirmImport(draft: InventoryImportDraftRow[]) {
     setImportBusy(true);
@@ -130,6 +140,16 @@ export function ProcurementInventoryListPage() {
           <div className="flex flex-wrap gap-2">
             <Button
               type="button"
+              size="sm"
+              className="cursor-pointer transition-colors duration-200"
+              disabled={loading}
+              onClick={() => router.push("/procurement/inventory/create-po")}
+            >
+              <Plus className="mr-1.5 size-3.5" />
+              Create purchase order
+            </Button>
+            <Button
+              type="button"
               variant="outline"
               size="sm"
               className="cursor-pointer transition-colors duration-200"
@@ -147,10 +167,12 @@ export function ProcurementInventoryListPage() {
               variant="outline"
               size="sm"
               className="cursor-pointer transition-colors duration-200"
-              disabled={loading}
+              disabled={loading || refreshing}
               onClick={() => void load(true)}
             >
-              <RefreshCw className={cn("mr-1.5 size-3.5", loading && "animate-spin")} />
+              <RefreshCw
+                className={cn("mr-1.5 size-3.5", (loading || refreshing) && "animate-spin")}
+              />
               Refresh
             </Button>
           </div>
@@ -163,6 +185,12 @@ export function ProcurementInventoryListPage() {
         </div>
       ) : null}
 
+      {serialSaveError ? (
+        <div className="rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">
+          {serialSaveError}
+        </div>
+      ) : null}
+
       <ProcurementListSearch
         value={query}
         onChange={setQuery}
@@ -170,156 +198,129 @@ export function ProcurementInventoryListPage() {
         aria-label="Search procurement inventory"
       />
 
-      {!loading && rows.length > 0 ? (
+      {loading ? (
+        <div className="space-y-3">
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="h-[118px] animate-pulse rounded-md border border-border/60 bg-muted/20" />
+            <div className="h-[118px] animate-pulse rounded-md border border-border/60 bg-muted/20" />
+          </div>
+          <div className="h-32 animate-pulse rounded-md border border-border/60 bg-muted/20" />
+        </div>
+      ) : (
         <div className="space-y-3">
           <div className="grid gap-3 sm:grid-cols-2">
             <FinanceKpiCard
               label="Units in stock"
-              value={loading ? "—" : String(stockSummary.totalUnits)}
-              hint={query.trim() ? "Matching current search" : "One row per received unit"}
+              value={String(stockSummary.totalUnits)}
               icon={Boxes}
             />
             <FinanceKpiCard
               label="Products"
-              value={loading ? "—" : String(stockSummary.productCount)}
-              hint="Distinct product names"
+              value={String(stockSummary.productCount)}
               icon={Package}
             />
           </div>
 
           <div className={procurementUi.sectionCard}>
-            <p className={procurementUi.sectionTitle}>Stock quantity by product</p>
-            {stockSummary.byProduct.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No stock rows to summarize.</p>
+            <p className={procurementUi.sectionTitle}>GRN stock by product</p>
+            {grnStockRows.length === 0 ? (
+              <p className="text-sm text-muted-foreground">
+                No GRN stock on hand. Units appear here when you receive on a GRN but do not bill
+                the full quantity on the vendor invoice.
+              </p>
             ) : (
-              <div className="overflow-x-auto rounded-md border border-border/60">
-                <table className="w-full min-w-[480px] text-left text-sm">
-                  <thead className="border-b border-border/60 bg-muted/20 text-[10px] font-semibold uppercase tracking-[0.07em] text-muted-foreground">
-                    <tr>
-                      <th className="px-3 py-2">Product</th>
-                      <th className="px-3 py-2 text-right">Units in stock</th>
-                      <th className="px-3 py-2 text-right">GRNs</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {stockSummary.byProduct.map((line) => (
-                      <tr
-                        key={line.productName}
-                        className="border-b border-border/50 last:border-0 hover:bg-muted/20"
-                      >
-                        <td className="px-3 py-2">
-                          <button
-                            type="button"
-                            className="cursor-pointer text-left font-medium text-foreground transition-colors duration-200 hover:text-[#0369A1] hover:underline"
-                            onClick={() => setQuery(line.productName)}
-                          >
-                            {line.productName}
-                          </button>
-                        </td>
-                        <td className="px-3 py-2 text-right font-mono tabular-nums text-foreground">
-                          {line.units}
-                        </td>
-                        <td className="px-3 py-2 text-right tabular-nums text-muted-foreground">
-                          {line.grnCount}
-                        </td>
+              <div className={procurementUi.tableShell}>
+                <div className={procurementUi.tableScroll}>
+                  <table
+                    className={cn(
+                      procurementUi.table,
+                      "min-w-[960px] border-separate border-spacing-0",
+                    )}
+                  >
+                    <thead className={procurementUi.thead}>
+                      <tr>
+                        <th className={cn(procurementUi.th, "px-4")}>Product</th>
+                        <th className={cn(procurementUi.th, "px-4")}>Description</th>
+                        <th className={cn(procurementUi.th, "px-4 text-right")}>Vendor price</th>
+                        <th className={cn(procurementUi.th, "px-4")}>Serial number</th>
+                        <th className={cn(procurementUi.th, "px-4")}>PO number</th>
+                        <th className={cn(procurementUi.th, "px-4")}>GRN number</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody>
+                      {grnStockRows.map((line, index) => (
+                        <tr
+                          key={
+                            line.stock_unit_id ??
+                            line.import_line_id ??
+                            `${line.grn_number}-${line.unit_index}-${index}`
+                          }
+                          className={procurementUi.tr}
+                        >
+                          <td className={cn(procurementUi.td, "px-4")}>
+                            <button
+                              type="button"
+                              className="cursor-pointer text-left font-medium text-foreground transition-colors duration-200 hover:text-[#0369A1] hover:underline"
+                              onClick={() => setQuery(line.product_name ?? "")}
+                            >
+                              {line.product_name?.trim() || "—"}
+                            </button>
+                          </td>
+                          <td
+                            className={cn(
+                              procurementUi.td,
+                              "px-4 max-w-[200px] text-muted-foreground",
+                            )}
+                          >
+                            <span className="line-clamp-2" title={line.description ?? ""}>
+                              {line.description?.trim() || "—"}
+                            </span>
+                          </td>
+                          <td
+                            className={cn(
+                              procurementUi.tdNumeric,
+                              "px-4 text-right font-mono tabular-nums",
+                            )}
+                          >
+                            {formatInr(Number(line.unit_cost) || 0)}
+                          </td>
+                          <td className={cn(procurementUi.td, "px-4 min-w-[140px]")}>
+                            <InventorySerialEditor
+                              row={line}
+                              onSaved={() => void load(true)}
+                              onError={setSerialSaveError}
+                            />
+                          </td>
+                          <td className={cn(procurementUi.td, "px-4 font-medium tabular-nums")}>
+                            {line.order_id ? (
+                              <Link
+                                href={`/procurement/orders/${line.order_id}`}
+                                className="cursor-pointer text-[#0369A1] transition-colors duration-200 hover:underline"
+                              >
+                                {line.company_po_number}
+                              </Link>
+                            ) : (
+                              line.company_po_number
+                            )}
+                          </td>
+                          <td
+                            className={cn(
+                              procurementUi.td,
+                              "px-4 font-mono text-xs tabular-nums text-muted-foreground",
+                            )}
+                          >
+                            {line.grn_number}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               </div>
             )}
           </div>
         </div>
-      ) : null}
-
-      <div className={procurementUi.sectionCard}>
-        <p className={procurementUi.sectionTitle}>GRN detail</p>
-        <div className={procurementUi.tableScroll}>
-          <table className={cn(procurementUi.table, "min-w-[800px]")}>
-            <thead className={procurementUi.thead}>
-              <tr>
-                <th className={procurementUi.th}>PO</th>
-                <th className={procurementUi.th}>GRN</th>
-                <th className={procurementUi.th}>GRN date</th>
-                <th className={procurementUi.th}>Vendor</th>
-                <th className={procurementUi.th}>Products</th>
-                <th className={cn(procurementUi.th, "text-right")}>Units</th>
-                <th className={procurementUi.th}>Serial numbers</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.length === 0 ? (
-                <tr>
-                  <td colSpan={7} className={procurementUi.empty}>
-                    {loading
-                      ? "Loading inventory…"
-                      : rows.length === 0
-                        ? "No GRN receipts yet. Save a receipt with serials on a purchase order first."
-                        : "No rows match your search."}
-                  </td>
-                </tr>
-              ) : null}
-              {poGroups.flatMap((po, poIndex) => {
-                const bandRow =
-                  poIndex % 2 === 0
-                    ? "bg-muted/30 hover:bg-muted/40"
-                    : "bg-sky-50/45 hover:bg-sky-50/65";
-                const bandPoCell =
-                  poIndex % 2 === 0 ? "bg-muted/45" : "bg-sky-100/55";
-                return po.grns.map((grn, grnIndex) => (
-                  <tr
-                    key={`${po.company_po_number}-${grn.grn_number}`}
-                    className={cn(
-                      "border-b border-border/45 transition-colors duration-150",
-                      bandRow,
-                      grnIndex === 0 && poIndex > 0 && "border-t-2 border-t-border/70",
-                    )}
-                  >
-                    {grnIndex === 0 ? (
-                      <td
-                        rowSpan={po.grns.length}
-                        className={cn(
-                          procurementUi.td,
-                          bandPoCell,
-                          "align-top border-r border-border/50 font-semibold tabular-nums text-foreground",
-                        )}
-                      >
-                        {po.company_po_number}
-                      </td>
-                    ) : null}
-                    <td className={cn(procurementUi.tdNumeric, "tabular-nums font-medium text-foreground")}>
-                      {grn.grn_number}
-                    </td>
-                    <td className={cn(procurementUi.tdNumeric, "text-muted-foreground")}>
-                      {formatReceiptDate(grn.receipt_at)}
-                    </td>
-                    <td className={procurementUi.tdMuted}>
-                      {grn.vendor_id ? (vendors[grn.vendor_id]?.label ?? "—") : "—"}
-                    </td>
-                    <td className={cn(procurementUi.td, "max-w-[280px]")}>
-                      <span className="line-clamp-3" title={formatGrnProductSummary(grn.lines)}>
-                        {formatGrnProductSummary(grn.lines)}
-                      </span>
-                    </td>
-                    <td className={cn(procurementUi.tdNumeric, "text-right tabular-nums font-medium")}>
-                      {grn.totalUnits}
-                    </td>
-                    <td
-                      className={cn(
-                        procurementUi.td,
-                        "max-w-[200px] font-mono text-xs text-muted-foreground",
-                      )}
-                      title={formatGrnSerialSummary(grn.lines)}
-                    >
-                      <span className="line-clamp-2">{formatGrnSerialSummary(grn.lines)}</span>
-                    </td>
-                  </tr>
-                ));
-              })}
-            </tbody>
-          </table>
-        </div>
-      </div>
+      )}
 
       <ProcurementInventoryImportDialog
         open={importOpen}

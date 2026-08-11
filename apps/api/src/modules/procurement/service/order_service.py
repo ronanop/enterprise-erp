@@ -187,6 +187,7 @@ class OrderService:
         source_document_id: UUID | None = None,
         entity_code: str | None = None,
         company_po_number: str | None = None,
+        approved_by_name: str | None = None,
     ):
         cid = self._scope.resolve_company_id(ctx, company_id)
         self._scope.validate_branch_access(ctx, branch_id)
@@ -218,6 +219,7 @@ class OrderService:
             source_document_id=source_document_id,
             entity_code=entity_code,
             company_po_number=company_po_number,
+            approved_by_name=(approved_by_name or "").strip() or None,
         )
         self._audit.log_entity_change(
             tenant_id=ctx.tenant_id,

@@ -279,6 +279,8 @@ class OrderLineResponse(BaseModel):
     last_receipt_qty: float = 0
     last_receipt_batch_id: UUID | None = None
     last_receipt_serial_numbers: list[str] | None = None
+    last_receipt_billing: bool = True
+    last_receipt_billing_quantity: float = 0
     unit_cost: float
     line_total: float
     status: str
@@ -324,6 +326,7 @@ class OrderResponse(BaseModel):
     company_po_number: str | None = None
     entity_code: str | None = None
     customer_name: str | None = None
+    approved_by_name: str | None = None
     ovf_date: date | None = None
     customer_po_number: str | None = None
     vendor_total: float = 0
@@ -362,16 +365,20 @@ class ScmQueueItemResponse(BaseModel):
     vendor_qty: float = 0
     vendor_total: float = 0
     customer_total: float = 0
+    customer_total_with_tax: float = 0
     margin_amount: float = 0
     vendor_payment_days: int = 0
     customer_payment_days: int = 0
     vendor_name: str | None = None
     oem_name: str | None = None
     received_at: datetime | None = None
+    delivery_period: str | None = None
+    expected_delivery_date: date | None = None
     purchase_order_id: UUID | None = None
     purchase_order_number: str | None = None
     purchase_order_status: str | None = None
     scm_on_hold: bool = False
+    scm_on_hold_at: datetime | None = None
     can_create_po: bool = True
 
 
@@ -400,6 +407,16 @@ class ScmMarginLinePreview(BaseModel):
     qty: float
     margin_amount: float
     margin_pct: float
+
+
+class ScmOvfHoldHistoryEntry(BaseModel):
+    started_at: datetime
+    released_at: datetime
+    remark: str | None = None
+
+
+class ScmOvfHoldRequest(BaseModel):
+    remark: str = Field(..., min_length=1, max_length=2000)
 
 
 class ScmOvfPreviewResponse(BaseModel):
@@ -449,6 +466,12 @@ class ScmOvfPreviewResponse(BaseModel):
     purchase_order_number: str | None = None
     can_create_po: bool = True
     scm_on_hold: bool = False
+    scm_on_hold_at: datetime | None = None
+    scm_hold_blocked: bool = False
+    scm_last_hold_since: datetime | None = None
+    scm_last_hold_released_at: datetime | None = None
+    scm_hold_history: list[ScmOvfHoldHistoryEntry] = Field(default_factory=list)
+    scm_on_hold_remark: str | None = None
     purchase_order_status: str | None = None
 
 
@@ -464,6 +487,23 @@ class ScmCreatePoFromOvfRequest(BaseModel):
     hold: bool = False
 
 
+class ScmInventoryPoLineRequest(BaseModel):
+    product_name: str = Field(min_length=1, max_length=255)
+    quantity: float = Field(gt=0)
+    unit_cost: float = Field(ge=0, default=0)
+
+
+class ScmCreateInventoryPoRequest(BaseModel):
+    vendor_id: UUID
+    entity_code: str
+    document_date: date | None = None
+    currency_code: str = "INR"
+    payment_terms: str | None = None
+    expected_delivery_date: date | None = None
+    approved_by_name: str | None = Field(default=None, max_length=255)
+    lines: list[ScmInventoryPoLineRequest] = Field(default_factory=list)
+
+
 class ScmUpdateOvfChargesRequest(BaseModel):
     freight: float = 0
     additional_charges: float = 0
@@ -475,6 +515,8 @@ class ScmLineReceiptUpdateRequest(BaseModel):
     grn_status: str | None = None  # pending | partial | delivered
     # One value per unit received in this save (use "NA" when not tracked).
     serial_numbers: list[str] | None = None
+    billing: bool = True
+    billing_quantity: float | None = None
 
 
 class ScmVendorPoLineResponse(BaseModel):
@@ -486,6 +528,8 @@ class ScmVendorPoLineResponse(BaseModel):
     last_receipt_qty: float = 0
     last_receipt_batch_id: UUID | None = None
     last_receipt_serial_numbers: list[str] | None = None
+    last_receipt_billing: bool = True
+    last_receipt_billing_quantity: float = 0
     unit_cost: float
     line_total: float
     status: str
@@ -522,6 +566,8 @@ class ScmReceiptBatchLineResponse(BaseModel):
     product_name: str | None = None
     quantity: float
     serial_numbers: list[str] | None = None
+    billing: bool = True
+    billing_quantity: float = 0
 
     @field_validator("serial_numbers", mode="before")
     @classmethod
@@ -540,6 +586,8 @@ class ScmReceiptBatchLineResponse(BaseModel):
 
 class ScmProcurementInventoryRowResponse(BaseModel):
     order_id: UUID | None = None
+    order_line_id: UUID | None = None
+    receipt_batch_id: UUID | None = None
     grn_number: str
     receipt_at: datetime | None = None
     company_po_number: str
@@ -549,6 +597,12 @@ class ScmProcurementInventoryRowResponse(BaseModel):
     unit_index: int
     serial_number: str
     source: str = "grn"
+    received_quantity: float = 0
+    billing_quantity: float = 0
+    unit_cost: float = 0
+    description: str | None = None
+    stock_unit_id: UUID | None = None
+    import_line_id: UUID | None = None
 
 
 class ScmInventoryImportLineRequest(BaseModel):
@@ -559,6 +613,10 @@ class ScmInventoryImportLineRequest(BaseModel):
 
 class ScmInventoryImportRequest(BaseModel):
     lines: list[ScmInventoryImportLineRequest] = Field(default_factory=list)
+
+
+class ScmInventorySerialUpdate(BaseModel):
+    serial_number: str = Field(..., min_length=1, max_length=120)
 
 
 class ScmReceiptBatchAttachmentSummary(BaseModel):
