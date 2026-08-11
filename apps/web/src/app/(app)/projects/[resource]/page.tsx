@@ -5,9 +5,11 @@ import { ProjectBudgetListPage } from "@/components/projects/project-budget-list
 import { ProjectCostListPage } from "@/components/projects/project-cost-list-page";
 import { ProjectDocumentListPage } from "@/components/projects/project-document-list-page";
 import { ProjectIssueListPage } from "@/components/projects/project-issue-list-page";
+import { ProjectCompletedJobsPage } from "@/components/projects/project-completed-jobs-page";
 import { ProjectFollowUpsPage } from "@/components/projects/project-follow-ups-page";
 import { ProjectMyJobsPage } from "@/components/projects/project-my-jobs-page";
 import { ProjectListPage } from "@/components/projects/project-list-page";
+import { ProjectPoQueuePage } from "@/components/projects/project-po-queue-page";
 import { ProjectMilestoneListPage } from "@/components/projects/project-milestone-list-page";
 import { ProjectPhaseListPage } from "@/components/projects/project-phase-list-page";
 import { ProjectProfitabilityPage } from "@/components/projects/project-profitability-page";
@@ -48,10 +50,14 @@ export default async function ProjectsResourcePage({ params }: PageProps) {
   switch (resourceKey) {
     case "my-jobs":
       return <ProjectMyJobsPage />;
+    case "completed-jobs":
+      return <ProjectCompletedJobsPage />;
     case "follow-ups":
       return <ProjectFollowUpsPage />;
     case "projects":
       return <ProjectListPage />;
+    case "po-queue":
+      return <ProjectPoQueuePage />;
     case "project-phases":
       return <ProjectPhaseListPage />;
     case "project-milestones":

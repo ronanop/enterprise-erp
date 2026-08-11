@@ -31,7 +31,7 @@ import {
   resolveStageOwnerDisplay,
   stageOwnerBannerSection,
 } from "@/components/projects/site-stage-assignments";
-import { useSiteStageFormReadOnly } from "@/components/projects/site-stage-form-read-only-context";
+import { useSiteStageFormReadOnlyMeta } from "@/components/projects/site-stage-form-read-only-context";
 
 const EMPTY: FormValues = {
   ...INTAKE_SUMMARY_EMPTY,
@@ -66,7 +66,7 @@ function dateOrEmpty(v: string | null | undefined): string {
 }
 
 export function SiteInstallFormPage({ projectId }: { projectId: string }) {
-  const adminProgressView = useSiteStageFormReadOnly();
+  const stageFormMeta = useSiteStageFormReadOnlyMeta();
   const [deliveryType, setDeliveryType] = useState("server_os_rack");
   const isRackOnly = deliveryIsRackOnly(deliveryType);
   const hasRack = deliveryIncludesRack(deliveryType);
@@ -354,13 +354,17 @@ export function SiteInstallFormPage({ projectId }: { projectId: string }) {
           : "Step 5 — Installation and configuration in one step. Next: Acceptance."
       }
       backHref={
-        adminProgressView ? `/projects/projects/${projectId}` : `/projects/my-jobs`
+        stageFormMeta.readOnly
+          ? (stageFormMeta.backHref ?? `/projects/projects/${projectId}`)
+          : `/projects/my-jobs`
       }
-      backLabel={adminProgressView ? "Back to project" : "Back to My Jobs"}
-      readOnly={adminProgressView}
-      readOnlyBanner={
-        adminProgressView ? "Viewing completed step progress (read-only)." : undefined
+      backLabel={
+        stageFormMeta.readOnly
+          ? (stageFormMeta.backLabel ?? "Back")
+          : "Back to My Jobs"
       }
+      readOnly={stageFormMeta.readOnly}
+      readOnlyBanner={stageFormMeta.readOnlyBanner}
       submitLabel="Save"
       sections={sections}
       emptyValues={EMPTY}

@@ -102,7 +102,7 @@ class LeadAssignRequest(BaseModel):
 
 
 class LeadConvertRequest(BaseModel):
-    pipeline_id: UUID | None = None
+    pipeline_id: UUID
     opportunity_name: str
     expected_revenue: Decimal = Decimal("0")
     existing_customer_id: UUID | None = None
@@ -117,11 +117,9 @@ class LeadResponse(OrmModel):
     lead_code: str
     first_name: str
     last_name: str | None
-    designation: str | None = None
     salutation: str | None = None
     mobile: str
     email: str | None
-    lead_source_id: UUID
     status: str
     blueprint_state: str
     locked: bool
@@ -771,7 +769,6 @@ class CompanyResponse(OrmModel):
     locked: bool
     version: int
     created_at: datetime | None = None
-    updated_at: datetime | None = None
 
 
 class ContactCreate(BaseModel):
@@ -822,12 +819,11 @@ class LeadCreateFromCompany(BaseModel):
     branch_id: UUID
     first_name: str | None = None
     last_name: str | None = None
-    designation: str | None = None
     salutation: str | None = None
     mobile: str | None = None
     email: str | None = None
     lead_source_id: UUID
-    owner_employee_id: UUID | None = None
+    owner_employee_id: UUID
     assign_to_id: UUID | None = None
     assigned_date: date | None = None
     expected_amount: Decimal | None = None
@@ -852,7 +848,7 @@ class LeadCreateFromCompany(BaseModel):
     state: str | None = None
     zip: str | None = None
     country: str | None = None
-    oem_name: str = Field(min_length=1, max_length=150)
+    oem_name: str | None = None
     oem_contact_person: str | None = None
     oem_contact_number: str | None = None
     oem_contact_email: str | None = None
@@ -882,18 +878,14 @@ class SalesLeadResponse(OrmModel):
     lead_code: str
     first_name: str
     last_name: str | None
-    designation: str | None = None
-    salutation: str | None = None
     mobile: str
     email: str | None
-    lead_source_id: UUID
     status: str
     blueprint_state: str
     locked: bool
     company_account_id: UUID | None
     owner_employee_id: UUID
     assign_to_id: UUID | None
-    assigned_date: date | None = None
     expected_amount: Decimal | None
     expected_closure_date: date | None
     project_title: str | None = None
@@ -901,19 +893,6 @@ class SalesLeadResponse(OrmModel):
     sub_product_category: str | None = None
     sub_product: str | None = None
     sub_product_other: str | None = None
-    engagement_score: int | None = None
-    portal_link: str | None = None
-    requirement_type: str | None = None
-    purchase_model: str | None = None
-    dr_number: str | None = None
-    new_dr_number: str | None = None
-    deal_type: str | None = None
-    industry: str | None = None
-    street: str | None = None
-    city: str | None = None
-    state: str | None = None
-    zip: str | None = None
-    country: str | None = None
     entity_name: str | None = None
     entity_email: str | None = None
     entity_address: str | None = None
@@ -927,7 +906,9 @@ class SalesLeadResponse(OrmModel):
     distributor_contact: str | None = None
     distributor_contact_person: str | None = None
     distributor_contact_email: str | None = None
+    distributor_department: str | None = None
     end_customer_name: str | None = None
+    end_customer_location: str | None = None
     notes: str | None = None
     converted_opportunity_id: UUID | None
     version: int
@@ -1166,7 +1147,6 @@ class QuoteMarginSummaryResponse(BaseModel):
 
 class QuoteSendForApprovalRequest(BaseModel):
     team_role: str = "management"
-    assigned_user_id: UUID
     remarks: str | None = None
 
 
@@ -1179,6 +1159,7 @@ class OvfCreate(BaseModel):
     quote_id: UUID
     branch_id: UUID
     po_number: str | None = None
+    po_date: date | None = None
     delivery_period: str | None = None
     customer_name: str | None = None
     quote_name: str | None = None
@@ -1207,6 +1188,7 @@ class OvfCreate(BaseModel):
 
 class OvfUpdate(BaseModel):
     po_number: str | None = None
+    po_date: date | None = None
     delivery_period: str | None = None
     customer_name: str | None = None
     quote_name: str | None = None
@@ -1243,6 +1225,7 @@ class OvfResponse(OrmModel):
     opportunity_id: UUID
     company_account_id: UUID | None
     po_number: str | None
+    po_date: date | None = None
     delivery_period: str | None
     customer_name: str | None
     quote_name: str | None
@@ -1263,6 +1246,7 @@ class OvfResponse(OrmModel):
     blueprint_state: str
     locked: bool
     shared_to_scm: bool
+    shared_to_scm_at: datetime | None = None
     deal_won: bool
     deal_won_amount: Decimal | None
     vendor_payment_days: int
@@ -1274,7 +1258,6 @@ class OvfResponse(OrmModel):
     total_margin_amount: Decimal
     version: int
     created_at: datetime | None = None
-    updated_at: datetime | None = None
 
 
 class OvfLineCreate(BaseModel):
@@ -1305,7 +1288,6 @@ class OvfLineResponse(OrmModel):
 
 class OvfSendForApprovalRequest(BaseModel):
     team_role: str = "management"
-    assigned_user_id: UUID
     remarks: str | None = None
 
 
@@ -1438,7 +1420,6 @@ class BlueprintActionRequest(BaseModel):
     content_base64: str | None = None
     content_type: str | None = None
     team_role: str | None = None
-    assigned_user_id: UUID | None = None
     remarks: str | None = None
     remark: str | None = None
     reason: str | None = None

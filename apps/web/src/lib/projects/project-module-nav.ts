@@ -3,6 +3,7 @@ import type { ProjectsNavGroup } from "@/components/projects/projects-workspace-
 /** Delivery queues and portfolio admin surfaces — module admin (techbank) only. */
 const ADMIN_ONLY_HREFS = new Set([
   "/projects",
+  "/projects/po-queue",
   "/projects/site-installations",
   "/projects/intake",
   "/projects/assignment",
@@ -15,6 +16,7 @@ const ADMIN_ONLY_HREFS = new Set([
 
 const MEMBER_WORKSPACE_HREFS = [
   "/projects/my-jobs",
+  "/projects/completed-jobs",
   "/projects/follow-ups",
   "/projects/projects",
 ] as const;
@@ -36,9 +38,11 @@ export function filterProjectsNavGroups(
           title:
             href === "/projects/my-jobs"
               ? "My Jobs"
-              : href === "/projects/follow-ups"
-                ? "Follow ups"
-                : "Projects",
+              : href === "/projects/completed-jobs"
+                ? "Completed Jobs"
+                : href === "/projects/follow-ups"
+                  ? "Follow ups"
+                  : "Projects",
           href,
         };
       }),
@@ -50,6 +54,9 @@ export function isProjectsAdminOnlyPath(pathname: string): boolean {
   if (pathname === "/projects/projects/new") return true;
   if (pathname.includes("/edit")) return true;
   if (pathname.endsWith("/assign")) return true;
+  if (pathname === "/projects/completed-jobs" || pathname.startsWith("/projects/completed-jobs/")) {
+    return false;
+  }
   for (const href of ADMIN_ONLY_HREFS) {
     if (href === "/projects") {
       if (pathname === "/projects") return true;

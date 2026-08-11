@@ -13,7 +13,10 @@ import {
   workflowStageNotCompleteMessage,
 } from "@/lib/projects/site-stage-form-access";
 import { WorkflowStepBlockedDialog } from "@/components/projects/workflow-step-blocked-dialog";
-import { SiteStageFormReadOnlyProvider } from "@/components/projects/site-stage-form-read-only-context";
+import {
+  SiteStageFormReadOnlyProvider,
+  type SiteStageFormReadOnlyMeta,
+} from "@/components/projects/site-stage-form-read-only-context";
 import { authService } from "@/services/api-client";
 import {
   getProject,
@@ -24,9 +27,11 @@ import { loadIntakeSummaryLookups } from "@/components/projects/site-intake-summ
 
 type GateState = "loading" | "allowed" | "denied" | "blocked";
 
+const editableMeta: SiteStageFormReadOnlyMeta = { readOnly: false };
+
 /**
  * Only the project manager (assign step) or the active stage assignee may open workflow forms.
- * Others are sent back to the project detail page (tracking only).
+ * Completed steps open read-only for assignees (Completed Jobs) and admins (project tracking).
  */
 export function SiteStageFormGate({
   projectId,
@@ -40,9 +45,10 @@ export function SiteStageFormGate({
   const router = useRouter();
   const [state, setState] = useState<GateState>("loading");
   const [blockedMessage, setBlockedMessage] = useState<string | null>(null);
-  const [adminProgressView, setAdminProgressView] = useState(false);
+  const [readOnlyMeta, setReadOnlyMeta] = useState<SiteStageFormReadOnlyMeta>(editableMeta);
 
   useEffect(() => {
+    setState("loading");
     let cancelled = false;
 
     void (async () => {
@@ -57,6 +63,19 @@ export function SiteStageFormGate({
         const parsed = parseAuthMe(meRes.data);
         const user = parsed.user;
         const employeeId = resolveSessionEmployeeId(lookups.employees, user);
+        const stageRow = blueprint?.stage_assignments?.find((a) => a.stage === stage);
+        const stageDone = stageRow?.work_status === "done";
+
+        if (parsed.projectModuleAdmin && stageDone) {
+          setReadOnlyMeta({
+            readOnly: true,
+            backHref: `/projects/projects/${projectId}`,
+            backLabel: "Back to project",
+          });
+          setState("allowed");
+          return;
+        }
+
         const allowed = canEditSiteStageForm(
           project,
           site,
@@ -66,18 +85,21 @@ export function SiteStageFormGate({
         );
         if (cancelled) return;
         if (allowed) {
-          setAdminProgressView(false);
+          setReadOnlyMeta(editableMeta);
           setState("allowed");
           return;
         }
-        if (parsed.projectModuleAdmin && blueprint) {
-          const row = blueprint.stage_assignments?.find((a) => a.stage === stage);
-          if (row?.work_status === "done") {
-            setAdminProgressView(true);
-            setState("allowed");
-            return;
-          }
+
+        if (isAssigneeForStage(site, stage, employeeId) && stageDone) {
+          setReadOnlyMeta({
+            readOnly: true,
+            backHref: "/projects/completed-jobs",
+            backLabel: "Back to Completed Jobs",
+          });
+          setState("allowed");
+          return;
         }
+
         if (
           isAssigneeForStage(site, stage, employeeId) &&
           !isAssignedStepActive(stage, site.workflow_stage)
@@ -131,8 +153,6 @@ export function SiteStageFormGate({
   }
 
   return (
-    <SiteStageFormReadOnlyProvider readOnly={adminProgressView}>
-      {children}
-    </SiteStageFormReadOnlyProvider>
+    <SiteStageFormReadOnlyProvider value={readOnlyMeta}>{children}</SiteStageFormReadOnlyProvider>
   );
 }

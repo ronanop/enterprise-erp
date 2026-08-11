@@ -14,9 +14,9 @@ class CompanyRepository(CrmScopedRepository):
     def __init__(self, db: Session) -> None:
         super().__init__(db)
 
-    def get(self, ctx: TenantContext, row_id: UUID) -> CrmCompany | None:
+    def get(self, ctx: TenantContext, row_id: UUID, *, branch_scoped: bool = True) -> CrmCompany | None:
         stmt = select(CrmCompany).where(CrmCompany.id == row_id, CrmCompany.is_deleted.is_(False))
-        stmt = self.apply_crm_filter(stmt, CrmCompany, ctx, branch_scoped=True)
+        stmt = self.apply_crm_filter(stmt, CrmCompany, ctx, branch_scoped=branch_scoped)
         return self.db.scalar(stmt)
 
     def list_companies(self, ctx: TenantContext, company_id: UUID):

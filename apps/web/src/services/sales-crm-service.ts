@@ -8,6 +8,7 @@
  */
 import { ApiClientError, apiClient, resourceService } from "@/services/api-client";
 import { getAccessToken } from "@/lib/auth";
+import { loadCrmOverview } from "@/services/crm-service";
 import { env } from "@/utils/env";
 
 function asArray<T>(data: T[] | T | null | undefined): T[] {
@@ -890,6 +891,7 @@ export type Ovf = {
   opportunity_id: string;
   company_account_id: string | null;
   po_number: string | null;
+  po_date: string | null;
   delivery_period: string | null;
   customer_name: string | null;
   quote_name: string | null;
@@ -1020,7 +1022,7 @@ export async function getOvfBlueprint(id: string): Promise<BlueprintState> {
 
 export async function sendOvfForApproval(
   id: string,
-  body: { team_role?: string; assigned_user_id: string; remarks?: string | null },
+  body: { team_role?: string; remarks?: string | null },
 ): Promise<Ovf> {
   return unwrap(
     await apiClient<Ovf>(`${CRM_OVF_API}/${id}/send-for-approval`, { method: "POST", body }),
@@ -1555,4 +1557,80 @@ export async function updateKycRecord(
   body: Partial<KycRecordFormInput>,
 ): Promise<CrmKycRecord> {
   return unwrap(await resourceService.update<CrmKycRecord>(CRM_KYC_API, kycId, body));
+}
+
+function prefetchQuiet(promise: Promise<unknown>): void {
+  void promise.catch(() => {
+    /* Prefetch only; destination pages surface errors when they await the same cache key. */
+  });
+}
+
+/** Warm list APIs before CRM tab navigation (hover / layout idle). */
+export function prefetchCrmTab(href: string): void {
+  const path = (href.split("?")[0] ?? href).replace(/\/$/, "") || "/";
+
+  switch (path) {
+    case "/crm":
+      prefetchQuiet(loadCrmOverview());
+      return;
+    case "/crm/my-jobs":
+      prefetchQuiet(listMyJobs());
+      return;
+    case "/crm/companies":
+    case "/crm/kyc-account-mapping":
+      prefetchQuiet(listCompanies());
+      return;
+    case "/crm/leads":
+      prefetchQuiet(listSalesLeads());
+      return;
+    case "/crm/opportunities":
+      prefetchQuiet(listOpportunities());
+      return;
+    case "/crm/oem-quotes":
+      prefetchQuiet(listAttachmentsByCategory("oem_quote"));
+      prefetchQuiet(listOpportunities());
+      return;
+    case "/crm/quotes":
+      prefetchQuiet(listQuotes());
+      return;
+    case "/crm/purchase-orders":
+      prefetchQuiet(listAttachmentsByCategory("customer_po"));
+      prefetchQuiet(listOpportunities());
+      return;
+    case "/crm/ovf":
+      prefetchQuiet(listOvfs());
+      return;
+    case "/crm/contacts":
+      prefetchQuiet(listContacts());
+      prefetchQuiet(listCompanies());
+      return;
+    case "/crm/products":
+      prefetchQuiet(listProducts());
+      return;
+    case "/crm/meetings":
+      prefetchQuiet(listMeetings());
+      return;
+    case "/crm/customer-followups":
+      prefetchQuiet(listFollowups());
+      return;
+    case "/crm/oem":
+      prefetchQuiet(listSalesLeads());
+      prefetchQuiet(listOems());
+      return;
+    case "/crm/distributors":
+    case "/crm/entities":
+    case "/crm/end-customers":
+      prefetchQuiet(listSalesLeads());
+      return;
+    case "/crm/boq":
+      prefetchQuiet(listAttachmentsByCategory("boq"));
+      prefetchQuiet(listOpportunities());
+      return;
+    case "/crm/sow":
+      prefetchQuiet(listAttachmentsByCategory("sow"));
+      prefetchQuiet(listOpportunities());
+      return;
+    default:
+      break;
+  }
 }

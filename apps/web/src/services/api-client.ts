@@ -13,6 +13,19 @@ export class ApiClientError extends Error {
   }
 }
 
+export function formatApiError(err: unknown, fallback: string): string {
+  if (err instanceof ApiClientError) {
+    if (err.errors.length > 0) {
+      return `${err.message}: ${err.errors.join("; ")}`;
+    }
+    return err.message;
+  }
+  if (err instanceof Error && err.message.trim()) {
+    return err.message;
+  }
+  return fallback;
+}
+
 type RequestOptions = Omit<RequestInit, "body"> & {
   body?: unknown;
   auth?: boolean;

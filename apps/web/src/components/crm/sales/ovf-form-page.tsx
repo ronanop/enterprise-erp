@@ -6,7 +6,6 @@ import { useRouter } from "next/navigation";
 import { ArrowLeft, ClipboardCheck, IndianRupee } from "lucide-react";
 
 import { CrmErrorBanner, CrmPage, CrmSection } from "@/components/crm/crm-ui";
-import { CrmSessionEmployeeField } from "@/components/crm/sales/crm-session-employee-field";
 import { SyncedBanner } from "@/components/crm/sales/approval-banner";
 import {
   OvfOrderLinesSection,
@@ -33,8 +32,6 @@ import {
 import { PageHeader } from "@/components/layout/page-header";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { useAuthUser } from "@/hooks/use-auth-user";
-import { resolveSessionEmployeeLabel } from "@/lib/crm/session-employee";
 import { ApiClientError } from "@/services/api-client";
 import {
   addOvfLine,
@@ -48,7 +45,7 @@ import {
   getOvf,
   getQuote,
   listContacts,
-  listCrmMemberOptions,
+  listEmployeeOptions,
   listOvfLines,
   listOvfs,
   listQuoteLines,
@@ -61,6 +58,7 @@ import {
 
 type OvfDraft = {
   po_number: string;
+  po_date: string;
   delivery_period: string;
   customer_name: string;
   quote_name: string;
@@ -96,12 +94,12 @@ const NUMBER_NO_SPIN =
 export function OvfFormPage({ quoteId, ovfId }: { quoteId?: string; ovfId?: string }) {
   const router = useRouter();
   const isEdit = Boolean(ovfId);
-  const { user } = useAuthUser();
   const [ovf, setOvf] = useState<Ovf | null>(null);
   const [quote, setQuote] = useState<Quote | null>(null);
   const [opportunity, setOpportunity] = useState<Opportunity | null>(null);
   const [form, setForm] = useState<OvfDraft>({
     po_number: "",
+    po_date: "",
     delivery_period: "",
     customer_name: "",
     quote_name: "",
@@ -162,6 +160,7 @@ export function OvfFormPage({ quoteId, ovfId }: { quoteId?: string; ovfId?: stri
         setVendorRows(vendorRowsFromOvfLines(ovfLines));
         setForm({
           po_number: ovfRow.po_number ?? "",
+          po_date: ovfRow.po_date ? String(ovfRow.po_date).slice(0, 10) : "",
           delivery_period: ovfRow.delivery_period ?? "",
           customer_name: ovfRow.customer_name ?? "",
           quote_name: ovfRow.quote_name ?? "",
@@ -204,7 +203,7 @@ export function OvfFormPage({ quoteId, ovfId }: { quoteId?: string; ovfId?: stri
           opportunityRow.company_account_id
             ? listContacts(opportunityRow.company_account_id).catch(() => [])
             : Promise.resolve([]),
-          listCrmMemberOptions().catch(() => []),
+          listEmployeeOptions().catch(() => []),
           getOpportunityBlueprint(quoteRow.opportunity_id).catch(() => null),
           listOvfs({ opportunity_id: quoteRow.opportunity_id }).catch(() => []),
           listQuoteLines(quoteId).catch(() => []),
@@ -230,29 +229,27 @@ export function OvfFormPage({ quoteId, ovfId }: { quoteId?: string; ovfId?: stri
         contactRows[0] ??
         null;
       const ownerName =
-        resolveSessionEmployeeLabel(employeeRows, user) ||
         employeeRows.find(
           (employee) => employee.id === opportunityRow.owner_employee_id,
-        )?.label ||
-        "";
+        )?.label ?? "";
       const contactName = selectedContact ? fullName(selectedContact) : "";
       const billingAddress = companyRow
         ? [
-          companyRow.billing_street,
-          companyRow.billing_city,
-          companyRow.billing_code,
-        ]
-          .filter(Boolean)
-          .join(", ")
+            companyRow.billing_street,
+            companyRow.billing_city,
+            companyRow.billing_code,
+          ]
+            .filter(Boolean)
+            .join(", ")
         : "";
       const shippingAddress = companyRow
         ? [
-          companyRow.shipping_street,
-          companyRow.shipping_city,
-          companyRow.shipping_code,
-        ]
-          .filter(Boolean)
-          .join(", ")
+            companyRow.shipping_street,
+            companyRow.shipping_city,
+            companyRow.shipping_code,
+          ]
+            .filter(Boolean)
+            .join(", ")
         : "";
       setQuote(quoteRow);
       setOpportunity(opportunityRow);
@@ -280,7 +277,7 @@ export function OvfFormPage({ quoteId, ovfId }: { quoteId?: string; ovfId?: stri
     } finally {
       setLoading(false);
     }
-  }, [isEdit, ovfId, quoteId, user]);
+  }, [isEdit, ovfId, quoteId]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => void load(), 0);
@@ -304,6 +301,7 @@ export function OvfFormPage({ quoteId, ovfId }: { quoteId?: string; ovfId?: stri
   function ovfPayload() {
     return {
       po_number: form.po_number.trim(),
+      po_date: form.po_date || null,
       delivery_period: form.delivery_period || null,
       customer_name: form.customer_name.trim() || null,
       quote_name: form.quote_name.trim() || null,
@@ -440,12 +438,13 @@ export function OvfFormPage({ quoteId, ovfId }: { quoteId?: string; ovfId?: stri
           <FinanceField label="Billing Address"><Input value={form.billing_address} onChange={(event) => setField("billing_address", event.target.value)} /></FinanceField>
           <FinanceField label="Quote No"><Input value={quote?.quote_no ?? "-"} disabled /></FinanceField>
           <FinanceField label="Billing State"><Input value={form.billing_state} onChange={(event) => setField("billing_state", event.target.value)} /></FinanceField>
-          <CrmSessionEmployeeField label="OVF Module Owner" value={form.owner_name} />
+          <FinanceField label="OVF Module Owner"><Input value={form.owner_name} onChange={(event) => setField("owner_name", event.target.value)} /></FinanceField>
           <FinanceField label="Billing Contact Person"><Input value={form.billing_contact_person} onChange={(event) => setField("billing_contact_person", event.target.value)} /></FinanceField>
           <FinanceField label="Shipping Address *"><Input value={form.shipping_address} onChange={(event) => setField("shipping_address", event.target.value)} /></FinanceField>
           <FinanceField label="Billing Country"><Input value={form.billing_country} onChange={(event) => setField("billing_country", event.target.value)} /></FinanceField>
           <FinanceField label="Shipping State"><Input value={form.shipping_state} onChange={(event) => setField("shipping_state", event.target.value)} /></FinanceField>
           <FinanceField label="PO Number *"><Input value={form.po_number} onChange={(event) => setField("po_number", event.target.value)} /></FinanceField>
+          <FinanceField label="Customer PO Date"><Input type="date" value={form.po_date} onChange={(event) => setField("po_date", event.target.value)} /></FinanceField>
           <FinanceField label="Shipping Contact Person"><Input value={form.shipping_contact_person} onChange={(event) => setField("shipping_contact_person", event.target.value)} /></FinanceField>
           <FinanceField label="Delivery Period *"><Input type="date" value={form.delivery_period} onChange={(event) => setField("delivery_period", event.target.value)} /></FinanceField>
           <FinanceField label="Shipping Country"><Input value={form.shipping_country} onChange={(event) => setField("shipping_country", event.target.value)} /></FinanceField>

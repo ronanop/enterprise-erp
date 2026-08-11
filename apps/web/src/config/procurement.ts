@@ -1,15 +1,12 @@
 /**
- * Procurement workspace config — aligned with FRD-07 screen inventory
- * and apps/api procurement routers (PR → RFQ → PO → GRN → Invoice).
+ * Procurement workspace config — SCM OVF → PO → GRN → Invoice flow.
  */
 
 import type { LucideIcon } from "lucide-react";
 import {
   ClipboardList,
-  FileSearch,
   PackageCheck,
   Receipt,
-  Scale,
   ShoppingCart,
   Truck,
 } from "lucide-react";
@@ -28,7 +25,7 @@ export type ProcurementPipelineStage = {
   key: string;
   title: string;
   href: string;
-  resource: "requisitions" | "rfqs" | "orders" | "grns" | "invoices";
+  resource: "scm" | "orders" | "grns" | "delivery-challan" | "delivery-status";
 };
 
 export const PROCUREMENT_MODULE_KEY = "procurement";
@@ -39,38 +36,34 @@ export const procurementWorkspaceGroups: ProcurementWorkspaceGroup[] = [
     title: "SCM Workflow",
     description: "OVF queue, vendor POs, and goods receipt",
     icon: Truck,
-    resourceKeys: ["scm", "vendor-po", "orders", "grns"],
-  },
-  {
-    key: "sourcing",
-    title: "Sourcing",
-    description: "Requisitions, RFQs, vendor quotes, and comparisons",
-    icon: FileSearch,
-    resourceKeys: ["requisitions", "rfqs", "vendor-quotations", "comparisons"],
+    resourceKeys: ["scm", "orders", "grns", "delivery-challan", "delivery-status", "inventory"],
   },
   {
     key: "fulfillment",
     title: "Fulfillment & Payables",
-    description: "Purchase orders, GRNs, vendor invoices, and returns",
+    description: "Vendor master",
     icon: ShoppingCart,
-    resourceKeys: ["orders", "grns", "invoices", "returns"],
-  },
-  {
-    key: "vendors",
-    title: "Vendor Management",
-    description: "Contracts and supplier performance",
-    icon: Scale,
-    resourceKeys: ["contracts", "performance"],
+    resourceKeys: ["vendors"],
   },
 ];
 
-/** FRD-07 procurement lifecycle (core operational stages) */
+/** Current SCM lifecycle: approved OVF → PO → GRN → delivery */
 export const procurementPipelineStages: ProcurementPipelineStage[] = [
-  { key: "requisition", title: "Requisition", href: "/procurement/requisitions", resource: "requisitions" },
-  { key: "rfq", title: "RFQ", href: "/procurement/rfqs", resource: "rfqs" },
+  { key: "scm", title: "SCM Queue", href: "/procurement/scm", resource: "scm" },
   { key: "order", title: "Purchase Order", href: "/procurement/orders", resource: "orders" },
   { key: "grn", title: "GRN", href: "/procurement/grns", resource: "grns" },
-  { key: "invoice", title: "Vendor Invoice", href: "/procurement/invoices", resource: "invoices" },
+  {
+    key: "delivery-challan",
+    title: "Delivery Challan",
+    href: "/procurement/delivery-challan",
+    resource: "delivery-challan",
+  },
+  {
+    key: "delivery-status",
+    title: "Delivery Status",
+    href: "/procurement/delivery-status",
+    resource: "delivery-status",
+  },
 ];
 
 export function getProcurementResources(): ModuleResource[] {
@@ -94,21 +87,21 @@ export const procurementQuickLinks = [
     icon: ClipboardList,
   },
   {
-    title: "Vendors & PO",
-    href: "/procurement/vendor-po",
-    description: "PO list + GRN badges",
-    icon: ShoppingCart,
-  },
-  {
     title: "Purchase Orders",
     href: "/procurement/orders",
-    description: "Committed spend",
-    icon: PackageCheck,
+    description: "Draft, issued, and GRN status",
+    icon: ShoppingCart,
   },
   {
     title: "GRNs",
     href: "/procurement/grns",
     description: "Goods receipts",
+    icon: PackageCheck,
+  },
+  {
+    title: "Vendors",
+    href: "/procurement/vendors",
+    description: "Vendor master list",
     icon: Receipt,
   },
 ] as const;

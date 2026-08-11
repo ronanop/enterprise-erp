@@ -2,22 +2,35 @@
 
 import { createContext, useContext } from "react";
 
-const SiteStageFormReadOnlyContext = createContext(false);
+export type SiteStageFormReadOnlyMeta = {
+  readOnly: boolean;
+  backHref?: string;
+  backLabel?: string;
+  readOnlyBanner?: string;
+};
+
+const defaultMeta: SiteStageFormReadOnlyMeta = { readOnly: false };
+
+const SiteStageFormReadOnlyContext = createContext<SiteStageFormReadOnlyMeta>(defaultMeta);
 
 export function SiteStageFormReadOnlyProvider({
-  readOnly,
+  value,
   children,
 }: {
-  readOnly: boolean;
+  value: SiteStageFormReadOnlyMeta;
   children: React.ReactNode;
 }) {
   return (
-    <SiteStageFormReadOnlyContext.Provider value={readOnly}>
+    <SiteStageFormReadOnlyContext.Provider value={value}>
       {children}
     </SiteStageFormReadOnlyContext.Provider>
   );
 }
 
-export function useSiteStageFormReadOnly(): boolean {
+export function useSiteStageFormReadOnlyMeta(): SiteStageFormReadOnlyMeta {
   return useContext(SiteStageFormReadOnlyContext);
+}
+
+export function useSiteStageFormReadOnly(): boolean {
+  return useSiteStageFormReadOnlyMeta().readOnly;
 }

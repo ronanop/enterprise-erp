@@ -29,6 +29,9 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
+
+const READ_ONLY_CONTROL_CLASS =
+  "disabled:pointer-events-none disabled:cursor-default disabled:opacity-100 disabled:text-foreground";
 import { ApiClientError } from "@/services/api-client";
 import {
   createCustomer,
@@ -191,20 +194,27 @@ export function ProjectsRecordForm({
       const result = await load();
       setLookups(result.lookups ?? {});
       if (result.values) setValues((v) => ({ ...v, ...result.values }));
-      if (result.readOnly !== undefined) setFormReadOnly(result.readOnly);
-      if (result.readOnlyBanner !== undefined) setFormReadOnlyBanner(result.readOnlyBanner);
+      if (result.readOnly !== undefined && !readOnly) setFormReadOnly(result.readOnly);
+      if (result.readOnlyBanner !== undefined && !readOnlyBanner)
+        setFormReadOnlyBanner(result.readOnlyBanner);
     } catch (err) {
       setError(err instanceof ApiClientError ? err.message : "Failed to load form data");
     } finally {
       setLoading(false);
     }
-  }, [load]);
+  }, [load, readOnly, readOnlyBanner]);
 
   useEffect(() => {
     void boot();
   }, [boot]);
 
+  useEffect(() => {
+    setFormReadOnly(readOnly);
+    setFormReadOnlyBanner(readOnlyBanner ?? "");
+  }, [readOnly, readOnlyBanner]);
+
   function set(name: string, value: string, clearFields?: string[]) {
+    if (formReadOnly) return;
     setValues((v) => {
       const next = { ...v, [name]: value };
       for (const key of clearFields ?? []) {
@@ -255,6 +265,8 @@ export function ProjectsRecordForm({
       return (
         <FinanceSelect
           value={values[field.name] ?? ""}
+          disabled={formReadOnly}
+          className={cn(formReadOnly && READ_ONLY_CONTROL_CLASS)}
           onChange={(e) => onSelectChange(field, e.target.value)}
         >
           <option value="">{field.placeholder ?? "Select…"}</option>
@@ -276,11 +288,24 @@ export function ProjectsRecordForm({
         <FinanceTextarea
           value={values[field.name] ?? ""}
           placeholder={field.placeholder}
+          disabled={formReadOnly}
+          className={cn(formReadOnly && READ_ONLY_CONTROL_CLASS)}
           onChange={(e) => set(field.name, e.target.value)}
         />
       );
     }
     if (field.type === "readonly") {
+      if (field.full) {
+        return (
+          <FinanceTextarea
+            className="min-w-0 w-full"
+            value={values[field.name] ?? ""}
+            disabled
+            aria-readonly="true"
+            rows={3}
+          />
+        );
+      }
       return (
         <Input
           className="min-w-0 w-full"
@@ -292,12 +317,18 @@ export function ProjectsRecordForm({
     }
     if (field.type === "yesno") {
       return (
-        <div className="flex flex-wrap items-center gap-4 text-sm text-foreground">
+        <div
+          className={cn(
+            "flex flex-wrap items-center gap-4 text-sm text-foreground",
+            formReadOnly && "pointer-events-none",
+          )}
+        >
           <label className="flex cursor-pointer items-center gap-2">
             <input
               type="checkbox"
               className="size-4 cursor-pointer rounded border border-input accent-[var(--color-accent,#0369A1)]"
               checked={values[field.name] === "true"}
+              disabled={formReadOnly}
               onChange={() => set(field.name, "true", field.clearFieldsOnChange)}
             />
             <span>Yes</span>
@@ -307,6 +338,7 @@ export function ProjectsRecordForm({
               type="checkbox"
               className="size-4 cursor-pointer rounded border border-input accent-[var(--color-accent,#0369A1)]"
               checked={values[field.name] === "false"}
+              disabled={formReadOnly}
               onChange={() => set(field.name, "false", field.clearFieldsOnChange)}
             />
             <span>No</span>
@@ -316,11 +348,17 @@ export function ProjectsRecordForm({
     }
     if (field.type === "checkbox") {
       return (
-        <label className="flex min-h-10 w-full cursor-pointer items-start gap-3 rounded-lg border border-border/80 bg-muted/25 px-3 py-2.5 text-sm text-foreground transition-colors duration-200 hover:bg-muted/40">
+        <label
+          className={cn(
+            "flex min-h-10 w-full items-start gap-3 rounded-lg border border-border/80 bg-muted/25 px-3 py-2.5 text-sm text-foreground transition-colors duration-200",
+            formReadOnly ? "cursor-default" : "cursor-pointer hover:bg-muted/40",
+          )}
+        >
           <input
             type="checkbox"
             className="mt-0.5 size-4 shrink-0 cursor-pointer rounded border border-input accent-[var(--color-accent,#0369A1)]"
             checked={values[field.name] === "true"}
+            disabled={formReadOnly}
             onChange={(e) =>
               set(
                 field.name,
@@ -335,13 +373,14 @@ export function ProjectsRecordForm({
     }
     return (
       <Input
-        className="min-w-0 w-full"
+        className={cn("min-w-0 w-full", formReadOnly && READ_ONLY_CONTROL_CLASS)}
         type={field.type}
         value={values[field.name] ?? ""}
         placeholder={field.placeholder}
         step={field.step}
         min={field.min}
         max={field.max}
+        disabled={formReadOnly}
         onChange={(e) => set(field.name, e.target.value)}
       />
     );
@@ -376,6 +415,7 @@ export function ProjectsRecordForm({
   }
 
   function onSelectChange(field: FieldSpec, value: string) {
+    if (formReadOnly) return;
     if (field.creatable === "customer" && value === NEW_CUSTOMER_VALUE) {
       openCustomerDialog(field.name);
       return;
@@ -491,57 +531,58 @@ export function ProjectsRecordForm({
 
       {error ? <ProjectsErrorBanner>{error}</ProjectsErrorBanner> : null}
 
-      {formReadOnlyBanner ? (
-        <p className="rounded-md border border-border/70 bg-muted/30 px-3 py-2 text-sm text-muted-foreground">
-          {formReadOnlyBanner}
-        </p>
-      ) : null}
-
-      {sections.map((section) => (
-        <ProjectsSection
-          key={section.title}
-          title={section.title}
-          subtitle={section.subtitle}
-          icon={section.icon}
-          bodyClassName="min-w-0"
-        >
-          <div
-            className={cn(
-              "grid min-w-0 grid-cols-1 items-start gap-x-8 gap-y-5",
-              section.columns === 3
-                ? "sm:grid-cols-2 xl:grid-cols-3"
-                : "sm:grid-cols-2",
-            )}
+      <div
+        className={cn(
+          formReadOnly &&
+          "[&_input:disabled]:pointer-events-none [&_input:disabled]:cursor-default [&_input:disabled]:opacity-100 [&_input:disabled]:text-foreground [&_select:disabled]:pointer-events-none [&_select:disabled]:cursor-default [&_select:disabled]:opacity-100 [&_select:disabled]:text-foreground [&_textarea:disabled]:pointer-events-none [&_textarea:disabled]:cursor-default [&_textarea:disabled]:opacity-100 [&_textarea:disabled]:text-foreground",
+        )}
+      >
+        {sections.map((section) => (
+          <ProjectsSection
+            key={section.title}
+            title={section.title}
+            subtitle={section.subtitle}
+            icon={section.icon}
+            bodyClassName="min-w-0"
           >
-            {groupFieldBlocks(section.fields).map((block) => {
-              if (block.kind === "pair") {
-                if (!isFieldVisible(block.checkbox)) return null;
-                const dateVisible = isFieldVisible(block.date);
-                return (
-                  <div
-                    key={block.checkbox.name}
-                    className={cn(
-                      "grid min-w-0 grid-cols-1 items-start gap-x-8 gap-y-5",
-                      // Always reserve full row width so checkboxes stay in the left column;
-                      // date appears in the right column only when the checkbox is checked.
-                      section.columns === 3
-                        ? "sm:col-span-2 xl:col-span-3 sm:grid-cols-2"
-                        : "sm:col-span-2 sm:grid-cols-2",
-                    )}
-                  >
-                    {renderField(block.checkbox)}
-                    {dateVisible ? renderField(block.date) : (
-                      <div className="hidden sm:block" aria-hidden="true" />
-                    )}
-                  </div>
-                );
-              }
-              if (!isFieldVisible(block.field)) return null;
-              return renderField(block.field, fieldSpanClass(block.field, section.columns));
-            })}
-          </div>
-        </ProjectsSection>
-      ))}
+            <div
+              className={cn(
+                "grid min-w-0 grid-cols-1 items-start gap-x-8 gap-y-5",
+                section.columns === 3
+                  ? "sm:grid-cols-2 xl:grid-cols-3"
+                  : "sm:grid-cols-2",
+              )}
+            >
+              {groupFieldBlocks(section.fields).map((block) => {
+                if (block.kind === "pair") {
+                  if (!isFieldVisible(block.checkbox)) return null;
+                  const dateVisible = isFieldVisible(block.date);
+                  return (
+                    <div
+                      key={block.checkbox.name}
+                      className={cn(
+                        "grid min-w-0 grid-cols-1 items-start gap-x-8 gap-y-5",
+                        // Always reserve full row width so checkboxes stay in the left column;
+                        // date appears in the right column only when the checkbox is checked.
+                        section.columns === 3
+                          ? "sm:col-span-2 xl:col-span-3 sm:grid-cols-2"
+                          : "sm:col-span-2 sm:grid-cols-2",
+                      )}
+                    >
+                      {renderField(block.checkbox)}
+                      {dateVisible ? renderField(block.date) : (
+                        <div className="hidden sm:block" aria-hidden="true" />
+                      )}
+                    </div>
+                  );
+                }
+                if (!isFieldVisible(block.field)) return null;
+                return renderField(block.field, fieldSpanClass(block.field, section.columns));
+              })}
+            </div>
+          </ProjectsSection>
+        ))}
+      </div>
 
       <div className="flex justify-end gap-2">
         <Button

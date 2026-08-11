@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useMemo } from "react";
+import { useSearchParams } from "next/navigation";
 import { CalendarRange, FolderKanban, MapPin } from "lucide-react";
 
 import {
@@ -18,6 +19,7 @@ import {
 import {
   createProject,
   getProject,
+  getProjectPoPrefill,
   getSiteInstallationByProject,
   listBranchOptions,
   listCustomerOptions,
@@ -30,6 +32,7 @@ import {
 const EMPTY_CREATE: FormValues = {
   branch_id: "",
   customer_id: "",
+  customer_label: "",
   delivery_type: "server_os_rack",
   site_name: "",
   project_manager_employee_id: "",
@@ -63,14 +66,24 @@ const EMPTY_EDIT: FormValues = {
 
 export function ProjectFormPage({ projectId }: { projectId?: string }) {
   const isEdit = Boolean(projectId);
+  const searchParams = useSearchParams();
+  const poId = searchParams.get("po_id");
 
   const load = useCallback(async (): Promise<{ values?: FormValues; lookups?: Lookups }> => {
-    const [branches, team, customers, record] = await Promise.all([
+    const [branches, team, customers, record, prefill] = await Promise.all([
       listBranchOptions().catch(() => []),
       listProjectManagementTeamOptions().catch(() => []),
       listCustomerOptions().catch(() => []),
       projectId ? getProject(projectId) : Promise.resolve(null),
+      !projectId && poId ? getProjectPoPrefill(poId).catch(() => null) : Promise.resolve(null),
     ]);
+    const resolvedCustomerLabel =
+      prefill?.customer_name?.trim() ||
+      (prefill?.customer_id
+        ? customers.find((c) => c.id === prefill.customer_id)?.label
+        : undefined) ||
+      "";
+
     const lookups: Lookups = {
       branches,
       employees: team,
@@ -112,12 +125,16 @@ export function ProjectFormPage({ projectId }: { projectId?: string }) {
 
     return {
       values: {
-        branch_id: branches[0]?.id ?? "",
+        branch_id: prefill?.branch_id || branches[0]?.id || "",
+        customer_id: prefill?.customer_id || "",
+        customer_label: resolvedCustomerLabel,
+        site_name: prefill?.site_name || "",
         project_manager_employee_id: team[0]?.id ?? "",
+        rfai_request_done: "false",
       },
       lookups,
     };
-  }, [projectId]);
+  }, [projectId, poId]);
 
   const onSave = useCallback(
     async (v: FormValues) => {
@@ -128,6 +145,7 @@ export function ProjectFormPage({ projectId }: { projectId?: string }) {
           branch_id: v.branch_id,
           customer_id: orNull(v.customer_id),
           project_manager_employee_id: v.project_manager_employee_id || undefined,
+          proc_order_id: poId || undefined,
           site_installation: {
             delivery_type: v.delivery_type || "server_os_rack",
             site_name: orNull(siteName),
@@ -168,7 +186,7 @@ export function ProjectFormPage({ projectId }: { projectId?: string }) {
 
       return `/projects/projects/${projectId}`;
     },
-    [isEdit, projectId],
+    [isEdit, projectId, poId],
   );
 
   const sections = useMemo<FormSection[]>(() => {
@@ -176,7 +194,9 @@ export function ProjectFormPage({ projectId }: { projectId?: string }) {
       return [
         {
           title: "Intake / Site request",
-          subtitle: "Step 1 — Customer → Site → Project Manager → RFAI → Power (when RFAI is Yes)",
+          subtitle: poId
+            ? "Step 1 — Customer and site prefilled from the SCM purchase order / CRM OVF."
+            : "Step 1 — Customer → Site → Project Manager → RFAI → Power (when RFAI is Yes)",
           icon: MapPin,
           fields: [
             {
@@ -195,24 +215,43 @@ export function ProjectFormPage({ projectId }: { projectId?: string }) {
               required: true,
               options: SITE_DELIVERY_TYPES,
             },
-            {
-              name: "customer_id",
-              label: "Customer",
-              type: "select",
-              required: true,
-              optionsKey: "customers",
-              placeholder: "Select customer…",
-              creatable: "customer",
-              createNewLabel: "New Customer…",
-              hint: "e.g. Airtel — pick existing or create new.",
-            },
-            {
-              name: "site_name",
-              label: "Site",
-              type: "text",
-              required: true,
-              placeholder: "Site name / site list entry…",
-            },
+            ...(poId
+              ? [
+                {
+                  name: "customer_label",
+                  label: "Customer",
+                  type: "readonly" as const,
+                  hint: "CRM company account linked to this purchase order.",
+                },
+                {
+                  name: "site_name",
+                  label: "Site",
+                  type: "readonly" as const,
+                  full: true,
+                  hint: "Company address from the CRM sales account for this PO.",
+                },
+              ]
+              : [
+                {
+                  name: "customer_id",
+                  label: "Customer",
+                  type: "select" as const,
+                  required: true,
+                  optionsKey: "customers",
+                  placeholder: "Select customer…",
+                  creatable: "customer" as const,
+                  createNewLabel: "New Customer…",
+                  hint: "e.g. Airtel — pick existing or create new.",
+                },
+                {
+                  name: "site_name",
+                  label: "Site",
+                  type: "textarea" as const,
+                  required: true,
+                  full: true,
+                  placeholder: "Site name / site list entry…",
+                },
+              ]),
             {
               name: "project_manager_employee_id",
               label: "Project Manager",
@@ -394,18 +433,28 @@ export function ProjectFormPage({ projectId }: { projectId?: string }) {
         ],
       },
     ];
-  }, [isEdit]);
+  }, [isEdit, poId]);
 
   return (
     <ProjectsRecordForm
-      title={isEdit ? "Edit Project" : "New Site Request"}
+      title={isEdit ? "Edit Project" : poId ? "New Site Request (from PO)" : "New Site Request"}
       description={
         isEdit
           ? "Update site request, delivery scope, project manager, and plan fields."
-          : "Step 1 — Intake / Site request. After create you continue to Assign stage owners."
+          : poId
+            ? "Step 1 — Intake / Site request prefilled from the SCM purchase order. After create you continue to Assign stage owners."
+            : "Step 1 — Intake / Site request. After create you continue to Assign stage owners."
       }
-      backHref={isEdit && projectId ? `/projects/projects/${projectId}` : "/projects/projects"}
-      backLabel={isEdit ? "Back to project" : "Back to projects"}
+      backHref={
+        isEdit && projectId
+          ? `/projects/projects/${projectId}`
+          : poId
+            ? "/projects/po-queue"
+            : "/projects/projects"
+      }
+      backLabel={
+        isEdit ? "Back to project" : poId ? "Back to PO queue" : "Back to projects"
+      }
       submitLabel={isEdit ? "Save changes" : "Create Project"}
       sections={sections}
       emptyValues={isEdit ? EMPTY_EDIT : EMPTY_CREATE}

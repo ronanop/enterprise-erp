@@ -82,7 +82,7 @@ export function ProjectMyJobsPage() {
     <>
       <ProjectsRecordList
         title="My Jobs"
-        description="Every delivery step you own as project manager or stage assignee. Open a row to work your step only."
+        description="Active delivery steps you own. When a step is finished and the site moves on, it moves to Completed Jobs."
         panelTitle="Assigned steps"
         panelSubtitle="All steps assigned to your employee record across visible projects"
         icon={Briefcase}

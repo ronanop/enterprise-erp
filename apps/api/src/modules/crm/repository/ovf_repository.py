@@ -14,9 +14,9 @@ class OvfRepository(CrmScopedRepository):
     def __init__(self, db: Session) -> None:
         super().__init__(db)
 
-    def get(self, ctx: TenantContext, row_id: UUID) -> CrmOvf | None:
+    def get(self, ctx: TenantContext, row_id: UUID, *, branch_scoped: bool = True) -> CrmOvf | None:
         stmt = select(CrmOvf).where(CrmOvf.id == row_id, CrmOvf.is_deleted.is_(False))
-        stmt = self.apply_crm_filter(stmt, CrmOvf, ctx, branch_scoped=True)
+        stmt = self.apply_crm_filter(stmt, CrmOvf, ctx, branch_scoped=branch_scoped)
         return self.db.scalar(stmt)
 
     def list_ovfs(
@@ -46,6 +46,13 @@ class OvfRepository(CrmScopedRepository):
         )
         stmt = self.apply_crm_filter(stmt, CrmOvf, ctx, branch_scoped=True)
         stmt = stmt.order_by(CrmOvf.updated_at.desc())
+        return list(self.db.scalars(stmt).all())
+
+    def list_by_ids(self, ctx: TenantContext, row_ids: list[UUID]) -> list[CrmOvf]:
+        if not row_ids:
+            return []
+        stmt = select(CrmOvf).where(CrmOvf.id.in_(row_ids), CrmOvf.is_deleted.is_(False))
+        stmt = self.apply_crm_filter(stmt, CrmOvf, ctx, branch_scoped=True)
         return list(self.db.scalars(stmt).all())
 
     def create(self, ctx: TenantContext, **fields) -> CrmOvf:

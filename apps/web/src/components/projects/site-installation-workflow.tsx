@@ -399,17 +399,31 @@ export function SiteInstallationTrackingSummary({ projectId }: { projectId: stri
                 const canFollowUp =
                   Boolean(sa.assignee_employee_id) && sa.work_status !== "done";
                 const stageFollowUp = latestFollowUpByStage.get(sa.stage);
+                const stageViewHref =
+                  projectModuleAdmin &&
+                    sa.work_status === "done" &&
+                    STAGE_FORM_LINKS[sa.stage as StageKey]
+                    ? STAGE_FORM_LINKS[sa.stage as StageKey]!.href(projectId)
+                    : null;
 
                 return (
                   <tr key={sa.stage} className="border-b border-border/50 last:border-0">
                     <td className="px-3 py-2 font-medium text-foreground">
                       <span className="inline-flex items-center gap-1.5">
-                        {sa.label}
-                        {projectModuleAdmin &&
-                          sa.work_status === "done" &&
-                          STAGE_FORM_LINKS[sa.stage as StageKey] ? (
+                        {stageViewHref ? (
                           <Link
-                            href={STAGE_FORM_LINKS[sa.stage as StageKey]!.href(projectId)}
+                            href={stageViewHref}
+                            title={`View ${sa.label} progress`}
+                            className="cursor-pointer text-foreground transition-colors duration-200 hover:text-primary hover:underline"
+                          >
+                            {sa.label}
+                          </Link>
+                        ) : (
+                          sa.label
+                        )}
+                        {stageViewHref ? (
+                          <Link
+                            href={stageViewHref}
                             title={`View ${sa.label} progress`}
                             aria-label={`View ${sa.label} progress`}
                             className="inline-flex cursor-pointer text-primary transition-colors duration-200 hover:text-primary/80"

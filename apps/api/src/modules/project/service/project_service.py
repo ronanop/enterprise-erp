@@ -50,6 +50,27 @@ class ProjectService:
         self._scope.validate_branch_access(ctx, branch_id)
         # Site workflow payload (optional) — stripped before project insert
         site_fields = fields.pop("site_installation", None)
+        proc_order_id = fields.get("proc_order_id")
+        if proc_order_id is not None:
+            from modules.project.service.project_po_queue_service import ProjectPoQueueService
+
+            po_queue = ProjectPoQueueService(self._db)
+            po_queue.ensure_linkable(ctx, proc_order_id)
+            prefill = po_queue.get_prefill(ctx, proc_order_id)
+            if not fields.get("budget_amount") and prefill.budget_amount is not None:
+                fields["budget_amount"] = prefill.budget_amount
+            if not fields.get("customer_id") and prefill.customer_id:
+                fields["customer_id"] = prefill.customer_id
+            if not fields.get("crm_opportunity_id") and prefill.crm_opportunity_id:
+                fields["crm_opportunity_id"] = prefill.crm_opportunity_id
+            if not fields.get("description") and prefill.description:
+                fields["description"] = prefill.description
+            if not fields.get("currency_code"):
+                fields["currency_code"] = prefill.currency_code
+            site = site_fields if isinstance(site_fields, dict) else {}
+            if not (site.get("site_name") or "").strip() and prefill.site_name:
+                site["site_name"] = prefill.site_name
+            site_fields = site
         self._apply_intake_create_defaults(ctx, cid, branch_id, fields, site_fields)
         doc = self._numbers.generate(PrjEntityType.PROJECT, cid, PrjProject, "project_code")
         project = self._repo.create(

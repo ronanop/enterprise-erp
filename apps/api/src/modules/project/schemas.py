@@ -51,6 +51,7 @@ class ProjectCreate(BaseModel):
     billing_type: str | None = None
     crm_opportunity_id: UUID | None = None
     crm_customer_id: UUID | None = None
+    proc_order_id: UUID | None = None
     health_status: str | None = None
     description: str | None = None
     status: str | None = None
@@ -93,6 +94,7 @@ class ProjectResponse(OrmModel):
     billing_type: str | None
     crm_opportunity_id: UUID | None
     crm_customer_id: UUID | None
+    proc_order_id: UUID | None
     health_status: str | None
     description: str | None
     status: str
@@ -102,6 +104,43 @@ class ProjectResponse(OrmModel):
     branch_id: UUID
     created_at: datetime | None = None
     version: int
+
+
+class ProjectPoQueueItem(BaseModel):
+    """Finalized SCM purchase order awaiting project creation."""
+
+    order_id: UUID
+    company_po_number: str | None = None
+    document_number: str
+    document_date: date
+    customer_name: str | None = None
+    customer_po_number: str | None = None
+    vendor_id: UUID
+    total_amount: float
+    customer_total: float = 0
+    status: str
+    ovf_id: UUID | None = None
+    branch_id: UUID
+    company_id: UUID
+
+
+class ProjectPoPrefillResponse(BaseModel):
+    """Suggested project intake values from a procurement PO."""
+
+    order_id: UUID
+    branch_id: UUID
+    company_id: UUID
+    company_po_number: str | None = None
+    customer_po_number: str | None = None
+    customer_name: str | None = None
+    customer_id: UUID | None = None
+    budget_amount: Decimal | None = None
+    currency_code: str = "INR"
+    site_name: str | None = None
+    description: str | None = None
+    ovf_id: UUID | None = None
+    crm_opportunity_id: UUID | None = None
+
 
 class ProjectPhaseCreate(BaseModel):
     company_id: UUID | None = None
@@ -1137,3 +1176,4 @@ class ProjectMyJobItem(BaseModel):
     stage_label: str
     delivery_type: str
     form_path: str
+    work_status: str = "pending"

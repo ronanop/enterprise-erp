@@ -57,6 +57,7 @@ import {
   type CrmMeeting,
   type Opportunity,
   type Option,
+  type Ovf,
   type Quote,
   type SalesLead,
 } from "@/services/sales-crm-service";

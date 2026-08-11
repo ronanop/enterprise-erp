@@ -82,6 +82,7 @@ def upgrade() -> None:
                 false
             FROM ranked
             WHERE name_rank = 1
+            ON CONFLICT ON CONSTRAINT uk_crm_oem_company_name DO NOTHING
             """
         )
     )

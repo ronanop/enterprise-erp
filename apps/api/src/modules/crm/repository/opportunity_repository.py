@@ -14,9 +14,9 @@ class OpportunityRepository(CrmScopedRepository):
     def __init__(self, db: Session) -> None:
         super().__init__(db)
 
-    def get(self, ctx: TenantContext, row_id: UUID) -> CrmOpportunity | None:
+    def get(self, ctx: TenantContext, row_id: UUID, *, branch_scoped: bool = True) -> CrmOpportunity | None:
         stmt = select(CrmOpportunity).where(CrmOpportunity.id == row_id, CrmOpportunity.is_deleted.is_(False))
-        stmt = self.apply_crm_filter(stmt, CrmOpportunity, ctx, branch_scoped=True)
+        stmt = self.apply_crm_filter(stmt, CrmOpportunity, ctx, branch_scoped=branch_scoped)
         return self.db.scalar(stmt)
 
     def list_opportunities(self, ctx: TenantContext, company_id: UUID):

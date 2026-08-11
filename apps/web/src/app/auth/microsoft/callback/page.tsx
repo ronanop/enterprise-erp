@@ -1,13 +1,14 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 
 import { ApiClientError, authService } from "@/services/api-client";
 import { getPostLoginRedirect } from "@/config/module-logins";
+import { parseAuthMe } from "@/lib/auth-user";
 
-export default function MicrosoftAuthCallbackPage() {
+function MicrosoftAuthCallbackContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [error, setError] = useState<string | null>(null);
@@ -27,10 +28,10 @@ export default function MicrosoftAuthCallbackPage() {
         let redirect = result.data?.redirect_to ?? "/";
         try {
           const profile = await authService.me();
-          const email = profile.data?.user?.email;
-          if (email) {
-            redirect = getPostLoginRedirect(email);
-          } else if (profile.data?.user?.user_type === "super_admin") {
+          const { user } = parseAuthMe(profile.data);
+          if (user?.email) {
+            redirect = getPostLoginRedirect(user.email);
+          } else if (user?.userType === "super_admin") {
             redirect = "/";
           }
         } catch {
@@ -65,5 +66,19 @@ export default function MicrosoftAuthCallbackPage() {
         <p className="text-sm text-muted-foreground">Completing Microsoft sign-in…</p>
       )}
     </div>
+  );
+}
+
+export default function MicrosoftAuthCallbackPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex min-h-dvh items-center justify-center px-4">
+          <p className="text-sm text-muted-foreground">Completing Microsoft sign-in…</p>
+        </div>
+      }
+    >
+      <MicrosoftAuthCallbackContent />
+    </Suspense>
   );
 }

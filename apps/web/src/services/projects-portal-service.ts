@@ -94,6 +94,7 @@ export type Project = AuditFields & {
   billing_type: string | null;
   crm_opportunity_id: string | null;
   crm_customer_id: string | null;
+  proc_order_id: string | null;
   health_status: string | null;
   description: string | null;
   workflow_status: string | null;
@@ -117,6 +118,7 @@ export type ProjectFormInput = {
   health_status?: string | null;
   description?: string | null;
   status?: string;
+  proc_order_id?: string | null;
   site_installation?: SiteInstallationNestedInput | null;
 };
 
@@ -164,6 +166,53 @@ export async function approveProject(id: string): Promise<Project> {
 
 export async function closeProject(id: string): Promise<Project> {
   return unwrap(await resourceService.action<Project>(PROJECTS_API, id, "close"));
+}
+
+// ---------------------------------------------------------------------------
+// PO queue (SCM → Project pipeline)
+// ---------------------------------------------------------------------------
+
+export const PROJECT_PO_QUEUE_API = "/projects/purchase-orders";
+
+export type ProjectPoQueueItem = {
+  order_id: string;
+  company_po_number: string | null;
+  document_number: string;
+  document_date: string;
+  customer_name: string | null;
+  customer_po_number: string | null;
+  vendor_id: string;
+  total_amount: number;
+  customer_total: number;
+  status: string;
+  ovf_id: string | null;
+  branch_id: string;
+  company_id: string;
+};
+
+export type ProjectPoPrefill = {
+  order_id: string;
+  branch_id: string;
+  company_id: string;
+  company_po_number: string | null;
+  customer_po_number: string | null;
+  customer_name: string | null;
+  customer_id: string | null;
+  budget_amount: string | null;
+  currency_code: string;
+  site_name: string | null;
+  description: string | null;
+  ovf_id: string | null;
+  crm_opportunity_id: string | null;
+};
+
+export async function listProjectPoQueue(): Promise<ProjectPoQueueItem[]> {
+  const res = await apiClient<ProjectPoQueueItem[]>(`${PROJECT_PO_QUEUE_API}/queue`);
+  return asArray(res.data);
+}
+
+export async function getProjectPoPrefill(orderId: string): Promise<ProjectPoPrefill> {
+  return unwrap(await apiClient<ProjectPoPrefill>(`${PROJECT_PO_QUEUE_API}/${orderId}/prefill`));
 }
 
 // ---------------------------------------------------------------------------
@@ -493,10 +542,16 @@ export type ProjectMyJob = {
   stage_label: string;
   delivery_type: string;
   form_path: string;
+  work_status: string;
 };
 
 export async function listProjectMyJobs(): Promise<ProjectMyJob[]> {
   const res = await resourceService.list<ProjectMyJob>("/projects/my-jobs");
+  return asArray(res.data);
+}
+
+export async function listProjectCompletedJobs(): Promise<ProjectMyJob[]> {
+  const res = await resourceService.list<ProjectMyJob>("/projects/my-jobs/completed");
   return asArray(res.data);
 }
 

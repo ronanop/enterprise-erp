@@ -20,7 +20,19 @@ def list_project_my_jobs(
     ctx: Annotated[TenantContext, Depends(require_permission("project.project:read"))],
     db: Annotated[Session, Depends(get_db)],
 ):
-    rows = SiteInstallationService(db).list_my_jobs(ctx)
+    rows = SiteInstallationService(db).list_my_jobs(ctx, completed=False)
+    return APIResponse(
+        message="OK",
+        data=[ProjectMyJobItem(**row) for row in rows],
+    )
+
+
+@my_jobs_router.get("/completed", response_model=APIResponse[list[ProjectMyJobItem]])
+def list_project_completed_jobs(
+    ctx: Annotated[TenantContext, Depends(require_permission("project.project:read"))],
+    db: Annotated[Session, Depends(get_db)],
+):
+    rows = SiteInstallationService(db).list_my_jobs(ctx, completed=True)
     return APIResponse(
         message="OK",
         data=[ProjectMyJobItem(**row) for row in rows],

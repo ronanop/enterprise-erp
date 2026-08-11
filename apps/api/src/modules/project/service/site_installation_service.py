@@ -634,8 +634,8 @@ class SiteInstallationService:
             "latest_reply_at": latest["created_at"] if latest else None,
         }
 
-    def list_my_jobs(self, ctx: TenantContext) -> list[dict]:
-        """All delivery steps assigned to the signed-in employee (any stage owner role)."""
+    def list_my_jobs(self, ctx: TenantContext, *, completed: bool = False) -> list[dict]:
+        """Delivery steps assigned to the signed-in employee — active or completed."""
         if ctx.user_id is None:
             return []
 
@@ -693,29 +693,28 @@ class SiteInstallationService:
                 SiteWorkflowStage.ASSIGNMENT.value,
             }:
                 assigned_stage = SiteWorkflowStage.ASSIGNMENT.value
-                segment = stage_form_segments[assigned_stage]
-                jobs.append(
-                    self._my_job_row(
-                        site,
-                        project,
-                        assigned_stage,
-                        current_stage,
-                        stage_form_segments,
-                    )
+                row = self._my_job_row(
+                    site,
+                    project,
+                    assigned_stage,
+                    current_stage,
+                    stage_form_segments,
                 )
+                if self._my_job_matches_completed_filter(row["work_status"], completed):
+                    jobs.append(row)
 
             for assigned_stage, field in engine.STAGE_ASSIGNEE_FIELDS.items():
                 if getattr(site, field, None) != employee_id:
                     continue
-                jobs.append(
-                    self._my_job_row(
-                        site,
-                        project,
-                        assigned_stage,
-                        current_stage,
-                        stage_form_segments,
-                    )
+                row = self._my_job_row(
+                    site,
+                    project,
+                    assigned_stage,
+                    current_stage,
+                    stage_form_segments,
                 )
+                if self._my_job_matches_completed_filter(row["work_status"], completed):
+                    jobs.append(row)
 
         jobs.sort(
             key=lambda row: (
@@ -724,6 +723,12 @@ class SiteInstallationService:
             )
         )
         return jobs
+
+    @staticmethod
+    def _my_job_matches_completed_filter(work_status: str, completed: bool) -> bool:
+        if completed:
+            return work_status == "done"
+        return work_status != "done"
 
     @staticmethod
     def _my_job_row(
@@ -739,6 +744,9 @@ class SiteInstallationService:
             if segment
             else f"/projects/projects/{site.project_id}"
         )
+        work_status = engine.stage_work_status(
+            assigned_stage, current_stage, site.delivery_type
+        )
         return {
             "site_installation_id": site.id,
             "project_id": site.project_id,
@@ -750,6 +758,7 @@ class SiteInstallationService:
             "stage_label": engine.STAGE_LABELS.get(assigned_stage, assigned_stage),
             "delivery_type": site.delivery_type,
             "form_path": form_path,
+            "work_status": work_status,
         }
 
     def _sync_phase_status(
