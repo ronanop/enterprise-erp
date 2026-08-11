@@ -47,6 +47,9 @@ docker-data/
 *.log
 logs/
 
+# Local build debug output
+build-output*.txt
+
 # Alembic
 # Keep versions tracked; ignore local scratch
 alembic/versions/*.pyc
