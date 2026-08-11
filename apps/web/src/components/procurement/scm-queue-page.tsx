@@ -13,9 +13,14 @@ import {
 } from "lucide-react";
 
 import { ScmCreatePoEntry } from "@/components/procurement/scm-create-po-entry";
-import { FinanceKpiCard } from "@/components/finance/finance-kpi-card";
-import { ProcurementPageHeader } from "@/components/procurement/procurement-page-header";
-import { procurementUi } from "@/components/procurement/procurement-ui";
+import { PageHeader } from "@/components/layout/page-header";
+import {
+  ProcurementErrorBanner,
+  ProcurementKpiCard,
+  ProcurementListPanel,
+  ProcurementPage,
+  procurementUi,
+} from "@/components/procurement/procurement-ui";
 import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -249,9 +254,10 @@ export function ScmQueuePage() {
   }, [enriched, filter, newOvfIds, query]);
 
   return (
-    <div className={procurementUi.page}>
-      <ProcurementPageHeader
+    <ProcurementPage>
+      <PageHeader
         title="SCM Queue"
+        description="Finance-approved OVFs awaiting vendor PO creation, issuance, and SCM hold actions."
         actions={
           <div className="flex flex-wrap items-center gap-2">
             <Button
@@ -284,32 +290,33 @@ export function ScmQueuePage() {
         }
       />
 
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <FinanceKpiCard
+      <div className="grid gap-2.5 sm:grid-cols-2 xl:grid-cols-4">
+        <ProcurementKpiCard
           label="Total OVF"
           value={String(kpis.total)}
           icon={ClipboardList}
-          onClick={() => setFilter("all")}
+          href="/procurement/scm"
         />
-        <FinanceKpiCard
+        <ProcurementKpiCard
           label="Open"
           value={String(kpis.open)}
           tone="warning"
           icon={ShoppingCart}
-          onClick={() => setFilter("open")}
+          href="/procurement/scm?filter=open"
         />
-        <FinanceKpiCard
+        <ProcurementKpiCard
           label="Close"
           value={String(kpis.close)}
           tone="success"
           icon={CircleCheckBig}
-          onClick={() => setFilter("close")}
+          href="/procurement/scm?filter=close"
         />
-        <FinanceKpiCard
+        <ProcurementKpiCard
           label="Hold"
           value={String(kpis.hold)}
+          tone="danger"
           icon={PauseCircle}
-          onClick={() => setFilter("hold")}
+          href="/procurement/scm?filter=hold"
         />
       </div>
 
@@ -343,16 +350,9 @@ export function ScmQueuePage() {
         </div>
       </div>
 
-      {error ? (
-        <div className="rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">
-          {error}
-        </div>
-      ) : null}
+      {error ? <ProcurementErrorBanner>{error}</ProcurementErrorBanner> : null}
 
-      <div
-        id="procurement-list"
-        className={cn("scroll-mt-24", procurementUi.tableShell)}
-      >
+      <ProcurementListPanel id="procurement-list" className="scroll-mt-24">
         <div className="overflow-x-auto">
           <table className="w-full min-w-[1440px] text-left text-sm">
             <thead className="border-b border-border bg-muted/40 text-xs uppercase tracking-wide text-muted-foreground">
@@ -502,7 +502,7 @@ export function ScmQueuePage() {
             </tbody>
           </table>
         </div>
-      </div>
-    </div>
+      </ProcurementListPanel>
+    </ProcurementPage>
   );
 }

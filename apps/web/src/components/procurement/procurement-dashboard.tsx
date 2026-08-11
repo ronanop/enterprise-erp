@@ -10,11 +10,16 @@ import {
 
 import { ProcurementInventoryStockCard } from "@/components/procurement/procurement-inventory-stock-card";
 import { ProcurementOpenOvfCard } from "@/components/procurement/procurement-open-ovf-card";
-import { ProcurementPageHeader } from "@/components/procurement/procurement-page-header";
-import { procurementUi } from "@/components/procurement/procurement-ui";
 import { ProcurementPoSummaryCard } from "@/components/procurement/procurement-po-summary-card";
 import { ProcurementDashboardCharts } from "@/components/procurement/procurement-dashboard-charts";
 import { ProcurementPipelineFunnel } from "@/components/procurement/procurement-pipeline-funnel";
+import {
+  ProcurementErrorBanner,
+  ProcurementPage,
+  ProcurementWarnBanner,
+} from "@/components/procurement/procurement-ui";
+import { PageHeader } from "@/components/layout/page-header";
+import { Button } from "@/components/ui/button";
 import { useClientAuth } from "@/hooks/use-client-auth";
 import { cn } from "@/lib/utils";
 import {
@@ -192,22 +197,25 @@ export function ProcurementDashboard() {
     (!authenticated && Boolean(data?.errors.length));
 
   return (
-    <div className={procurementUi.page}>
-      <ProcurementPageHeader
-        title="Procurement"
+    <ProcurementPage>
+      <PageHeader
+        title="Procurement Dashboard"
+        description="SCM queue readiness, purchase orders, GRN progress, and inventory stock across the procurement pipeline."
         actions={
           <div className="flex flex-wrap items-center gap-2">
-            <button
+            <Button
               type="button"
+              variant="outline"
+              size="sm"
+              className="cursor-pointer"
               onClick={() => void load(true)}
               disabled={loading && !data}
-              className="inline-flex h-8 cursor-pointer items-center gap-1.5 rounded-lg border border-border/80 bg-card px-3 text-sm font-medium shadow-sm transition-colors duration-200 hover:bg-muted disabled:opacity-60"
             >
               <RefreshCw
                 className={cn("size-3.5", (loading || refreshing) && "animate-spin")}
               />
               Refresh
-            </button>
+            </Button>
             <div className="relative">
               <Link
                 href="/procurement/scm"
@@ -273,12 +281,12 @@ export function ProcurementDashboard() {
       />
 
       {authBlocked ? (
-        <div className="rounded-xl border border-dashed border-amber-300/80 bg-amber-50 px-4 py-3 text-sm text-amber-950">
+        <ProcurementWarnBanner>
           Sign in to load live procurement data.{" "}
           <Link href="/login" className="cursor-pointer font-medium underline underline-offset-2">
             Go to login
           </Link>
-        </div>
+        </ProcurementWarnBanner>
       ) : null}
 
       {data?.partial && !authBlocked ? (
@@ -287,11 +295,7 @@ export function ProcurementDashboard() {
         </div>
       ) : null}
 
-      {poExportError ? (
-        <div className="rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">
-          {poExportError}
-        </div>
-      ) : null}
+      {poExportError ? <ProcurementErrorBanner>{poExportError}</ProcurementErrorBanner> : null}
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-3 md:gap-5 [&>*]:h-full">
         <ProcurementOpenOvfCard loading={loading} queue={scmQueueItems} />
@@ -313,6 +317,6 @@ export function ProcurementDashboard() {
         scmClose={scmOvfStatusCounts.close}
         scmHold={scmOvfStatusCounts.hold}
       />
-    </div>
+    </ProcurementPage>
   );
 }

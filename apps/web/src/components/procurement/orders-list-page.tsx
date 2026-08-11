@@ -12,9 +12,14 @@ import {
   ShoppingCart,
 } from "lucide-react";
 
-import { FinanceKpiCard } from "@/components/finance/finance-kpi-card";
-import { ProcurementPageHeader } from "@/components/procurement/procurement-page-header";
-import { procurementUi } from "@/components/procurement/procurement-ui";
+import { PageHeader } from "@/components/layout/page-header";
+import {
+  ProcurementErrorBanner,
+  ProcurementKpiCard,
+  ProcurementListPanel,
+  ProcurementPage,
+  procurementUi,
+} from "@/components/procurement/procurement-ui";
 import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -297,9 +302,10 @@ export function OrdersListPage() {
   ];
 
   return (
-    <div className={procurementUi.page}>
-      <ProcurementPageHeader
+    <ProcurementPage>
+      <PageHeader
         title="Purchase Orders"
+        description="Vendor purchase orders from SCM through GRN and delivery tracking."
         actions={
           <div className="flex flex-wrap items-center gap-2">
             <Button
@@ -333,27 +339,27 @@ export function OrdersListPage() {
         }
       />
 
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <FinanceKpiCard
+      <div className="grid gap-2.5 sm:grid-cols-2 xl:grid-cols-4">
+        <ProcurementKpiCard
           label="All POs"
           value={String(kpis.total)}
           icon={ShoppingCart}
           href="/procurement/orders"
         />
-        <FinanceKpiCard
+        <ProcurementKpiCard
           label="Draft"
           value={String(kpis.draft)}
           tone="warning"
           icon={CircleDot}
           href="/procurement/orders?filter=draft"
         />
-        <FinanceKpiCard
+        <ProcurementKpiCard
           label="Open"
           value={String(kpis.open)}
           icon={ShoppingCart}
           href="/procurement/orders?filter=open"
         />
-        <FinanceKpiCard
+        <ProcurementKpiCard
           label="Delivered"
           value={String(kpis.delivered)}
           tone="success"
@@ -380,13 +386,9 @@ export function OrdersListPage() {
         ))}
       </div>
 
-      {error ? (
-        <div className="rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">
-          {error}
-        </div>
-      ) : null}
+      {error ? <ProcurementErrorBanner>{error}</ProcurementErrorBanner> : null}
 
-      <div className={procurementUi.tableShell}>
+      <ProcurementListPanel>
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border/80 px-3 py-2">
           <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
             {filtered.length} orders
@@ -501,7 +503,7 @@ export function OrdersListPage() {
             </tbody>
           </table>
         </div>
-      </div>
-    </div>
+      </ProcurementListPanel>
+    </ProcurementPage>
   );
 }

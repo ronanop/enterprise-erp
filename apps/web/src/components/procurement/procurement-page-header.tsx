@@ -14,7 +14,7 @@ type ProcurementPageHeaderProps = {
   onBack?: () => void;
 };
 
-/** Compact procurement page title — optional subtitle via `description`. */
+/** Procurement page title — matches CRM PageHeader defaults. */
 export function ProcurementPageHeader({
   title,
   description,
@@ -31,8 +31,7 @@ export function ProcurementPageHeader({
       backHref={backHref}
       backLabel={backLabel}
       onBack={onBack}
-      titleClassName="text-lg font-semibold tracking-tight text-foreground sm:text-[1.25rem]"
-      className="border-border/50 pb-4"
+      className="border-border/60 pb-5"
     />
   );
 }
