@@ -18,6 +18,7 @@ const projectRoot = path.resolve(__dirname);
 
 const nextConfig: NextConfig = {
   reactStrictMode: true,
+  devIndicators: false,
   logging: {
     // Extension scripts flood the dev terminal; use browser DevTools instead.
     browserToTerminal: process.env.NEXT_BROWSER_LOGS === "1",

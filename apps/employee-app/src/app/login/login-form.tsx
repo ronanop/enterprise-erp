@@ -280,6 +280,8 @@ export default function LoginForm() {
 
               className={ui.input}
 
+              suppressHydrationWarning
+
               type="email"
 
               autoComplete="username"
@@ -308,6 +310,8 @@ export default function LoginForm() {
 
                 className={ui.input}
 
+                suppressHydrationWarning
+
                 required
 
                 value={companyCode}
@@ -327,6 +331,8 @@ export default function LoginForm() {
               <input
 
                 className={ui.input}
+
+                suppressHydrationWarning
 
                 required
 
@@ -353,6 +359,8 @@ export default function LoginForm() {
           <input
 
             className={ui.input}
+
+            suppressHydrationWarning
 
             type="password"
 

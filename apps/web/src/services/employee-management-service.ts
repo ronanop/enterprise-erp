@@ -21,6 +21,11 @@ import type {
   PersonalInfo,
 } from "@/types/employee-management";
 import {
+  ensureEmployeeExtensionsLoaded,
+  getEmployeeExtensionsSync,
+  setEmployeeExtension,
+} from "@/lib/employee-extensions-store";
+import {
   emptyBank,
   emptyEmployment,
   emptyGovernmentIds,
@@ -28,7 +33,6 @@ import {
   emptySalary,
 } from "@/types/employee-management";
 
-const EXT_KEY = "erp_employee_extensions_v1";
 const ACTIVITY_KEY = "erp_employee_activity_v1";
 const AUDIT_KEY = "erp_employee_audit_v1";
 
@@ -62,7 +66,23 @@ function readJson<T>(key: string, fallback: T): T {
 }
 
 function writeJson(key: string, value: unknown): void {
-  localStorage.setItem(key, JSON.stringify(value));
+  try {
+    localStorage.setItem(key, JSON.stringify(value));
+  } catch (err) {
+    const quota =
+      err instanceof DOMException &&
+      (err.name === "QuotaExceededError" || err.code === 22);
+    if (!quota) throw err;
+    if (key === AUDIT_KEY && Array.isArray(value)) {
+      localStorage.setItem(key, JSON.stringify((value as unknown[]).slice(0, 500)));
+      return;
+    }
+    if (key === ACTIVITY_KEY && Array.isArray(value)) {
+      localStorage.setItem(key, JSON.stringify((value as unknown[]).slice(0, 200)));
+      return;
+    }
+    throw err;
+  }
 }
 
 function defaultExtension(partial?: Partial<EmployeeExtension>): EmployeeExtension {
@@ -83,13 +103,11 @@ function defaultExtension(partial?: Partial<EmployeeExtension>): EmployeeExtensi
 }
 
 function loadExtensions(): Record<string, EmployeeExtension> {
-  return readJson<Record<string, EmployeeExtension>>(EXT_KEY, {});
+  return getEmployeeExtensionsSync();
 }
 
 function saveExtension(employeeId: string, ext: EmployeeExtension): void {
-  const all = loadExtensions();
-  all[employeeId] = ext;
-  writeJson(EXT_KEY, all);
+  setEmployeeExtension(employeeId, ext);
 }
 
 function appendActivity(event: Omit<ActivityEvent, "id" | "at">): void {
@@ -273,6 +291,8 @@ async function loadOptions(): Promise<EmployeeDirectoryOptions> {
 }
 
 async function fetchEmployeeDirectoryUncached(): Promise<EmployeeDirectoryResult> {
+  await ensureEmployeeExtensionsLoaded();
+
   const [masters, profiles, employment, options] = await Promise.all([
     resourceService.list("/employees", { page_size: 200, page: 1 }).catch((e) => ({ data: [], error: e })),
     resourceService.list("/hr/employee-profiles", { page_size: 200, page: 1 }).catch((e) => ({ data: [], error: e })),
@@ -398,8 +418,9 @@ export function filterEmployees(
     if (filters.reportingManagerId && r.reportingManagerId !== filters.reportingManagerId) {
       return false;
     }
-    if (filters.location && !r.extension.employment.location.includes(filters.location)) {
-      return false;
+    if (filters.location) {
+      const loc = r.extension?.employment?.location;
+      if (!loc || !loc.includes(filters.location)) return false;
     }
     if (filters.gender && r.gender !== filters.gender) return false;
     if (filters.joiningFrom && r.joiningDate && r.joiningDate < filters.joiningFrom) return false;
@@ -541,10 +562,11 @@ export async function createExistingEmployee(input: {
   };
 }
 
-export function applyOnboardingPortalToEmployee(
+export async function applyOnboardingPortalToEmployee(
   employeeId: string,
   draft: EmployeeWizardDraft,
-): void {
+): Promise<void> {
+  await ensureEmployeeExtensionsLoaded();
   const existing = loadExtensions()[employeeId];
   const ext = defaultExtension({
     ...existing,

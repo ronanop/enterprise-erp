@@ -599,7 +599,7 @@ export async function activateEmployee(
   });
 
   // Persist everything the candidate filled in the portal onto the employee record
-  applyOnboardingPortalToEmployee(local.id, portalToWizardDraft(c, employeeCode));
+  await applyOnboardingPortalToEmployee(local.id, portalToWizardDraft(c, employeeCode));
 
   const checklist = c.checklist.map((item) =>
     ["GEN_EMP_ID", "CREATE_PROFILE", "APPROVE_INFO", "ASSIGN_SHIFT"].includes(item.code)

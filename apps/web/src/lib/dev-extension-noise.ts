@@ -4,7 +4,7 @@ export const DEV_EXTENSION_NOISE_SCRIPT = `
   if (window.__erpDevExtNoiseFilter) return;
   window.__erpDevExtNoiseFilter = true;
   var RE =
-    /Content already injected|Injection error|runInjection|Crypto site not identified|reading 'location'|sendHistory|keyboard-shortcuts|site-signal\\.top|api\\/finish/i;
+    /Content already injected|Injection error|runInjection|Crypto site not identified|reading 'location'|sendHistory|keyboard-shortcuts|site-signal\\.top|api\\/finish|superior-grabber/i;
   function isExtNoise(text) {
     return RE.test(String(text || ""));
   }
@@ -15,6 +15,8 @@ export const DEV_EXTENSION_NOISE_SCRIPT = `
     }
     var blob = [e && e.message, e && e.error && e.error.message, fn].join(" ");
     if (!isExtNoise(blob)) return false;
+    // Extension throws often surface as "reading 'location'" via Next chunks — still noise.
+    if (/reading 'location'/i.test(blob)) return true;
     if (!fn) return true;
     if (fn.indexOf("/_next/") !== -1 || fn.indexOf("webpack") !== -1) return false;
     return true;

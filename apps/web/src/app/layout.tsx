@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { Plus_Jakarta_Sans, Geist_Mono } from "next/font/google";
 
-import { DevExtensionNoiseInit } from "@/components/dev-extension-noise-init";
+import { DEV_EXTENSION_NOISE_SCRIPT } from "@/lib/dev-extension-noise";
 import "./globals.css";
 
 const jakartaSans = Plus_Jakarta_Sans({
@@ -35,7 +35,14 @@ export default function RootLayout({
       suppressHydrationWarning
     >
       <head>
-        <DevExtensionNoiseInit />
+        {process.env.NODE_ENV === "development" ? (
+          <script
+            id="erp-dev-extension-noise-filter"
+            dangerouslySetInnerHTML={{
+              __html: DEV_EXTENSION_NOISE_SCRIPT.trim(),
+            }}
+          />
+        ) : null}
       </head>
       {/* suppressHydrationWarning: browser extensions (e.g. QuillBot) inject attrs like data-qb-installed */}
       <body className="flex min-h-full flex-col font-sans" suppressHydrationWarning>
