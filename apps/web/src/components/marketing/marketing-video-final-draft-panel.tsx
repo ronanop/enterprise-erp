@@ -7,60 +7,60 @@ import { MarketingEnlargeableMedia } from "@/components/marketing/marketing-enla
 import { Button } from "@/components/ui/button";
 import { uploadContentAssetForItem } from "@/lib/marketing-content-upload";
 import {
-  canLinkedInHandlerSendToPublisher,
-  canLinkedInHandlerSubmitFinalDraftToHead,
-  LINKEDIN_FINAL_POSTER_ROLE,
-  linkedInFinalDraftApproved,
-  linkedInFinalDraftAwaitingHead,
-  linkedInHandlerAwaitingPublisher,
-} from "@/lib/linkedin-section-approval";
+  canVideoEditorSendToPublisher,
+  canVideoEditorSubmitFinalDraftToHead,
+  VIDEO_FINAL_RENDER_ROLE,
+  videoEditorAwaitingPublisher,
+  videoFinalDraftApproved,
+  videoFinalDraftAwaitingHead,
+} from "@/lib/video-section-approval";
 import {
   ApiClientError,
-  linkedInSendToPublisher,
-  linkedInSubmitFinalDraftToHead,
   listContentAssets,
   linkedAssetMediaId,
   marketingAssetUrl,
+  videoSendToPublisher,
+  videoSubmitFinalDraftToHead,
   type MarketingContentItem,
   type MarketingLinkedAsset,
 } from "@/services/marketing-service";
 
-type MarketingLinkedInFinalDraftPanelProps = {
+type MarketingVideoFinalDraftPanelProps = {
   item: MarketingContentItem;
   userId: string | null;
   busy?: boolean;
   onUpdated: (item?: MarketingContentItem) => void;
 };
 
-export function MarketingLinkedInFinalDraftPanel({
+export function MarketingVideoFinalDraftPanel({
   item,
   userId,
   busy: externalBusy,
   onUpdated,
-}: MarketingLinkedInFinalDraftPanelProps) {
+}: MarketingVideoFinalDraftPanelProps) {
   const [assets, setAssets] = useState<MarketingLinkedAsset[]>([]);
   const [contentText, setContentText] = useState("");
-  const [posterPreview, setPosterPreview] = useState<string | null>(null);
-  const [posterAssetId, setPosterAssetId] = useState<string | null>(null);
+  const [videoPreview, setVideoPreview] = useState<string | null>(null);
+  const [videoAssetId, setVideoAssetId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
   const isBusy = busy || Boolean(externalBusy);
-  const canSubmit = canLinkedInHandlerSubmitFinalDraftToHead(item, userId);
-  const canSendPublisher = canLinkedInHandlerSendToPublisher(item, userId);
-  const awaitingHead = linkedInFinalDraftAwaitingHead(item);
-  const draftApproved = linkedInFinalDraftApproved(item);
-  const withPublisher = linkedInHandlerAwaitingPublisher(item);
+  const canSubmit = canVideoEditorSubmitFinalDraftToHead(item, userId);
+  const canSendPublisher = canVideoEditorSendToPublisher(item, userId);
+  const awaitingHead = videoFinalDraftAwaitingHead(item);
+  const draftApproved = videoFinalDraftApproved(item);
+  const withPublisher = videoEditorAwaitingPublisher(item);
 
   const loadAssets = useCallback(async () => {
     try {
       const linked = await listContentAssets(item.id);
       setAssets(linked);
-      const poster = linked.find((a) => a.asset_role === LINKEDIN_FINAL_POSTER_ROLE);
-      if (poster) {
-        setPosterAssetId(linkedAssetMediaId(poster));
-        setPosterPreview(marketingAssetUrl(poster.asset.file_url));
+      const render = linked.find((a) => a.asset_role === VIDEO_FINAL_RENDER_ROLE);
+      if (render) {
+        setVideoAssetId(linkedAssetMediaId(render));
+        setVideoPreview(marketingAssetUrl(render.asset.file_url));
       }
     } catch {
       setAssets([]);
@@ -68,7 +68,7 @@ export function MarketingLinkedInFinalDraftPanel({
   }, [item.id]);
 
   useEffect(() => {
-    setContentText(item.linkedin_final_draft?.content_text ?? item.body ?? "");
+    setContentText(item.video_final_draft?.content_text ?? item.body ?? "");
     void loadAssets();
   }, [item, loadAssets]);
 
@@ -86,7 +86,7 @@ export function MarketingLinkedInFinalDraftPanel({
     }
   };
 
-  const onPosterSelected = async (file: File) => {
+  const onVideoSelected = async (file: File) => {
     setBusy(true);
     setError(null);
     try {
@@ -94,11 +94,11 @@ export function MarketingLinkedInFinalDraftPanel({
         item.id,
         item.company_id,
         file,
-        LINKEDIN_FINAL_POSTER_ROLE,
-        "image",
+        VIDEO_FINAL_RENDER_ROLE,
+        "video",
       );
-      setPosterAssetId(uploaded.id);
-      setPosterPreview(URL.createObjectURL(file));
+      setVideoAssetId(uploaded.id);
+      setVideoPreview(URL.createObjectURL(file));
       await loadAssets();
     } catch (err) {
       setError(err instanceof ApiClientError ? err.message : "Upload failed");
@@ -108,15 +108,13 @@ export function MarketingLinkedInFinalDraftPanel({
   };
 
   const submitToHead = async () => {
-    const resolvedPosterId =
-      posterAssetId ??
-      assets.find((a) => a.asset_role === LINKEDIN_FINAL_POSTER_ROLE)?.asset.id ??
-      null;
+    const resolvedVideoId =
+      videoAssetId ?? assets.find((a) => a.asset_role === VIDEO_FINAL_RENDER_ROLE)?.asset.id ?? null;
     const text = contentText.trim() || "NA";
     await run(async () => {
-      const updated = await linkedInSubmitFinalDraftToHead(item.id, {
+      const updated = await videoSubmitFinalDraftToHead(item.id, {
         content_text: text,
-        poster_media_asset_id: resolvedPosterId,
+        poster_media_asset_id: resolvedVideoId,
       });
       setSuccess("Final draft sent to marketing head. Waiting for their approval.");
       return updated;
@@ -127,8 +125,8 @@ export function MarketingLinkedInFinalDraftPanel({
     return null;
   }
 
-  const submittedDraft = item.linkedin_final_draft;
-  const showSubmittedPoster =
+  const submittedDraft = item.video_final_draft;
+  const showSubmittedVideo =
     submittedDraft?.poster_media_asset_id &&
     assets.find((a) => a.asset.id === submittedDraft.poster_media_asset_id);
 
@@ -148,9 +146,9 @@ export function MarketingLinkedInFinalDraftPanel({
         </p>
         <p className="mt-1 text-xs text-muted-foreground">
           {canSubmit
-            ? "Optionally upload a final poster and add post copy. Leave blank or use NA if not applicable. Marketing head must approve before the publisher receives it."
+            ? "Upload the final rendered video and caption. Marketing head must approve before the publisher receives it."
             : awaitingHead
-              ? "Waiting for marketing head to approve your poster and content."
+              ? "Waiting for marketing head to approve your final video and caption."
               : canSendPublisher
                 ? "Marketing head approved your final draft. Send it to the publisher when ready."
                 : withPublisher
@@ -166,42 +164,33 @@ export function MarketingLinkedInFinalDraftPanel({
         <div className="space-y-3 rounded-lg border border-border/60 bg-background p-3">
           <div>
             <label className="mb-1 block text-xs font-medium text-muted-foreground">
-              Final poster image <span className="text-muted-foreground/70">(optional)</span>
+              Final video <span className="text-muted-foreground/70">(optional)</span>
             </label>
             <MarketingBannerUploadField
               disabled={isBusy}
-              previewUrl={posterPreview}
-              accept="image/*"
-              title="Final poster"
-              chooseLabel="Upload final poster"
-              hint="Optional — the finished poster/creative for this LinkedIn post."
-              onFileSelected={(file) => void onPosterSelected(file)}
+              previewUrl={videoPreview}
+              previewIsVideo
+              accept="video/*"
+              title="Final video"
+              chooseLabel="Upload final video"
+              hint="Optional — the finished video file for publishing."
+              onFileSelected={(file) => void onVideoSelected(file)}
             />
           </div>
           <div>
             <label className="mb-1 block text-xs font-medium text-muted-foreground">
-              Final post content <span className="text-muted-foreground/70">(optional)</span>
+              Caption / post text <span className="text-muted-foreground/70">(optional)</span>
             </label>
             <textarea
               rows={4}
               value={contentText}
               disabled={isBusy}
-              placeholder='Optional — write the final post copy, or leave blank / type "NA"'
+              placeholder='Optional — write the caption, or leave blank / type "NA"'
               className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
               onChange={(e) => setContentText(e.target.value)}
             />
-            <p className="mt-1 text-[11px] text-muted-foreground">
-              Leave empty or type <strong>NA</strong> if there is no copy.
-            </p>
           </div>
-          <Button
-            type="button"
-            disabled={isBusy}
-            onClick={(e) => {
-              e.stopPropagation();
-              void submitToHead();
-            }}
-          >
+          <Button type="button" disabled={isBusy} onClick={() => void submitToHead()}>
             Send final draft to marketing head
           </Button>
         </div>
@@ -210,38 +199,26 @@ export function MarketingLinkedInFinalDraftPanel({
       {(awaitingHead || draftApproved || withPublisher) && submittedDraft ? (
         <div className="space-y-3 rounded-lg border border-border/60 bg-background p-3 text-sm">
           <div>
-            <p className="text-xs font-medium uppercase text-muted-foreground">Final content</p>
+            <p className="text-xs font-medium uppercase text-muted-foreground">Final caption</p>
             <p className="mt-1 whitespace-pre-wrap">{submittedDraft.content_text || "—"}</p>
           </div>
-          {showSubmittedPoster ? (
+          {showSubmittedVideo ? (
             <div>
-              <p className="text-xs font-medium uppercase text-muted-foreground">Final poster</p>
+              <p className="text-xs font-medium uppercase text-muted-foreground">Final video</p>
               <MarketingEnlargeableMedia
-                src={marketingAssetUrl(showSubmittedPoster.asset.file_url)}
-                alt="Final poster"
+                src={marketingAssetUrl(showSubmittedVideo.asset.file_url)}
+                alt="Final video"
+                isVideo
                 showCaption={false}
                 mediaClassName="max-h-56 w-full"
               />
-            </div>
-          ) : null}
-          {submittedDraft.comments ? (
-            <div className="rounded-md border border-amber-500/30 bg-amber-500/5 p-2 text-xs">
-              <p className="font-medium text-amber-800">Marketing head feedback</p>
-              <p className="mt-1 whitespace-pre-wrap">{submittedDraft.comments}</p>
             </div>
           ) : null}
         </div>
       ) : null}
 
       {canSendPublisher ? (
-        <Button
-          type="button"
-          disabled={isBusy}
-          onClick={(e) => {
-            e.stopPropagation();
-            void run(() => linkedInSendToPublisher(item.id));
-          }}
-        >
+        <Button type="button" disabled={isBusy} onClick={() => void run(() => videoSendToPublisher(item.id))}>
           Send to publisher
         </Button>
       ) : null}

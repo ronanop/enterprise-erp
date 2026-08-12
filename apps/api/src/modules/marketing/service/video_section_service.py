@@ -1,4 +1,4 @@
-"""Content-based LinkedIn section approval — no verification checklist."""
+"""Video editor section approval — mirrors LinkedIn handler workflow for video content."""
 
 from __future__ import annotations
 
@@ -26,10 +26,9 @@ from modules.marketing.models.content_asset_link import MktContentAssetLink
 from modules.marketing.service.activity_log_service import ActivityLogService
 from modules.marketing.service.engines.content_engine import ContentItemEngine
 
-LINKEDIN_SECTION_IDS = ("post",)
-LINKEDIN_SECTION_ALIASES = {"content": "post", "theme": "post", "fonts": "post"}
-LEGACY_SECTION_IDS = frozenset({"content", "theme", "fonts"})
-LINKEDIN_FINAL_POSTER_ROLE = "linkedin_final_poster"
+VIDEO_SECTION_IDS = ("post",)
+VIDEO_CONTENT_MEDIA_ROLE = "video_content"
+VIDEO_FINAL_RENDER_ROLE = "video_final_render"
 
 FINAL_DRAFT_STATUS_DRAFT = "draft"
 FINAL_DRAFT_STATUS_AWAITING_HEAD = "awaiting_head"
@@ -37,7 +36,6 @@ FINAL_DRAFT_STATUS_APPROVED = "approved"
 FINAL_DRAFT_STATUS_CHANGES_REQUESTED = "changes_requested"
 FINAL_DRAFT_STATUS_REJECTED = "rejected"
 
-# UI / API status values stored per section
 SECTION_STATUS_PENDING = "pending"
 SECTION_STATUS_AWAITING_HEAD = "awaiting_head"
 SECTION_STATUS_APPROVED = "approved"
@@ -59,107 +57,26 @@ def _empty_section() -> dict[str, Any]:
 
 
 def _post_section_data_ready(row: MktContentItem) -> bool:
-    """Topic + company are required; theme and media are optional."""
     body = (row.body or "").strip()
     if not body:
         return False
-    if (row.summary or "").strip():
-        return True
-    return bool((row.hashtags or "").strip())
+    return bool((row.summary or "").strip())
 
 
-def _section_data_ready(row: MktContentItem, section_id: str) -> bool:
-    canonical = LINKEDIN_SECTION_ALIASES.get(section_id, section_id)
-    if canonical == "post":
-        return _post_section_data_ready(row)
-    return False
-
-
-def _resolve_section_id(section_id: str) -> str:
-    return LINKEDIN_SECTION_ALIASES.get(section_id, section_id)
-
-
-def _merge_legacy_status(sections: dict[str, Any], row: MktContentItem) -> str:
-    content = sections.get("content") or {}
-    theme = sections.get("theme") or {}
-    post = sections.get("post") or {}
-    statuses = [
-        s
-        for s in (content.get("status"), theme.get("status"), post.get("status"))
-        if s
-    ]
-    if SECTION_STATUS_REJECTED in statuses:
-        return SECTION_STATUS_REJECTED
-    if SECTION_STATUS_CHANGES_REQUESTED in statuses:
-        return SECTION_STATUS_CHANGES_REQUESTED
-    content_approved = content.get("status") == SECTION_STATUS_APPROVED
-    theme_approved = theme.get("status") == SECTION_STATUS_APPROVED
-    post_approved = post.get("status") == SECTION_STATUS_APPROVED
-    if post_approved or (content_approved and (theme_approved or not (row.theme or "").strip())):
-        return SECTION_STATUS_APPROVED
-    if content_approved and (row.theme or "").strip() and not theme_approved:
-        return SECTION_STATUS_AWAITING_HEAD
-    if SECTION_STATUS_AWAITING_HEAD in statuses:
-        return SECTION_STATUS_AWAITING_HEAD
-    if _post_section_data_ready(row):
-        return SECTION_STATUS_AWAITING_HEAD
-    return SECTION_STATUS_PENDING
-
-
-def _merge_legacy_comments(sections: dict[str, Any]) -> str | None:
-    parts: list[str] = []
-    for key, label in (("content", "Content"), ("theme", "Theme"), ("post", "Post")):
-        comments = (sections.get(key) or {}).get("comments")
-        if comments and str(comments).strip():
-            parts.append(f"{label}: {comments}")
-    return "\n\n".join(parts) if parts else None
-
-
-def _normalize_sections(sections: dict[str, Any], row: MktContentItem) -> tuple[dict[str, Any], bool]:
-    if not sections:
-        return {}, False
-
-    has_legacy = any(key in sections for key in LEGACY_SECTION_IDS)
+def _resync_video_sections(row: MktContentItem) -> bool:
+    sections = dict(row.video_head_sections or {})
     post = dict(sections.get("post") or _empty_section())
-
-    if not has_legacy:
-        cleaned = {"post": post}
-        return cleaned, set(sections.keys()) != {"post"}
-
-    post["status"] = _merge_legacy_status(sections, row)
-    merged_comments = _merge_legacy_comments(sections)
-    if merged_comments:
-        post["comments"] = merged_comments
-
-    for key in ("content", "theme", "post"):
-        reviewed_at = (sections.get(key) or {}).get("reviewed_at")
-        if reviewed_at:
-            post["reviewed_at"] = reviewed_at
-            post["reviewed_by_user_id"] = (sections.get(key) or {}).get("reviewed_by_user_id")
-            break
-
-    return {"post": post}, True
-
-
-def _resync_linkedin_sections(row: MktContentItem) -> bool:
-    """Normalize legacy multi-section state and promote ready posts to awaiting_head."""
-    if not row.linkedin_head_sections:
-        return False
-
-    sections, changed = _normalize_sections(dict(row.linkedin_head_sections), row)
-    post = dict(sections.get("post") or _empty_section())
-    status = post.get("status")
-    if status == SECTION_STATUS_PENDING and _post_section_data_ready(row):
+    changed = False
+    if post.get("status") == SECTION_STATUS_PENDING and _post_section_data_ready(row):
         post["status"] = SECTION_STATUS_AWAITING_HEAD
+        sections["post"] = post
         changed = True
-    sections["post"] = post
-
     if changed:
-        row.linkedin_head_sections = sections
+        row.video_head_sections = sections
     return changed
 
 
-class LinkedInSectionService:
+class VideoSectionService:
     def __init__(self, db: Session) -> None:
         self._db = db
         self._activity = ActivityLogService(db)
@@ -169,18 +86,18 @@ class LinkedInSectionService:
         self._engine.assert_editable(row)
 
     @staticmethod
-    def is_linkedin_section_workflow(row: MktContentItem) -> bool:
-        return row.content_type == ContentType.SOCIAL_POST.value
+    def is_video_section_workflow(row: MktContentItem) -> bool:
+        return row.content_type == ContentType.VIDEO.value
 
     @staticmethod
-    def uses_linkedin_sections(row: MktContentItem) -> bool:
-        return row.linkedin_head_sections is not None
+    def uses_video_sections(row: MktContentItem) -> bool:
+        return row.video_head_sections is not None
 
     @staticmethod
     def needs_section_backfill(row: MktContentItem) -> bool:
-        if not LinkedInSectionService.is_linkedin_section_workflow(row):
+        if not VideoSectionService.is_video_section_workflow(row):
             return False
-        if row.linkedin_head_sections is not None:
+        if row.video_head_sections is not None:
             return False
         return row.status in {
             ContentStatus.IN_REVIEW.value,
@@ -189,49 +106,38 @@ class LinkedInSectionService:
         }
 
     def ensure_sections_initialized(self, ctx: TenantContext, row: MktContentItem) -> bool:
-        """Backfill or refresh section state for social posts in head review."""
-        if not self.is_linkedin_section_workflow(row):
+        if not self.is_video_section_workflow(row):
             return False
-        if row.linkedin_head_sections is None:
+        if row.video_head_sections is None:
             if not self.needs_section_backfill(row):
                 return False
             self.initialize_on_submit(ctx, row)
             return True
-        return _resync_linkedin_sections(row)
+        return _resync_video_sections(row)
 
     def initialize_on_submit(self, ctx: TenantContext, row: MktContentItem) -> None:
         post = _empty_section()
         if _post_section_data_ready(row):
             post["status"] = SECTION_STATUS_AWAITING_HEAD
-        row.linkedin_head_sections = {"post": post}
+        row.video_head_sections = {"post": post}
         row.workflow_stage = WorkflowStage.HEAD_FINAL_REVIEW.value
         row.updated_by = ctx.user_id
         self._activity.log(
             ctx,
             entity_type="content",
             entity_id=row.id,
-            action="linkedin_submitted_to_head",
+            action="video_submitted_to_head",
             company_id=row.company_id,
         )
 
     def reset_on_resubmit(self, ctx: TenantContext, row: MktContentItem) -> None:
         self.initialize_on_submit(ctx, row)
 
-    def get_sections(self, row: MktContentItem) -> dict[str, dict[str, Any]]:
-        if not row.linkedin_head_sections:
-            return {}
-        sections, _ = _normalize_sections(dict(row.linkedin_head_sections), row)
-        return sections
-
     def pending_head_count(self, row: MktContentItem) -> int:
-        if not row.linkedin_head_sections:
+        if not row.video_head_sections:
             return 0
-        sections, _ = _normalize_sections(dict(row.linkedin_head_sections), row)
-        return sum(
-            1
-            for s in sections.values()
-            if s.get("status") == SECTION_STATUS_AWAITING_HEAD
-        )
+        post = (row.video_head_sections or {}).get("post") or {}
+        return 1 if post.get("status") == SECTION_STATUS_AWAITING_HEAD else 0
 
     def head_review_section(
         self,
@@ -242,8 +148,7 @@ class LinkedInSectionService:
         status: str,
         comments: str | None = None,
     ) -> MktContentItem:
-        section_id = _resolve_section_id(section_id)
-        if section_id not in LINKEDIN_SECTION_IDS:
+        if section_id != "post":
             raise InvalidMarketingState(f"Unknown section: {section_id}")
         if status not in {
             SECTION_STATUS_APPROVED,
@@ -256,19 +161,19 @@ class LinkedInSectionService:
         if row is None or row.is_deleted:
             raise NotFoundException("Content not found")
         self._assert_editable(row)
-        if not self.is_linkedin_section_workflow(row):
-            raise InvalidMarketingState("This post does not use LinkedIn section approval")
-        if not row.linkedin_head_sections:
+        if not self.is_video_section_workflow(row):
+            raise InvalidMarketingState("This post does not use video section approval")
+        if not row.video_head_sections:
             self.ensure_sections_initialized(ctx, row)
-        if not row.linkedin_head_sections:
-            raise InvalidMarketingState("This post does not use LinkedIn section approval")
+        if not row.video_head_sections:
+            raise InvalidMarketingState("This post does not use video section approval")
 
-        if _resync_linkedin_sections(row):
+        if _resync_video_sections(row):
             row.updated_by = ctx.user_id
             self._db.flush()
 
-        sections = dict(row.linkedin_head_sections)
-        section = dict(sections.get(section_id, _empty_section()))
+        sections = dict(row.video_head_sections)
+        section = dict(sections.get("post", _empty_section()))
 
         if section.get("status") == SECTION_STATUS_APPROVED and status == SECTION_STATUS_APPROVED:
             return row
@@ -277,10 +182,8 @@ class LinkedInSectionService:
         if current_status not in {SECTION_STATUS_AWAITING_HEAD, SECTION_STATUS_PENDING}:
             raise InvalidMarketingState("This section is not awaiting head review")
 
-        if not _section_data_ready(row, section_id):
-            raise InvalidMarketingState(
-                "Add topic and company before this post can be reviewed"
-            )
+        if not _post_section_data_ready(row):
+            raise InvalidMarketingState("Add topic and company before this video can be reviewed")
 
         if current_status == SECTION_STATUS_PENDING:
             section["status"] = SECTION_STATUS_AWAITING_HEAD
@@ -289,15 +192,15 @@ class LinkedInSectionService:
         section["comments"] = comments
         section["reviewed_at"] = _utcnow().isoformat()
         section["reviewed_by_user_id"] = str(ctx.user_id)
-        sections[section_id] = section
-        row.linkedin_head_sections = sections
+        sections["post"] = section
+        row.video_head_sections = sections
         row.updated_by = ctx.user_id
 
         if status in {SECTION_STATUS_CHANGES_REQUESTED, SECTION_STATUS_REJECTED}:
             row.status = ContentStatus.CHANGES_REQUIRED.value
             row.workflow_stage = WorkflowStage.CHANGES_REQUIRED.value
             row.rejection_reason = comments
-        elif self._all_sections_approved(row, sections):
+        elif section.get("status") == SECTION_STATUS_APPROVED:
             self._finalize_all_approved(ctx, row)
         else:
             row.status = ContentStatus.IN_REVIEW.value
@@ -307,30 +210,21 @@ class LinkedInSectionService:
             ctx,
             entity_type="content",
             entity_id=content_id,
-            action=f"linkedin_head_{status}_{section_id}",
+            action=f"video_head_{status}_{section_id}",
             details=comments,
             company_id=row.company_id,
         )
         self._db.flush()
         return row
 
-    def _all_sections_approved(self, row: MktContentItem, sections: dict[str, dict[str, Any]]) -> bool:
-        normalized, _ = _normalize_sections(sections, row)
-        for section_id in LINKEDIN_SECTION_IDS:
-            if not _section_data_ready(row, section_id):
-                continue
-            if normalized.get(section_id, {}).get("status") != SECTION_STATUS_APPROVED:
-                return False
-        return True
-
     def _finalize_all_approved(self, ctx: TenantContext, row: MktContentItem) -> None:
         now = _utcnow()
         row.final_head_approved_at = now
-        row.workflow_stage = WorkflowStage.LINKEDIN_HANDLER_REVIEW.value
+        row.workflow_stage = WorkflowStage.VIDEO_EDITOR_REVIEW.value
         row.status = ContentStatus.APPROVED.value
         row.posting_report_status = None
         row.rejection_reason = None
-        row.linkedin_final_draft = {
+        row.video_final_draft = {
             "content_text": None,
             "poster_media_asset_id": None,
             "status": FINAL_DRAFT_STATUS_DRAFT,
@@ -344,7 +238,7 @@ class LinkedInSectionService:
         verification = self._db.scalar(
             select(MktContentVerification).where(
                 MktContentVerification.content_item_id == row.id,
-                MktContentVerification.verifier_role == VerifierRole.LINKEDIN_HANDLER.value,
+                MktContentVerification.verifier_role == VerifierRole.VIDEO_EDITOR.value,
                 MktContentVerification.is_deleted.is_(False),
             )
         )
@@ -356,7 +250,7 @@ class LinkedInSectionService:
                 created_by=ctx.user_id,
                 updated_by=ctx.user_id,
                 content_item_id=row.id,
-                verifier_role=VerifierRole.LINKEDIN_HANDLER.value,
+                verifier_role=VerifierRole.VIDEO_EDITOR.value,
                 overall_status=VerificationOverallStatus.APPROVED.value,
             )
             self._db.add(verification)
@@ -370,29 +264,30 @@ class LinkedInSectionService:
             ctx,
             entity_type="content",
             entity_id=row.id,
-            action="linkedin_head_final_approved",
-            details="Post approved — awaiting final draft from LinkedIn handler",
+            action="video_head_final_approved",
+            details="Video approved — awaiting final render from video editor",
             company_id=row.company_id,
         )
 
     def all_sections_approved(self, row: MktContentItem) -> bool:
-        if not row.linkedin_head_sections:
+        if not row.video_head_sections:
             return False
-        return self._all_sections_approved(row, dict(row.linkedin_head_sections))
+        post = (row.video_head_sections or {}).get("post") or {}
+        return post.get("status") == SECTION_STATUS_APPROVED and _post_section_data_ready(row)
 
     def _final_draft(self, row: MktContentItem) -> dict[str, Any]:
-        if not row.linkedin_final_draft:
+        if not row.video_final_draft:
             return {}
-        return dict(row.linkedin_final_draft)
+        return dict(row.video_final_draft)
 
-    def _assert_handler_owner(self, ctx: TenantContext, row: MktContentItem) -> None:
+    def _assert_editor_owner(self, ctx: TenantContext, row: MktContentItem) -> None:
         if row.created_by_id != ctx.user_id and row.assigned_to_id != ctx.user_id:
-            raise ForbiddenException("Only the LinkedIn handler who owns this post can perform this action")
+            raise ForbiddenException("Only the video editor who owns this content can perform this action")
 
-    def can_handler_submit_final_draft_to_head(self, row: MktContentItem) -> bool:
-        if not self.is_linkedin_section_workflow(row):
+    def can_editor_submit_final_draft_to_head(self, row: MktContentItem) -> bool:
+        if not self.is_video_section_workflow(row):
             return False
-        if row.workflow_stage != WorkflowStage.LINKEDIN_HANDLER_REVIEW.value:
+        if row.workflow_stage != WorkflowStage.VIDEO_EDITOR_REVIEW.value:
             return False
         if row.status != ContentStatus.APPROVED.value:
             return False
@@ -414,11 +309,11 @@ class LinkedInSectionService:
         if row is None or row.is_deleted:
             raise NotFoundException("Content not found")
         self._assert_editable(row)
-        if not self.can_handler_submit_final_draft_to_head(row):
+        if not self.can_editor_submit_final_draft_to_head(row):
             raise InvalidMarketingState(
                 "Complete section approval and prepare your final draft before sending it to marketing head"
             )
-        self._assert_handler_owner(ctx, row)
+        self._assert_editor_owner(ctx, row)
 
         text = (content_text or "").strip() or "NA"
 
@@ -431,13 +326,13 @@ class LinkedInSectionService:
                 )
             )
             if link is None:
-                raise InvalidMarketingState("Upload the final poster image and link it to this post first")
-            if link.asset_role != LINKEDIN_FINAL_POSTER_ROLE:
-                link.asset_role = LINKEDIN_FINAL_POSTER_ROLE
+                raise InvalidMarketingState("Upload the final video file and link it to this content first")
+            if link.asset_role != VIDEO_FINAL_RENDER_ROLE:
+                link.asset_role = VIDEO_FINAL_RENDER_ROLE
                 link.updated_by = ctx.user_id
 
         now = _utcnow()
-        row.linkedin_final_draft = {
+        row.video_final_draft = {
             "content_text": text,
             "poster_media_asset_id": str(poster_media_asset_id) if poster_media_asset_id else None,
             "status": FINAL_DRAFT_STATUS_AWAITING_HEAD,
@@ -447,7 +342,7 @@ class LinkedInSectionService:
             "reviewed_by_user_id": None,
             "comments": None,
         }
-        row.workflow_stage = WorkflowStage.LINKEDIN_FINAL_DRAFT_HEAD_REVIEW.value
+        row.workflow_stage = WorkflowStage.VIDEO_FINAL_DRAFT_HEAD_REVIEW.value
         row.status = ContentStatus.IN_REVIEW.value
         row.updated_by = ctx.user_id
 
@@ -455,7 +350,7 @@ class LinkedInSectionService:
             ctx,
             entity_type="content",
             entity_id=content_id,
-            action="linkedin_final_draft_submitted_to_head",
+            action="video_final_draft_submitted_to_head",
             details=text if text.lower() != "na" else "No copy — NA",
             company_id=row.company_id,
         )
@@ -463,11 +358,11 @@ class LinkedInSectionService:
         return row
 
     def can_head_review_final_draft(self, row: MktContentItem) -> bool:
-        if not self.is_linkedin_section_workflow(row):
+        if not self.is_video_section_workflow(row):
             return False
         draft = self._final_draft(row)
         return (
-            row.workflow_stage == WorkflowStage.LINKEDIN_FINAL_DRAFT_HEAD_REVIEW.value
+            row.workflow_stage == WorkflowStage.VIDEO_FINAL_DRAFT_HEAD_REVIEW.value
             and draft.get("status") == FINAL_DRAFT_STATUS_AWAITING_HEAD
         )
 
@@ -499,11 +394,11 @@ class LinkedInSectionService:
         draft["comments"] = comments
         draft["reviewed_at"] = now.isoformat()
         draft["reviewed_by_user_id"] = str(ctx.user_id)
-        row.linkedin_final_draft = draft
+        row.video_final_draft = draft
         row.updated_by = ctx.user_id
 
         if status == FINAL_DRAFT_STATUS_APPROVED:
-            row.workflow_stage = WorkflowStage.LINKEDIN_HANDLER_REVIEW.value
+            row.workflow_stage = WorkflowStage.VIDEO_EDITOR_REVIEW.value
             row.status = ContentStatus.APPROVED.value
             row.rejection_reason = None
         else:
@@ -515,17 +410,17 @@ class LinkedInSectionService:
             ctx,
             entity_type="content",
             entity_id=content_id,
-            action=f"linkedin_head_final_draft_{status}",
+            action=f"video_head_final_draft_{status}",
             details=comments,
             company_id=row.company_id,
         )
         self._db.flush()
         return row
 
-    def can_handler_send_to_publisher(self, row: MktContentItem) -> bool:
-        if not self.is_linkedin_section_workflow(row):
+    def can_editor_send_to_publisher(self, row: MktContentItem) -> bool:
+        if not self.is_video_section_workflow(row):
             return False
-        if row.workflow_stage != WorkflowStage.LINKEDIN_HANDLER_REVIEW.value:
+        if row.workflow_stage != WorkflowStage.VIDEO_EDITOR_REVIEW.value:
             return False
         if row.status != ContentStatus.APPROVED.value:
             return False
@@ -539,11 +434,11 @@ class LinkedInSectionService:
         if row is None or row.is_deleted:
             raise NotFoundException("Content not found")
         self._assert_editable(row)
-        if not self.can_handler_send_to_publisher(row):
+        if not self.can_editor_send_to_publisher(row):
             raise InvalidMarketingState(
-                "Marketing head must approve your final draft (poster and content) before sending to the publisher"
+                "Marketing head must approve your final draft before sending to the publisher"
             )
-        self._assert_handler_owner(ctx, row)
+        self._assert_editor_owner(ctx, row)
 
         now = _utcnow()
         row.workflow_stage = WorkflowStage.PUBLISHER_REVIEW.value
@@ -553,7 +448,7 @@ class LinkedInSectionService:
         verification = self._db.scalar(
             select(MktContentVerification).where(
                 MktContentVerification.content_item_id == row.id,
-                MktContentVerification.verifier_role == VerifierRole.LINKEDIN_HANDLER.value,
+                MktContentVerification.verifier_role == VerifierRole.VIDEO_EDITOR.value,
                 MktContentVerification.is_deleted.is_(False),
             )
         )
@@ -565,7 +460,7 @@ class LinkedInSectionService:
                 created_by=ctx.user_id,
                 updated_by=ctx.user_id,
                 content_item_id=row.id,
-                verifier_role=VerifierRole.LINKEDIN_HANDLER.value,
+                verifier_role=VerifierRole.VIDEO_EDITOR.value,
                 overall_status=VerificationOverallStatus.SENT_TO_PUBLISHER.value,
                 sent_to_publisher_at=now,
             )
@@ -580,7 +475,7 @@ class LinkedInSectionService:
             ctx,
             entity_type="content",
             entity_id=content_id,
-            action="linkedin_sent_final_draft_to_publisher",
+            action="video_sent_final_draft_to_publisher",
             company_id=row.company_id,
         )
         self._db.flush()
@@ -600,9 +495,9 @@ class LinkedInSectionService:
                     "workflow_stage": row.workflow_stage,
                     "status": row.status,
                     "pending_head_items": 1,
-                    "verifier_role": VerifierRole.LINKEDIN_HANDLER.value,
-                    "linkedin_head_sections": row.linkedin_head_sections,
-                    "linkedin_final_draft": draft,
+                    "verifier_role": VerifierRole.VIDEO_EDITOR.value,
+                    "video_head_sections": row.video_head_sections,
+                    "video_final_draft": draft,
                 }
             )
         return results
@@ -610,11 +505,9 @@ class LinkedInSectionService:
     def list_pending_for_head(self, rows: list[MktContentItem]) -> list[dict[str, Any]]:
         results: list[dict[str, Any]] = []
         for row in rows:
-            if not row.linkedin_head_sections:
+            if not row.video_head_sections:
                 continue
             pending = self.pending_head_count(row)
-            if pending <= 0 and row.status != ContentStatus.IN_REVIEW.value:
-                continue
             if pending <= 0:
                 continue
             results.append(
@@ -625,8 +518,8 @@ class LinkedInSectionService:
                     "workflow_stage": row.workflow_stage,
                     "status": row.status,
                     "pending_head_items": pending,
-                    "verifier_role": VerifierRole.LINKEDIN_HANDLER.value,
-                    "linkedin_head_sections": row.linkedin_head_sections,
+                    "verifier_role": VerifierRole.VIDEO_EDITOR.value,
+                    "video_head_sections": row.video_head_sections,
                 }
             )
         return results

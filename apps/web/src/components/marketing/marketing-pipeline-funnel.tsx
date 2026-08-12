@@ -1,5 +1,7 @@
 import { MARKETING_CONTENT_PIPELINE } from "@/config/marketing";
+import { marketingCard } from "@/lib/marketing-ui";
 import { cn } from "@/lib/utils";
+import { BarChart3 } from "lucide-react";
 
 type StageCount = Record<string, number>;
 
@@ -74,7 +76,16 @@ export function MarketingPipelineFunnel({ counts, loading, onStageClick }: Marke
   const max = Math.max(...values.map((v) => v.count), 1);
 
   return (
-    <section className="rounded-xl border border-border/80 bg-card shadow-sm">
+    <section className={cn(marketingCard, "shadow-md")}>
+      <div className="flex items-center gap-3 border-b border-border/60 bg-gradient-to-r from-muted/35 to-transparent px-4 py-3.5 sm:px-5">
+        <div className="flex size-8 items-center justify-center rounded-lg border border-border/60 bg-background shadow-sm">
+          <BarChart3 className="size-4 text-primary/80" aria-hidden />
+        </div>
+        <div>
+          <h2 className="text-sm font-semibold tracking-tight">Content pipeline</h2>
+          <p className="text-[11px] text-muted-foreground">Live counts across every stage</p>
+        </div>
+      </div>
       <div className="erp-scroll overflow-x-auto px-4 py-4 sm:px-5">
         <ol className="flex min-w-max gap-3 pb-1 sm:min-w-0 sm:grid sm:grid-cols-2 sm:pb-0 lg:grid-cols-4 xl:grid-cols-8">
           {values.map((stage) => {
@@ -89,10 +100,11 @@ export function MarketingPipelineFunnel({ counts, loading, onStageClick }: Marke
                   type={onStageClick ? "button" : undefined}
                   onClick={onStageClick ? () => onStageClick(stage.key) : undefined}
                   className={cn(
-                    "flex h-full min-h-[118px] w-full flex-col rounded-xl border p-3.5 text-left transition-all duration-200",
-                    hasItems ? accent.active : "border-border/60 bg-background/50",
+                    "flex h-full min-h-[118px] w-full flex-col rounded-xl border p-3.5 text-left transition-all duration-300",
+                    hasItems ? accent.active : "border-border/60 bg-background/60",
                     hasItems && accent.ring,
-                    onStageClick && "cursor-pointer hover:-translate-y-0.5 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
+                    onStageClick &&
+                      "cursor-pointer hover:-translate-y-1 hover:shadow-lg hover:ring-2 hover:ring-primary/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
                   )}
                 >
                   <div className="flex items-start justify-between gap-2">

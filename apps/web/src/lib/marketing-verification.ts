@@ -24,8 +24,10 @@ export function inferSubmitterRole(perms: ReturnType<typeof useMarketingPermissi
   if (perms.canPublish && !perms.canVerify) return null;
   if (perms.canVerify && perms.canCampaignUpdate) return "campaign_handler";
   if (perms.canVerify && perms.canChannelUpdate) return "linkedin_handler";
+  if (perms.canVerify && perms.canAssetCreate && !perms.canChannelUpdate && !perms.canCampaignUpdate) {
+    return "video_editor";
+  }
   if (perms.canSubmit) return "creator";
-  if (perms.canVerify && perms.canAssetCreate) return "video_editor";
   return null;
 }
 
@@ -323,6 +325,7 @@ export function isSectionReadyForHeadApproval(
   preferredRole?: string | null,
   contentItem?: {
     body?: string | null;
+    summary?: string | null;
     hashtags?: string | null;
     theme?: string | null;
     font_name?: string | null;
@@ -339,7 +342,7 @@ export function headSectionWaitingMessage(
   preferredRole?: string | null,
   contentItem?: {
     body?: string | null;
-    hashtags?: string | null;
+    summary?: string | null;
     theme?: string | null;
     font_name?: string | null;
     font_size?: string | null;
@@ -370,6 +373,7 @@ export function headSectionDisplayStatus(
   preferredRole?: string | null,
   contentItem?: {
     body?: string | null;
+    summary?: string | null;
     hashtags?: string | null;
     theme?: string | null;
     font_name?: string | null;
@@ -416,6 +420,12 @@ export function isLinkedInVerificationRole(role: string | null | undefined): boo
   return role === "linkedin_handler";
 }
 
+export function isVideoVerificationRole(role: string | null | undefined): boolean {
+  return role === "video_editor";
+}
+
+export const VIDEO_CONTENT_MEDIA_ROLES = ["video_content"] as const;
+
 /** Asset roles that count as uploaded post media for LinkedIn Content approval. */
 export const LINKEDIN_CONTENT_MEDIA_ROLES = ["linkedin_content", "image_dimensions", "content"] as const;
 
@@ -426,14 +436,19 @@ export function linkedInContentMediaReady(
   return LINKEDIN_CONTENT_MEDIA_ROLES.some((role) => roles.has(role));
 }
 
-export function linkedInContentTextReady(body: string | null | undefined, hashtags: string | null | undefined): boolean {
-  return Boolean((body ?? "").trim()) && Boolean((hashtags ?? "").trim());
+export function linkedInContentTextReady(
+  body: string | null | undefined,
+  summary: string | null | undefined,
+  hashtags?: string | null | undefined,
+): boolean {
+  return Boolean((body ?? "").trim()) && (Boolean((summary ?? "").trim()) || Boolean((hashtags ?? "").trim()));
 }
 
 export function isSectionDataReady(
   sectionId: HeadReviewSectionId,
   contentItem: {
     body?: string | null;
+    summary?: string | null;
     hashtags?: string | null;
     theme?: string | null;
     font_name?: string | null;
@@ -442,7 +457,7 @@ export function isSectionDataReady(
   },
 ): boolean {
   if (sectionId === "content") {
-    return linkedInContentTextReady(contentItem.body, contentItem.hashtags);
+    return linkedInContentTextReady(contentItem.body, contentItem.summary, contentItem.hashtags);
   }
   if (sectionId === "theme") {
     return Boolean((contentItem.theme ?? "").trim());
@@ -494,6 +509,7 @@ export function getHeadReviewTargets(
   preferredRole?: string | null,
   contentItem?: {
     body?: string | null;
+    summary?: string | null;
     hashtags?: string | null;
     theme?: string | null;
     font_name?: string | null;
@@ -522,7 +538,7 @@ export function getHeadReviewTargets(
   ];
 }
 
-export const LINKEDIN_HEAD_SECTION_KEYS = ["linkedin_content", "theme", "fonts"] as const;
+export const LINKEDIN_HEAD_SECTION_KEYS = ["linkedin_content", "post"] as const;
 
 export async function submitLinkedInSectionsToHead(
   contentId: string,

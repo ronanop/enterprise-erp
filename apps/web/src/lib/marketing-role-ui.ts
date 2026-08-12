@@ -22,7 +22,15 @@ export function detectMarketingPersona(
   if (perms.canVerify && perms.canChannelUpdate && !perms.canCampaignUpdate) return "linkedin_handler";
   if (perms.canVerify && perms.canCampaignUpdate) return "campaign_handler";
   if (perms.canPublish && !perms.canVerify) return "publisher";
-  if (perms.canVerify && perms.canAssetCreate) return "video_editor";
+  if (
+    perms.canVerify &&
+    perms.canAssetCreate &&
+    !perms.canChannelUpdate &&
+    !perms.canCampaignUpdate &&
+    !perms.canCampaignCreate
+  ) {
+    return "video_editor";
+  }
   if (perms.canSubmit || perms.canCreate) return "creator";
   return "default";
 }
@@ -38,28 +46,33 @@ export function isLinkedInHandler(
   return detectMarketingPersona(perms) === "linkedin_handler";
 }
 
+export function isVideoEditor(
+  perms: MarketingNavAccessInput & {
+    canVerify?: boolean;
+    canAssetCreate?: boolean;
+    canChannelUpdate?: boolean;
+    canCampaignUpdate?: boolean;
+    canApprove?: boolean;
+  },
+): boolean {
+  return detectMarketingPersona(perms) === "video_editor";
+}
+
 const NAV_LABELS: Partial<Record<MarketingPersona, Partial<Record<string, string>>>> = {
   linkedin_handler: {
     "/marketing/pipeline": "Overview",
-    "/marketing/workflow": "Checklist",
     "/marketing/content": "LinkedIn posts",
-    "/marketing/calendar": "Schedule",
-    "/marketing/channels": "LinkedIn account",
-    "/marketing/publish-log": "Published posts",
-    "/marketing/reports": "Insights",
+  },
+  video_editor: {
+    "/marketing/pipeline": "Overview",
+    "/marketing/content": "Video content",
   },
   head: {
     "/marketing/pipeline": "Overview",
-    "/marketing/workflow": "Workflow",
     "/marketing/content": "All content",
     "/marketing/approvals": "Approvals",
     "/marketing/campaigns": "Campaigns",
-    "/marketing/calendar": "Calendar",
-    "/marketing/channels": "Channels",
-    "/marketing/publish-log": "Publish log",
     "/marketing/archive": "Archive",
-    "/marketing/assets": "Assets",
-    "/marketing/reports": "Reports",
   },
 };
 

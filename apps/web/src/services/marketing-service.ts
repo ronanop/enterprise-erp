@@ -93,6 +93,18 @@ export type MarketingContentItem = {
     submitted_at?: string | null;
     reviewed_at?: string | null;
   } | null;
+  video_head_sections?: Record<
+    string,
+    { status: string; comments?: string | null; reviewed_at?: string | null }
+  > | null;
+  video_final_draft?: {
+    content_text?: string | null;
+    poster_media_asset_id?: string | null;
+    status?: string;
+    comments?: string | null;
+    submitted_at?: string | null;
+    reviewed_at?: string | null;
+  } | null;
 };
 
 export type MarketingPublication = {
@@ -499,11 +511,14 @@ export function headReviewVerificationItem(
 
 export function linkedInHeadReviewSection(
   contentId: string,
-  body: { section: string; status: string; comments?: string },
+  body: { section?: string; status: string; comments?: string },
 ) {
   return unwrap<MarketingContentItem>(`${API}/content-items/${contentId}/linkedin/head-review-section`, {
     method: "POST",
-    body,
+    body: {
+      ...body,
+      section: body.section ?? "post",
+    },
   });
 }
 
@@ -528,6 +543,45 @@ export function linkedInHeadReviewFinalDraft(
   body: { status: string; comments?: string },
 ) {
   return unwrap<MarketingContentItem>(`${API}/content-items/${contentId}/linkedin/head-review-final-draft`, {
+    method: "POST",
+    body,
+  });
+}
+
+export function videoHeadReviewSection(
+  contentId: string,
+  body: { section?: string; status: string; comments?: string },
+) {
+  return unwrap<MarketingContentItem>(`${API}/content-items/${contentId}/video/head-review-section`, {
+    method: "POST",
+    body: {
+      ...body,
+      section: body.section ?? "post",
+    },
+  });
+}
+
+export function videoSendToPublisher(contentId: string) {
+  return unwrap<MarketingContentItem>(`${API}/content-items/${contentId}/video/send-to-publisher`, {
+    method: "POST",
+  });
+}
+
+export function videoSubmitFinalDraftToHead(
+  contentId: string,
+  body: { content_text?: string | null; poster_media_asset_id?: string | null },
+) {
+  return unwrap<MarketingContentItem>(`${API}/content-items/${contentId}/video/submit-final-draft-to-head`, {
+    method: "POST",
+    body,
+  });
+}
+
+export function videoHeadReviewFinalDraft(
+  contentId: string,
+  body: { status: string; comments?: string },
+) {
+  return unwrap<MarketingContentItem>(`${API}/content-items/${contentId}/video/head-review-final-draft`, {
     method: "POST",
     body,
   });
@@ -639,7 +693,11 @@ export function canUserReportPosting(
   perms: { canSubmit: boolean; canPublish: boolean; canApprove?: boolean; canVerify?: boolean },
 ): boolean {
   if (perms.canApprove) return false;
+  // LinkedIn / video section workflows: publisher marks published — not this report flow.
   if (item.content_type === "social_post" && item.linkedin_head_sections) {
+    return false;
+  }
+  if (item.content_type === "video" && item.video_head_sections) {
     return false;
   }
   const postReady =

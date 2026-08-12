@@ -76,6 +76,7 @@ class ContentItemService:
     def get_content(self, ctx: TenantContext, row_id: UUID) -> ContentItemResponse:
         row = self._get(ctx, row_id)
         from modules.marketing.service.linkedin_section_service import LinkedInSectionService
+        from modules.marketing.service.video_section_service import VideoSectionService
 
         linkedin_svc = LinkedInSectionService(self._repo.db)
         if linkedin_svc.ensure_sections_initialized(ctx, row):
@@ -84,6 +85,16 @@ class ContentItemService:
                 row_id,
                 linkedin_head_sections=row.linkedin_head_sections,
                 linkedin_final_draft=row.linkedin_final_draft,
+                workflow_stage=row.workflow_stage,
+            )
+        video_svc = VideoSectionService(self._repo.db)
+        row = self._get(ctx, row_id)
+        if video_svc.ensure_sections_initialized(ctx, row):
+            row = self._repo.update(
+                ctx,
+                row_id,
+                video_head_sections=row.video_head_sections,
+                video_final_draft=row.video_final_draft,
                 workflow_stage=row.workflow_stage,
             )
         return ContentItemResponse.model_validate(row)
@@ -122,25 +133,54 @@ class ContentItemService:
                 role == VerifierRole.LINKEDIN_HANDLER.value
                 or row.content_type == ContentType.SOCIAL_POST.value
             )
+            uses_video = (
+                role == VerifierRole.VIDEO_EDITOR.value
+                or row.content_type == ContentType.VIDEO.value
+            )
             if uses_linkedin:
                 from modules.marketing.service.linkedin_section_service import LinkedInSectionService
 
                 LinkedInSectionService(self._repo.db).reset_on_resubmit(ctx, row)
+            elif uses_video:
+                from modules.marketing.service.video_section_service import VideoSectionService
+
+                VideoSectionService(self._repo.db).reset_on_resubmit(ctx, row)
             else:
                 verification.reset_verifications(ctx, row_id)
         uses_linkedin_sections = (
             role == VerifierRole.LINKEDIN_HANDLER.value
             or row.content_type == ContentType.SOCIAL_POST.value
         )
+        uses_video_sections = (
+            role == VerifierRole.VIDEO_EDITOR.value
+            or row.content_type == ContentType.VIDEO.value
+        )
         if uses_linkedin_sections:
-            from modules.marketing.service.linkedin_section_service import LinkedInSectionService
+            from modules.marketing.service.linkedin_section_service import (
+                LinkedInSectionService,
+                _resync_linkedin_sections,
+            )
 
-            LinkedInSectionService(self._repo.db).initialize_on_submit(ctx, row)
+            linkedin_svc = LinkedInSectionService(self._repo.db)
+            linkedin_svc.initialize_on_submit(ctx, row)
+            _resync_linkedin_sections(row)
             self._repo.update(
                 ctx,
                 row_id,
                 linkedin_head_sections=row.linkedin_head_sections,
                 linkedin_final_draft=row.linkedin_final_draft,
+                workflow_stage=row.workflow_stage,
+            )
+        elif uses_video_sections:
+            from modules.marketing.service.video_section_service import VideoSectionService
+
+            video_svc = VideoSectionService(self._repo.db)
+            video_svc.initialize_on_submit(ctx, row)
+            self._repo.update(
+                ctx,
+                row_id,
+                video_head_sections=row.video_head_sections,
+                video_final_draft=row.video_final_draft,
                 workflow_stage=row.workflow_stage,
             )
         else:

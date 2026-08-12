@@ -102,7 +102,6 @@ export function ServiceRequestTicketListPage() {
     <div className="space-y-4">
       <PageHeader
         title="Service Request Tickets"
-        description="Create, manage, and track service request tickets per SOP workflow."
         actions={
           <div className="flex flex-wrap gap-2">
             <Button type="button" variant="outline" size="sm" onClick={() => exportTicketsCsv(sorted)}>
@@ -143,9 +142,6 @@ export function ServiceRequestTicketListPage() {
               </Button>
             ) : null}
           </div>
-          <p className="mt-2 text-xs text-muted-foreground">
-            Webhook: POST {emailStatus.webhook_path} with header <code className="rounded bg-muted px-1">X-Email-Webhook-Secret</code>
-          </p>
         </div>
       ) : null}
 

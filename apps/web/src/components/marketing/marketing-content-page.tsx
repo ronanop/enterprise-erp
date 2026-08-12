@@ -1,23 +1,27 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { Plus, RefreshCw } from "lucide-react";
+import { Building2, ImageIcon, Palette, PenLine, Plus, RefreshCw, Sparkles, type LucideIcon } from "lucide-react";
 
 import { FinanceStatusBadge } from "@/components/finance/finance-status-badge";
 import { MarketingBannerUploadField } from "@/components/marketing/marketing-banner-upload-field";
 import { MarketingContentReviewDialog } from "@/components/marketing/marketing-content-review-dialog";
-import { PageHeader } from "@/components/layout/page-header";
+import { MarketingReviewSectionHeader } from "@/components/marketing/marketing-review-section-header";
+import { MarketingPageHeader } from "@/components/marketing/marketing-page-header";
+import { marketingCard, marketingPage, marketingTableHead, marketingTableRow, marketingTableShell } from "@/lib/marketing-ui";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useMarketingPermissions } from "@/hooks/use-marketing-permissions";
+import { cn } from "@/lib/utils";
 import {
   BANNER_VERIFICATION_ITEM_KEY,
   isBannerContentType,
   uploadContentAssetForItem,
 } from "@/lib/marketing-content-upload";
 import { isLinkedInHandler, isMarketingHead } from "@/lib/marketing-verification";
+import { isVideoEditor } from "@/lib/marketing-role-ui";
 import {
   canLinkedInHandlerSendToPublisher,
   canLinkedInHandlerSubmitFinalDraftToHead,
@@ -29,7 +33,15 @@ import {
   linkedInPublishStatusLabel,
   usesLinkedInSectionWorkflow,
 } from "@/lib/linkedin-section-approval";
-import { cn } from "@/lib/utils";
+import {
+  canMarkVideoAsPublished,
+  canVideoEditorSendToPublisher,
+  canVideoEditorSubmitFinalDraftToHead,
+  hasVideoSectionApproval,
+  usesVideoSectionWorkflow,
+  videoEditorAwaitingPublisher,
+  videoPublishStatusLabel,
+} from "@/lib/video-section-approval";
 import { apiClient } from "@/services/api-client";
 import {
   ApiClientError,
@@ -52,23 +64,62 @@ const CONTENT_KINDS = [
   { value: "ad_creative", label: "Banner / ad creative" },
 ] as const;
 
-const LINKEDIN_DRAFT_TABS = [
-  { id: "content", label: "Content" },
-  { id: "theme", label: "Theme" },
-  { id: "fonts", label: "Fonts" },
-] as const;
+function titleFromTopic(topic: string): string {
+  const trimmed = topic.trim();
+  const firstLine = trimmed.split(/\r?\n/)[0] ?? trimmed;
+  return firstLine.length > 80 ? `${firstLine.slice(0, 77)}...` : firstLine;
+}
 
-type LinkedInDraftSection = (typeof LINKEDIN_DRAFT_TABS)[number]["id"];
+const linkedInFieldClass =
+  "w-full rounded-lg border border-input bg-background px-3 py-2.5 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/20";
+
+function LinkedInDraftFormField({
+  icon: Icon,
+  label,
+  required = false,
+  highlight = false,
+  children,
+}: {
+  icon: LucideIcon;
+  label: string;
+  required?: boolean;
+  highlight?: boolean;
+  children: ReactNode;
+}) {
+  return (
+    <div className="rounded-lg border border-border/50 bg-background/60 p-3.5 shadow-sm">
+      <div className="mb-2.5 flex items-center gap-2">
+        <span
+          className={cn(
+            "flex size-7 shrink-0 items-center justify-center rounded-md border",
+            highlight ? "border-primary/20 bg-primary/5" : "border-border/60 bg-muted/40",
+          )}
+        >
+          <Icon className={cn("size-3.5", highlight ? "text-primary" : "text-muted-foreground")} />
+        </span>
+        <span className="text-[11px] font-semibold uppercase tracking-[0.12em] text-foreground/80">
+          {label}
+          {required ? <span className="ml-1 text-destructive">*</span> : null}
+        </span>
+      </div>
+      {children}
+    </div>
+  );
+}
 
 export function MarketingContentPage() {
   const searchParams = useSearchParams();
   const perms = useMarketingPermissions();
   const linkedInMode = isLinkedInHandler(perms);
-  const canCreatePost = perms.canCreate && !isMarketingHead(perms);
-  const canSendToHead = perms.canSubmit || (linkedInMode && perms.canVerify);
+  const videoEditorMode = isVideoEditor(perms);
+  const sectionWorkflowMode = linkedInMode || videoEditorMode;
+  const canCreatePost = (perms.canCreate || sectionWorkflowMode) && !isMarketingHead(perms);
+  const canSendToHead = perms.canSubmit || (sectionWorkflowMode && perms.canVerify);
   const contentKinds = linkedInMode
     ? CONTENT_KINDS.filter((k) => k.value === "social_post")
-    : CONTENT_KINDS;
+    : videoEditorMode
+      ? CONTENT_KINDS.filter((k) => k.value === "video")
+      : CONTENT_KINDS;
   const [rows, setRows] = useState<MarketingContentItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -82,11 +133,8 @@ export function MarketingContentPage() {
   const [branchId, setBranchId] = useState("");
   const [bannerFile, setBannerFile] = useState<File | null>(null);
   const [bannerPreview, setBannerPreview] = useState<string | null>(null);
-  const [linkedInSection, setLinkedInSection] = useState<LinkedInDraftSection>("content");
+  const [companyName, setCompanyName] = useState("");
   const [theme, setTheme] = useState("");
-  const [fontName, setFontName] = useState("");
-  const [fontSize, setFontSize] = useState("");
-  const [colorCodes, setColorCodes] = useState("");
   const [postMediaFile, setPostMediaFile] = useState<File | null>(null);
   const [postMediaPreview, setPostMediaPreview] = useState<string | null>(null);
   const [postMediaIsVideo, setPostMediaIsVideo] = useState(false);
@@ -103,7 +151,7 @@ export function MarketingContentPage() {
           q: q || undefined,
           status: status || undefined,
           page_size: 200,
-          mine: linkedInMode || undefined,
+          mine: sectionWorkflowMode || undefined,
         })).filter(
           (row) =>
             status === "archived" ||
@@ -117,7 +165,7 @@ export function MarketingContentPage() {
     } finally {
       setLoading(false);
     }
-  }, [q, status, linkedInMode]);
+  }, [q, status, sectionWorkflowMode]);
 
   useEffect(() => {
     void load();
@@ -148,11 +196,8 @@ export function MarketingContentPage() {
     setBannerFile(null);
     if (bannerPreview) URL.revokeObjectURL(bannerPreview);
     setBannerPreview(null);
-    setLinkedInSection("content");
+    setCompanyName("");
     setTheme("");
-    setFontName("");
-    setFontSize("");
-    setColorCodes("");
     setPostMediaFile(null);
     if (postMediaPreview) URL.revokeObjectURL(postMediaPreview);
     setPostMediaPreview(null);
@@ -173,33 +218,44 @@ export function MarketingContentPage() {
     setPostMediaPreview(URL.createObjectURL(file));
   };
 
+  const linkedInFormReady = Boolean(body.trim() && companyName.trim() && branchId);
+  const genericFormReady = Boolean(title.trim() && branchId);
+
   const onCreate = async (submitAfterCreate: boolean) => {
-    if (!title.trim() || !branchId) return;
+    if (linkedInMode || videoEditorMode) {
+      if (!body.trim() || !companyName.trim() || !branchId) return;
+    } else if (!title.trim() || !branchId) {
+      return;
+    }
     const isBanner = isBannerContentType(contentType);
     if (submitAfterCreate && isBanner && !bannerFile) {
       setError("Upload a banner image before submitting for verification.");
       return;
     }
-    if (submitAfterCreate && !isBanner && !body.trim()) {
+    if (submitAfterCreate && !linkedInMode && !isBanner && !body.trim()) {
       setError("Add post text before submitting for verification.");
       return;
     }
     setCreating(true);
     setError(null);
     try {
-      const payload: Record<string, unknown> = {
-        title: title.trim(),
-        branch_id: branchId,
-        content_type: contentType,
-        body: body.trim() || null,
-        hashtags: hashtags.trim() || null,
-      };
-      if (linkedInMode) {
-        if (theme.trim()) payload.theme = theme.trim();
-        if (fontName.trim()) payload.font_name = fontName.trim();
-        if (fontSize.trim()) payload.font_size = fontSize.trim();
-        if (colorCodes.trim()) payload.color_codes = colorCodes.trim();
-      }
+      const payload: Record<string, unknown> =
+        linkedInMode || videoEditorMode
+          ? {
+              branch_id: branchId,
+              content_type: linkedInMode ? "social_post" : "video",
+              title: titleFromTopic(body),
+              body: body.trim(),
+              summary: companyName.trim(),
+              theme: theme.trim() || null,
+            }
+          : {
+            title: title.trim(),
+            branch_id: branchId,
+            content_type: contentType,
+            body: body.trim() || null,
+            hashtags: hashtags.trim() || null,
+          };
       const created = await createContentItem(payload);
       if (isBanner && bannerFile) {
         await uploadContentAssetForItem(
@@ -209,12 +265,12 @@ export function MarketingContentPage() {
           BANNER_VERIFICATION_ITEM_KEY,
         );
       }
-      if (linkedInMode && postMediaFile) {
+      if ((linkedInMode || videoEditorMode) && postMediaFile) {
         await uploadContentAssetForItem(
           created.id,
           created.company_id,
           postMediaFile,
-          "linkedin_content",
+          linkedInMode ? "linkedin_content" : "video_content",
           postMediaIsVideo ? "video" : "image",
         );
       }
@@ -238,9 +294,14 @@ export function MarketingContentPage() {
   };
 
   return (
-    <div className="space-y-4">
-      <PageHeader
-        title={linkedInMode ? "LinkedIn posts" : "Content"}
+    <div className={marketingPage}>
+      <MarketingPageHeader
+        title={linkedInMode ? "LinkedIn posts" : videoEditorMode ? "Video content" : "Content"}
+        description={
+          sectionWorkflowMode
+            ? "Create drafts, respond to head feedback, and move work through the pipeline."
+            : "Create and submit content for team verification."
+        }
         actions={
           <div className="flex flex-wrap gap-2">
             <Link
@@ -257,13 +318,10 @@ export function MarketingContentPage() {
               <Button
                 type="button"
                 size="sm"
-                onClick={() => {
-                  setLinkedInSection("content");
-                  setShowForm((v) => !v);
-                }}
+                onClick={() => setShowForm((v) => !v)}
               >
                 <Plus className="size-3.5" />
-                {linkedInMode ? "New LinkedIn draft" : "New post"}
+                {linkedInMode ? "New LinkedIn draft" : videoEditorMode ? "New video draft" : "New post"}
               </Button>
             ) : null}
           </div>
@@ -271,111 +329,90 @@ export function MarketingContentPage() {
       />
 
       {showForm && canCreatePost ? (
-        <div className="space-y-3 rounded-xl border border-border/80 bg-card p-4">
-          {linkedInMode ? (
-            <div className="flex flex-wrap gap-2">
-              {LINKEDIN_DRAFT_TABS.map((tab) => (
+        linkedInMode || videoEditorMode ? (
+          <section className={marketingCard}>
+            <MarketingReviewSectionHeader
+              tone="preview"
+              icon={Sparkles}
+              title={linkedInMode ? "New LinkedIn post draft" : "New video draft"}
+              description="Add topic, company, theme, and optional media before sending to marketing head"
+            />
+
+            <div className="space-y-3 p-4">
+              <LinkedInDraftFormField icon={PenLine} label="Topic" required highlight>
+                <textarea
+                  value={body}
+                  onChange={(e) => setBody(e.target.value)}
+                  rows={4}
+                  placeholder="What is this post about?"
+                  className={linkedInFieldClass}
+                />
+              </LinkedInDraftFormField>
+
+              <LinkedInDraftFormField icon={Building2} label="Company" required highlight>
+                <Input
+                  value={companyName}
+                  onChange={(e) => setCompanyName(e.target.value)}
+                  placeholder="Which company is this post for?"
+                  className="h-10 rounded-lg shadow-sm"
+                />
+              </LinkedInDraftFormField>
+
+              <LinkedInDraftFormField icon={Palette} label="Theme">
+                <textarea
+                  value={theme}
+                  onChange={(e) => setTheme(e.target.value)}
+                  rows={4}
+                  placeholder="Describe the mood, layout, and visual direction for the post image or video (e.g. minimal corporate, product launch, festive)."
+                  className={linkedInFieldClass}
+                />
+              </LinkedInDraftFormField>
+
+              <LinkedInDraftFormField icon={ImageIcon} label="Photo or video">
+                <MarketingBannerUploadField
+                  disabled={creating}
+                  previewUrl={postMediaPreview}
+                  previewIsVideo={postMediaIsVideo}
+                  accept="image/*,video/*"
+                  title="Upload media"
+                  chooseLabel="Choose image or video"
+                  hint="Upload the visual that will accompany this LinkedIn post (image or short video)."
+                  onFileSelected={onPostMediaSelected}
+                />
+              </LinkedInDraftFormField>
+            </div>
+
+            <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border/60 bg-muted/10 px-4 py-3.5">
+              <p className="text-xs text-muted-foreground">
+                <span className="text-destructive">*</span> Topic and company are required
+              </p>
+              <div className="flex flex-wrap gap-2">
                 <Button
-                  key={tab.id}
                   type="button"
                   size="sm"
-                  variant={linkedInSection === tab.id ? "default" : "outline"}
-                  className={cn(linkedInSection !== tab.id && "bg-background")}
-                  onClick={() => setLinkedInSection(tab.id)}
+                  variant="outline"
+                  className="bg-background"
+                  onClick={() => void onCreate(false)}
+                  disabled={!linkedInFormReady || creating}
                 >
-                  {tab.label}
+                  Save as draft
                 </Button>
-              ))}
+                {canSendToHead ? (
+                  <Button
+                    type="button"
+                    size="sm"
+                    onClick={() => void onCreate(true)}
+                    disabled={!linkedInFormReady || creating}
+                  >
+                    Send to marketing head
+                  </Button>
+                ) : null}
+              </div>
             </div>
-          ) : null}
-          <p className="text-sm font-medium">
-            {linkedInMode ? "New LinkedIn post draft" : "New content for verification"}
-          </p>
-          {linkedInMode ? (
-            <>
-              {linkedInSection === "content" ? (
-                <div className="space-y-3">
-                  <div>
-                    <label className="mb-1 block text-xs text-muted-foreground">Post title</label>
-                    <Input
-                      value={title}
-                      onChange={(e) => setTitle(e.target.value)}
-                      placeholder="e.g. Q1 product launch — LinkedIn"
-                    />
-                  </div>
-                  <div>
-                    <label className="mb-1 block text-xs text-muted-foreground">LinkedIn post copy</label>
-                    <textarea
-                      value={body}
-                      onChange={(e) => setBody(e.target.value)}
-                      rows={5}
-                      placeholder="Write your LinkedIn post. Marketing head will review before publishing."
-                      className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                    />
-                  </div>
-                  <div>
-                    <label className="mb-1 block text-xs text-muted-foreground">Hashtags</label>
-                    <Input
-                      value={hashtags}
-                      onChange={(e) => setHashtags(e.target.value)}
-                      placeholder="#launch #product #B2B"
-                    />
-                  </div>
-                  <MarketingBannerUploadField
-                    disabled={creating}
-                    previewUrl={postMediaPreview}
-                    previewIsVideo={postMediaIsVideo}
-                    accept="image/*,video/*"
-                    title="Post image or video"
-                    chooseLabel="Choose image or video"
-                    hint="Upload the visual that will accompany this LinkedIn post (image or short video)."
-                    onFileSelected={onPostMediaSelected}
-                  />
-                </div>
-              ) : null}
-              {linkedInSection === "theme" ? (
-                <div>
-                  <label className="mb-1 block text-xs text-muted-foreground">Visual theme</label>
-                  <textarea
-                    value={theme}
-                    onChange={(e) => setTheme(e.target.value)}
-                    rows={5}
-                    placeholder="Describe the mood, layout, and visual direction for the post image or video (e.g. minimal corporate, product launch, festive)."
-                    className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                  />
-                </div>
-              ) : null}
-              {linkedInSection === "fonts" ? (
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <div className="sm:col-span-2">
-                    <label className="mb-1 block text-xs text-muted-foreground">Font family</label>
-                    <Input
-                      value={fontName}
-                      onChange={(e) => setFontName(e.target.value)}
-                      placeholder="e.g. Inter, Helvetica Neue"
-                    />
-                  </div>
-                  <div>
-                    <label className="mb-1 block text-xs text-muted-foreground">Font size</label>
-                    <Input
-                      value={fontSize}
-                      onChange={(e) => setFontSize(e.target.value)}
-                      placeholder="e.g. 24px headline, 16px body"
-                    />
-                  </div>
-                  <div>
-                    <label className="mb-1 block text-xs text-muted-foreground">Color codes</label>
-                    <Input
-                      value={colorCodes}
-                      onChange={(e) => setColorCodes(e.target.value)}
-                      placeholder="#0A66C2, #FFFFFF"
-                    />
-                  </div>
-                </div>
-              ) : null}
-            </>
-          ) : (
-            <>
+          </section>
+        ) : (
+        <div className="space-y-3 rounded-xl border border-border/80 bg-card p-4">
+          <p className="text-sm font-medium">New content for verification</p>
               <div className="grid gap-3 sm:grid-cols-2">
                 <div>
                   <label className="mb-1 block text-xs text-muted-foreground">Content type</label>
@@ -435,32 +472,36 @@ export function MarketingContentPage() {
                 <label className="mb-1 block text-xs text-muted-foreground">Hashtags</label>
                 <Input value={hashtags} onChange={(e) => setHashtags(e.target.value)} placeholder="#launch #product #B2B" />
               </div>
-            </>
-          )}
           <div className="flex flex-wrap gap-2">
             <Button
               type="button"
               size="sm"
               variant="outline"
               onClick={() => void onCreate(false)}
-              disabled={!branchId || creating}
+              disabled={!genericFormReady || creating}
             >
               Save as draft
             </Button>
             {canSendToHead ? (
-              <Button type="button" size="sm" onClick={() => void onCreate(true)} disabled={!branchId || creating}>
-                {linkedInMode ? "Send to marketing head" : "Submit for verification"}
+              <Button
+                type="button"
+                size="sm"
+                onClick={() => void onCreate(true)}
+                disabled={!genericFormReady || creating}
+              >
+                Submit for verification
               </Button>
             ) : null}
           </div>
         </div>
+        )
       ) : null}
 
       <div className="flex flex-wrap gap-2">
         <Input
           value={q}
           onChange={(e) => setQ(e.target.value)}
-          placeholder={linkedInMode ? "Search your LinkedIn posts…" : "Search content…"}
+          placeholder={sectionWorkflowMode ? (linkedInMode ? "Search your LinkedIn posts…" : "Search your videos…") : "Search content…"}
           className="max-w-xs"
         />
         <select
@@ -479,9 +520,9 @@ export function MarketingContentPage() {
 
       {error ? <p className="text-sm text-destructive">{error}</p> : null}
 
-      <div className="overflow-x-auto rounded-xl border border-border/80">
+      <div className={`${marketingTableShell} overflow-x-auto`}>
         <table className="w-full min-w-[900px] text-left text-sm">
-          <thead className="border-b border-border/70 bg-muted/30 text-xs uppercase text-muted-foreground">
+          <thead className={marketingTableHead}>
             <tr>
               <th className="px-3 py-2">Number</th>
               <th className="px-3 py-2">Title</th>
@@ -508,7 +549,11 @@ export function MarketingContentPage() {
             {!loading && rows.length === 0 ? (
               <tr>
                 <td colSpan={6} className="px-3 py-8 text-center text-muted-foreground">
-                  {linkedInMode ? "No LinkedIn drafts yet. Create one and send it to marketing head for approval." : "No content items yet."}
+                  {linkedInMode
+                    ? "No LinkedIn drafts yet. Create one and send it to marketing head for approval."
+                    : videoEditorMode
+                      ? "No video drafts yet. Create one and send it to marketing head for approval."
+                      : "No content items yet."}
                 </td>
               </tr>
             ) : null}
@@ -538,17 +583,30 @@ function contentActionLabel(
   }
 
   const linkedInMode = isLinkedInHandler(perms);
+  const videoEditorMode = isVideoEditor(perms);
 
   if (canLinkedInHandlerSubmitFinalDraftToHead(row, perms.userId)) {
+    return { label: "Send final draft to head", variant: "default" };
+  }
+  if (canVideoEditorSubmitFinalDraftToHead(row, perms.userId)) {
     return { label: "Send final draft to head", variant: "default" };
   }
   if (canLinkedInHandlerSendToPublisher(row, perms.userId)) {
     return { label: "Send to publisher", variant: "default" };
   }
+  if (canVideoEditorSendToPublisher(row, perms.userId)) {
+    return { label: "Send to publisher", variant: "default" };
+  }
   if (canMarkLinkedInAsPublished(perms, row)) {
     return { label: "Mark as published", variant: "default" };
   }
+  if (canMarkVideoAsPublished(perms, row)) {
+    return { label: "Mark as published", variant: "default" };
+  }
   if (linkedInHandlerAwaitingPublisher(row) && linkedInMode) {
+    return { label: "View status", variant: "outline" };
+  }
+  if (videoEditorAwaitingPublisher(row) && videoEditorMode) {
     return { label: "View status", variant: "outline" };
   }
 
@@ -568,26 +626,33 @@ function contentActionLabel(
   ) {
     return { label: "Approve sections", variant: "default", href: `/marketing/approvals/${row.id}` };
   }
-  if (perms.canApproveMedia && row.status === "in_review" && !usesLinkedInSectionWorkflow(row)) {
+  if (
+    perms.canApprove &&
+    usesVideoSectionWorkflow(row) &&
+    (row.status === "in_review" || row.status === "changes_required")
+  ) {
+    return { label: "Approve sections", variant: "default", href: `/marketing/approvals/${row.id}` };
+  }
+  if (perms.canApproveMedia && row.status === "in_review" && !usesLinkedInSectionWorkflow(row) && !usesVideoSectionWorkflow(row)) {
     return { label: "Review & feedback", variant: "default" };
   }
   if (perms.canApprove && row.status === "media_approved") {
     return { label: "Head approve", variant: "default" };
   }
   if (perms.canPublish && (row.status === "approved" || row.status === "scheduled")) {
-    if (hasLinkedInSectionApproval(row)) {
+    if (hasLinkedInSectionApproval(row) || hasVideoSectionApproval(row)) {
       return null;
     }
     return { label: "Post & confirm", variant: "default" };
   }
   if (
-    perms.canCreate &&
+    (perms.canCreate || videoEditorMode || linkedInMode) &&
     (row.status === "draft" || row.status === "changes_required") &&
     perms.userId &&
     row.created_by_id === perms.userId
   ) {
     return {
-      label: linkedInMode ? "Send for approval" : "Edit & submit",
+      label: linkedInMode || videoEditorMode ? "Send for approval" : "Edit & submit",
       variant: "default",
     };
   }
@@ -595,7 +660,8 @@ function contentActionLabel(
     perms.canApproveMedia ||
     perms.canApprove ||
     perms.canPublish ||
-    perms.canSubmit
+    perms.canSubmit ||
+    perms.canVerify
   ) {
     return { label: "Open", variant: "outline" };
   }
@@ -630,7 +696,7 @@ function ContentRow({
 
   return (
     <>
-      <tr className="border-b border-border/50">
+      <tr className={marketingTableRow}>
         <td className="px-3 py-2 font-mono text-xs">{row.content_number}</td>
         <td className="px-3 py-2">
           <button type="button" className="font-medium text-left hover:underline" onClick={() => void loadTimeline()}>
@@ -640,8 +706,10 @@ function ContentRow({
         <td className="px-3 py-2">{formatMarketingStatus(row.content_type)}</td>
         <td className="px-3 py-2">
           <FinanceStatusBadge status={row.status} />
-          {linkedInPublishStatusLabel(row) ? (
-            <p className="mt-1 text-[11px] text-muted-foreground">{linkedInPublishStatusLabel(row)}</p>
+          {linkedInPublishStatusLabel(row) || videoPublishStatusLabel(row) ? (
+            <p className="mt-1 text-[11px] text-muted-foreground">
+              {linkedInPublishStatusLabel(row) || videoPublishStatusLabel(row)}
+            </p>
           ) : null}
         </td>
         <td className="max-w-[200px] truncate px-3 py-2 text-xs text-muted-foreground">{preview}</td>
@@ -664,7 +732,7 @@ function ContentRow({
         </td>
       </tr>
       {expanded ? (
-        <tr className="border-b border-border/50 bg-muted/20">
+        <tr className={cn(marketingTableRow, "bg-muted/20")}>
           <td colSpan={6} className="px-4 py-3">
             {row.body ? (
               <p className="mb-3 whitespace-pre-wrap text-sm">{row.body}</p>

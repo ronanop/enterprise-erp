@@ -122,7 +122,6 @@ export function ServiceDashboard() {
     <div className="space-y-5">
       <PageHeader
         title="Service"
-        description="Service request tickets — email intake, assignment, SLA tracking, and resolution."
         actions={
           <div className="flex flex-wrap items-center gap-2">
             <button
@@ -293,7 +292,6 @@ export function ServiceDashboard() {
           <div className="flex items-center justify-between gap-2 border-b border-border/70 px-4 py-3">
             <div>
               <h2 className="text-sm font-medium tracking-tight">Recent request tickets</h2>
-              <p className="text-[11px] text-muted-foreground">Live SOP tickets from API</p>
             </div>
             <Link
               href="/service/service-request-tickets"
@@ -364,7 +362,6 @@ export function ServiceDashboard() {
         <div className="rounded-xl border border-border/80 bg-card p-4 shadow-sm">
           <div className="mb-3">
             <h2 className="text-sm font-medium tracking-tight">Request ticket status</h2>
-            <p className="text-[11px] text-muted-foreground">SOP workflow lifecycle</p>
           </div>
           {loading ? (
             <p className="py-6 text-center text-sm text-muted-foreground">Loading…</p>

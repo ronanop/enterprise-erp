@@ -12,7 +12,13 @@ import {
   type DashboardStatKey,
   type MarketingNavAccessInput,
 } from "@/lib/marketing-nav-access";
+import { detectMarketingPersona, type MarketingPersona } from "@/lib/marketing-role-ui";
 import { useUserPermissions } from "@/hooks/use-user-permissions";
+
+const HIDDEN_NAV_BY_PERSONA: Partial<Record<MarketingPersona, ReadonlySet<string>>> = {
+  linkedin_handler: new Set(["/marketing/assets"]),
+  head: new Set(["/marketing/assets"]),
+};
 
 /** Strict marketing RBAC — never assumes access when permissions are unknown. */
 export function useMarketingPermissions() {
@@ -55,6 +61,8 @@ export function useMarketingPermissions() {
       canReportPosting: has("marketing.content:submit") || has("marketing.content:publish"),
     };
 
+    const persona = detectMarketingPersona(flags);
+
     return {
       loading,
       user,
@@ -64,7 +72,13 @@ export function useMarketingPermissions() {
       canAccessCalendar: canAccessMarketingCalendar(flags),
       canAccessChannels: canAccessMarketingChannels(flags),
       canAccessApprovals: canAccessMarketingApprovals(flags),
-      canShowNav: (href: string) => canShowMarketingNavHref(href, flags),
+      canShowNav: (href: string) => {
+        const hidden = HIDDEN_NAV_BY_PERSONA[persona];
+        if (hidden?.has(href)) {
+          return false;
+        }
+        return canShowMarketingNavHref(href, flags);
+      },
       canShowStat: (key: DashboardStatKey) => canShowDashboardStat(key, flags),
     };
   }, [loading, user, profile, has]);

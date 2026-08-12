@@ -5,31 +5,17 @@ import { usePathname } from "next/navigation";
 import type { LucideIcon } from "lucide-react";
 import {
   Archive,
-  CalendarDays,
-  BarChart3,
   CheckCircle2,
   FileImage,
-  ListChecks,
-  Globe,
   LayoutDashboard,
   Megaphone,
   Newspaper,
-  PenLine,
-  Radio,
-  Share2,
-  Video,
 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
-import { useMarketingHeadTeamNav } from "@/hooks/use-marketing-head-team-nav";
+import { marketingNavActive, marketingNavIdle } from "@/lib/marketing-ui";
 import { useMarketingPermissions } from "@/hooks/use-marketing-permissions";
 import { detectMarketingPersona, marketingNavTitle, marketingWorkspaceLabels } from "@/lib/marketing-role-ui";
-import {
-  MARKETING_TEAM_ROLE_KEYS,
-  teamRoleHref,
-  teamRoleLabel,
-  type MarketingTeamRoleKey,
-} from "@/lib/marketing-team-queue";
 import { SidebarUserIdentity } from "@/components/layout/sidebar-user-identity";
 
 type MarketingNavItem = {
@@ -40,16 +26,11 @@ type MarketingNavItem = {
 
 export const MARKETING_NAV: readonly MarketingNavItem[] = [
   { title: "Overview", href: "/marketing/pipeline", icon: LayoutDashboard },
-  { title: "Workflow", href: "/marketing/workflow", icon: ListChecks },
   { title: "Campaigns", href: "/marketing/campaigns", icon: Megaphone },
   { title: "Content", href: "/marketing/content", icon: Newspaper },
-  { title: "Calendar", href: "/marketing/calendar", icon: CalendarDays },
-  { title: "Channels", href: "/marketing/channels", icon: Radio },
-  { title: "Publish Log", href: "/marketing/publish-log", icon: Globe },
   { title: "Approvals", href: "/marketing/approvals", icon: CheckCircle2 },
   { title: "Archive", href: "/marketing/archive", icon: Archive },
   { title: "Assets", href: "/marketing/assets", icon: FileImage },
-  { title: "Reports", href: "/marketing/reports", icon: BarChart3 },
 ] as const;
 
 export function MarketingWorkspaceNav() {
@@ -63,8 +44,9 @@ export function MarketingWorkspaceNav() {
 
   return (
     <nav aria-label="Marketing workspace" className="erp-scroll -mx-1 overflow-x-auto px-1">
-      <ul className="flex min-w-max items-center gap-0.5 border-b border-border/70 pb-px">
+      <ul className="flex min-w-max items-center gap-1 rounded-xl border border-border/60 bg-muted/20 p-1 shadow-sm">
         {visibleNav.map((item) => {
+          const Icon = item.icon;
           const active =
             pathname === item.href || pathname.startsWith(`${item.href}/`);
           return (
@@ -72,12 +54,11 @@ export function MarketingWorkspaceNav() {
               <Link
                 href={item.href}
                 className={cn(
-                  "inline-flex h-8 cursor-pointer items-center rounded-t-md px-2.5 text-xs font-medium transition-colors duration-200",
-                  active
-                    ? "border-b-2 border-primary text-foreground"
-                    : "text-muted-foreground hover:bg-muted/50 hover:text-foreground",
+                  "inline-flex h-8 cursor-pointer items-center gap-1.5 rounded-lg px-3 text-xs font-medium transition-all duration-200",
+                  active ? marketingNavActive : marketingNavIdle,
                 )}
               >
+                <Icon className="size-3.5 shrink-0 opacity-80" aria-hidden />
                 {item.title}
               </Link>
             </li>
@@ -94,27 +75,20 @@ export function MarketingSidebar() {
   const persona = detectMarketingPersona(perms);
   const workspace = marketingWorkspaceLabels(persona);
   const visibleNav = MARKETING_NAV.filter((item) => perms.canShowNav(item.href));
-  const { roleQueues } = useMarketingHeadTeamNav(perms.canApprove);
-
-  const teamRoleIcons: Record<MarketingTeamRoleKey, LucideIcon> = {
-    creator: PenLine,
-    campaign_handler: Megaphone,
-    linkedin_handler: Share2,
-    video_editor: Video,
-  };
 
   if (perms.loading) {
     return null;
   }
 
   return (
-    <aside className="sticky top-0 z-20 hidden h-dvh w-56 shrink-0 flex-col border-r border-border/70 bg-muted/20 lg:flex">
+    <aside className="sticky top-0 z-20 hidden h-dvh w-56 shrink-0 flex-col border-r border-border/70 bg-gradient-to-b from-muted/30 via-background to-background lg:flex">
+      <div className="pointer-events-none h-0.5 w-full bg-gradient-to-r from-primary/60 via-violet-500/40 to-transparent" aria-hidden />
       <SidebarUserIdentity variant="marketing" className="mx-0 mt-3 shrink-0 border-0 bg-transparent px-3" />
-      <div className="shrink-0 border-b border-border/70 px-4 py-3">
-        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{workspace.section}</p>
-        <p className="mt-1 text-sm font-medium">{workspace.title}</p>
+      <div className="shrink-0 border-b border-border/70 px-4 py-3.5">
+        <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-muted-foreground">{workspace.section}</p>
+        <p className="mt-1 text-sm font-semibold tracking-tight">{workspace.title}</p>
       </div>
-      <nav aria-label="Marketing sidebar" className="erp-scroll flex-1 space-y-0.5 overflow-y-auto p-2">
+      <nav aria-label="Marketing sidebar" className="erp-scroll flex-1 space-y-1 overflow-y-auto p-2.5">
         {visibleNav.map((item) => {
           const Icon = item.icon;
           const label = marketingNavTitle(item.href, persona, item.title);
@@ -125,52 +99,22 @@ export function MarketingSidebar() {
               key={item.href}
               href={item.href}
               className={cn(
-                "flex items-center gap-2 rounded-md px-2.5 py-2 text-sm transition-colors",
-                active
-                  ? "bg-primary/10 font-medium text-primary"
-                  : "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
+                "flex items-center gap-2.5 rounded-xl px-2.5 py-2 text-sm transition-all duration-200",
+                active ? marketingNavActive : marketingNavIdle,
               )}
             >
-              <Icon className="size-4 shrink-0" aria-hidden />
+              <span
+                className={cn(
+                  "flex size-7 shrink-0 items-center justify-center rounded-lg border border-border/60 bg-background/80",
+                  active && "border-primary/25 bg-primary/10",
+                )}
+              >
+                <Icon className={cn("size-3.5 shrink-0", active ? "text-primary" : "text-muted-foreground")} aria-hidden />
+              </span>
               {label}
             </Link>
           );
         })}
-
-        {perms.canApprove ? (
-          <>
-            <p className="px-2.5 pb-1 pt-4 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-              Team queues
-            </p>
-            {MARKETING_TEAM_ROLE_KEYS.map((role) => {
-              const href = teamRoleHref(role);
-              const active = pathname === href || pathname.startsWith(`${href}/`);
-              const label = teamRoleLabel(role);
-              const Icon = teamRoleIcons[role];
-              const pendingCount = roleQueues.find((queue) => queue.role === role)?.pendingCount ?? 0;
-              return (
-                <Link
-                  key={href}
-                  href={href}
-                  className={cn(
-                    "flex items-center gap-2 rounded-md px-2.5 py-2 text-sm transition-colors",
-                    active
-                      ? "bg-primary/10 font-medium text-primary"
-                      : "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
-                  )}
-                >
-                  <Icon className="size-4 shrink-0" aria-hidden />
-                  <span className="min-w-0 flex-1 truncate">{label}</span>
-                  {pendingCount > 0 ? (
-                    <span className="rounded-full bg-primary/15 px-1.5 py-0.5 text-[10px] font-semibold tabular-nums text-primary">
-                      {pendingCount}
-                    </span>
-                  ) : null}
-                </Link>
-              );
-            })}
-          </>
-        ) : null}
       </nav>
     </aside>
   );

@@ -1,35 +1,61 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { Archive, Hash, Lock, Palette, Type } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Archive, Building2, ImageIcon, Lock, Palette, Sparkles, Type } from "lucide-react";
 
-import { formatMarketingStatus, type MarketingContentItem } from "@/services/marketing-service";
+import { MarketingReviewSectionHeader } from "@/components/marketing/marketing-review-section-header";
+import { MarketingLinkedAssetMedia } from "@/components/marketing/marketing-enlargeable-media";
+import { BANNER_VERIFICATION_ITEM_KEY } from "@/lib/marketing-content-upload";
+import {
+  filterSourcePreviewMedia,
+  usesSectionContentWorkflow,
+} from "@/lib/marketing-section-preview";
+import { LINKEDIN_CONTENT_MEDIA_ROLES } from "@/lib/marketing-verification";
+import {
+  formatMarketingStatus,
+  listContentAssets,
+  type MarketingContentItem,
+  type MarketingLinkedAsset,
+} from "@/services/marketing-service";
 import { cn } from "@/lib/utils";
+import { marketingCard, marketingFieldShell } from "@/lib/marketing-ui";
 
 type MarketingContentPreviewCardProps = {
   item: MarketingContentItem;
   locked?: boolean;
   className?: string;
+  /** When true, label as source draft and exclude final-render media. */
+  sourceDraft?: boolean;
 };
 
 function PreviewField({
   icon: Icon,
   label,
   children,
+  accent = "default",
 }: {
   icon: typeof Type;
   label: string;
   children: ReactNode;
+  accent?: "default" | "highlight";
 }) {
   return (
-    <div className="space-y-2.5 border-b border-border/50 pb-4 last:border-b-0 last:pb-0">
-      <h4 className="flex items-center gap-2">
-        <span className="flex size-6 shrink-0 items-center justify-center rounded-md bg-muted">
-          <Icon className="size-3.5 text-muted-foreground" />
+    <div className={marketingFieldShell}>
+      <h4 className="mb-2.5 flex items-center gap-2">
+        <span
+          className={cn(
+            "flex size-7 shrink-0 items-center justify-center rounded-md border",
+            accent === "highlight"
+              ? "border-primary/20 bg-primary/5"
+              : "border-border/60 bg-muted/40",
+          )}
+        >
+          <Icon className={cn("size-3.5", accent === "highlight" ? "text-primary" : "text-muted-foreground")} />
         </span>
-        <span className="text-sm font-semibold tracking-tight text-foreground">{label}</span>
+        <span className="text-[11px] font-semibold uppercase tracking-[0.12em] text-foreground/80">{label}</span>
       </h4>
-      <div className="pl-8 text-sm font-normal leading-relaxed text-muted-foreground">{children}</div>
+      <div className="text-sm font-normal leading-relaxed text-muted-foreground">{children}</div>
     </div>
   );
 }
@@ -40,48 +66,78 @@ function SubLabel({ children }: { children: ReactNode }) {
   );
 }
 
-function HashtagPills({ value }: { value: string }) {
-  const tags = value
-    .split(/[\s,]+/)
-    .map((t) => t.trim())
-    .filter(Boolean);
-
-  if (tags.length === 0) return <span className="text-foreground">{value}</span>;
-
-  return (
-    <div className="flex flex-wrap gap-1.5">
-      {tags.map((tag) => (
-        <span
-          key={tag}
-          className="inline-flex items-center rounded-full border border-border/70 bg-muted/50 px-2 py-0.5 text-xs font-medium text-foreground"
-        >
-          {tag.startsWith("#") ? tag : `#${tag}`}
-        </span>
-      ))}
-    </div>
-  );
+function isMediaAsset(link: MarketingLinkedAsset): boolean {
+  const role = link.asset_role ?? "";
+  if (
+    LINKEDIN_CONTENT_MEDIA_ROLES.includes(role as (typeof LINKEDIN_CONTENT_MEDIA_ROLES)[number]) ||
+    role === BANNER_VERIFICATION_ITEM_KEY
+  ) {
+    return true;
+  }
+  return link.asset.asset_kind === "image" || link.asset.asset_kind === "video";
 }
 
-export function MarketingContentPreviewCard({ item, locked = false, className }: MarketingContentPreviewCardProps) {
-  const hasFontInfo = Boolean(item.font_name || item.font_size || item.color_codes);
-  const hasContent = Boolean(item.title || item.body || item.hashtags || item.theme || hasFontInfo);
+export function MarketingContentPreviewCard({
+  item,
+  locked = false,
+  className,
+  sourceDraft = false,
+}: MarketingContentPreviewCardProps) {
+  const [assets, setAssets] = useState<MarketingLinkedAsset[]>([]);
+  const [assetsLoading, setAssetsLoading] = useState(true);
 
-  if (!hasContent) {
+  useEffect(() => {
+    let cancelled = false;
+    setAssetsLoading(true);
+    void listContentAssets(item.id)
+      .then((rows) => {
+        if (!cancelled) setAssets(rows);
+      })
+      .catch(() => {
+        if (!cancelled) setAssets([]);
+      })
+      .finally(() => {
+        if (!cancelled) setAssetsLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [item.id]);
+
+  const isSectionWorkflowPreview = usesSectionContentWorkflow(item);
+  const showAsSourceDraft = sourceDraft || isSectionWorkflowPreview;
+  const mediaAssets = showAsSourceDraft
+    ? filterSourcePreviewMedia(assets, item)
+    : assets.filter(isMediaAsset);
+  const hasFontInfo = Boolean(item.font_name || item.font_size || item.color_codes);
+  const hasContent = Boolean(
+    isSectionWorkflowPreview
+      ? item.body || item.summary || item.theme || mediaAssets.length > 0
+      : item.title || item.body || item.summary || item.hashtags || item.theme || hasFontInfo || mediaAssets.length > 0,
+  );
+
+  if (!hasContent && !assetsLoading) {
     return (
-      <div className={cn("rounded-xl border border-dashed border-border/80 bg-muted/20 px-4 py-8 text-center", className)}>
+      <div className={cn("rounded-xl border border-dashed border-border/80 bg-muted/20 px-4 py-10 text-center", className)}>
         <p className="text-sm text-muted-foreground">No content details to preview.</p>
       </div>
     );
   }
 
   return (
-    <section className={cn("overflow-hidden rounded-xl border border-border/80 bg-card", className)}>
-      <div className="border-b border-border/60 bg-muted/20 px-4 py-3.5">
-        <h3 className="text-base font-semibold text-foreground">Content preview</h3>
-        <p className="mt-0.5 text-xs text-muted-foreground">{formatMarketingStatus(item.content_type)}</p>
-      </div>
+    <section className={cn(marketingCard, className)}>
+      <MarketingReviewSectionHeader
+        tone="preview"
+        icon={Sparkles}
+        title={showAsSourceDraft ? "Source draft" : "Content preview"}
+        description={
+          showAsSourceDraft
+            ? "Topic, company, theme, and source media from the handler or editor"
+            : formatMarketingStatus(item.content_type)
+        }
+      />
 
-      <div className="space-y-4 p-4">
+      <div className="space-y-3 p-4">
         {locked ? (
           <div className="flex items-start gap-3 rounded-lg border border-border/70 bg-muted/30 p-3.5">
             <div className="flex size-9 shrink-0 items-center justify-center rounded-full bg-background">
@@ -115,23 +171,29 @@ export function MarketingContentPreviewCard({ item, locked = false, className }:
           </div>
         ) : null}
 
-        {item.title ? (
+        {item.summary ? (
+          <PreviewField icon={Building2} label="Company" accent="highlight">
+            <p className="text-sm font-medium text-foreground">{item.summary}</p>
+          </PreviewField>
+        ) : null}
+
+        {!isSectionWorkflowPreview && item.title ? (
           <PreviewField icon={Type} label="Post title">
             <p className="text-base font-medium text-foreground">{item.title}</p>
           </PreviewField>
         ) : null}
 
         {item.body ? (
-          <PreviewField icon={Type} label="Post text">
-            <p className="whitespace-pre-wrap rounded-lg border border-border/50 bg-muted/25 px-3 py-2.5 text-sm text-foreground">
+          <PreviewField icon={Type} label={isSectionWorkflowPreview ? "Topic" : "Post text"} accent="highlight">
+            <p className="whitespace-pre-wrap rounded-lg border border-border/50 bg-muted/20 px-3 py-2.5 text-sm text-foreground">
               {item.body}
             </p>
           </PreviewField>
         ) : null}
 
-        {item.hashtags ? (
-          <PreviewField icon={Hash} label="Hashtags">
-            <HashtagPills value={item.hashtags} />
+        {!isSectionWorkflowPreview && item.hashtags ? (
+          <PreviewField icon={Type} label="Hashtags">
+            <p className="text-foreground">{item.hashtags}</p>
           </PreviewField>
         ) : null}
 
@@ -141,7 +203,25 @@ export function MarketingContentPreviewCard({ item, locked = false, className }:
           </PreviewField>
         ) : null}
 
-        {hasFontInfo ? (
+        {assetsLoading ? (
+          <PreviewField icon={ImageIcon} label="Photo or video">
+            <p className="text-sm text-muted-foreground">Loading media…</p>
+          </PreviewField>
+        ) : mediaAssets.length > 0 ? (
+          <PreviewField
+            icon={ImageIcon}
+            label={showAsSourceDraft ? "Source photo or video" : "Photo or video"}
+            accent="highlight"
+          >
+            <div className="flex flex-wrap gap-3">
+              {mediaAssets.map((link) => (
+                <MarketingLinkedAssetMedia key={link.id} link={link} />
+              ))}
+            </div>
+          </PreviewField>
+        ) : null}
+
+        {!isSectionWorkflowPreview && hasFontInfo ? (
           <PreviewField icon={Type} label="Font styling">
             <dl className="grid gap-3 rounded-lg border border-border/60 bg-muted/20 p-3 sm:grid-cols-3">
               <div>

@@ -10,7 +10,8 @@ import {
   MarketingPipelineCampaignStageTable,
   MarketingPipelineStageTable,
 } from "@/components/marketing/marketing-pipeline-stage-table";
-import { PageHeader } from "@/components/layout/page-header";
+import { MarketingPageHeader } from "@/components/marketing/marketing-page-header";
+import { marketingActionBanner, marketingPage } from "@/lib/marketing-ui";
 import { Button } from "@/components/ui/button";
 import { useMarketingPermissions } from "@/hooks/use-marketing-permissions";
 import {
@@ -29,6 +30,8 @@ const CAMPAIGN_STAGE_KEYS = new Set([
   "campaign_approved",
   "campaign_head_review",
 ]);
+
+const HIDDEN_PIPELINE_STAGE_KEYS = new Set(["ready_to_post", "posted_archive"]);
 
 export function MarketingPipelinePage() {
   const perms = useMarketingPermissions();
@@ -68,6 +71,16 @@ export function MarketingPipelinePage() {
     return counts;
   }, [pipeline]);
 
+  const activeStages = useMemo(() => {
+    return (pipeline?.stages ?? []).filter((stage) => {
+      if (HIDDEN_PIPELINE_STAGE_KEYS.has(stage.key)) return false;
+      if (CAMPAIGN_STAGE_KEYS.has(stage.key)) {
+        return (stage.campaigns ?? []).length > 0;
+      }
+      return stage.items.length > 0;
+    });
+  }, [pipeline]);
+
   const openReview = (item: MarketingContentItem) => {
     setReviewItem(item);
     setReviewOpen(true);
@@ -82,9 +95,10 @@ export function MarketingPipelinePage() {
     pipeline?.stages.find((s) => s.key === "report_posting_to_head")?.count ?? 0;
 
   return (
-    <div className="space-y-6">
-      <PageHeader
+    <div className={marketingPage}>
+      <MarketingPageHeader
         title="Dashboard"
+        description="Track your drafts, approvals, and publishing queues in one place."
         actions={
           <Button type="button" variant="outline" size="sm" onClick={() => void load()} disabled={loading}>
             <RefreshCw className={`size-3.5 ${loading ? "animate-spin" : ""}`} />
@@ -96,7 +110,7 @@ export function MarketingPipelinePage() {
       {error ? <p className="text-sm text-destructive">{error}</p> : null}
 
       {postingPendingCount > 0 ? (
-        <div className="rounded-xl border border-violet-500/40 bg-violet-500/10 p-4">
+        <div className={marketingActionBanner}>
           <p className="text-sm font-semibold text-violet-900 dark:text-violet-100">
             Action needed: tell marketing head if you posted ({postingPendingCount} item
             {postingPendingCount === 1 ? "" : "s"})
@@ -110,7 +124,7 @@ export function MarketingPipelinePage() {
 
       <MarketingPipelineFunnel counts={funnelCounts} loading={loading} />
 
-      {pipeline?.stages.map((stage) =>
+      {activeStages.map((stage) =>
         CAMPAIGN_STAGE_KEYS.has(stage.key) ? (
           <MarketingPipelineCampaignStageTable
             key={stage.key}
@@ -123,6 +137,7 @@ export function MarketingPipelinePage() {
           <MarketingPipelineStageTable
             key={stage.key}
             title={stage.label}
+            description={stage.description}
             items={stage.items}
             onReview={openReview}
             isPostingQueue={stage.key === "report_posting_to_head"}

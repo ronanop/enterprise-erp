@@ -73,6 +73,13 @@ class VerificationService:
                 return VerifierRole.CAMPAIGN_HANDLER.value
             if "marketing.channel:update" in perms:
                 return VerifierRole.LINKEDIN_HANDLER.value
+            if (
+                "marketing.asset:create" in perms
+                and "marketing.campaign:update" not in perms
+                and "marketing.campaign:create" not in perms
+                and "marketing.channel:update" not in perms
+            ):
+                return VerifierRole.VIDEO_EDITOR.value
             if "marketing.content:submit" in perms:
                 return VerifierRole.CREATOR.value
             if "marketing.asset:create" in perms:
@@ -335,8 +342,6 @@ class VerificationService:
         next_key: str | None = None
         if approved_item_key in self._LINKEDIN_CONTENT_KEYS:
             next_key = "theme"
-        elif approved_item_key in self._LINKEDIN_THEME_KEYS:
-            next_key = "fonts"
         if not next_key:
             return
         next_item = items.get(next_key)
@@ -351,17 +356,17 @@ class VerificationService:
 
     def _linkedin_content_complete(self, row: MktContentItem, linked_roles: set[str]) -> bool:
         body = (row.body or "").strip()
-        hashtags = (row.hashtags or "").strip()
-        return bool(body) and bool(hashtags)
+        company = (row.summary or "").strip()
+        return bool(body) and bool(company)
 
     def _validate_item_before_submit(
         self, row: MktContentItem, item_key: str, linked_roles: set[str]
     ) -> None:
         if item_key == "linkedin_content":
             if not (row.body or "").strip():
-                raise InvalidMarketingState("Add post copy before submitting Content to head")
-            if not (row.hashtags or "").strip():
-                raise InvalidMarketingState("Add hashtags before submitting Content to head")
+                raise InvalidMarketingState("Add post topic before submitting Content to head")
+            if not (row.summary or "").strip():
+                raise InvalidMarketingState("Add company before submitting Content to head")
             return
         if item_key == "theme":
             if not (row.theme or "").strip():
@@ -873,6 +878,7 @@ class VerificationService:
 
     def can_publish(self, row: MktContentItem) -> bool:
         from modules.marketing.service.linkedin_section_service import LinkedInSectionService
+        from modules.marketing.service.video_section_service import VideoSectionService
 
         verifications = self._db.scalars(
             select(MktContentVerification).where(
@@ -888,10 +894,16 @@ class VerificationService:
                 row.workflow_stage == WorkflowStage.PUBLISHER_REVIEW.value
                 and row.status != ContentStatus.PUBLISHED.value
             )
+        if VideoSectionService.is_video_section_workflow(row) and row.video_head_sections:
+            return (
+                row.workflow_stage == WorkflowStage.PUBLISHER_REVIEW.value
+                and row.status != ContentStatus.PUBLISHED.value
+            )
         return all(v.publisher_upload_status == "uploaded" for v in verifications if v.sent_to_publisher_at)
 
     def assert_can_publish(self, row: MktContentItem) -> None:
         from modules.marketing.service.linkedin_section_service import LinkedInSectionService
+        from modules.marketing.service.video_section_service import VideoSectionService
 
         sent = self._db.scalars(
             select(MktContentVerification).where(
@@ -905,6 +917,10 @@ class VerificationService:
         if LinkedInSectionService.is_linkedin_section_workflow(row) and row.linkedin_head_sections:
             if row.workflow_stage != WorkflowStage.PUBLISHER_REVIEW.value:
                 raise InvalidMarketingState("This post is not with the publisher yet")
+            return
+        if VideoSectionService.is_video_section_workflow(row) and row.video_head_sections:
+            if row.workflow_stage != WorkflowStage.PUBLISHER_REVIEW.value:
+                raise InvalidMarketingState("This video is not with the publisher yet")
             return
         pending = [v for v in sent if v.publisher_upload_status != "uploaded"]
         if pending:
@@ -926,15 +942,72 @@ class VerificationService:
         )
         items: list[dict] = []
         linkedin_svc = LinkedInSectionService(self._db)
+        from modules.marketing.service.video_section_service import VideoSectionService
+
+        video_svc = VideoSectionService(self._db)
         for row in rows:
             if linkedin_svc.ensure_sections_initialized(ctx, row):
                 self._db.flush()
+            if video_svc.ensure_sections_initialized(ctx, row):
+                self._db.flush()
         linkedin_rows = linkedin_svc.list_pending_for_head(list(rows))
         final_draft_rows = linkedin_svc.list_pending_final_draft_for_head(list(rows))
+        video_rows = video_svc.list_pending_for_head(list(rows))
+        video_final_draft_rows = video_svc.list_pending_final_draft_for_head(list(rows))
         linkedin_by_id = {r["content_id"]: r for r in linkedin_rows}
         final_draft_by_id = {r["content_id"]: r for r in final_draft_rows}
+        video_by_id = {r["content_id"]: r for r in video_rows}
+        video_final_draft_by_id = {r["content_id"]: r for r in video_final_draft_rows}
 
         for row in rows:
+            if str(row.id) in video_final_draft_by_id:
+                vi = video_final_draft_by_id[str(row.id)]
+                items.append(
+                    {
+                        "content_id": vi["content_id"],
+                        "content_number": vi["content_number"],
+                        "title": vi["title"],
+                        "workflow_stage": vi["workflow_stage"],
+                        "status": vi["status"],
+                        "pending_head_items": 1,
+                        "video_head_sections": vi.get("video_head_sections"),
+                        "video_final_draft": vi.get("video_final_draft"),
+                        "verifications": [
+                            {
+                                "id": "final_draft",
+                                "verifier_role": VerifierRole.VIDEO_EDITOR.value,
+                                "verifier_user_id": None,
+                                "requested_by_user_id": None,
+                                "requested_by_name": None,
+                                "overall_status": "submitted_to_head",
+                                "overall_comments": None,
+                                "started_at": None,
+                                "completed_at": None,
+                                "posting_planned_at": None,
+                                "posting_timeline_notes": None,
+                                "posting_confirmed": False,
+                                "sent_to_publisher_at": None,
+                                "publisher_upload_status": None,
+                                "publisher_upload_notes": None,
+                                "publisher_reported_at": None,
+                                "items": [
+                                    {
+                                        "id": "final_draft",
+                                        "item_key": "final_draft",
+                                        "item_label": "Final draft (video + caption)",
+                                        "status": "submitted",
+                                        "comments": None,
+                                        "submitted_to_head_at": None,
+                                        "submitted_by_user_id": None,
+                                        "submitted_by_name": None,
+                                        "reviewed_at": None,
+                                    }
+                                ],
+                            }
+                        ],
+                    }
+                )
+                continue
             if str(row.id) in final_draft_by_id:
                 li = final_draft_by_id[str(row.id)]
                 items.append(
@@ -983,11 +1056,60 @@ class VerificationService:
                     }
                 )
                 continue
+            if str(row.id) in video_by_id:
+                vi = video_by_id[str(row.id)]
+                items.append(
+                    {
+                        "content_id": vi["content_id"],
+                        "content_number": vi["content_number"],
+                        "title": vi["title"],
+                        "workflow_stage": vi["workflow_stage"],
+                        "status": vi["status"],
+                        "pending_head_items": vi["pending_head_items"],
+                        "video_head_sections": vi["video_head_sections"],
+                        "verifications": [
+                            {
+                                "id": "",
+                                "verifier_role": VerifierRole.VIDEO_EDITOR.value,
+                                "verifier_user_id": None,
+                                "requested_by_user_id": None,
+                                "requested_by_name": None,
+                                "overall_status": "submitted_to_head",
+                                "overall_comments": None,
+                                "started_at": None,
+                                "completed_at": None,
+                                "posting_planned_at": None,
+                                "posting_timeline_notes": None,
+                                "posting_confirmed": False,
+                                "sent_to_publisher_at": None,
+                                "publisher_upload_status": None,
+                                "publisher_upload_notes": None,
+                                "publisher_reported_at": None,
+                                "items": [
+                                    {
+                                        "id": sid,
+                                        "item_key": sid,
+                                        "item_label": label,
+                                        "status": "submitted",
+                                        "comments": None,
+                                        "submitted_to_head_at": None,
+                                        "submitted_by_user_id": None,
+                                        "submitted_by_name": None,
+                                        "reviewed_at": None,
+                                    }
+                                    for sid, label in (("post", "Post"),)
+                                    if vi["video_head_sections"].get(sid, {}).get("status") == "awaiting_head"
+                                ],
+                            }
+                        ],
+                    }
+                )
+                continue
             if str(row.id) in linkedin_by_id:
                 li = linkedin_by_id[str(row.id)]
                 pending_labels = [
                     label
-                    for sid, label in (("content", "Content"), ("theme", "Theme"), ("fonts", "Fonts"))
+                    for sid, label in (("post", "Post"),)
                     if li["linkedin_head_sections"].get(sid, {}).get("status") == "awaiting_head"
                 ]
                 items.append(
@@ -1030,9 +1152,7 @@ class VerificationService:
                                         "reviewed_at": None,
                                     }
                                     for sid, label in (
-                                        ("content", "Content"),
-                                        ("theme", "Theme"),
-                                        ("fonts", "Fonts"),
+                                        ("post", "Post"),
                                     )
                                     if li["linkedin_head_sections"].get(sid, {}).get("status") == "awaiting_head"
                                 ],

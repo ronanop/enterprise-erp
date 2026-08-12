@@ -6,11 +6,13 @@ import { RefreshCw } from "lucide-react";
 
 import { FinanceStatusBadge } from "@/components/finance/finance-status-badge";
 import { MarketingContentReviewDialog } from "@/components/marketing/marketing-content-review-dialog";
-import { PageHeader } from "@/components/layout/page-header";
+import { MarketingPageHeader } from "@/components/marketing/marketing-page-header";
+import { marketingPage, marketingTableShell } from "@/lib/marketing-ui";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { useMarketingPermissions } from "@/hooks/use-marketing-permissions";
 import { VERIFIER_ROLE_LABELS } from "@/lib/marketing-verification";
 import { usesLinkedInSectionWorkflow } from "@/lib/linkedin-section-approval";
+import { usesVideoSectionWorkflow } from "@/lib/video-section-approval";
 import { buildChecklistRows, MARKETING_TEAM_ROLE_KEYS, teamRoleHref } from "@/lib/marketing-team-queue";
 import { cn } from "@/lib/utils";
 import {
@@ -44,7 +46,7 @@ function HeadApprovalTable({
           </Link>
         ) : null}
       </div>
-      <div className="overflow-x-auto rounded-xl border border-border/80">
+      <div className={marketingTableShell}>
         <table className="w-full min-w-[760px] text-left text-sm">
           <thead className="border-b border-border/70 bg-muted/30 text-xs uppercase text-muted-foreground">
             <tr>
@@ -103,7 +105,7 @@ function ApprovalTable({
   return (
     <div className="space-y-2">
       <h3 className="text-sm font-medium">{title}</h3>
-      <div className="overflow-x-auto rounded-xl border border-border/80">
+      <div className={marketingTableShell}>
         <table className="w-full min-w-[720px] text-left text-sm">
           <thead className="border-b border-border/70 bg-muted/30 text-xs uppercase text-muted-foreground">
             <tr>
@@ -173,7 +175,11 @@ export function MarketingApprovalsPage() {
         : Promise.resolve(null);
 
       const [media, dashboard] = await Promise.all([mediaPromise, dashboardPromise]);
-      setMediaQueue((media ?? []).filter((item) => !usesLinkedInSectionWorkflow(item)));
+      setMediaQueue(
+        (media ?? []).filter(
+          (item) => !usesLinkedInSectionWorkflow(item) && !usesVideoSectionWorkflow(item),
+        ),
+      );
 
       if (dashboard) {
         const rows = buildChecklistRows(dashboard.items);
@@ -221,9 +227,10 @@ export function MarketingApprovalsPage() {
   };
 
   return (
-    <div className="space-y-6">
-      <PageHeader
+    <div className={marketingPage}>
+      <MarketingPageHeader
         title="Approvals"
+        description="Review submissions from your team and approve or send feedback."
         actions={
           <div className="flex gap-2">
             <Link

@@ -5,11 +5,12 @@ import { RefreshCw } from "lucide-react";
 
 import { FinanceStatusBadge } from "@/components/finance/finance-status-badge";
 import { MarketingContentReviewDialog } from "@/components/marketing/marketing-content-review-dialog";
-import { PageHeader } from "@/components/layout/page-header";
+import { MarketingPageHeader } from "@/components/marketing/marketing-page-header";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useMarketingPermissions } from "@/hooks/use-marketing-permissions";
 import { linkedInPublishStatusLabel } from "@/lib/linkedin-section-approval";
+import { marketingPage, marketingTableHead, marketingTableRow, marketingTableShell } from "@/lib/marketing-ui";
 import {
   ApiClientError,
   formatMarketingStatus,
@@ -46,16 +47,16 @@ export function MarketingArchivePage() {
 
   if (!perms.loading && !perms.canReadContent) {
     return (
-      <div className="space-y-4">
-        <PageHeader title="Archive" />
+      <div className={marketingPage}>
+        <MarketingPageHeader title="Archive" />
         <p className="text-sm text-muted-foreground">You do not have permission to view marketing content.</p>
       </div>
     );
   }
 
   return (
-    <div className="space-y-4">
-      <PageHeader
+    <div className={marketingPage}>
+      <MarketingPageHeader
         title="Archive"
         description="Published posts are locked and moved here automatically. All marketing roles can view the archive."
         actions={
@@ -72,12 +73,12 @@ export function MarketingArchivePage() {
         value={q}
         onChange={(e) => setQ(e.target.value)}
         placeholder="Search archived posts…"
-        className="max-w-xs"
+        className="max-w-xs rounded-xl border-border/60 bg-background/80 shadow-sm"
       />
 
-      <div className="overflow-x-auto rounded-xl border border-border/80">
+      <div className={`${marketingTableShell} overflow-x-auto`}>
         <table className="w-full min-w-[800px] text-left text-sm">
-          <thead className="border-b border-border/70 bg-muted/30 text-xs uppercase text-muted-foreground">
+          <thead className={marketingTableHead}>
             <tr>
               <th className="px-3 py-2">Number</th>
               <th className="px-3 py-2">Title</th>
@@ -92,7 +93,7 @@ export function MarketingArchivePage() {
             {[...rows]
               .sort((a, b) => (b.archived_at ?? "").localeCompare(a.archived_at ?? ""))
               .map((row) => (
-                <tr key={row.id} className="border-b border-border/50">
+                <tr key={row.id} className={marketingTableRow}>
                   <td className="px-3 py-2 font-mono text-xs">{row.content_number}</td>
                   <td className="px-3 py-2 font-medium">{row.title}</td>
                   <td className="px-3 py-2">{formatMarketingStatus(row.content_type)}</td>

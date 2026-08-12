@@ -5,10 +5,17 @@ import { Plus, RefreshCw } from "lucide-react";
 
 import { FinanceStatusBadge } from "@/components/finance/finance-status-badge";
 import { MarketingCampaignReviewDialog } from "@/components/marketing/marketing-campaign-review-dialog";
-import { PageHeader } from "@/components/layout/page-header";
+import { MarketingPageHeader } from "@/components/marketing/marketing-page-header";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useMarketingPermissions } from "@/hooks/use-marketing-permissions";
+import {
+  marketingActionBanner,
+  marketingPage,
+  marketingTableHead,
+  marketingTableRow,
+  marketingTableShell,
+} from "@/lib/marketing-ui";
 import {
   ApiClientError,
   createCampaign,
@@ -105,17 +112,18 @@ export function MarketingCampaignsPage() {
 
   if (!perms.canAccessCampaigns && !perms.loading) {
     return (
-      <div className="space-y-4">
-        <PageHeader title="Campaigns" />
+      <div className={marketingPage}>
+        <MarketingPageHeader title="Campaigns" />
         <p className="text-sm text-muted-foreground">Campaign planning is for the campaign handler and marketing head.</p>
       </div>
     );
   }
 
   return (
-    <div className="space-y-4">
-      <PageHeader
+    <div className={marketingPage}>
+      <MarketingPageHeader
         title="Campaigns"
+        description="Plan campaigns, submit for head approval, and track status in one place."
         actions={
           perms.canCampaignCreate ? (
             <div className="flex gap-2">
@@ -138,65 +146,72 @@ export function MarketingCampaignsPage() {
       />
 
       {showForm ? (
-        <div className="space-y-3 rounded-lg border border-violet-500/30 bg-violet-500/5 p-4">
+        <div className={marketingActionBanner}>
           <p className="text-sm font-medium">New campaign — write about it, then submit for head approval</p>
-          <div>
-            <label className="mb-1 block text-xs text-muted-foreground">Campaign name</label>
-            <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Q1 LinkedIn push" />
-          </div>
-          <div>
-            <label className="mb-1 block text-xs text-muted-foreground">Write about this campaign *</label>
-            <textarea
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              rows={4}
-              placeholder="What is this campaign about? Channels, timeline, key message…"
-              className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-            />
-          </div>
-          <div>
-            <label className="mb-1 block text-xs text-muted-foreground">Goals</label>
-            <textarea
-              value={goals}
-              onChange={(e) => setGoals(e.target.value)}
-              rows={2}
-              placeholder="e.g. 200 sign-ups, brand awareness…"
-              className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-            />
-          </div>
-          <div>
-            <label className="mb-1 block text-xs text-muted-foreground">Target audience</label>
-            <Input
-              value={audience}
-              onChange={(e) => setAudience(e.target.value)}
-              placeholder="e.g. B2B buyers in manufacturing"
-            />
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <Button type="button" size="sm" variant="outline" onClick={() => void onSaveDraft()}>
-              Save as draft
-            </Button>
-            <Button
-              type="button"
-              size="sm"
-              onClick={() => void onCreateAndSubmit()}
-              disabled={!name.trim() || (!description.trim() && !goals.trim())}
-            >
-              Submit for head approval
-            </Button>
+          <div className="mt-3 space-y-3">
+            <div>
+              <label className="mb-1 block text-xs text-muted-foreground">Campaign name</label>
+              <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Q1 LinkedIn push" />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs text-muted-foreground">Write about this campaign *</label>
+              <textarea
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                rows={4}
+                placeholder="What is this campaign about? Channels, timeline, key message…"
+                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs text-muted-foreground">Goals</label>
+              <textarea
+                value={goals}
+                onChange={(e) => setGoals(e.target.value)}
+                rows={2}
+                placeholder="e.g. 200 sign-ups, brand awareness…"
+                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs text-muted-foreground">Target audience</label>
+              <Input
+                value={audience}
+                onChange={(e) => setAudience(e.target.value)}
+                placeholder="e.g. B2B buyers in manufacturing"
+              />
+            </div>
+            <div className="flex flex-wrap gap-2 pt-1">
+              <Button type="button" size="sm" variant="outline" onClick={() => void onSaveDraft()}>
+                Save as draft
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                onClick={() => void onCreateAndSubmit()}
+                disabled={!name.trim() || (!description.trim() && !goals.trim())}
+              >
+                Submit for head approval
+              </Button>
+            </div>
           </div>
         </div>
       ) : null}
 
       <div className="flex gap-2">
-        <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search campaigns…" className="max-w-xs" />
+        <Input
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          placeholder="Search campaigns…"
+          className="max-w-xs rounded-xl border-border/60 bg-background/80 shadow-sm"
+        />
       </div>
 
       {error ? <p className="text-sm text-destructive">{error}</p> : null}
 
-      <div className="overflow-x-auto rounded-xl border border-border/80">
+      <div className={`${marketingTableShell} overflow-x-auto`}>
         <table className="w-full min-w-[720px] text-left text-sm">
-          <thead className="border-b border-border/70 bg-muted/30 text-xs uppercase text-muted-foreground">
+          <thead className={marketingTableHead}>
             <tr>
               <th className="px-3 py-2">Number</th>
               <th className="px-3 py-2">Name</th>
@@ -208,7 +223,7 @@ export function MarketingCampaignsPage() {
           </thead>
           <tbody>
             {sortedRows(rows).map((row) => (
-              <tr key={row.id} className="border-b border-border/50">
+              <tr key={row.id} className={marketingTableRow}>
                 <td className="px-3 py-2 font-mono text-xs">{row.campaign_number}</td>
                 <td className="px-3 py-2 font-medium">{row.name}</td>
                 <td className="px-3 py-2">{formatMarketingStatus(row.campaign_type)}</td>

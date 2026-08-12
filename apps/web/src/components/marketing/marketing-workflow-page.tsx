@@ -29,10 +29,15 @@ export function MarketingWorkflowPage() {
     setLoading(true);
     try {
       const pipeline = await getMarketingPipeline();
-      const allItems = pipeline.stages.flatMap((s) => s.items);
-      const inWorkflow = allItems.filter(
-        (i) => i.workflow_stage && i.workflow_stage !== "published" && i.workflow_stage !== "draft",
-      );
+      const seenIds = new Set<string>();
+      const inWorkflow = pipeline.stages
+        .flatMap((s) => s.items)
+        .filter((i) => i.workflow_stage && i.workflow_stage !== "published" && i.workflow_stage !== "draft")
+        .filter((i) => {
+          if (seenIds.has(i.id)) return false;
+          seenIds.add(i.id);
+          return true;
+        });
       setItems(inWorkflow);
 
       const wfEntries = await Promise.all(

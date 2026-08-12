@@ -1,5 +1,6 @@
 "use client";
 
+import { MarketingEnlargeableMedia } from "@/components/marketing/marketing-enlargeable-media";
 import { Input } from "@/components/ui/input";
 
 type MarketingBannerUploadFieldProps = {
@@ -44,14 +45,14 @@ export function MarketingBannerUploadField({
         </span>
       </label>
       {previewUrl ? (
-        <div className="mt-2 max-w-xs overflow-hidden rounded border border-border/70">
-          {previewIsVideo ? (
-            <video src={previewUrl} controls className="max-h-40 w-full bg-black" />
-          ) : (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={previewUrl} alt="Upload preview" className="max-h-40 w-full object-contain" />
-          )}
-        </div>
+        <MarketingEnlargeableMedia
+          src={previewUrl}
+          alt="Upload preview"
+          isVideo={previewIsVideo}
+          showCaption={false}
+          mediaClassName="max-h-40 w-full"
+          className="mt-2 max-w-xs border-border/70"
+        />
       ) : null}
     </div>
   );

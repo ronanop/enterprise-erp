@@ -15,6 +15,8 @@ import {
 } from "lucide-react";
 
 import { formatMarketingStatus, type MarketingActivityLog } from "@/services/marketing-service";
+import { MarketingReviewSectionHeader } from "@/components/marketing/marketing-review-section-header";
+import { marketingCard } from "@/lib/marketing-ui";
 import { cn } from "@/lib/utils";
 
 type ActivityVisual = {
@@ -103,20 +105,13 @@ export function MarketingContentActivityTimeline({ entries, className }: Marketi
   const sorted = [...entries].sort((a, b) => a.created_at.localeCompare(b.created_at));
 
   return (
-    <section className={cn("rounded-xl border border-border/80 bg-card", className)}>
-      <div className="flex items-center justify-between gap-2 border-b border-border/60 px-4 py-3">
-        <div className="flex items-center gap-2">
-          <div className="flex size-7 items-center justify-center rounded-md bg-muted">
-            <History className="size-3.5 text-muted-foreground" />
-          </div>
-          <div>
-            <h3 className="text-sm font-medium">Activity</h3>
-            <p className="text-[11px] text-muted-foreground">
-              {sorted.length === 0 ? "No events yet" : `${sorted.length} event${sorted.length === 1 ? "" : "s"}`}
-            </p>
-          </div>
-        </div>
-      </div>
+    <section className={cn(marketingCard, className)}>
+      <MarketingReviewSectionHeader
+        tone="activity"
+        icon={History}
+        title="Activity"
+        description={sorted.length === 0 ? "No events yet" : `${sorted.length} event${sorted.length === 1 ? "" : "s"}`}
+      />
 
       {sorted.length === 0 ? (
         <div className="flex flex-col items-center justify-center gap-2 px-4 py-8 text-center">

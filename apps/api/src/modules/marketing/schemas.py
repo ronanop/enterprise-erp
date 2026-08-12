@@ -172,6 +172,8 @@ class ContentItemResponse(BaseModel):
     final_head_approved_at: datetime | None = None
     linkedin_head_sections: dict | None = None
     linkedin_final_draft: dict | None = None
+    video_head_sections: dict | None = None
+    video_final_draft: dict | None = None
     company_id: UUID
     branch_id: UUID
     version: int
@@ -409,6 +411,22 @@ class LinkedInSubmitFinalDraftPayload(BaseModel):
 
 
 class LinkedInHeadFinalDraftReviewPayload(BaseModel):
+    status: str
+    comments: str | None = None
+
+
+class VideoHeadSectionReviewPayload(BaseModel):
+    section: str
+    status: str
+    comments: str | None = None
+
+
+class VideoSubmitFinalDraftPayload(BaseModel):
+    content_text: str | None = None
+    poster_media_asset_id: UUID | None = None
+
+
+class VideoHeadFinalDraftReviewPayload(BaseModel):
     status: str
     comments: str | None = None
 

@@ -122,7 +122,7 @@ export const marketingTeamLoginAccounts: MarketingTeamLoginAccount[] = [
     email: "marketing.video@example.com",
     displayName: "Video Editor",
     role: "Upload & verify video quality",
-    href: "/marketing/workflow",
+    href: "/marketing/content",
   },
 ];
 

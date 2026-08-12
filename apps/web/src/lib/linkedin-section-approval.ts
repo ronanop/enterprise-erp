@@ -1,10 +1,6 @@
 import type { MarketingContentItem } from "@/services/marketing-service";
 
-export const LINKEDIN_HEAD_SECTIONS = [
-  { id: "content", label: "Content" },
-  { id: "theme", label: "Theme" },
-  { id: "fonts", label: "Fonts" },
-] as const;
+export const LINKEDIN_HEAD_SECTIONS = [{ id: "post", label: "Post" }] as const;
 
 export type LinkedInHeadSectionId = (typeof LINKEDIN_HEAD_SECTIONS)[number]["id"];
 
@@ -15,7 +11,9 @@ export type LinkedInSectionRecord = {
   reviewed_by_user_id?: string | null;
 };
 
-export type LinkedInHeadSections = Partial<Record<LinkedInHeadSectionId, LinkedInSectionRecord>>;
+export type LinkedInHeadSections = Partial<
+  Record<LinkedInHeadSectionId | "content" | "theme" | "fonts", LinkedInSectionRecord>
+>;
 
 export type SectionDisplayStatus =
   | "approved"
@@ -43,22 +41,22 @@ function sectionRecord(
   sections: LinkedInHeadSections | null | undefined,
   sectionId: LinkedInHeadSectionId,
 ): LinkedInSectionRecord | null {
-  return sections?.[sectionId] ?? null;
+  if (!sections) return null;
+  if (sections.post) return sections.post;
+  if (sectionId === "post" && sections.content) return sections.content ?? null;
+  return sections[sectionId] ?? null;
 }
 
+export const LINKEDIN_HEAD_REVIEW_SECTION_ID = "post" as const;
+
 export function isSectionDataReady(
-  sectionId: LinkedInHeadSectionId,
+  _sectionId: LinkedInHeadSectionId,
   item: MarketingContentItem,
 ): boolean {
-  if (sectionId === "content") {
-    return Boolean((item.body ?? "").trim()) && Boolean((item.hashtags ?? "").trim());
-  }
-  if (sectionId === "theme") {
-    return Boolean((item.theme ?? "").trim());
-  }
-  return Boolean((item.font_name ?? "").trim())
-    && Boolean((item.font_size ?? "").trim())
-    && Boolean((item.color_codes ?? "").trim());
+  const body = Boolean((item.body ?? "").trim());
+  const company = Boolean((item.summary ?? "").trim());
+  const legacyHashtags = Boolean((item.hashtags ?? "").trim());
+  return body && (company || legacyHashtags);
 }
 
 export function mapSectionDisplayStatus(status: string | undefined): SectionDisplayStatus {
@@ -91,12 +89,10 @@ export function getLinkedInSectionDisplayStatus(
 }
 
 export function isLinkedInPriorSectionApproved(
-  sections: LinkedInHeadSections | null | undefined,
-  sectionId: LinkedInHeadSectionId,
+  _sections: LinkedInHeadSections | null | undefined,
+  _sectionId: LinkedInHeadSectionId,
 ): boolean {
-  if (sectionId === "content") return true;
-  const priorId: LinkedInHeadSectionId = sectionId === "theme" ? "content" : "theme";
-  return sectionRecord(sections, priorId)?.status === "approved";
+  return true;
 }
 
 export function canHeadApproveLinkedInSection(
@@ -105,15 +101,12 @@ export function canHeadApproveLinkedInSection(
   item: MarketingContentItem,
 ): boolean {
   if (!usesLinkedInSectionWorkflow(item)) return false;
-  if (!isLinkedInPriorSectionApproved(sections, sectionId)) return false;
   const record = sectionRecord(sections, sectionId);
   if (record?.status === "approved") return false;
   if (!isSectionDataReady(sectionId, item)) return false;
-  if (!sections) {
-    return sectionId === "content";
-  }
+  if (!sections) return sectionId === "post";
   if (record?.status === "awaiting_head") return true;
-  if (record?.status === "pending" && isLinkedInPriorSectionApproved(sections, sectionId)) return true;
+  if (record?.status === "pending") return true;
   return false;
 }
 
@@ -122,20 +115,11 @@ export function linkedInSectionWaitingMessage(
   sectionId: LinkedInHeadSectionId,
   item: MarketingContentItem,
 ): string | null {
-  const label = LINKEDIN_HEAD_SECTIONS.find((s) => s.id === sectionId)?.label ?? sectionId;
-  if (!isLinkedInPriorSectionApproved(sections, sectionId)) {
-    const priorId: LinkedInHeadSectionId | null =
-      sectionId === "theme" ? "content" : sectionId === "fonts" ? "theme" : null;
-    if (priorId) {
-      const priorLabel = LINKEDIN_HEAD_SECTIONS.find((s) => s.id === priorId)?.label ?? priorId;
-      return `Approve ${priorLabel} first to unlock ${label} for approval.`;
-    }
-  }
   if (canHeadApproveLinkedInSection(sections, sectionId, item)) return null;
   const record = sectionRecord(sections, sectionId);
   if (record?.status === "approved") return null;
   if (!isSectionDataReady(sectionId, item)) {
-    return `LinkedIn handler has not completed the ${label} section yet.`;
+    return "LinkedIn handler must add topic and company before this post can be reviewed.";
   }
   return null;
 }
@@ -151,13 +135,23 @@ export function linkedInSectionRemarks(
 export function allLinkedInSectionsApproved(item: MarketingContentItem): boolean {
   if (!hasLinkedInSectionApproval(item)) return false;
   const sections = item.linkedin_head_sections as LinkedInHeadSections | null | undefined;
-  return LINKEDIN_HEAD_SECTIONS.every((section) => {
-    if (!isSectionDataReady(section.id, item)) return true;
-    return sections?.[section.id]?.status === "approved";
-  });
+  const record = sectionRecord(sections, "post");
+  if (!isSectionDataReady("post", item)) return false;
+  return record?.status === "approved";
 }
 
 export const LINKEDIN_FINAL_POSTER_ROLE = "linkedin_final_poster";
+
+export function hasLinkedInFinalDraftPreview(item: MarketingContentItem): boolean {
+  if (!usesLinkedInSectionWorkflow(item)) return false;
+  const draft = item.linkedin_final_draft;
+  if (!draft) return false;
+  return Boolean(
+    (draft.content_text ?? "").trim() ||
+      draft.poster_media_asset_id ||
+      (draft.status && draft.status !== "draft"),
+  );
+}
 
 export function linkedInFinalDraftApproved(item: MarketingContentItem): boolean {
   return item.linkedin_final_draft?.status === "approved";
@@ -250,10 +244,10 @@ export function linkedInPublishStatusLabel(item: MarketingContentItem): string |
     return "Final draft with marketing head";
   }
   if (canLinkedInHandlerSubmitFinalDraftToHead(item, null)) {
-    return "Head approved sections — send final draft to head";
+    return "Head approved post — send final draft to head";
   }
   if (linkedInHandlerInFinalDraftStage(item)) {
-    return "Head approved sections — send final draft to head";
+    return "Head approved post — send final draft to head";
   }
   return null;
 }

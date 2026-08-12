@@ -4,32 +4,31 @@ import { useCallback, useEffect, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { MarketingEnlargeableMedia } from "@/components/marketing/marketing-enlargeable-media";
-import { canHeadReviewLinkedInFinalDraft } from "@/lib/linkedin-section-approval";
+import { canHeadReviewVideoFinalDraft } from "@/lib/video-section-approval";
 import {
   ApiClientError,
-  linkedInHeadReviewFinalDraft,
-  linkedAssetMediaId,
   listContentAssets,
   marketingAssetUrl,
+  videoHeadReviewFinalDraft,
   type MarketingContentItem,
   type MarketingLinkedAsset,
 } from "@/services/marketing-service";
 
-type MarketingLinkedInHeadFinalDraftApprovalProps = {
+type MarketingVideoHeadFinalDraftApprovalProps = {
   item: MarketingContentItem;
   onUpdated: (item?: MarketingContentItem) => void;
 };
 
-export function MarketingLinkedInHeadFinalDraftApproval({
+export function MarketingVideoHeadFinalDraftApproval({
   item,
   onUpdated,
-}: MarketingLinkedInHeadFinalDraftApprovalProps) {
+}: MarketingVideoHeadFinalDraftApprovalProps) {
   const [assets, setAssets] = useState<MarketingLinkedAsset[]>([]);
   const [comments, setComments] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const draft = item.linkedin_final_draft;
+  const draft = item.video_final_draft;
 
   const loadAssets = useCallback(async () => {
     try {
@@ -43,11 +42,11 @@ export function MarketingLinkedInHeadFinalDraftApproval({
     void loadAssets();
   }, [loadAssets]);
 
-  if (!canHeadReviewLinkedInFinalDraft(item) || !draft) {
+  if (!canHeadReviewVideoFinalDraft(item) || !draft) {
     return null;
   }
 
-  const poster = draft.poster_media_asset_id
+  const videoAsset = draft.poster_media_asset_id
     ? assets.find((a) => a.asset.id === draft.poster_media_asset_id)
     : null;
 
@@ -55,7 +54,7 @@ export function MarketingLinkedInHeadFinalDraftApproval({
     setBusy(true);
     setError(null);
     try {
-      const updated = await linkedInHeadReviewFinalDraft(item.id, {
+      const updated = await videoHeadReviewFinalDraft(item.id, {
         status,
         comments: comments.trim() || undefined,
       });
@@ -69,30 +68,31 @@ export function MarketingLinkedInHeadFinalDraftApproval({
 
   return (
     <div className="space-y-3 rounded-xl border border-violet-500/40 bg-violet-500/5 p-4">
-      <p className="text-sm font-medium">Final draft approval — poster &amp; content</p>
+      <p className="text-sm font-medium">Final draft approval — video &amp; caption</p>
       <p className="text-xs text-muted-foreground">
-        LinkedIn handler submitted the finished poster and copy. Approve before they can send to the publisher.
+        Video editor submitted the finished video and caption. Approve before they can send to the publisher.
       </p>
 
       {error ? <p className="text-sm text-destructive">{error}</p> : null}
 
       <div className="space-y-3 rounded-lg border border-border/60 bg-background p-3 text-sm">
         <div>
-          <p className="text-xs font-medium uppercase text-muted-foreground">Final content</p>
+          <p className="text-xs font-medium uppercase text-muted-foreground">Final caption</p>
           <p className="mt-1 whitespace-pre-wrap">{draft.content_text || "—"}</p>
         </div>
-        {poster ? (
+        {videoAsset ? (
           <div>
-            <p className="text-xs font-medium uppercase text-muted-foreground">Final poster</p>
+            <p className="text-xs font-medium uppercase text-muted-foreground">Final video</p>
             <MarketingEnlargeableMedia
-              src={marketingAssetUrl(poster.asset.file_url)}
-              alt="Final poster"
+              src={marketingAssetUrl(videoAsset.asset.file_url)}
+              alt="Final video"
+              isVideo
               showCaption={false}
               mediaClassName="max-h-64 w-full"
             />
           </div>
         ) : (
-          <p className="text-xs text-muted-foreground">No poster provided.</p>
+          <p className="text-xs text-muted-foreground">No final video provided.</p>
         )}
       </div>
 

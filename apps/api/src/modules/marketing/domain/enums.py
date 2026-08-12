@@ -103,6 +103,7 @@ class WorkflowStage(str, Enum):
     LINKEDIN_HANDLER_REVIEW = "linkedin_handler_review"
     LINKEDIN_FINAL_DRAFT_HEAD_REVIEW = "linkedin_final_draft_head_review"
     VIDEO_EDITOR_REVIEW = "video_editor_review"
+    VIDEO_FINAL_DRAFT_HEAD_REVIEW = "video_final_draft_head_review"
     PUBLISHER_REVIEW = "publisher_review"
     HEAD_FINAL_REVIEW = "head_final_review"
     READY_TO_PUBLISH = "ready_to_publish"

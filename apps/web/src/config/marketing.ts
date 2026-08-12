@@ -65,11 +65,7 @@ export const MARKETING_NAV_ITEMS = [
   { title: "Overview", href: "/marketing/pipeline" },
   { title: "Campaigns", href: "/marketing/campaigns" },
   { title: "Content", href: "/marketing/content" },
-  { title: "Calendar", href: "/marketing/calendar" },
-  { title: "Channels", href: "/marketing/channels" },
-  { title: "Publish Log", href: "/marketing/publish-log" },
   { title: "Approvals", href: "/marketing/approvals" },
   { title: "Archive", href: "/marketing/archive" },
   { title: "Assets", href: "/marketing/assets" },
-  { title: "Reports", href: "/marketing/reports" },
 ] as const;

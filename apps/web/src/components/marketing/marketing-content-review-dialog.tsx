@@ -1,11 +1,10 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { X } from "lucide-react";
+import { FileText, X } from "lucide-react";
 
 import { FinanceStatusBadge } from "@/components/finance/finance-status-badge";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { useMarketingPermissions } from "@/hooks/use-marketing-permissions";
 import { inferSubmitterRole, isMarketingHead, isPublisherOnly } from "@/lib/marketing-verification";
 import {
@@ -20,11 +19,32 @@ import {
   linkedInPublishStatusLabel,
   usesLinkedInSectionWorkflow,
 } from "@/lib/linkedin-section-approval";
+import {
+  canHeadReviewVideoFinalDraft,
+  canMarkVideoAsPublished,
+  canVideoEditorSendToPublisher,
+  canVideoEditorSubmitFinalDraftToHead,
+  hasVideoSectionApproval,
+  usesVideoSectionWorkflow,
+  videoEditorAwaitingPublisher,
+  videoFinalDraftAwaitingHead,
+  videoPublishStatusLabel,
+} from "@/lib/video-section-approval";
 import { MarketingLinkedInFinalDraftPanel } from "@/components/marketing/marketing-linkedin-final-draft-panel";
+import { MarketingVideoFinalDraftPanel } from "@/components/marketing/marketing-video-final-draft-panel";
+import { MarketingSectionFinalDraftPreviews } from "@/components/marketing/marketing-section-final-draft-previews";
+import { MarketingSectionSourceDraftEditor } from "@/components/marketing/marketing-section-source-draft-editor";
+import {
+  canEditSectionSourceDraft,
+  hasSectionWorkflowFinalDraft,
+  publisherSeesFinalDraftOnly,
+} from "@/lib/marketing-section-preview";
 import { MarketingContentActivityTimeline } from "@/components/marketing/marketing-content-activity-timeline";
 import { MarketingContentPreviewCard } from "@/components/marketing/marketing-content-preview-card";
 import { MarketingLinkedInHeadFinalDraftApproval } from "@/components/marketing/marketing-linkedin-head-final-draft-approval";
 import { MarketingLinkedInHeadSectionApproval } from "@/components/marketing/marketing-linkedin-head-section-approval";
+import { MarketingVideoHeadFinalDraftApproval } from "@/components/marketing/marketing-video-head-final-draft-approval";
+import { MarketingVideoHeadSectionApproval } from "@/components/marketing/marketing-video-head-section-approval";
 import {
   ApiClientError,
   canUserReportPosting,
@@ -36,10 +56,17 @@ import {
   publishContentItem,
   reportContentPosting,
   submitContentItem,
-  updateContentItem,
+  videoSendToPublisher,
   type MarketingActivityLog,
   type MarketingContentItem,
 } from "@/services/marketing-service";
+import { cn } from "@/lib/utils";
+import {
+  marketingDialogHero,
+  marketingDialogOverlay,
+  marketingDialogPanel,
+  marketingFeedbackBanner,
+} from "@/lib/marketing-ui";
 import { MarketingVerificationPanel, MarketingHeadApprovalFooter } from "@/components/marketing/marketing-verification-panel";
 
 type MarketingContentReviewDialogProps = {
@@ -59,13 +86,6 @@ export function MarketingContentReviewDialog({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [timeline, setTimeline] = useState<MarketingActivityLog[]>([]);
-  const [editTitle, setEditTitle] = useState("");
-  const [editBody, setEditBody] = useState("");
-  const [editHashtags, setEditHashtags] = useState("");
-  const [editTheme, setEditTheme] = useState("");
-  const [editFontName, setEditFontName] = useState("");
-  const [editFontSize, setEditFontSize] = useState("");
-  const [editColorCodes, setEditColorCodes] = useState("");
   const [canPublishWorkflow, setCanPublishWorkflow] = useState(false);
   const [postingReportNotes, setPostingReportNotes] = useState("");
   const [postingReportUrl, setPostingReportUrl] = useState("");
@@ -118,13 +138,6 @@ export function MarketingContentReviewDialog({
 
   useEffect(() => {
     if (!currentItem || !open) return;
-    setEditTitle(currentItem.title);
-    setEditBody(currentItem.body ?? "");
-    setEditHashtags(currentItem.hashtags ?? "");
-    setEditTheme(currentItem.theme ?? "");
-    setEditFontName(currentItem.font_name ?? "");
-    setEditFontSize(currentItem.font_size ?? "");
-    setEditColorCodes(currentItem.color_codes ?? "");
     setError(null);
     setPostingReportNotes("");
     setPostingReportUrl(currentItem.target_url ?? "");
@@ -153,13 +166,10 @@ export function MarketingContentReviewDialog({
   };
 
   const locked = isMarketingContentLocked(currentItem);
-
-  const canEdit =
-    !locked &&
-    !head &&
-    perms.canUpdate &&
-    Boolean(submitterRole) &&
-    (currentItem.status === "draft" || currentItem.status === "changes_required" || currentItem.status === "in_review");
+  const publisherFinalDraftOnly = publisherSeesFinalDraftOnly(currentItem, publisher);
+  const showFinalDraftPreview = hasSectionWorkflowFinalDraft(currentItem);
+  const showSourceDraftEditor = canEditSectionSourceDraft(currentItem, perms.userId);
+  const showSourcePreview = !publisherFinalDraftOnly && !showSourceDraftEditor;
 
   const needsPostingReport =
     !locked &&
@@ -177,6 +187,13 @@ export function MarketingContentReviewDialog({
     hasLinkedInSectionApproval(currentItem) &&
     !canHeadReviewLinkedInFinalDraft(currentItem);
   const linkedInHeadFinalDraftReview = !locked && head && canHeadReviewLinkedInFinalDraft(currentItem);
+  const videoHeadReview =
+    !locked &&
+    head &&
+    usesVideoSectionWorkflow(currentItem) &&
+    hasVideoSectionApproval(currentItem) &&
+    !canHeadReviewVideoFinalDraft(currentItem);
+  const videoHeadFinalDraftReview = !locked && head && canHeadReviewVideoFinalDraft(currentItem);
   const handlerFinalDraftReview =
     !locked &&
     !head &&
@@ -186,12 +203,36 @@ export function MarketingContentReviewDialog({
       canLinkedInHandlerSendToPublisher(currentItem, perms.userId) ||
       linkedInFinalDraftAwaitingHead(currentItem) ||
       linkedInHandlerAwaitingPublisher(currentItem));
+  const videoHandlerFinalDraftReview =
+    !locked &&
+    !head &&
+    Boolean(submitterRole) &&
+    usesVideoSectionWorkflow(currentItem) &&
+    (canVideoEditorSubmitFinalDraftToHead(currentItem, perms.userId) ||
+      canVideoEditorSendToPublisher(currentItem, perms.userId) ||
+      videoFinalDraftAwaitingHead(currentItem) ||
+      videoEditorAwaitingPublisher(currentItem));
+
+  const showFooterSubmit =
+    !showSourceDraftEditor &&
+    (currentItem.status === "draft" || currentItem.status === "changes_required") &&
+    Boolean(submitterRole);
+  const showFooterSendToPublisher =
+    (canLinkedInHandlerSendToPublisher(currentItem, perms.userId) && !handlerFinalDraftReview) ||
+    (canVideoEditorSendToPublisher(currentItem, perms.userId) && !videoHandlerFinalDraftReview);
+  const showFooterGenericPublish =
+    publisher &&
+    canPublishWorkflow &&
+    !hasLinkedInSectionApproval(currentItem) &&
+    !hasVideoSectionApproval(currentItem);
+  const showDialogFooter =
+    !head && !locked && (showFooterSubmit || showFooterSendToPublisher || showFooterGenericPublish || needsPostingReport);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center overflow-hidden p-4">
       <button
         type="button"
-        className="absolute inset-0 bg-black/50"
+        className={marketingDialogOverlay}
         aria-label="Close review panel"
         onClick={() => onOpenChange(false)}
       />
@@ -199,110 +240,83 @@ export function MarketingContentReviewDialog({
         role="dialog"
         aria-modal="true"
         onClick={(e) => e.stopPropagation()}
-        className="relative z-10 flex max-h-[90vh] w-full max-w-2xl flex-col overflow-hidden rounded-xl border border-border bg-background shadow-lg"
+        className={marketingDialogPanel}
       >
-        <div className="shrink-0 border-b border-border/60 bg-muted/10 px-5 py-4">
-          <div className="flex items-start justify-between gap-3">
-            <div className="min-w-0 space-y-2">
-              <h2 className="truncate text-lg font-semibold tracking-tight">{currentItem.title}</h2>
-              <p className="font-mono text-[11px] text-muted-foreground">{currentItem.content_number}</p>
-              <div className="flex flex-wrap items-center gap-2">
+        <div className={cn("shrink-0", marketingDialogHero)}>
+          <div className="flex items-start justify-between gap-4">
+            <div className="min-w-0 flex-1 space-y-3">
+              <div className="flex items-start gap-3">
+                <div className="flex size-10 shrink-0 items-center justify-center rounded-xl border border-border/70 bg-background shadow-sm">
+                  <FileText className="size-4 text-primary/80" />
+                </div>
+                <div className="min-w-0 space-y-1">
+                  <p className="font-mono text-[10px] font-medium uppercase tracking-[0.18em] text-muted-foreground">
+                    {currentItem.content_number}
+                  </p>
+                  <h2 className="text-xl font-semibold leading-tight tracking-tight text-foreground">
+                    {currentItem.title}
+                  </h2>
+                </div>
+              </div>
+              <div className="flex flex-wrap items-center gap-2 pl-[52px]">
                 <FinanceStatusBadge status={currentItem.status} />
-                <span className="inline-flex items-center rounded-full border border-border/70 bg-background px-2.5 py-0.5 text-[11px] font-medium text-muted-foreground">
+                <span className="inline-flex items-center rounded-full border border-border/70 bg-background px-2.5 py-0.5 text-[11px] font-medium text-muted-foreground shadow-sm">
                   {formatMarketingStatus(currentItem.content_type)}
                 </span>
                 {hasLinkedInSectionApproval(currentItem) && linkedInPublishStatusLabel(currentItem) ? (
-                  <span className="inline-flex items-center rounded-full border border-primary/20 bg-primary/5 px-2.5 py-0.5 text-[11px] font-medium text-primary">
+                  <span className="inline-flex items-center rounded-full border border-primary/25 bg-primary/10 px-2.5 py-0.5 text-[11px] font-medium text-primary">
                     {linkedInPublishStatusLabel(currentItem)}
+                  </span>
+                ) : null}
+                {hasVideoSectionApproval(currentItem) && videoPublishStatusLabel(currentItem) ? (
+                  <span className="inline-flex items-center rounded-full border border-primary/25 bg-primary/10 px-2.5 py-0.5 text-[11px] font-medium text-primary">
+                    {videoPublishStatusLabel(currentItem)}
                   </span>
                 ) : null}
               </div>
             </div>
-            <Button type="button" variant="outline" size="sm" onClick={() => onOpenChange(false)}>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="shrink-0 bg-background/80"
+              onClick={() => onOpenChange(false)}
+            >
               <X className="size-4" />
             </Button>
           </div>
         </div>
 
-        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain bg-muted/5 p-5">
-          <div className="space-y-5">
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain bg-muted/[0.03] p-5">
+          <div className="space-y-4">
             {currentItem.rejection_reason ? (
-              <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 p-4 text-sm">
-                <p className="text-xs font-semibold uppercase tracking-wide text-amber-800 dark:text-amber-200">
+              <div className={marketingFeedbackBanner}>
+                <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-amber-800 dark:text-amber-200">
                   Marketing head feedback
                 </p>
                 <p className="mt-2 whitespace-pre-wrap leading-relaxed">{currentItem.rejection_reason}</p>
               </div>
             ) : null}
 
-            {canEdit ? (
-              <div className="space-y-3 rounded-xl border border-border/80 bg-card p-4 shadow-sm">
-                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Edit content</p>
-                <div>
-                  <label className="mb-1 block text-xs text-muted-foreground">Title</label>
-                  <Input value={editTitle} onChange={(e) => setEditTitle(e.target.value)} />
-                </div>
-                <div>
-                  <label className="mb-1 block text-xs text-muted-foreground">Post text / body</label>
-                  <textarea
-                    value={editBody}
-                    onChange={(e) => setEditBody(e.target.value)}
-                    rows={6}
-                    className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                  />
-                </div>
-                <div>
-                  <label className="mb-1 block text-xs text-muted-foreground">Hashtags</label>
-                  <Input value={editHashtags} onChange={(e) => setEditHashtags(e.target.value)} placeholder="#launch #product" />
-                </div>
-                <div>
-                  <label className="mb-1 block text-xs text-muted-foreground">Theme</label>
-                  <Input value={editTheme} onChange={(e) => setEditTheme(e.target.value)} placeholder="e.g. Product launch, festive" />
-                </div>
-                <div className="grid gap-3 sm:grid-cols-3">
-                  <div>
-                    <label className="mb-1 block text-xs text-muted-foreground">Font name</label>
-                    <Input value={editFontName} onChange={(e) => setEditFontName(e.target.value)} placeholder="Arial" />
-                  </div>
-                  <div>
-                    <label className="mb-1 block text-xs text-muted-foreground">Font size</label>
-                    <Input value={editFontSize} onChange={(e) => setEditFontSize(e.target.value)} placeholder="14px" />
-                  </div>
-                  <div>
-                    <label className="mb-1 block text-xs text-muted-foreground">Color codes</label>
-                    <Input value={editColorCodes} onChange={(e) => setEditColorCodes(e.target.value)} placeholder="#003366" />
-                  </div>
-                </div>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  disabled={busy}
-                  onClick={() =>
-                    void run(
-                      () =>
-                        updateContentItem(currentItem.id, {
-                          title: editTitle.trim(),
-                          body: editBody.trim() || null,
-                          hashtags: editHashtags.trim() || null,
-                          theme: editTheme.trim() || null,
-                          font_name: editFontName.trim() || null,
-                          font_size: editFontSize.trim() || null,
-                          color_codes: editColorCodes.trim() || null,
-                        }),
-                      false,
-                    )
-                  }
-                >
-                  Save edits
-                </Button>
-              </div>
-            ) : (
-              <MarketingContentPreviewCard item={currentItem} locked={locked} />
-            )}
+            {showSourceDraftEditor ? (
+              <MarketingSectionSourceDraftEditor
+                item={currentItem}
+                externalBusy={busy}
+                onUpdated={(updated) => void refreshDialogItem(updated)}
+              />
+            ) : showSourcePreview ? (
+              <MarketingContentPreviewCard item={currentItem} locked={locked} sourceDraft />
+            ) : null}
+
+            {showFinalDraftPreview ? <MarketingSectionFinalDraftPreviews item={currentItem} /> : null}
 
             {linkedInHeadFinalDraftReview ? (
               <MarketingLinkedInHeadFinalDraftApproval
+                item={currentItem}
+                onUpdated={(updated) => void refreshDialogItem(updated)}
+              />
+            ) : videoHeadFinalDraftReview ? (
+              <MarketingVideoHeadFinalDraftApproval
                 item={currentItem}
                 onUpdated={(updated) => void refreshDialogItem(updated)}
               />
@@ -311,8 +325,19 @@ export function MarketingContentReviewDialog({
                 item={currentItem}
                 onUpdated={() => void refreshDialogItem()}
               />
+            ) : videoHeadReview ? (
+              <MarketingVideoHeadSectionApproval
+                item={currentItem}
+                onUpdated={() => void refreshDialogItem()}
+              />
             ) : handlerFinalDraftReview ? (
               <MarketingLinkedInFinalDraftPanel
+                item={currentItem}
+                userId={perms.userId}
+                onUpdated={(updated) => void refreshDialogItem(updated)}
+              />
+            ) : videoHandlerFinalDraftReview ? (
+              <MarketingVideoFinalDraftPanel
                 item={currentItem}
                 userId={perms.userId}
                 onUpdated={(updated) => void refreshDialogItem(updated)}
@@ -336,43 +361,35 @@ export function MarketingContentReviewDialog({
         </div>
 
         {locked ? null : head && !linkedInHeadReview ? (
-          <div className="shrink-0 border-t border-border/60 bg-background p-5 pt-4">
+          <div className="shrink-0 border-t border-border/60 bg-muted/10 p-5 pt-4">
             <MarketingHeadApprovalFooter item={currentItem} onUpdated={() => void refreshDialogItem()} />
           </div>
-        ) : head ? null : locked ? null : (
-          <div className="shrink-0 border-t border-border/60 p-5 pt-4">
+        ) : head ? null : locked ? null : showDialogFooter ? (
+          <div className="shrink-0 border-t border-border/60 bg-muted/10 p-5 pt-4">
             <div className="flex flex-wrap gap-2">
-              {(currentItem.status === "draft" || currentItem.status === "changes_required") && submitterRole ? (
+              {showFooterSubmit ? (
                 <Button type="button" disabled={busy} onClick={() => void run(() => submitContentItem(currentItem.id))}>
                   {currentItem.status === "changes_required" ? "Resubmit for verification" : "Start verification workflow"}
                 </Button>
               ) : null}
 
-              {canLinkedInHandlerSendToPublisher(currentItem, perms.userId) && !handlerFinalDraftReview ? (
-                <Button type="button" disabled={busy} onClick={() => void run(() => linkedInSendToPublisher(currentItem.id))}>
-                  Send final draft to publisher
-                </Button>
-              ) : null}
-
-              {canMarkLinkedInAsPublished(perms, currentItem) && canPublishWorkflow ? (
+              {showFooterSendToPublisher ? (
                 <Button
                   type="button"
                   disabled={busy}
                   onClick={() =>
                     void run(() =>
-                      publishContentItem(currentItem.id, {
-                        content_item_id: currentItem.id,
-                        published_url: postingReportUrl.trim() || undefined,
-                        notes: postingReportNotes.trim() || "Marked as published",
-                      }),
+                      usesVideoSectionWorkflow(currentItem)
+                        ? videoSendToPublisher(currentItem.id)
+                        : linkedInSendToPublisher(currentItem.id),
                     )
                   }
                 >
-                  Mark as published
+                  Send final draft to publisher
                 </Button>
               ) : null}
 
-              {publisher && canPublishWorkflow && !hasLinkedInSectionApproval(currentItem) ? (
+              {showFooterGenericPublish ? (
                 <Button
                   type="button"
                   disabled={busy}
@@ -426,7 +443,7 @@ export function MarketingContentReviewDialog({
               ) : null}
             </div>
           </div>
-        )}
+        ) : null}
       </div>
     </div>
   );

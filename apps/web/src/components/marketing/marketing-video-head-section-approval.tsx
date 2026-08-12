@@ -2,42 +2,42 @@
 
 import { useCallback, useEffect, useState } from "react";
 
-import { MarketingLinkedInSectionPreview } from "@/components/marketing/marketing-linkedin-section-preview";
+import { MarketingVideoSectionPreview } from "@/components/marketing/marketing-video-section-preview";
 import {
   SectionApprovalStatusBadge,
   SectionHeadRemarks,
 } from "@/components/marketing/marketing-section-status-badge";
 import { Button } from "@/components/ui/button";
 import {
-  canHeadApproveLinkedInSection,
-  getLinkedInSectionDisplayStatus,
-  LINKEDIN_HEAD_SECTIONS,
-  linkedInSectionRemarks,
-  linkedInSectionWaitingMessage,
-  type LinkedInHeadSectionId,
-} from "@/lib/linkedin-section-approval";
-import { LINKEDIN_CONTENT_MEDIA_ROLES } from "@/lib/marketing-verification";
+  canHeadApproveVideoSection,
+  getVideoSectionDisplayStatus,
+  VIDEO_HEAD_SECTIONS,
+  videoSectionRemarks,
+  videoSectionWaitingMessage,
+  type VideoHeadSectionId,
+} from "@/lib/video-section-approval";
+import { VIDEO_CONTENT_MEDIA_ROLES } from "@/lib/marketing-verification";
 import { cn } from "@/lib/utils";
 import {
   ApiClientError,
   getContentItem,
-  linkedInHeadReviewSection,
   listContentAssets,
+  videoHeadReviewSection,
   type MarketingContentItem,
   type MarketingLinkedAsset,
 } from "@/services/marketing-service";
 
-type MarketingLinkedInHeadSectionApprovalProps = {
+type MarketingVideoHeadSectionApprovalProps = {
   item: MarketingContentItem;
   onUpdated: () => void;
   compact?: boolean;
 };
 
-export function MarketingLinkedInHeadSectionApproval({
+export function MarketingVideoHeadSectionApproval({
   item: initialItem,
   onUpdated,
   compact = false,
-}: MarketingLinkedInHeadSectionApprovalProps) {
+}: MarketingVideoHeadSectionApprovalProps) {
   const [item, setItem] = useState(initialItem);
   const [assets, setAssets] = useState<MarketingLinkedAsset[]>([]);
   const [assetsLoading, setAssetsLoading] = useState(true);
@@ -54,10 +54,13 @@ export function MarketingLinkedInHeadSectionApproval({
       ]);
       setItem(fresh);
       setAssets(
-        linked.filter((link) =>
-          LINKEDIN_CONTENT_MEDIA_ROLES.includes(
-            (link.asset_role ?? "") as (typeof LINKEDIN_CONTENT_MEDIA_ROLES)[number],
-          ) || link.asset.asset_kind === "image" || link.asset.asset_kind === "video",
+        linked.filter(
+          (link) =>
+            VIDEO_CONTENT_MEDIA_ROLES.includes(
+              (link.asset_role ?? "") as (typeof VIDEO_CONTENT_MEDIA_ROLES)[number],
+            ) ||
+            link.asset.asset_kind === "image" ||
+            link.asset.asset_kind === "video",
         ),
       );
     } catch {
@@ -74,13 +77,13 @@ export function MarketingLinkedInHeadSectionApproval({
   }, [initialItem, refresh]);
 
   const runSectionReview = async (
-    sectionId: LinkedInHeadSectionId,
+    sectionId: VideoHeadSectionId,
     status: "approved" | "changes_requested" | "rejected",
   ) => {
     setBusy(true);
     setError(null);
     try {
-      const updated = await linkedInHeadReviewSection(item.id, {
+      const updated = await videoHeadReviewSection(item.id, {
         section: "post",
         status,
         comments: comments[sectionId] || comments.post || undefined,
@@ -94,18 +97,18 @@ export function MarketingLinkedInHeadSectionApproval({
     }
   };
 
-  const sections = item.linkedin_head_sections;
+  const sections = item.video_head_sections;
 
   return (
     <div className="space-y-3">
-      <p className="text-sm font-medium">LinkedIn post approval</p>
+      <p className="text-sm font-medium">Video content approval</p>
       {error ? <p className="text-sm text-destructive">{error}</p> : null}
-      {LINKEDIN_HEAD_SECTIONS.map((section) => {
+      {VIDEO_HEAD_SECTIONS.map((section) => {
         const sectionId = section.id;
-        const displayStatus = getLinkedInSectionDisplayStatus(sections, sectionId, item);
-        const canApprove = canHeadApproveLinkedInSection(sections, sectionId, item);
-        const waitingMessage = linkedInSectionWaitingMessage(sections, sectionId, item);
-        const remarks = linkedInSectionRemarks(sections, sectionId);
+        const displayStatus = getVideoSectionDisplayStatus(sections, sectionId, item);
+        const canApprove = canHeadApproveVideoSection(sections, sectionId, item);
+        const waitingMessage = videoSectionWaitingMessage(sections, sectionId, item);
+        const remarks = videoSectionRemarks(sections, sectionId);
 
         return (
           <section
@@ -117,11 +120,7 @@ export function MarketingLinkedInHeadSectionApproval({
               <SectionApprovalStatusBadge status={displayStatus} />
             </div>
 
-            <MarketingLinkedInSectionPreview
-              item={item}
-              mediaAssets={assets}
-              assetsLoading={assetsLoading}
-            />
+            <MarketingVideoSectionPreview item={item} mediaAssets={assets} assetsLoading={assetsLoading} />
 
             <SectionHeadRemarks remarks={remarks} status={displayStatus} />
 
@@ -144,13 +143,8 @@ export function MarketingLinkedInHeadSectionApproval({
                   }
                 />
                 <div className="flex flex-wrap gap-2">
-                  <Button
-                    type="button"
-                    size="sm"
-                    disabled={busy}
-                    onClick={() => void runSectionReview(sectionId, "approved")}
-                  >
-                    Approve post
+                  <Button type="button" size="sm" disabled={busy} onClick={() => void runSectionReview(sectionId, "approved")}>
+                    Approve video
                   </Button>
                   <Button
                     type="button"
