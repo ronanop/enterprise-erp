@@ -7,6 +7,7 @@ import { CrmSidebar } from "@/components/crm/crm-workspace-nav";
 import { ProcurementSidebar } from "@/components/procurement/procurement-workspace-nav";
 import { AppSidebar } from "@/components/layout/app-sidebar";
 import { AppTopbar } from "@/components/layout/app-topbar";
+import { cn } from "@/lib/utils";
 import { useStandaloneChrome } from "@/hooks/use-standalone-chrome";
 
 interface AppShellProps {
@@ -21,13 +22,23 @@ export function AppShell({ children }: AppShellProps) {
   const isProcurement = pathname === "/procurement" || pathname.startsWith("/procurement/");
 
   return (
-    <div className="flex min-h-dvh w-full max-w-[100dvw] overflow-x-clip bg-background">
+    <div
+      className={cn(
+        "flex min-h-dvh w-full max-w-[100dvw] overflow-x-clip bg-background",
+        standalone && isProcurement && "bg-slate-50",
+      )}
+    >
       {!standalone ? <AppSidebar /> : null}
       {standalone && isCrm ? <CrmSidebar /> : null}
       {standalone && isProcurement ? <ProcurementSidebar /> : null}
       <div className="flex min-w-0 flex-1 flex-col overflow-x-clip">
         <AppTopbar />
-        <main className="min-w-0 flex-1 overflow-x-clip px-4 py-6 sm:px-6 lg:px-8">
+        <main
+          className={cn(
+            "min-w-0 flex-1 overflow-x-clip px-4 py-6 sm:px-6 lg:px-8",
+            standalone && isProcurement && "bg-slate-50",
+          )}
+        >
           <div className="mx-auto w-full min-w-0 max-w-[1400px]">
             {children}
           </div>

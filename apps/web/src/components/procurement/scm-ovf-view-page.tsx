@@ -29,6 +29,7 @@ import {
   scmHoldDayCountDisplay,
   scmHoldSinceDisplay,
 } from "@/utils/scm-ovf-hold";
+import { formatOvfDeliveryPeriodDisplay } from "@/utils/ovf-delivery-period";
 import { downloadScmOvfPdf } from "@/utils/scm-ovf-pdf";
 import { ApiClientError } from "@/services/api-client";
 import {
@@ -679,6 +680,9 @@ export function ScmOvfViewPage({ ovfId }: { ovfId: string }) {
                 <DetailItem label="Customer PO number">{textOrDash(preview.po_number)}</DetailItem>
                 <DetailItem label="Customer PO date">
                   {formatPoDate(preview.po_date)}
+                </DetailItem>
+                <DetailItem label="Delivery period">
+                  {formatOvfDeliveryPeriodDisplay(preview.delivery_period)}
                 </DetailItem>
               </dl>
               <div className="grid gap-3 sm:grid-cols-2">

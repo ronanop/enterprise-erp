@@ -29,7 +29,7 @@ import {
 } from "@/utils/delivery-status-flash";
 
 export function DeliveryStatusListPage() {
-  const [challans, setChallans] = useState<DeliveryChallanRecord[]>([]);
+  const [challans, setChallans] = useState<DeliveryChallanRecord[]>(() => listDeliveryChallans());
   const [query, setQuery] = useState("");
   const [statusVersion, setStatusVersion] = useState(0);
   const [flash, setFlash] = useState<ReturnType<typeof consumeDeliveryStatusFlash>>(null);

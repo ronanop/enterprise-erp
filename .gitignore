@@ -43,6 +43,9 @@ Thumbs.db
 # Docker
 docker-data/
 
+# Local database dumps (contain live data)
+backups/*.sql
+
 # Logs
 *.log
 logs/

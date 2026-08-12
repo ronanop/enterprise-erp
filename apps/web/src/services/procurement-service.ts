@@ -4,7 +4,7 @@ import { cachedFetch, invalidateClientCache, peekCachedValue } from "@/lib/clien
 import { env } from "@/utils/env";
 
 /** Short TTL so tab switches reuse in-flight / recent list responses. */
-const PROCUREMENT_LIST_TTL_MS = 45_000;
+const PROCUREMENT_LIST_TTL_MS = 300_000;
 
 export const PROCUREMENT_INVENTORY_CACHE_KEY = "erp.procurement.inventory";
 export const PROCUREMENT_OVERVIEW_CACHE_KEY = "erp.procurement.overview";

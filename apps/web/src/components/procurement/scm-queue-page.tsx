@@ -165,7 +165,7 @@ export function ScmQueuePage() {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [newOvfIds, setNewOvfIds] = useState<Set<string>>(new Set());
-  const [query, setQuery] = useState("");
+  const [query, setQuery] = useState(() => searchParams.get("q")?.trim() ?? "");
   const queueOvfIdsRef = useRef<string[]>([]);
 
   const setFilter = useCallback(

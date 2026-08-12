@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Boxes, Package, Plus, RefreshCw, Upload } from "lucide-react";
 
@@ -32,7 +31,7 @@ import {
   type ProcurementInventoryRow,
   type VendorOption,
 } from "@/services/procurement-service";
-import { buildProcurementInventoryStockSummary, isGrnNonBilledStockRow } from "@/utils/procurement-inventory-report";
+import { buildProcurementInventoryStockSummary, inventoryRowStableKey, isGrnNonBilledStockRow, nonBilledStockQuantity } from "@/utils/procurement-inventory-report";
 
 export function ProcurementInventoryListPage() {
   const router = useRouter();
@@ -95,7 +94,7 @@ export function ProcurementInventoryListPage() {
     if (!q) return rows;
     return rows.filter((row) => {
       const vendor = row.vendor_id ? (vendors[row.vendor_id]?.label ?? "") : "";
-      return [row.grn_number, row.company_po_number, vendor, row.product_name, row.serial_number]
+      return [row.grn_number, row.company_po_number, vendor, row.product_name, row.serial_number, String(row.unit_index)]
         .join(" ")
         .toLowerCase()
         .includes(q);
@@ -107,6 +106,21 @@ export function ProcurementInventoryListPage() {
     () => reportSource.filter(isGrnNonBilledStockRow),
     [reportSource],
   );
+  const grnStockTableRows = useMemo(() => {
+    return [...grnStockRows].sort((a, b) => {
+      const product = (a.product_name ?? "").localeCompare(b.product_name ?? "", undefined, {
+        sensitivity: "base",
+      });
+      if (product !== 0) return product;
+      const po = (a.company_po_number ?? "").localeCompare(b.company_po_number ?? "", undefined, {
+        numeric: true,
+      });
+      if (po !== 0) return po;
+      const line = (a.line_number ?? 0) - (b.line_number ?? 0);
+      if (line !== 0) return line;
+      return (a.unit_index ?? 0) - (b.unit_index ?? 0);
+    });
+  }, [grnStockRows]);
   const stockSummary = useMemo(
     () => buildProcurementInventoryStockSummary(grnStockRows),
     [grnStockRows],
@@ -240,21 +254,17 @@ export function ProcurementInventoryListPage() {
                     <thead className={procurementUi.thead}>
                       <tr>
                         <th className={cn(procurementUi.th, "px-4")}>Product</th>
+                        <th className={cn(procurementUi.th, "px-4 text-right")}>Stock qty</th>
                         <th className={cn(procurementUi.th, "px-4")}>Description</th>
                         <th className={cn(procurementUi.th, "px-4 text-right")}>Vendor price</th>
                         <th className={cn(procurementUi.th, "px-4")}>Serial number</th>
-                        <th className={cn(procurementUi.th, "px-4")}>PO number</th>
                         <th className={cn(procurementUi.th, "px-4")}>GRN number</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {grnStockRows.map((line, index) => (
+                      {grnStockTableRows.map((line, index) => (
                         <tr
-                          key={
-                            line.stock_unit_id ??
-                            line.import_line_id ??
-                            `${line.grn_number}-${line.unit_index}-${index}`
-                          }
+                          key={inventoryRowStableKey(line, index)}
                           className={procurementUi.tr}
                         >
                           <td className={cn(procurementUi.td, "px-4")}>
@@ -265,6 +275,14 @@ export function ProcurementInventoryListPage() {
                             >
                               {line.product_name?.trim() || "—"}
                             </button>
+                          </td>
+                          <td
+                            className={cn(
+                              procurementUi.tdNumeric,
+                              "px-4 text-right font-mono tabular-nums text-foreground",
+                            )}
+                          >
+                            {nonBilledStockQuantity(line).toLocaleString("en-IN")}
                           </td>
                           <td
                             className={cn(
@@ -290,18 +308,6 @@ export function ProcurementInventoryListPage() {
                               onSaved={() => void load(true)}
                               onError={setSerialSaveError}
                             />
-                          </td>
-                          <td className={cn(procurementUi.td, "px-4 font-medium tabular-nums")}>
-                            {line.order_id ? (
-                              <Link
-                                href={`/procurement/orders/${line.order_id}`}
-                                className="cursor-pointer text-[#0369A1] transition-colors duration-200 hover:underline"
-                              >
-                                {line.company_po_number}
-                              </Link>
-                            ) : (
-                              line.company_po_number
-                            )}
                           </td>
                           <td
                             className={cn(

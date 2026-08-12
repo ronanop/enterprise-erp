@@ -1010,7 +1010,9 @@ export async function createOvf(body: OvfFormInput): Promise<Ovf> {
 }
 
 export async function updateOvf(id: string, body: Partial<OvfFormInput>): Promise<Ovf> {
-  return unwrap(await resourceService.update<Ovf>(CRM_OVF_API, id, body));
+  const ovf = unwrap(await resourceService.update<Ovf>(CRM_OVF_API, id, body));
+  invalidateClientCache("erp.procurement.");
+  return ovf;
 }
 
 export async function listOvfLines(ovfId: string): Promise<OvfLine[]> {
@@ -1044,7 +1046,11 @@ export async function sendOvfForApproval(
 }
 
 export async function shareOvfToScm(id: string): Promise<Ovf> {
-  return unwrap(await apiClient<Ovf>(`${CRM_OVF_API}/${id}/share-to-scm`, { method: "POST", body: {} }));
+  const ovf = unwrap(
+    await apiClient<Ovf>(`${CRM_OVF_API}/${id}/share-to-scm`, { method: "POST", body: {} }),
+  );
+  invalidateClientCache("erp.procurement.");
+  return ovf;
 }
 
 export async function markOvfDealWon(id: string, dealWonAmount: number): Promise<Ovf> {

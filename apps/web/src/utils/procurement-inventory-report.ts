@@ -39,6 +39,71 @@ function hasTrackedSerial(serial: string | null | undefined): boolean {
   return value.toUpperCase() !== "NA";
 }
 
+/** Quantity received on GRN but not yet billed (stock on hand). */
+export function nonBilledStockQuantity(row: ProcurementInventoryRow): number {
+  const received = Number(row.received_quantity);
+  const billing = Number(row.billing_quantity);
+  if (Number.isFinite(received) && received > 0) {
+    return Math.max(0, Math.round(received - billing));
+  }
+  return 1;
+}
+
+function inventoryUnitGroupKey(row: ProcurementInventoryRow): string {
+  return [
+    row.order_line_id ?? row.grn_number,
+    row.grn_number,
+    productLabel(row),
+  ].join("\0");
+}
+
+/** Label for one stocked unit row (position within product + GRN). */
+export function formatInventoryUnitLabel(
+  row: ProcurementInventoryRow,
+  position: number,
+  totalInGroup: number,
+): string {
+  const serial = (row.serial_number ?? "").trim();
+  if (hasTrackedSerial(serial) && serial.toUpperCase() !== "—" && serial !== "-") {
+    return serial;
+  }
+  const index = row.unit_index > 0 ? row.unit_index : position;
+  if (totalInGroup > 1) {
+    return `Unit ${position} of ${totalInGroup}`;
+  }
+  return `Unit ${index}`;
+}
+
+export function buildInventoryUnitLabels(
+  rows: ProcurementInventoryRow[],
+): Map<string, string> {
+  const groups = new Map<string, ProcurementInventoryRow[]>();
+  for (const row of rows) {
+    const key = inventoryUnitGroupKey(row);
+    const list = groups.get(key) ?? [];
+    list.push(row);
+    groups.set(key, list);
+  }
+
+  const labels = new Map<string, string>();
+  for (const groupRows of groups.values()) {
+    const total = groupRows.length;
+    groupRows.forEach((row, index) => {
+      const rowKey = inventoryRowStableKey(row, index);
+      labels.set(rowKey, formatInventoryUnitLabel(row, index + 1, total));
+    });
+  }
+  return labels;
+}
+
+export function inventoryRowStableKey(row: ProcurementInventoryRow, index: number): string {
+  return (
+    row.stock_unit_id ??
+    row.import_line_id ??
+    `${row.grn_number}-${row.unit_index}-${index}`
+  );
+}
+
 export function buildProcurementInventoryStockSummary(
   rows: ProcurementInventoryRow[],
 ): ProcurementInventoryStockSummary {

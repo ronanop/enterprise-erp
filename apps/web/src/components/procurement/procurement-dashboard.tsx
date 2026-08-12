@@ -2,23 +2,14 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import {
-  ClipboardList,
-  RefreshCw,
-  X,
-} from "lucide-react";
+import { RefreshCw } from "lucide-react";
 
-import { ProcurementInventoryStockCard } from "@/components/procurement/procurement-inventory-stock-card";
-import { ProcurementOpenOvfCard } from "@/components/procurement/procurement-open-ovf-card";
-import { ProcurementPoSummaryCard } from "@/components/procurement/procurement-po-summary-card";
-import { ProcurementDashboardCharts } from "@/components/procurement/procurement-dashboard-charts";
+import { ProcurementDashboardSummary } from "@/components/procurement/procurement-dashboard-summary";
 import { ProcurementPipelineFunnel } from "@/components/procurement/procurement-pipeline-funnel";
 import {
-  ProcurementErrorBanner,
   ProcurementPage,
   ProcurementWarnBanner,
 } from "@/components/procurement/procurement-ui";
-import { PageHeader } from "@/components/layout/page-header";
 import { Button } from "@/components/ui/button";
 import { useClientAuth } from "@/hooks/use-client-auth";
 import { cn } from "@/lib/utils";
@@ -27,22 +18,23 @@ import {
   invalidateProcurementListCache,
   listProcurementInventory,
   loadProcurementOverview,
-  peekProcurementOverviewFromCache,
   peekProcurementInventoryFromCache,
+  peekProcurementOverviewFromCache,
   peekPurchaseOrdersFromCache,
   type ProcurementOverview,
   type ProcurementRow,
   type ProcOrder,
   type ScmQueueItem,
 } from "@/services/procurement-service";
-import { getUnseenScmOvfIds } from "@/utils/scm-queue-seen";
-import { deriveScmOvfQueueStatus } from "@/utils/scm-queue-ovf-status";
 import { countPoBuckets, emptyPoBucketCounts } from "@/utils/procurement-po-buckets";
 import {
   buildProcurementInventoryStockSummary,
   isGrnNonBilledStockRow,
   type ProcurementInventoryStockSummary,
 } from "@/utils/procurement-inventory-report";
+import {
+  isScmOpenOvfRow,
+} from "@/utils/scm-queue-ovf-status";
 
 /** Same rule as GrnsListPage — GRN stage = POs with partial/delivered receipt. */
 function isReceiptPo(row: ProcurementRow): boolean {
@@ -67,7 +59,6 @@ export function ProcurementDashboard() {
   );
   const [loading, setLoading] = useState(() => cachedOnMount === null);
   const [refreshing, setRefreshing] = useState(false);
-  const [dismissedArrivalKey, setDismissedArrivalKey] = useState<string | null>(null);
   const authenticated = useClientAuth();
 
   const load = useCallback(async (force = false) => {
@@ -97,7 +88,6 @@ export function ProcurementDashboard() {
     void load();
   }, [load]);
 
-  // Light poll so newly shared OVFs surface without a manual refresh.
   useEffect(() => {
     if (!authenticated) return;
     const id = window.setInterval(() => {
@@ -113,28 +103,6 @@ export function ProcurementDashboard() {
     return () => window.clearInterval(id);
   }, [authenticated]);
 
-  const [newQueueItems, setNewQueueItems] = useState<ProcurementRow[]>([]);
-
-  useEffect(() => {
-    const queue = data?.scmQueue ?? [];
-    const ids = queue.map((row) => String(row.ovf_id ?? "")).filter(Boolean);
-    const unseen = new Set(getUnseenScmOvfIds(ids));
-    setNewQueueItems(queue.filter((row) => unseen.has(String(row.ovf_id ?? ""))));
-  }, [data]);
-
-  const arrivalKey = useMemo(
-    () =>
-      newQueueItems
-        .map((row) => String(row.ovf_id ?? ""))
-        .filter(Boolean)
-        .sort()
-        .join(","),
-    [newQueueItems],
-  );
-
-  const showArrivalPopup =
-    newQueueItems.length > 0 && dismissedArrivalKey !== arrivalKey;
-
   const poBucketCounts = useMemo(() => {
     const fromOrdersApi = peekPurchaseOrdersFromCache();
     const source = fromOrdersApi ?? (data?.orders as unknown as ProcOrder[] | undefined);
@@ -142,17 +110,15 @@ export function ProcurementDashboard() {
     return countPoBuckets(source);
   }, [data?.orders]);
 
-  const poOrdersForExport = useMemo((): ProcOrder[] => {
-    const fromOrdersApi = peekPurchaseOrdersFromCache();
-    return fromOrdersApi ?? (data?.orders as unknown as ProcOrder[] | undefined) ?? [];
-  }, [data?.orders]);
-
-  const [poExportError, setPoExportError] = useState<string | null>(null);
-
   const scmQueueItems = useMemo((): ScmQueueItem[] => {
     const raw = data?.scmQueue ?? [];
     return raw as ScmQueueItem[];
   }, [data?.scmQueue]);
+
+  const openOvfCount = useMemo(
+    () => scmQueueItems.filter(isScmOpenOvfRow).length,
+    [scmQueueItems],
+  );
 
   const inventoryLoading = loading && inventorySummary === null;
 
@@ -169,9 +135,7 @@ export function ProcurementDashboard() {
   const pipelineCounts = useMemo(
     () => ({
       scm: data?.scmQueue.length ?? 0,
-      // SCM pipeline: only CRM OVF-sourced POs (exclude seed / non-SCM demos).
       orders: crmOrders.length,
-      // Align with /procurement/grns — receipt POs, not legacy GRN documents.
       grns: receiptPos.length,
       "delivery-challan": 0,
       "delivery-status": 0,
@@ -179,106 +143,34 @@ export function ProcurementDashboard() {
     [data, crmOrders, receiptPos],
   );
 
-  const scmOvfStatusCounts = useMemo(() => {
-    let open = 0;
-    let close = 0;
-    let hold = 0;
-    for (const row of scmQueueItems) {
-      const status = deriveScmOvfQueueStatus(row);
-      if (status === "open" || status === "draft") open += 1;
-      else if (status === "close") close += 1;
-      else if (status === "hold") hold += 1;
-    }
-    return { open, close, hold };
-  }, [scmQueueItems]);
-
   const authBlocked =
     Boolean(data?.statusCodes.includes(401)) ||
     (!authenticated && Boolean(data?.errors.length));
 
   return (
-    <ProcurementPage>
-      <PageHeader
-        title="Procurement Dashboard"
-        description="SCM queue readiness, purchase orders, GRN progress, and inventory stock across the procurement pipeline."
-        actions={
-          <div className="flex flex-wrap items-center gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="cursor-pointer"
-              onClick={() => void load(true)}
-              disabled={loading && !data}
-            >
-              <RefreshCw
-                className={cn("size-3.5", (loading || refreshing) && "animate-spin")}
-              />
-              Refresh
-            </Button>
-            <div className="relative">
-              <Link
-                href="/procurement/scm"
-                className="inline-flex h-8 cursor-pointer items-center gap-1.5 rounded-lg bg-primary px-3 text-sm font-medium text-primary-foreground shadow-sm transition-opacity duration-200 hover:opacity-90"
-              >
-                <ClipboardList className="size-3.5" />
-                SCM Queue
-                {newQueueItems.length > 0 ? (
-                  <span className="ml-0.5 inline-flex min-w-5 items-center justify-center rounded-md bg-amber-400 px-1.5 py-0.5 text-[10px] font-semibold text-slate-900 tabular-nums">
-                    {newQueueItems.length}
-                  </span>
-                ) : null}
-              </Link>
-              {showArrivalPopup ? (
-                <div
-                  role="status"
-                  className="absolute right-0 top-[calc(100%+0.5rem)] z-30 w-[min(22rem,calc(100vw-2rem))] rounded-lg border border-sky-200 bg-card p-3 shadow-md"
-                >
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="min-w-0">
-                      <p className="text-sm font-medium text-foreground">
-                        {newQueueItems.length === 1
-                          ? "New PO arrived in SCM Queue"
-                          : `${newQueueItems.length} new POs arrived in SCM Queue`}
-                      </p>
-                      <p className="mt-1 text-xs text-muted-foreground">
-                        {(() => {
-                          const first = newQueueItems[0];
-                          const label =
-                            String(first?.customer_name ?? first?.ovf_no ?? "OVF").trim() || "OVF";
-                          return newQueueItems.length === 1
-                            ? `${label} is ready for purchase order.`
-                            : `Including ${label} — open the queue to review.`;
-                        })()}
-                      </p>
-                    </div>
-                    <button
-                      type="button"
-                      aria-label="Dismiss notification"
-                      onClick={() => setDismissedArrivalKey(arrivalKey)}
-                      className="cursor-pointer rounded-md p-1 text-muted-foreground transition-colors duration-200 hover:bg-muted hover:text-foreground"
-                    >
-                      <X className="size-3.5" />
-                    </button>
-                  </div>
-                  <Link
-                    href="/procurement/scm"
-                    className="mt-2.5 inline-flex cursor-pointer text-xs font-medium text-sky-700 transition-opacity duration-200 hover:opacity-80"
-                  >
-                    Open SCM Queue →
-                  </Link>
-                </div>
-              ) : null}
-            </div>
-            <Link
-              href="/procurement/orders"
-              className="inline-flex h-8 cursor-pointer items-center rounded-lg border border-border/80 bg-card px-3 text-sm font-medium shadow-sm transition-colors duration-200 hover:bg-muted"
-            >
-              Purchase Orders
-            </Link>
-          </div>
-        }
-      />
+    <ProcurementPage className="space-y-5">
+      <div className="flex flex-col gap-4 border-b border-border/50 pb-5 sm:flex-row sm:items-center sm:justify-between">
+        <div className="min-w-0">
+          <h1 className="text-[1.75rem] font-semibold tracking-tight text-foreground">
+            Overview Dashboard
+          </h1>
+        </div>
+        <div className="flex w-full min-w-0 flex-wrap items-center justify-end gap-2 sm:w-auto">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="h-10 cursor-pointer rounded-xl"
+            onClick={() => void load(true)}
+            disabled={loading && !data}
+          >
+            <RefreshCw
+              className={cn("size-3.5", (loading || refreshing) && "animate-spin")}
+            />
+            Refresh
+          </Button>
+        </div>
+      </div>
 
       {authBlocked ? (
         <ProcurementWarnBanner>
@@ -295,28 +187,16 @@ export function ProcurementDashboard() {
         </div>
       ) : null}
 
-      {poExportError ? <ProcurementErrorBanner>{poExportError}</ProcurementErrorBanner> : null}
-
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-3 md:gap-5 [&>*]:h-full">
-        <ProcurementOpenOvfCard loading={loading} queue={scmQueueItems} />
-        <ProcurementPoSummaryCard
-          loading={loading}
-          counts={poBucketCounts}
-          orders={poOrdersForExport}
-          onExportError={setPoExportError}
-        />
-        <ProcurementInventoryStockCard loading={inventoryLoading} summary={inventorySummary} />
-      </div>
+      <ProcurementDashboardSummary
+        loading={loading || inventoryLoading}
+        openOvfCount={openOvfCount}
+        openPoCount={poBucketCounts.open}
+        partialPoCount={poBucketCounts.partial}
+        stockUnits={inventorySummary?.totalUnits ?? 0}
+        poBucketCounts={poBucketCounts}
+      />
 
       <ProcurementPipelineFunnel counts={pipelineCounts} loading={loading} />
-
-      <ProcurementDashboardCharts
-        loading={loading}
-        poBucketCounts={poBucketCounts}
-        scmOpen={scmOvfStatusCounts.open}
-        scmClose={scmOvfStatusCounts.close}
-        scmHold={scmOvfStatusCounts.hold}
-      />
     </ProcurementPage>
   );
 }

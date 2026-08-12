@@ -33,7 +33,7 @@ import { deliveryStatusUpdateHref } from "@/utils/delivery-status-routes";
 const LIST_RETURN_TO = encodeURIComponent("/procurement/delivery-challan");
 
 export function DeliveryChallanListPage() {
-  const [rows, setRows] = useState<DeliveryChallanRecord[]>([]);
+  const [rows, setRows] = useState<DeliveryChallanRecord[]>(() => listDeliveryChallans());
   const [query, setQuery] = useState("");
   const [pdfBusyId, setPdfBusyId] = useState<string | null>(null);
   const [pdfError, setPdfError] = useState<string | null>(null);

@@ -5,6 +5,10 @@ import { DeliveryChallanListPage } from "@/components/procurement/delivery-chall
 import { DeliveryStatusPage } from "@/components/procurement/delivery-status-page";
 import { GrnsListPage } from "@/components/procurement/grns-list-page";
 import { OrdersListPage } from "@/components/procurement/orders-list-page";
+import {
+  ProcurementAnalyticsPage,
+  ProcurementReportsPage,
+} from "@/components/procurement/procurement-insight-pages";
 import { ScmQueuePage } from "@/components/procurement/scm-queue-page";
 import { ProcurementInventoryListPage } from "@/components/procurement/procurement-inventory-list-page";
 import { VendorsListPage } from "@/components/procurement/vendors-list-page";
@@ -24,6 +28,8 @@ export default async function ProcurementResourcePage({ params }: PageProps) {
   if (resourceKey === "delivery-status") return <DeliveryStatusPage />;
   if (resourceKey === "vendors") return <VendorsListPage />;
   if (resourceKey === "inventory") return <ProcurementInventoryListPage />;
+  if (resourceKey === "reports") return <ProcurementReportsPage />;
+  if (resourceKey === "analytics") return <ProcurementAnalyticsPage />;
 
   const mod = getModule("procurement");
   const resource = getResource("procurement", resourceKey);

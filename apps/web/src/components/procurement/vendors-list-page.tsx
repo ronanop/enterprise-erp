@@ -26,6 +26,7 @@ import {
   invalidateProcurementListCache,
   listPurchaseOrders,
   listVendorOptions,
+  peekPurchaseOrdersFromCache,
   peekVendorOptionsFromCache,
   resolveVendorOrgScope,
   updateVendorOption,
@@ -65,7 +66,7 @@ export function VendorsListPage() {
         )
       : [],
   );
-  const [orders, setOrders] = useState<ProcOrder[]>([]);
+  const [orders, setOrders] = useState<ProcOrder[]>(() => peekPurchaseOrdersFromCache() ?? []);
   const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(() => cachedVendorsOnMount === null);
   const [refreshing, setRefreshing] = useState(false);
