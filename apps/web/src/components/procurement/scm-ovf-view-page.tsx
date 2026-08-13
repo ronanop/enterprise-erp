@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 
 import { ScmCreatePoEntry } from "@/components/procurement/scm-create-po-entry";
+import { ScmCommercialDocumentsPanel } from "@/components/procurement/scm-commercial-documents-panel";
 import { ConfirmDialog } from "@/components/finance/journals/confirm-dialog";
 import { FinanceStatusBadge } from "@/components/finance/finance-status-badge";
 import { FinanceField } from "@/components/finance/journals/finance-form-field";
@@ -802,6 +803,15 @@ export function ScmOvfViewPage({ ovfId }: { ovfId: string }) {
               ) : null}
             </div>
           </SectionCard>
+
+          <ScmCommercialDocumentsPanel
+            ovfId={ovfId}
+            branchId={preview.branch_id}
+            companyId={preview.company_id}
+            title="OVF documents"
+            description="Files attached by sales on this OVF. They are included automatically when the PO is sent for admin approval."
+            allowUpload={false}
+          />
         </>
       ) : null}
 

@@ -502,6 +502,9 @@ class ScmCreateInventoryPoRequest(BaseModel):
     expected_delivery_date: date | None = None
     approved_by_name: str | None = Field(default=None, max_length=255)
     lines: list[ScmInventoryPoLineRequest] = Field(default_factory=list)
+    # Soft-delete these on-hand units when creating the PO (inventory deduction).
+    stock_unit_ids: list[UUID] = Field(default_factory=list)
+    import_line_ids: list[UUID] = Field(default_factory=list)
 
 
 class ScmUpdateOvfChargesRequest(BaseModel):
@@ -619,11 +622,36 @@ class ScmInventorySerialUpdate(BaseModel):
     serial_number: str = Field(..., min_length=1, max_length=120)
 
 
+class ScmInventoryDescriptionUpdate(BaseModel):
+    description: str = Field(..., max_length=50)
+
+
 class ScmReceiptBatchAttachmentSummary(BaseModel):
     id: UUID
     file_name: str
     content_type: str | None = None
     size: int | None = None
+
+
+class ScmCommercialAttachmentSummary(BaseModel):
+    """OVF / purchase-order commercial documents visible to SCM and approvers."""
+
+    id: UUID
+    file_name: str
+    content_type: str | None = None
+    size: int | None = None
+    category: str = "other"
+    entity_type: str
+    entity_id: UUID
+
+
+class ScmCommercialAttachmentCreate(BaseModel):
+    file_name: str
+    content_base64: str
+    content_type: str | None = None
+    branch_id: UUID
+    company_id: UUID | None = None
+    category: str = "other"
 
 
 class ScmReceiptBatchResponse(BaseModel):

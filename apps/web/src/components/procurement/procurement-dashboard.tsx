@@ -17,6 +17,7 @@ import {
   asStatus,
   invalidateProcurementListCache,
   listProcurementInventory,
+  listVendorOptions,
   loadProcurementOverview,
   peekProcurementInventoryFromCache,
   peekProcurementOverviewFromCache,
@@ -33,33 +34,53 @@ import {
   type ProcurementInventoryStockSummary,
 } from "@/utils/procurement-inventory-report";
 import {
+  buildProcurementPipelineMetrics,
+} from "@/utils/procurement-pipeline-metrics";
+import {
+  isScmHoldOvfRow,
   isScmOpenOvfRow,
 } from "@/utils/scm-queue-ovf-status";
 
-/** Same rule as GrnsListPage — GRN stage = POs with partial/delivered receipt. */
-function isReceiptPo(row: ProcurementRow): boolean {
+/** Same rule as GrnsListPage — issued POs only (not draft/submitted/cancelled). */
+function isIssuedVendorPo(row: ProcurementRow): boolean {
   const status = asStatus(row.status);
-  if (status === "draft" || status === "submitted" || status === "cancelled") return false;
-  const grn = asStatus(row.grn_status);
-  return grn === "partial" || grn === "closed" || grn === "delivered";
+  return status !== "draft" && status !== "submitted" && status !== "cancelled";
 }
 
-function inventorySummaryFromCache(): ProcurementInventoryStockSummary | null {
+function inventorySummaryFromCache(
+  vendorLabels: Record<string, string> = {},
+): ProcurementInventoryStockSummary | null {
   const cached = peekProcurementInventoryFromCache();
   if (!cached) return null;
-  return buildProcurementInventoryStockSummary(cached.filter(isGrnNonBilledStockRow));
+  return buildProcurementInventoryStockSummary(cached.filter(isGrnNonBilledStockRow), {
+    vendorLabels,
+  });
 }
 
 export function ProcurementDashboard() {
   const cachedOnMount = peekProcurementOverviewFromCache();
-  const cachedInventorySummary = inventorySummaryFromCache();
-  const [data, setData] = useState<ProcurementOverview | null>(() => cachedOnMount);
+  const [vendorLabels, setVendorLabels] = useState<Record<string, string>>({});
   const [inventorySummary, setInventorySummary] = useState<ProcurementInventoryStockSummary | null>(
-    () => cachedInventorySummary,
+    () => inventorySummaryFromCache(),
   );
+  const [data, setData] = useState<ProcurementOverview | null>(() => cachedOnMount);
   const [loading, setLoading] = useState(() => cachedOnMount === null);
   const [refreshing, setRefreshing] = useState(false);
   const authenticated = useClientAuth();
+
+  const rebuildInventorySummary = useCallback(
+    (
+      inventory: Awaited<ReturnType<typeof listProcurementInventory>>,
+      labels: Record<string, string>,
+    ) => {
+      setInventorySummary(
+        buildProcurementInventoryStockSummary(inventory.filter(isGrnNonBilledStockRow), {
+          vendorLabels: labels,
+        }),
+      );
+    },
+    [],
+  );
 
   const load = useCallback(async (force = false) => {
     if (force) invalidateProcurementListCache();
@@ -70,19 +91,23 @@ export function ProcurementDashboard() {
       setRefreshing(true);
     }
     try {
-      const [overview, inventory] = await Promise.all([
+      const [overview, inventory, vendors] = await Promise.all([
         loadProcurementOverview(),
         listProcurementInventory().catch(() => []),
+        listVendorOptions().catch(() => []),
       ]);
+      const labels: Record<string, string> = {};
+      for (const vendor of vendors) {
+        if (vendor.id) labels[vendor.id] = vendor.label || vendor.id;
+      }
+      setVendorLabels(labels);
       setData(overview);
-      setInventorySummary(
-        buildProcurementInventoryStockSummary(inventory.filter(isGrnNonBilledStockRow)),
-      );
+      rebuildInventorySummary(inventory, labels);
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  }, []);
+  }, [rebuildInventorySummary]);
 
   useEffect(() => {
     void load();
@@ -92,16 +117,22 @@ export function ProcurementDashboard() {
     if (!authenticated) return;
     const id = window.setInterval(() => {
       void loadProcurementOverview().then(setData).catch(() => undefined);
-      void listProcurementInventory()
-        .then((inventory) =>
-          setInventorySummary(
-            buildProcurementInventoryStockSummary(inventory.filter(isGrnNonBilledStockRow)),
-          ),
-        )
-        .catch(() => undefined);
+      void Promise.all([
+        listProcurementInventory().catch(() => []),
+        listVendorOptions().catch(() => []),
+      ]).then(([inventory, vendors]) => {
+        setVendorLabels((prev) => {
+          const labels: Record<string, string> = { ...prev };
+          for (const vendor of vendors) {
+            if (vendor.id) labels[vendor.id] = vendor.label || vendor.id;
+          }
+          rebuildInventorySummary(inventory, labels);
+          return labels;
+        });
+      });
     }, 45_000);
     return () => window.clearInterval(id);
-  }, [authenticated]);
+  }, [authenticated, rebuildInventorySummary]);
 
   const poBucketCounts = useMemo(() => {
     const fromOrdersApi = peekPurchaseOrdersFromCache();
@@ -120,27 +151,20 @@ export function ProcurementDashboard() {
     [scmQueueItems],
   );
 
+  const holdOvfCount = useMemo(
+    () => scmQueueItems.filter(isScmHoldOvfRow).length,
+    [scmQueueItems],
+  );
+
   const inventoryLoading = loading && inventorySummary === null;
 
-  const crmOrders = useMemo(
-    () => (data?.orders ?? []).filter((row) => asStatus(row.source_module) === "crm"),
+  const pipelineMetrics = useMemo(
+    () =>
+      buildProcurementPipelineMetrics({
+        scmQueueCount: data?.scmQueue.length ?? 0,
+        vendorPos: (data?.vendorPos ?? []).filter(isIssuedVendorPo),
+      }),
     [data],
-  );
-
-  const receiptPos = useMemo(
-    () => (data?.vendorPos ?? []).filter(isReceiptPo),
-    [data],
-  );
-
-  const pipelineCounts = useMemo(
-    () => ({
-      scm: data?.scmQueue.length ?? 0,
-      orders: crmOrders.length,
-      grns: receiptPos.length,
-      "delivery-challan": 0,
-      "delivery-status": 0,
-    }),
-    [data, crmOrders, receiptPos],
   );
 
   const authBlocked =
@@ -190,13 +214,13 @@ export function ProcurementDashboard() {
       <ProcurementDashboardSummary
         loading={loading || inventoryLoading}
         openOvfCount={openOvfCount}
+        holdOvfCount={holdOvfCount}
         openPoCount={poBucketCounts.open}
-        partialPoCount={poBucketCounts.partial}
-        stockUnits={inventorySummary?.totalUnits ?? 0}
         poBucketCounts={poBucketCounts}
+        inventorySummary={inventorySummary}
       />
 
-      <ProcurementPipelineFunnel counts={pipelineCounts} loading={loading} />
+      <ProcurementPipelineFunnel metrics={pipelineMetrics} loading={loading} />
     </ProcurementPage>
   );
 }

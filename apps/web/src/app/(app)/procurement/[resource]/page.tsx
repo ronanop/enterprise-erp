@@ -5,6 +5,7 @@ import { DeliveryChallanListPage } from "@/components/procurement/delivery-chall
 import { DeliveryStatusPage } from "@/components/procurement/delivery-status-page";
 import { GrnsListPage } from "@/components/procurement/grns-list-page";
 import { OrdersListPage } from "@/components/procurement/orders-list-page";
+import { ProcurementApprovalsPage } from "@/components/procurement/procurement-approvals-page";
 import {
   ProcurementAnalyticsPage,
   ProcurementReportsPage,
@@ -28,6 +29,7 @@ export default async function ProcurementResourcePage({ params }: PageProps) {
   if (resourceKey === "delivery-status") return <DeliveryStatusPage />;
   if (resourceKey === "vendors") return <VendorsListPage />;
   if (resourceKey === "inventory") return <ProcurementInventoryListPage />;
+  if (resourceKey === "approval" || resourceKey === "approvals") return <ProcurementApprovalsPage />;
   if (resourceKey === "reports") return <ProcurementReportsPage />;
   if (resourceKey === "analytics") return <ProcurementAnalyticsPage />;
 

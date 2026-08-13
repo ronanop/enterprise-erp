@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ChevronDown, Eye, Minus, Paperclip, Plus, RefreshCw } from "lucide-react";
+import { ChevronDown, Eye, Minus, Plus, RefreshCw, Trash2 } from "lucide-react";
 
 import { ConfirmDialog } from "@/components/finance/journals/confirm-dialog";
 import { FinanceField, FinanceSelect, FinanceTextarea } from "@/components/finance/journals/finance-form-field";
@@ -16,12 +16,16 @@ import {
   VendorFormFields,
   type VendorFormDraft,
 } from "@/components/procurement/vendor-form-fields";
+import { ScmCommercialDocumentsPanel } from "@/components/procurement/scm-commercial-documents-panel";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
+import { useProcurementRole } from "@/hooks/use-procurement-role";
+import { submitPoFinalizeApproval } from "@/lib/procurement-approvals";
 import { scmHoldCreatePoNotice } from "@/utils/scm-ovf-hold";
 import { ApiClientError } from "@/services/api-client";
 import {
+  collectPoApprovalDocuments,
   createPoFromOvf,
   createVendorOption,
   emptyPostalAddress,
@@ -36,11 +40,7 @@ import {
   type VendorPostalAddress,
 } from "@/services/procurement-service";
 import {
-  createAttachment,
-  fileToBase64,
-} from "@/services/sales-crm-service";
-import {
-  buildDefaultPoTaxes,
+  buildPoTaxesFromBuckets,
   previewPurchaseOrderPdf,
   type PurchaseOrderPdfInput,
 } from "@/utils/purchase-order-pdf";
@@ -200,6 +200,14 @@ function companyLocationById(locationId: string) {
   return COMPANY_LOCATIONS.find((row) => row.id === locationId) ?? COMPANY_LOCATIONS[0];
 }
 
+/** Resolve entity from an assigned company PO (PO/{entityCode}/nnn). */
+function companyLocationFromPoNumber(poNumber: string | null | undefined) {
+  const match = /^PO\/([A-Za-z]+)\/\d+/i.exec((poNumber || "").trim());
+  if (!match) return null;
+  const code = match[1].toUpperCase();
+  return COMPANY_LOCATIONS.find((row) => row.entityCode === code) ?? null;
+}
+
 function entityAddressHeaderForLocationId(locationId: string): string {
   return companyLocationById(locationId).addressHeader;
 }
@@ -357,6 +365,29 @@ function lineSubtotal(
   return toNumber(row.qty) * adjustedUnitRate(toNumber(row.rate), distiPct, distiSign);
 }
 
+function lineGstAmount(
+  row: PoLineRow,
+  distiPct = 0,
+  distiSign: "plus" | "minus" = "plus",
+): number {
+  return (lineSubtotal(row, distiPct, distiSign) * toNumber(row.taxPct)) / 100;
+}
+
+/** When every line shares one GST %, return it; otherwise null (mixed). */
+function uniformLineTaxPct(rows: PoLineRow[]): string | null {
+  if (rows.length === 0) return null;
+  const first = rows[0]?.taxPct ?? "18";
+  return rows.every((row) => row.taxPct === first) ? first : null;
+}
+
+function normalizeTaxOption(value: number | string | null | undefined, fallback = "18"): string {
+  const raw = String(value ?? fallback).trim();
+  const n = Number(raw);
+  if (!Number.isFinite(n)) return fallback;
+  const asInt = String(Math.round(n));
+  return (TAX_OPTIONS as readonly string[]).includes(asInt) ? asInt : fallback;
+}
+
 function emptyForm(): PoFormState {
   return {
     vendorId: "",
@@ -442,7 +473,7 @@ function ItemDetailsTextarea({
 
 export function ScmCreatePoPage({ ovfId }: { ovfId: string }) {
   const router = useRouter();
-  const attachFileRef = useRef<HTMLInputElement>(null);
+  const { isAdmin } = useProcurementRole();
   const shippingMenuRef = useRef<HTMLDivElement>(null);
   const paymentTermsMenuRef = useRef<HTMLDivElement>(null);
   const [preview, setPreview] = useState<ScmOvfPreview | null>(null);
@@ -451,7 +482,6 @@ export function ScmCreatePoPage({ ovfId }: { ovfId: string }) {
   const [lines, setLines] = useState<PoLineRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
-  const [attachBusy, setAttachBusy] = useState(false);
   const [shippingMenuOpen, setShippingMenuOpen] = useState(false);
   const [paymentTermsMenuOpen, setPaymentTermsMenuOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -518,9 +548,20 @@ export function ScmCreatePoPage({ ovfId }: { ovfId: string }) {
 
   const setLineField = useCallback(
     <K extends keyof PoLineRow>(lineId: string, key: K, value: PoLineRow[K]) => {
-      setLines((current) =>
-        current.map((row) => (row.id === lineId ? { ...row, [key]: value } : row)),
-      );
+      setLines((current) => {
+        const next = current.map((row) =>
+          row.id === lineId ? { ...row, [key]: value } : row,
+        );
+        if (key === "taxPct") {
+          const uniform = uniformLineTaxPct(next);
+          if (uniform != null) {
+            setForm((form) =>
+              form.taxPercentage === uniform ? form : { ...form, taxPercentage: uniform },
+            );
+          }
+        }
+        return next;
+      });
     },
     [],
   );
@@ -536,7 +577,7 @@ export function ScmCreatePoPage({ ovfId }: { ovfId: string }) {
       setPreview(ovf);
       setVendors(vendorRows);
 
-      const defaultTax = ovf.tax_percentage ? String(ovf.tax_percentage) : "18";
+      const defaultTax = normalizeTaxOption(ovf.tax_percentage, "18");
       const location =
         COMPANY_LOCATIONS.find((loc) => loc.id === "kailash-colony") ?? COMPANY_LOCATIONS[0];
       setForm((current) => {
@@ -561,9 +602,24 @@ export function ScmCreatePoPage({ ovfId }: { ovfId: string }) {
                 vendorGstNumber: "",
                 sourceOfSupply: "",
               };
+        const lockedFromPo = companyLocationFromPoNumber(ovf.company_po_number);
         const selectedLocation = companyLocationById(
-          current.companyLocationId || location.id,
+          lockedFromPo?.id || current.companyLocationId || location.id,
         );
+        const seededLines =
+          ovf.vendor_lines.length > 0
+            ? ovf.vendor_lines.map((ln) =>
+                normalizeTaxOption(
+                  ln.gst_pct != null && Number.isFinite(Number(ln.gst_pct))
+                    ? ln.gst_pct
+                    : defaultTax,
+                  defaultTax,
+                ),
+              )
+            : [defaultTax];
+        const uniformSeed = seededLines.every((pct) => pct === seededLines[0])
+          ? seededLines[0]
+          : defaultTax;
         return {
           // Auto-select when OEM matches a vendor; otherwise leave blank for SCM.
           vendorId: keepVendor ? current.vendorId : matched?.id || "",
@@ -587,14 +643,15 @@ export function ScmCreatePoPage({ ovfId }: { ovfId: string }) {
             (ovf.vendor_payment_days > 0 ? `Net ${ovf.vendor_payment_days} days` : "Net 30 days"),
           ovfNumber: ovf.ovf_no || "",
           quoteNumber: current.quoteNumber || ovf.quote_name || "",
-          companyPoNumber: current.companyPoNumber || "",
+          companyPoNumber:
+            current.companyPoNumber || ovf.company_po_number || "",
           customerPoNumber: current.customerPoNumber || ovf.po_number || "",
           customerPoDate:
             current.customerPoDate || toDateInputValue(ovf.po_date),
           ovfApprover: current.ovfApprover || ovf.ovf_approver || ovf.owner_name || "",
           customerName: current.customerName || ovf.customer_name || ovf.account_name || "",
           customerGstNumber: current.customerGstNumber || ovf.customer_gst || "",
-          taxPercentage: current.taxPercentage || defaultTax,
+          taxPercentage: current.taxPercentage || uniformSeed,
           financeAmount: current.financeAmount || "0",
           distiAmount: current.distiAmount || "0",
           distiSign: current.distiSign || "plus",
@@ -616,12 +673,21 @@ export function ScmCreatePoPage({ ovfId }: { ovfId: string }) {
               poType: "Goods" as const,
               qty: String(ln.qty ?? 1),
               rate: String(ln.unit_price ?? 0),
-              taxPct: defaultTax,
+              taxPct: normalizeTaxOption(
+                ln.gst_pct != null && Number.isFinite(Number(ln.gst_pct))
+                  ? ln.gst_pct
+                  : defaultTax,
+                defaultTax,
+              ),
             }))
           : [emptyLine(defaultTax)];
       });
 
-      if (!ovf.can_create_po && ovf.purchase_order_id) {
+      if (ovf.purchase_order_id && ovf.can_create_po && ovf.purchase_order_status === "draft") {
+        setBanner(
+          `Editing draft ${ovf.company_po_number || ovf.purchase_order_number}. Same company PO number is kept on save.`,
+        );
+      } else if (!ovf.can_create_po && ovf.purchase_order_id) {
         setBanner(`PO ${ovf.purchase_order_number} already exists for this OVF.`);
       } else if (ovf.scm_on_hold && ovf.can_create_po) {
         setBanner(null);
@@ -629,15 +695,22 @@ export function ScmCreatePoPage({ ovfId }: { ovfId: string }) {
         setBanner(null);
       }
 
-      void peekNextCompanyPoNumber(location.entityCode, ovf.company_id)
-        .then((next) => {
-          setForm((current) =>
-            current.companyPoNumber.trim()
-              ? current
-              : { ...current, companyPoNumber: next.company_po_number },
-          );
-        })
-        .catch(() => undefined);
+      if (ovf.company_po_number?.trim()) {
+        setForm((current) => ({
+          ...current,
+          companyPoNumber: ovf.company_po_number || current.companyPoNumber,
+        }));
+      } else {
+        void peekNextCompanyPoNumber(location.entityCode, ovf.company_id)
+          .then((next) => {
+            setForm((current) =>
+              current.companyPoNumber.trim()
+                ? current
+                : { ...current, companyPoNumber: next.company_po_number },
+            );
+          })
+          .catch(() => undefined);
+      }
     } catch (err) {
       setPreview(null);
       setError(err instanceof ApiClientError ? err.message : "Failed to load OVF");
@@ -682,39 +755,53 @@ export function ScmCreatePoPage({ ovfId }: { ovfId: string }) {
   );
 
   const gstAmount = useMemo(() => {
-    const tax = toNumber(form.taxPercentage);
-    const taxableBase = form.freightTaxable
-      ? itemsSubtotal + freightAmount
-      : itemsSubtotal;
-    return (taxableBase * tax) / 100;
-  }, [itemsSubtotal, freightAmount, form.taxPercentage, form.freightTaxable]);
+    const linesGst = lines.reduce(
+      (sum, row) => sum + lineGstAmount(row, distiPct, form.distiSign),
+      0,
+    );
+    const freightGst = form.freightTaxable
+      ? (freightAmount * toNumber(form.taxPercentage)) / 100
+      : 0;
+    return linesGst + freightGst;
+  }, [lines, distiPct, form.distiSign, form.freightTaxable, freightAmount, form.taxPercentage]);
 
   const entityGstState = companyLocationById(form.companyLocationId).gstState;
 
   const taxBreakdown = useMemo(() => {
-    const taxableBase = form.freightTaxable
-      ? itemsSubtotal + freightAmount
-      : itemsSubtotal;
-    return buildDefaultPoTaxes({
-      taxableAmount: taxableBase,
-      taxPct: toNumber(form.taxPercentage),
+    const buckets = lines.map((row) => ({
+      taxableAmount: lineSubtotal(row, distiPct, form.distiSign),
+      taxPct: toNumber(row.taxPct),
+    }));
+    if (form.freightTaxable && freightAmount > 0) {
+      buckets.push({
+        taxableAmount: freightAmount,
+        taxPct: toNumber(form.taxPercentage),
+      });
+    }
+    return buildPoTaxesFromBuckets({
+      buckets,
       sourceOfSupply: form.sourceOfSupply,
       destinationOfSupply: entityGstState,
     });
   }, [
-    itemsSubtotal,
-    freightAmount,
+    lines,
+    distiPct,
+    form.distiSign,
     form.freightTaxable,
+    freightAmount,
     form.taxPercentage,
     form.sourceOfSupply,
     entityGstState,
   ]);
 
+  const uniformTaxPct = useMemo(() => uniformLineTaxPct(lines), [lines]);
+
   const finalTotal = itemsSubtotal + freightAmount + gstAmount;
 
   function applyGlobalTax(taxPct: string) {
-    setField("taxPercentage", taxPct);
-    setLines((current) => current.map((row) => ({ ...row, taxPct })));
+    const next = normalizeTaxOption(taxPct, form.taxPercentage || "18");
+    setField("taxPercentage", next);
+    setLines((current) => current.map((row) => ({ ...row, taxPct: next })));
   }
 
   function onVendorChange(vendorId: string) {
@@ -913,6 +1000,7 @@ export function ScmCreatePoPage({ ovfId }: { ovfId: string }) {
   }
 
   function onCompanyLocationChange(locationId: string) {
+    if (entityLocked) return;
     const location = companyLocationById(locationId);
     const billingAddress = formatEntityAddress(location);
     const shippingOptionId = location.lockShippingToEntity
@@ -1032,32 +1120,6 @@ export function ScmCreatePoPage({ ovfId }: { ovfId: string }) {
     setLines((current) => [...current, emptyLine(form.taxPercentage || "18")]);
   }
 
-  async function onOvfAttachFile(fileList: FileList | null) {
-    const file = fileList?.[0];
-    if (!file || !preview) return;
-    setAttachBusy(true);
-    setError(null);
-    try {
-      const content_base64 = await fileToBase64(file);
-      await createAttachment({
-        entity_type: "ovf",
-        entity_id: ovfId,
-        branch_id: preview.branch_id,
-        company_id: preview.company_id,
-        file_name: file.name,
-        category: "other",
-        content_base64,
-        content_type: file.type || "application/octet-stream",
-      });
-      setBanner(`Attached ${file.name} to OVF.`);
-    } catch (err) {
-      setError(err instanceof ApiClientError ? err.message : "Failed to attach OVF file");
-    } finally {
-      setAttachBusy(false);
-      if (attachFileRef.current) attachFileRef.current.value = "";
-    }
-  }
-
   async function submit(mode: "draft" | "finalize") {
     if (!preview?.can_create_po) {
       setError(
@@ -1098,14 +1160,42 @@ export function ScmCreatePoPage({ ovfId }: { ovfId: string }) {
     setError(null);
     try {
       await persistVendorDetails(vendorId);
+      const needsApproval = mode === "finalize" && !isAdmin;
       const order = await createPoFromOvf(ovfId, {
         vendor_id: vendorId,
         document_date: form.purchaseDate || undefined,
         payment_terms: form.paymentTerms || null,
         expected_delivery_date: form.deliveryDate || null,
         entity_code: location.entityCode,
-        finalize: mode === "finalize",
+        finalize: mode === "finalize" && isAdmin,
       });
+      if (needsApproval) {
+        const documents = await collectPoApprovalDocuments({
+          orderId: order.id,
+          ovfId,
+        });
+        submitPoFinalizeApproval({
+          orderId: order.id,
+          documentNumber: order.document_number,
+          companyPoNumber: order.company_po_number,
+          customerName:
+            order.customer_name ||
+            form.customerName ||
+            preview?.customer_name ||
+            preview?.account_name ||
+            null,
+          vendorId: order.vendor_id || vendorId,
+          vendorName:
+            form.vendorName ||
+            selectedVendor?.label ||
+            preview?.oem_name ||
+            null,
+          ovfId,
+          documents,
+        });
+        router.replace(`/procurement/orders/${order.id}?approval=pending`);
+        return;
+      }
       if (mode === "finalize") {
         router.replace(`/procurement/orders/${order.id}`);
       } else {
@@ -1152,13 +1242,18 @@ export function ScmCreatePoPage({ ovfId }: { ovfId: string }) {
         DEFAULT_ENTITY_ADDRESS;
       const shipping =
         (form.shippingAddress || "").trim() || DEFAULT_SHIPPING_ADDRESS;
-      const taxableBase = form.freightTaxable
-        ? itemsSubtotal + freightAmount
-        : itemsSubtotal;
-      const taxPct = toNumber(form.taxPercentage);
-      const taxes = buildDefaultPoTaxes({
-        taxableAmount: taxableBase,
-        taxPct,
+      const buckets = lines.map((row) => ({
+        taxableAmount: lineSubtotal(row, distiPct, form.distiSign),
+        taxPct: toNumber(row.taxPct),
+      }));
+      if (form.freightTaxable && freightAmount > 0) {
+        buckets.push({
+          taxableAmount: freightAmount,
+          taxPct: toNumber(form.taxPercentage),
+        });
+      }
+      const taxes = buildPoTaxesFromBuckets({
+        buckets,
         sourceOfSupply: form.sourceOfSupply,
         destinationOfSupply: location.gstState,
       });
@@ -1201,13 +1296,19 @@ export function ScmCreatePoPage({ ovfId }: { ovfId: string }) {
   }
 
   const disabled = !preview?.can_create_po || busy;
+  /** Company PO number is tied to entity — lock after number is assigned on the draft. */
+  const entityLocked = Boolean(preview?.company_po_number?.trim());
+  const editingDraft =
+    Boolean(preview?.purchase_order_id) &&
+    preview?.can_create_po &&
+    (preview?.purchase_order_status || "").toLowerCase() === "draft";
 
   return (
     <div className="space-y-4">
       <PageHeader
         backHref={`/procurement/scm/ovf/${ovfId}`}
         backLabel="OVF"
-        title="Create purchase order"
+        title={editingDraft ? "Edit purchase order" : "Create purchase order"}
         titleClassName="text-3xl font-semibold tracking-tight sm:text-4xl"
         centerTitle
         actions={
@@ -1415,7 +1516,12 @@ export function ScmCreatePoPage({ ovfId }: { ovfId: string }) {
                 <FinanceSelect
                   value={form.companyLocationId}
                   onChange={(e) => onCompanyLocationChange(e.target.value)}
-                  disabled={disabled}
+                  disabled={disabled || entityLocked}
+                  title={
+                    entityLocked
+                      ? "Entity is locked because this company PO number is already assigned"
+                      : undefined
+                  }
                 >
                   {COMPANY_LOCATIONS.map((location) => (
                     <option key={location.id} value={location.id}>
@@ -1423,6 +1529,12 @@ export function ScmCreatePoPage({ ovfId }: { ovfId: string }) {
                     </option>
                   ))}
                 </FinanceSelect>
+                {entityLocked ? (
+                  <p className="mt-1 text-[11px] text-muted-foreground">
+                    Entity cannot change after the company PO number is assigned (kept on
+                    reject / resubmit).
+                  </p>
+                ) : null}
               </FinanceField>
               <div className="grid grid-cols-1 gap-3 md:grid-cols-2 md:gap-x-6">
                 <FinanceField label="Billing address">
@@ -1613,31 +1725,11 @@ export function ScmCreatePoPage({ ovfId }: { ovfId: string }) {
                 </div>
               </FinanceField>
               <FinanceField label="OVF number">
-                <div className="flex items-center gap-2">
-                  <Input
-                    value={form.ovfNumber ?? ""}
-                    readOnly
-                    className="h-8 min-w-0 flex-1 cursor-default bg-muted/30 font-medium text-foreground"
-                  />
-                  <input
-                    ref={attachFileRef}
-                    type="file"
-                    className="hidden"
-                    onChange={(e) => void onOvfAttachFile(e.target.files)}
-                  />
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    className="h-8 shrink-0 cursor-pointer gap-1.5 transition-colors duration-200"
-                    disabled={!preview || attachBusy || busy}
-                    title="Attach file to this OVF"
-                    onClick={() => attachFileRef.current?.click()}
-                  >
-                    <Paperclip className="size-3.5 text-[#0369A1]" />
-                    {attachBusy ? "Attaching…" : "OVF attach file"}
-                  </Button>
-                </div>
+                <Input
+                  value={form.ovfNumber ?? ""}
+                  readOnly
+                  className="h-8 cursor-default bg-muted/30 font-medium text-foreground"
+                />
               </FinanceField>
               <FinanceField label="Customer PO number">
                 <Input
@@ -1676,19 +1768,44 @@ export function ScmCreatePoPage({ ovfId }: { ovfId: string }) {
             </div>
           </section>
 
+          {preview ? (
+            <ScmCommercialDocumentsPanel
+              ovfId={ovfId}
+              branchId={preview.branch_id}
+              companyId={preview.company_id}
+              title="OVF documents"
+              description="Sales attachments on this OVF are carried automatically into admin approval with the PO. No upload needed here."
+              allowUpload={false}
+            />
+          ) : null}
+
           <div className="overflow-hidden rounded-lg border border-border bg-card">
             <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-3 py-2.5">
-              <h2 className="text-sm font-medium tracking-tight text-foreground">Line items</h2>
+              <div className="min-w-0">
+                <h2 className="text-sm font-medium tracking-tight text-foreground">Line items</h2>
+                <p className="mt-0.5 text-[11px] text-muted-foreground">
+                  Set GST per line, or apply one rate to all when every item shares the same %.
+                </p>
+              </div>
               <div className="flex flex-wrap items-center gap-2">
                 <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                  Tax %
+                  Apply GST to all
                   <FinanceSelect
-                    value={form.taxPercentage}
-                    onChange={(e) => applyGlobalTax(e.target.value)}
-                    disabled={disabled}
-                    className="h-8 w-[88px]"
-                    aria-label="Global tax percent"
+                    value={uniformTaxPct ?? ""}
+                    onChange={(e) => {
+                      if (!e.target.value) return;
+                      applyGlobalTax(e.target.value);
+                    }}
+                    disabled={disabled || lines.length === 0}
+                    className="h-8 w-[104px] cursor-pointer transition-colors duration-200"
+                    aria-label="Apply GST percent to all line items"
+                    title="Sets the same GST % on every line"
                   >
+                    {uniformTaxPct == null ? (
+                      <option value="" disabled>
+                        Mixed
+                      </option>
+                    ) : null}
                     {TAX_OPTIONS.map((pct) => (
                       <option key={pct} value={pct}>
                         {pct}%
@@ -1699,7 +1816,7 @@ export function ScmCreatePoPage({ ovfId }: { ovfId: string }) {
               </div>
             </div>
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[980px] text-left text-sm">
+              <table className="w-full min-w-[1060px] text-left text-sm">
                 <thead className="border-b border-border bg-sky-50/80 text-[11px] tracking-wide text-slate-600 uppercase">
                   <tr>
                     <th className="px-2 py-2.5 font-semibold">S.No</th>
@@ -1709,6 +1826,7 @@ export function ScmCreatePoPage({ ovfId }: { ovfId: string }) {
                     <th className="min-w-[100px] px-2 py-2.5 font-semibold">PO type</th>
                     <th className="min-w-[72px] px-2 py-2.5 font-semibold">Qty</th>
                     <th className="min-w-[110px] px-2 py-2.5 font-semibold">Rate (INR)</th>
+                    <th className="min-w-[88px] px-2 py-2.5 font-semibold">Tax %</th>
                     <th className="min-w-[120px] px-2 py-2.5 font-semibold">Amount (INR)</th>
                     <th className="px-2 py-2.5 font-semibold"> </th>
                   </tr>
@@ -1716,7 +1834,7 @@ export function ScmCreatePoPage({ ovfId }: { ovfId: string }) {
                 <tbody>
                   {lines.length === 0 ? (
                     <tr>
-                      <td colSpan={9} className="px-3 py-6 text-center text-muted-foreground">
+                      <td colSpan={10} className="px-3 py-6 text-center text-muted-foreground">
                         No line items yet.
                       </td>
                     </tr>
@@ -1766,7 +1884,7 @@ export function ScmCreatePoPage({ ovfId }: { ovfId: string }) {
                             )
                           }
                           disabled={disabled}
-                          className="h-8"
+                          className="h-8 cursor-pointer transition-colors duration-200"
                         >
                           <option value="Goods">Goods</option>
                           <option value="Services">Services</option>
@@ -1819,6 +1937,21 @@ export function ScmCreatePoPage({ ovfId }: { ovfId: string }) {
                         />
                       </td>
                       <td className="px-2 py-2">
+                        <FinanceSelect
+                          value={normalizeTaxOption(row.taxPct)}
+                          onChange={(e) => setLineField(row.id, "taxPct", e.target.value)}
+                          disabled={disabled}
+                          className="h-8 w-[88px] cursor-pointer transition-colors duration-200"
+                          aria-label={`Tax percent for line ${index + 1}`}
+                        >
+                          {TAX_OPTIONS.map((pct) => (
+                            <option key={pct} value={pct}>
+                              {pct}%
+                            </option>
+                          ))}
+                        </FinanceSelect>
+                      </td>
+                      <td className="px-2 py-2">
                         <div className="flex h-8 items-center rounded-md border border-border bg-muted/40 px-2 text-sm font-medium tabular-nums">
                           {formatInr(lineSubtotal(row, distiPct, form.distiSign))}
                         </div>
@@ -1826,11 +1959,13 @@ export function ScmCreatePoPage({ ovfId }: { ovfId: string }) {
                       <td className="px-2 py-2">
                         <button
                           type="button"
-                          className="cursor-pointer text-xs font-medium text-destructive transition-opacity duration-200 hover:opacity-80 disabled:cursor-not-allowed disabled:opacity-40"
+                          className="inline-flex size-8 cursor-pointer items-center justify-center rounded-md text-muted-foreground transition-colors duration-200 hover:bg-muted/60 hover:text-destructive disabled:cursor-not-allowed disabled:opacity-40"
                           disabled={disabled}
+                          aria-label={`Remove line ${index + 1}`}
+                          title="Remove line"
                           onClick={() => removeLine(row.id)}
                         >
-                          Remove
+                          <Trash2 className="size-3.5" />
                         </button>
                       </td>
                     </tr>
@@ -2048,7 +2183,7 @@ export function ScmCreatePoPage({ ovfId }: { ovfId: string }) {
                   disabled={busy || pdfPreviewBusy}
                   onClick={() => void submit("finalize")}
                 >
-                  Finalize &amp; issue PO
+                  {isAdmin ? "Finalize & issue PO" : "Send for admin approval"}
                 </Button>
                 <Button
                   type="button"

@@ -345,6 +345,42 @@ export function ProcurementInventoryCreatePoPage() {
       setError("Select at least one stock unit to add PO lines.");
       return;
     }
+
+    const selectedRows = stockRows.filter((row, index) =>
+      selectedKeys.has(stockRowKey(row, index)),
+    );
+    const unitsByProduct = new Map<string, ProcurementInventoryRow[]>();
+    for (const row of selectedRows) {
+      const name = (row.product_name || "").trim() || "Unnamed product";
+      const list = unitsByProduct.get(name) ?? [];
+      list.push(row);
+      unitsByProduct.set(name, list);
+    }
+
+    const stockUnitIds: string[] = [];
+    const importLineIds: string[] = [];
+    const lines: Array<{ product_name: string; quantity: number; unit_cost: number }> = [];
+
+    for (const line of poLines) {
+      const available = unitsByProduct.get(line.productName) ?? [];
+      const qty = Math.min(Math.max(1, Math.floor(line.quantity)), available.length || line.quantity);
+      const consume = available.slice(0, Math.min(qty, available.length));
+      for (const row of consume) {
+        if (row.stock_unit_id) stockUnitIds.push(row.stock_unit_id);
+        else if (row.import_line_id) importLineIds.push(row.import_line_id);
+      }
+      lines.push({
+        product_name: line.productName,
+        quantity: consume.length > 0 ? consume.length : qty,
+        unit_cost: line.unitCost,
+      });
+    }
+
+    if (stockUnitIds.length === 0 && importLineIds.length === 0) {
+      setError("Selected stock units are missing inventory IDs. Refresh stock and try again.");
+      return;
+    }
+
     setBusy(true);
     setError(null);
     try {
@@ -354,11 +390,9 @@ export function ProcurementInventoryCreatePoPage() {
         document_date: documentDate,
         payment_terms: paymentTerms,
         approved_by_name: approvedByName,
-        lines: poLines.map((line) => ({
-          product_name: line.productName,
-          quantity: line.quantity,
-          unit_cost: line.unitCost,
-        })),
+        lines,
+        stock_unit_ids: stockUnitIds,
+        import_line_ids: importLineIds,
       });
       router.push(`/procurement/orders/${order.id}`);
     } catch (err) {
@@ -715,7 +749,12 @@ export function ProcurementInventoryCreatePoPage() {
 
       <div className="overflow-hidden rounded-lg border border-border bg-card">
         <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-4 py-3">
-          <h2 className="text-sm font-medium tracking-tight text-foreground">PO line items</h2>
+          <div className="min-w-0 space-y-0.5">
+            <h2 className="text-sm font-medium tracking-tight text-foreground">PO line items</h2>
+            <p className="text-xs text-muted-foreground">
+              Creating this PO removes the selected units from inventory stock.
+            </p>
+          </div>
           <label className="flex items-center gap-2 text-xs text-muted-foreground">
             Tax %
             <FinanceSelect
@@ -758,7 +797,13 @@ export function ProcurementInventoryCreatePoPage() {
                         value={String(line.quantity)}
                         disabled={busy}
                         onChange={(e) => {
-                          const n = Math.max(1, Math.floor(toNumber(e.target.value)));
+                          const selectedForProduct = stockRows.filter((row, index) => {
+                            if (!selectedKeys.has(stockRowKey(row, index))) return false;
+                            const name = (row.product_name || "").trim() || "Unnamed product";
+                            return name === line.productName;
+                          }).length;
+                          const maxQty = Math.max(1, selectedForProduct);
+                          const n = Math.min(maxQty, Math.max(1, Math.floor(toNumber(e.target.value))));
                           updatePoLine(line.id, { quantity: n });
                         }}
                       />

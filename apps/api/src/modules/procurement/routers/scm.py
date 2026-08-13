@@ -14,8 +14,11 @@ from modules.foundation.dependencies import require_permission
 from modules.foundation.domain.value_objects import TenantContext
 from modules.procurement.schemas import (
     OrderResponse,
+    ScmCommercialAttachmentCreate,
+    ScmCommercialAttachmentSummary,
     ScmCreateInventoryPoRequest,
     ScmCreatePoFromOvfRequest,
+    ScmInventoryDescriptionUpdate,
     ScmInventoryImportRequest,
     ScmInventorySerialUpdate,
     ScmLineReceiptUpdateRequest,
@@ -82,6 +85,119 @@ def get_scm_ovf_preview(
     return APIResponse(
         message="OVF preview retrieved",
         data=ScmOvfPreviewResponse.model_validate(row),
+    )
+
+
+@scm_router.get(
+    "/ovf/{ovf_id}/attachments",
+    response_model=APIResponse[list[ScmCommercialAttachmentSummary]],
+)
+def list_scm_ovf_attachments(
+    ovf_id: UUID,
+    ctx: Annotated[TenantContext, Depends(require_permission("procurement.order:read"))],
+    db: Annotated[Session, Depends(get_db)],
+) -> APIResponse[list[ScmCommercialAttachmentSummary]]:
+    rows = ScmHandoffService(db).list_ovf_attachments(ctx, ovf_id)
+    return APIResponse(
+        message="OVF documents retrieved",
+        data=[ScmCommercialAttachmentSummary.model_validate(r) for r in rows],
+    )
+
+
+@scm_router.post(
+    "/ovf/{ovf_id}/attachments",
+    response_model=APIResponse[AttachmentResponse],
+)
+def create_scm_ovf_attachment(
+    ovf_id: UUID,
+    body: ScmCommercialAttachmentCreate,
+    ctx: Annotated[TenantContext, Depends(require_permission("procurement.order:create"))],
+    db: Annotated[Session, Depends(get_db)],
+) -> APIResponse[AttachmentResponse]:
+    row = ScmHandoffService(db).attach_ovf_document(
+        ctx,
+        ovf_id,
+        file_name=body.file_name,
+        content_base64=body.content_base64,
+        content_type=body.content_type,
+        branch_id=body.branch_id,
+        company_id=body.company_id,
+        category=body.category,
+    )
+    db.commit()
+    return APIResponse(message="OVF document attached", data=AttachmentResponse.model_validate(row))
+
+
+@scm_router.get(
+    "/orders/{order_id}/attachments",
+    response_model=APIResponse[list[ScmCommercialAttachmentSummary]],
+)
+def list_scm_po_attachments(
+    order_id: UUID,
+    ctx: Annotated[TenantContext, Depends(require_permission("procurement.order:read"))],
+    db: Annotated[Session, Depends(get_db)],
+) -> APIResponse[list[ScmCommercialAttachmentSummary]]:
+    rows = ScmHandoffService(db).list_po_attachments(ctx, order_id)
+    return APIResponse(
+        message="PO documents retrieved",
+        data=[ScmCommercialAttachmentSummary.model_validate(r) for r in rows],
+    )
+
+
+@scm_router.get(
+    "/orders/{order_id}/commercial-documents",
+    response_model=APIResponse[list[ScmCommercialAttachmentSummary]],
+)
+def list_scm_order_commercial_documents(
+    order_id: UUID,
+    ctx: Annotated[TenantContext, Depends(require_permission("procurement.order:read"))],
+    db: Annotated[Session, Depends(get_db)],
+) -> APIResponse[list[ScmCommercialAttachmentSummary]]:
+    rows = ScmHandoffService(db).list_commercial_documents_for_order(ctx, order_id)
+    return APIResponse(
+        message="Commercial documents retrieved",
+        data=[ScmCommercialAttachmentSummary.model_validate(r) for r in rows],
+    )
+
+
+@scm_router.post(
+    "/orders/{order_id}/attachments",
+    response_model=APIResponse[AttachmentResponse],
+)
+def create_scm_po_attachment(
+    order_id: UUID,
+    body: ScmCommercialAttachmentCreate,
+    ctx: Annotated[TenantContext, Depends(require_permission("procurement.order:create"))],
+    db: Annotated[Session, Depends(get_db)],
+) -> APIResponse[AttachmentResponse]:
+    row = ScmHandoffService(db).attach_po_document(
+        ctx,
+        order_id,
+        file_name=body.file_name,
+        content_base64=body.content_base64,
+        content_type=body.content_type,
+        branch_id=body.branch_id,
+        company_id=body.company_id,
+        category=body.category,
+    )
+    db.commit()
+    return APIResponse(message="PO document attached", data=AttachmentResponse.model_validate(row))
+
+
+@scm_router.get("/commercial-attachments/{attachment_id}/content")
+def download_scm_commercial_attachment(
+    attachment_id: UUID,
+    ctx: Annotated[TenantContext, Depends(require_permission("procurement.order:read"))],
+    db: Annotated[Session, Depends(get_db)],
+):
+    path, file_name, content_type = ScmHandoffService(db).resolve_commercial_attachment_file(
+        ctx, attachment_id
+    )
+    return FileResponse(
+        path=path,
+        filename=file_name,
+        media_type=content_type or "application/octet-stream",
+        content_disposition_type="inline",
     )
 
 
@@ -264,6 +380,25 @@ def update_inventory_import_serial(
     return APIResponse(message="Serial number updated", data={"updated": True})
 
 
+@scm_router.patch(
+    "/inventory/order-lines/{line_id}/description",
+    response_model=APIResponse[dict],
+)
+def update_inventory_order_line_description(
+    line_id: UUID,
+    body: ScmInventoryDescriptionUpdate,
+    ctx: Annotated[TenantContext, Depends(require_permission("procurement.order:update"))],
+    db: Annotated[Session, Depends(get_db)],
+) -> APIResponse[dict]:
+    ScmHandoffService(db).update_inventory_order_line_description(
+        ctx,
+        line_id,
+        description=body.description,
+    )
+    db.commit()
+    return APIResponse(message="Description updated", data={"updated": True})
+
+
 @scm_router.post(
     "/inventory/purchase-orders",
     response_model=APIResponse[OrderResponse],
@@ -285,6 +420,8 @@ def create_po_from_inventory(
         company_id=company_id,
         lines=[line.model_dump() for line in body.lines],
         approved_by_name=body.approved_by_name,
+        stock_unit_ids=list(body.stock_unit_ids or []),
+        import_line_ids=list(body.import_line_ids or []),
     )
     db.commit()
     return APIResponse(

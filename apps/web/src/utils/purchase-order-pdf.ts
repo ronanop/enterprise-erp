@@ -1,4 +1,4 @@
-import { jsPDF } from "jspdf";
+import { GState, jsPDF } from "jspdf";
 
 import { loadCacheLogo } from "@/utils/load-cache-logo";
 import {
@@ -96,6 +96,34 @@ function strokeRect(doc: jsPDF, x: number, y: number, w: number, h: number) {
   doc.rect(x, y, w, h);
 }
 
+/** Diagonal DRAFT mark — only for unfinalized PDF previews. */
+function applyPreviewWatermark(doc: jsPDF) {
+  const pageCount = doc.getNumberOfPages();
+  const pageW = doc.internal.pageSize.getWidth();
+  const pageH = doc.internal.pageSize.getHeight();
+  const soft = new GState({ opacity: 0.14 });
+  const solid = new GState({ opacity: 1 });
+
+  for (let page = 1; page <= pageCount; page += 1) {
+    doc.setPage(page);
+    doc.setGState(soft);
+    doc.setTextColor(185, 28, 28);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(62);
+    doc.text("DRAFT", pageW / 2, pageH / 2 - 6, {
+      align: "center",
+      angle: 32,
+    });
+    doc.setFontSize(16);
+    doc.text("NOT FINALIZED", pageW / 2, pageH / 2 + 18, {
+      align: "center",
+      angle: 32,
+    });
+    doc.setGState(solid);
+    doc.setTextColor(0, 0, 0);
+  }
+}
+
 function fillStrokeRect(
   doc: jsPDF,
   x: number,
@@ -150,10 +178,67 @@ export function buildDefaultPoTaxes(params: {
   return [{ label: `IGST (${pct}%)`, amountInr: (taxable * pct) / 100 }];
 }
 
+/** Group taxable buckets by GST % and merge CGST/SGST/IGST labels. */
+export function buildPoTaxesFromBuckets(params: {
+  buckets: Array<{ taxableAmount: number; taxPct: number }>;
+  sourceOfSupply?: string;
+  destinationOfSupply?: string;
+}): Array<{ label: string; amountInr: number }> {
+  const byPct = new Map<number, number>();
+  for (const bucket of params.buckets) {
+    const pct = Number.isFinite(bucket.taxPct) ? bucket.taxPct : 0;
+    const taxable = Math.max(0, bucket.taxableAmount);
+    if (pct <= 0 || taxable <= 0) continue;
+    byPct.set(pct, (byPct.get(pct) || 0) + taxable);
+  }
+  const merged = new Map<string, number>();
+  for (const [taxPct, taxableAmount] of [...byPct.entries()].sort((a, b) => a[0] - b[0])) {
+    for (const row of buildDefaultPoTaxes({
+      taxableAmount,
+      taxPct,
+      sourceOfSupply: params.sourceOfSupply,
+      destinationOfSupply: params.destinationOfSupply,
+    })) {
+      merged.set(row.label, (merged.get(row.label) || 0) + row.amountInr);
+    }
+  }
+  return [...merged.entries()].map(([label, amountInr]) => ({ label, amountInr }));
+}
+
+/** Master-data stub used when SCM OVF lines are not catalog products. */
+const SCM_PLACEHOLDER_PRODUCT_CODES = new Set(["SCM-PURCHASED"]);
+
+/**
+ * Prefer real product / part identity on the PDF.
+ * Never print the SCM catalog placeholder code as "Product Part No.".
+ */
+export function resolvePoPdfLineLabels(
+  productCode?: string | null,
+  productName?: string | null,
+): { partNo: string; description: string } {
+  const code = (productCode || "").trim();
+  const name = (productName || "").trim();
+  const codeIsPlaceholder =
+    !code || SCM_PLACEHOLDER_PRODUCT_CODES.has(code.toUpperCase());
+
+  if (codeIsPlaceholder) {
+    return {
+      partNo: name || "—",
+      description: name || "—",
+    };
+  }
+
+  return {
+    partNo: code,
+    description: name || code || "—",
+  };
+}
+
 export function purchaseOrderPdfInputFromOrder(
   order: {
     document_number: string;
     document_date: string;
+    company_po_number?: string | null;
     payment_terms?: string | null;
     approved_by_name?: string | null;
     lines?: Array<{
@@ -167,17 +252,20 @@ export function purchaseOrderPdfInputFromOrder(
   options?: { taxPct?: number },
 ): PurchaseOrderPdfInput {
   const lines = (order.lines || []).map((ln) => {
-    const code = (ln.product_code || "").trim();
-    const name = (ln.product_name || "").trim();
+    const { partNo, description } = resolvePoPdfLineLabels(
+      ln.product_code,
+      ln.product_name,
+    );
     return {
-      partNo: code || name || "—",
-      description: name || code || "—",
+      partNo,
+      description,
       qty: Number(ln.quantity) || 0,
       unitPriceInr: Number(ln.unit_cost) || 0,
     };
   });
   const taxableAmount = lines.reduce((sum, row) => sum + row.qty * row.unitPriceInr, 0);
   const taxPct = options?.taxPct ?? 18;
+  const companyPo = (order.company_po_number || "").trim();
   return {
     company: {
       name: DEFAULT_CACHE_COMPANY.name,
@@ -191,7 +279,7 @@ export function purchaseOrderPdfInputFromOrder(
       name: (vendor.name || "").trim() || "—",
       address: (vendor.address || "").trim() || "—",
     },
-    poNumber: order.document_number || "PO",
+    poNumber: companyPo || order.document_number || "PO",
     date: order.document_date || new Date().toISOString().slice(0, 10),
     billingAddress: KAILASH_BILLING,
     shippingAddress: KAILASH_BILLING,
@@ -208,9 +296,17 @@ export async function downloadOrderPdf(
   order: Parameters<typeof purchaseOrderPdfInputFromOrder>[0],
   vendor: { name: string; address?: string },
   fileName?: string,
+  options?: { watermark?: boolean },
 ): Promise<void> {
   const input = purchaseOrderPdfInputFromOrder(order, vendor);
-  await downloadPurchaseOrderPdf(input, fileName || `PO-${input.poNumber}.pdf`);
+  const watermark = Boolean(options?.watermark);
+  const safePo = (input.poNumber || "PO").replace(/[\\/:*?"<>|]+/g, "-");
+  const baseName = fileName || `PO-${safePo}.pdf`;
+  await downloadPurchaseOrderPdf(
+    input,
+    watermark ? baseName.replace(/\.pdf$/i, "-draft.pdf") : baseName,
+    { watermark },
+  );
 }
 
 export async function previewPurchaseOrderPdf(
@@ -226,7 +322,7 @@ export async function previewPurchaseOrderPdf(
 export async function downloadPurchaseOrderPdf(
   input: PurchaseOrderPdfInput,
   fileName?: string,
-  options?: { preview?: boolean },
+  options?: { preview?: boolean; watermark?: boolean },
 ): Promise<void> {
   const payload: PurchaseOrderPdfInput = {
     ...input,
@@ -620,6 +716,10 @@ export async function downloadPurchaseOrderPdf(
     Math.max(ty + 12, pageH - 24),
     { align: "center" },
   );
+
+  if (options?.preview || options?.watermark) {
+    applyPreviewWatermark(doc);
+  }
 
   if (options?.preview) {
     const url = doc.output("bloburl");

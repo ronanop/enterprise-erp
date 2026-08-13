@@ -11,6 +11,7 @@ import {
   type InventoryImportDraftRow,
 } from "@/components/procurement/procurement-inventory-import-dialog";
 import { InventorySerialEditor } from "@/components/procurement/inventory-serial-editor";
+import { InventoryDescriptionEditor } from "@/components/procurement/inventory-description-editor";
 import {
   ProcurementListSearch,
   ProcurementPageHeader,
@@ -32,6 +33,7 @@ import {
   type VendorOption,
 } from "@/services/procurement-service";
 import { buildProcurementInventoryStockSummary, inventoryRowStableKey, isGrnNonBilledStockRow, nonBilledStockQuantity } from "@/utils/procurement-inventory-report";
+import { textTokenMatch } from "@/utils/procurement-search";
 
 export function ProcurementInventoryListPage() {
   const router = useRouter();
@@ -90,16 +92,16 @@ export function ProcurementInventoryListPage() {
   }, [load]);
 
   const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    if (!q) return rows;
+    const tokens = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
+    if (tokens.length === 0) return rows;
     return rows.filter((row) => {
-      const vendor = row.vendor_id ? (vendors[row.vendor_id]?.label ?? "") : "";
-      return [row.grn_number, row.company_po_number, vendor, row.product_name, row.serial_number, String(row.unit_index)]
-        .join(" ")
-        .toLowerCase()
-        .includes(q);
+      const product = row.product_name ?? "";
+      const description = row.description ?? "";
+      return tokens.every(
+        (token) => textTokenMatch(product, token) || textTokenMatch(description, token),
+      );
     });
-  }, [rows, query, vendors]);
+  }, [rows, query]);
 
   const reportSource = query.trim() ? filtered : rows;
   const grnStockRows = useMemo(
@@ -208,8 +210,8 @@ export function ProcurementInventoryListPage() {
       <ProcurementListSearch
         value={query}
         onChange={setQuery}
-        placeholder="Search GRN, PO, vendor, product, serial…"
-        aria-label="Search procurement inventory"
+        placeholder="Search by product…"
+        aria-label="Search inventory by product"
       />
 
       {loading ? (
@@ -287,12 +289,14 @@ export function ProcurementInventoryListPage() {
                           <td
                             className={cn(
                               procurementUi.td,
-                              "px-4 max-w-[200px] text-muted-foreground",
+                              "px-4 max-w-[220px] text-muted-foreground",
                             )}
                           >
-                            <span className="line-clamp-2" title={line.description ?? ""}>
-                              {line.description?.trim() || "—"}
-                            </span>
+                            <InventoryDescriptionEditor
+                              row={line}
+                              onSaved={() => void load(true)}
+                              onError={setSerialSaveError}
+                            />
                           </td>
                           <td
                             className={cn(

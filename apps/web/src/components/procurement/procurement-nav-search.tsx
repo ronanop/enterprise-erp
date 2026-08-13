@@ -33,9 +33,11 @@ export function ProcurementNavSearch({
 
   const results = useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (!q) return [...ALL_PROCUREMENT_NAV];
+    if (!q) return [];
     return ALL_PROCUREMENT_NAV.filter((item) => item.title.toLowerCase().includes(q));
   }, [query]);
+
+  const hasQuery = query.trim().length > 0;
 
   useEffect(() => {
     setActiveIndex(0);
@@ -55,7 +57,6 @@ export function ProcurementNavSearch({
   useEffect(() => {
     if (expanded && iconOnly) {
       inputRef.current?.focus();
-      setOpen(true);
     }
   }, [expanded, iconOnly]);
 
@@ -76,6 +77,10 @@ export function ProcurementNavSearch({
   }
 
   function onKeyDown(event: KeyboardEvent<HTMLInputElement>) {
+    if (!hasQuery) {
+      if (event.key === "Escape") close();
+      return;
+    }
     if (event.key === "ArrowDown") {
       event.preventDefault();
       setOpen(true);
@@ -150,15 +155,18 @@ export function ProcurementNavSearch({
             iconOnly && "h-8",
           )}
           onChange={(event) => {
-            setQuery(event.target.value);
-            setOpen(true);
+            const next = event.target.value;
+            setQuery(next);
+            setOpen(next.trim().length > 0);
           }}
-          onFocus={() => setOpen(true)}
+          onFocus={() => {
+            if (query.trim()) setOpen(true);
+          }}
           onKeyDown={onKeyDown}
         />
       </div>
 
-      {open ? (
+      {open && hasQuery ? (
         <ul
           id={listId}
           role="listbox"

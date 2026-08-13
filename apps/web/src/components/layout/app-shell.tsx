@@ -20,23 +20,25 @@ export function AppShell({ children }: AppShellProps) {
   const standalone = useStandaloneChrome();
   const isCrm = pathname === "/crm" || pathname.startsWith("/crm/");
   const isProcurement = pathname === "/procurement" || pathname.startsWith("/procurement/");
+  const useProcurementSidebar = isProcurement;
+  const hideAppSidebar = standalone || useProcurementSidebar;
 
   return (
     <div
       className={cn(
         "flex min-h-dvh w-full max-w-[100dvw] overflow-x-clip bg-background",
-        standalone && isProcurement && "bg-slate-50",
+        useProcurementSidebar && "bg-slate-50",
       )}
     >
-      {!standalone ? <AppSidebar /> : null}
+      {!hideAppSidebar ? <AppSidebar /> : null}
       {standalone && isCrm ? <CrmSidebar /> : null}
-      {standalone && isProcurement ? <ProcurementSidebar /> : null}
+      {useProcurementSidebar ? <ProcurementSidebar /> : null}
       <div className="flex min-w-0 flex-1 flex-col overflow-x-clip">
         <AppTopbar />
         <main
           className={cn(
             "min-w-0 flex-1 overflow-x-clip px-4 py-6 sm:px-6 lg:px-8",
-            standalone && isProcurement && "bg-slate-50",
+            useProcurementSidebar && "bg-slate-50",
           )}
         >
           <div className="mx-auto w-full min-w-0 max-w-[1400px]">

@@ -25,6 +25,10 @@ import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
+import {
+  listPendingPoApprovals,
+  PROCUREMENT_APPROVALS_EVENT,
+} from "@/lib/procurement-approvals";
 import { ApiClientError } from "@/services/api-client";
 import {
   formatInr,
@@ -33,10 +37,11 @@ import {
   peekScmQueueFromCache,
   type ScmQueueItem,
 } from "@/services/procurement-service";
+import { textTokenMatch } from "@/utils/procurement-search";
 import { getUnseenScmOvfIds, markScmQueueSeen } from "@/utils/scm-queue-seen";
 
 type QueueFilter = "all" | "open" | "close" | "hold";
-type OvfStatus = "open" | "close" | "hold" | "draft";
+type OvfStatus = "open" | "close" | "hold" | "draft" | "pending_approval";
 
 function formatReceivedDate(value?: string | null): string {
   if (!value) return "—";
@@ -76,11 +81,22 @@ function parseQueueFilter(value: string | null): QueueFilter {
  * OVF status for SCM queue:
  * - Open   = no vendor PO yet
  * - Draft  = draft vendor PO created from OVF (not finalized)
+ * - Pending approval = finalize request sent to admin
  * - Close  = PO finalized (issued)
  * - Hold   = SCM parked the OVF without a live PO (or cancelled PO)
  */
-function deriveOvfStatus(row: ScmQueueItem): OvfStatus {
+function deriveOvfStatus(
+  row: ScmQueueItem,
+  pendingOrderIds: Set<string>,
+): OvfStatus {
   const status = (row.purchase_order_status || "").toLowerCase();
+  if (
+    row.purchase_order_id &&
+    pendingOrderIds.has(row.purchase_order_id) &&
+    status === "draft"
+  ) {
+    return "pending_approval";
+  }
   if (status === "draft" && row.purchase_order_id && !row.can_create_po) {
     return "draft";
   }
@@ -122,9 +138,11 @@ function scmQueueRowMatchesSearch(
       return poDigits.includes(token) || poDigits.endsWith(token);
     }
 
-    const nameHit = customerName.includes(token) || vendorName.includes(token);
-    const poHit = poNumber.includes(token);
-    return nameHit || poHit;
+    return (
+      textTokenMatch(customerName, token) ||
+      textTokenMatch(vendorName, token) ||
+      textTokenMatch(poNumber, token)
+    );
   });
 }
 
@@ -136,7 +154,9 @@ function OvfStatusBadge({ status }: { status: OvfStatus }) {
         ? "Close"
         : status === "draft"
           ? "Draft"
-          : "Hold";
+          : status === "pending_approval"
+            ? "Pending approval"
+            : "Hold";
   return (
     <Badge
       variant="outline"
@@ -145,6 +165,7 @@ function OvfStatusBadge({ status }: { status: OvfStatus }) {
         status === "open" && "border-amber-300 bg-amber-50 text-amber-900",
         status === "close" && "border-emerald-300 bg-emerald-50 text-emerald-900",
         status === "draft" && "border-sky-300 bg-sky-50 text-sky-900",
+        status === "pending_approval" && "border-amber-300 bg-amber-50 text-amber-900",
         status === "hold" && "border-red-300 bg-red-50 text-red-800",
       )}
     >
@@ -166,6 +187,9 @@ export function ScmQueuePage() {
   const [error, setError] = useState<string | null>(null);
   const [newOvfIds, setNewOvfIds] = useState<Set<string>>(new Set());
   const [query, setQuery] = useState(() => searchParams.get("q")?.trim() ?? "");
+  const [pendingOrderIds, setPendingOrderIds] = useState<Set<string>>(() =>
+    new Set(listPendingPoApprovals().map((row) => row.orderId)),
+  );
   const queueOvfIdsRef = useRef<string[]>([]);
 
   const setFilter = useCallback(
@@ -207,6 +231,19 @@ export function ScmQueuePage() {
   }, [load]);
 
   useEffect(() => {
+    const syncApprovals = () => {
+      setPendingOrderIds(new Set(listPendingPoApprovals().map((row) => row.orderId)));
+    };
+    syncApprovals();
+    window.addEventListener(PROCUREMENT_APPROVALS_EVENT, syncApprovals);
+    window.addEventListener("storage", syncApprovals);
+    return () => {
+      window.removeEventListener(PROCUREMENT_APPROVALS_EVENT, syncApprovals);
+      window.removeEventListener("storage", syncApprovals);
+    };
+  }, []);
+
+  useEffect(() => {
     if (loading) return;
     const ids = rows.map((row) => row.ovf_id).filter(Boolean);
     queueOvfIdsRef.current = ids;
@@ -222,12 +259,21 @@ export function ScmQueuePage() {
   }, []);
 
   const enriched = useMemo(
-    () => rows.map((row) => ({ ...row, ovf_status: deriveOvfStatus(row) })),
-    [rows],
+    () =>
+      rows.map((row) => ({
+        ...row,
+        ovf_status: deriveOvfStatus(row, pendingOrderIds),
+      })),
+    [rows, pendingOrderIds],
   );
 
   const kpis = useMemo(() => {
-    const open = enriched.filter((r) => r.ovf_status === "open" || r.ovf_status === "draft").length;
+    const open = enriched.filter(
+      (r) =>
+        r.ovf_status === "open" ||
+        r.ovf_status === "draft" ||
+        r.ovf_status === "pending_approval",
+    ).length;
     const close = enriched.filter((r) => r.ovf_status === "close").length;
     const hold = enriched.filter((r) => r.ovf_status === "hold").length;
     return { open, close, hold, total: rows.length };
@@ -236,7 +282,12 @@ export function ScmQueuePage() {
   const filtered = useMemo(() => {
     let list = enriched;
     if (filter === "open") {
-      list = enriched.filter((r) => r.ovf_status === "open" || r.ovf_status === "draft");
+      list = enriched.filter(
+        (r) =>
+          r.ovf_status === "open" ||
+          r.ovf_status === "draft" ||
+          r.ovf_status === "pending_approval",
+      );
     } else if (filter === "close" || filter === "hold") {
       list = enriched.filter((r) => r.ovf_status === filter);
     }
@@ -257,7 +308,6 @@ export function ScmQueuePage() {
     <ProcurementPage>
       <PageHeader
         title="SCM Queue"
-        description="Finance-approved OVFs awaiting vendor PO creation, issuance, and SCM hold actions."
         actions={
           <div className="flex flex-wrap items-center gap-2">
             <Button
@@ -292,27 +342,27 @@ export function ScmQueuePage() {
 
       <div className="grid gap-2.5 sm:grid-cols-2 xl:grid-cols-4">
         <ProcurementKpiCard
-          label="Total OVF"
+          label="TOTAL OVF"
           value={String(kpis.total)}
           icon={ClipboardList}
           href="/procurement/scm"
         />
         <ProcurementKpiCard
-          label="Open"
+          label="OPEN OVF"
           value={String(kpis.open)}
           tone="warning"
           icon={ShoppingCart}
           href="/procurement/scm?filter=open"
         />
         <ProcurementKpiCard
-          label="Close"
+          label="CLOSE OVF"
           value={String(kpis.close)}
           tone="success"
           icon={CircleCheckBig}
           href="/procurement/scm?filter=close"
         />
         <ProcurementKpiCard
-          label="Hold"
+          label="HOLD OVF"
           value={String(kpis.hold)}
           tone="danger"
           icon={PauseCircle}
@@ -471,10 +521,21 @@ export function ScmQueuePage() {
                           scmOnHoldAt={row.scm_on_hold_at}
                           className="cursor-pointer transition-colors duration-200"
                         />
+                      ) : ovfStatus === "pending_approval" && row.purchase_order_id ? (
+                        <Link
+                          href={`/procurement/orders/${row.purchase_order_id}?from=scm`}
+                          className={cn(
+                            "inline-flex cursor-pointer items-center rounded-md border border-amber-200/80 bg-amber-50 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide text-amber-900",
+                            "transition-colors duration-200 hover:bg-amber-100",
+                            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1",
+                          )}
+                        >
+                          Pending approval
+                        </Link>
                       ) : ovfStatus === "draft" ||
                         (ovfStatus === "open" && row.purchase_order_id) ? (
                         <Link
-                          href={`/procurement/orders/${row.purchase_order_id}`}
+                          href={`/procurement/orders/${row.purchase_order_id}?from=scm`}
                           className={cn(
                             buttonVariants({ size: "sm", variant: "outline" }),
                             "cursor-pointer transition-colors duration-200",
@@ -484,7 +545,7 @@ export function ScmQueuePage() {
                         </Link>
                       ) : row.purchase_order_id ? (
                         <Link
-                          href={`/procurement/orders/${row.purchase_order_id}`}
+                          href={`/procurement/orders/${row.purchase_order_id}?from=scm`}
                           className={cn(
                             buttonVariants({ size: "sm", variant: "outline" }),
                             "cursor-pointer transition-colors duration-200",

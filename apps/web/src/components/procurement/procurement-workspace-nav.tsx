@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState, type ComponentType } from "react";
 import {
+  BadgeCheck,
   BarChart3,
   Boxes,
   Building2,
@@ -19,12 +20,15 @@ import {
   PackageCheck,
   ShoppingCart,
   Truck,
+  UserCog,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { clearTokens } from "@/lib/auth";
 import { cn } from "@/lib/utils";
 import { useClientAuth } from "@/hooks/use-client-auth";
+import { useProcurementApprovals } from "@/hooks/use-procurement-approvals";
+import { useProcurementRole } from "@/hooks/use-procurement-role";
 import { authService } from "@/services/api-client";
 import { prefetchProcurementTab } from "@/services/procurement-service";
 import { useDeliveryReminderSweep } from "@/hooks/use-delivery-reminder-sweep";
@@ -40,6 +44,7 @@ export const PROCUREMENT_NAV = [
   { title: "Delivery Status", href: "/procurement/delivery-status", icon: MapPinned },
   { title: "Vendors", href: "/procurement/vendors", icon: Building2 },
   { title: "Inventory", href: "/procurement/inventory", icon: Boxes },
+  { title: "Approval", href: "/procurement/approval", icon: BadgeCheck },
 ] as const satisfies ReadonlyArray<{ title: string; href: string; icon: NavIcon }>;
 
 export const PROCUREMENT_INSIGHT_NAV = [
@@ -78,11 +83,13 @@ function NavLinkItem({
   pathname,
   router,
   collapsed,
+  badge,
 }: {
   item: { title: string; href: string; icon: NavIcon };
   pathname: string;
   router: ReturnType<typeof useRouter>;
   collapsed?: boolean;
+  badge?: number;
 }) {
   const active = isProcurementNavActive(pathname, item.href);
   const Icon = item.icon;
@@ -95,7 +102,7 @@ function NavLinkItem({
       onMouseEnter={() => warmProcurementNavTarget(router, item.href)}
       onFocus={() => warmProcurementNavTarget(router, item.href)}
       className={cn(
-        "group flex cursor-pointer items-center gap-3 rounded-xl px-3 py-2.5 text-[13px] transition-[background-color,color,box-shadow] duration-200",
+        "group relative flex cursor-pointer items-center gap-3 rounded-xl px-3 py-2.5 text-[13px] transition-[background-color,color,box-shadow] duration-200",
         active
           ? "bg-[#0F172A] font-semibold text-white shadow-sm"
           : "font-medium text-muted-foreground hover:bg-muted/70 hover:text-foreground",
@@ -110,6 +117,17 @@ function NavLinkItem({
         aria-hidden
       />
       {!collapsed ? <span className="min-w-0 flex-1 truncate">{item.title}</span> : null}
+      {badge && badge > 0 ? (
+        <span
+          className={cn(
+            "inline-flex min-w-5 items-center justify-center rounded-full px-1.5 py-0.5 text-[10px] font-bold",
+            collapsed && "absolute right-1 top-1 min-w-4 px-1",
+            active ? "bg-amber-400 text-[#0F172A]" : "bg-amber-500 text-white",
+          )}
+        >
+          {badge}
+        </span>
+      ) : null}
     </Link>
   );
 }
@@ -170,6 +188,8 @@ export function ProcurementSidebar() {
   const router = useRouter();
   const [collapsed, setCollapsed] = useState(false);
   const signedIn = useClientAuth();
+  const { role, isAdmin, switchRole } = useProcurementRole();
+  const { pendingCount } = useProcurementApprovals();
   useDeliveryReminderSweep();
 
   useEffect(() => {
@@ -216,7 +236,7 @@ export function ProcurementSidebar() {
               Procurement
             </p>
             <p className="truncate text-[11px] font-normal text-muted-foreground">
-              SCM workspace
+              {isAdmin ? "Admin workspace" : "SCM workspace"}
             </p>
           </div>
         ) : null}
@@ -226,7 +246,13 @@ export function ProcurementSidebar() {
         <ul className="space-y-1">
           {PROCUREMENT_NAV.map((item) => (
             <li key={item.href}>
-              <NavLinkItem item={item} pathname={pathname} router={router} collapsed={collapsed} />
+              <NavLinkItem
+                item={item}
+                pathname={pathname}
+                router={router}
+                collapsed={collapsed}
+                badge={item.href === "/procurement/approval" && isAdmin ? pendingCount : undefined}
+              />
             </li>
           ))}
         </ul>
@@ -250,6 +276,30 @@ export function ProcurementSidebar() {
       </nav>
 
       <div className="space-y-1 border-t border-border/70 p-3">
+        <button
+          type="button"
+          onClick={() => switchRole()}
+          title={isAdmin ? "Switch to normal user" : "Switch to admin"}
+          className={cn(
+            "group flex w-full cursor-pointer items-center gap-3 rounded-xl px-3 py-2.5 text-[13px] font-medium",
+            "border border-border/80 bg-muted/30 text-foreground transition-[background-color,color] duration-200",
+            "hover:bg-muted/70",
+            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1",
+            collapsed && "justify-center px-0",
+          )}
+        >
+          <UserCog className="size-4 shrink-0" aria-hidden />
+          {!collapsed ? (
+            <span className="min-w-0 flex-1 truncate text-left">
+              {isAdmin ? "Switch to User" : "Switch to Admin"}
+            </span>
+          ) : null}
+          {!collapsed ? (
+            <span className="rounded-md bg-[#0F172A] px-1.5 py-0.5 text-[9px] font-bold tracking-wide text-white uppercase">
+              {role}
+            </span>
+          ) : null}
+        </button>
         <Button
           variant="ghost"
           size="sm"

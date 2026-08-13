@@ -5,6 +5,15 @@ export type ProcurementInventoryProductStock = {
   units: number;
   grnCount: number;
   serialsRecorded: number;
+  stockValue: number;
+  avgUnitCost: number;
+};
+
+export type ProcurementInventoryVendorStock = {
+  vendorId: string | null;
+  vendorLabel: string;
+  units: number;
+  stockValue: number;
 };
 
 export type ProcurementInventoryStockTableRow = {
@@ -19,13 +28,21 @@ export type ProcurementInventoryStockSummary = {
   totalUnits: number;
   productCount: number;
   grnCount: number;
+  totalStockValue: number;
+  avgUnitCost: number;
   byProduct: ProcurementInventoryProductStock[];
+  byVendor: ProcurementInventoryVendorStock[];
   byPoGrn: ProcurementInventoryStockTableRow[];
 };
 
 function productLabel(row: ProcurementInventoryRow): string {
   const name = row.product_name?.trim();
   return name || "Unnamed product";
+}
+
+function unitCostOf(row: ProcurementInventoryRow): number {
+  const n = Number(row.unit_cost);
+  return Number.isFinite(n) && n > 0 ? n : 0;
 }
 
 /** Stock on hand from GRN receipts only — units received but not yet billed. */
@@ -106,21 +123,33 @@ export function inventoryRowStableKey(row: ProcurementInventoryRow, index: numbe
 
 export function buildProcurementInventoryStockSummary(
   rows: ProcurementInventoryRow[],
+  options?: { vendorLabels?: Record<string, string> },
 ): ProcurementInventoryStockSummary {
+  const vendorLabels = options?.vendorLabels ?? {};
   const productMap = new Map<
     string,
-    { units: number; grns: Set<string>; serials: number }
+    { units: number; grns: Set<string>; serials: number; stockValue: number }
+  >();
+  const vendorMap = new Map<
+    string,
+    { vendorId: string | null; units: number; stockValue: number }
   >();
   const allGrns = new Set<string>();
+  let totalStockValue = 0;
 
   for (const row of rows) {
     const name = productLabel(row);
+    const cost = unitCostOf(row);
+    totalStockValue += cost;
+
     const entry = productMap.get(name) ?? {
       units: 0,
       grns: new Set<string>(),
       serials: 0,
+      stockValue: 0,
     };
     entry.units += 1;
+    entry.stockValue += cost;
     if (row.grn_number && row.grn_number !== "Imported") {
       entry.grns.add(row.grn_number);
     }
@@ -128,6 +157,18 @@ export function buildProcurementInventoryStockSummary(
       entry.serials += 1;
     }
     productMap.set(name, entry);
+
+    const vendorId = (row.vendor_id || "").trim() || null;
+    const vendorKey = vendorId || "__unassigned__";
+    const vendorEntry = vendorMap.get(vendorKey) ?? {
+      vendorId,
+      units: 0,
+      stockValue: 0,
+    };
+    vendorEntry.units += 1;
+    vendorEntry.stockValue += cost;
+    vendorMap.set(vendorKey, vendorEntry);
+
     if (row.grn_number && row.grn_number !== "Imported") {
       allGrns.add(row.grn_number);
     }
@@ -139,8 +180,34 @@ export function buildProcurementInventoryStockSummary(
       units: data.units,
       grnCount: data.grns.size,
       serialsRecorded: data.serials,
+      stockValue: data.stockValue,
+      avgUnitCost: data.units > 0 ? data.stockValue / data.units : 0,
     }))
-    .sort((a, b) => b.units - a.units || a.productName.localeCompare(b.productName));
+    .sort(
+      (a, b) =>
+        b.stockValue - a.stockValue ||
+        b.units - a.units ||
+        a.productName.localeCompare(b.productName),
+    );
+
+  const byVendor = Array.from(vendorMap.entries())
+    .map(([key, data]) => {
+      const labeled =
+        (data.vendorId && vendorLabels[data.vendorId]?.trim()) ||
+        (data.vendorId ? `OEM ${data.vendorId.slice(0, 8)}` : "Unassigned OEM");
+      return {
+        vendorId: data.vendorId,
+        vendorLabel: key === "__unassigned__" ? "Unassigned OEM" : labeled,
+        units: data.units,
+        stockValue: data.stockValue,
+      };
+    })
+    .sort(
+      (a, b) =>
+        b.stockValue - a.stockValue ||
+        b.units - a.units ||
+        a.vendorLabel.localeCompare(b.vendorLabel),
+    );
 
   const poGrnMap = new Map<string, ProcurementInventoryStockTableRow>();
   for (const row of rows) {
@@ -169,11 +236,15 @@ export function buildProcurementInventoryStockSummary(
       a.productName.localeCompare(b.productName),
   );
 
+  const totalUnits = rows.length;
   return {
-    totalUnits: rows.length,
+    totalUnits,
     productCount: byProduct.length,
     grnCount: allGrns.size,
+    totalStockValue,
+    avgUnitCost: totalUnits > 0 ? totalStockValue / totalUnits : 0,
     byProduct,
+    byVendor,
     byPoGrn,
   };
 }

@@ -20,3 +20,7 @@ export function isScmOpenOvfRow(row: ScmQueueItem): boolean {
   const s = deriveScmOvfQueueStatus(row);
   return s === "open" || s === "draft";
 }
+
+export function isScmHoldOvfRow(row: ScmQueueItem): boolean {
+  return deriveScmOvfQueueStatus(row) === "hold";
+}

@@ -323,6 +323,8 @@ export type ScmVendorPoLine = {
   quantity_received: number;
   last_receipt_qty?: number;
   last_receipt_batch_id?: string | null;
+  last_receipt_billing?: boolean;
+  last_receipt_billing_quantity?: number;
   unit_cost: number;
   line_total: number;
   status: string;
@@ -543,6 +545,8 @@ export async function createPoFromInventory(payload: {
   payment_terms?: string | null;
   approved_by_name?: string | null;
   lines?: Array<{ product_name: string; quantity: number; unit_cost?: number }>;
+  stock_unit_ids?: string[];
+  import_line_ids?: string[];
 }): Promise<ProcOrder> {
   const res = await apiClient<ProcOrder>(`${SCM_API}/inventory/purchase-orders`, {
     method: "POST",
@@ -553,6 +557,8 @@ export async function createPoFromInventory(payload: {
       payment_terms: payload.payment_terms ?? null,
       approved_by_name: payload.approved_by_name?.trim() || null,
       lines: payload.lines ?? [],
+      stock_unit_ids: payload.stock_unit_ids ?? [],
+      import_line_ids: payload.import_line_ids ?? [],
     },
   });
   invalidateProcurementListCache();
@@ -584,6 +590,17 @@ export async function updateInventoryImportSerial(
   await apiClient(`${SCM_API}/inventory/import-lines/${importLineId}/serial`, {
     method: "PATCH",
     body: { serial_number },
+  });
+  invalidateProcurementListCache();
+}
+
+export async function updateInventoryOrderLineDescription(
+  orderLineId: string,
+  description: string,
+): Promise<void> {
+  await apiClient(`${SCM_API}/inventory/order-lines/${orderLineId}/description`, {
+    method: "PATCH",
+    body: { description },
   });
   invalidateProcurementListCache();
 }
@@ -721,6 +738,130 @@ export async function openReceiptBatchAttachment(attachmentId: string): Promise<
   window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
 }
 
+export type ScmCommercialAttachment = {
+  id: string;
+  file_name: string;
+  content_type: string | null;
+  size: number | null;
+  category: string;
+  entity_type: string;
+  entity_id: string;
+};
+
+export async function listScmOvfAttachments(ovfId: string): Promise<ScmCommercialAttachment[]> {
+  const res = await apiClient<ScmCommercialAttachment[]>(
+    `${SCM_API}/ovf/${ovfId}/attachments`,
+  );
+  return unwrapData(res);
+}
+
+export async function uploadScmOvfAttachment(
+  ovfId: string,
+  body: {
+    file_name: string;
+    content_base64: string;
+    content_type?: string | null;
+    branch_id: string;
+    company_id?: string | null;
+    category?: string;
+  },
+): Promise<ScmCommercialAttachment> {
+  const res = await apiClient<ScmCommercialAttachment>(`${SCM_API}/ovf/${ovfId}/attachments`, {
+    method: "POST",
+    body,
+  });
+  return unwrapData(res);
+}
+
+export async function listScmPoAttachments(orderId: string): Promise<ScmCommercialAttachment[]> {
+  const res = await apiClient<ScmCommercialAttachment[]>(
+    `${SCM_API}/orders/${orderId}/attachments`,
+  );
+  return unwrapData(res);
+}
+
+export async function listScmOrderCommercialDocuments(
+  orderId: string,
+): Promise<ScmCommercialAttachment[]> {
+  const res = await apiClient<ScmCommercialAttachment[]>(
+    `${SCM_API}/orders/${orderId}/commercial-documents`,
+  );
+  return unwrapData(res);
+}
+
+export async function uploadScmPoAttachment(
+  orderId: string,
+  body: {
+    file_name: string;
+    content_base64: string;
+    content_type?: string | null;
+    branch_id: string;
+    company_id?: string | null;
+    category?: string;
+  },
+): Promise<ScmCommercialAttachment> {
+  const res = await apiClient<ScmCommercialAttachment>(
+    `${SCM_API}/orders/${orderId}/attachments`,
+    {
+      method: "POST",
+      body,
+    },
+  );
+  return unwrapData(res);
+}
+
+export async function openScmCommercialAttachment(attachmentId: string): Promise<void> {
+  const token = getAccessToken();
+  const response = await fetch(
+    `${env.apiUrl}${SCM_API}/commercial-attachments/${attachmentId}/content`,
+    {
+      headers: {
+        Accept: "*/*",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      cache: "no-store",
+    },
+  );
+  if (!response.ok) {
+    throw new Error(`Failed to open attachment (${response.status})`);
+  }
+  const blob = await response.blob();
+  const url = URL.createObjectURL(blob);
+  window.open(url, "_blank", "noopener,noreferrer");
+  window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+}
+
+/** OVF + PO commercial pack used when sending a PO for admin approval. */
+export async function collectPoApprovalDocuments(input: {
+  orderId: string;
+  ovfId?: string | null;
+}): Promise<
+  Array<{
+    id: string;
+    fileName: string;
+    category: string;
+    entityType: string;
+    source: "ovf" | "po";
+  }>
+> {
+  const docs = await listScmOrderCommercialDocuments(input.orderId).catch(async () => {
+    const [ovfDocs, poDocs] = await Promise.all([
+      input.ovfId
+        ? listScmOvfAttachments(input.ovfId).catch(() => [] as ScmCommercialAttachment[])
+        : Promise.resolve([] as ScmCommercialAttachment[]),
+      listScmPoAttachments(input.orderId).catch(() => [] as ScmCommercialAttachment[]),
+    ]);
+    return [...ovfDocs, ...poDocs];
+  });
+  return docs.map((row) => ({
+    id: row.id,
+    fileName: row.file_name,
+    category: row.category || "other",
+    entityType: row.entity_type,
+    source: row.entity_type === "purchase_order" ? ("po" as const) : ("ovf" as const),
+  }));
+}
+
 export async function getPurchaseOrder(
   orderId: string,
   options?: { includeCommercial?: boolean },
@@ -732,18 +873,34 @@ export async function getPurchaseOrder(
   return unwrapData(res);
 }
 
+async function fetchPurchaseOrders(options?: {
+  includeCommercial?: boolean;
+}): Promise<ProcOrder[]> {
+  const res = await resourceService.list<ProcOrder>("/procurement/orders", {
+    page: 1,
+    page_size: 200,
+    ...(options?.includeCommercial ? { include_commercial: true } : {}),
+  });
+  return normalizeRows(res.data) as unknown as ProcOrder[];
+}
+
 export async function listPurchaseOrders(options?: {
   includeCommercial?: boolean;
 }): Promise<ProcOrder[]> {
   if (options?.includeCommercial) {
-    const res = await resourceService.list<ProcOrder>("/procurement/orders", {
-      include_commercial: true,
-    });
-    return normalizeRows(res.data) as unknown as ProcOrder[];
+    return fetchPurchaseOrders({ includeCommercial: true });
   }
   return cachedFetch(PROCUREMENT_ORDERS_CACHE_KEY, PROCUREMENT_LIST_TTL_MS, async () => {
-    const res = await resourceService.list<ProcOrder>("/procurement/orders");
-    return normalizeRows(res.data) as unknown as ProcOrder[];
+    try {
+      return await fetchPurchaseOrders();
+    } catch (err) {
+      // One short retry — API is often briefly unreachable right after Docker recreate.
+      if (err instanceof ApiClientError && err.status === 0) {
+        await new Promise((resolve) => setTimeout(resolve, 1500));
+        return fetchPurchaseOrders();
+      }
+      throw err;
+    }
   });
 }
 

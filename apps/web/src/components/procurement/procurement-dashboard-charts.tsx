@@ -32,13 +32,11 @@ const PO_BUCKET_COLORS: Record<PoOverviewBucket, string> = {
   draft: PROC_CHART_COLORS.gold,
 };
 
-const PO_BUCKETS: PoOverviewBucket[] = ["open", "partial", "close", "draft"];
-
 const PO_BUCKET_HREFS: Record<PoOverviewBucket, string> = {
-  draft: "/procurement/orders/overview?bucket=draft",
-  open: "/procurement/orders/overview?bucket=open",
-  partial: "/procurement/orders/overview?bucket=partial",
-  close: "/procurement/orders/overview?bucket=close",
+  draft: "/procurement/orders?bucket=draft",
+  open: "/procurement/orders?bucket=open",
+  partial: "/procurement/orders?bucket=partial",
+  close: "/procurement/orders?bucket=close",
 };
 
 function ProcurementChartSection({
@@ -124,25 +122,30 @@ function PoLifecycleDonut({
   loading?: boolean;
   compact?: boolean;
 }) {
-  const slices: Exploded3dPieSlice[] = PO_BUCKETS.map((key) => ({
-    key,
-    label: PO_OVERVIEW_BUCKET_LABELS[key],
-    value: counts[key],
-    color: PO_BUCKET_COLORS[key],
-    href: PO_BUCKET_HREFS[key],
-  })).filter((s) => s.value > 0);
+  // Lifecycle stages only — draft is not part of the open→partial→close mix.
+  const lifecycleBuckets: PoOverviewBucket[] = ["open", "partial", "close"];
+  const slices: Exploded3dPieSlice[] = lifecycleBuckets
+    .map((key) => ({
+      key,
+      label: PO_OVERVIEW_BUCKET_LABELS[key],
+      value: counts[key],
+      color: PO_BUCKET_COLORS[key],
+      href: PO_BUCKET_HREFS[key],
+    }))
+    .filter((s) => s.value > 0);
   const total = slices.reduce((sum, d) => sum + d.value, 0);
 
   if (loading) return <ChartEmpty message="Loading…" />;
   if (!total) return <ChartEmpty message="No purchase orders yet" />;
 
   return (
-    <div className="rounded-xl border border-border/50 bg-gradient-to-b from-slate-50/90 to-white px-2 py-3">
+    <div className="rounded-xl border border-border/50 bg-gradient-to-b from-slate-50/90 to-white px-2.5 py-3">
       <Exploded3dPieChart
         slices={slices}
         ariaLabel="Purchase order lifecycle mix"
-        size={compact ? 132 : 176}
-        layout={compact ? "compact" : "horizontal"}
+        size={compact ? 148 : 176}
+        layout="horizontal"
+        legendMode="count"
       />
     </div>
   );
@@ -213,7 +216,7 @@ export function PoLifecycleChartCard({
       title="PO lifecycle"
       icon={PieChartIcon}
       className={className}
-      onClick={() => router.push("/procurement/orders/overview")}
+      onClick={() => router.push("/procurement/orders")}
     >
       <PoLifecycleDonut counts={counts} loading={loading} compact={compact} />
     </ProcurementChartSection>

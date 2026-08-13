@@ -1,12 +1,10 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ChevronDown, CircleDot, FileSpreadsheet, Layers, PackageCheck, RefreshCw } from "lucide-react";
+import { ChevronDown, CircleDot, Eye, FileSpreadsheet, PackageCheck, RefreshCw } from "lucide-react";
 
 import { FinanceKpiCard } from "@/components/finance/finance-kpi-card";
-import { GrnStockSummaryTable } from "@/components/procurement/grn-stock-summary-table";
 import { GrnDeliveryChallanMenu } from "@/components/procurement/grn-delivery-challan-menu";
 import {
   GrnReceiptHistoryDialog,
@@ -15,18 +13,16 @@ import {
 import { ProcurementPageHeader } from "@/components/procurement/procurement-page-header";
 import { procurementUi } from "@/components/procurement/procurement-ui";
 import { Badge } from "@/components/ui/badge";
-import { Button, buttonVariants } from "@/components/ui/button";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { formatApiError } from "@/services/api-client";
 import {
   formatInr,
   invalidateProcurementListCache,
-  listProcurementInventory,
   listVendorOptions,
   listVendorPos,
   peekVendorPosFromCache,
-  type ProcurementInventoryRow,
   type ScmVendorPo,
   type VendorOption,
 } from "@/services/procurement-service";
@@ -45,7 +41,6 @@ import {
 import { formatGrnStatusBadgeLabel } from "@/utils/grn-status-display";
 
 type GrnFilter = "all" | "partial" | "closed";
-type GrnPageView = "po-list" | "grn-list";
 
 function grnTone(status: string): "default" | "secondary" | "destructive" | "outline" {
   if (status === "closed" || status === "delivered") return "default";
@@ -126,9 +121,6 @@ export function GrnsListPage() {
   );
   const [error, setError] = useState<string | null>(null);
   const [exportOpen, setExportOpen] = useState(false);
-  const [pageView, setPageView] = useState<GrnPageView>("po-list");
-  const [stockRows, setStockRows] = useState<ProcurementInventoryRow[]>([]);
-  const [stockLoading, setStockLoading] = useState(false);
   const exportMenuRef = useRef<HTMLDivElement | null>(null);
   const [historyOrder, setHistoryOrder] = useState<{
     id: string;
@@ -177,25 +169,6 @@ export function GrnsListPage() {
     void load();
   }, [load]);
 
-  const loadStockList = useCallback(async (force = false) => {
-    if (force) invalidateProcurementListCache();
-    setStockLoading(true);
-    setError(null);
-    try {
-      const data = await listProcurementInventory();
-      setStockRows(data);
-    } catch (err) {
-      setStockRows([]);
-      setError(formatApiError(err, "Failed to load GRN list"));
-    } finally {
-      setStockLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    if (pageView === "grn-list") void loadStockList();
-  }, [pageView, loadStockList]);
-
   useEffect(() => {
     if (!exportOpen) return;
     function onPointerDown(event: MouseEvent) {
@@ -242,15 +215,7 @@ export function GrnsListPage() {
     [rows],
   );
 
-  const showActionColumn = useMemo(
-    () => filtered.some((row) => {
-      const status = row.grn_status.toLowerCase();
-      return status !== "closed" && status !== "delivered";
-    }),
-    [filtered],
-  );
-
-  const tableColSpan = showActionColumn ? 11 : 10;
+  const tableColSpan = 10;
 
   function onExport(mode: "all" | "filter") {
     setExportOpen(false);
@@ -341,16 +306,13 @@ export function GrnsListPage() {
               size="sm"
               variant="outline"
               className="cursor-pointer transition-colors duration-200"
-              onClick={() => {
-                if (pageView === "grn-list") void loadStockList(true);
-                else void load(true);
-              }}
-              disabled={(loading && rows.length === 0) || stockLoading}
+              onClick={() => void load(true)}
+              disabled={loading && rows.length === 0}
             >
               <RefreshCw
                 className={cn(
                   "mr-1.5 size-3.5",
-                  (loading || refreshing || stockLoading) && "animate-spin",
+                  (loading || refreshing) && "animate-spin",
                 )}
               />
               Refresh
@@ -377,59 +339,25 @@ export function GrnsListPage() {
 
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-wrap items-center gap-2">
-          <div className="flex flex-wrap gap-1.5 rounded-md border border-border/80 bg-muted/20 p-0.5">
+          {(["all", "partial", "closed"] as const).map((key) => (
             <button
+              key={key}
               type="button"
-              onClick={() => setPageView("po-list")}
-              className={cn(
-                "cursor-pointer rounded px-2.5 py-1 text-xs font-medium transition-colors duration-200",
-                pageView === "po-list"
-                  ? "bg-card text-foreground shadow-sm"
-                  : "text-muted-foreground hover:text-foreground",
-              )}
+              onClick={() => setFilter(key)}
+              className={`cursor-pointer rounded-md border px-2.5 py-1 text-xs font-medium transition-colors duration-200 ${
+                filter === key
+                  ? "border-primary bg-primary text-primary-foreground"
+                  : "border-border bg-card text-muted-foreground hover:bg-muted/50 hover:text-foreground"
+              }`}
             >
-              PO list
+              {key === "all" ? "All" : key === "closed" ? "Delivered" : "Partial"}
             </button>
-            <button
-              type="button"
-              onClick={() => setPageView("grn-list")}
-              className={cn(
-                "cursor-pointer rounded px-2.5 py-1 text-xs font-medium transition-colors duration-200",
-                pageView === "grn-list"
-                  ? "bg-card text-foreground shadow-sm"
-                  : "text-muted-foreground hover:text-foreground",
-              )}
-            >
-              GRN list
-            </button>
-          </div>
-          {pageView === "po-list" ? (
-            <>
-              {(["all", "partial", "closed"] as const).map((key) => (
-                <button
-                  key={key}
-                  type="button"
-                  onClick={() => setFilter(key)}
-                  className={`cursor-pointer rounded-md border px-2.5 py-1 text-xs font-medium transition-colors duration-200 ${
-                    filter === key
-                      ? "border-primary bg-primary text-primary-foreground"
-                      : "border-border bg-card text-muted-foreground hover:bg-muted/50 hover:text-foreground"
-                  }`}
-                >
-                  {key === "all" ? "All" : key === "closed" ? "Delivered" : "Partial"}
-                </button>
-              ))}
-            </>
-          ) : null}
+          ))}
         </div>
         <Input
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder={
-            pageView === "grn-list"
-              ? "Search GRN, PO, vendor, product, serial…"
-              : "Filter POs / vendors…"
-          }
+          placeholder="Filter POs / vendors…"
           className="h-8 max-w-xs shadow-none"
         />
       </div>
@@ -440,22 +368,9 @@ export function GrnsListPage() {
         </div>
       ) : null}
 
-      {pageView === "grn-list" ? (
-        <GrnStockSummaryTable
-          rows={stockRows}
-          vendors={vendors}
-          loading={stockLoading}
-          query={query}
-        />
-      ) : (
       <div className={procurementUi.tableShell}>
         <div className={procurementUi.tableScroll}>
-          <table
-            className={cn(
-              procurementUi.table,
-              showActionColumn ? "min-w-[1180px]" : "min-w-[1060px]",
-            )}
-          >
+          <table className={cn(procurementUi.table, "min-w-[1100px]")}>
             <thead className={procurementUi.thead}>
               <tr>
                 <th className="px-3 py-2 font-medium">Company PO number</th>
@@ -466,9 +381,6 @@ export function GrnsListPage() {
                 <th className="px-3 py-2 font-medium">Margin</th>
                 <th className="px-3 py-2 font-medium">GRN</th>
                 <th className="px-3 py-2 font-medium">Received</th>
-                {showActionColumn ? (
-                  <th className="px-3 py-2 font-medium">Action</th>
-                ) : null}
                 <th className={procurementUi.th}>Challans</th>
                 <th className="px-3 py-2 text-center font-medium">GRN detail</th>
               </tr>
@@ -503,9 +415,7 @@ export function GrnsListPage() {
                   Number(row.margin_amount) ||
                   (customerAmt > 0 ? customerAmt - vendorAmt : 0);
                 const grnLabel = formatGrnStatusBadgeLabel(row.grn_status);
-                const isDelivered =
-                  row.grn_status === "closed" || row.grn_status === "delivered";
-                const orderHref = `/procurement/orders/${row.id}`;
+                const orderHref = `/procurement/orders/${row.id}?tab=grn&from=grns`;
                 return (
                   <tr
                     key={row.id}
@@ -537,23 +447,6 @@ export function GrnsListPage() {
                     <td className="px-3 py-2 tabular-nums text-muted-foreground">
                       {receivedQty} / {orderedQty}
                     </td>
-                    {showActionColumn ? (
-                      <td className="px-3 py-2" onClick={(e) => e.stopPropagation()}>
-                        {isDelivered ? (
-                          <span className="text-xs text-muted-foreground">—</span>
-                        ) : (
-                          <Link
-                            href={orderHref}
-                            className={cn(
-                              buttonVariants({ size: "sm", variant: "outline" }),
-                              "cursor-pointer transition-colors duration-200",
-                            )}
-                          >
-                            Continue
-                          </Link>
-                        )}
-                      </td>
-                    ) : null}
                     <td className={procurementUi.td} onClick={(e) => e.stopPropagation()}>
                       <GrnDeliveryChallanMenu
                         poLabel={row.company_po_number || row.document_number}
@@ -569,7 +462,7 @@ export function GrnsListPage() {
                           type="button"
                           size="sm"
                           variant="outline"
-                          className="h-8 cursor-pointer gap-1.5 border-border px-2.5 text-xs transition-colors duration-200 hover:bg-muted/50"
+                          className="h-8 w-8 cursor-pointer border-border p-0 text-[#0369A1] transition-colors duration-200 hover:bg-sky-50 hover:text-[#0369A1]"
                           title="View GRN batches, serials, and documents"
                           aria-label={`View GRN history for ${row.company_po_number || row.document_number}`}
                           onClick={() =>
@@ -582,8 +475,7 @@ export function GrnsListPage() {
                             })
                           }
                         >
-                          <Layers className="size-3.5 text-[#0369A1]" />
-                          View
+                          <Eye className="size-4 stroke-[2]" aria-hidden />
                         </Button>
                       </div>
                     </td>
@@ -594,7 +486,6 @@ export function GrnsListPage() {
           </table>
         </div>
       </div>
-      )}
 
       {historyOrder ? (
         <GrnReceiptHistoryDialog

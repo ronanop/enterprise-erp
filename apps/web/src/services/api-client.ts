@@ -172,17 +172,25 @@ export async function apiClient<T>(
   const { body, headers, auth = true, query, _retried, ...rest } = options;
   const token = auth ? getAccessToken() : null;
 
-  const response = await fetch(buildUrl(path, query), {
-    ...rest,
-    headers: {
-      "Content-Type": "application/json",
-      Accept: "application/json",
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...headers,
-    },
-    body: body !== undefined ? JSON.stringify(body) : undefined,
-    cache: "no-store",
-  });
+  let response: Response;
+  try {
+    response = await fetch(buildUrl(path, query), {
+      ...rest,
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...headers,
+      },
+      body: body !== undefined ? JSON.stringify(body) : undefined,
+      cache: "no-store",
+    });
+  } catch {
+    throw new ApiClientError(
+      "Cannot reach the ERP API. If Docker just restarted, wait a few seconds and refresh.",
+      0,
+    );
+  }
 
   let payload: ApiResponse<T> | ErrorResponse;
   try {
@@ -249,6 +257,17 @@ export const authService = {
     } finally {
       clearTokens();
     }
+  },
+  microsoftConfig: () =>
+    apiClient<{ enabled: boolean }>("/auth/microsoft/config", { auth: false }).catch(() => ({
+      success: true as const,
+      message: "ok",
+      data: { enabled: false },
+    })),
+  microsoftLoginUrl: (returnTo = "/") => {
+    const base = env.apiUrl.replace(/\/$/, "");
+    const next = encodeURIComponent(returnTo.startsWith("/") ? returnTo : "/");
+    return `${base}/auth/microsoft/login?next=${next}`;
   },
 };
 

@@ -11,6 +11,7 @@ import {
   ListChecks,
   Package,
   PenLine,
+  Trash2,
   Truck,
 } from "lucide-react";
 
@@ -858,10 +859,12 @@ export function DeliveryChallanFormPage({ challanId, embedded }: DeliveryChallan
                   <td className="px-2 py-2">
                     <button
                       type="button"
-                      className="cursor-pointer text-xs font-medium text-destructive"
+                      aria-label="Remove line"
+                      title="Remove"
+                      className="inline-flex size-8 cursor-pointer items-center justify-center rounded-md text-destructive transition-colors duration-200 hover:bg-destructive/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                       onClick={() => removeLine(row.id)}
                     >
-                      Remove
+                      <Trash2 className="size-4" aria-hidden />
                     </button>
                   </td>
                 </tr>

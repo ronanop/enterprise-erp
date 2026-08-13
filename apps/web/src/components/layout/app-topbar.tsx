@@ -8,6 +8,15 @@ import { Bell, LogIn } from "lucide-react";
 import { ProcurementNavSearch } from "@/components/procurement/procurement-nav-search";
 import { Button } from "@/components/ui/button";
 import { useClientAuth } from "@/hooks/use-client-auth";
+import { useProcurementRole } from "@/hooks/use-procurement-role";
+import {
+  countUnreadPoApprovalDecisionNotifications,
+  listUnreadPoApprovalDecisionNotifications,
+  markAllPoApprovalDecisionNotificationsRead,
+  markPoApprovalDecisionNotificationRead,
+  PROCUREMENT_APPROVAL_NOTIFICATIONS_EVENT,
+  type PoApprovalDecisionNotification,
+} from "@/lib/procurement-approval-notifications";
 import { cn } from "@/lib/utils";
 import {
   loadProcurementOverview,
@@ -18,7 +27,7 @@ import { getUnseenScmOvfIds } from "@/utils/scm-queue-seen";
 const topbarIconBtn =
   "size-8 cursor-pointer rounded-lg border-border bg-background text-foreground shadow-none transition-colors duration-200 hover:bg-muted";
 
-function unreadFromOverview(): number {
+function unreadScmFromOverview(): number {
   const overview = peekProcurementOverviewFromCache();
   const ids = (overview?.scmQueue ?? [])
     .map((row) => String(row.ovf_id ?? ""))
@@ -30,17 +39,30 @@ export function AppTopbar() {
   const signedIn = useClientAuth();
   const pathname = usePathname();
   const router = useRouter();
+  const { isAdmin } = useProcurementRole();
   const showProcurementSearch =
     pathname === "/procurement" || pathname.startsWith("/procurement/");
-  const [unreadCount, setUnreadCount] = useState(0);
+  const [scmUnread, setScmUnread] = useState(0);
+  const [approvalUnread, setApprovalUnread] = useState(0);
+  const [panelOpen, setPanelOpen] = useState(false);
+  const [approvalItems, setApprovalItems] = useState<PoApprovalDecisionNotification[]>([]);
 
   const refreshUnread = useCallback(() => {
     if (!showProcurementSearch) {
-      setUnreadCount(0);
+      setScmUnread(0);
+      setApprovalUnread(0);
+      setApprovalItems([]);
       return;
     }
-    setUnreadCount(unreadFromOverview());
-  }, [showProcurementSearch]);
+    setScmUnread(unreadScmFromOverview());
+    if (isAdmin) {
+      setApprovalUnread(0);
+      setApprovalItems([]);
+      return;
+    }
+    setApprovalUnread(countUnreadPoApprovalDecisionNotifications());
+    setApprovalItems(listUnreadPoApprovalDecisionNotifications().slice(0, 8));
+  }, [showProcurementSearch, isAdmin]);
 
   useEffect(() => {
     refreshUnread();
@@ -63,13 +85,18 @@ export function AppTopbar() {
 
     const onFocus = () => refreshUnread();
     window.addEventListener("focus", onFocus);
+    window.addEventListener(PROCUREMENT_APPROVAL_NOTIFICATIONS_EVENT, onFocus);
+    window.addEventListener("storage", onFocus);
     return () => {
       cancelled = true;
       window.clearInterval(id);
       window.removeEventListener("focus", onFocus);
+      window.removeEventListener(PROCUREMENT_APPROVAL_NOTIFICATIONS_EVENT, onFocus);
+      window.removeEventListener("storage", onFocus);
     };
   }, [showProcurementSearch, signedIn, refreshUnread, pathname]);
 
+  const unreadCount = scmUnread + approvalUnread;
   const badgeLabel =
     unreadCount > 99 ? "99+" : unreadCount > 0 ? String(unreadCount) : null;
 
@@ -82,7 +109,7 @@ export function AppTopbar() {
         </p>
       </div>
 
-      <div className="flex items-center gap-2.5">
+      <div className="relative flex items-center gap-2.5">
         {showProcurementSearch ? (
           <ProcurementNavSearch iconOnly iconButtonClassName={topbarIconBtn} />
         ) : null}
@@ -95,9 +122,16 @@ export function AppTopbar() {
               ? `Notifications, ${unreadCount} new`
               : "Notifications"
           }
+          aria-expanded={panelOpen}
           className={cn(topbarIconBtn, "relative")}
           onClick={() => {
-            if (showProcurementSearch) router.push("/procurement/scm");
+            if (!showProcurementSearch) return;
+            if (!isAdmin && approvalUnread > 0) {
+              setPanelOpen((open) => !open);
+              refreshUnread();
+              return;
+            }
+            router.push("/procurement/scm");
           }}
         >
           <Bell className="size-4" strokeWidth={2.5} aria-hidden />
@@ -107,6 +141,71 @@ export function AppTopbar() {
             </span>
           ) : null}
         </Button>
+        {panelOpen && !isAdmin ? (
+          <div className="absolute right-0 top-10 z-50 w-[min(22rem,calc(100vw-2rem))] rounded-lg border border-border bg-card p-2 shadow-lg">
+            <div className="flex items-center justify-between gap-2 px-1.5 pb-2">
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                Approval updates
+              </p>
+              {approvalItems.length > 0 ? (
+                <button
+                  type="button"
+                  className="cursor-pointer text-[11px] font-medium text-sky-800 transition-colors duration-200 hover:underline"
+                  onClick={() => {
+                    markAllPoApprovalDecisionNotificationsRead();
+                    refreshUnread();
+                    setPanelOpen(false);
+                  }}
+                >
+                  Mark all read
+                </button>
+              ) : null}
+            </div>
+            {approvalItems.length === 0 ? (
+              <p className="px-2 py-3 text-xs text-muted-foreground">
+                No new accept/reject notifications.
+              </p>
+            ) : (
+              <ul className="max-h-72 space-y-1 overflow-y-auto">
+                {approvalItems.map((item) => (
+                  <li key={item.id}>
+                    <Link
+                      href={`/procurement/orders/${item.orderId}`}
+                      className={cn(
+                        "block cursor-pointer rounded-md border px-2.5 py-2 transition-colors duration-200",
+                        item.decision === "accepted"
+                          ? "border-emerald-200/80 bg-emerald-50/80 hover:bg-emerald-50"
+                          : "border-red-200/80 bg-red-50/80 hover:bg-red-50",
+                      )}
+                      onClick={() => {
+                        markPoApprovalDecisionNotificationRead(item.id);
+                        setPanelOpen(false);
+                        refreshUnread();
+                      }}
+                    >
+                      <p className="text-xs font-semibold text-foreground">
+                        {item.decision === "accepted" ? "PO accepted" : "PO rejected"}
+                      </p>
+                      <p className="mt-0.5 text-xs text-muted-foreground">{item.message}</p>
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            )}
+            {scmUnread > 0 ? (
+              <button
+                type="button"
+                className="mt-2 w-full cursor-pointer rounded-md border border-border px-2.5 py-1.5 text-left text-xs font-medium text-foreground transition-colors duration-200 hover:bg-muted/50"
+                onClick={() => {
+                  setPanelOpen(false);
+                  router.push("/procurement/scm");
+                }}
+              >
+                {scmUnread} new OVF{scmUnread === 1 ? "" : "s"} in SCM queue
+              </button>
+            ) : null}
+          </div>
+        ) : null}
         {!signedIn ? (
           <Link
             href="/login"

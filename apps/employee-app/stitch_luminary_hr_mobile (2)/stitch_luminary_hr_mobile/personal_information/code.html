@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0, viewport-fit=cover" name="viewport"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<style>
+        :root {
+            --glass-bg: rgba(255, 255, 255, 0.8);
+            --glass-blur: 20px;
+        }
+        body {
+            font-family: 'Inter', sans-serif;
+            -webkit-tap-highlight-color: transparent;
+        }
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .glass-card {
+            background: var(--glass-bg);
+            backdrop-filter: blur(var(--glass-blur));
+            border: 1px solid rgba(226, 232, 240, 0.5);
+        }
+        .safe-pb {
+            padding-bottom: env(safe-area-inset-bottom);
+        }
+    </style>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "on-surface": "#0b1c30",
+                        "error-container": "#ffdad6",
+                        "tertiary-fixed-dim": "#4edea3",
+                        "inverse-surface": "#213145",
+                        "on-secondary-fixed-variant": "#5a00c6",
+                        "secondary": "#712ae2",
+                        "error": "#ba1a1a",
+                        "on-background": "#0b1c30",
+                        "on-secondary-fixed": "#25005a",
+                        "on-tertiary-fixed": "#002113",
+                        "tertiary-container": "#007d55",
+                        "secondary-fixed-dim": "#d2bbff",
+                        "on-primary-fixed": "#00174b",
+                        "inverse-on-surface": "#eaf1ff",
+                        "primary": "#004ac6",
+                        "on-primary-fixed-variant": "#003ea8",
+                        "secondary-fixed": "#eaddff",
+                        "on-secondary-container": "#fffbff",
+                        "surface-container-highest": "#d3e4fe",
+                        "primary-fixed": "#dbe1ff",
+                        "outline": "#737686",
+                        "surface-container-low": "#eff4ff",
+                        "surface-tint": "#0053db",
+                        "on-surface-variant": "#434655",
+                        "primary-container": "#2563eb",
+                        "surface-container": "#e5eeff",
+                        "on-tertiary": "#ffffff",
+                        "surface-dim": "#cbdbf5",
+                        "surface": "#f8f9ff",
+                        "surface-bright": "#f8f9ff",
+                        "on-error": "#ffffff",
+                        "on-tertiary-container": "#bdffdb",
+                        "surface-container-lowest": "#ffffff",
+                        "outline-variant": "#c3c6d7",
+                        "on-primary-container": "#eeefff",
+                        "background": "#f8f9ff",
+                        "on-error-container": "#93000a",
+                        "tertiary-fixed": "#6ffbbe",
+                        "tertiary": "#006242",
+                        "on-primary": "#ffffff",
+                        "surface-container-high": "#dce9ff",
+                        "on-tertiary-fixed-variant": "#005236",
+                        "secondary-container": "#8a4cfc",
+                        "surface-variant": "#d3e4fe",
+                        "on-secondary": "#ffffff",
+                        "primary-fixed-dim": "#b4c5ff",
+                        "inverse-primary": "#b4c5ff"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "full": "9999px"
+                    },
+                    "spacing": {
+                        "stack-gap-md": "16px",
+                        "container-padding": "20px",
+                        "unit": "4px",
+                        "stack-gap-lg": "24px",
+                        "stack-gap-sm": "8px",
+                        "section-margin": "32px"
+                    },
+                    "fontFamily": {
+                        "label-md": ["Inter"],
+                        "headline-sm": ["Inter"],
+                        "label-sm": ["Inter"],
+                        "body-sm": ["Inter"],
+                        "display-lg-mobile": ["Inter"],
+                        "display-lg": ["Inter"],
+                        "title-lg": ["Inter"],
+                        "display-md": ["Inter"],
+                        "body-md": ["Inter"]
+                    },
+                    "fontSize": {
+                        "label-md": ["14px", {"lineHeight": "20px", "fontWeight": "500"}],
+                        "headline-sm": ["20px", {"lineHeight": "28px", "fontWeight": "600"}],
+                        "label-sm": ["12px", {"lineHeight": "16px", "fontWeight": "600"}],
+                        "body-sm": ["14px", {"lineHeight": "20px", "fontWeight": "400"}],
+                        "display-lg-mobile": ["28px", {"lineHeight": "34px", "fontWeight": "700"}],
+                        "display-lg": ["32px", {"lineHeight": "40px", "letterSpacing": "-0.02em", "fontWeight": "700"}],
+                        "title-lg": ["18px", {"lineHeight": "24px", "fontWeight": "600"}],
+                        "display-md": ["24px", {"lineHeight": "32px", "letterSpacing": "-0.01em", "fontWeight": "700"}],
+                        "body-md": ["16px", {"lineHeight": "24px", "fontWeight": "400"}]
+                    }
+                }
+            }
+        }
+    </script>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background text-on-surface min-h-screen flex flex-col">
+<!-- Top AppBar -->
+<header class="fixed top-0 w-full z-50 bg-surface/80 backdrop-blur-xl shadow-sm flex items-center justify-between px-container-padding h-16 w-full">
+<div class="flex items-center gap-4">
+<button class="transition-all duration-200 active:scale-95 text-primary hover:opacity-80">
+<span class="material-symbols-outlined">arrow_back</span>
+</button>
+<h1 class="font-headline-sm text-headline-sm-mobile text-on-surface">Personal Information</h1>
+</div>
+<div class="flex items-center gap-2">
+<button class="transition-all duration-200 active:scale-95 text-primary hover:opacity-80">
+<span class="material-symbols-outlined" data-icon="notifications">notifications</span>
+</button>
+</div>
+</header>
+<!-- Content Canvas -->
+<main class="flex-1 mt-16 mb-24 px-container-padding pt-stack-gap-lg overflow-y-auto">
+<!-- Profile Header Section -->
+<section class="flex flex-col items-center mb-section-margin">
+<div class="relative group">
+<div class="w-28 h-28 rounded-full overflow-hidden border-4 border-surface-container-highest shadow-lg transition-transform duration-300 group-hover:scale-105">
+<img class="w-full h-full object-cover" data-alt="A professional studio portrait of a modern, smiling executive in their late 20s. The lighting is soft and high-key with a clean, blurred office background. The aesthetic is bright and minimalist, matching a premium HR software interface with clean lines and soft blue highlights. High-end professional headshot photography style." src="https://lh3.googleusercontent.com/aida-public/AB6AXuA2kk936kDzmTWSln57RS2ciajNCEnGOMzijjGFV6CCKl3v5nuyfGILe3jzhvkIlcQlll_Np3o3OVGV0XOHrcq2E5lad3ZuVHgJQ2YESSyCdKzJuIPd9sr-tgGYUbrqjjvt7cRLv_TV1ScaRZ4NIybFVRILZ6E7eBLI2SXl5_e2wI7-ikvgUk6O9pJ-kcpCkx7zVdIj6d84nfNcrsF9jrOpcrqujjmPT6wY2HsOJ6JMQ3UVg1y60dzWcB6XSjNh_CaRhzZ1iEsEZRY"/>
+</div>
+<button class="absolute bottom-0 right-0 bg-primary text-on-primary w-10 h-10 rounded-full flex items-center justify-center border-4 border-background shadow-md transition-all duration-200 hover:bg-primary-container active:scale-90">
+<span class="material-symbols-outlined text-[20px]">edit</span>
+</button>
+</div>
+<h2 class="mt-stack-gap-md font-display-md text-display-md text-on-surface">Alex Rivera</h2>
+<p class="font-body-sm text-body-sm text-on-surface-variant">Senior Product Designer • ID: 1042</p>
+</section>
+<!-- Information Cards Grid (Bento Style) -->
+<div class="grid grid-cols-1 md:grid-cols-2 gap-stack-gap-md">
+<!-- Basic Details Card -->
+<div class="glass-card rounded-xl p-stack-gap-md shadow-sm transition-all duration-200 active:scale-[0.98]">
+<div class="flex items-center gap-stack-gap-sm mb-stack-gap-md">
+<div class="w-8 h-8 rounded-lg bg-primary-container/20 flex items-center justify-center text-primary">
+<span class="material-symbols-outlined">person</span>
+</div>
+<h3 class="font-title-lg text-title-lg">Bio Data</h3>
+</div>
+<div class="space-y-stack-gap-md">
+<div class="flex justify-between items-center border-b border-outline-variant/30 pb-stack-gap-sm">
+<span class="font-label-md text-label-md text-on-surface-variant">Date of Birth</span>
+<span class="font-label-md text-label-md text-on-surface">June 12, 1994</span>
+</div>
+<div class="flex justify-between items-center border-b border-outline-variant/30 pb-stack-gap-sm">
+<span class="font-label-md text-label-md text-on-surface-variant">Gender</span>
+<span class="font-label-md text-label-md text-on-surface">Male</span>
+</div>
+<div class="flex justify-between items-center">
+<span class="font-label-md text-label-md text-on-surface-variant">Nationality</span>
+<span class="font-label-md text-label-md text-on-surface">United States</span>
+</div>
+</div>
+</div>
+<!-- Address Card -->
+<div class="glass-card rounded-xl p-stack-gap-md shadow-sm transition-all duration-200 active:scale-[0.98]">
+<div class="flex items-center gap-stack-gap-sm mb-stack-gap-md">
+<div class="w-8 h-8 rounded-lg bg-secondary-container/20 flex items-center justify-center text-secondary">
+<span class="material-symbols-outlined">location_on</span>
+</div>
+<h3 class="font-title-lg text-title-lg">Residential</h3>
+</div>
+<div class="space-y-stack-gap-sm">
+<div class="flex flex-col gap-unit">
+<span class="font-label-sm text-label-sm text-on-surface-variant uppercase tracking-wider">Current Address</span>
+<p class="font-body-md text-body-md text-on-surface leading-relaxed">
+                            742 Evergreen Terrace,<br/>
+                            San Francisco, CA 94103
+                        </p>
+</div>
+<div class="mt-stack-gap-md w-full h-24 rounded-lg overflow-hidden relative border border-outline-variant/30">
+<img class="w-full h-full object-cover grayscale opacity-60" data-alt="A stylized, minimalist map view of a modern urban residential neighborhood in San Francisco. The map uses a light-mode color palette with soft greys, white streets, and subtle primary blue accents for landmarks. No labels, just clean geometric city planning lines." data-location="San Francisco" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCY8LHeaBsk2Dgzox0wXiBrU9ITicYr1TVaEs9CKRnZQt-NotNpEmDsOP7IT65U2epf7BK8ZPJ5Wt1UGCVl47nlCJT4AaVqeKCanijJizDQqNt_IrkoAWbeBtVVkTzLauWG5c6jp_D9XUiiT81RsEqtexjxmF8yjdXlnWQBJB8_NDoHIJdUFNIU6quM7fr_V8voxTJWlk26kqfo0iDSu97i1qMLvmUFO_m_YykRArO_TSGWvPTethtqckvR6QEuYL5Hc127kdXRj-g"/>
+<div class="absolute inset-0 flex items-center justify-center">
+<span class="material-symbols-outlined text-primary" style="font-variation-settings: 'FILL' 1;">location_on</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Contact Information Card -->
+<div class="glass-card rounded-xl p-stack-gap-md shadow-sm transition-all duration-200 active:scale-[0.98] md:col-span-2">
+<div class="flex items-center gap-stack-gap-sm mb-stack-gap-md">
+<div class="w-8 h-8 rounded-lg bg-tertiary-container/20 flex items-center justify-center text-tertiary">
+<span class="material-symbols-outlined">mail</span>
+</div>
+<h3 class="font-title-lg text-title-lg">Contact Channels</h3>
+</div>
+<div class="grid grid-cols-1 sm:grid-cols-2 gap-stack-gap-md">
+<div class="p-stack-gap-sm bg-surface-container-low rounded-lg border border-outline-variant/20 flex items-center gap-stack-gap-sm">
+<span class="material-symbols-outlined text-on-surface-variant">alternate_email</span>
+<div>
+<p class="font-label-sm text-label-sm text-on-surface-variant">Work Email</p>
+<p class="font-body-sm text-body-sm text-on-surface font-semibold">alex.rivera@company.com</p>
+</div>
+</div>
+<div class="p-stack-gap-sm bg-surface-container-low rounded-lg border border-outline-variant/20 flex items-center gap-stack-gap-sm">
+<span class="material-symbols-outlined text-on-surface-variant">smartphone</span>
+<div>
+<p class="font-label-sm text-label-sm text-on-surface-variant">Personal Mobile</p>
+<p class="font-body-sm text-body-sm text-on-surface font-semibold">+1 (555) 012-3456</p>
+</div>
+</div>
+</div>
+</div>
+</div>
+<!-- Action Button -->
+<div class="mt-section-margin pb-safe">
+<button class="w-full h-14 bg-primary text-on-primary rounded-full font-label-md text-label-md shadow-lg transition-all duration-200 hover:shadow-xl active:scale-95 flex items-center justify-center gap-stack-gap-sm">
+<span class="material-symbols-outlined">verified</span>
+                Request Detail Update
+            </button>
+<p class="mt-stack-gap-sm text-center font-label-sm text-label-sm text-on-surface-variant">Last updated on Oct 24, 2023</p>
+</div>
+</main>
+<!-- Bottom Navigation Bar -->
+<nav class="fixed bottom-0 left-0 w-full z-50 flex justify-around items-center px-2 pb-safe h-20 bg-surface/80 dark:bg-on-surface/80 border-t border-outline-variant backdrop-blur-xl shadow-lg">
+<button class="flex flex-col items-center justify-center text-on-surface-variant hover:bg-surface-container-low transition-transform duration-200 active:scale-90">
+<span class="material-symbols-outlined" data-icon="home">home</span>
+<span class="font-label-sm text-label-sm">Home</span>
+</button>
+<button class="flex flex-col items-center justify-center text-on-surface-variant hover:bg-surface-container-low transition-transform duration-200 active:scale-90">
+<span class="material-symbols-outlined" data-icon="fingerprint">fingerprint</span>
+<span class="font-label-sm text-label-sm">Attendance</span>
+</button>
+<button class="flex flex-col items-center justify-center text-on-surface-variant hover:bg-surface-container-low transition-transform duration-200 active:scale-90">
+<span class="material-symbols-outlined" data-icon="calendar_today">calendar_today</span>
+<span class="font-label-sm text-label-sm">Leave</span>
+</button>
+<button class="flex flex-col items-center justify-center text-on-surface-variant hover:bg-surface-container-low transition-transform duration-200 active:scale-90">
+<span class="material-symbols-outlined" data-icon="payments">payments</span>
+<span class="font-label-sm text-label-sm">Salary</span>
+</button>
+<button class="flex flex-col items-center justify-center text-primary font-bold after:content-[''] after:w-1 after:h-1 after:bg-primary after:rounded-full after:mt-1 transition-transform duration-200 active:scale-90">
+<span class="material-symbols-outlined" data-icon="person">person</span>
+<span class="font-label-sm text-label-sm">Profile</span>
+</button>
+</nav>
+<script>
+        // Micro-interactions for interactive cards
+        document.querySelectorAll('.glass-card').forEach(card => {
+            card.addEventListener('mouseenter', () => {
+                card.classList.add('shadow-md');
+            });
+            card.addEventListener('mouseleave', () => {
+                card.classList.remove('shadow-md');
+            });
+        });
+    </script>
+</body></html>

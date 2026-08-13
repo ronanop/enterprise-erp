@@ -6,6 +6,7 @@ import { Upload } from "lucide-react";
 import {
   RECEIPT_SERIAL_NA,
   resizeSerialSlots,
+  serialUnitCount,
 } from "@/utils/receipt-serial-numbers";
 import {
   importLineSerialsFromFile,
@@ -33,6 +34,25 @@ type ReceiptSerialsTableProps = {
   onImportError?: (message: string | null) => void;
 };
 
+function clampBillingQtyInput(raw: string, maxAllowed: number): string {
+  const value = raw.trim();
+  if (value === "" || value === ".") return value;
+  if (!/^\d*\.?\d*$/.test(value)) return value;
+  let next = value;
+  if (value.includes(".")) {
+    const [intPart = "", frac = ""] = value.split(".");
+    const normalizedInt = intPart.replace(/^0+(?=\d)/, "") || "0";
+    next = `${normalizedInt}.${frac}`;
+  } else {
+    next = value.replace(/^0+(?=\d)/, "");
+  }
+  if (next === "" || next === ".") return next;
+  const n = Number(next);
+  if (!Number.isFinite(n)) return next;
+  if (n > maxAllowed) return String(maxAllowed);
+  return next;
+}
+
 export function ReceiptSerialsTable({
   lines,
   serialDraft,
@@ -44,16 +64,6 @@ export function ReceiptSerialsTable({
   const [importingLineId, setImportingLineId] = useState<string | null>(null);
 
   if (lines.length === 0) return null;
-
-  function clampBillingQtyInput(raw: string, maxAllowed: number): string {
-    const value = raw.trim();
-    if (value === "") return "";
-    if (!/^\d*$/.test(value)) return value.replace(/\D/g, "");
-    const n = Number(value);
-    if (!Number.isFinite(n)) return "";
-    if (n > maxAllowed) return String(maxAllowed);
-    return value.replace(/^0+(?=\d)/, "");
-  }
 
   function setSlot(lineId: string, slots: string[], index: number, value: string) {
     const next = [...slots];
@@ -67,7 +77,7 @@ export function ReceiptSerialsTable({
     try {
       const result = await importLineSerialsFromFile(file, {
         lineId: line.lineId,
-        receiveQty: line.additional,
+        receiveQty: serialUnitCount(line.additional),
         productLabel: line.productLabel,
       });
       if (!result.ok) {
@@ -102,19 +112,26 @@ export function ReceiptSerialsTable({
           </thead>
           <tbody>
             {lines.flatMap((line, lineIndex) => {
-              const unitCount = line.additional;
+              const receiveQty = line.additional;
+              const unitCount = serialUnitCount(receiveQty);
+              const rowCount = Math.max(unitCount, 1);
               const slots = resizeSerialSlots(serialDraft[line.lineId] || [], unitCount);
               const lineImporting = importingLineId === line.lineId;
               const productSNo = lineIndex + 1;
               const rowspanCell = "align-middle";
-              return Array.from({ length: unitCount }, (_, index) => {
+              const receiveLabel = Number.isInteger(receiveQty)
+                ? String(receiveQty)
+                : String(receiveQty);
+
+              return Array.from({ length: rowCount }, (_, index) => {
                 const value = slots[index] ?? "";
                 const isNa = value.trim().toUpperCase() === RECEIPT_SERIAL_NA;
+                const fractionalOnly = unitCount <= 0;
                 return (
                   <tr key={`${line.lineId}-${index}`} className={procurementUi.tr}>
                     {index === 0 ? (
                       <td
-                        rowSpan={unitCount}
+                        rowSpan={rowCount}
                         className={cn(
                           procurementUi.tdNumeric,
                           rowspanCell,
@@ -127,28 +144,28 @@ export function ReceiptSerialsTable({
                     {index === 0 ? (
                       <>
                         <td
-                          rowSpan={unitCount}
+                          rowSpan={rowCount}
                           className={cn(procurementUi.td, rowspanCell)}
                         >
                           <span className="font-medium text-foreground">{line.productLabel}</span>
                         </td>
                         <td
-                          rowSpan={unitCount}
+                          rowSpan={rowCount}
                           className={cn(
                             procurementUi.tdNumeric,
                             rowspanCell,
                             "text-right font-medium tabular-nums",
                           )}
                         >
-                          {unitCount}
+                          {receiveLabel}
                         </td>
                         <td
-                          rowSpan={unitCount}
+                          rowSpan={rowCount}
                           className={cn(procurementUi.td, rowspanCell, "text-center")}
                         >
                           <div
                             className="mx-auto flex w-fit items-center gap-1 rounded-md border border-border bg-muted/30 p-1"
-                            title="Tick to bill all units, or type how many to bill"
+                            title="Tick to bill all received qty, or type how much to bill"
                           >
                             <label className="flex cursor-pointer items-center px-1">
                               <input
@@ -161,15 +178,15 @@ export function ReceiptSerialsTable({
                                   if (!onBillingQuantityChange) return;
                                   onBillingQuantityChange(
                                     line.lineId,
-                                    e.target.checked ? unitCount : 0,
+                                    e.target.checked ? receiveQty : 0,
                                   );
                                 }}
                               />
                             </label>
                             <Input
-                              className="h-7 w-12 border-0 bg-transparent text-center text-xs tabular-nums shadow-none focus-visible:ring-0"
+                              className="h-7 w-14 border-0 bg-transparent text-center text-xs tabular-nums shadow-none focus-visible:ring-0"
                               type="text"
-                              inputMode="numeric"
+                              inputMode="decimal"
                               placeholder="0"
                               disabled={disabled || !onBillingQuantityChange}
                               value={
@@ -183,9 +200,9 @@ export function ReceiptSerialsTable({
                                 if (!onBillingQuantityChange) return;
                                 const next = clampBillingQtyInput(
                                   e.target.value,
-                                  unitCount,
+                                  receiveQty,
                                 );
-                                const parsed = next === "" ? 0 : Number(next);
+                                const parsed = next === "" || next === "." ? 0 : Number(next);
                                 onBillingQuantityChange(
                                   line.lineId,
                                   Number.isFinite(parsed) ? parsed : 0,
@@ -202,68 +219,82 @@ export function ReceiptSerialsTable({
                         "align-middle text-right tabular-nums text-muted-foreground",
                       )}
                     >
-                      {index + 1}
+                      {fractionalOnly ? "—" : index + 1}
                     </td>
                     <td className={cn(procurementUi.td, "align-middle")}>
-                      <Input
-                        className={cn(
-                          "h-8 w-full min-w-[140px] cursor-text font-mono text-xs transition-colors duration-200",
-                          isNa && "text-muted-foreground",
-                        )}
-                        value={value}
-                        disabled={disabled || lineImporting}
-                        placeholder="Enter serial or use NA"
-                        aria-label={`Serial ${index + 1} for ${line.productLabel}`}
-                        onFocus={(e) => {
-                          if (isNa) {
-                            setSlot(line.lineId, slots, index, "");
-                          }
-                          e.currentTarget.select();
-                        }}
-                        onChange={(e) => setSlot(line.lineId, slots, index, e.target.value)}
-                      />
+                      {fractionalOnly ? (
+                        <span className="text-xs text-muted-foreground">
+                          No serial for fractional qty
+                        </span>
+                      ) : (
+                        <Input
+                          className={cn(
+                            "h-8 w-full min-w-[140px] cursor-text font-mono text-xs transition-colors duration-200",
+                            isNa && "text-muted-foreground",
+                          )}
+                          value={value}
+                          disabled={disabled || lineImporting}
+                          placeholder="Enter serial or use NA"
+                          aria-label={`Serial ${index + 1} for ${line.productLabel}`}
+                          onFocus={(e) => {
+                            if (isNa) {
+                              setSlot(line.lineId, slots, index, "");
+                            }
+                            e.currentTarget.select();
+                          }}
+                          onChange={(e) => setSlot(line.lineId, slots, index, e.target.value)}
+                        />
+                      )}
                     </td>
                     <td className={cn(procurementUi.td, "align-middle text-center")}>
-                      <Button
-                        type="button"
-                        variant={isNa ? "secondary" : "outline"}
-                        size="sm"
-                        className="h-8 min-w-[3rem] cursor-pointer px-2 text-xs transition-colors duration-200"
-                        disabled={disabled || lineImporting}
-                        onClick={() =>
-                          setSlot(line.lineId, slots, index, isNa ? "" : RECEIPT_SERIAL_NA)
-                        }
-                      >
-                        NA
-                      </Button>
+                      {fractionalOnly ? (
+                        <span className="text-xs text-muted-foreground">—</span>
+                      ) : (
+                        <Button
+                          type="button"
+                          variant={isNa ? "secondary" : "outline"}
+                          size="sm"
+                          className="h-8 min-w-[3rem] cursor-pointer px-2 text-xs transition-colors duration-200"
+                          disabled={disabled || lineImporting}
+                          onClick={() =>
+                            setSlot(line.lineId, slots, index, isNa ? "" : RECEIPT_SERIAL_NA)
+                          }
+                        >
+                          NA
+                        </Button>
+                      )}
                     </td>
                     {index === 0 ? (
                       <td
-                        rowSpan={unitCount}
+                        rowSpan={rowCount}
                         className={cn(procurementUi.td, rowspanCell, "text-center")}
                       >
-                        <label
-                          className={cn(
-                            buttonVariants({ size: "sm", variant: "outline" }),
-                            "h-7 cursor-pointer gap-1 px-2 text-[11px] transition-colors duration-200",
-                            (disabled || lineImporting) && "pointer-events-none opacity-50",
-                          )}
-                          title="Import serials for all units of this product"
-                        >
-                          <Upload className="size-3" aria-hidden />
-                          Import serials
-                          <input
-                            type="file"
-                            accept={RECEIPT_SERIAL_FILE_ACCEPT}
-                            className="sr-only"
-                            disabled={disabled || lineImporting}
-                            onChange={(e) => {
-                              const file = e.target.files?.[0];
-                              e.target.value = "";
-                              if (file) void onImportLine(line, file);
-                            }}
-                          />
-                        </label>
+                        {fractionalOnly ? (
+                          <span className="text-xs text-muted-foreground">—</span>
+                        ) : (
+                          <label
+                            className={cn(
+                              buttonVariants({ size: "sm", variant: "outline" }),
+                              "h-7 cursor-pointer gap-1 px-2 text-[11px] transition-colors duration-200",
+                              (disabled || lineImporting) && "pointer-events-none opacity-50",
+                            )}
+                            title="Import serials for all units of this product"
+                          >
+                            <Upload className="size-3" aria-hidden />
+                            Import serials
+                            <input
+                              type="file"
+                              accept={RECEIPT_SERIAL_FILE_ACCEPT}
+                              className="sr-only"
+                              disabled={disabled || lineImporting}
+                              onChange={(e) => {
+                                const file = e.target.files?.[0];
+                                e.target.value = "";
+                                if (file) void onImportLine(line, file);
+                              }}
+                            />
+                          </label>
+                        )}
                       </td>
                     ) : null}
                   </tr>

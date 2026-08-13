@@ -7,12 +7,16 @@ import {
   BarChart3,
   Boxes,
   ClipboardList,
+  IndianRupee,
+  PackageCheck,
   PackageOpen,
   ShoppingCart,
+  Warehouse,
 } from "lucide-react";
 import {
   Area,
   Bar,
+  BarChart,
   CartesianGrid,
   Cell,
   ComposedChart,
@@ -23,14 +27,18 @@ import {
   YAxis,
 } from "recharts";
 
+import { Exploded3dPieChart, type Exploded3dPieSlice } from "@/components/procurement/exploded-3d-pie";
+import { PoLifecycleChartCard } from "@/components/procurement/procurement-dashboard-charts";
+import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { formatInr } from "@/services/procurement-service";
+import type { ProcurementInventoryStockSummary } from "@/utils/procurement-inventory-report";
 import {
   PO_OVERVIEW_BUCKET_LABELS,
   type PoBucketCounts,
 } from "@/utils/procurement-po-buckets";
-import { PoLifecycleChartCard } from "@/components/procurement/procurement-dashboard-charts";
 
-type Tint = "amber" | "sky" | "orange" | "emerald";
+type Tint = "amber" | "sky" | "teal" | "emerald" | "orange";
 
 type SummaryCard = {
   label: string;
@@ -91,13 +99,17 @@ const TINT: Record<Tint, { card: string; icon: string }> = {
     card: "border-sky-200/80 bg-sky-50/80",
     icon: "bg-sky-100 text-sky-800",
   },
-  orange: {
-    card: "border-orange-200/80 bg-orange-50/70",
-    icon: "bg-orange-100 text-orange-800",
+  teal: {
+    card: "border-teal-200/80 bg-teal-50/70",
+    icon: "bg-teal-100 text-teal-800",
   },
   emerald: {
     card: "border-emerald-200/80 bg-emerald-50/80",
     icon: "bg-emerald-100 text-emerald-800",
+  },
+  orange: {
+    card: "border-orange-200/80 bg-orange-50/80",
+    icon: "bg-orange-100 text-orange-800",
   },
 };
 
@@ -121,16 +133,16 @@ function KpiCard({
       )}
     >
       <div className="flex items-center gap-2.5">
-        <p className="min-w-0 flex-1 truncate text-[13px] font-semibold tracking-tight text-foreground">
+        <p className="min-w-0 flex-1 truncate text-[13px] font-semibold uppercase tracking-wide text-foreground">
           {label}
         </p>
         <span
           className={cn(
-            "inline-flex size-7 shrink-0 items-center justify-center rounded-lg",
+            "inline-flex size-10 shrink-0 items-center justify-center rounded-xl",
             styles.icon,
           )}
         >
-          <Icon className="size-3.5" aria-hidden />
+          <Icon className="size-5" aria-hidden />
         </span>
       </div>
       <p className="mt-2.5 text-[1.55rem] font-light leading-none tracking-tight text-foreground/85 tabular-nums">
@@ -307,49 +319,361 @@ function OverviewHistogram({
   );
 }
 
+/** Inventory chart accents — MASTER navy/sky + stock teal (no purple). */
+const STOCK_BAR_TOP = "#0369A1";
+const STOCK_BAR_REST = ["#0EA5E9", "#0D9488", "#14B8A6", "#64748B", "#94A3B8"];
+const OEM_PIE_COLORS = [
+  "#0369A1",
+  "#0D9488",
+  "#0284C7",
+  "#0F766E",
+  "#475569",
+  "#38BDF8",
+  "#2DD4BF",
+];
+
+type InventoryStatTint = "sky" | "teal" | "slate";
+
+const INVENTORY_STAT_TINT: Record<
+  InventoryStatTint,
+  { card: string; icon: string; value: string }
+> = {
+  sky: {
+    card: "border-sky-200/80 bg-gradient-to-br from-sky-50 via-sky-50/70 to-white",
+    icon: "bg-sky-100 text-sky-800",
+    value: "text-sky-950",
+  },
+  teal: {
+    card: "border-teal-200/80 bg-gradient-to-br from-teal-50 via-teal-50/70 to-white",
+    icon: "bg-teal-100 text-teal-800",
+    value: "text-teal-950",
+  },
+  slate: {
+    card: "border-slate-200/90 bg-gradient-to-br from-slate-50 via-slate-50/80 to-white",
+    icon: "bg-slate-200/80 text-slate-800",
+    value: "text-slate-950",
+  },
+};
+
+function InventoryStockPanel({
+  summary,
+  loading,
+}: {
+  summary: ProcurementInventoryStockSummary | null;
+  loading?: boolean;
+}) {
+  const topProducts = useMemo(() => {
+    const rows = [...(summary?.byProduct ?? [])].sort(
+      (a, b) =>
+        b.units - a.units ||
+        b.stockValue - a.stockValue ||
+        a.productName.localeCompare(b.productName),
+    );
+    return rows.slice(0, 6).map((row) => ({
+      name:
+        row.productName.length > 22
+          ? `${row.productName.slice(0, 20)}…`
+          : row.productName,
+      fullName: row.productName,
+      units: row.units,
+      stockValue: row.stockValue,
+      avgUnitCost: row.avgUnitCost,
+    }));
+  }, [summary]);
+
+  const oemSlices = useMemo((): Exploded3dPieSlice[] => {
+    const rows = summary?.byVendor ?? [];
+    const top = rows.slice(0, 5);
+    const rest = rows.slice(5);
+    const slices: Exploded3dPieSlice[] = top.map((row, index) => ({
+      key: row.vendorId || `oem-${index}`,
+      label: row.vendorLabel,
+      value: Math.max(row.stockValue, row.units),
+      color: OEM_PIE_COLORS[index % OEM_PIE_COLORS.length],
+    }));
+    if (rest.length > 0) {
+      const otherValue = rest.reduce(
+        (sum, row) => sum + Math.max(row.stockValue, row.units),
+        0,
+      );
+      if (otherValue > 0) {
+        slices.push({
+          key: "other-oems",
+          label: "Other OEMs",
+          value: otherValue,
+          color: OEM_PIE_COLORS[OEM_PIE_COLORS.length - 1],
+        });
+      }
+    }
+    return slices.filter((s) => s.value > 0);
+  }, [summary]);
+
+  const totalUnits = summary?.totalUnits ?? 0;
+  const totalStockValue = summary?.totalStockValue ?? 0;
+  const oemCount = summary?.byVendor.length ?? 0;
+
+  return (
+    <section
+      aria-label="Inventory stock"
+      className="rounded-[1.35rem] border border-sky-200/60 bg-gradient-to-br from-sky-50/80 via-card to-teal-50/40 p-4 shadow-sm sm:p-5"
+    >
+      <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+        <div className="flex min-w-0 items-center gap-2.5">
+          <span className="inline-flex size-10 shrink-0 items-center justify-center rounded-xl border border-sky-200/80 bg-sky-100 text-sky-800">
+            <Warehouse className="size-5" aria-hidden />
+          </span>
+          <div className="min-w-0">
+            <h2 className="truncate text-sm font-semibold tracking-tight text-foreground">
+              Inventory value
+            </h2>
+          </div>
+        </div>
+        <Link
+          href="/procurement/inventory"
+          className={cn(
+            buttonVariants({ variant: "outline", size: "sm" }),
+            "h-8 cursor-pointer rounded-lg border-sky-200/80 bg-white/80 text-sky-900 transition-colors duration-200 hover:bg-sky-50",
+          )}
+        >
+          Open inventory
+        </Link>
+      </div>
+
+      <div className="mb-4 grid grid-cols-2 gap-2.5 xl:grid-cols-3">
+        <InventoryStat
+          label="Stock value"
+          value={loading ? "—" : formatInr(totalStockValue)}
+          icon={IndianRupee}
+          tint="sky"
+        />
+        <InventoryStat
+          label="Stock units"
+          value={loading ? "—" : totalUnits.toLocaleString("en-IN")}
+          icon={Boxes}
+          tint="teal"
+        />
+        <InventoryStat
+          label="OEM coverage"
+          value={loading ? "—" : oemCount.toLocaleString("en-IN")}
+          icon={PackageCheck}
+          tint="slate"
+        />
+      </div>
+
+      <div className="grid items-stretch gap-4 lg:grid-cols-[58fr_42fr] lg:gap-5">
+        <div className="rounded-xl border border-sky-200/70 bg-gradient-to-b from-white via-sky-50/40 to-white px-2 py-3 shadow-sm">
+          <div className="mb-1 flex items-center justify-between gap-2 px-2">
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-sky-800/80">
+              Top products by units
+            </p>
+            <p className="text-[11px] tabular-nums font-medium text-sky-900/70">
+              {loading ? "—" : `${totalUnits.toLocaleString("en-IN")} units`}
+            </p>
+          </div>
+          {loading ? (
+            <div className="flex h-[210px] items-center justify-center text-sm text-muted-foreground">
+              Loading stock…
+            </div>
+          ) : topProducts.length === 0 ? (
+            <div className="flex h-[210px] items-center justify-center text-sm text-muted-foreground">
+              No stock units on hand
+            </div>
+          ) : (
+            <div
+              className="h-[210px] w-full"
+              role="img"
+              aria-label="Top products by inventory units"
+            >
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart
+                  data={topProducts}
+                  layout="vertical"
+                  margin={{ top: 4, right: 36, left: 4, bottom: 4 }}
+                >
+                  <CartesianGrid
+                    strokeDasharray="4 4"
+                    stroke="#BAE6FD"
+                    strokeWidth={1}
+                    horizontal={false}
+                  />
+                  <XAxis
+                    type="number"
+                    allowDecimals={false}
+                    tick={{ fontSize: 10, fill: "#64748B" }}
+                    tickLine={false}
+                    axisLine={false}
+                    tickFormatter={(value: number) => value.toLocaleString("en-IN")}
+                  />
+                  <YAxis
+                    type="category"
+                    dataKey="name"
+                    width={108}
+                    tick={{ fontSize: 11, fill: "#334155", fontWeight: 500 }}
+                    tickLine={false}
+                    axisLine={false}
+                  />
+                  <Tooltip
+                    cursor={{ fill: "rgba(3, 105, 161, 0.06)" }}
+                    content={({ active, payload }) => {
+                      if (!active || !payload?.length) return null;
+                      const row = payload[0]?.payload as
+                        | (typeof topProducts)[number]
+                        | undefined;
+                      if (!row) return null;
+                      return (
+                        <div className="rounded-lg border border-sky-200/80 bg-card px-3 py-2 text-xs shadow-md">
+                          <p className="font-medium text-foreground">{row.fullName}</p>
+                          <p className="mt-1 tabular-nums text-sky-800">
+                            {row.units.toLocaleString("en-IN")} inventory unit
+                            {row.units === 1 ? "" : "s"}
+                          </p>
+                          {row.stockValue > 0 ? (
+                            <p className="tabular-nums text-muted-foreground">
+                              Value {formatInr(row.stockValue)}
+                              {row.avgUnitCost > 0
+                                ? ` · avg ${formatInr(row.avgUnitCost)}`
+                                : ""}
+                            </p>
+                          ) : null}
+                        </div>
+                      );
+                    }}
+                  />
+                  <Bar dataKey="units" radius={[0, 6, 6, 0]} maxBarSize={18}>
+                    {topProducts.map((row, index) => (
+                      <Cell
+                        key={row.fullName}
+                        fill={
+                          index === 0
+                            ? STOCK_BAR_TOP
+                            : STOCK_BAR_REST[(index - 1) % STOCK_BAR_REST.length]
+                        }
+                      />
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          )}
+        </div>
+
+        <div className="rounded-xl border border-teal-200/70 bg-gradient-to-b from-white via-teal-50/35 to-white px-3 py-3 shadow-sm">
+          <p className="mb-2 px-1 text-[11px] font-semibold uppercase tracking-wide text-teal-800/80">
+            OEM coverage
+          </p>
+          {loading ? (
+            <div className="flex min-h-[210px] items-center justify-center text-sm text-muted-foreground">
+              Loading OEMs…
+            </div>
+          ) : oemSlices.length === 0 ? (
+            <div className="flex min-h-[210px] items-center justify-center text-sm text-muted-foreground">
+              No OEM stock mix yet
+            </div>
+          ) : (
+            <Exploded3dPieChart
+              slices={oemSlices}
+              ariaLabel="OEM coverage by stock value"
+              size={128}
+              layout="compact"
+            />
+          )}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function InventoryStat({
+  label,
+  value,
+  hint,
+  icon: Icon,
+  tint,
+}: {
+  label: string;
+  value: string;
+  hint?: string;
+  icon: ComponentType<{ className?: string; "aria-hidden"?: boolean }>;
+  tint: InventoryStatTint;
+}) {
+  const styles = INVENTORY_STAT_TINT[tint];
+  return (
+    <div
+      className={cn(
+        "flex min-h-[5rem] items-start gap-2.5 rounded-xl border px-3.5 py-3.5 shadow-sm transition-[box-shadow] duration-200",
+        styles.card,
+      )}
+    >
+      <span
+        className={cn(
+          "mt-0.5 inline-flex size-10 shrink-0 items-center justify-center rounded-xl",
+          styles.icon,
+        )}
+      >
+        <Icon className="size-5" aria-hidden />
+      </span>
+      <div className="min-w-0 flex-1">
+        <p className="text-[11px] font-bold uppercase tracking-wide text-foreground">
+          {label}
+        </p>
+        <p
+          className={cn(
+            "mt-1 text-lg font-medium tabular-nums tracking-tight sm:text-xl",
+            styles.value,
+          )}
+        >
+          {value}
+        </p>
+        {hint ? <p className="mt-0.5 text-[11px] text-muted-foreground">{hint}</p> : null}
+      </div>
+    </div>
+  );
+}
+
 export function ProcurementDashboardSummary({
   loading,
   openOvfCount,
+  holdOvfCount,
   openPoCount,
-  partialPoCount,
-  stockUnits,
   poBucketCounts,
+  inventorySummary,
 }: {
   loading?: boolean;
   openOvfCount: number;
+  holdOvfCount: number;
   openPoCount: number;
-  partialPoCount: number;
-  stockUnits: number;
   poBucketCounts: PoBucketCounts;
+  inventorySummary?: ProcurementInventoryStockSummary | null;
 }) {
+  const openOvfIncludingHold = openOvfCount + holdOvfCount;
   const cards: SummaryCard[] = [
     {
-      label: "Open OVF",
-      value: openOvfCount.toLocaleString("en-IN"),
+      label: "OPEN OVF",
+      value: openOvfIncludingHold.toLocaleString("en-IN"),
       href: "/procurement/scm?filter=open",
       icon: ClipboardList,
       tint: "amber",
     },
     {
-      label: "Open PO",
+      label: "OPEN PO",
       value: openPoCount.toLocaleString("en-IN"),
-      href: "/procurement/orders/overview?bucket=open",
+      href: "/procurement/orders?bucket=open",
       icon: ShoppingCart,
       tint: "sky",
     },
     {
-      label: "Partial PO",
-      value: partialPoCount.toLocaleString("en-IN"),
-      href: "/procurement/orders/overview?bucket=partial",
+      label: "PARTIAL PO",
+      value: poBucketCounts.partial.toLocaleString("en-IN"),
+      href: "/procurement/orders?bucket=partial",
       icon: PackageOpen,
       tint: "orange",
     },
     {
-      label: "Total stock",
-      value: stockUnits.toLocaleString("en-IN"),
-      href: "/procurement/inventory",
-      icon: Boxes,
-      tint: "emerald",
+      label: "CLOSED PO",
+      value: poBucketCounts.close.toLocaleString("en-IN"),
+      href: "/procurement/orders?bucket=close",
+      icon: PackageCheck,
+      tint: "teal",
     },
   ];
 
@@ -357,26 +681,26 @@ export function ProcurementDashboardSummary({
     {
       key: "ovf",
       name: "Open OVF",
-      count: openOvfCount,
+      count: openOvfIncludingHold,
       href: "/procurement/scm?filter=open",
     },
     {
       key: "open",
       name: PO_OVERVIEW_BUCKET_LABELS.open,
       count: poBucketCounts.open,
-      href: "/procurement/orders/overview?bucket=open",
+      href: "/procurement/orders?bucket=open",
     },
     {
       key: "partial",
       name: PO_OVERVIEW_BUCKET_LABELS.partial,
       count: poBucketCounts.partial,
-      href: "/procurement/orders/overview?bucket=partial",
+      href: "/procurement/orders?bucket=partial",
     },
     {
       key: "close",
       name: PO_OVERVIEW_BUCKET_LABELS.close,
       count: poBucketCounts.close,
-      href: "/procurement/orders/overview?bucket=close",
+      href: "/procurement/orders?bucket=close",
     },
   ];
 
@@ -390,6 +714,9 @@ export function ProcurementDashboardSummary({
           <KpiCard key={card.label} {...card} loading={loading} />
         ))}
       </section>
+
+      <InventoryStockPanel summary={inventorySummary ?? null} loading={loading} />
+
       <div className="grid items-stretch gap-4 lg:grid-cols-[68fr_32fr] lg:gap-5">
         <OverviewHistogram data={histogram} loading={loading} />
         <PoLifecycleChartCard

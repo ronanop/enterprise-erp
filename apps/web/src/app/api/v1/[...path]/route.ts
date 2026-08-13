@@ -1,6 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server";
 
-const API_ORIGIN = (process.env.API_INTERNAL_URL ?? "http://127.0.0.1:8000").replace(
+const API_ORIGIN = (process.env.API_INTERNAL_URL ?? "http://api:8000").replace(
   /\/$/,
   "",
 );

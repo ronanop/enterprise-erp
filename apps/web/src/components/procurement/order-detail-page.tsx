@@ -1,9 +1,15 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { FileDown, RefreshCw, Truck } from "lucide-react";
+import {
+  Building2,
+  FileDown,
+  PackageCheck,
+  RefreshCw,
+  Truck,
+} from "lucide-react";
 
 import { DeliveryChallanFormPage } from "@/components/procurement/delivery-challan-form-page";
 import { GrnPdfPickDialog } from "@/components/procurement/grn-pdf-pick-dialog";
@@ -13,14 +19,28 @@ import {
   type VendorInvoiceDraft,
   emptyVendorInvoiceDraft,
 } from "@/components/procurement/receipt-serials-dialog";
+import { ScmCommercialDocumentsPanel } from "@/components/procurement/scm-commercial-documents-panel";
 
 import { PageHeader } from "@/components/layout/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
+import { useProcurementRole } from "@/hooks/use-procurement-role";
+import {
+  findLatestApprovalForOrder,
+  findPendingApprovalForOrder,
+  submitPoFinalizeApproval,
+} from "@/lib/procurement-approvals";
+import {
+  listUnreadPoApprovalDecisionNotifications,
+  markPoApprovalDecisionNotificationsReadForOrder,
+  PROCUREMENT_APPROVAL_NOTIFICATIONS_EVENT,
+  type PoApprovalDecisionNotification,
+} from "@/lib/procurement-approval-notifications";
 import { ApiClientError } from "@/services/api-client";
 import {
+  collectPoApprovalDocuments,
   finalizeScmOrder,
   formatInr,
   getPurchaseOrder,
@@ -55,10 +75,46 @@ import {
   resizeSerialSlots,
   receiptSerialSlotsWithNaDefaults,
   serialSlotsForSave,
+  serialUnitCount,
   validateSerialSlots,
 } from "@/utils/receipt-serial-numbers";
 
 type ReceiptStatus = "pending" | "partial" | "delivered";
+type PoDetailView = "po" | "grn";
+
+function DetailItem({
+  label,
+  children,
+  className,
+}: {
+  label: string;
+  children: ReactNode;
+  className?: string;
+}) {
+  return (
+    <div className={cn("min-w-0 space-y-1", className)}>
+      <dt className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+        {label}
+      </dt>
+      <dd className="text-sm font-medium break-words text-foreground">{children}</dd>
+    </div>
+  );
+}
+
+function SectionCard({
+  title,
+  children,
+}: {
+  title: string;
+  children: ReactNode;
+}) {
+  return (
+    <section className="space-y-3 rounded-lg border border-border/80 bg-card p-4 shadow-sm">
+      <h2 className="text-sm font-semibold tracking-tight text-foreground">{title}</h2>
+      {children}
+    </section>
+  );
+}
 
 /** Derive update status from received vs ordered qty. */
 function receiptStatusFromQty(ordered: number, received: number): ReceiptStatus {
@@ -73,6 +129,33 @@ function receiptBadgeVariant(
   if (status === "delivered") return "default";
   if (status === "partial") return "secondary";
   return "outline";
+}
+
+function formatOrderStatusLabel(status: string): string {
+  return status.replaceAll("_", " ").trim() || "—";
+}
+
+function orderStatusBadgeClass(status: string, pendingApproval: boolean): string {
+  if (pendingApproval) {
+    return "border-amber-300 bg-amber-50 text-amber-900";
+  }
+  const value = status.toLowerCase();
+  if (value === "draft" || value === "submitted") {
+    return "border-sky-300 bg-sky-50 text-sky-900";
+  }
+  if (value === "approved" || value === "issued" || value === "ordered") {
+    return "border-emerald-300 bg-emerald-50 text-emerald-900";
+  }
+  if (value === "partially_received") {
+    return "border-amber-300 bg-amber-50 text-amber-900";
+  }
+  if (value === "received" || value === "delivered" || value === "closed" || value === "completed") {
+    return "border-emerald-300 bg-emerald-50 text-emerald-900";
+  }
+  if (value === "cancelled" || value === "rejected") {
+    return "border-red-300 bg-red-50 text-red-800";
+  }
+  return "border-border bg-muted/40 text-foreground";
 }
 
 function isReceiptLocked(ordered: number, quantityReceived: number): boolean {
@@ -99,6 +182,52 @@ function normalizeQtyInput(raw: string, maxAllowed?: number): string {
   if (!Number.isFinite(n)) return next;
   if (n > maxAllowed) return String(maxAllowed);
   return next;
+}
+
+function roundTo(value: number, places: number): number {
+  const factor = 10 ** places;
+  return Math.round(value * factor) / factor;
+}
+
+function formatQtyDraftValue(value: number): string {
+  if (!Number.isFinite(value) || value <= 0) return "";
+  return String(roundTo(value, 4));
+}
+
+function formatCostDraftValue(value: number): string {
+  if (!Number.isFinite(value) || value < 0) return "";
+  return String(roundTo(value, 2));
+}
+
+/** Unit cost draft — never above the PO unit cost. */
+function normalizeCostInput(raw: string, maxAllowed: number): string {
+  const value = raw.trim();
+  if (value === "" || value === ".") return value;
+  if (!/^\d*\.?\d*$/.test(value)) return value;
+  let next = value;
+  if (value.includes(".")) {
+    const [intPart = "", frac = ""] = value.split(".");
+    const normalizedInt = intPart.replace(/^0+(?=\d)/, "") || "0";
+    const clippedFrac = frac.slice(0, 2);
+    next = `${normalizedInt}.${clippedFrac}`;
+  } else {
+    next = value.replace(/^0+(?=\d)/, "");
+  }
+  if (next === "" || next === ".") return next;
+  const n = Number(next);
+  if (!Number.isFinite(n)) return next;
+  const max = Math.max(0, maxAllowed);
+  if (n > max) return formatCostDraftValue(max);
+  return next;
+}
+
+function emptyReceiptDrafts(lines: Array<{ id: string; unit_cost?: number }>) {
+  return {
+    qty: Object.fromEntries(lines.map((ln) => [ln.id, ""])),
+    cost: Object.fromEntries(
+      lines.map((ln) => [ln.id, formatCostDraftValue(Number(ln.unit_cost) || 0)]),
+    ),
+  };
 }
 
 /** Match GRN / vendor-PO list: OVF commercial totals when GET order omits them. */
@@ -137,6 +266,7 @@ export function OrderDetailPage({ orderId }: { orderId: string }) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
+  const { isAdmin } = useProcurementRole();
   const [order, setOrder] = useState<ProcOrder | null>(null);
   const [vendorName, setVendorName] = useState<string>("");
   const [vendorAddress, setVendorAddress] = useState<string>("");
@@ -148,6 +278,7 @@ export function OrderDetailPage({ orderId }: { orderId: string }) {
   const [grnPdfPickOpen, setGrnPdfPickOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [qtyDraft, setQtyDraft] = useState<Record<string, string>>({});
+  const [costDraft, setCostDraft] = useState<Record<string, string>>({});
   const [serialDraft, setSerialDraft] = useState<Record<string, string[]>>({});
   const [receiptSerialOpen, setReceiptSerialOpen] = useState(false);
   const [pendingReceiptLines, setPendingReceiptLines] = useState<ReceiptSerialDialogLine[]>([]);
@@ -157,10 +288,32 @@ export function OrderDetailPage({ orderId }: { orderId: string }) {
   );
   const [challanOpen, setChallanOpen] = useState(false);
   const [challanSavedBanner, setChallanSavedBanner] = useState<string | null>(null);
+  const [decisionNotice, setDecisionNotice] = useState<PoApprovalDecisionNotification | null>(
+    null,
+  );
   const [challanFormMounted, setChallanFormMounted] = useState(false);
   const [savedChallans, setSavedChallans] = useState<DeliveryChallanRecord[]>([]);
   const [challanPdfBusyId, setChallanPdfBusyId] = useState<string | null>(null);
   const challanSaveRef = useRef<(() => void) | null>(null);
+  const [viewMode, setViewMode] = useState<PoDetailView>(() =>
+    searchParams.get("tab") === "grn" ? "grn" : "po",
+  );
+
+  useEffect(() => {
+    setViewMode(searchParams.get("tab") === "grn" ? "grn" : "po");
+  }, [searchParams]);
+
+  const setPoView = useCallback(
+    (next: PoDetailView) => {
+      setViewMode(next);
+      const params = new URLSearchParams(searchParams.toString());
+      if (next === "grn") params.set("tab", "grn");
+      else params.delete("tab");
+      const qs = params.toString();
+      router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
+    },
+    [pathname, router, searchParams],
+  );
 
   const refreshSavedChallans = useCallback(() => {
     setSavedChallans(listDeliveryChallansByOrderId(orderId));
@@ -202,7 +355,9 @@ export function OrderDetailPage({ orderId }: { orderId: string }) {
       const row = await loadOrderWithCommercial(orderId);
       setOrder(row);
       // Draft is "receive now" qty (additional), not cumulative total.
-      setQtyDraft(Object.fromEntries((row.lines || []).map((ln) => [ln.id, "" ])));
+      const drafts = emptyReceiptDrafts(row.lines || []);
+      setQtyDraft(drafts.qty);
+      setCostDraft(drafts.cost);
       setSerialDraft({});
       setLoading(false);
       void listVendorOptions()
@@ -229,11 +384,52 @@ export function OrderDetailPage({ orderId }: { orderId: string }) {
     void load();
   }, [load]);
 
+  useEffect(() => {
+    if (isAdmin) {
+      setDecisionNotice(null);
+      return;
+    }
+    const sync = () => {
+      const unread = listUnreadPoApprovalDecisionNotifications().find(
+        (row) => row.orderId === orderId,
+      );
+      if (!unread) return;
+      setDecisionNotice(unread);
+      markPoApprovalDecisionNotificationsReadForOrder(orderId);
+    };
+    sync();
+    window.addEventListener(PROCUREMENT_APPROVAL_NOTIFICATIONS_EVENT, sync);
+    window.addEventListener("storage", sync);
+    return () => {
+      window.removeEventListener(PROCUREMENT_APPROVAL_NOTIFICATIONS_EVENT, sync);
+      window.removeEventListener("storage", sync);
+    };
+  }, [isAdmin, orderId]);
+
   async function onFinalize() {
     if (!order) return;
     setBusy(true);
     setError(null);
     try {
+      if (!isAdmin) {
+        const documents = await collectPoApprovalDocuments({
+          orderId: order.id,
+          ovfId: order.source_document_id,
+        });
+        submitPoFinalizeApproval({
+          orderId: order.id,
+          documentNumber: order.document_number,
+          companyPoNumber: order.company_po_number,
+          customerName: order.customer_name,
+          vendorId: order.vendor_id,
+          vendorName: vendorName || null,
+          ovfId: order.source_document_id,
+          documents,
+        });
+        setError(null);
+        router.replace(`${pathname}?approval=pending`);
+        return;
+      }
       const updated = await finalizeScmOrder(order.id);
       setOrder(updated);
     } catch (err) {
@@ -248,7 +444,13 @@ export function OrderDetailPage({ orderId }: { orderId: string }) {
     setPdfBusy(true);
     setError(null);
     try {
-      await downloadOrderPdf(order, { name: vendorName, address: vendorAddress });
+      const draft = (order.status || "").toLowerCase() === "draft";
+      await downloadOrderPdf(
+        order,
+        { name: vendorName, address: vendorAddress },
+        undefined,
+        { watermark: draft },
+      );
     } catch (err) {
       const message =
         err instanceof Error && err.message.trim()
@@ -280,6 +482,10 @@ export function OrderDetailPage({ orderId }: { orderId: string }) {
 
   async function confirmReceiptWithSerials() {
     if (!order || pendingReceiptLines.length === 0) return;
+    if (["draft", "submitted", "cancelled"].includes((order.status || "").toLowerCase())) {
+      setReceiptModalError("GRN receipt is locked until this PO is approved and issued.");
+      return;
+    }
 
     type PendingLine = ReceiptSerialDialogLine & {
       orderedQty: number;
@@ -296,7 +502,8 @@ export function OrderDetailPage({ orderId }: { orderId: string }) {
       if (!line) continue;
       const orderedQty = Number(line.quantity) || 0;
       const savedReceived = Number(line.quantity_received ?? 0);
-      const slots = resizeSerialSlots(serialDraft[row.lineId] || [], row.additional);
+      const serialUnits = serialUnitCount(row.additional);
+      const slots = resizeSerialSlots(serialDraft[row.lineId] || [], serialUnits);
       const serialError = validateSerialSlots(slots, row.additional, row.productLabel);
       if (serialError) {
         setReceiptModalError(serialError);
@@ -409,9 +616,9 @@ export function OrderDetailPage({ orderId }: { orderId: string }) {
               `Receipt saved, but vendor invoice failed: ${uploadDetail}`,
             );
             setOrder(refreshed);
-            setQtyDraft(
-              Object.fromEntries((refreshed.lines || []).map((ln) => [ln.id, "" ])),
-            );
+            const drafts = emptyReceiptDrafts(refreshed.lines || []);
+            setQtyDraft(drafts.qty);
+            setCostDraft(drafts.cost);
             setSerialDraft({});
             setPendingReceiptLines([]);
             setVendorInvoiceDraft(emptyVendorInvoiceDraft());
@@ -423,9 +630,11 @@ export function OrderDetailPage({ orderId }: { orderId: string }) {
       }
 
       setOrder(refreshed);
-      setQtyDraft(
-        Object.fromEntries((refreshed.lines || []).map((ln) => [ln.id, "" ])),
-      );
+      {
+        const drafts = emptyReceiptDrafts(refreshed.lines || []);
+        setQtyDraft(drafts.qty);
+        setCostDraft(drafts.cost);
+      }
       setSerialDraft({});
       setPendingReceiptLines([]);
       setVendorInvoiceDraft(emptyVendorInvoiceDraft());
@@ -465,13 +674,11 @@ export function OrderDetailPage({ orderId }: { orderId: string }) {
       }
       if (additional > remaining) {
         setQtyDraft((prev) => ({ ...prev, [line.id]: String(remaining) }));
+        setCostDraft((prev) => ({
+          ...prev,
+          [line.id]: formatCostDraftValue(Number(line.unit_cost) || 0),
+        }));
         return { ok: false, message: `You can receive at most ${remaining} more for ${label}.` };
-      }
-      if (!Number.isInteger(additional)) {
-        return {
-          ok: false,
-          message: `Receive qty for ${label} must be a whole number when capturing serial numbers.`,
-        };
       }
 
       lines.push({
@@ -491,6 +698,13 @@ export function OrderDetailPage({ orderId }: { orderId: string }) {
   }
 
   function openReceiptSerialModal() {
+    if (
+      !order ||
+      ["draft", "submitted", "cancelled"].includes((order.status || "").toLowerCase())
+    ) {
+      setError("GRN receipt is locked until this PO is approved and issued.");
+      return;
+    }
     setError(null);
     setReceiptModalError(null);
     const result = collectPendingReceiptLines();
@@ -502,7 +716,7 @@ export function OrderDetailPage({ orderId }: { orderId: string }) {
     for (const row of result.lines) {
       draft[row.lineId] = receiptSerialSlotsWithNaDefaults(
         serialDraft[row.lineId] || [],
-        row.additional,
+        serialUnitCount(row.additional),
       );
     }
     setSerialDraft(draft);
@@ -518,21 +732,66 @@ export function OrderDetailPage({ orderId }: { orderId: string }) {
     setVendorInvoiceDraft(emptyVendorInvoiceDraft());
   }
 
-  const canReceipt =
+  /** GRN / receipt / challan only after admin finalizes (issued PO). */
+  const canReceipt = Boolean(
     order &&
-    !["draft", "submitted", "cancelled"].includes((order.status || "").toLowerCase());
+      !["draft", "submitted", "cancelled"].includes((order.status || "").toLowerCase()),
+  );
+  const showGrnWorkspace = canReceipt && viewMode === "grn";
+  const pendingApproval = order ? findPendingApprovalForOrder(order.id) : null;
+  const latestApproval = order ? findLatestApprovalForOrder(order.id) : null;
+  const approvalRejected =
+    Boolean(order) &&
+    (order?.status || "").toLowerCase() === "draft" &&
+    latestApproval?.status === "rejected" &&
+    !pendingApproval;
+  const approvalPendingFlag =
+    searchParams.get("approval") === "pending" || Boolean(pendingApproval);
+  const awaitingIssue =
+    Boolean(order) &&
+    (order?.status || "").toLowerCase() === "draft" &&
+    (approvalPendingFlag || order?.source_module === "crm");
+  const finalizeBlockedByApproval =
+    Boolean(pendingApproval) || (isAdmin && approvalPendingFlag);
   const canFinalize =
     order &&
     order.status === "draft" &&
     order.source_module === "crm" &&
-    (order.lines?.length ?? 0) > 0;
+    (order.lines?.length ?? 0) > 0 &&
+    !finalizeBlockedByApproval;
+  const editPoHref =
+    order?.source_module === "crm" && order.source_document_id
+      ? `/procurement/scm/ovf/${order.source_document_id}/po`
+      : null;
   const lineCount = order?.lines?.length ?? 0;
+  const orderLines = useMemo(() => {
+    const rows = [...(order?.lines || [])];
+    rows.sort((a, b) => (Number(a.line_number) || 0) - (Number(b.line_number) || 0));
+    return rows;
+  }, [order?.lines]);
   const allLinesDelivered =
     lineCount > 0 &&
-    (order?.lines || []).every((ln) =>
+    orderLines.every((ln) =>
       isReceiptLocked(Number(ln.quantity) || 0, Number(ln.quantity_received ?? 0)),
     );
-  const showReceiptColumns = !allLinesDelivered;
+  /** Hide receive / GRN columns until the PO is issued and user opens GRN workspace. */
+  const showReceiptColumns = showGrnWorkspace && !allLinesDelivered;
+
+  useEffect(() => {
+    // Wait until the PO has loaded — otherwise tab=grn is cleared while order is still null.
+    if (!order) return;
+    if (!canReceipt && viewMode === "grn") {
+      setPoView("po");
+    }
+  }, [order, canReceipt, viewMode, setPoView]);
+
+  useEffect(() => {
+    if (!order) return;
+    if (!canReceipt && challanOpen) {
+      setChallanOpen(false);
+    }
+  }, [order, canReceipt, challanOpen]);
+
   const hasDraftReceiptQty = (order?.lines || []).some((ln) => {
     const orderedQty = Number(ln.quantity) || 0;
     const savedReceived = Number(ln.quantity_received ?? 0);
@@ -543,10 +802,67 @@ export function OrderDetailPage({ orderId }: { orderId: string }) {
     return Number.isFinite(additional) && additional > 0;
   });
 
-  function onQtyDraftChange(lineId: string, value: string, maxAllowed: number) {
-    const next = normalizeQtyInput(value, maxAllowed);
-    setQtyDraft((prev) => ({ ...prev, [lineId]: next }));
+  function onQtyDraftChange(
+    lineId: string,
+    value: string,
+    maxAllowed: number,
+    originalUnitCost: number,
+  ) {
+    const nextQty = normalizeQtyInput(value, maxAllowed);
+    setQtyDraft((prev) => ({ ...prev, [lineId]: nextQty }));
+
+    const remaining = Math.max(0, maxAllowed);
+    const original = Math.max(0, originalUnitCost);
+    if (nextQty === "" || nextQty === "." || remaining <= 0 || original <= 0) {
+      setCostDraft((prev) => ({
+        ...prev,
+        [lineId]: formatCostDraftValue(original),
+      }));
+      return;
+    }
+    const qty = Number(nextQty);
+    if (!Number.isFinite(qty) || qty <= 0) {
+      setCostDraft((prev) => ({
+        ...prev,
+        [lineId]: formatCostDraftValue(original),
+      }));
+      return;
+    }
+    // Scale unit cost with receive portion of remaining — never above PO unit cost.
+    const scaled = Math.min(original, original * (qty / remaining));
+    setCostDraft((prev) => ({
+      ...prev,
+      [lineId]: formatCostDraftValue(scaled),
+    }));
   }
+
+  function onCostDraftChange(
+    lineId: string,
+    value: string,
+    maxAllowedQty: number,
+    originalUnitCost: number,
+  ) {
+    const original = Math.max(0, originalUnitCost);
+    const nextCost = normalizeCostInput(value, original);
+    setCostDraft((prev) => ({ ...prev, [lineId]: nextCost }));
+
+    const remaining = Math.max(0, maxAllowedQty);
+    if (nextCost === "" || nextCost === "." || remaining <= 0 || original <= 0) {
+      return;
+    }
+    const cost = Number(nextCost);
+    if (!Number.isFinite(cost) || cost <= 0) {
+      setQtyDraft((prev) => ({ ...prev, [lineId]: "" }));
+      return;
+    }
+    // Inverse of receive↔cost scale: lower unit cost → lower receive qty.
+    const qty = Math.min(remaining, remaining * (cost / original));
+    setQtyDraft((prev) => ({
+      ...prev,
+      [lineId]: formatQtyDraftValue(qty),
+    }));
+  }
+
   const hasReceivedQty = (order?.lines || []).some(
     (ln) => Number(ln.quantity_received) > 0 || Number(ln.last_receipt_qty) > 0,
   );
@@ -572,15 +888,33 @@ export function OrderDetailPage({ orderId }: { orderId: string }) {
     () => (order ? receiptGrnLabelForOrder(order) : ""),
     [order],
   );
-  const tableMinWidth = showReceiptColumns ? "min-w-[1000px]" : "min-w-[860px]";
-  const emptyColSpan = showReceiptColumns ? 9 : 8;
+  const tableMinWidth = showReceiptColumns
+    ? "min-w-[1000px]"
+    : showGrnWorkspace
+      ? "min-w-[860px]"
+      : "min-w-[640px]";
+  const emptyColSpan = showReceiptColumns ? 9 : showGrnWorkspace ? 8 : 5;
+  const backToScm = searchParams.get("from") === "scm";
+  const backToGrns = searchParams.get("from") === "grns";
+  const statusLabel = (order?.status || "").toLowerCase();
 
   return (
     <div className="space-y-4">
       <PageHeader
         {...(challanOpen
           ? { onBack: closeChallanPanel, backLabel: "PO" }
-          : { backHref: "/procurement/orders", backLabel: "Purchase Orders" })}
+          : showGrnWorkspace && backToGrns
+            ? { backHref: "/procurement/grns", backLabel: "GRNs" }
+            : showGrnWorkspace
+              ? {
+                  onBack: () => setPoView("po"),
+                  backLabel: "Purchase order",
+                }
+              : backToScm
+                ? { backHref: "/procurement/scm", backLabel: "SCM queue" }
+                : backToGrns
+                  ? { backHref: "/procurement/grns", backLabel: "GRNs" }
+                  : { backHref: "/procurement/orders", backLabel: "Purchase Orders" })}
         title={
           challanOpen
             ? "Create delivery challan"
@@ -601,7 +935,31 @@ export function OrderDetailPage({ orderId }: { orderId: string }) {
               <RefreshCw className={`mr-1.5 size-3.5 ${loading ? "animate-spin" : ""}`} />
               Refresh
             </Button>
-            {hasReceivedQty && !challanOpen ? (
+            {order && !challanOpen && !showGrnWorkspace ? (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="cursor-pointer transition-colors duration-200"
+                disabled={pdfBusy || lineCount === 0}
+                onClick={() => void onDownloadPdf()}
+              >
+                <FileDown className="mr-1.5 size-3.5" />
+                {pdfBusy ? "Preparing…" : "Download PO PDF"}
+              </Button>
+            ) : null}
+            {canReceipt && !challanOpen && !showGrnWorkspace ? (
+              <Button
+                type="button"
+                size="sm"
+                className="cursor-pointer transition-colors duration-200"
+                onClick={() => setPoView("grn")}
+              >
+                <PackageCheck className="mr-1.5 size-3.5" />
+                Record GRN
+              </Button>
+            ) : null}
+            {showGrnWorkspace && hasReceivedQty && !challanOpen ? (
               <Button
                 type="button"
                 size="sm"
@@ -612,7 +970,7 @@ export function OrderDetailPage({ orderId }: { orderId: string }) {
                 {savedChallans.length > 0 ? "Add delivery challan" : "Create delivery challan"}
               </Button>
             ) : null}
-            {challanOpen ? (
+            {showGrnWorkspace && challanOpen ? (
               <Button
                 type="button"
                 size="sm"
@@ -622,7 +980,7 @@ export function OrderDetailPage({ orderId }: { orderId: string }) {
                 Save challan
               </Button>
             ) : null}
-            {canFinalize ? (
+            {canFinalize && !showGrnWorkspace ? (
               <Button
                 type="button"
                 size="sm"
@@ -630,8 +988,44 @@ export function OrderDetailPage({ orderId }: { orderId: string }) {
                 disabled={busy}
                 onClick={() => void onFinalize()}
               >
-                Finalize &amp; issue
+                {isAdmin
+                  ? "Finalize & issue"
+                  : approvalRejected
+                    ? "Resubmit for approval"
+                    : "Send for admin approval"}
               </Button>
+            ) : null}
+            {isAdmin && approvalPendingFlag && !showGrnWorkspace ? (
+              <Link
+                href="/procurement/approval"
+                className={cn(
+                  buttonVariants({ size: "sm" }),
+                  "cursor-pointer transition-colors duration-200",
+                )}
+              >
+                Review on Approval
+              </Link>
+            ) : null}
+            {!isAdmin && approvalRejected && editPoHref && !showGrnWorkspace ? (
+              <Link
+                href={editPoHref}
+                className={cn(
+                  buttonVariants({ size: "sm", variant: "outline" }),
+                  "cursor-pointer transition-colors duration-200",
+                )}
+              >
+                Edit PO
+              </Link>
+            ) : null}
+            {order?.status === "draft" && approvalPendingFlag ? (
+              <span className="inline-flex items-center rounded-lg border border-amber-200/80 bg-amber-50 px-2.5 py-1 text-[11px] font-semibold text-amber-900">
+                {isAdmin ? "Pending your approval" : "Awaiting admin approval"}
+              </span>
+            ) : null}
+            {approvalRejected ? (
+              <span className="inline-flex items-center rounded-lg border border-red-200/80 bg-red-50 px-2.5 py-1 text-[11px] font-semibold text-red-800">
+                Approval rejected
+              </span>
             ) : null}
           </div>
         }
@@ -653,9 +1047,63 @@ export function OrderDetailPage({ orderId }: { orderId: string }) {
         </div>
       ) : null}
 
+      {decisionNotice ? (
+        <div
+          className={cn(
+            "rounded-md border px-3 py-2 text-sm",
+            decisionNotice.decision === "accepted"
+              ? "border-emerald-200/80 bg-emerald-50 text-emerald-950"
+              : "border-red-200/80 bg-red-50 text-red-950",
+          )}
+        >
+          {decisionNotice.message}
+        </div>
+      ) : null}
+
+      {awaitingIssue ? (
+        <div
+          className={cn(
+            "rounded-md border px-3 py-2 text-sm",
+            approvalRejected
+              ? "border-red-200/80 bg-red-50 text-red-950"
+              : "border-amber-200/80 bg-amber-50 text-amber-950",
+          )}
+        >
+          {approvalRejected
+            ? "Admin rejected this finalize request. Edit the PO if needed, then resubmit for approval — the same company PO number is kept."
+            : approvalPendingFlag
+              ? isAdmin
+                ? "A finalize request is waiting. Accept or reject it on Approval — do not issue this PO from here."
+                : "Sent for admin approval. GRN, receipt, and delivery challan stay locked until an admin accepts and issues this PO."
+              : "Draft PO. Send for admin approval before recording GRN or delivery."}
+          {isAdmin && approvalPendingFlag ? (
+            <>
+              {" "}
+              <Link
+                href="/procurement/approval"
+                className="cursor-pointer font-semibold underline underline-offset-2 transition-colors duration-200 hover:text-amber-800"
+              >
+                Open Approval
+              </Link>
+            </>
+          ) : null}
+          {!isAdmin && approvalRejected && editPoHref ? (
+            <>
+              {" "}
+              <Link
+                href={editPoHref}
+                className="cursor-pointer font-semibold underline underline-offset-2 transition-colors duration-200 hover:text-red-800"
+              >
+                Edit PO
+              </Link>
+            </>
+          ) : null}
+        </div>
+      ) : null}
+
       {order ? (
         <>
-          {challanOpen && challanFormMounted ? (
+          {showGrnWorkspace && challanOpen && challanFormMounted ? (
             <DeliveryChallanFormPage
               embedded={{
                 orderId: order.id,
@@ -670,6 +1118,116 @@ export function OrderDetailPage({ orderId }: { orderId: string }) {
                 },
               }}
             />
+          ) : !showGrnWorkspace ? (
+            <>
+              <SectionCard title="Purchase order overview">
+                <dl className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                  <DetailItem label="Company PO">
+                    {order.company_po_number?.trim() || order.document_number}
+                  </DetailItem>
+                  <DetailItem label="PO date">{order.document_date || "—"}</DetailItem>
+                  <DetailItem label="Status">
+                    <Badge
+                      variant="outline"
+                      className={cn(
+                        "uppercase",
+                        orderStatusBadgeClass(statusLabel, approvalPendingFlag),
+                      )}
+                    >
+                      {approvalPendingFlag
+                        ? "Pending approval"
+                        : formatOrderStatusLabel(statusLabel)}
+                    </Badge>
+                  </DetailItem>
+                  <DetailItem label="Customer">{order.customer_name?.trim() || "—"}</DetailItem>
+                  <DetailItem label="Vendor">{vendorName || "—"}</DetailItem>
+                  <DetailItem label="Vendor GST">{vendorGst?.trim() || "—"}</DetailItem>
+                  <DetailItem label="Vendor payment terms">
+                    {order.payment_terms?.trim() || "—"}
+                  </DetailItem>
+                  <DetailItem label="Amount">{formatInr(order.total_amount)}</DetailItem>
+                </dl>
+                {vendorAddress.trim() ? (
+                  <dl className="mt-3 grid gap-3 border-t border-border/60 pt-3 sm:grid-cols-2">
+                    <DetailItem label="Vendor address" className="sm:col-span-2">
+                      <span className="whitespace-pre-line font-normal text-muted-foreground">
+                        {vendorAddress}
+                      </span>
+                    </DetailItem>
+                  </dl>
+                ) : null}
+              </SectionCard>
+
+              <ScmCommercialDocumentsPanel
+                orderId={order.id}
+                ovfId={
+                  order.source_module === "crm" ? order.source_document_id : null
+                }
+                branchId={order.branch_id}
+                companyId={order.company_id}
+                title="Documents"
+                allowUpload={false}
+              />
+
+              <div className="overflow-hidden rounded-lg border border-border bg-card">
+                <div className="border-b border-border px-3 py-2">
+                  <div className="inline-flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                    <Building2 className="size-3.5 text-[#0369A1]" aria-hidden />
+                    Order lines
+                  </div>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full min-w-[640px] text-left text-sm">
+                    <thead className="border-b border-border bg-muted/40 text-xs text-muted-foreground">
+                      <tr>
+                        <th className="px-3 py-2 font-medium">S No.</th>
+                        <th className="px-3 py-2 font-medium">Product</th>
+                        <th className="px-3 py-2 text-right font-medium">Qty</th>
+                        <th className="px-3 py-2 text-right font-medium">Unit cost</th>
+                        <th className="px-3 py-2 text-right font-medium">Amount</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {orderLines.map((ln, index) => (
+                        <tr key={ln.id} className="border-b border-border/70">
+                          <td className="px-3 py-2 tabular-nums text-muted-foreground">
+                            {index + 1}
+                          </td>
+                          <td className="px-3 py-2 font-medium">
+                            {ln.product_name || ln.product_code || "—"}
+                          </td>
+                          <td className="px-3 py-2 text-right tabular-nums">
+                            {Number(ln.quantity) || 0}
+                          </td>
+                          <td className="px-3 py-2 text-right tabular-nums">
+                            {formatInr(ln.unit_cost)}
+                          </td>
+                          <td className="px-3 py-2 text-right font-medium tabular-nums">
+                            {formatInr(ln.line_total)}
+                          </td>
+                        </tr>
+                      ))}
+                      {lineCount === 0 ? (
+                        <tr>
+                          <td colSpan={5} className="px-3 py-8 text-center text-muted-foreground">
+                            No line items on this purchase order.
+                          </td>
+                        </tr>
+                      ) : (
+                        <tr className="border-t border-border bg-muted/20 font-semibold">
+                          <td colSpan={4} className="px-3 py-2.5 text-right">
+                            Total
+                          </td>
+                          <td className="px-3 py-2.5 text-right tabular-nums">
+                            {formatInr(order.total_amount)}
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </>
           ) : (
           <>
           {savedChallans.length > 0 ? (
@@ -743,9 +1301,9 @@ export function OrderDetailPage({ orderId }: { orderId: string }) {
           <div className="overflow-hidden rounded-lg border border-border bg-card">
             <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-3 py-2">
               <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                Lines &amp; receipt
+                Lines & receipt
               </div>
-              {showReceiptColumns && canReceipt ? (
+              {showReceiptColumns ? (
                 <Button
                   type="button"
                   size="sm"
@@ -779,7 +1337,7 @@ export function OrderDetailPage({ orderId }: { orderId: string }) {
                   </tr>
                 </thead>
                 <tbody>
-                  {(order.lines || []).map((ln, index) => {
+                  {orderLines.map((ln, index) => {
                     const orderedQty = Number(ln.quantity) || 0;
                     const savedReceived = Number(ln.quantity_received ?? 0);
                     const remainingSaved = Math.max(0, orderedQty - savedReceived);
@@ -797,12 +1355,12 @@ export function OrderDetailPage({ orderId }: { orderId: string }) {
 
                     return (
                       <tr key={ln.id} className="border-b border-border/70 align-top">
-                        <td className="px-3 py-2 tabular-nums">{ln.line_number}</td>
+                        <td className="px-3 py-2 tabular-nums">{index + 1}</td>
                         <td className="px-3 py-2">{ln.product_name || ln.product_code || "—"}</td>
                         <td className="px-3 py-2 tabular-nums">{orderedQty}</td>
                         <td className="px-3 py-2 text-center">
                           {locked ? (
-                            <span className="tabular-nums font-medium">{savedReceived}</span>
+                            <span className="font-medium tabular-nums">{savedReceived}</span>
                           ) : (
                             <Input
                               className="mx-auto block h-8 w-24"
@@ -810,11 +1368,19 @@ export function OrderDetailPage({ orderId }: { orderId: string }) {
                               inputMode="decimal"
                               value={qtyDraft[ln.id] ?? ""}
                               disabled={
-                                !canReceipt || savingReceipts || busy || remainingSaved <= 0
+                                !showGrnWorkspace ||
+                                savingReceipts ||
+                                busy ||
+                                remainingSaved <= 0
                               }
                               onFocus={(e) => e.currentTarget.select()}
                               onChange={(e) =>
-                                onQtyDraftChange(ln.id, e.target.value, remainingSaved)
+                                onQtyDraftChange(
+                                  ln.id,
+                                  e.target.value,
+                                  remainingSaved,
+                                  Number(ln.unit_cost) || 0,
+                                )
                               }
                               onKeyDown={(e) => {
                                 if (e.key === "Enter") {
@@ -828,7 +1394,7 @@ export function OrderDetailPage({ orderId }: { orderId: string }) {
                         {showReceiptColumns ? (
                           <td className="px-3 py-2">
                             {remainingAfterDraft > 0 ? (
-                              <span className="tabular-nums font-medium text-amber-700">
+                              <span className="font-medium tabular-nums text-amber-700">
                                 {remainingAfterDraft}
                               </span>
                             ) : (
@@ -836,7 +1402,35 @@ export function OrderDetailPage({ orderId }: { orderId: string }) {
                             )}
                           </td>
                         ) : null}
-                        <td className="px-3 py-2 tabular-nums">{formatInr(ln.unit_cost)}</td>
+                        <td className="px-3 py-2">
+                          {locked || !showReceiptColumns ? (
+                            <span className="tabular-nums">{formatInr(ln.unit_cost)}</span>
+                          ) : (
+                            <Input
+                              className="h-8 w-28 font-mono text-sm tabular-nums"
+                              type="text"
+                              inputMode="decimal"
+                              aria-label={`Unit cost for ${ln.product_name || ln.product_code || "line"}`}
+                              title={`Max ${formatInr(Number(ln.unit_cost) || 0)} (PO unit cost)`}
+                              value={costDraft[ln.id] ?? ""}
+                              disabled={
+                                !showGrnWorkspace ||
+                                savingReceipts ||
+                                busy ||
+                                remainingSaved <= 0
+                              }
+                              onFocus={(e) => e.currentTarget.select()}
+                              onChange={(e) =>
+                                onCostDraftChange(
+                                  ln.id,
+                                  e.target.value,
+                                  remainingSaved,
+                                  Number(ln.unit_cost) || 0,
+                                )
+                              }
+                            />
+                          )}
+                        </td>
                         <td className="px-3 py-2">
                           <Badge variant={receiptBadgeVariant(status)} className="uppercase">
                             {status}
