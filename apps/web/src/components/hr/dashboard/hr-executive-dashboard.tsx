@@ -343,7 +343,7 @@ export function HrExecutiveDashboardPage() {
               subtitle="Leave, compensatory, on duty & more"
               icon={FileText}
               footerHref="/hr/ess"
-              footerLabel="ESS inbox"
+              footerLabel="Employee Requests"
               portrait
             >
               {requestItems.length === 0 ? (
@@ -549,7 +549,7 @@ export function HrExecutiveDashboardPage() {
                     href="/hr/ess"
                     className="cursor-pointer text-[11px] font-medium text-primary hover:underline"
                   >
-                    ESS inbox
+                    Employee Requests
                   </Link>
                 </div>
               </div>

@@ -105,7 +105,7 @@ export function HrEssPoliciesPage() {
             </Button>
             <Link href="/hr/ess-inbox">
               <Button variant="outline" size="sm">
-                ESS inbox
+                Employee Requests
               </Button>
             </Link>
           </div>

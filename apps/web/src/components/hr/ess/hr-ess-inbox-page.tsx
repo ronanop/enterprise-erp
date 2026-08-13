@@ -136,8 +136,8 @@ export function HrEssInboxPage() {
     <div className="space-y-5">
       <SetupToastHost />
       <PageHeader
-        title="ESS"
-        description="All employee self-service notifications — leave, comp off, attendance regularization, OT, and on-duty. Filter by type and status."
+        title="Employee Requests"
+        description="Employee requests and approvals — leave, comp off, attendance regularization, OT, and on-duty. Filter by type and status."
       />
 
       {authBlocked ? <HrAuthBanner /> : null}

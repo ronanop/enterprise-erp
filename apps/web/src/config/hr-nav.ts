@@ -46,7 +46,7 @@ export const hrNavGroups: HrNavGroup[] = [
         description: "Executive HR overview & analytics",
       },
       {
-        title: "ESS",
+        title: "Employee Requests",
         href: "/hr/ess",
         icon: Bell,
         description: "Employee requests & approval notifications",
