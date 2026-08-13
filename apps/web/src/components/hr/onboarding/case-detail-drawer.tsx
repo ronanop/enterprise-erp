@@ -202,6 +202,7 @@ export function CaseDetailDrawer({
         <div className="space-y-3 text-xs">
           <div className="grid gap-2 sm:grid-cols-2">
             <Info label="Joining" value={caseRow.joiningDate} />
+            <Info label="Legal entity" value={caseRow.entityName || "—"} />
             <Info label="Department" value={caseRow.department} />
             <Info label="Designation" value={caseRow.designation} />
             <Info label="Reporting manager" value={caseRow.reportingManager || "—"} />

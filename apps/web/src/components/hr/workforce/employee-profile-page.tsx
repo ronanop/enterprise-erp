@@ -301,6 +301,10 @@ export function EmployeeProfilePage({ employeeId }: { employeeId: string }) {
         <EmsAvatar name={record.displayName} photoUrl={record.profilePhotoDataUrl} size="lg" />
         <div className="min-w-0 flex-1 grid gap-2 sm:grid-cols-2 lg:grid-cols-3 text-sm">
           <Info label="Employee ID" value={record.employeeCode} />
+          <Info
+            label="Legal entity"
+            value={record.extension.employment.entityName || "—"}
+          />
           <Info label="Department" value={record.departmentName} />
           <Info label="Designation" value={record.designationName} />
           <Info label="Reporting manager" value={record.reportingManagerName} />
@@ -322,6 +326,10 @@ export function EmployeeProfilePage({ employeeId }: { employeeId: string }) {
 
         {tab === "employment" ? (
           <EmsFormGrid>
+            <Info
+              label="Legal entity"
+              value={record.extension.employment.entityName || "—"}
+            />
             <Info label="Grade" value={record.extension.employment.grade || "—"} />
             <Info label="Job level" value={record.extension.employment.jobLevel || "—"} />
             <Info label="Shift" value={record.extension.employment.shiftName || "—"} />
@@ -866,6 +874,10 @@ function OverviewTab({
         <div className="flex flex-col gap-4">
           <OverviewCard title="Employment">
             <div className="grid grid-cols-1 gap-x-4 gap-y-3 sm:grid-cols-2">
+              <OverviewField
+                label="Legal entity"
+                value={record.extension.employment.entityName}
+              />
               <OverviewField label="Department" value={record.departmentName} />
               <OverviewField label="Designation" value={record.designationName} />
               <OverviewField label="Branch" value={record.branchName} />

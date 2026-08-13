@@ -114,7 +114,8 @@ class LeaveTypeService:
             raise NotFoundException("Leave type not found")
         return row
 
-    def delete(self, ctx: TenantContext, row_id: UUID) -> None:
+    def delete(self, ctx: TenantContext, row_id: UUID) -> str:
+        """Soft-delete when unused; otherwise deactivate so history stays intact."""
         self.get(ctx, row_id)
 
         used_total = self._db.scalar(
@@ -123,29 +124,33 @@ class LeaveTypeService:
                 HrLeaveBalance.is_deleted.is_(False),
             )
         )
-        if Decimal(str(used_total or 0)) > 0:
-            raise AppException(
-                "Cannot delete leave type while employees have used balance against it"
-            )
+        referenced = Decimal(str(used_total or 0)) > 0
 
-        open_requests = self._db.scalar(
-            select(func.count())
-            .select_from(HrLeaveRequest)
-            .where(
-                HrLeaveRequest.leave_type_id == row_id,
-                HrLeaveRequest.is_deleted.is_(False),
-                HrLeaveRequest.status.in_(
-                    (
-                        LeaveRequestStatus.DRAFT.value,
-                        LeaveRequestStatus.SUBMITTED.value,
-                        LeaveRequestStatus.MANAGER_APPROVED.value,
-                    )
-                ),
+        if not referenced:
+            any_requests = self._db.scalar(
+                select(func.count())
+                .select_from(HrLeaveRequest)
+                .where(
+                    HrLeaveRequest.leave_type_id == row_id,
+                    HrLeaveRequest.is_deleted.is_(False),
+                )
             )
-        )
-        if int(open_requests or 0) > 0:
-            raise AppException(
-                "Cannot delete leave type while open leave requests still reference it"
+            referenced = int(any_requests or 0) > 0
+
+        if referenced:
+            row = self._repo.update(ctx, row_id, status="inactive")
+            if row is None:
+                raise NotFoundException("Leave type not found")
+            self._audit.log_entity_change(
+                tenant_id=ctx.tenant_id,
+                entity_name="hr_leave_type",
+                entity_id=row_id,
+                operation="deactivate",
+                performed_by=ctx.user_id,
+            )
+            return (
+                "Leave type deactivated (still referenced by leave requests or used balances). "
+                "It will no longer appear for new applications."
             )
 
         if not self._repo.soft_delete(ctx, row_id):
@@ -157,6 +162,7 @@ class LeaveTypeService:
             operation="delete",
             performed_by=ctx.user_id,
         )
+        return "Leave type deleted"
 
 
 class LeaveBalanceService:
@@ -677,6 +683,11 @@ class LeaveRequestService:
         start_date = fields["start_date"]
         end_date = fields["end_date"]
         leave_type_id = fields["leave_type_id"]
+        leave_type = self._types.get(ctx, leave_type_id)
+        if leave_type is None:
+            raise NotFoundException("Leave type not found")
+        if str(getattr(leave_type, "status", "")).lower() != "active":
+            raise AppException("Cannot apply leave against an inactive leave type")
         fields["days_count"] = self._apply_sandwich_days(
             ctx,
             company_id=cid,

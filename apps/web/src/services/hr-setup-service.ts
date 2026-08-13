@@ -150,12 +150,16 @@ const DEFAULT_ENTITIES: SetupRow[] = [
     id: "ent-cache-digitech",
     code: "ENT-001",
     name: "Cache Digitech Pvt Ltd",
+    legal_name: "Cache Digitech",
+    description: "Primary demo entity (DEMOCO)",
     status: "active",
   },
   {
     id: "ent-cache-tech",
     code: "ENT-002",
     name: "Cache Technologies",
+    legal_name: "Cache Technologies & Infotech",
+    description: "Second demo entity for multi-company HR",
     status: "active",
   },
 ];
@@ -570,6 +574,16 @@ export async function createLocalSetup(
   const rows = ensureLocal(tabId);
   const codes = rows.map((r) => String(r.code ?? ""));
   const now = new Date().toISOString();
+  let actor = "current.user";
+  try {
+    const raw = localStorage.getItem("erp_user_profile");
+    if (raw) {
+      const p = JSON.parse(raw) as { full_name?: string; email?: string; id?: string };
+      actor = p.full_name || p.email || p.id || actor;
+    }
+  } catch {
+    /* ignore */
+  }
   const row: SetupRow = {
     ...body,
     id: crypto.randomUUID(),
@@ -577,8 +591,8 @@ export async function createLocalSetup(
     status: String(body.status ?? "active"),
     created_at: now,
     updated_at: now,
-    created_by: "current.user",
-    updated_by: "current.user",
+    created_by: actor,
+    updated_by: actor,
     __source: "local",
   };
   rows.unshift(row);
@@ -596,12 +610,22 @@ export async function updateLocalSetup(
   const rows = ensureLocal(tabId);
   const idx = rows.findIndex((r) => r.id === id);
   if (idx < 0) throw new Error("Record not found");
+  let actor = "current.user";
+  try {
+    const raw = localStorage.getItem("erp_user_profile");
+    if (raw) {
+      const p = JSON.parse(raw) as { full_name?: string; email?: string; id?: string };
+      actor = p.full_name || p.email || p.id || actor;
+    }
+  } catch {
+    /* ignore */
+  }
   const next = {
     ...rows[idx],
     ...body,
     id,
     updated_at: new Date().toISOString(),
-    updated_by: "current.user",
+    updated_by: actor,
   };
   rows[idx] = next;
   const store = readLocal();

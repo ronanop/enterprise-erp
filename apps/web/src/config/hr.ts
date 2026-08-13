@@ -56,7 +56,6 @@ export const hrWorkspaceGroups: HrWorkspaceGroup[] = [
       "shifts",
       "shift-assignments",
       "holiday-calendars",
-      "leave-types",
       "leave-balances",
       "leave-requests",
       "attendance",

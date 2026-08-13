@@ -8,7 +8,14 @@ from pydantic import BaseModel, ConfigDict
 
 
 class OrmModel(BaseModel):
+    """ORM-backed response base — includes standard audit columns everywhere."""
+
     model_config = ConfigDict(from_attributes=True)
+
+    created_at: datetime | None = None
+    created_by: UUID | None = None
+    updated_at: datetime | None = None
+    updated_by: UUID | None = None
 
 
 class DesignationCreate(BaseModel):
@@ -607,6 +614,7 @@ class LeaveRequestResponse(OrmModel):
     start_date: date
     end_date: date
     days_count: Decimal
+    reason: str | None = None
     status: str
     version: int
 
@@ -796,7 +804,6 @@ class KpiResponse(OrmModel):
     rating_scale: int
     status: str
     version: int
-    created_at: datetime | None = None
 
 
 class OkrKeyResultIn(BaseModel):
@@ -848,7 +855,6 @@ class OkrResponse(OrmModel):
     status: str
     version: int
     key_results: list[OkrKeyResultResponse] = []
-    created_at: datetime | None = None
 
 
 class AppraisalCreate(BaseModel):

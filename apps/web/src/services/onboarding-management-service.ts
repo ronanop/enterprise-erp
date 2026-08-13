@@ -226,27 +226,66 @@ export async function loadOnboardingDirectory(): Promise<OnboardingDirectory> {
   return { cases, acceptedOffers, departments, apiOnboardingCount };
 }
 
-export function computeOnboardingStats(cases: OnboardingCase[]) {
-  const today = new Date().toISOString().slice(0, 10);
-  return {
-    invitationsSent: cases.filter((c) =>
-      ["invitation_sent", "in_progress", "submitted", "hr_review", "ready_to_join", "pending_join", "joined"].includes(
-        c.status,
-      ),
-    ).length,
-    pendingForms: cases.filter((c) =>
-      ["invitation_sent", "in_progress"].includes(c.status),
-    ).length,
-    documentsPending: cases.filter((c) => {
+export type OnboardingStatBucket =
+  | "invitations_sent"
+  | "pending_forms"
+  | "documents_pending"
+  | "ready_to_join"
+  | "pending_join"
+  | "joined_today";
+
+export function matchesOnboardingStatBucket(
+  c: OnboardingCase,
+  bucket: OnboardingStatBucket,
+  today = new Date().toISOString().slice(0, 10),
+): boolean {
+  switch (bucket) {
+    case "invitations_sent":
+      return [
+        "invitation_sent",
+        "in_progress",
+        "submitted",
+        "hr_review",
+        "ready_to_join",
+        "pending_join",
+        "joined",
+      ].includes(c.status);
+    case "pending_forms":
+      return ["invitation_sent", "in_progress"].includes(c.status);
+    case "documents_pending": {
       const docs = c.portal.documents;
       return (
         !c.portal.submittedAt &&
         (docs.length < 3 || docs.some((d) => d.verifyStatus === "pending"))
       );
-    }).length,
-    readyToJoin: cases.filter((c) => c.status === "ready_to_join").length,
-    pendingJoin: cases.filter((c) => c.status === "pending_join").length,
-    joinedToday: cases.filter((c) => c.activatedAt?.slice(0, 10) === today).length,
+    }
+    case "ready_to_join":
+      return c.status === "ready_to_join";
+    case "pending_join":
+      return c.status === "pending_join";
+    case "joined_today":
+      return c.activatedAt?.slice(0, 10) === today;
+    default:
+      return true;
+  }
+}
+
+export function computeOnboardingStats(cases: OnboardingCase[]) {
+  const today = new Date().toISOString().slice(0, 10);
+  return {
+    invitationsSent: cases.filter((c) => matchesOnboardingStatBucket(c, "invitations_sent", today))
+      .length,
+    pendingForms: cases.filter((c) => matchesOnboardingStatBucket(c, "pending_forms", today))
+      .length,
+    documentsPending: cases.filter((c) =>
+      matchesOnboardingStatBucket(c, "documents_pending", today),
+    ).length,
+    readyToJoin: cases.filter((c) => matchesOnboardingStatBucket(c, "ready_to_join", today))
+      .length,
+    pendingJoin: cases.filter((c) => matchesOnboardingStatBucket(c, "pending_join", today))
+      .length,
+    joinedToday: cases.filter((c) => matchesOnboardingStatBucket(c, "joined_today", today))
+      .length,
     overdue: cases.filter((c) => c.status === "overdue").length,
     total: cases.length,
     completionRate:
@@ -260,9 +299,12 @@ export function filterOnboardingCases(
   cases: OnboardingCase[],
   query: string,
   filters: OnboardingFilters,
+  statsBucket?: OnboardingStatBucket | null,
 ): OnboardingCase[] {
   const q = query.trim().toLowerCase();
+  const today = new Date().toISOString().slice(0, 10);
   return cases.filter((c) => {
+    if (statsBucket && !matchesOnboardingStatBucket(c, statsBucket, today)) return false;
     if (filters.status !== "all" && c.status !== filters.status) return false;
     if (filters.department !== "all" && c.department !== filters.department) return false;
     if (filters.overdueOnly && c.status !== "overdue") return false;
@@ -300,6 +342,8 @@ export async function startOnboarding(input: StartOnboardingInput): Promise<Onbo
     offerId: "",
     offerCode: "",
     joiningDate: input.joiningDate,
+    entityId: input.entityId || "",
+    entityName: input.entityName || "",
     department: input.department,
     designation: input.designation,
     reportingManager: input.reportingManager,

@@ -134,24 +134,65 @@ function setupColumnWidths(columns: { key: string }[]): string[] {
   return weights.map((w) => `${((w / total) * budget).toFixed(2)}%`);
 }
 
-function AuditBlock({ row }: { row: SetupRow }) {
+function formatAuditWhen(value: unknown): string {
+  if (value == null || String(value).trim() === "") return "—";
+  const raw = String(value).trim();
+  const d = new Date(raw);
+  if (Number.isNaN(d.getTime())) return raw;
+  return d.toLocaleString(undefined, {
+    year: "numeric",
+    month: "short",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+function formatAuditWho(value: unknown, usersById: Record<string, string>): string {
+  if (value == null || String(value).trim() === "") return "—";
+  const id = String(value).trim();
+  if (usersById[id]) return usersById[id];
+  if (id === "current.user") {
+    try {
+      const raw = localStorage.getItem("erp_user_profile");
+      if (raw) {
+        const p = JSON.parse(raw) as { full_name?: string; email?: string };
+        return p.full_name || p.email || "Current user";
+      }
+    } catch {
+      /* ignore */
+    }
+    return "Current user";
+  }
+  // UUID → short readable fallback
+  if (/^[0-9a-f-]{36}$/i.test(id)) return `User ${id.slice(0, 8)}…`;
+  return id;
+}
+
+function AuditBlock({
+  row,
+  usersById,
+}: {
+  row: SetupRow;
+  usersById: Record<string, string>;
+}) {
   return (
     <div className="mt-4 grid gap-2 rounded-xl border border-border/70 bg-muted/30 p-3 text-[11px] text-muted-foreground sm:grid-cols-2">
       <div>
         <span className="font-medium text-foreground">Created by</span>
-        <p>{cell(row, "created_by")}</p>
+        <p>{formatAuditWho(row.created_by, usersById)}</p>
       </div>
       <div>
         <span className="font-medium text-foreground">Created at</span>
-        <p>{cell(row, "created_at")}</p>
+        <p>{formatAuditWhen(row.created_at)}</p>
       </div>
       <div>
         <span className="font-medium text-foreground">Updated by</span>
-        <p>{cell(row, "updated_by")}</p>
+        <p>{formatAuditWho(row.updated_by, usersById)}</p>
       </div>
       <div>
         <span className="font-medium text-foreground">Updated at</span>
-        <p>{cell(row, "updated_at")}</p>
+        <p>{formatAuditWhen(row.updated_at)}</p>
       </div>
     </div>
   );
@@ -167,7 +208,6 @@ export function SetupEntityPanel({
   buildCreateBody,
   buildUpdateBody,
   statusActions,
-  statsExtra,
 }: {
   tab: HrSetupTab;
   columns: ColumnDef[];
@@ -182,7 +222,6 @@ export function SetupEntityPanel({
     deactivate?: string;
     archive?: string;
   };
-  statsExtra?: (rows: SetupRow[]) => { label: string; value: number | string }[];
 }) {
   const [rows, setRows] = useState<SetupRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -206,6 +245,7 @@ export function SetupEntityPanel({
     employees: { value: string; label: string }[];
     shifts: { value: string; label: string }[];
   }>({ companies: [], branches: [], departments: [], employees: [], shifts: [] });
+  const [usersById, setUsersById] = useState<Record<string, string>>({});
 
   const needsOrgLookups = fields.some((f) => f.optionsSource);
 
@@ -227,6 +267,22 @@ export function SetupEntityPanel({
         const lookups = await loadSetupOrgLookups();
         setOrgLookups(lookups);
       }
+      // Best-effort user directory for audit "created by / updated by" labels
+      void resourceService
+        .list<Record<string, unknown>>("/users")
+        .then((res) => {
+          const map: Record<string, string> = {};
+          const list = Array.isArray(res.data) ? res.data : [];
+          for (const u of list) {
+            const id = String(u.id ?? "");
+            if (!id) continue;
+            map[id] = String(u.display_name || u.email || id);
+          }
+          setUsersById(map);
+        })
+        .catch(() => {
+          /* permission may block; UUIDs still show as short ids */
+        });
     } catch (err) {
       toast(err instanceof ApiClientError ? err.message : "Failed to load records", "error");
       setRows([]);
@@ -256,24 +312,6 @@ export function SetupEntityPanel({
   const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const pageRows = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
   const columnWidths = useMemo(() => setupColumnWidths(columns), [columns]);
-
-  const stats = useMemo(() => {
-    const base = [
-      { label: "Total", value: rows.length },
-      {
-        label: "Active",
-        value: rows.filter((r) => String(r.status).toLowerCase() === "active").length,
-      },
-      {
-        label: "Inactive / Archived",
-        value: rows.filter((r) =>
-          ["inactive", "archived", "draft"].includes(String(r.status).toLowerCase()),
-        ).length,
-      },
-      { label: "Selected", value: selected.size },
-    ];
-    return statsExtra ? [...base, ...statsExtra(rows)] : base;
-  }, [rows, selected, statsExtra]);
 
   function resolveFieldOptions(f: FieldDef): { value: string; label: string }[] {
     if (f.options?.length) return f.options;
@@ -420,7 +458,13 @@ export function SetupEntityPanel({
       } else if (tab.apiPath) {
         for (const id of ids) {
           if (type === "delete") {
-            await resourceService.delete(tab.apiPath, id);
+            const res = await resourceService.delete(tab.apiPath, id);
+            if (ids.length === 1 && res.message && res.message !== "OK") {
+              toast(res.message, "success");
+              setConfirm(null);
+              await load();
+              return;
+            }
           } else if (type === "archive") {
             await resourceService.update(tab.apiPath, id, {
               status: statusActions?.archive ?? "archived",
@@ -489,17 +533,6 @@ export function SetupEntityPanel({
             </Button>
           ) : null}
         </div>
-      </div>
-
-      <div className="grid w-full gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        {stats.map((s) => (
-          <div key={s.label} className="rounded-xl border border-border/70 bg-card px-3 py-2.5 shadow-sm">
-            <p className="text-[10px] font-medium tracking-wide text-muted-foreground uppercase">
-              {s.label}
-            </p>
-            <p className="mt-0.5 text-xl font-semibold tracking-tight">{s.value}</p>
-          </div>
-        ))}
       </div>
 
       <div className="flex w-full flex-wrap items-center gap-2">
@@ -879,7 +912,7 @@ export function SetupEntityPanel({
             </div>
           ))}
         </div>
-        {active ? <AuditBlock row={active} /> : null}
+        {active ? <AuditBlock row={active} usersById={usersById} /> : null}
       </SetupDrawer>
 
       <SetupDrawer
@@ -896,10 +929,7 @@ export function SetupEntityPanel({
         {active ? (
           <>
             <p className="text-sm font-medium">{cell(active, ...nameKeys)}</p>
-            <AuditBlock row={active} />
-            <p className="mt-3 text-[11px] text-muted-foreground">
-              Full change-log timeline requires audit API enrichment. Showing available audit columns.
-            </p>
+            <AuditBlock row={active} usersById={usersById} />
           </>
         ) : null}
       </SetupDrawer>

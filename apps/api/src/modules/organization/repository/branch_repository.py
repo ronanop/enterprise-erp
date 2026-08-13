@@ -51,6 +51,7 @@ class BranchRepository(OrgScopedRepository):
         city: str | None = None,
         state_code: str | None = None,
         country_code: str | None = None,
+        head_employee_id: UUID | None = None,
     ) -> BranchEntity:
         row = OrgBranch(
             id=uuid4(),
@@ -63,7 +64,8 @@ class BranchRepository(OrgScopedRepository):
             city=city,
             state_code=state_code,
             country_code=country_code,
-            status="draft",
+            head_employee_id=head_employee_id,
+            status="active",
             created_by=ctx.user_id,
             updated_by=ctx.user_id,
         )

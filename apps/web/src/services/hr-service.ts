@@ -245,10 +245,12 @@ export async function listHrEmployeeOptions(): Promise<HrOption[]> {
 export async function listLeaveTypeOptions(): Promise<HrOption[]> {
   try {
     const res = await resourceService.list("/hr/leave-types");
-    return asArray(res.data).map((r) => ({
-      id: String(r.id),
-      label: String(r.leave_type_name ?? r.leave_type_code ?? r.name ?? r.id),
-    }));
+    return asArray(res.data)
+      .filter((r) => String(r.status ?? "active").toLowerCase() === "active")
+      .map((r) => ({
+        id: String(r.id),
+        label: String(r.leave_type_name ?? r.leave_type_code ?? r.name ?? r.id),
+      }));
   } catch {
     return [];
   }

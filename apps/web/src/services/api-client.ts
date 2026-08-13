@@ -147,7 +147,13 @@ export async function apiClient<T>(
   try {
     payload = (await response.json()) as ApiResponse<T> | ErrorResponse;
   } catch {
-    throw new ApiClientError("Invalid API response", response.status);
+    const hint =
+      response.status >= 500
+        ? `Server error (${response.status}). Check that the API is running and try again.`
+        : response.status === 0 || !response.status
+          ? "Cannot reach API. Check that the backend is running on port 8000."
+          : `Invalid API response (${response.status})`;
+    throw new ApiClientError(hint, response.status);
   }
 
   if (!response.ok || payload.success === false) {

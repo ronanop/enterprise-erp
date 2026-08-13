@@ -17,7 +17,7 @@ import {
 } from "@/services/hr-master-connector";
 import { validateEmail, validateMobile } from "@/lib/employee-validators";
 import { EMPLOYMENT_TYPE_OPTIONS } from "@/config/hr-master-options";
-import { listEmploymentTypeOptions } from "@/services/hr-setup-service";
+import { listEmploymentTypeOptions, listEntityOptions } from "@/services/hr-setup-service";
 import type { StartOnboardingInput } from "@/types/onboarding-management";
 
 type Props = {
@@ -32,6 +32,7 @@ function digitsOnly(value: string): string {
 
 export function StartOnboardingDrawer({ open, onClose, onSubmit }: Props) {
   const [joiningDate, setJoiningDate] = useState("");
+  const [entityId, setEntityId] = useState("");
   const [department, setDepartment] = useState("");
   const [designation, setDesignation] = useState("");
   const [reportingManager, setReportingManager] = useState("");
@@ -55,11 +56,15 @@ export function StartOnboardingDrawer({ open, onClose, onSubmit }: Props) {
     branches: [],
   });
   const [employmentTypes, setEmploymentTypes] = useState(EMPLOYMENT_TYPE_OPTIONS);
+  const [entities, setEntities] = useState<{ value: string; label: string }[]>([]);
 
   useEffect(() => {
     if (!open) return;
-    void Promise.all([loadHrMasterDirectory(), listEmploymentTypeOptions()]).then(
-      ([m, types]) => {
+    void Promise.all([
+      loadHrMasterDirectory(),
+      listEmploymentTypeOptions(),
+      listEntityOptions(),
+    ]).then(([m, types, entityOpts]) => {
       setMasters({
         departments: m.departments,
         designations: m.designations,
@@ -67,9 +72,14 @@ export function StartOnboardingDrawer({ open, onClose, onSubmit }: Props) {
         branches: m.branches,
       });
       setEmploymentTypes(types);
+      setEntities(entityOpts);
       setBranch((prev) => prev || m.branches[0]?.label || "Head Office");
+      setEntityId((prev) => prev || entityOpts[0]?.value || "");
       if (!m.designations.length) {
         toast("No designations found — add them in HR Setup → Designations", "error");
+      }
+      if (!entityOpts.length) {
+        toast("No legal entities found — add them in HR Setup → Legal Entities", "error");
       }
     });
   }, [open]);
@@ -82,6 +92,7 @@ export function StartOnboardingDrawer({ open, onClose, onSubmit }: Props) {
 
     if (!name) next.push("Candidate name is required");
     if (!joiningDate) next.push("Joining date is required");
+    if (!entityId) next.push("Legal entity is required");
 
     const emailErr = validateEmail(email);
     if (emailErr) next.push(emailErr);
@@ -113,6 +124,7 @@ export function StartOnboardingDrawer({ open, onClose, onSubmit }: Props) {
     const name = candidateName.trim();
     const email = candidateEmail.trim();
     const phone = digitsOnly(candidatePhone);
+    const entity = entities.find((e) => e.value === entityId);
 
     setSaving(true);
     try {
@@ -122,6 +134,8 @@ export function StartOnboardingDrawer({ open, onClose, onSubmit }: Props) {
         candidateEmail: email,
         candidatePhone: phone,
         joiningDate,
+        entityId,
+        entityName: entity?.label || "",
         department: department || masters.departments[0]?.label || "General",
         designation,
         reportingManager,
@@ -136,6 +150,7 @@ export function StartOnboardingDrawer({ open, onClose, onSubmit }: Props) {
       setJoiningDate("");
       setDesignation("");
       setDepartment("");
+      setEntityId(entities[0]?.value || "");
       setErrors([]);
     } finally {
       setSaving(false);
@@ -211,6 +226,19 @@ export function StartOnboardingDrawer({ open, onClose, onSubmit }: Props) {
               onChange={(e) => setJoiningDate(e.target.value)}
             />
           </SetupField>
+          <SetupField label="Legal entity" required hint="HR Setup → Legal Entities">
+            <SetupSelect value={entityId} onChange={(e) => setEntityId(e.target.value)}>
+              <option value="">Select entity…</option>
+              {entities.map((e) => (
+                <option key={e.value} value={e.value}>
+                  {e.label}
+                </option>
+              ))}
+            </SetupSelect>
+          </SetupField>
+        </div>
+
+        <div className="grid gap-3 sm:grid-cols-2">
           <SetupField label="Employment type">
             <SetupSelect
               value={employmentType}

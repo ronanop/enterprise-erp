@@ -67,6 +67,25 @@ function mapLeaveType(row: SetupRow): SetupRow {
   };
 }
 
+function mapJobLevel(row: SetupRow): SetupRow {
+  return {
+    ...row,
+    code: row.level_code,
+    name: row.level_name,
+    sort_order: row.rank_order ?? 0,
+  };
+}
+
+function mapGrade(row: SetupRow): SetupRow {
+  return {
+    ...row,
+    code: row.grade_code,
+    name: row.grade_name,
+    min_salary: row.min_ctc ?? "",
+    max_salary: row.max_ctc ?? "",
+  };
+}
+
 function mapHoliday(row: SetupRow): SetupRow {
   return {
     ...row,
@@ -404,7 +423,9 @@ const TAB_CONFIG: Partial<Record<HrSetupTabId, TabConfig>> = {
     }),
   },
   "job-levels": {
-    nameKeys: ["name"],
+    nameKeys: ["name", "level_name"],
+    codeKey: "level_code",
+    mapApiRow: mapJobLevel,
     columns: [
       { key: "name", label: "Level" },
       { key: "code", label: "Code" },
@@ -412,15 +433,28 @@ const TAB_CONFIG: Partial<Record<HrSetupTabId, TabConfig>> = {
       { key: "status", label: "Status" },
     ],
     fields: [
-      { key: "name", label: "Level Name", required: true },
-      { key: "code", label: "Code", required: true, readOnly: true },
-      { key: "sort_order", label: "Sort Order", type: "number" },
-      { key: "description", label: "Description", type: "textarea" },
+      { key: "level_name", label: "Level Name", required: true },
+      { key: "level_code", label: "Code", required: true, readOnly: true },
+      { key: "rank_order", label: "Sort Order", type: "number" },
       STATUS_FIELD,
     ],
+    buildCreateBody: (f) => ({
+      level_code: f.level_code,
+      level_name: f.level_name,
+      rank_order: f.rank_order ? Number(f.rank_order) : 0,
+      status: f.status || "active",
+    }),
+    buildUpdateBody: (f) => ({
+      level_name: f.level_name,
+      rank_order: f.rank_order != null && f.rank_order !== "" ? Number(f.rank_order) : undefined,
+      status: f.status,
+      version: f.version ? Number(f.version) : undefined,
+    }),
   },
   grades: {
-    nameKeys: ["name"],
+    nameKeys: ["name", "grade_name"],
+    codeKey: "grade_code",
+    mapApiRow: mapGrade,
     columns: [
       { key: "name", label: "Grade" },
       { key: "code", label: "Code" },
@@ -429,13 +463,26 @@ const TAB_CONFIG: Partial<Record<HrSetupTabId, TabConfig>> = {
       { key: "status", label: "Status" },
     ],
     fields: [
-      { key: "name", label: "Grade Name", required: true, placeholder: "L1" },
-      { key: "code", label: "Code", required: true, readOnly: true },
-      { key: "min_salary", label: "Minimum Salary", type: "number" },
-      { key: "max_salary", label: "Maximum Salary", type: "number" },
-      { key: "description", label: "Description", type: "textarea" },
+      { key: "grade_name", label: "Grade Name", required: true, placeholder: "L1" },
+      { key: "grade_code", label: "Code", required: true, readOnly: true },
+      { key: "min_ctc", label: "Minimum Salary", type: "number" },
+      { key: "max_ctc", label: "Maximum Salary", type: "number" },
       STATUS_FIELD,
     ],
+    buildCreateBody: (f) => ({
+      grade_code: f.grade_code,
+      grade_name: f.grade_name,
+      min_ctc: f.min_ctc ? Number(f.min_ctc) : null,
+      max_ctc: f.max_ctc ? Number(f.max_ctc) : null,
+      status: f.status || "active",
+    }),
+    buildUpdateBody: (f) => ({
+      grade_name: f.grade_name,
+      min_ctc: f.min_ctc != null && f.min_ctc !== "" ? Number(f.min_ctc) : null,
+      max_ctc: f.max_ctc != null && f.max_ctc !== "" ? Number(f.max_ctc) : null,
+      status: f.status,
+      version: f.version ? Number(f.version) : undefined,
+    }),
   },
   "work-locations": {
     nameKeys: ["name", "location_name"],
@@ -501,6 +548,17 @@ const TAB_CONFIG: Partial<Record<HrSetupTabId, TabConfig>> = {
         f.geofence_radius_meters != null && f.geofence_radius_meters !== ""
           ? Number(f.geofence_radius_meters)
           : null,
+    }),
+    buildUpdateBody: (f) => ({
+      location_name: f.location_name,
+      location_type: f.location_type || "office",
+      latitude: f.latitude != null && f.latitude !== "" ? Number(f.latitude) : null,
+      longitude: f.longitude != null && f.longitude !== "" ? Number(f.longitude) : null,
+      geofence_radius_meters:
+        f.geofence_radius_meters != null && f.geofence_radius_meters !== ""
+          ? Number(f.geofence_radius_meters)
+          : null,
+      status: f.status || "active",
     }),
   },
   rooms: {
@@ -596,11 +654,19 @@ const TAB_CONFIG: Partial<Record<HrSetupTabId, TabConfig>> = {
     columns: [
       { key: "name", label: "Entity" },
       { key: "code", label: "Code" },
+      { key: "legal_name", label: "Legal name" },
       { key: "status", label: "Status" },
     ],
     fields: [
-      { key: "name", label: "Entity name", required: true },
+      { key: "name", label: "Entity name", required: true, placeholder: "e.g. Cache Digitech Pvt Ltd" },
+      { key: "legal_name", label: "Legal name", placeholder: "Registered legal name (optional)" },
       { key: "code", label: "Code", required: true, readOnly: true },
+      {
+        key: "description",
+        label: "Notes",
+        type: "textarea",
+        hint: "Used on onboarding and Add Employee legal-entity selection",
+      },
       STATUS_FIELD,
     ],
   },
@@ -751,6 +817,19 @@ const TAB_CONFIG: Partial<Record<HrSetupTabId, TabConfig>> = {
       { key: "requires_attachment", label: "Requires Attachment", type: "checkbox" },
       { key: "carry_forward_allowed", label: "Carry Forward Allowed", type: "checkbox" },
       { key: "max_carry_forward_days", label: "Max Carry Forward Days", type: "number" },
+      { key: "encashment_allowed", label: "Encashment Allowed", type: "checkbox" },
+      {
+        key: "sandwich_rule_enabled",
+        label: "Sandwich Rule",
+        type: "checkbox",
+        hint: "Count weekly offs between leave days",
+      },
+      {
+        key: "leave_cycle_start_day",
+        label: "Cycle Start Day",
+        type: "number",
+        hint: "Day of month leave cycle starts (1–28)",
+      },
       STATUS_FIELD,
     ],
     buildCreateBody: (f) => ({
@@ -764,6 +843,9 @@ const TAB_CONFIG: Partial<Record<HrSetupTabId, TabConfig>> = {
       max_carry_forward_days: f.max_carry_forward_days
         ? Number(f.max_carry_forward_days)
         : null,
+      encashment_allowed: f.encashment_allowed === "true",
+      sandwich_rule_enabled: f.sandwich_rule_enabled === "true",
+      leave_cycle_start_day: f.leave_cycle_start_day ? Number(f.leave_cycle_start_day) : 1,
       status: f.status || "active",
     }),
     buildUpdateBody: (f) => ({
@@ -777,6 +859,14 @@ const TAB_CONFIG: Partial<Record<HrSetupTabId, TabConfig>> = {
       max_carry_forward_days:
         f.max_carry_forward_days != null && f.max_carry_forward_days !== ""
           ? Number(f.max_carry_forward_days)
+          : undefined,
+      encashment_allowed:
+        f.encashment_allowed != null ? f.encashment_allowed === "true" : undefined,
+      sandwich_rule_enabled:
+        f.sandwich_rule_enabled != null ? f.sandwich_rule_enabled === "true" : undefined,
+      leave_cycle_start_day:
+        f.leave_cycle_start_day != null && f.leave_cycle_start_day !== ""
+          ? Number(f.leave_cycle_start_day)
           : undefined,
       status: f.status,
       version: f.version ? Number(f.version) : undefined,

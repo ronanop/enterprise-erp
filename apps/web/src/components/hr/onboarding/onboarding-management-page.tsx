@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import Link from "next/link";
 import {
   Download,
   Eye,
@@ -42,7 +41,6 @@ import {
   downloadTextFile,
   exportOnboardingCsv,
   filterOnboardingCases,
-  joiningThisWeek,
   listOnboardingAudit,
   loadOnboardingDirectory,
   sendInvitation,
@@ -50,6 +48,7 @@ import {
   updateChecklistItem,
   verifyDocument,
   type OnboardingDirectory,
+  type OnboardingStatBucket,
 } from "@/services/onboarding-management-service";
 import type {
   InvitationChannel,
@@ -66,7 +65,35 @@ import { resolveOnboardingDisplayStatus } from "@/lib/onboarding-display-status"
 
 const PAGE = 10;
 
-type Tab = "cases" | "checklist" | "documents" | "reports" | "audit";
+type Tab = "cases" | "checklist" | "documents" | "audit";
+
+const STAT_CARDS: {
+  key: OnboardingStatBucket;
+  label: string;
+  statKey: keyof ReturnType<typeof computeOnboardingStats>;
+  tab: Tab;
+}[] = [
+  { key: "invitations_sent", label: "Invitations Sent", statKey: "invitationsSent", tab: "cases" },
+  { key: "pending_forms", label: "Pending Forms", statKey: "pendingForms", tab: "cases" },
+  {
+    key: "documents_pending",
+    label: "Documents Pending",
+    statKey: "documentsPending",
+    tab: "documents",
+  },
+  { key: "ready_to_join", label: "Ready to Join", statKey: "readyToJoin", tab: "cases" },
+  { key: "pending_join", label: "Pending Join", statKey: "pendingJoin", tab: "cases" },
+  { key: "joined_today", label: "Joined Today", statKey: "joinedToday", tab: "cases" },
+];
+
+const STAT_LABELS: Record<OnboardingStatBucket, string> = {
+  invitations_sent: "Invitations Sent",
+  pending_forms: "Pending Forms",
+  documents_pending: "Documents Pending",
+  ready_to_join: "Ready to Join",
+  pending_join: "Pending Join",
+  joined_today: "Joined Today",
+};
 
 export function OnboardingManagementPage() {
   const [dir, setDir] = useState<OnboardingDirectory | null>(null);
@@ -74,6 +101,7 @@ export function OnboardingManagementPage() {
   const [tab, setTab] = useState<Tab>("cases");
   const [query, setQuery] = useState("");
   const [filters, setFilters] = useState<OnboardingFilters>(() => emptyOnboardingFilters());
+  const [statsBucket, setStatsBucket] = useState<OnboardingStatBucket | null>(null);
   const [page, setPage] = useState(1);
   const [startOpen, setStartOpen] = useState(false);
   const [inviteCase, setInviteCase] = useState<OnboardingCase | null>(null);
@@ -102,19 +130,28 @@ export function OnboardingManagementPage() {
 
   const stats = useMemo(() => computeOnboardingStats(dir?.cases ?? []), [dir]);
   const filtered = useMemo(
-    () => filterOnboardingCases(dir?.cases ?? [], query, filters),
-    [dir, query, filters],
+    () => filterOnboardingCases(dir?.cases ?? [], query, filters, statsBucket),
+    [dir, query, filters, statsBucket],
   );
   const pageRows = useMemo(() => {
     const start = (page - 1) * PAGE;
     return filtered.slice(start, start + PAGE);
   }, [filtered, page]);
 
-  useEffect(() => setPage(1), [query, filters, tab]);
+  useEffect(() => setPage(1), [query, filters, tab, statsBucket]);
 
   const audit = useMemo(() => listOnboardingAudit(), [dir, tab]);
-  const weekJoiners = useMemo(() => joiningThisWeek(dir?.cases ?? []), [dir]);
   const authBlocked = !isAuthenticated() && !loading && !(dir?.cases.length);
+
+  function selectStatCard(card: (typeof STAT_CARDS)[number]) {
+    const next = statsBucket === card.key ? null : card.key;
+    setStatsBucket(next);
+    if (next) {
+      setTab(card.tab);
+      setFilters(emptyOnboardingFilters());
+      setQuery("");
+    }
+  }
 
   async function handleStart(input: StartOnboardingInput) {
     const created = await startOnboarding(input);
@@ -175,25 +212,46 @@ export function OnboardingManagementPage() {
       {authBlocked ? <HrAuthBanner /> : null}
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
-        {[
-          { label: "Invitations Sent", value: stats.invitationsSent },
-          { label: "Pending Forms", value: stats.pendingForms },
-          { label: "Documents Pending", value: stats.documentsPending },
-          { label: "Ready to Join", value: stats.readyToJoin },
-          { label: "Pending Join", value: stats.pendingJoin },
-          { label: "Joined Today", value: stats.joinedToday },
-        ].map((k) => (
-          <div
-            key={k.label}
-            className="rounded-xl border border-border/70 bg-card px-3 py-3 shadow-sm transition-shadow duration-200 hover:shadow-md"
-          >
-            <p className="text-[10px] font-medium tracking-wide text-muted-foreground uppercase">
-              {k.label}
-            </p>
-            <p className="mt-1 text-2xl font-semibold tracking-tight text-foreground">{k.value}</p>
-          </div>
-        ))}
+        {STAT_CARDS.map((card) => {
+          const active = statsBucket === card.key;
+          const value = Number(stats[card.statKey] ?? 0);
+          return (
+            <button
+              key={card.key}
+              type="button"
+              onClick={() => selectStatCard(card)}
+              aria-pressed={active}
+              className={cn(
+                "cursor-pointer rounded-xl border bg-card px-3 py-3 text-left shadow-sm transition-all duration-200",
+                "hover:border-primary/40 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
+                active
+                  ? "border-primary/50 ring-1 ring-primary/20"
+                  : "border-border/70",
+              )}
+            >
+              <p className="text-[10px] font-medium tracking-wide text-muted-foreground uppercase">
+                {card.label}
+              </p>
+              <p className="mt-1 text-2xl font-semibold tracking-tight text-foreground">{value}</p>
+            </button>
+          );
+        })}
       </div>
+
+      {statsBucket ? (
+        <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+          <span>Filtered by card:</span>
+          <span className="font-medium text-foreground">{STAT_LABELS[statsBucket]}</span>
+          <span>· {filtered.length} case{filtered.length === 1 ? "" : "s"}</span>
+          <button
+            type="button"
+            className="cursor-pointer font-medium text-primary transition-colors duration-200 hover:underline"
+            onClick={() => setStatsBucket(null)}
+          >
+            Clear
+          </button>
+        </div>
+      ) : null}
 
       <div className="flex flex-wrap gap-1 border-b border-border/70 pb-px">
         {(
@@ -201,7 +259,6 @@ export function OnboardingManagementPage() {
             ["cases", "Cases"],
             ["checklist", "Checklist Board"],
             ["documents", "Documents"],
-            ["reports", "Reports"],
             ["audit", "Audit"],
           ] as const
         ).map(([id, label]) => (
@@ -289,6 +346,7 @@ export function OnboardingManagementPage() {
                     <th className="px-3 py-2 font-medium">Case</th>
                     <th className="px-3 py-2 font-medium">Candidate</th>
                     <th className="px-3 py-2 font-medium">Join</th>
+                    <th className="px-3 py-2 font-medium">Entity</th>
                     <th className="px-3 py-2 font-medium">Dept</th>
                     <th className="px-3 py-2 font-medium">Progress</th>
                     <th className="px-3 py-2 font-medium">Status</th>
@@ -307,6 +365,7 @@ export function OnboardingManagementPage() {
                         <p className="text-[10px] text-muted-foreground">{row.candidateEmail}</p>
                       </td>
                       <td className="px-3 py-2">{row.joiningDate || "—"}</td>
+                      <td className="px-3 py-2">{row.entityName || "—"}</td>
                       <td className="px-3 py-2">{row.department}</td>
                       <td className="px-3 py-2">
                         <div className="flex items-center gap-2">
@@ -467,43 +526,6 @@ export function OnboardingManagementPage() {
               description="Documents appear after candidates upload via the secure portal."
             />
           ) : null}
-        </div>
-      ) : null}
-
-      {tab === "reports" ? (
-        <div className="grid gap-3 md:grid-cols-2">
-          <ReportCard title="Completion Rate" value={`${stats.completionRate}%`} />
-          <ReportCard title="Total Cases" value={String(stats.total)} />
-          <ReportCard title="Joining This Week" value={String(weekJoiners.length)} />
-          <ReportCard title="Overdue Tasks" value={String(stats.overdue)} />
-          <div className="rounded-xl border border-border/70 bg-card p-4 md:col-span-2">
-            <p className="mb-2 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
-              Joining This Week
-            </p>
-            {weekJoiners.length === 0 ? (
-              <p className="text-xs text-muted-foreground">No joiners scheduled this week.</p>
-            ) : (
-              <ul className="space-y-1 text-xs">
-                {weekJoiners.map((c) => (
-                  <li key={c.id} className="flex justify-between gap-2">
-                    <span>
-                      {c.candidateName} · {c.department}
-                    </span>
-                    <span className="text-muted-foreground">{c.joiningDate}</span>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-          <div className="rounded-xl border border-border/70 bg-card p-4 md:col-span-2">
-            <p className="text-xs text-muted-foreground">
-              Pipeline: Start onboarding → Candidate portal → HR verification → Employee created →
-              Workforce assignment in{" "}
-              <Link href="/hr/workforce" className="cursor-pointer text-primary underline">
-                Employee Management
-              </Link>
-            </p>
-          </div>
         </div>
       ) : null}
 
@@ -699,17 +721,6 @@ export function OnboardingManagementPage() {
             });
         }}
       />
-    </div>
-  );
-}
-
-function ReportCard({ title, value }: { title: string; value: string }) {
-  return (
-    <div className="rounded-xl border border-border/70 bg-card px-4 py-4 shadow-sm">
-      <p className="text-[10px] font-medium tracking-wide text-muted-foreground uppercase">
-        {title}
-      </p>
-      <p className="mt-1 text-2xl font-semibold tracking-tight">{value}</p>
     </div>
   );
 }

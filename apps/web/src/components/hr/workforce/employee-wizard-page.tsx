@@ -35,6 +35,7 @@ import {
 } from "@/services/employee-management-service";
 import { loadOnboardingDirectory } from "@/services/onboarding-management-service";
 import { listSalaryStructureOptions } from "@/services/hr-master-connector";
+import { listEntityOptions } from "@/services/hr-setup-service";
 import type { OnboardingCase } from "@/types/onboarding-management";
 import type { EmployeeDocumentItem, EmployeeWizardDraft, EducationEntry, PreviousEmploymentEntry } from "@/types/employee-management";
 import {
@@ -82,11 +83,16 @@ export function EmployeeWizardPage() {
   const [onboardingOpen, setOnboardingOpen] = useState(false);
   const [onboardingCases, setOnboardingCases] = useState<OnboardingCase[]>([]);
   const [previewCase, setPreviewCase] = useState<OnboardingCase | null>(null);
+  const [entityOptions, setEntityOptions] = useState<{ value: string; label: string }[]>([]);
 
   const load = useCallback(async () => {
-    const { records: rows, options: opts } = await loadEmployeeDirectory();
+    const [{ records: rows, options: opts }, ents] = await Promise.all([
+      loadEmployeeDirectory(),
+      listEntityOptions(),
+    ]);
     setRecords(rows);
     setOptions(opts);
+    setEntityOptions(ents);
     if (duplicateId) {
       const src = getEmployeeById(rows, duplicateId);
       if (src) {
@@ -115,11 +121,14 @@ export function EmployeeWizardPage() {
         const branchId = d.employment.branchId || opts.branches[0]?.id || "";
         const departmentId = d.employment.departmentId || opts.departments[0]?.id || "";
         const heads = resolveOrgHeadsForEmployment(branchId, departmentId, opts);
+        const entityId = d.employment.entityId || ents[0]?.value || "";
         return {
         ...d,
         employment: {
           ...d.employment,
           joiningDate: d.employment.joiningDate || new Date().toISOString().slice(0, 10),
+          entityId,
+          entityName: d.employment.entityName || ents.find((e) => e.value === entityId)?.label || "",
           branchId,
           branchName: d.employment.branchName || opts.branches[0]?.label || "",
           departmentId,
@@ -157,6 +166,7 @@ export function EmployeeWizardPage() {
     }
     if (step === 1) {
       if (!draft.employment.joiningDate) e.push("Joining date is required");
+      if (!draft.employment.entityId && !entityOptions[0]) e.push("Legal entity is required");
       if (!draft.employment.branchId && !options?.branches[0]) e.push("Branch is required");
       if (!draft.employment.locationId && !draft.employment.location.trim()) {
         e.push("Location is required");
@@ -643,6 +653,25 @@ export function EmployeeWizardPage() {
               />
             ) : null}
             <EmsFormGrid>
+              <SetupField label="Legal entity" required hint="HR Setup → Legal Entities">
+                <SetupSelect
+                  value={draft.employment.entityId}
+                  onChange={(e) => {
+                    const id = e.target.value;
+                    patchEmployment({
+                      entityId: id,
+                      entityName: entityOptions.find((x) => x.value === id)?.label ?? "",
+                    });
+                  }}
+                >
+                  <option value="">Select entity…</option>
+                  {entityOptions.map((ent) => (
+                    <option key={ent.value} value={ent.value}>
+                      {ent.label}
+                    </option>
+                  ))}
+                </SetupSelect>
+              </SetupField>
               <SetupField label="Joining date" required>
                 <SetupInput type="date" value={draft.employment.joiningDate} onChange={(e) => patchEmployment({ joiningDate: e.target.value })} />
               </SetupField>
@@ -1500,10 +1529,11 @@ function ReviewStep({ draft }: { draft: EmployeeWizardDraft }) {
       ]} />
       <ReviewBlock title="Employment" lines={[
         draft.employment.employeeCode,
+        draft.employment.entityName,
         draft.employment.designationName,
         draft.employment.joiningDate,
         draft.employment.lifecycleStatus,
-      ]} />
+      ].filter(Boolean)} />
       <ReviewBlock title="Government IDs" lines={[draft.governmentIds.pan, draft.governmentIds.aadhaar].filter(Boolean)} />
       <ReviewBlock title="Bank" lines={[draft.bank.bankName, draft.bank.ifsc].filter(Boolean)} />
       <ReviewBlock

@@ -43,6 +43,7 @@ class BranchService:
         city: str | None = None,
         state_code: str | None = None,
         country_code: str | None = None,
+        head_employee_id: UUID | None = None,
     ):
         if self._companies.get_by_id(ctx, company_id) is None:
             raise NotFoundException("Company not found")
@@ -57,6 +58,7 @@ class BranchService:
             city=city,
             state_code=state_code,
             country_code=country_code,
+            head_employee_id=head_employee_id,
         )
         self._audit.log_entity_change(
             tenant_id=ctx.tenant_id,

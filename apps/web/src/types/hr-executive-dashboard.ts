@@ -106,7 +106,8 @@ export type NotificationItem = {
     | "document"
     | "probation"
     | "offer"
-    | "policy";
+    | "policy"
+    | "birthday";
   title: string;
   body: string;
   at: string;

@@ -387,6 +387,7 @@ export async function loadLeaveDirectory(): Promise<LeaveDirectory> {
       })),
       leaveTypes: leaveTypes
         .filter((t) => isVisibleLeaveType(t.code, t.name))
+        .filter((t) => String(t.status ?? "active").toLowerCase() === "active")
         .map((t) => ({
         id: t.id,
         label: t.name,

@@ -594,12 +594,20 @@ export function CandidateOnboardingPortal({ token }: { token: string }) {
       <div className="mb-6">
         <p className="text-[11px] font-medium tracking-wide text-muted-foreground uppercase">
           Secure onboarding · {caseRow.caseCode}
+          {caseRow.entityName ? ` · ${caseRow.entityName}` : ""}
         </p>
         <h1 className="mt-1 text-xl font-semibold tracking-tight text-foreground">
           Welcome, {caseRow.candidateName}
         </h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          Complete your profile before joining on {caseRow.joiningDate || "—"}. Link expires{" "}
+          Complete your profile before joining on {caseRow.joiningDate || "—"}.
+          {caseRow.entityName ? (
+            <>
+              {" "}
+              You are joining <span className="font-medium text-foreground">{caseRow.entityName}</span>.
+            </>
+          ) : null}{" "}
+          Link expires{" "}
           {caseRow.invitation
             ? new Date(caseRow.invitation.expiresAt).toLocaleDateString()
             : "soon"}

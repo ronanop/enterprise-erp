@@ -5,6 +5,8 @@ export function hrNotificationHref(n: Pick<NotificationItem, "kind" | "href">): 
   switch (n.kind) {
     case "leave":
       return "/hr/ess-inbox";
+    case "birthday":
+      return "/hr";
     case "payroll_due":
       return "/hr/payroll";
     case "interview":

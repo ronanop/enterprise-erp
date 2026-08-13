@@ -234,6 +234,9 @@ export type OnboardingCase = {
   offerId: string;
   offerCode: string;
   joiningDate: string;
+  /** HR Setup → Legal Entities */
+  entityId?: string;
+  entityName?: string;
   department: string;
   designation: string;
   reportingManager: string;
@@ -350,6 +353,8 @@ export type StartOnboardingInput = {
   candidateEmail: string;
   candidatePhone: string;
   joiningDate: string;
+  entityId: string;
+  entityName: string;
   department: string;
   designation: string;
   reportingManager: string;

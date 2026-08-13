@@ -769,23 +769,40 @@ function buildNotifications(
   const items: NotificationItem[] = [];
 
   if (approvals.length > 0) {
-    items.push({
-      id: "n-leave",
-      kind: "leave",
-      title: "Leave Pending",
-      body: `${approvals.filter((a) => a.category === "leave").length} leave request(s) need attention.`,
-      at: new Date(now).toISOString(),
-      unread: true,
-    });
+    const leaveCount = approvals.filter((a) => a.category === "leave").length;
+    if (leaveCount > 0) {
+      items.push({
+        id: "n-leave",
+        kind: "leave",
+        title: "Leave Pending",
+        body: `${leaveCount} leave request(s) need attention.`,
+        at: new Date(now).toISOString(),
+        unread: true,
+        href: "/hr/ess-inbox",
+      });
+    }
+    const other = approvals.length - leaveCount;
+    if (other > 0 && leaveCount === 0) {
+      items.push({
+        id: "n-approvals",
+        kind: "leave",
+        title: "Pending Approvals",
+        body: `${approvals.length} approval(s) need attention.`,
+        at: new Date(now).toISOString(),
+        unread: true,
+        href: "/hr/ess-inbox",
+      });
+    }
   }
   if (stats.upcomingBirthdays > 0) {
     items.push({
       id: "n-bday",
-      kind: "policy",
+      kind: "birthday",
       title: "Upcoming Birthdays",
       body: `${stats.upcomingBirthdays} birthday(s) in the next 30 days.`,
       at: new Date(now - 3600_000).toISOString(),
       unread: true,
+      href: "/hr",
     });
   }
   if (stats.onProbation > 0) {

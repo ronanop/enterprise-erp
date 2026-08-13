@@ -1,9 +1,9 @@
 """Pydantic schemas for organization APIs."""
 
-from datetime import date
+from datetime import date, datetime
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class CompanyCreateRequest(BaseModel):
@@ -26,6 +26,8 @@ class CompanyUpdateRequest(BaseModel):
 
 
 class CompanyResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True, extra="ignore")
+
     id: UUID
     tenant_id: UUID
     company_code: str
@@ -36,6 +38,10 @@ class CompanyResponse(BaseModel):
     status: str
     fiscal_year_start_month: int
     timezone: str
+    created_at: datetime | None = None
+    created_by: UUID | None = None
+    updated_at: datetime | None = None
+    updated_by: UUID | None = None
 
 
 class BranchCreateRequest(BaseModel):
@@ -60,6 +66,8 @@ class BranchUpdateRequest(BaseModel):
 
 
 class BranchResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True, extra="ignore")
+
     id: UUID
     tenant_id: UUID
     company_id: UUID
@@ -68,6 +76,10 @@ class BranchResponse(BaseModel):
     branch_type: str
     status: str
     head_employee_id: UUID | None = None
+    created_at: datetime | None = None
+    created_by: UUID | None = None
+    updated_at: datetime | None = None
+    updated_by: UUID | None = None
 
 
 class DepartmentCreateRequest(BaseModel):

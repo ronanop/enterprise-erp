@@ -6,7 +6,7 @@ import { useSearchParams } from "next/navigation";
 import { Plus } from "lucide-react";
 
 import { ApplyLeaveDrawer } from "@/components/hr/leave/apply-leave-drawer";
-import { LeaveApprovalDrawer, LeaveTypePolicyPanel } from "@/components/hr/leave/leave-panels";
+import { LeaveApprovalDrawer } from "@/components/hr/leave/leave-panels";
 import { LeaveStatusBadge } from "@/components/hr/leave/leave-status-badge";
 import {
   HrAuthBanner,
@@ -31,8 +31,6 @@ import type { LeaveFilters, LeaveRequestRecord } from "@/types/leave-management"
 import { emptyLeaveFilters } from "@/types/leave-management";
 
 const PAGE_SIZE = 12;
-
-type Tab = "requests" | "types";
 
 type StatCard = {
   label: string;
@@ -63,7 +61,6 @@ export function LeaveManagementPage() {
   const searchParams = useSearchParams();
   const [dir, setDir] = useState<LeaveDirectory | null>(null);
   const [loading, setLoading] = useState(true);
-  const [tab, setTab] = useState<Tab>("requests");
   const [query, setQuery] = useState("");
   const [filters, setFilters] = useState<LeaveFilters>(() => emptyLeaveFilters());
   const [page, setPage] = useState(1);
@@ -102,7 +99,7 @@ export function LeaveManagementPage() {
     return filtered.slice(start, start + PAGE_SIZE);
   }, [filtered, page]);
 
-  useEffect(() => setPage(1), [query, filters, tab, statusBucket, onLeaveTodayView]);
+  useEffect(() => setPage(1), [query, filters, statusBucket, onLeaveTodayView]);
 
   const authBlocked = !isAuthenticated() && !loading && !dir?.requests.length;
 
@@ -176,7 +173,7 @@ export function LeaveManagementPage() {
         </div>
       ) : null}
 
-      {(statusBucket || onLeaveTodayView) && tab === "requests" ? (
+      {(statusBucket || onLeaveTodayView) ? (
         <div className="flex shrink-0 items-center gap-2 text-xs text-muted-foreground">
           <span>Filtered view:</span>
           <span className="font-medium text-foreground">
@@ -192,31 +189,18 @@ export function LeaveManagementPage() {
         </div>
       ) : null}
 
-      <div className="flex shrink-0 items-center gap-1 border-b border-border/60">
-        {(
-          [
-            ["requests", "Requests"],
-            ["types", "Leave Types"],
-          ] as const
-        ).map(([id, label]) => (
-          <button
-            key={id}
-            type="button"
-            className={cn(
-              "cursor-pointer border-b-2 px-3 py-2 text-xs font-medium transition-colors",
-              tab === id
-                ? "border-primary text-foreground"
-                : "border-transparent text-muted-foreground hover:text-foreground",
-            )}
-            onClick={() => setTab(id)}
-          >
-            {label}
-          </button>
-        ))}
-      </div>
+      <p className="shrink-0 text-[11px] text-muted-foreground">
+        Configure leave type masters in{" "}
+        <Link
+          href="/hr/setup?section=leave&tab=leave-types"
+          className="cursor-pointer font-medium text-primary transition-colors duration-200 hover:underline"
+        >
+          HR Setup → Leave Types
+        </Link>
+        .
+      </p>
 
-      {tab === "requests" ? (
-        <div className="flex min-h-0 flex-1 flex-col gap-3">
+      <div className="flex min-h-0 flex-1 flex-col gap-3">
           <div className="shrink-0 rounded-lg border border-border/70 bg-card px-3 py-2.5 shadow-sm">
             <div className="mb-2 flex items-center justify-between gap-2">
               <p className="text-[11px] font-semibold text-foreground">Filter Requests</p>
@@ -460,13 +444,6 @@ export function LeaveManagementPage() {
             </div>
           )}
         </div>
-      ) : null}
-
-      {tab === "types" && dir ? (
-        <div className="min-h-0 flex-1 overflow-auto">
-          <LeaveTypePolicyPanel directory={dir} onSaved={() => void load()} />
-        </div>
-      ) : null}
 
       <ApplyLeaveDrawer
         open={applyOpen}

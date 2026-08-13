@@ -113,6 +113,115 @@ function saveExtension(employeeId: string, ext: EmployeeExtension): void {
   setEmployeeExtension(employeeId, ext);
 }
 
+/** Demo entity IDs from HR Setup → Legal Entities defaults. */
+const DEMO_ENTITY_DIGITECH = {
+  id: "ent-cache-digitech",
+  name: "Cache Digitech Pvt Ltd",
+};
+const DEMO_ENTITY_TECH = {
+  id: "ent-cache-tech",
+  name: "Cache Technologies",
+};
+
+/**
+ * Assign legal entities for demo workforce when missing:
+ * EMP-001..004,007 → Cache Digitech; EMP-005,006,008+ → Cache Technologies.
+ * Also ensures a few Tech-entity local rows exist for filter demos.
+ */
+function applyDemoEntityAssignments(records: EmployeeRecord[]): void {
+  if (typeof window === "undefined") return;
+
+  const digitechCodes = new Set(["EMP-001", "EMP-002", "EMP-003", "EMP-004", "EMP-007"]);
+  const techCodes = new Set(["EMP-005", "EMP-006", "EMP-008"]);
+
+  for (const row of records) {
+    if (row.extension.employment.entityId) continue;
+    const code = (row.employeeCode || "").toUpperCase();
+    let entity = DEMO_ENTITY_DIGITECH;
+    if (techCodes.has(code)) entity = DEMO_ENTITY_TECH;
+    else if (!digitechCodes.has(code) && /^EMP-0(0[5-9]|[1-9]\d)/.test(code)) {
+      entity = DEMO_ENTITY_TECH;
+    }
+    const nextExt = defaultExtension({
+      ...row.extension,
+      employment: {
+        ...row.extension.employment,
+        entityId: entity.id,
+        entityName: entity.name,
+      },
+    });
+    saveExtension(row.id, nextExt);
+    row.extension = nextExt;
+  }
+
+  const techCount = records.filter(
+    (r) => r.extension.employment.entityId === DEMO_ENTITY_TECH.id,
+  ).length;
+  if (techCount >= 2) return;
+
+  const local = readJson<EmployeeRecord[]>(LOCAL_EMP_KEY, []);
+  const extras: { code: string; first: string; last: string; designation: string }[] = [
+    { code: "EMP-T01", first: "Vikram", last: "Desai", designation: "Support Engineer" },
+    { code: "EMP-T02", first: "Ananya", last: "Rao", designation: "Business Analyst" },
+    { code: "EMP-T03", first: "Imran", last: "Sheikh", designation: "QA Engineer" },
+  ];
+  const existingCodes = new Set(records.map((r) => r.employeeCode.toUpperCase()));
+  let added = 0;
+  for (const extra of extras) {
+    if (existingCodes.has(extra.code)) continue;
+    if (techCount + added >= 3) break;
+    const id = crypto.randomUUID();
+    const employment = emptyEmployment(extra.code);
+    employment.entityId = DEMO_ENTITY_TECH.id;
+    employment.entityName = DEMO_ENTITY_TECH.name;
+    employment.designationName = extra.designation;
+    employment.departmentName = "IT";
+    employment.branchName = "Head Office";
+    employment.joiningDate = "2024-08-01";
+    employment.lifecycleStatus = "active";
+    employment.employmentType = "permanent";
+    const ext = defaultExtension({
+      personal: {
+        ...emptyPersonal(),
+        firstName: extra.first,
+        lastName: extra.last,
+        officialEmail: `${extra.first.toLowerCase()}.${extra.last.toLowerCase()}@cachetech.example.com`,
+        mobile: `98${String(10000000 + added).slice(0, 8)}`,
+      },
+      employment,
+    });
+    saveExtension(id, ext);
+    const record: EmployeeRecord = {
+      id,
+      masterVersion: 1,
+      employeeCode: extra.code,
+      displayName: `${extra.first} ${extra.last}`,
+      officialEmail: ext.personal.officialEmail,
+      mobile: ext.personal.mobile,
+      departmentId: "",
+      departmentName: "IT",
+      designationName: extra.designation,
+      branchId: "",
+      branchName: "Head Office",
+      locationId: "",
+      locationName: "",
+      reportingManagerId: "",
+      reportingManagerName: "—",
+      employmentType: "permanent",
+      joiningDate: employment.joiningDate,
+      lifecycleStatus: "active",
+      profilePhotoDataUrl: undefined,
+      gender: "",
+      isDeleted: false,
+      extension: ext,
+    };
+    local.push(record);
+    records.push(record);
+    added += 1;
+  }
+  if (added > 0) writeJson(LOCAL_EMP_KEY, local);
+}
+
 function appendActivity(event: Omit<ActivityEvent, "id" | "at">): void {
   const all = readJson<ActivityEvent[]>(ACTIVITY_KEY, []);
   all.unshift({
@@ -541,6 +650,8 @@ async function fetchEmployeeDirectoryUncached(): Promise<EmployeeDirectoryResult
       extension: nextExt,
     };
   }
+
+  applyDemoEntityAssignments(records);
 
   return { records, options, errors };
 }

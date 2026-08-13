@@ -88,6 +88,8 @@ export function portalToWizardDraft(
 
   const employment = emptyEmployment(employeeCode || previewNextEmployeeCode());
   employment.joiningDate = caseRow.joiningDate || new Date().toISOString().slice(0, 10);
+  employment.entityId = caseRow.entityId || "";
+  employment.entityName = caseRow.entityName || "";
   employment.departmentName = caseRow.department || "";
   employment.designationName = caseRow.designation || "";
   employment.branchName = caseRow.branch || "";

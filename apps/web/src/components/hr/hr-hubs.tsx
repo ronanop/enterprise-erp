@@ -358,7 +358,7 @@ export function SetupHub() {
           title="Leave Types"
           description="Casual, sick, privilege…"
           count={data?.leaveTypes.length ?? 0}
-          href="/hr/leave-types"
+          href="/hr/setup?section=leave&tab=leave-types"
         />
         <HrSetupCard
           title="Holiday Calendars"

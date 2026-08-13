@@ -792,8 +792,8 @@ def delete_leave_type(
     ctx: Annotated[TenantContext, Depends(require_permission("hr.leave_type:update"))],
     db: Annotated[Session, Depends(get_db)],
 ):
-    LeaveTypeService(db).delete(ctx, row_id)
-    return APIResponse(message="Leave type deleted", data=None)
+    message = LeaveTypeService(db).delete(ctx, row_id)
+    return APIResponse(message=message, data=None)
 
 
 @leave_balances_router.get("", response_model=APIResponse[list[LeaveBalanceResponse]])

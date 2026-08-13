@@ -30,9 +30,12 @@ class TrainingRoomRepository(HrScopedRepository):
         return list(self.db.scalars(stmt).all())
 
     def create(self, ctx: TenantContext, **fields) -> HrTrainingRoom:
+        now = utcnow()
         row = HrTrainingRoom(
             id=uuid4(),
             tenant_id=ctx.tenant_id,
+            created_at=now,
+            updated_at=now,
             created_by=ctx.user_id,
             updated_by=ctx.user_id,
             **fields,
