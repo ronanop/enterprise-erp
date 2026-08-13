@@ -12,6 +12,16 @@ Later phases (payroll run, payslip, leave accrual) must **read** this policy ins
 | **Leave** | **1st → last day of month** | Leave balance, monthly credit |
 | **Leave credit timing** | **After calendar month end** | Accrual jobs; not tied to 20–20 pay window |
 
+### Leave apply rules (enforced)
+
+| Rule | Behaviour |
+|------|-----------|
+| Dates **21–30/31** | Still that **calendar** month’s leave (not the next payroll cycle) |
+| Future calendar month | **Blocked** until that month starts |
+| Monthly credit for month M | Available **after M ends** (typically from **1st of M+1**); cannot use early |
+| Past leave dates | **Allowed** after credit posts (e.g. apply 25 Aug leave on 3 Sep once Aug credit is added) |
+| Salary cut | Via LOP in the **20–20** payroll window only |
+
 ## Monthly package (X)
 
 | Component | Formula |

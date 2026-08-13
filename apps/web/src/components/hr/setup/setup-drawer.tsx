@@ -66,15 +66,23 @@ export function SetupField({
   required,
   hint,
   children,
+  labelClassName,
 }: {
   label: string;
   required?: boolean;
   hint?: string;
   children: ReactNode;
+  /** Override default all-caps label styling (e.g. `normal-case` for Title Case). */
+  labelClassName?: string;
 }) {
   return (
     <div className="block space-y-1">
-      <span className="text-[11px] font-medium tracking-wide text-muted-foreground uppercase">
+      <span
+        className={cn(
+          "text-[11px] font-medium tracking-wide text-muted-foreground uppercase",
+          labelClassName,
+        )}
+      >
         {label}
         {required ? <span className="text-destructive"> *</span> : null}
       </span>

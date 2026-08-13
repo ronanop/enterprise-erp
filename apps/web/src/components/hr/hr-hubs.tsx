@@ -173,7 +173,7 @@ export function LeaveHub() {
   return (
     <div className="space-y-5">
       <PageHeader
-        title="Leave management"
+        title="Leave Management"
         description="Balances, requests, and approval-friendly leave tracking."
         actions={
           <HrToolbar onRefresh={() => void load()} loading={loading}>
@@ -206,7 +206,7 @@ export function LeaveHub() {
         placeholder="Filter requests…"
         className="max-w-sm"
       />
-      <HrSection title="Leave requests" description="Recent and open requests">
+      <HrSection title="Leave Requests" description="Recent and open requests">
         <HrTable
           columns={[
             { key: "doc", label: "Document" },
@@ -355,13 +355,13 @@ export function SetupHub() {
           href="/hr/shifts"
         />
         <HrSetupCard
-          title="Leave types"
+          title="Leave Types"
           description="Casual, sick, privilege…"
           count={data?.leaveTypes.length ?? 0}
           href="/hr/leave-types"
         />
         <HrSetupCard
-          title="Holiday calendars"
+          title="Holiday Calendars"
           description="Company holiday sets"
           count={data?.holidayCalendars.length ?? 0}
           href="/hr/holiday-calendars"
@@ -373,7 +373,7 @@ export function SetupHub() {
           href="/organization/departments"
         />
         <HrSetupCard
-          title="Employees (master)"
+          title="Employees (Master)"
           description="Master employee records"
           count={0}
           href="/master-data/employees"
@@ -408,7 +408,7 @@ export function ShiftsHub() {
   return (
     <div className="space-y-5">
       <PageHeader
-        title="Shifts & roster"
+        title="Shifts & Roster"
         description="Shift masters and employee shift assignments."
         actions={<HrToolbar onRefresh={() => void load()} loading={loading} />}
       />
@@ -624,7 +624,7 @@ export function ReportsHub() {
   return (
     <div className="space-y-5">
       <PageHeader
-        title="HR reports & KPIs"
+        title="HR Reports & KPIs"
         description="Workforce health snapshot and CSV exports from live HR data."
         actions={<HrToolbar onRefresh={() => void load()} loading={loading} />}
       />
@@ -706,9 +706,9 @@ export function PayrollHubInHr() {
         ]}
       />
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-        <HrSetupCard title="Payroll runs" description="Calculation runs" count={data?.runs.length ?? 0} href="/payroll/payroll-runs" />
+        <HrSetupCard title="Payroll Runs" description="Calculation runs" count={data?.runs.length ?? 0} href="/payroll/payroll-runs" />
         <HrSetupCard title="Payslips" description="Employee payslips" count={data?.payslips.length ?? 0} href="/payroll/payslips" />
-        <HrSetupCard title="Salary structures" description="CTC structures" count={data?.structures.length ?? 0} href="/payroll/salary-structures" />
+        <HrSetupCard title="Salary Structures" description="CTC structures" count={data?.structures.length ?? 0} href="/payroll/salary-structures" />
       </div>
       <HrTable
         columns={[
@@ -770,7 +770,7 @@ export function RecruitmentHubInHr() {
         ]}
       />
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-        <HrSetupCard title="Job requisitions" description="Open positions" count={data?.requisitions.length ?? 0} href="/recruitment/job-requisitions" />
+        <HrSetupCard title="Job Requisitions" description="Open positions" count={data?.requisitions.length ?? 0} href="/recruitment/job-requisitions" />
         <HrSetupCard title="Candidates" description="Talent pool" count={data?.candidates.length ?? 0} href="/recruitment/candidates" />
         <HrSetupCard title="Offers" description="Offer letters" count={data?.offers.length ?? 0} href="/recruitment/offers" />
       </div>

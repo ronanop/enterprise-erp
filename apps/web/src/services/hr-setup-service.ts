@@ -96,12 +96,48 @@ export const DEFAULT_DOCUMENT_TYPES: SetupRow[] = [
     status: "active",
   },
   {
-    id: "doc-type-graduation",
-    code: "DOC-GRAD",
-    name: "Graduation Degree",
-    kind: "education",
-    section: "education",
-    mandatory: true,
+    id: "doc-type-any-cert",
+    code: "DOC-CERT",
+    name: "Any Certificates",
+    kind: "other",
+    section: "other",
+    mandatory: false,
+    expiry_required: false,
+    formats: "PDF,JPG,PNG,DOC,DOCX",
+    max_size_mb: 2,
+    status: "active",
+  },
+  {
+    id: "doc-type-cheque",
+    code: "DOC-CHEQUE",
+    name: "Cancelled Cheque / Passbook",
+    kind: "cancelled_cheque",
+    section: "identity",
+    mandatory: false,
+    expiry_required: false,
+    formats: "PDF,JPG,PNG",
+    max_size_mb: 2,
+    status: "active",
+  },
+  {
+    id: "doc-type-relieving",
+    code: "DOC-REL",
+    name: "Relieving Letter",
+    kind: "relieving_letter",
+    section: "previous_employment",
+    mandatory: false,
+    expiry_required: false,
+    formats: "PDF,JPG,PNG",
+    max_size_mb: 2,
+    status: "active",
+  },
+  {
+    id: "doc-type-slips",
+    code: "DOC-SLIPS",
+    name: "Salary / Payslip",
+    kind: "salary_slips",
+    section: "previous_employment",
+    mandatory: false,
     expiry_required: false,
     formats: "PDF,JPG,PNG",
     max_size_mb: 2,
@@ -196,6 +232,8 @@ export type PortalDocumentType = {
   mandatory: boolean;
   accept: string;
   maxSizeMb: number | null;
+  /** When true, candidate may upload several files for this type. */
+  multiple?: boolean;
 };
 
 /** Map setup "PDF,JPG" → HTML accept string. */
@@ -280,52 +318,112 @@ export async function listPortalDocumentTypes(): Promise<PortalDocumentType[]> {
       .map((r) => [String(r.code ?? ""), r]),
   );
 
-  // Ensure portal always has the latest education / previous-employment catalog codes
+  // Always prefer the current default catalog for known onboarding codes
   for (const def of DEFAULT_DOCUMENT_TYPES) {
     const code = String(def.code ?? "");
-    if (!code || byCode.has(code)) continue;
+    if (!code) continue;
     byCode.set(code, def);
   }
+  byCode.delete("DOC-GRAD");
 
-  // Drop legacy single appointment/relieving/signature from the portal list when new codes exist
-  const legacyDrop = new Set(["DOC-APPT", "DOC-REL", "DOC-SIGN", "DOC-PREV-EMP", "DOC-EXP"]);
+  // Drop legacy appointment / signature / graduation from the portal list
+  const legacyDrop = new Set([
+    "DOC-APPT",
+    "DOC-SIGN",
+    "DOC-PREV-EMP",
+    "DOC-EXP",
+    "DOC-GRAD",
+  ]);
+
+  const allowedKinds = new Set([
+    "education",
+    "resume",
+    "cancelled_cheque",
+    "relieving_letter",
+    "salary_slips",
+    "other",
+  ]);
 
   return [...byCode.values()]
     .filter((r) => {
       const code = String(r.code ?? "");
-      const kind = normalizeDocKind(r.kind, code, String(r.name ?? ""));
+      const name = String(r.name ?? "");
+      const kind = normalizeDocKind(r.kind, code, name);
       if (kind === "signature" || kind === "photo") return false;
       if (legacyDrop.has(code)) return false;
-      // Documents step: education marksheets + resume only
-      if (!["education", "resume"].includes(kind)) return false;
-      return true;
+      // Remove outdated education extras still sitting in local setup
+      if (/graduation\s*(degree|marksheet)/i.test(name)) return false;
+      if (/education\s*certificates?/i.test(name)) return false;
+      // Collapse duplicate relieving / slip / cheque rows from old local setup into one portal type
+      if (kind === "relieving_letter" && code !== "DOC-REL") return false;
+      if (kind === "salary_slips" && code !== "DOC-SLIPS") return false;
+      if (kind === "cancelled_cheque" && code !== "DOC-CHEQUE") return false;
+      if (/previous\s*relieving/i.test(name)) return false;
+      if (/^cancelled\s*cheque$/i.test(name) && code !== "DOC-CHEQUE") return false;
+      if (code === "DOC-CERT") return true;
+      if (kind === "other") return false;
+      return allowedKinds.has(kind);
     })
     .map((r) => {
       const code = String(r.code ?? "");
       const name = String(r.name ?? r.code ?? "Document");
-      const kind = normalizeDocKind(r.kind, code, name);
+      const kind =
+        code === "DOC-CERT"
+          ? "other"
+          : code === "DOC-CHEQUE"
+            ? "cancelled_cheque"
+            : code === "DOC-REL"
+              ? "relieving_letter"
+              : code === "DOC-SLIPS"
+                ? "salary_slips"
+                : normalizeDocKind(r.kind, code, name);
+      const section =
+        code === "DOC-CERT"
+          ? "other"
+          : code === "DOC-CHEQUE"
+            ? "identity"
+            : resolveDocSection(code, kind, r.section);
       return {
         id: String(r.id),
         code,
-        name,
+        name:
+          code === "DOC-CERT"
+            ? "Any Certificates"
+            : code === "DOC-CHEQUE"
+              ? "Cancelled Cheque / Passbook"
+              : code === "DOC-REL"
+                ? "Relieving Letter"
+                : code === "DOC-SLIPS"
+                  ? "Salary / Payslip"
+                  : name,
         kind,
-        section: resolveDocSection(code, kind, r.section),
-        mandatory: Boolean(r.mandatory),
+        section,
+        mandatory: ["DOC-CERT", "DOC-CHEQUE", "DOC-REL", "DOC-SLIPS"].includes(code)
+          ? false
+          : Boolean(r.mandatory),
         accept: formatsToAccept(r.formats),
         maxSizeMb:
           r.max_size_mb == null || r.max_size_mb === ""
             ? null
             : Number(r.max_size_mb),
+        multiple: code === "DOC-CERT",
       };
     })
     .sort((a, b) => {
       const order: PortalDocumentSection[] = [
-        "identity",
         "education",
+        "identity",
         "previous_employment",
         "other",
       ];
-      return order.indexOf(a.section) - order.indexOf(b.section) || a.name.localeCompare(b.name);
+      const sectionDiff = order.indexOf(a.section) - order.indexOf(b.section);
+      if (sectionDiff !== 0) return sectionDiff;
+      const codeOrder = ["DOC-10TH", "DOC-12TH", "DOC-CHEQUE", "DOC-RESUME", "DOC-REL", "DOC-SLIPS", "DOC-CERT"];
+      return (
+        (codeOrder.indexOf(a.code) === -1 ? 99 : codeOrder.indexOf(a.code)) -
+          (codeOrder.indexOf(b.code) === -1 ? 99 : codeOrder.indexOf(b.code)) ||
+        a.name.localeCompare(b.name)
+      );
     });
 }
 

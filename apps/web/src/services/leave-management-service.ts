@@ -20,6 +20,7 @@ import {
   isVisibleLeaveType,
   leaveStatusDisplay,
 } from "@/types/leave-management";
+import { validateLeaveCycleOnApply } from "@/lib/hr/leave-cycle-rules";
 
 const EXT_KEY = "erp_leave_request_ext_v1";
 const AUDIT_KEY = "erp_leave_audit_v1";
@@ -316,6 +317,9 @@ export async function loadLeaveDirectory(): Promise<LeaveDirectory> {
       opening,
       accrued,
       closing,
+      lastAccrualYyyymm: row.last_accrual_yyyymm
+        ? String(row.last_accrual_yyyymm)
+        : undefined,
       version: Number(row.version ?? 1),
     };
   });
@@ -438,8 +442,8 @@ export function filterLeaveRequests(
     if (filters.branchId && r.branchId !== filters.branchId) return false;
     if (filters.leaveTypeId && r.leaveTypeId !== filters.leaveTypeId) return false;
     if (filters.status) {
-      const st = r.extension.approvalStage || r.status;
-      if (st !== filters.status && r.status !== filters.status) return false;
+      const bucket = leaveStatusDisplay(r.extension.approvalStage || r.status);
+      if (bucket.toLowerCase() !== filters.status.toLowerCase()) return false;
     }
     if (filters.dateFrom && r.toDate < filters.dateFrom) return false;
     if (filters.dateTo && r.fromDate > filters.dateTo) return false;
@@ -485,13 +489,27 @@ export function validateLeaveApplication(
   const bal = dir.balances.find(
     (b) => b.employeeId === payload.employeeId && b.leaveTypeId === payload.leaveTypeId,
   );
-  if (bal && netDays > bal.available) {
+
+  const cycle = validateLeaveCycleOnApply({
+    fromDate: payload.fromDate,
+    toDate: payload.toDate,
+    netDays,
+    available: bal ? bal.available : null,
+    lastAccrualYyyymm: bal?.lastAccrualYyyymm,
+    monthlyCreditDays: lt?.daysPerMonth ?? 0,
+  });
+  if (cycle.error) {
+    messages.push({ tone: "error", text: cycle.error });
+  } else if (bal && netDays > bal.available) {
     messages.push({
       tone: "error",
       text: `Insufficient balance. Available ${bal.available} day(s), requested ${netDays}.`,
     });
   } else if (!bal) {
     messages.push({ tone: "warn", text: "No leave balance record found for this type — policy check skipped." });
+  }
+  if (cycle.info) {
+    messages.push({ tone: "info", text: cycle.info });
   }
 
   if (weekendOrHoliday.length) {
@@ -539,11 +557,6 @@ export function validateLeaveApplication(
   if (lt && !lt.approvalRequired) {
     messages.push({ tone: "info", text: "This leave type does not require multi-level approval." });
   }
-
-  messages.push({
-    tone: "info",
-    text: "Attendance and shift assignment checked against holidays and weekly offs.",
-  });
 
   const ok = !messages.some((m) => m.tone === "error");
   return { ok, messages, netDays };
@@ -947,6 +960,23 @@ export async function updateLeaveTypePolicy(
     detail: `${patch.name || leaveType.name} (${leaveType.code}) · max ${patch.maxDays}/yr · ${
       patch.daysPerMonth
     }/mo · ${patch.isPaid ? "paid" : "unpaid"} · CF ${patch.carryForwardAllowed ? "yes" : "no"    }`,
+    actor: actor(),
+  });
+}
+
+export async function deleteLeaveType(leaveType: LeaveTypeRecord): Promise<void> {
+  await resourceService.delete("/hr/leave-types", leaveType.id);
+
+  const all = readJson<Record<string, Partial<LeaveTypeRecord>>>(TYPE_EXT_KEY, {});
+  if (leaveType.id in all) {
+    delete all[leaveType.id];
+    writeJson(TYPE_EXT_KEY, all);
+  }
+
+  appendLeaveAudit({
+    requestId: leaveType.id,
+    action: "leave_type_deleted",
+    detail: `${leaveType.name} (${leaveType.code}) deleted`,
     actor: actor(),
   });
 }

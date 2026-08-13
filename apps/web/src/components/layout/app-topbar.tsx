@@ -2,12 +2,13 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { Bell, LogIn, LogOut } from "lucide-react";
+import { LogIn, LogOut } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useHealthCheck } from "@/hooks/use-health-check";
 import { CompanyContextBadge } from "@/components/layout/company-context-badge";
+import { GlobalNotificationBell } from "@/components/layout/global-notification-bell";
 import { clearTokens, isAuthenticated } from "@/lib/auth";
 import { authService } from "@/services/api-client";
 
@@ -57,9 +58,7 @@ export function AppTopbar() {
           />
           {healthLabel}
         </Badge>
-        <Button variant="ghost" size="icon-sm" aria-label="Notifications" disabled className="text-muted-foreground">
-          <Bell className="size-4" />
-        </Button>
+        {signedIn ? <GlobalNotificationBell variant="topbar" /> : null}
         {signedIn ? (
           <Button variant="outline" size="sm" className="shadow-none" onClick={() => void handleLogout()}>
             <LogOut className="size-3.5" />

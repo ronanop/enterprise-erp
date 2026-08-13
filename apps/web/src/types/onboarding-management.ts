@@ -7,6 +7,7 @@ export type OnboardingCaseStatus =
   | "submitted"
   | "hr_review"
   | "ready_to_join"
+  | "pending_join"
   | "joined"
   | "overdue"
   | "cancelled";
@@ -50,7 +51,7 @@ export const PORTAL_STEPS: { id: PortalStepId; label: string; description: strin
   { id: "government_ids", label: "Government IDs", description: "Aadhaar, PAN, and more" },
   { id: "bank", label: "Bank Details", description: "Salary account" },
   { id: "emergency", label: "Emergency Contact", description: "Primary contact" },
-  { id: "documents", label: "Upload Documents", description: "Education marksheets and resume" },
+  { id: "documents", label: "Upload Documents", description: "Marksheets, resume, bank & employment proofs" },
   { id: "policies", label: "Policies", description: "Agree and upload signature" },
   { id: "review", label: "Review & Submit", description: "Confirm all steps" },
 ];
@@ -101,6 +102,7 @@ export const ONBOARDING_STATUS_LABELS: Record<OnboardingCaseStatus, string> = {
   submitted: "Submitted",
   hr_review: "HR Review",
   ready_to_join: "Ready to Join",
+  pending_join: "Pending Join",
   joined: "Joined",
   overdue: "Overdue",
   cancelled: "Cancelled",
@@ -128,7 +130,12 @@ export type PersonalDetails = {
   /** Personal / candidate email (not company email) */
   email: string;
   personalEmail: string;
+  /** Current residential address */
   address: string;
+  /** Permanent address (may match current) */
+  permanentAddress: string;
+  /** When true, permanent address mirrors current address */
+  sameAsCurrentAddress?: boolean;
 };
 
 export type GovernmentIds = {
@@ -289,6 +296,8 @@ export function emptyPersonal(): PersonalDetails {
     email: "",
     personalEmail: "",
     address: "",
+    permanentAddress: "",
+    sameAsCurrentAddress: false,
   };
 }
 

@@ -1,9 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname } from "next/navigation";
 import { useMemo, useState } from "react";
-import { ArrowLeft, ChevronLeft, ChevronRight, Search } from "lucide-react";
+import { ChevronLeft, ChevronRight, Search } from "lucide-react";
 
 import { hrNavGroups } from "@/config/hr-nav";
 import { Button } from "@/components/ui/button";
@@ -28,7 +28,6 @@ function resolveActiveHref(pathname: string, hrefs: string[]): string | null {
 /** Persistent HRMS-only sidebar (swapped in while on /hr routes). */
 export function HrSidebar() {
   const pathname = usePathname();
-  const router = useRouter();
   const [collapsed, setCollapsed] = useState(false);
   const [query, setQuery] = useState("");
 
@@ -143,21 +142,6 @@ export function HrSidebar() {
       </nav>
 
       <div className="space-y-1 border-t border-sidebar-border p-2.5">
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          onClick={() => router.push("/")}
-          className="w-full cursor-pointer justify-center text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
-          aria-label="Back to ERP modules"
-        >
-          {collapsed ? <ArrowLeft className="size-4" /> : (
-            <>
-              <ArrowLeft className="size-3.5" />
-              All modules
-            </>
-          )}
-        </Button>
         <Button
           type="button"
           variant="ghost"

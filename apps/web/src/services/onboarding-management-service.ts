@@ -5,10 +5,11 @@
  */
 
 import { resourceService } from "@/services/api-client";
-import { registerLocalEmployee } from "@/services/hr-master-connector";
+import { registerLocalEmployee, updateLocalEmployeeLifecycle } from "@/services/hr-master-connector";
 import { applyOnboardingPortalToEmployee } from "@/services/employee-management-service";
 import { loadRecruitmentOverview, type RecruitmentRow } from "@/services/recruitment-service";
 import { portalToWizardDraft } from "@/lib/onboarding-to-employee";
+import { isJoiningDateReached } from "@/lib/onboarding-workflow";
 import { previewNextEmployeeCode } from "@/services/employee-management-service";
 import {
   DEFAULT_MANAGER_CHECKLIST,
@@ -111,16 +112,14 @@ function buildDefaultChecklist(): ChecklistItem[] {
 }
 
 function calcProgress(portal: PortalPayload, checklist: ChecklistItem[], status: OnboardingCaseStatus): number {
+  if (status === "joined") return 100;
+  if (status === "pending_join") return 96;
+  if (status === "ready_to_join") return 92;
   const stepIdx = PORTAL_STEPS.findIndex((s) => s.id === portal.currentStep);
   const portalPct = portal.submittedAt
     ? 85
     : Math.round(((Math.max(stepIdx, 0) + 1) / PORTAL_STEPS.length) * 80);
-  if (status !== "joined") {
-    return Math.min(100, portalPct);
-  }
-  const done = checklist.filter((c) => c.status === "done").length;
-  const checkPct = checklist.length ? Math.round((done / checklist.length) * 15) : 0;
-  return Math.min(100, portalPct + checkPct);
+  return Math.min(100, portalPct);
 }
 
 function refreshCaseDerived(c: OnboardingCase): OnboardingCase {
@@ -129,14 +128,14 @@ function refreshCaseDerived(c: OnboardingCase): OnboardingCase {
   if (
     c.joiningDate &&
     c.joiningDate < today &&
-    !["joined", "cancelled", "ready_to_join"].includes(c.status)
+    !["joined", "cancelled", "ready_to_join", "pending_join"].includes(c.status)
   ) {
     status = "overdue";
   }
   return {
     ...c,
     status,
-    progressPct: c.status === "joined" ? 100 : calcProgress(c.portal, c.checklist, c.status),
+    progressPct: calcProgress(c.portal, c.checklist, status),
     updatedAt: c.updatedAt,
   };
 }
@@ -231,7 +230,7 @@ export function computeOnboardingStats(cases: OnboardingCase[]) {
   const today = new Date().toISOString().slice(0, 10);
   return {
     invitationsSent: cases.filter((c) =>
-      ["invitation_sent", "in_progress", "submitted", "hr_review", "ready_to_join", "joined"].includes(
+      ["invitation_sent", "in_progress", "submitted", "hr_review", "ready_to_join", "pending_join", "joined"].includes(
         c.status,
       ),
     ).length,
@@ -246,6 +245,7 @@ export function computeOnboardingStats(cases: OnboardingCase[]) {
       );
     }).length,
     readyToJoin: cases.filter((c) => c.status === "ready_to_join").length,
+    pendingJoin: cases.filter((c) => c.status === "pending_join").length,
     joinedToday: cases.filter((c) => c.activatedAt?.slice(0, 10) === today).length,
     overdue: cases.filter((c) => c.status === "overdue").length,
     total: cases.length,
@@ -539,21 +539,22 @@ export function approveCandidateReview(caseId: string): OnboardingCase | null {
   return next;
 }
 
-/** Complete onboarding after HR verification — creates employee; HR assigns details in Workforce. */
-export async function activateEmployee(
+/** Create employee profile after HR approval. Activates immediately if joining date has passed. */
+export async function completeOnboarding(
   caseId: string,
   opts?: { employeeCode?: string; shiftId?: string },
 ): Promise<OnboardingCase | null> {
   const c = getCaseById(caseId);
   if (!c) return null;
 
-  if (!["hr_review", "ready_to_join"].includes(c.status)) {
+  if (!["ready_to_join"].includes(c.status)) {
     throw new Error("Approve the candidate submission before completing onboarding.");
   }
   if (!c.portal.submittedAt) {
     throw new Error("Candidate has not submitted the onboarding portal yet.");
   }
 
+  const activateNow = isJoiningDateReached(c.joiningDate);
   const employeeCode = (opts?.employeeCode || previewNextEmployeeCode()).trim().toUpperCase();
 
   const apiOnboardingId = (c as OnboardingCase & { apiOnboardingId?: string }).apiOnboardingId;
@@ -563,7 +564,6 @@ export async function activateEmployee(
 
   if (apiOnboardingId) {
     try {
-      // Step 1: complete onboarding → creates ONB-* employee in status=onboarding
       if (!employmentId) {
         const res = await resourceService.action<Record<string, unknown>>(
           "/recruitment/onboarding",
@@ -575,8 +575,7 @@ export async function activateEmployee(
         employmentId = String(res.data?.hr_employment_request_id ?? "");
       }
 
-      // Step 2: activate with permanent Emp ID + optional shift + payroll eligible
-      if (employmentId) {
+      if (activateNow && employmentId) {
         await resourceService.action("/hr/employment", employmentId, "activate", {
           employee_code: employeeCode,
           shift_id: opts?.shiftId || null,
@@ -584,6 +583,14 @@ export async function activateEmployee(
           probation_days: 90,
           mark_payroll_eligible: true,
         });
+      }
+
+      // Import portal personal / IDs / bank / photo onto the employee record
+      if (employeeUuid && employeeUuid !== employeeCode) {
+        await applyOnboardingPortalToEmployee(
+          employeeUuid,
+          portalToWizardDraft(c, employeeCode),
+        );
       }
 
       const checklist = buildPostJoinChecklist().map((item) =>
@@ -596,22 +603,24 @@ export async function activateEmployee(
         employeeId: employeeCode,
         apiEmploymentId: employmentId,
         checklist,
-        status: "joined",
-        activatedAt: nowIso(),
-        progressPct: 100,
+        status: activateNow ? "joined" : "pending_join",
+        activatedAt: activateNow ? nowIso() : undefined,
+        progressPct: activateNow ? 100 : 96,
       } as OnboardingCase & { apiEmploymentId?: string });
       appendOnboardingAudit({
         caseId,
-        action: "activate_employee",
-        detail: `Activated Emp ID ${employeeCode}; employment ${employmentId || "n/a"}`,
+        action: activateNow ? "activate_employee" : "complete_onboarding",
+        detail: activateNow
+          ? `Activated Emp ID ${employeeCode}; employment ${employmentId || "n/a"}`
+          : `Employee profile created (${employeeCode}); activation pending until ${c.joiningDate || "joining date"}`,
         actor: actor(),
       });
       return next;
     } catch (err) {
-      const msg = err instanceof Error ? err.message : "Activation failed";
+      const msg = err instanceof Error ? err.message : "Completion failed";
       appendOnboardingAudit({
         caseId,
-        action: "activate_employee_failed",
+        action: "complete_onboarding_failed",
         detail: msg,
         actor: actor(),
       });
@@ -637,9 +646,9 @@ export async function activateEmployee(
     reportingManager: c.reportingManager,
     joiningDate: c.joiningDate,
     employeeCode,
+    lifecycleStatus: activateNow ? "probation" : "onboarding",
   });
 
-  // Persist everything the candidate filled in the portal onto the employee record
   await applyOnboardingPortalToEmployee(local.id, portalToWizardDraft(c, employeeCode));
 
   const checklist = buildPostJoinChecklist().map((item) =>
@@ -651,9 +660,9 @@ export async function activateEmployee(
     ...c,
     employeeId: local.employeeCode,
     checklist,
-    status: "joined",
-    activatedAt: nowIso(),
-    progressPct: 100,
+    status: activateNow ? "joined" : "pending_join",
+    activatedAt: activateNow ? nowIso() : undefined,
+    progressPct: activateNow ? 100 : 96,
   });
 
   try {
@@ -673,11 +682,105 @@ export async function activateEmployee(
 
   appendOnboardingAudit({
     caseId,
-    action: "activate_employee",
-    detail: `Local activate Emp ID ${local.employeeCode}`,
+    action: activateNow ? "activate_employee" : "complete_onboarding",
+    detail: activateNow
+      ? `Local activate Emp ID ${local.employeeCode}`
+      : `Local profile ${local.employeeCode} — pending activation until ${c.joiningDate || "joining date"}`,
     actor: actor(),
   });
   return next;
+}
+
+/** Activate a pending employee on or after joining date. */
+export async function activateOnboardingEmployee(
+  caseId: string,
+  opts?: { employeeCode?: string; shiftId?: string },
+): Promise<OnboardingCase | null> {
+  const c = getCaseById(caseId);
+  if (!c) return null;
+
+  if (c.status !== "pending_join") {
+    throw new Error("Complete onboarding first to create the employee profile.");
+  }
+  if (!isJoiningDateReached(c.joiningDate)) {
+    throw new Error(
+      `Joining date is ${c.joiningDate}. Activation is available on or after that date.`,
+    );
+  }
+  if (!c.employeeId) {
+    throw new Error("Employee profile not found for this onboarding case.");
+  }
+
+  const employeeCode = (opts?.employeeCode || c.employeeId).trim().toUpperCase();
+  const apiOnboardingId = (c as OnboardingCase & { apiOnboardingId?: string }).apiOnboardingId;
+  const employmentId =
+    (c as OnboardingCase & { apiEmploymentId?: string }).apiEmploymentId || "";
+
+  if (apiOnboardingId && employmentId) {
+    try {
+      await resourceService.action("/hr/employment", employmentId, "activate", {
+        employee_code: employeeCode,
+        shift_id: opts?.shiftId || null,
+        start_probation: true,
+        probation_days: 90,
+        mark_payroll_eligible: true,
+      });
+
+      const next = upsertCase({
+        ...c,
+        employeeId: employeeCode,
+        status: "joined",
+        activatedAt: nowIso(),
+        progressPct: 100,
+      });
+      appendOnboardingAudit({
+        caseId,
+        action: "activate_employee",
+        detail: `Activated Emp ID ${employeeCode}; employment ${employmentId}`,
+        actor: actor(),
+      });
+      return next;
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Activation failed";
+      appendOnboardingAudit({
+        caseId,
+        action: "activate_employee_failed",
+        detail: msg,
+        actor: actor(),
+      });
+      throw err;
+    }
+  }
+
+  updateLocalEmployeeLifecycle(c.employeeId, "probation");
+
+  const next = upsertCase({
+    ...c,
+    employeeId: employeeCode,
+    status: "joined",
+    activatedAt: nowIso(),
+    progressPct: 100,
+  });
+  appendOnboardingAudit({
+    caseId,
+    action: "activate_employee",
+    detail: `Local activate Emp ID ${employeeCode}`,
+    actor: actor(),
+  });
+  return next;
+}
+
+/** @deprecated Use completeOnboarding or activateOnboardingEmployee */
+export async function activateEmployee(
+  caseId: string,
+  opts?: { employeeCode?: string; shiftId?: string },
+): Promise<OnboardingCase | null> {
+  const c = getCaseById(caseId);
+  if (!c) return null;
+  if (c.status === "pending_join") {
+    return activateOnboardingEmployee(caseId, opts);
+  }
+  return completeOnboarding(caseId, opts);
 }
 
 export function exportOnboardingCsv(cases: OnboardingCase[]): string {

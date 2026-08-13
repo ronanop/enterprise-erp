@@ -54,7 +54,7 @@ export function AttendanceImportDrawer({
   return (
     <SetupDrawer
       open={open}
-      title="Import attendance"
+      title="Import Attendance"
       description="CSV import with duplicate validation (employee + date)."
       onClose={onClose}
       footer={
@@ -159,7 +159,7 @@ export function AttendanceCorrectionDrawer({
   return (
     <SetupDrawer
       open={open}
-      title="Attendance correction"
+      title="Attendance Correction"
       description="Updates punch time and logs a correction request"
       onClose={onClose}
       footer={

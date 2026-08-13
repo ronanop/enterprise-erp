@@ -786,6 +786,16 @@ def update_leave_type(
     return APIResponse(message="OK", data=LeaveTypeService(db).update(ctx, row_id, **extract_update_fields(body)))
 
 
+@leave_types_router.delete("/{row_id}", response_model=APIResponse[None])
+def delete_leave_type(
+    row_id: UUID,
+    ctx: Annotated[TenantContext, Depends(require_permission("hr.leave_type:update"))],
+    db: Annotated[Session, Depends(get_db)],
+):
+    LeaveTypeService(db).delete(ctx, row_id)
+    return APIResponse(message="Leave type deleted", data=None)
+
+
 @leave_balances_router.get("", response_model=APIResponse[list[LeaveBalanceResponse]])
 def list_balances(
     ctx: Annotated[TenantContext, Depends(require_permission("hr.leave:read"))],

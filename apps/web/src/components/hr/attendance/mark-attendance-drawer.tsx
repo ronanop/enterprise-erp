@@ -96,7 +96,7 @@ export function MarkAttendanceDrawer({
   return (
     <SetupDrawer
       open={open}
-      title="Mark attendance"
+      title="Mark Attendance"
       description="Record check-in/out, breaks, source, and GPS for audit-ready tracking."
       wide
       onClose={onClose}

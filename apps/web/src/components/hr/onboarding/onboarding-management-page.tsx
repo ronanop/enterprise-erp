@@ -4,6 +4,8 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import {
   Download,
+  Eye,
+  FolderOpen,
   Mail,
   Plus,
   Send,
@@ -23,17 +25,19 @@ import {
   HrStatusBadge,
   HrToolbar,
 } from "@/components/hr/hr-primitives";
-import { SetupDrawer, SetupField, SetupSelect } from "@/components/hr/setup/setup-drawer";
+import { SetupDrawer } from "@/components/hr/setup/setup-drawer";
 import { toast, SetupToastHost } from "@/components/hr/setup/setup-toast";
 import { EmsPagination, EmsSkeleton } from "@/components/hr/workforce/ems-primitives";
 import { PageHeader } from "@/components/layout/page-header";
 import { Button } from "@/components/ui/button";
+import { FilterSelect } from "@/components/ui/filter-select";
 import { Input } from "@/components/ui/input";
 import { isAuthenticated } from "@/lib/auth";
 import { cn } from "@/lib/utils";
 import {
-  activateEmployee,
+  activateOnboardingEmployee,
   approveCandidateReview,
+  completeOnboarding,
   computeOnboardingStats,
   downloadTextFile,
   exportOnboardingCsv,
@@ -70,17 +74,21 @@ export function OnboardingManagementPage() {
   const [tab, setTab] = useState<Tab>("cases");
   const [query, setQuery] = useState("");
   const [filters, setFilters] = useState<OnboardingFilters>(() => emptyOnboardingFilters());
-  const [filtersOpen, setFiltersOpen] = useState(true);
   const [page, setPage] = useState(1);
   const [startOpen, setStartOpen] = useState(false);
   const [inviteCase, setInviteCase] = useState<OnboardingCase | null>(null);
   const [detailCase, setDetailCase] = useState<OnboardingCase | null>(null);
+  const [docsCase, setDocsCase] = useState<OnboardingCase | null>(null);
   const [previewDoc, setPreviewDoc] = useState<OnboardingDocument | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      setDir(await loadOnboardingDirectory());
+      const next = await loadOnboardingDirectory();
+      setDir(next);
+      setDocsCase((prev) =>
+        prev ? (next.cases.find((c) => c.id === prev.id) ?? null) : null,
+      );
     } catch {
       toast("Failed to load onboarding data", "error");
     } finally {
@@ -172,8 +180,8 @@ export function OnboardingManagementPage() {
           { label: "Pending Forms", value: stats.pendingForms },
           { label: "Documents Pending", value: stats.documentsPending },
           { label: "Ready to Join", value: stats.readyToJoin },
+          { label: "Pending Join", value: stats.pendingJoin },
           { label: "Joined Today", value: stats.joinedToday },
-          { label: "Overdue", value: stats.overdue },
         ].map((k) => (
           <div
             key={k.label}
@@ -191,7 +199,7 @@ export function OnboardingManagementPage() {
         {(
           [
             ["cases", "Cases"],
-            ["checklist", "Checklist board"],
+            ["checklist", "Checklist Board"],
             ["documents", "Documents"],
             ["reports", "Reports"],
             ["audit", "Audit"],
@@ -217,28 +225,54 @@ export function OnboardingManagementPage() {
 
       {tab === "cases" ? (
         <div className="space-y-3">
-          <div className="flex flex-wrap items-center gap-2">
-            <Input
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search candidate, case, offer, EMP id…"
-              className="max-w-sm"
-            />
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              className="cursor-pointer"
-              onClick={() => setFiltersOpen(true)}
-            >
-              Filters
-            </Button>
-            <span className="text-xs text-muted-foreground">{filtered.length} cases</span>
+          <div className="flex flex-wrap items-end gap-2">
+            <div className="min-w-[12rem] flex-1 space-y-1 sm:max-w-sm">
+              <span className="text-[10px] font-medium tracking-wide text-muted-foreground uppercase">
+                Search
+              </span>
+              <Input
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Search candidate, case, offer, EMP id…"
+                className="h-8"
+              />
+            </div>
+            <div className="w-[9.5rem] space-y-1">
+              <span className="text-[10px] font-medium tracking-wide text-muted-foreground uppercase">
+                Status
+              </span>
+              <FilterSelect
+                value={filters.status}
+                onChange={(status) => setFilters((f) => ({ ...f, status }))}
+                options={[
+                  { value: "all", label: "All" },
+                  ...Object.entries(ONBOARDING_STATUS_LABELS)
+                    .filter(([k]) => k !== "overdue")
+                    .map(([k, v]) => ({
+                      value: k,
+                      label: v,
+                    })),
+                ]}
+              />
+            </div>
+            <div className="w-[9.5rem] space-y-1">
+              <span className="text-[10px] font-medium tracking-wide text-muted-foreground uppercase">
+                Department
+              </span>
+              <FilterSelect
+                value={filters.department}
+                onChange={(department) => setFilters((f) => ({ ...f, department }))}
+                options={[
+                  { value: "all", label: "All" },
+                  ...(dir?.departments ?? []).map((d) => ({ value: d, label: d })),
+                ]}
+              />
+            </div>
           </div>
 
           {pageRows.length === 0 ? (
             <HrEmptyState
-              title="No onboarding cases"
+              title="No Onboarding Cases"
               description="Start onboarding for a new candidate joining the organization."
               action={
                 <Button size="sm" className="cursor-pointer" onClick={() => setStartOpen(true)}>
@@ -371,7 +405,7 @@ export function OnboardingManagementPage() {
             ))}
           {(dir?.cases ?? []).filter((c) => !["joined", "cancelled"].includes(c.status)).length ===
           0 ? (
-            <HrEmptyState title="No post-join checklists" description="Checklists appear after onboarding is completed and the employee is created." />
+            <HrEmptyState title="No Post-Join Checklists" description="Checklists appear after onboarding is completed and the employee is created." />
           ) : null}
         </div>
       ) : null}
@@ -379,34 +413,57 @@ export function OnboardingManagementPage() {
       {tab === "documents" ? (
         <div className="space-y-2">
           <p className="text-[11px] text-muted-foreground">
-            Click a file name or <span className="font-medium text-foreground">View</span> to
-            preview. Files uploaded before this update may need to be re-uploaded from the candidate
-            portal.
+            One folder per candidate. Open{" "}
+            <span className="font-medium text-foreground">View</span> to see every uploaded file,
+            then preview, verify, or reject inside the directory.
           </p>
-          {(dir?.cases ?? []).flatMap((c) =>
-            c.portal.documents.map((d) => (
-              <OnboardingDocumentRow
-                key={`${c.id}-${d.id}`}
-                className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-border/70 bg-card px-3 py-2 text-xs"
-                doc={d}
-                subtitle={`${c.candidateName} · ${d.kind}`}
-                onView={setPreviewDoc}
-                onVerify={() => {
-                  verifyDocument(c.id, d.id, "verified");
-                  toast("Document verified");
-                  void load();
-                }}
-                onReject={() => {
-                  verifyDocument(c.id, d.id, "rejected");
-                  toast("Document rejected");
-                  void load();
-                }}
-              />
-            )),
-          )}
+          {(dir?.cases ?? [])
+            .filter((c) => c.portal.documents.length > 0)
+            .map((c) => {
+              const docs = c.portal.documents;
+              const verified = docs.filter((d) => d.verifyStatus === "verified").length;
+              const pending = docs.filter((d) => d.verifyStatus === "pending").length;
+              const rejected = docs.filter((d) => d.verifyStatus === "rejected").length;
+              return (
+                <div
+                  key={c.id}
+                  className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-border/70 bg-card px-3 py-2.5 text-xs"
+                >
+                  <button
+                    type="button"
+                    className="flex min-w-0 flex-1 cursor-pointer items-start gap-2 rounded-md text-left transition-colors duration-200 hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 px-1 py-0.5 -mx-1"
+                    onClick={() => setDocsCase(c)}
+                  >
+                    <FolderOpen className="mt-0.5 size-4 shrink-0 text-primary" />
+                    <div className="min-w-0">
+                      <p className="truncate font-medium text-foreground">
+                        {c.candidateName} documents
+                      </p>
+                      <p className="text-[10px] text-muted-foreground">
+                        {docs.length} file{docs.length === 1 ? "" : "s"}
+                        {verified ? ` · ${verified} verified` : ""}
+                        {pending ? ` · ${pending} pending` : ""}
+                        {rejected ? ` · ${rejected} rejected` : ""}
+                        {c.department ? ` · ${c.department}` : ""}
+                      </p>
+                    </div>
+                  </button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    className="h-7 cursor-pointer gap-1"
+                    onClick={() => setDocsCase(c)}
+                  >
+                    <Eye className="size-3" />
+                    View
+                  </Button>
+                </div>
+              );
+            })}
           {(dir?.cases ?? []).every((c) => c.portal.documents.length === 0) ? (
             <HrEmptyState
-              title="No documents yet"
+              title="No Documents Yet"
               description="Documents appear after candidates upload via the secure portal."
             />
           ) : null}
@@ -415,13 +472,13 @@ export function OnboardingManagementPage() {
 
       {tab === "reports" ? (
         <div className="grid gap-3 md:grid-cols-2">
-          <ReportCard title="Completion rate" value={`${stats.completionRate}%`} />
-          <ReportCard title="Total cases" value={String(stats.total)} />
-          <ReportCard title="Joining this week" value={String(weekJoiners.length)} />
-          <ReportCard title="Overdue tasks" value={String(stats.overdue)} />
+          <ReportCard title="Completion Rate" value={`${stats.completionRate}%`} />
+          <ReportCard title="Total Cases" value={String(stats.total)} />
+          <ReportCard title="Joining This Week" value={String(weekJoiners.length)} />
+          <ReportCard title="Overdue Tasks" value={String(stats.overdue)} />
           <div className="rounded-xl border border-border/70 bg-card p-4 md:col-span-2">
             <p className="mb-2 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
-              Joining this week
+              Joining This Week
             </p>
             {weekJoiners.length === 0 ? (
               <p className="text-xs text-muted-foreground">No joiners scheduled this week.</p>
@@ -483,72 +540,73 @@ export function OnboardingManagementPage() {
       ) : null}
 
       <SetupDrawer
-        open={filtersOpen}
-        onClose={() => setFiltersOpen(false)}
-        title="Filters"
-        description="Narrow onboarding cases"
+        open={Boolean(docsCase)}
+        onClose={() => setDocsCase(null)}
+        title={docsCase ? `${docsCase.candidateName} documents` : "Documents"}
+        description={
+          docsCase
+            ? `${docsCase.portal.documents.length} file(s) · preview, verify, or reject each upload`
+            : undefined
+        }
+        wide
         footer={
           <Button
             type="button"
+            variant="outline"
             className="cursor-pointer"
-            onClick={() => setFiltersOpen(false)}
+            onClick={() => setDocsCase(null)}
           >
-            Apply
+            Close
           </Button>
         }
       >
-        <div className="space-y-3">
-          <SetupField label="Status">
-            <SetupSelect
-              value={filters.status}
-              onChange={(e) => setFilters((f) => ({ ...f, status: e.target.value }))}
-            >
-              <option value="all">All</option>
-              {Object.entries(ONBOARDING_STATUS_LABELS).map(([k, v]) => (
-                <option key={k} value={k}>
-                  {v}
-                </option>
-              ))}
-            </SetupSelect>
-          </SetupField>
-          <SetupField label="Department">
-            <SetupSelect
-              value={filters.department}
-              onChange={(e) => setFilters((f) => ({ ...f, department: e.target.value }))}
-            >
-              <option value="all">All</option>
-              {(dir?.departments ?? []).map((d) => (
-                <option key={d} value={d}>
-                  {d}
-                </option>
-              ))}
-            </SetupSelect>
-          </SetupField>
-          <label className="flex cursor-pointer items-center gap-2 text-xs">
-            <input
-              type="checkbox"
-              className="cursor-pointer"
-              checked={filters.overdueOnly}
-              onChange={(e) => setFilters((f) => ({ ...f, overdueOnly: e.target.checked }))}
-            />
-            Overdue only
-          </label>
-        </div>
+        {docsCase ? (
+          <div className="space-y-2">
+            <p className="text-[11px] text-muted-foreground">
+              Click a file name or View to preview. Files uploaded before this update may need to be
+              re-uploaded from the candidate portal.
+            </p>
+            {docsCase.portal.documents.length === 0 ? (
+              <p className="text-xs text-muted-foreground">No documents in this directory.</p>
+            ) : (
+              docsCase.portal.documents.map((d) => (
+                <OnboardingDocumentRow
+                  key={d.id}
+                  doc={d}
+                  subtitle={d.kind.replace(/_/g, " ")}
+                  onView={setPreviewDoc}
+                  onVerify={() => {
+                    verifyDocument(docsCase.id, d.id, "verified");
+                    toast("Document verified");
+                    void load();
+                  }}
+                  onReject={() => {
+                    verifyDocument(docsCase.id, d.id, "rejected");
+                    toast("Document rejected");
+                    void load();
+                  }}
+                />
+              ))
+            )}
+          </div>
+        ) : null}
       </SetupDrawer>
 
       <OnboardingDocumentPreviewDialog
         doc={previewDoc}
         subtitle={
-          previewDoc
-            ? (dir?.cases ?? [])
-                .flatMap((c) =>
-                  c.portal.documents.map((d) => ({
-                    d,
-                    label: `${c.candidateName} · ${d.kind}`,
-                  })),
-                )
-                .find((x) => x.d.id === previewDoc.id)?.label
-            : undefined
+          previewDoc && docsCase
+            ? `${docsCase.candidateName} · ${previewDoc.kind}`
+            : previewDoc
+              ? (dir?.cases ?? [])
+                  .flatMap((c) =>
+                    c.portal.documents.map((d) => ({
+                      d,
+                      label: `${c.candidateName} · ${d.kind}`,
+                    })),
+                  )
+                  .find((x) => x.d.id === previewDoc.id)?.label
+              : undefined
         }
         onClose={() => setPreviewDoc(null)}
       />
@@ -605,10 +663,14 @@ export function OnboardingManagementPage() {
           }
         }}
         onComplete={(caseId) => {
-          void activateEmployee(caseId)
-            .then((activated) => {
-              if (activated) {
-                toast(`Employee ${activated.employeeId} created — complete assignments in Workforce`);
+          void completeOnboarding(caseId)
+            .then((completed) => {
+              if (completed) {
+                const msg =
+                  completed.status === "pending_join"
+                    ? `Profile created (${completed.employeeId}) — activates on ${completed.joiningDate}`
+                    : `Employee ${completed.employeeId} activated — complete assignments in Workforce`;
+                toast(msg);
                 void load().then(async () => {
                   const d = await loadOnboardingDirectory();
                   setDir(d);
@@ -618,6 +680,22 @@ export function OnboardingManagementPage() {
             })
             .catch((e) => {
               toast(e instanceof Error ? e.message : "Completion failed", "error");
+            });
+        }}
+        onActivate={(caseId) => {
+          void activateOnboardingEmployee(caseId)
+            .then((activated) => {
+              if (activated) {
+                toast(`Employee ${activated.employeeId} is now active in Workforce`);
+                void load().then(async () => {
+                  const d = await loadOnboardingDirectory();
+                  setDir(d);
+                  setDetailCase(d.cases.find((x) => x.id === caseId) ?? null);
+                });
+              }
+            })
+            .catch((e) => {
+              toast(e instanceof Error ? e.message : "Activation failed", "error");
             });
         }}
       />

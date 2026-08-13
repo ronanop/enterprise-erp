@@ -220,13 +220,13 @@ export function RosterCalendarView({
         <span className="text-[10px] text-muted-foreground self-center">Drag shift onto roster cells</span>
       </div>
 
-      <div className="erp-scroll overflow-x-auto">
-        <table className="min-w-[640px] w-full text-left text-xs">
+      <div className="erp-scroll overflow-x-scroll">
+        <table className="w-max min-w-full text-left text-xs">
           <thead>
             <tr className="border-b border-border/70">
               <th className="sticky left-0 bg-card py-2 pr-2">Employee</th>
               {dates.map((d) => (
-                <th key={d} className="px-1 py-2 font-normal text-muted-foreground">
+                <th key={d} className="min-w-11 px-1 py-2 text-center font-normal text-muted-foreground">
                   {d.slice(5)}
                   {directory.holidays.some((h) => h.date === d) ? (
                     <span className="block text-[9px] text-amber-600">HOL</span>

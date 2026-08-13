@@ -16,7 +16,7 @@ export function HrStatusBadge({ status }: { status: string }) {
   const tone =
     s.includes("active") || s.includes("approved") || s.includes("present") || s.includes("paid")
       ? "border-emerald-200 bg-emerald-50 text-emerald-800"
-      : s.includes("pending") || s.includes("draft") || s.includes("submitted") || s.includes("open")
+      : s.includes("pending") || s.includes("draft") || s.includes("submitted") || s.includes("open") || s.includes("onboarding")
         ? "border-amber-200 bg-amber-50 text-amber-900"
         : s.includes("absent") || s.includes("reject") || s.includes("cancel") || s.includes("lost")
           ? "border-red-200 bg-red-50 text-red-800"

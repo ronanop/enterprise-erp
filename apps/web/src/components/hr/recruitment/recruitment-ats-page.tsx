@@ -544,8 +544,8 @@ export function RecruitmentAtsPage() {
 
       {tab === "reports" ? (
         <div className="grid gap-3 md:grid-cols-2">
-          <ReportBlock title="Offer acceptance rate" value={`${stats?.offerAcceptanceRate ?? 0}%`} />
-          <ReportBlock title="Avg time to hire" value={`${stats?.avgTimeToHire ?? 0} days`} />
+          <ReportBlock title="Offer Acceptance Rate" value={`${stats?.offerAcceptanceRate ?? 0}%`} />
+          <ReportBlock title="Avg Time to Hire" value={`${stats?.avgTimeToHire ?? 0} days`} />
           <div className="rounded-xl border border-border/70 bg-card p-4">
             <p className="mb-2 text-xs font-semibold uppercase text-muted-foreground">Source performance</p>
             <ul className="space-y-1 text-xs">

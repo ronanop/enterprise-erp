@@ -74,6 +74,14 @@ type Mode = "create" | "edit" | "view" | "history" | null;
 
 const PAGE_SIZE = 10;
 
+/** Plural tab titles → singular labels for Add / Edit actions. */
+function singularTabTitle(title: string): string {
+  if (title.endsWith("ies")) return `${title.slice(0, -3)}y`;
+  if (/(?:ches|shes|sses|xes|zes)$/i.test(title)) return title.slice(0, -2);
+  if (title.endsWith("s") && !title.endsWith("ss")) return title.slice(0, -1);
+  return title;
+}
+
 function toFormValue(value: unknown, type?: FieldDef["type"]): string {
   if (value == null) return type === "checkbox" ? "false" : "";
   if (type === "checkbox") {
@@ -97,6 +105,33 @@ function SkeletonRows() {
       ))}
     </div>
   );
+}
+
+/**
+ * Percentage-only widths that always sum to 100% (checkbox 5% + actions 8% + data = 87%).
+ * Mixing rem + % was causing horizontal overflow.
+ */
+function setupColumnWidths(columns: { key: string }[]): string[] {
+  const budget = 87;
+  if (columns.length === 0) return [];
+  const weights = columns.map((c, i) => {
+    if (
+      c.key === "code" ||
+      c.key === "employee_code" ||
+      c.key === "status" ||
+      c.key === "sort_order" ||
+      c.key === "capacity" ||
+      c.key === "leave_days" ||
+      c.key === "year" ||
+      c.key === "paid"
+    ) {
+      return 0.75;
+    }
+    if (i === 0) return 1.55;
+    return 1;
+  });
+  const total = weights.reduce((a, b) => a + b, 0);
+  return weights.map((w) => `${((w / total) * budget).toFixed(2)}%`);
 }
 
 function AuditBlock({ row }: { row: SetupRow }) {
@@ -220,6 +255,7 @@ export function SetupEntityPanel({
 
   const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const pageRows = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  const columnWidths = useMemo(() => setupColumnWidths(columns), [columns]);
 
   const stats = useMemo(() => {
     const base = [
@@ -414,7 +450,7 @@ export function SetupEntityPanel({
   const canCreate = tab.source !== "derived";
 
   return (
-    <div className="space-y-4">
+    <div className="w-full min-w-0 space-y-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <div className="flex flex-wrap items-center gap-2">
@@ -449,13 +485,13 @@ export function SetupEntityPanel({
           {canCreate ? (
             <Button type="button" size="sm" className="cursor-pointer" onClick={openCreate}>
               <Plus className="size-3.5" />
-              Add {tab.title.replace(/s$/, "")}
+              Add {singularTabTitle(tab.title)}
             </Button>
           ) : null}
         </div>
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid w-full gap-3 sm:grid-cols-2 xl:grid-cols-4">
         {stats.map((s) => (
           <div key={s.label} className="rounded-xl border border-border/70 bg-card px-3 py-2.5 shadow-sm">
             <p className="text-[10px] font-medium tracking-wide text-muted-foreground uppercase">
@@ -466,7 +502,7 @@ export function SetupEntityPanel({
         ))}
       </div>
 
-      <div className="flex flex-wrap items-center gap-2">
+      <div className="flex w-full flex-wrap items-center gap-2">
         <div className="relative min-w-[200px] flex-1">
           <Search className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted-foreground" />
           <Input
@@ -564,17 +600,24 @@ export function SetupEntityPanel({
           {canCreate ? (
             <Button type="button" size="sm" className="mt-4 cursor-pointer" onClick={openCreate}>
               <Plus className="size-3.5" />
-              Add {tab.title.replace(/s$/, "")}
+              Add {singularTabTitle(tab.title)}
             </Button>
           ) : null}
         </div>
       ) : (
-        <div className="rounded-xl border border-border/70 bg-card shadow-sm">
-          <div className="erp-scroll overflow-x-auto">
-            <table className="w-full min-w-[720px] text-left text-sm">
-              <thead className="border-b border-border/70 bg-muted/40">
-                <tr>
-                  <th className="w-10 px-3 py-2">
+        <div className="w-full max-w-full min-w-0 overflow-hidden rounded-xl border border-border/70 bg-card shadow-sm">
+          <div className="w-full max-w-full overflow-x-hidden">
+            <table className="w-full max-w-full table-fixed border-collapse text-left text-sm">
+              <colgroup>
+                <col style={{ width: "5%" }} />
+                {columnWidths.map((w, i) => (
+                  <col key={columns[i]?.key ?? i} style={{ width: w }} />
+                ))}
+                <col style={{ width: "8%" }} />
+              </colgroup>
+              <thead>
+                <tr className="border-b border-border/70 bg-muted/40">
+                  <th className="overflow-hidden px-2 py-2.5 sm:px-3">
                     <input
                       type="checkbox"
                       className="cursor-pointer"
@@ -592,12 +635,13 @@ export function SetupEntityPanel({
                   {columns.map((c) => (
                     <th
                       key={c.key}
-                      className="px-3 py-2 text-[11px] font-medium tracking-wide text-muted-foreground uppercase"
+                      className="overflow-hidden px-2 py-2.5 text-[11px] font-medium tracking-wide text-ellipsis whitespace-nowrap text-muted-foreground uppercase sm:px-3"
+                      title={c.label}
                     >
                       {c.label}
                     </th>
                   ))}
-                  <th className="px-3 py-2 text-[11px] font-medium tracking-wide text-muted-foreground uppercase">
+                  <th className="overflow-hidden px-2 py-2.5 text-right text-[11px] font-medium tracking-wide whitespace-nowrap text-muted-foreground uppercase sm:px-3">
                     Actions
                   </th>
                 </tr>
@@ -605,7 +649,7 @@ export function SetupEntityPanel({
               <tbody>
                 {pageRows.map((row) => (
                   <tr key={row.id} className="border-b border-border/50 last:border-0 hover:bg-muted/30">
-                    <td className="px-3 py-2">
+                    <td className="overflow-hidden px-2 py-2 sm:px-3">
                       <input
                         type="checkbox"
                         className="cursor-pointer"
@@ -619,15 +663,23 @@ export function SetupEntityPanel({
                       />
                     </td>
                     {columns.map((c) => (
-                      <td key={c.key} className="px-3 py-2.5 align-middle">
+                      <td key={c.key} className="max-w-0 overflow-hidden px-2 py-2.5 align-middle sm:px-3">
                         {c.render
-                          ? c.render(row)
+                          ? <div className="min-w-0 truncate">{c.render(row)}</div>
                           : c.key === "status"
-                            ? <HrStatusBadge status={cell(row, "status")} />
-                            : cell(row, c.key, ...nameKeys)}
+                            ? (
+                              <div className="min-w-0 truncate">
+                                <HrStatusBadge status={cell(row, "status")} />
+                              </div>
+                            )
+                            : (
+                              <span className="block truncate" title={cell(row, c.key, ...nameKeys)}>
+                                {cell(row, c.key, ...nameKeys)}
+                              </span>
+                            )}
                       </td>
                     ))}
-                    <td className="px-3 py-2">
+                    <td className="overflow-hidden px-2 py-2 text-right align-middle sm:px-3">
                       <RowActionsMenu
                         open={menuId === row.id}
                         onOpenChange={(open) => setMenuId(open ? row.id : null)}
@@ -686,7 +738,7 @@ export function SetupEntityPanel({
               </tbody>
             </table>
           </div>
-          <div className="flex items-center justify-between border-t border-border/70 px-3 py-2 text-xs text-muted-foreground">
+          <div className="flex w-full items-center justify-between border-t border-border/70 px-3 py-2 text-xs text-muted-foreground">
             <span>
               Showing {(page - 1) * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE, filtered.length)} of{" "}
               {filtered.length}
@@ -721,10 +773,10 @@ export function SetupEntityPanel({
         open={mode === "create" || mode === "edit" || mode === "view"}
         title={
           mode === "create"
-            ? `Add ${tab.title.replace(/s$/, "")}`
+            ? `Add ${singularTabTitle(tab.title)}`
             : mode === "view"
-              ? `View ${tab.title.replace(/s$/, "")}`
-              : `Edit ${tab.title.replace(/s$/, "")}`
+              ? `View ${singularTabTitle(tab.title)}`
+              : `Edit ${singularTabTitle(tab.title)}`
         }
         description={tab.description}
         wide

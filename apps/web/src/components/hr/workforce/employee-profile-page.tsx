@@ -27,6 +27,7 @@ import {
   formatEmploymentTypeLabel,
   formatMaritalStatusLabel,
   formatRelationshipLabel,
+  GENDER_OPTIONS,
   LIFECYCLE_STATUS_OPTIONS,
 } from "@/config/hr-master-options";
 import type {
@@ -36,10 +37,10 @@ import type {
   EmployeeWizardDraft,
 } from "@/types/employee-management";
 import { emptyBank } from "@/types/employee-management";
+import { cn } from "@/lib/utils";
 
 const TABS = [
   { id: "overview", label: "Overview" },
-  { id: "all-details", label: "All details" },
   { id: "employment", label: "Employment" },
   { id: "gov", label: "Government IDs" },
   { id: "bank", label: "Bank" },
@@ -131,7 +132,7 @@ export function EmployeeProfilePage({ employeeId }: { employeeId: string }) {
   const [record, setRecord] = useState<EmployeeRecord | null>(null);
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState(
-    ["performance", "training", "assets", "activity", "audit"].includes(initialTab)
+    ["performance", "training", "assets", "activity", "audit", "all-details"].includes(initialTab)
       ? "overview"
       : initialTab,
   );
@@ -316,35 +317,7 @@ export function EmployeeProfilePage({ employeeId }: { employeeId: string }) {
 
       <div className="min-h-[200px] rounded-xl border border-border/70 bg-card p-4 shadow-sm">
         {tab === "overview" ? (
-          <div className="grid gap-4 text-sm md:grid-cols-2">
-            <Section title="Personal">
-              <p>
-                {record.extension.personal.maritalStatus || "—"} ·{" "}
-                {record.extension.personal.gender || "—"}
-              </p>
-              <p className="text-xs text-muted-foreground">
-                {record.extension.personal.currentAddress.city},{" "}
-                {record.extension.personal.currentAddress.country}
-              </p>
-            </Section>
-            <Section title="Emergency">
-              <p>{record.extension.personal.emergency.name || "—"}</p>
-              <p className="text-xs text-muted-foreground">
-                {record.extension.personal.emergency.phone}
-              </p>
-            </Section>
-            <Section title="At a glance">
-              <p className="text-xs text-muted-foreground">
-                Attendance rows: {linked?.attendance.length ?? "…"} · Leave requests:{" "}
-                {linked?.leaveRequests.length ?? "…"} · Documents:{" "}
-                {(record.extension.documents?.length ?? 0) + (linked?.hrDocuments.length ?? 0)}
-              </p>
-            </Section>
-          </div>
-        ) : null}
-
-        {tab === "all-details" ? (
-          <AllDetailsView record={record} companyBank={companyBank} />
+          <OverviewTab record={record} linked={linked} linkedLoading={linkedLoading} />
         ) : null}
 
         {tab === "employment" ? (
@@ -384,7 +357,7 @@ export function EmployeeProfilePage({ employeeId }: { employeeId: string }) {
 
         {tab === "bank" ? (
           <div className="grid gap-4 md:grid-cols-2">
-            <Section title="Onboarding bank">
+            <Section title="Onboarding Bank">
               <p className="mb-2 text-xs text-muted-foreground">
                 Account details provided by the employee during onboarding / hire.
               </p>
@@ -400,7 +373,7 @@ export function EmployeeProfilePage({ employeeId }: { employeeId: string }) {
                 <p className="text-xs text-muted-foreground">No onboarding bank details on file.</p>
               )}
             </Section>
-            <Section title="Company salary account">
+            <Section title="Company Salary Account">
               <p className="mb-2 text-xs text-muted-foreground">
                 Account opened / maintained by the company after hire (used for payroll).
               </p>
@@ -430,7 +403,7 @@ export function EmployeeProfilePage({ employeeId }: { employeeId: string }) {
         ) : null}
 
         {tab === "attendance" ? (
-          <Section title="Attendance log">
+          <Section title="Attendance Log">
             <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
               <div className="flex flex-wrap items-center gap-2">
                 <label htmlFor="profile-att-month" className="sr-only">
@@ -524,7 +497,7 @@ export function EmployeeProfilePage({ employeeId }: { employeeId: string }) {
 
         {tab === "payroll" ? (
           <div className="space-y-4">
-            <Section title="Salary structure">
+            <Section title="Salary Structure">
               <EmsFormGrid>
                 <Info label="CTC" value={record.extension.salary.ctc || "—"} />
                 <Info label="Basic" value={record.extension.salary.basicSalary || "—"} />
@@ -581,7 +554,7 @@ export function EmployeeProfilePage({ employeeId }: { employeeId: string }) {
 
       <SetupDrawer
         open={editOpen}
-        title="Edit employee"
+        title="Edit Employee"
         description="Update profile details and the company salary account."
         wide
         onClose={() => setEditOpen(false)}
@@ -679,7 +652,7 @@ export function EmployeeProfilePage({ employeeId }: { employeeId: string }) {
 
             <div>
               <h3 className="mb-2 text-xs font-semibold uppercase text-muted-foreground">
-                Company salary account
+                Company Salary Account
               </h3>
               <EmsFormGrid>
                 <SetupField label="Bank name">
@@ -739,151 +712,201 @@ export function EmployeeProfilePage({ employeeId }: { employeeId: string }) {
   );
 }
 
-function AllDetailsView({
+function formatGenderLabel(value: string | null | undefined): string {
+  if (!value) return "—";
+  const hit = GENDER_OPTIONS.find((o) => o.value === value.toLowerCase());
+  if (hit) return hit.label;
+  return value.charAt(0).toUpperCase() + value.slice(1);
+}
+
+function formatAddressLine(parts: (string | undefined | null)[]): string {
+  const cleaned = parts.map((p) => (p || "").trim()).filter(Boolean);
+  return cleaned.length ? cleaned.join(", ") : "—";
+}
+
+function isEmptyValue(value: ReactNode): boolean {
+  if (value == null) return true;
+  if (typeof value === "string") {
+    const t = value.trim();
+    return !t || t === "—";
+  }
+  return false;
+}
+
+function OverviewCard({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <div className="flex h-full flex-col rounded-xl border border-border/70 bg-card p-4 shadow-sm">
+      <h3 className="border-b border-border/50 pb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+        {title}
+      </h3>
+      <div className="mt-3 flex-1">{children}</div>
+    </div>
+  );
+}
+
+function OverviewField({
+  label,
+  value,
+  hideIfEmpty = false,
+  className,
+}: {
+  label: string;
+  value: ReactNode;
+  hideIfEmpty?: boolean;
+  className?: string;
+}) {
+  if (hideIfEmpty && isEmptyValue(value)) return null;
+  return (
+    <div className={cn("min-w-0", className)}>
+      <p className="text-[11px] font-medium text-muted-foreground">{label}</p>
+      <p className="mt-0.5 break-words text-sm font-medium text-foreground">
+        {isEmptyValue(value) ? "—" : value}
+      </p>
+    </div>
+  );
+}
+
+function OverviewTab({
   record,
-  companyBank,
+  linked,
+  linkedLoading,
 }: {
   record: EmployeeRecord;
-  companyBank: BankDetails;
+  linked: LinkedData | null;
+  linkedLoading: boolean;
 }) {
   const p = record.extension.personal;
-  const e = record.extension.employment;
-  const g = record.extension.governmentIds;
-  const b = record.extension.bank;
-  const education = record.extension.education ?? [];
-  const previous = record.extension.previousEmployment ?? [];
-  const docs = record.extension.documents ?? [];
+  const docCount =
+    (record.extension.documents?.length ?? 0) + (linked?.hrDocuments.length ?? 0);
+  const attendanceCount = linkedLoading ? null : (linked?.attendance.length ?? 0);
+  const leaveCount = linkedLoading ? null : (linked?.leaveRequests.length ?? 0);
+
+  const fullAddress = formatAddressLine([
+    p.currentAddress.line1,
+    p.currentAddress.line2,
+    p.currentAddress.city,
+    p.currentAddress.state,
+    p.currentAddress.pincode,
+    p.currentAddress.country,
+  ]);
+  const permanentAddress = formatAddressLine([
+    p.permanentAddress.line1,
+    p.permanentAddress.line2,
+    p.permanentAddress.city,
+    p.permanentAddress.state,
+    p.permanentAddress.pincode,
+    p.permanentAddress.country,
+  ]);
 
   return (
     <div className="space-y-4 text-sm">
-      <p className="text-xs text-muted-foreground">
-        Complete snapshot of details filled during onboarding or Add employee.
-      </p>
-      <div className="grid gap-3 md:grid-cols-2">
-        <Section title="Personal">
-          <EmsFormGrid>
-            <Info
-              label="Name"
-              value={`${p.firstName} ${p.middleName} ${p.lastName}`.replace(/\s+/g, " ").trim()}
-            />
-            <Info label="Official email" value={p.officialEmail || "—"} />
-            <Info label="Personal email" value={p.personalEmail || "—"} />
-            <Info label="Mobile" value={p.mobile || "—"} />
-            <Info label="DOB" value={p.dateOfBirth || "—"} />
-            <Info label="Gender" value={p.gender || "—"} />
-            <Info label="Marital status" value={formatMaritalStatusLabel(p.maritalStatus)} />
-            <Info label="Nationality" value={p.nationality || "—"} />
-            <Info label="Blood group" value={p.bloodGroup || "—"} />
-            <Info
-              label="Current address"
-              value={
-                [p.currentAddress.line1, p.currentAddress.city, p.currentAddress.state, p.currentAddress.pincode]
-                  .filter(Boolean)
-                  .join(", ") || "—"
-              }
-            />
-            <Info
-              label="Emergency"
-              value={`${p.emergency.name || "—"} (${formatRelationshipLabel(p.emergency.relationship)}) ${p.emergency.phone || ""}`}
-            />
-          </EmsFormGrid>
-        </Section>
-        <Section title="Employment">
-          <EmsFormGrid>
-            <Info label="Employee ID" value={e.employeeCode || record.employeeCode} />
-            <Info label="Joined" value={e.joiningDate || "—"} />
-            <Info label="Department" value={e.departmentName || record.departmentName} />
-            <Info label="Designation" value={e.designationName || record.designationName} />
-            <Info label="Branch" value={e.branchName || record.branchName} />
-            <Info label="Type" value={formatEmploymentTypeLabel(e.employmentType)} />
-            <Info label="Reporting manager" value={e.reportingManagerName || "—"} />
-            <Info label="Shift" value={e.shiftName || "—"} />
-            <Info label="Status" value={e.lifecycleStatus || "—"} />
-          </EmsFormGrid>
-        </Section>
-        <Section title="Government IDs">
-          <EmsFormGrid>
-            <Info label="Aadhaar" value={g.aadhaar || "—"} />
-            <Info label="PAN" value={g.pan || "—"} />
-            <Info label="Passport" value={g.passport || "—"} />
-            <Info label="UAN" value={g.uan || "—"} />
-            <Info label="ESIC" value={g.esic || "—"} />
-            <Info label="DL" value={g.drivingLicense || "—"} />
-          </EmsFormGrid>
-        </Section>
-        <Section title="Banks">
-          <EmsFormGrid>
-            <Info label="Onboarding bank" value={b.bankName || "—"} />
-            <Info label="Onboarding A/C" value={maskAccount(b.accountNumber)} />
-            <Info label="Company bank" value={companyBank.bankName || "—"} />
-            <Info label="Company A/C" value={maskAccount(companyBank.accountNumber)} />
-          </EmsFormGrid>
-        </Section>
+      <div>
+        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+          At a glance
+        </p>
+        <div className="mt-2 grid gap-3 sm:grid-cols-3">
+          {[
+            { label: "Attendance records", value: attendanceCount },
+            { label: "Leave requests", value: leaveCount },
+            { label: "Documents on file", value: docCount },
+          ].map((stat) => (
+            <div
+              key={stat.label}
+              className="rounded-xl border border-border/70 bg-muted/25 px-4 py-3"
+            >
+              <p className="text-[11px] font-medium text-muted-foreground">{stat.label}</p>
+              <p className="mt-1 text-2xl font-semibold tabular-nums tracking-tight text-foreground">
+                {stat.value == null ? "…" : stat.value}
+              </p>
+            </div>
+          ))}
+        </div>
       </div>
 
-      <Section title="Education (optional)">
-        {education.filter((x) => x.degree || x.institution).length === 0 ? (
-          <p className="text-xs text-muted-foreground">Not provided</p>
-        ) : (
-          <ul className="space-y-2 text-xs">
-            {education.map((x) => (
-              <li key={x.id} className="rounded-lg border border-border/60 px-3 py-2">
-                <p className="font-medium">
-                  {x.degree || "—"} · {x.institution || "—"}
-                </p>
-                <p className="text-muted-foreground">
-                  {[x.field, x.year, x.grade].filter(Boolean).join(" · ")}
-                </p>
-                {x.certificateFileName ? (
-                  <p className="mt-1 text-muted-foreground">Certificate: {x.certificateFileName}</p>
-                ) : null}
-              </li>
-            ))}
-          </ul>
-        )}
-      </Section>
+      <div className="grid items-stretch gap-4 lg:grid-cols-2">
+        <div className="flex flex-col gap-4">
+          <OverviewCard title="Personal">
+            <div className="grid grid-cols-1 gap-x-4 gap-y-3 sm:grid-cols-2">
+              <OverviewField
+                label="Gender"
+                value={formatGenderLabel(p.gender || record.gender)}
+              />
+              <OverviewField
+                label="Marital status"
+                value={formatMaritalStatusLabel(p.maritalStatus)}
+              />
+              <OverviewField label="Date of birth" value={p.dateOfBirth} hideIfEmpty />
+              <OverviewField label="Nationality" value={p.nationality} hideIfEmpty />
+              <OverviewField label="Blood group" value={p.bloodGroup} hideIfEmpty />
+              <OverviewField
+                label="Current address"
+                value={fullAddress}
+                className="sm:col-span-2"
+              />
+              <OverviewField
+                label="Permanent address"
+                value={permanentAddress}
+                className="sm:col-span-2"
+              />
+            </div>
+          </OverviewCard>
 
-      <Section title="Previous employment (optional)">
-        {previous.filter((x) => x.company || x.designation).length === 0 ? (
-          <p className="text-xs text-muted-foreground">Not provided</p>
-        ) : (
-          <ul className="space-y-2 text-xs">
-            {previous.map((x) => (
-              <li key={x.id} className="rounded-lg border border-border/60 px-3 py-2">
-                <p className="font-medium">
-                  {x.company || "—"} · {x.designation || "—"}
-                </p>
-                <p className="text-muted-foreground">
-                  {x.fromDate || "?"} → {x.toDate || "?"} · CTC {x.lastCtc || "—"}
-                </p>
-              </li>
-            ))}
-          </ul>
-        )}
-      </Section>
+          <OverviewCard title="Contact">
+            <div className="grid grid-cols-1 gap-x-4 gap-y-3 sm:grid-cols-2">
+              <OverviewField
+                label="Official email"
+                value={p.officialEmail || record.officialEmail}
+              />
+              <OverviewField label="Personal email" value={p.personalEmail} hideIfEmpty />
+              <OverviewField label="Mobile" value={p.mobile || record.mobile} />
+            </div>
+          </OverviewCard>
+        </div>
 
-      <Section title="Onboarding documents">
-        {docs.length === 0 ? (
-          <p className="text-xs text-muted-foreground">No documents</p>
-        ) : (
-          <ul className="space-y-1 text-xs">
-            {docs.map((d) => (
-              <li key={d.id}>
-                {d.documentType}: {d.fileName}
-              </li>
-            ))}
-          </ul>
-        )}
-      </Section>
+        <div className="flex flex-col gap-4">
+          <OverviewCard title="Employment">
+            <div className="grid grid-cols-1 gap-x-4 gap-y-3 sm:grid-cols-2">
+              <OverviewField label="Department" value={record.departmentName} />
+              <OverviewField label="Designation" value={record.designationName} />
+              <OverviewField label="Branch" value={record.branchName} />
+              <OverviewField label="Reporting manager" value={record.reportingManagerName} />
+              <OverviewField
+                label="Employment type"
+                value={formatEmploymentTypeLabel(record.employmentType)}
+              />
+              <OverviewField label="Joined" value={record.joiningDate} />
+              <OverviewField
+                label="Status"
+                value={<HrStatusBadge status={record.lifecycleStatus} />}
+              />
+            </div>
+          </OverviewCard>
+
+          <OverviewCard title="Emergency contact">
+            <div className="grid grid-cols-1 gap-x-4 gap-y-3 sm:grid-cols-2">
+              <OverviewField label="Name" value={p.emergency.name} />
+              <OverviewField
+                label="Relationship"
+                value={formatRelationshipLabel(p.emergency.relationship)}
+              />
+              <OverviewField label="Phone" value={p.emergency.phone} />
+            </div>
+          </OverviewCard>
+        </div>
+      </div>
     </div>
   );
 }
 
 function Info({ label, value }: { label: string; value: ReactNode }) {
+  const empty =
+    value == null ||
+    value === "" ||
+    (typeof value === "string" && value.trim() === "");
   return (
     <div>
       <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">{label}</p>
-      <p className="mt-0.5 text-sm text-foreground">{value}</p>
+      <p className="mt-0.5 text-sm text-foreground">{empty ? "—" : value}</p>
     </div>
   );
 }
@@ -958,7 +981,7 @@ function DocumentsTab({
 
   return (
     <div className="space-y-5">
-      <Section title="Uploaded during onboarding">
+      <Section title="Uploaded During Onboarding">
         {!portalDocs.length ? (
           <p className="text-xs text-muted-foreground">No documents uploaded during onboarding.</p>
         ) : (
@@ -991,7 +1014,7 @@ function DocumentsTab({
         )}
       </Section>
 
-      <Section title="HR / company documents">
+      <Section title="HR / Company Documents">
         {loading ? (
           <p className="text-xs text-muted-foreground">Loading…</p>
         ) : !hrDocs.length && !otherLocal.length ? (

@@ -18,16 +18,16 @@ export function AppShell({ children }: AppShellProps) {
   const hrMode = isHrPath(pathname);
 
   return (
-    <div className="flex min-h-dvh bg-background">
+    <div className="flex h-dvh overflow-hidden bg-background">
       {hrMode ? <HrSidebar /> : <AppSidebar />}
-      <div className="flex min-w-0 flex-1 flex-col">
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col">
         <AppTopbar />
-        <main className="flex-1 px-4 py-6 sm:px-6 lg:px-8">
-          <div className="mx-auto w-full max-w-[1400px] animate-in fade-in-0 duration-300">
+        <main className="erp-scroll flex min-h-0 flex-1 flex-col overflow-y-auto px-4 py-4 sm:px-6 lg:px-8">
+          <div className="mx-auto flex min-h-full w-full max-w-[1400px] flex-1 flex-col animate-in fade-in-0 duration-300">
             {children}
           </div>
         </main>
-        <footer className="border-t border-border/70 bg-card/40 px-4 py-3 text-[11px] text-muted-foreground sm:px-6">
+        <footer className="shrink-0 border-t border-border/70 bg-card/40 px-4 py-3 text-[11px] text-muted-foreground sm:px-6">
           <div className="mx-auto flex max-w-[1400px] flex-wrap items-center justify-between gap-2">
             <span className="font-medium tracking-tight">
               {hrMode ? "HRMS workspace" : "Architecture Baseline v1.1"}

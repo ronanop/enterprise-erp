@@ -1337,45 +1337,40 @@ export function HrSetupCenter() {
       </nav>
 
       <div>
-        <h1 className="text-lg font-semibold tracking-tight">HR Setup</h1>
-        <p className="text-xs text-muted-foreground">
-          Enterprise configuration center for organization, leave, shifts, payroll, and workflows —
-          foundation for Employee, Attendance, Leave, Payroll, Recruitment, Training, and Performance.
-        </p>
+        <h1 className="text-lg font-bold tracking-tight uppercase">HR Setup</h1>
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-[220px_minmax(0,1fr)]">
-        <aside className="h-fit rounded-xl border border-border/70 bg-card p-2 shadow-sm">
-          <p className="px-2 py-1.5 text-[10px] font-medium tracking-[0.14em] text-muted-foreground uppercase">
+      <div className="space-y-4">
+        <div className="rounded-xl border border-border/70 bg-card p-2 shadow-sm">
+          <p className="px-2 pb-1.5 text-[10px] font-medium tracking-[0.14em] text-muted-foreground uppercase">
             Configuration
           </p>
-          <ul className="space-y-0.5">
+          <div className="erp-scroll flex gap-1 overflow-x-auto">
             {hrSetupSections.map((s) => {
               const Icon = s.icon;
               const active = s.id === section.id;
               return (
-                <li key={s.id}>
-                  <button
-                    type="button"
-                    onClick={() => go(s.id)}
-                    className={cn(
-                      "flex w-full cursor-pointer items-center gap-2 rounded-lg px-2.5 py-2 text-left text-sm transition-colors duration-200",
-                      active
-                        ? "bg-primary text-primary-foreground"
-                        : "text-muted-foreground hover:bg-muted hover:text-foreground",
-                    )}
-                  >
-                    <Icon className="size-4 shrink-0" />
-                    <span className="truncate font-medium">{s.title}</span>
-                  </button>
-                </li>
+                <button
+                  key={s.id}
+                  type="button"
+                  onClick={() => go(s.id)}
+                  className={cn(
+                    "inline-flex shrink-0 cursor-pointer items-center gap-2 rounded-lg px-3 py-2 text-sm transition-colors duration-200",
+                    active
+                      ? "bg-primary text-primary-foreground"
+                      : "text-muted-foreground hover:bg-muted hover:text-foreground",
+                  )}
+                >
+                  <Icon className="size-4 shrink-0" />
+                  <span className="whitespace-nowrap font-medium">{s.title}</span>
+                </button>
               );
             })}
-          </ul>
-        </aside>
+          </div>
+        </div>
 
-        <div className="min-w-0 space-y-4">
-          <div className="erp-scroll overflow-x-auto rounded-xl border border-border/70 bg-card px-2 pt-2 shadow-sm">
+        <div className="w-full min-w-0 space-y-4">
+          <div className="erp-scroll w-full overflow-x-auto rounded-xl border border-border/70 bg-card px-2 pt-2 shadow-sm">
             <div className="flex min-w-max gap-0.5 border-b border-border/70">
               {section.tabs.map((t) => {
                 const active = t.id === tab.id;

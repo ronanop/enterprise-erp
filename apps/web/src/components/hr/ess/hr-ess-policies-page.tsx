@@ -95,7 +95,7 @@ export function HrEssPoliciesPage() {
       <SetupToastHost />
       <HrAuthBanner />
       <PageHeader
-        title="ESS policies"
+        title="ESS Policies"
         description="Publish mandatory walkthroughs for the employee app. Use ## headings for steps."
         actions={
           <div className="flex gap-2">

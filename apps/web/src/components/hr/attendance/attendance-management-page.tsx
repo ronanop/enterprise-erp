@@ -141,7 +141,7 @@ export function AttendanceManagementPage() {
           <HrToolbar onRefresh={() => void load()} loading={loading}>
             <Button size="sm" className="cursor-pointer" onClick={() => setMarkOpen(true)}>
               <Plus className="size-3.5" />
-              Mark attendance
+              Mark Attendance
             </Button>
             <Button size="sm" variant="outline" className="cursor-pointer" onClick={() => setImportOpen(true)}>
               <Upload className="size-3.5" />
@@ -184,14 +184,14 @@ export function AttendanceManagementPage() {
         <>
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4 2xl:grid-cols-8">
             {[
-              { label: "Today's present", value: stats.present },
-              { label: "Today's absent", value: stats.absent },
-              { label: "Late arrivals", value: stats.late },
-              { label: "Half day", value: stats.half },
-              { label: "Work from home", value: stats.wfh },
+              { label: "Today's Present", value: stats.present },
+              { label: "Today's Absent", value: stats.absent },
+              { label: "Late Arrivals", value: stats.late },
+              { label: "Half Day", value: stats.half },
+              { label: "Work From Home", value: stats.wfh },
               { label: "On leave", value: stats.leave },
-              { label: "Overtime hours", value: stats.otHours },
-              { label: "Missing punches", value: stats.missing },
+              { label: "Overtime Hours", value: stats.otHours },
+              { label: "Missing Punches", value: stats.missing },
             ].map((c) => (
               <div
                 key={c.label}
@@ -209,10 +209,10 @@ export function AttendanceManagementPage() {
             {(
               [
                 ["table", "Register"],
-                ["employee", "By employee"],
+                ["employee", "By Employee"],
                 ["calendar", "Calendar"],
                 ["reports", "Reports"],
-                ["audit", "Audit log"],
+                ["audit", "Audit Log"],
               ] as const
             ).map(([id, label]) => (
               <button
@@ -451,7 +451,7 @@ export function AttendanceManagementPage() {
                       className="cursor-pointer h-7"
                       onClick={() =>
                         setConfirm({
-                          title: "Mark present",
+                          title: "Mark Present",
                           message: "Update selected rows to present?",
                           action: async () => {
                             await bulkUpdateAttendanceStatus(selectedRows, "present");
@@ -462,7 +462,7 @@ export function AttendanceManagementPage() {
                         })
                       }
                     >
-                      Mark present
+                      Mark Present
                     </Button>
                     <Button
                       size="sm"
@@ -470,7 +470,7 @@ export function AttendanceManagementPage() {
                       className="cursor-pointer h-7"
                       onClick={() =>
                         setConfirm({
-                          title: "Mark absent",
+                          title: "Mark Absent",
                           message: "Update selected rows to absent?",
                           action: async () => {
                             await bulkUpdateAttendanceStatus(selectedRows, "absent");
@@ -480,7 +480,7 @@ export function AttendanceManagementPage() {
                         })
                       }
                     >
-                      Mark absent
+                      Mark Absent
                     </Button>
                     <Button
                       size="sm"
@@ -498,10 +498,10 @@ export function AttendanceManagementPage() {
                 {!pageRows.length ? (
                   <HrEmptyState
                     title="No attendance records"
-                    description="Mark attendance or import a CSV to populate the register."
+                    description="Mark Attendance or import a CSV to populate the register."
                     action={
                       <Button size="sm" className="cursor-pointer" onClick={() => setMarkOpen(true)}>
-                        Mark attendance
+                        Mark Attendance
                       </Button>
                     }
                   />

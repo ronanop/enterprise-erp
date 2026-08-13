@@ -360,7 +360,7 @@ export function PayrollManagementPage() {
           {tab === "dashboard" ? (
             <div className="grid gap-4 lg:grid-cols-2">
               <div className="rounded-xl border border-border/70 bg-card p-4 shadow-sm">
-                <h3 className="text-sm font-semibold">Net salary by run</h3>
+                <h3 className="text-sm font-semibold">Net Salary by Run</h3>
                 <p className="mt-0.5 text-xs text-muted-foreground">Recent payroll cycles</p>
                 <div className="mt-4 space-y-2">
                   {(dir?.runs.slice(0, 6) ?? []).length === 0 ? (
@@ -394,7 +394,7 @@ export function PayrollManagementPage() {
                 </div>
               </div>
               <div className="rounded-xl border border-border/70 bg-card p-4 shadow-sm">
-                <h3 className="text-sm font-semibold">Pending approvals</h3>
+                <h3 className="text-sm font-semibold">Pending Approvals</h3>
                 <div className="mt-3 space-y-3">
                   {(dir?.runs.filter((r) =>
                     ["pending_hr", "pending_finance"].includes(r.status),

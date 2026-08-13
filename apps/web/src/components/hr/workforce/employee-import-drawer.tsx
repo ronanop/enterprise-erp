@@ -47,7 +47,7 @@ export function EmployeeImportDrawer({
   return (
     <SetupDrawer
       open={open}
-      title="Import employees"
+      title="Import Employees"
       description="Upload CSV or Excel-exported CSV. Validate before import."
       wide
       onClose={onClose}

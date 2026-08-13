@@ -5,6 +5,7 @@ import type {
   BankDetails,
   EducationEntry,
   EmployeeDocumentItem,
+  EmployeeExtension,
   EmployeeWizardDraft,
   GovernmentIds,
   PreviousEmploymentEntry,
@@ -44,11 +45,26 @@ export function portalToWizardDraft(
     ...personal.currentAddress,
     line1: p.personal.address || "",
   };
+  const permanentLine =
+    (p.personal.sameAsCurrentAddress
+      ? p.personal.address
+      : p.personal.permanentAddress || p.personal.address) || "";
+  personal.permanentAddress = {
+    ...personal.permanentAddress,
+    line1: permanentLine,
+  };
   personal.emergency = {
     name: p.emergency.name || "",
     phone: p.emergency.phone || "",
     relationship: p.emergency.relationship || "",
   };
+
+  const photoDoc = (p.documents || []).find(
+    (d) => d.kind === "photo" || d.typeCode === "DOC-PHOTO",
+  );
+  if (photoDoc?.fileDataUrl) {
+    personal.profilePhotoDataUrl = photoDoc.fileDataUrl;
+  }
 
   const governmentIds: GovernmentIds = {
     ...emptyGovernmentIds(),
@@ -124,7 +140,9 @@ export function summarizePortalDetails(portal: PortalPayload): {
         portal.personal.phone,
         portal.personal.dob,
         portal.personal.gender,
-        portal.personal.address,
+        portal.personal.address && `Current: ${portal.personal.address}`,
+        (portal.personal.permanentAddress || portal.personal.address) &&
+          `Permanent: ${portal.personal.sameAsCurrentAddress ? portal.personal.address : portal.personal.permanentAddress || portal.personal.address}`,
       ].filter(Boolean),
     },
     {
@@ -179,4 +197,22 @@ export function summarizePortalDetails(portal: PortalPayload): {
       ].filter(Boolean) as string[],
     },
   ];
+}
+
+/** Prefer explicit profile photo, else onboarding/HR photo document. */
+export function profilePhotoFromExtension(
+  ext: Pick<EmployeeExtension, "personal" | "documents"> | undefined | null,
+): string | undefined {
+  if (!ext) return undefined;
+  if (ext.personal?.profilePhotoDataUrl) return ext.personal.profilePhotoDataUrl;
+  const photo = (ext.documents || []).find((d) => {
+    const t = (d.documentType || "").toLowerCase();
+    return t === "photo" || t === "doc-photo" || t.includes("photo");
+  });
+  return photo?.fileDataUrl || undefined;
+}
+
+export function displayOrDash(value: string | undefined | null): string {
+  const v = (value || "").trim();
+  return !v || v === "—" ? "—" : v;
 }

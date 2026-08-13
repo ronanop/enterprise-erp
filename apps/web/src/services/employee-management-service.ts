@@ -32,6 +32,9 @@ import {
   emptyPersonal,
   emptySalary,
 } from "@/types/employee-management";
+import { profilePhotoFromExtension } from "@/lib/onboarding-to-employee";
+
+const LOCAL_EMP_KEY = "erp_hr_local_employees_v1";
 
 const ACTIVITY_KEY = "erp_employee_activity_v1";
 const AUDIT_KEY = "erp_employee_audit_v1";
@@ -146,7 +149,7 @@ function mapLifecycle(
   extStatus: string | undefined,
 ): EmployeeRecord["lifecycleStatus"] {
   const s = (extStatus || profileStatus || masterStatus || "active").toLowerCase();
-  if (["probation", "notice", "resigned", "archived", "inactive"].includes(s)) {
+  if (["probation", "notice", "resigned", "archived", "inactive", "onboarding"].includes(s)) {
     return s as EmployeeRecord["lifecycleStatus"];
   }
   return s === "active" ? "active" : "inactive";
@@ -202,7 +205,7 @@ function mergeRow(
     locationName: locationName || "—",
     reportingManagerId: String(master.reporting_manager_id ?? ext.employment.reportingManagerId ?? ""),
     reportingManagerName:
-      ext.employment.reportingManagerName ||
+      (ext.employment.reportingManagerName || "").trim() ||
       managerMap.get(String(master.reporting_manager_id ?? "")) ||
       "—",
     employmentType: String(
@@ -216,7 +219,7 @@ function mergeRow(
       String(profile?.status ?? ""),
       ext.employment.lifecycleStatus,
     ),
-    profilePhotoDataUrl: ext.personal.profilePhotoDataUrl,
+    profilePhotoDataUrl: profilePhotoFromExtension(ext),
     gender: String(ext.personal.gender || profile?.gender || ""),
     isDeleted: Boolean(master.is_deleted),
     extension: ext,
@@ -386,14 +389,157 @@ async function fetchEmployeeDirectoryUncached(): Promise<EmployeeDirectoryResult
     });
 
   // Merge onboarding-activated / locally registered employees (shared HR connector)
-  const localEmployees = readJson<EmployeeRecord[]>("erp_hr_local_employees_v1", []);
+  const localEmployees = readJson<EmployeeRecord[]>(LOCAL_EMP_KEY, []);
   const seenIds = new Set(records.map((r) => r.id));
   const seenCodes = new Set(records.map((r) => r.employeeCode));
   for (const loc of localEmployees) {
     if (seenIds.has(loc.id) || seenCodes.has(loc.employeeCode)) continue;
-    records.push(loc);
+    const stored = extensions[loc.id];
+    const ext = defaultExtension(stored ?? loc.extension);
+    const mgrName =
+      (ext.employment.reportingManagerName || "").trim() ||
+      (loc.reportingManagerName || "").trim() ||
+      "—";
+    records.push({
+      ...loc,
+      reportingManagerId: ext.employment.reportingManagerId || loc.reportingManagerId || "",
+      reportingManagerName: mgrName,
+      departmentName: ext.employment.departmentName || loc.departmentName,
+      designationName: ext.employment.designationName || loc.designationName,
+      branchName: ext.employment.branchName || loc.branchName,
+      employmentType: ext.employment.employmentType || loc.employmentType,
+      joiningDate: ext.employment.joiningDate || loc.joiningDate,
+      profilePhotoDataUrl: profilePhotoFromExtension(ext) || loc.profilePhotoDataUrl,
+      extension: ext,
+    });
     seenIds.add(loc.id);
     seenCodes.add(loc.employeeCode);
+  }
+
+  // If an API employee matches an onboarding local record by code, overlay portal
+  // extension fields that were saved under the local UUID (manager, photo, docs).
+  const localByCode = new Map(localEmployees.map((l) => [l.employeeCode, l]));
+  for (let i = 0; i < records.length; i++) {
+    const row = records[i]!;
+    const local = localByCode.get(row.employeeCode);
+    if (!local || local.id === row.id) continue;
+    const localExt = extensions[local.id] ?? local.extension;
+    if (!localExt) continue;
+    const mergedExt = defaultExtension({
+      ...row.extension,
+      personal: {
+        ...row.extension.personal,
+        ...localExt.personal,
+        profilePhotoDataUrl:
+          row.extension.personal.profilePhotoDataUrl ||
+          localExt.personal.profilePhotoDataUrl ||
+          profilePhotoFromExtension(localExt),
+      },
+      employment: {
+        ...row.extension.employment,
+        ...localExt.employment,
+        reportingManagerName:
+          (row.extension.employment.reportingManagerName || "").trim() ||
+          (localExt.employment.reportingManagerName || "").trim() ||
+          "",
+      },
+      governmentIds: {
+        ...row.extension.governmentIds,
+        ...localExt.governmentIds,
+      },
+      bank: row.extension.bank.accountNumber ? row.extension.bank : localExt.bank,
+      documents:
+        row.extension.documents.length > 0 ? row.extension.documents : localExt.documents,
+    });
+    // Also store under API id so future loads find it
+    if (!extensions[row.id]) {
+      saveExtension(row.id, mergedExt);
+    }
+    records[i] = {
+      ...row,
+      reportingManagerName:
+        (mergedExt.employment.reportingManagerName || "").trim() ||
+        (row.reportingManagerName || "").trim() ||
+        "—",
+      profilePhotoDataUrl: profilePhotoFromExtension(mergedExt) || row.profilePhotoDataUrl,
+      extension: mergedExt,
+    };
+  }
+
+  // Backfill manager + photo from onboarding cases for employees created before mapping fixes
+  const onboardingCases = readJson<
+    {
+      employeeId?: string;
+      reportingManager?: string;
+      portal?: {
+        documents?: { kind?: string; typeCode?: string; fileDataUrl?: string }[];
+      };
+    }[]
+  >("erp_onboarding_cases_v1", []);
+  const caseByEmpCode = new Map(
+    onboardingCases
+      .filter((c) => c.employeeId)
+      .map((c) => [String(c.employeeId).toUpperCase(), c]),
+  );
+  for (let i = 0; i < records.length; i++) {
+    const row = records[i]!;
+    const caseRow = caseByEmpCode.get(row.employeeCode.toUpperCase());
+    if (!caseRow) continue;
+
+    const needsManager =
+      !(row.reportingManagerName || "").trim() || row.reportingManagerName === "—";
+    const needsPhoto = !row.profilePhotoDataUrl;
+
+    if (!needsManager && !needsPhoto) continue;
+
+    const photoDoc = (caseRow.portal?.documents || []).find(
+      (d) => d.kind === "photo" || d.typeCode === "DOC-PHOTO",
+    );
+    const photoUrl = photoDoc?.fileDataUrl;
+    const mgr = (caseRow.reportingManager || "").trim();
+
+    const nextExt = defaultExtension({
+      ...row.extension,
+      personal: {
+        ...row.extension.personal,
+        profilePhotoDataUrl:
+          row.extension.personal.profilePhotoDataUrl || photoUrl || undefined,
+      },
+      employment: {
+        ...row.extension.employment,
+        reportingManagerName:
+          (row.extension.employment.reportingManagerName || "").trim() || mgr || "",
+      },
+      documents:
+        row.extension.documents.length > 0
+          ? row.extension.documents
+          : (caseRow.portal?.documents || [])
+              .filter((d) => d.fileDataUrl)
+              .map((d, idx) => ({
+                id: `onb-doc-${idx}`,
+                documentType: d.kind || "other",
+                documentNumber: "",
+                issueDate: "",
+                expiryDate: "",
+                fileName: d.kind || "document",
+                fileDataUrl: d.fileDataUrl,
+                uploadedBy: "Onboarding portal",
+                uploadedAt: nowIso(),
+                source: "onboarding" as const,
+              })),
+    });
+
+    if (needsManager || needsPhoto) {
+      saveExtension(row.id, nextExt);
+    }
+
+    records[i] = {
+      ...row,
+      reportingManagerName: needsManager && mgr ? mgr : row.reportingManagerName || "—",
+      profilePhotoDataUrl:
+        row.profilePhotoDataUrl || profilePhotoFromExtension(nextExt) || photoUrl,
+      extension: nextExt,
+    };
   }
 
   return { records, options, errors };
@@ -465,9 +611,10 @@ export function computeEmployeeStats(records: EmployeeRecord[]) {
   const total = records.length;
   const active = records.filter((r) => r.lifecycleStatus === "active").length;
   const inactive = records.filter((r) => r.lifecycleStatus === "inactive").length;
+  const onboarding = records.filter((r) => r.lifecycleStatus === "onboarding").length;
   const probation = records.filter((r) => r.lifecycleStatus === "probation").length;
   const notice = records.filter((r) => r.lifecycleStatus === "notice").length;
-  return { total, active, inactive, probation, notice };
+  return { total, active, inactive, onboarding, probation, notice };
 }
 
 export function getEmployeeById(records: EmployeeRecord[], id: string): EmployeeRecord | undefined {
@@ -609,7 +756,48 @@ export async function applyOnboardingPortalToEmployee(
     updatedBy: "Onboarding",
     updatedAt: nowIso(),
   });
+  // Ensure avatar uses photo document when profilePhoto was not set separately
+  if (!ext.personal.profilePhotoDataUrl) {
+    const fromDoc = profilePhotoFromExtension(ext);
+    if (fromDoc) ext.personal.profilePhotoDataUrl = fromDoc;
+  }
   saveExtension(employeeId, ext);
+  invalidateEmployeeDirectoryCache();
+
+  // Keep local employee mirror in sync (directory may serve this row as-is)
+  try {
+    const locals = readJson<EmployeeRecord[]>(LOCAL_EMP_KEY, []);
+    const idx = locals.findIndex((e) => e.id === employeeId || e.employeeCode === draft.employment.employeeCode);
+    if (idx >= 0) {
+      const prev = locals[idx]!;
+      locals[idx] = {
+        ...prev,
+        displayName:
+          [draft.personal.firstName, draft.personal.middleName, draft.personal.lastName]
+            .filter(Boolean)
+            .join(" ")
+            .trim() || prev.displayName,
+        officialEmail: draft.personal.officialEmail || prev.officialEmail,
+        mobile: draft.personal.mobile || prev.mobile,
+        departmentName: draft.employment.departmentName || prev.departmentName,
+        designationName: draft.employment.designationName || prev.designationName,
+        branchName: draft.employment.branchName || prev.branchName,
+        reportingManagerId: draft.employment.reportingManagerId || prev.reportingManagerId,
+        reportingManagerName:
+          (draft.employment.reportingManagerName || "").trim() ||
+          prev.reportingManagerName ||
+          "—",
+        employmentType: draft.employment.employmentType || prev.employmentType,
+        joiningDate: draft.employment.joiningDate || prev.joiningDate,
+        profilePhotoDataUrl: profilePhotoFromExtension(ext) || prev.profilePhotoDataUrl,
+        extension: ext,
+      };
+      writeJson(LOCAL_EMP_KEY, locals);
+    }
+  } catch {
+    /* ignore */
+  }
+
   appendActivity({
     employeeId,
     type: "onboarding_imported",

@@ -81,7 +81,7 @@ export function DownloadManagerRosterDrawer({
     <SetupDrawer
       open={open}
       title="Download manager roster"
-      description="Export a formatted Excel workbook with shift dropdowns on each day. Upload still accepts CSV after filling."
+      description="Sheet columns: employee code, name, and real calendar dates only. Manager is chosen here before download."
       onClose={onClose}
       footer={
         <>
@@ -146,7 +146,7 @@ export function DownloadManagerRosterDrawer({
         <p className="text-xs text-muted-foreground">
           {managerId
             ? teamCount
-              ? `${teamCount} employee(s) for ${month || "selected month"}. Day cells use dropdowns (shift codes, WO, HO).`
+              ? `${teamCount} employee(s) for ${month || "selected month"}. Fill day cells with shift codes (A/B/C/D…), WO, or HO.`
               : "No employees report to this manager."
             : "Pick a manager to see team size."}
         </p>
@@ -168,10 +168,12 @@ export function DownloadManagerRosterDrawer({
           </div>
         ) : null}
         <div className="rounded-lg border border-border/60 bg-muted/30 px-3 py-2 text-[11px] text-muted-foreground">
-          <p className="font-medium text-foreground">Excel layout</p>
+          <p className="font-medium text-foreground">Sheet layout</p>
           <p className="mt-1">
-            Teal header row, color-coded days, frozen employee columns. Lists sheet powers the shift
-            dropdown. Columns <strong>d01…d31</strong> are day-of-month.
+            Columns are <strong>employee_code</strong>, <strong>employee_name</strong>, then real
+            dates (e.g. <strong>2026-08-11 (Mon)</strong>). Day cells use conditional formatting so
+            colors update when you change shift / WO / HO via the dropdown. CSV has the same values
+            without colors.
           </p>
         </div>
       </div>
@@ -190,10 +192,22 @@ export function UploadManagerRosterDrawer({
   onApplied: () => void;
   directory: ShiftRosterDirectory | null;
 }) {
+  const managers = directory?.options.managers ?? [];
+  const [managerId, setManagerId] = useState("");
+  const [month, setMonth] = useState(currentMonth);
   const [fileName, setFileName] = useState("");
   const [raw, setRaw] = useState("");
   const [validation, setValidation] = useState<ManagerRosterValidation | null>(null);
   const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    if (!open) return;
+    setMonth(currentMonth());
+    setManagerId((prev) => {
+      if (prev && managers.some((m) => m.id === prev)) return prev;
+      return managers[0]?.id ?? "";
+    });
+  }, [open, managers]);
 
   function reset() {
     setFileName("");
@@ -216,11 +230,19 @@ export function UploadManagerRosterDrawer({
 
   function validate() {
     if (!directory) return;
+    if (!managerId) {
+      toast("Select a reporting manager", "error");
+      return;
+    }
+    if (!/^\d{4}-\d{2}$/.test(month)) {
+      toast("Month must be YYYY-MM", "error");
+      return;
+    }
     if (!raw.trim()) {
       toast("Choose a CSV file first", "error");
       return;
     }
-    const result = validateManagerRosterCsv(directory, raw);
+    const result = validateManagerRosterCsv(directory, raw, { managerId, month });
     setValidation(result);
     if (result.errors.length && result.ok === 0) {
       toast("Validation failed — see errors", "error");
@@ -258,7 +280,7 @@ export function UploadManagerRosterDrawer({
     <SetupDrawer
       open={open}
       title="Upload manager roster"
-      description="Upload the filled manager CSV to update the roster calendar for that team."
+      description="Select the same manager and month used on download, then upload the filled CSV."
       onClose={handleClose}
       wide
       footer={
@@ -277,7 +299,7 @@ export function UploadManagerRosterDrawer({
             variant="outline"
             className="cursor-pointer transition-colors duration-200"
             onClick={validate}
-            disabled={!raw || busy}
+            disabled={!raw || !managerId || busy}
           >
             Validate
           </Button>
@@ -294,7 +316,24 @@ export function UploadManagerRosterDrawer({
       }
     >
       <div className="space-y-3">
-        <SetupField label="Roster CSV" required hint="Same format as Download manager roster">
+        <SetupField label="Reporting manager" required hint="Must match the team in the CSV">
+          <SetupSelect value={managerId} onChange={(e) => setManagerId(e.target.value)}>
+            <option value="">Select manager</option>
+            {managers.map((m) => (
+              <option key={m.id} value={m.id}>
+                {m.code} · {m.label}
+              </option>
+            ))}
+          </SetupSelect>
+        </SetupField>
+        <SetupField label="Month" required hint="Format YYYY-MM">
+          <SetupInput type="month" value={month} onChange={(e) => setMonth(e.target.value)} />
+        </SetupField>
+        <SetupField
+          label="Roster CSV"
+          required
+          hint="Columns: employee_code, employee_name, then date headers"
+        >
           <input
             type="file"
             accept=".csv,text/csv"
@@ -307,10 +346,11 @@ export function UploadManagerRosterDrawer({
         </SetupField>
 
         <div className="rounded-lg border border-border/60 bg-muted/30 px-3 py-2 text-[11px] text-muted-foreground">
-          Allowed cell values: shift <strong>codes or names</strong> from Shift master,{" "}
+          Allowed cell values: shift <strong>codes</strong> from Shift master (e.g. A/B/C/D),{" "}
           <strong>WO</strong> (weekly off), <strong>HO</strong> (holiday), or blank (clear
-          override). Day columns: <strong>d01…d31</strong> (also accepts Excel date headers from
-          older files).
+          override). Day columns: full dates like <strong>2026-08-11 (Mon)</strong> (legacy{" "}
+          <strong>d01…d31</strong> headers still import). Older CSVs that still include
+          manager/month/department columns are accepted.
         </div>
 
         {directory && directory.shifts.length > 0 ? (

@@ -7,7 +7,7 @@ import {
   loadEmployeeDirectory,
   type EmployeeDirectoryOptions,
 } from "@/services/employee-management-service";
-import type { EmployeeRecord } from "@/types/employee-management";
+import type { EmployeeRecord, EmployeeLifecycleStatus } from "@/types/employee-management";
 import {
   consumeEmployeeSequence,
   formatEmployeeCode,
@@ -108,6 +108,7 @@ export function registerLocalEmployee(
     reportingManager?: string;
     joiningDate?: string;
     employeeCode?: string;
+    lifecycleStatus?: EmployeeLifecycleStatus;
   },
 ): EmployeeRecord {
   const seq = consumeEmployeeSequence();
@@ -131,7 +132,8 @@ export function registerLocalEmployee(
   employment.employmentType = input.employmentType ?? "full_time";
   employment.reportingManagerName = input.reportingManager ?? "";
   employment.joiningDate = input.joiningDate ?? new Date().toISOString().slice(0, 10);
-  employment.lifecycleStatus = "probation";
+  const lifecycle = input.lifecycleStatus ?? "probation";
+  employment.lifecycleStatus = lifecycle;
 
   const record: EmployeeRecord = {
     id,
@@ -151,7 +153,7 @@ export function registerLocalEmployee(
     reportingManagerName: employment.reportingManagerName,
     employmentType: employment.employmentType,
     joiningDate: employment.joiningDate,
-    lifecycleStatus: "probation",
+    lifecycleStatus: lifecycle,
     gender: "",
     isDeleted: false,
     extension: {
@@ -174,6 +176,30 @@ export function registerLocalEmployee(
   all.unshift(record);
   writeJson(LOCAL_EMP_KEY, all.slice(0, 2000));
   return record;
+}
+
+export function updateLocalEmployeeLifecycle(
+  employeeCode: string,
+  lifecycleStatus: EmployeeLifecycleStatus,
+): EmployeeRecord | null {
+  const all = listLocalEmployees();
+  const idx = all.findIndex((e) => e.employeeCode === employeeCode);
+  if (idx < 0) return null;
+  const next = {
+    ...all[idx],
+    lifecycleStatus,
+    extension: {
+      ...all[idx].extension,
+      employment: {
+        ...all[idx].extension.employment,
+        lifecycleStatus,
+      },
+      updatedAt: new Date().toISOString(),
+    },
+  };
+  all[idx] = next;
+  writeJson(LOCAL_EMP_KEY, all);
+  return next;
 }
 
 export function resolveEmployeeOption(

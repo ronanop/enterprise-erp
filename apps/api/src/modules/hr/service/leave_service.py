@@ -4,6 +4,7 @@ from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 from uuid import UUID
 
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from core.exceptions import AppException, NotFoundException
@@ -12,7 +13,12 @@ from modules.foundation.service.audit_service import AuditService
 from modules.hr.adapters.master_data_port import HrMasterDataAdapter
 from modules.hr.domain.enums import HolidayCalendarStatus, HrEntityType, LeaveAdjustmentStatus, LeaveRequestStatus
 from modules.hr.domain.exceptions import InvalidLeaveAdjustmentState
-from modules.hr.models import HrLeaveRequest
+from modules.hr.domain.leave_cycle_rules import (
+    assert_leave_balance_for_cycle,
+    assert_no_future_calendar_month_leave,
+    validate_leave_cycle_application,
+)
+from modules.hr.models import HrLeaveBalance, HrLeaveRequest
 from modules.hr.repository.holiday_calendar_repository import HolidayCalendarRepository
 from modules.hr.repository.leave_adjustment_repository import LeaveAdjustmentRepository
 from modules.hr.repository.leave_balance_repository import LeaveBalanceRepository
@@ -81,9 +87,11 @@ def _count_leave_days(
 
 class LeaveTypeService:
     def __init__(self, db: Session) -> None:
+        self._db = db
         self._repo = LeaveTypeRepository(db)
         self._scope = HrScopeValidator(db)
         self._engine = LeaveTypeEngine()
+        self._audit = AuditService(db)
 
     def list(self, ctx: TenantContext, company_id: UUID | None = None):
         cid = self._scope.resolve_company_id(ctx, company_id)
@@ -105,6 +113,50 @@ class LeaveTypeService:
         if row is None:
             raise NotFoundException("Leave type not found")
         return row
+
+    def delete(self, ctx: TenantContext, row_id: UUID) -> None:
+        self.get(ctx, row_id)
+
+        used_total = self._db.scalar(
+            select(func.coalesce(func.sum(HrLeaveBalance.used), 0)).where(
+                HrLeaveBalance.leave_type_id == row_id,
+                HrLeaveBalance.is_deleted.is_(False),
+            )
+        )
+        if Decimal(str(used_total or 0)) > 0:
+            raise AppException(
+                "Cannot delete leave type while employees have used balance against it"
+            )
+
+        open_requests = self._db.scalar(
+            select(func.count())
+            .select_from(HrLeaveRequest)
+            .where(
+                HrLeaveRequest.leave_type_id == row_id,
+                HrLeaveRequest.is_deleted.is_(False),
+                HrLeaveRequest.status.in_(
+                    (
+                        LeaveRequestStatus.DRAFT.value,
+                        LeaveRequestStatus.SUBMITTED.value,
+                        LeaveRequestStatus.MANAGER_APPROVED.value,
+                    )
+                ),
+            )
+        )
+        if int(open_requests or 0) > 0:
+            raise AppException(
+                "Cannot delete leave type while open leave requests still reference it"
+            )
+
+        if not self._repo.soft_delete(ctx, row_id):
+            raise NotFoundException("Leave type not found")
+        self._audit.log_entity_change(
+            tenant_id=ctx.tenant_id,
+            entity_name="hr_leave_type",
+            entity_id=row_id,
+            operation="delete",
+            performed_by=ctx.user_id,
+        )
 
 
 class LeaveBalanceService:
@@ -581,6 +633,43 @@ class LeaveRequestService:
         sandwich = bool(getattr(leave_type, "sandwich_rule_enabled", False))
         return _count_leave_days(start_date, end_date, non_working, sandwich=sandwich)
 
+    def _find_open_balance(self, ctx: TenantContext, company_id: UUID, employee_id: UUID, leave_type_id: UUID, year: int):
+        for bal in self._balances.list_rows(ctx, company_id):
+            if (
+                bal.employee_id == employee_id
+                and bal.leave_type_id == leave_type_id
+                and bal.balance_year == year
+                and bal.status == "open"
+            ):
+                return bal
+        return None
+
+    def _validate_cycle_for_request(
+        self,
+        ctx: TenantContext,
+        *,
+        company_id: UUID,
+        employee_id: UUID,
+        leave_type_id: UUID,
+        start_date: date,
+        end_date: date,
+        days_count,
+        require_balance: bool = True,
+    ) -> None:
+        leave_type = self._types.get(ctx, leave_type_id)
+        balance = self._find_open_balance(
+            ctx, company_id, employee_id, leave_type_id, start_date.year
+        )
+        validate_leave_cycle_application(
+            start_date=start_date,
+            end_date=end_date,
+            days_count=days_count,
+            closing_balance=None if balance is None else balance.closing_balance,
+            last_accrual_yyyymm=getattr(balance, "last_accrual_yyyymm", None) if balance else None,
+            monthly_credit_days=getattr(leave_type, "monthly_credit_days", None) if leave_type else None,
+            require_balance=require_balance,
+        )
+
     def create(self, ctx: TenantContext, *, branch_id: UUID, employee_id: UUID, company_id: UUID | None = None, **fields):
         cid = self._scope.resolve_company_id(ctx, company_id)
         self._scope.validate_branch_access(ctx, branch_id)
@@ -595,6 +684,19 @@ class LeaveRequestService:
             start_date=start_date,
             end_date=end_date,
         )
+        # Leave cycle: calendar months only (past/current). Posted balance only — no early credit.
+        assert_no_future_calendar_month_leave(start_date, end_date)
+        balance = self._find_open_balance(ctx, cid, employee_id, leave_type_id, start_date.year)
+        if balance is not None:
+            leave_type = self._types.get(ctx, leave_type_id)
+            assert_leave_balance_for_cycle(
+                days_count=fields["days_count"],
+                closing_balance=balance.closing_balance,
+                start_date=start_date,
+                end_date=end_date,
+                last_accrual_yyyymm=getattr(balance, "last_accrual_yyyymm", None),
+                monthly_credit_days=getattr(leave_type, "monthly_credit_days", None) if leave_type else None,
+            )
         doc = self._numbers.generate(HrEntityType.LEAVE_REQUEST, cid, HrLeaveRequest, "document_number")
         return self._repo.create(
             ctx,
@@ -608,6 +710,16 @@ class LeaveRequestService:
 
     def submit(self, ctx: TenantContext, row_id: UUID):
         row = self.get(ctx, row_id)
+        self._validate_cycle_for_request(
+            ctx,
+            company_id=row.company_id,
+            employee_id=row.employee_id,
+            leave_type_id=row.leave_type_id,
+            start_date=row.start_date,
+            end_date=row.end_date,
+            days_count=row.days_count,
+            require_balance=True,
+        )
         self._engine.submit(row)
         updated = self._repo.update(ctx, row_id, status=row.status)
         try:
@@ -666,17 +778,20 @@ class LeaveRequestService:
 
     def approve(self, ctx: TenantContext, row_id: UUID, *, approver_employee_id: UUID | None = None):
         row = self.get(ctx, row_id)
+        self._validate_cycle_for_request(
+            ctx,
+            company_id=row.company_id,
+            employee_id=row.employee_id,
+            leave_type_id=row.leave_type_id,
+            start_date=row.start_date,
+            end_date=row.end_date,
+            days_count=row.days_count,
+            require_balance=True,
+        )
         self._engine.approve(row)
-        balance = None
-        for bal in self._balances.list_rows(ctx, row.company_id):
-            if (
-                bal.employee_id == row.employee_id
-                and bal.leave_type_id == row.leave_type_id
-                and bal.balance_year == row.start_date.year
-                and bal.status == "open"
-            ):
-                balance = bal
-                break
+        balance = self._find_open_balance(
+            ctx, row.company_id, row.employee_id, row.leave_type_id, row.start_date.year
+        )
         if balance is None:
             raise NotFoundException("Open leave balance not found for approval year")
         self._balance_engine.apply_usage(balance, row.days_count)

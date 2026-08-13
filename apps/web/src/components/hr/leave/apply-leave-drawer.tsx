@@ -95,8 +95,8 @@ export function ApplyLeaveDrawer({
   return (
     <SetupDrawer
       open={open}
-      title="Apply leave"
-      description="Policy validations run before submit — balance, holidays, overlaps, eligibility."
+      title="Apply Leave"
+      description="Leave cycle is calendar 1–last day (not payroll 20–20). Monthly credit posts after month end — then past dates in that month can be covered."
       wide
       onClose={onClose}
       footer={

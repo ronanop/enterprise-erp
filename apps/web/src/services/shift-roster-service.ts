@@ -596,9 +596,13 @@ function daysInMonth(month: string): string[] {
   return days;
 }
 
-/** Excel-safe day header (avoids #### / auto date conversion). */
-function dayHeader(day: number): string {
-  return `d${String(day).padStart(2, "0")}`;
+/** Full calendar date for roster export columns (import reads leading YYYY-MM-DD). */
+export function formatRosterDayHeader(isoDate: string): string {
+  const m = isoDate.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!m) return isoDate;
+  const dt = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+  const weekday = dt.toLocaleDateString("en-GB", { weekday: "short" });
+  return `${isoDate} (${weekday})`;
 }
 
 function csvEscape(value: string): string {
@@ -703,6 +707,9 @@ function headerToDate(header: string, month: string): string | null {
   const h = header.trim().replace(/^="+|"+$/g, "").trim();
   if (!h) return null;
 
+  const isoLead = h.match(/^(\d{4}-\d{2}-\d{2})/);
+  if (isoLead) return isoLead[1];
+
   const dayKey = h.match(/^(?:d|day[_\s-]?)(\d{1,2})$/i);
   if (dayKey && /^\d{4}-\d{2}$/.test(month)) {
     const day = Number(dayKey[1]);
@@ -747,7 +754,6 @@ export type ManagerRosterExportData = {
   rows: {
     code: string;
     name: string;
-    department: string;
     dayValues: string[];
   }[];
   activeShifts: ShiftRecord[];
@@ -771,13 +777,12 @@ export function buildManagerRosterExportData(
   const days = daysInMonth(month);
   if (!days.length) throw new Error("Invalid month (use YYYY-MM)");
 
-  const dayHeaders = days.map((_, i) => dayHeader(i + 1));
+  const dayHeaders = days.map(formatRosterDayHeader);
   const activeShifts = dir.shifts.filter((s) => s.status !== "inactive");
 
   const rows = team.map((emp) => ({
     code: emp.code,
     name: emp.label,
-    department: emp.departmentName,
     dayValues: days.map((d) => resolveCellValue(dir, d, emp.id)),
   }));
 
@@ -792,25 +797,18 @@ export function buildManagerRosterExportData(
   };
 }
 
-/** Build manager-wise month roster CSV (matrix). */
+/** Build manager-wise month roster CSV (matrix). Columns: employee_code, employee_name, dates. */
 export function exportManagerRosterCsv(
   dir: ShiftRosterDirectory,
   managerId: string,
   month: string,
 ): { filename: string; csv: string; teamCount: number } {
   const data = buildManagerRosterExportData(dir, managerId, month);
-  const header = [
-    "manager_code",
-    "manager_name",
-    "month",
-    "employee_code",
-    "employee_name",
-    "department",
-    ...data.dayHeaders,
-  ].map((c) => csvEscape(c));
+  const header = ["employee_code", "employee_name", ...data.dayHeaders].map((c) => csvEscape(c));
 
   const legend = [
-    `# Roster month ${month} · ${data.days.length} days · fill cells with shift CODE (not name)`,
+    `# Roster ${month} · manager ${data.manager.code} ${data.manager.label} · ${data.days.length} days`,
+    `# Fill cells with shift CODE only (e.g. A / B / C / D) — not Morning/Evening names`,
     `# Special: WO = weekly off · HO = holiday · blank = clear day override`,
     `# Allowed shifts: ${
       data.activeShifts.length
@@ -820,17 +818,7 @@ export function exportManagerRosterCsv(
   ];
 
   const lines = data.rows.map((emp) =>
-    [
-      data.manager.code,
-      data.manager.label,
-      month,
-      emp.code,
-      emp.name,
-      emp.department,
-      ...emp.dayValues,
-    ]
-      .map((c) => csvEscape(String(c)))
-      .join(","),
+    [emp.code, emp.name, ...emp.dayValues].map((c) => csvEscape(String(c))).join(","),
   );
 
   const csv = `\uFEFF${[...legend, header.join(","), ...lines].join("\n")}`;
@@ -868,10 +856,31 @@ function parseCsvLine(line: string): string[] {
   return out;
 }
 
+function emptyValidation(errors: string[]): ManagerRosterValidation {
+  return {
+    managerCode: "",
+    managerName: "",
+    month: "",
+    ok: 0,
+    cleared: 0,
+    errors,
+    cells: [],
+    clearKeys: [],
+  };
+}
+
+export type ManagerRosterImportContext = {
+  /** Reporting manager selected in upload UI (required for slim CSV without manager_code). */
+  managerId?: string;
+  /** Month YYYY-MM selected in upload UI (required when file has no month column). */
+  month?: string;
+};
+
 /** Validate manager roster CSV and build cells to apply. */
 export function validateManagerRosterCsv(
   dir: ShiftRosterDirectory,
   raw: string,
+  context: ManagerRosterImportContext = {},
 ): ManagerRosterValidation {
   const lines = raw
     .replace(/^\uFEFF/, "")
@@ -879,41 +888,63 @@ export function validateManagerRosterCsv(
     .map((l) => l.trim())
     .filter((l) => l && !l.startsWith("#"));
   if (lines.length < 2) {
-    return {
-      managerCode: "",
-      managerName: "",
-      month: "",
-      ok: 0,
-      cleared: 0,
-      errors: ["File is empty or missing data rows"],
-      cells: [],
-      clearKeys: [],
-    };
+    return emptyValidation(["File is empty or missing data rows"]);
   }
 
   const header = parseCsvLine(lines[0]).map((h) => h.trim());
   const headerLower = header.map((h) => h.toLowerCase());
-  const required = ["manager_code", "manager_name", "month", "employee_code", "employee_name", "department"];
+  const required = ["employee_code", "employee_name"];
   for (const col of required) {
     if (!headerLower.includes(col)) {
-      return {
-        managerCode: "",
-        managerName: "",
-        month: "",
-        ok: 0,
-        cleared: 0,
-        errors: [`Missing column: ${col}`],
-        cells: [],
-        clearKeys: [],
-      };
+      return emptyValidation([`Missing column: ${col}`]);
     }
   }
 
   const idx = Object.fromEntries(headerLower.map((h, i) => [h, i]));
   const firstData = parseCsvLine(lines[1]);
-  const managerCode = firstData[idx.manager_code] ?? "";
-  const managerName = firstData[idx.manager_name] ?? "";
-  const month = firstData[idx.month] ?? "";
+  const legacyManagerCode = idx.manager_code != null ? (firstData[idx.manager_code] ?? "") : "";
+  const legacyManagerName = idx.manager_name != null ? (firstData[idx.manager_name] ?? "") : "";
+  const legacyMonth = idx.month != null ? (firstData[idx.month] ?? "") : "";
+
+  const manager =
+    (context.managerId
+      ? dir.options.managers.find((m) => m.id === context.managerId) ??
+        dir.options.employees.find((e) => e.id === context.managerId)
+      : undefined) ||
+    (legacyManagerCode
+      ? dir.options.managers.find((m) => m.code === legacyManagerCode) ||
+        dir.options.employees.find((e) => e.code === legacyManagerCode)
+      : undefined);
+
+  if (!manager) {
+    return emptyValidation([
+      legacyManagerCode
+        ? `Unknown manager_code: ${legacyManagerCode}`
+        : "Select a reporting manager before validating (sheet no longer includes manager columns).",
+    ]);
+  }
+
+  let month = (context.month || legacyMonth || "").trim();
+  if (!/^\d{4}-\d{2}$/.test(month)) {
+    const inferred = header
+      .map((h) => headerToDate(h, ""))
+      .find((d): d is string => Boolean(d && /^\d{4}-\d{2}-\d{2}$/.test(d)));
+    if (inferred) month = inferred.slice(0, 7);
+  }
+  if (!/^\d{4}-\d{2}$/.test(month)) {
+    return {
+      managerCode: manager.code,
+      managerName: manager.label,
+      month: "",
+      ok: 0,
+      cleared: 0,
+      errors: [
+        "Select a month (YYYY-MM) before validating, or include real date column headers (e.g. 2026-08-01 (Fri)).",
+      ],
+      cells: [],
+      clearKeys: [],
+    };
+  }
 
   const dateCols = header
     .map((h, i) => ({ date: headerToDate(h, month), i, raw: h }))
@@ -921,30 +952,14 @@ export function validateManagerRosterCsv(
 
   if (!dateCols.length) {
     return {
-      managerCode,
-      managerName,
+      managerCode: manager.code,
+      managerName: manager.label || legacyManagerName,
       month,
       ok: 0,
       cleared: 0,
       errors: [
-        "No day columns found. Use d01…d31 (preferred), or YYYY-MM-DD dates.",
+        "No day columns found. Use full dates like 2026-08-11 (Mon), or legacy d01…d31.",
       ],
-      cells: [],
-      clearKeys: [],
-    };
-  }
-
-  const manager =
-    dir.options.managers.find((m) => m.code === managerCode) ||
-    dir.options.employees.find((e) => e.code === managerCode);
-  if (!manager) {
-    return {
-      managerCode,
-      managerName,
-      month,
-      ok: 0,
-      cleared: 0,
-      errors: [`Unknown manager_code: ${managerCode}`],
       cells: [],
       clearKeys: [],
     };
@@ -965,25 +980,29 @@ export function validateManagerRosterCsv(
 
   for (let r = 1; r < lines.length; r++) {
     const cols = parseCsvLine(lines[r]);
-    const rowMgr = cols[idx.manager_code] ?? "";
-    const rowMonth = cols[idx.month] ?? "";
+    if (idx.manager_code != null) {
+      const rowMgr = cols[idx.manager_code] ?? "";
+      if (rowMgr && rowMgr !== manager.code) {
+        errors.push(`Row ${r + 1}: manager_code mismatch (${rowMgr})`);
+        continue;
+      }
+    }
+    if (idx.month != null) {
+      const rowMonth = cols[idx.month] ?? "";
+      if (rowMonth && rowMonth !== month) {
+        errors.push(`Row ${r + 1}: month mismatch (${rowMonth})`);
+        continue;
+      }
+    }
     const empCode = (cols[idx.employee_code] ?? "").toUpperCase();
-    if (rowMgr && rowMgr !== managerCode) {
-      errors.push(`Row ${r + 1}: manager_code mismatch (${rowMgr})`);
-      continue;
-    }
-    if (rowMonth && rowMonth !== month) {
-      errors.push(`Row ${r + 1}: month mismatch (${rowMonth})`);
-      continue;
-    }
     const emp = teamByCode.get(empCode);
     if (!emp) {
-      errors.push(`Row ${r + 1}: ${empCode || "(blank)"} is not under manager ${managerCode}`);
+      errors.push(`Row ${r + 1}: ${empCode || "(blank)"} is not under manager ${manager.code}`);
       continue;
     }
 
     for (const { date, i } of dateCols) {
-      if (month && expectedDays.size && !expectedDays.has(date)) {
+      if (expectedDays.size && !expectedDays.has(date)) {
         errors.push(`Row ${r + 1}: date ${date} outside month ${month}`);
         continue;
       }
@@ -1023,7 +1042,7 @@ export function validateManagerRosterCsv(
       const sh = findShiftByToken(dir, rawVal);
       if (!sh) {
         errors.push(
-          `Row ${r + 1} ${date}: unknown shift "${rawVal}" (use a Shift master code or name)`,
+          `Row ${r + 1} ${date}: unknown shift "${rawVal}" (use a Shift master code e.g. A/B/C/D)`,
         );
         continue;
       }
@@ -1041,8 +1060,8 @@ export function validateManagerRosterCsv(
   }
 
   return {
-    managerCode,
-    managerName: manager.label || managerName,
+    managerCode: manager.code,
+    managerName: manager.label || legacyManagerName,
     month,
     ok,
     cleared,

@@ -189,7 +189,7 @@ export function EmployeeManagementPage() {
             <Link href="/hr/workforce/new">
               <Button size="sm" className="cursor-pointer">
                 <Plus className="size-3.5" />
-                Add employee
+                Add Employee
               </Button>
             </Link>
             <Link href="/hr/onboarding">
@@ -238,11 +238,12 @@ export function EmployeeManagementPage() {
               setFilters((f) => ({ ...f, status: key === "all" ? "" : key }))
             }
             items={[
-              { key: "all", label: "Total employees", value: stats.total },
-              { key: "active", label: "Active employees", value: stats.active },
-              { key: "inactive", label: "Ex employees", value: stats.inactive },
+              { key: "all", label: "Total Employees", value: stats.total },
+              { key: "active", label: "Active Employees", value: stats.active },
+              { key: "onboarding", label: "Pending Join", value: stats.onboarding },
+              { key: "inactive", label: "Ex Employees", value: stats.inactive },
               { key: "probation", label: "Probation", value: stats.probation },
-              { key: "notice", label: "Notice period", value: stats.notice },
+              { key: "notice", label: "Notice Period", value: stats.notice },
             ]}
           />
 
@@ -330,7 +331,7 @@ export function EmployeeManagementPage() {
                     className="cursor-pointer h-7"
                     onClick={() =>
                       setConfirm({
-                        title: "Activate employees",
+                        title: "Activate Employees",
                         message: "Set selected employees to active status?",
                         action: () => runBulk("active", "Activated"),
                       })
@@ -345,7 +346,7 @@ export function EmployeeManagementPage() {
                     className="cursor-pointer h-7"
                     onClick={() =>
                       setConfirm({
-                        title: "Deactivate employees",
+                        title: "Deactivate Employees",
                         message: "Set selected employees to ex-employee status?",
                         action: () => runBulk("inactive", "Deactivated"),
                       })
@@ -360,7 +361,7 @@ export function EmployeeManagementPage() {
                     className="cursor-pointer h-7"
                     onClick={() =>
                       setConfirm({
-                        title: "Archive employees",
+                        title: "Archive Employees",
                         message: "Soft-archive selected employees? Records are retained.",
                         action: () => runBulk("archived", "Archived"),
                       })
@@ -390,7 +391,7 @@ export function EmployeeManagementPage() {
                   action={
                     <Link href="/hr/workforce/new">
                       <Button size="sm" className="cursor-pointer">
-                        Add employee
+                        Add Employee
                       </Button>
                     </Link>
                   }
@@ -447,7 +448,7 @@ export function EmployeeManagementPage() {
                               }
                             />
                           </HeaderFilterTh>
-                          <HeaderFilterTh label="Reporting manager">
+                          <HeaderFilterTh label="Reporting Manager">
                             <HeaderFilterSelect
                               value={filters.reportingManagerId}
                               onChange={(v) => setFilters((f) => ({ ...f, reportingManagerId: v }))}
@@ -517,7 +518,7 @@ export function EmployeeManagementPage() {
                             <td className="px-2 py-2 text-xs">{row.designationName}</td>
                             <td className="px-2 py-2 text-xs">{row.branchName}</td>
                             <td className="px-2 py-2 text-xs">{row.locationName}</td>
-                            <td className="px-2 py-2 text-xs">{row.reportingManagerName}</td>
+                            <td className="px-2 py-2 text-xs">{row.reportingManagerName?.trim() || "—"}</td>
                             <td className="px-2 py-2 text-xs">{formatEmploymentTypeLabel(row.employmentType)}</td>
                             <td className="px-2 py-2 text-xs">{row.joiningDate || "—"}</td>
                             <td className="px-2 py-2">
@@ -561,7 +562,7 @@ export function EmployeeManagementPage() {
                                   destructive
                                   onClick={() => {
                                     setConfirm({
-                                      title: "Archive employee",
+                                      title: "Archive Employee",
                                       message:
                                         "Soft delete — status becomes archived. Record is retained.",
                                       action: async () => {

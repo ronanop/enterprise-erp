@@ -22,6 +22,14 @@ import type {
 } from "@/types/onboarding-management";
 import { PORTAL_STEPS } from "@/types/onboarding-management";
 import { resolveOnboardingDisplayStatus } from "@/lib/onboarding-display-status";
+import {
+  canActivateOnboardingCase,
+  canApproveOnboardingCase,
+  canCompleteOnboardingCase,
+  hasOnboardingEmployeeRecord,
+  isJoiningDateReached,
+  isPortalInProgressStatus,
+} from "@/lib/onboarding-workflow";
 import { cn } from "@/lib/utils";
 
 type Props = {
@@ -36,6 +44,7 @@ type Props = {
   ) => void;
   onApprove: (caseId: string) => void;
   onComplete: (caseId: string) => void;
+  onActivate: (caseId: string) => void;
   onInvite: (caseRow: OnboardingCase) => void;
 };
 
@@ -47,6 +56,7 @@ export function CaseDetailDrawer({
   onVerifyDoc,
   onApprove,
   onComplete,
+  onActivate,
   onInvite,
 }: Props) {
   const [tab, setTab] = useState<"overview" | "portal" | "docs" | "checklist" | "timeline">(
@@ -66,9 +76,7 @@ export function CaseDetailDrawer({
       },
       {
         label: "Portal in progress",
-        done: ["in_progress", "submitted", "hr_review", "ready_to_join", "joined"].includes(
-          caseRow.status,
-        ),
+        done: isPortalInProgressStatus(caseRow.status),
       },
       {
         label: "Candidate submitted",
@@ -77,10 +85,14 @@ export function CaseDetailDrawer({
       },
       {
         label: "HR verified",
-        done: ["ready_to_join", "joined"].includes(caseRow.status),
+        done: ["ready_to_join", "pending_join", "joined"].includes(caseRow.status),
       },
       {
-        label: "Employee created",
+        label: "Employee profile created",
+        done: hasOnboardingEmployeeRecord(caseRow),
+      },
+      {
+        label: "Employee activated",
         at: caseRow.activatedAt,
         done: caseRow.status === "joined",
       },
@@ -93,8 +105,11 @@ export function CaseDetailDrawer({
   const hrTasks = caseRow.checklist.filter((t) => t.owner === "hr");
   const mgrTasks = caseRow.checklist.filter((t) => t.owner === "manager");
   const showChecklist = caseRow.status === "joined" && caseRow.checklist.length > 0;
-  const canApprove = caseRow.status === "hr_review" && Boolean(caseRow.portal.submittedAt);
-  const canComplete = ["hr_review", "ready_to_join"].includes(caseRow.status);
+  const canApprove = canApproveOnboardingCase(caseRow);
+  const canComplete = canCompleteOnboardingCase(caseRow);
+  const canActivate = canActivateOnboardingCase(caseRow);
+  const isPendingJoin = caseRow.status === "pending_join";
+  const joiningNotReached = isPendingJoin && !isJoiningDateReached(caseRow.joiningDate);
 
   const tabs = (
     [
@@ -136,7 +151,7 @@ export function CaseDetailDrawer({
               Approve submission
             </Button>
           ) : null}
-          {canComplete && caseRow.status !== "joined" ? (
+          {canComplete ? (
             <Button
               type="button"
               className="cursor-pointer"
@@ -144,6 +159,22 @@ export function CaseDetailDrawer({
             >
               <UserCheck className="size-3.5" />
               Complete onboarding
+            </Button>
+          ) : null}
+          {isPendingJoin ? (
+            <Button
+              type="button"
+              className="cursor-pointer"
+              disabled={!canActivate}
+              title={
+                joiningNotReached
+                  ? `Available on or after ${caseRow.joiningDate}`
+                  : "Activate employee for Workforce"
+              }
+              onClick={() => onActivate(caseRow.id)}
+            >
+              <UserCheck className="size-3.5" />
+              Activate employee
             </Button>
           ) : null}
         </>
@@ -184,8 +215,17 @@ export function CaseDetailDrawer({
           </div>
           {caseRow.status !== "joined" ? (
             <p className="rounded-lg border border-border/60 bg-muted/30 px-3 py-2 text-[11px] text-muted-foreground">
-              After verification, complete onboarding to create the employee record. Assign shift,
-              leave policy, and other details from Workforce once the employee is active.
+              {canApprove
+                ? "Verify all documents, then approve the submission."
+                : isPendingJoin
+                  ? joiningNotReached
+                    ? `Employee profile created (${caseRow.employeeId}). Activation is available on or after ${caseRow.joiningDate}. They appear under Pending Join in Employee Management until then.`
+                    : `Employee profile ready (${caseRow.employeeId}). Click Activate employee to move them to Probation in Workforce.`
+                  : canComplete
+                    ? "Complete onboarding to create the employee profile. If joining date is in the future, activation waits until that date."
+                    : "After verification, complete onboarding to create the employee record."}{" "}
+              Assign shift, leave policy, and other details from Workforce once the employee is
+              active.
             </p>
           ) : null}
           <div className="h-2 overflow-hidden rounded-full bg-muted">

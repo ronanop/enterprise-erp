@@ -272,7 +272,7 @@ export function EmployeeWizardPage() {
     <div className="space-y-5 pb-10">
       <SetupToastHost />
       <PageHeader
-        title="Add employee"
+        title="Add Employee"
         description="Same details as onboarding — filled by HR here. No invitation link is sent. Education and previous employment are optional."
         actions={
           <div className="flex flex-wrap gap-2">
@@ -1515,7 +1515,7 @@ function ReviewStep({ draft }: { draft: EmployeeWizardDraft }) {
         ]}
       />
       <ReviewBlock
-        title="Previous employment"
+        title="Previous Employment"
         lines={[
           draft.previousEmployment.filter((e) => e.company || e.designation).length
             ? `${draft.previousEmployment.filter((e) => e.company || e.designation).length} employer(s)`

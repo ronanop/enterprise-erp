@@ -21,7 +21,7 @@ import {
   savePortalProgress,
   submitPortal,
 } from "@/services/onboarding-management-service";
-import { MAX_PHOTO_BYTES, readFileAsDataUrl } from "@/services/employee-management-service";
+import { MAX_DOCUMENT_BYTES, MAX_PHOTO_BYTES, readFileAsDataUrl } from "@/services/employee-management-service";
 import {
   listPortalDocumentTypes,
   type PortalDocumentType,
@@ -67,6 +67,10 @@ function validateStep(
       if (!email) return "Personal email is required.";
       if (!portal.personal.phone.trim()) return "Phone number is required.";
       if (!portal.personal.address.trim()) return "Current address is required.";
+      const permanent = portal.personal.sameAsCurrentAddress
+        ? portal.personal.address.trim()
+        : (portal.personal.permanentAddress || "").trim();
+      if (!permanent) return "Permanent address is required.";
       if (!portal.personal.gender.trim()) return "Gender is required.";
       if (!portal.personal.maritalStatus.trim()) return "Marital status is required.";
       if (!hasPassportPhoto(portal)) return "Passport photo is required.";
@@ -99,34 +103,37 @@ function validateStep(
     }
     case "emergency": {
       if (!portal.emergency.name.trim()) return "Emergency contact name is required.";
+      if (!portal.emergency.phone.trim()) return "Emergency contact phone number is required.";
       return null;
     }
     case "documents": {
-      if (!portal.documents.some((d) => d.kind === "resume")) {
+      if (!portal.documents.some((d) => d.kind === "resume" || d.typeCode === "DOC-RESUME")) {
         return "Please upload your Resume (required).";
-      }
-      const hasGraduation = portal.documents.some(
-        (d) => d.typeCode === "DOC-GRAD" || d.kind === "education",
-      );
-      if (!hasGraduation) {
-        return "Please upload your Graduation Degree (required).";
       }
       const excludedFromMandatory = new Set([
         "DOC-CHEQUE",
         "DOC-GRAD",
         "DOC-SLIPS",
+        "DOC-CERT",
+        "DOC-REL",
         "doc-type-cheque",
         "doc-type-grad",
+        "doc-type-any-cert",
+        "doc-type-relieving",
+        "doc-type-slips",
         "cancelled_cheque",
         "salary_slips",
+        "relieving_letter",
+        "other",
       ]);
       const missing = docTypes.filter(
         (t) =>
           t.mandatory &&
+          !t.multiple &&
           !excludedFromMandatory.has(t.code) &&
           !excludedFromMandatory.has(t.kind) &&
           !portal.documents.some(
-            (d) => d.typeCode === t.code || (!d.typeCode && d.kind === t.kind),
+            (d) => d.typeCode === t.code || d.typeCode?.startsWith(`${t.code}-`) || (!d.typeCode && d.kind === t.kind),
           ),
       );
       if (missing.length) {
@@ -138,8 +145,12 @@ function validateStep(
       if (!portal.policies.agreed) {
         return "Please agree to the policies before continuing.";
       }
-      if (!portal.policies.signature.trim() && !portal.policies.signatureDataUrl) {
-        return "Digital signature is required before continuing.";
+      const hasSignature =
+        Boolean(portal.policies.signature?.trim()) ||
+        Boolean(portal.policies.signatureDataUrl) ||
+        Boolean(portal.policies.signatureFileName);
+      if (!hasSignature) {
+        return "Add a digital signature — upload an image or type your full name (either one).";
       }
       return null;
     }
@@ -156,12 +167,22 @@ const DOC_SECTION_META: {
   {
     id: "education",
     title: "Education",
-    hint: "Upload 10th, 12th marksheets and graduation degree",
+    hint: "Upload 10th and 12th marksheets",
+  },
+  {
+    id: "identity",
+    title: "Bank Details",
+    hint: "",
   },
   {
     id: "previous_employment",
-    title: "Resume",
-    hint: "Upload your latest resume (PDF or Word)",
+    title: "Employment Documents",
+    hint: "Resume, relieving letters & salary slips (multi-file, up to 3 each)",
+  },
+  {
+    id: "other",
+    title: "Certificates",
+    hint: "Optional — upload any additional certificates (multiple files allowed)",
   },
 ];
 
@@ -344,6 +365,7 @@ export function CandidateOnboardingPortal({ token }: { token: string }) {
     file: File,
     typeCode?: string,
     personalPatch?: Partial<PortalPayload["personal"]>,
+    options?: { append?: boolean },
   ): Promise<boolean> {
     let fileDataUrl: string;
     try {
@@ -352,10 +374,12 @@ export function CandidateOnboardingPortal({ token }: { token: string }) {
       setStepError("Could not read the selected file. Try again.");
       return false;
     }
+    const storedTypeCode =
+      options?.append && typeCode ? `${typeCode}-${crypto.randomUUID().slice(0, 8)}` : typeCode;
     const doc: OnboardingDocument = {
       id: crypto.randomUUID(),
       kind,
-      typeCode,
+      typeCode: storedTypeCode,
       fileName: file.name,
       uploadedAt: new Date().toISOString(),
       verifyStatus: "pending",
@@ -366,13 +390,23 @@ export function CandidateOnboardingPortal({ token }: { token: string }) {
     const p = currentPortal();
     if (!p) return false;
 
-    const rest = p.documents.filter((d) => {
-      if (typeCode) {
-        if (d.typeCode) return d.typeCode !== typeCode;
-        return d.kind !== kind;
-      }
-      return d.kind !== kind;
-    });
+    const rest = options?.append
+      ? p.documents
+      : p.documents.filter((d) => {
+          if (typeCode) {
+            if (d.typeCode === typeCode) return false;
+            // Replace legacy untyped same-kind docs when filling the first slot
+            if (
+              !d.typeCode &&
+              d.kind === kind &&
+              (typeCode.endsWith("-1") || !typeCode.includes("-"))
+            ) {
+              return false;
+            }
+            return true;
+          }
+          return d.kind !== kind;
+        });
     const nextPortal: PortalPayload = {
       ...p,
       personal: personalPatch ? { ...p.personal, ...personalPatch } : p.personal,
@@ -388,6 +422,18 @@ export function CandidateOnboardingPortal({ token }: { token: string }) {
     return true;
   }
 
+  async function removeDocument(docId: string) {
+    const p = currentPortal();
+    if (!p) return;
+    const nextPortal: PortalPayload = {
+      ...p,
+      documents: p.documents.filter((d) => d.id !== docId),
+    };
+    applyPortal(nextPortal);
+    const saved = savePortalProgress(token, nextPortal);
+    if (!saved) setStepError("Could not update documents. Please try again.");
+  }
+
   async function onPickFile(docType: PortalDocumentType, file: File | undefined) {
     if (!file) return;
     if (docType.maxSizeMb && file.size > docType.maxSizeMb * 1024 * 1024) {
@@ -395,7 +441,70 @@ export function CandidateOnboardingPortal({ token }: { token: string }) {
       return;
     }
     setStepError(null);
-    await upsertDocument(asDocumentKind(docType.kind), file, docType.code);
+    await upsertDocument(asDocumentKind(docType.kind), file, docType.code, undefined, {
+      append: Boolean(docType.multiple),
+    });
+  }
+
+  async function onPickFiles(
+    docType: PortalDocumentType,
+    files: FileList | null,
+    options?: { maxFiles?: number; existingCount?: number },
+  ) {
+    if (!files?.length) return;
+    const maxFiles = options?.maxFiles;
+    const existing = options?.existingCount ?? 0;
+    const incoming = Array.from(files);
+    if (maxFiles != null && existing + incoming.length > maxFiles) {
+      setStepError(
+        `You can upload up to ${maxFiles} files for ${docType.name}. Remove one to add another.`,
+      );
+      return;
+    }
+    setStepError(null);
+    for (const file of incoming) {
+      if (docType.maxSizeMb && file.size > docType.maxSizeMb * 1024 * 1024) {
+        setStepError(`${file.name} must be under ${docType.maxSizeMb} MB.`);
+        return;
+      }
+      if (file.size > MAX_DOCUMENT_BYTES) {
+        setStepError(`${file.name} must be under 2 MB.`);
+        return;
+      }
+      const ok = await upsertDocument(asDocumentKind(docType.kind), file, docType.code, undefined, {
+        append: true,
+      });
+      if (!ok) return;
+    }
+  }
+
+  async function onPickCappedFiles(input: {
+    label: string;
+    kind: DocumentKind;
+    typeCode: string;
+    files: FileList | null;
+    existingCount: number;
+    maxFiles: number;
+  }) {
+    if (!input.files?.length) return;
+    const incoming = Array.from(input.files);
+    if (input.existingCount + incoming.length > input.maxFiles) {
+      setStepError(
+        `You can upload up to ${input.maxFiles} files for ${input.label}. Remove one to add another.`,
+      );
+      return;
+    }
+    setStepError(null);
+    for (const file of incoming) {
+      if (file.size > MAX_DOCUMENT_BYTES) {
+        setStepError(`${file.name} must be under 2 MB.`);
+        return;
+      }
+      const ok = await upsertDocument(input.kind, file, input.typeCode, undefined, {
+        append: true,
+      });
+      if (!ok) return;
+    }
   }
 
   async function handleSave() {
@@ -461,7 +570,7 @@ export function CandidateOnboardingPortal({ token }: { token: string }) {
       <Shell>
         <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-5 py-8 text-center">
           <CheckCircle2 className="mx-auto size-10 text-emerald-600" />
-          <h1 className="mt-3 text-lg font-semibold text-emerald-950">Onboarding submitted</h1>
+          <h1 className="mt-3 text-lg font-semibold text-emerald-950">Onboarding Submitted</h1>
           <p className="mt-1 text-sm text-emerald-900/80">
             Thank you, {caseRow.candidateName}. HR will verify your information before{" "}
             {caseRow.joiningDate || "your joining date"}.
@@ -629,10 +738,61 @@ export function CandidateOnboardingPortal({ token }: { token: string }) {
               <SetupField label="Current address" required>
                 <SetupTextarea
                   value={portal.personal.address}
+                  onChange={(e) => {
+                    const address = e.target.value;
+                    patchPortal({
+                      personal: {
+                        ...portal.personal,
+                        address,
+                        ...(portal.personal.sameAsCurrentAddress
+                          ? { permanentAddress: address }
+                          : {}),
+                      },
+                    });
+                  }}
+                  rows={2}
+                />
+              </SetupField>
+            </div>
+            <div className="sm:col-span-2 space-y-2">
+              <label className="flex cursor-pointer items-center gap-2 text-sm text-foreground">
+                <input
+                  type="checkbox"
+                  className="size-4 cursor-pointer accent-primary"
+                  checked={Boolean(portal.personal.sameAsCurrentAddress)}
+                  onChange={(e) => {
+                    const same = e.target.checked;
+                    patchPortal({
+                      personal: {
+                        ...portal.personal,
+                        sameAsCurrentAddress: same,
+                        permanentAddress: same
+                          ? portal.personal.address
+                          : portal.personal.permanentAddress || "",
+                      },
+                    });
+                  }}
+                />
+                Permanent address same as current
+              </label>
+              <SetupField label="Permanent address" required>
+                <SetupTextarea
+                  value={
+                    portal.personal.sameAsCurrentAddress
+                      ? portal.personal.address
+                      : portal.personal.permanentAddress || ""
+                  }
                   onChange={(e) =>
-                    patchPortal({ personal: { ...portal.personal, address: e.target.value } })
+                    patchPortal({
+                      personal: {
+                        ...portal.personal,
+                        sameAsCurrentAddress: false,
+                        permanentAddress: e.target.value,
+                      },
+                    })
                   }
                   rows={2}
+                  disabled={Boolean(portal.personal.sameAsCurrentAddress)}
                 />
               </SetupField>
             </div>
@@ -859,7 +1019,7 @@ export function CandidateOnboardingPortal({ token }: { token: string }) {
                 ))}
               </SetupSelect>
             </SetupField>
-            <SetupField label="Phone">
+            <SetupField label="Phone" required>
               <SetupInput
                 value={portal.emergency.phone}
                 onChange={(e) =>
@@ -889,38 +1049,145 @@ export function CandidateOnboardingPortal({ token }: { token: string }) {
                 Types.
               </p>
             ) : (
-              DOC_SECTION_META.map((section) => {
-                const types = docTypes.filter((t) => t.section === section.id);
-                if (!types.length) return null;
-                return (
-                  <section
-                    key={section.id}
-                    className="space-y-3 rounded-lg border border-border/70 bg-muted/20 p-3 sm:p-4"
-                  >
-                    <div>
-                      <h3 className="text-sm font-semibold text-foreground">{section.title}</h3>
-                      <p className="text-[11px] text-muted-foreground">{section.hint}</p>
-                    </div>
-                    <div className="space-y-3">
-                      {types.map((t) => (
-                        <FilePickField
-                          key={t.id}
-                          label={t.name}
-                          required={t.mandatory}
-                          accept={t.accept || ".pdf,image/*"}
-                          fileName={latestDoc(t.code, t.kind)?.fileName}
-                          hint={
-                            t.maxSizeMb
-                              ? `Upload from this device · max ${t.maxSizeMb} MB · ${t.code}`
-                              : `Upload from this device · ${t.code}`
+              <>
+                {DOC_SECTION_META.map((section) => {
+                  const types = docTypes.filter(
+                    (t) =>
+                      t.section === section.id &&
+                      t.code !== "DOC-SLIPS" &&
+                      t.code !== "DOC-REL",
+                  );
+                  const showRelieving =
+                    section.id === "previous_employment" &&
+                    docTypes.some((t) => t.code === "DOC-REL" || t.kind === "relieving_letter");
+                  const showSlips =
+                    section.id === "previous_employment" &&
+                    docTypes.some((t) => t.code === "DOC-SLIPS");
+                  if (!types.length && !showSlips && !showRelieving) return null;
+                  return (
+                    <section
+                      key={section.id}
+                      className="space-y-3 rounded-lg border border-border/70 bg-muted/20 p-3 sm:p-4"
+                    >
+                      <div>
+                        <h3 className="text-sm font-semibold text-foreground">{section.title}</h3>
+                        {section.hint ? (
+                          <p className="text-[11px] text-muted-foreground">{section.hint}</p>
+                        ) : null}
+                      </div>
+                      <div className="space-y-3">
+                        {types.map((t) => {
+                          if (t.multiple) {
+                            const files = portal.documents.filter(
+                              (d) =>
+                                d.typeCode === t.code || d.typeCode?.startsWith(`${t.code}-`),
+                            );
+                            return (
+                              <MultiFilePickField
+                                key={t.id}
+                                label={t.name}
+                                required={t.mandatory}
+                                accept={t.accept || ".pdf,image/*"}
+                                files={files.map((d) => ({ id: d.id, name: d.fileName }))}
+                                hint={
+                                  t.maxSizeMb
+                                    ? `Select multiple files · max ${t.maxSizeMb} MB each`
+                                    : "Select multiple files from this device"
+                                }
+                                onFiles={(list) => void onPickFiles(t, list)}
+                                onRemove={(id) => void removeDocument(id)}
+                              />
+                            );
                           }
-                          onFile={(file) => onPickFile(t, file)}
-                        />
-                      ))}
-                    </div>
-                  </section>
-                );
-              })
+                          return (
+                            <FilePickField
+                              key={t.id}
+                              label={
+                                t.code === "DOC-CHEQUE"
+                                  ? "Cancelled Cheque / Passbook"
+                                  : t.name
+                              }
+                              required={t.mandatory}
+                              accept={t.accept || ".pdf,image/*"}
+                              fileName={latestDoc(t.code, t.kind)?.fileName}
+                              hint={
+                                t.maxSizeMb
+                                  ? `Upload from this device · max ${t.maxSizeMb} MB`
+                                  : "Upload from this device"
+                              }
+                              onFile={(file) => onPickFile(t, file)}
+                            />
+                          );
+                        })}
+                        {showRelieving ? (
+                          <MultiFilePickField
+                            label="Previous / Latest 3 Relieving Letters"
+                            accept=".pdf,image/*,.jpg,.jpeg,.png"
+                            files={portal.documents
+                              .filter(
+                                (d) =>
+                                  d.kind === "relieving_letter" ||
+                                  d.typeCode === "DOC-REL" ||
+                                  d.typeCode?.startsWith("DOC-REL-"),
+                              )
+                              .map((d) => ({ id: d.id, name: d.fileName }))}
+                            hint="Optional — select up to 3 files (latest + previous). PDF, JPG, or PNG · max 2 MB each"
+                            maxFiles={3}
+                            onFiles={(list) =>
+                              void onPickCappedFiles({
+                                label: "Previous / Latest 3 Relieving Letters",
+                                kind: "relieving_letter",
+                                typeCode: "DOC-REL",
+                                files: list,
+                                existingCount: portal.documents.filter(
+                                  (d) =>
+                                    d.kind === "relieving_letter" ||
+                                    d.typeCode === "DOC-REL" ||
+                                    d.typeCode?.startsWith("DOC-REL-"),
+                                ).length,
+                                maxFiles: 3,
+                              })
+                            }
+                            onRemove={(id) => void removeDocument(id)}
+                          />
+                        ) : null}
+                        {showSlips ? (
+                          <MultiFilePickField
+                            label="Previous / Latest 3 Salary Slips"
+                            accept=".pdf,image/*,.jpg,.jpeg,.png"
+                            files={portal.documents
+                              .filter(
+                                (d) =>
+                                  d.kind === "salary_slips" ||
+                                  d.typeCode === "DOC-SLIPS" ||
+                                  d.typeCode?.startsWith("DOC-SLIPS-"),
+                              )
+                              .map((d) => ({ id: d.id, name: d.fileName }))}
+                            hint="Optional — select up to 3 files (latest + previous). PDF, JPG, or PNG · max 2 MB each"
+                            maxFiles={3}
+                            onFiles={(list) =>
+                              void onPickCappedFiles({
+                                label: "Previous / Latest 3 Salary Slips",
+                                kind: "salary_slips",
+                                typeCode: "DOC-SLIPS",
+                                files: list,
+                                existingCount: portal.documents.filter(
+                                  (d) =>
+                                    d.kind === "salary_slips" ||
+                                    d.typeCode === "DOC-SLIPS" ||
+                                    d.typeCode?.startsWith("DOC-SLIPS-"),
+                                ).length,
+                                maxFiles: 3,
+                              })
+                            }
+                            onRemove={(id) => void removeDocument(id)}
+                          />
+                        ) : null}
+                      </div>
+                    </section>
+                  );
+                })}
+              </>
             )}
           </div>
         ) : null}
@@ -972,7 +1239,7 @@ export function CandidateOnboardingPortal({ token }: { token: string }) {
             <SetupField
               label="Digital signature"
               required
-              hint="Upload signature image (JPG/PNG) or type your full name"
+              hint="Upload an image or type your full name — either one is enough to continue"
             >
               <div className="space-y-2">
                 <input
@@ -994,7 +1261,8 @@ export function CandidateOnboardingPortal({ token }: { token: string }) {
                         ...portal.policies,
                         signatureFileName: file.name,
                         signatureDataUrl: fileDataUrl,
-                        signature: portal.policies.signature || file.name.replace(/\.[^.]+$/, ""),
+                        // Keep typed name if already entered; otherwise leave blank — upload alone is enough
+                        signature: portal.policies.signature,
                       };
                       patchPortal({ policies });
                       const ok = await upsertDocument("signature", file, "DOC-SIGN");
@@ -1004,18 +1272,19 @@ export function CandidateOnboardingPortal({ token }: { token: string }) {
                   }}
                 />
                 {portal.policies.signatureFileName ? (
-                  <p className="text-[11px] text-muted-foreground">
+                  <p className="text-[11px] text-emerald-700">
                     Uploaded: {portal.policies.signatureFileName}
                   </p>
                 ) : null}
                 <SetupInput
                   placeholder="Or type full name as signature"
                   value={portal.policies.signature}
-                  onChange={(e) =>
+                  onChange={(e) => {
+                    setStepError(null);
                     patchPortal({
                       policies: { ...portal.policies, signature: e.target.value },
-                    })
-                  }
+                    });
+                  }}
                 />
               </div>
             </SetupField>
@@ -1028,7 +1297,7 @@ export function CandidateOnboardingPortal({ token }: { token: string }) {
               label="Name"
               value={`${portal.personal.firstName} ${portal.personal.lastName}`}
             />
-            <ReviewRow label="Personal email" value={portal.personal.personalEmail || portal.personal.email} />
+            <ReviewRow label="Personal Email" value={portal.personal.personalEmail || portal.personal.email} />
             <ReviewRow label="Aadhaar" value={portal.governmentIds.aadhaar || "—"} />
             <ReviewRow label="PAN" value={portal.governmentIds.pan || "—"} />
             <ReviewRow label="Bank" value={portal.bank.bankName || "—"} />
@@ -1038,7 +1307,51 @@ export function CandidateOnboardingPortal({ token }: { token: string }) {
               label="Education"
               value={
                 portal.documents
-                  .filter((d) => d.kind === "education" || ["DOC-GRAD", "DOC-PG", "DOC-CERT"].includes(d.typeCode ?? ""))
+                  .filter(
+                    (d) =>
+                      d.kind === "education" ||
+                      d.typeCode === "DOC-10TH" ||
+                      d.typeCode === "DOC-12TH",
+                  )
+                  .map((d) => d.fileName)
+                  .join(", ") || "—"
+              }
+            />
+            <ReviewRow
+              label="Certificates"
+              value={
+                portal.documents
+                  .filter((d) => d.typeCode === "DOC-CERT" || d.typeCode?.startsWith("DOC-CERT-"))
+                  .map((d) => d.fileName)
+                  .join(", ") || "—"
+              }
+            />
+            <ReviewRow
+              label="Cancelled Cheque / Passbook"
+              value={
+                portal.documents.find(
+                  (d) => d.typeCode === "DOC-CHEQUE" || d.kind === "cancelled_cheque",
+                )?.fileName || "—"
+              }
+            />
+            <ReviewRow
+              label="Relieving Letter"
+              value={
+                portal.documents.find(
+                  (d) => d.typeCode === "DOC-REL" || d.kind === "relieving_letter",
+                )?.fileName || "—"
+              }
+            />
+            <ReviewRow
+              label="Salary Slips"
+              value={
+                portal.documents
+                  .filter(
+                    (d) =>
+                      d.kind === "salary_slips" ||
+                      d.typeCode === "DOC-SLIPS" ||
+                      d.typeCode?.startsWith("DOC-SLIPS-"),
+                  )
                   .map((d) => d.fileName)
                   .join(", ") || "—"
               }
@@ -1203,6 +1516,88 @@ function FilePickField({
   );
 }
 
+function MultiFilePickField({
+  label,
+  required,
+  accept,
+  files,
+  hint,
+  maxFiles,
+  onFiles,
+  onRemove,
+}: {
+  label: string;
+  required?: boolean;
+  accept: string;
+  files: { id: string; name: string }[];
+  hint?: string;
+  maxFiles?: number;
+  onFiles: (files: FileList | null) => void | Promise<void>;
+  onRemove: (id: string) => void | Promise<void>;
+}) {
+  const inputId = `files-${label.replace(/\s+/g, "-").toLowerCase()}`;
+  const atLimit = maxFiles != null && files.length >= maxFiles;
+  return (
+    <SetupField label={label} required={required} hint={hint}>
+      <div className="space-y-2">
+        <label
+          htmlFor={inputId}
+          className={cn(
+            "flex h-10 w-full items-center gap-2 rounded-lg border border-dashed border-input bg-transparent px-2.5 text-sm transition-colors",
+            atLimit
+              ? "cursor-not-allowed opacity-60"
+              : "cursor-pointer hover:border-ring hover:bg-muted/40",
+            files.length > 0 && "border-emerald-300 bg-emerald-50/50",
+          )}
+        >
+          <Upload className="size-3.5 shrink-0 text-muted-foreground" />
+          <span className="truncate text-muted-foreground">
+            {atLimit
+              ? `Limit reached (${files.length}/${maxFiles})`
+              : files.length
+                ? `Add more files (${files.length}${maxFiles ? `/${maxFiles}` : ""} uploaded)`
+                : maxFiles
+                  ? `Choose files… (up to ${maxFiles})`
+                  : "Choose files…"}
+          </span>
+          <input
+            id={inputId}
+            type="file"
+            accept={accept}
+            multiple
+            disabled={atLimit}
+            className="sr-only"
+            onChange={(e) => {
+              void onFiles(e.target.files);
+              e.target.value = "";
+            }}
+          />
+        </label>
+        {files.length ? (
+          <ul className="space-y-1">
+            {files.map((f) => (
+              <li
+                key={f.id}
+                className="flex items-center justify-between gap-2 rounded-md border border-border/60 bg-card px-2.5 py-1.5 text-xs"
+              >
+                <span className="truncate font-medium">{f.name}</span>
+                <button
+                  type="button"
+                  className="cursor-pointer shrink-0 rounded p-0.5 text-muted-foreground hover:bg-muted hover:text-destructive"
+                  aria-label={`Remove ${f.name}`}
+                  onClick={() => void onRemove(f.id)}
+                >
+                  <X className="size-3.5" />
+                </button>
+              </li>
+            ))}
+          </ul>
+        ) : null}
+      </div>
+    </SetupField>
+  );
+}
+
 function Shell({ children }: { children: React.ReactNode }) {
   return (
     <div className="min-h-screen bg-[#F8FAFC] px-4 py-8 sm:px-6">
@@ -1216,55 +1611,6 @@ function ReviewRow({ label, value }: { label: string; value: string }) {
     <div className="flex justify-between gap-3 rounded-lg border border-border/60 px-3 py-2">
       <span className="text-muted-foreground">{label}</span>
       <span className="font-medium text-foreground">{value}</span>
-    </div>
-  );
-}
-
-
-
-function SalarySlipsMultiUploader({
-  portalDocs,
-  onUpload,
-}: {
-  portalDocs: OnboardingDocument[];
-  onUpload: (slipNum: number, file: File | undefined) => void;
-}) {
-  const getSlipFile = (num: number) => {
-    const code = `DOC-SLIPS-${num}`;
-    const doc = [...portalDocs].reverse().find((d) => d.typeCode === code);
-    if (doc) return doc.fileName;
-    if (num === 1) {
-      const genericDoc = [...portalDocs]
-        .reverse()
-        .find((d) => d.kind === "salary_slips" && !d.typeCode?.startsWith("DOC-SLIPS-"));
-      return genericDoc?.fileName;
-    }
-    return undefined;
-  };
-
-  return (
-    <div className="space-y-3 rounded-lg border border-border/70 bg-card p-3 sm:p-4">
-      <div>
-        <h4 className="text-xs font-semibold text-foreground">
-          Salary Slips (Up to 3 Slips) <span className="font-normal text-muted-foreground">(Optional)</span>
-        </h4>
-        <p className="text-[11px] text-muted-foreground">
-          Upload up to 3 previous salary slips. Accepts PDF, JPG, PNG, JPEG.
-        </p>
-      </div>
-
-      <div className="grid gap-3 sm:grid-cols-3">
-        {[1, 2, 3].map((num) => (
-          <FilePickField
-            key={num}
-            label={`Salary Slip ${num}`}
-            accept=".pdf,image/*,.jpg,.jpeg,.png"
-            fileName={getSlipFile(num)}
-            hint={`Salary slip ${num} (PDF or Image)`}
-            onFile={(file) => onUpload(num, file)}
-          />
-        ))}
-      </div>
     </div>
   );
 }

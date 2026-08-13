@@ -75,7 +75,7 @@ export function CompanyContextBadge() {
     <Link
       href="/select-company"
       className="hidden items-center gap-1.5 rounded-lg border border-border/70 bg-muted/40 px-2.5 py-1 text-xs text-muted-foreground transition-colors hover:border-primary/40 hover:bg-muted/60 sm:flex"
-      title="Switch company"
+      title="Switch Company"
     >
       {content}
     </Link>

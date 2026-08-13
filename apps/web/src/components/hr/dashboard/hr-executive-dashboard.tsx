@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import Link from "next/link";
 import {
-  Bell,
   Briefcase,
   CalendarDays,
   ClipboardCheck,
@@ -114,7 +113,6 @@ export function HrExecutiveDashboardPage() {
   const [loading, setLoading] = useState(true);
   const [role, setRole] = useState<DashboardRole>("hr");
   const [query, setQuery] = useState("");
-  const [notifOpen, setNotifOpen] = useState(false);
   const now = useClock();
 
   const load = useCallback(async (r?: DashboardRole) => {
@@ -133,11 +131,6 @@ export function HrExecutiveDashboardPage() {
   useEffect(() => {
     void load();
   }, [load]);
-
-  const unread = useMemo(
-    () => data?.notifications.filter((n) => n.unread).length ?? 0,
-    [data],
-  );
 
   const filteredCalendar = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -263,44 +256,6 @@ export function HrExecutiveDashboardPage() {
               ))}
             </select>
 
-            <div className="relative">
-              <Button
-                size="sm"
-                variant="outline"
-                className="cursor-pointer"
-                onClick={() => setNotifOpen((v) => !v)}
-              >
-                <Bell className="size-3.5" />
-                {unread > 0 ? (
-                  <span className="ml-1 rounded-full bg-destructive px-1.5 text-[10px] text-white">
-                    {unread}
-                  </span>
-                ) : null}
-              </Button>
-              {notifOpen ? (
-                <div className="absolute right-0 z-20 mt-2 w-80 max-w-[calc(100vw-2rem)] rounded-xl border border-border/80 bg-card p-2 shadow-lg">
-                  <p className="px-2 py-1.5 text-xs font-semibold">Notifications</p>
-                  <ul className="max-h-72 space-y-1 overflow-y-auto">
-                    {(data?.notifications ?? []).map((n) => (
-                      <li key={n.id}>
-                        <Link
-                          href={hrNotificationHref(n)}
-                          onClick={() => setNotifOpen(false)}
-                          className={cn(
-                            "block cursor-pointer rounded-lg px-2 py-2 text-xs transition-colors duration-150 hover:bg-muted/60",
-                            n.unread && "bg-muted/80",
-                          )}
-                        >
-                          <p className="font-medium">{n.title}</p>
-                          <p className="mt-0.5 text-muted-foreground">{n.body}</p>
-                        </Link>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              ) : null}
-            </div>
-
             <Button
               size="sm"
               variant="outline"
@@ -338,7 +293,7 @@ export function HrExecutiveDashboardPage() {
           {/* Top row — 4 portrait (3:4) boxes, then key metrics below */}
           <section className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
             <DashboardListBox
-              title="Upcoming events"
+              title="Upcoming Events"
               subtitle="Holidays, birthdays, anniversaries"
               icon={CalendarDays}
               footerHref="/hr/setup?section=leave&tab=holiday-calendar"
@@ -424,7 +379,7 @@ export function HrExecutiveDashboardPage() {
                   vertical
                 />
                 <AttendanceStat
-                  label="On duty"
+                  label="On Duty"
                   value={stats?.onDutyToday ?? 0}
                   variant="onDuty"
                   vertical
@@ -436,7 +391,7 @@ export function HrExecutiveDashboardPage() {
           {/* Key metrics — below top boxes */}
           <section>
             <div className="mb-2 flex items-end justify-between gap-2">
-              <h2 className="text-sm font-semibold tracking-tight">Key metrics</h2>
+              <h2 className="text-sm font-semibold tracking-tight">Key Metrics</h2>
               <p className="text-[11px] text-muted-foreground">
                 Live from employees · attendance · leave · recruitment
               </p>

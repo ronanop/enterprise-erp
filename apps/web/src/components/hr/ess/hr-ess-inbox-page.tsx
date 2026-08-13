@@ -33,18 +33,18 @@ type StatusFilter =
   | "rejected";
 
 const CATEGORY_FILTERS: { id: CategoryFilter; label: string }[] = [
-  { id: "all", label: "All types" },
+  { id: "all", label: "All Types" },
   { id: "leave", label: "Leave" },
   { id: "attendance_correction", label: "Attendance" },
   { id: "ot_allotment", label: "OT" },
-  { id: "on_duty", label: "On duty" },
+  { id: "on_duty", label: "On Duty" },
 ];
 
 const STATUS_FILTERS: { id: StatusFilter; label: string }[] = [
-  { id: "all", label: "All status" },
+  { id: "all", label: "All Status" },
   { id: "pending", label: "Pending" },
   { id: "submitted", label: "Submitted" },
-  { id: "manager_approved", label: "Reporting manager OK" },
+  { id: "manager_approved", label: "Reporting Manager OK" },
   { id: "approved", label: "Approved" },
   { id: "rejected", label: "Rejected" },
 ];

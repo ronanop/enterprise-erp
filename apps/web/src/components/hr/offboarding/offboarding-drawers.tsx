@@ -76,7 +76,7 @@ export function NewResignationDrawer({
     <SetupDrawer
       open={open}
       onClose={onClose}
-      title="New resignation / exit"
+      title="New Resignation / Exit"
       description="Start an offboarding case. HR will run approvals, clearance, exit interview, and FNF."
       footer={
         <>
@@ -202,7 +202,7 @@ export function ExitInterviewDrawer({
     <SetupDrawer
       open={open}
       onClose={onClose}
-      title="Exit interview"
+      title="Exit Interview"
       description="Capture feedback before the employee leaves. Stored on the offboarding case."
       footer={
         <>

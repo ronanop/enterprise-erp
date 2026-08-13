@@ -109,7 +109,7 @@ export function TrainingManagementPage() {
           <HrToolbar onRefresh={() => void load()} loading={loading}>
             <Button size="sm" className="cursor-pointer" onClick={() => setCreateOpen(true)}>
               <Plus className="size-3.5" />
-              Create training
+              Create Training
             </Button>
             <Button size="sm" variant="outline" className="cursor-pointer" onClick={() => setRoomOpen(true)}>
               <Building2 className="size-3.5" />
@@ -117,7 +117,7 @@ export function TrainingManagementPage() {
             </Button>
             <Button size="sm" variant="outline" className="cursor-pointer" onClick={() => setRequestOpen(true)}>
               <CalendarDays className="size-3.5" />
-              Request meeting
+              Request Meeting
             </Button>
           </HrToolbar>
         }
@@ -166,7 +166,7 @@ export function TrainingManagementPage() {
           [
             ["programs", "Programs"],
             ["rooms", "Rooms"],
-            ["requests", "Meeting requests"],
+            ["requests", "Meeting Requests"],
             ["notifications", "Notifications"],
           ] as const
         ).map(([id, label]) => (
@@ -198,7 +198,7 @@ export function TrainingManagementPage() {
             description="Create a training with date, time, host, room, and attendees."
             action={
               <Button size="sm" className="cursor-pointer" onClick={() => setCreateOpen(true)}>
-                Create training
+                Create Training
               </Button>
             }
           />
@@ -279,7 +279,7 @@ export function TrainingManagementPage() {
             description="Submit a meeting or training request for approval."
             action={
               <Button size="sm" className="cursor-pointer" onClick={() => setRequestOpen(true)}>
-                Request meeting
+                Request Meeting
               </Button>
             }
           />
@@ -329,7 +329,7 @@ export function TrainingManagementPage() {
       {tab === "notifications" ? (
         <div className="rounded-xl border border-border/70 bg-card p-4 shadow-sm">
           <div className="mb-3 flex items-center justify-between">
-            <h3 className="text-sm font-semibold">Employee training notifications</h3>
+            <h3 className="text-sm font-semibold">Employee Training Notifications</h3>
             <Button
               size="sm"
               variant="outline"
@@ -442,7 +442,7 @@ function CreateTrainingDrawer({
   return (
     <SetupDrawer
       open={open}
-      title="Create training"
+      title="Create Training"
       description="Name, schedule, host, room, recurrence, and attendees"
       wide
       onClose={onClose}
@@ -623,7 +623,7 @@ function CreateRoomDrawer({
   return (
     <SetupDrawer
       open={open}
-      title="Create room"
+      title="Create Room"
       description="Name, capacity, and equipment"
       onClose={onClose}
       footer={
@@ -732,7 +732,7 @@ function CreateRequestDrawer({
   return (
     <SetupDrawer
       open={open}
-      title="Request meeting / training"
+      title="Request Meeting / Training"
       description="Submit for approval with attendees"
       wide
       onClose={onClose}

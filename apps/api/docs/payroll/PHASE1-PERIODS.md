@@ -42,6 +42,11 @@ Creates Feb, Mar, Apr 2026 anchors (20–20 windows).
 
 Helper: `modules.hr.domain.leave_accrual_calendar.completed_calendar_month_yyyymm`.
 
+Apply/submit/approve also use `modules.hr.domain.leave_cycle_rules`:
+- no leave days in a **future** calendar month
+- balance check uses **posted** credits only (cannot borrow next month’s credit early)
+- **past** dates allowed after credit posts (cover prior holidays)
+
 ## Payroll run
 
 - `PayrollRunService.calculate` **requires** a payroll period with `start_date` and `end_date`.
@@ -51,7 +56,7 @@ Helper: `modules.hr.domain.leave_accrual_calendar.completed_calendar_month_yyyym
 
 ```bash
 cd apps/api
-pytest src/tests/unit/payroll/test_payroll_period_calendar.py src/tests/unit/hr/test_leave_accrual_calendar.py -q
+pytest src/tests/unit/payroll/test_payroll_period_calendar.py src/tests/unit/hr/test_leave_accrual_calendar.py src/tests/unit/hr/test_leave_cycle_rules.py -q
 ```
 
 ## Next (Phase 2)

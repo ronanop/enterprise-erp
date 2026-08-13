@@ -10,6 +10,9 @@ export function resolveOnboardingDisplayStatus(
   if (status === "cancelled" || status === "joined") {
     return ONBOARDING_STATUS_LABELS[status];
   }
+  if (status === "pending_join") {
+    return ONBOARDING_STATUS_LABELS.pending_join;
+  }
   if (joiningDate) {
     const join = new Date(joiningDate);
     if (!Number.isNaN(join.getTime()) && join > today) {

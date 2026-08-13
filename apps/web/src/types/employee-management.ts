@@ -3,6 +3,7 @@
 export type EmployeeLifecycleStatus =
   | "active"
   | "inactive"
+  | "onboarding"
   | "probation"
   | "notice"
   | "resigned"

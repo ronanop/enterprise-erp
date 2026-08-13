@@ -38,10 +38,10 @@ type TabId = "resignations" | "workflow" | "clearance" | "exit_interview" | "fnf
 
 const TABS: { id: TabId; label: string }[] = [
   { id: "resignations", label: "Resignations" },
-  { id: "workflow", label: "Exit workflow" },
+  { id: "workflow", label: "Exit Workflow" },
   { id: "clearance", label: "Clearance" },
-  { id: "exit_interview", label: "Exit interview" },
-  { id: "fnf", label: "FNF settlement" },
+  { id: "exit_interview", label: "Exit Interview" },
+  { id: "fnf", label: "FNF Settlement" },
 ];
 
 function WorkflowStrip({ c }: { c: OffboardingCase }) {
@@ -233,10 +233,10 @@ export function OffboardingManagementPage() {
 
       <HrKpiGrid
         items={[
-          { label: "Open cases", value: openCount },
+          { label: "Open Cases", value: openCount },
           { label: "Resignations", value: resignationCount },
           {
-            label: "Pending clearance",
+            label: "Pending Clearance",
             value: cases.filter(
               (c) =>
                 c.checklist.some((i) => !i.done) &&
@@ -375,7 +375,7 @@ export function OffboardingManagementPage() {
 
       {!selected && tab !== "resignations" ? (
         <HrEmptyState
-          title="Select a case"
+          title="Select a Case"
           description="Choose an offboarding case from Resignations to manage workflow, clearance, interview, and FNF."
           action={
             <Button size="sm" variant="outline" className="cursor-pointer" onClick={() => setTab("resignations")}>
@@ -468,7 +468,7 @@ export function OffboardingManagementPage() {
       {selected && tab === "clearance" ? (
         <section className="space-y-3 rounded-xl border border-border/70 bg-card p-4 shadow-sm">
           <OffboardingCaseHeader c={selected} />
-          <h3 className="text-sm font-semibold">Clearance checklist</h3>
+          <h3 className="text-sm font-semibold">Clearance Checklist</h3>
           <p className="text-xs text-muted-foreground">
             Sign-off for <span className="font-medium text-foreground">{selected.employeeName}</span>{" "}
             ({selected.employeeCode}) before FNF and completion.
@@ -505,7 +505,7 @@ export function OffboardingManagementPage() {
           <OffboardingCaseHeader c={selected} />
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div>
-              <h3 className="text-sm font-semibold">Exit interview</h3>
+              <h3 className="text-sm font-semibold">Exit Interview</h3>
               <p className="text-xs text-muted-foreground">
                 Structured feedback for {selected.employeeName} ({selected.employeeCode}).
               </p>
@@ -541,7 +541,7 @@ export function OffboardingManagementPage() {
       {selected && tab === "fnf" ? (
         <section className="space-y-3 rounded-xl border border-border/70 bg-card p-4 shadow-sm">
           <OffboardingCaseHeader c={selected} />
-          <h3 className="text-sm font-semibold">FNF settlement</h3>
+          <h3 className="text-sm font-semibold">FNF Settlement</h3>
           <div className="rounded-lg border border-border/60 bg-muted/20 px-3 py-2 text-xs text-muted-foreground space-y-1.5">
             <p className="font-medium text-foreground">How FNF works</p>
             <ol className="list-decimal space-y-1 pl-4">

@@ -41,9 +41,9 @@ export const SEPARATION_TYPE_LABELS: Record<string, string> = {
 export const WORKFLOW_STEPS = [
   { key: "draft", label: "Draft" },
   { key: "submitted", label: "Submitted" },
-  { key: "manager_approved", label: "Manager approved" },
-  { key: "hr_approved", label: "HR approved" },
-  { key: "fnf", label: "FNF settlement" },
+  { key: "manager_approved", label: "Manager Approved" },
+  { key: "hr_approved", label: "HR Approved" },
+  { key: "fnf", label: "FNF Settlement" },
   { key: "completed", label: "Completed" },
 ] as const;
 

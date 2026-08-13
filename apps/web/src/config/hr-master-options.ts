@@ -11,7 +11,6 @@ export const GENDER_OPTIONS: MasterOption[] = [
 export const MARITAL_STATUS_OPTIONS: MasterOption[] = [
   { value: "unmarried", label: "Unmarried" },
   { value: "married", label: "Married" },
-  { value: "divorced", label: "Divorced" },
 ];
 
 export const RELATIONSHIP_OPTIONS: MasterOption[] = [
@@ -37,6 +36,7 @@ export const EMPLOYMENT_TYPE_FILTER_OPTIONS: MasterOption[] = [
 
 export const LIFECYCLE_STATUS_OPTIONS: MasterOption[] = [
   { value: "active", label: "Active" },
+  { value: "onboarding", label: "Pending Join" },
   { value: "inactive", label: "Ex Employee" },
   { value: "probation", label: "Probation" },
   { value: "notice", label: "Notice" },

@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  CalendarDays,
   Download,
   Pencil,
   Plus,
@@ -140,20 +139,9 @@ export function ShiftRosterManagementPage() {
               <Repeat className="size-3.5" />
               Create rotation
             </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              className="cursor-pointer"
-              onClick={() => {
-                setTab("calendar");
-              }}
-            >
-              <CalendarDays className="size-3.5" />
-              Roster calendar
-            </Button>
             <Button size="sm" variant="outline" className="cursor-pointer" onClick={() => setDownloadManagerOpen(true)}>
               <Download className="size-3.5" />
-              Reporting manager roster
+              Reporting Manager Roster
             </Button>
             <Button size="sm" variant="outline" className="cursor-pointer" onClick={() => setUploadManagerOpen(true)}>
               <Upload className="size-3.5" />
@@ -190,7 +178,7 @@ export function ShiftRosterManagementPage() {
             ["Employees assigned", stats.employeesAssigned],
             ["Rotations", stats.rotations],
             ["Night shifts", stats.nightShifts],
-            ["Weekly off rules", stats.weeklyOffRules],
+            ["Weekly Off Rules", stats.weeklyOffRules],
           ].map(([label, value]) => (
             <div key={label} className="rounded-xl border border-border/70 bg-card px-3 py-2.5 shadow-sm">
               <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">{label}</p>
@@ -203,13 +191,13 @@ export function ShiftRosterManagementPage() {
       <div className="flex flex-wrap gap-2 border-b border-border/60 pb-2">
         {(
           [
-            ["shifts", "Shift master"],
+            ["shifts", "Shift Master"],
             ["assignments", "Assignments"],
-            ["calendar", "Roster calendar"],
+            ["calendar", "Roster Calendar"],
             ["rotations", "Rotations"],
-            ["rules", "Rules & swap"],
+            ["rules", "Rules & Swap"],
             ["reports", "Reports"],
-            ["audit", "Audit log"],
+            ["audit", "Audit Log"],
           ] as const
         ).map(([id, label]) => (
           <button
@@ -432,7 +420,7 @@ export function ShiftRosterManagementPage() {
       {tab === "rules" && dir ? (
         <div className="grid gap-4 lg:grid-cols-2">
           <div className="rounded-xl border border-border/70 bg-card p-4 shadow-sm space-y-3">
-            <h3 className="text-sm font-semibold">Weekly off rules</h3>
+            <h3 className="text-sm font-semibold">Weekly Off Rules</h3>
             <p className="text-[11px] text-muted-foreground">
               Used for roster WO cells and for auto week-off attendance (Celery / backfill below).
             </p>
@@ -512,7 +500,7 @@ export function ShiftRosterManagementPage() {
                 {jobBusy ? "Running…" : "Run for yesterday"}
               </Button>
             </div>
-            <h3 className="text-sm font-semibold pt-2">Holiday rules</h3>
+            <h3 className="text-sm font-semibold pt-2">Holiday Rules</h3>
             <p className="text-xs text-muted-foreground">
               {dir.holidays.length} holidays loaded from HR holiday calendars (national / company).
             </p>
@@ -524,7 +512,7 @@ export function ShiftRosterManagementPage() {
           </div>
           <div className="rounded-xl border border-border/70 bg-card p-4 shadow-sm space-y-3">
             <div className="flex items-center justify-between">
-              <h3 className="text-sm font-semibold">Shift swap requests</h3>
+              <h3 className="text-sm font-semibold">Shift Swap Requests</h3>
               <Button size="sm" variant="outline" className="cursor-pointer h-7" onClick={() => setSwapOpen(true)}>
                 Request swap
               </Button>
@@ -643,7 +631,7 @@ function SwapRequestDrawer({
   return (
     <SetupDrawer
       open={open}
-      title="Shift swap request"
+      title="Shift Swap Request"
       onClose={onClose}
       footer={
         <Button size="sm" className="cursor-pointer" onClick={() => {

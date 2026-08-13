@@ -78,6 +78,8 @@ export type LeaveBalanceRecord = {
   opening: number;
   accrued: number;
   closing: number;
+  /** Last monthly accrual period credited (YYYY-MM). */
+  lastAccrualYyyymm?: string;
   version: number;
 };
 

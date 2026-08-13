@@ -626,10 +626,10 @@ export function PerformanceManagementPage() {
 
       {tab === "reports" ? (
         <div className="grid gap-3 md:grid-cols-2">
-          <ReportCard title="Goals completed" value={String(stats?.goalsCompleted ?? 0)} />
-          <ReportCard title="High performers" value={String(stats?.highPerformers ?? 0)} />
+          <ReportCard title="Goals Completed" value={String(stats?.goalsCompleted ?? 0)} />
+          <ReportCard title="High Performers" value={String(stats?.highPerformers ?? 0)} />
           <ReportCard title="On PIP" value={String(stats?.onPip ?? 0)} />
-          <ReportCard title="Pending reviews" value={String(stats?.pendingReviews ?? 0)} />
+          <ReportCard title="Pending Reviews" value={String(stats?.pendingReviews ?? 0)} />
           <div className="rounded-xl border border-border/70 bg-card p-4 md:col-span-2">
             <p className="mb-2 text-xs font-semibold uppercase text-muted-foreground">
               Radar-style scorecard (sample dimensions)

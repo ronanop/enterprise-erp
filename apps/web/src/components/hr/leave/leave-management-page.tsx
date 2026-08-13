@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { Plus } from "lucide-react";
@@ -13,11 +13,11 @@ import {
   HrEmptyState,
   HrToolbar,
 } from "@/components/hr/hr-primitives";
-import { SetupField, SetupSelect } from "@/components/hr/setup/setup-drawer";
 import { toast, SetupToastHost } from "@/components/hr/setup/setup-toast";
 import { EmsPagination, EmsSkeleton } from "@/components/hr/workforce/ems-primitives";
 import { PageHeader } from "@/components/layout/page-header";
 import { Button } from "@/components/ui/button";
+import { FilterSelect } from "@/components/ui/filter-select";
 import { Input } from "@/components/ui/input";
 import { isAuthenticated } from "@/lib/auth";
 import { cn } from "@/lib/utils";
@@ -28,7 +28,7 @@ import {
   type LeaveDirectory,
 } from "@/services/leave-management-service";
 import type { LeaveFilters, LeaveRequestRecord } from "@/types/leave-management";
-import { emptyLeaveFilters, LEAVE_STATUS_LABELS } from "@/types/leave-management";
+import { emptyLeaveFilters } from "@/types/leave-management";
 
 const PAGE_SIZE = 12;
 
@@ -40,6 +40,25 @@ type StatCard = {
   href?: string;
 };
 
+function FilterControl({
+  label,
+  children,
+  className,
+}: {
+  label: string;
+  children: ReactNode;
+  className?: string;
+}) {
+  return (
+    <label className={cn("block min-w-0", className)}>
+      <span className="mb-1 block text-[10px] font-medium tracking-wide text-muted-foreground uppercase">
+        {label}
+      </span>
+      {children}
+    </label>
+  );
+}
+
 export function LeaveManagementPage() {
   const searchParams = useSearchParams();
   const [dir, setDir] = useState<LeaveDirectory | null>(null);
@@ -47,9 +66,7 @@ export function LeaveManagementPage() {
   const [tab, setTab] = useState<Tab>("requests");
   const [query, setQuery] = useState("");
   const [filters, setFilters] = useState<LeaveFilters>(() => emptyLeaveFilters());
-  const [filtersOpen, setFiltersOpen] = useState(true);
   const [page, setPage] = useState(1);
-  const [selected, setSelected] = useState<Set<string>>(new Set());
   const [applyOpen, setApplyOpen] = useState(false);
   const [approvalRequest, setApprovalRequest] = useState<LeaveRequestRecord | null>(null);
 
@@ -91,15 +108,15 @@ export function LeaveManagementPage() {
 
   const statCards: StatCard[] = stats
     ? [
-        { label: "Pending requests", value: stats.pending, href: "/hr/leave?status=pending" },
+        { label: "Pending Requests", value: stats.pending, href: "/hr/leave?status=pending" },
         { label: "Approved", value: stats.approved, href: "/hr/leave?status=approved" },
         { label: "Rejected", value: stats.rejected, href: "/hr/leave?status=rejected" },
-        { label: "On leave today", value: stats.onLeaveToday, href: "/hr/leave?view=on-leave-today" },
+        { label: "On Leave Today", value: stats.onLeaveToday, href: "/hr/leave?view=on-leave-today" },
       ]
     : [];
 
   return (
-    <div className="space-y-5">
+    <div className="flex h-full min-h-0 flex-1 flex-col gap-3">
       <SetupToastHost />
       <PageHeader
         title="Leave Management"
@@ -108,7 +125,7 @@ export function LeaveManagementPage() {
           <HrToolbar onRefresh={() => void load()} loading={loading}>
             <Button size="sm" className="cursor-pointer" onClick={() => setApplyOpen(true)}>
               <Plus className="size-3.5" />
-              Apply leave
+              Apply Leave
             </Button>
           </HrToolbar>
         }
@@ -118,7 +135,7 @@ export function LeaveManagementPage() {
       {loading && !dir ? <EmsSkeleton /> : null}
 
       {statCards.length ? (
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="grid shrink-0 gap-2 sm:grid-cols-2 xl:grid-cols-4">
           {statCards.map(({ label, value, href }) => {
             const active =
               (href?.includes("status=pending") && statusBucket === "pending") ||
@@ -127,17 +144,17 @@ export function LeaveManagementPage() {
               (href?.includes("view=on-leave-today") && onLeaveTodayView);
             const inner = (
               <>
-                <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                <p className="text-[10px] font-medium tracking-wide text-muted-foreground uppercase">
                   {label}
                 </p>
-                <p className="mt-0.5 text-xl font-semibold">{value}</p>
+                <p className="mt-0.5 text-lg font-semibold tabular-nums">{value}</p>
               </>
             );
             if (!href) {
               return (
                 <div
                   key={label}
-                  className="rounded-xl border border-border/70 bg-card px-3 py-2.5 shadow-sm"
+                  className="rounded-lg border border-border/70 bg-card px-3 py-2 shadow-sm"
                 >
                   {inner}
                 </div>
@@ -148,7 +165,7 @@ export function LeaveManagementPage() {
                 key={label}
                 href={href}
                 className={cn(
-                  "block cursor-pointer rounded-xl border bg-card px-3 py-2.5 shadow-sm transition-colors hover:border-primary/40 hover:bg-muted/30",
+                  "block cursor-pointer rounded-lg border bg-card px-3 py-2 shadow-sm transition-colors hover:border-primary/40 hover:bg-muted/30",
                   active ? "border-primary/50 ring-1 ring-primary/20" : "border-border/70",
                 )}
               >
@@ -160,11 +177,11 @@ export function LeaveManagementPage() {
       ) : null}
 
       {(statusBucket || onLeaveTodayView) && tab === "requests" ? (
-        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+        <div className="flex shrink-0 items-center gap-2 text-xs text-muted-foreground">
           <span>Filtered view:</span>
           <span className="font-medium text-foreground">
             {onLeaveTodayView
-              ? "On leave today"
+              ? "On Leave Today"
               : statusBucket
                 ? `${statusBucket.charAt(0).toUpperCase()}${statusBucket.slice(1)}`
                 : ""}
@@ -175,19 +192,21 @@ export function LeaveManagementPage() {
         </div>
       ) : null}
 
-      <div className="flex flex-wrap gap-2 border-b border-border/60 pb-2">
+      <div className="flex shrink-0 items-center gap-1 border-b border-border/60">
         {(
           [
             ["requests", "Requests"],
-            ["types", "Leave types"],
+            ["types", "Leave Types"],
           ] as const
         ).map(([id, label]) => (
           <button
             key={id}
             type="button"
             className={cn(
-              "cursor-pointer rounded-lg px-3 py-1.5 text-xs font-medium transition-colors",
-              tab === id ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted",
+              "cursor-pointer border-b-2 px-3 py-2 text-xs font-medium transition-colors",
+              tab === id
+                ? "border-primary text-foreground"
+                : "border-transparent text-muted-foreground hover:text-foreground",
             )}
             onClick={() => setTab(id)}
           >
@@ -197,211 +216,256 @@ export function LeaveManagementPage() {
       </div>
 
       {tab === "requests" ? (
-        <div className="flex flex-col gap-3 lg:flex-row">
-          <aside className={cn("lg:w-60 shrink-0", filtersOpen ? "block" : "hidden lg:block")}>
-            <div className="sticky top-4 space-y-2 rounded-xl border border-border/70 bg-card p-3 shadow-sm">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-semibold uppercase text-muted-foreground">Filters</span>
-                <button
-                  type="button"
-                  className="cursor-pointer text-[10px] text-primary"
-                  onClick={() => setFilters(emptyLeaveFilters())}
-                >
-                  Clear
-                </button>
-              </div>
-              <SetupField label="Branch">
-                <SetupSelect
-                  value={filters.branchId}
-                  onChange={(e) => setFilters((f) => ({ ...f, branchId: e.target.value }))}
-                >
-                  <option value="">All</option>
-                  {dir?.options.branches.map((b) => (
-                    <option key={b.id} value={b.id}>{b.label}</option>
-                  ))}
-                </SetupSelect>
-              </SetupField>
-              <SetupField label="Department">
-                <SetupSelect
-                  value={filters.departmentId}
-                  onChange={(e) => setFilters((f) => ({ ...f, departmentId: e.target.value }))}
-                >
-                  <option value="">All</option>
-                  {dir?.options.departments.map((d) => (
-                    <option key={d.id} value={d.id}>{d.label}</option>
-                  ))}
-                </SetupSelect>
-              </SetupField>
-              <SetupField label="Leave type">
-                <SetupSelect
-                  value={filters.leaveTypeId}
-                  onChange={(e) => setFilters((f) => ({ ...f, leaveTypeId: e.target.value }))}
-                >
-                  <option value="">All</option>
-                  {dir?.options.leaveTypes.map((t) => (
-                    <option key={t.id} value={t.id}>{t.label}</option>
-                  ))}
-                </SetupSelect>
-              </SetupField>
-              <SetupField label="Status">
-                <SetupSelect
-                  value={filters.status}
-                  onChange={(e) => setFilters((f) => ({ ...f, status: e.target.value }))}
-                >
-                  <option value="">All</option>
-                  {Object.entries(LEAVE_STATUS_LABELS).map(([k, v]) => (
-                    <option key={k} value={k}>{v}</option>
-                  ))}
-                </SetupSelect>
-              </SetupField>
-              <SetupField label="Reporting manager">
-                <SetupSelect
-                  value={filters.managerId}
-                  onChange={(e) => setFilters((f) => ({ ...f, managerId: e.target.value }))}
-                >
-                  <option value="">All</option>
-                  {dir?.options.managers.map((m) => (
-                    <option key={m.id} value={m.id}>{m.label}</option>
-                  ))}
-                </SetupSelect>
-              </SetupField>
-              <SetupField label="From">
-                <Input type="date" value={filters.dateFrom} onChange={(e) => setFilters((f) => ({ ...f, dateFrom: e.target.value }))} />
-              </SetupField>
-              <SetupField label="To">
-                <Input type="date" value={filters.dateTo} onChange={(e) => setFilters((f) => ({ ...f, dateTo: e.target.value }))} />
-              </SetupField>
-            </div>
-          </aside>
-
-          <div className="min-w-0 flex-1 space-y-3">
-            <div className="flex flex-wrap gap-2">
-              <Input
-                className="max-w-md flex-1"
-                placeholder="Search name, employee ID, department…"
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-              />
-              <Button
+        <div className="flex min-h-0 flex-1 flex-col gap-3">
+          <div className="shrink-0 rounded-lg border border-border/70 bg-card px-3 py-2.5 shadow-sm">
+            <div className="mb-2 flex items-center justify-between gap-2">
+              <p className="text-[11px] font-semibold text-foreground">Filter Requests</p>
+              <button
                 type="button"
-                variant="outline"
-                size="sm"
-                className="cursor-pointer lg:hidden"
-                onClick={() => setFiltersOpen((v) => !v)}
+                className="cursor-pointer text-[11px] font-medium text-primary hover:underline"
+                onClick={() => {
+                  setFilters(emptyLeaveFilters());
+                  setQuery("");
+                }}
               >
-                Filters
-              </Button>
+                Clear all
+              </button>
             </div>
 
-            {!pageRows.length ? (
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-9">
+              <FilterControl label="Search" className="col-span-2">
+                <Input
+                  className="h-8"
+                  placeholder="Name, ID, department…"
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                />
+              </FilterControl>
+              <FilterControl label="Branch">
+                <FilterSelect
+                  value={filters.branchId}
+                  onChange={(branchId) => setFilters((f) => ({ ...f, branchId }))}
+                  options={[
+                    { value: "", label: "All" },
+                    ...(dir?.options.branches.map((b) => ({ value: b.id, label: b.label })) ?? []),
+                  ]}
+                />
+              </FilterControl>
+              <FilterControl label="Department">
+                <FilterSelect
+                  value={filters.departmentId}
+                  onChange={(departmentId) => setFilters((f) => ({ ...f, departmentId }))}
+                  options={[
+                    { value: "", label: "All" },
+                    ...(dir?.options.departments.map((d) => ({ value: d.id, label: d.label })) ?? []),
+                  ]}
+                />
+              </FilterControl>
+              <FilterControl label="Leave Type">
+                <FilterSelect
+                  value={filters.leaveTypeId}
+                  onChange={(leaveTypeId) => setFilters((f) => ({ ...f, leaveTypeId }))}
+                  options={[
+                    { value: "", label: "All" },
+                    ...(dir?.options.leaveTypes.map((t) => ({ value: t.id, label: t.label })) ?? []),
+                  ]}
+                />
+              </FilterControl>
+              <FilterControl label="Status">
+                <FilterSelect
+                  value={filters.status}
+                  onChange={(status) => setFilters((f) => ({ ...f, status }))}
+                  options={[
+                    { value: "", label: "All" },
+                    { value: "pending", label: "Pending" },
+                    { value: "approved", label: "Approved" },
+                    { value: "rejected", label: "Rejected" },
+                  ]}
+                />
+              </FilterControl>
+              <FilterControl label="Manager">
+                <FilterSelect
+                  value={filters.managerId}
+                  onChange={(managerId) => setFilters((f) => ({ ...f, managerId }))}
+                  options={[
+                    { value: "", label: "All" },
+                    ...(dir?.options.managers.map((m) => ({ value: m.id, label: m.label })) ?? []),
+                  ]}
+                />
+              </FilterControl>
+              <FilterControl label="From">
+                <Input
+                  type="date"
+                  className="h-8"
+                  value={filters.dateFrom}
+                  onChange={(e) => setFilters((f) => ({ ...f, dateFrom: e.target.value }))}
+                />
+              </FilterControl>
+              <FilterControl label="To">
+                <Input
+                  type="date"
+                  className="h-8"
+                  value={filters.dateTo}
+                  onChange={(e) => setFilters((f) => ({ ...f, dateTo: e.target.value }))}
+                />
+              </FilterControl>
+            </div>
+          </div>
+
+          {!pageRows.length ? (
+            <div className="flex min-h-0 flex-1 items-center justify-center rounded-lg border border-dashed border-border/70 bg-card/40">
               <HrEmptyState
-                title="No leave requests"
-                description="Apply leave to create the first request with policy validation."
+                title="No Leave Requests"
+                description="Apply Leave to create the first request with policy validation."
                 action={
                   <Button size="sm" className="cursor-pointer" onClick={() => setApplyOpen(true)}>
-                    Apply leave
+                    Apply Leave
                   </Button>
                 }
               />
-            ) : (
-              <div className="overflow-hidden rounded-xl border border-border/70 bg-card shadow-sm">
-                <div className="erp-scroll max-h-[calc(100vh-20rem)] overflow-auto">
-                  <table className="w-full min-w-[1100px] text-left text-sm">
-                    <thead className="sticky top-0 z-10 border-b border-border/70 bg-muted/90 backdrop-blur-sm">
+            </div>
+          ) : (
+            <div className="flex min-h-0 flex-1 flex-col gap-3 lg:flex-row lg:items-stretch">
+              <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-lg border border-border/70 bg-card shadow-sm">
+                <div className="erp-scroll min-h-0 flex-1 overflow-auto">
+                  <table className="w-full border-collapse text-left text-sm">
+                    <thead className="sticky top-0 z-10 border-b border-border/70 bg-muted/95 backdrop-blur-sm">
                       <tr>
-                        <th className="w-8 px-2 py-2">
-                          <input
-                            type="checkbox"
-                            className="cursor-pointer"
-                            checked={pageRows.length > 0 && pageRows.every((r) => selected.has(r.id))}
-                            onChange={(e) => {
-                              if (e.target.checked) setSelected(new Set(pageRows.map((r) => r.id)));
-                              else setSelected(new Set());
-                            }}
-                          />
+                        <th className="px-3 py-2.5 text-[10px] font-semibold tracking-wide text-muted-foreground uppercase">
+                          Employee
                         </th>
-                        {[
-                          "Employee",
-                          "ID",
-                          "Department",
-                          "Leave type",
-                          "From",
-                          "To",
-                          "Days",
-                          "Applied",
-                          "Status",
-                          "Approver",
-                          "",
-                        ].map((h) => (
-                          <th key={h || "a"} className="px-2 py-2 text-[10px] font-medium uppercase text-muted-foreground">
-                            {h}
+                        <th className="w-[76px] px-3 py-2.5 text-[10px] font-semibold tracking-wide text-muted-foreground uppercase">
+                          ID
+                        </th>
+                        {!approvalRequest ? (
+                          <th className="px-3 py-2.5 text-[10px] font-semibold tracking-wide text-muted-foreground uppercase">
+                            Department
                           </th>
-                        ))}
+                        ) : null}
+                        <th className="px-3 py-2.5 text-[10px] font-semibold tracking-wide text-muted-foreground uppercase">
+                          Leave Type
+                        </th>
+                        <th className="w-[96px] px-3 py-2.5 text-[10px] font-semibold tracking-wide text-muted-foreground uppercase">
+                          From
+                        </th>
+                        <th className="w-[96px] px-3 py-2.5 text-[10px] font-semibold tracking-wide text-muted-foreground uppercase">
+                          To
+                        </th>
+                        <th className="w-12 px-3 py-2.5 text-[10px] font-semibold tracking-wide text-muted-foreground uppercase">
+                          Days
+                        </th>
+                        {!approvalRequest ? (
+                          <th className="w-[96px] px-3 py-2.5 text-[10px] font-semibold tracking-wide text-muted-foreground uppercase">
+                            Applied
+                          </th>
+                        ) : null}
+                        <th className="w-[96px] px-3 py-2.5 text-[10px] font-semibold tracking-wide text-muted-foreground uppercase">
+                          Status
+                        </th>
+                        {!approvalRequest ? (
+                          <th className="px-3 py-2.5 text-[10px] font-semibold tracking-wide text-muted-foreground uppercase">
+                            Approver
+                          </th>
+                        ) : null}
                       </tr>
                     </thead>
                     <tbody>
-                      {pageRows.map((row) => (
-                        <tr key={row.id} className="border-b border-border/50 hover:bg-muted/30">
-                          <td className="px-2 py-2">
-                            <input
-                              type="checkbox"
-                              className="cursor-pointer"
-                              checked={selected.has(row.id)}
-                              onChange={() => {
-                                setSelected((prev) => {
-                                  const n = new Set(prev);
-                                  if (n.has(row.id)) n.delete(row.id);
-                                  else n.add(row.id);
-                                  return n;
-                                });
-                              }}
-                            />
-                          </td>
-                          <td className="px-2 py-2 text-xs font-medium">{row.employeeName}</td>
-                          <td className="px-2 py-2 font-mono text-[10px] text-muted-foreground">{row.employeeCode}</td>
-                          <td className="px-2 py-2 text-xs">{row.departmentName}</td>
-                          <td className="px-2 py-2 text-xs">
-                            <span className="inline-flex items-center gap-1">
-                              <span
-                                className="size-2 rounded-full"
-                                style={{ backgroundColor: row.extension.color }}
+                      {pageRows.map((row) => {
+                        const isOpen = approvalRequest?.id === row.id;
+                        return (
+                          <tr
+                            key={row.id}
+                            role="button"
+                            tabIndex={0}
+                            className={cn(
+                              "border-b border-border/40 cursor-pointer transition-colors",
+                              isOpen
+                                ? "bg-primary/5 ring-1 ring-inset ring-primary/20"
+                                : "odd:bg-background even:bg-muted/20 hover:bg-muted/40",
+                            )}
+                            onClick={() => setApprovalRequest(row)}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter" || e.key === " ") {
+                                e.preventDefault();
+                                setApprovalRequest(row);
+                              }
+                            }}
+                          >
+                            <td className="truncate px-3 py-2 text-xs font-medium text-primary">
+                              {row.employeeName}
+                            </td>
+                            <td className="truncate px-3 py-2 font-mono text-[10px] text-muted-foreground">
+                              {row.employeeCode}
+                            </td>
+                            {!approvalRequest ? (
+                              <td className="truncate px-3 py-2 text-xs text-muted-foreground">
+                                {row.departmentName}
+                              </td>
+                            ) : null}
+                            <td className="px-3 py-2 text-xs">
+                              <span className="inline-flex max-w-full items-center gap-1.5 truncate">
+                                <span
+                                  className="size-2 shrink-0 rounded-full"
+                                  style={{ backgroundColor: row.extension.color }}
+                                />
+                                <span className="truncate">{row.leaveTypeName}</span>
+                              </span>
+                            </td>
+                            <td className="px-3 py-2 text-xs tabular-nums whitespace-nowrap">
+                              {row.fromDate}
+                            </td>
+                            <td className="px-3 py-2 text-xs tabular-nums whitespace-nowrap">
+                              {row.toDate}
+                            </td>
+                            <td className="px-3 py-2 text-xs tabular-nums">{row.totalDays}</td>
+                            {!approvalRequest ? (
+                              <td className="px-3 py-2 text-xs tabular-nums whitespace-nowrap text-muted-foreground">
+                                {row.appliedOn.slice(0, 10)}
+                              </td>
+                            ) : null}
+                            <td className="px-3 py-2">
+                              <LeaveStatusBadge
+                                status={row.extension.approvalStage || row.status}
                               />
-                              {row.leaveTypeName}
-                            </span>
-                          </td>
-                          <td className="px-2 py-2 text-xs">{row.fromDate}</td>
-                          <td className="px-2 py-2 text-xs">{row.toDate}</td>
-                          <td className="px-2 py-2 text-xs">{row.totalDays}</td>
-                          <td className="px-2 py-2 text-xs">{row.appliedOn.slice(0, 10)}</td>
-                          <td className="px-2 py-2">
-                            <LeaveStatusBadge status={row.extension.approvalStage || row.status} />
-                          </td>
-                          <td className="px-2 py-2 text-xs">{row.approverName}</td>
-                          <td className="px-2 py-2">
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="sm"
-                              className="cursor-pointer h-7 text-xs"
-                              onClick={() => setApprovalRequest(row)}
-                            >
-                              Review
-                            </Button>
-                          </td>
-                        </tr>
-                      ))}
+                            </td>
+                            {!approvalRequest ? (
+                              <td className="truncate px-3 py-2 text-xs text-muted-foreground">
+                                {row.approverName}
+                              </td>
+                            ) : null}
+                          </tr>
+                        );
+                      })}
                     </tbody>
                   </table>
                 </div>
-                <EmsPagination page={page} pageSize={PAGE_SIZE} total={filtered.length} onPageChange={setPage} />
+                <EmsPagination
+                  page={page}
+                  pageSize={PAGE_SIZE}
+                  total={filtered.length}
+                  onPageChange={setPage}
+                />
               </div>
-            )}
-          </div>
+
+              {approvalRequest ? (
+                <div className="flex min-h-[22rem] w-full shrink-0 self-stretch lg:min-h-0 lg:w-auto">
+                  <LeaveApprovalDrawer
+                    open
+                    request={approvalRequest}
+                    onClose={() => setApprovalRequest(null)}
+                    onDone={() => void load()}
+                  />
+                </div>
+              ) : null}
+            </div>
+          )}
         </div>
       ) : null}
 
       {tab === "types" && dir ? (
-        <LeaveTypePolicyPanel directory={dir} onSaved={() => void load()} />
+        <div className="min-h-0 flex-1 overflow-auto">
+          <LeaveTypePolicyPanel directory={dir} onSaved={() => void load()} />
+        </div>
       ) : null}
 
       <ApplyLeaveDrawer
@@ -409,12 +473,6 @@ export function LeaveManagementPage() {
         directory={dir}
         onClose={() => setApplyOpen(false)}
         onSaved={() => void load()}
-      />
-      <LeaveApprovalDrawer
-        open={Boolean(approvalRequest)}
-        request={approvalRequest}
-        onClose={() => setApprovalRequest(null)}
-        onDone={() => void load()}
       />
     </div>
   );
