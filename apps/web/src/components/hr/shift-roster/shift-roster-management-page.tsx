@@ -41,7 +41,6 @@ import {
   listShiftAudit,
   loadShiftRosterDirectory,
   saveWeeklyOffRules,
-  shiftUtilizationReport,
   submitShiftSwap,
   runAttendanceAutoAbsentJob,
   type ShiftRosterDirectory,
@@ -52,7 +51,7 @@ import { WEEKLY_OFF_RULE_OPTIONS } from "@/lib/hr/weekly-off-rules";
 
 const PAGE = 10;
 
-type Tab = "shifts" | "assignments" | "calendar" | "rotations" | "rules" | "reports" | "audit";
+type Tab = "shifts" | "assignments" | "calendar" | "rotations" | "rules" | "audit";
 
 export function ShiftRosterManagementPage() {
   const [dir, setDir] = useState<ShiftRosterDirectory | null>(null);
@@ -115,7 +114,6 @@ export function ShiftRosterManagementPage() {
   }, [dir]);
 
   const audit = useMemo(() => listShiftAudit(), [dir, tab]);
-  const utilization = useMemo(() => (dir ? shiftUtilizationReport(dir) : []), [dir]);
 
   const authBlocked = !isAuthenticated() && !loading && !dir?.shifts.length;
 
@@ -196,7 +194,6 @@ export function ShiftRosterManagementPage() {
             ["calendar", "Roster Calendar"],
             ["rotations", "Rotations"],
             ["rules", "Rules & Swap"],
-            ["reports", "Reports"],
             ["audit", "Audit Log"],
           ] as const
         ).map(([id, label]) => (
@@ -217,7 +214,7 @@ export function ShiftRosterManagementPage() {
         ))}
       </div>
 
-      {tab !== "calendar" && tab !== "audit" && tab !== "reports" ? (
+      {tab !== "calendar" && tab !== "audit" ? (
         <div className="flex flex-wrap gap-2">
           <Input
             className="max-w-sm"
@@ -532,30 +529,6 @@ export function ShiftRosterManagementPage() {
                 ))}
               </ul>
             )}
-          </div>
-        </div>
-      ) : null}
-
-      {tab === "reports" && dir ? (
-        <div className="grid gap-4 lg:grid-cols-2">
-          <div className="rounded-xl border border-border/70 bg-card p-4 shadow-sm">
-            <h3 className="text-xs font-semibold uppercase text-muted-foreground">Shift utilization</h3>
-            <table className="mt-3 w-full text-xs">
-              <thead><tr className="text-muted-foreground"><th className="py-1 text-left">Shift</th><th>Assigned</th></tr></thead>
-              <tbody>
-                {utilization.map((u) => (
-                  <tr key={u.code} className="border-t border-border/40">
-                    <td className="py-1.5">{u.shift}</td>
-                    <td className="py-1.5 text-center">{u.assigned}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          <div className="rounded-xl border border-border/70 bg-card p-4 shadow-sm">
-            <h3 className="text-xs font-semibold uppercase text-muted-foreground">Night shift report</h3>
-            <p className="mt-2 text-2xl font-semibold">{stats?.nightShifts ?? 0}</p>
-            <p className="text-xs text-muted-foreground">Active night / overnight shift definitions</p>
           </div>
         </div>
       ) : null}

@@ -476,9 +476,8 @@ export function OnboardingManagementPage() {
             <span className="font-medium text-foreground">View</span> to see every uploaded file,
             then preview, verify, or reject inside the directory.
           </p>
-          {(dir?.cases ?? [])
-            .filter((c) => c.portal.documents.length > 0)
-            .map((c) => {
+          {(statsBucket ? filtered : (dir?.cases ?? []).filter((c) => c.portal.documents.length > 0)).map(
+            (c) => {
               const docs = c.portal.documents;
               const verified = docs.filter((d) => d.verifyStatus === "verified").length;
               const pending = docs.filter((d) => d.verifyStatus === "pending").length;
@@ -490,7 +489,7 @@ export function OnboardingManagementPage() {
                 >
                   <button
                     type="button"
-                    className="flex min-w-0 flex-1 cursor-pointer items-start gap-2 rounded-md text-left transition-colors duration-200 hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 px-1 py-0.5 -mx-1"
+                    className="flex min-w-0 flex-1 cursor-pointer items-start gap-2 rounded-md px-1 py-0.5 -mx-1 text-left transition-colors duration-200 hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
                     onClick={() => setDocsCase(c)}
                   >
                     <FolderOpen className="mt-0.5 size-4 shrink-0 text-primary" />
@@ -519,11 +518,17 @@ export function OnboardingManagementPage() {
                   </Button>
                 </div>
               );
-            })}
-          {(dir?.cases ?? []).every((c) => c.portal.documents.length === 0) ? (
+            },
+          )}
+          {(statsBucket ? filtered : (dir?.cases ?? []).filter((c) => c.portal.documents.length > 0))
+            .length === 0 ? (
             <HrEmptyState
               title="No Documents Yet"
-              description="Documents appear after candidates upload via the secure portal."
+              description={
+                statsBucket
+                  ? "No cases match this card filter."
+                  : "Documents appear after candidates upload via the secure portal."
+              }
             />
           ) : null}
         </div>
