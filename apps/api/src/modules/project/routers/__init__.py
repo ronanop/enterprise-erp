@@ -70,6 +70,7 @@ from modules.project.schemas import (
     SiteInstallationCreate,
     SiteInstallationFollowUpRequest,
     SiteInstallationFollowUpResponse,
+    SiteInstallationNoAnswerNotifyRequest,
     SiteStageFollowUpItem,
     SiteInstallationResponse,
     SiteInstallationUpdate,
@@ -1051,6 +1052,27 @@ def follow_up_site_installation_stage(
         message="Follow-up sent",
         data=SiteInstallationService(db).follow_up_stage(
             ctx, project_id, body.stage, body.note
+        ),
+    )
+
+
+@site_installations_router.post(
+    "/by-project/{project_id}/notify-no-answers",
+    response_model=APIResponse[SiteInstallationFollowUpResponse],
+)
+def notify_site_installation_no_answers(
+    project_id: UUID,
+    body: SiteInstallationNoAnswerNotifyRequest,
+    ctx: Annotated[TenantContext, Depends(require_permission("project.project:update"))],
+    db: Annotated[Session, Depends(get_db)],
+):
+    return APIResponse(
+        message="Admin notified",
+        data=SiteInstallationService(db).notify_no_answers(
+            ctx,
+            project_id,
+            body.stage,
+            [item.model_dump() for item in body.items],
         ),
     )
 

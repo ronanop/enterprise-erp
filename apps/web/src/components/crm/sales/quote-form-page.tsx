@@ -660,7 +660,7 @@ export function QuoteFormPage({
         <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border/70 px-4 py-3">
           <div className="flex items-center gap-2.5">
             <CrmIconBadge icon={ListOrdered} />
-            <h2 className="text-sm font-medium">Quoted Items</h2>
+            <h2 className="text-base font-extrabold tracking-tight">Quoted Items</h2>
           </div>
           <Button
             type="button"

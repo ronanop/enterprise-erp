@@ -324,7 +324,7 @@ export function TaskAssignmentFormDialog({
         onClick={(event) => event.stopPropagation()}
       >
         <div className="flex items-center justify-between border-b border-border/70 px-4 py-3">
-          <h2 id="task-assignment-dialog-title" className="text-sm font-medium tracking-tight">
+          <h2 id="task-assignment-dialog-title" className="text-base font-extrabold tracking-tight">
             Task Assignment
           </h2>
           <Button

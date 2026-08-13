@@ -63,7 +63,7 @@ function buildIntakeDetailRows(
   const rows: Array<{ label: string; value: string }> = [];
 
   if (hasText(branchLabel)) {
-    rows.push({ label: "Branch", value: branchLabel! });
+    rows.push({ label: "Circle Name", value: branchLabel! });
   }
   if (site?.delivery_type) {
     rows.push({
@@ -74,7 +74,7 @@ function buildIntakeDetailRows(
   const customer = labelOrNull(project.customer_id, labels.customerName);
   if (customer) rows.push({ label: "Customer", value: customer });
   if (hasText(site?.site_name)) {
-    rows.push({ label: "Site", value: site!.site_name!.trim() });
+    rows.push({ label: "Site Name", value: site!.site_name!.trim() });
   }
   const pm = labelOrNull(project.project_manager_employee_id, labels.employeeName);
   if (pm) rows.push({ label: "Project Manager", value: pm });

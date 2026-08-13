@@ -129,7 +129,7 @@ function OverviewPanelHeader({
         <CrmIconBadge icon={Icon} />
         <div className="min-w-0">
           <div className="flex items-center gap-2">
-            <h2 className="text-base font-bold tracking-tight text-foreground">{title}</h2>
+            <h2 className="text-base font-extrabold tracking-tight text-foreground">{title}</h2>
             <CrmCountBadge count={count} />
           </div>
           <p className="text-[11px] text-muted-foreground">{subtitle}</p>

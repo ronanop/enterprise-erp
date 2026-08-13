@@ -233,6 +233,10 @@ class SiteInstallationService:
     def _ensure_current_stage_editor(
         self, ctx: TenantContext, site: PrjSiteInstallation, project: PrjProject
     ) -> None:
+        # Module admin may update any stage (stepwise assignee assignment from Project Tracking).
+        if self._module_admin.is_admin(ctx):
+            return
+
         employee_id = self._assignment.resolve_employee_id(ctx)
         if employee_id is None:
             raise ForbiddenException("Employee profile required to edit site workflow")
@@ -242,20 +246,30 @@ class SiteInstallationService:
             SiteWorkflowStage.INTAKE.value,
             SiteWorkflowStage.ASSIGNMENT.value,
         }:
-            self._module_admin.ensure_admin(ctx)
-            return
+            raise ForbiddenException(
+                "Only the Project Management module admin can edit Intake / Assignment"
+            )
+
+        owned_stages = [
+            stage_key
+            for stage_key, field in engine.STAGE_ASSIGNEE_FIELDS.items()
+            if getattr(site, field, None) == employee_id
+        ]
+        if not owned_stages:
+            raise ForbiddenException("Only the assigned stage owner can update this workflow step")
 
         lookup_stage = stage
         if lookup_stage == SiteWorkflowStage.CONFIGURATION.value:
             lookup_stage = SiteWorkflowStage.INSTALLATION.value
 
-        field = engine.STAGE_ASSIGNEE_FIELDS.get(lookup_stage)
-        if not field:
-            raise ForbiddenException("This workflow stage cannot be edited")
+        if lookup_stage in owned_stages:
+            return
 
-        assignee_id = getattr(site, field, None)
-        if assignee_id != employee_id:
-            raise ForbiddenException("Only the assigned stage owner can update this workflow step")
+        for owned in owned_stages:
+            if engine.is_stage_unlocked_by_progress(site, owned):
+                return
+
+        raise ForbiddenException("Only the assigned stage owner can update this workflow step")
 
     def _ensure_can_run_advance_action(
         self, ctx: TenantContext, site: PrjSiteInstallation, project: PrjProject, action: str
@@ -271,6 +285,7 @@ class SiteInstallationService:
         action_stage: dict[str, str] = {
             "complete_survey": SiteWorkflowStage.SURVEY.value,
             "complete_scm": SiteWorkflowStage.SCM.value,
+            "complete_onsite": SiteWorkflowStage.ONSITE.value,
             "complete_installation": SiteWorkflowStage.INSTALLATION.value,
             "complete_installation_rack_only": SiteWorkflowStage.INSTALLATION.value,
             "complete_acceptance": SiteWorkflowStage.ACCEPTANCE.value,
@@ -303,6 +318,8 @@ class SiteInstallationService:
                     "Delivery type can only change during Intake"
                 )
         self._apply_material_line_side_effects(fields)
+        self._stamp_assignee_dates(row, fields)
+        self._stamp_progress_finished_dates(row, fields)
         updated = self._repo.update(ctx, row_id, **fields)
         if updated is None:
             raise NotFoundException("Site installation not found")
@@ -349,6 +366,38 @@ class SiteInstallationService:
             lines = self._normalize_lines(fields["industrial_socket_lines"])
             fields["industrial_socket_lines"] = lines
             fields["industrial_socket"] = bool(lines)
+
+    @staticmethod
+    def _stamp_progress_finished_dates(row: PrjSiteInstallation, fields: dict) -> None:
+        """When a step owner sets Partial completed or Completed, stamp the finished date."""
+        today = date.today()
+        for stage_key, progress_field in engine.STAGE_PROGRESS_FIELDS.items():
+            if progress_field not in fields:
+                continue
+            status = fields.get(progress_field)
+            if status not in engine.PROGRESS_UNLOCK_STATUSES:
+                continue
+            finished_field = engine.STAGE_DATE_FIELDS[stage_key][1]
+            if finished_field in fields:
+                continue
+            if getattr(row, finished_field, None) is None:
+                fields[finished_field] = today
+
+    @staticmethod
+    def _stamp_assignee_dates(row: PrjSiteInstallation, fields: dict) -> None:
+        """When an assignee is first set, stamp that stage's assigned date."""
+        today = date.today()
+        for stage_key, assignee_field in engine.STAGE_ASSIGNEE_FIELDS.items():
+            if assignee_field not in fields:
+                continue
+            next_assignee = fields.get(assignee_field)
+            if not next_assignee:
+                continue
+            date_field = engine.STAGE_DATE_FIELDS[stage_key][0]
+            if date_field in fields:
+                continue
+            if getattr(row, date_field, None) is None:
+                fields[date_field] = today
 
     def update_by_project(
         self, ctx: TenantContext, project_id: UUID, **fields
@@ -473,6 +522,82 @@ class SiteInstallationService:
             entity_name="prj_site_installation",
             entity_id=row.id,
             operation=f"follow_up:{stage_key}",
+            performed_by=ctx.user_id,
+        )
+        return {
+            "stage": stage_key,
+            "stage_label": stage_label,
+            "recipient_employee_id": recipient_id,
+            "notification_id": notification.id,
+            "message": message,
+        }
+
+    def notify_no_answers(
+        self,
+        ctx: TenantContext,
+        project_id: UUID,
+        stage: str,
+        items: list[dict],
+    ) -> dict:
+        """Notify the project manager when a stage owner marks checklist items as No."""
+        row = self.get_by_project(ctx, project_id)
+        project = self._projects.get(ctx, project_id)
+        if project is None:
+            raise NotFoundException("Project not found")
+
+        stage_key = stage.strip().lower()
+        if stage_key == "configuration":
+            stage_key = SiteWorkflowStage.INSTALLATION.value
+        stage_label = engine.STAGE_LABELS.get(stage_key, stage_key)
+
+        recipient_id = project.project_manager_employee_id
+        if recipient_id is None:
+            # Fall back to any module admin path — still persist for portfolio inbox if no PM
+            raise InvalidSiteInstallationState(
+                "Project manager is not set — cannot notify admin of No answers"
+            )
+
+        labels = [
+            str(item.get("label") or item.get("field") or "").strip()
+            for item in (items or [])
+            if isinstance(item, dict)
+        ]
+        labels = [label for label in labels if label]
+        if not labels:
+            raise InvalidSiteInstallationState("No 'No' answers were provided")
+
+        site_name = row.site_name or row.document_number
+        joined = ", ".join(labels)
+        message = (
+            f"{stage_label} on site {site_name}: assignee marked No for {joined}."
+        )
+        notification = NotificationService(self._db).create(
+            ctx,
+            company_id=row.company_id,
+            branch_id=row.branch_id,
+            project_id=project_id,
+            notification_type="other",
+            recipient_employee_id=recipient_id,
+            payload_json={
+                "kind": "site_stage_no_answer",
+                "stage": stage_key,
+                "stage_label": stage_label,
+                "site_installation_id": str(row.id),
+                "document_number": row.document_number,
+                "site_name": row.site_name,
+                "message": message,
+                "items": labels,
+                "sender_user_id": str(ctx.user_id) if ctx.user_id else None,
+            },
+            delivery_status="sent",
+            sent_at=datetime.now(timezone.utc),
+            status="active",
+        )
+        self._audit.log_entity_change(
+            tenant_id=ctx.tenant_id,
+            entity_name="prj_site_installation",
+            entity_id=row.id,
+            operation=f"notify_no_answers:{stage_key}",
             performed_by=ctx.user_id,
         )
         return {
@@ -670,6 +795,7 @@ class SiteInstallationService:
             SiteWorkflowStage.ASSIGNMENT.value: "assign",
             SiteWorkflowStage.SURVEY.value: "survey",
             SiteWorkflowStage.SCM.value: "scm",
+            SiteWorkflowStage.ONSITE.value: "onsite",
             SiteWorkflowStage.INSTALLATION.value: "installation",
             SiteWorkflowStage.ACCEPTANCE.value: "acceptance",
         }
@@ -677,10 +803,11 @@ class SiteInstallationService:
         stage_rank = {s: i for i, s in enumerate(engine.STAGE_ORDER)}
 
         for site in sites:
-            if site.workflow_stage == SiteWorkflowStage.COMPLETED.value:
-                continue
-            if site.status == SiteInstallationStatus.COMPLETED.value:
-                continue
+            if not completed:
+                if site.workflow_stage == SiteWorkflowStage.COMPLETED.value:
+                    continue
+                if site.status == SiteInstallationStatus.COMPLETED.value:
+                    continue
 
             project = self._projects.get(ctx, site.project_id)
             if project is None:
@@ -744,9 +871,7 @@ class SiteInstallationService:
             if segment
             else f"/projects/projects/{site.project_id}"
         )
-        work_status = engine.stage_work_status(
-            assigned_stage, current_stage, site.delivery_type
-        )
+        work_status = engine.assignee_work_status(site, assigned_stage, current_stage)
         return {
             "site_installation_id": site.id,
             "project_id": site.project_id,
@@ -759,6 +884,10 @@ class SiteInstallationService:
             "delivery_type": site.delivery_type,
             "form_path": form_path,
             "work_status": work_status,
+            "can_open_form": engine.can_open_stage_form(
+                site, assigned_stage, current_stage
+            ),
+            "created_at": getattr(site, "created_at", None) or getattr(project, "created_at", None),
         }
 
     def _sync_phase_status(

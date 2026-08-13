@@ -4,6 +4,18 @@ import type { ReactNode } from "react";
 
 import { cn } from "@/lib/utils";
 
+function FieldLabelText({ label }: { label: string }) {
+  const trimmed = label.trimEnd();
+  const required = trimmed.endsWith("*");
+  const text = required ? trimmed.slice(0, -1).trimEnd() : trimmed;
+  return (
+    <>
+      {text}
+      {required ? <span className="ml-0.5 text-destructive">*</span> : null}
+    </>
+  );
+}
+
 export function FinanceField({
   label,
   htmlFor,
@@ -22,7 +34,7 @@ export function FinanceField({
   return (
     <label className={cn("block min-w-0 space-y-1.5", className)} htmlFor={htmlFor}>
       <span className="block text-[11px] font-medium tracking-wide text-muted-foreground uppercase break-words">
-        {label}
+        <FieldLabelText label={label} />
       </span>
       <div className="min-w-0">{children}</div>
       {hint && !error ? (

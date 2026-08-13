@@ -279,12 +279,18 @@ export type SiteInstallation = AuditFields & {
   dac_ilo_cabling_date: string | null;
   bios_configuration_done: boolean;
   bios_configuration_date: string | null;
-  firmware_nw_config_done: boolean;
-  firmware_nw_config_date: string | null;
+  firmware_config_done: boolean;
+  firmware_config_date: string | null;
   lld_done: boolean;
   lld_date: string | null;
   os_installation_done: boolean;
   os_installation_date: string | null;
+  vm_installation_done: boolean;
+  vm_installation_date: string | null;
+  nw_config_done: boolean;
+  nw_config_date: string | null;
+  tools_integration_done: boolean;
+  tools_integration_date: string | null;
   mbss_done: boolean;
   mbss_date: string | null;
   vascan_done: boolean;
@@ -297,6 +303,7 @@ export type SiteInstallation = AuditFields & {
   hwat_signoff_date: string | null;
   survey_assignee_employee_id: string | null;
   scm_assignee_employee_id: string | null;
+  onsite_assignee_employee_id: string | null;
   installation_assignee_employee_id: string | null;
   configuration_assignee_employee_id: string | null;
   acceptance_assignee_employee_id: string | null;
@@ -304,10 +311,28 @@ export type SiteInstallation = AuditFields & {
   survey_finished_date: string | null;
   scm_assigned_date: string | null;
   scm_finished_date: string | null;
+  onsite_assigned_date: string | null;
+  onsite_finished_date: string | null;
   installation_assigned_date: string | null;
   installation_finished_date: string | null;
   acceptance_assigned_date: string | null;
   acceptance_finished_date: string | null;
+  survey_attachment_name: string | null;
+  scm_attachment_name: string | null;
+  onsite_attachment_name: string | null;
+  installation_attachment_name: string | null;
+  acceptance_attachment_name: string | null;
+  material_handover_to_name: string | null;
+  survey_progress_status: string | null;
+  survey_remarks: string | null;
+  scm_progress_status: string | null;
+  scm_remarks: string | null;
+  onsite_progress_status: string | null;
+  onsite_remarks: string | null;
+  installation_progress_status: string | null;
+  installation_remarks: string | null;
+  acceptance_progress_status: string | null;
+  acceptance_remarks: string | null;
   remarks: string | null;
 };
 
@@ -359,12 +384,18 @@ export type SiteInstallationFormInput = {
   dac_ilo_cabling_date?: string | null;
   bios_configuration_done?: boolean;
   bios_configuration_date?: string | null;
-  firmware_nw_config_done?: boolean;
-  firmware_nw_config_date?: string | null;
+  firmware_config_done?: boolean;
+  firmware_config_date?: string | null;
   lld_done?: boolean;
   lld_date?: string | null;
   os_installation_done?: boolean;
   os_installation_date?: string | null;
+  vm_installation_done?: boolean;
+  vm_installation_date?: string | null;
+  nw_config_done?: boolean;
+  nw_config_date?: string | null;
+  tools_integration_done?: boolean;
+  tools_integration_date?: string | null;
   mbss_done?: boolean;
   mbss_date?: string | null;
   vascan_done?: boolean;
@@ -377,9 +408,26 @@ export type SiteInstallationFormInput = {
   hwat_signoff_date?: string | null;
   survey_assignee_employee_id?: string | null;
   scm_assignee_employee_id?: string | null;
+  onsite_assignee_employee_id?: string | null;
   installation_assignee_employee_id?: string | null;
   configuration_assignee_employee_id?: string | null;
   acceptance_assignee_employee_id?: string | null;
+  survey_attachment_name?: string | null;
+  scm_attachment_name?: string | null;
+  onsite_attachment_name?: string | null;
+  installation_attachment_name?: string | null;
+  acceptance_attachment_name?: string | null;
+  material_handover_to_name?: string | null;
+  survey_progress_status?: string | null;
+  survey_remarks?: string | null;
+  scm_progress_status?: string | null;
+  scm_remarks?: string | null;
+  onsite_progress_status?: string | null;
+  onsite_remarks?: string | null;
+  installation_progress_status?: string | null;
+  installation_remarks?: string | null;
+  acceptance_progress_status?: string | null;
+  acceptance_remarks?: string | null;
   remarks?: string | null;
 };
 
@@ -388,6 +436,8 @@ export type SiteStageAssignment = {
   label: string;
   assignee_employee_id: string | null;
   work_status: "pending" | "in_progress" | "done" | "skipped" | string;
+  progress_status?: string | null;
+  remarks?: string | null;
   assigned_date?: string | null;
   completed_date?: string | null;
 };
@@ -444,6 +494,16 @@ export async function advanceSiteInstallation(
       `${SITE_INSTALLATIONS_API}/by-project/${projectId}/advance`,
       { method: "POST", body: { action } },
     ),
+  );
+}
+
+export async function notifySiteStageNoAnswers(
+  projectId: string,
+  body: { stage: string; items: Array<{ field: string; label: string }> },
+): Promise<void> {
+  await apiClient(
+    `${SITE_INSTALLATIONS_API}/by-project/${projectId}/notify-no-answers`,
+    { method: "POST", body },
   );
 }
 
@@ -543,6 +603,8 @@ export type ProjectMyJob = {
   delivery_type: string;
   form_path: string;
   work_status: string;
+  can_open_form?: boolean;
+  created_at?: string | null;
 };
 
 export async function listProjectMyJobs(): Promise<ProjectMyJob[]> {

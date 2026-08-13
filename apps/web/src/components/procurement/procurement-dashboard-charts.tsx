@@ -86,7 +86,7 @@ function ProcurementChartSection({
             </span>
           ) : null}
           <div className="min-w-0">
-            <h2 className="truncate text-sm font-medium tracking-tight">{title}</h2>
+            <h2 className="truncate text-base font-extrabold tracking-tight">{title}</h2>
             {subtitle ? (
               <p className="truncate text-[10px] text-muted-foreground">{subtitle}</p>
             ) : null}

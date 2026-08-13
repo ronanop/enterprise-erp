@@ -274,7 +274,7 @@ export function CoaDetailPage({ accountId }: { accountId: string }) {
 
       <div className="rounded-xl border border-border/80 bg-card p-4 shadow-sm">
         <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-          <h3 className="text-sm font-medium tracking-tight">Account Details</h3>
+          <h3 className="text-base font-extrabold tracking-tight">Account Details</h3>
           <CoaWorkflowActions account={account} onDone={() => void load()} />
         </div>
         <form
@@ -326,7 +326,7 @@ export function CoaDetailPage({ accountId }: { accountId: string }) {
 
       <div className="grid gap-4 lg:grid-cols-2">
         <div className="rounded-xl border border-border/80 bg-card p-3.5 shadow-sm">
-          <h3 className="text-sm font-medium tracking-tight">Child Accounts</h3>
+          <h3 className="text-base font-extrabold tracking-tight">Child Accounts</h3>
           {children.length === 0 ? (
             <p className="mt-2 text-xs text-muted-foreground">No child accounts.</p>
           ) : (
@@ -347,7 +347,7 @@ export function CoaDetailPage({ accountId }: { accountId: string }) {
         </div>
 
         <div className="rounded-xl border border-border/80 bg-card p-3.5 shadow-sm">
-          <h3 className="text-sm font-medium tracking-tight">Related Journals</h3>
+          <h3 className="text-base font-extrabold tracking-tight">Related Journals</h3>
           {journals.length === 0 ? (
             <p className="mt-2 text-xs text-muted-foreground">No journals reference this account.</p>
           ) : (
@@ -368,7 +368,7 @@ export function CoaDetailPage({ accountId }: { accountId: string }) {
       </div>
 
       <div className="rounded-xl border border-border/80 bg-card p-3.5 shadow-sm">
-        <h3 className="mb-2 text-sm font-medium tracking-tight">Audit Timeline / Change History</h3>
+        <h3 className="mb-2 text-base font-extrabold tracking-tight">Audit Timeline / Change History</h3>
         <JournalAuditTimeline events={auditEvents} resolveUser={resolve} />
       </div>
 

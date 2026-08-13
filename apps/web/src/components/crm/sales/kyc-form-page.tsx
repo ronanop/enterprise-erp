@@ -7,12 +7,13 @@ import {
   ArrowLeft,
   Building2,
   Cloud,
-  Cpu,
   Network,
   Plus,
   Shield,
+  Sparkles,
+  AppWindow,
+  HardHat,
   UserRound,
-  Wrench,
 } from "lucide-react";
 
 import { CrmErrorBanner, CrmPage, CrmSection, CRM_TABLE_HEAD_CELL, CRM_TABLE_HEAD_ROW } from "@/components/crm/crm-ui";
@@ -36,9 +37,12 @@ import {
   emptyKycFormData,
   emptyKycContactRow,
   emptyKycGridRow,
+  KYC_AI_PRODUCT_OPTIONS,
   KYC_CLOUD_PRODUCT_OPTIONS,
+  KYC_FSM_PRODUCT_OPTIONS,
   KYC_HARDWARE_PRODUCT_OPTIONS,
   KYC_SECURITY_PRODUCT_OPTIONS,
+  KYC_SOFTWARE_PRODUCT_OPTIONS,
   type CrmKycFormData,
   type KycContactRow,
   type KycGridRow,
@@ -111,6 +115,54 @@ function parseKycFormData(raw: Record<string, unknown>, fallback: CrmKycFormData
     });
   } else if (!merged.security_rows?.length) {
     merged.security_rows = [emptyKycGridRow()];
+  }
+
+  const aiRows = raw.ai_rows;
+  if (Array.isArray(aiRows) && aiRows.length > 0) {
+    merged.ai_rows = aiRows.map((row, index) => {
+      const item = row as Partial<KycGridRow>;
+      return {
+        id: item.id ?? `row-${index}`,
+        network_profile: String(item.network_profile ?? ""),
+        numbers: String(item.numbers ?? ""),
+        oem: String(item.oem ?? ""),
+        major_partner: String(item.major_partner ?? ""),
+      };
+    });
+  } else if (!merged.ai_rows?.length) {
+    merged.ai_rows = [emptyKycGridRow()];
+  }
+
+  const softwareRows = raw.software_rows;
+  if (Array.isArray(softwareRows) && softwareRows.length > 0) {
+    merged.software_rows = softwareRows.map((row, index) => {
+      const item = row as Partial<KycGridRow>;
+      return {
+        id: item.id ?? `row-${index}`,
+        network_profile: String(item.network_profile ?? ""),
+        numbers: String(item.numbers ?? ""),
+        oem: String(item.oem ?? ""),
+        major_partner: String(item.major_partner ?? ""),
+      };
+    });
+  } else if (!merged.software_rows?.length) {
+    merged.software_rows = [emptyKycGridRow()];
+  }
+
+  const fsmRows = raw.fsm_rows;
+  if (Array.isArray(fsmRows) && fsmRows.length > 0) {
+    merged.fsm_rows = fsmRows.map((row, index) => {
+      const item = row as Partial<KycGridRow>;
+      return {
+        id: item.id ?? `row-${index}`,
+        network_profile: String(item.network_profile ?? ""),
+        numbers: String(item.numbers ?? ""),
+        oem: String(item.oem ?? ""),
+        major_partner: String(item.major_partner ?? ""),
+      };
+    });
+  } else if (!merged.fsm_rows?.length) {
+    merged.fsm_rows = [emptyKycGridRow()];
   }
 
   const contacts = raw.contact_rows;
@@ -266,6 +318,33 @@ export function KycFormPage({ companyAccountId, kycId }: KycFormPageProps) {
     }));
   }
 
+  function updateAiRow(id: string, patch: Partial<KycGridRow>) {
+    setForm((current) => ({
+      ...current,
+      ai_rows: current.ai_rows.map((row) =>
+        row.id === id ? { ...row, ...patch } : row,
+      ),
+    }));
+  }
+
+  function updateSoftwareRow(id: string, patch: Partial<KycGridRow>) {
+    setForm((current) => ({
+      ...current,
+      software_rows: current.software_rows.map((row) =>
+        row.id === id ? { ...row, ...patch } : row,
+      ),
+    }));
+  }
+
+  function updateFsmRow(id: string, patch: Partial<KycGridRow>) {
+    setForm((current) => ({
+      ...current,
+      fsm_rows: current.fsm_rows.map((row) =>
+        row.id === id ? { ...row, ...patch } : row,
+      ),
+    }));
+  }
+
   function updateContactRow(id: string, patch: Partial<KycContactRow>) {
     setForm((current) => ({
       ...current,
@@ -404,6 +483,13 @@ export function KycFormPage({ companyAccountId, kycId }: KycFormPageProps) {
               onChange={(e) => setField("number_of_locations", e.target.value)}
             />
           </FinanceField>
+          <FinanceField label="Number of Employees">
+            <Input
+              value={form.number_of_employees}
+              onChange={(e) => setField("number_of_employees", e.target.value)}
+              inputMode="numeric"
+            />
+          </FinanceField>
           <FinanceField label="GST No.">
             <Input value={form.gst_no} onChange={(e) => setField("gst_no", e.target.value)} />
           </FinanceField>
@@ -429,7 +515,7 @@ export function KycFormPage({ companyAccountId, kycId }: KycFormPageProps) {
             </div>
           </FinanceField>
           <CrmSessionEmployeeField label="KYC Owner" value={kycOwnerLabel} required />
-          <FinanceField label="TAN">
+          <FinanceField label="TAN Number">
             <Input value={form.tan} onChange={(e) => setField("tan", e.target.value)} />
           </FinanceField>
         </div>
@@ -501,24 +587,6 @@ export function KycFormPage({ companyAccountId, kycId }: KycFormPageProps) {
               ))}
             </tbody>
           </table>
-        </div>
-      </CrmSection>
-
-      <CrmSection title="Profile" icon={Cpu}>
-        <div className="grid gap-4 lg:grid-cols-2 lg:gap-x-10">
-          <FinanceField label="Number of Employees">
-            <Input
-              value={form.number_of_employees}
-              onChange={(e) => setField("number_of_employees", e.target.value)}
-              inputMode="numeric"
-            />
-          </FinanceField>
-          <FinanceField label="User's Major Partner">
-            <Input
-              value={form.users_major_partner}
-              onChange={(e) => setField("users_major_partner", e.target.value)}
-            />
-          </FinanceField>
         </div>
       </CrmSection>
 
@@ -732,40 +800,213 @@ export function KycFormPage({ companyAccountId, kycId }: KycFormPageProps) {
         </div>
       </CrmSection>
 
-      <CrmSection title="FMS Information" icon={Wrench}>
-        <div className="grid gap-4 lg:grid-cols-2 lg:gap-x-10">
-          <FinanceField label="RE's">
-            <Input value={form.res} onChange={(e) => setField("res", e.target.value)} />
-          </FinanceField>
-          <FinanceField label="RE's No Of Engineer">
-            <Input
-              value={form.res_no_of_engineer}
-              onChange={(e) => setField("res_no_of_engineer", e.target.value)}
-            />
-          </FinanceField>
-          <FinanceField label="RE's Expiry Date">
-            <Input
-              type="date"
-              value={form.res_expiry_date}
-              onChange={(e) => setField("res_expiry_date", e.target.value)}
-            />
-          </FinanceField>
-          <FinanceField label="AMC's">
-            <Input value={form.amcs} onChange={(e) => setField("amcs", e.target.value)} />
-          </FinanceField>
-          <FinanceField label="AMC's No Of Engineer">
-            <Input
-              value={form.amcs_no_of_engineer}
-              onChange={(e) => setField("amcs_no_of_engineer", e.target.value)}
-            />
-          </FinanceField>
-          <FinanceField label="AMC's Expiry Date">
-            <Input
-              type="date"
-              value={form.amcs_expiry_date}
-              onChange={(e) => setField("amcs_expiry_date", e.target.value)}
-            />
-          </FinanceField>
+      <CrmSection
+        title="AI Products"
+        icon={Sparkles}
+        actions={
+          <Button
+            type="button"
+            variant="outline"
+            size="xs"
+            className="cursor-pointer"
+            onClick={() =>
+              setForm((current) => ({
+                ...current,
+                ai_rows: [...current.ai_rows, emptyKycGridRow()],
+              }))
+            }
+          >
+            <Plus className="size-3" aria-hidden="true" />
+            Add row
+          </Button>
+        }
+      >
+        <div className="erp-scroll overflow-x-auto">
+          <table className="w-full min-w-[720px] text-left text-sm">
+            <thead>
+              <tr className={CRM_TABLE_HEAD_ROW}>
+                <th className={CRM_TABLE_HEAD_CELL}>Product Category</th>
+                <th className={CRM_TABLE_HEAD_CELL}>Numbers</th>
+                <th className={CRM_TABLE_HEAD_CELL}>OEM</th>
+                <th className={CRM_TABLE_HEAD_CELL}>Major Partner</th>
+              </tr>
+            </thead>
+            <tbody>
+              {form.ai_rows.map((row) => (
+                <tr key={row.id} className={cn("border-b border-border/60")}>
+                  <td className="min-w-[200px] px-4 py-2 align-top">
+                    <KycTableProductField
+                      options={KYC_AI_PRODUCT_OPTIONS}
+                      value={row.network_profile}
+                      onChange={(network_profile) =>
+                        updateAiRow(row.id, { network_profile })
+                      }
+                    />
+                  </td>
+                  <td className="px-4 py-2">
+                    <Input
+                      value={row.numbers}
+                      onChange={(e) => updateAiRow(row.id, { numbers: e.target.value })}
+                    />
+                  </td>
+                  <td className="px-4 py-2">
+                    <Input
+                      value={row.oem}
+                      onChange={(e) => updateAiRow(row.id, { oem: e.target.value })}
+                    />
+                  </td>
+                  <td className="px-4 py-2">
+                    <Input
+                      value={row.major_partner}
+                      onChange={(e) =>
+                        updateAiRow(row.id, { major_partner: e.target.value })
+                      }
+                    />
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </CrmSection>
+
+      <CrmSection
+        title="Software"
+        icon={AppWindow}
+        actions={
+          <Button
+            type="button"
+            variant="outline"
+            size="xs"
+            className="cursor-pointer"
+            onClick={() =>
+              setForm((current) => ({
+                ...current,
+                software_rows: [...current.software_rows, emptyKycGridRow()],
+              }))
+            }
+          >
+            <Plus className="size-3" aria-hidden="true" />
+            Add row
+          </Button>
+        }
+      >
+        <div className="erp-scroll overflow-x-auto">
+          <table className="w-full min-w-[720px] text-left text-sm">
+            <thead>
+              <tr className={CRM_TABLE_HEAD_ROW}>
+                <th className={CRM_TABLE_HEAD_CELL}>Product Category</th>
+                <th className={CRM_TABLE_HEAD_CELL}>Numbers</th>
+                <th className={CRM_TABLE_HEAD_CELL}>OEM</th>
+                <th className={CRM_TABLE_HEAD_CELL}>Major Partner</th>
+              </tr>
+            </thead>
+            <tbody>
+              {form.software_rows.map((row) => (
+                <tr key={row.id} className={cn("border-b border-border/60")}>
+                  <td className="min-w-[200px] px-4 py-2 align-top">
+                    <KycTableProductField
+                      options={KYC_SOFTWARE_PRODUCT_OPTIONS}
+                      value={row.network_profile}
+                      onChange={(network_profile) =>
+                        updateSoftwareRow(row.id, { network_profile })
+                      }
+                    />
+                  </td>
+                  <td className="px-4 py-2">
+                    <Input
+                      value={row.numbers}
+                      onChange={(e) => updateSoftwareRow(row.id, { numbers: e.target.value })}
+                    />
+                  </td>
+                  <td className="px-4 py-2">
+                    <Input
+                      value={row.oem}
+                      onChange={(e) => updateSoftwareRow(row.id, { oem: e.target.value })}
+                    />
+                  </td>
+                  <td className="px-4 py-2">
+                    <Input
+                      value={row.major_partner}
+                      onChange={(e) =>
+                        updateSoftwareRow(row.id, { major_partner: e.target.value })
+                      }
+                    />
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </CrmSection>
+
+      <CrmSection
+        title="FSM Information"
+        icon={HardHat}
+        actions={
+          <Button
+            type="button"
+            variant="outline"
+            size="xs"
+            className="cursor-pointer"
+            onClick={() =>
+              setForm((current) => ({
+                ...current,
+                fsm_rows: [...current.fsm_rows, emptyKycGridRow()],
+              }))
+            }
+          >
+            <Plus className="size-3" aria-hidden="true" />
+            Add row
+          </Button>
+        }
+      >
+        <div className="erp-scroll overflow-x-auto">
+          <table className="w-full min-w-[720px] text-left text-sm">
+            <thead>
+              <tr className={CRM_TABLE_HEAD_ROW}>
+                <th className={CRM_TABLE_HEAD_CELL}>Product Category</th>
+                <th className={CRM_TABLE_HEAD_CELL}>Numbers</th>
+                <th className={CRM_TABLE_HEAD_CELL}>OEM</th>
+                <th className={CRM_TABLE_HEAD_CELL}>Major Partner</th>
+              </tr>
+            </thead>
+            <tbody>
+              {form.fsm_rows.map((row) => (
+                <tr key={row.id} className={cn("border-b border-border/60")}>
+                  <td className="min-w-[200px] px-4 py-2 align-top">
+                    <KycTableProductField
+                      options={KYC_FSM_PRODUCT_OPTIONS}
+                      value={row.network_profile}
+                      onChange={(network_profile) =>
+                        updateFsmRow(row.id, { network_profile })
+                      }
+                    />
+                  </td>
+                  <td className="px-4 py-2">
+                    <Input
+                      value={row.numbers}
+                      onChange={(e) => updateFsmRow(row.id, { numbers: e.target.value })}
+                    />
+                  </td>
+                  <td className="px-4 py-2">
+                    <Input
+                      value={row.oem}
+                      onChange={(e) => updateFsmRow(row.id, { oem: e.target.value })}
+                    />
+                  </td>
+                  <td className="px-4 py-2">
+                    <Input
+                      value={row.major_partner}
+                      onChange={(e) =>
+                        updateFsmRow(row.id, { major_partner: e.target.value })
+                      }
+                    />
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       </CrmSection>
 

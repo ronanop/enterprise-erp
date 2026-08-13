@@ -76,9 +76,9 @@ export function intakeSummarySection(): FormSection {
     icon: FolderKanban,
     fields: [
       { name: "intake_project_label", label: "Project", type: "readonly" },
-      { name: "intake_branch_label", label: "Branch", type: "readonly" },
+      { name: "intake_branch_label", label: "Circle Name", type: "readonly" },
       { name: "intake_customer_label", label: "Customer", type: "readonly" },
-      { name: "intake_site_name", label: "Site", type: "readonly" },
+      { name: "intake_site_name", label: "Site Name", type: "readonly" },
       {
         name: "intake_delivery_type_label",
         label: "Delivery Type",

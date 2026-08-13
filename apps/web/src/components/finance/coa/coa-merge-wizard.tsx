@@ -57,7 +57,7 @@ export function CoaMergeWizard({ accounts, currentId }: Props) {
     <div className="rounded-xl border border-border/80 bg-card p-3.5 shadow-sm">
       <div className="flex items-start justify-between gap-2">
         <div>
-          <h3 className="text-sm font-medium tracking-tight">Account Merge</h3>
+          <h3 className="text-base font-extrabold tracking-tight">Account Merge</h3>
           <p className="mt-1 text-xs text-muted-foreground">
             Merge a source account into a target. Requires backend ledger remapping support.
           </p>

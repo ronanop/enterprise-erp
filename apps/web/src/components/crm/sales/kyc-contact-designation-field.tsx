@@ -69,11 +69,12 @@ export function KycContactDesignationField({ value, onChange }: KycContactDesign
   function openPicker() {
     updatePosition();
     setOpen(true);
-    if (selectedPreset === KYC_CONTACT_DESIGNATION_OTHER) {
-      setSearch("");
-    } else {
-      setSearch(value);
-    }
+    setSearch("");
+    requestAnimationFrame(() => {
+      const input = triggerRef.current?.querySelector("input");
+      input?.focus();
+      input?.select();
+    });
   }
 
   function closePicker() {
@@ -173,7 +174,9 @@ export function KycContactDesignationField({ value, onChange }: KycContactDesign
             }
           }}
           onMouseDown={(event) => {
-            event.preventDefault();
+            if (open) event.preventDefault();
+          }}
+          onClick={() => {
             if (!open) openPicker();
           }}
           onFocus={() => {

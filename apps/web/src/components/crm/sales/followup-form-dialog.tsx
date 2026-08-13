@@ -254,7 +254,7 @@ export function FollowupFormDialog({
         className="w-full max-w-lg rounded-xl border border-border/80 bg-card shadow-lg"
       >
         <div className="flex items-center justify-between border-b border-border/70 px-4 py-3">
-          <h2 id="followup-dialog-title" className="text-sm font-medium tracking-tight">
+          <h2 id="followup-dialog-title" className="text-base font-extrabold tracking-tight">
             New Follow-up
           </h2>
           <Button

@@ -127,7 +127,7 @@ export function CompanyShareDialog({ open, company, onClose, onShared }: Company
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-start justify-between gap-3">
-          <h2 id="company-share-title" className="text-base font-semibold tracking-tight text-foreground">
+          <h2 id="company-share-title" className="text-base font-extrabold tracking-tight text-foreground">
             Sharing Account
           </h2>
           <button

@@ -306,7 +306,7 @@ export function CompanyDetailPage({ companyAccountId }: { companyAccountId: stri
                   <CrmIconBadge icon={CalendarDays} />
                   <div className="min-w-0">
                     <div className="flex items-center gap-2">
-                      <h2 className="text-base font-bold tracking-tight text-foreground">Meetings</h2>
+                      <h2 className="text-base font-extrabold tracking-tight text-foreground">Meetings</h2>
                       <CrmCountBadge count={openMeetings.length} label="open" />
                     </div>
                     <p className="text-[11px] text-muted-foreground">Scheduled account meetings</p>
@@ -340,7 +340,7 @@ export function CompanyDetailPage({ companyAccountId }: { companyAccountId: stri
                   <CrmIconBadge icon={ClipboardList} />
                   <div className="min-w-0">
                     <div className="flex items-center gap-2">
-                      <h2 className="text-base font-bold tracking-tight text-foreground">Customer Follow Up</h2>
+                      <h2 className="text-base font-extrabold tracking-tight text-foreground">Customer Follow Up</h2>
                       <CrmCountBadge count={openFollowups.length} label="open" />
                     </div>
                     <p className="text-[11px] text-muted-foreground">Open customer follow-ups</p>
@@ -423,7 +423,7 @@ export function CompanyDetailPage({ companyAccountId }: { companyAccountId: stri
                   <CrmIconBadge icon={Target} />
                   <div className="min-w-0">
                     <div className="flex items-center gap-2">
-                      <h2 className="text-base font-bold tracking-tight text-foreground">Leads</h2>
+                      <h2 className="text-base font-extrabold tracking-tight text-foreground">Leads</h2>
                       <CrmCountBadge count={leads.length} />
                     </div>
                     <p className="text-[11px] text-muted-foreground">Sales blueprint entry points</p>

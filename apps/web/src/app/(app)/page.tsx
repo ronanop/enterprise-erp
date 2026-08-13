@@ -88,7 +88,7 @@ export default function DashboardPage() {
                 <div className="mb-3 flex size-10 items-center justify-center rounded-xl bg-accent text-accent-foreground">
                   <Icon className="size-4" />
                 </div>
-                <h3 className="text-sm font-medium tracking-tight">{item.title}</h3>
+                <h3 className="text-base font-extrabold tracking-tight">{item.title}</h3>
                 <p className="mt-1 text-xs leading-relaxed text-muted-foreground">{item.description}</p>
               </Link>
             );

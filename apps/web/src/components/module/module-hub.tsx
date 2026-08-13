@@ -35,7 +35,7 @@ export function ModuleHub({ module }: ModuleHubProps) {
             className="group rounded-xl border border-border/80 bg-card p-4 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-primary/25 hover:shadow-md"
           >
             <div className="mb-2 flex items-start justify-between gap-2">
-              <h3 className="text-sm font-medium tracking-tight text-foreground">{resource.title}</h3>
+              <h3 className="text-base font-extrabold tracking-tight text-foreground">{resource.title}</h3>
               <ArrowUpRight className="size-3.5 shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100" />
             </div>
             <p className="mb-3 line-clamp-2 text-xs leading-relaxed text-muted-foreground">

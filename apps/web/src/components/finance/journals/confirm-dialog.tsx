@@ -66,7 +66,7 @@ export function ConfirmDialog({
             {title}
           </h2>
         ) : (
-          <h2 id="confirm-dialog-title" className="shrink-0 text-sm font-medium tracking-tight">
+          <h2 id="confirm-dialog-title" className="shrink-0 text-base font-extrabold tracking-tight">
             {title}
           </h2>
         )}

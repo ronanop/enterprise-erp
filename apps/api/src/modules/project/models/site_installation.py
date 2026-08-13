@@ -36,7 +36,7 @@ class PrjSiteInstallation(Base, *PrjDetailMixin):
         ),
         CheckConstraint(
             "workflow_stage IN ("
-            "'intake','assignment','survey','scm','installation','acceptance','completed'"
+            "'intake','assignment','survey','scm','onsite','installation','acceptance','completed'"
             ")",
             name="ck_prj_site_workflow_stage",
         ),
@@ -117,6 +117,7 @@ class PrjSiteInstallation(Base, *PrjDetailMixin):
     mo_request_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     im_material_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     material_handover_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    material_handover_to_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
     # Installation
     rack_server_stacking_done: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
@@ -128,15 +129,21 @@ class PrjSiteInstallation(Base, *PrjDetailMixin):
 
     # Configuration
     bios_configuration_done: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
-    firmware_nw_config_done: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    firmware_config_done: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     lld_done: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     os_installation_done: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    vm_installation_done: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    nw_config_done: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    tools_integration_done: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     mbss_done: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     vascan_done: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     bios_configuration_date: Mapped[date | None] = mapped_column(Date, nullable=True)
-    firmware_nw_config_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    firmware_config_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     lld_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     os_installation_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    vm_installation_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    nw_config_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    tools_integration_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     mbss_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     vascan_date: Mapped[date | None] = mapped_column(Date, nullable=True)
 
@@ -150,6 +157,25 @@ class PrjSiteInstallation(Base, *PrjDetailMixin):
 
     remarks: Mapped[str | None] = mapped_column(Text, nullable=True)
 
+    # Stage evidence attachments (file name required before advancing)
+    survey_attachment_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    scm_attachment_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    onsite_attachment_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    installation_attachment_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    acceptance_attachment_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+
+    # Owner-reported progress + remarks per stage
+    survey_progress_status: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    scm_progress_status: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    onsite_progress_status: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    installation_progress_status: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    acceptance_progress_status: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    survey_remarks: Mapped[str | None] = mapped_column(Text, nullable=True)
+    scm_remarks: Mapped[str | None] = mapped_column(Text, nullable=True)
+    onsite_remarks: Mapped[str | None] = mapped_column(Text, nullable=True)
+    installation_remarks: Mapped[str | None] = mapped_column(Text, nullable=True)
+    acceptance_remarks: Mapped[str | None] = mapped_column(Text, nullable=True)
+
     # Stage owners — set by project assignee before Survey work begins
     survey_assignee_employee_id: Mapped[UUID | None] = mapped_column(
         PG_UUID(as_uuid=True),
@@ -158,6 +184,12 @@ class PrjSiteInstallation(Base, *PrjDetailMixin):
         index=True,
     )
     scm_assignee_employee_id: Mapped[UUID | None] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("master.master_employee.id", ondelete="RESTRICT"),
+        nullable=True,
+        index=True,
+    )
+    onsite_assignee_employee_id: Mapped[UUID | None] = mapped_column(
         PG_UUID(as_uuid=True),
         ForeignKey("master.master_employee.id", ondelete="RESTRICT"),
         nullable=True,
@@ -187,6 +219,8 @@ class PrjSiteInstallation(Base, *PrjDetailMixin):
     survey_finished_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     scm_assigned_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     scm_finished_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    onsite_assigned_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    onsite_finished_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     installation_assigned_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     installation_finished_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     acceptance_assigned_date: Mapped[date | None] = mapped_column(Date, nullable=True)

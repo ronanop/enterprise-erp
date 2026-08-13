@@ -17,6 +17,7 @@ import {
   type Lookups,
 } from "@/components/projects/projects-record-form";
 import {
+  advanceSiteInstallation,
   createProject,
   getProject,
   getProjectPoPrefill,
@@ -154,7 +155,15 @@ export function ProjectFormPage({ projectId }: { projectId?: string }) {
             rfai_number: rfaiYes ? orNull(v.rfai_number) : null,
           },
         });
-        return `/projects/projects/${saved.id}/assign`;
+        // Intake was captured on create — move to Survey so admin assigns Survey from Project Tracking.
+        if (siteName) {
+          try {
+            await advanceSiteInstallation(saved.id, "complete_intake");
+          } catch {
+            // Stay on intake if gates fail; admin can still assign Survey from tracking.
+          }
+        }
+        return `/projects/projects/${saved.id}`;
       }
 
       const rfaiYes = v.rfai_request_done === "true";
@@ -201,11 +210,11 @@ export function ProjectFormPage({ projectId }: { projectId?: string }) {
           fields: [
             {
               name: "branch_id",
-              label: "Branch",
+              label: "Circle Name",
               type: "select",
               required: true,
               optionsKey: "branches",
-              placeholder: "Select branch…",
+              placeholder: "Select circle…",
               hint: "Your org office — not the telecom customer.",
             },
             {
@@ -225,7 +234,7 @@ export function ProjectFormPage({ projectId }: { projectId?: string }) {
                 },
                 {
                   name: "site_name",
-                  label: "Site",
+                  label: "Site Name",
                   type: "readonly" as const,
                   full: true,
                   hint: "Company address from the CRM sales account for this PO.",
@@ -245,7 +254,7 @@ export function ProjectFormPage({ projectId }: { projectId?: string }) {
                 },
                 {
                   name: "site_name",
-                  label: "Site",
+                  label: "Site Name",
                   type: "textarea" as const,
                   required: true,
                   full: true,
@@ -259,7 +268,7 @@ export function ProjectFormPage({ projectId }: { projectId?: string }) {
               required: true,
               optionsKey: "pmTeam",
               placeholder: "Select project manager…",
-              hint: "Owns this site request and assigns stage owners next.",
+              hint: "Owns this site request. Survey owner is assigned from Project Tracking after create.",
             },
             {
               name: "rfai_request_done",
@@ -303,7 +312,7 @@ export function ProjectFormPage({ projectId }: { projectId?: string }) {
             label: "Workflow Stage",
             type: "readonly",
           },
-          { name: "branch_label", label: "Branch", type: "readonly" },
+          { name: "branch_label", label: "Circle Name", type: "readonly" },
           {
             name: "delivery_type",
             label: "Delivery Type",
@@ -323,7 +332,7 @@ export function ProjectFormPage({ projectId }: { projectId?: string }) {
           },
           {
             name: "site_name",
-            label: "Site",
+            label: "Site Name",
             type: "text",
             required: true,
             placeholder: "Site name / site list entry…",
@@ -442,8 +451,8 @@ export function ProjectFormPage({ projectId }: { projectId?: string }) {
         isEdit
           ? "Update site request, delivery scope, project manager, and plan fields."
           : poId
-            ? "Step 1 — Intake / Site request prefilled from the SCM purchase order. After create you continue to Assign stage owners."
-            : "Step 1 — Intake / Site request. After create you continue to Assign stage owners."
+            ? "Step 1 — Intake / Site request prefilled from the SCM purchase order. After create you continue to Assign Survey owner."
+            : "Step 1 — Intake / Site request. After create you continue to Assign Survey owner."
       }
       backHref={
         isEdit && projectId

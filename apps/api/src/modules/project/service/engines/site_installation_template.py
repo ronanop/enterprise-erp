@@ -78,11 +78,25 @@ SITE_INSTALLATION_WBS: tuple[WbsPhaseSpec, ...] = (
         sequence_no=3,
         stage=SiteWorkflowStage.SCM.value,
         milestone=WbsMilestoneSpec(
+            code="MS-WH",
+            name="Warehouse Delivery",
+            tasks=(
+                WbsTaskSpec("Confirm site materials types & quantities"),
+                WbsTaskSpec("Track server / rack / PDU WH delivery"),
+            ),
+        ),
+    ),
+    WbsPhaseSpec(
+        code="PH-ONSITE",
+        name="On-site",
+        sequence_no=4,
+        stage=SiteWorkflowStage.ONSITE.value,
+        milestone=WbsMilestoneSpec(
             code="MS-MATERIAL",
             name="Material On Site",
             tasks=(
                 WbsTaskSpec("Raise MO request", "high"),
-                WbsTaskSpec("Track server / rack / PDU WH & on-site delivery"),
+                WbsTaskSpec("Track server / rack / PDU on-site delivery"),
                 WbsTaskSpec("Confirm IM material"),
                 WbsTaskSpec("Power-on material check"),
                 WbsTaskSpec("Material handover WH → Site", "high"),
@@ -92,7 +106,7 @@ SITE_INSTALLATION_WBS: tuple[WbsPhaseSpec, ...] = (
     WbsPhaseSpec(
         code="PH-INSTALL",
         name="Installation & Configuration",
-        sequence_no=4,
+        sequence_no=5,
         stage=SiteWorkflowStage.INSTALLATION.value,
         milestone=WbsMilestoneSpec(
             code="MS-INSTALL",
@@ -102,9 +116,12 @@ SITE_INSTALLATION_WBS: tuple[WbsPhaseSpec, ...] = (
                 WbsTaskSpec("Rack + server power on", "high"),
                 WbsTaskSpec("DAC / ILO cabling"),
                 WbsTaskSpec("BIOS configuration"),
-                WbsTaskSpec("Firmware / N/W configuration"),
+                WbsTaskSpec("Firmware configuration"),
                 WbsTaskSpec("LLD availability"),
                 WbsTaskSpec("OS installation", "high"),
+                WbsTaskSpec("VM installation", "high"),
+                WbsTaskSpec("N/W configuration"),
+                WbsTaskSpec("Tools integration", "high"),
                 WbsTaskSpec("MBSS", "high"),
                 WbsTaskSpec("VASCAN", "high"),
             ),
@@ -113,7 +130,7 @@ SITE_INSTALLATION_WBS: tuple[WbsPhaseSpec, ...] = (
     WbsPhaseSpec(
         code="PH-ACCEPT",
         name="Acceptance",
-        sequence_no=5,
+        sequence_no=6,
         stage=SiteWorkflowStage.ACCEPTANCE.value,
         milestone=WbsMilestoneSpec(
             code="MS-HO",
@@ -132,9 +149,12 @@ def wbs_for_delivery_type(delivery_type: str) -> tuple[WbsPhaseSpec, ...]:
     """Filter WBS phases/tasks by delivery scope."""
     config_tasks = {
         "BIOS configuration",
-        "Firmware / N/W configuration",
+        "Firmware configuration",
         "LLD availability",
         "OS installation",
+        "VM installation",
+        "N/W configuration",
+        "Tools integration",
         "MBSS",
         "VASCAN",
     }
@@ -150,7 +170,14 @@ def wbs_for_delivery_type(delivery_type: str) -> tuple[WbsPhaseSpec, ...]:
                 tasks = tuple(
                     t
                     for t in tasks
-                    if t.task_name not in {"OS installation", "MBSS", "VASCAN"}
+                    if t.task_name not in {
+                        "OS installation",
+                        "VM installation",
+                        "N/W configuration",
+                        "Tools integration",
+                        "MBSS",
+                        "VASCAN",
+                    }
                 )
             if delivery_is_rack_only(delivery_type):
                 tasks = tuple(

@@ -209,6 +209,7 @@ class SiteWorkflowStage(str, Enum):
     ASSIGNMENT = "assignment"
     SURVEY = "survey"
     SCM = "scm"
+    ONSITE = "onsite"
     INSTALLATION = "installation"
     CONFIGURATION = "configuration"
     ACCEPTANCE = "acceptance"

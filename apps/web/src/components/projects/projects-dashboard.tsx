@@ -19,6 +19,7 @@ import {
   siteDeliveryTypeLabel,
   siteWorkflowStageLabel,
 } from "@/components/projects/projects-domain";
+import { ProjectsMemberDashboard } from "@/components/projects/projects-member-dashboard";
 import {
   PROJECTS_CHART_COLORS,
   ProjectsActivityTile,
@@ -38,6 +39,7 @@ import { FinanceStatusBadge } from "@/components/finance/finance-status-badge";
 import { PageHeader } from "@/components/layout/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { useAuthUser } from "@/hooks/use-auth-user";
 import { isAuthenticated } from "@/lib/auth";
 import {
   formatDate,
@@ -78,6 +80,7 @@ const ACTIVE_STAGES = new Set([
   "assignment",
   "survey",
   "scm",
+  "onsite",
   "installation",
   "configuration",
   "acceptance",
@@ -93,7 +96,27 @@ function newestSites(rows: SiteInstallation[], limit = 8): SiteInstallation[] {
     .slice(0, limit);
 }
 
+/** Role-aware Projects home — portfolio for admins, personal for all other users. */
 export function ProjectsDashboard() {
+  const { loading: authLoading, projectModuleAdmin } = useAuthUser();
+
+  if (authLoading) {
+    return (
+      <div className="space-y-3">
+        <div className="h-8 w-48 animate-pulse rounded bg-muted" />
+        <div className="h-64 animate-pulse rounded-xl bg-muted/60" />
+      </div>
+    );
+  }
+
+  if (!projectModuleAdmin) {
+    return <ProjectsMemberDashboard />;
+  }
+
+  return <ProjectsAdminDashboard />;
+}
+
+function ProjectsAdminDashboard() {
   const [data, setData] = useState<ProjectsOverview | null>(null);
   const [loading, setLoading] = useState(true);
   const authenticated = typeof window !== "undefined" ? isAuthenticated() : false;
@@ -164,7 +187,7 @@ export function ProjectsDashboard() {
   const recentSites = useMemo(() => newestSites(sites), [sites]);
 
   const attentionQueue = useMemo(() => {
-    const priority = ["assignment", "intake", "acceptance", "survey", "scm", "installation"];
+    const priority = ["assignment", "intake", "acceptance", "survey", "scm", "onsite", "installation"];
     return [...sites]
       .filter((s) => ACTIVE_STAGES.has(normalizeStage(s.workflow_stage)))
       .sort((a, b) => {
@@ -252,7 +275,7 @@ export function ProjectsDashboard() {
           <ProjectsHeadlineStat
             label="Need owners"
             value={String(kpis.needsOwners)}
-            sub="Assign stage owners"
+            sub="Assign Survey owner"
             loading={loading}
           />
           <ProjectsHeadlineStat
@@ -362,7 +385,7 @@ export function ProjectsDashboard() {
             <div className="flex items-center gap-2.5">
               <ProjectsIconBadge icon={Cable} />
               <div>
-                <h2 className="text-sm font-medium tracking-tight">Recent sites</h2>
+                <h2 className="text-base font-extrabold tracking-tight">Recent sites</h2>
                 <p className="text-[11px] text-muted-foreground">Newest installation requests</p>
               </div>
             </div>
@@ -447,7 +470,7 @@ export function ProjectsDashboard() {
             <div className="flex items-center gap-2.5">
               <ProjectsIconBadge icon={Users} />
               <div>
-                <h2 className="text-sm font-medium tracking-tight">Needs attention</h2>
+                <h2 className="text-base font-extrabold tracking-tight">Needs attention</h2>
                 <p className="text-[11px] text-muted-foreground">
                   Active sites by stage priority
                 </p>

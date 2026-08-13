@@ -334,7 +334,7 @@ export function OpportunityDetailPage({ opportunityId }: { opportunityId: string
               <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border/70 px-4 py-3">
                 <div className="flex items-center gap-2.5">
                   <CrmIconBadge icon={FileText} />
-                  <h2 className="text-sm font-medium tracking-tight">Quotes</h2>
+                  <h2 className="text-base font-extrabold tracking-tight">Quotes</h2>
                 </div>
               </div>
               {quotes.length === 0 ? (
@@ -381,7 +381,7 @@ export function OpportunityDetailPage({ opportunityId }: { opportunityId: string
               <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border/70 px-4 py-3">
                 <div className="flex items-center gap-2.5">
                   <CrmIconBadge icon={ClipboardCheck} />
-                  <h2 className="text-sm font-medium tracking-tight">OVF</h2>
+                  <h2 className="text-base font-extrabold tracking-tight">OVF</h2>
                 </div>
               </div>
               {ovfs.length === 0 ? (

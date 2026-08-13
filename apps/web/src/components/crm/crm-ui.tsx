@@ -18,6 +18,11 @@ export const CRM_TABLE_HEAD_CELL = cn(
   "px-4 py-2.5 text-xs font-extrabold text-foreground sm:text-[13px]",
 );
 
+/** Section / panel titles across CRM (forms, lists, detail cards). */
+export const CRM_SECTION_TITLE = cn(
+  "text-base font-extrabold tracking-tight text-foreground break-words",
+);
+
 /** Page vertical rhythm — matches CRM dashboard. */
 export function CrmPage({
   children,
@@ -99,7 +104,7 @@ export function CrmSection({
         <div className="flex min-w-0 items-start gap-2.5">
           {icon ? <CrmIconBadge icon={icon} /> : null}
           <div className="min-w-0">
-            <h2 className="text-sm font-medium tracking-tight break-words">{title}</h2>
+            <h2 className={CRM_SECTION_TITLE}>{title}</h2>
             {subtitle ? (
               <p className="mt-0.5 text-[11px] leading-snug text-muted-foreground break-words">
                 {subtitle}

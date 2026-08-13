@@ -4,7 +4,6 @@ import { useCallback, useMemo, useState } from "react";
 import Link from "next/link";
 import { FileDown, FolderPlus, ShoppingCart } from "lucide-react";
 
-import { FinanceStatusBadge } from "@/components/finance/finance-status-badge";
 import {
   ProjectsRecordList,
   type RecordColumn,
@@ -131,14 +130,14 @@ export function ProjectPoQueuePage() {
         cell: (r) => formatInr(r.customer_total || r.total_amount),
       },
       {
-        key: "status",
-        label: "Status",
-        sort: (r) => r.status,
-        cell: (r) => <FinanceStatusBadge status={r.status} />,
+        key: "created_at",
+        label: "Date Created",
+        sort: (r) => r.document_date,
+        cell: (r) => formatDate(r.document_date),
       },
       {
         key: "actions",
-        label: "",
+        label: "Action",
         sort: () => "",
         align: "right",
         cell: (r) => (

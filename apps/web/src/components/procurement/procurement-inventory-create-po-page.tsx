@@ -715,7 +715,7 @@ export function ProcurementInventoryCreatePoPage() {
 
       <div className="overflow-hidden rounded-lg border border-border bg-card">
         <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-4 py-3">
-          <h2 className="text-sm font-medium tracking-tight text-foreground">PO line items</h2>
+          <h2 className="text-base font-extrabold tracking-tight text-foreground">PO line items</h2>
           <label className="flex items-center gap-2 text-xs text-muted-foreground">
             Tax %
             <FinanceSelect

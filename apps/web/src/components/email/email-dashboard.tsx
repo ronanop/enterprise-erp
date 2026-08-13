@@ -225,7 +225,7 @@ export function EmailDashboard() {
 
       <div className="grid gap-4 lg:grid-cols-2">
         <section className="rounded-xl border border-border/80 bg-card p-4 shadow-sm">
-          <h2 className="text-sm font-medium text-foreground">Graph provider</h2>
+          <h2 className="text-base font-extrabold tracking-tight text-foreground">Graph provider</h2>
           <dl className="mt-3 space-y-2 text-sm">
             <div className="flex items-center justify-between gap-2">
               <dt className="text-muted-foreground">Status</dt>
@@ -264,7 +264,7 @@ export function EmailDashboard() {
 
         <section className="rounded-xl border border-border/80 bg-card p-4 shadow-sm">
           <div className="flex items-center justify-between gap-2">
-            <h2 className="text-sm font-medium text-foreground">Recent deliveries</h2>
+            <h2 className="text-base font-extrabold tracking-tight text-foreground">Recent deliveries</h2>
             <Link
               href="/email/deliveries"
               className="cursor-pointer text-xs font-medium text-primary transition-opacity duration-200 hover:opacity-80"

@@ -15,8 +15,6 @@ import {
   loadIntakeSummaryLookups,
 } from "@/components/projects/site-intake-summary";
 import {
-  assigneePayloadFromValues,
-  assigneeValuesFromSite,
   stageAssignmentSection,
 } from "@/components/projects/site-stage-assignments";
 import {
@@ -30,9 +28,6 @@ const EMPTY: FormValues = {
   ...INTAKE_SUMMARY_EMPTY,
   delivery_type: "",
   survey_assignee_employee_id: "",
-  scm_assignee_employee_id: "",
-  installation_assignee_employee_id: "",
-  acceptance_assignee_employee_id: "",
 };
 
 export function SiteAssignFormPage({ projectId }: { projectId: string }) {
@@ -56,7 +51,7 @@ export function SiteAssignFormPage({ projectId }: { projectId: string }) {
           employees: lookups.employees,
         }),
         delivery_type: site.delivery_type ?? "",
-        ...assigneeValuesFromSite(site),
+        survey_assignee_employee_id: site.survey_assignee_employee_id ?? "",
       } satisfies FormValues,
       lookups: { employees: lookups.employees },
     };
@@ -64,8 +59,9 @@ export function SiteAssignFormPage({ projectId }: { projectId: string }) {
 
   const onSave = useCallback(
     async (v: FormValues) => {
+      const surveyAssignee = (v.survey_assignee_employee_id ?? "").trim() || null;
       await updateSiteInstallationByProject(projectId, {
-        ...assigneePayloadFromValues(v),
+        survey_assignee_employee_id: surveyAssignee,
       });
 
       let site = await getSiteInstallationByProject(projectId);
@@ -85,10 +81,11 @@ export function SiteAssignFormPage({ projectId }: { projectId: string }) {
     () => [
       intakeSummarySection(),
       {
-        title: "Assign stage owners",
-        subtitle: "Step 2 — Select who owns each delivery stage, then continue to Survey.",
+        ...stageAssignmentSection(deliveryType),
+        title: "Assign Survey owner",
+        subtitle:
+          "Step 2 — Select the Survey owner. SCM, Installation, and Acceptance owners are assigned later from Project Tracking after each step completes.",
         icon: Users,
-        fields: stageAssignmentSection(deliveryType).fields,
       },
     ],
     [deliveryType],
@@ -96,12 +93,8 @@ export function SiteAssignFormPage({ projectId }: { projectId: string }) {
 
   return (
     <ProjectsRecordForm
-      title="Assign stage owners"
-      description={
-        deliveryType === "rack_only"
-          ? "Step 2 — Select who owns Survey, SCM, Installation, and Acceptance. Next: Survey."
-          : "Step 2 — Project assignee selects who owns Survey, SCM, Installation & Configuration, and Acceptance. Next: Survey."
-      }
+      title="Assign Survey owner"
+      description="Select who owns Survey. Later stage owners are assigned one-by-one from Project Tracking after the previous step is completed."
       backHref={`/projects/projects/${projectId}`}
       backLabel="Back to project"
       submitLabel="Save & continue to Survey"

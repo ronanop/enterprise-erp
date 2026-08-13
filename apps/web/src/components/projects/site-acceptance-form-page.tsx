@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { CloudUpload } from "lucide-react";
 
 import {
@@ -24,13 +24,25 @@ import {
   advanceSiteInstallation,
   getProject,
   getSiteInstallationByProject,
+  notifySiteStageNoAnswers,
   updateSiteInstallationByProject,
 } from "@/services/projects-portal-service";
 import {
   resolveStageOwnerDisplay,
   stageOwnerBannerSection,
 } from "@/components/projects/site-stage-assignments";
+import {
+  collectNewNoAnswers,
+  isProgressCompleteForAdvance,
+  stageClosingSections,
+} from "@/components/projects/site-stage-attachment";
 import { useSiteStageFormReadOnlyMeta } from "@/components/projects/site-stage-form-read-only-context";
+
+const ACCEPTANCE_NO_FIELDS = [
+  { name: "handover_to_cloud_done", label: "Handover to Application Team" },
+  { name: "hwat_request_done", label: "HWAT Request" },
+  { name: "hwat_signoff_received", label: "HWAT Sign-off from Circle" },
+] as const;
 
 const EMPTY: FormValues = {
   ...INTAKE_SUMMARY_EMPTY,
@@ -39,12 +51,15 @@ const EMPTY: FormValues = {
   os_installation_done: "",
   mbss_done: "",
   vascan_done: "",
-  handover_to_cloud_done: "false",
+  handover_to_cloud_done: "",
   handover_to_cloud_date: "",
-  hwat_request_done: "false",
+  hwat_request_done: "",
   hwat_request_date: "",
-  hwat_signoff_received: "false",
+  hwat_signoff_received: "",
   hwat_signoff_date: "",
+  acceptance_progress_status: "",
+  acceptance_attachment_name: "",
+  acceptance_remarks: "",
 };
 
 function asBool(v: string | undefined): boolean {
@@ -57,6 +72,7 @@ function dateOrEmpty(v: string | null | undefined): string {
 
 export function SiteAcceptanceFormPage({ projectId }: { projectId: string }) {
   const stageFormMeta = useSiteStageFormReadOnlyMeta();
+  const loadedValuesRef = useRef<FormValues | null>(null);
   const [deliveryType, setDeliveryType] = useState("server_os_rack");
   const needsHwat = deliveryNeedsHwat(deliveryType);
   const showOsStatus = deliveryIncludesOs(deliveryType);
@@ -71,28 +87,31 @@ export function SiteAcceptanceFormPage({ projectId }: { projectId: string }) {
     setDeliveryType(type);
     const owner = resolveStageOwnerDisplay(site, "acceptance", lookups.employees);
 
-    return {
-      values: {
-        ...intakeSummaryValues({
-          project,
-          site,
-          branches: lookups.branches,
-          customers: lookups.customers,
-          employees: lookups.employees,
-        }),
-        stage_assignee_label: owner.stage_assignee_label,
-        delivery_type: type,
-        os_installation_done: site.os_installation_done ? "Done" : "Pending",
-        mbss_done: site.mbss_done ? "Done" : "Pending",
-        vascan_done: site.vascan_done ? "Done" : "Pending",
-        handover_to_cloud_done: site.handover_to_cloud_done ? "true" : "false",
-        handover_to_cloud_date: dateOrEmpty(site.handover_to_cloud_date),
-        hwat_request_done: site.hwat_request_done ? "true" : "false",
-        hwat_request_date: dateOrEmpty(site.hwat_request_date),
-        hwat_signoff_received: site.hwat_signoff_received ? "true" : "false",
-        hwat_signoff_date: dateOrEmpty(site.hwat_signoff_date),
-      } satisfies FormValues,
-    };
+    const values = {
+      ...intakeSummaryValues({
+        project,
+        site,
+        branches: lookups.branches,
+        customers: lookups.customers,
+        employees: lookups.employees,
+      }),
+      stage_assignee_label: owner.stage_assignee_label,
+      delivery_type: type,
+      os_installation_done: site.os_installation_done ? "Done" : "Pending",
+      mbss_done: site.mbss_done ? "Done" : "Pending",
+      vascan_done: site.vascan_done ? "Done" : "Pending",
+      handover_to_cloud_done: site.handover_to_cloud_done ? "true" : "",
+      handover_to_cloud_date: dateOrEmpty(site.handover_to_cloud_date),
+      hwat_request_done: site.hwat_request_done ? "true" : "",
+      hwat_request_date: dateOrEmpty(site.hwat_request_date),
+      hwat_signoff_received: site.hwat_signoff_received ? "true" : "",
+      hwat_signoff_date: dateOrEmpty(site.hwat_signoff_date),
+      acceptance_progress_status: site.acceptance_progress_status ?? "",
+      acceptance_attachment_name: site.acceptance_attachment_name ?? "",
+      acceptance_remarks: site.acceptance_remarks ?? "",
+    } satisfies FormValues;
+    loadedValuesRef.current = values;
+    return { values };
   }, [projectId]);
 
   const onSave = useCallback(
@@ -111,14 +130,35 @@ export function SiteAcceptanceFormPage({ projectId }: { projectId: string }) {
         hwat_signoff_received: hwat ? asBool(v.hwat_signoff_received) : false,
         hwat_signoff_date:
           hwat && asBool(v.hwat_signoff_received) ? orNull(v.hwat_signoff_date) : null,
+        acceptance_progress_status: orNull(v.acceptance_progress_status),
+        acceptance_attachment_name: orNull(v.acceptance_attachment_name),
+        acceptance_remarks: orNull(v.acceptance_remarks),
       });
 
-      let site = await getSiteInstallationByProject(projectId);
-      if (site.workflow_stage === "installation") {
-        site = await advanceSiteInstallation(projectId, "complete_installation");
+      const activeHwatFields = hwat
+        ? [...ACCEPTANCE_NO_FIELDS]
+        : ACCEPTANCE_NO_FIELDS.filter(
+          (f) => f.name !== "hwat_request_done" && f.name !== "hwat_signoff_received",
+        );
+      const noAnswers = collectNewNoAnswers(v, loadedValuesRef.current, activeHwatFields);
+      if (noAnswers.length > 0) {
+        await notifySiteStageNoAnswers(projectId, {
+          stage: "acceptance",
+          items: noAnswers,
+        }).catch(() => {
+          // Non-blocking.
+        });
       }
-      if (site.workflow_stage === "acceptance") {
-        await advanceSiteInstallation(projectId, "complete_acceptance");
+      loadedValuesRef.current = v;
+
+      if (isProgressCompleteForAdvance(v.acceptance_progress_status)) {
+        let site = await getSiteInstallationByProject(projectId);
+        if (site.workflow_stage === "installation") {
+          site = await advanceSiteInstallation(projectId, "complete_installation");
+        }
+        if (site.workflow_stage === "acceptance") {
+          await advanceSiteInstallation(projectId, "complete_acceptance");
+        }
       }
 
       return `/projects/my-jobs`;
@@ -153,7 +193,7 @@ export function SiteAcceptanceFormPage({ projectId }: { projectId: string }) {
       {
         name: "handover_to_cloud_done",
         label: "Handover to Application Team",
-        type: "checkbox",
+        type: "yesno",
         hint: "Common exit for all delivery scopes.",
         clearFieldsOnChange: ["handover_to_cloud_date"],
       },
@@ -171,7 +211,7 @@ export function SiteAcceptanceFormPage({ projectId }: { projectId: string }) {
         {
           name: "hwat_request_done",
           label: "HWAT Request",
-          type: "checkbox",
+          type: "yesno",
           clearFieldsOnChange: ["hwat_request_date"],
         },
         {
@@ -184,7 +224,7 @@ export function SiteAcceptanceFormPage({ projectId }: { projectId: string }) {
         {
           name: "hwat_signoff_received",
           label: "HWAT Sign-off from Circle",
-          type: "checkbox",
+          type: "yesno",
           clearFieldsOnChange: ["hwat_signoff_date"],
         },
         {
@@ -208,6 +248,12 @@ export function SiteAcceptanceFormPage({ projectId }: { projectId: string }) {
         icon: CloudUpload,
         fields,
       },
+      ...stageClosingSections(
+        "acceptance_progress_status",
+        "acceptance_attachment_name",
+        "acceptance_remarks",
+        "Acceptance",
+      ),
     ];
   }, [needsHwat, showOsStatus]);
 

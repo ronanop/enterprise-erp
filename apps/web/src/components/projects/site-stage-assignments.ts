@@ -7,21 +7,31 @@ export const STAGE_ASSIGNEE_FIELDS = [
     stage: "survey",
     name: "survey_assignee_employee_id",
     label: "Survey assignee",
+    assignedDateField: "survey_assigned_date",
   },
   {
     stage: "scm",
     name: "scm_assignee_employee_id",
     label: "SCM / Logistics assignee",
+    assignedDateField: "scm_assigned_date",
+  },
+  {
+    stage: "onsite",
+    name: "onsite_assignee_employee_id",
+    label: "On-site assignee",
+    assignedDateField: "onsite_assigned_date",
   },
   {
     stage: "installation",
     name: "installation_assignee_employee_id",
     label: "Installation & Configuration assignee",
+    assignedDateField: "installation_assigned_date",
   },
   {
     stage: "acceptance",
     name: "acceptance_assignee_employee_id",
     label: "Acceptance assignee",
+    assignedDateField: "acceptance_assigned_date",
   },
 ] as const;
 
@@ -33,10 +43,96 @@ const STAGE_ORDER = [
   "assignment",
   "survey",
   "scm",
+  "onsite",
   "installation",
   "acceptance",
   "completed",
 ] as const;
+
+const ASSIGNABLE_STAGES = ["survey", "scm", "onsite", "installation", "acceptance"] as const;
+
+/** Step owner progress that lets the admin assign the next stage. */
+export function progressAllowsNextStageAssignment(
+  progressStatus: string | null | undefined,
+): boolean {
+  return (
+    progressStatus === "completed" || progressStatus === "partial_completed"
+  );
+}
+
+type StageAssignmentRow = {
+  stage: string;
+  work_status: string;
+  progress_status?: string | null;
+  label?: string;
+};
+
+function previousStageReadyForNextAssignment(
+  prevRow: StageAssignmentRow | undefined,
+): boolean {
+  if (!prevRow) return false;
+  if (progressAllowsNextStageAssignment(prevRow.progress_status)) return true;
+  // Legacy / workflow-advanced rows without progress_status
+  return prevRow.work_status === "done";
+}
+
+function stageAssignmentClosed(row: StageAssignmentRow): boolean {
+  return (
+    row.work_status === "done" ||
+    progressAllowsNextStageAssignment(row.progress_status)
+  );
+}
+
+export function assigneeFieldForStage(stage: AssignableStage) {
+  return STAGE_ASSIGNEE_FIELDS.find((f) => f.stage === stage)!;
+}
+
+/** Previous assignable work stage, or null for Survey. */
+export function previousAssignableStage(stage: string): AssignableStage | null {
+  const normalized = stage === "configuration" ? "installation" : stage;
+  const idx = ASSIGNABLE_STAGES.indexOf(normalized as AssignableStage);
+  if (idx <= 0) return null;
+  return ASSIGNABLE_STAGES[idx - 1];
+}
+
+/**
+ * Whether Project Tracking may show an assignee picker for this stage.
+ * Survey: after project create (until Survey workflow is Done).
+ * Later stages: when the previous stage progress is Partial completed or Completed.
+ */
+export function canAssignStageFromTracking(
+  stage: string,
+  assignments: StageAssignmentRow[],
+  isAdmin: boolean,
+): boolean {
+  if (!isAdmin) return false;
+  const normalized = stage === "configuration" ? "installation" : stage;
+  if (!ASSIGNABLE_STAGES.includes(normalized as AssignableStage)) return false;
+
+  const row = assignments.find((a) => a.stage === normalized);
+  if (!row || stageAssignmentClosed(row)) return false;
+
+  const prev = previousAssignableStage(normalized);
+  if (!prev) {
+    // Survey — assign anytime before survey workflow completes
+    return row.work_status === "pending" || row.work_status === "in_progress";
+  }
+
+  const prevRow = assignments.find((a) => a.stage === prev);
+  return previousStageReadyForNextAssignment(prevRow);
+}
+
+export function assignWaitingHint(
+  stage: string,
+  assignments: StageAssignmentRow[],
+): string | null {
+  const normalized = stage === "configuration" ? "installation" : stage;
+  const prev = previousAssignableStage(normalized);
+  if (!prev) return null;
+  const prevRow = assignments.find((a) => a.stage === prev);
+  if (previousStageReadyForNextAssignment(prevRow)) return null;
+  return `Assign after ${prevRow?.label ?? prev} is Partial completed or Completed`;
+}
 
 export function stageWorkStatus(
   stage: string,
@@ -44,8 +140,9 @@ export function stageWorkStatus(
   _deliveryType: string,
 ): "pending" | "in_progress" | "done" | "skipped" {
   const normalizedStage = stage === "configuration" ? "installation" : stage;
-  const normalizedCurrent =
+  let normalizedCurrent =
     currentStage === "configuration" ? "installation" : currentStage;
+  if (normalizedCurrent === "assignment") normalizedCurrent = "survey";
   const cur = STAGE_ORDER.indexOf(normalizedCurrent as (typeof STAGE_ORDER)[number]);
   const idx = STAGE_ORDER.indexOf(normalizedStage as (typeof STAGE_ORDER)[number]);
   if (cur < 0 || idx < 0) return "pending";
@@ -71,6 +168,7 @@ export function assigneeValuesFromSite(site: SiteInstallation): FormValues {
   return {
     survey_assignee_employee_id: site.survey_assignee_employee_id ?? "",
     scm_assignee_employee_id: site.scm_assignee_employee_id ?? "",
+    onsite_assignee_employee_id: site.onsite_assignee_employee_id ?? "",
     installation_assignee_employee_id: site.installation_assignee_employee_id ?? "",
     acceptance_assignee_employee_id: site.acceptance_assignee_employee_id ?? "",
   };
@@ -87,26 +185,25 @@ export function assigneePayloadFromValues(
   return out;
 }
 
-/** Editable assignment section — shown on Assign stage owners step. */
+/** Editable assignment section — Survey owner only (later owners from Project Tracking). */
 export function stageAssignmentSection(deliveryType?: string): FormSection {
-  const fields: FieldSpec[] = STAGE_ASSIGNEE_FIELDS.map((f) => ({
-    name: f.name,
-    label:
-      f.stage === "installation" && deliveryType === "rack_only"
-        ? "Installation assignee"
-        : f.label,
-    type: "select" as const,
-    required: true,
-    optionsKey: "employees",
-    placeholder: "Select person…",
-  }));
-
+  void deliveryType;
+  const survey = STAGE_ASSIGNEE_FIELDS[0];
   return {
-    title: "Assign stage owners",
+    title: "Assign Survey owner",
     subtitle:
-      "Select who owns each step. Work status updates when the stage is completed.",
+      "Select who owns Survey. Later stage owners are assigned from Project Tracking after each step completes.",
     icon: Users,
-    fields,
+    fields: [
+      {
+        name: survey.name,
+        label: survey.label,
+        type: "select" as const,
+        required: true,
+        optionsKey: "employees",
+        placeholder: "Select person…",
+      },
+    ],
   };
 }
 
@@ -123,10 +220,6 @@ export function stageOwnerBannerSection(): FormSection {
       },
     ],
   };
-}
-
-export function assigneeFieldForStage(stage: AssignableStage) {
-  return STAGE_ASSIGNEE_FIELDS.find((f) => f.stage === stage)!;
 }
 
 export function resolveStageOwnerDisplay(

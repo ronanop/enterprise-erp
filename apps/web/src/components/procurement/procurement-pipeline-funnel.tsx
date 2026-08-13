@@ -21,7 +21,7 @@ export function ProcurementPipelineFunnel({ counts, loading }: ProcurementPipeli
   return (
     <div className="rounded-xl border border-border/80 bg-card p-4 shadow-sm">
       <div className="mb-3">
-        <h2 className="text-sm font-medium tracking-tight">Analytics</h2>
+        <h2 className="text-base font-extrabold tracking-tight">Analytics</h2>
       </div>
       <ol className="grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
         {values.map((stage, index) => {

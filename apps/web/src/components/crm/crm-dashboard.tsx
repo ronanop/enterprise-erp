@@ -353,7 +353,7 @@ export function CrmDashboard() {
             <div className="flex items-center gap-2.5">
               <CrmIconBadge icon={UserPlus} />
               <div>
-                <h2 className="text-sm font-medium tracking-tight">Recent leads</h2>
+                <h2 className="text-base font-extrabold tracking-tight">Recent leads</h2>
                 <p className="text-[11px] text-muted-foreground">Latest prospect activity</p>
               </div>
             </div>
@@ -431,7 +431,7 @@ export function CrmDashboard() {
             <div className="flex items-center gap-2.5">
               <CrmIconBadge icon={Handshake} />
               <div>
-                <h2 className="text-sm font-medium tracking-tight">Top opportunities</h2>
+                <h2 className="text-base font-extrabold tracking-tight">Top opportunities</h2>
                 <p className="text-[11px] text-muted-foreground">Highest expected revenue</p>
               </div>
             </div>

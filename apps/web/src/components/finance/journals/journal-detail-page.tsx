@@ -241,7 +241,7 @@ export function JournalDetailPage({ journalId }: { journalId: string }) {
           />
         </div>
         <section className="rounded-xl border border-border/80 bg-card p-4 shadow-sm">
-          <h2 className="text-sm font-medium tracking-tight">Posting summary</h2>
+          <h2 className="text-base font-extrabold tracking-tight">Posting summary</h2>
           <dl className="mt-3 space-y-2 text-xs">
             <div className="flex justify-between gap-2">
               <dt className="text-muted-foreground">Status</dt>

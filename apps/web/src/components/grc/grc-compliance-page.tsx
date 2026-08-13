@@ -214,7 +214,7 @@ export function GrcCompliancePage() {
 
       <div className="grid gap-3 lg:grid-cols-[1fr_1.2fr]">
         <div className="rounded-xl border border-border/80 bg-card p-4 shadow-sm">
-          <h2 className="text-sm font-medium tracking-tight">Compliance status mix</h2>
+          <h2 className="text-base font-extrabold tracking-tight">Compliance status mix</h2>
           <p className="mb-3 text-[11px] text-muted-foreground">Latest assessment outcomes</p>
           {loading ? (
             <p className="py-6 text-center text-sm text-muted-foreground">Loading…</p>
@@ -248,7 +248,7 @@ export function GrcCompliancePage() {
         <div className="overflow-hidden rounded-xl border border-border/80 bg-card shadow-sm">
           <div className="flex items-center justify-between gap-2 border-b border-border/70 px-4 py-3">
             <div>
-              <h2 className="text-sm font-medium tracking-tight">Active frameworks</h2>
+              <h2 className="text-base font-extrabold tracking-tight">Active frameworks</h2>
               <p className="text-[11px] text-muted-foreground">India pack & custom</p>
             </div>
             <Badge variant="secondary">{frameworks.length}</Badge>
@@ -286,7 +286,7 @@ export function GrcCompliancePage() {
       <div className="overflow-hidden rounded-xl border border-border/80 bg-card shadow-sm">
         <div className="flex items-center justify-between gap-2 border-b border-border/70 px-4 py-3">
           <div>
-            <h2 className="text-sm font-medium tracking-tight">Recent assessments</h2>
+            <h2 className="text-base font-extrabold tracking-tight">Recent assessments</h2>
             <p className="text-[11px] text-muted-foreground">Manual and signal-driven</p>
           </div>
           <Link

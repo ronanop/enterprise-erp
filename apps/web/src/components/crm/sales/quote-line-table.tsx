@@ -178,7 +178,7 @@ export function QuoteLineTable({
     <section className="overflow-hidden rounded-xl border border-border/80 bg-card shadow-sm">
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border/70 px-4 py-3">
         <div>
-          <h2 className="text-sm font-medium tracking-tight">Quote Lines</h2>
+          <h2 className="text-base font-extrabold tracking-tight">Quote Lines</h2>
           <p className="text-[11px] text-muted-foreground">GST/HSN aware · unit price + margin %</p>
         </div>
         {!readOnly ? (

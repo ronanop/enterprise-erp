@@ -297,7 +297,7 @@ export function MeetingFormDialog({
         onClick={(e) => e.stopPropagation()}
       >
         <div className="border-b border-border/70 px-5 py-4">
-          <h2 id="meeting-information-title" className="text-base font-semibold tracking-tight text-foreground">
+          <h2 id="meeting-information-title" className="text-base font-extrabold tracking-tight text-foreground">
             Meeting Information
           </h2>
         </div>

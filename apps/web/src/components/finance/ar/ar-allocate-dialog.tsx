@@ -145,7 +145,7 @@ export function ArAllocateDialog({ open, receipt, onClose, onSaved }: Props) {
         className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-xl border border-border/80 bg-card p-4 shadow-lg"
         onClick={(e) => e.stopPropagation()}
       >
-        <h2 className="text-sm font-medium tracking-tight">Allocate receipt</h2>
+        <h2 className="text-base font-extrabold tracking-tight">Allocate receipt</h2>
         <p className="mt-1 text-xs text-muted-foreground">Apply receipt balance to open invoices.</p>
 
         <div className="mt-4 grid gap-3 sm:grid-cols-2">

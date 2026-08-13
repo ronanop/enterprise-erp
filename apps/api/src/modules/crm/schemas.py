@@ -847,7 +847,7 @@ class LeadCreateFromCompany(BaseModel):
     mobile: str | None = None
     email: str | None = None
     lead_source_id: UUID
-    owner_employee_id: UUID
+    owner_employee_id: UUID | None = None
     assign_to_id: UUID | None = None
     assigned_date: date | None = None
     expected_amount: Decimal | None = None

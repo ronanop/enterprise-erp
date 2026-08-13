@@ -129,6 +129,7 @@ export function ProjectFollowUpsPage() {
         key: "actions",
         label: "",
         sort: () => "",
+        sortable: false,
         className: "text-right",
         cell: (r) =>
           !r.has_reply ? (
@@ -181,6 +182,7 @@ export function ProjectFollowUpsPage() {
         minWidth={1100}
         columns={columns}
         defaultSortKey="created_at"
+        defaultSortDir="desc"
         load={load}
         matches={(r, q) =>
           r.project_name.toLowerCase().includes(q) ||

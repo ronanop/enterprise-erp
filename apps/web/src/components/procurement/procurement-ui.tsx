@@ -112,7 +112,7 @@ export function ProcurementSection({
         <div className="flex min-w-0 items-center gap-2.5">
           {icon ? <ProcurementIconBadge icon={icon} /> : null}
           <div className="min-w-0">
-            <h2 className="truncate text-sm font-medium tracking-tight">{title}</h2>
+            <h2 className="truncate text-base font-extrabold tracking-tight">{title}</h2>
             {subtitle ? <p className="text-[11px] text-muted-foreground">{subtitle}</p> : null}
           </div>
         </div>

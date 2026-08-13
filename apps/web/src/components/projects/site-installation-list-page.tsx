@@ -28,10 +28,10 @@ const STAGE_META: Record<
     empty: "No sites in Intake. Create a project to start the delivery workflow.",
   },
   assignment: {
-    title: "Assign stage owners",
+    title: "Assign Survey owner",
     description:
-      "Project assignee picks owners for Survey, SCM, Installation & Configuration, and Acceptance.",
-    empty: "No sites waiting for stage assignment.",
+      "Assign the Survey owner after project create. Later stage owners are set from Project Tracking after each step completes.",
+    empty: "No sites waiting for Survey assignment.",
   },
   survey: {
     title: "Survey",

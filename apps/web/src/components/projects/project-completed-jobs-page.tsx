@@ -8,14 +8,17 @@ import { CheckCircle2 } from "lucide-react";
 import { MyJobOpenStepButton } from "@/components/projects/my-job-open-step-button";
 import {
   siteDeliveryTypeLabel,
-  siteWorkflowStageLabel,
 } from "@/components/projects/projects-domain";
 import {
   ProjectsRecordList,
   type RecordColumn,
 } from "@/components/projects/projects-record-list";
 import { useAuthUser } from "@/hooks/use-auth-user";
-import { listProjectCompletedJobs, type ProjectMyJob } from "@/services/projects-portal-service";
+import {
+  formatDate,
+  listProjectCompletedJobs,
+  type ProjectMyJob,
+} from "@/services/projects-portal-service";
 
 export function ProjectCompletedJobsPage() {
   const router = useRouter();
@@ -35,13 +38,6 @@ export function ProjectCompletedJobsPage() {
         sort: (r) => r.stage_label,
         className: "font-medium text-foreground",
         cell: (r) => r.stage_label,
-      },
-      {
-        key: "document_number",
-        label: "Site ID",
-        sort: (r) => r.document_number,
-        className: "font-mono text-xs text-muted-foreground",
-        cell: (r) => r.document_number,
       },
       {
         key: "project_name",
@@ -69,15 +65,16 @@ export function ProjectCompletedJobsPage() {
         cell: (r) => siteDeliveryTypeLabel(r.delivery_type),
       },
       {
-        key: "workflow_stage",
-        label: "Current stage",
-        sort: (r) => r.workflow_stage,
-        cell: (r) => siteWorkflowStageLabel(r.workflow_stage),
+        key: "created_at",
+        label: "Date Created",
+        sort: (r) => r.created_at ?? "",
+        cell: (r) => formatDate(r.created_at),
       },
       {
         key: "action",
         label: "",
         sort: () => "",
+        sortable: false,
         align: "right",
         cell: (r) => <MyJobOpenStepButton job={r} completed />,
       },
@@ -97,9 +94,9 @@ export function ProjectCompletedJobsPage() {
   return (
     <ProjectsRecordList
       title="Completed Jobs"
-      description="Steps you finished on assigned projects. Open any row to review your submitted work in read-only mode."
+      description="Steps you finished on assigned projects — including after the full site workflow is completed. Open any row to review your submitted work in read-only mode."
       panelTitle="Completed steps"
-      panelSubtitle="Steps where your assignment is done and the workflow has moved forward"
+      panelSubtitle="Finished steps stay listed here even when the project workflow is completed"
       icon={CheckCircle2}
       searchPlaceholder="Search project, site, or step…"
       emptyMessage="No completed steps yet. Finished work appears here after the site moves to the next stage."
@@ -107,7 +104,8 @@ export function ProjectCompletedJobsPage() {
       errorMessage="Failed to load Completed Jobs"
       minWidth={1000}
       columns={columns}
-      defaultSortKey="stage"
+      defaultSortKey="created_at"
+      defaultSortDir="desc"
       load={async () => {
         const rows = await load();
         return rows.map((row) => ({
@@ -118,9 +116,8 @@ export function ProjectCompletedJobsPage() {
       matches={(r, q) =>
         r.stage_label.toLowerCase().includes(q) ||
         r.project_name.toLowerCase().includes(q) ||
-        r.document_number.toLowerCase().includes(q) ||
         (r.site_name ?? "").toLowerCase().includes(q) ||
-        r.workflow_stage.toLowerCase().includes(q)
+        r.delivery_type.toLowerCase().includes(q)
       }
     />
   );

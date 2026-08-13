@@ -10,6 +10,7 @@ import {
   ClipboardCheck,
   CloudUpload,
   MapPin,
+  MapPinned,
   Package,
   Server,
   Users,
@@ -29,25 +30,36 @@ import {
   ProjectsSection,
 } from "@/components/projects/projects-ui";
 import { ConfirmDialog } from "@/components/finance/journals/confirm-dialog";
+import { FinanceSelect } from "@/components/finance/journals/finance-form-field";
 import { Button } from "@/components/ui/button";
 import { useAuthUser } from "@/hooks/use-auth-user";
 import { cn } from "@/lib/utils";
 import { ApiClientError } from "@/services/api-client";
 import { loadIntakeSummaryLookups } from "@/components/projects/site-intake-summary";
 import {
+  assigneeFieldForStage,
+  assignWaitingHint,
+  canAssignStageFromTracking,
+  type AssignableStage,
+} from "@/components/projects/site-stage-assignments";
+import { stageProgressLabel } from "@/components/projects/site-stage-attachment";
+import {
+  advanceSiteInstallation,
   getSiteInstallationBlueprint,
   getSiteInstallationByProject,
   followUpSiteStage,
   getProject,
   listEmployeeOptions,
   listSiteStageFollowUps,
+  updateSiteInstallationByProject,
   type SiteInstallation,
   type SiteInstallationBlueprint,
+  type SiteInstallationFormInput,
   type SiteStageFollowUp,
 } from "@/services/projects-portal-service";
 import { parseAuthMe } from "@/lib/auth-user";
 import { resolveSessionEmployeeId } from "@/lib/crm/session-employee";
-import { canOpenCurrentStageForm } from "@/lib/projects/site-stage-form-access";
+import { canAdminViewStageForm, canOpenCurrentStageForm, isStageWorkDone, type SiteStageFormKey } from "@/lib/projects/site-stage-form-access";
 import { authService } from "@/services/api-client";
 
 type StageKey =
@@ -55,6 +67,7 @@ type StageKey =
   | "assignment"
   | "survey"
   | "scm"
+  | "onsite"
   | "installation"
   | "acceptance"
   | "completed";
@@ -64,6 +77,7 @@ const STAGE_ICONS: Record<string, typeof MapPin> = {
   assignment: Users,
   survey: MapPin,
   scm: Package,
+  onsite: MapPinned,
   installation: Server,
   acceptance: CloudUpload,
   completed: Check,
@@ -72,10 +86,6 @@ const STAGE_ICONS: Record<string, typeof MapPin> = {
 const STAGE_FORM_LINKS: Partial<
   Record<StageKey, { href: (projectId: string) => string; label: string }>
 > = {
-  assignment: {
-    href: (id) => `/projects/projects/${id}/assign`,
-    label: "Open Assign owners form",
-  },
   survey: {
     href: (id) => `/projects/projects/${id}/survey`,
     label: "Open Survey form",
@@ -83,6 +93,10 @@ const STAGE_FORM_LINKS: Partial<
   scm: {
     href: (id) => `/projects/projects/${id}/scm`,
     label: "Open SCM form",
+  },
+  onsite: {
+    href: (id) => `/projects/projects/${id}/onsite`,
+    label: "Open On-site form",
   },
   installation: {
     href: (id) => `/projects/projects/${id}/installation`,
@@ -93,6 +107,12 @@ const STAGE_FORM_LINKS: Partial<
     label: "Open Acceptance form",
   },
 };
+
+/** Show person name only — drop trailing employee code like " (EMP-000057)". */
+function employeeNameOnly(label: string): string {
+  const stripped = label.replace(/\s*\([^)]*\)\s*$/, "").trim();
+  return stripped || label;
+}
 
 export function SiteInstallationTrackingSummary({ projectId }: { projectId: string }) {
   const { projectModuleAdmin } = useAuthUser();
@@ -110,6 +130,8 @@ export function SiteInstallationTrackingSummary({ projectId }: { projectId: stri
   const [followUpBusy, setFollowUpBusy] = useState(false);
   const [followUpFeedback, setFollowUpFeedback] = useState<string | null>(null);
   const [followUps, setFollowUps] = useState<SiteStageFollowUp[]>([]);
+  const [assignDrafts, setAssignDrafts] = useState<Record<string, string>>({});
+  const [assignBusyStage, setAssignBusyStage] = useState<string | null>(null);
 
   const refreshFollowUpsOnly = useCallback(async () => {
     const rows = await listSiteStageFollowUps(projectId).catch(() => []);
@@ -142,6 +164,11 @@ export function SiteInstallationTrackingSummary({ projectId }: { projectId: stri
         Array.isArray(employees) ? (employees as Array<{ id: string; label: string }>) : [],
       );
       setFollowUps(Array.isArray(followUpRows) ? followUpRows : []);
+      const drafts: Record<string, string> = {};
+      for (const sa of bp.stage_assignments ?? []) {
+        drafts[sa.stage] = sa.assignee_employee_id ?? "";
+      }
+      setAssignDrafts(drafts);
     } catch (err) {
       setError(
         err instanceof ApiClientError ? err.message : "Failed to load stage owner tracking",
@@ -150,6 +177,45 @@ export function SiteInstallationTrackingSummary({ projectId }: { projectId: stri
       setLoading(false);
     }
   }, [projectId]);
+
+  const onAssignStage = useCallback(
+    async (stage: string) => {
+      const field = assigneeFieldForStage(stage as AssignableStage);
+      const employeeId = (assignDrafts[stage] ?? "").trim();
+      if (!employeeId) {
+        setError(`Select a person for ${field.label} before assigning.`);
+        return;
+      }
+      setAssignBusyStage(stage);
+      setError(null);
+      setFollowUpFeedback(null);
+      try {
+        const payload: SiteInstallationFormInput = {
+          [field.name]: employeeId,
+        };
+        await updateSiteInstallationByProject(projectId, payload);
+
+        // Survey assign after create advances Intake (or legacy Assignment) → Survey.
+        if (stage === "survey") {
+          let current = await getSiteInstallationByProject(projectId);
+          if (current.workflow_stage === "intake") {
+            current = await advanceSiteInstallation(projectId, "complete_intake");
+          }
+          if (current.workflow_stage === "assignment") {
+            await advanceSiteInstallation(projectId, "complete_assignment");
+          }
+        }
+
+        await load();
+        setFollowUpFeedback(`Assigned ${field.label.replace(/ assignee$/i, "")} owner.`);
+      } catch (err) {
+        setError(err instanceof ApiClientError ? err.message : "Failed to assign stage owner");
+      } finally {
+        setAssignBusyStage(null);
+      }
+    },
+    [assignDrafts, load, projectId],
+  );
 
   useEffect(() => {
     void load();
@@ -169,14 +235,17 @@ export function SiteInstallationTrackingSummary({ projectId }: { projectId: stri
     return <ProjectsErrorBanner>{error ?? "Tracking unavailable."}</ProjectsErrorBanner>;
   }
 
-  const statusText = (status: string) =>
-    status === "done"
-      ? "Done"
-      : status === "in_progress"
-        ? "In progress"
-        : status === "skipped"
-          ? "Skipped"
-          : "Pending";
+  const statusText = (
+    workStatus: string,
+    progressStatus?: string | null,
+  ) => {
+    const progress = stageProgressLabel(progressStatus);
+    if (progress !== "—") return progress;
+    if (workStatus === "done") return "Done";
+    if (workStatus === "in_progress") return "In progress";
+    if (workStatus === "skipped") return "Skipped";
+    return "Pending";
+  };
 
   const displayDate = (value: string | null | undefined) => {
     if (!value) return "—";
@@ -198,7 +267,8 @@ export function SiteInstallationTrackingSummary({ projectId }: { projectId: stri
 
   const employeeName = (employeeId: string | null | undefined) => {
     if (!employeeId) return "Unassigned";
-    return employeeOptions.find((e) => e.id === employeeId)?.label ?? "Assigned";
+    const label = employeeOptions.find((e) => e.id === employeeId)?.label;
+    return label ? employeeNameOnly(label) : "Assigned";
   };
 
   const rackOnly = deliveryIsRackOnly(site.delivery_type);
@@ -211,6 +281,7 @@ export function SiteInstallationTrackingSummary({ projectId }: { projectId: stri
   const completedByForStep = (step: string) => {
     if (step === "Survey") return employeeName(site.survey_assignee_employee_id);
     if (step === "SCM / Logistics") return employeeName(site.scm_assignee_employee_id);
+    if (step === "On-site") return employeeName(site.onsite_assignee_employee_id);
     if (step === "Installation" || step === "Installation & Configuration") {
       return employeeName(site.installation_assignee_employee_id);
     }
@@ -238,32 +309,32 @@ export function SiteInstallationTrackingSummary({ projectId }: { projectId: stri
       completedBy: completedByForStep("Survey"),
     },
     {
-      step: "SCM / Logistics",
+      step: "On-site",
       item: "MO Request",
       date: displayDate(site.mo_request_date),
-      completedBy: completedByForStep("SCM / Logistics"),
+      completedBy: completedByForStep("On-site"),
     },
     {
-      step: "SCM / Logistics",
+      step: "On-site",
       item: "IM Material",
       date: displayDate(site.im_material_date),
-      completedBy: completedByForStep("SCM / Logistics"),
+      completedBy: completedByForStep("On-site"),
     },
     ...(rackOnly
       ? []
       : [
         {
-          step: "SCM / Logistics",
+          step: "On-site",
           item: "Power-on Material",
           date: displayDate(site.power_on_material_date),
-          completedBy: completedByForStep("SCM / Logistics"),
+          completedBy: completedByForStep("On-site"),
         },
       ]),
     {
-      step: "SCM / Logistics",
+      step: "On-site",
       item: "Material Handover",
       date: displayDate(site.material_handover_date),
-      completedBy: completedByForStep("SCM / Logistics"),
+      completedBy: completedByForStep("On-site"),
     },
     {
       step: installStep,
@@ -301,8 +372,8 @@ export function SiteInstallationTrackingSummary({ projectId }: { projectId: stri
         },
         {
           step: installStep,
-          item: "Firmware / N/W",
-          date: displayDate(site.firmware_nw_config_date),
+          item: "Firmware Configuration",
+          date: displayDate(site.firmware_config_date),
           completedBy: completedByForStep(installStep),
         },
         {
@@ -319,6 +390,24 @@ export function SiteInstallationTrackingSummary({ projectId }: { projectId: stri
           step: installStep,
           item: "OS Installation",
           date: displayDate(site.os_installation_date),
+          completedBy: completedByForStep(installStep),
+        },
+        {
+          step: installStep,
+          item: "VM Installation",
+          date: displayDate(site.vm_installation_date),
+          completedBy: completedByForStep(installStep),
+        },
+        {
+          step: installStep,
+          item: "N/W Configuration",
+          date: displayDate(site.nw_config_date),
+          completedBy: completedByForStep(installStep),
+        },
+        {
+          step: installStep,
+          item: "Tools Integration",
+          date: displayDate(site.tools_integration_date),
           completedBy: completedByForStep(installStep),
         },
         {
@@ -362,7 +451,7 @@ export function SiteInstallationTrackingSummary({ projectId }: { projectId: stri
   return (
     <ProjectsSection
       title="Project Tracking"
-      subtitle="Stage owners with step-wise assigned and completed dates"
+      subtitle="Assign the next stage owner after the previous step is completed. Survey is assigned first after project create."
       icon={Users}
     >
       {error ? <ProjectsErrorBanner>{error}</ProjectsErrorBanner> : null}
@@ -396,15 +485,34 @@ export function SiteInstallationTrackingSummary({ projectId }: { projectId: stri
                 const assigneeLabel = sa.assignee_employee_id
                   ? employeeName(sa.assignee_employee_id)
                   : "Unassigned";
+                const stageWorkDone = isStageWorkDone(sa.progress_status, sa.work_status);
+                const adminCanViewStage =
+                  Boolean(projectModuleAdmin) &&
+                  site != null &&
+                  canAdminViewStageForm(
+                    site,
+                    sa.stage as Exclude<SiteStageFormKey, "assignment">,
+                    sa.progress_status,
+                    sa.work_status,
+                  );
                 const canFollowUp =
-                  Boolean(sa.assignee_employee_id) && sa.work_status !== "done";
+                  Boolean(sa.assignee_employee_id) && !stageWorkDone;
                 const stageFollowUp = latestFollowUpByStage.get(sa.stage);
                 const stageViewHref =
-                  projectModuleAdmin &&
-                    sa.work_status === "done" &&
-                    STAGE_FORM_LINKS[sa.stage as StageKey]
+                  adminCanViewStage && STAGE_FORM_LINKS[sa.stage as StageKey]
                     ? STAGE_FORM_LINKS[sa.stage as StageKey]!.href(projectId)
                     : null;
+                const canAssign = canAssignStageFromTracking(
+                  sa.stage,
+                  blueprint.stage_assignments ?? [],
+                  Boolean(projectModuleAdmin),
+                );
+                const waitingHint = assignWaitingHint(
+                  sa.stage,
+                  blueprint.stage_assignments ?? [],
+                );
+                const draftValue = assignDrafts[sa.stage] ?? sa.assignee_employee_id ?? "";
+                const assignBusy = assignBusyStage === sa.stage;
 
                 return (
                   <tr key={sa.stage} className="border-b border-border/50 last:border-0">
@@ -433,14 +541,56 @@ export function SiteInstallationTrackingSummary({ projectId }: { projectId: stri
                         ) : null}
                       </span>
                     </td>
-                    <td className="px-3 py-2 text-muted-foreground">{assigneeLabel}</td>
+                    <td className="px-3 py-2 text-muted-foreground">
+                      {canAssign ? (
+                        <div className="flex min-w-[220px] flex-col gap-1.5">
+                          <div className="flex items-center gap-2">
+                            <FinanceSelect
+                              value={draftValue}
+                              className="h-8 min-w-0 flex-1"
+                              aria-label={`Assign ${sa.label}`}
+                              disabled={assignBusy}
+                              onChange={(e) =>
+                                setAssignDrafts((prev) => ({
+                                  ...prev,
+                                  [sa.stage]: e.target.value,
+                                }))
+                              }
+                            >
+                              <option value="">Select person…</option>
+                              {employeeOptions.map((emp) => (
+                                <option key={emp.id} value={emp.id}>
+                                  {employeeNameOnly(emp.label)}
+                                </option>
+                              ))}
+                            </FinanceSelect>
+                            <Button
+                              type="button"
+                              size="xs"
+                              variant="outline"
+                              className="h-8 shrink-0 cursor-pointer"
+                              disabled={assignBusy || !draftValue.trim()}
+                              onClick={() => void onAssignStage(sa.stage)}
+                            >
+                              {assignBusy ? "Saving…" : sa.assignee_employee_id ? "Update" : "Assign"}
+                            </Button>
+                          </div>
+                        </div>
+                      ) : waitingHint && !sa.assignee_employee_id ? (
+                        <span className="text-xs italic text-muted-foreground">{waitingHint}</span>
+                      ) : (
+                        assigneeLabel
+                      )}
+                    </td>
                     <td className="px-3 py-2 text-muted-foreground">
                       {displayDate(sa.assigned_date)}
                     </td>
                     <td className="px-3 py-2 text-muted-foreground">
                       {displayDate(sa.completed_date)}
                     </td>
-                    <td className="px-3 py-2 text-muted-foreground">{statusText(sa.work_status)}</td>
+                    <td className="px-3 py-2 text-muted-foreground">
+                      {statusText(sa.work_status, sa.progress_status)}
+                    </td>
                     {projectModuleAdmin ? (
                       <>
                         <td className="px-3 py-2 text-muted-foreground">
@@ -650,6 +800,7 @@ export function SiteInstallationTrackingSummary({ projectId }: { projectId: stri
 
 /** Overview only — stage details are filled on dedicated form pages. */
 export function SiteInstallationWorkflow({ projectId }: { projectId: string }) {
+  const { projectModuleAdmin } = useAuthUser();
   const [row, setRow] = useState<SiteInstallation | null>(null);
   const [blueprint, setBlueprint] = useState<SiteInstallationBlueprint | null>(null);
   const [loading, setLoading] = useState(true);
@@ -689,6 +840,28 @@ export function SiteInstallationWorkflow({ projectId }: { projectId: string }) {
 
   const locked = row?.status === "completed" || blueprint?.terminal === true;
   const stage = (blueprint?.state ?? row?.workflow_stage ?? "intake") as StageKey;
+  const completedStageLinks = useMemo(() => {
+    if (!row || !blueprint || !locked) return [];
+    return (blueprint.stage_assignments ?? [])
+      .filter((sa) =>
+        canAdminViewStageForm(
+          row,
+          sa.stage as Exclude<SiteStageFormKey, "assignment">,
+          sa.progress_status,
+          sa.work_status,
+        ),
+      )
+      .map((sa) => {
+        const link = STAGE_FORM_LINKS[sa.stage as StageKey];
+        if (!link) return null;
+        const label =
+          sa.stage === "installation" && deliveryIsRackOnly(row.delivery_type)
+            ? "View Installation"
+            : `View ${sa.label}`;
+        return { key: sa.stage, href: link.href(projectId), label };
+      })
+      .filter((entry): entry is { key: string; href: string; label: string } => entry != null);
+  }, [blueprint, locked, projectId, row]);
   const currentIdx = useMemo(() => {
     const stages = blueprint?.stages ?? [];
     return stages.findIndex((s) => s.key === stage);
@@ -728,7 +901,8 @@ export function SiteInstallationWorkflow({ projectId }: { projectId: string }) {
         ) : null}
         {stage === "intake" && !locked ? (
           <p className="text-xs text-muted-foreground">
-            Intake fields are edited from Edit Project. Use Assign owners after intake is complete.
+            Intake fields are edited from Edit Project. Assign the Survey owner from Project Tracking
+            below.
           </p>
         ) : null}
         {formLink && !locked && !canOpenForm && stage !== "intake" ? (
@@ -737,8 +911,23 @@ export function SiteInstallationWorkflow({ projectId }: { projectId: string }) {
             the workflow form.
           </p>
         ) : null}
+        {locked && projectModuleAdmin && completedStageLinks.length > 0 ? (
+          <div className="flex flex-wrap gap-2">
+            {completedStageLinks.map((link) => (
+              <Link
+                key={link.key}
+                href={link.href}
+                className="inline-flex h-8 cursor-pointer items-center justify-center rounded-md border border-border/80 bg-card px-3 text-xs font-medium text-foreground transition-colors duration-200 hover:bg-muted"
+              >
+                {link.label}
+              </Link>
+            ))}
+          </div>
+        ) : null}
         {locked ? (
-          <p className="text-xs text-muted-foreground">Workflow completed — forms are read-only.</p>
+          <p className="text-xs text-muted-foreground">
+            Workflow completed — open any completed step above in read-only mode.
+          </p>
         ) : null}
       </div>
 

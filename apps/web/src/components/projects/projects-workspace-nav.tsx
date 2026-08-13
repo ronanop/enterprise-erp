@@ -47,6 +47,7 @@ export const PROJECTS_NAV_GROUPS: readonly ProjectsNavGroup[] = [
       { title: "Assign owners", href: "/projects/assignment", stage: "assignment" },
       { title: "Survey", href: "/projects/survey", stage: "survey" },
       { title: "SCM / Logistics", href: "/projects/scm", stage: "scm" },
+      { title: "On-site", href: "/projects/onsite", stage: "onsite" },
       { title: "Installation & Configuration", href: "/projects/installation", stage: "installation" },
       { title: "Acceptance", href: "/projects/acceptance", stage: "acceptance" },
       { title: "Completed", href: "/projects/completed", stage: "completed" },

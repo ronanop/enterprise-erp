@@ -47,7 +47,7 @@ _SEED_ROWS: tuple[tuple[str, str, str | None, str], ...] = (
     (
         "ENT-000005",
         "VYUHA AI LABS PRIVATE LIMITED",
-        None,
+        "07AAMCV4044L1ZW",
         (
             "L-32 F/F, Kailash Colony, Near Summer Field School, Kailash Colony, "
             "New Delhi, South Delhi 110048 (CIN U73200DL2026PTC468069)"
@@ -86,8 +86,8 @@ def upgrade() -> None:
                     gen_random_uuid(),
                     CAST(:entity_code AS VARCHAR(50)),
                     CAST(:entity_name AS VARCHAR(255)),
-                    NULL,
-                    NULL,
+                    CAST(:entity_email AS VARCHAR(255)),
+                    CAST(:entity_contact AS VARCHAR(50)),
                     CAST(:entity_gst AS VARCHAR(30)),
                     CAST(:entity_address AS TEXT),
                     'active',
@@ -114,6 +114,8 @@ def upgrade() -> None:
             {
                 "entity_code": code,
                 "entity_name": name,
+                "entity_email": "info@cachedigitech.com",
+                "entity_contact": "18003094333",
                 "entity_gst": gst,
                 "entity_address": address,
             },

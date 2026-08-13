@@ -3,10 +3,6 @@
 import { useRouter } from "next/navigation";
 import { ChevronRight } from "lucide-react";
 
-import {
-  isAssignedStepActive,
-  workflowStageNotCompleteMessage,
-} from "@/lib/projects/site-stage-form-access";
 import type { ProjectMyJob } from "@/services/projects-portal-service";
 
 export function MyJobOpenStepButton({
@@ -29,11 +25,13 @@ export function MyJobOpenStepButton({
           router.push(job.form_path);
           return;
         }
-        if (!isAssignedStepActive(job.assigned_stage, job.workflow_stage)) {
-          onBlocked?.(workflowStageNotCompleteMessage(job.workflow_stage));
+        if (job.can_open_form !== false) {
+          router.push(job.form_path);
           return;
         }
-        router.push(job.form_path);
+        onBlocked?.(
+          "Complete the previous step (Partial completed or Completed) before opening this one.",
+        );
       }}
     >
       {completed ? "View step" : "Open step"}

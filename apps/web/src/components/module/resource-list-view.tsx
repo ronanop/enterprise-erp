@@ -306,7 +306,7 @@ export function ResourceListView({
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border/70 px-4 py-3.5 sm:px-5">
           <div className="min-w-0 space-y-0.5">
             <div className="flex flex-wrap items-center gap-2">
-              <h2 className="text-sm font-medium tracking-tight">Records</h2>
+              <h2 className="text-base font-extrabold tracking-tight">Records</h2>
               <Badge variant="secondary">{filtered.length} shown</Badge>
             </div>
             <p className="text-xs text-muted-foreground">

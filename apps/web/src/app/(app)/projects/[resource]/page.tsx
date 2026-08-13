@@ -34,6 +34,7 @@ const SITE_STAGE_RESOURCES: Record<string, string> = {
   assignment: "assignment",
   survey: "survey",
   scm: "scm",
+  onsite: "onsite",
   installation: "installation",
   acceptance: "acceptance",
   completed: "completed",

@@ -309,7 +309,7 @@ export function GlHubPage() {
           </div>
           <GlTrialBalancePreviewPanel preview={preview} loading={previewLoading} />
           <div className="rounded-xl border border-border/80 bg-card p-3.5 shadow-sm">
-            <h3 className="text-sm font-medium tracking-tight">Recent Ledger Activity</h3>
+            <h3 className="text-base font-extrabold tracking-tight">Recent Ledger Activity</h3>
             {loading && rows.length === 0 ? (
               <div className="mt-3 space-y-2">{Array.from({ length: 5 }).map((_, i) => <div key={i} className="h-8 animate-pulse rounded bg-muted/70" />)}</div>
             ) : rows.length === 0 ? (

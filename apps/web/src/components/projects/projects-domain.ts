@@ -206,10 +206,13 @@ export function deliveryIncludesRack(v: string | null | undefined): boolean {
 }
 
 /** Survey material types when delivery includes Rack Installation. */
+export const MATERIAL_TYPE_OTHERS = "others";
+
 export const CABLE_TYPES: Choice[] = [
   choice("5cr 10sqmm", "5cr 10sqmm"),
   choice("5 cr 6 sqmm", "5 cr 6 sqmm"),
   choice("25sqmm Green", "25sqmm Green"),
+  choice(MATERIAL_TYPE_OTHERS, "Others"),
 ];
 
 export const LUG_TYPES: Choice[] = [
@@ -219,11 +222,13 @@ export const LUG_TYPES: Choice[] = [
   choice("ring type 6 sqmm", "Ring type 6 sqmm"),
   choice("ring type 10 sqmm", "Ring type 10 sqmm"),
   choice("ring type 25 sqmm", "Ring type 25 sqmm"),
+  choice(MATERIAL_TYPE_OTHERS, "Others"),
 ];
 
 export const INDUSTRIAL_SOCKET_TYPES: Choice[] = [
   choice("male", "Male"),
   choice("female", "Female"),
+  choice(MATERIAL_TYPE_OTHERS, "Others"),
 ];
 
 export function deliveryIsRackOnly(v: string | null | undefined): boolean {
@@ -262,9 +267,9 @@ export function deliveryNeedsHwat(v: string | null | undefined): boolean {
 
 export const SITE_WORKFLOW_STAGES: Choice[] = [
   choice("intake", "Intake & RFAI"),
-  choice("assignment", "Assign stage owners"),
   choice("survey", "Survey"),
   choice("scm", "SCM / Logistics"),
+  choice("onsite", "On-site"),
   choice("installation", "Installation & Configuration"),
   choice("acceptance", "Acceptance"),
   choice("completed", "Completed"),
@@ -289,5 +294,7 @@ export const siteDeliveryTypeLabel = (v: string | null | undefined) =>
 export const siteWorkflowStageLabel = (v: string | null | undefined) => {
   // Legacy stage before install+config merge
   if (v === "configuration") return "Installation & Configuration";
+  // Removed dedicated assign step — owners assigned from Project Tracking
+  if (v === "assignment") return "Survey";
   return labelFrom(SITE_WORKFLOW_STAGES, v);
 };

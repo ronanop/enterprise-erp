@@ -57,7 +57,7 @@ export function LeadDetailsCard({
   };
 
   const companyName = company?.customer_name ?? "—";
-  const salutation = lead.salutation?.trim() || "None";
+  const salutation = lead.salutation?.trim() || "—";
 
   return (
     <div className="space-y-5">
@@ -69,12 +69,9 @@ export function LeadDetailsCard({
             value={textOrDash(lead.project_title)}
           />
 
-          <LeadReadOnlyField label="Email *" value={textOrDash(lead.email)} />
-          <LeadReadOnlyField label="Lead Source *" value={leadSourceName(lead.lead_source_id)} />
-
           <FinanceField label="First Name *">
             <div className="flex gap-2">
-              <div className="w-24 shrink-0">
+              <div className="w-14 shrink-0">
                 <ReadOnlyValue value={salutation} />
               </div>
               <div className="min-w-0 flex-1">
@@ -83,10 +80,14 @@ export function LeadDetailsCard({
             </div>
           </FinanceField>
           <LeadReadOnlyField label="Last Name *" value={textOrDash(lead.last_name)} />
+
+          <LeadReadOnlyField label="Email *" value={textOrDash(lead.email)} />
+          <LeadReadOnlyField label="Mobile *" value={textOrDash(lead.mobile)} />
+
           <LeadReadOnlyField label="Designation" value={textOrDash(lead.designation)} />
+          <LeadReadOnlyField label="Lead Source *" value={leadSourceName(lead.lead_source_id)} />
 
           <LeadReadOnlyField label="Product Type *" value={textOrDash(lead.product_type)} />
-          <LeadReadOnlyField label="Mobile *" value={textOrDash(lead.mobile)} />
 
           <LeadReadOnlyField
             label="Sub Product Category"
@@ -97,17 +98,19 @@ export function LeadDetailsCard({
           <LeadReadOnlyField label="Sub Product" value={textOrDash(lead.sub_product)} />
           <LeadReadOnlyField label="Purchase Model *" value={textOrDash(lead.purchase_model)} />
 
-          <LeadReadOnlyField label="Engagement Score" value={textOrDash(lead.engagement_score)} />
+          <LeadReadOnlyField
+            label="Engagement Score"
+            value={
+              lead.engagement_score != null ? `${lead.engagement_score}%` : textOrDash(lead.engagement_score)
+            }
+          />
           <LeadReadOnlyField label="DR Number" value={textOrDash(lead.dr_number)} />
 
-          <LeadReadOnlyField label="Portal Link" value={textOrDash(lead.portal_link)} />
-          <LeadReadOnlyField label="New DR Number" value={textOrDash(lead.new_dr_number)} />
-
-          <LeadReadOnlyField label="Fulfillment Type" value={textOrDash(lead.deal_type)} />
+          <LeadReadOnlyField label="Sourcing Channel" value={textOrDash(lead.deal_type)} />
           <LeadReadOnlyField label="Lead Owner *" value={employeeName(lead.owner_employee_id)} />
 
           <LeadReadOnlyField
-            label="Expected Business Amount *"
+            label="Expected Order Value *"
             value={lead.expected_amount != null ? formatInr(lead.expected_amount) : "—"}
           />
           <LeadReadOnlyField label="Lead Status" value={formatLeadStatus(lead.status)} />
@@ -156,7 +159,7 @@ export function LeadDetailsCard({
         </div>
       </CrmSection>
 
-      <CrmSection title="Customer & Industry Information" icon={Users}>
+      <CrmSection title="End Customer Detail" icon={Users}>
         <div className="grid gap-x-10 gap-y-3 md:grid-cols-2">
           <LeadReadOnlyField label="End Customer *" value={textOrDash(lead.end_customer_name)} />
           <LeadReadOnlyField label="Industry" value={textOrDash(lead.industry) || "None"} />

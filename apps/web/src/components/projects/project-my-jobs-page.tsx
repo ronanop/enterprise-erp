@@ -8,13 +8,16 @@ import { MyJobOpenStepButton } from "@/components/projects/my-job-open-step-butt
 import { WorkflowStepBlockedDialog } from "@/components/projects/workflow-step-blocked-dialog";
 import {
   siteDeliveryTypeLabel,
-  siteWorkflowStageLabel,
 } from "@/components/projects/projects-domain";
 import {
   ProjectsRecordList,
   type RecordColumn,
 } from "@/components/projects/projects-record-list";
-import { listProjectMyJobs, type ProjectMyJob } from "@/services/projects-portal-service";
+import {
+  formatDate,
+  listProjectMyJobs,
+  type ProjectMyJob,
+} from "@/services/projects-portal-service";
 
 export function ProjectMyJobsPage() {
   const [blockedMessage, setBlockedMessage] = useState<string | null>(null);
@@ -28,13 +31,6 @@ export function ProjectMyJobsPage() {
         sort: (r) => r.stage_label,
         className: "font-medium text-foreground",
         cell: (r) => r.stage_label,
-      },
-      {
-        key: "document_number",
-        label: "Site ID",
-        sort: (r) => r.document_number,
-        className: "font-mono text-xs text-muted-foreground",
-        cell: (r) => r.document_number,
       },
       {
         key: "project_name",
@@ -62,15 +58,16 @@ export function ProjectMyJobsPage() {
         cell: (r) => siteDeliveryTypeLabel(r.delivery_type),
       },
       {
-        key: "workflow_stage",
-        label: "Current stage",
-        sort: (r) => r.workflow_stage,
-        cell: (r) => siteWorkflowStageLabel(r.workflow_stage),
+        key: "created_at",
+        label: "Date Created",
+        sort: (r) => r.created_at ?? "",
+        cell: (r) => formatDate(r.created_at),
       },
       {
         key: "action",
         label: "",
         sort: () => "",
+        sortable: false,
         align: "right",
         cell: (r) => <MyJobOpenStepButton job={r} onBlocked={setBlockedMessage} />,
       },
@@ -87,12 +84,13 @@ export function ProjectMyJobsPage() {
         panelSubtitle="All steps assigned to your employee record across visible projects"
         icon={Briefcase}
         searchPlaceholder="Search project, site, or stage…"
-        emptyMessage="No steps assigned to you right now. A project admin assigns owners on the Assign stage screen."
+        emptyMessage="No steps assigned to you right now. A project admin assigns the next stage owner from Project Tracking after the previous step completes."
         loadingMessage="Loading your assigned steps…"
         errorMessage="Failed to load My Jobs"
         minWidth={1000}
         columns={columns}
-        defaultSortKey="stage"
+        defaultSortKey="created_at"
+        defaultSortDir="desc"
         load={async () => {
           const rows = await load();
           return rows.map((row) => ({
@@ -103,9 +101,8 @@ export function ProjectMyJobsPage() {
         matches={(r, q) =>
           r.stage_label.toLowerCase().includes(q) ||
           r.project_name.toLowerCase().includes(q) ||
-          r.document_number.toLowerCase().includes(q) ||
           (r.site_name ?? "").toLowerCase().includes(q) ||
-          r.workflow_stage.toLowerCase().includes(q)
+          r.delivery_type.toLowerCase().includes(q)
         }
       />
       <WorkflowStepBlockedDialog

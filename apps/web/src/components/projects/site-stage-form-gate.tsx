@@ -6,9 +6,12 @@ import { useRouter } from "next/navigation";
 import { parseAuthMe } from "@/lib/auth-user";
 import { resolveSessionEmployeeId } from "@/lib/crm/session-employee";
 import {
+  canAdminViewStageForm,
   canEditSiteStageForm,
+  canOpenAssignedStageForm,
   isAssigneeForStage,
-  isAssignedStepActive,
+  isSiteWorkflowTerminal,
+  isStageWorkDone,
   type SiteStageFormKey,
   workflowStageNotCompleteMessage,
 } from "@/lib/projects/site-stage-form-access";
@@ -64,13 +67,37 @@ export function SiteStageFormGate({
         const user = parsed.user;
         const employeeId = resolveSessionEmployeeId(lookups.employees, user);
         const stageRow = blueprint?.stage_assignments?.find((a) => a.stage === stage);
-        const stageDone = stageRow?.work_status === "done";
+        const stageDone = isStageWorkDone(
+          stageRow?.progress_status,
+          stageRow?.work_status ?? "",
+        );
 
-        if (parsed.projectModuleAdmin && stageDone) {
+        if (
+          parsed.projectModuleAdmin &&
+          canAdminViewStageForm(
+            site,
+            stage,
+            stageRow?.progress_status,
+            stageRow?.work_status ?? "",
+          )
+        ) {
           setReadOnlyMeta({
             readOnly: true,
             backHref: `/projects/projects/${projectId}`,
             backLabel: "Back to project",
+          });
+          setState("allowed");
+          return;
+        }
+
+        if (
+          isSiteWorkflowTerminal(site) &&
+          isAssigneeForStage(site, stage, employeeId)
+        ) {
+          setReadOnlyMeta({
+            readOnly: true,
+            backHref: "/projects/completed-jobs",
+            backLabel: "Back to Completed Jobs",
           });
           setState("allowed");
           return;
@@ -102,9 +129,10 @@ export function SiteStageFormGate({
 
         if (
           isAssigneeForStage(site, stage, employeeId) &&
-          !isAssignedStepActive(stage, site.workflow_stage)
+          !canOpenAssignedStageForm(site, stage, site.workflow_stage) &&
+          !stageDone
         ) {
-          setBlockedMessage(workflowStageNotCompleteMessage(site.workflow_stage));
+          setBlockedMessage(workflowStageNotCompleteMessage(site, stage));
           setState("blocked");
           return;
         }

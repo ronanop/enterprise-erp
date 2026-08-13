@@ -70,7 +70,8 @@ export type FieldSpec = {
   | "readonly"
   | "checkbox"
   | "yesno"
-  | "type_qty_lines";
+  | "type_qty_lines"
+  | "file";
   required?: boolean;
   /** Fixed choices (domain enums). */
   options?: { value: string; label: string }[];
@@ -114,14 +115,14 @@ type FieldBlock =
   | { kind: "single"; field: FieldSpec }
   | { kind: "pair"; checkbox: FieldSpec; date: FieldSpec };
 
-/** Pair checkbox + following date when the date is cleared by / tied to that checkbox. */
+/** Pair checkbox/yesno + following date when the date is cleared by / tied to that field. */
 function groupFieldBlocks(fields: FieldSpec[]): FieldBlock[] {
   const blocks: FieldBlock[] = [];
   for (let i = 0; i < fields.length; i++) {
     const field = fields[i];
     const next = fields[i + 1];
     const clearsDate =
-      field.type === "checkbox" &&
+      (field.type === "checkbox" || field.type === "yesno") &&
       next?.type === "date" &&
       (field.clearFieldsOnChange ?? []).includes(next.name);
     if (clearsDate && next) {
@@ -242,7 +243,10 @@ export function ProjectsRecordForm({
 
   function fieldSpanClass(field: FieldSpec, columns?: 2 | 3): string | undefined {
     const spanFull =
-      field.full || field.type === "type_qty_lines" || field.type === "textarea";
+      field.full ||
+      field.type === "type_qty_lines" ||
+      field.type === "textarea" ||
+      field.type === "file";
     if (!spanFull) return undefined;
     return columns === 3 ? "sm:col-span-2 xl:col-span-3" : "sm:col-span-2";
   }
@@ -315,6 +319,45 @@ export function ProjectsRecordForm({
         />
       );
     }
+    if (field.type === "file") {
+      const current = (values[field.name] ?? "").trim();
+      const inputId = `file-${field.name}`;
+      return (
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
+          {!formReadOnly ? (
+            <>
+              <Input
+                id={inputId}
+                className="sr-only"
+                type="file"
+                tabIndex={-1}
+                aria-hidden="true"
+                accept={field.placeholder || undefined}
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  set(field.name, file?.name ?? "");
+                }}
+              />
+              <label
+                htmlFor={inputId}
+                className="inline-flex h-10 w-fit shrink-0 cursor-pointer items-center justify-center gap-2 rounded-md border border-primary/40 bg-primary px-4 text-sm font-medium text-primary-foreground shadow-sm transition-colors duration-200 hover:bg-primary/90 focus-within:outline-none focus-within:ring-2 focus-within:ring-ring/40"
+              >
+                Choose file
+              </label>
+            </>
+          ) : null}
+          <p
+            className={cn(
+              "min-w-0 truncate text-sm",
+              current ? "font-medium text-foreground" : "text-muted-foreground",
+            )}
+            title={current || undefined}
+          >
+            {current || "No file chosen"}
+          </p>
+        </div>
+      );
+    }
     if (field.type === "yesno") {
       return (
         <div
@@ -329,7 +372,13 @@ export function ProjectsRecordForm({
               className="size-4 cursor-pointer rounded border border-input accent-[var(--color-accent,#0369A1)]"
               checked={values[field.name] === "true"}
               disabled={formReadOnly}
-              onChange={() => set(field.name, "true", field.clearFieldsOnChange)}
+              onChange={() =>
+                set(
+                  field.name,
+                  values[field.name] === "true" ? "" : "true",
+                  field.clearFieldsOnChange,
+                )
+              }
             />
             <span>Yes</span>
           </label>
@@ -339,7 +388,13 @@ export function ProjectsRecordForm({
               className="size-4 cursor-pointer rounded border border-input accent-[var(--color-accent,#0369A1)]"
               checked={values[field.name] === "false"}
               disabled={formReadOnly}
-              onChange={() => set(field.name, "false", field.clearFieldsOnChange)}
+              onChange={() =>
+                set(
+                  field.name,
+                  values[field.name] === "false" ? "" : "false",
+                  field.clearFieldsOnChange,
+                )
+              }
             />
             <span>No</span>
           </label>
@@ -431,7 +486,7 @@ export function ProjectsRecordForm({
     }
     const branchId = (values.branch_id ?? "").trim();
     if (!branchId) {
-      setCustomerDialogError("Select a Branch on the form before creating a customer.");
+      setCustomerDialogError("Select a Circle Name on the form before creating a customer.");
       return;
     }
 
@@ -533,6 +588,7 @@ export function ProjectsRecordForm({
 
       <div
         className={cn(
+          "space-y-5",
           formReadOnly &&
           "[&_input:disabled]:pointer-events-none [&_input:disabled]:cursor-default [&_input:disabled]:opacity-100 [&_input:disabled]:text-foreground [&_select:disabled]:pointer-events-none [&_select:disabled]:cursor-default [&_select:disabled]:opacity-100 [&_select:disabled]:text-foreground [&_textarea:disabled]:pointer-events-none [&_textarea:disabled]:cursor-default [&_textarea:disabled]:opacity-100 [&_textarea:disabled]:text-foreground",
         )}
