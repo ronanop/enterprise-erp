@@ -27,7 +27,7 @@ import {
   type VendorOption,
 } from "@/services/procurement-service";
 import {
-  buildDeliveryChallanPdfInputFromRecord,
+  buildDeliveryChallanPdfInputFromRecordResolved,
   downloadDeliveryChallanPdf,
 } from "@/utils/delivery-challan-pdf";
 import {
@@ -241,7 +241,7 @@ export function GrnsListPage() {
     setChallanPdfBusyId(challan.id);
     setError(null);
     try {
-      const input = buildDeliveryChallanPdfInputFromRecord(challan);
+      const input = await buildDeliveryChallanPdfInputFromRecordResolved(challan);
       await downloadDeliveryChallanPdf(input);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to download delivery challan PDF");

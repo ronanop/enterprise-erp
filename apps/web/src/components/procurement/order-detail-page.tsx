@@ -56,7 +56,7 @@ import { fileToBase64 } from "@/services/sales-crm-service";
 import type { GrnReceiptPdfContext } from "@/utils/grn-batch-pdf-download";
 import { resolveReceiptBatchId } from "@/utils/resolve-receipt-batch-id";
 import {
-  buildDeliveryChallanPdfInputFromRecord,
+  buildDeliveryChallanPdfInputFromRecordResolved,
   downloadDeliveryChallanPdf,
 } from "@/utils/delivery-challan-pdf";
 import {
@@ -467,7 +467,7 @@ export function OrderDetailPage({ orderId }: { orderId: string }) {
     setChallanPdfBusyId(challan.id);
     setError(null);
     try {
-      const input = buildDeliveryChallanPdfInputFromRecord(challan);
+      const input = await buildDeliveryChallanPdfInputFromRecordResolved(challan);
       await downloadDeliveryChallanPdf(input);
     } catch (err) {
       setError(

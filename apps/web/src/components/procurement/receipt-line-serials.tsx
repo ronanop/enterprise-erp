@@ -122,6 +122,11 @@ export function ReceiptSerialsTable({
               const receiveLabel = Number.isInteger(receiveQty)
                 ? String(receiveQty)
                 : String(receiveQty);
+              const billedQty = Math.max(0, Number(line.billingQuantity) || 0);
+              const unbilledQty = Math.max(0, Math.round((receiveQty - billedQty) * 1e6) / 1e6);
+              const unbilledLabel = Number.isInteger(unbilledQty)
+                ? String(unbilledQty)
+                : String(unbilledQty);
 
               return Array.from({ length: rowCount }, (_, index) => {
                 const value = slots[index] ?? "";
@@ -164,51 +169,63 @@ export function ReceiptSerialsTable({
                           className={cn(procurementUi.td, rowspanCell, "text-center")}
                         >
                           <div
-                            className="mx-auto flex w-fit items-center gap-1 rounded-md border border-border bg-muted/30 p-1"
-                            title="Tick to bill all received qty, or type how much to bill"
+                            className="mx-auto flex w-fit flex-col items-center gap-0.5"
+                            title="Bill any amount up to receiving qty (decimals allowed). Unbilled qty goes to stock."
                           >
-                            <label className="flex cursor-pointer items-center px-1">
-                              <input
-                                type="checkbox"
-                                className="size-4 cursor-pointer accent-primary"
-                                checked={line.billingQuantity > 0}
+                            <div className="flex w-fit items-center gap-1 rounded-md border border-border bg-muted/30 p-1">
+                              <label className="flex cursor-pointer items-center px-1">
+                                <input
+                                  type="checkbox"
+                                  className="size-4 cursor-pointer accent-primary"
+                                  checked={line.billingQuantity > 0}
+                                  disabled={disabled || !onBillingQuantityChange}
+                                  aria-label={`Bill ${line.productLabel}`}
+                                  onChange={(e) => {
+                                    if (!onBillingQuantityChange) return;
+                                    onBillingQuantityChange(
+                                      line.lineId,
+                                      e.target.checked ? receiveQty : 0,
+                                    );
+                                  }}
+                                />
+                              </label>
+                              <Input
+                                className="h-7 w-16 border-0 bg-transparent text-center text-xs tabular-nums shadow-none focus-visible:ring-0"
+                                type="text"
+                                inputMode="decimal"
+                                placeholder="0"
                                 disabled={disabled || !onBillingQuantityChange}
-                                aria-label={`Bill ${line.productLabel}`}
+                                value={
+                                  line.billingQuantity > 0
+                                    ? String(line.billingQuantity)
+                                    : ""
+                                }
+                                aria-label={`Bill quantity for ${line.productLabel}`}
+                                onFocus={(e) => e.currentTarget.select()}
                                 onChange={(e) => {
                                   if (!onBillingQuantityChange) return;
+                                  const next = clampBillingQtyInput(
+                                    e.target.value,
+                                    receiveQty,
+                                  );
+                                  const parsed =
+                                    next === "" || next === "." ? 0 : Number(next);
                                   onBillingQuantityChange(
                                     line.lineId,
-                                    e.target.checked ? receiveQty : 0,
+                                    Number.isFinite(parsed) ? parsed : 0,
                                   );
                                 }}
                               />
-                            </label>
-                            <Input
-                              className="h-7 w-14 border-0 bg-transparent text-center text-xs tabular-nums shadow-none focus-visible:ring-0"
-                              type="text"
-                              inputMode="decimal"
-                              placeholder="0"
-                              disabled={disabled || !onBillingQuantityChange}
-                              value={
-                                line.billingQuantity > 0
-                                  ? String(line.billingQuantity)
-                                  : ""
-                              }
-                              aria-label={`Bill quantity for ${line.productLabel}`}
-                              onFocus={(e) => e.currentTarget.select()}
-                              onChange={(e) => {
-                                if (!onBillingQuantityChange) return;
-                                const next = clampBillingQtyInput(
-                                  e.target.value,
-                                  receiveQty,
-                                );
-                                const parsed = next === "" || next === "." ? 0 : Number(next);
-                                onBillingQuantityChange(
-                                  line.lineId,
-                                  Number.isFinite(parsed) ? parsed : 0,
-                                );
-                              }}
-                            />
+                            </div>
+                            {unbilledQty > 1e-9 ? (
+                              <span className="text-[10px] tabular-nums text-teal-700">
+                                Stock {unbilledLabel}
+                              </span>
+                            ) : (
+                              <span className="text-[10px] text-muted-foreground">
+                                Fully billed
+                              </span>
+                            )}
                           </div>
                         </td>
                       </>

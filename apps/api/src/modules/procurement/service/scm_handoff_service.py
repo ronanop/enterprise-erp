@@ -84,6 +84,7 @@ class ScmHandoffService:
         self._receipt_batch_storage_ready: bool | None = None
         self._inventory_import_table_ready: bool | None = None
         self._inventory_stock_table_ready: bool | None = None
+        self._inventory_stock_qty_ready: bool | None = None
         self._batch_line_billing_quantity_ready: bool | None = None
         self._crm = ProcurementCrmAdapter(db)
         self._master = ProcurementMasterDataAdapter(db)
@@ -115,6 +116,21 @@ class ScmHandoffService:
                 schema="procurement",
             )
         return self._inventory_stock_table_ready
+
+    def _inventory_stock_has_quantity(self) -> bool:
+        if self._inventory_stock_qty_ready is None:
+            if not self._inventory_stock_table_exists():
+                self._inventory_stock_qty_ready = False
+            else:
+                cols = {
+                    c["name"]
+                    for c in inspect(self._db.get_bind()).get_columns(
+                        "proc_inventory_stock_unit",
+                        schema="procurement",
+                    )
+                }
+                self._inventory_stock_qty_ready = "quantity" in cols
+        return self._inventory_stock_qty_ready
 
     def _receipt_batch_line_has_billing_quantity(self) -> bool:
         if self._batch_line_billing_quantity_ready is None:
@@ -1642,26 +1658,32 @@ class ScmHandoffService:
         return rows
 
     @staticmethod
-    def _inventory_stock_units_from_batch_line(
+    def _inventory_stock_lots_from_batch_line(
         batch_line: ProcOrderReceiptBatchLine,
-    ) -> list[tuple[int, str]]:
-        """Units not yet billed on vendor invoice — available in procurement stock."""
-        qty = int(float(batch_line.quantity or 0))
+    ) -> list[tuple[int, str, float]]:
+        """Unbilled lots (whole + optional fractional) available in procurement stock."""
+        qty = float(batch_line.quantity or 0)
         if qty <= 0:
             return []
-        bill_qty = int(float(getattr(batch_line, "billing_quantity", 0) or 0))
-        bill_qty = max(0, min(bill_qty, qty))
-        stock_count = qty - bill_qty
-        if stock_count <= 0:
+        bill_qty = float(getattr(batch_line, "billing_quantity", 0) or 0)
+        bill_qty = max(0.0, min(bill_qty, qty))
+        unbilled = round(qty - bill_qty, 6)
+        if unbilled <= 1e-9:
             return []
         serials = [str(s).strip() for s in (batch_line.serial_numbers or []) if str(s).strip()]
-        units: list[tuple[int, str]] = []
-        for i in range(stock_count):
-            global_index = bill_qty + i
+        whole = int(unbilled)
+        frac = round(unbilled - whole, 6)
+        receive_whole = int(qty)
+        start = max(0, receive_whole - whole)
+        lots: list[tuple[int, str, float]] = []
+        for i in range(whole):
+            global_index = start + i
             unit_index = global_index + 1
             serial = serials[global_index] if global_index < len(serials) else "—"
-            units.append((unit_index, serial))
-        return units
+            lots.append((unit_index, serial, 1.0))
+        if frac > 1e-9:
+            lots.append((start + whole + 1, "NA", frac))
+        return lots
 
     def _append_stock_units_for_receipt(
         self,
@@ -1678,37 +1700,68 @@ class ScmHandoffService:
     ) -> None:
         if not self._inventory_stock_table_exists():
             return
-        unit_count = int(receive_qty)
-        if unit_count <= 0:
+        receive = float(receive_qty or 0)
+        bill = max(0.0, min(float(billing_quantity or 0), receive))
+        unbilled = round(receive - bill, 6)
+        if unbilled <= 1e-9:
             return
-        bill_delta = int(billing_quantity)
-        stock_delta = unit_count - bill_delta
-        if stock_delta <= 0:
+        whole = int(unbilled)
+        frac = round(unbilled - whole, 6)
+        row_count = whole + (1 if frac > 1e-9 else 0)
+        if row_count <= 0:
             return
+
         serials = [str(s).strip() for s in (serial_numbers or []) if str(s).strip()]
         grn_label = (grn_number or "").strip() or "—"
         product = (line.product_name or "").strip() or "Unnamed product"
-        for i in range(stock_delta):
-            serial_idx = bill_delta + i
+        receive_whole = int(receive)
+        start_serial = max(0, receive_whole - whole)
+        qty_rec = float(line.quantity_received or 0)
+        has_qty = self._inventory_stock_has_quantity()
+
+        for i in range(whole):
+            serial_idx = start_serial + i
             serial = serials[serial_idx] if serial_idx < len(serials) else "—"
-            unit_index = int(float(line.quantity_received or 0)) - stock_delta + i + 1
-            self._db.add(
-                ProcInventoryStockUnit(
-                    order_header_id=order.id,
-                    order_line_id=line.id,
-                    receipt_batch_id=batch_id,
-                    product_name=product,
-                    grn_number=grn_label,
-                    receipt_at=receipt_at,
-                    unit_index=unit_index,
-                    serial_number=serial,
-                    tenant_id=order.tenant_id,
-                    company_id=order.company_id,
-                    branch_id=order.branch_id,
-                    created_by=ctx.user_id,
-                    updated_by=ctx.user_id,
-                )
+            unit_index = max(1, int(qty_rec) - row_count + i + 1)
+            unit = ProcInventoryStockUnit(
+                order_header_id=order.id,
+                order_line_id=line.id,
+                receipt_batch_id=batch_id,
+                product_name=product,
+                grn_number=grn_label,
+                receipt_at=receipt_at,
+                unit_index=unit_index,
+                serial_number=serial,
+                tenant_id=order.tenant_id,
+                company_id=order.company_id,
+                branch_id=order.branch_id,
+                created_by=ctx.user_id,
+                updated_by=ctx.user_id,
             )
+            if has_qty:
+                unit.quantity = 1.0
+            self._db.add(unit)
+
+        if frac > 1e-9:
+            unit_index = max(1, int(qty_rec) - row_count + whole + 1)
+            unit = ProcInventoryStockUnit(
+                order_header_id=order.id,
+                order_line_id=line.id,
+                receipt_batch_id=batch_id,
+                product_name=product,
+                grn_number=grn_label,
+                receipt_at=receipt_at,
+                unit_index=unit_index,
+                serial_number="NA",
+                tenant_id=order.tenant_id,
+                company_id=order.company_id,
+                branch_id=order.branch_id,
+                created_by=ctx.user_id,
+                updated_by=ctx.user_id,
+            )
+            if has_qty:
+                unit.quantity = float(frac)
+            self._db.add(unit)
 
     def clear_procurement_inventory_stock(
         self, ctx: TenantContext, company_id: UUID | None = None
@@ -1929,6 +1982,7 @@ class ScmHandoffService:
                 unit_cost = float(getattr(ol, "unit_cost", 0) or 0) if ol else 0.0
                 line_number = int(ol.line_number) if ol else 0
                 product_code = (getattr(ol, "product_code", None) or "").strip() if ol else ""
+                stock_qty = float(getattr(stock, "quantity", None) or 1)
                 result.append(
                     {
                         "order_id": order.id,
@@ -1943,7 +1997,7 @@ class ScmHandoffService:
                         "unit_index": stock.unit_index,
                         "serial_number": stock.serial_number,
                         "source": "grn",
-                        "received_quantity": 1,
+                        "received_quantity": stock_qty,
                         "billing_quantity": 0,
                         "unit_cost": unit_cost,
                         "description": product_code or None,
@@ -2019,8 +2073,8 @@ class ScmHandoffService:
                     bill_qty = float(getattr(bl, "billing_quantity", 0) or 0)
                     unit_cost = float(getattr(ol, "unit_cost", 0) or 0)
                     product_code = (getattr(ol, "product_code", None) or "").strip()
-                    stock_units = self._inventory_stock_units_from_batch_line(bl)
-                    for unit_index, serial in stock_units:
+                    stock_lots = self._inventory_stock_lots_from_batch_line(bl)
+                    for unit_index, serial, lot_qty in stock_lots:
                         result.append(
                             {
                                 "order_id": order.id,
@@ -2035,8 +2089,8 @@ class ScmHandoffService:
                                 "unit_index": unit_index,
                                 "serial_number": serial,
                                 "source": "grn",
-                                "received_quantity": qty,
-                                "billing_quantity": bill_qty,
+                                "received_quantity": lot_qty,
+                                "billing_quantity": 0,
                                 "unit_cost": unit_cost,
                                 "description": product_code or None,
                                 "stock_unit_id": None,

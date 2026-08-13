@@ -3,7 +3,7 @@
 from datetime import datetime
 from uuid import UUID, uuid4
 
-from sqlalchemy import DateTime, ForeignKey, Integer, String
+from sqlalchemy import DateTime, ForeignKey, Integer, Numeric, String
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -38,3 +38,5 @@ class ProcInventoryStockUnit(Base, *ProcTransactionMixin):
     receipt_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     unit_index: Mapped[int] = mapped_column(Integer, nullable=False)
     serial_number: Mapped[str] = mapped_column(String(120), nullable=False)
+    # 1 for whole units; fractional for partial unbilled GRN stock.
+    quantity: Mapped[float] = mapped_column(Numeric(18, 4), nullable=False, default=1)

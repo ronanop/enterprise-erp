@@ -141,12 +141,15 @@ export function deliveryStatusRowFromChallan(challan: DeliveryChallanRecord): De
 
 export function shipmentStatusBadgeVariant(
   status: string,
-): "default" | "secondary" | "destructive" | "outline" {
+): "default" | "secondary" | "destructive" | "outline" | "success" | "warning" {
   const value = status.toLowerCase();
-  if (value === "delivered") return "default";
+  if (value === "delivered") return "success";
   if (value === "failed delivery" || value === "returned") return "destructive";
-  if (value === "pending dispatch") return "outline";
-  return "secondary";
+  if (value === "pending dispatch") return "warning";
+  if (value === "dispatched" || value === "in transit" || value === "out for delivery") {
+    return "secondary";
+  }
+  return "outline";
 }
 
 export type DeliveryStatusFormErrors = Partial<

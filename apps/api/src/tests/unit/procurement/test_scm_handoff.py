@@ -95,18 +95,45 @@ def test_create_po_blocks_duplicate(monkeypatch):
         )
 
 
-def test_inventory_stock_units_excludes_billed_portion():
+def test_inventory_stock_lots_excludes_billed_portion():
     bl = SimpleNamespace(
         quantity=5,
         billing_quantity=3,
         serial_numbers=["S1", "S2", "S3", "S4", "S5"],
     )
-    units = ScmHandoffService._inventory_stock_units_from_batch_line(bl)
-    assert len(units) == 2
-    assert units[0] == (4, "S4")
-    assert units[1] == (5, "S5")
+    lots = ScmHandoffService._inventory_stock_lots_from_batch_line(bl)
+    assert len(lots) == 2
+    assert lots[0] == (4, "S4", 1.0)
+    assert lots[1] == (5, "S5", 1.0)
 
 
-def test_inventory_stock_units_all_billed_empty():
+def test_inventory_stock_lots_all_billed_empty():
     bl = SimpleNamespace(quantity=5, billing_quantity=5, serial_numbers=["S1"])
-    assert ScmHandoffService._inventory_stock_units_from_batch_line(bl) == []
+    assert ScmHandoffService._inventory_stock_lots_from_batch_line(bl) == []
+
+
+def test_inventory_stock_lots_fractional_unbilled():
+    bl = SimpleNamespace(
+        quantity=0.1,
+        billing_quantity=0.04,
+        serial_numbers=[],
+    )
+    lots = ScmHandoffService._inventory_stock_lots_from_batch_line(bl)
+    assert len(lots) == 1
+    assert lots[0][0] == 1
+    assert lots[0][1] == "NA"
+    assert abs(lots[0][2] - 0.06) < 1e-9
+
+
+def test_inventory_stock_lots_mixed_whole_and_fraction():
+    bl = SimpleNamespace(
+        quantity=2.5,
+        billing_quantity=1.2,
+        serial_numbers=["A", "B"],
+    )
+    lots = ScmHandoffService._inventory_stock_lots_from_batch_line(bl)
+    # unbilled 1.3 → one whole + 0.3 fractional
+    assert len(lots) == 2
+    assert lots[0][2] == 1.0
+    assert abs(lots[1][2] - 0.3) < 1e-9
+    assert lots[1][1] == "NA"

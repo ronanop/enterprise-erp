@@ -45,7 +45,13 @@ import {
   downloadDeliveryChallanPdf,
   openDeliveryChallanPdfPreview,
 } from "@/utils/delivery-challan-pdf";
-import { buildChallanPrefillHeader, formatPoNumberDateLine, resolveChallanTaxSupplyStates, resolveEntityPdfBlock } from "@/utils/delivery-challan-prefill";
+import {
+  applyCustomerPoToChallanFields,
+  buildChallanPrefillHeader,
+  formatPoNumberDateLine,
+  resolveChallanTaxSupplyStates,
+  resolveEntityPdfBlock,
+} from "@/utils/delivery-challan-prefill";
 import {
   computeDeliveryChallanTaxSummary,
 } from "@/utils/delivery-challan-totals";
@@ -292,7 +298,7 @@ export function DeliveryChallanFormPage({ challanId, embedded }: DeliveryChallan
   function applyPrefillHeader(
     order: ProcOrder,
     ovf: ScmOvfPreview | null,
-    poNumber: string,
+    companyPoNumber: string,
     vendorLabel: string,
   ) {
     const header = buildChallanPrefillHeader(order, ovf, order.entity_code);
@@ -301,12 +307,13 @@ export function DeliveryChallanFormPage({ challanId, embedded }: DeliveryChallan
     setCustomerShipTo(header.customerShipTo);
     setCustomerGstNo(header.customerGstNo);
     setKindAttn(header.kindAttn);
-    setPurchaseOrderNumber(poNumber);
+    setPurchaseOrderNumber(header.poNumber);
     setPoDate(header.poDate);
     setRemarks(header.remarks);
     setVendorName(vendorLabel);
     setChallanDate(order.document_date || todayIso());
-    setChallanNumber(`CT/23-24/${poNumber.replace(/\//g, "-").slice(-6)}`);
+    const challanSeed = (companyPoNumber || order.document_number || "PO").replace(/\//g, "-").slice(-6);
+    setChallanNumber(`CT/23-24/${challanSeed}`);
   }
 
   async function loadOrderContext(orderIdValue: string) {
@@ -370,6 +377,28 @@ export function DeliveryChallanFormPage({ challanId, embedded }: DeliveryChallan
             setLoadedOrder(order);
             setOvfContext(ovf);
             setGrnBatches(batches);
+            const corrected = applyCustomerPoToChallanFields(
+              {
+                purchaseOrderNumber: saved.purchaseOrderNumber,
+                poDate: saved.poDate,
+                poNumberDate: saved.poNumberDate,
+              },
+              order,
+              ovf,
+            );
+            if (
+              corrected.purchaseOrderNumber !== saved.purchaseOrderNumber ||
+              corrected.poDate !== saved.poDate
+            ) {
+              setPurchaseOrderNumber(corrected.purchaseOrderNumber);
+              setPoDate(corrected.poDate);
+              upsertDeliveryChallan({
+                ...saved,
+                purchaseOrderNumber: corrected.purchaseOrderNumber,
+                poDate: corrected.poDate,
+                poNumberDate: corrected.poNumberDate || saved.poNumberDate,
+              });
+            }
           } catch {
             /* optional */
           } finally {
@@ -493,7 +522,7 @@ export function DeliveryChallanFormPage({ challanId, embedded }: DeliveryChallan
       return;
     }
     if (!purchaseOrderNumber.trim()) {
-      setLoadError("Purchase order number is required.");
+      setLoadError("Customer PO number is required.");
       return;
     }
     if (!customerName.trim()) {
@@ -672,14 +701,14 @@ export function DeliveryChallanFormPage({ challanId, embedded }: DeliveryChallan
               className="h-8"
             />
           </FinanceField>
-          <FinanceField label="PO number">
+          <FinanceField label="Customer PO number">
             <Input
               value={purchaseOrderNumber}
               onChange={(e) => setPurchaseOrderNumber(e.target.value)}
               className="h-8"
             />
           </FinanceField>
-          <FinanceField label="PO date">
+          <FinanceField label="Customer PO date">
             <Input
               type="date"
               value={poDate}

@@ -14,7 +14,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import {
-  buildDeliveryChallanPdfInputFromRecord,
+  buildDeliveryChallanPdfInputFromRecordResolved,
   downloadDeliveryChallanPdf,
 } from "@/utils/delivery-challan-pdf";
 import {
@@ -91,7 +91,7 @@ export function DeliveryChallanListPage() {
     setPdfBusyId(row.id);
     setPdfError(null);
     try {
-      const input = buildDeliveryChallanPdfInputFromRecord(row);
+      const input = await buildDeliveryChallanPdfInputFromRecordResolved(row);
       await downloadDeliveryChallanPdf(input);
     } catch (err) {
       setPdfError(err instanceof Error ? err.message : "Failed to download PDF");
