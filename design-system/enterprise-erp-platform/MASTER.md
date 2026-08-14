@@ -7,9 +7,8 @@
 ---
 
 **Project:** Enterprise ERP Platform
-**Generated:** 2026-08-02 18:49:29
-**Category:** B2B Service
-**Design Dials:** Variance 3/10 (Centered / Minimal) | Motion 3/10 (Subtle) | Density 9/10 (Dense / Dashboard)
+**Generated:** 2026-08-13 22:19:24
+**Category:** Timer & Pomodoro
 
 ---
 
@@ -19,44 +18,36 @@
 
 | Role | Hex | CSS Variable |
 |------|-----|--------------|
-| Primary | `#0F172A` | `--color-primary` |
+| Primary | `#D97706` | `--color-primary` |
 | On Primary | `#FFFFFF` | `--color-on-primary` |
-| Secondary | `#334155` | `--color-secondary` |
-| Accent/CTA | `#0369A1` | `--color-accent` |
-| Background | `#F8FAFC` | `--color-background` |
-| Foreground | `#020617` | `--color-foreground` |
-| Muted | `#E8ECF1` | `--color-muted` |
-| Border | `#E2E8F0` | `--color-border` |
+| Secondary | `#F59E0B` | `--color-secondary` |
+| Accent/CTA | `#16A34A` | `--color-accent` |
+| Background | `#FFFBEB` | `--color-background` |
+| Foreground | `#0F172A` | `--color-foreground` |
+| Muted | `#FCF6F0` | `--color-muted` |
+| Border | `#FAEEE1` | `--color-border` |
 | Destructive | `#DC2626` | `--color-destructive` |
-| Ring | `#0F172A` | `--color-ring` |
+| Ring | `#D97706` | `--color-ring` |
 
-**Color Notes:** Professional navy + blue CTA
+**Color Notes:** Funding progress amber + goal green + urgency
 
 ### Typography
 
-- **Heading Font:** Roboto
-- **Body Font:** Roboto
-- **Mood:** material design 3, md3, android, google, tonal, friendly, rounded, accessible, adaptive
-- **Google Fonts:** [Roboto + Roboto](https://fonts.googleapis.com/css2?family=Roboto:ital,wght@0,300;0,400;0,500;0,700;1,400)
-
-**CSS Import:**
-```css
-@import url('https://fonts.googleapis.com/css2?family=Roboto:ital,wght@0,300;0,400;0,500;0,700;1,400&display=swap');
-```
+- **Heading Font:** Inter
+- **Body Font:** Inter
+- **Mood:** Professional + Clean hierarchy
 
 ### Spacing Variables
 
-*Density: 9/10 — Dense / Dashboard*
-
 | Token | Value | Usage |
 |-------|-------|-------|
-| `--space-xs` | `2px` / `0.125rem` | Tight gaps |
-| `--space-sm` | `4px` / `0.25rem` | Icon gaps, inline spacing |
-| `--space-md` | `8px` / `0.5rem` | Standard padding |
-| `--space-lg` | `12px` / `0.75rem` | Section padding |
-| `--space-xl` | `16px` / `1rem` | Large gaps |
-| `--space-2xl` | `24px` / `1.5rem` | Section margins |
-| `--space-3xl` | `32px` / `2rem` | Hero padding |
+| `--space-xs` | `4px` / `0.25rem` | Tight gaps |
+| `--space-sm` | `8px` / `0.5rem` | Icon gaps, inline spacing |
+| `--space-md` | `16px` / `1rem` | Standard padding |
+| `--space-lg` | `24px` / `1.5rem` | Section padding |
+| `--space-xl` | `32px` / `2rem` | Large gaps |
+| `--space-2xl` | `48px` / `3rem` | Section margins |
+| `--space-3xl` | `64px` / `4rem` | Hero padding |
 
 ### Shadow Depths
 
@@ -76,7 +67,7 @@
 ```css
 /* Primary Button */
 .btn-primary {
-  background: #0369A1;
+  background: #16A34A;
   color: white;
   padding: 12px 24px;
   border-radius: 8px;
@@ -93,8 +84,8 @@
 /* Secondary Button */
 .btn-secondary {
   background: transparent;
-  color: #0F172A;
-  border: 2px solid #0F172A;
+  color: #D97706;
+  border: 2px solid #D97706;
   padding: 12px 24px;
   border-radius: 8px;
   font-weight: 600;
@@ -107,7 +98,7 @@
 
 ```css
 .card {
-  background: #F8FAFC;
+  background: #FFFBEB;
   border-radius: 12px;
   padding: 24px;
   box-shadow: var(--shadow-md);
@@ -133,9 +124,9 @@
 }
 
 .input:focus {
-  border-color: #0F172A;
+  border-color: #D97706;
   outline: none;
-  box-shadow: 0 0 0 3px #0F172A20;
+  box-shadow: 0 0 0 3px #D9770620;
 }
 ```
 
@@ -171,35 +162,17 @@
 
 ### Page Pattern
 
-**Pattern Name:** Minimal Single Column
+**Pattern Name:** Interactive 3D Configurator
 
-- **Conversion Strategy:** Single CTA focus. Large typography. Lots of whitespace. No nav clutter. Mobile-first.
-- **CTA Placement:** Center, large CTA button
-- **Section Order:** 1. Hero headline, 2. Short description, 3. Benefit bullets (3 max), 4. CTA, 5. Footer
-
----
-
-## Motion
-
-**Page Transition** (Subtle) — Trigger: route change | Duration: 200-300ms | Easing: `power1.inOut`
-
-```js
-gsap.to(main, { opacity: 0, duration: 0.2, onComplete: () => { navigate(); gsap.fromTo(main, { opacity: 0 }, { opacity: 1, duration: 0.2 }); } });
-```
-
-**Framework notes:** Pair with the router's transition hooks (Next.js App Router transitions, React Router's useNavigate, Vue Router's beforeEach/afterEach)
-
-- ✅ Preload the destination route's critical assets before the exit tween finishes
-- ❌ Don't block navigation on animation; cap exit duration at ~250ms so the app never feels unresponsive
-- ⚡ Exit animation should always resolve faster than entrance (asymmetric timing) so back/forward feels snappy
+- **Conversion Strategy:** Increases ownership feeling. 360 view reduces return rates. Direct add-to-cart.
+- **CTA Placement:** Inside Configurator UI + Sticky Bottom Bar
+- **Section Order:** 1. Hero (Configurator), 2. Feature Highlight (synced), 3. Price/Specs, 4. Purchase
 
 ---
 
 ## Anti-Patterns (Do NOT Use)
 
-- ❌ Playful design
-- ❌ Hidden credentials
-- ❌ AI purple/pink gradients
+- ❌ Excessive decoration
 
 ### Additional Forbidden Patterns
 

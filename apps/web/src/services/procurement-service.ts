@@ -402,6 +402,7 @@ export type ProcOrder = {
     last_receipt_batch_id?: string | null;
     last_receipt_serial_numbers?: string[] | null;
     last_receipt_billing?: boolean;
+    last_receipt_billing_quantity?: number;
     unit_cost: number;
     line_total: number;
     status: string;

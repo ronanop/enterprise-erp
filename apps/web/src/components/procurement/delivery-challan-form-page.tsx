@@ -1,8 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import {
   ArrowLeft,
   Eye,
@@ -106,13 +106,10 @@ type DeliveryChallanFormPageProps = {
     orderId: string;
     onClose: () => void;
     onSaved?: (recordId: string) => void;
-    /** Parent PageHeader triggers save via this ref when embedded. */
-    saveRef?: RefObject<(() => void) | null>;
   };
 };
 
 export function DeliveryChallanFormPage({ challanId, embedded }: DeliveryChallanFormPageProps) {
-  const router = useRouter();
   const searchParams = useSearchParams();
   const orderIdParam = embedded?.orderId ?? searchParams.get("orderId");
   const returnToParam = searchParams.get("returnTo");
@@ -155,6 +152,7 @@ export function DeliveryChallanFormPage({ challanId, embedded }: DeliveryChallan
   const [ovfContext, setOvfContext] = useState<ScmOvfPreview | null>(null);
   const [grnBatches, setGrnBatches] = useState<ScmReceiptBatch[]>([]);
   const [banner, setBanner] = useState<string | null>(null);
+  const [hasSaved, setHasSaved] = useState(!isNew);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [pdfBusy, setPdfBusy] = useState(false);
   const [prefillBusy, setPrefillBusy] = useState(Boolean(challanId || orderIdParam));
@@ -176,7 +174,7 @@ export function DeliveryChallanFormPage({ challanId, embedded }: DeliveryChallan
     ) => {
       if (!loadedOrder) return;
       if (mode === "full_po") {
-        const next = fullPoChallanLines(loadedOrder, defaultShipTo);
+        const next = fullPoChallanLines(loadedOrder, defaultShipTo, ovfContext);
         setLines(next.length > 0 ? next : [emptyChallanLine()]);
         return;
       }
@@ -188,7 +186,7 @@ export function DeliveryChallanFormPage({ challanId, embedded }: DeliveryChallan
       );
       setLines(merged.length > 0 ? merged : [emptyChallanLine()]);
     },
-    [defaultShipTo, effectiveGrnBatches, itemsSourceMode, loadedOrder, selectedGrnKeys],
+    [defaultShipTo, effectiveGrnBatches, itemsSourceMode, loadedOrder, ovfContext, selectedGrnKeys],
   );
 
   const selectedGrnNumbers = useMemo(() => {
@@ -226,7 +224,7 @@ export function DeliveryChallanFormPage({ challanId, embedded }: DeliveryChallan
 
   const taxSummary = useMemo(() => {
     const pct = Number(taxPercentagePdf) || 0;
-    const activeLines = lines.filter((ln) => ln.itemName.trim());
+    const activeLines = lines.filter((ln) => ln.itemName.trim() || ln.product.trim());
     return computeDeliveryChallanTaxSummary({
       lines: activeLines,
       taxPct: pct,
@@ -431,7 +429,7 @@ export function DeliveryChallanFormPage({ challanId, embedded }: DeliveryChallan
         setItemsSourceMode("full_po");
         setSelectedGrnKeys([]);
         skipAutoApplyLinesRef.current = false;
-        const itemLines = fullPoChallanLines(order, "");
+        const itemLines = fullPoChallanLines(order, "", ovf);
         setLines(itemLines.length > 0 ? itemLines : [emptyChallanLine()]);
       } catch (err) {
         if (!cancelled) {
@@ -531,33 +529,18 @@ export function DeliveryChallanFormPage({ challanId, embedded }: DeliveryChallan
     }
     setLoadError(null);
     upsertDeliveryChallan(buildSavePayload());
-    setBanner("Delivery challan saved.");
+    setHasSaved(true);
+    setBanner("Delivery challan saved. You can download the PDF now.");
     if (embedded) {
       embedded.onSaved?.(recordId);
-      return;
     }
-    window.setTimeout(() => {
-      router.push(resolveChallanModuleExitHref(returnTo));
-    }, 400);
   }
-
-  const saveHandlerRef = useRef(onSave);
-  saveHandlerRef.current = onSave;
-
-  useEffect(() => {
-    const saveRef = embedded?.saveRef;
-    if (!saveRef) return;
-    saveRef.current = () => saveHandlerRef.current();
-    return () => {
-      saveRef.current = null;
-    };
-  }, [embedded]);
 
   async function onPreviewPdf() {
     setPdfBusy(true);
     setLoadError(null);
     try {
-      await openDeliveryChallanPdfPreview(pdfInput);
+      await openDeliveryChallanPdfPreview(pdfInput, { watermark: !hasSaved });
     } catch (err) {
       setLoadError(err instanceof Error ? err.message : "Failed to preview PDF");
     } finally {
@@ -566,6 +549,10 @@ export function DeliveryChallanFormPage({ challanId, embedded }: DeliveryChallan
   }
 
   async function onDownloadPdf() {
+    if (!hasSaved) {
+      setLoadError("Save the challan before downloading the PDF.");
+      return;
+    }
     setPdfBusy(true);
     setLoadError(null);
     try {
@@ -591,35 +578,8 @@ export function DeliveryChallanFormPage({ challanId, embedded }: DeliveryChallan
     applyLinesFromSource(mode, selectedGrnKeys, effectiveGrnBatches);
   }
 
-  const pdfActions = (
+  const footerActions = (
     <div className="flex flex-wrap items-center justify-end gap-2">
-      <Button
-        type="button"
-        size="sm"
-        variant="outline"
-        className="cursor-pointer transition-colors duration-200"
-        onClick={() => void onPreviewPdf()}
-        disabled={prefillBusy || pdfBusy}
-      >
-        <Eye className="mr-1.5 size-3.5" />
-        Preview PDF
-      </Button>
-      <Button
-        type="button"
-        size="sm"
-        variant="outline"
-        className="cursor-pointer transition-colors duration-200"
-        onClick={() => void onDownloadPdf()}
-        disabled={prefillBusy || pdfBusy}
-      >
-        <FileDown className="mr-1.5 size-3.5" />
-        Download PDF
-      </Button>
-    </div>
-  );
-
-  const headerActions = (
-    <div className="flex flex-wrap items-center gap-2">
       {!embedded ? (
         <Link
           href={backHref}
@@ -632,7 +592,7 @@ export function DeliveryChallanFormPage({ challanId, embedded }: DeliveryChallan
           Back
         </Link>
       ) : null}
-      {!embedded && !isLocked ? (
+      {!isLocked ? (
         <Button
           type="button"
           size="sm"
@@ -641,6 +601,31 @@ export function DeliveryChallanFormPage({ challanId, embedded }: DeliveryChallan
           onClick={onSave}
         >
           Save challan
+        </Button>
+      ) : null}
+      <Button
+        type="button"
+        size="sm"
+        variant="outline"
+        className="cursor-pointer transition-colors duration-200"
+        onClick={() => void onPreviewPdf()}
+        disabled={prefillBusy || pdfBusy}
+        title={hasSaved ? "Preview PDF" : "Preview draft PDF with watermark"}
+      >
+        <Eye className="mr-1.5 size-3.5" />
+        {hasSaved ? "Preview PDF" : "Preview draft"}
+      </Button>
+      {hasSaved ? (
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          className="cursor-pointer transition-colors duration-200"
+          onClick={() => void onDownloadPdf()}
+          disabled={prefillBusy || pdfBusy}
+        >
+          <FileDown className="mr-1.5 size-3.5" />
+          Download PDF
         </Button>
       ) : null}
     </div>
@@ -657,7 +642,6 @@ export function DeliveryChallanFormPage({ challanId, embedded }: DeliveryChallan
           backHref={backHref}
           backLabel={backLabel}
           title={isLocked ? challanNumber || "Delivery challan" : isNew ? "Create delivery challan" : challanNumber || "Delivery challan"}
-          actions={headerActions}
         />
       ) : null}
 
@@ -828,11 +812,12 @@ export function DeliveryChallanFormPage({ challanId, embedded }: DeliveryChallan
 
       <DeliverySectionCard title="Line items" icon={Package}>
         <div className="erp-scroll overflow-x-auto rounded-md border border-border">
-          <table className="w-full min-w-[700px] text-left text-sm">
+          <table className="w-full min-w-[980px] text-left text-sm">
             <thead className="border-b border-border bg-muted/40 text-xs uppercase tracking-wide text-muted-foreground">
               <tr>
-                <th className="px-2 py-2 font-medium">S.No</th>
-                <th className="px-2 py-2 font-medium">Description</th>
+                <th className="w-12 px-2 py-2 font-medium">S.No</th>
+                <th className="min-w-[260px] px-2 py-2 font-medium">Product</th>
+                <th className="min-w-[200px] px-2 py-2 font-medium">Description</th>
                 <th className="w-24 px-2 py-2 font-medium">HSN/SAC</th>
                 <th className="w-20 px-2 py-2 font-medium">Asset</th>
                 <th className="w-20 px-2 py-2 font-medium">Qty</th>
@@ -846,9 +831,20 @@ export function DeliveryChallanFormPage({ challanId, embedded }: DeliveryChallan
                   <td className="px-2 py-2 tabular-nums text-muted-foreground">{index + 1}</td>
                   <td className="px-2 py-2">
                     <Input
+                      value={row.product}
+                      onChange={(e) => setLineField(row.id, "product", e.target.value)}
+                      className="h-8 min-w-[240px]"
+                      placeholder="Product name"
+                      title={row.product || undefined}
+                    />
+                  </td>
+                  <td className="px-2 py-2">
+                    <Input
                       value={row.itemName}
                       onChange={(e) => setLineField(row.id, "itemName", e.target.value)}
-                      className="h-8"
+                      className="h-8 min-w-[180px]"
+                      placeholder="Description"
+                      title={row.itemName || undefined}
                     />
                   </td>
                   <td className="px-2 py-2">
@@ -1018,7 +1014,7 @@ export function DeliveryChallanFormPage({ challanId, embedded }: DeliveryChallan
       </DeliverySectionCard>
       </fieldset>
 
-      <div className="border-t border-border/60 pt-4">{pdfActions}</div>
+      <div className="border-t border-border/60 pt-4">{footerActions}</div>
     </div>
   );
 }

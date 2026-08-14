@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { FileDown, FilePlus2, RefreshCw, Truck } from "lucide-react";
+import { FilePlus2, RefreshCw, Truck } from "lucide-react";
 
 import { DeliveryChallanViewDialog } from "@/components/procurement/delivery-challan-view-dialog";
 import {
@@ -13,10 +13,6 @@ import { procurementUi } from "@/components/procurement/procurement-ui";
 import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import {
-  buildDeliveryChallanPdfInputFromRecordResolved,
-  downloadDeliveryChallanPdf,
-} from "@/utils/delivery-challan-pdf";
 import {
   formatChallanGrnSummary,
   formatChallanItemsSummary,
@@ -35,8 +31,6 @@ const LIST_RETURN_TO = encodeURIComponent("/procurement/delivery-challan");
 export function DeliveryChallanListPage() {
   const [rows, setRows] = useState<DeliveryChallanRecord[]>(() => listDeliveryChallans());
   const [query, setQuery] = useState("");
-  const [pdfBusyId, setPdfBusyId] = useState<string | null>(null);
-  const [pdfError, setPdfError] = useState<string | null>(null);
   const [viewChallan, setViewChallan] = useState<DeliveryChallanRecord | null>(null);
   const [statusVersion, setStatusVersion] = useState(0);
 
@@ -87,19 +81,6 @@ export function DeliveryChallanListPage() {
     });
   }, [rows, query, statusVersion]);
 
-  async function onDownloadPdf(row: DeliveryChallanRecord) {
-    setPdfBusyId(row.id);
-    setPdfError(null);
-    try {
-      const input = await buildDeliveryChallanPdfInputFromRecordResolved(row);
-      await downloadDeliveryChallanPdf(input);
-    } catch (err) {
-      setPdfError(err instanceof Error ? err.message : "Failed to download PDF");
-    } finally {
-      setPdfBusyId(null);
-    }
-  }
-
   return (
     <div className={procurementUi.page}>
       <ProcurementPageHeader
@@ -129,12 +110,6 @@ export function DeliveryChallanListPage() {
           </div>
         }
       />
-
-      {pdfError ? (
-        <div className="rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">
-          {pdfError}
-        </div>
-      ) : null}
 
       <ProcurementListSearch
         value={query}
@@ -234,18 +209,6 @@ export function DeliveryChallanListPage() {
                           onClick={() => setViewChallan(row)}
                         >
                           View
-                        </Button>
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="ghost"
-                          className={procurementUi.actionBtn}
-                          disabled={pdfBusyId === row.id}
-                          title="Download PDF"
-                          aria-label={`Download PDF for ${row.challanNumber}`}
-                          onClick={() => void onDownloadPdf(row)}
-                        >
-                          <FileDown className="size-3.5" />
                         </Button>
                       </div>
                     </td>

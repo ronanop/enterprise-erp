@@ -204,7 +204,7 @@ export async function downloadGoodsReceiptPdf(
     const billQty = ln.billingQuantity;
     let billingLabel = "No";
     if (billQty != null && Number.isFinite(billQty)) {
-      const b = Math.round(billQty);
+      const b = Math.round(billQty * 1e6) / 1e6;
       if (b <= 0) billingLabel = "No";
       else if (b >= received && received > 0) billingLabel = "Yes";
       else billingLabel = String(b);

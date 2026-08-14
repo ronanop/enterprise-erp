@@ -1,10 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
-  Eye,
   FileSpreadsheet,
   PackageCheck,
   PackageOpen,
@@ -22,9 +20,8 @@ import {
   procurementUi,
 } from "@/components/procurement/procurement-ui";
 import { Badge } from "@/components/ui/badge";
-import { Button, buttonVariants } from "@/components/ui/button";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { useProcurementApprovals } from "@/hooks/use-procurement-approvals";
 import { cn } from "@/lib/utils";
 import { formatApiError } from "@/services/api-client";
 import {
@@ -41,6 +38,7 @@ import {
 } from "@/utils/orders-excel-export";
 import {
   formatGrnStatusBadgeLabel,
+  grnBadgeVariant,
   grnStatusMatchesSearch,
 } from "@/utils/grn-status-display";
 import { textTokenMatch } from "@/utils/procurement-search";
@@ -65,12 +63,6 @@ function parseStatusFilter(value: string | null): StatusFilter {
   ];
   if (value && (allowed as string[]).includes(value)) return value as StatusFilter;
   return "all";
-}
-
-function grnTone(status: string): "default" | "secondary" | "destructive" | "outline" {
-  if (status === "closed" || status === "delivered") return "default";
-  if (status === "partial") return "secondary";
-  return "outline";
 }
 
 function isDraft(status: string): boolean {
@@ -139,29 +131,6 @@ export function OrdersListPage() {
   const [refreshing, setRefreshing] = useState(false);
   const [exportBusy, setExportBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const { pending, rows: approvalRows } = useProcurementApprovals();
-  const pendingApprovalOrderIds = useMemo(
-    () => new Set(pending.map((row) => row.orderId)),
-    [pending],
-  );
-  const rejectedApprovalOrderIds = useMemo(() => {
-    const latestByOrder = new Map<string, (typeof approvalRows)[number]>();
-    for (const row of approvalRows) {
-      const prev = latestByOrder.get(row.orderId);
-      if (!prev) {
-        latestByOrder.set(row.orderId, row);
-        continue;
-      }
-      const prevKey = prev.decidedAt || prev.createdAt;
-      const nextKey = row.decidedAt || row.createdAt;
-      if (nextKey > prevKey) latestByOrder.set(row.orderId, row);
-    }
-    return new Set(
-      [...latestByOrder.values()]
-        .filter((row) => row.status === "rejected")
-        .map((row) => row.orderId),
-    );
-  }, [approvalRows]);
 
   const setStatusFilter = useCallback(
     (next: StatusFilter) => {
@@ -413,106 +382,60 @@ export function OrdersListPage() {
           />
         </div>
         <div className={procurementUi.tableScroll}>
-          <table className={cn(procurementUi.table, "min-w-[1080px]")}>
+          <table className={cn(procurementUi.table, "min-w-[1080px] leading-normal")}>
             <thead className={procurementUi.thead}>
               <tr>
-                <th className="px-3 py-2 font-medium">S.No</th>
-                <th className="px-3 py-2 font-medium">Company PO number</th>
-                <th className="px-3 py-2 font-medium">PO date</th>
-                <th className="px-3 py-2 font-medium">Vendor</th>
-                <th className="px-3 py-2 font-medium">Customer / approved by</th>
-                <th className="px-3 py-2 font-medium">Amount</th>
-                <th className="px-3 py-2 font-medium">GRN</th>
-                <th className="px-3 py-2 font-medium">Action</th>
+                <th className="px-3 py-3.5 font-bold">S.No</th>
+                <th className="px-3 py-3.5 font-bold">Company PO number</th>
+                <th className="px-3 py-3.5 font-bold">PO date</th>
+                <th className="px-3 py-3.5 font-bold">Vendor</th>
+                <th className="px-3 py-3.5 font-bold">Customer / approved by</th>
+                <th className="px-3 py-3.5 font-bold">Amount</th>
+                <th className="px-3 py-3.5 font-bold">GRN</th>
               </tr>
             </thead>
             <tbody>
               {loading && filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="px-3 py-8 text-center text-muted-foreground">
+                  <td colSpan={7} className="px-3 py-8 text-center text-muted-foreground">
                     Loading purchase orders…
                   </td>
                 </tr>
               ) : null}
               {!loading && filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="px-3 py-8 text-center text-muted-foreground">
+                  <td colSpan={7} className="px-3 py-8 text-center text-muted-foreground">
                     No purchase orders match this filter.
                   </td>
                 </tr>
               ) : null}
               {filtered.map((row, index) => {
                 const orderHref = `/procurement/orders/${row.id}`;
-                const draft = isDraft(row.status);
-                const pendingApproval = draft && pendingApprovalOrderIds.has(row.id);
-                const rejectedApproval =
-                  draft && !pendingApproval && rejectedApprovalOrderIds.has(row.id);
                 return (
                 <tr
                   key={row.id}
                   className={cn(
-                    "border-b border-border/70 cursor-pointer transition-colors duration-150",
-                    "hover:bg-muted/40 active:bg-muted/55",
+                    "border-b border-border/70 cursor-pointer transition-colors duration-200",
+                    "hover:bg-sky-50 active:bg-sky-100/80",
                   )}
                   onClick={() => router.push(orderHref)}
                 >
-                  <td className="px-3 py-2 tabular-nums text-muted-foreground">{index + 1}</td>
-                  <td className="px-3 py-2 font-medium tabular-nums">
+                  <td className="px-3 py-3.5 tabular-nums text-muted-foreground">{index + 1}</td>
+                  <td className="px-3 py-3.5 font-medium tabular-nums">
                     {row.company_po_number || row.document_number || "—"}
                   </td>
-                  <td className={cn(procurementUi.tdNumeric, "text-muted-foreground")}>
+                  <td className={cn(procurementUi.tdNumeric, "py-3.5 text-muted-foreground")}>
                     {row.document_date || "—"}
                   </td>
-                  <td className="px-3 py-2">
+                  <td className="px-3 py-3.5">
                     {vendors[row.vendor_id]?.label || row.vendor_id.slice(0, 8)}
                   </td>
-                  <td className="px-3 py-2">{orderCustomerOrApproverLabel(row) || "—"}</td>
-                  <td className="px-3 py-2 tabular-nums">{formatInr(row.total_amount)}</td>
-                  <td className="px-3 py-2">
-                    <Badge variant={grnTone(row.grn_status ?? "pending")} className="uppercase">
+                  <td className="px-3 py-3.5">{orderCustomerOrApproverLabel(row) || "—"}</td>
+                  <td className="px-3 py-3.5 tabular-nums">{formatInr(row.total_amount)}</td>
+                  <td className="px-3 py-3.5">
+                    <Badge variant={grnBadgeVariant(row.grn_status ?? "pending")} className="uppercase">
                       {formatGrnStatusBadgeLabel(row.grn_status ?? "pending")}
                     </Badge>
-                  </td>
-                  <td className="px-3 py-2" onClick={(e) => e.stopPropagation()}>
-                      <Link
-                        href={orderHref}
-                        className={cn(
-                          buttonVariants({ size: "sm", variant: "outline" }),
-                          "h-8 w-8 cursor-pointer border-border p-0 transition-colors duration-200",
-                          pendingApproval &&
-                            "border-amber-300 bg-amber-50 text-amber-950 hover:bg-amber-100 hover:text-amber-950",
-                          rejectedApproval &&
-                            "border-red-200 bg-red-50 text-red-900 hover:bg-red-100 hover:text-red-950",
-                          !pendingApproval &&
-                            !rejectedApproval &&
-                            draft &&
-                            "border-sky-200 bg-sky-50 text-sky-900 hover:bg-sky-100 hover:text-sky-950",
-                          !pendingApproval &&
-                            !rejectedApproval &&
-                            !draft &&
-                            "text-[#0369A1] hover:bg-sky-50 hover:text-[#0369A1]",
-                        )}
-                        title={
-                          pendingApproval
-                            ? "Awaiting admin finalize approval"
-                            : rejectedApproval
-                              ? "Approval rejected — edit and resubmit"
-                              : draft
-                                ? "Open draft to review, then finalize & issue inside"
-                                : "Open purchase order"
-                        }
-                        aria-label={
-                          pendingApproval
-                            ? `View pending PO ${row.document_number}`
-                            : rejectedApproval
-                              ? `View rejected PO ${row.document_number}`
-                              : draft
-                                ? `Review draft PO ${row.document_number}`
-                                : `View purchase order ${row.document_number}`
-                        }
-                      >
-                        <Eye className="size-4 stroke-[2]" aria-hidden />
-                      </Link>
                   </td>
                 </tr>
                 );

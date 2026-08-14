@@ -139,10 +139,10 @@ function DetailItem({
 }) {
   return (
     <div className={cn("min-w-0 space-y-1", className)}>
-      <dt className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+      <dt className="text-xs font-bold uppercase tracking-wide text-foreground">
         {label}
       </dt>
-      <dd className="text-sm font-medium text-foreground break-words">{children}</dd>
+      <dd className="text-sm font-normal text-slate-600 break-words">{children}</dd>
     </div>
   );
 }
@@ -616,7 +616,7 @@ export function ScmOvfViewPage({ ovfId }: { ovfId: string }) {
                   </DetailItem>
                   {preview.scm_on_hold_remark?.trim() ? (
                     <DetailItem label="Hold remark" className="sm:col-span-2 lg:col-span-3">
-                      <span className="whitespace-pre-wrap font-medium text-foreground">
+                      <span className="whitespace-pre-wrap text-slate-600">
                         {preview.scm_on_hold_remark.trim()}
                       </span>
                     </DetailItem>
@@ -626,7 +626,7 @@ export function ScmOvfViewPage({ ovfId }: { ovfId: string }) {
             </dl>
             {holdHistory.length > 0 ? (
               <div className="mt-3 border-t border-border/60 pt-3">
-                <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+                <p className="text-xs font-bold uppercase tracking-wide text-foreground">
                   Hold history
                 </p>
                 <div className="mt-2 overflow-hidden rounded-md border border-border">
@@ -688,28 +688,24 @@ export function ScmOvfViewPage({ ovfId }: { ovfId: string }) {
               </dl>
               <div className="grid gap-3 sm:grid-cols-2">
                 <div className="rounded-md border border-border/70 bg-muted/20 p-3 space-y-3">
-                  <p className="text-[11px] font-semibold uppercase tracking-wide text-foreground">
-                    Billing
+                  <p className="text-xs font-bold uppercase tracking-wide text-foreground">
+                    Bill to
                   </p>
                   <dl className="space-y-3">
-                    <DetailItem label="Address">
-                      <span className="whitespace-pre-wrap font-medium leading-relaxed text-foreground">
-                        {textOrDash(preview.billing_address)}
-                      </span>
-                    </DetailItem>
+                    <dd className="text-sm font-normal leading-relaxed text-slate-600 break-words whitespace-pre-wrap">
+                      {textOrDash(preview.billing_address)}
+                    </dd>
                     <DetailItem label="State">{textOrDash(preview.billing_state)}</DetailItem>
                   </dl>
                 </div>
                 <div className="rounded-md border border-border/70 bg-muted/20 p-3 space-y-3">
-                  <p className="text-[11px] font-semibold uppercase tracking-wide text-foreground">
-                    Shipping
+                  <p className="text-xs font-bold uppercase tracking-wide text-foreground">
+                    Ship to
                   </p>
                   <dl className="space-y-3">
-                    <DetailItem label="Address">
-                      <span className="whitespace-pre-wrap font-medium leading-relaxed text-foreground">
-                        {textOrDash(preview.shipping_address)}
-                      </span>
-                    </DetailItem>
+                    <dd className="text-sm font-normal leading-relaxed text-slate-600 break-words whitespace-pre-wrap">
+                      {textOrDash(preview.shipping_address)}
+                    </dd>
                     <DetailItem label="State">{textOrDash(preview.shipping_state)}</DetailItem>
                   </dl>
                 </div>

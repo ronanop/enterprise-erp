@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
@@ -13,6 +13,7 @@ import {
 
 import { DeliveryChallanFormPage } from "@/components/procurement/delivery-challan-form-page";
 import { GrnPdfPickDialog } from "@/components/procurement/grn-pdf-pick-dialog";
+import { PoFulfillmentCharts } from "@/components/procurement/po-fulfillment-charts";
 import {
   ReceiptSerialsDialog,
   type ReceiptSerialDialogLine,
@@ -44,6 +45,7 @@ import {
   finalizeScmOrder,
   formatInr,
   getPurchaseOrder,
+  listOrderReceiptBatches,
   listVendorOptions,
   listVendorPos,
   resolveVendorOrgScope,
@@ -51,6 +53,7 @@ import {
   saveReceiptBatchVendorInvoice,
   uploadReceiptBatchAttachment,
   type ProcOrder,
+  type ScmReceiptBatch,
 } from "@/services/procurement-service";
 import { fileToBase64 } from "@/services/sales-crm-service";
 import type { GrnReceiptPdfContext } from "@/utils/grn-batch-pdf-download";
@@ -93,10 +96,10 @@ function DetailItem({
 }) {
   return (
     <div className={cn("min-w-0 space-y-1", className)}>
-      <dt className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+      <dt className="text-[11px] font-bold uppercase tracking-wide text-foreground">
         {label}
       </dt>
-      <dd className="text-sm font-medium break-words text-foreground">{children}</dd>
+      <dd className="text-sm font-normal break-words text-slate-600">{children}</dd>
     </div>
   );
 }
@@ -294,7 +297,7 @@ export function OrderDetailPage({ orderId }: { orderId: string }) {
   const [challanFormMounted, setChallanFormMounted] = useState(false);
   const [savedChallans, setSavedChallans] = useState<DeliveryChallanRecord[]>([]);
   const [challanPdfBusyId, setChallanPdfBusyId] = useState<string | null>(null);
-  const challanSaveRef = useRef<(() => void) | null>(null);
+  const [receiptBatches, setReceiptBatches] = useState<ScmReceiptBatch[]>([]);
   const [viewMode, setViewMode] = useState<PoDetailView>(() =>
     searchParams.get("tab") === "grn" ? "grn" : "po",
   );
@@ -360,6 +363,9 @@ export function OrderDetailPage({ orderId }: { orderId: string }) {
       setCostDraft(drafts.cost);
       setSerialDraft({});
       setLoading(false);
+      void listOrderReceiptBatches(orderId)
+        .then((batches) => setReceiptBatches(batches))
+        .catch(() => setReceiptBatches([]));
       void listVendorOptions()
         .then((vendors) => {
           const matched = vendors.find((v) => v.id === row.vendor_id);
@@ -375,6 +381,7 @@ export function OrderDetailPage({ orderId }: { orderId: string }) {
         });
     } catch (err) {
       setOrder(null);
+      setReceiptBatches([]);
       setError(err instanceof ApiClientError ? err.message : "Failed to load purchase order");
       setLoading(false);
     }
@@ -616,6 +623,9 @@ export function OrderDetailPage({ orderId }: { orderId: string }) {
               `Receipt saved, but vendor invoice failed: ${uploadDetail}`,
             );
             setOrder(refreshed);
+            void listOrderReceiptBatches(orderId)
+              .then((batches) => setReceiptBatches(batches))
+              .catch(() => setReceiptBatches([]));
             const drafts = emptyReceiptDrafts(refreshed.lines || []);
             setQtyDraft(drafts.qty);
             setCostDraft(drafts.cost);
@@ -630,6 +640,9 @@ export function OrderDetailPage({ orderId }: { orderId: string }) {
       }
 
       setOrder(refreshed);
+      void listOrderReceiptBatches(orderId)
+        .then((batches) => setReceiptBatches(batches))
+        .catch(() => setReceiptBatches([]));
       {
         const drafts = emptyReceiptDrafts(refreshed.lines || []);
         setQtyDraft(drafts.qty);
@@ -970,16 +983,6 @@ export function OrderDetailPage({ orderId }: { orderId: string }) {
                 {savedChallans.length > 0 ? "Add delivery challan" : "Create delivery challan"}
               </Button>
             ) : null}
-            {showGrnWorkspace && challanOpen ? (
-              <Button
-                type="button"
-                size="sm"
-                className="cursor-pointer transition-colors duration-200"
-                onClick={() => challanSaveRef.current?.()}
-              >
-                Save challan
-              </Button>
-            ) : null}
             {canFinalize && !showGrnWorkspace ? (
               <Button
                 type="button"
@@ -1107,7 +1110,6 @@ export function OrderDetailPage({ orderId }: { orderId: string }) {
             <DeliveryChallanFormPage
               embedded={{
                 orderId: order.id,
-                saveRef: challanSaveRef,
                 onClose: closeChallanPanel,
                 onSaved: () => {
                   setChallanSavedBanner(
@@ -1157,17 +1159,6 @@ export function OrderDetailPage({ orderId }: { orderId: string }) {
                   </dl>
                 ) : null}
               </SectionCard>
-
-              <ScmCommercialDocumentsPanel
-                orderId={order.id}
-                ovfId={
-                  order.source_module === "crm" ? order.source_document_id : null
-                }
-                branchId={order.branch_id}
-                companyId={order.company_id}
-                title="Documents"
-                allowUpload={false}
-              />
 
               <div className="overflow-hidden rounded-lg border border-border bg-card">
                 <div className="border-b border-border px-3 py-2">
@@ -1227,6 +1218,24 @@ export function OrderDetailPage({ orderId }: { orderId: string }) {
                   </table>
                 </div>
               </div>
+
+              <ScmCommercialDocumentsPanel
+                orderId={order.id}
+                ovfId={
+                  order.source_module === "crm" ? order.source_document_id : null
+                }
+                branchId={order.branch_id}
+                companyId={order.company_id}
+                title="Documents"
+                allowUpload={false}
+              />
+
+              <PoFulfillmentCharts
+                poLabel={order.company_po_number?.trim() || order.document_number}
+                lines={orderLines}
+                batches={receiptBatches}
+                loading={loading}
+              />
             </>
           ) : (
           <>
@@ -1495,6 +1504,12 @@ export function OrderDetailPage({ orderId }: { orderId: string }) {
               </table>
             </div>
           </div>
+          <PoFulfillmentCharts
+            poLabel={order.company_po_number?.trim() || order.document_number}
+            lines={orderLines}
+            batches={receiptBatches}
+            loading={loading}
+          />
           </>
           )}
         </>

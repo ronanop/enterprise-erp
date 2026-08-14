@@ -1,5 +1,8 @@
 export type DeliveryChallanLine = {
   id: string;
+  /** Product / part number. */
+  product: string;
+  /** Item description (legacy field name: itemName). */
   itemName: string;
   quantitySent: string;
   hsnSac: string;
@@ -58,9 +61,19 @@ export type DeliveryChallanRecord = {
 const STORAGE_KEY = "erp.procurement.delivery-challans";
 
 function normalizeLine(line: Partial<DeliveryChallanLine> & { id: string }): DeliveryChallanLine {
+  let product = (line.product ?? "").trim();
+  let itemName = (line.itemName ?? "").trim();
+  // Legacy / wrong mapping put product name in description — move it to product.
+  if (!product && itemName) {
+    product = itemName;
+    itemName = "";
+  } else if (product && itemName && product.toLowerCase() === itemName.toLowerCase()) {
+    itemName = "";
+  }
   return {
     id: line.id,
-    itemName: line.itemName ?? "",
+    product,
+    itemName,
     quantitySent: line.quantitySent ?? "",
     hsnSac: line.hsnSac ?? "",
     assetNo: line.assetNo ?? "-",
@@ -174,10 +187,11 @@ export function upsertDeliveryChallan(
 }
 
 export function formatChallanItemsSummary(lines: DeliveryChallanLine[]): string {
-  const items = lines.filter((ln) => ln.itemName.trim());
+  const items = lines.filter((ln) => ln.itemName.trim() || ln.product.trim());
   if (items.length === 0) return "—";
   if (items.length === 1) {
-    return `${items[0].itemName} (${items[0].quantitySent || "0"})`;
+    const label = items[0].itemName.trim() || items[0].product.trim() || "Item";
+    return `${label} (${items[0].quantitySent || "0"})`;
   }
   return `${items.length} items`;
 }
@@ -185,6 +199,7 @@ export function formatChallanItemsSummary(lines: DeliveryChallanLine[]): string 
 export function emptyChallanLine(): DeliveryChallanLine {
   return {
     id: crypto.randomUUID(),
+    product: "",
     itemName: "",
     quantitySent: "",
     hsnSac: "",

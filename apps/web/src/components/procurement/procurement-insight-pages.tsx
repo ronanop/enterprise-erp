@@ -44,6 +44,7 @@ import {
   type VendorOption,
 } from "@/services/procurement-service";
 import { buildGrnExportRows, exportGrnsXlsx } from "@/utils/grns-excel-export";
+import { grnBadgeVariant } from "@/utils/grn-status-display";
 import { buildOrderExportRows, exportOrdersXlsx } from "@/utils/orders-excel-export";
 import {
   buildProcurementInventoryStockSummary,
@@ -248,12 +249,6 @@ export function ProcurementReportsPage() {
     } finally {
       setBusyId(null);
     }
-  }
-
-  function grnTone(statusKey: string): "default" | "secondary" | "outline" {
-    if (statusKey === "closed" || statusKey === "delivered") return "default";
-    if (statusKey === "partial") return "secondary";
-    return "outline";
   }
 
   const cards: ReportCard[] = [
@@ -501,7 +496,7 @@ export function ProcurementReportsPage() {
                       <td className={cn(procurementUi.td, "px-3")}>{row.vendor}</td>
                       <td className={cn(procurementUi.td, "px-3")}>{row.poStatus}</td>
                       <td className={cn(procurementUi.td, "px-3")}>
-                        <Badge variant={grnTone(row.grnStatusKey)} className="uppercase">
+                        <Badge variant={grnBadgeVariant(row.grnStatusKey)} className="uppercase">
                           {row.grnStatus}
                         </Badge>
                       </td>

@@ -38,15 +38,9 @@ import {
   buildGrnExportRows,
   exportGrnsXlsx,
 } from "@/utils/grns-excel-export";
-import { formatGrnStatusBadgeLabel } from "@/utils/grn-status-display";
+import { formatGrnStatusBadgeLabel, grnBadgeVariant } from "@/utils/grn-status-display";
 
 type GrnFilter = "all" | "partial" | "closed";
-
-function grnTone(status: string): "default" | "secondary" | "destructive" | "outline" {
-  if (status === "closed" || status === "delivered") return "default";
-  if (status === "partial") return "secondary";
-  return "outline";
-}
 
 function isReceiptEligible(status: string): boolean {
   const value = status.toLowerCase();
@@ -440,7 +434,7 @@ export function GrnsListPage() {
                       {customerAmt > 0 || Number(row.margin_amount) ? formatInr(marginAmt) : "—"}
                     </td>
                     <td className="px-3 py-2">
-                      <Badge variant={grnTone(row.grn_status)} className="uppercase">
+                      <Badge variant={grnBadgeVariant(row.grn_status)} className="uppercase">
                         {grnLabel}
                       </Badge>
                     </td>

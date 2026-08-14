@@ -48,7 +48,7 @@ function DetailBlock({ label, value }: { label: string; value: string }) {
 }
 
 function ChallanItemsTable({ lines }: { lines: DeliveryChallanLine[] }) {
-  const rows = lines.filter((line) => line.itemName.trim());
+  const rows = lines.filter((line) => line.itemName.trim() || line.product.trim());
   if (rows.length === 0) {
     return (
       <p className="text-sm text-muted-foreground">No line items on this challan.</p>
@@ -58,10 +58,11 @@ function ChallanItemsTable({ lines }: { lines: DeliveryChallanLine[] }) {
   return (
     <div className={procurementUi.tableShell}>
       <div className={procurementUi.tableScroll}>
-        <table className={cn(procurementUi.table, "min-w-[720px]")}>
+        <table className={cn(procurementUi.table, "min-w-[820px]")}>
           <thead className={procurementUi.thead}>
             <tr>
               <th className={cn(procurementUi.th, "w-12")}>S.No</th>
+              <th className={cn(procurementUi.th, "w-36")}>Product</th>
               <th className={procurementUi.th}>Description</th>
               <th className={cn(procurementUi.th, "w-24")}>HSN / SAC</th>
               <th className={cn(procurementUi.th, "w-20 text-right")}>Qty</th>
@@ -80,7 +81,8 @@ function ChallanItemsTable({ lines }: { lines: DeliveryChallanLine[] }) {
                   <td className={cn(procurementUi.tdNumeric, "text-muted-foreground")}>
                     {index + 1}
                   </td>
-                  <td className={procurementUi.td}>{line.itemName}</td>
+                  <td className={procurementUi.tdMuted}>{line.product.trim() || "—"}</td>
+                  <td className={procurementUi.td}>{line.itemName.trim() || "—"}</td>
                   <td className={procurementUi.tdMuted}>{line.hsnSac.trim() || "—"}</td>
                   <td className={cn(procurementUi.tdNumeric, "text-right")}>
                     {line.quantitySent.trim() || "—"}

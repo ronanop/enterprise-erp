@@ -1,4 +1,4 @@
-import type { ProcOrder, ScmReceiptBatch } from "@/services/procurement-service";
+import type { ProcOrder, ScmOvfPreview, ScmReceiptBatch } from "@/services/procurement-service";
 import { orderLineToChallanLine } from "@/utils/delivery-challan-prefill";
 import type { DeliveryChallanLine } from "@/utils/delivery-challan-storage";
 
@@ -123,10 +123,27 @@ function mergeReceiptBatchLists(
 export function fullPoChallanLines(
   order: ProcOrder,
   defaultShipTo = "",
+  ovf: ScmOvfPreview | null = null,
 ): DeliveryChallanLine[] {
   const lines = order.lines || [];
   if (lines.length === 0) return [];
-  return lines.map((ln) => orderLineToChallanLine(ln, defaultShipTo));
+  const descByName = new Map<string, string>();
+  if (ovf) {
+    for (const ln of [...(ovf.vendor_lines || []), ...(ovf.customer_lines || [])]) {
+      const key = (ln.product_name || "").trim().toLowerCase();
+      const desc = (ln.description || "").trim();
+      if (key && desc) descByName.set(key, desc);
+    }
+  }
+  return lines.map((ln) => {
+    const base = orderLineToChallanLine(ln, defaultShipTo);
+    const key = base.product.trim().toLowerCase();
+    const ovfDesc = (descByName.get(key) || "").trim();
+    if (ovfDesc && ovfDesc.toLowerCase() !== key) {
+      return { ...base, itemName: ovfDesc };
+    }
+    return base;
+  });
 }
 
 export function mergeSelectedGrnChallanLines(
@@ -138,7 +155,7 @@ export function mergeSelectedGrnChallanLines(
   const orderLineById = new Map((order?.lines || []).map((ln) => [ln.id, ln]));
   const byLine = new Map<
     string,
-    { name: string; qty: number; rate: number; hsn: string; shipTo: string }
+    { product: string; name: string; qty: number; rate: number; hsn: string; shipTo: string }
   >();
   for (const batch of batches) {
     if (!selectedKeys.has(receiptBatchKey(batch))) continue;
@@ -147,14 +164,15 @@ export function mergeSelectedGrnChallanLines(
       if (qty <= 0) continue;
       const key = ln.order_line_id;
       const ol = orderLineById.get(key);
-      const name = (ln.product_name || ol?.product_name || `Line ${ln.line_number}`).trim();
+      const product = (ln.product_name || ol?.product_name || ol?.product_code || `Line ${ln.line_number}`).trim();
       const rate = Number(ol?.unit_cost) || 0;
       const prev = byLine.get(key);
       if (prev) {
         prev.qty += qty;
       } else {
         byLine.set(key, {
-          name,
+          product,
+          name: "",
           qty,
           rate,
           hsn: "",
@@ -163,8 +181,9 @@ export function mergeSelectedGrnChallanLines(
       }
     }
   }
-  return [...byLine.values()].map(({ name, qty, rate, hsn, shipTo }) => ({
+  return [...byLine.values()].map(({ product, name, qty, rate, hsn, shipTo }) => ({
     id: crypto.randomUUID(),
+    product,
     itemName: name,
     quantitySent: String(qty),
     hsnSac: hsn,

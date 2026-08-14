@@ -259,7 +259,7 @@ export function Exploded3dPieChart({
         <li key={slice.key} className="flex min-w-0 items-baseline gap-1">
           {legendMode === "percent" ? (
             <>
-              <span className="min-w-0 truncate text-slate-500">{slice.label}:</span>
+              <span className="min-w-0 truncate font-bold text-foreground">{slice.label}:</span>
               <span
                 className="shrink-0 font-semibold tabular-nums"
                 style={{ color: slice.color }}
@@ -269,7 +269,7 @@ export function Exploded3dPieChart({
             </>
           ) : (
             <>
-              <span className="min-w-0 truncate text-slate-500">{slice.label}:</span>
+              <span className="min-w-0 truncate font-bold text-foreground">{slice.label}:</span>
               <span
                 className="shrink-0 font-semibold tabular-nums"
                 style={{ color: slice.color }}

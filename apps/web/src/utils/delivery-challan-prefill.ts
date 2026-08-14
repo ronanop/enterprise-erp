@@ -202,9 +202,11 @@ export function orderLineToChallanLine(
   ln: ProcOrder["lines"][number],
   defaultShipTo: string,
 ): DeliveryChallanLine {
+  const product = (ln.product_name || ln.product_code || "").trim();
   return {
     id: crypto.randomUUID(),
-    itemName: (ln.product_name || ln.product_code || "").trim(),
+    product,
+    itemName: "",
     quantitySent: String(Number(ln.quantity) || 0),
     hsnSac: "",
     assetNo: "-",

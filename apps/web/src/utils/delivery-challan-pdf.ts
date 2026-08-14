@@ -1,4 +1,4 @@
-import { jsPDF } from "jspdf";
+import { GState, jsPDF } from "jspdf";
 
 import { loadCacheLogo } from "@/utils/load-cache-logo";
 import {
@@ -142,13 +142,14 @@ function drawChallanTotalsSection(
 }
 
 const ITEM_COL_WEIGHTS = {
-  sr: 10,
-  desc: 62,
-  hsn: 18,
-  asset: 16,
-  qty: 14,
-  rate: 20,
-  value: 22,
+  sr: 9,
+  product: 28,
+  desc: 42,
+  hsn: 16,
+  asset: 14,
+  qty: 12,
+  rate: 18,
+  value: 20,
 } as const;
 
 type ItemColumnWidths = Record<keyof typeof ITEM_COL_WEIGHTS, number>;
@@ -457,18 +458,57 @@ function drawHeaderGrid(
 export async function downloadDeliveryChallanPdf(
   input: DeliveryChallanPdfInput,
   fileName?: string,
+  options?: { watermark?: boolean },
 ): Promise<void> {
   const doc = await renderDeliveryChallanPdf(input);
+  if (options?.watermark) {
+    applyDraftWatermark(doc);
+  }
   const safeName = (input.challanNumber || "delivery-challan").replace(/[/\\?%*:|"<>]/g, "-");
-  doc.save(fileName || `Delivery-Challan-${safeName}.pdf`);
+  const base = fileName || `Delivery-Challan-${safeName}.pdf`;
+  doc.save(options?.watermark ? base.replace(/\.pdf$/i, "-draft.pdf") : base);
 }
 
-export async function openDeliveryChallanPdfPreview(input: DeliveryChallanPdfInput): Promise<void> {
+export async function openDeliveryChallanPdfPreview(
+  input: DeliveryChallanPdfInput,
+  options?: { watermark?: boolean },
+): Promise<void> {
   const doc = await renderDeliveryChallanPdf(input);
+  if (options?.watermark) {
+    applyDraftWatermark(doc);
+  }
   const blob = doc.output("blob");
   const url = URL.createObjectURL(blob);
   window.open(url, "_blank", "noopener,noreferrer");
   window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+}
+
+/** Diagonal DRAFT mark — used for unsaved challan previews. */
+function applyDraftWatermark(doc: jsPDF) {
+  const pageCount = doc.getNumberOfPages();
+  const pageW = doc.internal.pageSize.getWidth();
+  const pageH = doc.internal.pageSize.getHeight();
+  const soft = new GState({ opacity: 0.14 });
+  const solid = new GState({ opacity: 1 });
+
+  for (let page = 1; page <= pageCount; page += 1) {
+    doc.setPage(page);
+    doc.setGState(soft);
+    doc.setTextColor(185, 28, 28);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(62);
+    doc.text("DRAFT", pageW / 2, pageH / 2 - 6, {
+      align: "center",
+      angle: 32,
+    });
+    doc.setFontSize(16);
+    doc.text("NOT FINALIZED", pageW / 2, pageH / 2 + 18, {
+      align: "center",
+      angle: 32,
+    });
+    doc.setGState(solid);
+    doc.setTextColor(0, 0, 0);
+  }
 }
 
 async function renderDeliveryChallanPdf(input: DeliveryChallanPdfInput): Promise<jsPDF> {
@@ -486,11 +526,11 @@ async function renderDeliveryChallanPdf(input: DeliveryChallanPdfInput): Promise
     doc.addImage(logo.dataUrl, "JPEG", margin, y, logoW, logoH);
   }
 
-  const centerX = pageW / 2;
+  const rightX = pageW - margin;
   const entityTitle = (input.entityName || "Cache Technologies").trim();
   doc.setFont("helvetica", "bold");
   doc.setFontSize(11);
-  doc.text(entityTitle, centerX, y + 4, { align: "center" });
+  doc.text(entityTitle, rightX, y + 4, { align: "right" });
 
   doc.setFont("helvetica", "normal");
   doc.setFontSize(7);
@@ -503,26 +543,27 @@ async function renderDeliveryChallanPdf(input: DeliveryChallanPdfInput): Promise
       return line.toLowerCase() !== entityTitle.toLowerCase();
     })
     .join("\n");
-  const headerLines = wrap(doc, addressOnly, contentW * 0.55);
+  const headerLines = wrap(doc, addressOnly, contentW * 0.5);
   let hy = y + 8;
   headerLines.slice(0, 4).forEach((line) => {
-    doc.text(line, centerX, hy, { align: "center" });
+    doc.text(line, rightX, hy, { align: "right" });
     hy += 3;
   });
 
-  const gstLines = wrap(doc, input.entityGstBlock, contentW * 0.7);
+  const gstLines = wrap(doc, input.entityGstBlock, contentW * 0.55);
   gstLines.slice(0, 5).forEach((line) => {
-    doc.text(line, centerX, hy, { align: "center" });
+    doc.text(line, rightX, hy, { align: "right" });
     hy += 2.8;
   });
 
   y = Math.max(y + logoH + 2, hy + 2);
 
+  const centerX = pageW / 2;
   doc.setFont("helvetica", "bold");
   doc.setFontSize(12);
   doc.text("DELIVERY CHALLAN", centerX, y, { align: "center" });
   doc.setFontSize(7);
-  doc.text(input.copyLabel || "ORIGINAL FOR CONSIGNEE", pageW - margin, y, { align: "right" });
+  doc.text(input.copyLabel || "ORIGINAL FOR CONSIGNEE", rightX, y, { align: "right" });
   y += 5;
 
   const headerRows: HeaderGridRow[] = [
@@ -569,6 +610,7 @@ async function renderDeliveryChallanPdf(input: DeliveryChallanPdfInput): Promise
   let cx = tableX;
   const headers = [
     ["Sr. No.", itemCols.sr],
+    ["Product", itemCols.product],
     ["Description", itemCols.desc],
     ["HSN/SAC Code", itemCols.hsn],
     ["Asset No", itemCols.asset],
@@ -582,7 +624,7 @@ async function renderDeliveryChallanPdf(input: DeliveryChallanPdfInput): Promise
   }
   y += headerRowH;
 
-  const itemRows = input.lines.filter((ln) => ln.itemName.trim());
+  const itemRows = input.lines.filter((ln) => ln.itemName.trim() || ln.product.trim());
 
   for (let i = 0; i < itemRows.length; i += 1) {
     const ln = itemRows[i];
@@ -590,12 +632,13 @@ async function renderDeliveryChallanPdf(input: DeliveryChallanPdfInput): Promise
     const rate = Number(ln.rate) || 0;
     const value = qty * rate;
 
-    const descParts = [ln.itemName.trim()];
+    const productLines = wrap(doc, (ln.product || "").trim() || "—", itemCols.product - 2);
+    const descParts = [(ln.itemName || "").trim() || "—"];
     if (ln.shipTo.trim()) {
       descParts.push(`Ship To: ${ln.shipTo.trim()}`);
     }
     const descLines = wrap(doc, descParts.join("\n"), itemCols.desc - 2);
-    const rowH = Math.max(12, 4 + descLines.length * 3.2);
+    const rowH = Math.max(12, 4 + Math.max(productLines.length, descLines.length) * 3.2);
 
     if (y + rowH > 250) {
       doc.addPage();
@@ -610,6 +653,12 @@ async function renderDeliveryChallanPdf(input: DeliveryChallanPdfInput): Promise
     const textY = y + Math.min(5, rowH * 0.4);
     doc.text(String(i + 1), cx + itemCols.sr / 2, textY, { align: "center" });
     cx += itemCols.sr;
+    let py = y + 4;
+    productLines.forEach((line) => {
+      doc.text(line, cx + 1, py);
+      py += 3.2;
+    });
+    cx += itemCols.product;
     let dy = y + 4;
     descLines.forEach((line) => {
       doc.text(line, cx + 1, dy);

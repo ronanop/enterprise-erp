@@ -61,7 +61,8 @@ export function nonBilledStockQuantity(row: ProcurementInventoryRow): number {
   const received = Number(row.received_quantity);
   const billing = Number(row.billing_quantity);
   if (Number.isFinite(received) && received > 0) {
-    return Math.max(0, Math.round(received - billing));
+    const billed = Number.isFinite(billing) ? billing : 0;
+    return Math.max(0, Math.round((received - billed) * 1e6) / 1e6);
   }
   return 1;
 }
@@ -139,7 +140,8 @@ export function buildProcurementInventoryStockSummary(
 
   for (const row of rows) {
     const name = productLabel(row);
-    const cost = unitCostOf(row);
+    const qty = nonBilledStockQuantity(row);
+    const cost = unitCostOf(row) * qty;
     totalStockValue += cost;
 
     const entry = productMap.get(name) ?? {
@@ -148,7 +150,7 @@ export function buildProcurementInventoryStockSummary(
       serials: 0,
       stockValue: 0,
     };
-    entry.units += 1;
+    entry.units = Math.round((entry.units + qty) * 1e6) / 1e6;
     entry.stockValue += cost;
     if (row.grn_number && row.grn_number !== "Imported") {
       entry.grns.add(row.grn_number);
@@ -165,7 +167,7 @@ export function buildProcurementInventoryStockSummary(
       units: 0,
       stockValue: 0,
     };
-    vendorEntry.units += 1;
+    vendorEntry.units = Math.round((vendorEntry.units + qty) * 1e6) / 1e6;
     vendorEntry.stockValue += cost;
     vendorMap.set(vendorKey, vendorEntry);
 
@@ -222,7 +224,7 @@ export function buildProcurementInventoryStockSummary(
       orderId: row.order_id,
       units: 0,
     };
-    entry.units += 1;
+    entry.units = Math.round((entry.units + nonBilledStockQuantity(row)) * 1e6) / 1e6;
     if (!entry.orderId && row.order_id) {
       entry.orderId = row.order_id;
     }
@@ -236,7 +238,9 @@ export function buildProcurementInventoryStockSummary(
       a.productName.localeCompare(b.productName),
   );
 
-  const totalUnits = rows.length;
+  const totalUnits = Math.round(
+    rows.reduce((sum, row) => sum + nonBilledStockQuantity(row), 0) * 1e6,
+  ) / 1e6;
   return {
     totalUnits,
     productCount: byProduct.length,

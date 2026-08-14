@@ -21,7 +21,7 @@ import {
   type ProcOrder,
 } from "@/services/procurement-service";
 import { buildOrderExportRows, exportOrdersXlsx } from "@/utils/orders-excel-export";
-import { formatGrnStatusBadgeLabel } from "@/utils/grn-status-display";
+import { formatGrnStatusBadgeLabel, grnBadgeVariant } from "@/utils/grn-status-display";
 import {
   countPoBuckets,
   deriveGrnStatus,
@@ -283,7 +283,7 @@ export function OrdersOverviewPage() {
                   <td className={procurementUi.td}>{orderCustomerOrApproverLabel(row) || "—"}</td>
                   <td className={cn(procurementUi.tdNumeric)}>{formatInr(row.total_amount)}</td>
                   <td className={procurementUi.td}>
-                    <Badge variant="outline" className="uppercase">
+                    <Badge variant={grnBadgeVariant(row.grn_status ?? "pending")} className="uppercase">
                       {formatGrnStatusBadgeLabel(row.grn_status ?? "pending")}
                     </Badge>
                   </td>

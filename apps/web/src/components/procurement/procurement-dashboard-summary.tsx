@@ -332,7 +332,7 @@ const OEM_PIE_COLORS = [
   "#2DD4BF",
 ];
 
-type InventoryStatTint = "sky" | "teal" | "slate";
+type InventoryStatTint = "sky" | "teal" | "cyan";
 
 const INVENTORY_STAT_TINT: Record<
   InventoryStatTint,
@@ -348,10 +348,10 @@ const INVENTORY_STAT_TINT: Record<
     icon: "bg-teal-100 text-teal-800",
     value: "text-teal-950",
   },
-  slate: {
-    card: "border-slate-200/90 bg-gradient-to-br from-slate-50 via-slate-50/80 to-white",
-    icon: "bg-slate-200/80 text-slate-800",
-    value: "text-slate-950",
+  cyan: {
+    card: "border-cyan-200/80 bg-gradient-to-br from-cyan-50 via-cyan-50/70 to-white",
+    icon: "bg-cyan-100 text-cyan-800",
+    value: "text-cyan-950",
   },
 };
 
@@ -424,7 +424,7 @@ function InventoryStockPanel({
           </span>
           <div className="min-w-0">
             <h2 className="truncate text-sm font-semibold tracking-tight text-foreground">
-              Inventory value
+              Inventory Value
             </h2>
           </div>
         </div>
@@ -456,7 +456,7 @@ function InventoryStockPanel({
           label="OEM coverage"
           value={loading ? "—" : oemCount.toLocaleString("en-IN")}
           icon={PackageCheck}
-          tint="slate"
+          tint="cyan"
         />
       </div>
 

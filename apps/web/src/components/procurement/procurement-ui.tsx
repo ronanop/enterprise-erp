@@ -15,8 +15,8 @@ export const procurementUi = {
   tableScroll: "overflow-x-auto",
   table: "w-full text-left text-[13px] leading-snug",
   thead:
-    "border-b border-border/80 bg-muted/20 text-[10px] font-semibold uppercase tracking-[0.07em] text-muted-foreground",
-  th: "px-3 py-2.5",
+    "border-b border-border/80 bg-muted/20 text-[10px] font-bold uppercase tracking-[0.07em] text-foreground",
+  th: "px-3 py-2.5 font-bold",
   tr: "border-b border-border/50 transition-colors duration-150 last:border-0 hover:bg-muted/20",
   td: "px-3 py-2 align-middle",
   tdMuted: "px-3 py-2 align-middle text-muted-foreground",
