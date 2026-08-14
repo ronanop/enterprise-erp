@@ -383,6 +383,7 @@ export function LeadFormPage({ companyAccountId }: { companyAccountId: string })
     if (!form.last_name?.trim()) missing.push("Last Name");
     if (!form.product_type) missing.push("Product Type");
     if (!form.mobile?.trim()) missing.push("Mobile");
+    if (!form.designation?.trim()) missing.push("Designation");
     if (!form.lead_source_id) missing.push("Lead Source");
     if (!form.sub_product_category?.trim()) missing.push("Sub Product Category");
     if (!form.requirement_type) missing.push("Requirement Type");
@@ -486,7 +487,7 @@ export function LeadFormPage({ companyAccountId }: { companyAccountId: string })
             />
           </FinanceField>
 
-          <FinanceField label="Designation">
+          <FinanceField label="Designation *">
             <KycContactDesignationField
               value={form.designation ?? ""}
               onChange={(designation) => set("designation", designation)}

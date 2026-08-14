@@ -271,9 +271,9 @@ class LeadService:
         ctx: TenantContext,
         lead_id: UUID,
         *,
-        pipeline_id: UUID | None,
-        opportunity_name: str,
-        expected_revenue: float = 0,
+        pipeline_id: UUID | None = None,
+        opportunity_name: str | None = None,
+        expected_revenue: float | None = None,
         existing_customer_id: UUID | None = None,
         create_customer: bool = True,
         remark: str | None = None,
@@ -286,6 +286,16 @@ class LeadService:
             if not pipelines:
                 raise ConflictException("No sales pipeline is configured for this company")
             pipeline_id = pipelines[0].id
+        resolved_name = (opportunity_name or "").strip() or (
+            lead.project_title
+            or (f"{lead.first_name} {lead.last_name or ''}".strip() + " — Opportunity")
+            or f"{lead.company_name or 'Lead'} — Opportunity"
+        )
+        resolved_revenue = (
+            expected_revenue
+            if expected_revenue is not None
+            else float(lead.expected_amount or 0)
+        )
         if lead.company_account_id is not None:
             # Sales-blueprint lead (rule #1/#2): lifecycle is governed by
             # ``blueprint_state``, not the legacy ``status`` qualification
@@ -315,12 +325,12 @@ class LeadService:
         opp_fields = {
             "branch_id": lead.branch_id,
             "company_id": lead.company_id,
-            "opportunity_name": opportunity_name or lead.project_title or f"{lead.company_name} — Opportunity",
+            "opportunity_name": resolved_name,
             "pipeline_id": pipeline_id,
             "owner_employee_id": lead.owner_employee_id,
             "lead_id": lead_id,
             "customer_id": customer_id,
-            "expected_revenue": expected_revenue or lead.expected_amount or 0,
+            "expected_revenue": resolved_revenue,
             "expected_close_date": lead.expected_closure_date,
             "probability_percent": lead.engagement_score if lead.engagement_score is not None else 25,
             "current_stage": "qualification",

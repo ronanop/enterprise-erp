@@ -33,11 +33,28 @@ def utcnow() -> datetime:
     return datetime.now(timezone.utc)
 
 
-def _require_assigned_user(payload: dict[str, Any]) -> UUID:
-    raw = payload.get("assigned_user_id")
-    if not raw:
-        raise ConflictException("Select an approver before sending for approval")
-    return UUID(str(raw))
+def _require_assigned_users(payload: dict[str, Any]) -> list[UUID]:
+    """Collect one or more selected approvers from the action payload."""
+    ids: list[UUID] = []
+    seen: set[UUID] = set()
+    raw_list = payload.get("assigned_user_ids")
+    if isinstance(raw_list, list):
+        for item in raw_list:
+            if not item:
+                continue
+            uid = UUID(str(item))
+            if uid in seen:
+                continue
+            seen.add(uid)
+            ids.append(uid)
+    raw_single = payload.get("assigned_user_id")
+    if raw_single:
+        uid = UUID(str(raw_single))
+        if uid not in seen:
+            ids.append(uid)
+    if not ids:
+        raise ConflictException("Select at least one approver before sending for approval")
+    return ids
 
 
 def log_state_history(
@@ -129,44 +146,15 @@ class OpportunityBlueprintService:
             # which must never be invoked via the generic opportunity endpoint.
             allowed = [action for action in allowed if action not in {"quote_accepted", "deal_won"}]
         allowed = filter_opportunity_actions(opp, allowed)
-        if current == "boq_pending":
-            # Symmetric document step:
-            # - only BOQ attached  → Attach SOW + Send BOQ for Approval + Deal Registration
-            # - only SOW attached  → Attach BOQ + Send SOW for Approval + Deal Registration
-            # - both attached      → both approval buttons + Deal Registration, no attach buttons
-            if opp.boq_attached and opp.sow_attached:
-                allowed = [
-                    action for action in allowed if action not in {"attach_boq", "attach_sow"}
-                ]
-            elif opp.boq_attached:
-                allowed = [action for action in allowed if action != "attach_boq"]
-            elif opp.sow_attached:
-                allowed = [action for action in allowed if action != "attach_sow"]
-            if not opp.boq_attached:
-                allowed = [action for action in allowed if action != "send_boq_approval"]
-            if not opp.sow_attached:
-                allowed = [action for action in allowed if action != "send_sow_approval"]
-            # Deal Registration is available once either document is attached.
-            if not opp.boq_attached and not opp.sow_attached:
-                allowed = [action for action in allowed if action != "deal_reg"]
-        # Hide attach/approval actions once the matching document is already present/approved,
-        # including later stages (e.g. deal_reg still lists attach_sow in the engine).
-        if opp.boq_attached:
-            allowed = [action for action in allowed if action != "attach_boq"]
-        if opp.sow_attached:
-            allowed = [action for action in allowed if action != "attach_sow"]
+        allowed = self._filter_document_step_actions(allowed, opp)
         if opp.customer_po_attached:
             allowed = [action for action in allowed if action != "attach_po"]
-        if opp.boq_approved or not opp.boq_attached:
-            allowed = [action for action in allowed if action != "send_boq_approval"]
-        if opp.sow_approved or not opp.sow_attached:
-            allowed = [action for action in allowed if action != "send_sow_approval"]
         if opp.customer_po_approved or not opp.customer_po_attached:
             allowed = [action for action in allowed if action != "send_po_approval"]
-        if current == "boq_approval" and not opp.locked:
+        if current in {"boq_approval", "sow_approval"} and not opp.locked:
             # Approve/reject run via My Jobs while locked; hide stale actions if unlocked.
             allowed = [action for action in allowed if action not in _UNLOCKING_ACTIONS]
-        allowed = self._ensure_boq_actions_after_sow_approval(allowed, opp)
+        allowed = self._ensure_peer_document_actions(allowed, opp, current)
         return {
             "entity_type": "opportunity",
             "entity_id": opp.id,
@@ -177,22 +165,64 @@ class OpportunityBlueprintService:
         }
 
     @staticmethod
-    def _ensure_boq_actions_after_sow_approval(
-        allowed: list[str], opp: CrmOpportunity
-    ) -> list[str]:
-        """After SOW is approved, keep BOQ attach/approval available until BOQ is approved."""
-        if opp.locked or not opp.sow_approved:
-            return allowed
+    def _filter_document_step_actions(allowed: list[str], opp: CrmOpportunity) -> list[str]:
+        """Gate BOQ/SOW attach, approval, and Deal Registration by document status.
+
+        - SOW attached → Attach BOQ + Send SOW for Approval
+        - BOQ attached → Attach SOW + Send BOQ for Approval
+        - Either document approved → Deal Registration + peer attach (if missing)
+        """
         actions = list(allowed)
-        if not opp.boq_attached and "attach_boq" not in actions:
+
+        if opp.boq_attached:
+            actions = [action for action in actions if action != "attach_boq"]
+        if opp.sow_attached:
+            actions = [action for action in actions if action != "attach_sow"]
+
+        if opp.boq_approved or not opp.boq_attached:
+            actions = [action for action in actions if action != "send_boq_approval"]
+        if opp.sow_approved or not opp.sow_attached:
+            actions = [action for action in actions if action != "send_sow_approval"]
+
+        # Deal Registration only after at least one document is approved.
+        if not opp.boq_approved and not opp.sow_approved:
+            actions = [action for action in actions if action != "deal_reg"]
+
+        return actions
+
+    @staticmethod
+    def _ensure_peer_document_actions(
+        allowed: list[str], opp: CrmOpportunity, current: str
+    ) -> list[str]:
+        """After one document is approved, keep the other attach/approval path available."""
+        if opp.locked or current not in {"boq_pending", "deal_reg", "boq_approval", "sow_approval"}:
+            return allowed
+        if not opp.boq_approved and not opp.sow_approved:
+            return allowed
+
+        actions = list(allowed)
+
+        if opp.sow_approved and not opp.boq_attached and "attach_boq" not in actions:
             actions.append("attach_boq")
+        if opp.boq_approved and not opp.sow_attached and "attach_sow" not in actions:
+            actions.append("attach_sow")
+
         if (
-            opp.boq_attached
+            opp.sow_approved
+            and opp.boq_attached
             and not opp.boq_approved
             and "send_boq_approval" not in actions
         ):
             actions.append("send_boq_approval")
-        return sorted(actions)
+        if (
+            opp.boq_approved
+            and opp.sow_attached
+            and not opp.sow_approved
+            and "send_sow_approval" not in actions
+        ):
+            actions.append("send_sow_approval")
+
+        return sorted(set(actions))
 
     def perform_action(
         self,
@@ -246,6 +276,7 @@ class OpportunityBlueprintService:
                 team_role=payload.get("team_role", "management"),
                 title=f"Approve Cloud Discount — {opp.opportunity_name}",
                 remarks=payload.get("remarks") or summary,
+                assigned_user_ids=_require_assigned_users(payload),
             )
             updates["locked"] = True
         elif action == "approve_cloud_discount":
@@ -277,7 +308,7 @@ class OpportunityBlueprintService:
                 team_role=payload.get("team_role", "presales"),
                 title=f"Approve BOQ — {opp.opportunity_name}",
                 remarks=payload.get("remarks"),
-                assigned_user_id=_require_assigned_user(payload),
+                assigned_user_ids=_require_assigned_users(payload),
             )
             updates["locked"] = True
         elif action == "send_sow_approval":
@@ -292,14 +323,12 @@ class OpportunityBlueprintService:
                 team_role=payload.get("team_role", "presales"),
                 title=f"Approve SOW — {opp.opportunity_name}",
                 remarks=payload.get("remarks"),
-                assigned_user_id=_require_assigned_user(payload),
+                assigned_user_ids=_require_assigned_users(payload),
             )
             updates["locked"] = True
         elif action == "approve_boq":
             updates["boq_approved"] = True
             updates["locked"] = False
-            if not opp.sow_approved:
-                next_state = "boq_pending"
         elif action == "reject_boq":
             self._clear_approval_attachment(ctx, opp.id, "boq")
             updates["boq_approved"] = False
@@ -308,8 +337,6 @@ class OpportunityBlueprintService:
         elif action == "approve_sow":
             updates["sow_approved"] = True
             updates["locked"] = False
-            if not opp.boq_approved:
-                next_state = "boq_pending"
         elif action == "reject_sow":
             self._clear_approval_attachment(ctx, opp.id, "sow")
             updates["sow_approved"] = False
@@ -321,6 +348,10 @@ class OpportunityBlueprintService:
         elif action == "skip_sow":
             updates["sow_skipped"] = True
         elif action == "deal_reg":
+            if not opp.boq_approved and not opp.sow_approved:
+                raise ConflictException(
+                    "Approve a BOQ or SOW before Deal Registration"
+                )
             reg_no = payload.get("deal_reg_number")
             if not reg_no:
                 raise ConflictException("deal_reg_number is required")
@@ -361,7 +392,7 @@ class OpportunityBlueprintService:
                 team_role=payload.get("team_role", "management"),
                 title=f"Approve Customer PO — {opp.opportunity_name}",
                 remarks=payload.get("remarks"),
-                assigned_user_id=_require_assigned_user(payload),
+                assigned_user_ids=_require_assigned_users(payload),
             )
             updates["locked"] = True
         elif action == "approve_po":
@@ -440,13 +471,13 @@ class OpportunityBlueprintService:
         team_role: str,
         title: str,
         remarks: str | None,
-        assigned_user_id: UUID,
+        assigned_user_ids: list[UUID],
     ) -> None:
         from modules.crm.service.approval_task_service import ApprovalTaskService
 
         ApprovalTaskService(self._db).route_approval(
             ctx,
-            assigned_user_id=assigned_user_id,
+            assigned_user_ids=assigned_user_ids,
             title=title,
             entity_type="opportunity",
             entity_id=opp.id,

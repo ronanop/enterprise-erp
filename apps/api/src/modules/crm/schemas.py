@@ -102,9 +102,11 @@ class LeadAssignRequest(BaseModel):
 
 
 class LeadConvertRequest(BaseModel):
-    pipeline_id: UUID
-    opportunity_name: str
-    expected_revenue: Decimal = Decimal("0")
+    """Convert uses lead defaults when pipeline / name / revenue are omitted."""
+
+    pipeline_id: UUID | None = None
+    opportunity_name: str | None = None
+    expected_revenue: Decimal | None = None
     existing_customer_id: UUID | None = None
     create_customer: bool = True
     remark: str | None = None
@@ -118,6 +120,7 @@ class LeadResponse(OrmModel):
     first_name: str
     last_name: str | None
     salutation: str | None = None
+    designation: str | None = None
     mobile: str
     email: str | None
     status: str
@@ -236,6 +239,8 @@ class OpportunityResponse(OrmModel):
     locked: bool = False
     boq_attached: bool = False
     sow_attached: bool = False
+    boq_approved: bool = False
+    sow_approved: bool = False
     oem_quote_attached: bool = False
     customer_po_attached: bool = False
     customer_po_approved: bool = False
@@ -844,6 +849,7 @@ class LeadCreateFromCompany(BaseModel):
     first_name: str | None = None
     last_name: str | None = None
     salutation: str | None = None
+    designation: str = Field(min_length=1)
     mobile: str | None = None
     email: str | None = None
     lead_source_id: UUID
@@ -853,7 +859,7 @@ class LeadCreateFromCompany(BaseModel):
     expected_amount: Decimal | None = None
     expected_closure_date: date | None = None
     product_type: str | None = None
-    sub_product_category: str | None = None
+    sub_product_category: str = Field(min_length=1)
     sub_product: str | None = None
     sub_product_other: str | None = None
     engagement_score: int | None = None
@@ -904,6 +910,7 @@ class SalesLeadResponse(OrmModel):
     last_name: str | None
     mobile: str
     email: str | None
+    designation: str | None = None
     status: str
     blueprint_state: str
     locked: bool
@@ -1451,6 +1458,8 @@ class BlueprintActionRequest(BaseModel):
     valid_until: date | None = None
     deal_won_amount: Decimal | None = None
     onboarding_date: date | None = None
+    assigned_user_id: UUID | None = None
+    assigned_user_ids: list[UUID] | None = None
 
     def to_payload(self) -> dict:
         return self.model_dump(exclude_none=True)

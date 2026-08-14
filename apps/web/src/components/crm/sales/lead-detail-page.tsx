@@ -11,14 +11,11 @@ import {
 } from "@/components/crm/crm-ui";
 import { ApprovalBanner, SyncedBanner } from "@/components/crm/sales/approval-banner";
 import { BlueprintActions } from "@/components/crm/sales/blueprint-actions";
-import { DealTimeline, DealTimelineStatusBadge } from "@/components/crm/sales/deal-timeline";
+import { DealTimelineStatusBadge } from "@/components/crm/sales/deal-timeline";
 import { LeadDetailsCard } from "@/components/crm/sales/lead-details-card";
-import { ConfirmDialog } from "@/components/finance/journals/confirm-dialog";
-import { FinanceField, FinanceTextarea } from "@/components/finance/journals/finance-form-field";
 import { FinanceStatusBadge } from "@/components/finance/finance-status-badge";
 import { PageHeader } from "@/components/layout/page-header";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { ApiClientError } from "@/services/api-client";
 import {
   convertLead,
@@ -46,15 +43,7 @@ export function LeadDetailPage({ leadId }: { leadId: string }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [banner, setBanner] = useState<{ text: string; tone: "success" | "error" } | null>(null);
-
-  const [convertOpen, setConvertOpen] = useState(false);
-  const [convertForm, setConvertForm] = useState({
-    opportunity_name: "",
-    expected_revenue: "",
-    remark: "",
-  });
   const [converting, setConverting] = useState(false);
-  const [convertError, setConvertError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -75,13 +64,6 @@ export function LeadDetailPage({ leadId }: { leadId: string }) {
           ? await getCompany(leadRow.company_account_id).catch(() => null)
           : null,
       );
-      setConvertForm((form) => ({
-        ...form,
-        opportunity_name:
-          form.opportunity_name || leadRow.project_title || `${fullName(leadRow)} — Opportunity`,
-        expected_revenue:
-          form.expected_revenue || (leadRow.expected_amount ? String(leadRow.expected_amount) : ""),
-      }));
     } catch (err) {
       setLead(null);
       setError(err instanceof ApiClientError ? err.message : "Failed to load lead");
@@ -95,28 +77,18 @@ export function LeadDetailPage({ leadId }: { leadId: string }) {
     return () => window.clearTimeout(timer);
   }, [load]);
 
-  function openConvert() {
-    setConvertError(null);
-    setConvertOpen(true);
-  }
-
-  async function submitConvert() {
-    if (!lead) return;
-    if (!convertForm.opportunity_name.trim() || !convertForm.remark.trim()) {
-      setConvertError("Opportunity name and remark are required.");
-      return;
-    }
+  async function convertNow() {
+    if (!lead || converting) return;
     setConverting(true);
-    setConvertError(null);
+    setBanner(null);
     try {
-      const opp = await convertLead(lead.id, {
-        opportunity_name: convertForm.opportunity_name.trim(),
-        expected_revenue: convertForm.expected_revenue ? Number(convertForm.expected_revenue) : 0,
-        remark: convertForm.remark.trim(),
-      });
+      const opp = await convertLead(lead.id, {});
       router.push(`/crm/opportunities/${opp.id}`);
     } catch (err) {
-      setConvertError(err instanceof ApiClientError ? err.message : "Failed to convert lead");
+      setBanner({
+        text: err instanceof ApiClientError ? err.message : "Failed to convert lead",
+        tone: "error",
+      });
     } finally {
       setConverting(false);
     }
@@ -154,13 +126,6 @@ export function LeadDetailPage({ leadId }: { leadId: string }) {
   const lost = blueprint.state === "lost";
   const canConvert = blueprint.allowed_actions.includes("convert") && !blueprint.locked;
   const converted = blueprint.state === "converted" && Boolean(lead.converted_opportunity_id);
-  const timelineLinks = {
-    ...(lead.company_account_id ? { company: `/crm/companies/${lead.company_account_id}` } : {}),
-    lead: `/crm/leads/${lead.id}`,
-    ...(lead.converted_opportunity_id
-      ? { opportunity: `/crm/opportunities/${lead.converted_opportunity_id}` }
-      : {}),
-  };
 
   return (
     <CrmPage>
@@ -173,11 +138,6 @@ export function LeadDetailPage({ leadId }: { leadId: string }) {
         </Link>
       </div>
 
-      <DealTimeline
-        current={converted ? "opportunity" : "lead"}
-        lost={lost}
-        links={timelineLinks}
-      />
       <ApprovalBanner locked={blueprint.locked} label="This lead" />
       {lead.company_account_id ? (
         <SyncedBanner from="Company" href={`/crm/companies/${lead.company_account_id}`} />
@@ -195,8 +155,14 @@ export function LeadDetailPage({ leadId }: { leadId: string }) {
             <DealTimelineStatusBadge stage={converted ? "opportunity" : "lead"} lost={lost} />
             <FinanceStatusBadge status={lead.status} />
             {canConvert ? (
-              <Button type="button" size="sm" className="cursor-pointer" onClick={() => void openConvert()}>
-                Convert to Opportunity
+              <Button
+                type="button"
+                size="sm"
+                className="cursor-pointer"
+                disabled={converting}
+                onClick={() => void convertNow()}
+              >
+                {converting ? "Converting…" : "Convert to Opportunity"}
               </Button>
             ) : null}
             {converted && lead.converted_opportunity_id ? (
@@ -236,40 +202,6 @@ export function LeadDetailPage({ leadId }: { leadId: string }) {
         employees={employees}
         leadSources={leadSources}
       />
-
-      <ConfirmDialog
-        open={convertOpen}
-        title="Convert to Opportunity"
-        description="A remark is required to convert this lead."
-        confirmLabel={converting ? "Converting…" : "Convert"}
-        busy={converting}
-        onCancel={() => !converting && setConvertOpen(false)}
-        onConfirm={() => void submitConvert()}
-      >
-        <div className="mt-3 space-y-3">
-          <FinanceField label="Opportunity Name *">
-            <Input
-              value={convertForm.opportunity_name}
-              onChange={(e) => setConvertForm((f) => ({ ...f, opportunity_name: e.target.value }))}
-            />
-          </FinanceField>
-          <FinanceField label="Expected Revenue (₹)">
-            <Input
-              type="number"
-              min={0}
-              value={convertForm.expected_revenue}
-              onChange={(e) => setConvertForm((f) => ({ ...f, expected_revenue: e.target.value }))}
-            />
-          </FinanceField>
-          <FinanceField label="Remark *">
-            <FinanceTextarea
-              value={convertForm.remark}
-              onChange={(e) => setConvertForm((f) => ({ ...f, remark: e.target.value }))}
-            />
-          </FinanceField>
-          {convertError ? <p className="text-xs text-destructive">{convertError}</p> : null}
-        </div>
-      </ConfirmDialog>
     </CrmPage>
   );
 }

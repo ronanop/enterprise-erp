@@ -10,7 +10,6 @@ import { CrmErrorBanner, CrmPage } from "@/components/crm/crm-ui";
 import { ApprovalBanner } from "@/components/crm/sales/approval-banner";
 import { CompanyAccountActionsMenu } from "@/components/crm/sales/company-account-actions-menu";
 import { CompanyWorkspaceNav } from "@/components/crm/company-workspace-nav";
-import { DealTimeline, type DealStage } from "@/components/crm/sales/deal-timeline";
 import { PageHeader } from "@/components/layout/page-header";
 import {
   getCrmOpportunityContext,
@@ -20,12 +19,7 @@ import {
   setCrmSidebarFocus,
 } from "@/lib/crm-sidebar-focus";
 import { ApiClientError } from "@/services/api-client";
-import {
-  getCompany,
-  listSalesLeads,
-  type Company,
-  type SalesLead,
-} from "@/services/sales-crm-service";
+import { getCompany, type Company } from "@/services/sales-crm-service";
 
 export function CompanyWorkspaceShell({
   companyAccountId,
@@ -38,7 +32,6 @@ export function CompanyWorkspaceShell({
 }) {
   const pathname = usePathname();
   const [company, setCompany] = useState<Company | null>(null);
-  const [leads, setLeads] = useState<SalesLead[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [fromOpportunityId, setFromOpportunityId] = useState<string | null>(() => {
@@ -50,12 +43,8 @@ export function CompanyWorkspaceShell({
     setLoading(true);
     setError(null);
     try {
-      const [companyRow, leadRows] = await Promise.all([
-        getCompany(companyAccountId),
-        listSalesLeads(companyAccountId).catch(() => [] as SalesLead[]),
-      ]);
+      const companyRow = await getCompany(companyAccountId);
       setCompany(companyRow);
-      setLeads(leadRows);
       onCompanyChange?.(companyRow);
     } catch (err) {
       setCompany(null);
@@ -119,19 +108,6 @@ export function CompanyWorkspaceShell({
     );
   }
 
-  const activeLead = leads.find((lead) => lead.blueprint_state === "open") ?? leads[0];
-  const timelineStage: DealStage = activeLead?.converted_opportunity_id
-    ? "opportunity"
-    : activeLead
-      ? "lead"
-      : "company";
-  const timelineLinks = {
-    company: `/crm/companies/${company.id}`,
-    ...(activeLead ? { lead: `/crm/leads/${activeLead.id}` } : {}),
-    ...(activeLead?.converted_opportunity_id
-      ? { opportunity: `/crm/opportunities/${activeLead.converted_opportunity_id}` }
-      : {}),
-  };
   return (
     <div className="flex min-w-0 items-start gap-0">
       {hideWorkspaceNav ? null : (
@@ -160,8 +136,7 @@ export function CompanyWorkspaceShell({
             </Link>
 
             {hideWorkspaceNav ? null : (
-              <div className="mt-3 space-y-3">
-                <DealTimeline current={timelineStage} links={timelineLinks} />
+              <div className="mt-3">
                 <ApprovalBanner locked={company.locked} label="This company account" />
               </div>
             )}

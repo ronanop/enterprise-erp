@@ -28,9 +28,16 @@ function LeadReadOnlyField({ label, value }: { label: string; value: string }) {
   );
 }
 
-function formatLeadStatus(status: string): string {
-  if (status === "new") return "New";
-  return status.replaceAll("_", " ").replace(/\b\w/g, (c) => c.toUpperCase());
+function formatLeadStatus(lead: SalesLead): string {
+  if (
+    lead.status === "converted" ||
+    lead.blueprint_state === "converted" ||
+    Boolean(lead.converted_opportunity_id)
+  ) {
+    return "Converted to Opportunity";
+  }
+  if (lead.status === "new") return "New";
+  return lead.status.replaceAll("_", " ").replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
 type Props = {
@@ -38,6 +45,8 @@ type Props = {
   company?: Company | null;
   employees?: Option[];
   leadSources?: Option[];
+  /** Section heading — use Opportunity Information on converted deals. */
+  title?: string;
 };
 
 export function LeadDetailsCard({
@@ -45,6 +54,7 @@ export function LeadDetailsCard({
   company,
   employees = [],
   leadSources = [],
+  title = "Lead Information",
 }: Props) {
   const employeeName = (id: string | null | undefined) => {
     if (!id) return "None";
@@ -61,7 +71,7 @@ export function LeadDetailsCard({
 
   return (
     <div className="space-y-5">
-      <CrmSection title="Lead Information" icon={UserPlus}>
+      <CrmSection title={title} icon={UserPlus}>
         <div className="grid gap-x-10 gap-y-3 md:grid-cols-2">
           <LeadReadOnlyField label="Company" value={companyName} />
           <LeadReadOnlyField
@@ -84,13 +94,13 @@ export function LeadDetailsCard({
           <LeadReadOnlyField label="Email *" value={textOrDash(lead.email)} />
           <LeadReadOnlyField label="Mobile *" value={textOrDash(lead.mobile)} />
 
-          <LeadReadOnlyField label="Designation" value={textOrDash(lead.designation)} />
+          <LeadReadOnlyField label="Designation *" value={textOrDash(lead.designation)} />
           <LeadReadOnlyField label="Lead Source *" value={leadSourceName(lead.lead_source_id)} />
 
           <LeadReadOnlyField label="Product Type *" value={textOrDash(lead.product_type)} />
 
           <LeadReadOnlyField
-            label="Sub Product Category"
+            label="Sub Product Category *"
             value={textOrDash(lead.sub_product_category)}
           />
           <LeadReadOnlyField label="Requirement Type *" value={textOrDash(lead.requirement_type)} />
@@ -113,7 +123,7 @@ export function LeadDetailsCard({
             label="Expected Order Value *"
             value={lead.expected_amount != null ? formatInr(lead.expected_amount) : "—"}
           />
-          <LeadReadOnlyField label="Lead Status" value={formatLeadStatus(lead.status)} />
+          <LeadReadOnlyField label="Status" value={formatLeadStatus(lead)} />
 
           <LeadReadOnlyField
             label="Expected Closure Date *"

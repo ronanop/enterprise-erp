@@ -1,9 +1,9 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { ArrowLeft, ClipboardCheck, FileText, Handshake, Paperclip, Plus } from "lucide-react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { ArrowLeft, ClipboardCheck, Download, Eye, FileText, Handshake, Paperclip, Plus } from "lucide-react";
 
 import {
   CrmErrorBanner,
@@ -15,7 +15,6 @@ import {
 } from "@/components/crm/crm-ui";
 import { ApprovalBanner } from "@/components/crm/sales/approval-banner";
 import { BlueprintActions } from "@/components/crm/sales/blueprint-actions";
-import { DealTimeline, DealTimelineStatusBadge, type DealStage } from "@/components/crm/sales/deal-timeline";
 import { EntityAttachmentsList } from "@/components/crm/sales/entity-attachments-list";
 import { LeadDetailsCard } from "@/components/crm/sales/lead-details-card";
 import { CompanyWorkspaceNav } from "@/components/crm/company-workspace-nav";
@@ -31,26 +30,41 @@ import {
   getCompany,
   getOpportunity,
   getOpportunityBlueprint,
-  getOpportunityTimeline,
   getSalesLead,
   listAttachments,
   listCrmMemberOptions,
   listLeadSourceOptions,
   listOvfs,
   listQuotes,
+  downloadAttachment,
   markOvfDealWon,
+  openAttachmentInNewTab,
   sendOvfForApproval,
   shareOvfToScm,
   type Attachment,
   type BlueprintState,
   type Company,
   type Opportunity,
-  type OpportunityTimelineEvent,
   type Option,
   type Ovf,
   type Quote,
   type SalesLead,
 } from "@/services/sales-crm-service";
+
+function approvalAttachmentCategory(state: string | null | undefined): string | null {
+  switch (state) {
+    case "sow_approval":
+      return "sow";
+    case "boq_approval":
+      return "boq";
+    case "po_approval":
+      return "customer_po";
+    case "cloud_discount_approval":
+      return "contract";
+    default:
+      return null;
+  }
+}
 
 const CUSTOM_ACTIONS = ["create_quote", "quote_accepted", "create_ovf"];
 
@@ -72,7 +86,10 @@ const OVF_FOLLOW_ON = new Set(Object.values(OVF_STAGE_ACTIONS).flat());
 
 export function OpportunityDetailPage({ opportunityId }: { opportunityId: string }) {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const fromMyJobs = searchParams.get("from") === "my-jobs";
   const [opp, setOpp] = useState<Opportunity | null>(null);
+  const [attachmentBusy, setAttachmentBusy] = useState(false);
   const [blueprint, setBlueprint] = useState<BlueprintState | null>(null);
   const [sourceLead, setSourceLead] = useState<SalesLead | null>(null);
   const [company, setCompany] = useState<Company | null>(null);
@@ -81,7 +98,6 @@ export function OpportunityDetailPage({ opportunityId }: { opportunityId: string
   const [quotes, setQuotes] = useState<Quote[]>([]);
   const [ovfs, setOvfs] = useState<Ovf[]>([]);
   const [attachments, setAttachments] = useState<Attachment[]>([]);
-  const [timelineEvents, setTimelineEvents] = useState<OpportunityTimelineEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [banner, setBanner] = useState<{ text: string; tone: "success" | "error" } | null>(null);
@@ -101,7 +117,7 @@ export function OpportunityDetailPage({ opportunityId }: { opportunityId: string
       setBlueprint(bp);
       setEmployees(employeeOptions);
       setLeadSources(leadSourceOptions);
-      const [quoteRows, ovfRows, attachmentRows, leadRow, companyRow, timeline] = await Promise.all([
+      const [quoteRows, ovfRows, attachmentRows, leadRow, companyRow] = await Promise.all([
         listQuotes({ opportunity_id: opportunityId }).catch(() => []),
         listOvfs({ opportunity_id: opportunityId }).catch(() => []),
         listAttachments("opportunity", opportunityId).catch(() => []),
@@ -109,14 +125,12 @@ export function OpportunityDetailPage({ opportunityId }: { opportunityId: string
         oppRow.company_account_id
           ? getCompany(oppRow.company_account_id).catch(() => null)
           : Promise.resolve(null),
-        getOpportunityTimeline(opportunityId).catch(() => null),
       ]);
       setQuotes(quoteRows);
       setOvfs(ovfRows);
       setAttachments(attachmentRows);
       setSourceLead(leadRow);
       setCompany(companyRow);
-      setTimelineEvents(timeline?.events ?? []);
     } catch (err) {
       setOpp(null);
       setError(err instanceof ApiClientError ? err.message : "Failed to load opportunity");
@@ -185,6 +199,24 @@ export function OpportunityDetailPage({ opportunityId }: { opportunityId: string
     router.push(`/crm/quotes/${quote.id}/ovf/new`);
   }
 
+  const reviewCategory = useMemo(
+    () => approvalAttachmentCategory(blueprint?.state),
+    [blueprint?.state],
+  );
+  const reviewAttachment = useMemo(() => {
+    if (reviewCategory) {
+      const matched = attachments.find((row) => row.category === reviewCategory);
+      if (matched) return matched;
+      // Legacy SOW approvals were sometimes stored under boq_approval.
+      if (reviewCategory === "boq") {
+        const sow = attachments.find((row) => row.category === "sow");
+        if (sow) return sow;
+      }
+    }
+    if (fromMyJobs || blueprint?.locked) return attachments[0] ?? null;
+    return null;
+  }, [attachments, reviewCategory, fromMyJobs, blueprint?.locked]);
+
   if (loading && !opp) {
     return (
       <div className="space-y-3">
@@ -207,8 +239,6 @@ export function OpportunityDetailPage({ opportunityId }: { opportunityId: string
 
   if (!opp || !blueprint) return null;
 
-  const lost = blueprint.state === "lost" || opp.status === "lost";
-  const won = blueprint.state === "won" || opp.status === "won";
   const acceptedQuote = quotes.find((q) => q.quote_stage === "accepted");
   const activeQuote = acceptedQuote ?? quotes[0];
   const existingOvf = ovfs[0];
@@ -226,22 +256,6 @@ export function OpportunityDetailPage({ opportunityId }: { opportunityId: string
     );
   const showOvf = ovfs.length > 0 || ["ovf_ready", "won"].includes(blueprint.state);
 
-  const timelineStage: DealStage = won
-    ? "won"
-    : existingOvf || blueprint.state === "ovf_ready"
-      ? "ovf"
-      : ["quote_ready", "quote_in_progress", "po_pending", "po_approval"].includes(blueprint.state) ||
-        !!activeQuote
-        ? "quote"
-        : "opportunity";
-  const timelineLinks = {
-    ...(opp.company_account_id ? { company: `/crm/companies/${opp.company_account_id}` } : {}),
-    ...(opp.lead_id ? { lead: `/crm/leads/${opp.lead_id}` } : {}),
-    opportunity: `/crm/opportunities/${opp.id}`,
-    ...(activeQuote ? { quote: `/crm/quotes/${activeQuote.id}` } : {}),
-    ...(existingOvf ? { ovf: `/crm/ovf/${existingOvf.id}` } : {}),
-    ...(won && existingOvf ? { won: `/crm/ovf/${existingOvf.id}` } : {}),
-  };
   const quoteFollowOnActions =
     blueprint.state === "quote_in_progress" && activeQuote
       ? (QUOTE_STAGE_ACTIONS[activeQuote.quote_stage] ?? [])
@@ -253,6 +267,30 @@ export function OpportunityDetailPage({ opportunityId }: { opportunityId: string
   const blueprintActions = Array.from(
     new Set([...blueprint.allowed_actions, ...quoteFollowOnActions, ...ovfFollowOnActions]),
   );
+
+  async function onOpenReviewAttachment() {
+    if (!reviewAttachment) return;
+    setAttachmentBusy(true);
+    try {
+      await openAttachmentInNewTab(reviewAttachment);
+    } catch {
+      window.alert("Could not open this attachment.");
+    } finally {
+      setAttachmentBusy(false);
+    }
+  }
+
+  async function onDownloadReviewAttachment() {
+    if (!reviewAttachment) return;
+    setAttachmentBusy(true);
+    try {
+      await downloadAttachment(reviewAttachment.id, reviewAttachment.file_name, reviewAttachment);
+    } catch {
+      window.alert("Could not download this attachment.");
+    } finally {
+      setAttachmentBusy(false);
+    }
+  }
 
   return (
     <div className="flex min-w-0 items-start gap-0">
@@ -274,19 +312,21 @@ export function OpportunityDetailPage({ opportunityId }: { opportunityId: string
             </Link>
           </div>
 
-          <DealTimeline current={timelineStage} lost={lost} links={timelineLinks} />
-          <ApprovalBanner locked={blueprint.locked} approvalStatus={blueprint.state} label="This opportunity" />
+          <ApprovalBanner
+            locked={blueprint.locked}
+            approvalStatus={blueprint.state}
+            label="This opportunity"
+            boqAttached={opp.boq_attached}
+            boqApproved={opp.boq_approved}
+            sowAttached={opp.sow_attached}
+            sowApproved={opp.sow_approved}
+          />
 
           <PageHeader
             title={`${opp.opportunity_name} · ${opp.opportunity_code}`}
             description={`Expected revenue ${formatInr(opp.expected_revenue)}`}
             actions={
               <div className="flex flex-wrap items-center gap-2">
-                <DealTimelineStatusBadge
-                  stage={timelineStage}
-                  lost={lost}
-                  timelineEvents={timelineEvents}
-                />
                 {canCreateQuote ? (
                   <Button type="button" size="sm" className="cursor-pointer" disabled={busy} onClick={onCreateQuote}>
                     <Plus className="size-3.5" /> Create Quote
@@ -431,6 +471,7 @@ export function OpportunityDetailPage({ opportunityId }: { opportunityId: string
               company={company}
               employees={employees}
               leadSources={leadSources}
+              title="Opportunity Information"
             />
           ) : opp.lead_id ? (
             <CrmSection title="Source Lead" icon={Handshake}>
@@ -446,6 +487,48 @@ export function OpportunityDetailPage({ opportunityId }: { opportunityId: string
             </CrmSection>
           ) : null}
 
+          {(fromMyJobs || blueprint.locked) && reviewAttachment ? (
+            <CrmSection
+              title="Document for approval"
+              subtitle="Open or download the file under review"
+              icon={Paperclip}
+            >
+              <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border/70 bg-muted/30 px-3 py-2.5">
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-medium text-foreground">
+                    {reviewAttachment.file_name}
+                  </p>
+                  <p className="text-[11px] capitalize text-muted-foreground">
+                    {reviewAttachment.category.replaceAll("_", " ")}
+                  </p>
+                </div>
+                <div className="flex shrink-0 flex-wrap gap-1.5">
+                  <Button
+                    type="button"
+                    size="sm"
+                    className="cursor-pointer transition-opacity duration-200"
+                    disabled={attachmentBusy}
+                    onClick={() => void onOpenReviewAttachment()}
+                  >
+                    <Eye className="size-3.5" />
+                    Open in new tab
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="cursor-pointer transition-opacity duration-200"
+                    disabled={attachmentBusy}
+                    onClick={() => void onDownloadReviewAttachment()}
+                  >
+                    <Download className="size-3.5" />
+                    Download
+                  </Button>
+                </div>
+              </div>
+            </CrmSection>
+          ) : null}
+
           <CrmSection title="Attachments" subtitle="BOQ / SOW / OEM / PO files" icon={Paperclip}>
             <EntityAttachmentsList
               attachments={attachments}
@@ -453,6 +536,7 @@ export function OpportunityDetailPage({ opportunityId }: { opportunityId: string
               entityId={opportunityId}
               branchId={opp.branch_id}
               companyId={opp.company_id}
+              highlightCategory={fromMyJobs || blueprint.locked ? reviewCategory : null}
               onChanged={load}
             />
           </CrmSection>

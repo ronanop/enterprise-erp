@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { RefreshCw, Trash2 } from "lucide-react";
+import { Download, Eye, RefreshCw, Trash2 } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -9,6 +9,7 @@ import { ApiClientError } from "@/services/api-client";
 import {
   createAttachment,
   deleteAttachment,
+  downloadAttachment,
   fileToBase64,
   openAttachmentInNewTab,
   type Attachment,
@@ -21,6 +22,7 @@ type Props = {
   branchId: string;
   companyId?: string | null;
   readOnly?: boolean;
+  highlightCategory?: string | null;
   onChanged: () => void | Promise<void>;
 };
 
@@ -31,6 +33,7 @@ export function EntityAttachmentsList({
   branchId,
   companyId,
   readOnly,
+  highlightCategory,
   onChanged,
 }: Props) {
   const replaceInputRef = useRef<HTMLInputElement>(null);
@@ -92,6 +95,28 @@ export function EntityAttachmentsList({
     }
   }
 
+  async function onOpen(row: Attachment) {
+    setBusyId(row.id);
+    try {
+      await openAttachmentInNewTab(row);
+    } catch {
+      window.alert("Could not open this attachment.");
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  async function onDownload(row: Attachment) {
+    setBusyId(row.id);
+    try {
+      await downloadAttachment(row.id, row.file_name, row);
+    } catch {
+      window.alert("Could not download this attachment.");
+    } finally {
+      setBusyId(null);
+    }
+  }
+
   if (attachments.length === 0) {
     return <p className="text-xs text-muted-foreground">No files attached yet.</p>;
   }
@@ -109,25 +134,45 @@ export function EntityAttachmentsList({
       <ul className="space-y-1.5 text-xs">
         {attachments.map((row) => {
           const busy = busyId === row.id;
+          const highlighted = Boolean(highlightCategory && row.category === highlightCategory);
           return (
             <li
               key={row.id}
-              className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border/60 px-3 py-1.5"
+              className={
+                highlighted
+                  ? "flex flex-wrap items-center justify-between gap-2 rounded-lg border border-primary/40 bg-primary/5 px-3 py-2"
+                  : "flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border/60 px-3 py-1.5"
+              }
             >
-              <button
-                type="button"
-                className="min-w-0 flex-1 cursor-pointer truncate text-left text-foreground transition-opacity duration-200 hover:opacity-80"
-                disabled={busy}
-                onClick={() => void openAttachmentInNewTab(row).catch(() => {
-                  window.alert("Could not open this attachment.");
-                })}
-              >
-                {row.file_name}
-              </button>
-              <div className="flex shrink-0 flex-wrap items-center gap-1.5">
-                <Badge variant="secondary" className="capitalize">
+              <div className="min-w-0 flex-1">
+                <p className="truncate font-medium text-foreground">{row.file_name}</p>
+                <Badge variant="secondary" className="mt-1 capitalize">
                   {row.category.replaceAll("_", " ")}
                 </Badge>
+              </div>
+              <div className="flex shrink-0 flex-wrap items-center gap-1.5">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-7 cursor-pointer px-2 text-[11px] transition-colors duration-200"
+                  disabled={Boolean(busyId)}
+                  onClick={() => void onOpen(row)}
+                >
+                  <Eye className="size-3" />
+                  {busy ? "…" : "Open"}
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-7 cursor-pointer px-2 text-[11px] transition-colors duration-200"
+                  disabled={Boolean(busyId)}
+                  onClick={() => void onDownload(row)}
+                >
+                  <Download className="size-3" />
+                  Download
+                </Button>
                 {!readOnly ? (
                   <>
                     <Button
@@ -150,7 +195,7 @@ export function EntityAttachmentsList({
                       onClick={() => void onDelete(row)}
                     >
                       <Trash2 className="size-3" />
-                      {busy ? "…" : "Delete"}
+                      Delete
                     </Button>
                   </>
                 ) : null}

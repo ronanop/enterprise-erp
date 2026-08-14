@@ -66,7 +66,7 @@ class ApprovalTaskService:
     ):
         cid = self._scope.resolve_company_id(ctx, company_id)
         assigned_user_id = ctx.user_id if my_tasks_only else None
-        return self._repo.list_tasks(
+        rows = self._repo.list_tasks(
             ctx,
             cid,
             team_role=team_role,
@@ -75,6 +75,27 @@ class ApprovalTaskService:
             entity_type=entity_type,
             entity_id=entity_id,
         )
+        # When viewing “Assigned to me”, also surface requests I sent so the
+        # requester can track open approvals even if they are not the assignee.
+        if my_tasks_only and ctx.user_id is not None:
+            sent = self._repo.list_tasks(
+                ctx,
+                cid,
+                team_role=team_role,
+                status=status,
+                requested_by=ctx.user_id,
+                entity_type=entity_type,
+                entity_id=entity_id,
+            )
+            by_id = {row.id: row for row in rows}
+            for row in sent:
+                by_id.setdefault(row.id, row)
+            rows = sorted(
+                by_id.values(),
+                key=lambda row: row.created_at or utcnow(),
+                reverse=True,
+            )
+        return rows
 
     def get(self, ctx: TenantContext, row_id: UUID) -> CrmApprovalTask:
         row = self._repo.get(ctx, row_id)
@@ -125,7 +146,8 @@ class ApprovalTaskService:
         self,
         ctx: TenantContext,
         *,
-        assigned_user_id: UUID,
+        assigned_user_ids: list[UUID] | None = None,
+        assigned_user_id: UUID | None = None,
         title: str,
         entity_type: str,
         entity_id: UUID,
@@ -136,22 +158,40 @@ class ApprovalTaskService:
         remarks: str | None = None,
         priority: str = "normal",
     ) -> CrmApprovalTask:
-        """Create a My Jobs task for the selected approver and copies for tenant admins."""
-        primary = self.create_task(
-            ctx,
-            title=title,
-            entity_type=entity_type,
-            entity_id=entity_id,
-            team_role=team_role,
-            action=action,
-            company_id=company_id,
-            branch_id=branch_id,
-            assigned_user_id=assigned_user_id,
-            remarks=remarks,
-            priority=priority,
-        )
+        """Create My Jobs tasks for each selected approver and copies for tenant admins."""
+        recipient_ids: list[UUID] = []
+        seen: set[UUID] = set()
+        for uid in assigned_user_ids or []:
+            if uid in seen:
+                continue
+            seen.add(uid)
+            recipient_ids.append(uid)
+        if assigned_user_id is not None and assigned_user_id not in seen:
+            recipient_ids.insert(0, assigned_user_id)
+            seen.add(assigned_user_id)
+        if not recipient_ids:
+            raise ConflictException("Select at least one approver before sending for approval")
+
+        primary: CrmApprovalTask | None = None
+        for uid in recipient_ids:
+            task = self.create_task(
+                ctx,
+                title=title,
+                entity_type=entity_type,
+                entity_id=entity_id,
+                team_role=team_role,
+                action=action,
+                company_id=company_id,
+                branch_id=branch_id,
+                assigned_user_id=uid,
+                remarks=remarks,
+                priority=priority,
+            )
+            if primary is None:
+                primary = task
+
         for admin_id in self._admin_recipient_ids(ctx):
-            if admin_id == assigned_user_id:
+            if admin_id in seen:
                 continue
             self.create_task(
                 ctx,
@@ -166,6 +206,7 @@ class ApprovalTaskService:
                 remarks=remarks,
                 priority=priority,
             )
+        assert primary is not None
         return primary
 
     def _admin_recipient_ids(self, ctx: TenantContext) -> list[UUID]:

@@ -71,15 +71,22 @@ _TRANSITIONS: dict[str, dict[str, dict[str, str]]] = {
             "attach_boq": "boq_pending",
             "attach_sow": "boq_pending",
             "send_boq_approval": "boq_approval",
-            "send_sow_approval": "boq_approval",
+            "send_sow_approval": "sow_approval",
+            # Gated in BlueprintService until BOQ or SOW is approved.
             "deal_reg": "oem_pending",
             "lost": "lost",
         },
         "boq_approval": {
             "approve_boq": "deal_reg",
             "reject_boq": "boq_pending",
+            # Legacy: older builds routed send_sow_approval into boq_approval.
             "approve_sow": "deal_reg",
-            "reject_sow": "deal_reg",
+            "reject_sow": "boq_pending",
+            "lost": "lost",
+        },
+        "sow_approval": {
+            "approve_sow": "deal_reg",
+            "reject_sow": "boq_pending",
             "lost": "lost",
         },
         # Backward-compatible exit for opportunities already persisted in the
@@ -95,7 +102,7 @@ _TRANSITIONS: dict[str, dict[str, dict[str, str]]] = {
             "deal_reg": "oem_pending",
             "lost": "lost",
             "send_boq_approval": "boq_approval",
-            "send_sow_approval": "boq_approval",
+            "send_sow_approval": "sow_approval",
         },
         "oem_pending": {"oem_received": "oem_attached", "lost": "lost"},
         "oem_attached": {"attach_oem_quote": "quote_ready", "lost": "lost"},

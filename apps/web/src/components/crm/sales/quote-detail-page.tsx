@@ -31,7 +31,7 @@ import {
 import { ApprovalBanner } from "@/components/crm/sales/approval-banner";
 import { AttachmentsPanel } from "@/components/crm/sales/attachments-panel";
 import { BlueprintActions } from "@/components/crm/sales/blueprint-actions";
-import { DealTimeline, DealTimelineStatusBadge, type DealStage } from "@/components/crm/sales/deal-timeline";
+import { DealTimelineStatusBadge, type DealStage } from "@/components/crm/sales/deal-timeline";
 import { QuoteLineTable } from "@/components/crm/sales/quote-line-table";
 import { FinanceStatusBadge } from "@/components/finance/finance-status-badge";
 import { PageHeader } from "@/components/layout/page-header";
@@ -197,43 +197,6 @@ export function QuoteDetailPage({ quoteId }: { quoteId: string }) {
       .filter((row) => row.category === "boq")
       .map((row) => row.file_name)
       .join(", ") || "—";
-  const timelineLinks = {
-    ...(opportunity?.company_account_id
-      ? { company: `/crm/companies/${opportunity.company_account_id}` }
-      : {}),
-    ...(opportunity?.lead_id ? { lead: `/crm/leads/${opportunity.lead_id}` } : {}),
-    opportunity: `/crm/opportunities/${quote.opportunity_id}`,
-    quote: `/crm/quotes/${quote.id}`,
-    ...(existingOvf ? { ovf: `/crm/ovf/${existingOvf.id}` } : {}),
-    ...(existingOvf?.deal_won ? { won: `/crm/ovf/${existingOvf.id}` } : {}),
-  };
-  const nextStep = existingOvf
-    ? {
-        label: existingOvf.deal_won ? "Review Won Deal" : "Continue OVF",
-        description: existingOvf.deal_won
-          ? "The deal is complete. Review its final OVF and value."
-          : "Continue approval, SCM sharing, and Deal Won on the OVF.",
-        href: `/crm/ovf/${existingOvf.id}`,
-      }
-    : quote.quote_stage === "accepted" &&
-        opportunity?.blueprint_state === "ovf_ready" &&
-        opportunity.customer_po_approved
-      ? {
-          label: "Create OVF",
-          description: "Customer PO is approved. Create the OVF to continue the deal.",
-          href: `/crm/quotes/${quote.id}/ovf/new`,
-        }
-      : quote.quote_stage === "accepted"
-        ? {
-            label: "Attach Customer PO",
-            description:
-              "The quote is accepted. Continue on the opportunity to attach and approve the customer PO.",
-            href: `/crm/opportunities/${quote.opportunity_id}`,
-          }
-        : {
-            label: "Complete Quote",
-            description: "Use the quote actions and line editor on this screen to advance the deal.",
-          };
 
   const canCreateOvf =
     quote.quote_stage === "accepted" &&
@@ -275,8 +238,7 @@ export function QuoteDetailPage({ quoteId }: { quoteId: string }) {
         </Link>
       </div>
 
-      <DealTimeline current={timelineStage} lost={lost} links={timelineLinks} nextStep={nextStep} />
-      <ApprovalBanner locked={blueprint.locked} approvalStatus={quote.approval_status} label="This quote" />
+      <ApprovalBanner locked={blueprint.locked} approvalStatus={blueprint.state} label="This quote" />
 
       <PageHeader
         title={`${quote.quote_no}${quote.quote_revision > 1 ? ` (Rev ${quote.quote_revision})` : ""}`}

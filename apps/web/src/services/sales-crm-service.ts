@@ -87,6 +87,7 @@ export type BlueprintActionPayload = {
   content_type?: string;
   team_role?: string;
   assigned_user_id?: string;
+  assigned_user_ids?: string[];
   remarks?: string;
   remark?: string;
   reason?: string;
@@ -559,14 +560,15 @@ export async function markLeadLost(id: string, reason?: string): Promise<SalesLe
 
 export type LeadConvertInput = {
   pipeline_id?: string | null;
-  opportunity_name: string;
-  expected_revenue?: number;
+  opportunity_name?: string | null;
+  expected_revenue?: number | null;
   existing_customer_id?: string | null;
   create_customer?: boolean;
   remark?: string | null;
 };
 
-export async function convertLead(id: string, body: LeadConvertInput): Promise<Opportunity> {
+/** Converts using lead defaults when body fields are omitted. */
+export async function convertLead(id: string, body: LeadConvertInput = {}): Promise<Opportunity> {
   return unwrap(
     await apiClient<Opportunity>(`${CRM_LEADS_API}/${id}/convert`, { method: "POST", body }),
   );
@@ -600,6 +602,8 @@ export type Opportunity = {
   locked?: boolean;
   boq_attached?: boolean;
   sow_attached?: boolean;
+  boq_approved?: boolean;
+  sow_approved?: boolean;
   oem_quote_attached?: boolean;
   customer_po_attached?: boolean;
   customer_po_approved?: boolean;

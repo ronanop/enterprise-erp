@@ -11,11 +11,13 @@ import { CrmListToolbar } from "@/components/crm/sales/crm-list-toolbar";
 import { CrmSortableTh, sortRows, useTableSort } from "@/components/crm/sales/crm-table-sort";
 import { FinanceStatusBadge } from "@/components/finance/finance-status-badge";
 import { PageHeader } from "@/components/layout/page-header";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ApiClientError } from "@/services/api-client";
 import {
   decideMyJob,
+  getOpportunity,
+  getOvf,
+  getQuote,
   listMyJobs,
   listOpportunities,
   listOvfs,
@@ -28,15 +30,13 @@ import {
 const TEAM_ROLES = ["presales", "project", "management", "accounts", "scm"];
 const STATUSES = ["pending", "approved", "rejected", "cancelled"];
 
-type SortKey = "title" | "entity_type" | "team_role" | "priority" | "status" | "due_at";
+type SortKey = "title" | "opportunity_name" | "team_role" | "status";
 
-function formatDate(value: string | null): string {
-  if (!value) return "—";
-  try {
-    return new Date(value).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" });
-  } catch {
-    return value;
-  }
+function myJobDetailHref(task: ApprovalTask): string {
+  const base = myJobEntityHref(task.entity_type, task.entity_id);
+  if (base === "/crm/my-jobs") return base;
+  const sep = base.includes("?") ? "&" : "?";
+  return `${base}${sep}from=my-jobs`;
 }
 
 export function MyJobsPage({
@@ -47,17 +47,57 @@ export function MyJobsPage({
   embedded?: boolean;
 } = {}) {
   const [rows, setRows] = useState<ApprovalTask[]>([]);
+  const [recordNames, setRecordNames] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [teamRole, setTeamRole] = useState<string>("");
   const [status, setStatus] = useState<string>("pending");
-  const [mineOnly, setMineOnly] = useState(false);
-  const { sortBy, sortDir, onSort } = useTableSort<SortKey>("due_at", "asc");
+  const [mineOnly, setMineOnly] = useState(true);
+  const { sortBy, sortDir, onSort } = useTableSort<SortKey>("title", "asc");
 
   const [decision, setDecision] = useState<{ task: ApprovalTask; outcome: "approved" | "rejected" } | null>(null);
   const [remark, setRemark] = useState("");
   const [deciding, setDeciding] = useState(false);
   const [decideError, setDecideError] = useState<string | null>(null);
+
+  const loadNames = useCallback(async (tasks: ApprovalTask[]) => {
+    const names: Record<string, string> = {};
+    const oppCache = new Map<string, string>();
+
+    async function opportunityName(id: string): Promise<string | null> {
+      if (oppCache.has(id)) return oppCache.get(id) ?? null;
+      try {
+        const opp = await getOpportunity(id);
+        oppCache.set(id, opp.opportunity_name);
+        return opp.opportunity_name;
+      } catch {
+        return null;
+      }
+    }
+
+    await Promise.all(
+      tasks.map(async (task) => {
+        try {
+          if (task.entity_type === "opportunity") {
+            names[task.id] = (await opportunityName(task.entity_id)) ?? "—";
+          } else if (task.entity_type === "quote") {
+            const quote = await getQuote(task.entity_id);
+            names[task.id] =
+              (quote.opportunity_id ? await opportunityName(quote.opportunity_id) : null) ?? quote.quote_no;
+          } else if (task.entity_type === "ovf") {
+            const ovf = await getOvf(task.entity_id);
+            names[task.id] =
+              (ovf.opportunity_id ? await opportunityName(ovf.opportunity_id) : null) ?? ovf.ovf_no;
+          } else {
+            names[task.id] = "—";
+          }
+        } catch {
+          names[task.id] = "—";
+        }
+      }),
+    );
+    setRecordNames(names);
+  }, []);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -69,34 +109,36 @@ export function MyJobsPage({
         mine: mineOnly || undefined,
       });
 
-      if (!companyAccountId) {
-        setRows(tasks);
-        return;
+      let visible = tasks;
+      if (companyAccountId) {
+        const [leads, opps, quotes, ovfs] = await Promise.all([
+          listSalesLeads(companyAccountId).catch(() => []),
+          listOpportunities({ company_account_id: companyAccountId }).catch(() => []),
+          listQuotes({ company_account_id: companyAccountId }).catch(() => []),
+          listOvfs({ company_account_id: companyAccountId }).catch(() => []),
+        ]);
+
+        const entityIds = new Set<string>([
+          companyAccountId,
+          ...leads.map((row) => row.id),
+          ...opps.map((row) => row.id),
+          ...quotes.map((row) => row.id),
+          ...ovfs.map((row) => row.id),
+        ]);
+
+        visible = tasks.filter((task) => entityIds.has(task.entity_id));
       }
 
-      const [leads, opps, quotes, ovfs] = await Promise.all([
-        listSalesLeads(companyAccountId).catch(() => []),
-        listOpportunities({ company_account_id: companyAccountId }).catch(() => []),
-        listQuotes({ company_account_id: companyAccountId }).catch(() => []),
-        listOvfs({ company_account_id: companyAccountId }).catch(() => []),
-      ]);
-
-      const entityIds = new Set<string>([
-        companyAccountId,
-        ...leads.map((row) => row.id),
-        ...opps.map((row) => row.id),
-        ...quotes.map((row) => row.id),
-        ...ovfs.map((row) => row.id),
-      ]);
-
-      setRows(tasks.filter((task) => entityIds.has(task.entity_id)));
+      setRows(visible);
+      await loadNames(visible);
     } catch (err) {
       setRows([]);
+      setRecordNames({});
       setError(err instanceof ApiClientError ? err.message : "Failed to load My Jobs");
     } finally {
       setLoading(false);
     }
-  }, [teamRole, status, mineOnly, companyAccountId]);
+  }, [teamRole, status, mineOnly, companyAccountId, loadNames]);
 
   useEffect(() => {
     void load();
@@ -131,13 +173,11 @@ export function MyJobsPage({
     () =>
       sortRows(rows, sortBy, sortDir, {
         title: (t) => t.title,
-        entity_type: (t) => t.entity_type,
+        opportunity_name: (t) => recordNames[t.id] ?? "",
         team_role: (t) => t.team_role,
-        priority: (t) => t.priority,
         status: (t) => t.status,
-        due_at: (t) => t.due_at,
       }),
-    [rows, sortBy, sortDir],
+    [rows, sortBy, sortDir, recordNames],
   );
 
   return (
@@ -179,7 +219,7 @@ export function MyJobsPage({
             checked={mineOnly}
             onChange={(e) => setMineOnly(e.target.checked)}
           />
-          Assigned to me only
+          Assigned to me / sent by me
         </label>
       </div>
 
@@ -194,57 +234,53 @@ export function MyJobsPage({
         />
 
         <div className="erp-scroll overflow-x-auto">
-          <table className="w-full min-w-[980px] text-left text-sm">
+          <table className="w-full min-w-[720px] text-left text-sm">
             <thead>
               <tr className={CRM_TABLE_HEAD_ROW}>
                 <CrmSortableTh label="Task" sortKey="title" activeKey={sortBy} dir={sortDir} onSort={onSort} />
-                <CrmSortableTh label="Entity" sortKey="entity_type" activeKey={sortBy} dir={sortDir} onSort={onSort} />
+                <CrmSortableTh
+                  label="Opportunity name"
+                  sortKey="opportunity_name"
+                  activeKey={sortBy}
+                  dir={sortDir}
+                  onSort={onSort}
+                />
                 <CrmSortableTh label="Team" sortKey="team_role" activeKey={sortBy} dir={sortDir} onSort={onSort} />
-                <CrmSortableTh label="Priority" sortKey="priority" activeKey={sortBy} dir={sortDir} onSort={onSort} />
                 <CrmSortableTh label="Status" sortKey="status" activeKey={sortBy} dir={sortDir} onSort={onSort} />
-                <CrmSortableTh label="Due" sortKey="due_at" activeKey={sortBy} dir={sortDir} onSort={onSort} />
                 <th className="px-4 py-2.5" />
               </tr>
             </thead>
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={7} className="px-4 py-10 text-center text-muted-foreground">
+                  <td colSpan={5} className="px-4 py-10 text-center text-muted-foreground">
                     Loading tasks…
                   </td>
                 </tr>
               ) : sorted.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="px-4 py-10 text-center text-muted-foreground">
-                    No tasks match these filters.
+                  <td colSpan={5} className="px-4 py-10 text-center text-muted-foreground">
+                    {mineOnly
+                      ? "No tasks assigned to you (or sent by you) match these filters. Uncheck “Assigned to me / sent by me” to see the full company inbox."
+                      : "No tasks match these filters."}
                   </td>
                 </tr>
               ) : (
                 sorted.map((task) => (
                   <tr key={task.id} className="border-b border-border/50 last:border-0 hover:bg-accent/30">
                     <td className="px-4 py-2.5">
-                      <div className="font-medium text-foreground">{task.title}</div>
-                      <div className="font-mono text-[11px] text-muted-foreground">{task.task_code}</div>
-                      {task.remarks ? <div className="mt-0.5 text-[11px] text-muted-foreground">“{task.remarks}”</div> : null}
-                    </td>
-                    <td className="px-4 py-2.5">
                       <Link
-                        href={myJobEntityHref(task.entity_type, task.entity_id)}
-                        className="cursor-pointer capitalize text-primary hover:underline"
+                        href={myJobDetailHref(task)}
+                        className="cursor-pointer font-medium text-foreground transition-colors duration-200 hover:text-primary hover:underline"
                       >
-                        {task.entity_type}
+                        {task.title}
                       </Link>
                     </td>
+                    <td className="px-4 py-2.5 text-foreground">{recordNames[task.id] ?? "—"}</td>
                     <td className="px-4 py-2.5 capitalize text-muted-foreground">{task.team_role}</td>
-                    <td className="px-4 py-2.5">
-                      <Badge variant="outline" className="capitalize">
-                        {task.priority}
-                      </Badge>
-                    </td>
                     <td className="px-4 py-2.5">
                       <FinanceStatusBadge status={task.status} />
                     </td>
-                    <td className="px-4 py-2.5 text-muted-foreground">{formatDate(task.due_at)}</td>
                     <td className="px-4 py-2.5 text-right whitespace-nowrap">
                       {task.status === "pending" ? (
                         <div className="flex justify-end gap-1.5">
@@ -267,9 +303,7 @@ export function MyJobsPage({
                           </Button>
                         </div>
                       ) : (
-                        <span className="text-xs text-muted-foreground">
-                          {task.decided_at ? `Decided ${formatDate(task.decided_at)}` : "—"}
-                        </span>
+                        <span className="text-xs text-muted-foreground">—</span>
                       )}
                     </td>
                   </tr>
@@ -283,7 +317,7 @@ export function MyJobsPage({
       <ConfirmDialog
         open={Boolean(decision)}
         title={decision?.outcome === "approved" ? "Approve task" : "Reject task"}
-        description={decision ? `${decision.task.title} (${decision.task.task_code})` : undefined}
+        description={decision ? decision.task.title : undefined}
         tone={decision?.outcome === "rejected" ? "destructive" : "default"}
         confirmLabel={decision?.outcome === "approved" ? "Approve" : "Reject"}
         busy={deciding}

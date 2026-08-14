@@ -3,7 +3,8 @@
 import { Fragment, useEffect, useRef, useState } from "react";
 import { Paperclip } from "lucide-react";
 
-import { FinanceField, FinanceSelect, FinanceTextarea } from "@/components/finance/journals/finance-form-field";
+import { ApproverMultiSelect } from "@/components/crm/sales/approver-multi-select";
+import { FinanceField, FinanceTextarea } from "@/components/finance/journals/finance-form-field";
 import { ConfirmDialog } from "@/components/finance/journals/confirm-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -15,15 +16,15 @@ type FieldType = "text" | "textarea" | "date" | "number" | "file" | "approver";
 
 type FieldConfig = {
   key:
-    | "remark"
-    | "remarks"
-    | "reason"
-    | "deal_reg_number"
-    | "valid_until"
-    | "deal_won_amount"
-    | "onboarding_date"
-    | "file_name"
-    | "assigned_user_id";
+  | "remark"
+  | "remarks"
+  | "reason"
+  | "deal_reg_number"
+  | "valid_until"
+  | "deal_won_amount"
+  | "onboarding_date"
+  | "file_name"
+  | "assigned_user_id";
   label: string;
   type: FieldType;
   required?: boolean;
@@ -47,7 +48,7 @@ const SEND_APPROVAL_ACTIONS = new Set([
 ]);
 
 const APPROVAL_DIALOG_FIELDS: FieldConfig[] = [
-  { key: "assigned_user_id", label: "Approver", type: "approver", required: true },
+  { key: "assigned_user_id", label: "Approvers", type: "approver", required: true },
   { key: "remarks", label: "Remarks", type: "textarea", required: true },
 ];
 
@@ -55,7 +56,7 @@ const ACTION_CONFIG: Record<string, ActionConfig> = {
   convert: {
     label: "Convert to Opportunity",
     fields: [],
-    description: "Handled via the dedicated Convert dialog.",
+    description: "Converts immediately using lead defaults.",
   },
   lost: {
     label: "Mark Lost",
@@ -162,18 +163,27 @@ const ACTION_CONFIG: Record<string, ActionConfig> = {
   },
 };
 
-const ATTACH_ACTIONS = new Set(["attach_boq", "attach_sow", "attach_oem_quote", "attach_po"]);
+const BLUE_ACTION_BUTTON_CLASS =
+  "border-blue-900 bg-blue-800 font-bold text-white hover:bg-blue-900 hover:text-white dark:border-blue-700 dark:bg-blue-800 dark:text-white dark:hover:bg-blue-700";
 
-const ATTACH_BUTTON_CLASS: Record<string, string> = {
-  attach_sow:
-    "border-violet-300 bg-violet-50 text-violet-950 hover:bg-violet-100 dark:border-violet-700 dark:bg-violet-950/40 dark:text-violet-100",
-  attach_boq:
-    "border-amber-300 bg-amber-50 text-amber-950 hover:bg-amber-100 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-100",
-  attach_oem_quote:
-    "border-cyan-300 bg-cyan-50 text-cyan-950 hover:bg-cyan-100 dark:border-cyan-700 dark:bg-cyan-950/40 dark:text-cyan-100",
-  attach_po:
-    "border-emerald-300 bg-emerald-50 text-emerald-950 hover:bg-emerald-100 dark:border-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-100",
-};
+const LOST_BUTTON_CLASS =
+  "border-red-800 bg-red-700 font-bold text-white hover:bg-red-800 hover:text-white dark:border-red-600 dark:bg-red-700 dark:text-white dark:hover:bg-red-600";
+
+const ATTACH_ACTIONS = new Set([
+  "attach_boq",
+  "attach_sow",
+  "attach_oem_quote",
+  "attach_po",
+  "attach_contract",
+]);
+
+const APPROVAL_ACTIONS = new Set([
+  "send_boq_approval",
+  "send_sow_approval",
+  "send_po_approval",
+  "send_for_approval",
+  "send_cloud_discount_approval",
+]);
 
 type Props = {
   allowedActions: string[];
@@ -203,6 +213,7 @@ export function BlueprintActions({
 
   const [activeAction, setActiveAction] = useState<string | null>(null);
   const [values, setValues] = useState<Record<string, string>>({});
+  const [approverIds, setApproverIds] = useState<string[]>([]);
   const [file, setFile] = useState<File | null>(null);
   const [files, setFiles] = useState<File[]>([]);
   const [busy, setBusy] = useState(false);
@@ -243,23 +254,43 @@ export function BlueprintActions({
         fields: APPROVAL_DIALOG_FIELDS,
         description:
           base.description ??
-          "A copy is also sent to tenant admins. Either the selected approver or an admin can decide in My Jobs.",
+          "A copy is also sent to tenant admins. Any selected approver or an admin can decide in My Jobs.",
       };
     }
     return base;
   }
 
+  async function runImmediate(action: string) {
+    const dispatchAction = actionDispatchOverrides?.[action] ?? action;
+    setBusy(true);
+    setError(null);
+    try {
+      await onAction(dispatchAction, {});
+    } catch (err) {
+      setError(err instanceof ApiClientError ? err.message : `Failed to ${dispatchAction}`);
+    } finally {
+      setBusy(false);
+    }
+  }
+
   function openAction(action: string) {
     const config = resolveConfig(action);
+    // Convert uses lead defaults and should not open a form popup.
+    if (action === "convert" && config.fields.length === 0) {
+      void runImmediate(action);
+      return;
+    }
     setActiveAction(action);
     setValues(
       Object.fromEntries(
         config.fields.flatMap((field) => {
+          if (field.type === "approver") return [];
           const value = defaultValues?.[field.key];
           return value === null || value === undefined ? [] : [[field.key, String(value)]];
         }),
       ),
     );
+    setApproverIds([]);
     setFile(null);
     setFiles([]);
     setError(null);
@@ -269,6 +300,7 @@ export function BlueprintActions({
     if (busy) return;
     setActiveAction(null);
     setValues({});
+    setApproverIds([]);
     setFile(null);
     setFiles([]);
     if (fileInputRef.current) fileInputRef.current.value = "";
@@ -286,6 +318,13 @@ export function BlueprintActions({
       dispatchAction === "attach_po" ||
       dispatchAction === "attach_contract";
     for (const field of config.fields) {
+      if (field.required && field.type === "approver") {
+        if (approverIds.length === 0) {
+          setError(`${field.label} is required`);
+          return;
+        }
+        continue;
+      }
       if (field.required && field.type !== "file" && !values[field.key]?.trim()) {
         setError(`${field.label} is required`);
         return;
@@ -307,14 +346,17 @@ export function BlueprintActions({
     try {
       const payloadBase: BlueprintActionPayload = {};
       for (const field of config.fields) {
-        if (field.type === "file") continue;
+        if (field.type === "file" || field.type === "approver") continue;
         const raw = values[field.key];
         if (!raw) continue;
         if (field.key === "deal_won_amount") payloadBase.deal_won_amount = Number(raw);
         else if (field.key === "valid_until") payloadBase.valid_until = raw;
-        else if (field.key === "assigned_user_id") payloadBase.assigned_user_id = raw;
         else if (field.key === "onboarding_date") payloadBase.onboarding_date = raw;
         else (payloadBase as Record<string, string>)[field.key] = raw;
+      }
+      if (approverIds.length > 0) {
+        payloadBase.assigned_user_ids = approverIds;
+        payloadBase.assigned_user_id = approverIds[0];
       }
       if (activeAction === "lost" && values.reason) {
         payloadBase.remark = values.reason;
@@ -360,8 +402,6 @@ export function BlueprintActions({
     return rank(a) - rank(b);
   });
 
-  const visibleAttachCount = orderedActions.filter((action) => ATTACH_ACTIONS.has(action)).length;
-
   return (
     <div className="space-y-2">
       <div className="flex flex-wrap items-center gap-2">
@@ -372,14 +412,14 @@ export function BlueprintActions({
           const config = resolveConfig(action);
           const label = actionLabelOverrides?.[action] ?? config.label;
           const isAttach = ATTACH_ACTIONS.has(action);
-          const variant =
-            config.tone === "destructive"
-              ? "destructive"
-              : isAttach && visibleAttachCount === 1
-                ? "default"
-                : "outline";
-          const colorClass =
-            isAttach && visibleAttachCount > 1 ? ATTACH_BUTTON_CLASS[action] : undefined;
+          const isApproval = APPROVAL_ACTIONS.has(action);
+          const isLost = action === "lost";
+          const colorClass = isLost
+            ? LOST_BUTTON_CLASS
+            : isAttach || isApproval
+              ? BLUE_ACTION_BUTTON_CLASS
+              : undefined;
+          const variant = colorClass ? "outline" : config.tone === "destructive" ? "destructive" : "outline";
           return (
             <Fragment key={action}>
               {action === "attach_boq" && orderedActions[index - 1] === "attach_sow" ? (
@@ -425,17 +465,11 @@ export function BlueprintActions({
                     onChange={(e) => setValues((v) => ({ ...v, [field.key]: e.target.value }))}
                   />
                 ) : field.type === "approver" ? (
-                  <FinanceSelect
-                    value={values[field.key] ?? ""}
-                    onChange={(e) => setValues((v) => ({ ...v, [field.key]: e.target.value }))}
-                  >
-                    <option value="">Select approver</option>
-                    {approvalUsers.map((user) => (
-                      <option key={user.id} value={user.id}>
-                        {user.label}
-                      </option>
-                    ))}
-                  </FinanceSelect>
+                  <ApproverMultiSelect
+                    options={approvalUsers}
+                    value={approverIds}
+                    onChange={setApproverIds}
+                  />
                 ) : field.type === "file" ? (
                   <div className="flex min-w-0 flex-col gap-1.5">
                     <div className="flex min-w-0 flex-wrap items-center gap-2">

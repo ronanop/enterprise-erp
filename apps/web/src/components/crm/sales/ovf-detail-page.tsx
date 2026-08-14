@@ -15,7 +15,6 @@ import {
 } from "@/components/crm/crm-ui";
 import { ApprovalBanner } from "@/components/crm/sales/approval-banner";
 import { BlueprintActions, BlueprintStateBadge } from "@/components/crm/sales/blueprint-actions";
-import { DealTimeline } from "@/components/crm/sales/deal-timeline";
 import {
   OvfOrderLinesSection,
   customerRowsFromOvfLines,
@@ -199,21 +198,11 @@ export function OvfDetailPage({ ovfId }: { ovfId: string }) {
   );
   const shippingCountry = textOrDash(
     ovf.shipping_country ||
-      quote?.shipping_country ||
-      company?.shipping_country ||
-      company?.billing_country,
+    quote?.shipping_country ||
+    company?.shipping_country ||
+    company?.billing_country,
   );
   const shippingContact = textOrDash(ovf.shipping_contact_person || quote?.entity_contact);
-  const timelineLinks = {
-    ...(opportunity?.company_account_id
-      ? { company: `/crm/companies/${opportunity.company_account_id}` }
-      : {}),
-    ...(opportunity?.lead_id ? { lead: `/crm/leads/${opportunity.lead_id}` } : {}),
-    opportunity: `/crm/opportunities/${ovf.opportunity_id}`,
-    quote: `/crm/quotes/${ovf.quote_id}`,
-    ovf: `/crm/ovf/${ovf.id}`,
-    ...(ovf.deal_won ? { won: `/crm/ovf/${ovf.id}` } : {}),
-  };
 
   return (
     <CrmPage>
@@ -229,20 +218,7 @@ export function OvfDetailPage({ ovfId }: { ovfId: string }) {
         </Button>
       </div>
 
-      <DealTimeline
-        current={ovf.deal_won ? "won" : "ovf"}
-        links={timelineLinks}
-        nextStep={
-          ovf.deal_won
-            ? undefined
-            : {
-                label: "Complete OVF",
-                description:
-                  "Use the blueprint actions on this screen through Share to SCM and Deal Won.",
-              }
-        }
-      />
-      <ApprovalBanner locked={blueprint.locked} approvalStatus={ovf.approval_status} label="This OVF" />
+      <ApprovalBanner locked={blueprint.locked} approvalStatus={blueprint.state} label="This OVF" />
 
       {ovf.deal_won ? (
         <div className="flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-2.5 text-sm text-emerald-950">
