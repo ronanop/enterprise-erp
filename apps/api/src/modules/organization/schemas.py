@@ -62,6 +62,8 @@ class BranchUpdateRequest(BaseModel):
     status: str | None = None
     address_line1: str | None = None
     city: str | None = None
+    state_code: str | None = None
+    country_code: str | None = None
     head_employee_id: UUID | None = None
 
 
@@ -75,6 +77,10 @@ class BranchResponse(BaseModel):
     branch_name: str
     branch_type: str
     status: str
+    address_line1: str | None = None
+    city: str | None = None
+    state_code: str | None = None
+    country_code: str | None = None
     head_employee_id: UUID | None = None
     created_at: datetime | None = None
     created_by: UUID | None = None

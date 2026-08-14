@@ -1,5 +1,6 @@
 """Audit repository."""
 
+from datetime import date, datetime
 from uuid import UUID, uuid4
 
 from sqlalchemy import select
@@ -8,6 +9,23 @@ from sqlalchemy.orm import Session
 from modules.foundation.domain.entities import AuditLogEntity
 from modules.foundation.models.audit import AuditEvent, AuditLog
 from modules.foundation.repository.base import utcnow
+
+
+def _json_safe(value: object) -> object:
+    """Coerce values so JSONB dumps never receive raw UUID/datetime objects."""
+    if value is None or isinstance(value, (str, int, float, bool)):
+        return value
+    if isinstance(value, UUID):
+        return str(value)
+    if isinstance(value, datetime):
+        return value.isoformat()
+    if isinstance(value, date):
+        return value.isoformat()
+    if isinstance(value, dict):
+        return {str(k): _json_safe(v) for k, v in value.items()}
+    if isinstance(value, (list, tuple, set)):
+        return [_json_safe(v) for v in value]
+    return str(value)
 
 
 class AuditRepository:
@@ -33,8 +51,8 @@ class AuditRepository:
             entity_name=entity_name,
             entity_id=entity_id,
             operation=operation,
-            old_value=old_value,
-            new_value=new_value,
+            old_value=_json_safe(old_value) if old_value is not None else None,
+            new_value=_json_safe(new_value) if new_value is not None else None,
             performed_by=performed_by,
             performed_at=utcnow(),
             ip_address=ip_address,
@@ -70,7 +88,7 @@ class AuditRepository:
             event_type=event_type,
             severity=severity,
             user_id=user_id,
-            details_json=details_json,
+            details_json=_json_safe(details_json) if details_json is not None else None,
             performed_at=utcnow(),
             ip_address=ip_address,
         )

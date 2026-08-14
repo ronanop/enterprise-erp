@@ -2,7 +2,7 @@
 
 from uuid import UUID, uuid4
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from modules.foundation.domain.entities import NotificationTemplateEntity
@@ -88,6 +88,71 @@ class NotificationRepository(TenantScopedRepository):
     def list_events(self, tenant_id: UUID) -> list[NtfEvent]:
         stmt = select(NtfEvent).where(NtfEvent.tenant_id == tenant_id)
         return list(self.db.scalars(stmt).all())
+
+    def list_inbox(self, *, tenant_id: UUID, user_id: UUID, limit: int = 50) -> list[NtfEvent]:
+        stmt = (
+            select(NtfEvent)
+            .where(
+                NtfEvent.tenant_id == tenant_id,
+                NtfEvent.recipient_user_id == user_id,
+            )
+            .order_by(NtfEvent.created_at.desc())
+            .limit(limit)
+        )
+        return list(self.db.scalars(stmt).all())
+
+    def unread_count(self, *, tenant_id: UUID, user_id: UUID) -> int:
+        count = self.db.scalar(
+            select(func.count())
+            .select_from(NtfEvent)
+            .where(
+                NtfEvent.tenant_id == tenant_id,
+                NtfEvent.recipient_user_id == user_id,
+                NtfEvent.read_at.is_(None),
+                NtfEvent.status != "read",
+            )
+        )
+        return int(count or 0)
+
+    def get_inbox_event(self, *, tenant_id: UUID, user_id: UUID, event_id: UUID) -> NtfEvent | None:
+        stmt = select(NtfEvent).where(
+            NtfEvent.id == event_id,
+            NtfEvent.tenant_id == tenant_id,
+            NtfEvent.recipient_user_id == user_id,
+        )
+        return self.db.scalar(stmt)
+
+    def list_unread(self, *, tenant_id: UUID, user_id: UUID) -> list[NtfEvent]:
+        stmt = select(NtfEvent).where(
+            NtfEvent.tenant_id == tenant_id,
+            NtfEvent.recipient_user_id == user_id,
+            NtfEvent.read_at.is_(None),
+            NtfEvent.status != "read",
+        )
+        return list(self.db.scalars(stmt).all())
+
+    def find_unread_digest(
+        self,
+        *,
+        tenant_id: UUID,
+        user_id: UUID,
+        event_type: str,
+        digest_key: str,
+    ) -> NtfEvent | None:
+        stmt = (
+            select(NtfEvent)
+            .where(
+                NtfEvent.tenant_id == tenant_id,
+                NtfEvent.recipient_user_id == user_id,
+                NtfEvent.event_type == event_type,
+                NtfEvent.read_at.is_(None),
+                NtfEvent.status != "read",
+                NtfEvent.payload_json.contains({"digest_key": digest_key}),
+            )
+            .order_by(NtfEvent.created_at.desc())
+            .limit(1)
+        )
+        return self.db.scalar(stmt)
 
     @staticmethod
     def _tpl_to_entity(row: NtfTemplate) -> NotificationTemplateEntity:

@@ -7,6 +7,7 @@ from uuid import UUID
 from sqlalchemy.orm import Session
 
 from modules.foundation.models.security import SecUser
+from modules.foundation.service.notification_href import sanitize_inbox_href
 from modules.foundation.service.notification_service import NotificationService
 from modules.master_data.models.employee import MasterEmployee
 from security.rbac import RBACEngine
@@ -40,6 +41,9 @@ def _send_in_app(
     payload = {"title": title, "body": body, "kind": kind}
     if extra:
         payload.update(extra)
+    href = sanitize_inbox_href(payload.get("href"), kind=kind)
+    if href:
+        payload["href"] = href
     notif.send(
         tenant_id=tenant_id,
         template_id=tpl.id,
@@ -84,6 +88,9 @@ def notify_employee(
     if cc_reporting_manager and emp.reporting_manager_id:
         mgr = db.get(MasterEmployee, emp.reporting_manager_id)
         if mgr is not None:
+            manager_extra = {**(extra or {}), "employee_id": str(employee_id)}
+            if kind == "leave":
+                manager_extra["href"] = "/hr/ess-inbox"
             _send_in_app(
                 db,
                 tenant_id=tenant_id,
@@ -95,7 +102,7 @@ def notify_employee(
                 title=f"[Manager] {title}",
                 body=body,
                 kind=kind,
-                extra={**(extra or {}), "employee_id": str(employee_id)},
+                extra=manager_extra,
             )
     return sent
 

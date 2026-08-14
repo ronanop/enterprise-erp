@@ -1,6 +1,7 @@
 """Notification router."""
 
 from typing import Annotated
+from uuid import UUID
 
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
@@ -10,13 +11,74 @@ from modules.foundation.dependencies import get_tenant_context, require_permissi
 from modules.foundation.domain.value_objects import TenantContext
 from modules.foundation.schemas import (
     DeviceTokenRegisterRequest,
+    NotificationInboxItemResponse,
     NotificationSendRequest,
     NotificationTemplateCreateRequest,
+    NotificationUnreadCountResponse,
 )
 from modules.foundation.service.notification_service import NotificationService
 from shared.schemas import APIResponse
 
 router = APIRouter(prefix="/notifications", tags=["Notifications"])
+
+
+def _inbox_response(item) -> NotificationInboxItemResponse:
+    return NotificationInboxItemResponse(
+        id=item.id,
+        title=item.title,
+        body=item.body,
+        kind=item.kind,
+        unread=item.unread,
+        created_at=item.created_at,
+        href=item.href,
+        read_at=item.read_at,
+    )
+
+
+@router.get("/inbox", response_model=APIResponse[list[NotificationInboxItemResponse]])
+def list_inbox(
+    ctx: Annotated[TenantContext, Depends(get_tenant_context)],
+    db: Annotated[Session, Depends(get_db)],
+) -> APIResponse[list[NotificationInboxItemResponse]]:
+    items = NotificationService(db).list_inbox(tenant_id=ctx.tenant_id, user_id=ctx.user_id)
+    return APIResponse(message="Inbox retrieved", data=[_inbox_response(item) for item in items])
+
+
+@router.get("/unread-count", response_model=APIResponse[NotificationUnreadCountResponse])
+def unread_count(
+    ctx: Annotated[TenantContext, Depends(get_tenant_context)],
+    db: Annotated[Session, Depends(get_db)],
+) -> APIResponse[NotificationUnreadCountResponse]:
+    count = NotificationService(db).unread_count(tenant_id=ctx.tenant_id, user_id=ctx.user_id)
+    return APIResponse(
+        message="Unread count retrieved",
+        data=NotificationUnreadCountResponse(unread_count=count),
+    )
+
+
+@router.post("/read-all", response_model=APIResponse[dict])
+def mark_all_read(
+    ctx: Annotated[TenantContext, Depends(get_tenant_context)],
+    db: Annotated[Session, Depends(get_db)],
+) -> APIResponse[dict]:
+    marked = NotificationService(db).mark_all_read(tenant_id=ctx.tenant_id, user_id=ctx.user_id)
+    db.commit()
+    return APIResponse(message="Notifications marked read", data={"marked": marked})
+
+
+@router.post("/{notification_id}/read", response_model=APIResponse[NotificationInboxItemResponse])
+def mark_read(
+    notification_id: UUID,
+    ctx: Annotated[TenantContext, Depends(get_tenant_context)],
+    db: Annotated[Session, Depends(get_db)],
+) -> APIResponse[NotificationInboxItemResponse]:
+    item = NotificationService(db).mark_read(
+        tenant_id=ctx.tenant_id,
+        user_id=ctx.user_id,
+        event_id=notification_id,
+    )
+    db.commit()
+    return APIResponse(message="Notification marked read", data=_inbox_response(item))
 
 
 @router.get("/templates", response_model=APIResponse[list])

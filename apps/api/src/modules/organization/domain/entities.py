@@ -1,7 +1,7 @@
 """Organization domain entities."""
 
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, datetime
 from uuid import UUID
 
 
@@ -30,8 +30,17 @@ class BranchEntity:
     branch_name: str
     branch_type: str
     status: str
+    address_line1: str | None = None
+    city: str | None = None
+    state_code: str | None = None
+    country_code: str | None = None
+    head_employee_id: UUID | None = None
     version: int = 1
     is_deleted: bool = False
+    created_at: datetime | None = None
+    created_by: UUID | None = None
+    updated_at: datetime | None = None
+    updated_by: UUID | None = None
 
 
 @dataclass
@@ -44,7 +53,12 @@ class DepartmentEntity:
     department_name: str
     status: str
     parent_department_id: UUID | None = None
+    head_employee_id: UUID | None = None
     version: int = 1
+    created_at: datetime | None = None
+    created_by: UUID | None = None
+    updated_at: datetime | None = None
+    updated_by: UUID | None = None
 
 
 @dataclass

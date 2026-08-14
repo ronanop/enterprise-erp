@@ -60,7 +60,9 @@ class DepartmentRepository(OrgScopedRepository):
         department_code: str,
         department_name: str,
         parent_department_id: UUID | None = None,
+        head_employee_id: UUID | None = None,
     ) -> DepartmentEntity:
+        now = utcnow()
         row = OrgDepartment(
             id=uuid4(),
             tenant_id=ctx.tenant_id,
@@ -69,7 +71,10 @@ class DepartmentRepository(OrgScopedRepository):
             department_code=department_code,
             department_name=department_name,
             parent_department_id=parent_department_id,
-            status="draft",
+            head_employee_id=head_employee_id,
+            status="active",
+            created_at=now,
+            updated_at=now,
             created_by=ctx.user_id,
             updated_by=ctx.user_id,
         )
@@ -121,7 +126,12 @@ class DepartmentRepository(OrgScopedRepository):
             department_name=row.department_name,
             status=row.status,
             parent_department_id=row.parent_department_id,
+            head_employee_id=row.head_employee_id,
             version=row.version,
+            created_at=row.created_at,
+            created_by=row.created_by,
+            updated_at=row.updated_at,
+            updated_by=row.updated_by,
         )
 
 

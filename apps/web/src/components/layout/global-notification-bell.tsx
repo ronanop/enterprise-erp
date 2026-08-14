@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { useCallback, useLayoutEffect, useRef, useState, type CSSProperties } from "react";
 import Link from "next/link";
 import { createPortal } from "react-dom";
 import {
@@ -14,13 +14,9 @@ import {
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import { hrNotificationHref } from "@/lib/hr-notification-href";
+import { useNotificationInbox } from "@/hooks/use-notification-inbox";
+import { mapInboxHref } from "@/lib/notification-inbox";
 import { cn } from "@/lib/utils";
-import {
-  getDashboardRole,
-  loadHrExecutiveDashboard,
-} from "@/services/hr-executive-dashboard-service";
-import type { NotificationItem } from "@/types/hr-executive-dashboard";
 
 type Props = {
   /** Match topbar ghost icon vs dashboard outline button */
@@ -28,30 +24,12 @@ type Props = {
   className?: string;
 };
 
-const READ_KEY = "erp_hr_notif_read_v1";
-
-function loadReadIds(): Set<string> {
-  if (typeof window === "undefined") return new Set();
-  try {
-    const raw = localStorage.getItem(READ_KEY);
-    if (!raw) return new Set();
-    const arr = JSON.parse(raw) as string[];
-    return new Set(Array.isArray(arr) ? arr : []);
-  } catch {
-    return new Set();
-  }
-}
-
-function saveReadIds(ids: Set<string>) {
-  if (typeof window === "undefined") return;
-  localStorage.setItem(READ_KEY, JSON.stringify([...ids].slice(-200)));
-}
-
-function kindIcon(kind: NotificationItem["kind"]) {
+function kindIcon(kind: string) {
   switch (kind) {
     case "leave":
       return CalendarDays;
     case "birthday":
+    case "anniversary":
       return Cake;
     case "probation":
       return UserCheck;
@@ -80,35 +58,12 @@ function formatRelative(iso: string): string {
 
 export function GlobalNotificationBell({ variant = "topbar", className }: Props) {
   const [open, setOpen] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [items, setItems] = useState<NotificationItem[]>([]);
-  const [readIds, setReadIds] = useState<Set<string>>(() => new Set());
   const [panelStyle, setPanelStyle] = useState<CSSProperties>({});
   const rootRef = useRef<HTMLDivElement>(null);
   const anchorRef = useRef<HTMLDivElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    setReadIds(loadReadIds());
-  }, []);
-
-  const load = useCallback(async () => {
-    setLoading(true);
-    try {
-      const dash = await loadHrExecutiveDashboard(getDashboardRole());
-      setItems(dash.notifications ?? []);
-    } catch {
-      setItems([]);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    void load();
-    const id = window.setInterval(() => void load(), 60_000);
-    return () => window.clearInterval(id);
-  }, [load]);
+  const { items, unreadCount, loading, error, refresh, markRead, markAllRead } =
+    useNotificationInbox();
 
   const placePanel = useCallback(() => {
     const btn = anchorRef.current;
@@ -131,7 +86,7 @@ export function GlobalNotificationBell({ variant = "topbar", className }: Props)
   useLayoutEffect(() => {
     if (!open) return;
     placePanel();
-    void load();
+    void refresh();
     function onDoc(e: MouseEvent) {
       const t = e.target as Node;
       if (rootRef.current?.contains(t) || panelRef.current?.contains(t)) return;
@@ -153,36 +108,9 @@ export function GlobalNotificationBell({ variant = "topbar", className }: Props)
       window.removeEventListener("resize", onReposition);
       window.removeEventListener("scroll", onReposition, true);
     };
-  }, [open, load, placePanel]);
+  }, [open, refresh, placePanel]);
 
-  const displayItems = useMemo(
-    () =>
-      items.map((n) => ({
-        ...n,
-        unread: n.unread && !readIds.has(n.id),
-      })),
-    [items, readIds],
-  );
-
-  const unread = useMemo(() => displayItems.filter((n) => n.unread).length, [displayItems]);
-
-  function markRead(id: string) {
-    setReadIds((prev) => {
-      const next = new Set(prev);
-      next.add(id);
-      saveReadIds(next);
-      return next;
-    });
-  }
-
-  function markAllRead() {
-    setReadIds((prev) => {
-      const next = new Set(prev);
-      for (const n of items) next.add(n.id);
-      saveReadIds(next);
-      return next;
-    });
-  }
+  const unread = unreadCount;
 
   const panel =
     open && typeof document !== "undefined"
@@ -199,7 +127,7 @@ export function GlobalNotificationBell({ variant = "topbar", className }: Props)
               role="dialog"
               aria-label="Notifications"
               style={panelStyle}
-              className="overflow-hidden rounded-xl border border-border/80 bg-card shadow-xl"
+              className="max-w-[calc(100vw-16px)] overflow-hidden rounded-xl border border-border/80 bg-card shadow-xl"
             >
               <div className="flex items-center justify-between gap-2 border-b border-border/70 px-3 py-2.5">
                 <div>
@@ -214,8 +142,8 @@ export function GlobalNotificationBell({ variant = "topbar", className }: Props)
                       type="button"
                       variant="ghost"
                       size="sm"
-                      className="h-7 cursor-pointer px-2 text-[11px]"
-                      onClick={markAllRead}
+                      className="h-7 cursor-pointer px-2 text-[11px] transition-colors duration-200 motion-reduce:transition-none"
+                      onClick={() => void markAllRead()}
                     >
                       Mark all read
                     </Button>
@@ -224,7 +152,7 @@ export function GlobalNotificationBell({ variant = "topbar", className }: Props)
                     type="button"
                     variant="ghost"
                     size="icon-sm"
-                    className="cursor-pointer text-muted-foreground"
+                    className="cursor-pointer text-muted-foreground transition-colors duration-200 motion-reduce:transition-none"
                     aria-label="Close"
                     onClick={() => setOpen(false)}
                   >
@@ -233,27 +161,30 @@ export function GlobalNotificationBell({ variant = "topbar", className }: Props)
                 </div>
               </div>
 
-              {loading && displayItems.length === 0 ? (
+              {loading && items.length === 0 ? (
                 <p className="px-3 py-8 text-center text-xs text-muted-foreground">Loading…</p>
-              ) : displayItems.length === 0 ? (
+              ) : error && items.length === 0 ? (
+                <p className="px-3 py-8 text-center text-xs text-muted-foreground">{error}</p>
+              ) : items.length === 0 ? (
                 <p className="px-3 py-8 text-center text-xs text-muted-foreground">
                   No notifications right now.
                 </p>
               ) : (
                 <ul className="erp-scroll max-h-[min(22rem,calc(100vh-8rem))] divide-y divide-border/50 overflow-y-auto">
-                  {displayItems.map((n) => {
+                  {items.map((n) => {
                     const Icon = kindIcon(n.kind);
-                    const href = hrNotificationHref(n);
+                    const href = mapInboxHref(n.href, n.kind);
                     return (
                       <li key={n.id}>
                         <Link
                           href={href}
                           onClick={() => {
-                            markRead(n.id);
+                            void markRead(n.id);
                             setOpen(false);
                           }}
                           className={cn(
-                            "flex cursor-pointer gap-2.5 px-3 py-2.5 text-xs transition-colors duration-150 hover:bg-muted/50",
+                            "flex cursor-pointer gap-2.5 px-3 py-2.5 text-xs transition-colors duration-200 motion-reduce:transition-none hover:bg-muted/50",
+                            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
                             n.unread && "bg-primary/5",
                           )}
                         >
@@ -276,7 +207,7 @@ export function GlobalNotificationBell({ variant = "topbar", className }: Props)
                             </span>
                             <span className="mt-0.5 block text-muted-foreground">{n.body}</span>
                             <span className="mt-1 block text-[10px] text-muted-foreground/80">
-                              {formatRelative(n.at)}
+                              {formatRelative(n.created_at)}
                             </span>
                           </span>
                         </Link>
@@ -290,9 +221,9 @@ export function GlobalNotificationBell({ variant = "topbar", className }: Props)
                 <Link
                   href="/hr/ess-inbox"
                   onClick={() => setOpen(false)}
-                  className="block cursor-pointer rounded-lg px-2 py-1.5 text-center text-[11px] font-medium text-primary transition-colors duration-150 hover:bg-muted/50"
+                  className="block cursor-pointer rounded-lg px-2 py-1.5 text-center text-[11px] font-medium text-primary transition-colors duration-200 motion-reduce:transition-none hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 >
-                  Open ESS inbox
+                  Employee Requests
                 </Link>
               </div>
             </div>
@@ -312,7 +243,7 @@ export function GlobalNotificationBell({ variant = "topbar", className }: Props)
           aria-expanded={open}
           aria-haspopup="dialog"
           className={cn(
-            "relative cursor-pointer",
+            "relative cursor-pointer transition-colors duration-200 motion-reduce:transition-none",
             variant === "topbar" && "text-muted-foreground",
           )}
           onClick={() => setOpen((v) => !v)}

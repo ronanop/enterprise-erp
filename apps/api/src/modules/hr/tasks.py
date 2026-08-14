@@ -751,6 +751,66 @@ def leave_balance_monthly_credit(period_yyyymm: str | None = None) -> dict:
         db.close()
 
 
+def _notify_upcoming_birthday_digests(db, today) -> int:
+    """Notify HR users about birthdays in the next 30 days (one digest per user per day)."""
+    from sqlalchemy import select
+
+    from modules.foundation.models.security import SecUser
+    from modules.foundation.service.notification_service import NotificationService
+    from modules.hr.models import HrEmployeeProfile
+    from modules.hr.service.birthday_window import is_upcoming_birthday
+    from modules.hr.service.hr_notify import _send_in_app
+    from security.rbac import RBACEngine
+
+    profiles = list(
+        db.scalars(
+            select(HrEmployeeProfile).where(
+                HrEmployeeProfile.is_deleted.is_(False),
+                HrEmployeeProfile.date_of_birth.is_not(None),
+            )
+        ).all()
+    )
+    counts: dict = {}
+    for profile in profiles:
+        if is_upcoming_birthday(profile.date_of_birth, today, days=30):
+            counts[profile.tenant_id] = counts.get(profile.tenant_id, 0) + 1
+
+    sent = 0
+    digest_key = f"upcoming_birthdays:{today.isoformat()}"
+    notif = NotificationService(db)
+    rbac = RBACEngine(db)
+    for tenant_id, count in counts.items():
+        if count <= 0:
+            continue
+        for uid in rbac.list_user_ids_with_permission(tenant_id, "hr.employee_profile:update"):
+            existing = notif.find_unread_digest(
+                tenant_id=tenant_id,
+                user_id=uid,
+                event_type="hr.upcoming_birthdays",
+                digest_key=digest_key,
+            )
+            if existing is not None:
+                continue
+            user = db.get(SecUser, uid)
+            if user is None or getattr(user, "is_deleted", False) or user.status != "active":
+                continue
+            if _send_in_app(
+                db,
+                tenant_id=tenant_id,
+                recipient_user_id=user.id,
+                recipient_address=user.email,
+                template_code="hr.upcoming_birthdays",
+                template_name="Upcoming Birthdays",
+                event_type="hr.upcoming_birthdays",
+                title="Upcoming Birthdays",
+                body=f"{count} birthday(s) in the next 30 days.",
+                kind="birthday",
+                extra={"href": "/hr", "digest_key": digest_key},
+            ):
+                sent += 1
+    return sent
+
+
 @celery_app.task(name="hr.birthday_anniversary_reminders")
 def birthday_anniversary_reminders() -> dict:
     """Daily in-app birthday + work-anniversary notifications."""
@@ -789,6 +849,8 @@ def birthday_anniversary_reminders() -> dict:
                     title="Happy Birthday!",
                     body="Wishing you a wonderful birthday from the HR team.",
                     kind="birthday",
+                    extra={"href": "/hr/ess"},
+                    cc_reporting_manager=False,
                 ):
                     birthdays += 1
             except Exception:
@@ -825,11 +887,13 @@ def birthday_anniversary_reminders() -> dict:
             except Exception:
                 continue
 
+        hr_digests = _notify_upcoming_birthday_digests(db, today)
         db.commit()
         return {
             "status": "ok",
             "birthdays": birthdays,
             "anniversaries": anniversaries,
+            "hr_digests": hr_digests,
         }
     except Exception as exc:
         db.rollback()

@@ -734,7 +734,8 @@ class LeaveRequestService:
         self._engine.submit(row)
         updated = self._repo.update(ctx, row_id, status=row.status)
         try:
-            from modules.hr.service.hr_notify import notify_employee
+            from modules.hr.service.hr_notify import notify_employee, notify_users_with_permission
+            from modules.master_data.models.employee import MasterEmployee
 
             notify_employee(
                 self._db,
@@ -746,6 +747,31 @@ class LeaveRequestService:
                 title="Leave request submitted",
                 body=f"Leave request {row.document_number} was submitted and is pending approval.",
                 kind="leave",
+                extra={"href": "/hr/ess", "leave_request_id": str(row.id)},
+            )
+            exclude: set[UUID] = set()
+            if ctx.user_id:
+                exclude.add(ctx.user_id)
+            emp = self._db.get(MasterEmployee, row.employee_id)
+            if emp is not None:
+                if emp.user_id:
+                    exclude.add(emp.user_id)
+                if emp.reporting_manager_id:
+                    mgr = self._db.get(MasterEmployee, emp.reporting_manager_id)
+                    if mgr is not None and mgr.user_id:
+                        exclude.add(mgr.user_id)
+            notify_users_with_permission(
+                self._db,
+                tenant_id=ctx.tenant_id,
+                permission_code="hr.leave:approve",
+                template_code="hr.leave_submitted",
+                template_name="Leave Request Submitted",
+                event_type="hr.leave_submitted",
+                title="Leave Pending",
+                body=f"Leave request {row.document_number} needs approval.",
+                kind="leave",
+                extra={"href": "/hr/ess-inbox", "leave_request_id": str(row.id)},
+                exclude_user_ids=exclude,
             )
         except Exception:
             pass

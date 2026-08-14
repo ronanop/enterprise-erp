@@ -417,6 +417,16 @@ export function SetupEntityPanel({
         return;
       }
     }
+    const minRaw = form.min_ctc;
+    const maxRaw = form.max_ctc;
+    if (minRaw != null && minRaw !== "" && maxRaw != null && maxRaw !== "") {
+      const min = Number(minRaw);
+      const max = Number(maxRaw);
+      if (Number.isFinite(min) && Number.isFinite(max) && max < min) {
+        toast("Maximum salary must be ≥ minimum salary", "error");
+        return;
+      }
+    }
     setSaving(true);
     try {
       if (tab.source === "local") {
