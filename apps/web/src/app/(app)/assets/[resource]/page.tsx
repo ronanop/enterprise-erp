@@ -21,6 +21,10 @@ import { AssetLocationWorkspace } from "@/components/assets/asset-location-works
 import { AssetMaintenancePlanWorkspace } from "@/components/assets/asset-maintenance-plan-workspace";
 import { AssetWarrantyWorkspace } from "@/components/assets/asset-warranty-workspace";
 import { AssetCategoryWorkspace } from "@/components/assets/asset-category-workspace";
+import { IncomingAssetsWorkspace } from "@/components/assets/incoming-assets-workspace";
+import { IncomingAssetsQcWorkspace } from "@/components/assets/incoming-assets-qc-workspace";
+import { AssetRegistrationQueueWorkspace } from "@/components/assets/asset-registration-queue-workspace";
+import { AssetLocationsPlaceholderWorkspace } from "@/components/assets/asset-locations-placeholder-workspace";
 import { AssetOrgMasterWrapper } from "@/components/assets/asset-org-master-wrapper";
 import { AssetQrWorkspacePage } from "@/components/assets/asset-qr-workspace-page";
 import { AssetSettingsWorkspace } from "@/components/assets/asset-settings-workspace";
@@ -39,6 +43,18 @@ export default async function AssetsResourcePage({ params }: PageProps) {
 
   if (resourceKey === "assets") {
     return <AssetInventoryContainer />;
+  }
+
+  if (resourceKey === "incoming-assets") {
+    return <IncomingAssetsWorkspace />;
+  }
+
+  if (resourceKey === "incoming-assets-qc") {
+    return <IncomingAssetsQcWorkspace />;
+  }
+
+  if (resourceKey === "asset-registration") {
+    return <AssetRegistrationQueueWorkspace />;
   }
 
   if (resourceKey === "asset-categories") {
@@ -130,7 +146,7 @@ export default async function AssetsResourcePage({ params }: PageProps) {
   }
 
   if (resourceKey === "locations") {
-    return <AssetOrgMasterWrapper kind="locations" />;
+    return <AssetLocationsPlaceholderWorkspace />;
   }
 
   if (resourceKey === "departments") {

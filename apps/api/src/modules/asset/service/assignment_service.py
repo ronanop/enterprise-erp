@@ -21,8 +21,10 @@ from modules.asset.repository.asset_assignment_repository import (
 )
 from modules.asset.repository.asset_repository import AssetRepository
 from modules.asset.repository.base import utcnow
+from modules.asset.schemas import AssignmentComponentResponse, AssetAssignmentResponse
 from modules.asset.service.asset_operational_status_service import AssetOperationalStatusService
 from modules.asset.service.asset_scope_validator import AssetScopeValidator
+from modules.asset.service.assignment_component_service import AssignmentComponentService
 from modules.asset.service.assignment_validator import AssignmentValidator
 from modules.asset.service.document_number_service import DocumentNumberService
 from modules.asset.service.engines import AssetAssignmentEngine
@@ -31,6 +33,25 @@ from modules.asset.service.workflow_governance_settings import asset_workflow_go
 from modules.foundation.domain.enums import WorkflowStatus
 from modules.foundation.domain.value_objects import TenantContext
 from modules.foundation.service.audit_service import AuditService
+
+
+def _json_safe_component_returns_for_audit(
+    component_returns: list[dict] | None,
+) -> list[dict] | None:
+    """Copy return lines for JSONB audit; stringify nested UUID component_id only.
+
+    Custody reconciliation must keep receiving the original UUID-typed list.
+    """
+    if component_returns is None:
+        return None
+    safe: list[dict] = []
+    for line in component_returns:
+        copy = dict(line)
+        cid = copy.get("component_id")
+        if cid is not None:
+            copy["component_id"] = str(cid)
+        safe.append(copy)
+    return safe
 
 
 class AssignmentService:
@@ -45,6 +66,7 @@ class AssignmentService:
         self._validator = AssignmentValidator(db)
         self._audit = AuditService(db)
         self._operational = AssetOperationalStatusService(db)
+        self._assignment_components = AssignmentComponentService(db)
 
     def search(
         self,
@@ -80,9 +102,25 @@ class AssignmentService:
             raise NotFoundException("Asset assignment not found")
         return row
 
+    def get_with_components(self, ctx: TenantContext, row_id: UUID) -> AssetAssignmentResponse:
+        row = self.get(ctx, row_id)
+        return self._to_response(ctx, row, include_components=True)
+
+    def list_components(self, ctx: TenantContext, row_id: UUID) -> list[dict]:
+        row = self.get(ctx, row_id)
+        return self._assignment_components.list_for_assignment(ctx, row)
+
+    def set_components(
+        self, ctx: TenantContext, row_id: UUID, component_ids: list[UUID]
+    ) -> list[dict]:
+        row = self.get(ctx, row_id)
+        self._assignment_components.set_components(ctx, row, component_ids)
+        return self._assignment_components.list_for_assignment(ctx, row)
+
     def create(self, ctx: TenantContext, *, branch_id: UUID, company_id: UUID | None = None, **fields):
         cid = self._scope.resolve_company_id(ctx, company_id)
         self._scope.validate_branch_access(ctx, branch_id)
+        component_ids = fields.pop("component_ids", None)
         enrichment = self._validator.validate_create_fields(ctx, company_id=cid, fields=fields)
 
         asset = self._assets.get(ctx, fields["asset_id"])
@@ -115,11 +153,15 @@ class AssignmentService:
             status=AssetAssignmentStatus.DRAFT.value,
             **{k: v for k, v in enrichment.items() if k != "return_remarks"},
         )
+        if component_ids is not None:
+            self._assignment_components.set_components(ctx, row, component_ids)
         audit_payload = {
             "document_number": row.document_number,
             "asset_id": str(asset.id),
             **{k: v for k, v in enrichment.items() if v is not None},
         }
+        if component_ids is not None:
+            audit_payload["component_ids"] = [str(x) for x in component_ids]
         self._audit.log_entity_change(
             tenant_id=ctx.tenant_id,
             entity_name=ENTITY_AST_ASSIGNMENT,
@@ -132,10 +174,12 @@ class AssignmentService:
 
     def update(self, ctx: TenantContext, row_id: UUID, **fields):
         row = self.get(ctx, row_id)
+        component_ids = fields.pop("component_ids", None)
         self._validator.validate_update_fields(ctx, row, fields)
         enrichment_keys = {
             "delivery_reference_number",
             "delivery_reference_status",
+            "delivery_challan_signature_status",
             "assignment_remarks",
         }
         enrichment_patch = {k: fields[k] for k in enrichment_keys if k in fields}
@@ -147,6 +191,10 @@ class AssignmentService:
                 "delivery_reference_status": enrichment_patch.get(
                     "delivery_reference_status", row.delivery_reference_status
                 ),
+                "delivery_challan_signature_status": enrichment_patch.get(
+                    "delivery_challan_signature_status",
+                    getattr(row, "delivery_challan_signature_status", None),
+                ),
                 "assignment_remarks": enrichment_patch.get(
                     "assignment_remarks", row.assignment_remarks
                 ),
@@ -156,7 +204,11 @@ class AssignmentService:
         updated = self._repo.update(ctx, row_id, **fields)
         if updated is None:
             raise NotFoundException("Asset assignment not found")
+        if component_ids is not None:
+            self._assignment_components.set_components(ctx, updated, component_ids)
         audit_new = {k: fields[k] for k in enrichment_keys if k in fields}
+        if component_ids is not None:
+            audit_new["component_ids"] = [str(x) for x in component_ids]
         self._audit.log_entity_change(
             tenant_id=ctx.tenant_id,
             entity_name=ENTITY_AST_ASSIGNMENT,
@@ -220,6 +272,7 @@ class AssignmentService:
             raise InvalidAssetWorkflowState("Assignment has no workflow instance")
 
         def on_rejected() -> None:
+            self._assignment_components.release_issued(ctx, row_id)
             self._repo.update(
                 ctx,
                 row_id,
@@ -243,6 +296,7 @@ class AssignmentService:
         if row.workflow_instance_id is not None:
             raise InvalidAssetWorkflowState("Cannot cancel after workflow started")
         self._engine.cancel_draft(row)
+        self._assignment_components.release_issued(ctx, row_id)
         updated = self._repo.update(ctx, row_id, status=row.status)
         self._audit.log_entity_change(
             tenant_id=ctx.tenant_id,
@@ -289,6 +343,7 @@ class AssignmentService:
         return_condition: str = "good",
         reason: str | None = None,
         remarks: str | None = None,
+        component_returns: list[dict] | None = None,
     ):
         row = self.get(ctx, row_id)
         self._validator.validate_return_readiness(ctx, row)
@@ -297,6 +352,8 @@ class AssignmentService:
             return_remarks=remarks,
             reason=reason,
         )
+        # Reconcile components first so a failure rolls back with the request UoW.
+        self._assignment_components.reconcile_return(ctx, row, component_returns)
         asset = self._assets.lock_for_update(ctx, row.asset_id)
         if asset is None:
             raise NotFoundException("Asset not found")
@@ -345,6 +402,9 @@ class AssignmentService:
                 **{k: str(v) if v is not None else None for k, v in master_payload.items()},
                 "return_condition": return_condition,
                 "return_remarks": normalized_remarks,
+                "component_returns": _json_safe_component_returns_for_audit(
+                    component_returns
+                ),
             },
         )
         return updated
@@ -401,6 +461,8 @@ class AssignmentService:
             workflow_status=WorkflowStatus.APPROVED.value,
             allocated_at=now,
         )
+        # Issue components atomically with activation (same request UoW).
+        self._assignment_components.activate_issued(ctx, assignment)
         self._operational.apply_action(
             ctx,
             asset.id,
@@ -424,5 +486,24 @@ class AssignmentService:
                 "delivery_reference_status": getattr(
                     assignment, "delivery_reference_status", None
                 ),
+                "delivery_challan_signature_status": getattr(
+                    assignment, "delivery_challan_signature_status", None
+                ),
             },
         )
+
+    def _to_response(
+        self,
+        ctx: TenantContext,
+        row: AstAssetAssignment,
+        *,
+        include_components: bool = False,
+    ) -> AssetAssignmentResponse:
+        payload = AssetAssignmentResponse.model_validate(row)
+        comps = self._assignment_components.list_for_assignment(ctx, row)
+        payload.component_ids = [c["component_id"] for c in comps]
+        if include_components:
+            payload.components = [
+                AssignmentComponentResponse.model_validate(c) for c in comps
+            ]
+        return payload

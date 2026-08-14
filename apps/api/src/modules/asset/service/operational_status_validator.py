@@ -22,6 +22,8 @@ _ACTION_TARGETS: dict[str, str] = {
     "return_to_ready": Ready,
     "retire": Retired,
     "mark_pending_disposal": Pending,
+    "start_disposal": Pending,
+    "reinstate": Ready,
     "complete_disposal": Disposed,
 }
 

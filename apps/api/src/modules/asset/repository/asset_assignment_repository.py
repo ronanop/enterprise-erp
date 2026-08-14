@@ -150,6 +150,7 @@ class AssetAssignmentRepository(AstScopedRepository):
                 "expected_return_at",
                 "delivery_reference_number",
                 "delivery_reference_status",
+                "delivery_challan_signature_status",
                 "assignment_remarks",
                 "return_remarks",
             }:

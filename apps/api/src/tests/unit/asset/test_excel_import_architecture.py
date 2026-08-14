@@ -87,14 +87,14 @@ def test_batch_default_documented_in_service() -> None:
 
 @pytest.mark.parametrize(
     "action",
-    ["assign", "retire", "mark_pending_disposal", "complete_disposal", "return_to_ready"],
+    ["assign", "retire", "mark_pending_disposal", "return_to_ready"],
 )
 def test_engine_does_not_hardcode_direct_status_writes(action: str) -> None:
     src = _source(ENGINE)
     assert "set_operational_status(" not in src
     assert "._repo." not in src
-    if action == "complete_disposal":
-        assert "complete_disposal" in src
+    assert "complete_disposal" not in src
+    assert action  # parametrize keeps action names as regression documentation
 
 
 def test_router_endpoint_exists() -> None:

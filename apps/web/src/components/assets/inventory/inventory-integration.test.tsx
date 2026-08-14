@@ -34,13 +34,20 @@ vi.mock("@/services/assets-service", async (importOriginal) => {
     assetCategoryService: {
       search: vi.fn().mockResolvedValue({ items: [] }),
     },
+    assetLocationService: {
+      search: vi.fn().mockResolvedValue({ items: [], total: 0, page: 1, page_size: 200 }),
+    },
   };
 });
 
 vi.mock("@/lib/org-options", () => ({
   listBranchOptions: vi.fn().mockResolvedValue([{ id: "b1", label: "Noida" }]),
   listDepartmentOptions: vi.fn().mockResolvedValue([]),
+  listLocationOptions: vi.fn().mockResolvedValue([]),
   listEmployeeOptions: vi.fn().mockResolvedValue([]),
+  listEmployeeDirectory: vi.fn().mockResolvedValue([]),
+  employeeLabelsFromDirectory: () => ({}),
+  employeeDirectoryById: () => ({}),
 }));
 
 const readyAsset = {
@@ -91,7 +98,7 @@ beforeEach(() => {
       ],
       total: 1,
       page: 1,
-      page_size: 500,
+      page_size: 200,
     }),
   );
 });

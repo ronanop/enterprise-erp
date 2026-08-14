@@ -56,6 +56,7 @@ async function advanceToReview(user: ReturnType<typeof userEvent.setup>) {
   await user.click(screen.getByRole("button", { name: /^Next$/i }));
   await user.click(screen.getByRole("button", { name: /^Next$/i }));
   await user.click(screen.getByRole("button", { name: /^Next$/i }));
+  await user.click(screen.getByRole("button", { name: /^Next$/i }));
   await waitFor(() => {
     expect(screen.getByRole("button", { name: /Confirm return/i })).toBeInTheDocument();
   });
@@ -322,6 +323,7 @@ describe("ReturnWizardContainer — return condition", () => {
     await user.click(screen.getByRole("radio", { name: /Outdated/i }));
     await user.click(screen.getByRole("button", { name: /^Next$/i }));
     await user.click(screen.getByRole("button", { name: /^Next$/i }));
+    await user.click(screen.getByRole("button", { name: /^Next$/i }));
     await user.click(screen.getByRole("button", { name: /Confirm return/i }));
     await waitFor(() =>
       expect(returnAsset).toHaveBeenCalledWith(
@@ -339,6 +341,7 @@ describe("ReturnWizardContainer — return condition", () => {
     await waitForWizard();
     await user.click(screen.getByRole("button", { name: /^Next$/i }));
     await user.click(screen.getByRole("radio", { name: /Not working/i }));
+    await user.click(screen.getByRole("button", { name: /^Next$/i }));
     await user.click(screen.getByRole("button", { name: /^Next$/i }));
     await user.click(screen.getByRole("button", { name: /^Next$/i }));
     await user.click(screen.getByRole("button", { name: /Confirm return/i }));
@@ -379,6 +382,7 @@ describe("ReturnWizardContainer — return remarks", () => {
       <ReturnWizardContainer assignmentId="asg-1" service={service} listEmployees={listEmployees} />,
     );
     await waitForWizard();
+    await user.click(screen.getByRole("button", { name: /^Next$/i }));
     await user.click(screen.getByRole("button", { name: /^Next$/i }));
     await user.click(screen.getByRole("button", { name: /^Next$/i }));
     await user.type(screen.getByLabelText(/Return remarks/i), "  screen scratch  ");

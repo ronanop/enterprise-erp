@@ -16,6 +16,7 @@ from modules.asset.domain.exceptions import (
 )
 from modules.asset.domain.workflow_codes import ENTITY_AST_DISPOSAL
 from modules.asset.models import AstAssetDisposal
+from modules.asset.repository.asset_component_repository import AssetComponentRepository
 from modules.asset.repository.asset_disposal_repository import (
     AssetDisposalListFilters,
     AssetDisposalRepository,
@@ -47,6 +48,21 @@ class DisposalService:
         self._governance = AssetGovernanceService(db)
         self._validator = DisposalValidator(db)
         self._operational = AssetOperationalStatusService(db)
+        self._components = AssetComponentRepository(db)
+
+    def _assert_no_active_components(self, ctx: TenantContext, asset_id: UUID) -> None:
+        active = self._components.list_by_asset(ctx, asset_id, include_inactive=False)
+        if not active:
+            return
+        labels = ", ".join(
+            f"{c.component_code}"
+            + (f" ({c.serial_number})" if c.serial_number else "")
+            for c in active[:10]
+        )
+        raise DisposalValidationError(
+            "Remove or dispose of active components before disposing this asset: "
+            + labels
+        )
 
     def search(
         self,
@@ -90,6 +106,7 @@ class DisposalService:
         asset = self._assets.get(ctx, fields["asset_id"])
         if asset is None:
             raise NotFoundException("Asset not found")
+        self._assert_no_active_components(ctx, asset.id)
         if asset.branch_id != branch_id:
             raise DisposalValidationError(
                 "Disposal branch must match the asset's current branch"
@@ -167,6 +184,8 @@ class DisposalService:
         row = self.get(ctx, row_id)
         if not asset_workflow_governance_enabled():
             return self._legacy_approve(ctx, row_id, row)
+        self._validator.validate_approve_readiness(ctx, row)
+        self._assert_no_active_components(ctx, row.asset_id)
         if row.created_by == ctx.user_id:
             raise SegregationOfDutiesError("Creator cannot approve own disposal")
         if row.workflow_instance_id is None:
@@ -174,6 +193,9 @@ class DisposalService:
 
         def on_approved() -> None:
             fresh = self.get(ctx, row_id)
+            # Re-check gates immediately before irreversible document approval.
+            self._validator.validate_approve_readiness(ctx, fresh)
+            self._assert_no_active_components(ctx, fresh.asset_id)
             self._engine.approve(fresh)
             self._repo.update(
                 ctx,
@@ -282,6 +304,7 @@ class DisposalService:
     ):
         row = self.get(ctx, row_id)
         self._validator.validate_post_readiness(ctx, row)
+        self._assert_no_active_components(ctx, row.asset_id)
 
         # Optimistic claim before Finance so a concurrent post fails without a second journal.
         claimed = self._repo.update(ctx, row_id, version=int(row.version or 1))
@@ -344,9 +367,13 @@ class DisposalService:
     def _legacy_approve(self, ctx: TenantContext, row_id: UUID, row: AstAssetDisposal):
         """Non-production path when ASSET_WORKFLOW_GOVERNANCE_ENABLED=false."""
         if row.status == AssetDisposalStatus.DRAFT.value:
+            self._validator.validate_submit_readiness(ctx, row)
+            self._assert_no_active_components(ctx, row.asset_id)
             self._engine.submit(row)
             self._repo.update(ctx, row_id, status=row.status)
             row = self.get(ctx, row_id)
+        self._validator.validate_approve_readiness(ctx, row)
+        self._assert_no_active_components(ctx, row.asset_id)
         self._engine.approve(row)
         return self._repo.update(
             ctx,

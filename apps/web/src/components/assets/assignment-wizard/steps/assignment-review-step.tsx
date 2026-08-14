@@ -43,12 +43,18 @@ export function AssignmentReviewStep({
           <dd>{issuedLabels.length ? issuedLabels.join(", ") : "—"}</dd>
         </div>
         <div>
-          <dt className="text-xs text-muted-foreground">Delivery status</dt>
-          <dd className="capitalize">{state.deliveryReferenceStatus}</dd>
+          <dt className="text-xs text-muted-foreground">DC Status</dt>
+          <dd className="capitalize">{state.deliveryReferenceStatus.replaceAll("_", " ")}</dd>
         </div>
         <div>
-          <dt className="text-xs text-muted-foreground">Delivery reference</dt>
+          <dt className="text-xs text-muted-foreground">DC Number</dt>
           <dd>{state.deliveryReferenceNumber || "—"}</dd>
+        </div>
+        <div>
+          <dt className="text-xs text-muted-foreground">Signature</dt>
+          <dd className="capitalize">
+            {state.deliveryChallanSignatureStatus.replaceAll("_", " ")}
+          </dd>
         </div>
         <div>
           <dt className="text-xs text-muted-foreground">Expected return</dt>

@@ -43,16 +43,68 @@ def test_create_blocks_disposed_asset() -> None:
 def test_create_blocks_second_open_work_order() -> None:
     validator = MaintenanceValidator(MagicMock())
     ctx = _ctx()
-    asset = SimpleNamespace(id=uuid4(), company_id=ctx.company_id, status="active")
+    asset = SimpleNamespace(
+        id=uuid4(),
+        company_id=ctx.company_id,
+        status="active",
+        operational_status="READY_TO_MOVE",
+    )
     open_wo = SimpleNamespace(document_number="AMNT-2026-000001")
+    with (
+        patch.object(validator._assets, "get", return_value=asset),
+        patch.object(validator._assignments, "find_pending_or_active_for_asset", return_value=None),
+        patch.object(validator._maintenances, "find_open_for_asset", return_value=open_wo),
+        pytest.raises(MaintenanceValidationError, match="open maintenance"),
+    ):
+        validator.validate_create_fields(
+            ctx,
+            company_id=ctx.company_id,
+            fields={"asset_id": asset.id, "maintenance_type": "corrective"},
+        )
+
+
+@pytest.mark.parametrize("ops", ["RETIRED", "PENDING_DISPOSAL", "DISPOSED"])
+def test_create_blocks_retired_pending_disposed_ops(ops: str) -> None:
+    validator = MaintenanceValidator(MagicMock())
+    ctx = _ctx()
+    asset = SimpleNamespace(
+        id=uuid4(),
+        company_id=ctx.company_id,
+        status="active",
+        operational_status=ops,
+    )
     with patch.object(validator._assets, "get", return_value=asset):
-        with patch.object(validator._maintenances, "find_open_for_asset", return_value=open_wo):
-            with pytest.raises(MaintenanceValidationError, match="open maintenance"):
-                validator.validate_create_fields(
-                    ctx,
-                    company_id=ctx.company_id,
-                    fields={"asset_id": asset.id, "maintenance_type": "corrective"},
-                )
+        with pytest.raises(MaintenanceValidationError, match="cannot enter maintenance"):
+            validator.validate_create_fields(
+                ctx,
+                company_id=ctx.company_id,
+                fields={"asset_id": asset.id, "maintenance_type": "preventive"},
+            )
+
+
+def test_create_blocks_open_assignment() -> None:
+    validator = MaintenanceValidator(MagicMock())
+    ctx = _ctx()
+    asset = SimpleNamespace(
+        id=uuid4(),
+        company_id=ctx.company_id,
+        status="active",
+        operational_status="READY_TO_MOVE",
+    )
+    with (
+        patch.object(validator._assets, "get", return_value=asset),
+        patch.object(
+            validator._assignments,
+            "find_pending_or_active_for_asset",
+            return_value=SimpleNamespace(document_number="AASN-1"),
+        ),
+        pytest.raises(MaintenanceValidationError, match="currently assigned"),
+    ):
+        validator.validate_create_fields(
+            ctx,
+            company_id=ctx.company_id,
+            fields={"asset_id": asset.id, "maintenance_type": "preventive"},
+        )
 
 
 def test_start_blocks_pending_transfer() -> None:
@@ -62,12 +114,17 @@ def test_start_blocks_pending_transfer() -> None:
         status="approved",
         asset_id=uuid4(),
     )
-    asset = SimpleNamespace(id=row.asset_id, status="active")
+    asset = SimpleNamespace(
+        id=row.asset_id, status="active", operational_status="READY_TO_MOVE"
+    )
     pending = SimpleNamespace(document_number="ATRF-2026-000001")
-    with patch.object(validator._assets, "get", return_value=asset):
-        with patch.object(validator._transfers, "find_pending_for_asset", return_value=pending):
-            with pytest.raises(MaintenanceValidationError, match="pending transfer"):
-                validator.validate_start_readiness(ctx, row)
+    with (
+        patch.object(validator._assets, "get", return_value=asset),
+        patch.object(validator._assignments, "find_pending_or_active_for_asset", return_value=None),
+        patch.object(validator._transfers, "find_pending_for_asset", return_value=pending),
+        pytest.raises(MaintenanceValidationError, match="pending transfer"),
+    ):
+        validator.validate_start_readiness(ctx, row)
 
 
 def test_update_only_draft() -> None:

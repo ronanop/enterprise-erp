@@ -19,15 +19,26 @@ export type RegisterAssignmentLike = {
   updated_at?: string | null;
   delivery_reference_number?: string | null;
   delivery_reference_status?: string | null;
+  delivery_challan_signature_status?: string | null;
   assignment_remarks?: string | null;
   return_remarks?: string | null;
 };
+
+/** Optional employee master enrichment (from GET /employees). */
+export type EmployeeLookupEntry = {
+  label?: string;
+  displayName?: string;
+  employeeCode?: string | null;
+  mobile?: string | null;
+};
+
+export type EmployeeLookup = Record<string, EmployeeLookupEntry | string>;
 
 /** Excel Employee Asset Register columns → ERP ownership / source. */
 export const REGISTER_PARITY_FIELDS = [
   {
     excel: "Employee ID",
-    source: "active_assignment.employee_id",
+    source: "active_assignment.employee_id → employee_code",
     derived: true,
     inventoryKey: "employeeId",
   },
@@ -51,19 +62,19 @@ export const REGISTER_PARITY_FIELDS = [
   },
   {
     excel: "Brand",
-    source: "discovery_profile_json.manufacturer",
+    source: "ast_asset.make → discovery_profile_json.manufacturer",
     derived: true,
     inventoryKey: "manufacturer",
   },
   {
     excel: "Model",
-    source: "discovery_profile_json.model",
+    source: "ast_asset.model → discovery_profile_json.model",
     derived: true,
     inventoryKey: "model",
   },
   {
     excel: "Configuration",
-    source: "discovery_profile_json summary",
+    source: "ast_asset.configuration → discovery profile summary",
     derived: true,
     inventoryKey: "configuration",
   },
@@ -75,9 +86,9 @@ export const REGISTER_PARITY_FIELDS = [
   },
   {
     excel: "Location / Branch",
-    source: "ast_asset.branch_id → org",
+    source: "ast_asset_location.location_label (current); branch is separate",
     derived: true,
-    inventoryKey: "branch",
+    inventoryKey: "location",
   },
   {
     excel: "Earlier Used By",
@@ -117,7 +128,7 @@ export const REGISTER_PARITY_FIELDS = [
   },
   {
     excel: "Phone Number",
-    source: "employee master (not on assignment list)",
+    source: "employee master mobile",
     derived: true,
     inventoryKey: "expandable.phoneNumber",
   },
@@ -134,16 +145,98 @@ export const DELIVERY_REFERENCE_STATUS_LABELS: Record<string, string> = {
   received: "Received",
 };
 
+export const DELIVERY_CHALLAN_SIGNATURE_STATUS_LABELS: Record<string, string> = {
+  not_signed: "Not Signed",
+  signed: "Signed",
+};
+
 export function displayOrDash(value: unknown): string {
   if (value === null || value === undefined) return EMPTY;
   const s = String(value).trim();
   return s || EMPTY;
 }
 
+function asEmployeeLookup(
+  lookup: Record<string, string> | EmployeeLookup = {},
+): EmployeeLookup {
+  const out: EmployeeLookup = {};
+  for (const [id, value] of Object.entries(lookup)) {
+    out[id] = value;
+  }
+  return out;
+}
+
+function normalizeEmployeeLookup(lookup: EmployeeLookup = {}): Record<string, EmployeeLookupEntry> {
+  const out: Record<string, EmployeeLookupEntry> = {};
+  for (const [id, value] of Object.entries(lookup)) {
+    if (typeof value === "string") {
+      out[id] = { label: value };
+    } else if (value && typeof value === "object") {
+      out[id] = value;
+    }
+  }
+  return out;
+}
+
+/** Labels map for resolveAssigneeLabel (string id → display label). */
+export function employeeLabelsFromLookup(lookup: EmployeeLookup = {}): Record<string, string> {
+  const normalized = normalizeEmployeeLookup(lookup);
+  const labels: Record<string, string> = {};
+  for (const [id, entry] of Object.entries(normalized)) {
+    const label = entry.label?.trim() || entry.displayName?.trim();
+    if (label) labels[id] = label;
+  }
+  return labels;
+}
+
+export function resolveEmployeeMobile(
+  employeeId: string | null | undefined,
+  lookup: Record<string, string> | EmployeeLookup = {},
+): string {
+  if (!employeeId) return EMPTY;
+  const entry = normalizeEmployeeLookup(asEmployeeLookup(lookup))[String(employeeId)];
+  if (!entry) return EMPTY;
+  return displayOrDash(entry.mobile);
+}
+
+export function resolveEmployeeCode(
+  employeeId: string | null | undefined,
+  lookup: Record<string, string> | EmployeeLookup = {},
+): string {
+  if (!employeeId) return EMPTY;
+  const id = String(employeeId);
+  const entry = normalizeEmployeeLookup(asEmployeeLookup(lookup))[id];
+  if (entry?.employeeCode?.trim()) return entry.employeeCode.trim();
+  return EMPTY;
+}
+
 export function formatDeliveryReferenceStatus(status: string | null | undefined): string {
   if (!status?.trim()) return EMPTY;
   const key = status.trim().toLowerCase();
   return DELIVERY_REFERENCE_STATUS_LABELS[key] ?? status.trim();
+}
+
+export function formatDeliveryChallanSignatureStatus(
+  status: string | null | undefined,
+): string {
+  if (!status?.trim()) return DELIVERY_CHALLAN_SIGNATURE_STATUS_LABELS.not_signed;
+  const key = status.trim().toLowerCase();
+  return DELIVERY_CHALLAN_SIGNATURE_STATUS_LABELS[key] ?? status.trim();
+}
+
+/** Compact DC line for expandable / history: "DC-001 · Issued · Signed" */
+export function formatDeliveryChallanSummary(
+  number: string | null | undefined,
+  status: string | null | undefined,
+  signature: string | null | undefined,
+): string {
+  const num = number?.trim() || "—";
+  const st = formatDeliveryReferenceStatus(status);
+  const sig = formatDeliveryChallanSignatureStatus(signature);
+  if (st === EMPTY && (!signature || !String(signature).trim())) {
+    return num;
+  }
+  return `${num} · ${st === EMPTY ? "—" : st} · ${sig}`;
 }
 
 /** Excel-facing delivery challan cell: number, or status when N/A. */
@@ -187,13 +280,14 @@ export function groupAssignmentsByAssetId(
 
 export function resolveAssigneeLabel(
   row: RegisterAssignmentLike | null | undefined,
-  employeeLabels: Record<string, string> = {},
+  employeeLabels: Record<string, string> | EmployeeLookup = {},
 ): string {
   if (!row) return EMPTY;
   const fromApi = row.assignee_label?.trim();
   if (fromApi) return fromApi;
   const employeeId = row.employee_id ? String(row.employee_id) : "";
-  if (employeeId && employeeLabels[employeeId]) return employeeLabels[employeeId];
+  const labels = employeeLabelsFromLookup(asEmployeeLookup(employeeLabels));
+  if (employeeId && labels[employeeId]) return labels[employeeId];
   if (employeeId) return employeeId;
   return EMPTY;
 }
@@ -203,7 +297,7 @@ export function resolveAssigneeLabel(
  */
 export function deriveEarlierUsedBy(
   history: RegisterAssignmentLike[],
-  employeeLabels: Record<string, string> = {},
+  employeeLabels: Record<string, string> | EmployeeLookup = {},
 ): string {
   const returned = history
     .filter((a) => String(a.status ?? "").toLowerCase() === "returned")
@@ -248,7 +342,10 @@ export type RegisterParityExpandable = {
   earlierUsedBy: string;
   deliveryChallan: string;
   deliveryReferenceStatus: string;
+  deliverySignature: string;
+  deliveryChallanSummary: string;
   phoneNumber: string;
+  /** @deprecated Prefer assignmentRemarks — kept for Excel “Remarks” label. */
   remarks: string;
   assignmentRemarks: string;
   returnRemarks: string;
@@ -263,6 +360,8 @@ export type AssignmentHistoryEntryView = {
   returnedAt: string;
   deliveryReferenceNumber: string;
   deliveryReferenceStatus: string;
+  deliverySignature: string;
+  deliveryChallanSummary: string;
   assignmentRemarks: string;
   returnRemarks: string;
 };
@@ -274,23 +373,42 @@ function formatShortDate(value: unknown): string {
   return new Intl.DateTimeFormat(undefined, { dateStyle: "medium" }).format(d);
 }
 
+export function formatIssuedDate(allocatedAt: string | null | undefined): string {
+  return formatShortDate(allocatedAt);
+}
+
 export function buildRegisterParityExpandable(
   history: RegisterAssignmentLike[],
-  employeeLabels: Record<string, string> = {},
+  employeeLookup: Record<string, string> | EmployeeLookup = {},
 ): RegisterParityExpandable {
   const current = pickRegisterAssignment(history);
+  const active = history.find((a) => isActiveAssignment(a));
   const latestReturned = pickLatestReturnedAssignment(history);
   const assignmentRemarks = formatAssignmentRemarksDisplay(current?.assignment_remarks);
   const returnRemarks = displayOrDash(latestReturned?.return_remarks);
+  const lookup = asEmployeeLookup(employeeLookup);
+  const labels = employeeLabelsFromLookup(lookup);
 
   return {
-    earlierUsedBy: deriveEarlierUsedBy(history, employeeLabels),
+    earlierUsedBy: deriveEarlierUsedBy(history, labels),
     deliveryChallan: formatDeliveryChallanDisplay(
       current?.delivery_reference_number,
       current?.delivery_reference_status,
     ),
     deliveryReferenceStatus: formatDeliveryReferenceStatus(current?.delivery_reference_status),
-    phoneNumber: EMPTY,
+    deliverySignature: formatDeliveryChallanSignatureStatus(
+      current?.delivery_challan_signature_status,
+    ),
+    deliveryChallanSummary: formatDeliveryChallanSummary(
+      current?.delivery_reference_number,
+      current?.delivery_reference_status,
+      current?.delivery_challan_signature_status,
+    ),
+    // Phone only for current active/approved assignee — never from returned fallback.
+    phoneNumber: resolveEmployeeMobile(
+      active?.employee_id ? String(active.employee_id) : null,
+      lookup,
+    ),
     remarks: assignmentRemarks,
     assignmentRemarks,
     returnRemarks,
@@ -299,7 +417,7 @@ export function buildRegisterParityExpandable(
 
 export function mapAssignmentHistoryEntries(
   history: RegisterAssignmentLike[],
-  employeeLabels: Record<string, string> = {},
+  employeeLabels: Record<string, string> | EmployeeLookup = {},
 ): AssignmentHistoryEntryView[] {
   return [...history]
     .sort((a, b) => assignmentTimestamp(b) - assignmentTimestamp(a))
@@ -312,6 +430,14 @@ export function mapAssignmentHistoryEntries(
       returnedAt: formatShortDate(row.returned_at),
       deliveryReferenceNumber: displayOrDash(row.delivery_reference_number),
       deliveryReferenceStatus: formatDeliveryReferenceStatus(row.delivery_reference_status),
+      deliverySignature: formatDeliveryChallanSignatureStatus(
+        row.delivery_challan_signature_status,
+      ),
+      deliveryChallanSummary: formatDeliveryChallanSummary(
+        row.delivery_reference_number,
+        row.delivery_reference_status,
+        row.delivery_challan_signature_status,
+      ),
       assignmentRemarks: formatAssignmentRemarksDisplay(row.assignment_remarks),
       returnRemarks: displayOrDash(row.return_remarks),
     }));

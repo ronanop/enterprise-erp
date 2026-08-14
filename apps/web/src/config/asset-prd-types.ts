@@ -25,6 +25,34 @@ export const ASSET_PRD_TYPES: AssetPrdType[] = [
     apiAssetType: "fixed",
   },
   {
+    id: "monitor",
+    typeName: "Monitor",
+    categoryCode: "IT-HW",
+    description: "Displays",
+    apiAssetType: "fixed",
+  },
+  {
+    id: "keyboard",
+    typeName: "Keyboard",
+    categoryCode: "IT-HW",
+    description: "Input devices",
+    apiAssetType: "fixed",
+  },
+  {
+    id: "mouse",
+    typeName: "Mouse",
+    categoryCode: "IT-HW",
+    description: "Pointing devices",
+    apiAssetType: "fixed",
+  },
+  {
+    id: "mobile",
+    typeName: "Mobile Device",
+    categoryCode: "IT-HW",
+    description: "Phones and tablets",
+    apiAssetType: "digital",
+  },
+  {
     id: "furniture",
     typeName: "Office Furniture",
     categoryCode: "FURN",
@@ -39,17 +67,23 @@ export const ASSET_PRD_TYPES: AssetPrdType[] = [
     apiAssetType: "fixed",
   },
   {
-    id: "mobile",
-    typeName: "Mobile Device",
-    categoryCode: "IT-HW",
-    description: "Phones and tablets",
-    apiAssetType: "digital",
+    id: "other",
+    typeName: "Other",
+    categoryCode: "",
+    description: "Unclassified asset type",
+    apiAssetType: "fixed",
   },
 ];
 
 export function prdTypesForCategory(categoryCode: string): AssetPrdType[] {
   const code = categoryCode.trim().toUpperCase();
-  return ASSET_PRD_TYPES.filter(
-    (t) => t.categoryCode.toUpperCase() === code || code === "",
+  if (!code) return ASSET_PRD_TYPES;
+  const matched = ASSET_PRD_TYPES.filter(
+    (t) => !t.categoryCode || t.categoryCode.toUpperCase() === code || t.id === "other",
   );
+  return matched.length > 0 ? matched : ASSET_PRD_TYPES;
+}
+
+export function getPrdType(id: string): AssetPrdType | undefined {
+  return ASSET_PRD_TYPES.find((t) => t.id === id);
 }

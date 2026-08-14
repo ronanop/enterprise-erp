@@ -22,6 +22,28 @@ def _ctx() -> TenantContext:
     )
 
 
+def _pending_asset(*, company_id, status: str = "active", ops: str | None = "PENDING_DISPOSAL"):
+    return SimpleNamespace(
+        id=uuid4(),
+        company_id=company_id,
+        status=status,
+        operational_status=ops,
+    )
+
+
+def _clear_custody(validator: DisposalValidator):
+    return (
+        patch.object(validator._disposals, "find_pending_for_asset", return_value=None),
+        patch.object(validator._maintenances, "find_open_for_asset", return_value=None),
+        patch.object(
+            validator._assignments,
+            "find_pending_or_active_for_asset",
+            return_value=None,
+        ),
+        patch.object(validator._transfers, "find_pending_for_asset", return_value=None),
+    )
+
+
 def test_create_requires_asset_id() -> None:
     validator = DisposalValidator(MagicMock())
     with pytest.raises(DisposalValidationError, match="asset_id is required"):
@@ -31,9 +53,32 @@ def test_create_requires_asset_id() -> None:
 def test_create_blocks_disposed_asset() -> None:
     validator = DisposalValidator(MagicMock())
     ctx = _ctx()
-    asset = SimpleNamespace(id=uuid4(), company_id=ctx.company_id, status="disposed")
+    asset = _pending_asset(company_id=ctx.company_id, status="disposed")
     with patch.object(validator._assets, "get", return_value=asset):
         with pytest.raises(DisposalValidationError, match="Disposed"):
+            validator.validate_create_fields(
+                ctx,
+                company_id=ctx.company_id,
+                fields={"asset_id": asset.id, "disposal_type": "scrap"},
+            )
+
+
+@pytest.mark.parametrize(
+    "ops,match",
+    [
+        ("READY_TO_MOVE", "PENDING_DISPOSAL"),
+        ("ASSIGNED", "PENDING_DISPOSAL"),
+        ("DISPOSED", "PENDING_DISPOSAL"),
+        ("RETIRED", "Start Disposal"),
+        (None, "PENDING_DISPOSAL"),
+    ],
+)
+def test_create_blocks_non_pending_operational_status(ops: str | None, match: str) -> None:
+    validator = DisposalValidator(MagicMock())
+    ctx = _ctx()
+    asset = _pending_asset(company_id=ctx.company_id, ops=ops)
+    with patch.object(validator._assets, "get", return_value=asset):
+        with pytest.raises(DisposalValidationError, match=match):
             validator.validate_create_fields(
                 ctx,
                 company_id=ctx.company_id,
@@ -44,7 +89,7 @@ def test_create_blocks_disposed_asset() -> None:
 def test_create_blocks_open_maintenance() -> None:
     validator = DisposalValidator(MagicMock())
     ctx = _ctx()
-    asset = SimpleNamespace(id=uuid4(), company_id=ctx.company_id, status="active")
+    asset = _pending_asset(company_id=ctx.company_id)
     open_wo = SimpleNamespace(document_number="AMNT-2026-000001")
     with patch.object(validator._assets, "get", return_value=asset):
         with patch.object(validator._disposals, "find_pending_for_asset", return_value=None):
@@ -60,7 +105,7 @@ def test_create_blocks_open_maintenance() -> None:
 def test_create_blocks_open_assignment() -> None:
     validator = DisposalValidator(MagicMock())
     ctx = _ctx()
-    asset = SimpleNamespace(id=uuid4(), company_id=ctx.company_id, status="active")
+    asset = _pending_asset(company_id=ctx.company_id)
     open_asn = SimpleNamespace(document_number="AASN-2026-000001")
     with patch.object(validator._assets, "get", return_value=asset):
         with patch.object(validator._disposals, "find_pending_for_asset", return_value=None):
@@ -81,7 +126,7 @@ def test_create_blocks_open_assignment() -> None:
 def test_create_blocks_pending_transfer() -> None:
     validator = DisposalValidator(MagicMock())
     ctx = _ctx()
-    asset = SimpleNamespace(id=uuid4(), company_id=ctx.company_id, status="active")
+    asset = _pending_asset(company_id=ctx.company_id)
     pending = SimpleNamespace(document_number="ATRF-2026-000001")
     with patch.object(validator._assets, "get", return_value=asset):
         with patch.object(validator._disposals, "find_pending_for_asset", return_value=None):
@@ -105,7 +150,7 @@ def test_create_blocks_pending_transfer() -> None:
 def test_create_blocks_second_open_disposal() -> None:
     validator = DisposalValidator(MagicMock())
     ctx = _ctx()
-    asset = SimpleNamespace(id=uuid4(), company_id=ctx.company_id, status="active")
+    asset = _pending_asset(company_id=ctx.company_id)
     open_dsp = SimpleNamespace(document_number="ADISP-2026-000001")
     with patch.object(validator._assets, "get", return_value=asset):
         with patch.object(validator._disposals, "find_pending_for_asset", return_value=open_dsp):
@@ -178,27 +223,93 @@ def test_reopen_blocked_when_another_open_disposal_exists() -> None:
             validator.validate_reopen_readiness(ctx, row)
 
 
-def test_create_accepts_eligible_active_asset() -> None:
+def test_create_accepts_pending_disposal_asset() -> None:
     validator = DisposalValidator(MagicMock())
     ctx = _ctx()
-    asset = SimpleNamespace(id=uuid4(), company_id=ctx.company_id, status="active")
+    asset = _pending_asset(company_id=ctx.company_id)
     with patch.object(validator._assets, "get", return_value=asset):
-        with patch.object(validator._disposals, "find_pending_for_asset", return_value=None):
-            with patch.object(validator._maintenances, "find_open_for_asset", return_value=None):
-                with patch.object(
-                    validator._assignments,
-                    "find_pending_or_active_for_asset",
-                    return_value=None,
-                ):
-                    with patch.object(
-                        validator._transfers, "find_pending_for_asset", return_value=None
-                    ):
-                        validator.validate_create_fields(
-                            ctx,
-                            company_id=ctx.company_id,
-                            fields={
-                                "asset_id": asset.id,
-                                "disposal_type": "scrap",
-                                "disposal_date": date.today(),
-                            },
-                        )
+        patches = _clear_custody(validator)
+        with patches[0], patches[1], patches[2], patches[3]:
+            validator.validate_create_fields(
+                ctx,
+                company_id=ctx.company_id,
+                fields={
+                    "asset_id": asset.id,
+                    "disposal_type": "scrap",
+                    "disposal_date": date.today(),
+                },
+            )
+
+
+def test_submit_rejects_when_no_longer_pending() -> None:
+    validator = DisposalValidator(MagicMock())
+    ctx = _ctx()
+    asset = _pending_asset(company_id=ctx.company_id, ops="READY_TO_MOVE")
+    row = SimpleNamespace(
+        id=uuid4(),
+        asset_id=asset.id,
+        status="draft",
+        disposal_type="scrap",
+        disposal_date=date.today(),
+        proceeds_amount=None,
+        book_value_at_disposal=None,
+    )
+    with patch.object(validator._assets, "get", return_value=asset):
+        with pytest.raises(DisposalValidationError, match="no longer pending disposal"):
+            validator.validate_submit_readiness(ctx, row)
+
+
+def test_approve_rejects_when_no_longer_pending() -> None:
+    validator = DisposalValidator(MagicMock())
+    ctx = _ctx()
+    asset = _pending_asset(company_id=ctx.company_id, ops="ASSIGNED")
+    row = SimpleNamespace(
+        id=uuid4(),
+        asset_id=asset.id,
+        status="submitted",
+        disposal_type="scrap",
+        disposal_date=date.today(),
+        proceeds_amount=None,
+        book_value_at_disposal=None,
+    )
+    with patch.object(validator._assets, "get", return_value=asset):
+        with pytest.raises(DisposalValidationError, match="cannot be approved"):
+            validator.validate_approve_readiness(ctx, row)
+
+
+def test_approve_accepts_pending_submitted() -> None:
+    validator = DisposalValidator(MagicMock())
+    ctx = _ctx()
+    asset = _pending_asset(company_id=ctx.company_id)
+    row = SimpleNamespace(
+        id=uuid4(),
+        asset_id=asset.id,
+        status="submitted",
+        disposal_type="scrap",
+        disposal_date=date.today(),
+        proceeds_amount=None,
+        book_value_at_disposal=None,
+    )
+    with patch.object(validator._assets, "get", return_value=asset):
+        patches = _clear_custody(validator)
+        with patches[0], patches[1], patches[2], patches[3]:
+            validator.validate_approve_readiness(ctx, row)
+
+
+def test_post_rejects_when_no_longer_pending() -> None:
+    validator = DisposalValidator(MagicMock())
+    ctx = _ctx()
+    asset = _pending_asset(company_id=ctx.company_id, ops="READY_TO_MOVE")
+    row = SimpleNamespace(
+        id=uuid4(),
+        asset_id=asset.id,
+        status="approved",
+        disposal_type="scrap",
+        disposal_date=date.today(),
+        proceeds_amount=None,
+        book_value_at_disposal=None,
+        finance_journal_id=None,
+    )
+    with patch.object(validator._assets, "get", return_value=asset):
+        with pytest.raises(DisposalValidationError, match="cannot be posted"):
+            validator.validate_post_readiness(ctx, row)

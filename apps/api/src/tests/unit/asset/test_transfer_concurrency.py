@@ -32,21 +32,31 @@ def _ctx() -> TenantContext:
 def test_validator_blocks_second_pending_transfer() -> None:
     validator = TransferValidator(MagicMock())
     ctx = _ctx()
-    asset = SimpleNamespace(id=uuid4(), company_id=ctx.company_id, status="active")
+    asset = SimpleNamespace(
+        id=uuid4(),
+        company_id=ctx.company_id,
+        status="active",
+        operational_status="READY_TO_MOVE",
+    )
     pending = SimpleNamespace(document_number="ATRF-2026-000001")
     with patch.object(validator._assets, "get", return_value=asset):
         with patch.object(
-            validator._org,
-            "get_branch",
-            return_value=SimpleNamespace(company_id=ctx.company_id),
+            validator._assignments, "find_pending_or_active_for_asset", return_value=None
         ):
-            with patch.object(validator._transfers, "find_pending_for_asset", return_value=pending):
-                with pytest.raises(TransferValidationError, match="pending transfer"):
-                    validator.validate_create_fields(
-                        ctx,
-                        company_id=ctx.company_id,
-                        fields={"asset_id": asset.id, "to_branch_id": uuid4()},
-                    )
+            with patch.object(
+                validator._org,
+                "get_branch",
+                return_value=SimpleNamespace(company_id=ctx.company_id),
+            ):
+                with patch.object(
+                    validator._transfers, "find_pending_for_asset", return_value=pending
+                ):
+                    with pytest.raises(TransferValidationError, match="pending transfer"):
+                        validator.validate_create_fields(
+                            ctx,
+                            company_id=ctx.company_id,
+                            fields={"asset_id": asset.id, "to_branch_id": uuid4()},
+                        )
 
 
 def test_repository_rejects_stale_version() -> None:

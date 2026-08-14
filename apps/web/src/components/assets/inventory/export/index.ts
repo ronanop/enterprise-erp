@@ -29,5 +29,6 @@ export {
   inventoryExportService,
   exportInventoryRegister,
   fetchAllInventoryRowsForExport,
+  fetchAllAssignmentPages,
 } from "./inventory-export-service";
 export { InventoryExportToolbar } from "./inventory-export-toolbar";

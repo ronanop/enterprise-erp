@@ -1,4 +1,5 @@
 import type { InventoryRowViewModel } from "@/components/assets/inventory.mapper";
+import { inventoryRowToRegisterGroups } from "@/components/assets/inventory/inventory-register-groups";
 import type {
   AssetDetailDrawerData,
   InventoryAssetRef,
@@ -12,31 +13,57 @@ export function inventoryRowToAssetRef(row: InventoryRowViewModel): InventoryAss
   };
 }
 
+/**
+ * Project inventory row → drawer payload.
+ * Assignment / IT / location / accessories / DC / remarks all come from the same
+ * register-group model as the expandable row (Sub-phase 4E consistency).
+ */
 export function mapInventoryRowToDrawerData(row: InventoryRowViewModel): AssetDetailDrawerData {
+  const groups = inventoryRowToRegisterGroups(row);
   return {
     assetTag: row.assetTag,
     laptopName: row.laptopName,
     currentHolder: row.currentHolder,
     configuration: row.configuration,
+    make: row.manufacturer,
+    model: row.model,
+    serialNumber: row.serialNumber,
+    location: row.location,
     branch: row.branch,
     operationalStatus: row.operationalStatus,
     lifecycleStatus: row.lifecycleStatus,
+    registerGroups: groups,
     assignment: {
-      employee: row.currentHolder,
-      issueDate: row.issueDate,
+      employee: groups.assignee,
+      employeeId: groups.employeeId,
+      phone: groups.phone,
+      issueDate: groups.issuedDate,
+      earlierUsedBy: groups.earlierUsedBy,
       department: row.department,
-      deliveryReferenceNumber: row.expandable.deliveryChallan,
-      deliveryReferenceStatus: row.expandable.deliveryReferenceStatus,
-      assignmentRemarks: row.expandable.assignmentRemarks,
-      returnRemarks: row.expandable.returnRemarks,
+      deliveryReferenceNumber: groups.dcNumber,
+      deliveryReferenceStatus: groups.dcStatus,
+      deliverySignature: groups.dcSignature,
+      deliveryChallanSummary: row.expandable.deliveryChallanSummary,
+      assignmentRemarks: groups.assignmentRemarks,
+      returnRemarks: groups.returnRemarks,
     },
     additional: {
-      earlierUsedBy: row.expandable.earlierUsedBy,
-      deliveryChallan: row.expandable.deliveryChallan,
-      deliveryReferenceStatus: row.expandable.deliveryReferenceStatus,
-      remarks: row.expandable.assignmentRemarks,
-      assignmentRemarks: row.expandable.assignmentRemarks,
-      returnRemarks: row.expandable.returnRemarks,
+      earlierUsedBy: groups.earlierUsedBy,
+      deliveryChallan: groups.dcNumber,
+      deliveryReferenceStatus: groups.dcStatus,
+      deliverySignature: groups.dcSignature,
+      deliveryChallanSummary: row.expandable.deliveryChallanSummary,
+      remarks: groups.assignmentRemarks,
+      assignmentRemarks: groups.assignmentRemarks,
+      returnRemarks: groups.returnRemarks,
+      make: groups.make,
+      model: groups.model,
+      configuration: groups.configuration,
+      branch: groups.branch,
+      location: groups.location,
+      accessories: groups.accessories,
+      phone: groups.phone,
+      employeeId: groups.employeeId,
     },
     history: row.assignmentHistory,
   };

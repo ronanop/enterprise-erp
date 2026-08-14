@@ -32,6 +32,9 @@ describe("fetchAssetOperationsData", () => {
     expect(listAssets).toHaveBeenCalledWith(
       expect.objectContaining({ operational_status: "PENDING_DISPOSAL", page_size: 10 }),
     );
+    expect(listAssignments).toHaveBeenCalledWith(
+      expect.objectContaining({ status: "active", page_size: 10 }),
+    );
   });
 
   it("passes branch_id when branch is selected", async () => {

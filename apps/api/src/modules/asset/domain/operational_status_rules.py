@@ -10,12 +10,14 @@ Retired = AssetOperationalStatus.RETIRED.value
 Pending = AssetOperationalStatus.PENDING_DISPOSAL.value
 Disposed = AssetOperationalStatus.DISPOSED.value
 
-# --- Allowed transitions (Phase 2B-1 scope) ---
+# --- Allowed transitions (Phase 2B-1 + Phase 5D + Phase 5E) ---
 # READY_TO_MOVE → ASSIGNED
 # ASSIGNED → READY_TO_MOVE
 # ASSIGNED → RETIRED
 # ASSIGNED → PENDING_DISPOSAL
+# RETIRED → PENDING_DISPOSAL  (explicit Start Disposal)
 # PENDING_DISPOSAL → DISPOSED
+# PENDING_DISPOSAL → READY_TO_MOVE  (explicit Reinstate)
 
 ALLOWED_OPERATIONAL_TRANSITIONS: frozenset[tuple[str, str]] = frozenset(
     {
@@ -23,7 +25,9 @@ ALLOWED_OPERATIONAL_TRANSITIONS: frozenset[tuple[str, str]] = frozenset(
         (Assigned, Ready),
         (Assigned, Retired),
         (Assigned, Pending),
+        (Retired, Pending),
         (Pending, Disposed),
+        (Pending, Ready),
     }
 )
 
@@ -33,6 +37,7 @@ ALLOWED_OPERATIONAL_TRANSITIONS: frozenset[tuple[str, str]] = frozenset(
 # DISPOSED → *
 # RETIRED → ASSIGNED
 # RETIRED → READY_TO_MOVE
+# RETIRED → DISPOSED (must go PENDING first via Start Disposal)
 
 BLOCKED_OPERATIONAL_TRANSITIONS: frozenset[tuple[str, str]] = frozenset(
     {
@@ -45,5 +50,10 @@ BLOCKED_OPERATIONAL_TRANSITIONS: frozenset[tuple[str, str]] = frozenset(
 
 TERMINAL_OPERATIONAL_STATUSES: frozenset[str] = frozenset({Disposed})
 
-# Semi-terminal: no outbound transitions in Phase 2B-1 allowed set except future phases.
+# Semi-terminal: no outbound transitions except Start Disposal (RETIRED → PENDING).
 EFFECTIVE_TERMINAL_FOR_ASSIGNMENT: frozenset[str] = frozenset({Retired, Pending, Disposed})
+
+# Ops statuses that block normal maintenance / transfer workflows (Phase 5D).
+OPS_BLOCKED_FOR_MAINTENANCE_OR_TRANSFER: frozenset[str] = frozenset(
+    {Retired, Pending, Disposed}
+)

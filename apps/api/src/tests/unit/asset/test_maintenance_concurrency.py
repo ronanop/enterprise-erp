@@ -77,7 +77,12 @@ def test_repository_rejects_stale_version() -> None:
 def test_open_work_order_exclusivity_allows_exclude_self() -> None:
     validator = MaintenanceValidator(MagicMock())
     ctx = _ctx()
-    asset = SimpleNamespace(id=uuid4(), company_id=ctx.company_id, status="active")
+    asset = SimpleNamespace(
+        id=uuid4(),
+        company_id=ctx.company_id,
+        status="active",
+        operational_status="READY_TO_MOVE",
+    )
     row = SimpleNamespace(
         id=uuid4(),
         status="draft",
@@ -92,8 +97,11 @@ def test_open_work_order_exclusivity_allows_exclude_self() -> None:
     )
     with patch.object(validator._assets, "get", return_value=asset):
         with patch.object(
-            validator._maintenances, "find_open_for_asset", return_value=None
-        ) as find_open:
-            validator.validate_update_fields(ctx, row, {"maintenance_type": "corrective"})
-            find_open.assert_called_once()
-            assert find_open.call_args.kwargs["exclude_id"] == row.id
+            validator._assignments, "find_pending_or_active_for_asset", return_value=None
+        ):
+            with patch.object(
+                validator._maintenances, "find_open_for_asset", return_value=None
+            ) as find_open:
+                validator.validate_update_fields(ctx, row, {"maintenance_type": "corrective"})
+                find_open.assert_called_once()
+                assert find_open.call_args.kwargs["exclude_id"] == row.id

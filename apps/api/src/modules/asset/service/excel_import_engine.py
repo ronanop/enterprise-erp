@@ -75,6 +75,16 @@ class AssetExcelImportEngine:
             )
 
         target_ops = (row.operational_status or "").strip().upper()
+        if target_ops == Disposed:
+            return ExcelImportRowResult(
+                row_number=row.row_number,
+                outcome=ExcelImportRowOutcome.FAILED.value,
+                reason=(
+                    "DISPOSED cannot be assigned directly through Excel import. "
+                    "Create and post an Asset Disposal request."
+                ),
+                warning=preview == "warning",
+            )
         if target_ops not in VALID_IMPORT_OPERATIONAL_STATUSES:
             return ExcelImportRowResult(
                 row_number=row.row_number,
@@ -106,18 +116,6 @@ class AssetExcelImportEngine:
             elif target_ops == Pending:
                 assignment_id = self._path_to_pending(ctx, asset_id=asset.id, row=row, company_id=cid)
                 final_ops = Pending
-            elif target_ops == Disposed:
-                assignment_id = self._path_to_pending(ctx, asset_id=asset.id, row=row, company_id=cid)
-                refreshed = self._assets.get(ctx, asset.id)
-                self._operational.apply_action(
-                    ctx,
-                    asset.id,
-                    action="complete_disposal",
-                    expected_version=int(refreshed.version or 1),
-                    reason="excel_import",
-                    remarks="Phase 8B import",
-                )
-                final_ops = Disposed
 
             return ExcelImportRowResult(
                 row_number=row.row_number,
@@ -199,6 +197,10 @@ class AssetExcelImportEngine:
             purchase_cost=purchase_cost,
             currency_code=defaults.currency_code or "USD",
             serial_number=(row.serial_number or "").strip() or None,
+            make=(row.make or "").strip() or None,
+            model=(row.model or "").strip() or None,
+            configuration=(row.configuration or "").strip() or None,
+            location_label=(row.location_label or "").strip() or None,
             department_id=row.department_id,
         )
         self._assets.submit(ctx, asset.id)
@@ -221,6 +223,7 @@ class AssetExcelImportEngine:
             employee_id=row.employee_id,
             delivery_reference_number=row.delivery_reference_number,
             delivery_reference_status=row.delivery_reference_status,
+            delivery_challan_signature_status=row.delivery_challan_signature_status,
             assignment_remarks=row.assignment_remarks or "excel_import",
         )
         self._assignments.submit(ctx, assignment.id)

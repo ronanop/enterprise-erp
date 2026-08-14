@@ -19,8 +19,10 @@ from modules.asset.routers import (
     asset_transfers_router,
     asset_warranties_router,
     assets_router,
+    incoming_assets_router,
     maintenance_plans_router,
     meter_readings_router,
+    registration_queue_router,
     reports_router,
     service_histories_router,
 )
@@ -28,6 +30,8 @@ from modules.asset.routers import (
 asset_router = APIRouter(prefix="/assets")
 asset_router.include_router(asset_categories_router)
 asset_router.include_router(assets_router)
+asset_router.include_router(incoming_assets_router)
+asset_router.include_router(registration_queue_router)
 asset_router.include_router(asset_components_router)
 asset_router.include_router(asset_assignments_router)
 asset_router.include_router(asset_transfers_router)

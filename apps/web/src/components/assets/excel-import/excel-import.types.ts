@@ -103,6 +103,18 @@ export const EXCEL_IMPORT_TARGET_FIELDS = [
     aliases: ["delivery status", "delivery_reference_status", "challan status"],
   },
   {
+    key: "deliverySignature",
+    label: "DC Signature",
+    required: false,
+    aliases: [
+      "dc signature",
+      "delivery signature",
+      "signature status",
+      "delivery_challan_signature_status",
+      "challan signature",
+    ],
+  },
+  {
     key: "assignmentRemarks",
     label: "Assignment Remarks",
     required: false,
@@ -160,7 +172,6 @@ export const VALID_OPERATIONAL_STATUSES = [
   "ASSIGNED",
   "RETIRED",
   "PENDING_DISPOSAL",
-  "DISPOSED",
 ] as const;
 
 /** Human labels / Excel tab names → enum. */
@@ -174,7 +185,6 @@ export const OPERATIONAL_STATUS_ALIASES: Record<string, (typeof VALID_OPERATIONA
   pending_disposal: "PENDING_DISPOSAL",
   "pending disposal": "PENDING_DISPOSAL",
   "not working": "PENDING_DISPOSAL",
-  disposed: "DISPOSED",
 };
 
 export const VALID_DELIVERY_STATUSES = [
@@ -195,6 +205,18 @@ export const DELIVERY_STATUS_ALIASES: Record<string, (typeof VALID_DELIVERY_STAT
   received: "received",
 };
 
+export const VALID_DC_SIGNATURE_STATUSES = ["not_signed", "signed"] as const;
+
+export const DC_SIGNATURE_STATUS_ALIASES: Record<
+  string,
+  (typeof VALID_DC_SIGNATURE_STATUSES)[number]
+> = {
+  not_signed: "not_signed",
+  "not signed": "not_signed",
+  unsigned: "not_signed",
+  signed: "signed",
+};
+
 export type ExcelImportIssueSeverity = "error" | "warning";
 
 export type ExcelImportIssueCode =
@@ -210,6 +232,7 @@ export type ExcelImportIssueCode =
   | "invalid_employee"
   | "invalid_date"
   | "invalid_delivery_status"
+  | "invalid_dc_signature_status"
   | "parse_error"
   | "large_file";
 

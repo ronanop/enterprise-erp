@@ -315,29 +315,19 @@ def test_pending_disposal_return_dead() -> None:
     assert assignments.return_assignment.call_args.kwargs["return_condition"] == "dead"
 
 
-def test_disposed_completes_via_operational_service() -> None:
+def test_disposed_rejected_without_complete_disposal() -> None:
     engine, assets, assignments, operational = _engine()
-    asset_id = uuid4()
-    assignment_id = uuid4()
-    assets.find_by_asset_code.return_value = None
-    assets.find_by_serial_number.return_value = None
-    assets.create_for_import.return_value = SimpleNamespace(id=asset_id)
-    assets.submit.return_value = SimpleNamespace(id=asset_id)
-    assets.approve.return_value = SimpleNamespace(id=asset_id, version=1)
-    assets.get.return_value = SimpleNamespace(id=asset_id, version=3)
-    assignments.create.return_value = SimpleNamespace(id=assignment_id)
-    assignments.submit.return_value = SimpleNamespace(id=assignment_id)
-    assignments.approve.return_value = SimpleNamespace(id=assignment_id)
     result = engine.import_row(
         _ctx(),
         _row(operational_status=Disposed),
         defaults=_defaults(),
         confirm_warnings=False,
     )
-    assert result.outcome == ExcelImportRowOutcome.IMPORTED.value
-    assert result.operational_status == Disposed
-    operational.apply_action.assert_called_once()
-    assert operational.apply_action.call_args.kwargs["action"] == "complete_disposal"
+    assert result.outcome == ExcelImportRowOutcome.FAILED.value
+    assert "DISPOSED cannot be assigned directly" in (result.reason or "")
+    assets.create_for_import.assert_not_called()
+    operational.apply_action.assert_not_called()
+    assignments.return_assignment.assert_not_called()
 
 
 def test_duplicate_registration_error_maps_to_duplicate() -> None:
@@ -430,7 +420,7 @@ def test_delivery_fields_on_assignment() -> None:
 
 @pytest.mark.parametrize(
     "status",
-    [Ready, Assigned, Retired, Pending, Disposed],
+    [Ready, Assigned, Retired, Pending],
 )
 def test_all_ops_statuses_accepted_as_targets(status: str) -> None:
     engine, assets, assignments, operational = _engine()
@@ -452,6 +442,7 @@ def test_all_ops_statuses_accepted_as_targets(status: str) -> None:
     result = engine.import_row(_ctx(), row, defaults=_defaults(), confirm_warnings=False)
     assert result.outcome == ExcelImportRowOutcome.IMPORTED.value
     assert result.operational_status == status
+    operational.apply_action.assert_not_called()
 
 
 def test_never_calls_repo_directly() -> None:

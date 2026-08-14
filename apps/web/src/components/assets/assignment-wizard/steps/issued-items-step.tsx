@@ -24,7 +24,8 @@ export function IssuedItemsStep({ state, onChange, items = MOCK_ISSUED_ITEMS }: 
     );
   }
 
-  function toggle(id: string) {
+  function toggle(id: string, disabled?: boolean) {
+    if (disabled) return;
     const set = new Set(state.issuedItemIds);
     if (set.has(id)) set.delete(id);
     else set.add(id);
@@ -39,23 +40,36 @@ export function IssuedItemsStep({ state, onChange, items = MOCK_ISSUED_ITEMS }: 
       <ul className="m-0 list-none space-y-2 p-0">
         {items.map((item) => {
           const checked = state.issuedItemIds.includes(item.id);
+          const disabled = Boolean(item.disabled);
           return (
             <li key={item.id}>
               <label
                 className={cn(
                   "flex cursor-pointer items-start gap-3 rounded-lg border px-3 py-2 transition-colors duration-200",
+                  disabled && "cursor-not-allowed opacity-60",
                   checked ? "border-primary/50 bg-primary/5" : "border-border hover:bg-muted/30",
                 )}
               >
                 <input
                   type="checkbox"
-                  className="mt-1 size-4 cursor-pointer accent-primary"
+                  className="mt-1 size-4 cursor-pointer accent-primary disabled:cursor-not-allowed"
                   checked={checked}
-                  onChange={() => toggle(item.id)}
+                  disabled={disabled}
+                  onChange={() => toggle(item.id, disabled)}
                 />
                 <span className="flex-1 text-sm">
                   <span className="font-medium">{item.label}</span>
-                  <span className="mt-0.5 block text-xs text-muted-foreground">Status: {item.status}</span>
+                  {item.componentName ? (
+                    <span className="mt-0.5 block text-xs text-muted-foreground">
+                      {item.componentName}
+                    </span>
+                  ) : null}
+                  <span className="mt-0.5 block text-xs text-muted-foreground">
+                    S/N: {item.serialNumber?.trim() || "—"}
+                  </span>
+                  <span className="mt-0.5 block text-xs text-muted-foreground">
+                    {disabled ? "Currently issued" : `Status: ${item.status}`}
+                  </span>
                 </span>
               </label>
             </li>

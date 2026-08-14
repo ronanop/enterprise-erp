@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 import {
   branchLookupFromOptions,
   formatAssignmentTimestamp,
+  kpiShareOfTotal,
   mapAssetListToDisposalQueueRows,
   mapAssetListToReadyQueueRows,
   mapAssignmentsToActivityRows,
@@ -103,7 +104,7 @@ describe("mapAssetListToReadyQueueRows", () => {
 });
 
 describe("mapAssetListToDisposalQueueRows", () => {
-  it("includes lifecycle badge cell", () => {
+  it("includes operational status badge cell", () => {
     const list: AssetPaginatedListResult = {
       items: [
         {
@@ -112,6 +113,7 @@ describe("mapAssetListToDisposalQueueRows", () => {
           asset_name: "Desktop",
           branch_id: "b-mumbai",
           status: "active",
+          operational_status: "PENDING_DISPOSAL",
         },
       ],
       total: 1,
@@ -127,7 +129,7 @@ describe("mapAssetListToDisposalQueueRows", () => {
 });
 
 describe("mapAssignmentsToActivityRows", () => {
-  it("maps status, document, and allocated time", () => {
+  it("maps status, document, and allocated time for active assignments", () => {
     const list: AssetPaginatedListResult = {
       items: [
         {
@@ -136,6 +138,7 @@ describe("mapAssignmentsToActivityRows", () => {
           asset_id: "asset-uuid",
           status: "active",
           allocated_at: "2026-08-01T10:30:00.000Z",
+          returned_at: "2026-08-05T10:30:00.000Z",
         },
       ],
       total: 1,
@@ -146,6 +149,26 @@ describe("mapAssignmentsToActivityRows", () => {
     expect(rows[0].cells[0]).toBe("active");
     expect(rows[0].cells[1]).toBe("ASN-100");
     expect(rows[0].cells[2]).toContain("2026");
+    expect(rows[0].cells[2]).toBe(formatAssignmentTimestamp("2026-08-01T10:30:00.000Z"));
+  });
+
+  it("uses returned_at for returned assignments", () => {
+    const list: AssetPaginatedListResult = {
+      items: [
+        {
+          id: "as2",
+          document_number: "ASN-200",
+          status: "returned",
+          allocated_at: "2026-07-01T10:30:00.000Z",
+          returned_at: "2026-08-05T12:00:00.000Z",
+        },
+      ],
+      total: 1,
+      page: 1,
+      page_size: 10,
+    };
+    const rows = mapAssignmentsToActivityRows(list);
+    expect(rows[0].cells[2]).toBe(formatAssignmentTimestamp("2026-08-05T12:00:00.000Z"));
   });
 });
 
@@ -159,21 +182,56 @@ describe("formatAssignmentTimestamp", () => {
 describe("mapDashboardPayloadToViewModel", () => {
   it("combines summary and lists", () => {
     const view = mapDashboardPayloadToViewModel({
-      summary: summaryFixture,
+      summary: {
+        ...summaryFixture,
+        by_branch: [
+          {
+            branch_id: "b-noida",
+            total_assets: 40,
+            ready_to_move: 5,
+            assigned: 30,
+            retired: 2,
+            pending_disposal: 2,
+            disposed: 1,
+          },
+        ],
+      },
       readyList: {
         items: [{ id: "1", asset_code: "AST-9", asset_name: "Tab", branch_id: "b-noida" }],
-        total: 1,
+        total: 4,
         page: 1,
         page_size: 10,
       },
-      disposalList: { items: [], total: 0, page: 1, page_size: 10 },
-      assignmentsList: { items: [], total: 0, page: 1, page_size: 10 },
+      disposalList: { items: [], total: 2, page: 1, page_size: 10 },
+      assignmentsList: { items: [], total: 9, page: 1, page_size: 10 },
       branchLookup,
     });
     expect(view.kpis.totalAssets).toBe(100);
+    expect(view.kpiTrends.assigned?.label).toBe("70% of total");
     expect(view.queues.readyRows).toHaveLength(1);
-    expect(view.queues.disposalRows).toHaveLength(0);
-    expect(view.queues.assignmentRows).toHaveLength(0);
+    expect(view.queueTotals).toEqual({ ready: 4, disposal: 2, assignments: 9 });
+    expect(view.byBranch).toEqual([
+      {
+        branchId: "b-noida",
+        label: "Noida",
+        totalAssets: 40,
+        readyToMove: 5,
+        assigned: 30,
+        retired: 2,
+        pendingDisposal: 2,
+        disposed: 1,
+      },
+    ]);
+  });
+});
+
+describe("kpiShareOfTotal", () => {
+  it("returns undefined when total is zero", () => {
+    expect(kpiShareOfTotal(5, 0)).toBeUndefined();
+  });
+
+  it("rounds percentage of total", () => {
+    expect(kpiShareOfTotal(1, 3)?.label).toBe("33% of total");
   });
 });
 

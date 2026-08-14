@@ -43,6 +43,7 @@ import {
   buildAssignmentWizardHref,
   buildReturnWizardHref,
 } from "@/components/assets/navigation/assignment-navigation";
+import { formatDeliveryChallanSummary } from "@/components/assets/inventory/register-parity";
 
 type AssetRow = {
   id: string;
@@ -70,6 +71,9 @@ type AssignmentRow = {
   version: number;
   created_by?: string | null;
   branch_id: string;
+  delivery_reference_number?: string | null;
+  delivery_reference_status?: string | null;
+  delivery_challan_signature_status?: string | null;
 };
 
 type ListPayload<T> = {
@@ -116,6 +120,14 @@ function parseListItems<T>(data: unknown): T[] {
 function optionLabel(map: Map<string, OrgOption>, id?: string | null): string {
   if (!id) return "—";
   return map.get(id)?.label ?? `${id.slice(0, 8)}…`;
+}
+
+function formatDcCell(row: AssignmentRow): string {
+  return formatDeliveryChallanSummary(
+    row.delivery_reference_number,
+    row.delivery_reference_status,
+    row.delivery_challan_signature_status,
+  );
 }
 
 export function AssetAssignmentWorkspace() {
@@ -609,6 +621,9 @@ export function AssetAssignmentWorkspace() {
                   <th scope="col" className="px-3 py-2 font-medium">
                     Status
                   </th>
+                  <th scope="col" className="px-3 py-2 font-medium">
+                    Delivery Challan
+                  </th>
                   <th scope="col" className="px-3 py-2 font-medium text-right">
                     Actions
                   </th>
@@ -617,13 +632,13 @@ export function AssetAssignmentWorkspace() {
               <tbody>
                 {loading ? (
                   <tr>
-                    <td className="px-3 py-8 text-center text-muted-foreground" colSpan={6}>
+                    <td className="px-3 py-8 text-center text-muted-foreground" colSpan={7}>
                       <Loader2 className="mx-auto size-5 animate-spin" />
                     </td>
                   </tr>
                 ) : rows.length === 0 ? (
                   <tr>
-                    <td className="px-3 py-8 text-center text-muted-foreground" colSpan={6}>
+                    <td className="px-3 py-8 text-center text-muted-foreground" colSpan={7}>
                       No assignments found.
                     </td>
                   </tr>
@@ -642,6 +657,11 @@ export function AssetAssignmentWorkspace() {
                         <td className="px-3 py-2 text-muted-foreground">{assigneeSummary(row)}</td>
                         <td className="px-3 py-2 text-xs capitalize">{row.allocation_type}</td>
                         <td className="px-3 py-2">{statusBadge(row)}</td>
+                        <td className="px-3 py-2" data-testid="assignment-dc-cell">
+                          <div className="text-xs leading-snug text-muted-foreground">
+                            {formatDcCell(row)}
+                          </div>
+                        </td>
                         <td className="px-3 py-2">
                           <div className="flex justify-end gap-1">
                             <button
@@ -774,6 +794,33 @@ export function AssetAssignmentWorkspace() {
                     <dd>{modalRow.allocated_at?.slice(0, 10) ?? "—"}</dd>
                   </div>
                 </dl>
+                <div
+                  className="rounded-md border border-border/70 bg-muted/20 px-3 py-3"
+                  data-testid="assignment-detail-dc"
+                >
+                  <p className="mb-2 text-sm font-medium text-foreground">Delivery Challan</p>
+                  <dl className="grid gap-2 text-sm sm:grid-cols-3">
+                    <div>
+                      <dt className="text-xs text-muted-foreground">DC Number</dt>
+                      <dd>{modalRow.delivery_reference_number?.trim() || "—"}</dd>
+                    </div>
+                    <div>
+                      <dt className="text-xs text-muted-foreground">Status</dt>
+                      <dd className="capitalize">
+                        {(modalRow.delivery_reference_status || "—").replaceAll("_", " ")}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt className="text-xs text-muted-foreground">Signature</dt>
+                      <dd className="capitalize">
+                        {(modalRow.delivery_challan_signature_status || "not_signed").replaceAll(
+                          "_",
+                          " ",
+                        )}
+                      </dd>
+                    </div>
+                  </dl>
+                </div>
                 <div className="space-y-2">
                   <Label htmlFor="asn-workflow-comments">Workflow comments</Label>
                   <Input

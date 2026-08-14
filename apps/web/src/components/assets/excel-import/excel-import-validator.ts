@@ -4,6 +4,7 @@
 
 import {
   applyColumnMapping,
+  normalizeDcSignatureStatus,
   normalizeDeliveryStatus,
   normalizeLookupKey,
   normalizeOperationalStatus,
@@ -246,6 +247,22 @@ export function validateImportRows(
         });
       } else {
         values.deliveryStatus = normalized;
+      }
+    }
+
+    if (values.deliverySignature?.trim()) {
+      const normalized = normalizeDcSignatureStatus(values.deliverySignature);
+      if (!normalized) {
+        issues.push({
+          severity: "error",
+          code: "invalid_dc_signature_status",
+          message: `Invalid DC signature status: ${values.deliverySignature}`,
+          rowNumber: row.rowNumber,
+          field: "deliverySignature",
+          value: values.deliverySignature,
+        });
+      } else {
+        values.deliverySignature = normalized;
       }
     }
 

@@ -1173,6 +1173,24 @@ export const erpModules: ErpModule[] = [
         apiPath: "/assets/assets",
       },
       {
+        key: "incoming-assets",
+        title: "Incoming Assets",
+        description: "IT receiving for Procurement GRN lines",
+        apiPath: "/assets/incoming-assets",
+      },
+      {
+        key: "incoming-assets-qc",
+        title: "Incoming QC",
+        description: "QC accept/reject for arrived incoming assets",
+        apiPath: "/assets/incoming-assets/qc",
+      },
+      {
+        key: "asset-registration",
+        title: "Pending Registration",
+        description: "Register QC-accepted incoming units as assets",
+        apiPath: "/assets/registration-queue",
+      },
+      {
         key: "assets-new",
         title: "Add Asset",
         description: "Register a new asset",

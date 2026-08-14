@@ -109,3 +109,104 @@ def test_submit_creates_workflow_instance(_flag) -> None:
                 with patch.object(svc._repo, "update", return_value=row) as mock_update:
                     svc.submit(ctx, row.id)
                     assert mock_update.call_args.kwargs["workflow_instance_id"] == instance.id
+
+
+def test_create_repo_receives_validated_asset_id_once() -> None:
+    """BUG-TRF-CREATE-01: body asset_id must not double-bind repository kwargs."""
+    svc = TransferService(MagicMock())
+    ctx = _ctx()
+    branch_id = ctx.branch_id
+    company_id = ctx.company_id
+    request_asset_id = uuid4()
+    validated_asset_id = uuid4()
+    to_branch_id = uuid4()
+    asset = SimpleNamespace(
+        id=validated_asset_id,
+        branch_id=branch_id,
+        department_id=None,
+        custodian_employee_id=None,
+        company_id=company_id,
+        status="active",
+        operational_status="READY_TO_MOVE",
+    )
+    created = _transfer_row()
+    created.asset_id = validated_asset_id
+    created.document_number = "ATRF-1"
+
+    with patch.object(svc._scope, "resolve_company_id", return_value=company_id):
+        with patch.object(svc._scope, "validate_branch_access"):
+            with patch.object(svc._validator, "validate_create_fields"):
+                with patch.object(svc._assets, "get", return_value=asset) as mock_get:
+                    with patch.object(svc._locations, "find_current", return_value=[]):
+                        with patch.object(svc._numbers, "generate", return_value="ATRF-1"):
+                            with patch.object(svc._repo, "create", return_value=created) as mock_create:
+                                with patch.object(svc._audit, "log_entity_change"):
+                                    svc.create(
+                                        ctx,
+                                        branch_id=branch_id,
+                                        company_id=company_id,
+                                        asset_id=request_asset_id,
+                                        to_branch_id=to_branch_id,
+                                        to_location_label="Dest Lab",
+                                        reason="move",
+                                        transfer_notes="note",
+                                    )
+
+    mock_get.assert_called_once_with(ctx, request_asset_id)
+    kwargs = mock_create.call_args.kwargs
+    assert kwargs["asset_id"] == validated_asset_id
+    assert kwargs["asset_id"] != request_asset_id
+    assert kwargs["company_id"] == company_id
+    assert kwargs["branch_id"] == branch_id
+    assert kwargs["to_branch_id"] == to_branch_id
+    assert kwargs["to_location_label"] == "Dest Lab"
+    assert kwargs["reason"] == "move"
+    assert kwargs["transfer_notes"] == "note"
+    assert kwargs["status"] == "draft"
+    assert kwargs["document_number"] == "ATRF-1"
+
+
+def test_create_company_id_in_fields_does_not_duplicate_kwarg() -> None:
+    """company_id in **fields must not collide with explicit company_id=cid on repo.create."""
+    svc = TransferService(MagicMock())
+    ctx = _ctx()
+    branch_id = ctx.branch_id
+    company_id = ctx.company_id
+    other_company = uuid4()
+    asset_id = uuid4()
+    asset = SimpleNamespace(
+        id=asset_id,
+        branch_id=branch_id,
+        department_id=None,
+        custodian_employee_id=None,
+        company_id=company_id,
+        status="active",
+        operational_status="READY_TO_MOVE",
+    )
+    created = _transfer_row()
+    created.asset_id = asset_id
+    created.document_number = "ATRF-2"
+
+    def _inject_company_id(_ctx, *, company_id, fields):  # noqa: ARG001
+        fields["company_id"] = other_company
+
+    with patch.object(svc._scope, "resolve_company_id", return_value=company_id):
+        with patch.object(svc._scope, "validate_branch_access"):
+            with patch.object(svc._validator, "validate_create_fields", side_effect=_inject_company_id):
+                with patch.object(svc._assets, "get", return_value=asset):
+                    with patch.object(svc._locations, "find_current", return_value=[]):
+                        with patch.object(svc._numbers, "generate", return_value="ATRF-2"):
+                            with patch.object(svc._repo, "create", return_value=created) as mock_create:
+                                with patch.object(svc._audit, "log_entity_change"):
+                                    svc.create(
+                                        ctx,
+                                        branch_id=branch_id,
+                                        company_id=company_id,
+                                        asset_id=asset_id,
+                                        to_location_label="B",
+                                    )
+
+    assert mock_create.call_args.kwargs["company_id"] == company_id
+    assert mock_create.call_args.kwargs["company_id"] != other_company
+    assert mock_create.call_args.kwargs["to_location_label"] == "B"
+    assert mock_create.call_args.kwargs["asset_id"] == asset_id

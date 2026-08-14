@@ -15,6 +15,7 @@ import { ConfigurationSection } from "@/components/assets/inventory/interaction/
 import { AssetDetailDrawerSkeleton } from "@/components/assets/inventory/interaction/drawer-sections/drawer-skeleton";
 import { QuickLinksSection } from "@/components/assets/inventory/interaction/drawer-sections/quick-links-section";
 import { SummarySection } from "@/components/assets/inventory/interaction/drawer-sections/summary-section";
+import { InventoryRegisterGroups } from "@/components/assets/inventory/inventory-register-groups";
 import { EmptyState } from "@/components/assets/shared";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -108,9 +109,15 @@ export function AssetDetailDrawer({
                 operationalStatus={data.operationalStatus}
                 lifecycleStatus={data.lifecycleStatus}
               />
-              <AssignmentSection assignment={data.assignment} />
-              <ConfigurationSection configuration={data.configuration} />
-              <AdditionalInfoSection additional={data.additional} />
+              {data.registerGroups ? (
+                <InventoryRegisterGroups model={data.registerGroups} compact={false} />
+              ) : (
+                <>
+                  <AssignmentSection assignment={data.assignment} />
+                  <ConfigurationSection configuration={data.configuration} />
+                  <AdditionalInfoSection additional={data.additional} />
+                </>
+              )}
               <AssignmentHistorySection history={data.history} />
               <QuickLinksSection
                 enabledLinks={quickLinkEnabled}

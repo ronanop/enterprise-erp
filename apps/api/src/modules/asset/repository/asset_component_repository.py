@@ -168,6 +168,43 @@ class AssetComponentRepository(AstScopedRepository):
         stmt = self.apply_ast_filter(stmt, AstAsset, ctx, branch_scoped=False)
         return self.db.scalar(stmt)
 
+    def lock_for_update(self, ctx: TenantContext, row_id: UUID) -> AstAssetComponent | None:
+        """Row lock to serialize concurrent issue attempts for the same component."""
+        stmt = (
+            select(AstAssetComponent)
+            .where(AstAssetComponent.id == row_id, AstAssetComponent.is_deleted.is_(False))
+            .with_for_update()
+        )
+        stmt = self.apply_ast_filter(stmt, AstAssetComponent, ctx, branch_scoped=False)
+        return self.db.scalar(stmt)
+
+    def list_by_asset_ids(
+        self,
+        ctx: TenantContext,
+        *,
+        company_id: UUID,
+        asset_ids: list[UUID],
+        status: str | None = AssetComponentStatus.ACTIVE.value,
+    ) -> list[AstAssetComponent]:
+        if not asset_ids:
+            return []
+        stmt = select(AstAssetComponent).where(
+            AstAssetComponent.company_id == company_id,
+            AstAssetComponent.asset_id.in_(asset_ids),
+            AstAssetComponent.is_deleted.is_(False),
+        )
+        if status is not None:
+            stmt = stmt.where(AstAssetComponent.status == status)
+        stmt = self.apply_ast_filter(stmt, AstAssetComponent, ctx, branch_scoped=False)
+        return list(
+            self.db.scalars(
+                stmt.order_by(
+                    AstAssetComponent.asset_id.asc(),
+                    AstAssetComponent.component_code.asc(),
+                )
+            ).all()
+        )
+
     def create(self, ctx: TenantContext, **fields) -> AstAssetComponent:
         row = AstAssetComponent(
             id=uuid4(),

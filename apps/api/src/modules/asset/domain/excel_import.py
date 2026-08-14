@@ -17,7 +17,6 @@ VALID_IMPORT_OPERATIONAL_STATUSES = frozenset(
         "ASSIGNED",
         "RETIRED",
         "PENDING_DISPOSAL",
-        "DISPOSED",
     }
 )
 
@@ -58,9 +57,14 @@ class ExcelImportRowInput:
     department_id: UUID | None = None
     asset_category_id: UUID | None = None
     serial_number: str | None = None
+    make: str | None = None
+    model: str | None = None
+    configuration: str | None = None
+    location_label: str | None = None
     issue_date: date | None = None
     delivery_reference_number: str | None = None
     delivery_reference_status: str | None = None
+    delivery_challan_signature_status: str | None = None
     assignment_remarks: str | None = None
     company_id: UUID | None = None
 

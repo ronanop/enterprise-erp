@@ -11,10 +11,16 @@ import {
 } from "@/components/ui/select";
 import type { AssignmentWizardState } from "@/components/assets/assignment-wizard/wizard-types";
 
+/** Primary DC workflow options. Received kept for historical assignment reload. */
 const DELIVERY_STATUSES = [
   { value: "pending", label: "Pending" },
   { value: "issued", label: "Issued" },
   { value: "received", label: "Received" },
+] as const;
+
+const SIGNATURE_STATUSES = [
+  { value: "not_signed", label: "Not Signed" },
+  { value: "signed", label: "Signed" },
 ] as const;
 
 export type DeliveryStepProps = {
@@ -28,8 +34,21 @@ export function DeliveryStep({ state, onChange }: DeliveryStepProps) {
 
   return (
     <div className="grid max-w-lg gap-4">
+      <p className="text-sm font-medium text-foreground">Delivery Challan</p>
       <div className="space-y-2">
-        <Label htmlFor="wiz-delivery-status">Delivery reference status *</Label>
+        <Label htmlFor="wiz-delivery-number">
+          DC Number{numberRequired ? " *" : ""}
+        </Label>
+        <Input
+          id="wiz-delivery-number"
+          value={state.deliveryReferenceNumber}
+          onChange={(e) => onChange({ deliveryReferenceNumber: e.target.value })}
+          placeholder="e.g. DC-2026-0042"
+          maxLength={100}
+        />
+      </div>
+      <div className="space-y-2">
+        <Label htmlFor="wiz-delivery-status">DC Status *</Label>
         <Select
           value={state.deliveryReferenceStatus}
           onValueChange={(value) =>
@@ -51,16 +70,27 @@ export function DeliveryStep({ state, onChange }: DeliveryStepProps) {
         </Select>
       </div>
       <div className="space-y-2">
-        <Label htmlFor="wiz-delivery-number">
-          Delivery reference number{numberRequired ? " *" : ""}
-        </Label>
-        <Input
-          id="wiz-delivery-number"
-          value={state.deliveryReferenceNumber}
-          onChange={(e) => onChange({ deliveryReferenceNumber: e.target.value })}
-          placeholder="e.g. DC-2026-0042"
-          maxLength={100}
-        />
+        <Label htmlFor="wiz-dc-signature">Signature *</Label>
+        <Select
+          value={state.deliveryChallanSignatureStatus}
+          onValueChange={(value) =>
+            onChange({
+              deliveryChallanSignatureStatus:
+                value as AssignmentWizardState["deliveryChallanSignatureStatus"],
+            })
+          }
+        >
+          <SelectTrigger id="wiz-dc-signature" className="cursor-pointer">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {SIGNATURE_STATUSES.map((s) => (
+              <SelectItem key={s.value} value={s.value} className="cursor-pointer">
+                {s.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </div>
       <div className="space-y-2">
         <Label htmlFor="wiz-assignment-remarks">Assignment remarks</Label>
@@ -71,7 +101,9 @@ export function DeliveryStep({ state, onChange }: DeliveryStepProps) {
           onChange={(e) => onChange({ assignmentRemarks: e.target.value })}
           maxLength={4000}
         />
-        <p className="text-xs text-muted-foreground">Required for employee issues before submit (backend rule).</p>
+        <p className="text-xs text-muted-foreground">
+          Required for employee issues before submit (backend rule).
+        </p>
       </div>
     </div>
   );

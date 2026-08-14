@@ -44,6 +44,9 @@ export type AssignmentWizardContainerService = {
     page_size?: number;
   }) => Promise<WizardAssetOption[]>;
   listComponents: (assetId: string) => Promise<WizardIssuedItemOption[]>;
+  listAssignmentComponents?: (
+    assignmentId: string,
+  ) => Promise<Array<{ component_id: string; issue_status: string }>>;
   formatError: (err: unknown, fallback: string) => string;
 };
 
@@ -70,6 +73,8 @@ function bindDefaultService(): AssignmentWizardContainerService {
     activateAssignment: assignmentFrontendService.activateAssignment.bind(assignmentFrontendService),
     listReadyAssets: assignmentFrontendService.listReadyAssets.bind(assignmentFrontendService),
     listComponents: assignmentFrontendService.listComponents.bind(assignmentFrontendService),
+    listAssignmentComponents:
+      assignmentFrontendService.listAssignmentComponents.bind(assignmentFrontendService),
     formatError: assignmentFrontendService.formatError.bind(assignmentFrontendService),
   };
 }
@@ -101,6 +106,7 @@ export function AssignmentWizardContainer({
   const [assets, setAssets] = useState<WizardAssetOption[]>([]);
   const [issuedItems, setIssuedItems] = useState<WizardIssuedItemOption[]>([]);
   const [branchLabel, setBranchLabel] = useState("—");
+  const [unavailableAssetMessage, setUnavailableAssetMessage] = useState<string | null>(null);
 
   const loadAll = useCallback(async () => {
     if (!isAuthenticated()) {
@@ -125,16 +131,38 @@ export function AssignmentWizardContainer({
       if (draftId) {
         const row = await service.loadDraft(draftId);
         components = await service.listComponents(row.asset_id);
-        next = assignmentRowToWizardState(row, [], components);
+        let issuedIds: string[] = [];
+        if (service.listAssignmentComponents) {
+          const lines = await service.listAssignmentComponents(row.id);
+          issuedIds = lines
+            .filter((l) => l.issue_status === "ISSUED")
+            .map((l) => l.component_id);
+        }
+        next = assignmentRowToWizardState(
+          { ...row, component_ids: issuedIds },
+          issuedIds,
+          components,
+        );
         const match = readyAssets.find((a) => a.id === row.asset_id);
         setBranchLabel(match?.branchLabel ?? (row.branch_id.slice(0, 8) || "—"));
       } else if (next.assetId) {
-        components = await service.listComponents(next.assetId);
         const match = readyAssets.find((a) => a.id === next.assetId);
         if (match) {
+          components = await service.listComponents(next.assetId);
           next.branchId = match.branchId || next.branchId;
           setBranchLabel(match.branchLabel);
+          setUnavailableAssetMessage(null);
+        } else {
+          // Deep-link to an asset that is no longer READY_TO_MOVE.
+          setUnavailableAssetMessage(
+            "This asset is no longer available for assignment. Choose another Ready to Move asset.",
+          );
+          next.assetId = "";
+          next.branchId = "";
+          components = [];
         }
+      } else {
+        setUnavailableAssetMessage(null);
       }
 
       setIssuedItems(components);
@@ -263,6 +291,12 @@ export function AssignmentWizardContainer({
         assets={assets}
         issuedItems={issuedItems}
         finishLabel="Submit"
+        unavailableAssetMessage={unavailableAssetMessage}
+        onClearUnavailableAsset={() => {
+          setUnavailableAssetMessage(null);
+          setWizardState((prev) => ({ ...prev, assetId: "", branchId: prev.branchId }));
+          setIssuedItems([]);
+        }}
         onCancel={onCancel}
         onSaveDraft={(state) => void handleSaveDraft(state)}
         onFinish={(state) => void handleSubmitAndActivate(state)}

@@ -509,6 +509,26 @@ describe("AssignmentWizardContainer — payload mapping", () => {
 });
 
 describe("AssignmentWizardContainer — asset change", () => {
+  it("blocks deep-link when asset is not in ready list", async () => {
+    const user = userEvent.setup();
+    listReadyAssets.mockResolvedValue(readyAssets());
+    render(
+      <AssignmentWizardContainer
+        initialState={{ employeeId: "e1", assetId: "gone-asset", branchId: "b1" }}
+        service={service}
+        listEmployees={listEmployees}
+      />,
+    );
+    await waitForWizard();
+    await user.click(screen.getByRole("button", { name: /^Next$/i }));
+    await waitFor(() => {
+      expect(screen.getByTestId("assignment-asset-unavailable")).toBeInTheDocument();
+    });
+    expect(
+      screen.getByText("This asset is no longer available for assignment."),
+    ).toBeInTheDocument();
+  });
+
   it("reloads components when asset selected", async () => {
     const user = userEvent.setup();
     listReadyAssets.mockResolvedValue([

@@ -9,6 +9,8 @@ export type InventoryMenuActionId =
   | "qr"
   | "transfer"
   | "maintenance"
+  | "startDisposal"
+  | "reinstate"
   | "history";
 
 export type InventoryActionPermissions = {
@@ -20,6 +22,8 @@ export type InventoryActionPermissions = {
   qr: boolean;
   transfer: boolean;
   maintenance: boolean;
+  startDisposal: boolean;
+  reinstate: boolean;
   history: boolean;
 };
 
@@ -32,6 +36,8 @@ export const DEFAULT_INVENTORY_ACTION_PERMISSIONS: InventoryActionPermissions = 
   qr: true,
   transfer: true,
   maintenance: true,
+  startDisposal: true,
+  reinstate: true,
   history: true,
 };
 
@@ -46,10 +52,15 @@ export type InventoryAssetRef = {
 
 export type AssetDetailDrawerAssignment = {
   employee: string;
+  employeeId?: string;
+  phone?: string;
   issueDate: string;
+  earlierUsedBy?: string;
   department: string;
   deliveryReferenceNumber?: string;
   deliveryReferenceStatus?: string;
+  deliverySignature?: string;
+  deliveryChallanSummary?: string;
   assignmentRemarks?: string;
   returnRemarks?: string;
 };
@@ -58,9 +69,24 @@ export type AssetDetailDrawerAdditional = {
   earlierUsedBy: string;
   deliveryChallan: string;
   deliveryReferenceStatus?: string;
+  deliverySignature?: string;
+  deliveryChallanSummary?: string;
   remarks: string;
   assignmentRemarks?: string;
   returnRemarks?: string;
+  make?: string;
+  model?: string;
+  configuration?: string;
+  branch?: string;
+  location?: string;
+  accessories?: Array<{
+    typeLabel: string;
+    serialDisplay: string;
+    componentName?: string;
+    status?: string;
+  }>;
+  phone?: string;
+  employeeId?: string;
 };
 
 export type AssetDetailDrawerHistoryEntry = {
@@ -72,19 +98,27 @@ export type AssetDetailDrawerHistoryEntry = {
   returnedAt: string;
   deliveryReferenceNumber: string;
   deliveryReferenceStatus: string;
+  deliverySignature?: string;
+  deliveryChallanSummary?: string;
   assignmentRemarks: string;
   returnRemarks: string;
 };
 
-/** Presentational drawer payload (mapped by container in a later phase). */
+/** Presentational drawer payload (mapped from inventory row via shared register groups). */
 export type AssetDetailDrawerData = {
   assetTag: string;
   laptopName: string;
   currentHolder: string;
   configuration: string;
+  make?: string;
+  model?: string;
+  serialNumber?: string;
+  location?: string;
   branch: string;
   operationalStatus: string;
   lifecycleStatus: string;
+  /** Same model as inventory expandable (preferred for 4E consistency). */
+  registerGroups?: import("@/components/assets/inventory/inventory-register-groups").InventoryRegisterGroupModel;
   assignment?: AssetDetailDrawerAssignment | null;
   additional?: AssetDetailDrawerAdditional | null;
   history?: AssetDetailDrawerHistoryEntry[] | null;
@@ -103,5 +137,7 @@ export const INVENTORY_MENU_ITEMS: Array<{
   { id: "qr", label: "QR Code", permissionKey: "qr" },
   { id: "transfer", label: "Transfer", permissionKey: "transfer" },
   { id: "maintenance", label: "Maintenance", permissionKey: "maintenance" },
+  { id: "startDisposal", label: "Start Disposal", permissionKey: "startDisposal" },
+  { id: "reinstate", label: "Reinstate", permissionKey: "reinstate" },
   { id: "history", label: "History", permissionKey: "history" },
 ];

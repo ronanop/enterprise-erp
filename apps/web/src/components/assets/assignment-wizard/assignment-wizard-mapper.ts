@@ -9,11 +9,23 @@ export type WizardSelectOption = { id: string; label: string };
 export type WizardAssetOption = WizardSelectOption & {
   code: string;
   operationalStatus: string;
+  lifecycleStatus?: string;
   branchLabel: string;
   branchId: string;
+  serialNumber?: string;
+  make?: string;
+  model?: string;
+  locationLabel?: string;
 };
 
-export type WizardIssuedItemOption = WizardSelectOption & { status: string };
+export type WizardIssuedItemOption = WizardSelectOption & {
+  status: string;
+  componentType?: string;
+  componentName?: string;
+  serialNumber?: string | null;
+  availability?: string;
+  disabled?: boolean;
+};
 
 export type AssignmentApiRow = {
   id: string;
@@ -31,7 +43,9 @@ export type AssignmentApiRow = {
   branch_id: string;
   delivery_reference_number?: string | null;
   delivery_reference_status?: string;
+  delivery_challan_signature_status?: string | null;
   assignment_remarks?: string | null;
+  component_ids?: string[] | null;
 };
 
 export type ReturnSummaryView = {
@@ -84,12 +98,15 @@ export function assignmentRowToWizardState(
   issuedItems: WizardIssuedItemOption[],
 ): AssignmentWizardState {
   const { issuedLabels, assignmentRemarks } = splitIssuedFromRemarks(row.assignment_remarks);
+  const fromApi = Array.isArray(row.component_ids) ? row.component_ids.map(String) : [];
   const ids =
     issuedItemIds.length > 0
       ? issuedItemIds
-      : issuedItems
-          .filter((i) => issuedLabels.some((l) => i.label.includes(l) || l.includes(i.label)))
-          .map((i) => i.id);
+      : fromApi.length > 0
+        ? fromApi
+        : issuedItems
+            .filter((i) => issuedLabels.some((l) => i.label.includes(l) || l.includes(i.label)))
+            .map((i) => i.id);
 
   return {
     allocationType: row.allocation_type,
@@ -106,6 +123,9 @@ export function assignmentRowToWizardState(
       (row.delivery_reference_status as AssignmentWizardState["deliveryReferenceStatus"]) ||
       "pending",
     deliveryReferenceNumber: row.delivery_reference_number ?? "",
+    deliveryChallanSignatureStatus:
+      (row.delivery_challan_signature_status as AssignmentWizardState["deliveryChallanSignatureStatus"]) ||
+      "not_signed",
     assignmentRemarks,
   };
 }
@@ -134,7 +154,9 @@ export function wizardStateToCreateBody(
     expected_return_at: state.expectedReturnAt || undefined,
     delivery_reference_number: state.deliveryReferenceNumber.trim() || undefined,
     delivery_reference_status: state.deliveryReferenceStatus,
+    delivery_challan_signature_status: state.deliveryChallanSignatureStatus,
     assignment_remarks: buildAssignmentRemarks(state, issuedItems) || undefined,
+    component_ids: state.issuedItemIds,
   };
   if (state.allocationType === "employee") body.employee_id = state.employeeId || undefined;
   if (state.allocationType === "department") body.department_id = state.departmentId || undefined;
@@ -153,10 +175,16 @@ export function wizardStateToUpdateBody(
 }
 
 export function returnWizardStateToBody(state: ReturnWizardState): Record<string, unknown> {
+  const component_returns = (state.componentReturns ?? []).map((line) => ({
+    component_id: line.componentId,
+    issue_status: line.issueStatus,
+    return_remarks: line.returnRemarks.trim() || undefined,
+  }));
   return {
     return_condition: state.returnCondition,
     return_remarks: state.returnRemarks.trim() || undefined,
     reason: state.reason.trim() || undefined,
+    ...(component_returns.length ? { component_returns } : {}),
   };
 }
 

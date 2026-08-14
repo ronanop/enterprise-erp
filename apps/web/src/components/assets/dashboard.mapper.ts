@@ -1,7 +1,7 @@
 import { createElement } from "react";
 
 import { StatusBadge } from "@/components/assets/shared";
-import type { QueueCardRow } from "@/components/assets/shared";
+import type { QueueCardRow, StatCardTrend } from "@/components/assets/shared";
 import type {
   AssetDashboardSummaryDto,
   AssetPaginatedListResult,
@@ -17,10 +17,35 @@ export type AssetOperationsKpiModel = {
   disposed: number;
 };
 
+export type AssetOperationsKpiTrends = {
+  readyToMove?: StatCardTrend;
+  assigned?: StatCardTrend;
+  retired?: StatCardTrend;
+  pendingDisposal?: StatCardTrend;
+  disposed?: StatCardTrend;
+};
+
 export type AssetOperationsQueueModels = {
   readyRows: QueueCardRow[];
   disposalRows: QueueCardRow[];
   assignmentRows: QueueCardRow[];
+};
+
+export type AssetOperationsQueueTotals = {
+  ready: number;
+  disposal: number;
+  assignments: number;
+};
+
+export type BranchBreakdownRow = {
+  branchId: string;
+  label: string;
+  totalAssets: number;
+  readyToMove: number;
+  assigned: number;
+  retired: number;
+  pendingDisposal: number;
+  disposed: number;
 };
 
 export type BranchLabelLookup = Record<string, string>;
@@ -34,6 +59,16 @@ export function resolveBranchLabel(
   return lookup[key] ?? key.slice(0, 8);
 }
 
+/** Client-side share of fleet total — does not change KPI count calculations. */
+export function kpiShareOfTotal(count: number, total: number): StatCardTrend | undefined {
+  if (total <= 0) return undefined;
+  const pct = Math.round((count / total) * 100);
+  return {
+    label: `${pct}% of total`,
+    direction: "neutral",
+  };
+}
+
 export function mapDashboardSummaryToKpis(
   summary: AssetDashboardSummaryDto,
 ): AssetOperationsKpiModel {
@@ -45,6 +80,36 @@ export function mapDashboardSummaryToKpis(
     pendingDisposal: summary.pending_disposal ?? 0,
     disposed: summary.disposed ?? 0,
   };
+}
+
+export function mapDashboardSummaryToKpiTrends(
+  kpis: AssetOperationsKpiModel,
+): AssetOperationsKpiTrends {
+  const total = kpis.totalAssets;
+  return {
+    readyToMove: kpiShareOfTotal(kpis.readyToMove, total),
+    assigned: kpiShareOfTotal(kpis.assigned, total),
+    retired: kpiShareOfTotal(kpis.retired, total),
+    pendingDisposal: kpiShareOfTotal(kpis.pendingDisposal, total),
+    disposed: kpiShareOfTotal(kpis.disposed, total),
+  };
+}
+
+export function mapByBranchBreakdown(
+  summary: AssetDashboardSummaryDto,
+  lookup: BranchLabelLookup,
+): BranchBreakdownRow[] {
+  const rows = summary.by_branch ?? [];
+  return rows.map((b) => ({
+    branchId: String(b.branch_id),
+    label: resolveBranchLabel(b.branch_id, lookup),
+    totalAssets: b.total_assets ?? 0,
+    readyToMove: b.ready_to_move ?? 0,
+    assigned: b.assigned ?? 0,
+    retired: b.retired ?? 0,
+    pendingDisposal: b.pending_disposal ?? 0,
+    disposed: b.disposed ?? 0,
+  }));
 }
 
 function assetRowId(row: AssetsRow, index: number): string {
@@ -66,8 +131,8 @@ function assetName(row: AssetsRow): string {
   return typeof name === "string" && name.trim() ? name : "—";
 }
 
-function lifecycleStatus(row: AssetsRow): string {
-  const status = row.status;
+function operationalStatus(row: AssetsRow): string {
+  const status = row.operational_status;
   return typeof status === "string" && status.trim() ? status : "unknown";
 }
 
@@ -90,7 +155,7 @@ export function mapAssetListToDisposalQueueRows(
   branchLookup: BranchLabelLookup,
 ): QueueCardRow[] {
   return list.items.map((row, index) => {
-    const status = lifecycleStatus(row);
+    const status = operationalStatus(row);
     return {
       id: assetRowId(row, index),
       cells: [
@@ -98,8 +163,8 @@ export function mapAssetListToDisposalQueueRows(
         assetName(row),
         resolveBranchLabel(row.branch_id, branchLookup),
         createElement(StatusBadge, {
-          key: `lifecycle-${assetRowId(row, index)}`,
-          kind: "lifecycle",
+          key: `ops-${assetRowId(row, index)}`,
+          kind: "operational",
           status,
         }),
       ],
@@ -131,17 +196,29 @@ function assignmentAssetRef(row: AssetsRow): string {
   return "—";
 }
 
+/** Prefer allocation time for active assignments; return time for returned; else fall back. */
+export function resolveAssignmentActivityWhen(row: AssetsRow): string {
+  const status = typeof row.status === "string" ? row.status : "";
+  if (status === "returned") {
+    const returned = formatAssignmentTimestamp(row.returned_at);
+    if (returned !== "—") return returned;
+  }
+  const allocated = formatAssignmentTimestamp(row.allocated_at);
+  if (allocated !== "—") return allocated;
+  if (status !== "returned") {
+    const returned = formatAssignmentTimestamp(row.returned_at);
+    if (returned !== "—") return returned;
+  }
+  return formatAssignmentTimestamp(row.created_at);
+}
+
 export function mapAssignmentsToActivityRows(list: AssetPaginatedListResult): QueueCardRow[] {
   return list.items.map((row, index) => {
     const id = typeof row.id === "string" && row.id ? row.id : `assignment-${index}`;
-    const when =
-      formatAssignmentTimestamp(row.allocated_at) !== "—"
-        ? formatAssignmentTimestamp(row.allocated_at)
-        : formatAssignmentTimestamp(row.returned_at);
     const status = typeof row.status === "string" ? row.status : "Assignment";
     return {
       id,
-      cells: [status, assignmentDoc(row) || assignmentAssetRef(row), when],
+      cells: [status, assignmentDoc(row) || assignmentAssetRef(row), resolveAssignmentActivityWhen(row)],
     };
   });
 }
@@ -154,15 +231,26 @@ export function mapDashboardPayloadToViewModel(input: {
   branchLookup: BranchLabelLookup;
 }): {
   kpis: AssetOperationsKpiModel;
+  kpiTrends: AssetOperationsKpiTrends;
   queues: AssetOperationsQueueModels;
+  queueTotals: AssetOperationsQueueTotals;
+  byBranch: BranchBreakdownRow[];
 } {
+  const kpis = mapDashboardSummaryToKpis(input.summary);
   return {
-    kpis: mapDashboardSummaryToKpis(input.summary),
+    kpis,
+    kpiTrends: mapDashboardSummaryToKpiTrends(kpis),
     queues: {
       readyRows: mapAssetListToReadyQueueRows(input.readyList, input.branchLookup),
       disposalRows: mapAssetListToDisposalQueueRows(input.disposalList, input.branchLookup),
       assignmentRows: mapAssignmentsToActivityRows(input.assignmentsList),
     },
+    queueTotals: {
+      ready: input.readyList.total ?? input.readyList.items.length,
+      disposal: input.disposalList.total ?? input.disposalList.items.length,
+      assignments: input.assignmentsList.total ?? input.assignmentsList.items.length,
+    },
+    byBranch: mapByBranchBreakdown(input.summary, input.branchLookup),
   };
 }
 

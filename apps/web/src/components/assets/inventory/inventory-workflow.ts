@@ -9,7 +9,12 @@ import { dispatchInventoryMenuAction } from "@/components/assets/navigation/asse
 import { assignmentNavigationPaths } from "@/components/assets/navigation/assignment-navigation";
 
 export function isInventoryWorkflowAction(action: InventoryMenuActionId): boolean {
-  return action === "assign" || action === "return";
+  return (
+    action === "assign" ||
+    action === "return" ||
+    action === "startDisposal" ||
+    action === "reinstate"
+  );
 }
 
 /**

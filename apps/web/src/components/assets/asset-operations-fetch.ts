@@ -79,6 +79,7 @@ export async function fetchAssetOperationsData(
     ),
     settle(
       listAssignments({
+        status: "active",
         page_size: 10,
         page: 1,
         branch_id,

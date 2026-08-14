@@ -93,6 +93,28 @@ describe("buildImportPayloadRows", () => {
     expect(rows[0].assignment_remarks).toBe("note");
   });
 
+  it("persists make model configuration and location", () => {
+    const rows = buildImportPayloadRows(
+      [
+        preview({
+          rowNumber: 7,
+          values: {
+            manufacturer: "Dell",
+            model: "XPS 15",
+            configuration: "i7 · 32GB",
+            location: "Rack B-2",
+          },
+        }),
+      ],
+      lookups,
+      { includeWarnings: false },
+    );
+    expect(rows[0].make).toBe("Dell");
+    expect(rows[0].model).toBe("XPS 15");
+    expect(rows[0].configuration).toBe("i7 · 32GB");
+    expect(rows[0].location_label).toBe("Rack B-2");
+  });
+
   it("skips when branch cannot resolve", () => {
     const rows = buildImportPayloadRows(
       [preview({ rowNumber: 5, values: { branch: "Unknown" } })],

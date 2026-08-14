@@ -391,18 +391,44 @@ export const documentService = {
   },
 };
 
+export type ComponentType =
+  | "CHARGER"
+  | "MOUSE"
+  | "KEYBOARD"
+  | "CABLE"
+  | "PENDRIVE"
+  | "LAPTOP_BAG"
+  | "OTHER";
+
+export const COMPONENT_TYPE_OPTIONS: { value: ComponentType; label: string }[] = [
+  { value: "CHARGER", label: "Charger" },
+  { value: "MOUSE", label: "Mouse" },
+  { value: "KEYBOARD", label: "Keyboard" },
+  { value: "CABLE", label: "Cable" },
+  { value: "PENDRIVE", label: "Pendrive" },
+  { value: "LAPTOP_BAG", label: "Laptop Bag" },
+  { value: "OTHER", label: "Other" },
+];
+
+export function componentTypeLabel(type: string | null | undefined): string {
+  const found = COMPONENT_TYPE_OPTIONS.find((o) => o.value === type);
+  return found?.label ?? (type?.trim() || "Other");
+}
+
 export type ComponentRow = {
   id: string;
   branch_id?: string | null;
   asset_id: string;
   component_code: string;
   component_name: string;
+  component_type?: ComponentType | string;
   product_id?: string | null;
   serial_number?: string | null;
   quantity?: string | number | null;
   status: string;
   company_id: string;
   version: number;
+  availability?: "available" | "unavailable" | string | null;
 };
 
 export type ComponentListResult = {
@@ -420,7 +446,17 @@ export type ComponentTreeResult = {
     status: string;
     company_id: string;
   };
-  components: ComponentRow[];
+  components: Array<{
+    id: string;
+    component_code: string;
+    component_name: string;
+    component_type?: string;
+    serial_number?: string | null;
+    quantity?: string | null;
+    status: string;
+    product_id?: string | null;
+    version: number;
+  }>;
   depth: number;
 };
 
@@ -445,7 +481,26 @@ export type ComponentReplaceResult = {
   successor: ComponentRow;
 };
 
+export type AssignmentComponentRow = {
+  id: string;
+  assignment_id: string;
+  component_id: string;
+  issue_status: string;
+  issued_at?: string | null;
+  returned_at?: string | null;
+  return_condition?: string | null;
+  return_remarks?: string | null;
+  company_id: string;
+  version: number;
+  component_code?: string | null;
+  component_name?: string | null;
+  component_type?: string | null;
+  serial_number?: string | null;
+  component_status?: string | null;
+};
+
 const ASSET_COMPONENTS_PATH = "/assets/asset-components";
+const ASSET_ASSIGNMENTS_PATH = "/assets/asset-assignments";
 
 function parseComponentList(data: unknown): ComponentListResult {
   if (data && typeof data === "object" && "items" in data) {
@@ -465,21 +520,27 @@ export const componentService = {
     page?: number;
     page_size?: number;
     asset_id?: string;
+    asset_ids?: string[];
     status?: string;
     product_id?: string;
     branch_id?: string;
+    component_type?: string;
     q?: string;
     sort?: string;
+    include_availability?: boolean;
   }): Promise<ComponentListResult> {
     const query = new URLSearchParams();
     if (params.page) query.set("page", String(params.page));
     if (params.page_size) query.set("page_size", String(params.page_size));
     if (params.asset_id) query.set("asset_id", params.asset_id);
+    if (params.asset_ids?.length) query.set("asset_ids", params.asset_ids.join(","));
     if (params.status) query.set("status", params.status);
     if (params.product_id) query.set("product_id", params.product_id);
     if (params.branch_id) query.set("branch_id", params.branch_id);
+    if (params.component_type) query.set("component_type", params.component_type);
     if (params.q) query.set("q", params.q);
     if (params.sort) query.set("sort", params.sort);
+    if (params.include_availability) query.set("include_availability", "true");
     const res = await resourceService.list<ComponentListResult>(
       `${ASSET_COMPONENTS_PATH}?${query.toString()}`,
     );
@@ -509,6 +570,7 @@ export const componentService = {
     asset_id: string;
     component_code: string;
     component_name: string;
+    component_type?: string;
     product_id?: string;
     serial_number?: string;
     quantity?: number | string;
@@ -522,6 +584,7 @@ export const componentService = {
     id: string,
     body: {
       component_name?: string;
+      component_type?: string;
       product_id?: string | null;
       serial_number?: string | null;
       quantity?: number | string | null;
@@ -538,6 +601,7 @@ export const componentService = {
     body: {
       component_code?: string;
       component_name?: string;
+      component_type?: string;
       product_id?: string;
       serial_number?: string;
       quantity?: number | string;
@@ -560,6 +624,14 @@ export const componentService = {
       "dispose",
     );
     return res.data as ComponentRow;
+  },
+
+  async listForAssignment(assignmentId: string): Promise<AssignmentComponentRow[]> {
+    const res = await resourceService.list<{ items: AssignmentComponentRow[] }>(
+      `${ASSET_ASSIGNMENTS_PATH}/${assignmentId}/components`,
+    );
+    const data = res.data as { items?: AssignmentComponentRow[] };
+    return Array.isArray(data?.items) ? data.items : [];
   },
 };
 
@@ -1595,6 +1667,13 @@ export type AssetOperationsListParams = {
   status?: string;
   asset_category_id?: string;
   q?: string;
+  asset_type?: string;
+  department_id?: string;
+  location_id?: string;
+  employee_id?: string;
+  assignment_state?: string;
+  make?: string;
+  model?: string;
 };
 
 function buildAssetListQuery(params: AssetOperationsListParams): Record<string, string | number> {
@@ -1607,6 +1686,13 @@ function buildAssetListQuery(params: AssetOperationsListParams): Record<string, 
   if (params.status) query.status = params.status;
   if (params.asset_category_id) query.asset_category_id = params.asset_category_id;
   if (params.q) query.q = params.q;
+  if (params.asset_type) query.asset_type = params.asset_type;
+  if (params.department_id) query.department_id = params.department_id;
+  if (params.location_id) query.location_id = params.location_id;
+  if (params.employee_id) query.employee_id = params.employee_id;
+  if (params.assignment_state) query.assignment_state = params.assignment_state;
+  if (params.make) query.make = params.make;
+  if (params.model) query.model = params.model;
   return query;
 }
 
@@ -1688,7 +1774,8 @@ export const assetOperationsService = {
   } = {}): Promise<AssetPaginatedListResult> {
     const query: Record<string, string | number> = {
       page: params.page ?? 1,
-      page_size: params.page_size ?? 10,
+      // Asset module pagination max is 200 (FastAPI Query le=200).
+      page_size: Math.min(params.page_size ?? 10, 200),
     };
     if (params.branch_id) query.branch_id = params.branch_id;
     if (params.status) query.status = params.status;
@@ -1732,5 +1819,468 @@ export const assetRegisterService = {
       body,
     );
     return res.data as AssetsRow;
+  },
+
+  /** Phase 5D: RETIRED → PENDING_DISPOSAL */
+  async startDisposal(id: string, comments?: string): Promise<AssetsRow> {
+    return this.action(id, "start-disposal", comments ? { comments } : undefined);
+  },
+
+  /** Phase 5E: PENDING_DISPOSAL → READY_TO_MOVE */
+  async reinstate(id: string, comments?: string): Promise<AssetsRow> {
+    return this.action(id, "reinstate", comments ? { comments } : undefined);
+  },
+};
+
+const INCOMING_ASSETS_PATH = "/assets/incoming-assets";
+
+export type IncomingArrivalStatus = "EXPECTED" | "PARTIALLY_ARRIVED" | "ARRIVED";
+
+export type IncomingAssetUnitRow = {
+  id: string;
+  unit_index: number;
+  serial_number?: string | null;
+  status: "PENDING" | "ARRIVED" | string;
+  arrived_at?: string | null;
+  arrived_by?: string | null;
+};
+
+export type IncomingAssetLineRow = {
+  id: string;
+  company_id: string;
+  branch_id: string;
+  grn_id: string;
+  grn_line_id: string;
+  purchase_order_id?: string | null;
+  product_id: string;
+  vendor_id?: string | null;
+  grn_document_number: string;
+  po_document_number?: string | null;
+  product_code?: string | null;
+  product_name?: string | null;
+  document_date?: string | null;
+  expected_quantity: number | string;
+  arrived_quantity: number | string;
+  pending_quantity: number | string;
+  status: IncomingArrivalStatus | string;
+  version: number;
+  units?: IncomingAssetUnitRow[];
+};
+
+export type IncomingAssetListResult = {
+  items: IncomingAssetLineRow[];
+  total: number;
+  page: number;
+  page_size: number;
+};
+
+export type IncomingAssetSummary = {
+  expected_lines: number;
+  pending_arrival_lines: number;
+  partially_arrived_lines: number;
+  arrived_lines: number;
+  expected_quantity_total: number;
+  arrived_quantity_total: number;
+  pending_quantity_total: number;
+};
+
+function parseIncomingList(data: unknown): IncomingAssetListResult {
+  if (data && typeof data === "object" && "items" in data) {
+    const payload = data as IncomingAssetListResult;
+    return {
+      items: Array.isArray(payload.items) ? payload.items : [],
+      total: payload.total ?? 0,
+      page: payload.page ?? 1,
+      page_size: payload.page_size ?? 25,
+    };
+  }
+  return { items: [], total: 0, page: 1, page_size: 25 };
+}
+
+export const incomingAssetService = {
+  async summary(params?: {
+    branch_id?: string;
+    company_id?: string;
+  }): Promise<IncomingAssetSummary> {
+    const res = await apiClient<IncomingAssetSummary>(`${INCOMING_ASSETS_PATH}/summary`, {
+      method: "GET",
+      query: {
+        branch_id: params?.branch_id,
+        company_id: params?.company_id,
+      },
+    });
+    if (!res.data) {
+      throw new ApiClientError("Incoming assets summary returned no data", 500);
+    }
+    return res.data;
+  },
+
+  async search(params: {
+    page?: number;
+    page_size?: number;
+    branch_id?: string;
+    company_id?: string;
+    status?: string;
+    grn_id?: string;
+    purchase_order_id?: string;
+    document_date_from?: string;
+    document_date_to?: string;
+    q?: string;
+  } = {}): Promise<IncomingAssetListResult> {
+    const query: Record<string, string | number> = {
+      page: params.page ?? 1,
+      page_size: params.page_size ?? 25,
+    };
+    if (params.branch_id) query.branch_id = params.branch_id;
+    if (params.company_id) query.company_id = params.company_id;
+    if (params.status) query.status = params.status;
+    if (params.grn_id) query.grn_id = params.grn_id;
+    if (params.purchase_order_id) query.purchase_order_id = params.purchase_order_id;
+    if (params.document_date_from) query.document_date_from = params.document_date_from;
+    if (params.document_date_to) query.document_date_to = params.document_date_to;
+    if (params.q) query.q = params.q;
+    const res = await resourceService.list<IncomingAssetListResult>(INCOMING_ASSETS_PATH, query);
+    return parseIncomingList(res.data);
+  },
+
+  async get(id: string): Promise<IncomingAssetLineRow> {
+    const res = await resourceService.get<IncomingAssetLineRow>(INCOMING_ASSETS_PATH, id);
+    return res.data as IncomingAssetLineRow;
+  },
+
+  async arrive(
+    id: string,
+    body: {
+      quantity?: number;
+      mark_all?: boolean;
+      units?: Array<{ unit_index: number; serial_number?: string }>;
+      notes?: string;
+    },
+  ): Promise<IncomingAssetLineRow> {
+    const res = await resourceService.action<IncomingAssetLineRow>(
+      INCOMING_ASSETS_PATH,
+      id,
+      "arrive",
+      body,
+    );
+    return res.data as IncomingAssetLineRow;
+  },
+};
+
+export type IncomingQcStatus = "PENDING" | "IN_PROGRESS" | "ACCEPTED" | "REJECTED";
+export type IncomingUnitQcStatus = "PENDING_QC" | "ACCEPTED" | "REJECTED";
+
+export type IncomingAssetQcLineRow = IncomingAssetLineRow & {
+  accepted_quantity: number | string;
+  rejected_quantity: number | string;
+  pending_qc_quantity: number | string;
+  qc_status: IncomingQcStatus | string;
+  qc_started_at?: string | null;
+  qc_started_by?: string | null;
+  qc_notes?: string | null;
+  quality_inspection_id?: string | null;
+  units?: Array<
+    IncomingAssetUnitRow & {
+      qc_status?: IncomingUnitQcStatus | string | null;
+      tested_at?: string | null;
+      tested_by?: string | null;
+      qc_notes?: string | null;
+      rejection_reason?: string | null;
+      evidence_uri?: string | null;
+      quality_inspection_id?: string | null;
+    }
+  >;
+};
+
+export type IncomingAssetQcListResult = {
+  items: IncomingAssetQcLineRow[];
+  total: number;
+  page: number;
+  page_size: number;
+};
+
+function parseIncomingQcList(data: unknown): IncomingAssetQcListResult {
+  if (data && typeof data === "object" && "items" in data) {
+    const payload = data as IncomingAssetQcListResult;
+    return {
+      items: Array.isArray(payload.items) ? payload.items : [],
+      total: payload.total ?? 0,
+      page: payload.page ?? 1,
+      page_size: payload.page_size ?? 25,
+    };
+  }
+  return { items: [], total: 0, page: 1, page_size: 25 };
+}
+
+export const incomingAssetQcService = {
+  async search(params: {
+    page?: number;
+    page_size?: number;
+    branch_id?: string;
+    company_id?: string;
+    qc_status?: string;
+    grn_id?: string;
+    purchase_order_id?: string;
+    q?: string;
+  } = {}): Promise<IncomingAssetQcListResult> {
+    const query: Record<string, string | number> = {
+      page: params.page ?? 1,
+      page_size: params.page_size ?? 25,
+    };
+    if (params.branch_id) query.branch_id = params.branch_id;
+    if (params.company_id) query.company_id = params.company_id;
+    if (params.qc_status) query.qc_status = params.qc_status;
+    if (params.grn_id) query.grn_id = params.grn_id;
+    if (params.purchase_order_id) query.purchase_order_id = params.purchase_order_id;
+    if (params.q) query.q = params.q;
+    const res = await resourceService.list<IncomingAssetQcListResult>(
+      `${INCOMING_ASSETS_PATH}/qc`,
+      query,
+    );
+    return parseIncomingQcList(res.data);
+  },
+
+  async get(id: string): Promise<IncomingAssetQcLineRow> {
+    const res = await apiClient<IncomingAssetQcLineRow>(`${INCOMING_ASSETS_PATH}/${id}/qc`, {
+      method: "GET",
+    });
+    return res.data as IncomingAssetQcLineRow;
+  },
+
+  async start(id: string): Promise<IncomingAssetQcLineRow> {
+    const res = await resourceService.action<IncomingAssetQcLineRow>(
+      INCOMING_ASSETS_PATH,
+      id,
+      "qc/start",
+      {},
+    );
+    return res.data as IncomingAssetQcLineRow;
+  },
+
+  async accept(
+    id: string,
+    body: {
+      quantity?: number;
+      unit_ids?: string[];
+      mark_all_pending?: boolean;
+      notes?: string;
+      evidence_uri?: string;
+      quality_inspection_id?: string;
+    },
+  ): Promise<IncomingAssetQcLineRow> {
+    const res = await resourceService.action<IncomingAssetQcLineRow>(
+      INCOMING_ASSETS_PATH,
+      id,
+      "qc/accept",
+      body,
+    );
+    return res.data as IncomingAssetQcLineRow;
+  },
+
+  async reject(
+    id: string,
+    body: {
+      quantity?: number;
+      unit_ids?: string[];
+      mark_all_pending?: boolean;
+      notes?: string;
+      rejection_reason: string;
+      evidence_uri?: string;
+      quality_inspection_id?: string;
+    },
+  ): Promise<IncomingAssetQcLineRow> {
+    const res = await resourceService.action<IncomingAssetQcLineRow>(
+      INCOMING_ASSETS_PATH,
+      id,
+      "qc/reject",
+      body,
+    );
+    return res.data as IncomingAssetQcLineRow;
+  },
+};
+
+const REGISTRATION_QUEUE_PATH = "/assets/registration-queue";
+
+export type RegistrationStatus =
+  | "PENDING_REGISTRATION"
+  | "PARTIALLY_REGISTERED"
+  | "REGISTERED"
+  | string;
+
+export type RegistrationQueueItem = {
+  incoming_unit_id: string;
+  incoming_line_id: string;
+  unit_index: number;
+  unit_reference: string;
+  product_name?: string | null;
+  product_code?: string | null;
+  serial_number?: string | null;
+  grn_id: string;
+  grn_document_number: string;
+  purchase_order_id?: string | null;
+  po_document_number?: string | null;
+  branch_id: string;
+  qc_status: string;
+  registration_status: RegistrationStatus;
+  line_registration_status: RegistrationStatus;
+  registered_asset_id?: string | null;
+};
+
+export type RegistrationQueueSummary = {
+  accepted: number;
+  registered: number;
+  pending_registration: number;
+};
+
+export type IncomingRegistrationPrefill = {
+  incoming_line_id: string;
+  incoming_unit_id: string;
+  unit_index: number;
+  grn_id: string;
+  grn_document_number: string;
+  purchase_order_id?: string | null;
+  po_document_number?: string | null;
+  branch_id: string;
+  product_id: string;
+  supplier_vendor_id?: string | null;
+  quality_inspection_id?: string | null;
+  asset_name: string;
+  serial_number?: string | null;
+  purchase_date?: string | null;
+  purchase_cost?: number | string | null;
+  currency_code?: string;
+  asset_category_id?: string | null;
+  asset_type?: string;
+  qc_status: string;
+  registration_status: string;
+  registered_asset_id?: string | null;
+};
+
+export type RegistrationExcelRow = {
+  incoming_unit_id?: string | null;
+  asset_name?: string | null;
+  serial_number?: string | null;
+  branch_id?: string | null;
+  asset_category_id?: string | null;
+  asset_type?: string | null;
+  purchase_date?: string | null;
+  purchase_cost?: string | null;
+  currency_code?: string | null;
+  make?: string | null;
+  model?: string | null;
+  configuration?: string | null;
+  location?: string | null;
+};
+
+export type RegistrationExcelRowResult = RegistrationExcelRow & {
+  row_number: number;
+  status: string;
+  errors: string[];
+  grn_document_number?: string | null;
+  po_document_number?: string | null;
+  qc_status?: string | null;
+};
+
+export const assetRegistrationQueueService = {
+  async summary(params: { branch_id?: string; company_id?: string } = {}) {
+    const query: Record<string, string> = {};
+    if (params.branch_id) query.branch_id = params.branch_id;
+    if (params.company_id) query.company_id = params.company_id;
+    const res = await apiClient<RegistrationQueueSummary>(`${REGISTRATION_QUEUE_PATH}/summary`, {
+      method: "GET",
+      query,
+    });
+    return res.data as RegistrationQueueSummary;
+  },
+
+  async search(params: {
+    page?: number;
+    page_size?: number;
+    branch_id?: string;
+    grn_id?: string;
+    purchase_order_id?: string;
+    registration_status?: string;
+    q?: string;
+  } = {}) {
+    const query: Record<string, string | number> = {
+      page: params.page ?? 1,
+      page_size: params.page_size ?? 25,
+    };
+    if (params.branch_id) query.branch_id = params.branch_id;
+    if (params.grn_id) query.grn_id = params.grn_id;
+    if (params.purchase_order_id) query.purchase_order_id = params.purchase_order_id;
+    if (params.registration_status) query.registration_status = params.registration_status;
+    if (params.q) query.q = params.q;
+    const res = await apiClient<{
+      items: RegistrationQueueItem[];
+      total: number;
+      page: number;
+      page_size: number;
+    }>(REGISTRATION_QUEUE_PATH, { method: "GET", query });
+    const data = res.data;
+    return {
+      items: Array.isArray(data?.items) ? data.items : [],
+      total: data?.total ?? 0,
+      page: data?.page ?? 1,
+      page_size: data?.page_size ?? 25,
+    };
+  },
+
+  async downloadTemplate(params: { branch_id?: string } = {}): Promise<Blob> {
+    const token = (await import("@/lib/auth")).getAccessToken();
+    const { env } = await import("@/utils/env");
+    const qs = new URLSearchParams();
+    if (params.branch_id) qs.set("branch_id", params.branch_id);
+    const url = `${env.apiUrl}${REGISTRATION_QUEUE_PATH}/excel-template${qs.toString() ? `?${qs}` : ""}`;
+    const response = await fetch(url, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+    if (!response.ok) throw new ApiClientError("Failed to download template", response.status);
+    return response.blob();
+  },
+
+  async validateExcel(rows: RegistrationExcelRow[]) {
+    const res = await apiClient<{
+      valid_count: number;
+      error_count: number;
+      warning_count: number;
+      rows: RegistrationExcelRowResult[];
+    }>(`${REGISTRATION_QUEUE_PATH}/excel/validate`, {
+      method: "POST",
+      body: { rows },
+    });
+    return res.data!;
+  },
+
+  async confirmExcel(rows: RegistrationExcelRow[], activate = true) {
+    const res = await apiClient<{
+      registered_count: number;
+      activation_complete: number;
+      activation_incomplete: number;
+      items: Array<{
+        row_number: number;
+        incoming_unit_id: string;
+        asset_id: string;
+        asset_code?: string | null;
+        created: boolean;
+        activation: string;
+        activation_error?: string | null;
+        operational_status?: string | null;
+      }>;
+    }>(`${REGISTRATION_QUEUE_PATH}/excel/confirm`, {
+      method: "POST",
+      body: { rows, activate },
+    });
+    return res.data!;
+  },
+
+  async prefillFromIncoming(incomingUnitId: string, incomingLineId?: string) {
+    const query: Record<string, string> = { incoming_unit_id: incomingUnitId };
+    if (incomingLineId) query.incoming_line_id = incomingLineId;
+    const res = await apiClient<IncomingRegistrationPrefill>(
+      `${ASSETS_REGISTER_PATH}/registration/prefill-from-incoming`,
+      { method: "GET", query },
+    );
+    return res.data as IncomingRegistrationPrefill;
   },
 };

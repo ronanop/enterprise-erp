@@ -62,20 +62,22 @@ export function StatCard({
           : undefined
       }
     >
-      <CardHeader className="flex flex-row items-start justify-between space-y-0 pb-2">
-        <CardTitle className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
+      <CardHeader className="flex flex-row items-start justify-between space-y-0 px-4 pb-1.5 pt-3">
+        <CardTitle className="text-[11px] font-medium tracking-wide text-muted-foreground uppercase">
           {title}
         </CardTitle>
         {Icon ? (
-          <Icon className="size-4 shrink-0 text-muted-foreground" aria-hidden />
+          <Icon className="size-3.5 shrink-0 text-muted-foreground" aria-hidden />
         ) : null}
       </CardHeader>
-      <CardContent>
-        <p className="font-mono text-2xl font-semibold tabular-nums text-foreground">{displayValue}</p>
+      <CardContent className="px-4 pb-3 pt-0">
+        <p className="font-mono text-xl font-semibold tabular-nums tracking-tight text-foreground sm:text-2xl">
+          {displayValue}
+        </p>
         {trend ? (
           <p
             className={cn(
-              "mt-1 text-xs text-muted-foreground",
+              "mt-0.5 text-[11px] text-muted-foreground",
               trend.direction === "up" && "text-emerald-700 dark:text-emerald-400",
               trend.direction === "down" && "text-destructive",
             )}

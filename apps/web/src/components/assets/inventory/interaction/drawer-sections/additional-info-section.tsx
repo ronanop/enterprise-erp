@@ -11,6 +11,8 @@ export function AdditionalInfoSection({ additional, className }: AdditionalInfoS
     earlierUsedBy: "—",
     deliveryChallan: "—",
     deliveryReferenceStatus: "—",
+    deliverySignature: "Not Signed",
+    deliveryChallanSummary: "—",
     remarks: "—",
     assignmentRemarks: "—",
     returnRemarks: "—",
@@ -28,13 +30,14 @@ export function AdditionalInfoSection({ additional, className }: AdditionalInfoS
             {info.earlierUsedBy}
           </dd>
         </div>
-        <div>
-          <dt className="text-xs font-medium text-muted-foreground">Delivery reference</dt>
-          <dd className="mt-0.5 text-sm">{info.deliveryChallan}</dd>
-        </div>
-        <div>
-          <dt className="text-xs font-medium text-muted-foreground">Delivery status</dt>
-          <dd className="mt-0.5 text-sm">{info.deliveryReferenceStatus ?? "—"}</dd>
+        <div className="sm:col-span-2">
+          <dt className="text-xs font-medium text-muted-foreground">Delivery Challan</dt>
+          <dd className="mt-0.5 text-sm" data-testid="drawer-additional-dc">
+            {info.deliveryChallanSummary ??
+              `${info.deliveryChallan} · ${info.deliveryReferenceStatus ?? "—"}${
+                info.deliverySignature ? ` · ${info.deliverySignature}` : ""
+              }`}
+          </dd>
         </div>
         <div className="sm:col-span-2">
           <dt className="text-xs font-medium text-muted-foreground">Assignment remarks</dt>

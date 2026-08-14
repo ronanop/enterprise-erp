@@ -29,8 +29,9 @@ def test_default_batch_size() -> None:
 
 def test_valid_ops_statuses() -> None:
     assert "READY_TO_MOVE" in VALID_IMPORT_OPERATIONAL_STATUSES
-    assert "DISPOSED" in VALID_IMPORT_OPERATIONAL_STATUSES
-    assert len(VALID_IMPORT_OPERATIONAL_STATUSES) == 5
+    assert "DISPOSED" not in VALID_IMPORT_OPERATIONAL_STATUSES
+    assert "PENDING_DISPOSAL" in VALID_IMPORT_OPERATIONAL_STATUSES
+    assert len(VALID_IMPORT_OPERATIONAL_STATUSES) == 4
 
 
 def test_skip_reasons() -> None:

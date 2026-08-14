@@ -8,7 +8,11 @@ from core.exceptions import NotFoundException
 from modules.asset.adapters.master_data_port import AssetMasterDataAdapter
 from modules.asset.adapters.procurement_read_port import ProcurementReadPort
 from modules.asset.domain.enums import AssetStatus, AstEntityType
-from modules.asset.domain.exceptions import InvalidAssetWorkflowState, SegregationOfDutiesError
+from modules.asset.domain.exceptions import (
+    InvalidAssetWorkflowState,
+    RegistrationValidationError,
+    SegregationOfDutiesError,
+)
 from modules.asset.domain.workflow_codes import ENTITY_AST_ASSET
 from modules.asset.models import AstAsset
 from modules.asset.repository.asset_category_repository import AssetCategoryRepository
@@ -52,11 +56,23 @@ class AssetService:
         operational_status: str | None = None,
         asset_category_id: UUID | None = None,
         search: str | None = None,
+        asset_type: str | None = None,
+        department_id: UUID | None = None,
+        location_id: UUID | None = None,
+        employee_id: UUID | None = None,
+        assignment_state: str | None = None,
+        make: str | None = None,
+        model: str | None = None,
         offset: int = 0,
         limit: int = 25,
     ) -> tuple[list[AstAsset], int]:
         cid = self._scope.resolve_company_id(ctx, company_id)
         ops_filter = coerce_operational_status_filter(operational_status)
+        state = (assignment_state or "").strip().lower() or None
+        if state is not None and state not in {"assigned", "unassigned"}:
+            raise RegistrationValidationError(
+                "assignment_state must be 'assigned' or 'unassigned'"
+            )
         filters = AssetListFilters(
             company_id=cid,
             branch_id=branch_id,
@@ -64,6 +80,13 @@ class AssetService:
             operational_status=ops_filter,
             asset_category_id=asset_category_id,
             search=search,
+            asset_type=asset_type,
+            department_id=department_id,
+            location_id=location_id,
+            employee_id=employee_id,
+            assignment_state=state,
+            make=make,
+            model=model,
         )
         return self._repo.search(ctx, filters, offset=offset, limit=limit)
 
@@ -92,14 +115,87 @@ class AssetService:
         cid = self._scope.resolve_company_id(ctx, company_id)
         return self._repo.find_by_serial(ctx, cid, serial_number)
 
+    @staticmethod
+    def _normalize_optional_text_fields(fields: dict) -> None:
+        """Normalize optional registration text fields; empty string → None."""
+        for key in (
+            "make",
+            "model",
+            "configuration",
+            "serial_number",
+            "barcode",
+            "qr_code",
+            "rfid_tag",
+            "location_label",
+        ):
+            if key not in fields:
+                continue
+            value = fields[key]
+            if value is None:
+                continue
+            text = str(value).strip()
+            fields[key] = text or None
+
+    def _persist_registration_location(
+        self,
+        ctx: TenantContext,
+        *,
+        asset_id: UUID,
+        branch_id: UUID,
+        company_id: UUID,
+        location_label: str | None,
+    ) -> str | None:
+        """Create current ast_asset_location via LocationService. No-op when blank."""
+        if not location_label:
+            return None
+        from modules.asset.service.location_service import LocationService
+
+        loc = LocationService(self._db).create(
+            ctx,
+            company_id=company_id,
+            asset_id=asset_id,
+            branch_id=branch_id,
+            location_label=location_label,
+        )
+        return loc.location_label
+
     def create(self, ctx: TenantContext, *, branch_id: UUID, company_id: UUID | None = None, **fields):
         cid = self._scope.resolve_company_id(ctx, company_id)
         self._scope.validate_branch_access(ctx, branch_id)
         fields.pop("asset_code", None)
         fields.pop("document_number", None)
+        incoming_unit_id = fields.pop("incoming_unit_id", None)
+        incoming_line_id = fields.pop("incoming_line_id", None)
+        self._normalize_optional_text_fields(fields)
+        location_label = fields.pop("location_label", None)
         self._validator.validate_create_fields(
             ctx, company_id=cid, branch_id=branch_id, fields={**fields, "branch_id": branch_id}
         )
+        if incoming_unit_id is not None:
+            from modules.asset.service.incoming_registration_service import IncomingRegistrationService
+
+            reg = IncomingRegistrationService(self._db)
+            unit = reg._repo.get_unit(ctx, incoming_unit_id)
+            if unit is None:
+                raise NotFoundException("Incoming unit not found")
+            line = reg.assert_unit_registrable(ctx, unit, expected_line_id=incoming_line_id)
+            # System-owned refs always come from incoming record
+            fields["grn_id"] = line.grn_id
+            fields["purchase_order_id"] = line.purchase_order_id
+            fields["product_id"] = fields.get("product_id") or line.product_id
+            fields["supplier_vendor_id"] = fields.get("supplier_vendor_id") or line.vendor_id
+            if not fields.get("quality_inspection_id"):
+                fields["quality_inspection_id"] = (
+                    unit.quality_inspection_id or line.quality_inspection_id
+                )
+            if unit.serial_number and fields.get("serial_number"):
+                if fields["serial_number"] != unit.serial_number:
+                    from core.exceptions import ConflictException
+
+                    raise ConflictException("Serial mismatch")
+            if unit.serial_number and not fields.get("serial_number"):
+                fields["serial_number"] = unit.serial_number
+
         doc = self._numbers.generate(AstEntityType.ASSET, cid, AstAsset, "document_number", ctx=ctx)
         row = self._repo.create(
             ctx,
@@ -110,12 +206,30 @@ class AssetService:
             status=AssetStatus.DRAFT.value,
             **fields,
         )
+        persisted_location = self._persist_registration_location(
+            ctx,
+            asset_id=row.id,
+            branch_id=branch_id,
+            company_id=cid,
+            location_label=location_label,
+        )
+        if persisted_location:
+            object.__setattr__(row, "current_location_label", persisted_location)
+        if incoming_unit_id is not None:
+            from modules.asset.service.incoming_registration_service import IncomingRegistrationService
+
+            IncomingRegistrationService(self._db).link_unit_after_create(
+                ctx, incoming_unit_id=incoming_unit_id, asset_id=row.id
+            )
         self._audit.log_entity_change(
             tenant_id=ctx.tenant_id,
             entity_name=ENTITY_AST_ASSET,
             entity_id=row.id,
             operation="create",
             performed_by=ctx.user_id,
+            new_value=(
+                {"incoming_unit_id": str(incoming_unit_id)} if incoming_unit_id is not None else None
+            ),
         )
         return row
 
@@ -137,6 +251,8 @@ class AssetService:
         self._scope.validate_branch_access(ctx, branch_id)
         fields.pop("document_number", None)
         fields.pop("status", None)
+        self._normalize_optional_text_fields(fields)
+        location_label = fields.pop("location_label", None)
         code = (asset_code or "").strip()
         self._validator.validate_create_for_import_fields(
             ctx,
@@ -154,6 +270,15 @@ class AssetService:
             status=AssetStatus.DRAFT.value,
             **fields,
         )
+        persisted_location = self._persist_registration_location(
+            ctx,
+            asset_id=row.id,
+            branch_id=branch_id,
+            company_id=cid,
+            location_label=location_label,
+        )
+        if persisted_location:
+            object.__setattr__(row, "current_location_label", persisted_location)
         self._audit.log_entity_change(
             tenant_id=ctx.tenant_id,
             entity_name=ENTITY_AST_ASSET,
@@ -166,10 +291,22 @@ class AssetService:
 
     def update(self, ctx: TenantContext, row_id: UUID, **fields):
         row = self.get(ctx, row_id)
+        self._normalize_optional_text_fields(fields)
+        location_label = fields.pop("location_label", None)
         self._validator.validate_update_fields(ctx, row, fields)
         updated = self._repo.update(ctx, row_id, **fields)
         if updated is None:
             raise NotFoundException("Asset not found")
+        if location_label:
+            persisted = self._persist_registration_location(
+                ctx,
+                asset_id=updated.id,
+                branch_id=updated.branch_id,
+                company_id=updated.company_id,
+                location_label=location_label,
+            )
+            if persisted:
+                object.__setattr__(updated, "current_location_label", persisted)
         self._audit.log_entity_change(
             tenant_id=ctx.tenant_id,
             entity_name=ENTITY_AST_ASSET,

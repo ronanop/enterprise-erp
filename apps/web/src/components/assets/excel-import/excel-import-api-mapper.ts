@@ -23,9 +23,14 @@ export type AssetExcelImportApiRow = {
   department_id?: string | null;
   asset_category_id?: string | null;
   serial_number?: string | null;
+  make?: string | null;
+  model?: string | null;
+  configuration?: string | null;
+  location_label?: string | null;
   issue_date?: string | null;
   delivery_reference_number?: string | null;
   delivery_reference_status?: string | null;
+  delivery_challan_signature_status?: string | null;
   assignment_remarks?: string | null;
 };
 
@@ -105,9 +110,14 @@ export function buildImportPayloadRows(
       department_id: resolveId(lookups.departmentsByLabel, row.values.department),
       asset_category_id: resolveId(lookups.categoriesByLabel, row.values.category),
       serial_number: (row.values.serialNumber ?? "").trim() || null,
+      make: (row.values.manufacturer ?? "").trim() || null,
+      model: (row.values.model ?? "").trim() || null,
+      configuration: (row.values.configuration ?? "").trim() || null,
+      location_label: (row.values.location ?? "").trim() || null,
       issue_date: issue.ok && issue.iso ? issue.iso : null,
       delivery_reference_number: (row.values.deliveryReference ?? "").trim() || null,
       delivery_reference_status: (row.values.deliveryStatus ?? "").trim() || null,
+      delivery_challan_signature_status: (row.values.deliverySignature ?? "").trim() || null,
       assignment_remarks: (row.values.assignmentRemarks ?? "").trim() || null,
     });
   }

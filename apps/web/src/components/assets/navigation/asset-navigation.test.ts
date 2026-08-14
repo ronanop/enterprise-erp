@@ -54,6 +54,9 @@ describe("createAssetNavigation", () => {
     nav.openMaintenance("a1");
     expect(push).toHaveBeenCalledWith(expect.stringContaining("/assets/asset-maintenances"));
 
+    nav.openDisposal("a1");
+    expect(push).toHaveBeenCalledWith(expect.stringContaining("/assets/asset-disposals"));
+
     nav.openHistory("a1");
     expect(push).toHaveBeenCalledWith(expect.stringContaining("tab=activity"));
   });

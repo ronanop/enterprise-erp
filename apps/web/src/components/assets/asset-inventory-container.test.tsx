@@ -31,13 +31,34 @@ vi.mock("@/services/assets-service", async (importOriginal) => {
     assetCategoryService: {
       search: vi.fn().mockResolvedValue({ items: [] }),
     },
+    assetLocationService: {
+      search: vi.fn().mockResolvedValue({ items: [], total: 0, page: 1, page_size: 200 }),
+    },
+    componentService: {
+      ...actual.componentService,
+      search: vi.fn().mockResolvedValue({ items: [], total: 0, page: 1, page_size: 100 }),
+    },
   };
 });
 
 vi.mock("@/lib/org-options", () => ({
   listBranchOptions: vi.fn().mockResolvedValue([{ id: "b1", label: "Noida" }]),
   listDepartmentOptions: vi.fn().mockResolvedValue([{ id: "d1", label: "IT" }]),
+  listLocationOptions: vi.fn().mockResolvedValue([{ id: "loc1", label: "Floor 3" }]),
   listEmployeeOptions: vi.fn().mockResolvedValue([{ id: "e1", label: "Asha Nair (EMP-001)" }]),
+  listEmployeeDirectory: vi.fn().mockResolvedValue([
+    {
+      id: "e1",
+      label: "Asha Nair (EMP-001)",
+      displayName: "Asha Nair",
+      employeeCode: "EMP-001",
+      mobile: "9000000001",
+    },
+  ]),
+  employeeLabelsFromDirectory: (entries: Array<{ id: string; label: string }>) =>
+    Object.fromEntries(entries.map((e) => [e.id, e.label])),
+  employeeDirectoryById: (entries: Array<{ id: string }>) =>
+    Object.fromEntries(entries.map((e) => [e.id, e])),
 }));
 
 const assetItem = {
@@ -67,7 +88,7 @@ beforeEach(() => {
       items: [],
       total: 0,
       page: 1,
-      page_size: 500,
+      page_size: 200,
     }),
   );
 });
@@ -84,7 +105,7 @@ describe("fetchInventoryPage", () => {
       items: [],
       total: 0,
       page: 1,
-      page_size: 500,
+      page_size: 200,
     });
     await fetchInventoryPage({
       preset: "ready",
@@ -94,7 +115,9 @@ describe("fetchInventoryPage", () => {
       deps: { listAssets, listAssignments },
     });
     expect(listAssets).toHaveBeenCalledOnce();
-    expect(listAssignments).toHaveBeenCalledOnce();
+    expect(listAssignments).toHaveBeenCalledWith(
+      expect.objectContaining({ page: 1, page_size: 200 }),
+    );
   });
 
   it("uses assetOperationsService when deps omitted", async () => {
@@ -145,9 +168,11 @@ describe("AssetInventoryContainer", () => {
 
   it("retries after error", async () => {
     const user = userEvent.setup();
-    vi.mocked(assetOperationsService.listAssets).mockRejectedValueOnce(new Error("fail"));
+    vi.mocked(assetOperationsService.listAssets).mockRejectedValue(new Error("fail"));
     render(<AssetInventoryContainer />);
-    await waitFor(() => screen.getByRole("button", { name: "Retry" }));
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Retry" })).toBeInTheDocument();
+    });
     vi.mocked(assetOperationsService.listAssets).mockImplementation(() =>
       Promise.resolve({
         items: [assetItem],

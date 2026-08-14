@@ -18,13 +18,18 @@ import {
   buildRegisterParityExpandable,
   deriveEarlierUsedBy,
   formatDeliveryChallanDisplay,
+  formatDeliveryChallanSignatureStatus,
+  formatDeliveryChallanSummary,
   formatDeliveryReferenceStatus,
   formatAssignmentRemarksDisplay,
+  formatIssuedDate,
   groupAssignmentsByAssetId,
   mapAssignmentHistoryEntries,
   pickLatestReturnedAssignment,
   pickRegisterAssignment,
   resolveAssigneeLabel,
+  resolveEmployeeCode,
+  resolveEmployeeMobile,
 } from "@/components/assets/inventory/register-parity";
 
 afterEach(() => cleanup());
@@ -32,6 +37,27 @@ afterEach(() => cleanup());
 const employeeLabels = {
   "emp-old": "Priya Sharma (EMP-004)",
   "emp-new": "Asha Nair (EMP-001)",
+};
+
+const employeeLookup = {
+  "emp-old": {
+    label: "Priya Sharma (EMP-004)",
+    displayName: "Priya Sharma",
+    employeeCode: "EMP-004",
+    mobile: "9876543210",
+  },
+  "emp-new": {
+    label: "Asha Nair (EMP-001)",
+    displayName: "Asha Nair",
+    employeeCode: "EMP-001",
+    mobile: "9123456789",
+  },
+  "emp-blank-phone": {
+    label: "No Phone (EMP-009)",
+    displayName: "No Phone",
+    employeeCode: "EMP-009",
+    mobile: "   ",
+  },
 };
 
 const historyWithReturnAndActive = [
@@ -57,6 +83,7 @@ const historyWithReturnAndActive = [
     allocated_at: "2026-01-01T00:00:00Z",
     delivery_reference_number: "DR-42",
     delivery_reference_status: "issued",
+    delivery_challan_signature_status: "signed",
     assignment_remarks: "[Issued: Keyboard] Handle carefully",
     return_remarks: null,
   },
@@ -110,6 +137,21 @@ describe("delivery reference formatting", () => {
 
   it("falls back to status label when number missing", () => {
     expect(formatDeliveryChallanDisplay("", "pending")).toBe("Pending");
+  });
+
+  it("formats signature statuses and defaults missing to Not Signed", () => {
+    expect(formatDeliveryChallanSignatureStatus("signed")).toBe("Signed");
+    expect(formatDeliveryChallanSignatureStatus("not_signed")).toBe("Not Signed");
+    expect(formatDeliveryChallanSignatureStatus(null)).toBe("Not Signed");
+  });
+
+  it("builds compact DC summary", () => {
+    expect(formatDeliveryChallanSummary("DC-1", "issued", "signed")).toBe(
+      "DC-1 · Issued · Signed",
+    );
+    expect(formatDeliveryChallanSummary("DC-2", "pending", null)).toBe(
+      "DC-2 · Pending · Not Signed",
+    );
   });
 });
 
@@ -252,9 +294,35 @@ describe("buildRegisterParityExpandable", () => {
     expect(exp.earlierUsedBy).toBe("Priya Sharma (EMP-004)");
     expect(exp.deliveryChallan).toBe("DR-42");
     expect(exp.deliveryReferenceStatus).toBe("Issued");
+    expect(exp.deliverySignature).toBe("Signed");
+    expect(exp.deliveryChallanSummary).toBe("DR-42 · Issued · Signed");
     expect(exp.assignmentRemarks).toBe("Handle carefully");
     expect(exp.returnRemarks).toBe("screen scratch");
     expect(exp.remarks).toBe("Handle carefully");
+  });
+
+  it("resolves phone from active employee mobile", () => {
+    const exp = buildRegisterParityExpandable(historyWithReturnAndActive, employeeLookup);
+    expect(exp.phoneNumber).toBe("9123456789");
+    expect(exp.earlierUsedBy).toBe("Priya Sharma (EMP-004)");
+  });
+
+  it("phone is dash when no active assignment", () => {
+    const returnedOnly = [historyWithReturnAndActive[0]];
+    const exp = buildRegisterParityExpandable(returnedOnly, employeeLookup);
+    expect(exp.phoneNumber).toBe("—");
+    expect(exp.earlierUsedBy).toBe("Priya Sharma (EMP-004)");
+  });
+
+  it("phone is dash when mobile missing or blank", () => {
+    const history = [
+      {
+        ...historyWithReturnAndActive[1],
+        employee_id: "emp-blank-phone",
+      },
+    ];
+    expect(buildRegisterParityExpandable(history, employeeLookup).phoneNumber).toBe("—");
+    expect(buildRegisterParityExpandable(history, {}).phoneNumber).toBe("—");
   });
 
   it("empty history yields dashes", () => {
@@ -263,6 +331,23 @@ describe("buildRegisterParityExpandable", () => {
     expect(exp.deliveryChallan).toBe("—");
     expect(exp.assignmentRemarks).toBe("—");
     expect(exp.returnRemarks).toBe("—");
+    expect(exp.phoneNumber).toBe("—");
+  });
+});
+
+describe("resolveEmployeeCode / mobile / issued date", () => {
+  it("resolves employee_code and mobile", () => {
+    expect(resolveEmployeeCode("emp-new", employeeLookup)).toBe("EMP-001");
+    expect(resolveEmployeeMobile("emp-new", employeeLookup)).toBe("9123456789");
+    expect(resolveEmployeeCode("missing", employeeLookup)).toBe("—");
+    expect(resolveEmployeeMobile("missing", employeeLookup)).toBe("—");
+    expect(resolveEmployeeMobile(null, employeeLookup)).toBe("—");
+  });
+
+  it("formats issued date from allocated_at", () => {
+    expect(formatIssuedDate("2026-01-01T00:00:00Z")).toContain("2026");
+    expect(formatIssuedDate(null)).toBe("—");
+    expect(formatIssuedDate("  ")).toBe("—");
   });
 });
 
@@ -300,15 +385,45 @@ describe("mapAssetToInventoryRow register parity", () => {
           ["asset-1", historyWithReturnAndActive[1] as never],
         ]),
         assignmentHistoryByAssetId: new Map([["asset-1", historyWithReturnAndActive]]),
-        employeeLabels,
+        employeeLookup,
       },
     );
     expect(row.expandable.earlierUsedBy).toBe("Priya Sharma (EMP-004)");
     expect(row.expandable.deliveryChallan).toBe("DR-42");
     expect(row.expandable.assignmentRemarks).toBe("Handle carefully");
     expect(row.expandable.returnRemarks).toBe("screen scratch");
+    expect(row.expandable.phoneNumber).toBe("9123456789");
+    expect(row.employeeId).toBe("EMP-001");
+    expect(row.issueDate).toContain("2026");
     expect(row.assignmentHistory.length).toBe(2);
     expect(row.currentHolder).toContain("Asha");
+  });
+
+  it("no active assignment clears assignee phone and issued date", () => {
+    const row = mapAssetToInventoryRow(
+      {
+        id: "asset-1",
+        asset_code: "AST-1",
+        asset_name: "Laptop",
+        operational_status: "READY_TO_MOVE",
+      },
+      {
+        branchLabels: {},
+        departmentLabels: {},
+        categoryLabels: {},
+        locationLabels: {},
+        assignmentsByAssetId: new Map(),
+        assignmentHistoryByAssetId: new Map([
+          ["asset-1", [historyWithReturnAndActive[0]]],
+        ]),
+        employeeLookup,
+      },
+    );
+    expect(row.currentHolder).toBe("—");
+    expect(row.employeeId).toBe("—");
+    expect(row.issueDate).toBe("—");
+    expect(row.expandable.phoneNumber).toBe("—");
+    expect(row.expandable.earlierUsedBy).toBe("Priya Sharma (EMP-004)");
   });
 
   it("inventory row keys cover register parity map", () => {
@@ -331,7 +446,7 @@ describe("mapAssetToInventoryRow register parity", () => {
       "model",
       "configuration",
       "issueDate",
-      "branch",
+      "location",
       "expandable.earlierUsedBy",
       "expandable.deliveryChallan",
       "expandable.assignmentRemarks",
@@ -350,6 +465,7 @@ function sampleRow(overrides: Partial<InventoryRowViewModel> = {}): InventoryRow
     id: "1",
     assetTag: "AST-9",
     laptopName: "Mac",
+    serialNumber: "SN-1",
     manufacturer: "Apple",
     model: "M3",
     configuration: "16GB",
@@ -504,10 +620,15 @@ describe("AssetDetailDrawer register parity rendering", () => {
 
   it("renders earlier used by, delivery, remarks, history", () => {
     render(<AssetDetailDrawer open onOpenChange={() => undefined} data={data} />);
-    expect(screen.getByTestId("drawer-earlier-used-by")).toHaveTextContent("Priya");
-    expect(screen.getByTestId("drawer-delivery-reference")).toHaveTextContent("DR-42");
-    expect(screen.getByTestId("drawer-assignment-remarks")).toHaveTextContent("Handle carefully");
-    expect(screen.getByTestId("drawer-return-remarks")).toHaveTextContent("screen scratch");
+    expect(screen.getByTestId("inventory-expandable-earlier-used")).toHaveTextContent("Priya");
+    expect(screen.getByTestId("inventory-expandable-dc-number")).toHaveTextContent("DR-42");
+    expect(screen.getByTestId("inventory-expandable-dc-status")).toHaveTextContent("Issued");
+    expect(screen.getByTestId("inventory-expandable-assignment-remarks")).toHaveTextContent(
+      "Handle carefully",
+    );
+    expect(screen.getByTestId("inventory-expandable-return-remarks")).toHaveTextContent(
+      "screen scratch",
+    );
     expect(screen.getByTestId("drawer-assignment-history")).toBeInTheDocument();
     expect(screen.getByText("Assignment history")).toBeInTheDocument();
   });

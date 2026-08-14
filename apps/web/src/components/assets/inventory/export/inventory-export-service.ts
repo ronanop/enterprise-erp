@@ -6,7 +6,6 @@
  */
 
 import {
-  applyClientInventoryFilters,
   buildInventoryListQuery,
   groupAssignmentsByAssetId,
   indexActiveAssignments,
@@ -60,7 +59,8 @@ export type ExportInventoryRegisterInput = {
   };
 };
 
-async function fetchAllAssignmentPages(
+/** Paginate assignments within the API `page_size` cap (200). */
+export async function fetchAllAssignmentPages(
   listAssignments: InventoryExportListAssignments,
   branch_id: string | undefined,
 ): Promise<AssetsRow[]> {
@@ -86,8 +86,7 @@ async function fetchAllAssignmentPages(
 
 /**
  * Fetches every asset page matching server-side inventory filters, then applies
- * the same client-side filters as the inventory workspace.
- *
+ * Phase 5F: filters are applied server-side via GET /assets query params.
  * Pagination note: asset module caps `page_size` at 200 — no new API; we loop pages.
  */
 export async function fetchAllInventoryRowsForExport(input: {
@@ -161,7 +160,7 @@ export async function fetchAllInventoryRowsForExport(input: {
   }
 
   const mapped = mapAssetsToInventoryRows(allAssets, lookupCtx);
-  return applyClientInventoryFilters(mapped, input.filters, allAssets);
+  return mapped;
 }
 
 export async function exportInventoryRegister(

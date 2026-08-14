@@ -22,6 +22,10 @@ export const assetNavigationPaths = {
     `/assets/asset-transfers?assetId=${encodeURIComponent(assetId)}`,
   maintenance: (assetId: string) =>
     `/assets/asset-maintenances?assetId=${encodeURIComponent(assetId)}`,
+  disposal: (assetId?: string) =>
+    assetId
+      ? `/assets/asset-disposals?assetId=${encodeURIComponent(assetId)}`
+      : "/assets/asset-disposals",
   history: (assetId: string) =>
     `/assets/assets/${encodeURIComponent(assetId)}?tab=activity`,
 } as const;
@@ -38,6 +42,7 @@ export type AssetNavigation = {
   openQr: (assetId: string) => void;
   openTransfer: (assetId: string) => void;
   openMaintenance: (assetId: string) => void;
+  openDisposal: (assetId?: string) => void;
   openHistory: (assetId: string) => void;
 };
 
@@ -52,6 +57,7 @@ export function createAssetNavigation(push: AssetNavigateFn): AssetNavigation {
     openQr: (assetId) => push(assetNavigationPaths.qr(assetId)),
     openTransfer: (assetId) => push(assetNavigationPaths.transfer(assetId)),
     openMaintenance: (assetId) => push(assetNavigationPaths.maintenance(assetId)),
+    openDisposal: (assetId) => push(assetNavigationPaths.disposal(assetId)),
     openHistory: (assetId) => push(assetNavigationPaths.history(assetId)),
   };
 }
@@ -85,6 +91,12 @@ export function dispatchInventoryMenuAction(
       break;
     case "maintenance":
       navigation.openMaintenance(assetId);
+      break;
+    case "startDisposal":
+      // Handled by inventory container (confirm + API) before navigating to disposal.
+      break;
+    case "reinstate":
+      // Handled by inventory container (confirm + API).
       break;
     case "history":
       navigation.openHistory(assetId);

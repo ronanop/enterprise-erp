@@ -39,30 +39,92 @@ class AssetComponentService:
         *,
         company_id: UUID | None = None,
         asset_id: UUID | None = None,
+        asset_ids: list[UUID] | None = None,
         status: str | None = None,
         product_id: UUID | None = None,
         branch_id: UUID | None = None,
+        component_type: str | None = None,
         search: str | None = None,
         sort: str = "created_at",
         offset: int = 0,
         limit: int = 25,
-    ) -> tuple[list[AstAssetComponent], int]:
+        include_availability: bool = False,
+    ) -> tuple[list[AstAssetComponent] | list[dict], int]:
         cid = self._scope.resolve_company_id(ctx, company_id)
         if sort not in {"created_at", "component_code", "component_name"}:
             sort = "created_at"
-        return self._repo.search(
-            ctx,
-            AssetComponentListFilters(
-                company_id=cid,
-                asset_id=asset_id,
-                status=status,
-                product_id=product_id,
-                branch_id=branch_id,
-                search=search,
-                sort=sort,
-            ),
-            offset=offset,
-            limit=limit,
+        if asset_ids:
+            rows = self._repo.list_by_asset_ids(
+                ctx, company_id=cid, asset_ids=asset_ids, status=status
+            )
+            if component_type:
+                rows = [r for r in rows if getattr(r, "component_type", None) == component_type]
+            total = len(rows)
+            rows = rows[offset : offset + limit]
+        else:
+            rows, total = self._repo.search(
+                ctx,
+                AssetComponentListFilters(
+                    company_id=cid,
+                    asset_id=asset_id,
+                    status=status,
+                    product_id=product_id,
+                    branch_id=branch_id,
+                    search=search,
+                    sort=sort,
+                ),
+                offset=offset,
+                limit=limit,
+            )
+            if component_type:
+                # Prefer DB filter when single asset_id path — apply post-filter for now
+                rows = [r for r in rows if getattr(r, "component_type", None) == component_type]
+                # total may be approximate when type filter applied without recount
+        if not include_availability:
+            return rows, total
+        from modules.asset.repository.assignment_component_repository import (
+            AssignmentComponentRepository,
+        )
+
+        ac_repo = AssignmentComponentRepository(self._repo.db)
+        blocked = ac_repo.list_blocking_component_ids(
+            ctx, component_ids=[r.id for r in rows]
+        )
+        enriched = []
+        for r in rows:
+            availability = "unavailable" if r.id in blocked else "available"
+            if r.status != AssetComponentStatus.ACTIVE.value:
+                availability = "unavailable"
+            enriched.append(
+                {
+                    "id": r.id,
+                    "branch_id": r.branch_id,
+                    "asset_id": r.asset_id,
+                    "component_code": r.component_code,
+                    "component_name": r.component_name,
+                    "component_type": getattr(r, "component_type", "OTHER"),
+                    "product_id": r.product_id,
+                    "serial_number": r.serial_number,
+                    "quantity": r.quantity,
+                    "status": r.status,
+                    "company_id": r.company_id,
+                    "version": int(r.version or 1),
+                    "availability": availability,
+                }
+            )
+        return enriched, total
+
+    def list_for_assets(
+        self,
+        ctx: TenantContext,
+        *,
+        company_id: UUID | None = None,
+        asset_ids: list[UUID],
+        status: str | None = "active",
+    ) -> list[AstAssetComponent]:
+        cid = self._scope.resolve_company_id(ctx, company_id)
+        return self._repo.list_by_asset_ids(
+            ctx, company_id=cid, asset_ids=asset_ids, status=status
         )
 
     def list(self, ctx: TenantContext, company_id: UUID | None = None):
@@ -96,6 +158,7 @@ class AssetComponentService:
                     "id": str(c.id),
                     "component_code": c.component_code,
                     "component_name": c.component_name,
+                    "component_type": getattr(c, "component_type", "OTHER"),
                     "serial_number": c.serial_number,
                     "quantity": str(c.quantity) if c.quantity is not None else None,
                     "status": c.status,
@@ -147,6 +210,7 @@ class AssetComponentService:
             asset_id=fields["asset_id"],
             component_code=fields["component_code"],
             component_name=fields["component_name"],
+            component_type=fields.get("component_type", "OTHER"),
             product_id=fields.get("product_id"),
             serial_number=fields.get("serial_number"),
             quantity=fields.get("quantity"),
@@ -183,6 +247,7 @@ class AssetComponentService:
             in {
                 "branch_id",
                 "component_name",
+                "component_type",
                 "product_id",
                 "serial_number",
                 "quantity",
@@ -228,6 +293,9 @@ class AssetComponentService:
             asset_id=row.asset_id,
             component_code=fields["component_code"],
             component_name=fields["component_name"],
+            component_type=fields.get(
+                "component_type", getattr(row, "component_type", "OTHER")
+            ),
             product_id=fields.get("product_id"),
             serial_number=fields.get("serial_number"),
             quantity=fields.get("quantity"),

@@ -44,14 +44,14 @@ export function SummarySection({
         <Field label="Laptop name">{laptopName}</Field>
         <Field label="Current holder">{currentHolder}</Field>
         <Field label="Branch">{branch}</Field>
-        <Field label="Operational status">
+        <Field label="Operational Status">
           {isOperationalStatus(operationalStatus) ? (
             <StatusBadge kind="operational" status={operationalStatus} />
           ) : (
             operationalStatus
           )}
         </Field>
-        <Field label="Lifecycle">
+        <Field label="Lifecycle Status">
           <StatusBadge kind="lifecycle" status={lifecycleStatus} />
         </Field>
       </dl>

@@ -6,7 +6,12 @@
  */
 
 import { ApiClientError, resourceService } from "@/services/api-client";
-import { assetOperationsService, type AssetsRow } from "@/services/assets-service";
+import {
+  assetOperationsService,
+  componentService,
+  componentTypeLabel,
+  type AssetsRow,
+} from "@/services/assets-service";
 import type {
   AssignmentApiRow,
   WizardAssetOption,
@@ -17,10 +22,10 @@ import {
   wizardStateToCreateBody,
   wizardStateToUpdateBody,
 } from "@/components/assets/assignment-wizard/assignment-wizard-mapper";
+import { isAssignmentEligibleAsset } from "@/components/assets/shared/asset-status";
 
 const API_ASSIGNMENTS = "/assets/asset-assignments";
 const API_ASSETS = "/assets/assets";
-const API_COMPONENTS = "/assets/asset-components";
 
 // ---------------------------------------------------------------------------
 // Types (aligned with backend AssetAssignment* DTOs)
@@ -37,7 +42,9 @@ export type AssignmentDraft = {
   expected_return_at?: string | null;
   delivery_reference_number?: string | null;
   delivery_reference_status?: string | null;
+  delivery_challan_signature_status?: string | null;
   assignment_remarks?: string | null;
+  component_ids?: string[];
   /** Required on update (optimistic concurrency). */
   version?: number;
 };
@@ -57,6 +64,7 @@ export type AssignmentResponse = {
   status: string;
   delivery_reference_number?: string | null;
   delivery_reference_status: string;
+  delivery_challan_signature_status?: string | null;
   assignment_remarks?: string | null;
   return_remarks?: string | null;
   workflow_status?: string | null;
@@ -65,6 +73,7 @@ export type AssignmentResponse = {
   branch_id: string;
   version: number;
   created_by?: string | null;
+  component_ids?: string[] | null;
 };
 
 /** Return action body (maps to AssetAssignmentReturnRequest). */
@@ -72,6 +81,11 @@ export type AssignmentReturnRequest = {
   return_condition: string;
   reason?: string | null;
   return_remarks?: string | null;
+  component_returns?: Array<{
+    component_id: string;
+    issue_status: string;
+    return_remarks?: string | null;
+  }>;
 };
 
 /** Normalized assignment API failure. */
@@ -234,12 +248,13 @@ export const assignmentFrontendService = {
     return withAssignmentErrors(async () => {
       const list = await assetOperationsService.listAssets({
         operational_status: "READY_TO_MOVE",
-        status: "active",
         page: 1,
         page_size: params.page_size ?? 100,
         branch_id: params.branch_id,
       });
-      return (list.items ?? []).map(assetRowToWizardAsset);
+      return (list.items ?? [])
+        .filter((row) => isAssignmentEligibleAsset(row))
+        .map(assetRowToWizardAsset);
     }, "Failed to list ready assets.");
   },
 
@@ -252,24 +267,34 @@ export const assignmentFrontendService = {
 
   async listComponents(assetId: string): Promise<WizardIssuedItemOption[]> {
     return withAssignmentErrors(async () => {
-      type ComponentRow = {
-        id: string;
-        component_code?: string;
-        description?: string;
-        current_status?: string;
-      };
-      const res = await resourceService.list<Paginated<ComponentRow>>(API_COMPONENTS, {
+      const page = await componentService.search({
         asset_id: assetId,
+        status: "active",
         page: 1,
         page_size: 100,
+        include_availability: true,
       });
-      const page = parsePaginated<ComponentRow>(res.data);
-      return page.items.map((row) => ({
-        id: row.id,
-        label: row.description?.trim() || row.component_code || row.id.slice(0, 8),
-        status: row.current_status ?? "unknown",
-      }));
+      return page.items.map((row) => {
+        const typeLabel = componentTypeLabel(row.component_type);
+        const unavailable = row.availability === "unavailable";
+        return {
+          id: row.id,
+          label: typeLabel,
+          status: unavailable ? "Currently issued" : row.status || "active",
+          componentType: row.component_type ?? "OTHER",
+          componentName: row.component_name,
+          serialNumber: row.serial_number ?? null,
+          availability: row.availability ?? "available",
+          disabled: unavailable,
+        };
+      });
     }, "Failed to list asset components.");
+  },
+
+  async listAssignmentComponents(assignmentId: string) {
+    return withAssignmentErrors(async () => {
+      return componentService.listForAssignment(assignmentId);
+    }, "Failed to list assignment components.");
   },
 
   async findActiveAssignmentForAsset(assetId: string): Promise<AssignmentResponse | null> {
@@ -293,13 +318,22 @@ export const assignmentFrontendService = {
 function assetRowToWizardAsset(row: AssetsRow): WizardAssetOption {
   const code = String(row.asset_code ?? "");
   const name = String(row.asset_name ?? row.id);
+  const make = typeof row.make === "string" ? row.make.trim() : "";
+  const model = typeof row.model === "string" ? row.model.trim() : "";
   return {
     id: String(row.id),
     label: name,
     code,
     operationalStatus: String(row.operational_status ?? "READY_TO_MOVE"),
+    lifecycleStatus: String(row.status ?? "active"),
     branchLabel: String(row.branch_id ?? "").slice(0, 8) || "—",
     branchId: String(row.branch_id ?? ""),
+    serialNumber:
+      typeof row.serial_number === "string" && row.serial_number.trim()
+        ? row.serial_number.trim()
+        : "—",
+    make: make || "—",
+    model: model || "—",
   };
 }
 

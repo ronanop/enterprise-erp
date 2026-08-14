@@ -4,6 +4,10 @@ import { ChevronDown, ChevronRight } from "lucide-react";
 
 import type { InventoryRowViewModel } from "@/components/assets/inventory.mapper";
 import {
+  InventoryRegisterGroups,
+  inventoryRowToRegisterGroups,
+} from "@/components/assets/inventory/inventory-register-groups";
+import {
   AssetDetailDrawer,
   InventoryActionMenu,
   inventoryRowToAssetRef,
@@ -15,6 +19,7 @@ import type { AssetDetailDrawerData } from "@/components/assets/inventory/intera
 import {
   INVENTORY_PRESETS,
   PRESET_EMPTY_COPY,
+  PRESET_OPERATIONAL_STATUS,
   type InventoryPresetId,
 } from "@/components/assets/inventory.types";
 import {
@@ -33,7 +38,24 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
+import { applyOperationalGatesToInventoryPermissions } from "@/components/assets/navigation/inventory-permissions";
 import { isOperationalStatus } from "@/components/assets/shared/asset-status";
+import { BRANCH_ALL_VALUE } from "@/components/assets/shared";
+
+function hasActiveInventoryFilters(
+  filters: InventoryFilterValues,
+  quickSearch: string,
+  preset: InventoryPresetId,
+): boolean {
+  if (quickSearch.trim() || filters.search.trim()) return true;
+  if (filters.lifecycleStatus || filters.categoryId || filters.departmentId) return true;
+  if (filters.assetType || filters.assignmentState) return true;
+  if (filters.branchId && filters.branchId !== BRANCH_ALL_VALUE) return true;
+  if (filters.locationId && filters.locationId !== BRANCH_ALL_VALUE) return true;
+  const presetOps = PRESET_OPERATIONAL_STATUS[preset] ?? "";
+  const effectiveOps = filters.operationalStatus || presetOps;
+  return effectiveOps !== presetOps;
+}
 
 export type AssetInventoryWorkspaceProps = {
   preset: InventoryPresetId;
@@ -45,6 +67,7 @@ export type AssetInventoryWorkspaceProps = {
   onQuickSearchChange: (value: string) => void;
   onQuickSearchSubmit: () => void;
   draftFilters: InventoryFilterValues;
+  appliedFilters?: InventoryFilterValues;
   onDraftFiltersChange: (patch: Partial<InventoryFilterValues>) => void;
   onApplyFilters: () => void;
   onResetFilters: () => void;
@@ -78,19 +101,16 @@ export type AssetInventoryWorkspaceProps = {
 };
 
 const TABLE_COLUMNS = [
-  "Asset Tag",
-  "Laptop Name",
-  "Manufacturer",
+  "Asset Code",
+  "Asset Name",
+  "S/N",
+  "Make",
   "Model",
-  "Configuration",
-  "Current Holder",
+  "Assignee",
   "Employee ID",
-  "Department",
-  "Branch",
   "Operational Status",
-  "Lifecycle Status",
-  "Issue Date",
   "Location",
+  "Issue Date",
 ] as const;
 
 export function AssetInventoryWorkspace({
@@ -103,6 +123,7 @@ export function AssetInventoryWorkspace({
   onQuickSearchChange,
   onQuickSearchSubmit,
   draftFilters,
+  appliedFilters,
   onDraftFiltersChange,
   onApplyFilters,
   onResetFilters,
@@ -136,6 +157,20 @@ export function AssetInventoryWorkspace({
 }: AssetInventoryWorkspaceProps) {
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
   const emptyCopy = PRESET_EMPTY_COPY[preset];
+  const filtersActive = hasActiveInventoryFilters(
+    appliedFilters ?? draftFilters,
+    quickSearch,
+    preset,
+  );
+  const emptyTitle =
+    filtersActive || total === 0
+      ? filtersActive
+        ? "No assets match your current search or filters."
+        : emptyCopy.title
+      : emptyCopy.title;
+  const emptyDescription = filtersActive
+    ? "Try clearing filters or adjusting your search."
+    : emptyCopy.description;
 
   return (
     <div className="space-y-6" data-testid="asset-inventory-workspace">
@@ -266,11 +301,26 @@ export function AssetInventoryWorkspace({
             ) : rows.length === 0 ? (
               <tr>
                 <td colSpan={TABLE_COLUMNS.length + 2} className="p-6">
-                  <EmptyState
-                    variant="no-results"
-                    title={emptyCopy.title}
-                    description={emptyCopy.description}
-                  />
+                  <div className="space-y-3">
+                    <EmptyState
+                      variant="no-results"
+                      title={emptyTitle}
+                      description={emptyDescription}
+                    />
+                    {filtersActive ? (
+                      <div className="flex justify-center">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="cursor-pointer"
+                          onClick={onResetFilters}
+                        >
+                          Clear filters
+                        </Button>
+                      </div>
+                    ) : null}
+                  </div>
                 </td>
               </tr>
             ) : (
@@ -298,11 +348,26 @@ export function AssetInventoryWorkspace({
         {loading ? (
           <TableRowsSkeleton rows={4} />
         ) : rows.length === 0 ? (
-          <EmptyState
-            variant="no-results"
-            title={emptyCopy.title}
-            description={emptyCopy.description}
-          />
+          <div className="space-y-3">
+            <EmptyState
+              variant="no-results"
+              title={emptyTitle}
+              description={emptyDescription}
+            />
+            {filtersActive ? (
+              <div className="flex justify-center">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="cursor-pointer"
+                  onClick={onResetFilters}
+                >
+                  Clear filters
+                </Button>
+              </div>
+            ) : null}
+          </div>
         ) : (
           rows.map((row) => (
             <InventoryMobileCard
@@ -376,6 +441,23 @@ function InventoryTableRow({
   onMenuAction?: (action: InventoryMenuActionId, row: InventoryRowViewModel) => void;
 }) {
   const asset = inventoryRowToAssetRef(row);
+  const rowPermissions = applyOperationalGatesToInventoryPermissions(
+    {
+      viewDetails: true,
+      assign: true,
+      return: true,
+      portal: true,
+      discovery: true,
+      qr: true,
+      transfer: true,
+      maintenance: true,
+      startDisposal: true,
+      reinstate: true,
+      history: true,
+      ...actionPermissions,
+    },
+    row.operationalStatus,
+  );
   const opsBadge = isOperationalStatus(row.operationalStatus) ? (
     <StatusBadge kind="operational" status={row.operationalStatus} />
   ) : (
@@ -398,25 +480,18 @@ function InventoryTableRow({
         </td>
         <td className="px-2 py-2 font-mono text-xs">{row.assetTag}</td>
         <td className="px-2 py-2 font-medium">{row.laptopName}</td>
+        <td className="px-2 py-2 font-mono text-xs">{row.serialNumber}</td>
         <td className="px-2 py-2">{row.manufacturer}</td>
         <td className="px-2 py-2">{row.model}</td>
-        <td className="max-w-[160px] truncate px-2 py-2 text-muted-foreground" title={row.configuration}>
-          {row.configuration}
-        </td>
         <td className="px-2 py-2">{row.currentHolder}</td>
         <td className="px-2 py-2 font-mono text-xs">{row.employeeId}</td>
-        <td className="px-2 py-2">{row.department}</td>
-        <td className="px-2 py-2">{row.branch}</td>
         <td className="px-2 py-2">{opsBadge}</td>
-        <td className="px-2 py-2">
-          <StatusBadge kind="lifecycle" status={row.lifecycleStatus} />
-        </td>
-        <td className="px-2 py-2 whitespace-nowrap">{row.issueDate}</td>
         <td className="px-2 py-2">{row.location}</td>
+        <td className="px-2 py-2 whitespace-nowrap">{row.issueDate}</td>
         <td className="px-2 py-2 text-right">
           <InventoryActionMenu
             asset={asset}
-            permissions={actionPermissions}
+            permissions={rowPermissions}
             onView={() => onViewRow?.(row)}
             onMenuAction={(action, a) => onMenuAction?.(action, row)}
           />
@@ -424,33 +499,8 @@ function InventoryTableRow({
       </tr>
       {expanded ? (
         <tr className="border-t border-border/40 bg-muted/10">
-          <td colSpan={TABLE_COLUMNS.length + 2} className="px-4 py-3 text-xs text-muted-foreground">
-            <dl className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3" data-testid="inventory-expandable-register">
-              <div>
-                <dt className="font-medium text-foreground">Earlier Used By</dt>
-                <dd>{row.expandable.earlierUsedBy}</dd>
-              </div>
-              <div>
-                <dt className="font-medium text-foreground">Delivery Reference</dt>
-                <dd>{row.expandable.deliveryChallan}</dd>
-              </div>
-              <div>
-                <dt className="font-medium text-foreground">Delivery Status</dt>
-                <dd>{row.expandable.deliveryReferenceStatus}</dd>
-              </div>
-              <div>
-                <dt className="font-medium text-foreground">Phone Number</dt>
-                <dd>{row.expandable.phoneNumber}</dd>
-              </div>
-              <div>
-                <dt className="font-medium text-foreground">Assignment Remarks</dt>
-                <dd className="whitespace-pre-wrap">{row.expandable.assignmentRemarks}</dd>
-              </div>
-              <div>
-                <dt className="font-medium text-foreground">Return Remarks</dt>
-                <dd className="whitespace-pre-wrap">{row.expandable.returnRemarks}</dd>
-              </div>
-            </dl>
+          <td colSpan={TABLE_COLUMNS.length + 2} className="px-4 py-3">
+            <InventoryRegisterGroups model={inventoryRowToRegisterGroups(row)} />
           </td>
         </tr>
       ) : null}
@@ -470,6 +520,23 @@ function InventoryMobileCard({
   onMenuAction?: (action: InventoryMenuActionId, row: InventoryRowViewModel) => void;
 }) {
   const asset = inventoryRowToAssetRef(row);
+  const rowPermissions = applyOperationalGatesToInventoryPermissions(
+    {
+      viewDetails: true,
+      assign: true,
+      return: true,
+      portal: true,
+      discovery: true,
+      qr: true,
+      transfer: true,
+      maintenance: true,
+      startDisposal: true,
+      reinstate: true,
+      history: true,
+      ...actionPermissions,
+    },
+    row.operationalStatus,
+  );
   return (
     <Card className="border-border/80 shadow-sm">
       <CardContent className="space-y-2 pt-4">
@@ -486,11 +553,14 @@ function InventoryMobileCard({
           {row.manufacturer} · {row.model}
         </p>
         <p className="text-xs">
-          Holder: {row.currentHolder} · {row.branch}
+          Assignee: {row.currentHolder} · {row.employeeId}
+        </p>
+        <p className="text-xs text-muted-foreground">
+          Location: {row.location} · Issued: {row.issueDate}
         </p>
         <InventoryActionMenu
           asset={asset}
-          permissions={actionPermissions}
+          permissions={rowPermissions}
           onView={() => onViewRow?.(row)}
           onMenuAction={(action) => onMenuAction?.(action, row)}
           className="w-full justify-end"

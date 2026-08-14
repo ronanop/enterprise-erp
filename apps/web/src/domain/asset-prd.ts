@@ -105,6 +105,13 @@ export function parseDiscoveryProfile(asset: AssetsRow): DiscoveryProfile | null
 }
 
 export function brandModelLabel(asset: AssetsRow): string {
+  const make =
+    typeof asset.make === "string" && asset.make.trim() ? asset.make.trim() : null;
+  const model =
+    typeof asset.model === "string" && asset.model.trim() ? asset.model.trim() : null;
+  if (make || model) {
+    return [make, model].filter(Boolean).join(" ");
+  }
   const profile = parseDiscoveryProfile(asset);
   if (!profile) return "—";
   const parts = [profile.manufacturer, profile.model].filter(Boolean);

@@ -27,6 +27,10 @@ class AstAssetAssignment(Base, *AstTransactionMixin):
             "delivery_reference_status IN ('not_applicable','pending','issued','received')",
             name="ck_ast_asset_assignment_delivery_reference_status",
         ),
+        CheckConstraint(
+            "delivery_challan_signature_status IN ('not_signed','signed')",
+            name="ck_ast_asset_assignment_dc_signature_status",
+        ),
         {"schema": "asset"},
     )
 
@@ -69,6 +73,11 @@ class AstAssetAssignment(Base, *AstTransactionMixin):
         String(30),
         nullable=False,
         default="not_applicable",
+    )
+    delivery_challan_signature_status: Mapped[str] = mapped_column(
+        String(30),
+        nullable=False,
+        default="not_signed",
     )
     assignment_remarks: Mapped[str | None] = mapped_column(Text, nullable=True)
     return_remarks: Mapped[str | None] = mapped_column(Text, nullable=True)

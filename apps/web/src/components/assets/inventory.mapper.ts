@@ -9,10 +9,13 @@ import type { InventoryPresetId } from "@/components/assets/inventory.types";
 import { PRESET_OPERATIONAL_STATUS } from "@/components/assets/inventory.types";
 import {
   buildRegisterParityExpandable,
+  formatIssuedDate,
   groupAssignmentsByAssetId,
   mapAssignmentHistoryEntries,
   resolveAssigneeLabel,
+  resolveEmployeeCode,
   type AssignmentHistoryEntryView,
+  type EmployeeLookup,
   type RegisterAssignmentLike,
 } from "@/components/assets/inventory/register-parity";
 
@@ -25,25 +28,42 @@ export type InventoryLookupContext = {
   assignmentsByAssetId: Map<string, AssetsRow>;
   /** Full assignment history per asset (Earlier Used By, remarks, delivery). */
   assignmentHistoryByAssetId?: Map<string, RegisterAssignmentLike[]>;
-  /** Optional employee id → display label (existing /employees list). */
+  /** Active accessories keyed by asset id (batch-loaded). */
+  accessoriesByAssetId?: Map<string, InventoryAccessoryLine[]>;
+  /**
+   * Employee enrichment from GET /employees.
+   * Accepts legacy id→label map or rich { label, employeeCode, mobile }.
+   */
   employeeLabels?: Record<string, string>;
+  employeeLookup?: EmployeeLookup;
+};
+
+export type InventoryAccessoryLine = {
+  typeLabel: string;
+  serialDisplay: string;
+  componentName?: string;
+  status?: string;
 };
 
 export type InventoryExpandableFields = {
   earlierUsedBy: string;
   deliveryChallan: string;
   deliveryReferenceStatus: string;
+  deliverySignature?: string;
+  deliveryChallanSummary?: string;
   phoneNumber: string;
   /** @deprecated Prefer assignmentRemarks — kept for Excel “Remarks” label. */
   remarks: string;
   assignmentRemarks: string;
   returnRemarks: string;
+  accessories?: InventoryAccessoryLine[];
 };
 
 export type InventoryRowViewModel = {
   id: string;
   assetTag: string;
   laptopName: string;
+  serialNumber: string;
   manufacturer: string;
   model: string;
   configuration: string;
@@ -81,6 +101,10 @@ export function buildInventoryListQuery(input: {
   operational_status?: string;
   status?: string;
   asset_category_id?: string;
+  asset_type?: string;
+  department_id?: string;
+  location_id?: string;
+  assignment_state?: string;
 } {
   const branchId =
     input.headerBranchId !== BRANCH_ALL_VALUE
@@ -90,6 +114,10 @@ export function buildInventoryListQuery(input: {
         : undefined;
 
   const operational = resolveOperationalStatusForQuery(input.preset, input.filters);
+  const locationId =
+    input.filters.locationId && input.filters.locationId !== BRANCH_ALL_VALUE
+      ? input.filters.locationId
+      : undefined;
 
   return {
     page: input.page,
@@ -99,6 +127,10 @@ export function buildInventoryListQuery(input: {
     operational_status: operational,
     status: input.filters.lifecycleStatus || undefined,
     asset_category_id: input.filters.categoryId || undefined,
+    asset_type: input.filters.assetType || undefined,
+    department_id: input.filters.departmentId || undefined,
+    location_id: locationId,
+    assignment_state: input.filters.assignmentState || undefined,
   };
 }
 
@@ -125,18 +157,35 @@ function discoveryModel(asset: AssetsRow): string {
   return profile?.model?.trim() || "—";
 }
 
+export function persistedOrDiscovery(
+  persisted: unknown,
+  discoveryFallback: string,
+): string {
+  if (typeof persisted === "string" && persisted.trim()) return persisted.trim();
+  return discoveryFallback;
+}
+
+/** Shared IT registration display: persisted make/model/config with discovery fallback. */
+export function resolveItRegistrationFields(asset: AssetsRow): {
+  make: string;
+  model: string;
+  configuration: string;
+} {
+  return {
+    make: persistedOrDiscovery(asset.make, discoveryManufacturer(asset)),
+    model: persistedOrDiscovery(asset.model, discoveryModel(asset)),
+    configuration: configurationSummary(asset),
+  };
+}
+
 export function configurationSummary(asset: AssetsRow): string {
+  if (typeof asset.configuration === "string" && asset.configuration.trim()) {
+    return asset.configuration.trim();
+  }
   const profile = parseDiscoveryProfile(asset);
   if (!profile) return "—";
   const parts = [profile.cpu, profile.ram, profile.os_name].filter(Boolean);
   return parts.length ? parts.join(" · ") : "—";
-}
-
-function formatDate(value: unknown): string {
-  if (typeof value !== "string" || !value.trim()) return "—";
-  const d = new Date(value);
-  if (Number.isNaN(d.getTime())) return value;
-  return new Intl.DateTimeFormat(undefined, { dateStyle: "medium" }).format(d);
 }
 
 export function mapAssetToInventoryRow(
@@ -148,10 +197,18 @@ export function mapAssetToInventoryRow(
   const history =
     ctx.assignmentHistoryByAssetId?.get(id) ??
     (assignment ? [assignment as RegisterAssignmentLike] : []);
-  const employeeLabels = ctx.employeeLabels ?? {};
-  const expandable = buildRegisterParityExpandable(history, employeeLabels);
+  const employeeLookup: EmployeeLookup = ctx.employeeLookup ?? ctx.employeeLabels ?? {};
+  const expandable = {
+    ...buildRegisterParityExpandable(history, employeeLookup),
+    accessories: ctx.accessoriesByAssetId?.get(id) ?? [],
+  };
   const branchKey = String(asset.branch_id ?? "");
-  const deptKey = String(asset.department_id ?? "");
+  // Prefer active assignment department (custody); fall back to asset home dept.
+  const assignmentDept =
+    assignment && assignment.department_id != null
+      ? String(assignment.department_id)
+      : "";
+  const deptKey = assignmentDept || String(asset.department_id ?? "");
 
   const operational =
     typeof asset.operational_status === "string" && asset.operational_status
@@ -160,26 +217,43 @@ export function mapAssetToInventoryRow(
   const lifecycle = typeof asset.status === "string" ? asset.status : "—";
 
   const holderLabel = assignment
-    ? resolveAssigneeLabel(assignment as RegisterAssignmentLike, employeeLabels)
+    ? resolveAssigneeLabel(assignment as RegisterAssignmentLike, employeeLookup)
     : "—";
+  const employeeIdRaw = assignment?.employee_id ? String(assignment.employee_id) : "";
+  const employeeCode = employeeIdRaw
+    ? resolveEmployeeCode(employeeIdRaw, employeeLookup)
+    : "—";
+
+  const it = resolveItRegistrationFields(asset);
 
   return {
     id,
     assetTag: String(asset.asset_code ?? asset.document_number ?? "—"),
     laptopName: String(asset.asset_name ?? "—"),
-    manufacturer: discoveryManufacturer(asset),
-    model: discoveryModel(asset),
-    configuration: configurationSummary(asset),
+    serialNumber:
+      typeof asset.serial_number === "string" && asset.serial_number.trim()
+        ? asset.serial_number.trim()
+        : "—",
+    manufacturer: it.make,
+    model: it.model,
+    configuration: it.configuration,
     currentHolder: holderLabel === "—" && assignment ? "Assigned" : holderLabel,
-    employeeId: assignment?.employee_id ? String(assignment.employee_id) : "—",
+    // Prefer employee_code; do not show raw UUID when code is unavailable.
+    employeeId: employeeCode,
     department: ctx.departmentLabels[deptKey] ?? (deptKey ? deptKey.slice(0, 8) : "—"),
     branch: ctx.branchLabels[branchKey] ?? (branchKey ? branchKey.slice(0, 8) : "—"),
     operationalStatus: operational,
     lifecycleStatus: lifecycle,
-    issueDate: formatDate(assignment?.allocated_at ?? assignment?.created_at),
-    location: ctx.locationLabels[branchKey] ?? ctx.branchLabels[branchKey] ?? "—",
+    // Issued Date = allocated_at only (system set on activation).
+    issueDate: assignment
+      ? formatIssuedDate(
+          typeof assignment.allocated_at === "string" ? assignment.allocated_at : null,
+        )
+      : "—",
+    // Prefer current ast_asset_location keyed by asset id — never fake with branch.
+    location: ctx.locationLabels[id] ?? "—",
     expandable,
-    assignmentHistory: mapAssignmentHistoryEntries(history, employeeLabels),
+    assignmentHistory: mapAssignmentHistoryEntries(history, employeeLookup),
   };
 }
 
@@ -190,26 +264,16 @@ export function mapAssetsToInventoryRows(
   return assets.map((asset) => mapAssetToInventoryRow(asset, ctx));
 }
 
+/**
+ * Phase 5F: client-side inventory filtering is retired.
+ * Filters are applied by GET /assets; this returns rows unchanged for call-site compatibility.
+ */
 export function applyClientInventoryFilters(
   rows: InventoryRowViewModel[],
-  filters: InventoryFilterValues,
-  rawAssets: AssetsRow[],
+  _filters: InventoryFilterValues,
+  _rawAssets: AssetsRow[],
 ): InventoryRowViewModel[] {
-  const assetById = new Map(rawAssets.map((a) => [String(a.id), a]));
-  return rows.filter((row) => {
-    const raw = assetById.get(row.id);
-    if (!raw) return true;
-    if (filters.departmentId && String(raw.department_id ?? "") !== filters.departmentId) {
-      return false;
-    }
-    if (filters.assetType && String(raw.asset_type ?? "") !== filters.assetType) {
-      return false;
-    }
-    if (filters.locationId && filters.locationId !== BRANCH_ALL_VALUE) {
-      if (String(raw.branch_id ?? "") !== filters.locationId) return false;
-    }
-    return true;
-  });
+  return rows;
 }
 
 export function branchLookupFromOrgOptions(

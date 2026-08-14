@@ -3,10 +3,20 @@
 import type { ComponentProps } from "react";
 import { cleanup, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { AssetOperationsDashboard } from "@/components/assets/asset-operations-dashboard";
+import {
+  clearInventoryUiSnapshot,
+  peekInventoryUiSnapshot,
+} from "@/components/assets/inventory/inventory-ui-state";
 import { BRANCH_ALL_VALUE } from "@/components/assets/shared";
+
+const push = vi.fn();
+
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ push, replace: vi.fn(), prefetch: vi.fn() }),
+}));
 
 const branches = [
   { id: "b1", label: "Noida" },
@@ -38,6 +48,11 @@ function renderDashboard(overrides: Partial<ComponentProps<typeof AssetOperation
   );
   return { onBranchChange };
 }
+
+beforeEach(() => {
+  push.mockReset();
+  clearInventoryUiSnapshot();
+});
 
 afterEach(() => {
   cleanup();
@@ -85,9 +100,13 @@ describe("AssetOperationsDashboard layout", () => {
 
   it("renders KPI values from props", () => {
     renderDashboard();
+    expect(screen.getByTestId("asset-ops-kpi-ops-note")).toHaveTextContent(
+      "Counts by Operational Status",
+    );
     const kpiGrid = screen.getByTestId("asset-ops-kpi-grid");
     expect(within(kpiGrid).getByText("12")).toBeInTheDocument();
     expect(within(kpiGrid).getByText("Assigned")).toBeInTheDocument();
+    expect(within(kpiGrid).getByText("Ready to Move")).toBeInTheDocument();
   });
 
   it("shows empty KPI dashes when kpis null and not loading", () => {
@@ -99,7 +118,45 @@ describe("AssetOperationsDashboard layout", () => {
     renderDashboard();
     const grid = screen.getByTestId("asset-ops-kpi-grid");
     expect(grid.className).toMatch(/xl:grid-cols-6/);
-    expect(grid.className).toMatch(/md:grid-cols-3/);
+    expect(grid.className).toMatch(/sm:grid-cols-3/);
+  });
+
+  it("renders KPI share trends when provided", () => {
+    renderDashboard({
+      kpiTrends: {
+        readyToMove: { label: "17% of total", direction: "neutral" },
+        assigned: { label: "67% of total", direction: "neutral" },
+      },
+    });
+    expect(screen.getByText("17% of total")).toBeInTheDocument();
+    expect(screen.getByText("67% of total")).toBeInTheDocument();
+  });
+
+  it("renders branch breakdown when provided", () => {
+    renderDashboard({
+      byBranchRows: [
+        {
+          branchId: "b1",
+          label: "Noida",
+          totalAssets: 10,
+          readyToMove: 2,
+          assigned: 6,
+          retired: 1,
+          pendingDisposal: 1,
+          disposed: 0,
+        },
+      ],
+    });
+    expect(screen.getByTestId("asset-ops-branch-breakdown")).toBeInTheDocument();
+    expect(screen.getByText("By branch")).toBeInTheDocument();
+  });
+
+  it("shows queue count badges", () => {
+    renderDashboard({
+      queueTotals: { ready: 12, disposal: 3, assignments: 8 },
+    });
+    expect(screen.getAllByTestId("queue-card-count")).toHaveLength(3);
+    expect(screen.getByLabelText("12 total")).toBeInTheDocument();
   });
 
   it("renders six quick action cards", () => {
@@ -109,11 +166,60 @@ describe("AssetOperationsDashboard layout", () => {
     expect(within(grid).getByRole("button", { name: /QR \/ Barcode/ })).toBeInTheDocument();
   });
 
+  it("navigates quick actions to existing routes", async () => {
+    const user = userEvent.setup();
+    renderDashboard();
+    const grid = screen.getByTestId("asset-ops-quick-actions-grid");
+    await user.click(within(grid).getByRole("button", { name: /Register Asset/ }));
+    expect(push).toHaveBeenCalledWith("/assets/assets/new");
+    await user.click(within(grid).getByRole("button", { name: /Assign Asset/ }));
+    expect(push).toHaveBeenCalledWith("/assets/asset-assignments/new");
+    await user.click(within(grid).getByRole("button", { name: /Return Asset/ }));
+    expect(push).toHaveBeenCalledWith("/assets/asset-assignments/return");
+    await user.click(within(grid).getByRole("button", { name: /QR \/ Barcode/ }));
+    expect(push).toHaveBeenCalledWith("/assets/qr-barcode");
+  });
+
+  it("opens inventory presets from view-all actions", async () => {
+    const user = userEvent.setup();
+    renderDashboard({ branchId: "b1" });
+    await user.click(screen.getByRole("button", { name: "View all ready" }));
+    expect(push).toHaveBeenCalledWith("/assets/assets");
+    expect(peekInventoryUiSnapshot()?.preset).toBe("ready");
+    expect(peekInventoryUiSnapshot()?.headerBranchId).toBe("b1");
+
+    await user.click(screen.getByRole("button", { name: "View all pending disposal" }));
+    expect(peekInventoryUiSnapshot()?.preset).toBe("pending_disposal");
+
+    await user.click(screen.getByRole("button", { name: "View all assignments" }));
+    expect(push).toHaveBeenCalledWith("/assets/asset-assignments");
+  });
+
   it("renders operations queues", () => {
     renderDashboard();
-    expect(screen.getByText("Ready To Move Queue")).toBeInTheDocument();
+    expect(screen.getByText("Ready to Move Queue")).toBeInTheDocument();
+    expect(screen.getByText("Pending Disposal Queue")).toBeInTheDocument();
     expect(screen.getByText("Recent Assignments")).toBeInTheDocument();
     expect(screen.getByText("AST-1")).toBeInTheDocument();
+  });
+
+  it("uses 2+1 operations layout (queues row + full-width assignments)", () => {
+    renderDashboard();
+    const queues = screen.getByTestId("asset-ops-operations-grid");
+    expect(queues.className).toMatch(/lg:grid-cols-2/);
+    expect(queues.className).not.toMatch(/lg:grid-cols-3/);
+    expect(within(queues).getByText("Ready to Move Queue")).toBeInTheDocument();
+    expect(within(queues).getByText("Pending Disposal Queue")).toBeInTheDocument();
+    expect(within(queues).queryByText("Recent Assignments")).not.toBeInTheDocument();
+    expect(
+      within(screen.getByTestId("asset-ops-assignments-row")).getByText("Recent Assignments"),
+    ).toBeInTheDocument();
+  });
+
+  it("does not cap dashboard with an inner max-width", () => {
+    renderDashboard();
+    const root = screen.getByTestId("asset-operations-dashboard");
+    expect(root.className).not.toMatch(/max-w-\[/);
   });
 
   it("shows error card with retry", async () => {

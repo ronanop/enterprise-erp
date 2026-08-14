@@ -134,6 +134,16 @@ class DisposalValidationError(AppException):
         super().__init__(message, status_code=422)
 
 
+class RetirementValidationError(AppException):
+    def __init__(self, message: str) -> None:
+        super().__init__(message, status_code=422)
+
+
+class ReinstateValidationError(AppException):
+    def __init__(self, message: str) -> None:
+        super().__init__(message, status_code=422)
+
+
 class DepreciationValidationError(AppException):
     def __init__(self, message: str) -> None:
         super().__init__(message, status_code=422)

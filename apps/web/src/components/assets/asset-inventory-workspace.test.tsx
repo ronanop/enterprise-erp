@@ -13,6 +13,7 @@ const sampleRow = {
   id: "1",
   assetTag: "AST-1",
   laptopName: "Laptop",
+  serialNumber: "SN-1",
   manufacturer: "Dell",
   model: "XPS",
   configuration: "i7 · 16GB",
@@ -32,6 +33,7 @@ const sampleRow = {
     remarks: "—",
     assignmentRemarks: "—",
     returnRemarks: "—",
+    accessories: [],
   },
   assignmentHistory: [],
 };

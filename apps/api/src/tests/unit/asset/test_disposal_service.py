@@ -31,9 +31,35 @@ def test_approve_enforces_sod(_flag) -> None:
     row = MagicMock()
     row.created_by = user_id
     row.workflow_instance_id = uuid4()
+    row.asset_id = uuid4()
+    row.status = "submitted"
     with patch.object(svc, "get", return_value=row):
-        with pytest.raises(SegregationOfDutiesError):
-            svc.approve(ctx, uuid4())
+        with patch.object(svc._validator, "validate_approve_readiness", return_value=None):
+            with patch.object(svc, "_assert_no_active_components", return_value=None):
+                with pytest.raises(SegregationOfDutiesError):
+                    svc.approve(ctx, uuid4())
+
+
+@patch("modules.asset.service.disposal_service.asset_workflow_governance_enabled", return_value=True)
+def test_approve_rejects_when_eligibility_fails(_flag) -> None:
+    db = MagicMock()
+    svc = DisposalService(db)
+    ctx = _ctx()
+    row = MagicMock()
+    row.created_by = uuid4()
+    row.workflow_instance_id = uuid4()
+    row.asset_id = uuid4()
+    row.status = "submitted"
+    with patch.object(svc, "get", return_value=row):
+        with patch.object(
+            svc._validator,
+            "validate_approve_readiness",
+            side_effect=DisposalValidationError(
+                "Disposal cannot be approved because the asset is no longer pending disposal."
+            ),
+        ):
+            with pytest.raises(DisposalValidationError, match="no longer pending"):
+                svc.approve(ctx, uuid4())
 
 
 def test_create_requires_matching_branch() -> None:

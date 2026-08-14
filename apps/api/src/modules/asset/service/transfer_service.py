@@ -104,6 +104,13 @@ class TransferService:
             "document_number",
             ctx=ctx,
         )
+        # Drop keys passed explicitly below so **payload cannot double-bind
+        # (BUG-TRF-CREATE-01: body asset_id collided with asset_id=asset.id).
+        payload = {
+            k: v
+            for k, v in fields.items()
+            if k not in {"asset_id", "company_id", "branch_id", "document_number", "status"}
+        }
         row = self._repo.create(
             ctx,
             company_id=cid,
@@ -116,7 +123,7 @@ class TransferService:
             from_location_label=getattr(current_location, "location_label", None),
             from_org_location_id=getattr(current_location, "org_location_id", None),
             status=AssetTransferStatus.DRAFT.value,
-            **fields,
+            **payload,
         )
         self._audit.log_entity_change(
             tenant_id=ctx.tenant_id,

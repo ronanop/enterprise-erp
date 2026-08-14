@@ -3,9 +3,11 @@
  */
 
 import {
+  DC_SIGNATURE_STATUS_ALIASES,
   DELIVERY_STATUS_ALIASES,
   EXCEL_IMPORT_TARGET_FIELDS,
   OPERATIONAL_STATUS_ALIASES,
+  VALID_DC_SIGNATURE_STATUSES,
   VALID_DELIVERY_STATUSES,
   VALID_OPERATIONAL_STATUSES,
   type ExcelImportColumnMapping,
@@ -86,6 +88,15 @@ export function normalizeDeliveryStatus(raw: string): string | null {
   const lower = trimmed.toLowerCase().replace(/\s+/g, "_");
   if ((VALID_DELIVERY_STATUSES as readonly string[]).includes(lower)) return lower;
   const alias = DELIVERY_STATUS_ALIASES[normalizeHeaderKey(trimmed)];
+  return alias ?? null;
+}
+
+export function normalizeDcSignatureStatus(raw: string): string | null {
+  const trimmed = raw.trim();
+  if (!trimmed) return null;
+  const lower = trimmed.toLowerCase().replace(/\s+/g, "_");
+  if ((VALID_DC_SIGNATURE_STATUSES as readonly string[]).includes(lower)) return lower;
+  const alias = DC_SIGNATURE_STATUS_ALIASES[normalizeHeaderKey(trimmed)];
   return alias ?? null;
 }
 

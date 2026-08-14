@@ -82,6 +82,7 @@ def test_shared_asset_allows_multiple_assignments() -> None:
         id=uuid4(),
         company_id=ctx.company_id,
         status="active",
+        operational_status="READY_TO_MOVE",
         is_shared=True,
     )
     with patch.object(validator._assets, "get", return_value=asset):

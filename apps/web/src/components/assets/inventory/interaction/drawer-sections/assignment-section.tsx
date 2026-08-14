@@ -40,6 +40,15 @@ export function AssignmentSection({ assignment, className }: AssignmentSectionPr
             <dt className="text-xs font-medium text-muted-foreground">Department</dt>
             <dd className="mt-0.5 text-sm">{assignment!.department}</dd>
           </div>
+          <div className="sm:col-span-2">
+            <dt className="text-xs font-medium text-muted-foreground">Delivery Challan</dt>
+            <dd className="mt-0.5 text-sm" data-testid="drawer-delivery-challan">
+              {assignment!.deliveryChallanSummary ??
+                `${assignment!.deliveryReferenceNumber ?? "—"} · ${
+                  assignment!.deliveryReferenceStatus ?? "—"
+                }`}
+            </dd>
+          </div>
           <div>
             <dt className="text-xs font-medium text-muted-foreground">Delivery reference</dt>
             <dd className="mt-0.5 text-sm" data-testid="drawer-delivery-reference">
@@ -50,6 +59,12 @@ export function AssignmentSection({ assignment, className }: AssignmentSectionPr
             <dt className="text-xs font-medium text-muted-foreground">Delivery status</dt>
             <dd className="mt-0.5 text-sm" data-testid="drawer-delivery-status">
               {assignment!.deliveryReferenceStatus ?? "—"}
+            </dd>
+          </div>
+          <div>
+            <dt className="text-xs font-medium text-muted-foreground">Signature</dt>
+            <dd className="mt-0.5 text-sm" data-testid="drawer-delivery-signature">
+              {assignment!.deliverySignature ?? "Not Signed"}
             </dd>
           </div>
           <div className="sm:col-span-2">

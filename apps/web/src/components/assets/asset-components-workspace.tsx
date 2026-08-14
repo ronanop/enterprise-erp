@@ -29,7 +29,9 @@ import {
   type ComponentHistoryResult,
   type ComponentRow,
   type ComponentTreeResult,
+  COMPONENT_TYPE_OPTIONS,
   componentService,
+  componentTypeLabel,
 } from "@/services/assets-service";
 import { ApiClientError, resourceService } from "@/services/api-client";
 
@@ -89,6 +91,7 @@ export function AssetComponentsWorkspace() {
 
   const [draft, setDraft] = useState({
     asset_id: "",
+    component_type: "OTHER",
     component_code: "",
     component_name: "",
     serial_number: "",
@@ -96,12 +99,14 @@ export function AssetComponentsWorkspace() {
   });
 
   const [replaceDraft, setReplaceDraft] = useState({
+    component_type: "OTHER",
     component_name: "",
     serial_number: "",
     quantity: "",
   });
 
   const [editDraft, setEditDraft] = useState({
+    component_type: "OTHER",
     component_name: "",
     serial_number: "",
     quantity: "",
@@ -185,11 +190,13 @@ export function AssetComponentsWorkspace() {
       return;
     }
     setEditDraft({
+      component_type: String(selected.component_type ?? "OTHER"),
       component_name: selected.component_name,
       serial_number: selected.serial_number ?? "",
       quantity: selected.quantity != null ? String(selected.quantity) : "",
     });
     setReplaceDraft({
+      component_type: String(selected.component_type ?? "OTHER"),
       component_name: selected.component_name,
       serial_number: "",
       quantity: selected.quantity != null ? String(selected.quantity) : "1",
@@ -213,11 +220,16 @@ export function AssetComponentsWorkspace() {
       setError("Asset, component code, and name are required.");
       return;
     }
+    if (draft.component_type === "CHARGER" && !draft.serial_number.trim()) {
+      setError("Serial number is required for Charger components.");
+      return;
+    }
     setActionLoading(true);
     setError(null);
     try {
       const created = await componentService.install({
         asset_id: draft.asset_id,
+        component_type: draft.component_type,
         component_code: draft.component_code.trim(),
         component_name: draft.component_name.trim(),
         serial_number: draft.serial_number.trim() || undefined,
@@ -226,6 +238,7 @@ export function AssetComponentsWorkspace() {
       setShowCreate(false);
       setDraft({
         asset_id: "",
+        component_type: "OTHER",
         component_code: "",
         component_name: "",
         serial_number: "",
@@ -247,10 +260,15 @@ export function AssetComponentsWorkspace() {
       setError("Component name is required.");
       return;
     }
+    if (editDraft.component_type === "CHARGER" && !editDraft.serial_number.trim()) {
+      setError("Serial number is required for Charger components.");
+      return;
+    }
     setActionLoading(true);
     setError(null);
     try {
       const updated = await componentService.update(selected.id, {
+        component_type: editDraft.component_type,
         component_name: editDraft.component_name.trim(),
         serial_number: editDraft.serial_number.trim() || null,
         quantity: editDraft.quantity.trim() || null,
@@ -268,10 +286,15 @@ export function AssetComponentsWorkspace() {
 
   const handleReplace = async () => {
     if (!selected || !canReplace) return;
+    if (replaceDraft.component_type === "CHARGER" && !replaceDraft.serial_number.trim()) {
+      setError("Serial number is required for Charger components.");
+      return;
+    }
     setActionLoading(true);
     setError(null);
     try {
       const result = await componentService.replace(selected.id, {
+        component_type: replaceDraft.component_type,
         component_name: replaceDraft.component_name.trim() || undefined,
         serial_number: replaceDraft.serial_number.trim() || undefined,
         quantity: replaceDraft.quantity.trim() || undefined,
@@ -371,6 +394,24 @@ export function AssetComponentsWorkspace() {
                 </SelectContent>
               </Select>
             </div>
+            <div className="space-y-2 sm:col-span-2">
+              <Label htmlFor="cmp-type">Component type</Label>
+              <Select
+                value={draft.component_type}
+                onValueChange={(value) => setDraft((d) => ({ ...d, component_type: value }))}
+              >
+                <SelectTrigger id="cmp-type" className="cursor-pointer">
+                  <SelectValue placeholder="Select type" />
+                </SelectTrigger>
+                <SelectContent>
+                  {COMPONENT_TYPE_OPTIONS.map((opt) => (
+                    <SelectItem key={opt.value} value={opt.value} className="cursor-pointer">
+                      {opt.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
             <div className="space-y-2">
               <Label htmlFor="cmp-code">Component code</Label>
               <Input
@@ -388,7 +429,9 @@ export function AssetComponentsWorkspace() {
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="cmp-serial">Serial number</Label>
+              <Label htmlFor="cmp-serial">
+                Serial number{draft.component_type === "CHARGER" ? " *" : ""}
+              </Label>
               <Input
                 id="cmp-serial"
                 value={draft.serial_number}
@@ -494,6 +537,7 @@ export function AssetComponentsWorkspace() {
                 <thead className="bg-muted/50 text-muted-foreground">
                   <tr>
                     <th className="px-3 py-2 font-medium">Code</th>
+                    <th className="px-3 py-2 font-medium">Type</th>
                     <th className="px-3 py-2 font-medium">Name</th>
                     <th className="px-3 py-2 font-medium">Asset</th>
                     <th className="px-3 py-2 font-medium">Status</th>
@@ -503,13 +547,13 @@ export function AssetComponentsWorkspace() {
                 <tbody>
                   {loading ? (
                     <tr>
-                      <td colSpan={5} className="px-3 py-8 text-center text-muted-foreground">
+                      <td colSpan={6} className="px-3 py-8 text-center text-muted-foreground">
                         <Loader2 className="mx-auto h-5 w-5 animate-spin" />
                       </td>
                     </tr>
                   ) : rows.length === 0 ? (
                     <tr>
-                      <td colSpan={5} className="px-3 py-8 text-center text-muted-foreground">
+                      <td colSpan={6} className="px-3 py-8 text-center text-muted-foreground">
                         No components found
                       </td>
                     </tr>
@@ -525,6 +569,7 @@ export function AssetComponentsWorkspace() {
                           onClick={() => setSelected(row)}
                         >
                           <td className="px-3 py-2 font-medium">{row.component_code}</td>
+                          <td className="px-3 py-2">{componentTypeLabel(row.component_type)}</td>
                           <td className="px-3 py-2">{row.component_name}</td>
                           <td className="px-3 py-2 text-muted-foreground">
                             {asset?.asset_code ?? row.asset_id.slice(0, 8)}

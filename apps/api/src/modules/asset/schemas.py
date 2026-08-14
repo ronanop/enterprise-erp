@@ -4,7 +4,7 @@ from decimal import Decimal
 from datetime import date, datetime
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class OrmModel(BaseModel):
@@ -74,6 +74,9 @@ class AssetCreate(BaseModel):
     barcode: str | None = None
     qr_code: str | None = None
     rfid_tag: str | None = None
+    make: str | None = None
+    model: str | None = None
+    configuration: str | None = None
     current_book_value: Decimal | None = None
     salvage_value: Decimal | None = None
     depreciation_method: str | None = None
@@ -88,6 +91,9 @@ class AssetCreate(BaseModel):
     production_order_id: UUID | None = None
     quality_inspection_id: UUID | None = None
     is_shared: bool = False
+    incoming_unit_id: UUID | None = None
+    incoming_line_id: UUID | None = None
+    location_label: str | None = None
 
 
 AssetRegistrationCreate = AssetCreate
@@ -106,6 +112,9 @@ class AssetUpdate(BaseModel):
     barcode: str | None = None
     qr_code: str | None = None
     rfid_tag: str | None = None
+    make: str | None = None
+    model: str | None = None
+    configuration: str | None = None
     current_book_value: Decimal | None = None
     salvage_value: Decimal | None = None
     depreciation_method: str | None = None
@@ -120,6 +129,7 @@ class AssetUpdate(BaseModel):
     production_order_id: UUID | None = None
     quality_inspection_id: UUID | None = None
     is_shared: bool | None = None
+    location_label: str | None = None
     version: int | None = None
 
 
@@ -179,6 +189,9 @@ class AssetResponse(OrmModel):
     barcode: str | None
     qr_code: str | None
     rfid_tag: str | None
+    make: str | None = None
+    model: str | None = None
+    configuration: str | None = None
     purchase_date: date | None
     purchase_cost: Decimal | None
     current_book_value: Decimal | None
@@ -204,6 +217,7 @@ class AssetResponse(OrmModel):
     branch_id: UUID
     version: int
     discovery_profile_json: dict | None = None
+    current_location_label: str | None = None
 
 
 class AssetPortalAssignmentSummary(BaseModel):
@@ -301,6 +315,7 @@ class AssetComponentCreate(BaseModel):
     asset_id: UUID
     component_code: str
     component_name: str
+    component_type: str | None = Field(default="OTHER", max_length=30)
     product_id: UUID | None = None
     serial_number: str | None = None
     quantity: Decimal | None = None
@@ -309,6 +324,7 @@ class AssetComponentCreate(BaseModel):
 class AssetComponentUpdate(BaseModel):
     branch_id: UUID | None = None
     component_name: str | None = None
+    component_type: str | None = Field(default=None, max_length=30)
     product_id: UUID | None = None
     serial_number: str | None = None
     quantity: Decimal | None = None
@@ -318,6 +334,7 @@ class AssetComponentUpdate(BaseModel):
 class AssetComponentReplace(BaseModel):
     component_code: str | None = None
     component_name: str | None = None
+    component_type: str | None = Field(default=None, max_length=30)
     product_id: UUID | None = None
     serial_number: str | None = None
     quantity: Decimal | None = None
@@ -330,12 +347,15 @@ class AssetComponentResponse(OrmModel):
     asset_id: UUID
     component_code: str
     component_name: str
+    component_type: str = "OTHER"
     product_id: UUID | None
     serial_number: str | None
     quantity: Decimal | None
     status: str
     company_id: UUID
     version: int
+    # Populated when listing for assignment wizard / availability
+    availability: str | None = None
 
 
 class AssetComponentListResult(BaseModel):
@@ -349,6 +369,7 @@ class AssetComponentTreeNode(BaseModel):
     id: str
     component_code: str
     component_name: str
+    component_type: str = "OTHER"
     serial_number: str | None = None
     quantity: str | None = None
     status: str
@@ -392,6 +413,40 @@ class AssetComponentReplaceResult(BaseModel):
     replaced: AssetComponentResponse
     successor: AssetComponentResponse
 
+
+class AssignmentComponentReturnLine(BaseModel):
+    component_id: UUID
+    issue_status: str = Field(description="RETURNED | MISSING | DAMAGED | RETAINED")
+    return_remarks: str | None = Field(default=None, max_length=4000)
+
+
+class AssignmentComponentResponse(OrmModel):
+    id: UUID
+    assignment_id: UUID
+    component_id: UUID
+    issue_status: str
+    issued_at: datetime | None = None
+    returned_at: datetime | None = None
+    return_condition: str | None = None
+    return_remarks: str | None = None
+    company_id: UUID
+    version: int
+    component_code: str | None = None
+    component_name: str | None = None
+    component_type: str | None = None
+    serial_number: str | None = None
+    component_status: str | None = None
+
+
+class AssignmentComponentListResult(BaseModel):
+    items: list[AssignmentComponentResponse]
+    total: int
+
+
+class AssignmentComponentSetRequest(BaseModel):
+    component_ids: list[UUID] = Field(default_factory=list)
+
+
 class AssetAssignmentCreate(BaseModel):
     company_id: UUID | None = None
     branch_id: UUID
@@ -403,7 +458,10 @@ class AssetAssignmentCreate(BaseModel):
     expected_return_at: date | None = None
     delivery_reference_number: str | None = Field(default=None, max_length=100)
     delivery_reference_status: str | None = None
+    delivery_challan_signature_status: str | None = None
     assignment_remarks: str | None = Field(default=None, max_length=4000)
+    component_ids: list[UUID] | None = None
+
 
 class AssetAssignmentUpdate(BaseModel):
     allocation_type: str | None = None
@@ -413,7 +471,9 @@ class AssetAssignmentUpdate(BaseModel):
     expected_return_at: date | None = None
     delivery_reference_number: str | None = Field(default=None, max_length=100)
     delivery_reference_status: str | None = None
+    delivery_challan_signature_status: str | None = None
     assignment_remarks: str | None = Field(default=None, max_length=4000)
+    component_ids: list[UUID] | None = None
     version: int
 
 
@@ -421,6 +481,7 @@ class AssetAssignmentReturnRequest(BaseModel):
     return_condition: str = Field(default="good", description="good | outdated | dead")
     reason: str | None = Field(default=None, max_length=500)
     return_remarks: str | None = Field(default=None, max_length=4000)
+    component_returns: list[AssignmentComponentReturnLine] | None = None
 
 
 class AssetAssignmentResponse(OrmModel):
@@ -437,6 +498,7 @@ class AssetAssignmentResponse(OrmModel):
     status: str
     delivery_reference_number: str | None = None
     delivery_reference_status: str
+    delivery_challan_signature_status: str = "not_signed"
     assignment_remarks: str | None = None
     return_remarks: str | None = None
     workflow_status: str | None
@@ -445,6 +507,16 @@ class AssetAssignmentResponse(OrmModel):
     branch_id: UUID
     version: int
     created_by: UUID | None = None
+    component_ids: list[UUID] | None = None
+    components: list[AssignmentComponentResponse] | None = None
+
+    @field_validator("delivery_challan_signature_status", mode="before")
+    @classmethod
+    def _default_signature_status(cls, value: object) -> object:
+        """Legacy rows / in-memory ORM without column populated → not_signed."""
+        if value is None or value == "":
+            return "not_signed"
+        return value
 
 
 class AssetAssignmentListResult(BaseModel):
@@ -1220,9 +1292,14 @@ class AssetExcelImportRow(BaseModel):
     department_id: UUID | None = None
     asset_category_id: UUID | None = None
     serial_number: str | None = Field(default=None, max_length=100)
+    make: str | None = Field(default=None, max_length=100)
+    model: str | None = Field(default=None, max_length=100)
+    configuration: str | None = Field(default=None, max_length=500)
+    location_label: str | None = Field(default=None, max_length=255)
     issue_date: date | None = None
     delivery_reference_number: str | None = Field(default=None, max_length=100)
     delivery_reference_status: str | None = None
+    delivery_challan_signature_status: str | None = None
     assignment_remarks: str | None = Field(default=None, max_length=4000)
     company_id: UUID | None = None
 
@@ -1255,3 +1332,276 @@ class AssetExcelImportSummaryResponse(BaseModel):
     duration_ms: int
     batch_count: int
     rows: list[AssetExcelImportRowResult] = []
+
+
+# --- Incoming Assets (IT receiving / Sub-phase 1–2 QC) ---
+
+
+class IncomingAssetUnitResponse(OrmModel):
+    id: UUID
+    unit_index: int
+    serial_number: str | None = None
+    status: str
+    arrived_at: datetime | None = None
+    arrived_by: UUID | None = None
+    qc_status: str | None = None
+    tested_at: datetime | None = None
+    tested_by: UUID | None = None
+    qc_notes: str | None = None
+    rejection_reason: str | None = None
+    evidence_uri: str | None = None
+    quality_inspection_id: UUID | None = None
+    registered_asset_id: UUID | None = None
+    registered_at: datetime | None = None
+    registered_by: UUID | None = None
+
+
+class IncomingAssetLineResponse(OrmModel):
+    id: UUID
+    company_id: UUID
+    branch_id: UUID
+    grn_id: UUID
+    grn_line_id: UUID
+    purchase_order_id: UUID | None = None
+    product_id: UUID
+    vendor_id: UUID | None = None
+    grn_document_number: str
+    po_document_number: str | None = None
+    product_code: str | None = None
+    product_name: str | None = None
+    document_date: date | None = None
+    expected_quantity: Decimal
+    arrived_quantity: Decimal
+    pending_quantity: Decimal
+    accepted_quantity: Decimal = Decimal("0")
+    rejected_quantity: Decimal = Decimal("0")
+    pending_qc_quantity: Decimal = Decimal("0")
+    status: str
+    qc_status: str = "PENDING"
+    qc_started_at: datetime | None = None
+    qc_started_by: UUID | None = None
+    qc_notes: str | None = None
+    quality_inspection_id: UUID | None = None
+    version: int
+    units: list[IncomingAssetUnitResponse] = []
+
+
+class IncomingAssetListResult(BaseModel):
+    items: list[IncomingAssetLineResponse]
+    total: int
+    page: int
+    page_size: int
+
+
+class IncomingAssetSummaryResponse(BaseModel):
+    expected_lines: int
+    pending_arrival_lines: int
+    partially_arrived_lines: int
+    arrived_lines: int
+    expected_quantity_total: float = 0
+    arrived_quantity_total: float = 0
+    pending_quantity_total: float = 0
+
+
+class IncomingAssetArriveUnit(BaseModel):
+    unit_index: int = Field(ge=1)
+    serial_number: str | None = None
+
+
+class IncomingAssetArriveRequest(BaseModel):
+    quantity: float | None = Field(default=None, gt=0)
+    mark_all: bool = False
+    units: list[IncomingAssetArriveUnit] | None = None
+    notes: str | None = None
+
+
+class IncomingAssetQcEventResponse(OrmModel):
+    id: UUID
+    disposition: str
+    quantity: Decimal
+    notes: str | None = None
+    rejection_reason: str | None = None
+    evidence_uri: str | None = None
+    unit_ids_json: str | None = None
+    quality_inspection_id: UUID | None = None
+    created_at: datetime | None = None
+    created_by: UUID | None = None
+
+
+class IncomingAssetQcLineResponse(OrmModel):
+    id: UUID
+    company_id: UUID
+    branch_id: UUID
+    grn_id: UUID
+    grn_line_id: UUID
+    purchase_order_id: UUID | None = None
+    product_id: UUID
+    vendor_id: UUID | None = None
+    grn_document_number: str
+    po_document_number: str | None = None
+    product_code: str | None = None
+    product_name: str | None = None
+    document_date: date | None = None
+    expected_quantity: Decimal
+    arrived_quantity: Decimal
+    accepted_quantity: Decimal
+    rejected_quantity: Decimal
+    pending_qc_quantity: Decimal
+    pending_quantity: Decimal
+    status: str
+    qc_status: str
+    qc_started_at: datetime | None = None
+    qc_started_by: UUID | None = None
+    qc_notes: str | None = None
+    quality_inspection_id: UUID | None = None
+    version: int
+    units: list[IncomingAssetUnitResponse] = []
+    qc_events: list[IncomingAssetQcEventResponse] = []
+
+
+class IncomingAssetQcListResult(BaseModel):
+    items: list[IncomingAssetQcLineResponse]
+    total: int
+    page: int
+    page_size: int
+
+
+class IncomingAssetQcDispositionRequest(BaseModel):
+    quantity: float | None = Field(default=None, gt=0)
+    unit_ids: list[UUID] | None = None
+    mark_all_pending: bool = False
+    notes: str | None = None
+    rejection_reason: str | None = None
+    evidence_uri: str | None = None
+    quality_inspection_id: UUID | None = None
+
+
+# --- Incoming Registration Queue (Sub-phase 3) ---
+
+
+class IncomingRegistrationPrefillResponse(BaseModel):
+    incoming_line_id: UUID
+    incoming_unit_id: UUID
+    unit_index: int
+    grn_id: UUID
+    grn_document_number: str
+    purchase_order_id: UUID | None = None
+    po_document_number: str | None = None
+    branch_id: UUID
+    product_id: UUID
+    supplier_vendor_id: UUID | None = None
+    quality_inspection_id: UUID | None = None
+    asset_name: str
+    serial_number: str | None = None
+    purchase_date: date | None = None
+    purchase_cost: Decimal | None = None
+    currency_code: str = "INR"
+    asset_category_id: UUID | None = None
+    asset_type: str = "fixed"
+    qc_status: str
+    registration_status: str
+    registered_asset_id: UUID | None = None
+
+
+class RegistrationQueueItemResponse(BaseModel):
+    incoming_unit_id: UUID
+    incoming_line_id: UUID
+    unit_index: int
+    unit_reference: str
+    product_name: str | None = None
+    product_code: str | None = None
+    serial_number: str | None = None
+    grn_id: UUID
+    grn_document_number: str
+    purchase_order_id: UUID | None = None
+    po_document_number: str | None = None
+    branch_id: UUID
+    qc_status: str
+    registration_status: str
+    line_registration_status: str
+    registered_asset_id: UUID | None = None
+
+
+class RegistrationQueueListResult(BaseModel):
+    items: list[RegistrationQueueItemResponse]
+    total: int
+    page: int
+    page_size: int
+
+
+class RegistrationQueueSummaryResponse(BaseModel):
+    accepted: int
+    registered: int
+    pending_registration: int
+
+
+class RegistrationExcelRowInput(BaseModel):
+    incoming_unit_id: str | None = None
+    asset_name: str | None = None
+    serial_number: str | None = None
+    branch_id: str | None = None
+    asset_category_id: str | None = None
+    asset_type: str | None = None
+    purchase_date: str | None = None
+    purchase_cost: str | None = None
+    currency_code: str | None = None
+    make: str | None = None
+    model: str | None = None
+    configuration: str | None = None
+    location: str | None = None
+
+
+class RegistrationExcelValidateRequest(BaseModel):
+    rows: list[RegistrationExcelRowInput]
+
+
+class RegistrationExcelRowResult(BaseModel):
+    row_number: int
+    status: str
+    errors: list[str] = []
+    incoming_unit_id: str | None = None
+    asset_name: str | None = None
+    serial_number: str | None = None
+    branch_id: str | None = None
+    asset_category_id: str | None = None
+    asset_type: str | None = None
+    purchase_date: str | None = None
+    purchase_cost: str | None = None
+    currency_code: str | None = None
+    make: str | None = None
+    model: str | None = None
+    configuration: str | None = None
+    location: str | None = None
+    grn_document_number: str | None = None
+    po_document_number: str | None = None
+    qc_status: str | None = None
+
+
+class RegistrationExcelValidateResult(BaseModel):
+    valid_count: int
+    error_count: int
+    warning_count: int = 0
+    rows: list[RegistrationExcelRowResult]
+
+
+class RegistrationExcelConfirmRequest(BaseModel):
+    rows: list[RegistrationExcelRowInput]
+    activate: bool = True
+
+
+class RegistrationExcelConfirmItem(BaseModel):
+    row_number: int
+    incoming_unit_id: str
+    asset_id: str
+    asset_code: str | None = None
+    created: bool = True
+    activation: str
+    activation_error: str | None = None
+    operational_status: str | None = None
+
+
+class RegistrationExcelConfirmResult(BaseModel):
+    registered_count: int
+    activation_complete: int
+    activation_incomplete: int
+    items: list[RegistrationExcelConfirmItem]

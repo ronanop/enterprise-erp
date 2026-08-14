@@ -53,13 +53,17 @@ describe("buildInventoryListQuery", () => {
     expect(q.branch_id).toBe("branch-1");
   });
 
-  it("includes lifecycle and category filters", () => {
+  it("includes lifecycle, category, and Phase 5F server filters", () => {
     const q = buildInventoryListQuery({
       preset: "all",
       filters: {
         ...EMPTY_INVENTORY_FILTERS,
         lifecycleStatus: "active",
         categoryId: "cat-1",
+        departmentId: "dept-1",
+        assetType: "fixed",
+        locationId: "loc-1",
+        assignmentState: "assigned",
       },
       headerBranchId: BRANCH_ALL_VALUE,
       page: 1,
@@ -67,6 +71,21 @@ describe("buildInventoryListQuery", () => {
     });
     expect(q.status).toBe("active");
     expect(q.asset_category_id).toBe("cat-1");
+    expect(q.department_id).toBe("dept-1");
+    expect(q.asset_type).toBe("fixed");
+    expect(q.location_id).toBe("loc-1");
+    expect(q.assignment_state).toBe("assigned");
+  });
+
+  it("does not send location_id when All locations selected", () => {
+    const q = buildInventoryListQuery({
+      preset: "all",
+      filters: { ...EMPTY_INVENTORY_FILTERS, locationId: BRANCH_ALL_VALUE },
+      headerBranchId: BRANCH_ALL_VALUE,
+      page: 1,
+      pageSize: 25,
+    });
+    expect(q.location_id).toBeUndefined();
   });
 });
 
@@ -111,24 +130,66 @@ describe("mapAssetToInventoryRow", () => {
             },
           ],
         ]),
+        employeeLookup: {
+          "emp-1": {
+            label: "Asha Nair (EMP-001)",
+            displayName: "Asha Nair",
+            employeeCode: "EMP-001",
+            mobile: "9000000001",
+          },
+        },
       },
     );
     expect(row.assetTag).toBe("AST-9");
     expect(row.manufacturer).toBe("Dell");
+    expect(row.serialNumber).toBe("—");
     expect(row.branch).toBe("Noida");
     expect(row.department).toBe("IT");
     expect(row.operationalStatus).toBe("ASSIGNED");
     expect(row.issueDate).toContain("2026");
+    expect(row.location).toBe("—");
+    expect(row.employeeId).toBe("EMP-001");
+    expect(row.currentHolder).toContain("Asha");
+    expect(row.expandable.phoneNumber).toBe("9000000001");
+  });
+
+  it("prefers persisted make/model/configuration and asset location", () => {
+    const row = mapAssetToInventoryRow(
+      {
+        id: "asset-2",
+        asset_code: "AST-2",
+        asset_name: "Laptop",
+        branch_id: "b1",
+        serial_number: "SN-99",
+        make: "Lenovo",
+        model: "T14",
+        configuration: "i7 · 32GB",
+        discovery_profile_json: { manufacturer: "Dell", model: "XPS" },
+      },
+      {
+        branchLabels: { b1: "Noida" },
+        departmentLabels: {},
+        categoryLabels: {},
+        locationLabels: { "asset-2": "Rack A-12" },
+        assignmentsByAssetId: new Map(),
+      },
+    );
+    expect(row.manufacturer).toBe("Lenovo");
+    expect(row.model).toBe("T14");
+    expect(row.configuration).toBe("i7 · 32GB");
+    expect(row.serialNumber).toBe("SN-99");
+    expect(row.location).toBe("Rack A-12");
   });
 });
 
 describe("applyClientInventoryFilters", () => {
-  it("filters by department and asset type", () => {
+  it("is a no-op (Phase 5F server-side filtering)", () => {
     const rows = [
       {
         id: "1",
         assetTag: "A",
         laptopName: "X",
+        serialNumber: "—",
         manufacturer: "—",
         model: "—",
         configuration: "—",
@@ -154,16 +215,9 @@ describe("applyClientInventoryFilters", () => {
     ];
     const filtered = applyClientInventoryFilters(
       rows,
-      { ...EMPTY_INVENTORY_FILTERS, departmentId: "d1" },
-      [{ id: "1", department_id: "d1", asset_type: "fixed" }],
-    );
-    expect(filtered).toHaveLength(1);
-
-    const none = applyClientInventoryFilters(
-      rows,
       { ...EMPTY_INVENTORY_FILTERS, departmentId: "other" },
       [{ id: "1", department_id: "d1" }],
     );
-    expect(none).toHaveLength(0);
+    expect(filtered).toHaveLength(1);
   });
 });

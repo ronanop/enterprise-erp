@@ -9,11 +9,18 @@ from sqlalchemy.orm import Session
 
 from core.exceptions import NotFoundException
 from modules.asset.adapters.master_data_port import AssetMasterDataAdapter
-from modules.asset.domain.enums import AssetComponentStatus, AssetStatus
+from modules.asset.domain.enums import (
+    ASSET_COMPONENT_TYPE_VALUES,
+    AssetComponentStatus,
+    AssetComponentType,
+    AssetStatus,
+)
 from modules.asset.domain.exceptions import ComponentValidationError
 from modules.asset.models import AstAssetComponent
+from modules.asset.repository.assignment_component_repository import AssignmentComponentRepository
 from modules.asset.repository.asset_component_repository import AssetComponentRepository
 from modules.asset.repository.asset_repository import AssetRepository
+from modules.asset.service.assignment_component_service import assert_charger_serial
 from modules.foundation.domain.value_objects import TenantContext
 
 BLOCKED_ASSET_STATUSES = frozenset(
@@ -29,6 +36,7 @@ class ComponentValidator:
     def __init__(self, db: Session) -> None:
         self._assets = AssetRepository(db)
         self._components = AssetComponentRepository(db)
+        self._assignment_components = AssignmentComponentRepository(db)
         self._master = AssetMasterDataAdapter(db)
 
     def validate_install_fields(
@@ -57,11 +65,25 @@ class ComponentValidator:
             raise ComponentValidationError("component_name is required")
         fields["component_name"] = str(name).strip()
 
+        component_type = fields.get("component_type")
+        if component_type is None or component_type == "":
+            fields["component_type"] = AssetComponentType.OTHER.value
+        else:
+            normalized = str(component_type).strip().upper()
+            if normalized not in ASSET_COMPONENT_TYPE_VALUES:
+                raise ComponentValidationError(
+                    "component_type must be one of: "
+                    + ", ".join(sorted(ASSET_COMPONENT_TYPE_VALUES))
+                )
+            fields["component_type"] = normalized
+
         if "quantity" in fields and fields.get("quantity") is not None:
             fields["quantity"] = self._validate_quantity(fields["quantity"])
 
         if "serial_number" in fields and fields.get("serial_number") is not None:
             fields["serial_number"] = self._validate_serial(fields["serial_number"])
+
+        assert_charger_serial(fields.get("component_type"), fields.get("serial_number"))
 
         asset = self._assets.get(ctx, asset_id)
         if asset is None:
@@ -123,6 +145,15 @@ class ComponentValidator:
                 raise ComponentValidationError("component_name is required")
             fields["component_name"] = name
 
+        if "component_type" in fields and fields["component_type"] is not None:
+            normalized = str(fields["component_type"]).strip().upper()
+            if normalized not in ASSET_COMPONENT_TYPE_VALUES:
+                raise ComponentValidationError(
+                    "component_type must be one of: "
+                    + ", ".join(sorted(ASSET_COMPONENT_TYPE_VALUES))
+                )
+            fields["component_type"] = normalized
+
         if "quantity" in fields and fields.get("quantity") is not None:
             fields["quantity"] = self._validate_quantity(fields["quantity"])
 
@@ -136,6 +167,14 @@ class ComponentValidator:
                 raise ComponentValidationError(
                     "An active component with this serial_number already exists in the company"
                 )
+
+        effective_type = fields.get("component_type", row.component_type)
+        effective_serial = (
+            fields["serial_number"]
+            if "serial_number" in fields
+            else row.serial_number
+        )
+        assert_charger_serial(effective_type, effective_serial)
 
         if "product_id" in fields and fields.get("product_id") is not None:
             self._validate_product(ctx, fields["product_id"])
@@ -158,10 +197,20 @@ class ComponentValidator:
             raise ComponentValidationError(
                 "Components cannot be replaced when the parent asset is disposed or written-off"
             )
+        blocking = self._assignment_components.find_active_issue(ctx, component_id=row.id)
+        if blocking:
+            raise ComponentValidationError(
+                "Cannot replace a component that is currently issued on an assignment"
+            )
 
     def validate_dispose_readiness(self, ctx: TenantContext, row: AstAssetComponent) -> None:
         if row.status != AssetComponentStatus.ACTIVE.value:
             raise ComponentValidationError("Only active components can be disposed")
+        blocking = self._assignment_components.find_active_issue(ctx, component_id=row.id)
+        if blocking:
+            raise ComponentValidationError(
+                "Cannot dispose a component that is currently issued on an assignment"
+            )
 
     def validate_successor_fields(
         self,
@@ -176,6 +225,7 @@ class ComponentValidator:
         fields.setdefault("component_code", source.component_code)
         if not fields.get("component_name"):
             fields["component_name"] = source.component_name
+        fields.setdefault("component_type", getattr(source, "component_type", "OTHER"))
         fields.setdefault("branch_id", source.branch_id)
         fields.setdefault("product_id", source.product_id)
         if "quantity" not in fields:

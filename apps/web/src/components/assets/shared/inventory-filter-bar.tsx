@@ -26,6 +26,8 @@ export type InventoryFilterValues = {
   departmentId: string;
   assetType: string;
   locationId: string;
+  /** Phase 5F: "assigned" | "unassigned" | "" */
+  assignmentState: string;
 };
 
 export const EMPTY_INVENTORY_FILTERS: InventoryFilterValues = {
@@ -37,6 +39,7 @@ export const EMPTY_INVENTORY_FILTERS: InventoryFilterValues = {
   departmentId: "",
   assetType: "",
   locationId: BRANCH_ALL_VALUE,
+  assignmentState: "",
 };
 
 export type InventoryFilterBarProps = {
@@ -94,7 +97,7 @@ export function InventoryFilterBar({
           <Label htmlFor="inventory-search">Search</Label>
           <Input
             id="inventory-search"
-            placeholder="Asset tag, name, serial…"
+            placeholder="Asset tag, name, serial, make, model, employee…"
             value={values.search}
             onChange={(e) => onChange({ search: e.target.value })}
           />
@@ -212,6 +215,24 @@ export function InventoryFilterBar({
                   {t.label}
                 </SelectItem>
               ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="space-y-1.5">
+          <Label>Assignment</Label>
+          <Select
+            value={values.assignmentState || "__all"}
+            onValueChange={(v) =>
+              onChange({ assignmentState: v === "__all" ? "" : v })
+            }
+          >
+            <SelectTrigger className="w-full cursor-pointer">
+              <SelectValue placeholder="Assignment" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="__all">All assignment states</SelectItem>
+              <SelectItem value="assigned">Assigned</SelectItem>
+              <SelectItem value="unassigned">Unassigned</SelectItem>
             </SelectContent>
           </Select>
         </div>

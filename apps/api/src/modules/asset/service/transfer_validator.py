@@ -9,16 +9,25 @@ from modules.asset.adapters.master_data_port import AssetMasterDataAdapter
 from modules.asset.adapters.organization_port import AssetOrganizationAdapter
 from modules.asset.domain.enums import AssetStatus, AssetTransferStatus
 from modules.asset.domain.exceptions import TransferValidationError
+from modules.asset.domain.operational_status_rules import (
+    OPS_BLOCKED_FOR_MAINTENANCE_OR_TRANSFER,
+)
 from modules.asset.models import AstAssetTransfer
+from modules.asset.repository.asset_assignment_repository import AssetAssignmentRepository
 from modules.asset.repository.asset_repository import AssetRepository
 from modules.asset.repository.asset_transfer_repository import AssetTransferRepository
 from modules.foundation.domain.value_objects import TenantContext
+
+_ASSIGNED_BLOCK_MESSAGE = (
+    "Asset is currently assigned. Return the asset before transferring it."
+)
 
 
 class TransferValidator:
     def __init__(self, db: Session) -> None:
         self._assets = AssetRepository(db)
         self._transfers = AssetTransferRepository(db)
+        self._assignments = AssetAssignmentRepository(db)
         self._org = AssetOrganizationAdapter(db)
         self._master = AssetMasterDataAdapter(db)
 
@@ -36,6 +45,10 @@ class TransferValidator:
         if asset is None:
             raise NotFoundException("Asset not found")
         self._validate_asset_is_transferable(asset.status)
+        self._validate_operational_allows_transfer(
+            getattr(asset, "operational_status", None)
+        )
+        self._validate_no_open_assignment(ctx, asset_id)
         if asset.company_id != company_id:
             raise TransferValidationError("Asset does not belong to this company")
         self._validate_target_fields(ctx, company_id=company_id, fields=fields)
@@ -71,6 +84,10 @@ class TransferValidator:
         if asset is None:
             raise NotFoundException("Asset not found")
         self._validate_asset_is_transferable(asset.status)
+        self._validate_operational_allows_transfer(
+            getattr(asset, "operational_status", None)
+        )
+        self._validate_no_open_assignment(ctx, row.asset_id)
         self._validate_pending_transfer(ctx, row.asset_id, exclude_id=row.id)
         if not any(
             (
@@ -90,6 +107,10 @@ class TransferValidator:
         if asset is None:
             raise NotFoundException("Asset not found")
         self._validate_asset_is_transferable(asset.status)
+        self._validate_operational_allows_transfer(
+            getattr(asset, "operational_status", None)
+        )
+        self._validate_no_open_assignment(ctx, row.asset_id)
         self._validate_pending_transfer(ctx, row.asset_id, exclude_id=row.id)
         if not any(
             (
@@ -162,10 +183,25 @@ class TransferValidator:
                 f"Asset already has a pending transfer ({pending.document_number})"
             )
 
+    def _validate_no_open_assignment(self, ctx: TenantContext, asset_id: UUID) -> None:
+        open_asn = self._assignments.find_pending_or_active_for_asset(
+            ctx, asset_id, exclude_id=None
+        )
+        if open_asn is not None:
+            raise TransferValidationError(_ASSIGNED_BLOCK_MESSAGE)
+
     @staticmethod
     def _validate_asset_is_transferable(status: str) -> None:
         if status not in {AssetStatus.ACTIVE.value, AssetStatus.IN_MAINTENANCE.value}:
             raise TransferValidationError("Only active or in_maintenance assets can be transferred")
+
+    @staticmethod
+    def _validate_operational_allows_transfer(operational_status: str | None) -> None:
+        ops = str(operational_status or "").strip().upper()
+        if ops in OPS_BLOCKED_FOR_MAINTENANCE_OR_TRANSFER:
+            raise TransferValidationError(
+                "Retired, pending disposal, or disposed assets cannot be transferred."
+            )
 
     @staticmethod
     def _different(left, right) -> bool:

@@ -1,11 +1,13 @@
-"""Assignment issuance / enrichment field rules (CR-004 Phase 5A-2)."""
+"""Assignment issuance / enrichment field rules (CR-004 Phase 5A-2 / Sub-phase 4D)."""
 
 from __future__ import annotations
 
 import re
 
 from modules.asset.domain.enums import (
+    ASSIGNMENT_DELIVERY_CHALLAN_SIGNATURE_STATUS_VALUES,
     ASSIGNMENT_DELIVERY_REFERENCE_STATUS_VALUES,
+    AssignmentDeliveryChallanSignatureStatus,
     AssignmentDeliveryReferenceStatus,
 )
 from modules.asset.domain.exceptions import AssignmentValidationError
@@ -30,6 +32,12 @@ def normalize_delivery_reference_status(status: str | None) -> str:
     return str(status).strip().lower()
 
 
+def normalize_delivery_challan_signature_status(status: str | None) -> str:
+    if status is None or not str(status).strip():
+        return AssignmentDeliveryChallanSignatureStatus.NOT_SIGNED.value
+    return str(status).strip().lower()
+
+
 def normalize_optional_text(value: str | None) -> str | None:
     if value is None:
         return None
@@ -43,6 +51,16 @@ def validate_delivery_reference_status(status: str | None) -> str:
         allowed = ", ".join(sorted(ASSIGNMENT_DELIVERY_REFERENCE_STATUS_VALUES))
         raise AssignmentValidationError(
             f"delivery_reference_status must be one of: {allowed}"
+        )
+    return normalized
+
+
+def validate_delivery_challan_signature_status(status: str | None) -> str:
+    normalized = normalize_delivery_challan_signature_status(status)
+    if normalized not in ASSIGNMENT_DELIVERY_CHALLAN_SIGNATURE_STATUS_VALUES:
+        allowed = ", ".join(sorted(ASSIGNMENT_DELIVERY_CHALLAN_SIGNATURE_STATUS_VALUES))
+        raise AssignmentValidationError(
+            f"delivery_challan_signature_status must be one of: {allowed}"
         )
     return normalized
 
@@ -115,6 +133,7 @@ def validate_draft_enrichment_fields(
     *,
     delivery_reference_number: str | None = None,
     delivery_reference_status: str | None = None,
+    delivery_challan_signature_status: str | None = None,
     assignment_remarks: str | None = None,
     return_remarks: str | None = None,
     allow_return_remarks: bool = False,
@@ -130,6 +149,9 @@ def validate_draft_enrichment_fields(
     return {
         "delivery_reference_number": ref_number,
         "delivery_reference_status": ref_status,
+        "delivery_challan_signature_status": validate_delivery_challan_signature_status(
+            delivery_challan_signature_status
+        ),
         "assignment_remarks": validate_assignment_remarks(assignment_remarks),
         "return_remarks": validate_return_remarks(return_remarks) if allow_return_remarks else None,
     }

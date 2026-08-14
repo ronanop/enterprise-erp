@@ -5,7 +5,11 @@ from uuid import UUID
 from sqlalchemy.orm import Session
 
 from core.exceptions import NotFoundException
-from modules.asset.domain.enums import AssetDisposalStatus, AssetStatus
+from modules.asset.domain.enums import (
+    AssetDisposalStatus,
+    AssetOperationalStatus,
+    AssetStatus,
+)
 from modules.asset.domain.exceptions import DisposalValidationError
 from modules.asset.models import AstAssetDisposal
 from modules.asset.repository.asset_assignment_repository import AssetAssignmentRepository
@@ -22,6 +26,31 @@ ELIGIBLE_ASSET_STATUSES = frozenset(
         AssetStatus.IN_MAINTENANCE.value,
     }
 )
+
+_PENDING = AssetOperationalStatus.PENDING_DISPOSAL.value
+_RETIRED = AssetOperationalStatus.RETIRED.value
+
+_CREATE_PENDING_MESSAGE = (
+    "Asset must be in PENDING_DISPOSAL status before creating a disposal request. "
+    "Return the asset with condition 'Dead', or use Start Disposal on a retired asset."
+)
+_RETIRED_MESSAGE = (
+    "Retired assets must use Start Disposal before creating a disposal request."
+)
+_PHASE_NO_LONGER_PENDING: dict[str, str] = {
+    "submit": (
+        "Disposal cannot be submitted because the asset is no longer pending disposal."
+    ),
+    "approve": (
+        "Disposal cannot be approved because the asset is no longer pending disposal."
+    ),
+    "post": (
+        "Disposal cannot be posted because the asset is no longer pending disposal."
+    ),
+    "update": (
+        "Disposal cannot be updated because the asset is no longer pending disposal."
+    ),
+}
 
 
 class DisposalValidator:
@@ -48,6 +77,7 @@ class DisposalValidator:
         if asset.company_id != company_id:
             raise DisposalValidationError("Asset does not belong to this company")
         self._validate_asset_eligible(asset.status)
+        self._validate_pending_disposal_operational_status(asset, phase="create")
         self._validate_disposal_type(fields)
         self._validate_open_disposal(ctx, asset_id, exclude_id=None)
         self._validate_open_maintenance(ctx, asset_id)
@@ -78,6 +108,7 @@ class DisposalValidator:
         if asset is None:
             raise NotFoundException("Asset not found")
         self._validate_asset_eligible(asset.status)
+        self._validate_pending_disposal_operational_status(asset, phase="update")
         self._validate_disposal_type(merged)
         self._validate_open_disposal(ctx, row.asset_id, exclude_id=row.id)
         self._validate_open_maintenance(ctx, row.asset_id)
@@ -87,7 +118,12 @@ class DisposalValidator:
     def validate_submit_readiness(self, ctx: TenantContext, row: AstAssetDisposal) -> None:
         if row.status != AssetDisposalStatus.DRAFT.value:
             raise DisposalValidationError("Only draft disposals can be submitted")
-        self._validate_operational_gates(ctx, row)
+        self._validate_operational_gates(ctx, row, phase="submit")
+
+    def validate_approve_readiness(self, ctx: TenantContext, row: AstAssetDisposal) -> None:
+        if row.status != AssetDisposalStatus.SUBMITTED.value:
+            raise DisposalValidationError("Only submitted disposals can be approved")
+        self._validate_operational_gates(ctx, row, phase="approve")
 
     def validate_post_readiness(self, ctx: TenantContext, row: AstAssetDisposal) -> None:
         if (
@@ -99,17 +135,24 @@ class DisposalValidator:
             raise DisposalValidationError("Only approved disposals can be posted")
         if row.disposal_date is None:
             raise DisposalValidationError("disposal_date is required before posting")
-        self._validate_operational_gates(ctx, row)
+        self._validate_operational_gates(ctx, row, phase="post")
 
     def validate_reopen_readiness(self, ctx: TenantContext, row: AstAssetDisposal) -> None:
         """Ensure reopening does not create a second open disposal (DSP-14)."""
         self._validate_open_disposal(ctx, row.asset_id, exclude_id=row.id)
 
-    def _validate_operational_gates(self, ctx: TenantContext, row: AstAssetDisposal) -> None:
+    def _validate_operational_gates(
+        self,
+        ctx: TenantContext,
+        row: AstAssetDisposal,
+        *,
+        phase: str,
+    ) -> None:
         asset = self._assets.get(ctx, row.asset_id)
         if asset is None:
             raise NotFoundException("Asset not found")
         self._validate_asset_eligible(asset.status)
+        self._validate_pending_disposal_operational_status(asset, phase=phase)
         self._validate_disposal_type(
             {
                 "disposal_type": row.disposal_type,
@@ -122,6 +165,22 @@ class DisposalValidator:
         self._validate_open_maintenance(ctx, row.asset_id)
         self._validate_open_assignment(ctx, row.asset_id)
         self._validate_pending_transfer(ctx, row.asset_id)
+
+    @staticmethod
+    def _validate_pending_disposal_operational_status(asset, *, phase: str) -> None:
+        ops = getattr(asset, "operational_status", None)
+        key = str(ops).strip().upper() if ops is not None else ""
+        if key == _PENDING:
+            return
+        if key == _RETIRED:
+            raise DisposalValidationError(_RETIRED_MESSAGE)
+        if phase == "create":
+            raise DisposalValidationError(_CREATE_PENDING_MESSAGE)
+        message = _PHASE_NO_LONGER_PENDING.get(
+            phase,
+            "Disposal cannot proceed because the asset is no longer pending disposal.",
+        )
+        raise DisposalValidationError(message)
 
     def _validate_disposal_type(self, fields: dict) -> None:
         disposal_type = fields.get("disposal_type")
@@ -154,7 +213,8 @@ class DisposalValidator:
         )
         if open_asn is not None:
             raise DisposalValidationError(
-                f"Asset has an open assignment ({open_asn.document_number}); return or cancel first"
+                f"Asset has an open assignment ({open_asn.document_number}); "
+                "return or cancel first"
             )
 
     def _validate_pending_transfer(self, ctx: TenantContext, asset_id: UUID) -> None:

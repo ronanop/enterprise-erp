@@ -36,6 +36,8 @@ export type AssignmentWizardProps = {
   onAssetChange?: (assetId: string) => void;
   /** Last-step primary action label (container may pass Submit). */
   finishLabel?: string;
+  unavailableAssetMessage?: string | null;
+  onClearUnavailableAsset?: () => void;
 };
 
 export function AssignmentWizard({
@@ -51,6 +53,8 @@ export function AssignmentWizard({
   onFinish,
   onAssetChange,
   finishLabel = "Save draft",
+  unavailableAssetMessage,
+  onClearUnavailableAsset,
 }: AssignmentWizardProps) {
   const [step, setStep] = useState(0);
   const [maxVisited, setMaxVisited] = useState(0);
@@ -155,7 +159,15 @@ export function AssignmentWizard({
       {step === 0 ? (
         <EmployeeStep state={state} onChange={patch} showAdvancedAllocation employees={employees} />
       ) : null}
-      {step === 1 ? <AssetStep state={state} onChange={patch} assets={assets} /> : null}
+      {step === 1 ? (
+        <AssetStep
+          state={state}
+          onChange={patch}
+          assets={assets}
+          unavailableAssetMessage={unavailableAssetMessage}
+          onClearUnavailableAsset={onClearUnavailableAsset}
+        />
+      ) : null}
       {step === 2 ? <IssuedItemsStep state={state} onChange={patch} items={issuedItems} /> : null}
       {step === 3 ? <DeliveryStep state={state} onChange={patch} /> : null}
       {step === 4 ? (

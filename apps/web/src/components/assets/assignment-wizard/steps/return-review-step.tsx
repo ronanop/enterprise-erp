@@ -41,6 +41,22 @@ export function ReturnReviewStep({ state, summary = MOCK_RETURN_SUMMARY }: Retur
           <dt className="text-xs text-muted-foreground">Reason</dt>
           <dd>{state.reason || "—"}</dd>
         </div>
+        <div>
+          <dt className="text-xs text-muted-foreground">Components</dt>
+          <dd>
+            {!(state.componentReturns ?? []).length ? (
+              "—"
+            ) : (
+              <ul className="mt-1 list-none space-y-1 p-0">
+                {(state.componentReturns ?? []).map((line) => (
+                  <li key={line.componentId} className="text-xs">
+                    {line.label} ({line.serialNumber}) — {line.issueStatus}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </dd>
+        </div>
       </dl>
       <p className="rounded-md border border-amber-500/30 bg-amber-500/5 px-3 py-2 text-xs text-muted-foreground">
         Confirming will return the assignment and update operational status.

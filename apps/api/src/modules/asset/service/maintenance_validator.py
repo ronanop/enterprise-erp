@@ -8,7 +8,11 @@ from core.exceptions import NotFoundException
 from modules.asset.adapters.master_data_port import AssetMasterDataAdapter
 from modules.asset.domain.enums import AssetMaintenanceStatus, AssetStatus
 from modules.asset.domain.exceptions import MaintenanceValidationError
+from modules.asset.domain.operational_status_rules import (
+    OPS_BLOCKED_FOR_MAINTENANCE_OR_TRANSFER,
+)
 from modules.asset.models import AstAssetMaintenance
+from modules.asset.repository.asset_assignment_repository import AssetAssignmentRepository
 from modules.asset.repository.asset_maintenance_repository import AssetMaintenanceRepository
 from modules.asset.repository.asset_repository import AssetRepository
 from modules.asset.repository.asset_transfer_repository import AssetTransferRepository
@@ -26,12 +30,17 @@ OPEN_STATUSES = frozenset(
     }
 )
 
+_ASSIGNED_BLOCK_MESSAGE = (
+    "Asset is currently assigned. Return the asset before starting maintenance."
+)
+
 
 class MaintenanceValidator:
     def __init__(self, db: Session) -> None:
         self._assets = AssetRepository(db)
         self._maintenances = AssetMaintenanceRepository(db)
         self._transfers = AssetTransferRepository(db)
+        self._assignments = AssetAssignmentRepository(db)
         self._master = AssetMasterDataAdapter(db)
         self._plan_validator = MaintenancePlanValidator(db)
 
@@ -49,6 +58,10 @@ class MaintenanceValidator:
         if asset is None:
             raise NotFoundException("Asset not found")
         self._validate_asset_is_serviceable(asset.status)
+        self._validate_operational_allows_maintenance(
+            getattr(asset, "operational_status", None)
+        )
+        self._validate_no_open_assignment(ctx, asset_id)
         if asset.company_id != company_id:
             raise MaintenanceValidationError("Asset does not belong to this company")
         self._validate_type_and_refs(ctx, fields, asset_id=asset_id)
@@ -80,6 +93,10 @@ class MaintenanceValidator:
         if asset is None:
             raise NotFoundException("Asset not found")
         self._validate_asset_is_serviceable(asset.status)
+        self._validate_operational_allows_maintenance(
+            getattr(asset, "operational_status", None)
+        )
+        self._validate_no_open_assignment(ctx, row.asset_id)
         self._validate_type_and_refs(ctx, merged, asset_id=row.asset_id)
         self._validate_open_work_order(ctx, row.asset_id, exclude_id=row.id)
 
@@ -90,6 +107,10 @@ class MaintenanceValidator:
         if asset is None:
             raise NotFoundException("Asset not found")
         self._validate_asset_is_serviceable(asset.status)
+        self._validate_operational_allows_maintenance(
+            getattr(asset, "operational_status", None)
+        )
+        self._validate_no_open_assignment(ctx, row.asset_id)
         self._validate_type_and_refs(
             ctx,
             {
@@ -102,6 +123,18 @@ class MaintenanceValidator:
         )
         self._validate_open_work_order(ctx, row.asset_id, exclude_id=row.id)
 
+    def validate_approve_readiness(self, ctx: TenantContext, row: AstAssetMaintenance) -> None:
+        if row.status != AssetMaintenanceStatus.SUBMITTED.value:
+            raise MaintenanceValidationError("Only submitted maintenance can be approved")
+        asset = self._assets.get(ctx, row.asset_id)
+        if asset is None:
+            raise NotFoundException("Asset not found")
+        self._validate_asset_is_serviceable(asset.status)
+        self._validate_operational_allows_maintenance(
+            getattr(asset, "operational_status", None)
+        )
+        self._validate_no_open_assignment(ctx, row.asset_id)
+
     def validate_start_readiness(self, ctx: TenantContext, row: AstAssetMaintenance) -> None:
         if row.status not in {
             AssetMaintenanceStatus.APPROVED.value,
@@ -112,6 +145,10 @@ class MaintenanceValidator:
         if asset is None:
             raise NotFoundException("Asset not found")
         self._validate_asset_is_serviceable(asset.status)
+        self._validate_operational_allows_maintenance(
+            getattr(asset, "operational_status", None)
+        )
+        self._validate_no_open_assignment(ctx, row.asset_id)
         self._validate_pending_transfer(ctx, row.asset_id)
 
     def validate_complete_readiness(self, ctx: TenantContext, row: AstAssetMaintenance) -> None:
@@ -178,6 +215,13 @@ class MaintenanceValidator:
                 f"Asset has a pending transfer ({pending.document_number})"
             )
 
+    def _validate_no_open_assignment(self, ctx: TenantContext, asset_id: UUID) -> None:
+        open_asn = self._assignments.find_pending_or_active_for_asset(
+            ctx, asset_id, exclude_id=None
+        )
+        if open_asn is not None:
+            raise MaintenanceValidationError(_ASSIGNED_BLOCK_MESSAGE)
+
     @staticmethod
     def _validate_asset_is_serviceable(status: str) -> None:
         if status in {AssetStatus.DISPOSED.value, AssetStatus.WRITTEN_OFF.value}:
@@ -185,4 +229,12 @@ class MaintenanceValidator:
         if status not in {AssetStatus.ACTIVE.value, AssetStatus.IN_MAINTENANCE.value}:
             raise MaintenanceValidationError(
                 "Only active or in_maintenance assets can have maintenance work orders"
+            )
+
+    @staticmethod
+    def _validate_operational_allows_maintenance(operational_status: str | None) -> None:
+        ops = str(operational_status or "").strip().upper()
+        if ops in OPS_BLOCKED_FOR_MAINTENANCE_OR_TRANSFER:
+            raise MaintenanceValidationError(
+                "Retired, pending disposal, or disposed assets cannot enter maintenance."
             )

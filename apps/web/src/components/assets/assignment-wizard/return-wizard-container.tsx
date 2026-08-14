@@ -36,6 +36,16 @@ export type ReturnWizardContainerService = {
   findActiveAssignmentForAsset: (assetId: string) => Promise<AssignmentResponse | null>;
   getAsset: (assetId: string) => Promise<AssetsRow>;
   returnAsset: (id: string, body: AssignmentReturnRequest) => Promise<AssignmentResponse>;
+  listAssignmentComponents?: (assignmentId: string) => Promise<
+    Array<{
+      component_id: string;
+      issue_status: string;
+      component_code?: string | null;
+      component_name?: string | null;
+      component_type?: string | null;
+      serial_number?: string | null;
+    }>
+  >;
   formatError: (err: unknown, fallback: string) => string;
 };
 
@@ -59,6 +69,8 @@ function bindDefaultService(): ReturnWizardContainerService {
       assignmentFrontendService.findActiveAssignmentForAsset.bind(assignmentFrontendService),
     getAsset: assignmentFrontendService.getAsset.bind(assignmentFrontendService),
     returnAsset: assignmentFrontendService.returnAsset.bind(assignmentFrontendService),
+    listAssignmentComponents:
+      assignmentFrontendService.listAssignmentComponents.bind(assignmentFrontendService),
     formatError: assignmentFrontendService.formatError.bind(assignmentFrontendService),
   };
 }
@@ -125,11 +137,28 @@ export function ReturnWizardContainer({
         employees.find((e) => e.id === assignment.employee_id)?.label ??
         (assignment.employee_id ? assignment.employee_id.slice(0, 8) : "Assigned");
 
+      const issuedLines = service.listAssignmentComponents
+        ? await service.listAssignmentComponents(assignment.id)
+        : [];
+      const componentReturns = issuedLines
+        .filter((line) => line.issue_status === "ISSUED")
+        .map((line) => ({
+          componentId: line.component_id,
+          label:
+            [line.component_type, line.component_name || line.component_code]
+              .filter(Boolean)
+              .join(" · ") || line.component_id.slice(0, 8),
+          serialNumber: line.serial_number?.trim() || "—",
+          issueStatus: "RETURNED" as const,
+          returnRemarks: "",
+        }));
+
       setAssignmentId(assignment.id);
       setSummary(buildReturnSummary(assignment, asset, empLabel));
       setWizardState({
         ...EMPTY_RETURN_WIZARD_STATE,
         ...initialStateRef.current,
+        componentReturns,
       });
       setHydrationKey(`return-${assignment.id}`);
     } catch (err) {

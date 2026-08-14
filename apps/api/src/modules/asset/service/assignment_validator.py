@@ -13,7 +13,7 @@ from modules.asset.domain.assignment_enrichment import (
     validate_return_remarks,
 )
 from modules.asset.domain.assignment_return_condition import operational_action_for_return_condition
-from modules.asset.domain.enums import AssetAssignmentStatus, AssetStatus
+from modules.asset.domain.enums import AssetAssignmentStatus, AssetOperationalStatus, AssetStatus
 from modules.asset.domain.exceptions import AssignmentValidationError
 from modules.asset.models import AstAssetAssignment
 from modules.asset.repository.asset_assignment_repository import AssetAssignmentRepository
@@ -22,6 +22,29 @@ from modules.asset.repository.asset_transfer_repository import AssetTransferRepo
 from modules.foundation.domain.value_objects import TenantContext
 
 ALLOCATION_TYPES = frozenset({"employee", "department", "project", "branch", "warehouse"})
+
+# User-facing messages when operational_status blocks a new assignment (Phase 5B).
+_OPS_NOT_ASSIGNABLE_MESSAGES: dict[str, str] = {
+    AssetOperationalStatus.ASSIGNED.value: "Asset is already assigned.",
+    AssetOperationalStatus.RETIRED.value: "Retired assets cannot be assigned.",
+    AssetOperationalStatus.PENDING_DISPOSAL.value: (
+        "Asset is pending disposal and cannot be assigned."
+    ),
+    AssetOperationalStatus.DISPOSED.value: "Disposed assets cannot be assigned.",
+}
+
+
+def operational_status_not_assignable_message(operational_status: str | None) -> str:
+    """Clear domain message when asset is not READY_TO_MOVE for assignment."""
+    if operational_status is None or not str(operational_status).strip():
+        return "Asset is not ready to move and cannot be assigned."
+    key = str(operational_status).strip().upper()
+    if key == AssetOperationalStatus.READY_TO_MOVE.value:
+        return "Asset is available for assignment."
+    return _OPS_NOT_ASSIGNABLE_MESSAGES.get(
+        key,
+        "Asset is not ready to move and cannot be assigned.",
+    )
 
 
 class AssignmentValidator:
@@ -46,6 +69,7 @@ class AssignmentValidator:
         if asset is None:
             raise NotFoundException("Asset not found")
         self._validate_asset_is_assignable(asset.status)
+        self._validate_operational_eligibility(getattr(asset, "operational_status", None))
         if asset.company_id != company_id:
             raise AssignmentValidationError("Asset does not belong to this company")
         self._validate_allocation_fields(ctx, company_id=company_id, fields=fields)
@@ -65,6 +89,9 @@ class AssignmentValidator:
         validated = validate_draft_enrichment_fields(
             delivery_reference_number=fields.get("delivery_reference_number"),
             delivery_reference_status=fields.get("delivery_reference_status"),
+            delivery_challan_signature_status=fields.get(
+                "delivery_challan_signature_status"
+            ),
             assignment_remarks=fields.get("assignment_remarks"),
             return_remarks=fields.get("return_remarks"),
             allow_return_remarks=allow_return,
@@ -80,6 +107,9 @@ class AssignmentValidator:
         validate_draft_enrichment_fields(
             delivery_reference_number=row.delivery_reference_number,
             delivery_reference_status=row.delivery_reference_status,
+            delivery_challan_signature_status=getattr(
+                row, "delivery_challan_signature_status", None
+            ),
             assignment_remarks=row.assignment_remarks,
             return_remarks=None,
             allow_return_remarks=False,
@@ -134,6 +164,10 @@ class AssignmentValidator:
             "delivery_reference_status": fields.get(
                 "delivery_reference_status", row.delivery_reference_status
             ),
+            "delivery_challan_signature_status": fields.get(
+                "delivery_challan_signature_status",
+                getattr(row, "delivery_challan_signature_status", None),
+            ),
             "assignment_remarks": fields.get("assignment_remarks", row.assignment_remarks),
             "return_remarks": fields.get("return_remarks"),
         }
@@ -146,6 +180,7 @@ class AssignmentValidator:
         if asset is None:
             raise NotFoundException("Asset not found")
         self._validate_asset_is_assignable(asset.status)
+        self._validate_operational_eligibility(getattr(asset, "operational_status", None))
         fields = {
             "allocation_type": row.allocation_type,
             "employee_id": row.employee_id,
@@ -175,6 +210,7 @@ class AssignmentValidator:
         if asset is None:
             raise NotFoundException("Asset not found")
         self._validate_asset_is_assignable(asset.status)
+        self._validate_operational_eligibility(getattr(asset, "operational_status", None))
         fields = {
             "allocation_type": row.allocation_type,
             "employee_id": row.employee_id,
@@ -255,3 +291,16 @@ class AssignmentValidator:
     def _validate_asset_is_assignable(status: str) -> None:
         if status not in {AssetStatus.ACTIVE.value, AssetStatus.IN_MAINTENANCE.value}:
             raise AssignmentValidationError("Only active or in_maintenance assets can be assigned")
+
+    @staticmethod
+    def _validate_operational_eligibility(operational_status: str | None) -> None:
+        """Early + late gate: only READY_TO_MOVE assets can enter assignment (Phase 5B).
+
+        Activation still also runs AssetOperationalStatusService.apply_action(\"assign\")
+        as the final race-condition safety check.
+        """
+        ready = AssetOperationalStatus.READY_TO_MOVE.value
+        current = (operational_status or "").strip().upper() or None
+        if current == ready:
+            return
+        raise AssignmentValidationError(operational_status_not_assignable_message(current))

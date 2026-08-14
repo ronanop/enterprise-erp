@@ -24,6 +24,11 @@ describe("buildInventoryActionPermissions", () => {
     expect(perms.return).toBe(true);
     expect(perms.viewDetails).toBe(false);
   });
+
+  it("enables startDisposal with disposal create permission", () => {
+    const perms = buildInventoryActionPermissions((p) => p === "asset.disposal:create");
+    expect(perms.startDisposal).toBe(true);
+  });
 });
 
 describe("buildInventoryQuickLinkPermissions", () => {

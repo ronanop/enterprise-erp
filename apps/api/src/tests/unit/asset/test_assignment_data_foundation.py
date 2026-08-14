@@ -84,6 +84,7 @@ def _draft_row(ctx: TenantContext, **overrides) -> AstAssetAssignment:
         employee_id=uuid4(),
         status="draft",
         delivery_reference_status="not_applicable",
+        delivery_challan_signature_status="not_signed",
         is_deleted=False,
         version=1,
         created_at=now,
@@ -248,6 +249,7 @@ def test_response_from_orm_row() -> None:
     dto = AssetAssignmentResponse.model_validate(row)
     assert dto.delivery_reference_number == "REF-9"
     assert dto.delivery_reference_status == "pending"
+    assert dto.delivery_challan_signature_status == "not_signed"
     assert dto.assignment_remarks == "note"
     assert dto.return_remarks == "ret"
 

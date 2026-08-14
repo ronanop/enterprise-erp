@@ -44,12 +44,14 @@ export function AssignmentHistorySection({ history, className }: AssignmentHisto
               </p>
               <dl className="mt-2 grid gap-1 text-xs sm:grid-cols-2">
                 <div>
-                  <dt className="text-muted-foreground">Delivery</dt>
-                  <dd>
-                    {entry.deliveryReferenceNumber}
-                    {entry.deliveryReferenceStatus !== "—"
-                      ? ` (${entry.deliveryReferenceStatus})`
-                      : ""}
+                  <dt className="text-muted-foreground">Delivery Challan</dt>
+                  <dd data-testid="drawer-history-delivery">
+                    {entry.deliveryChallanSummary ||
+                      `${entry.deliveryReferenceNumber}${
+                        entry.deliveryReferenceStatus !== "—"
+                          ? ` (${entry.deliveryReferenceStatus})`
+                          : ""
+                      }`}
                   </dd>
                 </div>
                 <div className="sm:col-span-2">

@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Banknote,
@@ -10,6 +11,12 @@ import {
   SquarePen,
 } from "lucide-react";
 
+import { StatusBadge } from "@/components/assets/shared";
+import {
+  formatLifecycleStatusLabel,
+  isOperationalStatus,
+  OPERATIONAL_STATUS_LABELS,
+} from "@/components/assets/shared/asset-status";
 import { PageHeader } from "@/components/layout/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -26,12 +33,14 @@ import {
 import { getAccessTokenUserId, isAuthenticated } from "@/lib/auth";
 import { ApiClientError, resourceService } from "@/services/api-client";
 
-type AssetRow = {
+export type DisposalAssetOption = {
   id: string;
   asset_code: string;
   asset_name: string;
   branch_id: string;
   status: string;
+  operational_status?: string | null;
+  serial_number?: string | null;
 };
 
 type DisposalRow = {
@@ -73,13 +82,87 @@ function shortId(value?: string | null): string {
   return value ? value.slice(0, 8) : "None";
 }
 
+export function isDisposalEligibleAsset(asset: {
+  operational_status?: string | null;
+}): boolean {
+  return String(asset.operational_status ?? "").toUpperCase() === "PENDING_DISPOSAL";
+}
+
+export function formatDisposalGateError(message: string): {
+  title: string;
+  detail: string;
+  showAssignmentsLink: boolean;
+} {
+  const lower = message.toLowerCase();
+  if (lower.includes("retired")) {
+    return {
+      title: "Retired assets are not currently eligible for disposal.",
+      detail: message,
+      showAssignmentsLink: false,
+    };
+  }
+  if (lower.includes("pending_disposal") || lower.includes("pending disposal")) {
+    return {
+      title: "Asset is not pending disposal.",
+      detail:
+        "Return the asset with condition 'Dead' before creating a disposal request.",
+      showAssignmentsLink: true,
+    };
+  }
+  return { title: message, detail: "", showAssignmentsLink: false };
+}
+
+export function DisposalEligibilityPanel({ asset }: { asset: DisposalAssetOption }) {
+  const ops = String(asset.operational_status ?? "").toUpperCase();
+  const eligible = ops === "PENDING_DISPOSAL";
+  return (
+    <div
+      className="rounded-md border border-border/80 bg-muted/20 px-3 py-2 text-xs"
+      data-testid="disposal-eligibility-panel"
+    >
+      <p className="mb-2 font-medium text-foreground">
+        {eligible ? "Asset eligible for disposal" : "Asset cannot be disposed"}
+      </p>
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="text-muted-foreground">Lifecycle Status</span>
+        <StatusBadge kind="lifecycle" status={asset.status} />
+        <span className="text-muted-foreground">Operational Status</span>
+        {isOperationalStatus(ops) ? (
+          <StatusBadge kind="operational" status={ops} />
+        ) : (
+          <Badge variant="outline">{ops || "—"}</Badge>
+        )}
+      </div>
+      {eligible ? (
+        <ul className="mt-2 list-none space-y-0.5 p-0 text-muted-foreground">
+          <li>✓ Operational status: Pending Disposal</li>
+          <li>✓ Backend still re-checks assignment, transfer, maintenance, and components</li>
+        </ul>
+      ) : (
+        <p className="mt-2 text-muted-foreground" data-testid="disposal-eligibility-reason">
+          {ops === "RETIRED"
+            ? "Retired assets are not currently eligible for disposal."
+            : ops === "ASSIGNED"
+              ? "Not eligible — return the asset with condition Dead first."
+              : "Not eligible — operational status must be Pending Disposal."}
+        </p>
+      )}
+    </div>
+  );
+}
+
 export function AssetDisposalWorkspace() {
   const apiPath = "/assets/asset-disposals";
   const assetsPath = "/assets/assets";
 
   const [rows, setRows] = useState<DisposalRow[]>([]);
-  const [assetOptions, setAssetOptions] = useState<AssetRow[]>([]);
+  const [assetOptions, setAssetOptions] = useState<DisposalAssetOption[]>([]);
   const [selected, setSelected] = useState<DisposalRow | null>(null);
+  const [gateError, setGateError] = useState<{
+    title: string;
+    detail: string;
+    showAssignmentsLink: boolean;
+  } | null>(null);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [pageSize] = useState(25);
@@ -134,24 +217,13 @@ export function AssetDisposalWorkspace() {
   const loadAssets = useCallback(async () => {
     if (!isAuthenticated()) return;
     try {
-      const active = await resourceService.list<ListPayload<AssetRow>>(
-        `${assetsPath}?page=1&page_size=100&status=active`,
+      const pending = await resourceService.list<ListPayload<DisposalAssetOption>>(
+        `${assetsPath}?page=1&page_size=100&operational_status=PENDING_DISPOSAL`,
       );
-      const maintenance = await resourceService.list<ListPayload<AssetRow>>(
-        `${assetsPath}?page=1&page_size=100&status=in_maintenance`,
+      const items = parseListItems<DisposalAssetOption>(pending.data).filter(
+        isDisposalEligibleAsset,
       );
-      const merged = [
-        ...parseListItems<AssetRow>(active.data),
-        ...parseListItems<AssetRow>(maintenance.data),
-      ];
-      const seen = new Set<string>();
-      setAssetOptions(
-        merged.filter((row) => {
-          if (seen.has(row.id)) return false;
-          seen.add(row.id);
-          return true;
-        }),
-      );
+      setAssetOptions(items);
     } catch {
       setAssetOptions([]);
     }
@@ -216,6 +288,8 @@ export function AssetDisposalWorkspace() {
 
   function onDraftAssetChange(assetId: string) {
     const asset = assetMap.get(assetId);
+    setGateError(null);
+    setError(null);
     setDraft((s) => ({
       ...s,
       asset_id: assetId,
@@ -227,17 +301,29 @@ export function AssetDisposalWorkspace() {
     if (!payload.asset_id) return "Select an asset.";
     if (!payload.branch_id) return "Branch is required.";
     if (!payload.disposal_type) return "Select a disposal type.";
+    const asset = assetMap.get(payload.asset_id);
+    if (!asset || !isDisposalEligibleAsset(asset)) {
+      return "Asset must be Pending Disposal. Return the asset with condition Dead first.";
+    }
     return null;
+  }
+
+  function captureActionError(err: unknown, fallback: string) {
+    const message = err instanceof ApiClientError ? err.message : fallback;
+    setError(message);
+    setGateError(formatDisposalGateError(message));
   }
 
   async function createDraft() {
     const message = validateDraft(draft);
     if (message) {
       setError(message);
+      setGateError(formatDisposalGateError(message));
       return;
     }
     setActionLoading(true);
     setError(null);
+    setGateError(null);
     try {
       await resourceService.create(apiPath, {
         asset_id: draft.asset_id,
@@ -259,7 +345,7 @@ export function AssetDisposalWorkspace() {
       });
       await load();
     } catch (err) {
-      setError(err instanceof ApiClientError ? err.message : "Failed to create draft");
+      captureActionError(err, "Failed to create draft");
     } finally {
       setActionLoading(false);
     }
@@ -301,6 +387,7 @@ export function AssetDisposalWorkspace() {
     if (!selected) return;
     setActionLoading(true);
     setError(null);
+    setGateError(null);
     try {
       await resourceService.action(apiPath, selected.id, action, body);
       await load();
@@ -312,7 +399,7 @@ export function AssetDisposalWorkspace() {
         setPostAccounts({ debit_account_id: "", credit_account_id: "", fiscal_year_id: "" });
       }
     } catch (err) {
-      setError(err instanceof ApiClientError ? err.message : "Action failed");
+      captureActionError(err, "Action failed");
     } finally {
       setActionLoading(false);
     }
@@ -348,7 +435,26 @@ export function AssetDisposalWorkspace() {
         description="Governed retirement and write-off with multi-step approval and Finance journal posting."
       />
 
-      {error ? (
+      {gateError ? (
+        <div
+          className="rounded-md border border-destructive/40 bg-destructive/5 px-3 py-2 text-sm text-destructive"
+          data-testid="disposal-gate-error"
+          role="alert"
+        >
+          <p className="font-medium">{gateError.title}</p>
+          {gateError.detail ? <p className="mt-1 text-xs opacity-90">{gateError.detail}</p> : null}
+          {gateError.showAssignmentsLink ? (
+            <p className="mt-2">
+              <Link
+                href="/assets/asset-assignments"
+                className="cursor-pointer underline underline-offset-2 transition-colors duration-200 hover:text-foreground"
+              >
+                Go to Assignments
+              </Link>
+            </p>
+          ) : null}
+        </div>
+      ) : error ? (
         <div className="rounded-md border border-destructive/40 bg-destructive/5 px-3 py-2 text-sm text-destructive">
           {error}
         </div>
@@ -520,19 +626,55 @@ export function AssetDisposalWorkspace() {
             <CardContent className="space-y-3">
               <div className="space-y-2">
                 <Label htmlFor="dsp-asset">Asset</Label>
-                <Select value={draft.asset_id || undefined} onValueChange={onDraftAssetChange}>
-                  <SelectTrigger id="dsp-asset" className="cursor-pointer">
-                    <SelectValue placeholder="Select asset" />
+                <Select
+                  value={draft.asset_id || undefined}
+                  onValueChange={onDraftAssetChange}
+                  disabled={assetOptions.length === 0}
+                >
+                  <SelectTrigger
+                    id="dsp-asset"
+                    className="cursor-pointer"
+                    data-testid="disposal-asset-select"
+                  >
+                    <SelectValue
+                      placeholder={
+                        assetOptions.length === 0
+                          ? "No pending-disposal assets"
+                          : "Select pending-disposal asset"
+                      }
+                    />
                   </SelectTrigger>
                   <SelectContent>
-                    {assetOptions.map((asset) => (
-                      <SelectItem key={asset.id} value={asset.id} className="cursor-pointer">
-                        {asset.asset_code} — {asset.asset_name}
-                      </SelectItem>
-                    ))}
+                    {assetOptions.map((asset) => {
+                      const ops = String(asset.operational_status ?? "PENDING_DISPOSAL");
+                      const opsLabel = isOperationalStatus(ops)
+                        ? OPERATIONAL_STATUS_LABELS[ops]
+                        : ops;
+                      const serial =
+                        typeof asset.serial_number === "string" && asset.serial_number.trim()
+                          ? asset.serial_number.trim()
+                          : "—";
+                      return (
+                        <SelectItem key={asset.id} value={asset.id} className="cursor-pointer">
+                          {asset.asset_code} — {asset.asset_name} · S/N: {serial} · Lifecycle:{" "}
+                          {formatLifecycleStatusLabel(asset.status)} · Operational: {opsLabel}
+                        </SelectItem>
+                      );
+                    })}
                   </SelectContent>
                 </Select>
+                {assetOptions.length === 0 ? (
+                  <p
+                    className="text-xs text-muted-foreground"
+                    data-testid="disposal-no-pending-assets"
+                  >
+                    No assets are pending disposal. Return an asset with condition Dead first.
+                  </p>
+                ) : null}
               </div>
+              {draft.asset_id && assetMap.get(draft.asset_id) ? (
+                <DisposalEligibilityPanel asset={assetMap.get(draft.asset_id)!} />
+              ) : null}
               <div className="space-y-2">
                 <Label htmlFor="dsp-type">Disposal type</Label>
                 <Select

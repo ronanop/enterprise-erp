@@ -21,12 +21,18 @@ def _ctx() -> TenantContext:
     )
 
 
-def _asset(company_id, *, is_shared: bool = False):
+def _asset(
+    company_id,
+    *,
+    is_shared: bool = False,
+    operational_status: str | None = "READY_TO_MOVE",
+):
     return SimpleNamespace(
         id=uuid4(),
         company_id=company_id,
         branch_id=uuid4(),
         status="active",
+        operational_status=operational_status,
         is_shared=is_shared,
     )
 
@@ -107,3 +113,87 @@ def test_activate_requires_submitted() -> None:
     )
     with pytest.raises(AssignmentValidationError, match="submitted"):
         validator.validate_activate_readiness(_ctx(), row)
+
+
+@pytest.mark.parametrize(
+    ("ops", "match"),
+    [
+        ("ASSIGNED", "already assigned"),
+        ("RETIRED", "Retired assets"),
+        ("PENDING_DISPOSAL", "pending disposal"),
+        ("DISPOSED", "Disposed assets"),
+        (None, "not ready to move"),
+    ],
+)
+def test_create_blocks_non_ready_operational_status(ops: str | None, match: str) -> None:
+    validator = AssignmentValidator(MagicMock())
+    ctx = _ctx()
+    asset = _asset(ctx.company_id, is_shared=True, operational_status=ops)
+    with patch.object(validator._assets, "get", return_value=asset):
+        with patch.object(validator._master, "get_employee", return_value=MagicMock()):
+            with patch.object(validator._transfers, "find_pending_for_asset", return_value=None):
+                with patch.object(
+                    validator._assignments, "find_pending_or_active_for_asset", return_value=None
+                ):
+                    with pytest.raises(AssignmentValidationError, match=match):
+                        validator.validate_create_fields(
+                            ctx,
+                            company_id=ctx.company_id,
+                            fields={
+                                "asset_id": asset.id,
+                                "allocation_type": "employee",
+                                "employee_id": uuid4(),
+                            },
+                        )
+
+
+def test_create_allows_ready_to_move() -> None:
+    validator = AssignmentValidator(MagicMock())
+    ctx = _ctx()
+    asset = _asset(ctx.company_id, is_shared=True, operational_status="READY_TO_MOVE")
+    with patch.object(validator._assets, "get", return_value=asset):
+        with patch.object(validator._master, "get_employee", return_value=MagicMock()):
+            with patch.object(validator._transfers, "find_pending_for_asset", return_value=None):
+                with patch.object(
+                    validator._assignments, "find_pending_or_active_for_asset", return_value=None
+                ):
+                    result = validator.validate_create_fields(
+                        ctx,
+                        company_id=ctx.company_id,
+                        fields={
+                            "asset_id": asset.id,
+                            "allocation_type": "employee",
+                            "employee_id": uuid4(),
+                            "delivery_reference_status": "pending",
+                        },
+                    )
+    assert result["delivery_reference_status"] == "pending"
+
+
+def test_activate_blocks_when_ops_changed_to_assigned() -> None:
+    """Race: draft created while READY; activate after another assignment."""
+    validator = AssignmentValidator(MagicMock())
+    ctx = _ctx()
+    asset = _asset(ctx.company_id, is_shared=True, operational_status="ASSIGNED")
+    row = SimpleNamespace(
+        id=uuid4(),
+        asset_id=asset.id,
+        company_id=ctx.company_id,
+        status="submitted",
+        allocation_type="employee",
+        employee_id=uuid4(),
+        department_id=None,
+        project_id=None,
+        delivery_reference_number="DC-1",
+        delivery_reference_status="issued",
+        delivery_challan_signature_status="not_signed",
+        assignment_remarks="ok",
+    )
+    with patch.object(validator._assets, "get", return_value=asset):
+        with patch.object(validator._master, "get_employee", return_value=MagicMock()):
+            with patch.object(validator._transfers, "find_pending_for_asset", return_value=None):
+                with patch.object(
+                    validator._assignments, "find_pending_or_active_for_asset", return_value=None
+                ):
+                    with pytest.raises(AssignmentValidationError, match="already assigned"):
+                        validator.validate_activate_readiness(ctx, row)

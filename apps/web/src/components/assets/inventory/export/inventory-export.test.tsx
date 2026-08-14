@@ -35,6 +35,7 @@ function sampleRow(overrides: Partial<InventoryRowViewModel> = {}): InventoryRow
     id: "a1",
     assetTag: "AST-1",
     laptopName: "ThinkPad",
+    serialNumber: "SN-1",
     manufacturer: "Lenovo",
     model: "T14",
     configuration: "i7 · 16GB",
@@ -288,7 +289,7 @@ describe("fetchAllInventoryRowsForExport", () => {
     expect(rows[200].assetTag).toBe("AST-200");
   });
 
-  it("applies client department filter to full set", async () => {
+  it("sends department_id to listAssets (server-side filter)", async () => {
     const listAssets = vi.fn().mockResolvedValue({
       items: [
         {
@@ -300,17 +301,8 @@ describe("fetchAllInventoryRowsForExport", () => {
           operational_status: "READY_TO_MOVE",
           status: "active",
         },
-        {
-          id: "2",
-          asset_code: "B",
-          asset_name: "Y",
-          department_id: "other",
-          branch_id: "b1",
-          operational_status: "READY_TO_MOVE",
-          status: "active",
-        },
       ],
-      total: 2,
+      total: 1,
       page: 1,
       page_size: 200,
     });
@@ -323,6 +315,9 @@ describe("fetchAllInventoryRowsForExport", () => {
       lookup,
       deps: { listAssets, listAssignments },
     });
+    expect(listAssets).toHaveBeenCalledWith(
+      expect.objectContaining({ department_id: "d1" }),
+    );
     expect(rows).toHaveLength(1);
     expect(rows[0].assetTag).toBe("A");
   });
@@ -696,7 +691,7 @@ describe("workspace export wiring", () => {
     expect(listAssets.mock.calls[0][0].branch_id).toBe("branch-99");
   });
 
-  it("asset type client filter applied", async () => {
+  it("sends asset_type to listAssets (server-side filter)", async () => {
     const listAssets = vi.fn().mockResolvedValue({
       items: [
         {
@@ -707,16 +702,8 @@ describe("workspace export wiring", () => {
           operational_status: "READY_TO_MOVE",
           status: "active",
         },
-        {
-          id: "2",
-          asset_code: "B",
-          asset_name: "Y",
-          asset_type: "consumable",
-          operational_status: "READY_TO_MOVE",
-          status: "active",
-        },
       ],
-      total: 2,
+      total: 1,
       page: 1,
       page_size: 200,
     });
@@ -736,6 +723,7 @@ describe("workspace export wiring", () => {
         listAssignments: vi.fn().mockResolvedValue({ items: [], total: 0, page: 1, page_size: 200 }),
       },
     });
+    expect(listAssets).toHaveBeenCalledWith(expect.objectContaining({ asset_type: "fixed" }));
     expect(rows).toHaveLength(1);
     expect(rows[0].assetTag).toBe("A");
   });

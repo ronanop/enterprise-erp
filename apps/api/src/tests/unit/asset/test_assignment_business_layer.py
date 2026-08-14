@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
+import json
 from datetime import datetime, timezone
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 
@@ -14,7 +15,10 @@ from modules.asset.domain.exceptions import AssignmentValidationError
 from modules.asset.models.asset_assignment import AstAssetAssignment
 from modules.asset.repository.asset_assignment_repository import AssetAssignmentRepository
 from modules.asset.schemas import AssetAssignmentReturnRequest
-from modules.asset.service.assignment_service import AssignmentService
+from modules.asset.service.assignment_service import (
+    AssignmentService,
+    _json_safe_component_returns_for_audit,
+)
 from modules.asset.service.assignment_validator import AssignmentValidator
 from modules.foundation.domain.value_objects import TenantContext
 
@@ -144,7 +148,9 @@ def test_submit_blocks_employee_without_delivery_ref() -> None:
         delivery_reference_status="not_applicable",
         assignment_remarks=None,
     )
-    asset = SimpleNamespace(id=row.asset_id, status="active", is_shared=True)
+    asset = SimpleNamespace(
+        id=row.asset_id, status="active", operational_status="READY_TO_MOVE", is_shared=True
+    )
     with patch.object(v._assets, "get", return_value=asset):
         with patch.object(v._master, "get_employee", return_value=MagicMock()):
             with patch.object(v._transfers, "find_pending_for_asset", return_value=None):
@@ -170,7 +176,9 @@ def test_submit_allows_department_without_delivery_ref() -> None:
         delivery_reference_status="not_applicable",
         assignment_remarks=None,
     )
-    asset = SimpleNamespace(id=row.asset_id, status="active", is_shared=True)
+    asset = SimpleNamespace(
+        id=row.asset_id, status="active", operational_status="READY_TO_MOVE", is_shared=True
+    )
     with patch.object(v._assets, "get", return_value=asset):
         with patch.object(v._org, "get_department", return_value=SimpleNamespace(company_id=row.company_id)):
             with patch.object(v._transfers, "find_pending_for_asset", return_value=None):
@@ -188,6 +196,7 @@ def test_create_rejects_return_remarks_in_fields() -> None:
         company_id=ctx.company_id,
         branch_id=uuid4(),
         status="active",
+        operational_status="READY_TO_MOVE",
         is_shared=True,
     )
     with patch.object(v._assets, "get", return_value=asset):
@@ -416,6 +425,7 @@ def test_validate_create_fields_returns_enrichment() -> None:
         company_id=ctx.company_id,
         branch_id=uuid4(),
         status="active",
+        operational_status="READY_TO_MOVE",
         is_shared=True,
     )
     with patch.object(v._assets, "get", return_value=asset):
@@ -466,3 +476,188 @@ def test_return_audit_includes_condition() -> None:
     payload = audit.call_args.kwargs["new_value"]
     assert payload["return_condition"] == "outdated"
     assert payload["return_remarks"] == "old laptop"
+
+
+def test_json_safe_component_returns_helper_stringifies_uuid_only() -> None:
+    cid = uuid4()
+    original = [
+        {"component_id": cid, "issue_status": "RETURNED", "return_remarks": "ok"},
+    ]
+    safe = _json_safe_component_returns_for_audit(original)
+    assert safe is not None
+    assert isinstance(safe[0]["component_id"], str)
+    assert safe[0]["component_id"] == str(cid)
+    assert isinstance(original[0]["component_id"], UUID)
+    assert _json_safe_component_returns_for_audit(None) is None
+    json.dumps({"component_returns": safe})
+
+
+def _run_return_with_component_returns(
+    *,
+    return_condition: str,
+    ops_action: str,
+    component_returns: list[dict],
+):
+    svc = AssignmentService(MagicMock())
+    ctx = _ctx()
+    row_id = uuid4()
+    row = SimpleNamespace(
+        id=row_id,
+        status="active",
+        asset_id=uuid4(),
+        allocation_type="employee",
+        employee_id=uuid4(),
+    )
+    asset = SimpleNamespace(
+        id=row.asset_id,
+        version=1,
+        custodian_employee_id=row.employee_id,
+        master_asset_id=None,
+    )
+    with patch.object(svc, "get", return_value=row):
+        with patch.object(svc._validator, "validate_return_readiness"):
+            with patch.object(
+                svc._validator, "validate_return_request", return_value=ops_action
+            ):
+                with patch.object(
+                    svc._assignment_components, "reconcile_return", return_value=[]
+                ) as reconcile:
+                    with patch.object(svc._assets, "lock_for_update", return_value=asset):
+                        with patch.object(svc._operational, "apply_action"):
+                            with patch.object(svc._assets, "get", return_value=asset):
+                                with patch.object(
+                                    svc._assets, "update", return_value=asset
+                                ):
+                                    with patch.object(
+                                        svc._repo, "complete_return", return_value=row
+                                    ):
+                                        with patch.object(
+                                            svc._audit, "log_entity_change"
+                                        ) as audit:
+                                            svc.return_assignment(
+                                                ctx,
+                                                row_id,
+                                                return_condition=return_condition,
+                                                remarks="ok",
+                                                component_returns=component_returns,
+                                            )
+    return reconcile, audit
+
+
+@pytest.mark.parametrize(
+    "issue_status",
+    ("RETURNED", "MISSING", "DAMAGED", "RETAINED"),
+)
+def test_return_audit_component_outcome_json_safe(issue_status: str) -> None:
+    cid = uuid4()
+    component_returns = [
+        {"component_id": cid, "issue_status": issue_status, "return_remarks": None},
+    ]
+    reconcile, audit = _run_return_with_component_returns(
+        return_condition="good",
+        ops_action="return_to_ready",
+        component_returns=component_returns,
+    )
+    # Custody path keeps UUID
+    passed = reconcile.call_args.args[2]
+    assert passed is component_returns
+    assert isinstance(passed[0]["component_id"], UUID)
+    assert passed[0]["component_id"] == cid
+
+    payload = audit.call_args.kwargs["new_value"]
+    assert payload["component_returns"][0]["component_id"] == str(cid)
+    assert isinstance(payload["component_returns"][0]["component_id"], str)
+    assert payload["component_returns"][0]["issue_status"] == issue_status
+    json.dumps(payload)
+
+
+@pytest.mark.parametrize(
+    ("return_condition", "ops_action"),
+    [
+        ("good", "return_to_ready"),
+        ("outdated", "retire"),
+        ("dead", "retire"),
+    ],
+)
+def test_return_audit_condition_with_components_json_safe(
+    return_condition: str, ops_action: str
+) -> None:
+    cid = uuid4()
+    component_returns = [
+        {"component_id": cid, "issue_status": "RETURNED", "return_remarks": "back"},
+    ]
+    _, audit = _run_return_with_component_returns(
+        return_condition=return_condition,
+        ops_action=ops_action,
+        component_returns=component_returns,
+    )
+    payload = audit.call_args.kwargs["new_value"]
+    assert payload["return_condition"] == return_condition
+    assert payload["component_returns"][0]["component_id"] == str(cid)
+    json.dumps(payload)
+
+
+def test_return_audit_multiple_components_json_safe() -> None:
+    cids = [uuid4(), uuid4(), uuid4()]
+    component_returns = [
+        {"component_id": cids[0], "issue_status": "RETURNED", "return_remarks": None},
+        {"component_id": cids[1], "issue_status": "MISSING", "return_remarks": "lost"},
+        {"component_id": cids[2], "issue_status": "DAMAGED", "return_remarks": "crack"},
+    ]
+    reconcile, audit = _run_return_with_component_returns(
+        return_condition="good",
+        ops_action="return_to_ready",
+        component_returns=component_returns,
+    )
+    passed = reconcile.call_args.args[2]
+    assert all(isinstance(line["component_id"], UUID) for line in passed)
+    assert [line["component_id"] for line in passed] == cids
+
+    payload = audit.call_args.kwargs["new_value"]
+    assert [line["component_id"] for line in payload["component_returns"]] == [
+        str(c) for c in cids
+    ]
+    assert all(
+        isinstance(line["component_id"], str) for line in payload["component_returns"]
+    )
+    json.dumps(payload)
+
+
+def test_return_without_components_audit_still_works() -> None:
+    svc = AssignmentService(MagicMock())
+    ctx = _ctx()
+    row_id = uuid4()
+    row = SimpleNamespace(
+        id=row_id,
+        status="active",
+        asset_id=uuid4(),
+        allocation_type="branch",
+        employee_id=None,
+    )
+    asset = SimpleNamespace(
+        id=row.asset_id, version=1, custodian_employee_id=None, master_asset_id=None
+    )
+    with patch.object(svc, "get", return_value=row):
+        with patch.object(svc._validator, "validate_return_readiness"):
+            with patch.object(
+                svc._validator, "validate_return_request", return_value="return_to_ready"
+            ):
+                with patch.object(svc._assets, "lock_for_update", return_value=asset):
+                    with patch.object(svc._operational, "apply_action"):
+                        with patch.object(svc._assets, "get", return_value=asset):
+                            with patch.object(
+                                svc._repo, "complete_return", return_value=row
+                            ):
+                                with patch.object(
+                                    svc._audit, "log_entity_change"
+                                ) as audit:
+                                    svc.return_assignment(
+                                        ctx,
+                                        row_id,
+                                        return_condition="good",
+                                        remarks="no comps",
+                                    )
+    payload = audit.call_args.kwargs["new_value"]
+    assert payload["component_returns"] is None
+    assert payload["return_condition"] == "good"
+    json.dumps(payload)

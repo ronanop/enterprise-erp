@@ -35,10 +35,122 @@ ASSET_OPERATIONAL_STATUS_VALUES: frozenset[str] = frozenset(
 )
 
 
+class IncomingAssetArrivalStatus(str, Enum):
+    """IT physical receiving status for GRN-sourced incoming lines (not ast_asset ops)."""
+
+    EXPECTED = "EXPECTED"
+    PARTIALLY_ARRIVED = "PARTIALLY_ARRIVED"
+    ARRIVED = "ARRIVED"
+
+
+INCOMING_ASSET_ARRIVAL_STATUS_VALUES: frozenset[str] = frozenset(
+    s.value for s in IncomingAssetArrivalStatus
+)
+
+
+class IncomingAssetUnitStatus(str, Enum):
+    PENDING = "PENDING"
+    ARRIVED = "ARRIVED"
+
+
+INCOMING_ASSET_UNIT_STATUS_VALUES: frozenset[str] = frozenset(
+    s.value for s in IncomingAssetUnitStatus
+)
+
+
+class IncomingAssetQcStatus(str, Enum):
+    """Line-level QC orchestration status (orthogonal to arrival status)."""
+
+    PENDING = "PENDING"
+    IN_PROGRESS = "IN_PROGRESS"
+    ACCEPTED = "ACCEPTED"
+    REJECTED = "REJECTED"
+
+
+INCOMING_ASSET_QC_STATUS_VALUES: frozenset[str] = frozenset(
+    s.value for s in IncomingAssetQcStatus
+)
+
+
+class IncomingAssetUnitQcStatus(str, Enum):
+    """Unit-level QC disposition after physical arrival."""
+
+    PENDING_QC = "PENDING_QC"
+    ACCEPTED = "ACCEPTED"
+    REJECTED = "REJECTED"
+
+
+INCOMING_ASSET_UNIT_QC_STATUS_VALUES: frozenset[str] = frozenset(
+    s.value for s in IncomingAssetUnitQcStatus
+)
+
+
+class IncomingRegistrationStatus(str, Enum):
+    """Derived registration progress for QC-accepted incoming (not asset lifecycle/ops)."""
+
+    PENDING_REGISTRATION = "PENDING_REGISTRATION"
+    PARTIALLY_REGISTERED = "PARTIALLY_REGISTERED"
+    REGISTERED = "REGISTERED"
+
+
+INCOMING_REGISTRATION_STATUS_VALUES: frozenset[str] = frozenset(
+    s.value for s in IncomingRegistrationStatus
+)
+
+
 class AssetComponentStatus(str, Enum):
     ACTIVE = "active"
     REPLACED = "replaced"
     DISPOSED = "disposed"
+
+
+class AssetComponentType(str, Enum):
+    """Typed accessory categories for IT assets (Sub-phase 4C)."""
+
+    CHARGER = "CHARGER"
+    MOUSE = "MOUSE"
+    KEYBOARD = "KEYBOARD"
+    CABLE = "CABLE"
+    PENDRIVE = "PENDRIVE"
+    LAPTOP_BAG = "LAPTOP_BAG"
+    OTHER = "OTHER"
+
+
+ASSET_COMPONENT_TYPE_VALUES: frozenset[str] = frozenset(t.value for t in AssetComponentType)
+
+
+class AssignmentComponentIssueStatus(str, Enum):
+    """Custody state of a component on an assignment (Sub-phase 4C)."""
+
+    ISSUED = "ISSUED"
+    RETURNED = "RETURNED"
+    MISSING = "MISSING"
+    DAMAGED = "DAMAGED"
+    RETAINED = "RETAINED"
+
+
+ASSIGNMENT_COMPONENT_ISSUE_STATUS_VALUES: frozenset[str] = frozenset(
+    s.value for s in AssignmentComponentIssueStatus
+)
+
+# Terminal custody states — component must not become available again automatically.
+ASSIGNMENT_COMPONENT_UNAVAILABLE_STATUSES: frozenset[str] = frozenset(
+    {
+        AssignmentComponentIssueStatus.ISSUED.value,
+        AssignmentComponentIssueStatus.MISSING.value,
+        AssignmentComponentIssueStatus.DAMAGED.value,
+        AssignmentComponentIssueStatus.RETAINED.value,
+    }
+)
+
+ASSIGNMENT_COMPONENT_RETURN_OUTCOMES: frozenset[str] = frozenset(
+    {
+        AssignmentComponentIssueStatus.RETURNED.value,
+        AssignmentComponentIssueStatus.MISSING.value,
+        AssignmentComponentIssueStatus.DAMAGED.value,
+        AssignmentComponentIssueStatus.RETAINED.value,
+    }
+)
 
 
 class AssetAssignmentStatus(str, Enum):
@@ -61,6 +173,18 @@ class AssignmentDeliveryReferenceStatus(str, Enum):
 
 ASSIGNMENT_DELIVERY_REFERENCE_STATUS_VALUES: frozenset[str] = frozenset(
     s.value for s in AssignmentDeliveryReferenceStatus
+)
+
+
+class AssignmentDeliveryChallanSignatureStatus(str, Enum):
+    """Independent signature dimension for delivery challan (Sub-phase 4D)."""
+
+    NOT_SIGNED = "not_signed"
+    SIGNED = "signed"
+
+
+ASSIGNMENT_DELIVERY_CHALLAN_SIGNATURE_STATUS_VALUES: frozenset[str] = frozenset(
+    s.value for s in AssignmentDeliveryChallanSignatureStatus
 )
 
 

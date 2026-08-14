@@ -28,6 +28,7 @@ def _asset(company_id):
         company_id=company_id,
         branch_id=uuid4(),
         status="active",
+        operational_status="READY_TO_MOVE",
         department_id=uuid4(),
         custodian_employee_id=uuid4(),
     )
@@ -57,13 +58,16 @@ def test_create_requires_target() -> None:
     validator = TransferValidator(MagicMock())
     ctx = _ctx()
     asset = _asset(ctx.company_id)
-    with patch.object(validator._assets, "get", return_value=asset):
-        with pytest.raises(TransferValidationError, match="target"):
-            validator.validate_create_fields(
-                ctx,
-                company_id=ctx.company_id,
-                fields={"asset_id": asset.id},
-            )
+    with (
+        patch.object(validator._assets, "get", return_value=asset),
+        patch.object(validator._assignments, "find_pending_or_active_for_asset", return_value=None),
+        pytest.raises(TransferValidationError, match="target"),
+    ):
+        validator.validate_create_fields(
+            ctx,
+            company_id=ctx.company_id,
+            fields={"asset_id": asset.id},
+        )
 
 
 def test_create_rejects_pending_transfer() -> None:
@@ -72,15 +76,18 @@ def test_create_rejects_pending_transfer() -> None:
     asset = _asset(ctx.company_id)
     pending = SimpleNamespace(document_number="ATRF-2026-000001")
     branch = SimpleNamespace(company_id=ctx.company_id)
-    with patch.object(validator._assets, "get", return_value=asset):
-        with patch.object(validator._org, "get_branch", return_value=branch):
-            with patch.object(validator._transfers, "find_pending_for_asset", return_value=pending):
-                with pytest.raises(TransferValidationError, match="pending transfer"):
-                    validator.validate_create_fields(
-                        ctx,
-                        company_id=ctx.company_id,
-                        fields={"asset_id": asset.id, "to_branch_id": uuid4()},
-                    )
+    with (
+        patch.object(validator._assets, "get", return_value=asset),
+        patch.object(validator._assignments, "find_pending_or_active_for_asset", return_value=None),
+        patch.object(validator._org, "get_branch", return_value=branch),
+        patch.object(validator._transfers, "find_pending_for_asset", return_value=pending),
+        pytest.raises(TransferValidationError, match="pending transfer"),
+    ):
+        validator.validate_create_fields(
+            ctx,
+            company_id=ctx.company_id,
+            fields={"asset_id": asset.id, "to_branch_id": uuid4()},
+        )
 
 
 def test_create_validates_destination_branch_company() -> None:
@@ -88,28 +95,34 @@ def test_create_validates_destination_branch_company() -> None:
     ctx = _ctx()
     asset = _asset(ctx.company_id)
     branch = SimpleNamespace(company_id=uuid4())
-    with patch.object(validator._assets, "get", return_value=asset):
-        with patch.object(validator._org, "get_branch", return_value=branch):
-            with pytest.raises(TransferValidationError, match="Destination branch"):
-                validator.validate_create_fields(
-                    ctx,
-                    company_id=ctx.company_id,
-                    fields={"asset_id": asset.id, "to_branch_id": uuid4()},
-                )
+    with (
+        patch.object(validator._assets, "get", return_value=asset),
+        patch.object(validator._assignments, "find_pending_or_active_for_asset", return_value=None),
+        patch.object(validator._org, "get_branch", return_value=branch),
+        pytest.raises(TransferValidationError, match="Destination branch"),
+    ):
+        validator.validate_create_fields(
+            ctx,
+            company_id=ctx.company_id,
+            fields={"asset_id": asset.id, "to_branch_id": uuid4()},
+        )
 
 
 def test_create_validates_department_and_employee_targets() -> None:
     validator = TransferValidator(MagicMock())
     ctx = _ctx()
     asset = _asset(ctx.company_id)
-    with patch.object(validator._assets, "get", return_value=asset):
-        with patch.object(validator._org, "get_department", side_effect=NotFoundException("Department not found")):
-            with pytest.raises(NotFoundException, match="Department"):
-                validator.validate_create_fields(
-                    ctx,
-                    company_id=ctx.company_id,
-                    fields={"asset_id": asset.id, "to_department_id": uuid4()},
-                )
+    with (
+        patch.object(validator._assets, "get", return_value=asset),
+        patch.object(validator._assignments, "find_pending_or_active_for_asset", return_value=None),
+        patch.object(validator._org, "get_department", side_effect=NotFoundException("Department not found")),
+        pytest.raises(NotFoundException, match="Department"),
+    ):
+        validator.validate_create_fields(
+            ctx,
+            company_id=ctx.company_id,
+            fields={"asset_id": asset.id, "to_department_id": uuid4()},
+        )
 
 
 def test_submit_requires_actual_change() -> None:
@@ -133,10 +146,13 @@ def test_submit_requires_actual_change() -> None:
         from_org_location_id=shared_location_id,
         to_org_location_id=shared_location_id,
     )
-    with patch.object(validator._assets, "get", return_value=asset):
-        with patch.object(validator._transfers, "find_pending_for_asset", return_value=None):
-            with pytest.raises(TransferValidationError, match="must differ"):
-                validator.validate_submit_readiness(ctx, row)
+    with (
+        patch.object(validator._assets, "get", return_value=asset),
+        patch.object(validator._assignments, "find_pending_or_active_for_asset", return_value=None),
+        patch.object(validator._transfers, "find_pending_for_asset", return_value=None),
+        pytest.raises(TransferValidationError, match="must differ"),
+    ):
+        validator.validate_submit_readiness(ctx, row)
 
 
 def test_update_rejects_non_draft() -> None:
@@ -172,3 +188,38 @@ def test_execute_readiness_requires_submitted_status() -> None:
     )
     with pytest.raises(TransferValidationError, match="submitted"):
         validator.validate_execute_readiness(_ctx(), row)
+
+
+@pytest.mark.parametrize("ops", ["RETIRED", "PENDING_DISPOSAL", "DISPOSED"])
+def test_create_blocks_retired_pending_disposed_ops(ops: str) -> None:
+    validator = TransferValidator(MagicMock())
+    ctx = _ctx()
+    asset = _asset(ctx.company_id)
+    asset.operational_status = ops
+    with patch.object(validator._assets, "get", return_value=asset):
+        with pytest.raises(TransferValidationError, match="cannot be transferred"):
+            validator.validate_create_fields(
+                ctx,
+                company_id=ctx.company_id,
+                fields={"asset_id": asset.id, "to_branch_id": uuid4()},
+            )
+
+
+def test_create_blocks_open_assignment() -> None:
+    validator = TransferValidator(MagicMock())
+    ctx = _ctx()
+    asset = _asset(ctx.company_id)
+    with (
+        patch.object(validator._assets, "get", return_value=asset),
+        patch.object(
+            validator._assignments,
+            "find_pending_or_active_for_asset",
+            return_value=SimpleNamespace(document_number="AASN-1"),
+        ),
+        pytest.raises(TransferValidationError, match="currently assigned"),
+    ):
+        validator.validate_create_fields(
+            ctx,
+            company_id=ctx.company_id,
+            fields={"asset_id": asset.id, "to_branch_id": uuid4()},
+        )

@@ -6,6 +6,7 @@ from modules.asset.models.asset_audit import AstAssetAudit
 from modules.asset.models.asset_category import AstAssetCategory
 from modules.asset.models.asset_checklist import AstAssetChecklist
 from modules.asset.models.asset_component import AstAssetComponent
+from modules.asset.models.assignment_component import AstAssignmentComponent
 from modules.asset.models.asset_depreciation import AstAssetDepreciation
 from modules.asset.models.asset_disposal import AstAssetDisposal
 from modules.asset.models.asset_document import AstAssetDocument
@@ -20,11 +21,18 @@ from modules.asset.models.asset_revaluation import AstAssetRevaluation
 from modules.asset.models.asset_service_history import AstAssetServiceHistory
 from modules.asset.models.asset_transfer import AstAssetTransfer
 from modules.asset.models.asset_warranty import AstAssetWarranty
+from modules.asset.models.incoming_asset import (
+    AstIncomingArrivalEvent,
+    AstIncomingAssetLine,
+    AstIncomingAssetUnit,
+    AstIncomingQcEvent,
+)
 
 __all__ = [
     "AstAssetCategory",
     "AstAsset",
     "AstAssetComponent",
+    "AstAssignmentComponent",
     "AstAssetAssignment",
     "AstAssetTransfer",
     "AstAssetLocation",
@@ -42,4 +50,8 @@ __all__ = [
     "AstAssetMeterReading",
     "AstAssetNotification",
     "AstAssetReport",
+    "AstIncomingAssetLine",
+    "AstIncomingAssetUnit",
+    "AstIncomingArrivalEvent",
+    "AstIncomingQcEvent",
 ]

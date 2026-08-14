@@ -8,6 +8,9 @@ import {
   branchLookupFromOptions,
   mapDashboardPayloadToViewModel,
   type AssetOperationsKpiModel,
+  type AssetOperationsKpiTrends,
+  type AssetOperationsQueueTotals,
+  type BranchBreakdownRow,
 } from "@/components/assets/dashboard.mapper";
 import { BRANCH_ALL_VALUE, type BranchOption, type QueueCardRow } from "@/components/assets/shared";
 import { listBranchOptions } from "@/lib/org-options";
@@ -29,6 +32,9 @@ export function AssetOperationsContainer() {
   const [branchId, setBranchId] = useState(BRANCH_ALL_VALUE);
   const [branches, setBranches] = useState<BranchOption[]>([]);
   const [kpis, setKpis] = useState<AssetOperationsKpiModel | null>(null);
+  const [kpiTrends, setKpiTrends] = useState<AssetOperationsKpiTrends | null>(null);
+  const [queueTotals, setQueueTotals] = useState<AssetOperationsQueueTotals | null>(null);
+  const [byBranchRows, setByBranchRows] = useState<BranchBreakdownRow[]>([]);
   const [readyQueueRows, setReadyQueueRows] = useState<QueueCardRow[]>([]);
   const [disposalQueueRows, setDisposalQueueRows] = useState<QueueCardRow[]>([]);
   const [assignmentRows, setAssignmentRows] = useState<QueueCardRow[]>([]);
@@ -84,6 +90,9 @@ export function AssetOperationsContainer() {
       const messages = Object.values(result.errors).filter(Boolean);
       setErrorMessage(messages[0] ?? "Something went wrong. Please try again.");
       setKpis(null);
+      setKpiTrends(null);
+      setQueueTotals(null);
+      setByBranchRows([]);
       setReadyQueueRows([]);
       setDisposalQueueRows([]);
       setAssignmentRows([]);
@@ -95,6 +104,8 @@ export function AssetOperationsContainer() {
     if (result.errors.summary) {
       setErrorMessage(result.errors.summary);
       setKpis(null);
+      setKpiTrends(null);
+      setByBranchRows([]);
     } else {
       setErrorMessage(null);
     }
@@ -108,6 +119,13 @@ export function AssetOperationsContainer() {
     });
 
     setKpis(result.summary ? view.kpis : null);
+    setKpiTrends(result.summary ? view.kpiTrends : null);
+    setByBranchRows(result.summary ? view.byBranch : []);
+    setQueueTotals({
+      ready: result.readyList ? view.queueTotals.ready : 0,
+      disposal: result.disposalList ? view.queueTotals.disposal : 0,
+      assignments: result.assignmentsList ? view.queueTotals.assignments : 0,
+    });
     setReadyQueueRows(result.readyList ? view.queues.readyRows : []);
     setDisposalQueueRows(result.disposalList ? view.queues.disposalRows : []);
     setAssignmentRows(result.assignmentsList ? view.queues.assignmentRows : []);
@@ -132,6 +150,9 @@ export function AssetOperationsContainer() {
       kpisLoading={kpisLoading}
       queuesLoading={queuesLoading}
       kpis={kpis}
+      kpiTrends={kpiTrends}
+      queueTotals={queueTotals}
+      byBranchRows={byBranchRows}
       readyQueueRows={readyQueueRows}
       disposalQueueRows={disposalQueueRows}
       assignmentRows={assignmentRows}

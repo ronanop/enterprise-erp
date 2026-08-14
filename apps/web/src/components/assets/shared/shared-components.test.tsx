@@ -95,6 +95,13 @@ describe("QueueCard", () => {
     await user.click(screen.getByRole("button", { name: "View all" }));
     expect(onClick).toHaveBeenCalled();
   });
+
+  it("renders count badge", () => {
+    render(
+      <QueueCard title="Ready queue" count={14} rows={[{ id: "1", cells: ["A"] }]} />,
+    );
+    expect(screen.getByTestId("queue-card-count")).toHaveTextContent("14");
+  });
 });
 
 describe("StatusBadge", () => {

@@ -80,7 +80,12 @@ def test_repository_rejects_stale_version() -> None:
 def test_open_disposal_exclusivity_allows_exclude_self() -> None:
     validator = DisposalValidator(MagicMock())
     ctx = _ctx()
-    asset = SimpleNamespace(id=uuid4(), company_id=ctx.company_id, status="active")
+    asset = SimpleNamespace(
+        id=uuid4(),
+        company_id=ctx.company_id,
+        status="active",
+        operational_status="PENDING_DISPOSAL",
+    )
     row = SimpleNamespace(
         id=uuid4(),
         asset_id=asset.id,

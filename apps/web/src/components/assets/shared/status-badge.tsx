@@ -2,6 +2,7 @@ import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 
 import {
+  formatLifecycleStatusLabel,
   isOperationalStatus,
   OPERATIONAL_STATUS_LABELS,
   type OperationalStatusValue,
@@ -38,10 +39,7 @@ const LIFECYCLE_VARIANT: Record<
 };
 
 function formatLifecycleLabel(status: string): string {
-  return status
-    .split("_")
-    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
-    .join(" ");
+  return formatLifecycleStatusLabel(status);
 }
 
 export type StatusBadgeProps = {
@@ -72,7 +70,7 @@ export function StatusBadge({ kind, status, className }: StatusBadgeProps) {
 
   const variant = LIFECYCLE_VARIANT[status] ?? "outline";
   return (
-    <Badge variant={variant} className={cn("font-medium capitalize", className)}>
+    <Badge variant={variant} className={cn("font-medium", className)}>
       {formatLifecycleLabel(status)}
     </Badge>
   );

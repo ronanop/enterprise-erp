@@ -189,6 +189,44 @@ def test_disposed_asset_blocked(location_db: Session, ids: dict[str, object]):
             )
 
 
+@pytest.mark.parametrize(
+    "status",
+    ("draft", "submitted", "approved", "active", "in_maintenance", "transferred"),
+)
+def test_create_allowed_for_registration_lifecycle(
+    location_db: Session, ids: dict[str, object], status: str
+):
+    """BUG-REG-LOC-01: location create allowed before and after activation."""
+    ctx = _ctx(ids)
+    asset = _insert_active_asset(location_db, ids, status=status)
+    svc = LocationService(location_db)
+    with _patched_audit(svc):
+        row = svc.create(
+            ctx,
+            asset_id=asset.id,
+            location_label=f"Loc-{status}",
+        )
+    assert row.is_current is True
+    assert row.status == "active"
+    assert row.location_label == f"Loc-{status}"
+
+
+@pytest.mark.parametrize("status", ("cancelled", "written_off"))
+def test_create_blocked_for_terminal_lifecycle(
+    location_db: Session, ids: dict[str, object], status: str
+):
+    ctx = _ctx(ids)
+    asset = _insert_active_asset(location_db, ids, status=status)
+    svc = LocationService(location_db)
+    with _patched_audit(svc):
+        with pytest.raises(LocationValidationError):
+            svc.create(
+                ctx,
+                asset_id=asset.id,
+                location_label="Blocked",
+            )
+
+
 def test_search_filters(location_db: Session, ids: dict[str, object]):
     ctx = _ctx(ids)
     asset = _insert_active_asset(location_db, ids)

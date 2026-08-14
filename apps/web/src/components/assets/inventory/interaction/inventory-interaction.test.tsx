@@ -20,6 +20,26 @@ const drawerData = {
   branch: "Noida",
   operationalStatus: "ASSIGNED",
   lifecycleStatus: "active",
+  registerGroups: {
+    assignee: "Asha Nair",
+    employeeId: "EMP-001",
+    phone: "9123456789",
+    issuedDate: "Aug 1, 2026",
+    earlierUsedBy: "—",
+    make: "Lenovo",
+    model: "T14",
+    configuration: "i7 · 16GB",
+    branch: "Noida",
+    location: "Floor 2",
+    operationalStatus: "ASSIGNED",
+    lifecycleStatus: "active",
+    accessories: [],
+    dcNumber: "—",
+    dcStatus: "—",
+    dcSignature: "Not Signed",
+    assignmentRemarks: "—",
+    returnRemarks: "—",
+  },
   assignment: { employee: "Asha Nair", issueDate: "Aug 1, 2026", department: "IT" },
   additional: {
     earlierUsedBy: "—",
@@ -96,6 +116,8 @@ describe("InventoryActionMenu", () => {
           qr: false,
           transfer: false,
           maintenance: false,
+          startDisposal: false,
+          reinstate: false,
           history: false,
         }}
       />,
@@ -125,11 +147,13 @@ describe("AssetDetailDrawer", () => {
     expect(screen.getByRole("dialog")).toBeInTheDocument();
     expect(screen.getByText("Asset summary")).toBeInTheDocument();
     expect(screen.getByText("Assignment")).toBeInTheDocument();
-    expect(screen.getByText("Configuration")).toBeInTheDocument();
-    expect(screen.getByText("Register fields")).toBeInTheDocument();
+    expect(screen.getByText("IT Information")).toBeInTheDocument();
+    expect(screen.getByText("Location")).toBeInTheDocument();
+    expect(screen.getByText("Delivery Challan")).toBeInTheDocument();
     expect(screen.getByText("Assignment history")).toBeInTheDocument();
     expect(screen.getByText("Quick links")).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "ThinkPad" })).toBeInTheDocument();
+    expect(screen.getByTestId("inventory-expandable-assignee").textContent).toBe("Asha Nair");
   });
 
   it("closes via close button", async () => {
@@ -161,7 +185,10 @@ describe("SummarySection", () => {
         lifecycleStatus="active"
       />,
     );
-    expect(screen.getByText("Ready to move")).toBeInTheDocument();
+    expect(screen.getByText("Ready to Move")).toBeInTheDocument();
+    expect(screen.getByText("Operational Status")).toBeInTheDocument();
+    expect(screen.getByText("Lifecycle Status")).toBeInTheDocument();
+    expect(screen.getByText("Active")).toBeInTheDocument();
   });
 });
 
@@ -227,6 +254,7 @@ describe("mapInventoryRowToDrawerData", () => {
       id: "1",
       assetTag: "AST-9",
       laptopName: "Mac",
+      serialNumber: "SN-1",
       manufacturer: "Apple",
       model: "M3",
       configuration: "16GB",

@@ -164,6 +164,7 @@ class MaintenanceService:
 
     def approve(self, ctx: TenantContext, row_id: UUID, comments: str | None = None):
         row = self.get(ctx, row_id)
+        self._validator.validate_approve_readiness(ctx, row)
         if not asset_workflow_governance_enabled():
             return self._legacy_approve(ctx, row_id, row)
         if row.created_by == ctx.user_id:

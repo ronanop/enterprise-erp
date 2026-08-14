@@ -213,6 +213,7 @@ describe("Container callbacks — Return success path", () => {
     await user.click(screen.getByRole("button", { name: /^Next$/i }));
     await user.click(screen.getByRole("button", { name: /^Next$/i }));
     await user.click(screen.getByRole("button", { name: /^Next$/i }));
+    await user.click(screen.getByRole("button", { name: /^Next$/i }));
     await user.click(screen.getByRole("button", { name: /Confirm return/i }));
     await waitFor(() => expect(onSuccess).toHaveBeenCalled());
     expect(consumeInventoryStale()?.reason).toBe("return");
@@ -231,6 +232,7 @@ describe("Container callbacks — Return success path", () => {
       />,
     );
     await waitFor(() => screen.getByRole("button", { name: /^Next$/i }));
+    await user.click(screen.getByRole("button", { name: /^Next$/i }));
     await user.click(screen.getByRole("button", { name: /^Next$/i }));
     await user.click(screen.getByRole("button", { name: /^Next$/i }));
     await user.click(screen.getByRole("button", { name: /^Next$/i }));

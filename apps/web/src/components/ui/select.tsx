@@ -59,9 +59,26 @@ function findTrigger(
   return found;
 }
 
+function findPlaceholder(node: React.ReactNode): string | undefined {
+  let placeholder: string | undefined;
+  React.Children.forEach(node, (child) => {
+    if (placeholder || !React.isValidElement(child)) return;
+    const type = child.type as { displayName?: string };
+    if (type?.displayName === "SelectValue") {
+      placeholder = (child.props as { placeholder?: string }).placeholder;
+      return;
+    }
+    placeholder = findPlaceholder(
+      (child.props as { children?: React.ReactNode }).children,
+    );
+  });
+  return placeholder;
+}
+
 function Select({ value, defaultValue, onValueChange, children, disabled }: SelectProps) {
   const items = collectItems(children);
   const trigger = findTrigger(children);
+  const placeholder = findPlaceholder(children) ?? "Select…";
   const triggerProps = trigger?.props ?? {};
   const {
     className,
@@ -71,24 +88,41 @@ function Select({ value, defaultValue, onValueChange, children, disabled }: Sele
     ...rest
   } = triggerProps;
 
+  // Controlled empty value with no matching option makes browsers look
+  // "selected" on the first item while React state stays "". Always expose
+  // an empty option when the current value is blank / unmatched.
+  const resolvedValue = value ?? defaultValue ?? "";
+  const hasMatchingOption =
+    resolvedValue !== "" && items.some((item) => item.value === resolvedValue);
+  const hasEmptyOption = items.some((item) => item.value === "");
+  const options =
+    !hasEmptyOption && (resolvedValue === "" || !hasMatchingOption)
+      ? [{ value: "", children: placeholder, disabled: true }, ...items]
+      : items;
+
   return (
     <select
       id={id}
       aria-label={ariaLabel}
       disabled={disabled}
-      value={value}
+      value={resolvedValue}
       defaultValue={defaultValue}
       onChange={(event) => onValueChange?.(event.target.value)}
       className={cn(
-        "flex h-8 w-full min-w-0 cursor-pointer rounded-lg border border-input bg-transparent px-2.5 py-1 text-sm outline-none transition-colors",
+        "flex h-8 w-full min-w-0 cursor-pointer rounded-lg border border-input bg-transparent px-2.5 py-1 text-sm outline-none transition-colors duration-200",
         "focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50",
         "disabled:pointer-events-none disabled:opacity-50",
         className,
       )}
       {...rest}
     >
-      {items.map((item) => (
-        <option key={item.value} value={item.value} disabled={item.disabled} className={item.className}>
+      {options.map((item) => (
+        <option
+          key={item.value || "__placeholder"}
+          value={item.value}
+          disabled={item.disabled}
+          className={item.className}
+        >
           {item.children}
         </option>
       ))}

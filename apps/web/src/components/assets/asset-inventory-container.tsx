@@ -23,20 +23,23 @@ import {
   type InventoryUiSnapshot,
 } from "@/components/assets/inventory/inventory-ui-state";
 import { handleInventoryMenuWorkflow } from "@/components/assets/inventory/inventory-workflow";
+import { StartDisposalConfirmDialog } from "@/components/assets/start-disposal-confirm-dialog";
+import { ReinstateConfirmDialog } from "@/components/assets/reinstate-confirm-dialog";
 import {
   exportInventoryRegister,
+  fetchAllAssignmentPages,
   InventoryExportError,
   type InventoryExportFormat,
 } from "@/components/assets/inventory/export";
 import { useUserPermissions } from "@/hooks/use-user-permissions";
 import type { InventoryRowViewModel } from "@/components/assets/inventory.mapper";
 import {
-  applyClientInventoryFilters,
   branchLookupFromOrgOptions,
   buildInventoryListQuery,
   groupAssignmentsByAssetId,
   indexActiveAssignments,
   mapAssetsToInventoryRows,
+  type InventoryAccessoryLine,
 } from "@/components/assets/inventory.mapper";
 import type { InventoryPresetId } from "@/components/assets/inventory.types";
 import { PRESET_OPERATIONAL_STATUS } from "@/components/assets/inventory.types";
@@ -45,15 +48,53 @@ import {
   EMPTY_INVENTORY_FILTERS,
   type InventoryFilterValues,
 } from "@/components/assets/shared";
-import { listBranchOptions, listDepartmentOptions, listEmployeeOptions } from "@/lib/org-options";
+import {
+  listBranchOptions,
+  listDepartmentOptions,
+  listEmployeeDirectory,
+  listLocationOptions,
+  employeeDirectoryById,
+  employeeLabelsFromDirectory,
+  type EmployeeDirectoryEntry,
+} from "@/lib/org-options";
+import type { EmployeeLookup } from "@/components/assets/inventory/register-parity";
 import {
   assetCategoryService,
+  assetLocationService,
   assetOperationsService,
+  assetRegisterService,
+  componentService,
+  componentTypeLabel,
   filterActiveCategories,
+  type AssetPaginatedListResult,
 } from "@/services/assets-service";
 import { ApiClientError } from "@/services/api-client";
 
 const PAGE_SIZE = 25;
+
+async function fetchCurrentAssetLocationLabels(): Promise<Record<string, string>> {
+  const labels: Record<string, string> = {};
+  let page = 1;
+  let total = 0;
+  const pageSize = 200;
+  do {
+    const res = await assetLocationService.search({
+      page,
+      page_size: pageSize,
+      is_current: true,
+      status: "active",
+    });
+    total = res.total;
+    for (const loc of res.items) {
+      if (loc.asset_id && loc.location_label) {
+        labels[String(loc.asset_id)] = loc.location_label;
+      }
+    }
+    if (res.items.length === 0) break;
+    page += 1;
+  } while ((page - 1) * pageSize < total);
+  return labels;
+}
 
 const DEFAULT_UI_SNAPSHOT: InventoryUiSnapshot = {
   preset: "all",
@@ -93,12 +134,48 @@ export async function fetchInventoryPage(input: {
 
   const branch_id = query.branch_id;
 
-  const [assetList, assignmentList] = await Promise.all([
+  // Assignments API caps page_size at 200 — paginate instead of requesting 500 (422).
+  const [assetList, assignmentItems] = await Promise.all([
     listAssets(query),
-    listAssignments({ page: 1, page_size: 500, branch_id }),
+    fetchAllAssignmentPages(listAssignments, branch_id),
   ]);
 
-  return { assetList, assignmentList };
+  const assignmentList: AssetPaginatedListResult = {
+    items: assignmentItems,
+    total: assignmentItems.length,
+    page: 1,
+    page_size: assignmentItems.length,
+  };
+
+  const assetIds = (assetList.items ?? [])
+    .map((a) => String(a.id ?? ""))
+    .filter(Boolean);
+  const accessoriesByAssetId = new Map<string, InventoryAccessoryLine[]>();
+  if (assetIds.length) {
+    try {
+      const components = await componentService.search({
+        asset_ids: assetIds,
+        status: "active",
+        page: 1,
+        page_size: Math.max(assetIds.length * 10, 100),
+      });
+      for (const row of components.items) {
+        const assetId = String(row.asset_id);
+        const list = accessoriesByAssetId.get(assetId) ?? [];
+        list.push({
+          typeLabel: componentTypeLabel(row.component_type),
+          serialDisplay: row.serial_number?.trim() || "—",
+          componentName: row.component_name?.trim() || undefined,
+          status: row.status,
+        });
+        accessoriesByAssetId.set(assetId, list);
+      }
+    } catch {
+      // Accessories are optional enrichment — inventory still loads.
+    }
+  }
+
+  return { assetList, assignmentList, accessoriesByAssetId };
 }
 
 export function AssetInventoryContainer() {
@@ -128,25 +205,46 @@ export function AssetInventoryContainer() {
   const [exporting, setExporting] = useState(false);
   const [exportError, setExportError] = useState<string | null>(null);
   const [exportSuccess, setExportSuccess] = useState<string | null>(null);
+  const [startDisposalRow, setStartDisposalRow] = useState<InventoryRowViewModel | null>(null);
+  const [startDisposalSubmitting, setStartDisposalSubmitting] = useState(false);
+  const [startDisposalError, setStartDisposalError] = useState<string | null>(null);
+  const [reinstateRow, setReinstateRow] = useState<InventoryRowViewModel | null>(null);
+  const [reinstateSubmitting, setReinstateSubmitting] = useState(false);
+  const [reinstateError, setReinstateError] = useState<string | null>(null);
 
   const [branches, setBranches] = useState<Array<{ id: string; label: string }>>([]);
   const [departments, setDepartments] = useState<Array<{ id: string; label: string }>>([]);
+  const [locations, setLocations] = useState<Array<{ id: string; label: string }>>([]);
   const [categories, setCategories] = useState<Array<{ id: string; category_name: string }>>([]);
   const [employeeLabels, setEmployeeLabels] = useState<Record<string, string>>({});
+  const [employeeLookup, setEmployeeLookup] = useState<EmployeeLookup>({});
 
   useEffect(() => {
     void (async () => {
-      const [branchOpts, deptOpts, empOpts, catRes] = await Promise.all([
+      const [branchOpts, deptOpts, locOpts, empDir, catRes] = await Promise.all([
         listBranchOptions().catch(() => []),
         listDepartmentOptions().catch(() => []),
-        listEmployeeOptions().catch(() => []),
+        listLocationOptions().catch(() => []),
+        listEmployeeDirectory().catch(() => [] as EmployeeDirectoryEntry[]),
         assetCategoryService
           .search({ page: 1, page_size: 200, status: "active" })
           .catch(() => ({ items: [] })),
       ]);
       setBranches(branchOpts);
       setDepartments(deptOpts);
-      setEmployeeLabels(Object.fromEntries(empOpts.map((e) => [e.id, e.label])));
+      setLocations(locOpts);
+      setEmployeeLabels(employeeLabelsFromDirectory(empDir));
+      const byId = employeeDirectoryById(empDir);
+      const lookup: EmployeeLookup = {};
+      for (const [id, e] of Object.entries(byId)) {
+        lookup[id] = {
+          label: e.label,
+          displayName: e.displayName,
+          employeeCode: e.employeeCode,
+          mobile: e.mobile,
+        };
+      }
+      setEmployeeLookup(lookup);
       setCategories(filterActiveCategories(catRes.items));
     })();
   }, []);
@@ -161,35 +259,42 @@ export function AssetInventoryContainer() {
     [categories],
   );
   const locationOptions = useMemo(
-    () => branches.map((b) => ({ value: b.id, label: b.label })),
-    [branches],
+    () => locations.map((l) => ({ value: l.id, label: l.label })),
+    [locations],
   );
 
   const load = useCallback(async () => {
     setLoading(true);
     setErrorMessage(null);
     try {
-      const { assetList, assignmentList } = await fetchInventoryPage({
+      const { assetList, assignmentList, accessoriesByAssetId } = await fetchInventoryPage({
         preset,
         filters: appliedFilters,
         headerBranchId,
         page,
       });
 
+      let locationLabels: Record<string, string> = {};
+      try {
+        locationLabels = await fetchCurrentAssetLocationLabels();
+      } catch {
+        locationLabels = {};
+      }
       const assignmentsByAssetId = indexActiveAssignments(assignmentList.items);
       const assignmentHistoryByAssetId = groupAssignmentsByAssetId(assignmentList.items);
       const mapped = mapAssetsToInventoryRows(assetList.items, {
         branchLabels,
         departmentLabels,
         categoryLabels,
-        locationLabels: branchLabels,
+        locationLabels,
         assignmentsByAssetId,
         assignmentHistoryByAssetId,
+        accessoriesByAssetId,
         employeeLabels,
+        employeeLookup,
       });
-      const filtered = applyClientInventoryFilters(mapped, appliedFilters, assetList.items);
 
-      setRows(filtered);
+      setRows(mapped);
       setTotal(assetList.total);
     } catch (err) {
       setErrorMessage(err instanceof ApiClientError ? err.message : "Failed to load inventory");
@@ -204,6 +309,7 @@ export function AssetInventoryContainer() {
     categoryLabels,
     departmentLabels,
     employeeLabels,
+    employeeLookup,
     headerBranchId,
     page,
     preset,
@@ -287,6 +393,18 @@ export function AssetInventoryContainer() {
 
   const onMenuAction = useCallback(
     (action: InventoryMenuActionId, row: InventoryRowViewModel) => {
+      if (action === "startDisposal") {
+        closeDrawer();
+        setStartDisposalError(null);
+        setStartDisposalRow(row);
+        return;
+      }
+      if (action === "reinstate") {
+        closeDrawer();
+        setReinstateError(null);
+        setReinstateRow(row);
+        return;
+      }
       if (action === "assign" || action === "return") {
         snapshotUiForWorkflow();
       }
@@ -299,6 +417,42 @@ export function AssetInventoryContainer() {
     },
     [closeDrawer, navigation, snapshotUiForWorkflow],
   );
+
+  const confirmStartDisposal = useCallback(async () => {
+    if (!startDisposalRow) return;
+    setStartDisposalSubmitting(true);
+    setStartDisposalError(null);
+    try {
+      await assetRegisterService.startDisposal(startDisposalRow.id);
+      setStartDisposalRow(null);
+      setReloadToken((t) => t + 1);
+      navigation.openDisposal(startDisposalRow.id);
+    } catch (err) {
+      setStartDisposalError(
+        err instanceof ApiClientError ? err.message : "Could not start disposal",
+      );
+    } finally {
+      setStartDisposalSubmitting(false);
+    }
+  }, [navigation, startDisposalRow]);
+
+  const confirmReinstate = useCallback(async () => {
+    if (!reinstateRow) return;
+    setReinstateSubmitting(true);
+    setReinstateError(null);
+    try {
+      await assetRegisterService.reinstate(reinstateRow.id);
+      setReinstateRow(null);
+      setExportSuccess("Asset reinstated and is Ready to Move.");
+      setReloadToken((t) => t + 1);
+    } catch (err) {
+      setReinstateError(
+        err instanceof ApiClientError ? err.message : "Could not reinstate asset",
+      );
+    } finally {
+      setReinstateSubmitting(false);
+    }
+  }, [reinstateRow]);
 
   const onDrawerQuickLink = useCallback(
     (link: InventoryQuickLinkId, row: InventoryRowViewModel) => {
@@ -313,6 +467,12 @@ export function AssetInventoryContainer() {
       setExportError(null);
       setExportSuccess(null);
       try {
+        let locationLabels: Record<string, string> = {};
+        try {
+          locationLabels = await fetchCurrentAssetLocationLabels();
+        } catch {
+          locationLabels = {};
+        }
         const result = await exportInventoryRegister({
           format,
           preset,
@@ -322,8 +482,9 @@ export function AssetInventoryContainer() {
             branchLabels,
             departmentLabels,
             categoryLabels,
-            locationLabels: branchLabels,
+            locationLabels,
             employeeLabels,
+            employeeLookup,
           },
         });
         setExportSuccess(
@@ -347,55 +508,105 @@ export function AssetInventoryContainer() {
       categoryLabels,
       departmentLabels,
       employeeLabels,
+      employeeLookup,
       headerBranchId,
       preset,
     ],
   );
 
   return (
-    <AssetInventoryWorkspace
-      preset={preset}
-      onPresetChange={onPresetChange}
-      headerBranchId={headerBranchId}
-      onHeaderBranchChange={(id) => {
-        setHeaderBranchId(id);
-        setPage(1);
-      }}
-      branches={branches}
-      quickSearch={quickSearch}
-      onQuickSearchChange={setQuickSearch}
-      onQuickSearchSubmit={onQuickSearchSubmit}
-      draftFilters={draftFilters}
-      onDraftFiltersChange={(patch) => setDraftFilters((f) => ({ ...f, ...patch }))}
-      onApplyFilters={onApplyFilters}
-      onResetFilters={onResetFilters}
-      categories={categories.map((c) => ({ value: c.id, label: c.category_name }))}
-      departments={departments.map((d) => ({ value: d.id, label: d.label }))}
-      locations={locationOptions}
-      rows={rows}
-      total={total}
-      page={page}
-      pageSize={PAGE_SIZE}
-      onPageChange={setPage}
-      loading={loading}
-      errorMessage={errorMessage}
-      onRetry={() => setReloadToken((t) => t + 1)}
-      expandedRowIds={expandedRowIds}
-      onToggleExpand={onToggleExpand}
-      actionPermissions={actionPermissions}
-      onViewRow={onViewRow}
-      onMenuAction={onMenuAction}
-      drawerOpen={drawerOpen}
-      onDrawerOpenChange={setDrawerOpen}
-      drawerData={drawerData}
-      drawerRow={drawerRow}
-      drawerQuickLinkEnabled={quickLinkPermissions}
-      onDrawerQuickLink={onDrawerQuickLink}
-      exportBusy={exporting}
-      exportError={exportError}
-      exportSuccess={exportSuccess}
-      onExportExcel={() => void runExport("xlsx")}
-      onExportCsv={() => void runExport("csv")}
-    />
+    <>
+      <AssetInventoryWorkspace
+        preset={preset}
+        onPresetChange={onPresetChange}
+        headerBranchId={headerBranchId}
+        onHeaderBranchChange={(id) => {
+          setHeaderBranchId(id);
+          setPage(1);
+        }}
+        branches={branches}
+        quickSearch={quickSearch}
+        onQuickSearchChange={setQuickSearch}
+        onQuickSearchSubmit={onQuickSearchSubmit}
+        draftFilters={draftFilters}
+        appliedFilters={appliedFilters}
+        onDraftFiltersChange={(patch) => setDraftFilters((f) => ({ ...f, ...patch }))}
+        onApplyFilters={onApplyFilters}
+        onResetFilters={onResetFilters}
+        categories={categories.map((c) => ({ value: c.id, label: c.category_name }))}
+        departments={departments.map((d) => ({ value: d.id, label: d.label }))}
+        locations={locationOptions}
+        rows={rows}
+        total={total}
+        page={page}
+        pageSize={PAGE_SIZE}
+        onPageChange={setPage}
+        loading={loading}
+        errorMessage={errorMessage}
+        onRetry={() => setReloadToken((t) => t + 1)}
+        expandedRowIds={expandedRowIds}
+        onToggleExpand={onToggleExpand}
+        actionPermissions={actionPermissions}
+        onViewRow={onViewRow}
+        onMenuAction={onMenuAction}
+        drawerOpen={drawerOpen}
+        onDrawerOpenChange={setDrawerOpen}
+        drawerData={drawerData}
+        drawerRow={drawerRow}
+        drawerQuickLinkEnabled={quickLinkPermissions}
+        onDrawerQuickLink={onDrawerQuickLink}
+        exportBusy={exporting}
+        exportError={exportError}
+        exportSuccess={exportSuccess}
+        onExportExcel={() => void runExport("xlsx")}
+        onExportCsv={() => void runExport("csv")}
+      />
+      <StartDisposalConfirmDialog
+        open={startDisposalRow != null}
+        asset={
+          startDisposalRow
+            ? {
+                id: startDisposalRow.id,
+                assetCode: startDisposalRow.assetTag,
+                assetName: startDisposalRow.laptopName,
+                serialNumber: startDisposalRow.serialNumber,
+                lifecycleStatus: startDisposalRow.lifecycleStatus,
+                operationalStatus: startDisposalRow.operationalStatus,
+              }
+            : null
+        }
+        submitting={startDisposalSubmitting}
+        error={startDisposalError}
+        onCancel={() => {
+          if (startDisposalSubmitting) return;
+          setStartDisposalRow(null);
+          setStartDisposalError(null);
+        }}
+        onConfirm={() => void confirmStartDisposal()}
+      />
+      <ReinstateConfirmDialog
+        open={reinstateRow != null}
+        asset={
+          reinstateRow
+            ? {
+                id: reinstateRow.id,
+                assetCode: reinstateRow.assetTag,
+                assetName: reinstateRow.laptopName,
+                serialNumber: reinstateRow.serialNumber,
+                lifecycleStatus: reinstateRow.lifecycleStatus,
+                operationalStatus: reinstateRow.operationalStatus,
+              }
+            : null
+        }
+        submitting={reinstateSubmitting}
+        error={reinstateError}
+        onCancel={() => {
+          if (reinstateSubmitting) return;
+          setReinstateRow(null);
+          setReinstateError(null);
+        }}
+        onConfirm={() => void confirmReinstate()}
+      />
+    </>
   );
 }

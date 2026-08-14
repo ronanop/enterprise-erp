@@ -63,6 +63,16 @@ describe("assignmentRowToWizardState", () => {
     expect(state.issuedItemIds).toEqual(["c1", "c2"]);
     expect(state.assignmentRemarks).toBe("Note here");
     expect(state.deliveryReferenceNumber).toBe("DR-9");
+    expect(state.deliveryChallanSignatureStatus).toBe("not_signed");
+  });
+
+  it("maps explicit signature status", () => {
+    const state = assignmentRowToWizardState(
+      { ...baseRow, delivery_challan_signature_status: "signed" },
+      [],
+      issuedItems,
+    );
+    expect(state.deliveryChallanSignatureStatus).toBe("signed");
   });
 
   it("prefers explicit issuedItemIds", () => {
@@ -92,12 +102,16 @@ describe("wizardStateToCreateBody", () => {
         allocationType: "employee",
         employeeId: "e1",
         deliveryReferenceStatus: "pending",
+        deliveryChallanSignatureStatus: "signed",
+        deliveryReferenceNumber: "DC-1",
       },
       [],
     );
     expect(body.asset_id).toBe("a1");
     expect(body.employee_id).toBe("e1");
     expect(body.department_id).toBeUndefined();
+    expect(body.delivery_challan_signature_status).toBe("signed");
+    expect(body.delivery_reference_number).toBe("DC-1");
   });
 
   it("maps department allocation", () => {
@@ -134,11 +148,38 @@ describe("returnWizardStateToBody", () => {
         returnCondition: "good",
         returnRemarks: "  ok  ",
         reason: " offboarding ",
+        componentReturns: [],
       }),
     ).toEqual({
       return_condition: "good",
       return_remarks: "ok",
       reason: "offboarding",
+    });
+  });
+
+  it("includes component_returns when present", () => {
+    expect(
+      returnWizardStateToBody({
+        returnCondition: "good",
+        returnRemarks: "ok",
+        reason: "",
+        componentReturns: [
+          {
+            componentId: "c1",
+            label: "Charger",
+            serialNumber: "CHG-1",
+            issueStatus: "RETURNED",
+            returnRemarks: "",
+          },
+        ],
+      }),
+    ).toEqual({
+      return_condition: "good",
+      return_remarks: "ok",
+      reason: undefined,
+      component_returns: [
+        { component_id: "c1", issue_status: "RETURNED", return_remarks: undefined },
+      ],
     });
   });
 });

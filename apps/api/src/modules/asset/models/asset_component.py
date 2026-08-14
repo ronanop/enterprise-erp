@@ -23,6 +23,12 @@ class AstAssetComponent(Base, *AstDetailMixin):
             "status IN ('active','replaced','disposed')",
             name="ck_ast_asset_component_status",
         ),
+        CheckConstraint(
+            "component_type IN ("
+            "'CHARGER','MOUSE','KEYBOARD','CABLE','PENDRIVE','LAPTOP_BAG','OTHER'"
+            ")",
+            name="ck_ast_asset_component_type",
+        ),
         {"schema": "asset"},
     )
 
@@ -43,6 +49,9 @@ class AstAssetComponent(Base, *AstDetailMixin):
     )
     component_code: Mapped[str] = mapped_column(String(50), nullable=False)
     component_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    component_type: Mapped[str] = mapped_column(
+        String(30), nullable=False, default="OTHER", index=True
+    )
     product_id: Mapped[UUID | None] = mapped_column(
         PG_UUID(as_uuid=True),
         ForeignKey("master.master_product.id", ondelete="RESTRICT"),

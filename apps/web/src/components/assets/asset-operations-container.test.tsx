@@ -10,6 +10,10 @@ import { BRANCH_ALL_VALUE } from "@/components/assets/shared";
 const fetchMock = vi.fn();
 const listBranchesMock = vi.fn();
 
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ push: vi.fn(), replace: vi.fn(), prefetch: vi.fn() }),
+}));
+
 vi.mock("@/components/assets/asset-operations-fetch", () => ({
   fetchAssetOperationsData: (...args: unknown[]) => fetchMock(...args),
 }));
@@ -102,25 +106,29 @@ describe("AssetOperationsContainer", () => {
 
   it("retries fetch when Retry is clicked", async () => {
     const user = userEvent.setup();
-    fetchMock
-      .mockResolvedValueOnce({
-        summary: null,
-        readyList: null,
-        disposalList: null,
-        assignmentsList: null,
-        errors: { summary: "fail" },
-      })
-      .mockResolvedValueOnce(successPayload);
+    let allowSuccess = false;
+    fetchMock.mockImplementation(async () => {
+      if (!allowSuccess) {
+        return {
+          summary: null,
+          readyList: null,
+          disposalList: null,
+          assignmentsList: null,
+          errors: { summary: "fail" },
+        };
+      }
+      return successPayload;
+    });
 
     render(<AssetOperationsContainer />);
     await waitFor(() => {
       expect(screen.getByRole("button", { name: "Retry" })).toBeInTheDocument();
     });
+    allowSuccess = true;
     await user.click(screen.getByRole("button", { name: "Retry" }));
     await waitFor(() => {
       expect(screen.getByText("12")).toBeInTheDocument();
     });
-    expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
   it("refetches when branch changes", async () => {

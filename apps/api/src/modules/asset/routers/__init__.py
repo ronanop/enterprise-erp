@@ -41,6 +41,9 @@ from modules.asset.schemas import (
     AssetComponentResponse,
     AssetComponentTreeResult,
     AssetComponentUpdate,
+    AssignmentComponentListResult,
+    AssignmentComponentResponse,
+    AssignmentComponentSetRequest,
     AssetCreate,
     AssetDepreciationCreate,
     AssetDepreciationListResult,
@@ -64,6 +67,23 @@ from modules.asset.schemas import (
     DiscoveryParseRequest,
     DiscoveryParseResult,
     GrnPrefillResponse,
+    IncomingAssetArriveRequest,
+    IncomingAssetLineResponse,
+    IncomingAssetListResult,
+    IncomingAssetSummaryResponse,
+    IncomingAssetQcDispositionRequest,
+    IncomingAssetQcLineResponse,
+    IncomingAssetQcListResult,
+    IncomingRegistrationPrefillResponse,
+    RegistrationExcelConfirmRequest,
+    RegistrationExcelConfirmResult,
+    RegistrationExcelConfirmItem,
+    RegistrationExcelValidateRequest,
+    RegistrationExcelValidateResult,
+    RegistrationExcelRowResult,
+    RegistrationQueueItemResponse,
+    RegistrationQueueListResult,
+    RegistrationQueueSummaryResponse,
     AssetInsuranceCreate,
     AssetInsuranceListResult,
     AssetInsuranceRenew,
@@ -146,6 +166,15 @@ from modules.asset.service import (
     TransferService,
     WarrantyService,
 )
+from modules.asset.service.incoming_asset_service import (
+    IncomingAssetService,
+    to_incoming_line_response,
+)
+from modules.asset.service.incoming_qc_service import (
+    IncomingAssetQcService,
+    to_qc_line_response,
+)
+from modules.asset.service.incoming_registration_service import IncomingRegistrationService
 from modules.asset.service.information_portal_service import AssetInformationPortalService
 from modules.asset.service.discovery_service import AssetDiscoveryService
 from modules.foundation.domain.value_objects import TenantContext
@@ -246,7 +275,21 @@ def list_assets(
     operational_status: str | None = None,
     asset_category_id: UUID | None = None,
     q: str | None = None,
+    asset_type: str | None = None,
+    department_id: UUID | None = None,
+    location_id: UUID | None = None,
+    employee_id: UUID | None = None,
+    assignment_state: str | None = None,
+    make: str | None = None,
+    model: str | None = None,
 ):
+    """List assets with composable server-side filters (Phase 5F).
+
+    Search ``q`` matches asset code/name/serial/document/make/model and
+    active-assignee employee name/code. Location filter uses current
+    ``AstAssetLocation.org_location_id`` (not branch). Department filter uses
+    active assignment custody only (not historical).
+    """
     items, total = AssetService(db).search(
         ctx,
         company_id=company_id,
@@ -255,6 +298,13 @@ def list_assets(
         operational_status=operational_status,
         asset_category_id=asset_category_id,
         search=q,
+        asset_type=asset_type,
+        department_id=department_id,
+        location_id=location_id,
+        employee_id=employee_id,
+        assignment_state=assignment_state,
+        make=make,
+        model=model,
         offset=pagination.offset,
         limit=pagination.page_size,
     )
@@ -323,9 +373,16 @@ def import_assets_from_excel(
             department_id=r.department_id,
             asset_category_id=r.asset_category_id,
             serial_number=r.serial_number,
+            make=r.make,
+            model=r.model,
+            configuration=r.configuration,
+            location_label=r.location_label,
             issue_date=r.issue_date,
             delivery_reference_number=r.delivery_reference_number,
             delivery_reference_status=r.delivery_reference_status,
+            delivery_challan_signature_status=getattr(
+                r, "delivery_challan_signature_status", None
+            ),
             assignment_remarks=r.assignment_remarks,
             company_id=r.company_id or body.company_id,
         )
@@ -385,6 +442,25 @@ def prefill_asset_registration_from_grn(
             lines=prefill.lines,
         ),
     )
+
+
+@assets_router.get(
+    "/registration/prefill-from-incoming",
+    response_model=APIResponse[IncomingRegistrationPrefillResponse],
+)
+def prefill_asset_registration_from_incoming(
+    incoming_unit_id: UUID,
+    ctx: Annotated[TenantContext, Depends(require_permission("asset.asset:create"))],
+    db: Annotated[Session, Depends(get_db)],
+    incoming_line_id: UUID | None = None,
+):
+    data = IncomingRegistrationService(db).prefill_from_incoming(
+        ctx,
+        incoming_unit_id=incoming_unit_id,
+        incoming_line_id=incoming_line_id,
+    )
+    return APIResponse(message="OK", data=IncomingRegistrationPrefillResponse(**data))
+
 
 @assets_router.get("/{row_id}", response_model=APIResponse[AssetResponse])
 def get_assets(
@@ -556,6 +632,41 @@ def resubmit_assets(
 ):
     return APIResponse(message="resubmit", data=AssetService(db).resubmit(ctx, row_id))
 
+
+@assets_router.post("/{row_id}/start-disposal", response_model=APIResponse[AssetResponse])
+def start_disposal_assets(
+    row_id: UUID,
+    ctx: Annotated[TenantContext, Depends(require_permission("asset.disposal:create"))],
+    db: Annotated[Session, Depends(get_db)],
+    body: WorkflowActionRequest | None = None,
+):
+    """Phase 5D: RETIRED → PENDING_DISPOSAL (explicit Start Disposal)."""
+    from modules.asset.service.retirement_service import RetirementService
+
+    remarks = body.comments if body else None
+    return APIResponse(
+        message="start_disposal",
+        data=RetirementService(db).start_disposal(ctx, row_id, remarks=remarks),
+    )
+
+
+@assets_router.post("/{row_id}/reinstate", response_model=APIResponse[AssetResponse])
+def reinstate_assets(
+    row_id: UUID,
+    ctx: Annotated[TenantContext, Depends(require_permission("asset.disposal:create"))],
+    db: Annotated[Session, Depends(get_db)],
+    body: WorkflowActionRequest | None = None,
+):
+    """Phase 5E: PENDING_DISPOSAL → READY_TO_MOVE (explicit Reinstate)."""
+    from modules.asset.service.reinstate_service import ReinstateService
+
+    remarks = body.comments if body else None
+    return APIResponse(
+        message="reinstate",
+        data=ReinstateService(db).reinstate(ctx, row_id, remarks=remarks),
+    )
+
+
 asset_components_router = APIRouter(prefix="/asset-components", tags=["Asset — AssetComponent"])
 
 @asset_components_router.get("", response_model=APIResponse[AssetComponentListResult])
@@ -565,26 +676,39 @@ def list_asset_components(
     pagination: Annotated[PaginationParams, Depends(get_pagination)],
     company_id: UUID | None = None,
     asset_id: UUID | None = None,
+    asset_ids: str | None = None,
     status: str | None = None,
     product_id: UUID | None = None,
     branch_id: UUID | None = None,
+    component_type: str | None = None,
     q: str | None = None,
     sort: str = "created_at",
+    include_availability: bool = False,
 ):
+    parsed_asset_ids: list[UUID] | None = None
+    if asset_ids:
+        parsed_asset_ids = [UUID(x.strip()) for x in asset_ids.split(",") if x.strip()]
     items, total = AssetComponentService(db).search(
         ctx,
         company_id=company_id,
         asset_id=asset_id,
+        asset_ids=parsed_asset_ids,
         status=status,
         product_id=product_id,
         branch_id=branch_id,
+        component_type=component_type,
         search=q,
         sort=sort,
         offset=pagination.offset,
         limit=pagination.page_size,
+        include_availability=include_availability,
     )
+    response_items = [
+        i if isinstance(i, AssetComponentResponse) else AssetComponentResponse.model_validate(i)
+        for i in items
+    ]
     payload = AssetComponentListResult(
-        items=items,
+        items=response_items,
         total=total,
         page=pagination.page,
         page_size=pagination.page_size,
@@ -710,8 +834,48 @@ def get_asset_assignments(
     row_id: UUID,
     ctx: Annotated[TenantContext, Depends(require_permission("asset.assignment:read"))],
     db: Annotated[Session, Depends(get_db)],
+    include_components: bool = False,
 ):
-    return APIResponse(message="OK", data=AssignmentService(db).get(ctx, row_id))
+    svc = AssignmentService(db)
+    if include_components:
+        return APIResponse(message="OK", data=svc.get_with_components(ctx, row_id))
+    return APIResponse(message="OK", data=svc.get(ctx, row_id))
+
+
+@asset_assignments_router.get(
+    "/{row_id}/components",
+    response_model=APIResponse[AssignmentComponentListResult],
+)
+def list_assignment_components(
+    row_id: UUID,
+    ctx: Annotated[TenantContext, Depends(require_permission("asset.assignment:read"))],
+    db: Annotated[Session, Depends(get_db)],
+):
+    items = AssignmentService(db).list_components(ctx, row_id)
+    payload = AssignmentComponentListResult(
+        items=[AssignmentComponentResponse.model_validate(i) for i in items],
+        total=len(items),
+    )
+    return APIResponse(message="OK", data=payload)
+
+
+@asset_assignments_router.post(
+    "/{row_id}/components",
+    response_model=APIResponse[AssignmentComponentListResult],
+)
+def set_assignment_components(
+    row_id: UUID,
+    body: AssignmentComponentSetRequest,
+    ctx: Annotated[TenantContext, Depends(require_permission("asset.assignment:update"))],
+    db: Annotated[Session, Depends(get_db)],
+):
+    items = AssignmentService(db).set_components(ctx, row_id, body.component_ids)
+    payload = AssignmentComponentListResult(
+        items=[AssignmentComponentResponse.model_validate(i) for i in items],
+        total=len(items),
+    )
+    return APIResponse(message="Updated", data=payload)
+
 
 @asset_assignments_router.post("", response_model=APIResponse[AssetAssignmentResponse])
 def create_asset_assignments(
@@ -807,6 +971,9 @@ def return_asset_assignments(
     ctx: Annotated[TenantContext, Depends(require_permission("asset.assignment:return"))],
     db: Annotated[Session, Depends(get_db)],
 ):
+    component_returns = None
+    if body.component_returns is not None:
+        component_returns = [line.model_dump() for line in body.component_returns]
     return APIResponse(
         message="return",
         data=AssignmentService(db).return_assignment(
@@ -815,6 +982,7 @@ def return_asset_assignments(
             return_condition=body.return_condition,
             reason=body.reason,
             remarks=body.return_remarks,
+            component_returns=component_returns,
         ),
     )
 
@@ -2510,3 +2678,343 @@ def finalize_reports(
 ):
     return APIResponse(message="finalize", data=AssetReportService(db).finalize(ctx, row_id))
 
+
+incoming_assets_router = APIRouter(prefix="/incoming-assets", tags=["Asset — IncomingAssets"])
+
+
+@incoming_assets_router.get("/summary", response_model=APIResponse[IncomingAssetSummaryResponse])
+def summary_incoming_assets(
+    ctx: Annotated[TenantContext, Depends(require_permission("asset.incoming:read"))],
+    db: Annotated[Session, Depends(get_db)],
+    company_id: UUID | None = None,
+    branch_id: UUID | None = None,
+):
+    data = IncomingAssetService(db).summary(ctx, company_id=company_id, branch_id=branch_id)
+    return APIResponse(message="OK", data=IncomingAssetSummaryResponse(**data))
+
+
+@incoming_assets_router.get("/qc", response_model=APIResponse[IncomingAssetQcListResult])
+def list_incoming_assets_qc(
+    ctx: Annotated[TenantContext, Depends(require_permission("asset.incoming_qc:read"))],
+    db: Annotated[Session, Depends(get_db)],
+    pagination: Annotated[PaginationParams, Depends(get_pagination)],
+    company_id: UUID | None = None,
+    branch_id: UUID | None = None,
+    qc_status: str | None = None,
+    grn_id: UUID | None = None,
+    purchase_order_id: UUID | None = None,
+    q: str | None = None,
+):
+    items, total = IncomingAssetQcService(db).search(
+        ctx,
+        company_id=company_id,
+        branch_id=branch_id,
+        qc_status=qc_status,
+        grn_id=grn_id,
+        purchase_order_id=purchase_order_id,
+        search=q,
+        offset=pagination.offset,
+        limit=pagination.page_size,
+    )
+    payload = IncomingAssetQcListResult(
+        items=[to_qc_line_response(i) for i in items],
+        total=total,
+        page=pagination.page,
+        page_size=pagination.page_size,
+    )
+    return APIResponse(message="OK", data=payload)
+
+
+@incoming_assets_router.get("", response_model=APIResponse[IncomingAssetListResult])
+def list_incoming_assets(
+    ctx: Annotated[TenantContext, Depends(require_permission("asset.incoming:read"))],
+    db: Annotated[Session, Depends(get_db)],
+    pagination: Annotated[PaginationParams, Depends(get_pagination)],
+    company_id: UUID | None = None,
+    branch_id: UUID | None = None,
+    status: str | None = None,
+    grn_id: UUID | None = None,
+    purchase_order_id: UUID | None = None,
+    document_date_from: date | None = None,
+    document_date_to: date | None = None,
+    q: str | None = None,
+):
+    items, total = IncomingAssetService(db).search(
+        ctx,
+        company_id=company_id,
+        branch_id=branch_id,
+        status=status,
+        grn_id=grn_id,
+        purchase_order_id=purchase_order_id,
+        search=q,
+        document_date_from=document_date_from,
+        document_date_to=document_date_to,
+        offset=pagination.offset,
+        limit=pagination.page_size,
+    )
+    payload = IncomingAssetListResult(
+        items=[to_incoming_line_response(i) for i in items],
+        total=total,
+        page=pagination.page,
+        page_size=pagination.page_size,
+    )
+    return APIResponse(message="OK", data=payload)
+
+
+@incoming_assets_router.get(
+    "/{row_id}/qc",
+    response_model=APIResponse[IncomingAssetQcLineResponse],
+)
+def get_incoming_asset_qc(
+    row_id: UUID,
+    ctx: Annotated[TenantContext, Depends(require_permission("asset.incoming_qc:read"))],
+    db: Annotated[Session, Depends(get_db)],
+):
+    row = IncomingAssetQcService(db).get(ctx, row_id)
+    return APIResponse(message="OK", data=to_qc_line_response(row))
+
+
+@incoming_assets_router.post(
+    "/{row_id}/qc/start",
+    response_model=APIResponse[IncomingAssetQcLineResponse],
+)
+def start_incoming_asset_qc(
+    row_id: UUID,
+    ctx: Annotated[TenantContext, Depends(require_permission("asset.incoming_qc:inspect"))],
+    db: Annotated[Session, Depends(get_db)],
+):
+    updated = IncomingAssetQcService(db).start(ctx, row_id)
+    return APIResponse(message="QC started", data=to_qc_line_response(updated))
+
+
+@incoming_assets_router.post(
+    "/{row_id}/qc/accept",
+    response_model=APIResponse[IncomingAssetQcLineResponse],
+)
+def accept_incoming_asset_qc(
+    row_id: UUID,
+    body: IncomingAssetQcDispositionRequest,
+    ctx: Annotated[TenantContext, Depends(require_permission("asset.incoming_qc:inspect"))],
+    db: Annotated[Session, Depends(get_db)],
+):
+    updated = IncomingAssetQcService(db).accept(
+        ctx,
+        row_id,
+        quantity=body.quantity,
+        unit_ids=body.unit_ids,
+        notes=body.notes,
+        evidence_uri=body.evidence_uri,
+        quality_inspection_id=body.quality_inspection_id,
+        mark_all_pending=body.mark_all_pending,
+    )
+    return APIResponse(message="Accepted", data=to_qc_line_response(updated))
+
+
+@incoming_assets_router.post(
+    "/{row_id}/qc/reject",
+    response_model=APIResponse[IncomingAssetQcLineResponse],
+)
+def reject_incoming_asset_qc(
+    row_id: UUID,
+    body: IncomingAssetQcDispositionRequest,
+    ctx: Annotated[TenantContext, Depends(require_permission("asset.incoming_qc:inspect"))],
+    db: Annotated[Session, Depends(get_db)],
+):
+    updated = IncomingAssetQcService(db).reject(
+        ctx,
+        row_id,
+        quantity=body.quantity,
+        unit_ids=body.unit_ids,
+        notes=body.notes,
+        rejection_reason=body.rejection_reason,
+        evidence_uri=body.evidence_uri,
+        quality_inspection_id=body.quality_inspection_id,
+        mark_all_pending=body.mark_all_pending,
+    )
+    return APIResponse(message="Rejected", data=to_qc_line_response(updated))
+
+
+@incoming_assets_router.get("/{row_id}", response_model=APIResponse[IncomingAssetLineResponse])
+def get_incoming_asset(
+    row_id: UUID,
+    ctx: Annotated[TenantContext, Depends(require_permission("asset.incoming:read"))],
+    db: Annotated[Session, Depends(get_db)],
+):
+    row = IncomingAssetService(db).get(ctx, row_id)
+    return APIResponse(message="OK", data=to_incoming_line_response(row))
+
+
+@incoming_assets_router.post(
+    "/{row_id}/arrive",
+    response_model=APIResponse[IncomingAssetLineResponse],
+)
+def arrive_incoming_asset(
+    row_id: UUID,
+    body: IncomingAssetArriveRequest,
+    ctx: Annotated[TenantContext, Depends(require_permission("asset.incoming:receive"))],
+    db: Annotated[Session, Depends(get_db)],
+):
+    unit_indexes = None
+    serials = None
+    if body.units:
+        unit_indexes = [u.unit_index for u in body.units]
+        serials = {u.unit_index: u.serial_number for u in body.units if u.serial_number}
+    updated = IncomingAssetService(db).arrive(
+        ctx,
+        row_id,
+        quantity=body.quantity,
+        mark_all=body.mark_all,
+        unit_indexes=unit_indexes,
+        serials=serials,
+        notes=body.notes,
+    )
+    return APIResponse(message="Arrived", data=to_incoming_line_response(updated))
+
+
+registration_queue_router = APIRouter(
+    prefix="/registration-queue", tags=["Asset — RegistrationQueue"]
+)
+
+
+@registration_queue_router.get(
+    "/summary", response_model=APIResponse[RegistrationQueueSummaryResponse]
+)
+def registration_queue_summary(
+    ctx: Annotated[TenantContext, Depends(require_permission("asset.incoming_qc:read"))],
+    db: Annotated[Session, Depends(get_db)],
+    company_id: UUID | None = None,
+    branch_id: UUID | None = None,
+):
+    data = IncomingRegistrationService(db).summary(
+        ctx, company_id=company_id, branch_id=branch_id
+    )
+    return APIResponse(message="OK", data=RegistrationQueueSummaryResponse(**data))
+
+
+@registration_queue_router.get("", response_model=APIResponse[RegistrationQueueListResult])
+def list_registration_queue(
+    ctx: Annotated[TenantContext, Depends(require_permission("asset.incoming_qc:read"))],
+    db: Annotated[Session, Depends(get_db)],
+    pagination: Annotated[PaginationParams, Depends(get_pagination)],
+    company_id: UUID | None = None,
+    branch_id: UUID | None = None,
+    grn_id: UUID | None = None,
+    purchase_order_id: UUID | None = None,
+    registration_status: str | None = None,
+    q: str | None = None,
+):
+    rows, total = IncomingRegistrationService(db).search_queue(
+        ctx,
+        company_id=company_id,
+        branch_id=branch_id,
+        grn_id=grn_id,
+        purchase_order_id=purchase_order_id,
+        search=q,
+        registration_status=registration_status,
+        offset=pagination.offset,
+        limit=pagination.page_size,
+    )
+    items = [
+        RegistrationQueueItemResponse(
+            incoming_unit_id=r.unit.id,
+            incoming_line_id=r.line.id,
+            unit_index=r.unit.unit_index,
+            unit_reference=f"IN-{r.unit.unit_index:04d}",
+            product_name=r.line.product_name,
+            product_code=r.line.product_code,
+            serial_number=r.unit.serial_number,
+            grn_id=r.line.grn_id,
+            grn_document_number=r.line.grn_document_number,
+            purchase_order_id=r.line.purchase_order_id,
+            po_document_number=r.line.po_document_number,
+            branch_id=r.line.branch_id,
+            qc_status=r.unit.qc_status,
+            registration_status=r.registration_status,
+            line_registration_status=r.line_registration_status,
+            registered_asset_id=r.unit.registered_asset_id,
+        )
+        for r in rows
+    ]
+    return APIResponse(
+        message="OK",
+        data=RegistrationQueueListResult(
+            items=items,
+            total=total,
+            page=pagination.page,
+            page_size=pagination.page_size,
+        ),
+    )
+
+
+@registration_queue_router.get("/excel-template")
+def download_registration_excel_template(
+    ctx: Annotated[TenantContext, Depends(require_permission("asset.asset:create"))],
+    db: Annotated[Session, Depends(get_db)],
+    company_id: UUID | None = None,
+    branch_id: UUID | None = None,
+):
+    from fastapi.responses import Response
+
+    csv_text = IncomingRegistrationService(db).build_excel_template_csv(
+        ctx, company_id=company_id, branch_id=branch_id
+    )
+    return Response(
+        content=csv_text,
+        media_type="text/csv",
+        headers={
+            "Content-Disposition": 'attachment; filename="pending-registration-template.csv"'
+        },
+    )
+
+
+@registration_queue_router.post(
+    "/excel/validate", response_model=APIResponse[RegistrationExcelValidateResult]
+)
+def validate_registration_excel(
+    body: RegistrationExcelValidateRequest,
+    ctx: Annotated[TenantContext, Depends(require_permission("asset.asset:create"))],
+    db: Annotated[Session, Depends(get_db)],
+    company_id: UUID | None = None,
+):
+    rows = IncomingRegistrationService(db).validate_excel_rows(
+        ctx,
+        [r.model_dump() for r in body.rows],
+        company_id=company_id,
+    )
+    valid_count = sum(1 for r in rows if r["status"] == "valid")
+    error_count = sum(1 for r in rows if r["status"] == "error")
+    return APIResponse(
+        message="OK",
+        data=RegistrationExcelValidateResult(
+            valid_count=valid_count,
+            error_count=error_count,
+            warning_count=0,
+            rows=[RegistrationExcelRowResult(**r) for r in rows],
+        ),
+    )
+
+
+@registration_queue_router.post(
+    "/excel/confirm", response_model=APIResponse[RegistrationExcelConfirmResult]
+)
+def confirm_registration_excel(
+    body: RegistrationExcelConfirmRequest,
+    ctx: Annotated[TenantContext, Depends(require_permission("asset.asset:create"))],
+    db: Annotated[Session, Depends(get_db)],
+    company_id: UUID | None = None,
+):
+    result = IncomingRegistrationService(db).confirm_excel_rows(
+        ctx,
+        [r.model_dump() for r in body.rows],
+        company_id=company_id,
+        activate=body.activate,
+    )
+    return APIResponse(
+        message="Registered",
+        data=RegistrationExcelConfirmResult(
+            registered_count=result["registered_count"],
+            activation_complete=result["activation_complete"],
+            activation_incomplete=result["activation_incomplete"],
+            items=[RegistrationExcelConfirmItem(**i) for i in result["items"]],
+        ),
+    )

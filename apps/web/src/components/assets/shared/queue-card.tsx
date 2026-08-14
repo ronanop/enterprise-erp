@@ -14,6 +14,8 @@ export type QueueCardRow = {
 
 export type QueueCardProps = {
   title: string;
+  /** Optional total count badge (e.g. API list `total`). */
+  count?: number | null;
   rows?: QueueCardRow[];
   columnLabels?: string[];
   action?: { label: string; onClick?: () => void };
@@ -22,10 +24,12 @@ export type QueueCardProps = {
   emptyTitle?: string;
   emptyDescription?: string;
   className?: string;
+  dense?: boolean;
 };
 
 export function QueueCard({
   title,
+  count,
   rows = [],
   columnLabels,
   action,
@@ -34,19 +38,30 @@ export function QueueCard({
   emptyTitle,
   emptyDescription,
   className,
+  dense = false,
 }: QueueCardProps) {
   if (loading) {
     return <QueueCardSkeleton className={className} />;
   }
 
   const isEmpty = rows.length === 0;
+  const showCount = typeof count === "number" && Number.isFinite(count);
 
   return (
     <Card className={cn("border-border/80 shadow-sm", className)}>
-      <CardHeader className="pb-3">
+      <CardHeader className={cn("flex flex-row items-center justify-between gap-2 space-y-0", dense ? "pb-2 pt-3" : "pb-3")}>
         <CardTitle className="text-sm font-medium tracking-tight">{title}</CardTitle>
+        {showCount ? (
+          <span
+            className="inline-flex min-w-6 items-center justify-center rounded-md border border-border/70 bg-muted/50 px-1.5 py-0.5 font-mono text-[11px] font-semibold tabular-nums text-muted-foreground"
+            data-testid="queue-card-count"
+            aria-label={`${count} total`}
+          >
+            {count}
+          </span>
+        ) : null}
       </CardHeader>
-      <CardContent className="pt-0">
+      <CardContent className={cn("pt-0", dense && "pb-2")}>
         {isEmpty ? (
           <EmptyState
             variant={emptyVariant}
@@ -56,12 +71,12 @@ export function QueueCard({
           />
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[280px] text-left text-sm">
+            <table className="w-full min-w-[240px] text-left text-sm">
               {columnLabels?.length ? (
                 <thead>
-                  <tr className="border-b border-border/60 text-xs text-muted-foreground">
+                  <tr className="border-b border-border/60 text-[11px] text-muted-foreground">
                     {columnLabels.map((label) => (
-                      <th key={label} className="pb-2 pr-3 font-medium">
+                      <th key={label} className={cn("font-medium", dense ? "pb-1.5 pr-2" : "pb-2 pr-3")}>
                         {label}
                       </th>
                     ))}
@@ -70,9 +85,18 @@ export function QueueCard({
               ) : null}
               <tbody>
                 {rows.map((row) => (
-                  <tr key={row.id} className="border-b border-border/40 last:border-0">
+                  <tr
+                    key={row.id}
+                    className="border-b border-border/40 transition-colors duration-150 last:border-0 hover:bg-muted/30"
+                  >
                     {row.cells.map((cell, i) => (
-                      <td key={`${row.id}-${i}`} className="py-2 pr-3 text-foreground/90">
+                      <td
+                        key={`${row.id}-${i}`}
+                        className={cn(
+                          "text-foreground/90",
+                          dense ? "py-1.5 pr-2 text-[13px]" : "py-2 pr-3",
+                        )}
+                      >
                         {cell}
                       </td>
                     ))}
@@ -84,12 +108,12 @@ export function QueueCard({
         )}
       </CardContent>
       {action ? (
-        <CardFooter className="pt-0">
+        <CardFooter className={cn(dense ? "pt-0 pb-3" : "pt-0")}>
           <Button
             type="button"
             variant="ghost"
             size="sm"
-            className="cursor-pointer"
+            className="h-7 cursor-pointer px-2 text-xs"
             onClick={action.onClick}
           >
             {action.label}

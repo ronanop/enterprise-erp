@@ -3,13 +3,18 @@
 from dataclasses import dataclass
 from uuid import UUID, uuid4
 
-from sqlalchemy import func, or_, select
+from sqlalchemy import and_, exists, func, or_, select
 from sqlalchemy.orm import Session
 
-from modules.asset.domain.enums import AssetOperationalStatus
+from modules.asset.domain.enums import AssetAssignmentStatus, AssetOperationalStatus
 from modules.asset.models import AstAsset
+from modules.asset.models.asset_assignment import AstAssetAssignment
+from modules.asset.models.asset_location import AstAssetLocation
 from modules.asset.repository.base import AstScopedRepository, utcnow
 from modules.foundation.domain.value_objects import TenantContext
+from modules.master_data.models.employee import MasterEmployee
+
+_ACTIVE_ASSIGNMENT = AssetAssignmentStatus.ACTIVE.value
 
 
 @dataclass(frozen=True)
@@ -20,6 +25,14 @@ class AssetListFilters:
     operational_status: str | None = None
     asset_category_id: UUID | None = None
     search: str | None = None
+    # Phase 5F — server-authoritative inventory filters
+    asset_type: str | None = None
+    department_id: UUID | None = None
+    location_id: UUID | None = None
+    employee_id: UUID | None = None
+    assignment_state: str | None = None  # "assigned" | "unassigned"
+    make: str | None = None
+    model: str | None = None
 
 
 @dataclass(frozen=True)
@@ -173,14 +186,53 @@ class AssetRepository(AstScopedRepository):
             stmt = stmt.where(AstAsset.operational_status == filters.operational_status)
         if filters.asset_category_id is not None:
             stmt = stmt.where(AstAsset.asset_category_id == filters.asset_category_id)
-        if filters.search:
-            term = f"%{filters.search.strip()}%"
+        if filters.asset_type is not None:
+            stmt = stmt.where(AstAsset.asset_type == filters.asset_type)
+        if filters.make:
+            stmt = stmt.where(AstAsset.make.ilike(f"%{filters.make.strip()}%"))
+        if filters.model:
+            stmt = stmt.where(AstAsset.model.ilike(f"%{filters.model.strip()}%"))
+
+        assignment_state = (filters.assignment_state or "").strip().lower() or None
+        if assignment_state == "assigned":
+            stmt = stmt.where(self._exists_active_assignment(filters.company_id))
+        elif assignment_state == "unassigned":
+            stmt = stmt.where(~self._exists_active_assignment(filters.company_id))
+
+        if filters.employee_id is not None:
+            stmt = stmt.where(
+                self._exists_active_assignment(
+                    filters.company_id, employee_id=filters.employee_id
+                )
+            )
+
+        if filters.department_id is not None:
+            # Current custody only: active assignment department OR assignee employee dept.
+            # Historical assignments never match.
+            stmt = stmt.where(
+                self._exists_active_assignment_for_department(
+                    filters.company_id, filters.department_id
+                )
+            )
+
+        if filters.location_id is not None:
+            # Branch != location. Match current AstAssetLocation.org_location_id only.
+            stmt = stmt.where(self._exists_current_location(filters.location_id))
+
+        search = (filters.search or "").strip()
+        if search:
+            term = f"%{search}%"
             stmt = stmt.where(
                 or_(
                     AstAsset.asset_name.ilike(term),
                     AstAsset.asset_code.ilike(term),
                     AstAsset.document_number.ilike(term),
                     AstAsset.serial_number.ilike(term),
+                    AstAsset.make.ilike(term),
+                    AstAsset.model.ilike(term),
+                    self._exists_active_assignment_employee_search(
+                        filters.company_id, term
+                    ),
                 )
             )
         stmt = self.apply_ast_filter(stmt, AstAsset, ctx, branch_scoped=True)
@@ -188,10 +240,92 @@ class AssetRepository(AstScopedRepository):
         total = int(self.db.scalar(count_stmt) or 0)
         rows = list(
             self.db.scalars(
-                stmt.order_by(AstAsset.created_at.desc()).offset(offset).limit(limit)
+                stmt.order_by(AstAsset.created_at.desc(), AstAsset.id.desc())
+                .offset(offset)
+                .limit(limit)
             ).all()
         )
         return rows, total
+
+    @staticmethod
+    def _exists_active_assignment(
+        company_id: UUID, *, employee_id: UUID | None = None
+    ):
+        clauses = [
+            AstAssetAssignment.asset_id == AstAsset.id,
+            AstAssetAssignment.company_id == company_id,
+            AstAssetAssignment.is_deleted.is_(False),
+            AstAssetAssignment.status == _ACTIVE_ASSIGNMENT,
+        ]
+        if employee_id is not None:
+            clauses.append(AstAssetAssignment.employee_id == employee_id)
+        return exists(select(1).select_from(AstAssetAssignment).where(and_(*clauses)))
+
+    @staticmethod
+    def _exists_active_assignment_for_department(company_id: UUID, department_id: UUID):
+        return exists(
+            select(1)
+            .select_from(AstAssetAssignment)
+            .outerjoin(
+                MasterEmployee,
+                and_(
+                    MasterEmployee.id == AstAssetAssignment.employee_id,
+                    MasterEmployee.is_deleted.is_(False),
+                ),
+            )
+            .where(
+                AstAssetAssignment.asset_id == AstAsset.id,
+                AstAssetAssignment.company_id == company_id,
+                AstAssetAssignment.is_deleted.is_(False),
+                AstAssetAssignment.status == _ACTIVE_ASSIGNMENT,
+                or_(
+                    AstAssetAssignment.department_id == department_id,
+                    MasterEmployee.department_id == department_id,
+                ),
+            )
+        )
+
+    @staticmethod
+    def _exists_current_location(org_location_id: UUID):
+        return exists(
+            select(1)
+            .select_from(AstAssetLocation)
+            .where(
+                AstAssetLocation.asset_id == AstAsset.id,
+                AstAssetLocation.is_deleted.is_(False),
+                AstAssetLocation.is_current.is_(True),
+                AstAssetLocation.org_location_id == org_location_id,
+            )
+        )
+
+    @staticmethod
+    def _exists_active_assignment_employee_search(company_id: UUID, term: str):
+        full_name = func.concat(
+            MasterEmployee.first_name, " ", MasterEmployee.last_name
+        )
+        return exists(
+            select(1)
+            .select_from(AstAssetAssignment)
+            .join(
+                MasterEmployee,
+                and_(
+                    MasterEmployee.id == AstAssetAssignment.employee_id,
+                    MasterEmployee.is_deleted.is_(False),
+                ),
+            )
+            .where(
+                AstAssetAssignment.asset_id == AstAsset.id,
+                AstAssetAssignment.company_id == company_id,
+                AstAssetAssignment.is_deleted.is_(False),
+                AstAssetAssignment.status == _ACTIVE_ASSIGNMENT,
+                or_(
+                    MasterEmployee.first_name.ilike(term),
+                    MasterEmployee.last_name.ilike(term),
+                    MasterEmployee.employee_code.ilike(term),
+                    full_name.ilike(term),
+                ),
+            )
+        )
 
     def count_operational_by_category(
         self,
@@ -355,6 +489,9 @@ class AssetRepository(AstScopedRepository):
                 "current_book_value",
                 "discovery_profile_json",
                 "serial_number",
+                "make",
+                "model",
+                "configuration",
             }:
                 setattr(row, k, v)
         row.updated_at = utcnow()

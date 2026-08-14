@@ -12,8 +12,14 @@ from modules.asset.models import AstAssetLocation
 from modules.asset.repository.asset_repository import AssetRepository
 from modules.foundation.domain.value_objects import TenantContext
 
+# ADR-ASSET-LOC-001 LOC-08: block terminal assets only.
+# Phase 4A registration persists location on draft create, so pre-active
+# lifecycle statuses are eligible alongside live/custody statuses.
 ELIGIBLE_ASSET_STATUSES = frozenset(
     {
+        AssetStatus.DRAFT.value,
+        AssetStatus.SUBMITTED.value,
+        AssetStatus.APPROVED.value,
         AssetStatus.ACTIVE.value,
         AssetStatus.IN_MAINTENANCE.value,
         AssetStatus.TRANSFERRED.value,
@@ -115,5 +121,5 @@ class LocationValidator:
             raise LocationValidationError("Cancelled assets cannot have location records")
         if status not in ELIGIBLE_ASSET_STATUSES:
             raise LocationValidationError(
-                "Only active, in_maintenance, or transferred assets can have location records"
+                "Asset status does not allow location records"
             )

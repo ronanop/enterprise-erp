@@ -310,6 +310,7 @@ describe("ReturnWizard", () => {
     await user.click(screen.getByRole("button", { name: /Next/i }));
     await user.click(screen.getByRole("radio", { name: /Outdated/i }));
     await user.click(screen.getByRole("button", { name: /Next/i }));
+    await user.click(screen.getByRole("button", { name: /Next/i }));
     expect(screen.getByLabelText(/Return remarks/i)).toBeInTheDocument();
   });
 
@@ -317,7 +318,7 @@ describe("ReturnWizard", () => {
     const user = userEvent.setup();
     const onFinish = vi.fn();
     render(<ReturnWizard onCancel={vi.fn()} onFinish={onFinish} />);
-    for (let i = 0; i < 3; i += 1) {
+    for (let i = 0; i < 4; i += 1) {
       await user.click(screen.getByRole("button", { name: /Next/i }));
     }
     await user.click(screen.getByRole("button", { name: /Confirm return/i }));
@@ -331,7 +332,7 @@ describe("ReturnConditionStep", () => {
   it("defaults to good", () => {
     render(
       <ReturnConditionStep
-        state={{ returnCondition: "good", returnRemarks: "", reason: "" }}
+        state={{ returnCondition: "good", returnRemarks: "", reason: "", componentReturns: [] }}
         onChange={vi.fn()}
       />,
     );
@@ -344,7 +345,59 @@ describe("AssetStep empty state", () => {
     render(
       <AssetStep state={EMPTY_ASSIGNMENT_WIZARD_STATE} onChange={vi.fn()} assets={[]} />,
     );
-    expect(screen.getByText(/No ready assets/i)).toBeInTheDocument();
+    expect(screen.getByTestId("assignment-no-ready-assets")).toBeInTheDocument();
+    expect(screen.getByText("No assets are currently ready to move.")).toBeInTheDocument();
+    expect(
+      screen.getByText("Register and approve an asset before assigning it."),
+    ).toBeInTheDocument();
+  });
+
+  it("shows unavailable deep-link message and choose-another action", async () => {
+    const user = userEvent.setup();
+    const onClear = vi.fn();
+    render(
+      <AssetStep
+        state={EMPTY_ASSIGNMENT_WIZARD_STATE}
+        onChange={vi.fn()}
+        assets={[]}
+        unavailableAssetMessage="Choose another Ready to Move asset."
+        onClearUnavailableAsset={onClear}
+      />,
+    );
+    expect(screen.getByTestId("assignment-asset-unavailable")).toBeInTheDocument();
+    expect(
+      screen.getByText("This asset is no longer available for assignment."),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Choose another Ready to Move asset.")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /Choose another asset/i }));
+    expect(onClear).toHaveBeenCalled();
+  });
+
+  it("lists only provided eligible assets with operational badge", () => {
+    render(
+      <AssetStep
+        state={EMPTY_ASSIGNMENT_WIZARD_STATE}
+        onChange={vi.fn()}
+        assets={[
+          {
+            id: "a1",
+            label: "Laptop One",
+            code: "AST-1",
+            operationalStatus: "READY_TO_MOVE",
+            lifecycleStatus: "active",
+            branchLabel: "HQ",
+            branchId: "b1",
+            serialNumber: "SN-1",
+            make: "Dell",
+            model: "5420",
+          },
+        ]}
+      />,
+    );
+    expect(screen.getByRole("option", { name: /Laptop One/i })).toBeInTheDocument();
+    expect(screen.getByText("Ready to Move")).toBeInTheDocument();
+    expect(screen.getByText(/S\/N: SN-1/)).toBeInTheDocument();
+    expect(screen.queryByText("Assigned")).not.toBeInTheDocument();
   });
 });
 
@@ -358,8 +411,8 @@ describe("IssuedItemsStep empty state", () => {
 });
 
 describe("RETURN_WIZARD_STEPS", () => {
-  it("has four steps", () => {
-    expect(RETURN_WIZARD_STEPS).toHaveLength(4);
+  it("has five steps including components reconciliation", () => {
+    expect(RETURN_WIZARD_STEPS).toHaveLength(5);
   });
 });
 

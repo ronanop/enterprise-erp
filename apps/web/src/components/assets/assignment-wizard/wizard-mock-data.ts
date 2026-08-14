@@ -13,22 +13,31 @@ export const MOCK_ASSETS: (WizardSelectOption & {
   operationalStatus: string;
   branchLabel: string;
   branchId: string;
+  serialNumber?: string;
+  make?: string;
+  model?: string;
 })[] = [
   {
     id: "asset-1",
     label: "Dell Latitude 7440",
     code: "LT-2024-014",
-    operationalStatus: "Ready To Move",
+    operationalStatus: "READY_TO_MOVE",
     branchLabel: "HQ",
     branchId: "branch-hq",
+    serialNumber: "SN-DEMO-014",
+    make: "Dell",
+    model: "Latitude 7440",
   },
   {
     id: "asset-2",
     label: "Dell Latitude 5540",
     code: "LT-2024-001",
-    operationalStatus: "Ready To Move",
+    operationalStatus: "READY_TO_MOVE",
     branchLabel: "HQ",
     branchId: "branch-hq",
+    serialNumber: "SN-DEMO-001",
+    make: "Dell",
+    model: "Latitude 5540",
   },
 ];
 

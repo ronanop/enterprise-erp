@@ -10,6 +10,7 @@ export {
   applyColumnMapping,
   normalizeOperationalStatus,
   normalizeDeliveryStatus,
+  normalizeDcSignatureStatus,
   parseImportDate,
   normalizeHeaderKey,
   getTargetFieldDefs,
