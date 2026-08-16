@@ -16,10 +16,16 @@ export const STAGE_ASSIGNEE_FIELDS = [
     assignedDateField: "scm_assigned_date",
   },
   {
-    stage: "onsite",
-    name: "onsite_assignee_employee_id",
-    label: "On-site assignee",
-    assignedDateField: "onsite_assigned_date",
+    stage: "onsite_delivery",
+    name: "onsite_delivery_assignee_employee_id",
+    label: "Onsite Delivery assignee",
+    assignedDateField: "onsite_delivery_assigned_date",
+  },
+  {
+    stage: "material_handover",
+    name: "material_handover_assignee_employee_id",
+    label: "Material Handover assignee",
+    assignedDateField: "material_handover_assigned_date",
   },
   {
     stage: "installation",
@@ -43,13 +49,22 @@ const STAGE_ORDER = [
   "assignment",
   "survey",
   "scm",
+  "onsite_delivery",
   "onsite",
+  "material_handover",
   "installation",
   "acceptance",
   "completed",
 ] as const;
 
-const ASSIGNABLE_STAGES = ["survey", "scm", "onsite", "installation", "acceptance"] as const;
+const ASSIGNABLE_STAGES = [
+  "survey",
+  "scm",
+  "onsite_delivery",
+  "material_handover",
+  "installation",
+  "acceptance",
+] as const;
 
 /** Step owner progress that lets the admin assign the next stage. */
 export function progressAllowsNextStageAssignment(
@@ -58,6 +73,13 @@ export function progressAllowsNextStageAssignment(
   return (
     progressStatus === "completed" || progressStatus === "partial_completed"
   );
+}
+
+/** Only Completed closes the step for My Jobs / read-only. */
+export function progressMarksStageCompleted(
+  progressStatus: string | null | undefined,
+): boolean {
+  return progressStatus === "completed";
 }
 
 type StageAssignmentRow = {
@@ -79,7 +101,7 @@ function previousStageReadyForNextAssignment(
 function stageAssignmentClosed(row: StageAssignmentRow): boolean {
   return (
     row.work_status === "done" ||
-    progressAllowsNextStageAssignment(row.progress_status)
+    progressMarksStageCompleted(row.progress_status)
   );
 }
 
@@ -89,7 +111,12 @@ export function assigneeFieldForStage(stage: AssignableStage) {
 
 /** Previous assignable work stage, or null for Survey. */
 export function previousAssignableStage(stage: string): AssignableStage | null {
-  const normalized = stage === "configuration" ? "installation" : stage;
+  const normalized =
+    stage === "configuration"
+      ? "installation"
+      : stage === "onsite"
+        ? "onsite_delivery"
+        : stage;
   const idx = ASSIGNABLE_STAGES.indexOf(normalized as AssignableStage);
   if (idx <= 0) return null;
   return ASSIGNABLE_STAGES[idx - 1];
@@ -99,6 +126,7 @@ export function previousAssignableStage(stage: string): AssignableStage | null {
  * Whether Project Tracking may show an assignee picker for this stage.
  * Survey: after project create (until Survey workflow is Done).
  * Later stages: when the previous stage progress is Partial completed or Completed.
+ * Onsite Delivery is auto-assigned to PM — still allow admin reassignment until completed.
  */
 export function canAssignStageFromTracking(
   stage: string,
@@ -106,7 +134,12 @@ export function canAssignStageFromTracking(
   isAdmin: boolean,
 ): boolean {
   if (!isAdmin) return false;
-  const normalized = stage === "configuration" ? "installation" : stage;
+  const normalized =
+    stage === "configuration"
+      ? "installation"
+      : stage === "onsite"
+        ? "onsite_delivery"
+        : stage;
   if (!ASSIGNABLE_STAGES.includes(normalized as AssignableStage)) return false;
 
   const row = assignments.find((a) => a.stage === normalized);
@@ -126,7 +159,12 @@ export function assignWaitingHint(
   stage: string,
   assignments: StageAssignmentRow[],
 ): string | null {
-  const normalized = stage === "configuration" ? "installation" : stage;
+  const normalized =
+    stage === "configuration"
+      ? "installation"
+      : stage === "onsite"
+        ? "onsite_delivery"
+        : stage;
   const prev = previousAssignableStage(normalized);
   if (!prev) return null;
   const prevRow = assignments.find((a) => a.stage === prev);
@@ -139,9 +177,18 @@ export function stageWorkStatus(
   currentStage: string,
   _deliveryType: string,
 ): "pending" | "in_progress" | "done" | "skipped" {
-  const normalizedStage = stage === "configuration" ? "installation" : stage;
+  const normalizedStage =
+    stage === "configuration"
+      ? "installation"
+      : stage === "onsite"
+        ? "onsite_delivery"
+        : stage;
   let normalizedCurrent =
-    currentStage === "configuration" ? "installation" : currentStage;
+    currentStage === "configuration"
+      ? "installation"
+      : currentStage === "onsite"
+        ? "onsite_delivery"
+        : currentStage;
   if (normalizedCurrent === "assignment") normalizedCurrent = "survey";
   const cur = STAGE_ORDER.indexOf(normalizedCurrent as (typeof STAGE_ORDER)[number]);
   const idx = STAGE_ORDER.indexOf(normalizedStage as (typeof STAGE_ORDER)[number]);
@@ -168,7 +215,12 @@ export function assigneeValuesFromSite(site: SiteInstallation): FormValues {
   return {
     survey_assignee_employee_id: site.survey_assignee_employee_id ?? "",
     scm_assignee_employee_id: site.scm_assignee_employee_id ?? "",
-    onsite_assignee_employee_id: site.onsite_assignee_employee_id ?? "",
+    onsite_delivery_assignee_employee_id:
+      site.onsite_delivery_assignee_employee_id ??
+      site.onsite_assignee_employee_id ??
+      "",
+    material_handover_assignee_employee_id:
+      site.material_handover_assignee_employee_id ?? "",
     installation_assignee_employee_id: site.installation_assignee_employee_id ?? "",
     acceptance_assignee_employee_id: site.acceptance_assignee_employee_id ?? "",
   };
@@ -202,7 +254,7 @@ export function stageAssignmentSection(deliveryType?: string): FormSection {
         required: true,
         optionsKey: "employees",
         placeholder: "Select person…",
-      },
+      } satisfies FieldSpec,
     ],
   };
 }
@@ -228,7 +280,10 @@ export function resolveStageOwnerDisplay(
   employees: Array<{ id: string; label: string }>,
 ): { stage_assignee_label: string } {
   const field = assigneeFieldForStage(stage);
-  const id = site[field.name];
+  let id = site[field.name as keyof SiteInstallation] as string | null | undefined;
+  if (!id && stage === "onsite_delivery") {
+    id = site.onsite_assignee_employee_id;
+  }
   const name =
     employees.find((e) => e.id === id)?.label ??
     (id ? "Assigned (name unavailable)" : "Unassigned");

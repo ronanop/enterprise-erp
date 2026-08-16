@@ -23,6 +23,7 @@ import {
   SiteInstallationTrackingSummary,
   SiteInstallationWorkflow,
 } from "@/components/projects/site-installation-workflow";
+import { ProjectExcelExportButton } from "@/components/projects/site-stage-export-button";
 import { useProjectsLookups } from "@/components/projects/use-projects-lookups";
 import { useAuthUser } from "@/hooks/use-auth-user";
 import { Button } from "@/components/ui/button";
@@ -86,12 +87,6 @@ function buildIntakeDetailRows(
     if (site.rfai_request_done) {
       if (hasText(site.rfai_number)) {
         rows.push({ label: "RFAI Number", value: site.rfai_number!.trim() });
-      }
-      if (hasText(site.power_requirements)) {
-        rows.push({
-          label: "Power Requirements",
-          value: site.power_requirements!.trim(),
-        });
       }
     }
   }
@@ -202,6 +197,7 @@ export function ProjectDetailPage({ projectId }: { projectId: string }) {
             <RefreshCw className={`size-3.5 ${loading ? "animate-spin" : ""}`} />
             Refresh
           </Button>
+          <ProjectExcelExportButton projectId={project.id} />
           {projectModuleAdmin ? (
             <Link
               href={`/projects/projects/${project.id}/edit`}

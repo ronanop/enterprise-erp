@@ -1,12 +1,11 @@
 "use client";
 
 import { useCallback, useMemo, useRef } from "react";
-import { Package, Truck, Warehouse } from "lucide-react";
+import { Truck, Warehouse } from "lucide-react";
 
 import {
   deliveryIncludesRack,
   deliveryIncludesServer,
-  deliveryIsRackOnly,
 } from "@/components/projects/projects-domain";
 import {
   orNull,
@@ -35,6 +34,7 @@ import {
   stageClosingSections,
 } from "@/components/projects/site-stage-attachment";
 import { useSiteStageFormReadOnlyMeta } from "@/components/projects/site-stage-form-read-only-context";
+import { SiteStageExportButton } from "@/components/projects/site-stage-export-button";
 
 const EMPTY: FormValues = {
   ...INTAKE_SUMMARY_EMPTY,
@@ -48,16 +48,9 @@ const EMPTY: FormValues = {
   rack_on_site_delivery_date: "",
   pdu_on_site_delivery_done: "",
   pdu_on_site_delivery_date: "",
-  im_material: "",
-  im_material_date: "",
-  power_on_material: "",
-  power_on_material_date: "",
-  material_handover_done: "",
-  material_handover_date: "",
-  material_handover_to_name: "",
-  onsite_progress_status: "",
-  onsite_attachment_name: "",
-  onsite_remarks: "",
+  onsite_delivery_progress_status: "",
+  onsite_delivery_attachment_name: "",
+  onsite_delivery_remarks: "",
 };
 
 function asBool(v: string | undefined): boolean {
@@ -76,11 +69,7 @@ function isServer(values: FormValues): boolean {
   return deliveryIncludesServer(values.delivery_type);
 }
 
-function isRackOnly(values: FormValues): boolean {
-  return deliveryIsRackOnly(values.delivery_type);
-}
-
-export function SiteOnsiteFormPage({ projectId }: { projectId: string }) {
+export function SiteOnsiteDeliveryFormPage({ projectId }: { projectId: string }) {
   const stageFormMeta = useSiteStageFormReadOnlyMeta();
   const loadedValuesRef = useRef<FormValues | null>(null);
 
@@ -90,7 +79,7 @@ export function SiteOnsiteFormPage({ projectId }: { projectId: string }) {
       getSiteInstallationByProject(projectId),
       loadIntakeSummaryLookups(),
     ]);
-    const owner = resolveStageOwnerDisplay(site, "onsite", lookups.employees);
+    const owner = resolveStageOwnerDisplay(site, "onsite_delivery", lookups.employees);
 
     const values = {
       ...intakeSummaryValues({
@@ -110,16 +99,11 @@ export function SiteOnsiteFormPage({ projectId }: { projectId: string }) {
       rack_on_site_delivery_date: dateOrEmpty(site.rack_on_site_delivery_date),
       pdu_on_site_delivery_done: site.pdu_on_site_delivery_date ? "true" : "false",
       pdu_on_site_delivery_date: dateOrEmpty(site.pdu_on_site_delivery_date),
-      im_material: site.im_material ? "true" : "",
-      im_material_date: dateOrEmpty(site.im_material_date),
-      power_on_material: site.power_on_material ? "true" : "",
-      power_on_material_date: dateOrEmpty(site.power_on_material_date),
-      material_handover_done: site.material_handover_done ? "true" : "",
-      material_handover_date: dateOrEmpty(site.material_handover_date),
-      material_handover_to_name: site.material_handover_to_name ?? "",
-      onsite_progress_status: site.onsite_progress_status ?? "",
-      onsite_attachment_name: site.onsite_attachment_name ?? "",
-      onsite_remarks: site.onsite_remarks ?? "",
+      onsite_delivery_progress_status:
+        site.onsite_delivery_progress_status ?? site.onsite_progress_status ?? "",
+      onsite_delivery_attachment_name:
+        site.onsite_delivery_attachment_name ?? site.onsite_attachment_name ?? "",
+      onsite_delivery_remarks: site.onsite_delivery_remarks ?? site.onsite_remarks ?? "",
     } satisfies FormValues;
     loadedValuesRef.current = values;
     return { values };
@@ -127,9 +111,8 @@ export function SiteOnsiteFormPage({ projectId }: { projectId: string }) {
 
   const onSave = useCallback(
     async (v: FormValues) => {
-      const rack = isRack(v);
       const server = isServer(v);
-      const rackOnly = isRackOnly(v);
+      const rack = isRack(v);
 
       await updateSiteInstallationByProject(projectId, {
         mo_request: asBool(v.mo_request),
@@ -145,27 +128,14 @@ export function SiteOnsiteFormPage({ projectId }: { projectId: string }) {
         pdu_on_site_delivery_date: asBool(v.pdu_on_site_delivery_done)
           ? orNull(v.pdu_on_site_delivery_date)
           : null,
-        im_material: asBool(v.im_material),
-        im_material_date: asBool(v.im_material) ? orNull(v.im_material_date) : null,
-        power_on_material: rackOnly ? false : asBool(v.power_on_material),
-        power_on_material_date:
-          rackOnly || !asBool(v.power_on_material)
-            ? null
-            : orNull(v.power_on_material_date),
-        material_handover_done: asBool(v.material_handover_done),
-        material_handover_date: asBool(v.material_handover_done)
-          ? orNull(v.material_handover_date)
-          : null,
-        material_handover_to_name: asBool(v.material_handover_done)
-          ? orNull(v.material_handover_to_name)
-          : null,
-        onsite_progress_status: orNull(v.onsite_progress_status),
-        onsite_attachment_name: orNull(v.onsite_attachment_name),
-        onsite_remarks: orNull(v.onsite_remarks),
+        onsite_delivery_progress_status: orNull(v.onsite_delivery_progress_status),
+        onsite_delivery_attachment_name: orNull(v.onsite_delivery_attachment_name),
+        onsite_delivery_remarks: orNull(v.onsite_delivery_remarks),
       });
+
       loadedValuesRef.current = v;
 
-      if (isProgressCompleteForAdvance(v.onsite_progress_status)) {
+      if (isProgressCompleteForAdvance(v.onsite_delivery_progress_status)) {
         let site = await getSiteInstallationByProject(projectId);
         if (site.workflow_stage === "survey") {
           site = await advanceSiteInstallation(projectId, "complete_survey");
@@ -173,8 +143,11 @@ export function SiteOnsiteFormPage({ projectId }: { projectId: string }) {
         if (site.workflow_stage === "scm") {
           site = await advanceSiteInstallation(projectId, "complete_scm");
         }
-        if (site.workflow_stage === "onsite") {
-          await advanceSiteInstallation(projectId, "complete_onsite");
+        if (
+          site.workflow_stage === "onsite_delivery" ||
+          site.workflow_stage === "onsite"
+        ) {
+          await advanceSiteInstallation(projectId, "complete_onsite_delivery");
         }
       }
 
@@ -255,66 +228,11 @@ export function SiteOnsiteFormPage({ projectId }: { projectId: string }) {
           },
         ],
       },
-      {
-        title: "IM material & handover",
-        subtitle: "Confirm IM material and warehouse-to-site handover.",
-        icon: Package,
-        fields: [
-          {
-            name: "im_material",
-            label: "IM Material",
-            type: "yesno",
-            clearFieldsOnChange: ["im_material_date"],
-          },
-          {
-            name: "im_material_date",
-            label: "IM Material Date",
-            type: "date",
-            required: true,
-            visibleWhen: (v) => v.im_material === "true",
-          },
-          {
-            name: "power_on_material",
-            label: "Power-on Material",
-            type: "yesno",
-            clearFieldsOnChange: ["power_on_material_date"],
-            visibleWhen: (v) => !isRackOnly(v),
-          },
-          {
-            name: "power_on_material_date",
-            label: "Power-on Material Date",
-            type: "date",
-            required: true,
-            visibleWhen: (v) => !isRackOnly(v) && v.power_on_material === "true",
-          },
-          {
-            name: "material_handover_done",
-            label: "Material Handover (WH → Site)",
-            type: "yesno",
-            clearFieldsOnChange: ["material_handover_date", "material_handover_to_name"],
-          },
-          {
-            name: "material_handover_date",
-            label: "Material Handover Date",
-            type: "date",
-            required: true,
-            visibleWhen: (v) => v.material_handover_done === "true",
-          },
-          {
-            name: "material_handover_to_name",
-            label: "Handed Over To (Name)",
-            type: "text",
-            required: true,
-            placeholder: "Person who received the materials",
-            visibleWhen: (v) => v.material_handover_done === "true",
-          },
-        ],
-      },
       ...stageClosingSections(
-        "onsite_progress_status",
-        "onsite_attachment_name",
-        "onsite_remarks",
-        "On-site",
+        "onsite_delivery_progress_status",
+        "onsite_delivery_attachment_name",
+        "onsite_delivery_remarks",
+        "Onsite Delivery",
       ),
     ],
     [],
@@ -322,8 +240,8 @@ export function SiteOnsiteFormPage({ projectId }: { projectId: string }) {
 
   return (
     <ProjectsRecordForm
-      title="On-site"
-      description="Step 4b — MO request, on-site deliveries, IM material, and material handover."
+      title="Onsite Delivery"
+      description="Step 4 — MO request and on-site deliveries (server / rack / PDU)."
       backHref={
         stageFormMeta.readOnly
           ? (stageFormMeta.backHref ?? `/projects/projects/${projectId}`)
@@ -341,6 +259,11 @@ export function SiteOnsiteFormPage({ projectId }: { projectId: string }) {
       emptyValues={EMPTY}
       load={load}
       onSave={onSave}
+      headerActions={
+        stageFormMeta.readOnly ? (
+          <SiteStageExportButton projectId={projectId} stage="onsite_delivery" />
+        ) : null
+      }
     />
   );
 }

@@ -81,11 +81,22 @@ export function SiteStageFormGate({
             stageRow?.work_status ?? "",
           )
         ) {
-          setReadOnlyMeta({
-            readOnly: true,
-            backHref: `/projects/projects/${projectId}`,
-            backLabel: "Back to project",
-          });
+          const adminCanEdit = canEditSiteStageForm(
+            project,
+            site,
+            stage,
+            employeeId,
+            parsed.projectModuleAdmin,
+          );
+          setReadOnlyMeta(
+            adminCanEdit
+              ? editableMeta
+              : {
+                readOnly: true,
+                backHref: `/projects/projects/${projectId}`,
+                backLabel: "Back to project",
+              },
+          );
           setState("allowed");
           return;
         }

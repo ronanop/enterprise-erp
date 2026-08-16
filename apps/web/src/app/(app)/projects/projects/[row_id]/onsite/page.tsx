@@ -1,15 +1,11 @@
-import { SiteOnsiteFormPage } from "@/components/projects/site-onsite-form-page";
-import { SiteStageFormGate } from "@/components/projects/site-stage-form-gate";
+import { redirect } from "next/navigation";
 
 interface PageProps {
   params: Promise<{ row_id: string }>;
 }
 
-export default async function ProjectOnsiteRoute({ params }: PageProps) {
+/** Legacy combined On-site route — redirect to Onsite Delivery. */
+export default async function ProjectOnsiteLegacyRoute({ params }: PageProps) {
   const { row_id: projectId } = await params;
-  return (
-    <SiteStageFormGate projectId={projectId} stage="onsite">
-      <SiteOnsiteFormPage projectId={projectId} />
-    </SiteStageFormGate>
-  );
+  redirect(`/projects/projects/${projectId}/onsite-delivery`);
 }

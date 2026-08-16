@@ -25,8 +25,7 @@ export type ProjectsNavGroup = {
 };
 
 /**
- * Site installation delivery nav — replaces generic WBS/timesheet panes
- * with the handwritten Project Management workflow stages.
+ * Projects module sidebar — primary workspace links for delivery admins and members.
  */
 export const PROJECTS_NAV_GROUPS: readonly ProjectsNavGroup[] = [
   {
@@ -34,23 +33,10 @@ export const PROJECTS_NAV_GROUPS: readonly ProjectsNavGroup[] = [
     items: [
       { title: "Dashboard", href: "/projects" },
       { title: "My Jobs", href: "/projects/my-jobs" },
-      { title: "Follow ups", href: "/projects/follow-ups" },
-      { title: "Projects", href: "/projects/projects" },
+      { title: "Completed Jobs", href: "/projects/completed-jobs" },
       { title: "PO Queue", href: "/projects/po-queue" },
+      { title: "Projects", href: "/projects/projects" },
       { title: "All Sites", href: "/projects/site-installations" },
-    ],
-  },
-  {
-    label: "Delivery stages",
-    items: [
-      { title: "Intake & RFAI", href: "/projects/intake", stage: "intake" },
-      { title: "Assign owners", href: "/projects/assignment", stage: "assignment" },
-      { title: "Survey", href: "/projects/survey", stage: "survey" },
-      { title: "SCM / Logistics", href: "/projects/scm", stage: "scm" },
-      { title: "On-site", href: "/projects/onsite", stage: "onsite" },
-      { title: "Installation & Configuration", href: "/projects/installation", stage: "installation" },
-      { title: "Acceptance", href: "/projects/acceptance", stage: "acceptance" },
-      { title: "Completed", href: "/projects/completed", stage: "completed" },
     ],
   },
 ] as const;

@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useMemo, useRef, useState } from "react";
-import { Server, Wrench } from "lucide-react";
+import { ClipboardList, Server, Wrench } from "lucide-react";
 
 import {
   deliveryIncludesBios,
@@ -25,7 +25,6 @@ import {
   advanceSiteInstallation,
   getProject,
   getSiteInstallationByProject,
-  notifySiteStageNoAnswers,
   updateSiteInstallationByProject,
 } from "@/services/projects-portal-service";
 import {
@@ -33,11 +32,11 @@ import {
   stageOwnerBannerSection,
 } from "@/components/projects/site-stage-assignments";
 import {
-  collectNewNoAnswers,
   isProgressCompleteForAdvance,
   stageClosingSections,
 } from "@/components/projects/site-stage-attachment";
 import { useSiteStageFormReadOnlyMeta } from "@/components/projects/site-stage-form-read-only-context";
+import { SiteStageExportButton } from "@/components/projects/site-stage-export-button";
 
 const EMPTY: FormValues = {
   ...INTAKE_SUMMARY_EMPTY,
@@ -70,6 +69,7 @@ const EMPTY: FormValues = {
   installation_progress_status: "",
   installation_attachment_name: "",
   installation_remarks: "",
+  tile_details: "",
 };
 
 function asBool(v: string | undefined): boolean {
@@ -135,6 +135,7 @@ export function SiteInstallFormPage({ projectId }: { projectId: string }) {
       installation_progress_status: site.installation_progress_status ?? "",
       installation_attachment_name: site.installation_attachment_name ?? "",
       installation_remarks: site.installation_remarks ?? "",
+      tile_details: site.tile_details ?? "",
     } satisfies FormValues;
     loadedValuesRef.current = values;
     return { values };
@@ -146,33 +147,6 @@ export function SiteInstallFormPage({ projectId }: { projectId: string }) {
       const rackOnly = deliveryIsRackOnly(type);
       const includeOs = deliveryIncludesOs(type);
       const includeBios = deliveryIncludesBios(type);
-
-      const installDoneFields = [
-        { name: "rack_server_stacking_done", label: "Rack / Server Stacking" },
-        ...(!rackOnly
-          ? [
-            { name: "rack_server_power_on_done", label: "Rack / Server Power On" },
-            { name: "dac_ilo_cabling_done", label: "DAC / ILO Cabling" },
-          ]
-          : []),
-        ...(includeBios
-          ? [
-            { name: "bios_configuration_done", label: "BIOS Configuration" },
-            { name: "firmware_config_done", label: "Firmware Configuration" },
-            { name: "lld_done", label: "LLD Availability" },
-          ]
-          : []),
-        ...(includeOs
-          ? [
-            { name: "os_installation_done", label: "OS Installation" },
-            { name: "vm_installation_done", label: "VM Installation" },
-            { name: "nw_config_done", label: "N/W Configuration" },
-            { name: "tools_integration_done", label: "Tools Integration" },
-            { name: "mbss_done", label: "MBSS" },
-            { name: "vascan_done", label: "VASCAN" },
-          ]
-          : []),
-      ];
 
       await updateSiteInstallationByProject(projectId, {
         rack_server_stacking_done: asBool(v.rack_server_stacking_done),
@@ -221,16 +195,6 @@ export function SiteInstallFormPage({ projectId }: { projectId: string }) {
         installation_attachment_name: orNull(v.installation_attachment_name),
         installation_remarks: orNull(v.installation_remarks),
       });
-
-      const noAnswers = collectNewNoAnswers(v, loadedValuesRef.current, installDoneFields);
-      if (noAnswers.length > 0) {
-        await notifySiteStageNoAnswers(projectId, {
-          stage: "installation",
-          items: noAnswers,
-        }).catch(() => {
-          // Non-blocking.
-        });
-      }
       loadedValuesRef.current = v;
 
       if (isProgressCompleteForAdvance(v.installation_progress_status)) {
@@ -238,8 +202,14 @@ export function SiteInstallFormPage({ projectId }: { projectId: string }) {
         if (site.workflow_stage === "scm") {
           site = await advanceSiteInstallation(projectId, "complete_scm");
         }
-        if (site.workflow_stage === "onsite") {
-          site = await advanceSiteInstallation(projectId, "complete_onsite");
+        if (
+          site.workflow_stage === "onsite_delivery" ||
+          site.workflow_stage === "onsite"
+        ) {
+          site = await advanceSiteInstallation(projectId, "complete_onsite_delivery");
+        }
+        if (site.workflow_stage === "material_handover") {
+          site = await advanceSiteInstallation(projectId, "complete_material_handover");
         }
         if (site.workflow_stage === "installation" || site.workflow_stage === "configuration") {
           await advanceSiteInstallation(projectId, "complete_installation");
@@ -318,6 +288,19 @@ export function SiteInstallFormPage({ projectId }: { projectId: string }) {
     const sectionsOut: FormSection[] = [
       intakeSummarySection(),
       stageOwnerBannerSection(),
+      {
+        title: "Survey reference",
+        subtitle: "Tile details captured during Survey (read-only).",
+        icon: ClipboardList,
+        fields: [
+          {
+            name: "tile_details",
+            label: "Tile Details",
+            type: "readonly",
+            full: true,
+          },
+        ],
+      },
       {
         title: "Installation",
         subtitle: installSubtitle,
@@ -480,8 +463,8 @@ export function SiteInstallFormPage({ projectId }: { projectId: string }) {
       title={isRackOnly ? "Installation" : "Installation & Configuration"}
       description={
         isRackOnly
-          ? "Step 5 — Confirm rack installation, then continue to Acceptance."
-          : "Step 5 — Installation and configuration in one step. Next: Acceptance."
+          ? "Step 6 — Confirm rack installation, then continue to Acceptance."
+          : "Step 6 — Installation and configuration in one step. Next: Acceptance."
       }
       backHref={
         stageFormMeta.readOnly
@@ -500,6 +483,11 @@ export function SiteInstallFormPage({ projectId }: { projectId: string }) {
       emptyValues={EMPTY}
       load={load}
       onSave={onSave}
+      headerActions={
+        stageFormMeta.readOnly ? (
+          <SiteStageExportButton projectId={projectId} stage="installation" />
+        ) : null
+      }
     />
   );
 }

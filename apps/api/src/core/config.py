@@ -101,6 +101,11 @@ class Settings(BaseSettings):
     azure_from_email: str = Field(default="", alias="AZURE_FROM_EMAIL")
     # sync = deliver in-request (local/dev); async = Celery only
     email_delivery_mode: str = Field(default="sync", alias="EMAIL_DELIVERY_MODE")
+    # Project stage-save emails — keep false until Graph Mail.Send is granted
+    project_stage_email_notifications_enabled: bool = Field(
+        default=False,
+        alias="PROJECT_STAGE_EMAIL_NOTIFICATIONS_ENABLED",
+    )
 
     frontend_url: str = Field(default="http://localhost:3000", alias="FRONTEND_URL")
 

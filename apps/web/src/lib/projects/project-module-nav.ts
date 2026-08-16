@@ -8,7 +8,8 @@ const ADMIN_ONLY_HREFS = new Set([
   "/projects/assignment",
   "/projects/survey",
   "/projects/scm",
-  "/projects/onsite",
+  "/projects/onsite_delivery",
+  "/projects/material_handover",
   "/projects/installation",
   "/projects/acceptance",
   "/projects/completed",
@@ -19,7 +20,6 @@ const MEMBER_WORKSPACE_HREFS = [
   "/projects",
   "/projects/my-jobs",
   "/projects/completed-jobs",
-  "/projects/follow-ups",
   "/projects/projects",
 ] as const;
 
@@ -45,9 +45,7 @@ export function filterProjectsNavGroups(
                   ? "My Jobs"
                   : href === "/projects/completed-jobs"
                     ? "Completed Jobs"
-                    : href === "/projects/follow-ups"
-                      ? "Follow ups"
-                      : "Projects",
+                    : "Projects",
             href,
           }
         );

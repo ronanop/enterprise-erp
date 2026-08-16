@@ -6,7 +6,6 @@ import {
   Cable,
   CheckCircle2,
   ClipboardCheck,
-  FolderKanban,
   MapPin,
   Package,
   PieChart,
@@ -56,6 +55,18 @@ const DELIVERY_STAGES = [
   { key: "survey", label: "Survey", href: "/projects/survey", icon: MapPin },
   { key: "scm", label: "SCM / Logistics", href: "/projects/scm", icon: Package },
   {
+    key: "onsite_delivery",
+    label: "Onsite Delivery",
+    href: "/projects/onsite_delivery",
+    icon: MapPin,
+  },
+  {
+    key: "material_handover",
+    label: "Material Handover",
+    href: "/projects/material_handover",
+    icon: Package,
+  },
+  {
     key: "installation",
     label: "Installation & Configuration",
     href: "/projects/installation",
@@ -81,6 +92,8 @@ const ACTIVE_STAGES = new Set([
   "survey",
   "scm",
   "onsite",
+  "onsite_delivery",
+  "material_handover",
   "installation",
   "configuration",
   "acceptance",
@@ -187,7 +200,17 @@ function ProjectsAdminDashboard() {
   const recentSites = useMemo(() => newestSites(sites), [sites]);
 
   const attentionQueue = useMemo(() => {
-    const priority = ["assignment", "intake", "acceptance", "survey", "scm", "onsite", "installation"];
+    const priority = [
+      "assignment",
+      "intake",
+      "acceptance",
+      "survey",
+      "scm",
+      "onsite_delivery",
+      "material_handover",
+      "onsite",
+      "installation",
+    ];
     return [...sites]
       .filter((s) => ACTIVE_STAGES.has(normalizeStage(s.workflow_stage)))
       .sort((a, b) => {
@@ -226,19 +249,6 @@ function ProjectsAdminDashboard() {
               <RefreshCw className={`size-3.5 ${loading ? "animate-spin" : ""}`} />
               Refresh
             </Button>
-            <Link
-              href="/projects/projects/new"
-              className="inline-flex h-8 cursor-pointer items-center gap-1.5 rounded-lg bg-primary px-3 text-sm font-medium text-primary-foreground shadow-sm transition-opacity duration-200 hover:opacity-90"
-            >
-              <FolderKanban className="size-3.5" />
-              New Site Request
-            </Link>
-            <Link
-              href="/projects/site-installations"
-              className="inline-flex h-8 cursor-pointer items-center rounded-lg border border-border/80 bg-card px-3 text-sm font-medium shadow-sm transition-colors duration-200 hover:bg-muted"
-            >
-              All Sites
-            </Link>
           </div>
         }
       />
@@ -315,7 +325,7 @@ function ProjectsAdminDashboard() {
         <ProjectsKpiCard
           label="Acceptance"
           value={String(kpis.inAcceptance)}
-          hint="Handover / HWAT"
+          hint="Handover / HW-AT"
           icon={CheckCircle2}
           tone={kpis.inAcceptance > 0 ? "warning" : "success"}
           href="/projects/acceptance"

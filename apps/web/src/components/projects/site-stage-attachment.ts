@@ -12,6 +12,8 @@ export type StageAttachmentField =
   | "survey_attachment_name"
   | "scm_attachment_name"
   | "onsite_attachment_name"
+  | "onsite_delivery_attachment_name"
+  | "material_handover_attachment_name"
   | "installation_attachment_name"
   | "acceptance_attachment_name";
 
@@ -19,6 +21,8 @@ export type StageProgressField =
   | "survey_progress_status"
   | "scm_progress_status"
   | "onsite_progress_status"
+  | "onsite_delivery_progress_status"
+  | "material_handover_progress_status"
   | "installation_progress_status"
   | "acceptance_progress_status";
 
@@ -26,6 +30,8 @@ export type StageRemarksField =
   | "survey_remarks"
   | "scm_remarks"
   | "onsite_remarks"
+  | "onsite_delivery_remarks"
+  | "material_handover_remarks"
   | "installation_remarks"
   | "acceptance_remarks";
 
@@ -46,7 +52,6 @@ export function stageProgressSection(
         required: true,
         full: true,
         options: [...STAGE_PROGRESS_OPTIONS],
-        hint: "In progress / Partial completed / Completed — shown on Project Tracking.",
       },
     ],
   };
@@ -68,7 +73,6 @@ export function stageAttachmentSection(
         type: "file",
         required: true,
         full: true,
-        hint: "PDF, images, or office documents. Required to complete this step.",
       },
     ],
   };
@@ -143,8 +147,15 @@ export function stageProgressLabel(status: string | null | undefined): string {
   }
 }
 
-/** Partial completed and Completed both allow workflow advance / step handoff. */
+/** Only Completed advances the workflow; Partial completed stays an editable draft. */
 export function isProgressCompleteForAdvance(
+  status: string | null | undefined,
+): boolean {
+  return status === "completed";
+}
+
+/** Partial completed or Completed unlocks assigning / opening the next stage. */
+export function isProgressUnlockStatus(
   status: string | null | undefined,
 ): boolean {
   return status === "completed" || status === "partial_completed";

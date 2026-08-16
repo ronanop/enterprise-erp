@@ -19,7 +19,6 @@ export const INTAKE_SUMMARY_EMPTY: FormValues = {
   intake_pm_label: "",
   intake_rfai_request: "",
   intake_rfai_number: "",
-  intake_power_requirements: "",
 };
 
 function optionLabel(
@@ -49,9 +48,6 @@ export function intakeSummaryValues(input: {
     intake_pm_label: optionLabel(employees, project.project_manager_employee_id),
     intake_rfai_request: rfaiYes ? "Yes" : "No",
     intake_rfai_number: rfaiYes ? site.rfai_number?.trim() || "—" : "—",
-    intake_power_requirements: rfaiYes
-      ? site.power_requirements?.trim() || "—"
-      : "—",
   };
 }
 
@@ -94,13 +90,6 @@ export function intakeSummarySection(): FormSection {
         name: "intake_rfai_number",
         label: "RFAI Number",
         type: "readonly",
-        visibleWhen: (v) => v.intake_rfai_request === "Yes",
-      },
-      {
-        name: "intake_power_requirements",
-        label: "Power Requirements",
-        type: "readonly",
-        full: true,
         visibleWhen: (v) => v.intake_rfai_request === "Yes",
       },
     ],

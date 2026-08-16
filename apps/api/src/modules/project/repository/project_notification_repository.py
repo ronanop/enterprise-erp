@@ -60,6 +60,34 @@ class ProjectNotificationRepository(PrjScopedRepository):
             and row.payload_json.get("kind") == "site_stage_follow_up"
         ]
 
+    def list_site_stage_save_alert_rows(
+        self,
+        ctx: TenantContext,
+        company_id: UUID,
+        *,
+        recipient_user_id: UUID,
+        limit: int = 50,
+    ) -> list[PrjProjectNotification]:
+        stmt = (
+            select(PrjProjectNotification)
+            .where(
+                PrjProjectNotification.company_id == company_id,
+                PrjProjectNotification.is_deleted.is_(False),
+                PrjProjectNotification.notification_type == "other",
+                PrjProjectNotification.recipient_user_id == recipient_user_id,
+            )
+            .order_by(PrjProjectNotification.created_at.desc())
+            .limit(max(1, min(limit, 200)))
+        )
+        stmt = self.apply_prj_filter(stmt, PrjProjectNotification, ctx, branch_scoped=False)
+        rows = list(self.db.scalars(stmt).all())
+        return [
+            row
+            for row in rows
+            if isinstance(row.payload_json, dict)
+            and row.payload_json.get("kind") == "site_stage_saved"
+        ]
+
     def list_site_follow_ups(self, ctx: TenantContext, project_id: UUID):
         stmt = (
             select(PrjProjectNotification)

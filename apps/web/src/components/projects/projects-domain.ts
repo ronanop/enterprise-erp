@@ -269,7 +269,8 @@ export const SITE_WORKFLOW_STAGES: Choice[] = [
   choice("intake", "Intake & RFAI"),
   choice("survey", "Survey"),
   choice("scm", "SCM / Logistics"),
-  choice("onsite", "On-site"),
+  choice("onsite_delivery", "Onsite Delivery"),
+  choice("material_handover", "Material Handover"),
   choice("installation", "Installation & Configuration"),
   choice("acceptance", "Acceptance"),
   choice("completed", "Completed"),
@@ -296,5 +297,7 @@ export const siteWorkflowStageLabel = (v: string | null | undefined) => {
   if (v === "configuration") return "Installation & Configuration";
   // Removed dedicated assign step — owners assigned from Project Tracking
   if (v === "assignment") return "Survey";
+  // Historic combined on-site stage
+  if (v === "onsite") return "Onsite Delivery";
   return labelFrom(SITE_WORKFLOW_STAGES, v);
 };

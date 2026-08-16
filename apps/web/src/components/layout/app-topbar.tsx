@@ -3,9 +3,9 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
-import { Bell, LogIn } from "lucide-react";
+import { LogIn } from "lucide-react";
 
-import { Button } from "@/components/ui/button";
+import { AppTopbarNotifications } from "@/components/layout/app-topbar-notifications";
 import { isAuthenticated } from "@/lib/auth";
 
 function workspaceSubtitle(pathname: string, signedIn: boolean): string {
@@ -26,7 +26,7 @@ export function AppTopbar() {
   }, []);
 
   return (
-    <header className="sticky top-0 z-10 flex h-14 items-center justify-between gap-4 border-b border-border/80 bg-card/80 px-4 backdrop-blur-md supports-backdrop-filter:bg-card/70 sm:px-6">
+    <header className="sticky top-0 z-40 flex h-14 items-center justify-between gap-4 border-b border-border/80 bg-card/80 px-4 backdrop-blur-md supports-backdrop-filter:bg-card/70 sm:px-6">
       <div className="min-w-0 flex-1">
         <p className="truncate text-sm font-medium tracking-tight">Workspace</p>
         <p className="truncate text-xs text-muted-foreground">
@@ -35,13 +35,11 @@ export function AppTopbar() {
       </div>
 
       <div className="flex shrink-0 items-center gap-2">
-        <Button variant="ghost" size="icon-sm" aria-label="Notifications" disabled className="text-muted-foreground">
-          <Bell className="size-4" />
-        </Button>
+        <AppTopbarNotifications />
         {!signedIn ? (
           <Link
             href="/login"
-            className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-primary px-3 text-sm font-medium text-primary-foreground shadow-sm transition-opacity hover:opacity-90"
+            className="inline-flex h-8 cursor-pointer items-center gap-1.5 rounded-lg bg-primary px-3 text-sm font-medium text-primary-foreground shadow-sm transition-opacity duration-200 hover:opacity-90"
           >
             <LogIn className="size-3.5" />
             Sign in

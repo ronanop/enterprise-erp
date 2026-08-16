@@ -44,12 +44,20 @@ import {
   type ProjectPortfolioFollowUp,
 } from "@/services/projects-portal-service";
 
-const STAGE_ORDER = ["survey", "scm", "onsite", "installation", "acceptance"] as const;
+const STAGE_ORDER = [
+  "survey",
+  "scm",
+  "onsite_delivery",
+  "material_handover",
+  "installation",
+  "acceptance",
+] as const;
 
 const STAGE_ICONS = {
   survey: MapPin,
   scm: Package,
-  onsite: MapPin,
+  onsite_delivery: MapPin,
+  material_handover: Package,
   installation: Server,
   acceptance: CloudUpload,
 } as const;
@@ -58,12 +66,15 @@ const STAGE_COLORS = [
   PROJECTS_CHART_COLORS.sky,
   PROJECTS_CHART_COLORS.teal,
   PROJECTS_CHART_COLORS.amber,
+  PROJECTS_CHART_COLORS.slate,
   PROJECTS_CHART_COLORS.emerald,
   PROJECTS_CHART_COLORS.slate,
 ] as const;
 
 function normalizeAssignedStage(stage: string): string {
-  return stage === "configuration" ? "installation" : stage;
+  if (stage === "configuration") return "installation";
+  if (stage === "onsite") return "onsite_delivery";
+  return stage;
 }
 
 export function ProjectsMemberDashboard() {
@@ -280,9 +291,11 @@ export function ProjectsMemberDashboard() {
                     <Icon className="size-3" aria-hidden />
                     {key === "scm"
                       ? "SCM"
-                      : key === "onsite"
-                        ? "On-site"
-                        : key.charAt(0).toUpperCase() + key.slice(1)}
+                      : key === "onsite_delivery"
+                        ? "Onsite Delivery"
+                        : key === "material_handover"
+                          ? "Material Handover"
+                          : key.charAt(0).toUpperCase() + key.slice(1)}
                     <span className="font-medium tabular-nums text-foreground">{count}</span>
                   </span>
                 </li>

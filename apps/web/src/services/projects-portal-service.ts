@@ -204,6 +204,8 @@ export type ProjectPoPrefill = {
   description: string | null;
   ovf_id: string | null;
   crm_opportunity_id: string | null;
+  circle_name: string | null;
+  entity_state: string | null;
 };
 
 export async function listProjectPoQueue(): Promise<ProjectPoQueueItem[]> {
@@ -304,6 +306,8 @@ export type SiteInstallation = AuditFields & {
   survey_assignee_employee_id: string | null;
   scm_assignee_employee_id: string | null;
   onsite_assignee_employee_id: string | null;
+  onsite_delivery_assignee_employee_id: string | null;
+  material_handover_assignee_employee_id: string | null;
   installation_assignee_employee_id: string | null;
   configuration_assignee_employee_id: string | null;
   acceptance_assignee_employee_id: string | null;
@@ -313,6 +317,10 @@ export type SiteInstallation = AuditFields & {
   scm_finished_date: string | null;
   onsite_assigned_date: string | null;
   onsite_finished_date: string | null;
+  onsite_delivery_assigned_date: string | null;
+  onsite_delivery_finished_date: string | null;
+  material_handover_assigned_date: string | null;
+  material_handover_finished_date: string | null;
   installation_assigned_date: string | null;
   installation_finished_date: string | null;
   acceptance_assigned_date: string | null;
@@ -320,6 +328,8 @@ export type SiteInstallation = AuditFields & {
   survey_attachment_name: string | null;
   scm_attachment_name: string | null;
   onsite_attachment_name: string | null;
+  onsite_delivery_attachment_name: string | null;
+  material_handover_attachment_name: string | null;
   installation_attachment_name: string | null;
   acceptance_attachment_name: string | null;
   material_handover_to_name: string | null;
@@ -329,6 +339,10 @@ export type SiteInstallation = AuditFields & {
   scm_remarks: string | null;
   onsite_progress_status: string | null;
   onsite_remarks: string | null;
+  onsite_delivery_progress_status: string | null;
+  onsite_delivery_remarks: string | null;
+  material_handover_progress_status: string | null;
+  material_handover_remarks: string | null;
   installation_progress_status: string | null;
   installation_remarks: string | null;
   acceptance_progress_status: string | null;
@@ -409,12 +423,16 @@ export type SiteInstallationFormInput = {
   survey_assignee_employee_id?: string | null;
   scm_assignee_employee_id?: string | null;
   onsite_assignee_employee_id?: string | null;
+  onsite_delivery_assignee_employee_id?: string | null;
+  material_handover_assignee_employee_id?: string | null;
   installation_assignee_employee_id?: string | null;
   configuration_assignee_employee_id?: string | null;
   acceptance_assignee_employee_id?: string | null;
   survey_attachment_name?: string | null;
   scm_attachment_name?: string | null;
   onsite_attachment_name?: string | null;
+  onsite_delivery_attachment_name?: string | null;
+  material_handover_attachment_name?: string | null;
   installation_attachment_name?: string | null;
   acceptance_attachment_name?: string | null;
   material_handover_to_name?: string | null;
@@ -424,6 +442,10 @@ export type SiteInstallationFormInput = {
   scm_remarks?: string | null;
   onsite_progress_status?: string | null;
   onsite_remarks?: string | null;
+  onsite_delivery_progress_status?: string | null;
+  onsite_delivery_remarks?: string | null;
+  material_handover_progress_status?: string | null;
+  material_handover_remarks?: string | null;
   installation_progress_status?: string | null;
   installation_remarks?: string | null;
   acceptance_progress_status?: string | null;
@@ -504,6 +526,51 @@ export async function notifySiteStageNoAnswers(
   await apiClient(
     `${SITE_INSTALLATIONS_API}/by-project/${projectId}/notify-no-answers`,
     { method: "POST", body },
+  );
+}
+
+export type ProjectStageSaveAlert = {
+  id: string;
+  project_id: string;
+  project_name: string;
+  stage: string;
+  stage_label: string;
+  progress_status: string | null;
+  progress_status_label: string;
+  message: string;
+  remarks: string | null;
+  no_answers: string[];
+  site_name: string | null;
+  document_number: string | null;
+  form_path: string;
+  actor_name: string;
+  saved_at: string | null;
+  delivery_status: string | null;
+  unread: boolean;
+  created_at: string | null;
+  sent_at: string | null;
+};
+
+export async function listProjectStageSaveAlerts(
+  limit = 50,
+): Promise<ProjectStageSaveAlert[]> {
+  return asArray(
+    unwrap(
+      await apiClient<ProjectStageSaveAlert[]>(
+        `/projects/stage-alerts?limit=${limit}`,
+      ),
+    ),
+  );
+}
+
+export async function markProjectStageSaveAlertRead(
+  notificationId: string,
+): Promise<ProjectStageSaveAlert> {
+  return unwrap(
+    await apiClient<ProjectStageSaveAlert>(
+      `/projects/stage-alerts/${notificationId}/read`,
+      { method: "POST" },
+    ),
   );
 }
 
@@ -1305,7 +1372,7 @@ export async function updateProjectDocument(
 // Lookup options
 // ---------------------------------------------------------------------------
 
-export type Option = { id: string; label: string };
+export type Option = { id: string; label: string; meta?: Record<string, string> };
 
 function toOptions(
   data: unknown,

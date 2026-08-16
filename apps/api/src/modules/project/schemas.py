@@ -140,6 +140,8 @@ class ProjectPoPrefillResponse(BaseModel):
     description: str | None = None
     ovf_id: UUID | None = None
     crm_opportunity_id: UUID | None = None
+    circle_name: str | None = None
+    entity_state: str | None = None
 
 
 class ProjectPhaseCreate(BaseModel):
@@ -909,6 +911,8 @@ class SiteInstallationCreate(BaseModel):
     survey_assignee_employee_id: UUID | None = None
     scm_assignee_employee_id: UUID | None = None
     onsite_assignee_employee_id: UUID | None = None
+    onsite_delivery_assignee_employee_id: UUID | None = None
+    material_handover_assignee_employee_id: UUID | None = None
     installation_assignee_employee_id: UUID | None = None
     configuration_assignee_employee_id: UUID | None = None
     acceptance_assignee_employee_id: UUID | None = None
@@ -918,6 +922,10 @@ class SiteInstallationCreate(BaseModel):
     scm_finished_date: date | None = None
     onsite_assigned_date: date | None = None
     onsite_finished_date: date | None = None
+    onsite_delivery_assigned_date: date | None = None
+    onsite_delivery_finished_date: date | None = None
+    material_handover_assigned_date: date | None = None
+    material_handover_finished_date: date | None = None
     installation_assigned_date: date | None = None
     installation_finished_date: date | None = None
     acceptance_assigned_date: date | None = None
@@ -925,16 +933,22 @@ class SiteInstallationCreate(BaseModel):
     survey_attachment_name: str | None = Field(default=None, max_length=255)
     scm_attachment_name: str | None = Field(default=None, max_length=255)
     onsite_attachment_name: str | None = Field(default=None, max_length=255)
+    onsite_delivery_attachment_name: str | None = Field(default=None, max_length=255)
+    material_handover_attachment_name: str | None = Field(default=None, max_length=255)
     installation_attachment_name: str | None = Field(default=None, max_length=255)
     acceptance_attachment_name: str | None = Field(default=None, max_length=255)
     survey_progress_status: str | None = Field(default=None, max_length=40)
     scm_progress_status: str | None = Field(default=None, max_length=40)
     onsite_progress_status: str | None = Field(default=None, max_length=40)
+    onsite_delivery_progress_status: str | None = Field(default=None, max_length=40)
+    material_handover_progress_status: str | None = Field(default=None, max_length=40)
     installation_progress_status: str | None = Field(default=None, max_length=40)
     acceptance_progress_status: str | None = Field(default=None, max_length=40)
     survey_remarks: str | None = None
     scm_remarks: str | None = None
     onsite_remarks: str | None = None
+    onsite_delivery_remarks: str | None = None
+    material_handover_remarks: str | None = None
     installation_remarks: str | None = None
     acceptance_remarks: str | None = None
     material_handover_to_name: str | None = Field(default=None, max_length=255)
@@ -1014,6 +1028,8 @@ class SiteInstallationUpdate(BaseModel):
     survey_assignee_employee_id: UUID | None = None
     scm_assignee_employee_id: UUID | None = None
     onsite_assignee_employee_id: UUID | None = None
+    onsite_delivery_assignee_employee_id: UUID | None = None
+    material_handover_assignee_employee_id: UUID | None = None
     installation_assignee_employee_id: UUID | None = None
     configuration_assignee_employee_id: UUID | None = None
     acceptance_assignee_employee_id: UUID | None = None
@@ -1023,6 +1039,10 @@ class SiteInstallationUpdate(BaseModel):
     scm_finished_date: date | None = None
     onsite_assigned_date: date | None = None
     onsite_finished_date: date | None = None
+    onsite_delivery_assigned_date: date | None = None
+    onsite_delivery_finished_date: date | None = None
+    material_handover_assigned_date: date | None = None
+    material_handover_finished_date: date | None = None
     installation_assigned_date: date | None = None
     installation_finished_date: date | None = None
     acceptance_assigned_date: date | None = None
@@ -1030,16 +1050,22 @@ class SiteInstallationUpdate(BaseModel):
     survey_attachment_name: str | None = Field(default=None, max_length=255)
     scm_attachment_name: str | None = Field(default=None, max_length=255)
     onsite_attachment_name: str | None = Field(default=None, max_length=255)
+    onsite_delivery_attachment_name: str | None = Field(default=None, max_length=255)
+    material_handover_attachment_name: str | None = Field(default=None, max_length=255)
     installation_attachment_name: str | None = Field(default=None, max_length=255)
     acceptance_attachment_name: str | None = Field(default=None, max_length=255)
     survey_progress_status: str | None = Field(default=None, max_length=40)
     scm_progress_status: str | None = Field(default=None, max_length=40)
     onsite_progress_status: str | None = Field(default=None, max_length=40)
+    onsite_delivery_progress_status: str | None = Field(default=None, max_length=40)
+    material_handover_progress_status: str | None = Field(default=None, max_length=40)
     installation_progress_status: str | None = Field(default=None, max_length=40)
     acceptance_progress_status: str | None = Field(default=None, max_length=40)
     survey_remarks: str | None = None
     scm_remarks: str | None = None
     onsite_remarks: str | None = None
+    onsite_delivery_remarks: str | None = None
+    material_handover_remarks: str | None = None
     installation_remarks: str | None = None
     acceptance_remarks: str | None = None
     material_handover_to_name: str | None = Field(default=None, max_length=255)
@@ -1124,36 +1150,9 @@ class SiteInstallationResponse(OrmModel):
     hwat_signoff_date: date | None = None
     survey_assignee_employee_id: UUID | None = None
     scm_assignee_employee_id: UUID | None = None
-    installation_assignee_employee_id: UUID | None = None
-    configuration_assignee_employee_id: UUID | None = None
-    acceptance_assignee_employee_id: UUID | None = None
-    survey_assigned_date: date | None = None
-    survey_finished_date: date | None = None
-    scm_assigned_date: date | None = None
-    scm_finished_date: date | None = None
-    installation_assigned_date: date | None = None
-    installation_finished_date: date | None = None
-    acceptance_assigned_date: date | None = None
-    acceptance_finished_date: date | None = None
-    survey_attachment_name: str | None = None
-    scm_attachment_name: str | None = None
-    onsite_attachment_name: str | None = None
-    installation_attachment_name: str | None = None
-    acceptance_attachment_name: str | None = None
-    survey_progress_status: str | None = None
-    scm_progress_status: str | None = None
-    onsite_progress_status: str | None = None
-    installation_progress_status: str | None = None
-    acceptance_progress_status: str | None = None
-    survey_remarks: str | None = None
-    scm_remarks: str | None = None
-    onsite_remarks: str | None = None
-    installation_remarks: str | None = None
-    acceptance_remarks: str | None = None
-    material_handover_to_name: str | None = None
-    survey_assignee_employee_id: UUID | None = None
-    scm_assignee_employee_id: UUID | None = None
     onsite_assignee_employee_id: UUID | None = None
+    onsite_delivery_assignee_employee_id: UUID | None = None
+    material_handover_assignee_employee_id: UUID | None = None
     installation_assignee_employee_id: UUID | None = None
     configuration_assignee_employee_id: UUID | None = None
     acceptance_assignee_employee_id: UUID | None = None
@@ -1163,10 +1162,36 @@ class SiteInstallationResponse(OrmModel):
     scm_finished_date: date | None = None
     onsite_assigned_date: date | None = None
     onsite_finished_date: date | None = None
+    onsite_delivery_assigned_date: date | None = None
+    onsite_delivery_finished_date: date | None = None
+    material_handover_assigned_date: date | None = None
+    material_handover_finished_date: date | None = None
     installation_assigned_date: date | None = None
     installation_finished_date: date | None = None
     acceptance_assigned_date: date | None = None
     acceptance_finished_date: date | None = None
+    survey_attachment_name: str | None = None
+    scm_attachment_name: str | None = None
+    onsite_attachment_name: str | None = None
+    onsite_delivery_attachment_name: str | None = None
+    material_handover_attachment_name: str | None = None
+    installation_attachment_name: str | None = None
+    acceptance_attachment_name: str | None = None
+    survey_progress_status: str | None = None
+    scm_progress_status: str | None = None
+    onsite_progress_status: str | None = None
+    onsite_delivery_progress_status: str | None = None
+    material_handover_progress_status: str | None = None
+    installation_progress_status: str | None = None
+    acceptance_progress_status: str | None = None
+    survey_remarks: str | None = None
+    scm_remarks: str | None = None
+    onsite_remarks: str | None = None
+    onsite_delivery_remarks: str | None = None
+    material_handover_remarks: str | None = None
+    installation_remarks: str | None = None
+    acceptance_remarks: str | None = None
+    material_handover_to_name: str | None = None
     remarks: str | None
     status: str
     company_id: UUID
@@ -1261,6 +1286,30 @@ class SiteStageFollowUpItem(BaseModel):
 class ProjectPortfolioFollowUpItem(SiteStageFollowUpItem):
     project_id: UUID
     project_name: str
+
+
+class ProjectStageSaveAlertItem(BaseModel):
+    """Admin inbox item for an assignee stage save."""
+
+    id: UUID
+    project_id: UUID
+    project_name: str
+    stage: str
+    stage_label: str
+    progress_status: str | None = None
+    progress_status_label: str
+    message: str
+    remarks: str | None = None
+    no_answers: list[str] = Field(default_factory=list)
+    site_name: str | None = None
+    document_number: str | None = None
+    form_path: str
+    actor_name: str
+    saved_at: datetime | None = None
+    delivery_status: str | None = None
+    unread: bool = True
+    created_at: datetime | None = None
+    sent_at: datetime | None = None
 
 
 class ProjectMyJobItem(BaseModel):

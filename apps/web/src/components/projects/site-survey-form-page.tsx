@@ -32,24 +32,17 @@ import {
   stageOwnerBannerSection,
 } from "@/components/projects/site-stage-assignments";
 import {
-  collectNewNoAnswers,
   isProgressCompleteForAdvance,
   stageClosingSections,
 } from "@/components/projects/site-stage-attachment";
 import { useSiteStageFormReadOnlyMeta } from "@/components/projects/site-stage-form-read-only-context";
+import { SiteStageExportButton } from "@/components/projects/site-stage-export-button";
 import {
   advanceSiteInstallation,
   getProject,
   getSiteInstallationByProject,
-  notifySiteStageNoAnswers,
   updateSiteInstallationByProject,
 } from "@/services/projects-portal-service";
-
-const SURVEY_NO_FIELDS = [
-  { name: "space_available", label: "Space Available" },
-  { name: "power_available", label: "Power Available" },
-  { name: "survey_completed", label: "Survey Completed" },
-] as const;
 
 const EMPTY_LINES = serializeTypeQtyLines([
   { type: "", otherLabel: "", quantity: "", date: "" },
@@ -177,18 +170,6 @@ export function SiteSurveyFormPage({ projectId }: { projectId: string }) {
           lug_lines: [],
           industrial_socket_lines: [],
           ...readiness,
-        });
-      }
-
-      const noAnswers = collectNewNoAnswers(v, loadedValuesRef.current, [
-        ...SURVEY_NO_FIELDS,
-      ]);
-      if (noAnswers.length > 0) {
-        await notifySiteStageNoAnswers(projectId, {
-          stage: "survey",
-          items: noAnswers,
-        }).catch(() => {
-          // Non-blocking.
         });
       }
       loadedValuesRef.current = v;
@@ -333,6 +314,11 @@ export function SiteSurveyFormPage({ projectId }: { projectId: string }) {
       emptyValues={EMPTY}
       load={load}
       onSave={onSave}
+      headerActions={
+        stageFormMeta.readOnly ? (
+          <SiteStageExportButton projectId={projectId} stage="survey" />
+        ) : null
+      }
     />
   );
 }

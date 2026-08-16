@@ -1,7 +1,7 @@
 "use client";
 
 import type { LucideIcon } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
@@ -78,7 +78,6 @@ export type FieldSpec = {
   /** Choices resolved from the lookups map returned by `load`. */
   optionsKey?: string;
   placeholder?: string;
-  hint?: string;
   step?: string;
   min?: string;
   max?: string;
@@ -100,6 +99,8 @@ export type FieldSpec = {
   visibleWhen?: (values: FormValues) => boolean;
   /** Clear these fields when this yesno/select/checkbox value changes. */
   clearFieldsOnChange?: string[];
+  /** When the select value changes, merge extra fields (e.g. entity → state). */
+  fillFieldsOnChange?: (value: string, lookups: Lookups) => Record<string, string>;
 };
 
 export type FormSection = {
@@ -151,6 +152,7 @@ export function ProjectsRecordForm({
   onSave,
   readOnly = false,
   readOnlyBanner,
+  headerActions,
 }: {
   title: string;
   description?: string;
@@ -169,6 +171,7 @@ export function ProjectsRecordForm({
   /** When true, fields are disabled and save is hidden (stage owner view). */
   readOnly?: boolean;
   readOnlyBanner?: string;
+  headerActions?: ReactNode;
 }) {
   const router = useRouter();
   const [values, setValues] = useState<FormValues>(emptyValues);
@@ -214,10 +217,15 @@ export function ProjectsRecordForm({
     setFormReadOnlyBanner(readOnlyBanner ?? "");
   }, [readOnly, readOnlyBanner]);
 
-  function set(name: string, value: string, clearFields?: string[]) {
+  function set(
+    name: string,
+    value: string,
+    clearFields?: string[],
+    fillFields?: Record<string, string>,
+  ) {
     if (formReadOnly) return;
     setValues((v) => {
-      const next = { ...v, [name]: value };
+      const next = { ...v, ...fillFields, [name]: value };
       for (const key of clearFields ?? []) {
         next[key] = "";
       }
@@ -446,7 +454,6 @@ export function ProjectsRecordForm({
       <FinanceField
         key={field.name}
         label={isFieldRequired(field) ? `${field.label} *` : field.label}
-        hint={field.hint}
         className={cn("min-w-0", className)}
       >
         {renderFieldControl(field)}
@@ -475,7 +482,8 @@ export function ProjectsRecordForm({
       openCustomerDialog(field.name);
       return;
     }
-    set(field.name, value, field.clearFieldsOnChange);
+    const filled = field.fillFieldsOnChange?.(value, lookups) ?? {};
+    set(field.name, value, field.clearFieldsOnChange, filled);
   }
 
   async function saveCustomerDialog() {
@@ -486,7 +494,7 @@ export function ProjectsRecordForm({
     }
     const branchId = (values.branch_id ?? "").trim();
     if (!branchId) {
-      setCustomerDialogError("Select a Circle Name on the form before creating a customer.");
+      setCustomerDialogError("Select an office branch context before creating a customer.");
       return;
     }
 
@@ -582,7 +590,7 @@ export function ProjectsRecordForm({
         {backLabel}
       </Link>
 
-      <PageHeader title={title} description={description} />
+      <PageHeader title={title} description={description} actions={headerActions} />
 
       {error ? <ProjectsErrorBanner>{error}</ProjectsErrorBanner> : null}
 

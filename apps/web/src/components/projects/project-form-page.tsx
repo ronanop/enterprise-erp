@@ -2,13 +2,9 @@
 
 import { useCallback, useMemo } from "react";
 import { useSearchParams } from "next/navigation";
-import { CalendarRange, FolderKanban, MapPin } from "lucide-react";
+import { MapPin } from "lucide-react";
 
-import {
-  PROJECT_STATUSES,
-  SITE_DELIVERY_TYPES,
-  siteWorkflowStageLabel,
-} from "@/components/projects/projects-domain";
+import { SITE_DELIVERY_TYPES } from "@/components/projects/projects-domain";
 import {
   orNull,
   ProjectsRecordForm,
@@ -32,36 +28,21 @@ import {
 
 const EMPTY_CREATE: FormValues = {
   branch_id: "",
+  circle: "",
+  company_po_number: "",
   customer_id: "",
   customer_label: "",
   delivery_type: "server_os_rack",
   site_name: "",
   project_manager_employee_id: "",
-  power_requirements: "",
   rfai_request_done: "",
   rfai_number: "",
 };
 
 const EMPTY_EDIT: FormValues = {
+  ...EMPTY_CREATE,
   project_code: "",
-  workflow_stage_label: "",
-  branch_id: "",
-  branch_label: "",
   project_name: "",
-  customer_id: "",
-  delivery_type: "server_os_rack",
-  site_name: "",
-  project_manager_employee_id: "",
-  rfai_request_done: "false",
-  rfai_number: "",
-  power_requirements: "",
-  circle: "",
-  cloud_name: "",
-  fabric_partner: "",
-  application: "",
-  remarks: "",
-  planned_start_date: "",
-  planned_end_date: "",
   status: "draft",
 };
 
@@ -94,32 +75,23 @@ export function ProjectFormPage({ projectId }: { projectId?: string }) {
 
     if (record) {
       const site = await getSiteInstallationByProject(projectId!).catch(() => null);
-      const branchLabel =
-        branches.find((b) => b.id === record.branch_id)?.label ?? record.branch_id;
+      const customerLabel =
+        customers.find((c) => c.id === record.customer_id)?.label ?? "";
 
       const values: FormValues = {
         project_code: record.project_code,
-        workflow_stage_label: site
-          ? siteWorkflowStageLabel(site.workflow_stage)
-          : "—",
-        branch_id: record.branch_id,
-        branch_label: branchLabel,
         project_name: record.project_name,
+        status: record.status,
+        branch_id: record.branch_id,
+        circle: site?.circle ?? "",
+        company_po_number: "",
         customer_id: record.customer_id ?? "",
+        customer_label: customerLabel,
         delivery_type: site?.delivery_type || "server_os_rack",
         site_name: site?.site_name ?? "",
         project_manager_employee_id: record.project_manager_employee_id,
         rfai_request_done: site?.rfai_request_done ? "true" : "false",
         rfai_number: site?.rfai_number ?? "",
-        power_requirements: site?.power_requirements ?? "",
-        circle: site?.circle ?? "",
-        cloud_name: site?.cloud_name ?? "",
-        fabric_partner: site?.fabric_partner ?? "",
-        application: site?.application ?? "",
-        remarks: site?.remarks ?? "",
-        planned_start_date: record.planned_start_date,
-        planned_end_date: record.planned_end_date,
-        status: record.status,
       };
       return { values, lookups };
     }
@@ -127,6 +99,12 @@ export function ProjectFormPage({ projectId }: { projectId?: string }) {
     return {
       values: {
         branch_id: prefill?.branch_id || branches[0]?.id || "",
+        // Circle shows the lead entity state (GST / address), falling back to entity name.
+        circle:
+          prefill?.entity_state?.trim() ||
+          prefill?.circle_name?.trim() ||
+          "",
+        company_po_number: prefill?.company_po_number?.trim() || "",
         customer_id: prefill?.customer_id || "",
         customer_label: resolvedCustomerLabel,
         site_name: prefill?.site_name || "",
@@ -150,7 +128,7 @@ export function ProjectFormPage({ projectId }: { projectId?: string }) {
           site_installation: {
             delivery_type: v.delivery_type || "server_os_rack",
             site_name: orNull(siteName),
-            power_requirements: rfaiYes ? orNull(v.power_requirements) : null,
+            circle: orNull(v.circle),
             rfai_request_done: rfaiYes,
             rfai_number: rfaiYes ? orNull(v.rfai_number) : null,
           },
@@ -172,8 +150,6 @@ export function ProjectFormPage({ projectId }: { projectId?: string }) {
         project_name: v.project_name.trim() || siteName || "Site Installation Request",
         customer_id: orNull(v.customer_id),
         project_manager_employee_id: v.project_manager_employee_id,
-        planned_start_date: v.planned_start_date,
-        planned_end_date: v.planned_end_date,
         status: v.status || "draft",
       };
 
@@ -184,12 +160,7 @@ export function ProjectFormPage({ projectId }: { projectId?: string }) {
           site_name: orNull(siteName),
           rfai_request_done: rfaiYes,
           rfai_number: rfaiYes ? orNull(v.rfai_number) : null,
-          power_requirements: rfaiYes ? orNull(v.power_requirements) : null,
           circle: orNull(v.circle),
-          cloud_name: orNull(v.cloud_name),
-          fabric_partner: orNull(v.fabric_partner),
-          application: orNull(v.application),
-          remarks: orNull(v.remarks),
         }),
       ]);
 
@@ -199,272 +170,120 @@ export function ProjectFormPage({ projectId }: { projectId?: string }) {
   );
 
   const sections = useMemo<FormSection[]>(() => {
-    if (!isEdit) {
-      return [
-        {
-          title: "Intake / Site request",
-          subtitle: poId
-            ? "Step 1 — Customer and site prefilled from the SCM purchase order / CRM OVF."
-            : "Step 1 — Customer → Site → Project Manager → RFAI → Power (when RFAI is Yes)",
-          icon: MapPin,
-          fields: [
-            {
-              name: "branch_id",
-              label: "Circle Name",
-              type: "select",
-              required: true,
-              optionsKey: "branches",
-              placeholder: "Select circle…",
-              hint: "Your org office — not the telecom customer.",
-            },
-            {
-              name: "delivery_type",
-              label: "Delivery Type",
-              type: "select",
-              required: true,
-              options: SITE_DELIVERY_TYPES,
-            },
-            ...(poId
-              ? [
-                {
-                  name: "customer_label",
-                  label: "Customer",
-                  type: "readonly" as const,
-                  hint: "CRM company account linked to this purchase order.",
-                },
-                {
-                  name: "site_name",
-                  label: "Site Name",
-                  type: "readonly" as const,
-                  full: true,
-                  hint: "Company address from the CRM sales account for this PO.",
-                },
-              ]
-              : [
-                {
-                  name: "customer_id",
-                  label: "Customer",
-                  type: "select" as const,
-                  required: true,
-                  optionsKey: "customers",
-                  placeholder: "Select customer…",
-                  creatable: "customer" as const,
-                  createNewLabel: "New Customer…",
-                  hint: "e.g. Airtel — pick existing or create new.",
-                },
-                {
-                  name: "site_name",
-                  label: "Site Name",
-                  type: "textarea" as const,
-                  required: true,
-                  full: true,
-                  placeholder: "Site name / site list entry…",
-                },
-              ]),
-            {
-              name: "project_manager_employee_id",
-              label: "Project Manager",
-              type: "select",
-              required: true,
-              optionsKey: "pmTeam",
-              placeholder: "Select project manager…",
-              hint: "Owns this site request. Survey owner is assigned from Project Tracking after create.",
-            },
-            {
-              name: "rfai_request_done",
-              label: "RFAI Request",
-              type: "yesno",
-              required: true,
-              hint: "If No, Power Requirements and RFAI Number are hidden.",
-              clearFieldsOnChange: ["rfai_number", "power_requirements"],
-            },
-            {
-              name: "rfai_number",
-              label: "RFAI Number",
-              type: "text",
-              required: true,
-              placeholder: "RFAI reference number…",
-              visibleWhen: (vals) => vals.rfai_request_done === "true",
-            },
-            {
-              name: "power_requirements",
-              label: "Power Requirements",
-              type: "textarea",
-              required: true,
-              full: true,
-              placeholder: "Power load, feed, redundancy…",
-              visibleWhen: (vals) => vals.rfai_request_done === "true",
-            },
-          ],
-        },
-      ];
-    }
-
-    return [
+    const intakeFields: FormSection["fields"] = [
+      ...(isEdit
+        ? [
+          {
+            name: "project_code",
+            label: "Project Code",
+            type: "readonly" as const,
+          },
+        ]
+        : []),
       {
-        title: "Site request",
-        subtitle: "Delivery scope, customer site, and RFAI — same fields used in the site workflow",
-        icon: MapPin,
-        fields: [
-          { name: "project_code", label: "Project Code", type: "readonly" },
+        name: "circle",
+        label: "Circle",
+        type: "text" as const,
+        placeholder: "Telecom circle…",
+      },
+      {
+        name: "delivery_type",
+        label: "Delivery Type",
+        type: "select",
+        required: true,
+        options: SITE_DELIVERY_TYPES,
+      },
+      ...(!isEdit && poId
+        ? [
           {
-            name: "workflow_stage_label",
-            label: "Workflow Stage",
-            type: "readonly",
+            name: "company_po_number",
+            label: "PO Number",
+            type: "readonly" as const,
           },
-          { name: "branch_label", label: "Circle Name", type: "readonly" },
           {
-            name: "delivery_type",
-            label: "Delivery Type",
-            type: "select",
-            required: true,
-            options: SITE_DELIVERY_TYPES,
+            name: "customer_label",
+            label: "Customer",
+            type: "readonly" as const,
           },
+          {
+            name: "site_name",
+            label: "Site Name",
+            type: "readonly" as const,
+            full: true as const,
+          },
+        ]
+        : [
           {
             name: "customer_id",
             label: "Customer",
-            type: "select",
+            type: "select" as const,
             required: true,
-            optionsKey: "customers",
+            optionsKey: "customers" as const,
             placeholder: "Select customer…",
-            creatable: "customer",
+            creatable: "customer" as const,
             createNewLabel: "New Customer…",
           },
           {
             name: "site_name",
             label: "Site Name",
-            type: "text",
+            type: "textarea" as const,
             required: true,
+            full: true as const,
             placeholder: "Site name / site list entry…",
           },
-          {
-            name: "project_manager_employee_id",
-            label: "Project Manager",
-            type: "select",
-            required: true,
-            optionsKey: "pmTeam",
-            placeholder: "Select project manager…",
-          },
-          {
-            name: "rfai_request_done",
-            label: "RFAI Request",
-            type: "yesno",
-            required: true,
-            clearFieldsOnChange: ["rfai_number", "power_requirements"],
-          },
-          {
-            name: "rfai_number",
-            label: "RFAI Number",
-            type: "text",
-            required: true,
-            placeholder: "RFAI reference number…",
-            visibleWhen: (vals) => vals.rfai_request_done === "true",
-          },
-          {
-            name: "power_requirements",
-            label: "Power Requirements",
-            type: "textarea",
-            required: true,
-            full: true,
-            placeholder: "Power load, feed, redundancy…",
-            visibleWhen: (vals) => vals.rfai_request_done === "true",
-          },
-        ],
+        ]),
+      {
+        name: "project_manager_employee_id",
+        label: "Project Manager",
+        type: "select",
+        required: true,
+        optionsKey: "pmTeam",
+        placeholder: "Select project manager…",
       },
       {
-        title: "Site details",
-        subtitle: "Optional intake context used across delivery stages",
-        icon: FolderKanban,
-        fields: [
-          {
-            name: "circle",
-            label: "Circle",
-            type: "text",
-            placeholder: "Telecom circle…",
-          },
-          {
-            name: "cloud_name",
-            label: "Cloud",
-            type: "text",
-            placeholder: "Cloud / environment…",
-          },
-          {
-            name: "fabric_partner",
-            label: "Fabric Partner",
-            type: "text",
-          },
-          {
-            name: "application",
-            label: "Application",
-            type: "text",
-          },
-          {
-            name: "remarks",
-            label: "Remarks",
-            type: "textarea",
-            full: true,
-            placeholder: "Notes for delivery team…",
-          },
-        ],
+        name: "rfai_request_done",
+        label: "RFAI Request",
+        type: "yesno",
+        required: true,
+        clearFieldsOnChange: ["rfai_number"],
       },
       {
-        title: "Project plan",
-        subtitle: "Name, status, and planned window",
-        icon: CalendarRange,
-        fields: [
-          {
-            name: "project_name",
-            label: "Project Name",
-            type: "text",
-            required: true,
-            hint: "Defaults from customer + site on create; editable here.",
-          },
-          {
-            name: "status",
-            label: "Status",
-            type: "select",
-            required: true,
-            options: PROJECT_STATUSES,
-          },
-          {
-            name: "planned_start_date",
-            label: "Planned Start Date",
-            type: "date",
-            required: true,
-          },
-          {
-            name: "planned_end_date",
-            label: "Planned End Date",
-            type: "date",
-            required: true,
-            hint: "Must be on or after the planned start date.",
-          },
-        ],
+        name: "rfai_number",
+        label: "RFAI Number",
+        type: "text",
+        required: true,
+        placeholder: "RFAI reference number…",
+        visibleWhen: (vals) => vals.rfai_request_done === "true",
+      },
+    ];
+
+    return [
+      {
+        title: "Intake / Site request",
+        subtitle: isEdit
+          ? "Same intake fields as create — Circle, Delivery Type, Customer, Site, PM, and RFAI are editable."
+          : poId
+            ? "Step 1 — Customer, site and circle prefilled from the CRM lead via SCM PO / OVF."
+            : "Step 1 — Customer → Site → Project Manager → RFAI",
+        icon: MapPin,
+        fields: intakeFields,
       },
     ];
   }, [isEdit, poId]);
 
   return (
     <ProjectsRecordForm
-      title={isEdit ? "Edit Project" : poId ? "New Site Request (from PO)" : "New Site Request"}
+      title={isEdit ? "Edit Project" : "New Project"}
       description={
         isEdit
-          ? "Update site request, delivery scope, project manager, and plan fields."
+          ? "Update intake / site request fields. Schedule is managed from the project timeline."
           : poId
             ? "Step 1 — Intake / Site request prefilled from the SCM purchase order. After create you continue to Assign Survey owner."
             : "Step 1 — Intake / Site request. After create you continue to Assign Survey owner."
       }
-      backHref={
-        isEdit && projectId
-          ? `/projects/projects/${projectId}`
-          : poId
-            ? "/projects/po-queue"
-            : "/projects/projects"
-      }
-      backLabel={
-        isEdit ? "Back to project" : poId ? "Back to PO queue" : "Back to projects"
-      }
-      submitLabel={isEdit ? "Save changes" : "Create Project"}
+      backHref={poId ? "/projects/purchase-orders" : "/projects/projects"}
+      backLabel={poId ? "Back to PO queue" : "Back to projects"}
+      submitLabel={isEdit ? "Save changes" : "Create project"}
       sections={sections}
       emptyValues={isEdit ? EMPTY_EDIT : EMPTY_CREATE}
       load={load}

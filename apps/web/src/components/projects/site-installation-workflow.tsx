@@ -67,6 +67,8 @@ type StageKey =
   | "assignment"
   | "survey"
   | "scm"
+  | "onsite_delivery"
+  | "material_handover"
   | "onsite"
   | "installation"
   | "acceptance"
@@ -77,6 +79,8 @@ const STAGE_ICONS: Record<string, typeof MapPin> = {
   assignment: Users,
   survey: MapPin,
   scm: Package,
+  onsite_delivery: MapPinned,
+  material_handover: Package,
   onsite: MapPinned,
   installation: Server,
   acceptance: CloudUpload,
@@ -94,9 +98,17 @@ const STAGE_FORM_LINKS: Partial<
     href: (id) => `/projects/projects/${id}/scm`,
     label: "Open SCM form",
   },
+  onsite_delivery: {
+    href: (id) => `/projects/projects/${id}/onsite-delivery`,
+    label: "Open Onsite Delivery form",
+  },
+  material_handover: {
+    href: (id) => `/projects/projects/${id}/material-handover`,
+    label: "Open Material Handover form",
+  },
   onsite: {
-    href: (id) => `/projects/projects/${id}/onsite`,
-    label: "Open On-site form",
+    href: (id) => `/projects/projects/${id}/onsite-delivery`,
+    label: "Open Onsite Delivery form",
   },
   installation: {
     href: (id) => `/projects/projects/${id}/installation`,
@@ -281,7 +293,19 @@ export function SiteInstallationTrackingSummary({ projectId }: { projectId: stri
   const completedByForStep = (step: string) => {
     if (step === "Survey") return employeeName(site.survey_assignee_employee_id);
     if (step === "SCM / Logistics") return employeeName(site.scm_assignee_employee_id);
-    if (step === "On-site") return employeeName(site.onsite_assignee_employee_id);
+    if (step === "Onsite Delivery") {
+      return employeeName(
+        site.onsite_delivery_assignee_employee_id ?? site.onsite_assignee_employee_id,
+      );
+    }
+    if (step === "Material Handover") {
+      return employeeName(site.material_handover_assignee_employee_id);
+    }
+    if (step === "On-site") {
+      return employeeName(
+        site.onsite_delivery_assignee_employee_id ?? site.onsite_assignee_employee_id,
+      );
+    }
     if (step === "Installation" || step === "Installation & Configuration") {
       return employeeName(site.installation_assignee_employee_id);
     }
@@ -309,32 +333,58 @@ export function SiteInstallationTrackingSummary({ projectId }: { projectId: stri
       completedBy: completedByForStep("Survey"),
     },
     {
-      step: "On-site",
+      step: "Onsite Delivery",
       item: "MO Request",
       date: displayDate(site.mo_request_date),
-      completedBy: completedByForStep("On-site"),
+      completedBy: completedByForStep("Onsite Delivery"),
+    },
+    ...(hasServer
+      ? [
+        {
+          step: "Onsite Delivery",
+          item: "Server On-site Delivery",
+          date: displayDate(site.server_on_site_delivery_date),
+          completedBy: completedByForStep("Onsite Delivery"),
+        },
+      ]
+      : []),
+    ...(hasRack
+      ? [
+        {
+          step: "Onsite Delivery",
+          item: "Rack On-site Delivery",
+          date: displayDate(site.rack_on_site_delivery_date),
+          completedBy: completedByForStep("Onsite Delivery"),
+        },
+      ]
+      : []),
+    {
+      step: "Onsite Delivery",
+      item: "PDU On-site Delivery",
+      date: displayDate(site.pdu_on_site_delivery_date),
+      completedBy: completedByForStep("Onsite Delivery"),
     },
     {
-      step: "On-site",
+      step: "Material Handover",
       item: "IM Material",
       date: displayDate(site.im_material_date),
-      completedBy: completedByForStep("On-site"),
+      completedBy: completedByForStep("Material Handover"),
     },
     ...(rackOnly
       ? []
       : [
         {
-          step: "On-site",
+          step: "Material Handover",
           item: "Power-on Material",
           date: displayDate(site.power_on_material_date),
-          completedBy: completedByForStep("On-site"),
+          completedBy: completedByForStep("Material Handover"),
         },
       ]),
     {
-      step: "On-site",
+      step: "Material Handover",
       item: "Material Handover",
       date: displayDate(site.material_handover_date),
-      completedBy: completedByForStep("On-site"),
+      completedBy: completedByForStep("Material Handover"),
     },
     {
       step: installStep,
@@ -435,13 +485,13 @@ export function SiteInstallationTrackingSummary({ projectId }: { projectId: stri
       : [
         {
           step: "Acceptance",
-          item: "HWAT Request",
+          item: "HW-AT Request",
           date: displayDate(site.hwat_request_date),
           completedBy: completedByForStep("Acceptance"),
         },
         {
           step: "Acceptance",
-          item: "HWAT Sign-off",
+          item: "HW-AT Sign-off",
           date: displayDate(site.hwat_signoff_date),
           completedBy: completedByForStep("Acceptance"),
         },

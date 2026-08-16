@@ -2,12 +2,23 @@
 
 from __future__ import annotations
 
-from sqlalchemy import select
+from dataclasses import dataclass
+from uuid import UUID
+
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from core.config import settings
 from modules.foundation.domain.value_objects import TenantContext
 from modules.foundation.models.security import SecUser
+
+
+@dataclass(frozen=True)
+class ProjectModuleAdminRecipient:
+    user_id: UUID
+    email: str
+    display_name: str
+    employee_id: UUID | None
 
 
 class ProjectModuleAdminService:
@@ -41,3 +52,33 @@ class ProjectModuleAdminService:
             raise ForbiddenException(
                 "Only the Project Management module admin can perform this action"
             )
+
+    def list_admin_recipients(self, tenant_id: UUID) -> list[ProjectModuleAdminRecipient]:
+        """Active SecUser rows whose email is in the platform admin allowlist."""
+        emails = settings.microsoft_platform_admin_email_set()
+        if not emails:
+            return []
+        rows = list(
+            self._db.scalars(
+                select(SecUser).where(
+                    SecUser.tenant_id == tenant_id,
+                    SecUser.is_deleted.is_(False),
+                    SecUser.status == "active",
+                    func.lower(SecUser.email).in_(sorted(emails)),
+                )
+            ).all()
+        )
+        out: list[ProjectModuleAdminRecipient] = []
+        for user in rows:
+            email = (user.email or "").strip().lower()
+            if email not in emails:
+                continue
+            out.append(
+                ProjectModuleAdminRecipient(
+                    user_id=user.id,
+                    email=email,
+                    display_name=(user.display_name or email).strip() or email,
+                    employee_id=user.employee_id,
+                )
+            )
+        return out

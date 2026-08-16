@@ -1,15 +1,19 @@
 """Table-driven state machine for site installation workflow.
 
 Stages:
-    intake → survey → scm → onsite → installation → acceptance → completed
+    intake → survey → scm → onsite_delivery → material_handover
+    → installation → acceptance → completed
 
 Stage owners are assigned from Project Tracking after the previous step completes
 (Survey first after create). Legacy sites may still sit on ``assignment`` until
 ``complete_assignment`` advances them to Survey.
 
+Historic ``onsite`` rows are soft-aliased to ``onsite_delivery`` /
+``material_handover`` based on filled fields.
+
 Installation includes configuration (BIOS / FW / LLD / OS / MBSS / VASCAN) when in scope.
 Rack-only scopes only require rack installation work in this stage.
-Scopes with server work require HWAT + circle sign-off (except rack-only).
+Scopes with server work require HW-AT + circle sign-off (except rack-only).
 """
 
 from __future__ import annotations
@@ -38,8 +42,21 @@ _TRANSITIONS: dict[str, dict[str, str]] = {
         "complete_assignment": SiteWorkflowStage.SURVEY.value
     },
     SiteWorkflowStage.SURVEY.value: {"complete_survey": SiteWorkflowStage.SCM.value},
-    SiteWorkflowStage.SCM.value: {"complete_scm": SiteWorkflowStage.ONSITE.value},
-    SiteWorkflowStage.ONSITE.value: {"complete_onsite": SiteWorkflowStage.INSTALLATION.value},
+    SiteWorkflowStage.SCM.value: {
+        "complete_scm": SiteWorkflowStage.ONSITE_DELIVERY.value
+    },
+    SiteWorkflowStage.ONSITE_DELIVERY.value: {
+        "complete_onsite_delivery": SiteWorkflowStage.MATERIAL_HANDOVER.value
+    },
+    SiteWorkflowStage.MATERIAL_HANDOVER.value: {
+        "complete_material_handover": SiteWorkflowStage.INSTALLATION.value
+    },
+    # Legacy combined on-site stage
+    SiteWorkflowStage.ONSITE.value: {
+        "complete_onsite": SiteWorkflowStage.INSTALLATION.value,
+        "complete_onsite_delivery": SiteWorkflowStage.MATERIAL_HANDOVER.value,
+        "complete_material_handover": SiteWorkflowStage.INSTALLATION.value,
+    },
     SiteWorkflowStage.INSTALLATION.value: {
         "complete_installation": SiteWorkflowStage.ACCEPTANCE.value,
         # Legacy alias — same destination as complete_installation
@@ -56,7 +73,8 @@ DISPLAY_STAGE_ORDER: list[str] = [
     SiteWorkflowStage.INTAKE.value,
     SiteWorkflowStage.SURVEY.value,
     SiteWorkflowStage.SCM.value,
-    SiteWorkflowStage.ONSITE.value,
+    SiteWorkflowStage.ONSITE_DELIVERY.value,
+    SiteWorkflowStage.MATERIAL_HANDOVER.value,
     SiteWorkflowStage.INSTALLATION.value,
     SiteWorkflowStage.ACCEPTANCE.value,
     SiteWorkflowStage.COMPLETED.value,
@@ -67,7 +85,9 @@ STAGE_ORDER: list[str] = [
     SiteWorkflowStage.ASSIGNMENT.value,
     SiteWorkflowStage.SURVEY.value,
     SiteWorkflowStage.SCM.value,
-    SiteWorkflowStage.ONSITE.value,
+    SiteWorkflowStage.ONSITE_DELIVERY.value,
+    SiteWorkflowStage.ONSITE.value,  # legacy ranking slot
+    SiteWorkflowStage.MATERIAL_HANDOVER.value,
     SiteWorkflowStage.INSTALLATION.value,
     SiteWorkflowStage.ACCEPTANCE.value,
     SiteWorkflowStage.COMPLETED.value,
@@ -79,6 +99,8 @@ STAGE_LABELS: dict[str, str] = {
     SiteWorkflowStage.SURVEY.value: "Survey",
     SiteWorkflowStage.SCM.value: "SCM / Logistics",
     SiteWorkflowStage.ONSITE.value: "On-site",
+    SiteWorkflowStage.ONSITE_DELIVERY.value: "Onsite Delivery",
+    SiteWorkflowStage.MATERIAL_HANDOVER.value: "Material Handover",
     SiteWorkflowStage.INSTALLATION.value: "Installation & Configuration",
     SiteWorkflowStage.ACCEPTANCE.value: "Acceptance",
     SiteWorkflowStage.COMPLETED.value: "Completed",
@@ -89,6 +111,8 @@ ACTION_LABELS: dict[str, str] = {
     "complete_assignment": "Complete Assignment",
     "complete_survey": "Complete Survey",
     "complete_scm": "Complete SCM",
+    "complete_onsite_delivery": "Complete Onsite Delivery",
+    "complete_material_handover": "Complete Material Handover",
     "complete_onsite": "Complete On-site",
     "complete_installation": "Complete Installation & Configuration",
     "complete_installation_rack_only": "Complete Installation (Rack Only)",
@@ -96,15 +120,34 @@ ACTION_LABELS: dict[str, str] = {
 }
 
 
+# Partial completed unlocks next-owner assignment; only Completed closes My Jobs.
 PROGRESS_UNLOCK_STATUSES = frozenset({"partial_completed", "completed"})
+PROGRESS_COMPLETED_STATUS = "completed"
 
 ASSIGNABLE_STAGE_ORDER: list[str] = [
     SiteWorkflowStage.SURVEY.value,
     SiteWorkflowStage.SCM.value,
-    SiteWorkflowStage.ONSITE.value,
+    SiteWorkflowStage.ONSITE_DELIVERY.value,
+    SiteWorkflowStage.MATERIAL_HANDOVER.value,
     SiteWorkflowStage.INSTALLATION.value,
     SiteWorkflowStage.ACCEPTANCE.value,
 ]
+
+
+def resolve_legacy_onsite_stage(record: Any) -> str:
+    """Map historic ``onsite`` into the nearest split stage from filled fields."""
+    stage = getattr(record, "workflow_stage", None)
+    if stage != SiteWorkflowStage.ONSITE.value:
+        return stage
+    if (
+        getattr(record, "material_handover_done", False)
+        or getattr(record, "im_material", False)
+        or getattr(record, "power_on_material", False)
+        or getattr(record, "material_handover_progress_status", None)
+        or getattr(record, "material_handover_assignee_employee_id", None)
+    ):
+        return SiteWorkflowStage.MATERIAL_HANDOVER.value
+    return SiteWorkflowStage.ONSITE_DELIVERY.value
 
 
 def stage_progress_status(record: Any, stage: str) -> str | None:
@@ -112,11 +155,30 @@ def stage_progress_status(record: Any, stage: str) -> str | None:
     if not field:
         return None
     value = getattr(record, field, None)
+    if value is None and stage in {
+        SiteWorkflowStage.ONSITE_DELIVERY.value,
+        SiteWorkflowStage.MATERIAL_HANDOVER.value,
+    }:
+        # Fall back to legacy combined onsite progress when split columns are empty
+        legacy = getattr(record, "onsite_progress_status", None)
+        if isinstance(legacy, str):
+            return legacy
     return value if isinstance(value, str) else None
 
 
-def is_stage_progress_done(record: Any, stage: str) -> bool:
+def is_stage_progress_unlocked(record: Any, stage: str) -> bool:
+    """Partial completed or Completed — unlocks next-stage assignment."""
     return stage_progress_status(record, stage) in PROGRESS_UNLOCK_STATUSES
+
+
+def is_stage_progress_done(record: Any, stage: str) -> bool:
+    """Backward-compatible alias for unlock semantics (partial or completed)."""
+    return is_stage_progress_unlocked(record, stage)
+
+
+def is_stage_assignee_completed(record: Any, stage: str) -> bool:
+    """Only Completed counts as done for My Jobs / read-only."""
+    return stage_progress_status(record, stage) == PROGRESS_COMPLETED_STATUS
 
 
 def is_stage_unlocked_by_progress(record: Any, stage: str) -> bool:
@@ -127,29 +189,32 @@ def is_stage_unlocked_by_progress(record: Any, stage: str) -> bool:
     if idx <= 0:
         return True
     for prior in ASSIGNABLE_STAGE_ORDER[:idx]:
-        if not is_stage_progress_done(record, prior):
+        if not is_stage_progress_unlocked(record, prior):
             return False
     return True
 
 
 def assignee_work_status(record: Any, assigned_stage: str, current_stage: str) -> str:
-    """My Jobs / Completed Jobs — honour step-owner progress before workflow position."""
-    if is_stage_progress_done(record, assigned_stage):
+    """My Jobs / Completed Jobs — only Completed progress is ``done``."""
+    if is_stage_assignee_completed(record, assigned_stage):
         return "done"
+    effective = resolve_legacy_onsite_stage(record) if current_stage == SiteWorkflowStage.ONSITE.value else current_stage
     delivery = getattr(record, "delivery_type", SiteDeliveryType.SERVER_OS_RACK.value)
-    return stage_work_status(assigned_stage, current_stage, delivery)
+    return stage_work_status(assigned_stage, effective, delivery)
 
 
 def can_open_stage_form(record: Any, assigned_stage: str, current_stage: str) -> bool:
     """Assignee may open the step form (active stage or pre-assigned after prior progress)."""
-    if is_stage_progress_done(record, assigned_stage):
+    # Completed (read-only) and Partial completed (still editable) both allow open
+    if is_stage_progress_unlocked(record, assigned_stage):
         return True
     if current_stage == SiteWorkflowStage.COMPLETED.value:
         field = STAGE_ASSIGNEE_FIELDS.get(assigned_stage)
         if field and getattr(record, field, None):
             return True
+    effective = resolve_legacy_onsite_stage(record) if current_stage == SiteWorkflowStage.ONSITE.value else current_stage
     delivery = getattr(record, "delivery_type", SiteDeliveryType.SERVER_OS_RACK.value)
-    if stage_work_status(assigned_stage, current_stage, delivery) == "in_progress":
+    if stage_work_status(assigned_stage, effective, delivery) == "in_progress":
         return True
     return is_stage_unlocked_by_progress(record, assigned_stage)
 
@@ -157,6 +222,9 @@ def can_open_stage_form(record: Any, assigned_stage: str, current_stage: str) ->
 STAGE_ASSIGNEE_FIELDS: dict[str, str] = {
     SiteWorkflowStage.SURVEY.value: "survey_assignee_employee_id",
     SiteWorkflowStage.SCM.value: "scm_assignee_employee_id",
+    SiteWorkflowStage.ONSITE_DELIVERY.value: "onsite_delivery_assignee_employee_id",
+    SiteWorkflowStage.MATERIAL_HANDOVER.value: "material_handover_assignee_employee_id",
+    # Legacy combined stage — still referenced for historic rows
     SiteWorkflowStage.ONSITE.value: "onsite_assignee_employee_id",
     SiteWorkflowStage.INSTALLATION.value: "installation_assignee_employee_id",
     SiteWorkflowStage.ACCEPTANCE.value: "acceptance_assignee_employee_id",
@@ -165,23 +233,103 @@ STAGE_ASSIGNEE_FIELDS: dict[str, str] = {
 STAGE_PROGRESS_FIELDS: dict[str, str] = {
     SiteWorkflowStage.SURVEY.value: "survey_progress_status",
     SiteWorkflowStage.SCM.value: "scm_progress_status",
+    SiteWorkflowStage.ONSITE_DELIVERY.value: "onsite_delivery_progress_status",
+    SiteWorkflowStage.MATERIAL_HANDOVER.value: "material_handover_progress_status",
     SiteWorkflowStage.ONSITE.value: "onsite_progress_status",
     SiteWorkflowStage.INSTALLATION.value: "installation_progress_status",
     SiteWorkflowStage.ACCEPTANCE.value: "acceptance_progress_status",
 }
 
+STAGE_ATTACHMENT_FIELDS: dict[str, str] = {
+    SiteWorkflowStage.SURVEY.value: "survey_attachment_name",
+    SiteWorkflowStage.SCM.value: "scm_attachment_name",
+    SiteWorkflowStage.ONSITE_DELIVERY.value: "onsite_delivery_attachment_name",
+    SiteWorkflowStage.MATERIAL_HANDOVER.value: "material_handover_attachment_name",
+    SiteWorkflowStage.ONSITE.value: "onsite_attachment_name",
+    SiteWorkflowStage.INSTALLATION.value: "installation_attachment_name",
+    SiteWorkflowStage.ACCEPTANCE.value: "acceptance_attachment_name",
+}
+
 STAGE_REMARKS_FIELDS: dict[str, str] = {
     SiteWorkflowStage.SURVEY.value: "survey_remarks",
     SiteWorkflowStage.SCM.value: "scm_remarks",
+    SiteWorkflowStage.ONSITE_DELIVERY.value: "onsite_delivery_remarks",
+    SiteWorkflowStage.MATERIAL_HANDOVER.value: "material_handover_remarks",
     SiteWorkflowStage.ONSITE.value: "onsite_remarks",
     SiteWorkflowStage.INSTALLATION.value: "installation_remarks",
     SiteWorkflowStage.ACCEPTANCE.value: "acceptance_remarks",
+}
+
+# Yes/No checklist fields that can be answered No — labels for admin alerts.
+STAGE_CHECKLIST_NO_FIELDS: dict[str, tuple[tuple[str, str], ...]] = {
+    SiteWorkflowStage.SURVEY.value: (
+        ("space_available", "Space Available"),
+        ("power_available", "Power Available"),
+        ("survey_completed", "Survey Completed"),
+    ),
+    SiteWorkflowStage.ONSITE_DELIVERY.value: (
+        ("mo_request", "MO Request"),
+    ),
+    SiteWorkflowStage.MATERIAL_HANDOVER.value: (
+        ("im_material", "IM Material"),
+        ("power_on_material", "Power-on Material"),
+        ("material_handover_done", "Material Handover (WH → Site)"),
+    ),
+    SiteWorkflowStage.ONSITE.value: (
+        ("mo_request", "MO Request"),
+        ("im_material", "IM Material"),
+        ("power_on_material", "Power-on Material"),
+        ("material_handover_done", "Material Handover (WH → Site)"),
+    ),
+    SiteWorkflowStage.INSTALLATION.value: (
+        ("rack_server_stacking_done", "Rack / Server Stacking"),
+        ("rack_server_power_on_done", "Rack / Server Power On"),
+        ("dac_ilo_cabling_done", "DAC / ILO Cabling"),
+        ("bios_configuration_done", "BIOS Configuration"),
+        ("firmware_config_done", "Firmware Configuration"),
+        ("lld_done", "LLD Availability"),
+        ("os_installation_done", "OS Installation"),
+        ("vm_installation_done", "VM Installation"),
+        ("nw_config_done", "N/W Configuration"),
+        ("tools_integration_done", "Tools Integration"),
+        ("mbss_done", "MBSS"),
+        ("vascan_done", "VASCAN"),
+    ),
+    SiteWorkflowStage.ACCEPTANCE.value: (
+        ("handover_to_cloud_done", "Handover to Application Team"),
+        ("hwat_request_done", "HW-AT Request"),
+        ("hwat_signoff_received", "HW-AT Sign-off from Circle"),
+    ),
+}
+
+PROGRESS_STATUS_LABELS: dict[str, str] = {
+    "completed": "Completed",
+    "partial_completed": "Partial completed",
+    "in_progress": "In progress",
+}
+
+STAGE_FORM_SEGMENTS: dict[str, str] = {
+    SiteWorkflowStage.SURVEY.value: "survey",
+    SiteWorkflowStage.SCM.value: "scm",
+    SiteWorkflowStage.ONSITE_DELIVERY.value: "onsite-delivery",
+    SiteWorkflowStage.MATERIAL_HANDOVER.value: "material-handover",
+    SiteWorkflowStage.ONSITE.value: "onsite-delivery",
+    SiteWorkflowStage.INSTALLATION.value: "installation",
+    SiteWorkflowStage.ACCEPTANCE.value: "acceptance",
 }
 
 # (assigned_date_field, finished_date_field) per tracked work stage
 STAGE_DATE_FIELDS: dict[str, tuple[str, str]] = {
     SiteWorkflowStage.SURVEY.value: ("survey_assigned_date", "survey_finished_date"),
     SiteWorkflowStage.SCM.value: ("scm_assigned_date", "scm_finished_date"),
+    SiteWorkflowStage.ONSITE_DELIVERY.value: (
+        "onsite_delivery_assigned_date",
+        "onsite_delivery_finished_date",
+    ),
+    SiteWorkflowStage.MATERIAL_HANDOVER.value: (
+        "material_handover_assigned_date",
+        "material_handover_finished_date",
+    ),
     SiteWorkflowStage.ONSITE.value: ("onsite_assigned_date", "onsite_finished_date"),
     SiteWorkflowStage.INSTALLATION.value: (
         "installation_assigned_date",
@@ -202,7 +350,15 @@ _ADVANCE_STAGE_DATES: dict[str, tuple[str | None, str | None]] = {
     ),
     "complete_scm": (
         SiteWorkflowStage.SCM.value,
-        SiteWorkflowStage.ONSITE.value,
+        SiteWorkflowStage.ONSITE_DELIVERY.value,
+    ),
+    "complete_onsite_delivery": (
+        SiteWorkflowStage.ONSITE_DELIVERY.value,
+        SiteWorkflowStage.MATERIAL_HANDOVER.value,
+    ),
+    "complete_material_handover": (
+        SiteWorkflowStage.MATERIAL_HANDOVER.value,
+        SiteWorkflowStage.INSTALLATION.value,
     ),
     "complete_onsite": (
         SiteWorkflowStage.ONSITE.value,
@@ -359,6 +515,11 @@ def transition(stage: str, action: str, delivery_type: str) -> str:
     # Legacy action alias from pre-merge configuration stage
     if action == "complete_configuration":
         action = "complete_installation"
+    # Soft-alias: historic onsite can complete via split actions
+    if stage == SiteWorkflowStage.ONSITE.value and action == "complete_onsite_delivery":
+        return SiteWorkflowStage.MATERIAL_HANDOVER.value
+    if stage == SiteWorkflowStage.ONSITE.value and action == "complete_material_handover":
+        return SiteWorkflowStage.INSTALLATION.value
     allowed = allowed_actions(stage, delivery_type)
     if action not in allowed:
         raise InvalidSiteInstallationState(
@@ -435,13 +596,57 @@ def _require_stage_attachment(record: Any, field: str, label: str) -> None:
 
 
 def _require_progress_completed(record: Any, stage: str, label: str) -> None:
-    field = STAGE_PROGRESS_FIELDS.get(stage)
-    if not field:
-        return
-    status = getattr(record, field, None)
-    if status not in PROGRESS_UNLOCK_STATUSES:
+    status = stage_progress_status(record, stage)
+    if status != PROGRESS_COMPLETED_STATUS:
         raise InvalidSiteInstallationState(
-            f"{label} progress must be set to Partial completed or Completed before continuing"
+            f"{label} progress must be set to Completed before continuing"
+        )
+
+
+def _assert_onsite_delivery_gates(record: Any, delivery: str) -> None:
+    _require_progress_completed(
+        record, SiteWorkflowStage.ONSITE_DELIVERY.value, "Onsite Delivery"
+    )
+    attachment = STAGE_ATTACHMENT_FIELDS[SiteWorkflowStage.ONSITE_DELIVERY.value]
+    # Fall back to legacy attachment column when split column empty
+    if not (isinstance(getattr(record, attachment, None), str) and getattr(record, attachment).strip()):
+        legacy = getattr(record, "onsite_attachment_name", None)
+        if not (isinstance(legacy, str) and legacy.strip()):
+            raise InvalidSiteInstallationState(
+                "Onsite Delivery attachment is required before continuing"
+            )
+    _require_true_with_date(record, "mo_request", "mo_request_date", "MO Request")
+    if delivery_includes_server(delivery):
+        _require(record, "server_on_site_delivery_date", "Server On-site Delivery Date")
+    if delivery_includes_rack(delivery):
+        _require(record, "rack_on_site_delivery_date", "Rack On-site Delivery Date")
+    _require(record, "pdu_on_site_delivery_date", "PDU On-site Delivery Date")
+
+
+def _assert_material_handover_gates(record: Any, delivery: str) -> None:
+    _require_progress_completed(
+        record, SiteWorkflowStage.MATERIAL_HANDOVER.value, "Material Handover"
+    )
+    attachment = STAGE_ATTACHMENT_FIELDS[SiteWorkflowStage.MATERIAL_HANDOVER.value]
+    if not (isinstance(getattr(record, attachment, None), str) and getattr(record, attachment).strip()):
+        legacy = getattr(record, "onsite_attachment_name", None)
+        if not (isinstance(legacy, str) and legacy.strip()):
+            raise InvalidSiteInstallationState(
+                "Material Handover attachment is required before continuing"
+            )
+    _require_true_with_date(record, "im_material", "im_material_date", "IM Material")
+    if not delivery_is_rack_only(delivery):
+        _require_true_with_date(
+            record, "power_on_material", "power_on_material_date", "Power-on Material"
+        )
+    _require_true_with_date(
+        record, "material_handover_done", "material_handover_date", "Material Handover"
+    )
+    if getattr(record, "material_handover_done", False) and not getattr(
+        record, "material_handover_to_name", None
+    ):
+        raise InvalidSiteInstallationState(
+            "Material handover person name is required when handover is Yes"
         )
 
 
@@ -452,7 +657,7 @@ def assert_advance_gates(record: Any, action: str) -> None:
     if action == "complete_intake":
         _require(record, "site_name", "Site Name")
         if getattr(record, "rfai_request_done", False):
-            _require(record, "power_requirements", "Power Requirements")
+            # Power Requirements is optional (UI removed); only RFAI number is required.
             _require(record, "rfai_number", "RFAI Number")
         return
 
@@ -496,7 +701,16 @@ def assert_advance_gates(record: Any, action: str) -> None:
             raise InvalidSiteInstallationState("Rack Qty is required before advancing")
         return
 
+    if action == "complete_onsite_delivery":
+        _assert_onsite_delivery_gates(record, delivery)
+        return
+
+    if action == "complete_material_handover":
+        _assert_material_handover_gates(record, delivery)
+        return
+
     if action == "complete_onsite":
+        # Legacy combined gate — both delivery + handover verticals
         _require_progress_completed(record, SiteWorkflowStage.ONSITE.value, "On-site")
         _require_stage_attachment(record, "onsite_attachment_name", "On-site")
         _require_true_with_date(record, "mo_request", "mo_request_date", "MO Request")
@@ -540,13 +754,13 @@ def assert_advance_gates(record: Any, action: str) -> None:
         )
         if delivery_needs_hwat(delivery):
             _require_true_with_date(
-                record, "hwat_request_done", "hwat_request_date", "HWAT Request"
+                record, "hwat_request_done", "hwat_request_date", "HW-AT Request"
             )
             _require_true_with_date(
                 record,
                 "hwat_signoff_received",
                 "hwat_signoff_date",
-                "HWAT Sign off from Circle",
+                "HW-AT Sign off from Circle",
             )
         return
 
@@ -556,24 +770,30 @@ def blueprint_state(record: Any) -> dict[str, Any]:
     if stage == SiteWorkflowStage.CONFIGURATION.value:
         stage = SiteWorkflowStage.INSTALLATION.value
     # Legacy assignment step — present as Survey in the UI stepper
-    display_state = (
-        SiteWorkflowStage.SURVEY.value
-        if stage == SiteWorkflowStage.ASSIGNMENT.value
-        else stage
-    )
+    if stage == SiteWorkflowStage.ASSIGNMENT.value:
+        display_state = SiteWorkflowStage.SURVEY.value
+    elif stage == SiteWorkflowStage.ONSITE.value:
+        display_state = resolve_legacy_onsite_stage(record)
+    else:
+        display_state = stage
     delivery = getattr(record, "delivery_type", SiteDeliveryType.SERVER_OS_RACK.value)
     actions = allowed_actions(stage, delivery)
     assignments = []
-    for s in STAGE_ORDER:
-        if s in (
-            SiteWorkflowStage.INTAKE.value,
-            SiteWorkflowStage.ASSIGNMENT.value,
-            SiteWorkflowStage.COMPLETED.value,
-        ):
-            continue
+    for s in ASSIGNABLE_STAGE_ORDER:
         field = STAGE_ASSIGNEE_FIELDS.get(s)
         if not field:
             continue
+        progress_field = STAGE_PROGRESS_FIELDS.get(s, "")
+        remarks_field = STAGE_REMARKS_FIELDS.get(s, "")
+        progress_val = getattr(record, progress_field, None) if progress_field else None
+        if progress_val is None and s in {
+            SiteWorkflowStage.ONSITE_DELIVERY.value,
+            SiteWorkflowStage.MATERIAL_HANDOVER.value,
+        }:
+            progress_val = getattr(record, "onsite_progress_status", None)
+        assignee_val = getattr(record, field, None)
+        if assignee_val is None and s == SiteWorkflowStage.ONSITE_DELIVERY.value:
+            assignee_val = getattr(record, "onsite_assignee_employee_id", None)
         assignments.append(
             {
                 "stage": s,
@@ -583,10 +803,10 @@ def blueprint_state(record: Any) -> dict[str, Any]:
                     and delivery_is_rack_only(delivery)
                     else STAGE_LABELS.get(s, s)
                 ),
-                "assignee_employee_id": getattr(record, field, None),
+                "assignee_employee_id": assignee_val,
                 "work_status": assignee_work_status(record, s, stage),
-                "progress_status": getattr(record, STAGE_PROGRESS_FIELDS.get(s, ""), None),
-                "remarks": getattr(record, STAGE_REMARKS_FIELDS.get(s, ""), None),
+                "progress_status": progress_val,
+                "remarks": getattr(record, remarks_field, None) if remarks_field else None,
                 "assigned_date": _stage_date_value(record, STAGE_DATE_FIELDS[s][0]),
                 "completed_date": _stage_date_value(record, STAGE_DATE_FIELDS[s][1]),
             }

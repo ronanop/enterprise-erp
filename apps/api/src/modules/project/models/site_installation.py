@@ -36,7 +36,9 @@ class PrjSiteInstallation(Base, *PrjDetailMixin):
         ),
         CheckConstraint(
             "workflow_stage IN ("
-            "'intake','assignment','survey','scm','onsite','installation','acceptance','completed'"
+            "'intake','assignment','survey','scm','onsite',"
+            "'onsite_delivery','material_handover',"
+            "'installation','acceptance','completed'"
             ")",
             name="ck_prj_site_workflow_stage",
         ),
@@ -161,6 +163,12 @@ class PrjSiteInstallation(Base, *PrjDetailMixin):
     survey_attachment_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
     scm_attachment_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
     onsite_attachment_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    onsite_delivery_attachment_name: Mapped[str | None] = mapped_column(
+        String(255), nullable=True
+    )
+    material_handover_attachment_name: Mapped[str | None] = mapped_column(
+        String(255), nullable=True
+    )
     installation_attachment_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
     acceptance_attachment_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
@@ -168,11 +176,19 @@ class PrjSiteInstallation(Base, *PrjDetailMixin):
     survey_progress_status: Mapped[str | None] = mapped_column(String(40), nullable=True)
     scm_progress_status: Mapped[str | None] = mapped_column(String(40), nullable=True)
     onsite_progress_status: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    onsite_delivery_progress_status: Mapped[str | None] = mapped_column(
+        String(40), nullable=True
+    )
+    material_handover_progress_status: Mapped[str | None] = mapped_column(
+        String(40), nullable=True
+    )
     installation_progress_status: Mapped[str | None] = mapped_column(String(40), nullable=True)
     acceptance_progress_status: Mapped[str | None] = mapped_column(String(40), nullable=True)
     survey_remarks: Mapped[str | None] = mapped_column(Text, nullable=True)
     scm_remarks: Mapped[str | None] = mapped_column(Text, nullable=True)
     onsite_remarks: Mapped[str | None] = mapped_column(Text, nullable=True)
+    onsite_delivery_remarks: Mapped[str | None] = mapped_column(Text, nullable=True)
+    material_handover_remarks: Mapped[str | None] = mapped_column(Text, nullable=True)
     installation_remarks: Mapped[str | None] = mapped_column(Text, nullable=True)
     acceptance_remarks: Mapped[str | None] = mapped_column(Text, nullable=True)
 
@@ -190,6 +206,18 @@ class PrjSiteInstallation(Base, *PrjDetailMixin):
         index=True,
     )
     onsite_assignee_employee_id: Mapped[UUID | None] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("master.master_employee.id", ondelete="RESTRICT"),
+        nullable=True,
+        index=True,
+    )
+    onsite_delivery_assignee_employee_id: Mapped[UUID | None] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("master.master_employee.id", ondelete="RESTRICT"),
+        nullable=True,
+        index=True,
+    )
+    material_handover_assignee_employee_id: Mapped[UUID | None] = mapped_column(
         PG_UUID(as_uuid=True),
         ForeignKey("master.master_employee.id", ondelete="RESTRICT"),
         nullable=True,
@@ -221,6 +249,10 @@ class PrjSiteInstallation(Base, *PrjDetailMixin):
     scm_finished_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     onsite_assigned_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     onsite_finished_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    onsite_delivery_assigned_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    onsite_delivery_finished_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    material_handover_assigned_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    material_handover_finished_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     installation_assigned_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     installation_finished_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     acceptance_assigned_date: Mapped[date | None] = mapped_column(Date, nullable=True)

@@ -14,7 +14,6 @@ import { cn } from "@/lib/utils";
 import { ApiClientError } from "@/services/api-client";
 import {
   formatDate,
-  formatInr,
   listProjectPoQueue,
   type ProjectPoQueueItem,
 } from "@/services/projects-portal-service";
@@ -114,20 +113,6 @@ export function ProjectPoQueuePage() {
         sort: (r) => r.customer_name || "",
         className: "max-w-[220px] truncate",
         cell: (r) => r.customer_name || "—",
-      },
-      {
-        key: "customer_po_number",
-        label: "Customer PO",
-        sort: (r) => r.customer_po_number || "",
-        className: "font-mono text-xs text-muted-foreground",
-        cell: (r) => r.customer_po_number || "—",
-      },
-      {
-        key: "customer_total",
-        label: "Sell Value",
-        sort: (r) => r.customer_total,
-        align: "right",
-        cell: (r) => formatInr(r.customer_total || r.total_amount),
       },
       {
         key: "created_at",

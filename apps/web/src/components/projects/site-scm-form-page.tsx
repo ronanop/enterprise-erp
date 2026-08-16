@@ -41,6 +41,7 @@ import {
 } from "@/components/projects/site-stage-assignments";
 import { isProgressCompleteForAdvance, stageClosingSections } from "@/components/projects/site-stage-attachment";
 import { useSiteStageFormReadOnlyMeta } from "@/components/projects/site-stage-form-read-only-context";
+import { SiteStageExportButton } from "@/components/projects/site-stage-export-button";
 
 const EMPTY_LINES = serializeTypeQtyLines([
   { type: "", otherLabel: "", quantity: "", delivered: "", date: "" },
@@ -302,7 +303,7 @@ export function SiteScmFormPage({ projectId }: { projectId: string }) {
   return (
     <ProjectsRecordForm
       title="SCM / Logistics"
-      description="Step 4 — Site materials, quantities, and warehouse delivery. On-site deliveries and handover continue in the On-site step."
+      description="Step 3 — Site materials, quantities, and warehouse delivery. Next: Onsite Delivery, then Material Handover."
       backHref={
         stageFormMeta.readOnly
           ? (stageFormMeta.backHref ?? `/projects/projects/${projectId}`)
@@ -320,6 +321,11 @@ export function SiteScmFormPage({ projectId }: { projectId: string }) {
       emptyValues={EMPTY}
       load={load}
       onSave={onSave}
+      headerActions={
+        stageFormMeta.readOnly ? (
+          <SiteStageExportButton projectId={projectId} stage="scm" />
+        ) : null
+      }
     />
   );
 }

@@ -24,7 +24,6 @@ import {
   advanceSiteInstallation,
   getProject,
   getSiteInstallationByProject,
-  notifySiteStageNoAnswers,
   updateSiteInstallationByProject,
 } from "@/services/projects-portal-service";
 import {
@@ -32,17 +31,11 @@ import {
   stageOwnerBannerSection,
 } from "@/components/projects/site-stage-assignments";
 import {
-  collectNewNoAnswers,
   isProgressCompleteForAdvance,
   stageClosingSections,
 } from "@/components/projects/site-stage-attachment";
 import { useSiteStageFormReadOnlyMeta } from "@/components/projects/site-stage-form-read-only-context";
-
-const ACCEPTANCE_NO_FIELDS = [
-  { name: "handover_to_cloud_done", label: "Handover to Application Team" },
-  { name: "hwat_request_done", label: "HWAT Request" },
-  { name: "hwat_signoff_received", label: "HWAT Sign-off from Circle" },
-] as const;
+import { SiteStageExportButton } from "@/components/projects/site-stage-export-button";
 
 const EMPTY: FormValues = {
   ...INTAKE_SUMMARY_EMPTY,
@@ -135,20 +128,6 @@ export function SiteAcceptanceFormPage({ projectId }: { projectId: string }) {
         acceptance_remarks: orNull(v.acceptance_remarks),
       });
 
-      const activeHwatFields = hwat
-        ? [...ACCEPTANCE_NO_FIELDS]
-        : ACCEPTANCE_NO_FIELDS.filter(
-          (f) => f.name !== "hwat_request_done" && f.name !== "hwat_signoff_received",
-        );
-      const noAnswers = collectNewNoAnswers(v, loadedValuesRef.current, activeHwatFields);
-      if (noAnswers.length > 0) {
-        await notifySiteStageNoAnswers(projectId, {
-          stage: "acceptance",
-          items: noAnswers,
-        }).catch(() => {
-          // Non-blocking.
-        });
-      }
       loadedValuesRef.current = v;
 
       if (isProgressCompleteForAdvance(v.acceptance_progress_status)) {
@@ -194,7 +173,6 @@ export function SiteAcceptanceFormPage({ projectId }: { projectId: string }) {
         name: "handover_to_cloud_done",
         label: "Handover to Application Team",
         type: "yesno",
-        hint: "Common exit for all delivery scopes.",
         clearFieldsOnChange: ["handover_to_cloud_date"],
       },
       {
@@ -210,26 +188,26 @@ export function SiteAcceptanceFormPage({ projectId }: { projectId: string }) {
       fields.push(
         {
           name: "hwat_request_done",
-          label: "HWAT Request",
+          label: "HW-AT Request",
           type: "yesno",
           clearFieldsOnChange: ["hwat_request_date"],
         },
         {
           name: "hwat_request_date",
-          label: "HWAT Request Date",
+          label: "HW-AT Request Date",
           type: "date",
           required: true,
           visibleWhen: (v) => v.hwat_request_done === "true",
         },
         {
           name: "hwat_signoff_received",
-          label: "HWAT Sign-off from Circle",
+          label: "HW-AT Sign-off from Circle",
           type: "yesno",
           clearFieldsOnChange: ["hwat_signoff_date"],
         },
         {
           name: "hwat_signoff_date",
-          label: "HWAT Sign-off Date",
+          label: "HW-AT Sign-off Date",
           type: "date",
           required: true,
           visibleWhen: (v) => v.hwat_signoff_received === "true",
@@ -243,8 +221,8 @@ export function SiteAcceptanceFormPage({ projectId }: { projectId: string }) {
       {
         title: "Acceptance / Closure",
         subtitle: needsHwat
-          ? "Step 6 — HWAT + Circle sign-off · Handover to Application Team"
-          : "Step 6 — Rack handover · Handover to Application Team",
+          ? "Step 7 — HW-AT + Circle sign-off · Handover to Application Team"
+          : "Step 7 — Rack handover · Handover to Application Team",
         icon: CloudUpload,
         fields,
       },
@@ -262,8 +240,8 @@ export function SiteAcceptanceFormPage({ projectId }: { projectId: string }) {
       title="Acceptance / Closure"
       description={
         needsHwat
-          ? "Step 6 — Complete HWAT, Circle sign-off, and Handover to Application Team."
-          : "Step 6 — Rack Installation only — complete Handover to Application Team to close."
+          ? "Step 7 — Complete HW-AT, Circle sign-off, and Handover to Application Team."
+          : "Step 7 — Rack Installation only — complete Handover to Application Team to close."
       }
       backHref={
         stageFormMeta.readOnly
@@ -282,6 +260,11 @@ export function SiteAcceptanceFormPage({ projectId }: { projectId: string }) {
       emptyValues={EMPTY}
       load={load}
       onSave={onSave}
+      headerActions={
+        stageFormMeta.readOnly ? (
+          <SiteStageExportButton projectId={projectId} stage="acceptance" />
+        ) : null
+      }
     />
   );
 }

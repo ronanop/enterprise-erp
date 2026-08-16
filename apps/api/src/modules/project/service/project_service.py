@@ -70,6 +70,9 @@ class ProjectService:
             site = site_fields if isinstance(site_fields, dict) else {}
             if not (site.get("site_name") or "").strip() and prefill.site_name:
                 site["site_name"] = prefill.site_name
+            if not (site.get("circle") or "").strip():
+                # Prefer lead entity state (telecom circle); fall back to entity name.
+                site["circle"] = (prefill.entity_state or prefill.circle_name or "").strip() or None
             site_fields = site
         self._apply_intake_create_defaults(ctx, cid, branch_id, fields, site_fields)
         doc = self._numbers.generate(PrjEntityType.PROJECT, cid, PrjProject, "project_code")

@@ -87,16 +87,28 @@ SITE_INSTALLATION_WBS: tuple[WbsPhaseSpec, ...] = (
         ),
     ),
     WbsPhaseSpec(
-        code="PH-ONSITE",
-        name="On-site",
+        code="PH-ONSITE-DEL",
+        name="Onsite Delivery",
         sequence_no=4,
-        stage=SiteWorkflowStage.ONSITE.value,
+        stage=SiteWorkflowStage.ONSITE_DELIVERY.value,
         milestone=WbsMilestoneSpec(
-            code="MS-MATERIAL",
-            name="Material On Site",
+            code="MS-ONSITE-DEL",
+            name="Material Delivered On Site",
             tasks=(
                 WbsTaskSpec("Raise MO request", "high"),
                 WbsTaskSpec("Track server / rack / PDU on-site delivery"),
+            ),
+        ),
+    ),
+    WbsPhaseSpec(
+        code="PH-MAT-HO",
+        name="Material Handover",
+        sequence_no=5,
+        stage=SiteWorkflowStage.MATERIAL_HANDOVER.value,
+        milestone=WbsMilestoneSpec(
+            code="MS-MAT-HO",
+            name="Material Handed Over",
+            tasks=(
                 WbsTaskSpec("Confirm IM material"),
                 WbsTaskSpec("Power-on material check"),
                 WbsTaskSpec("Material handover WH → Site", "high"),
@@ -106,7 +118,7 @@ SITE_INSTALLATION_WBS: tuple[WbsPhaseSpec, ...] = (
     WbsPhaseSpec(
         code="PH-INSTALL",
         name="Installation & Configuration",
-        sequence_no=5,
+        sequence_no=6,
         stage=SiteWorkflowStage.INSTALLATION.value,
         milestone=WbsMilestoneSpec(
             code="MS-INSTALL",
@@ -130,15 +142,15 @@ SITE_INSTALLATION_WBS: tuple[WbsPhaseSpec, ...] = (
     WbsPhaseSpec(
         code="PH-ACCEPT",
         name="Acceptance",
-        sequence_no=6,
+        sequence_no=7,
         stage=SiteWorkflowStage.ACCEPTANCE.value,
         milestone=WbsMilestoneSpec(
             code="MS-HO",
             name="Handover / Circle Sign-off",
             tasks=(
                 WbsTaskSpec("Handover to Application Team", "high"),
-                WbsTaskSpec("HWAT request", "high"),
-                WbsTaskSpec("HWAT sign-off from circle", "critical"),
+                WbsTaskSpec("HW-AT request", "high"),
+                WbsTaskSpec("HW-AT sign-off from circle", "critical"),
             ),
         ),
     ),
