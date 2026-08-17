@@ -14,6 +14,7 @@ import {
   CrmSection,
 } from "@/components/crm/crm-ui";
 import { ApprovalBanner } from "@/components/crm/sales/approval-banner";
+import { CrmEntityRejectionAlert } from "@/components/crm/sales/crm-approval-inbox-listener";
 import { BlueprintActions, BlueprintStateBadge } from "@/components/crm/sales/blueprint-actions";
 import {
   OvfOrderLinesSection,
@@ -218,6 +219,7 @@ export function OvfDetailPage({ ovfId }: { ovfId: string }) {
         </Button>
       </div>
 
+      <CrmEntityRejectionAlert entityType="ovf" entityId={ovf.id} />
       <ApprovalBanner locked={blueprint.locked} approvalStatus={blueprint.state} label="This OVF" />
 
       {ovf.deal_won ? (

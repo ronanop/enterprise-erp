@@ -29,6 +29,7 @@ import {
   textOrDash,
 } from "@/components/crm/sales/crm-readonly-field";
 import { ApprovalBanner } from "@/components/crm/sales/approval-banner";
+import { CrmEntityRejectionAlert } from "@/components/crm/sales/crm-approval-inbox-listener";
 import { AttachmentsPanel } from "@/components/crm/sales/attachments-panel";
 import { BlueprintActions } from "@/components/crm/sales/blueprint-actions";
 import { DealTimelineStatusBadge, type DealStage } from "@/components/crm/sales/deal-timeline";
@@ -238,6 +239,7 @@ export function QuoteDetailPage({ quoteId }: { quoteId: string }) {
         </Link>
       </div>
 
+      <CrmEntityRejectionAlert entityType="quote" entityId={quote.id} />
       <ApprovalBanner locked={blueprint.locked} approvalStatus={blueprint.state} label="This quote" />
 
       <PageHeader

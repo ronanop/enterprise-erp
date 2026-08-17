@@ -14,6 +14,7 @@ import {
   CRM_TABLE_HEAD_ROW,
 } from "@/components/crm/crm-ui";
 import { ApprovalBanner } from "@/components/crm/sales/approval-banner";
+import { CrmEntityRejectionAlert } from "@/components/crm/sales/crm-approval-inbox-listener";
 import { BlueprintActions } from "@/components/crm/sales/blueprint-actions";
 import { EntityAttachmentsList } from "@/components/crm/sales/entity-attachments-list";
 import { LeadDetailsCard } from "@/components/crm/sales/lead-details-card";
@@ -311,6 +312,8 @@ export function OpportunityDetailPage({ opportunityId }: { opportunityId: string
               <ArrowLeft className="size-3.5" /> Opportunities
             </Link>
           </div>
+
+          <CrmEntityRejectionAlert entityType="opportunity" entityId={opportunityId} />
 
           <ApprovalBanner
             locked={blueprint.locked}

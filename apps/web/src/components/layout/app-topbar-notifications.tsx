@@ -10,27 +10,50 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { Bell, CheckCheck, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { useAuthUser } from "@/hooks/use-auth-user";
 import { cn } from "@/lib/utils";
 import {
+  listCrmApprovalInbox,
+  type CrmApprovalInboxItem,
+} from "@/services/sales-crm-service";
+import {
   listProjectStageSaveAlerts,
   markProjectStageSaveAlertRead,
   type ProjectStageSaveAlert,
 } from "@/services/projects-portal-service";
 
-const SEEN_POPUP_KEY = "prj_stage_save_alert_popup_seen";
+const PROJECT_SEEN_POPUP_KEY = "prj_stage_save_alert_popup_seen";
+const CRM_SEEN_KEY = "crm_topbar_inbox_seen";
 const POLL_MS = 20_000;
 const PANEL_WIDTH = 352;
 const PANEL_GAP = 8;
 const VIEWPORT_PAD = 8;
 
-function readSeenPopupIds(): Set<string> {
+type NotificationMode = "projects" | "crm" | "none";
+
+type CrmBellItem = {
+  id: string;
+  title: string;
+  body: string;
+  href: string;
+  created_at: string | null;
+  unread: boolean;
+};
+
+function resolveMode(pathname: string): NotificationMode {
+  if (pathname === "/projects" || pathname.startsWith("/projects/")) return "projects";
+  if (pathname === "/crm" || pathname.startsWith("/crm/")) return "crm";
+  return "none";
+}
+
+function readIdSet(key: string): Set<string> {
   if (typeof window === "undefined") return new Set();
   try {
-    const raw = sessionStorage.getItem(SEEN_POPUP_KEY);
+    const raw = sessionStorage.getItem(key);
     if (!raw) return new Set();
     return new Set(JSON.parse(raw) as string[]);
   } catch {
@@ -38,8 +61,8 @@ function readSeenPopupIds(): Set<string> {
   }
 }
 
-function writeSeenPopupIds(ids: Set<string>) {
-  sessionStorage.setItem(SEEN_POPUP_KEY, JSON.stringify([...ids].slice(-200)));
+function writeIdSet(key: string, ids: Set<string>) {
+  sessionStorage.setItem(key, JSON.stringify([...ids].slice(-200)));
 }
 
 function formatSavedAt(value: string | null | undefined): string {
@@ -53,6 +76,27 @@ function formatSavedAt(value: string | null | undefined): string {
     hour: "2-digit",
     minute: "2-digit",
   });
+}
+
+function crmEntityHref(entityType: string, entityId: string): string {
+  if (entityType === "opportunity") return `/crm/opportunities/${entityId}`;
+  if (entityType === "quote") return `/crm/quotes/${entityId}`;
+  if (entityType === "ovf") return `/crm/ovf/${entityId}`;
+  return "/crm/my-jobs";
+}
+
+function mapCrmInboxItem(row: CrmApprovalInboxItem, seen: Set<string>): CrmBellItem {
+  const payload = row.payload_json ?? {};
+  const entityType = String(payload.entity_type ?? "");
+  const entityId = String(payload.entity_id ?? "");
+  return {
+    id: row.id,
+    title: String(payload.title ?? "CRM approval update"),
+    body: String(payload.body ?? "Open the related record to review."),
+    href: crmEntityHref(entityType, entityId),
+    created_at: row.created_at,
+    unread: !seen.has(row.id),
+  };
 }
 
 function anchorBelowBell(trigger: HTMLElement | null): { top: number; left: number } | null {
@@ -71,7 +115,7 @@ function anchorBelowBell(trigger: HTMLElement | null): { top: number; left: numb
   return { top, left };
 }
 
-function AlertBody({ alert }: { alert: ProjectStageSaveAlert }) {
+function ProjectAlertBody({ alert }: { alert: ProjectStageSaveAlert }) {
   return (
     <div className="min-w-0 space-y-1 text-left">
       <p className="text-sm font-medium text-foreground">
@@ -97,11 +141,26 @@ function AlertBody({ alert }: { alert: ProjectStageSaveAlert }) {
   );
 }
 
+function CrmAlertBody({ item }: { item: CrmBellItem }) {
+  return (
+    <div className="min-w-0 space-y-1 text-left">
+      <p className="text-sm font-medium text-foreground">{item.title}</p>
+      <p className="text-xs text-foreground/90 wrap-break-word">{item.body}</p>
+      <p className="text-xs text-muted-foreground">{formatSavedAt(item.created_at)}</p>
+    </div>
+  );
+}
+
 export function AppTopbarNotifications() {
+  const pathname = usePathname() ?? "";
+  const mode = resolveMode(pathname);
   const { signedIn, projectModuleAdmin, loading: authLoading } = useAuthUser();
+
   const [open, setOpen] = useState(false);
-  const [alerts, setAlerts] = useState<ProjectStageSaveAlert[]>([]);
-  const [popups, setPopups] = useState<ProjectStageSaveAlert[]>([]);
+  const [projectAlerts, setProjectAlerts] = useState<ProjectStageSaveAlert[]>([]);
+  const [projectPopups, setProjectPopups] = useState<ProjectStageSaveAlert[]>([]);
+  const [crmAlerts, setCrmAlerts] = useState<CrmBellItem[]>([]);
+  const [crmPopups, setCrmPopups] = useState<CrmBellItem[]>([]);
   const [coords, setCoords] = useState<{ top: number; left: number } | null>(null);
   const [mounted, setMounted] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
@@ -109,10 +168,18 @@ export function AppTopbarNotifications() {
   const inboxRef = useRef<HTMLDivElement>(null);
   const toastRef = useRef<HTMLDivElement>(null);
 
-  const unreadCount = useMemo(
-    () => alerts.filter((a) => a.unread).length,
-    [alerts],
-  );
+  const projectsEnabled = mode === "projects" && signedIn && projectModuleAdmin;
+  const crmEnabled = mode === "crm" && signedIn;
+  const enabled = projectsEnabled || crmEnabled;
+
+  const unreadCount = useMemo(() => {
+    if (mode === "projects") return projectAlerts.filter((a) => a.unread).length;
+    if (mode === "crm") return crmAlerts.filter((a) => a.unread).length;
+    return 0;
+  }, [mode, projectAlerts, crmAlerts]);
+
+  const popupCount =
+    mode === "projects" ? projectPopups.length : mode === "crm" ? crmPopups.length : 0;
 
   const updatePosition = useCallback(() => {
     setCoords(anchorBelowBell(triggerRef.current));
@@ -122,47 +189,90 @@ export function AppTopbarNotifications() {
     setMounted(true);
   }, []);
 
-  const poll = useCallback(async () => {
-    if (!signedIn || !projectModuleAdmin) {
-      setAlerts([]);
-      setPopups([]);
+  // Drop cross-module panels when leaving a workspace.
+  useEffect(() => {
+    setOpen(false);
+    if (mode !== "projects") {
+      setProjectAlerts([]);
+      setProjectPopups([]);
+    }
+    if (mode !== "crm") {
+      setCrmAlerts([]);
+      setCrmPopups([]);
+    }
+  }, [mode]);
+
+  const pollProjects = useCallback(async () => {
+    if (!projectsEnabled) {
+      setProjectAlerts([]);
+      setProjectPopups([]);
       return;
     }
     try {
       const rows = await listProjectStageSaveAlerts(40);
-      setAlerts(rows);
-      const seen = readSeenPopupIds();
+      setProjectAlerts(rows);
+      const seen = readIdSet(PROJECT_SEEN_POPUP_KEY);
       const fresh = rows.filter((row) => row.unread && !seen.has(row.id));
       if (fresh.length > 0) {
         for (const row of fresh) seen.add(row.id);
-        writeSeenPopupIds(seen);
-        setPopups(fresh.slice(0, 3));
+        writeIdSet(PROJECT_SEEN_POPUP_KEY, seen);
+        setProjectPopups(fresh.slice(0, 3));
       }
     } catch {
-      /* ignore polling errors for guests / permission */
+      /* ignore polling errors */
     }
-  }, [signedIn, projectModuleAdmin]);
+  }, [projectsEnabled]);
+
+  const pollCrm = useCallback(async () => {
+    if (!crmEnabled) {
+      setCrmAlerts([]);
+      setCrmPopups([]);
+      return;
+    }
+    try {
+      const rows = await listCrmApprovalInbox();
+      const seen = readIdSet(CRM_SEEN_KEY);
+      const mapped = rows.slice(0, 40).map((row) => mapCrmInboxItem(row, seen));
+      setCrmAlerts(mapped);
+      const fresh = mapped.filter((row) => row.unread && !seen.has(`popup:${row.id}`));
+      if (fresh.length > 0) {
+        for (const row of fresh) seen.add(`popup:${row.id}`);
+        writeIdSet(CRM_SEEN_KEY, seen);
+        setCrmPopups(fresh.slice(0, 3));
+      }
+    } catch {
+      /* ignore polling errors */
+    }
+  }, [crmEnabled]);
 
   useEffect(() => {
     if (authLoading) return;
-    void poll();
-    if (!signedIn || !projectModuleAdmin) return;
-    const timer = window.setInterval(() => void poll(), POLL_MS);
-    return () => window.clearInterval(timer);
-  }, [authLoading, signedIn, projectModuleAdmin, poll]);
+    if (mode === "projects") {
+      void pollProjects();
+      if (!projectsEnabled) return;
+      const timer = window.setInterval(() => void pollProjects(), POLL_MS);
+      return () => window.clearInterval(timer);
+    }
+    if (mode === "crm") {
+      void pollCrm();
+      if (!crmEnabled) return;
+      const timer = window.setInterval(() => void pollCrm(), POLL_MS);
+      return () => window.clearInterval(timer);
+    }
+  }, [authLoading, mode, projectsEnabled, crmEnabled, pollProjects, pollCrm]);
 
   useLayoutEffect(() => {
-    if (!open && popups.length === 0) {
+    if (!open && popupCount === 0) {
       setCoords(null);
       return;
     }
     updatePosition();
     const id = requestAnimationFrame(() => updatePosition());
     return () => cancelAnimationFrame(id);
-  }, [open, popups.length, updatePosition]);
+  }, [open, popupCount, updatePosition]);
 
   useEffect(() => {
-    if (!open && popups.length === 0) return;
+    if (!open && popupCount === 0) return;
     const onScrollOrResize = () => updatePosition();
     window.addEventListener("resize", onScrollOrResize);
     window.addEventListener("scroll", onScrollOrResize, true);
@@ -170,7 +280,7 @@ export function AppTopbarNotifications() {
       window.removeEventListener("resize", onScrollOrResize);
       window.removeEventListener("scroll", onScrollOrResize, true);
     };
-  }, [open, popups.length, updatePosition]);
+  }, [open, popupCount, updatePosition]);
 
   useEffect(() => {
     if (!open) return;
@@ -196,22 +306,44 @@ export function AppTopbarNotifications() {
     };
   }, [open]);
 
-  const onMarkRead = useCallback(async (id: string) => {
+  const onMarkProjectRead = useCallback(async (id: string) => {
     try {
       const updated = await markProjectStageSaveAlertRead(id);
-      setAlerts((prev) => prev.map((row) => (row.id === id ? updated : row)));
-      setPopups((prev) => prev.filter((row) => row.id !== id));
+      setProjectAlerts((prev) => prev.map((row) => (row.id === id ? updated : row)));
+      setProjectPopups((prev) => prev.filter((row) => row.id !== id));
     } catch {
       /* ignore */
     }
   }, []);
 
-  const onMarkAllRead = useCallback(async () => {
-    const unread = alerts.filter((a) => a.unread);
-    await Promise.all(unread.map((row) => onMarkRead(row.id)));
-  }, [alerts, onMarkRead]);
+  const onMarkCrmRead = useCallback((id: string) => {
+    const seen = readIdSet(CRM_SEEN_KEY);
+    seen.add(id);
+    seen.add(`popup:${id}`);
+    writeIdSet(CRM_SEEN_KEY, seen);
+    setCrmAlerts((prev) =>
+      prev.map((row) => (row.id === id ? { ...row, unread: false } : row)),
+    );
+    setCrmPopups((prev) => prev.filter((row) => row.id !== id));
+  }, []);
 
-  if (!signedIn || !projectModuleAdmin) {
+  const onMarkAllProjectRead = useCallback(async () => {
+    const unread = projectAlerts.filter((a) => a.unread);
+    await Promise.all(unread.map((row) => onMarkProjectRead(row.id)));
+  }, [projectAlerts, onMarkProjectRead]);
+
+  const onMarkAllCrmRead = useCallback(() => {
+    const seen = readIdSet(CRM_SEEN_KEY);
+    for (const row of crmAlerts) {
+      seen.add(row.id);
+      seen.add(`popup:${row.id}`);
+    }
+    writeIdSet(CRM_SEEN_KEY, seen);
+    setCrmAlerts((prev) => prev.map((row) => ({ ...row, unread: false })));
+    setCrmPopups([]);
+  }, [crmAlerts]);
+
+  if (!enabled) {
     return (
       <Button
         variant="ghost"
@@ -230,13 +362,18 @@ export function AppTopbarNotifications() {
     typeof window !== "undefined" ? window.innerWidth - VIEWPORT_PAD * 2 : PANEL_WIDTH,
   );
 
+  const inboxTitle = mode === "crm" ? "CRM updates" : "Stage updates";
+  const inboxEmpty =
+    mode === "crm" ? "No CRM approval alerts yet." : "No stage save alerts yet.";
+  const dialogLabel = mode === "crm" ? "CRM notifications" : "Stage save notifications";
+
   const inbox =
     mounted && open && coords
       ? createPortal(
         <div
           ref={inboxRef}
           role="dialog"
-          aria-label="Stage save notifications"
+          aria-label={dialogLabel}
           className="fixed z-80 overflow-hidden rounded-xl border border-border/80 bg-card shadow-lg animate-in fade-in-0 zoom-in-95 duration-200"
           style={{
             top: coords.top,
@@ -245,12 +382,15 @@ export function AppTopbarNotifications() {
           }}
         >
           <div className="flex items-center justify-between gap-2 border-b border-border/70 px-3 py-2.5">
-            <p className="text-sm font-semibold">Stage updates</p>
+            <p className="text-sm font-semibold">{inboxTitle}</p>
             {unreadCount > 0 ? (
               <button
                 type="button"
                 className="inline-flex cursor-pointer items-center gap-1 text-xs font-medium text-primary transition-opacity duration-200 hover:opacity-80"
-                onClick={() => void onMarkAllRead()}
+                onClick={() => {
+                  if (mode === "crm") onMarkAllCrmRead();
+                  else void onMarkAllProjectRead();
+                }}
               >
                 <CheckCheck className="size-3.5" aria-hidden />
                 Mark all read
@@ -258,12 +398,51 @@ export function AppTopbarNotifications() {
             ) : null}
           </div>
           <ul className="erp-scroll max-h-[min(70vh,24rem)] overflow-y-auto">
-            {alerts.length === 0 ? (
+            {mode === "crm" ? (
+              crmAlerts.length === 0 ? (
+                <li className="px-3 py-6 text-center text-xs text-muted-foreground">
+                  {inboxEmpty}
+                </li>
+              ) : (
+                crmAlerts.map((item) => (
+                  <li
+                    key={item.id}
+                    className={cn(
+                      "border-b border-border/50 px-3 py-2.5 last:border-b-0",
+                      item.unread && "bg-muted/40",
+                    )}
+                  >
+                    <CrmAlertBody item={item} />
+                    <div className="mt-2 flex flex-wrap items-center gap-2">
+                      <Link
+                        href={item.href}
+                        className="inline-flex h-7 cursor-pointer items-center rounded-lg border border-border/80 bg-background px-2.5 text-xs font-medium transition-colors duration-200 hover:bg-muted"
+                        onClick={() => {
+                          setOpen(false);
+                          if (item.unread) onMarkCrmRead(item.id);
+                        }}
+                      >
+                        Open record
+                      </Link>
+                      {item.unread ? (
+                        <button
+                          type="button"
+                          className="inline-flex h-7 cursor-pointer items-center rounded-lg px-2 text-xs font-medium text-muted-foreground transition-colors duration-200 hover:bg-muted hover:text-foreground"
+                          onClick={() => onMarkCrmRead(item.id)}
+                        >
+                          Mark read
+                        </button>
+                      ) : null}
+                    </div>
+                  </li>
+                ))
+              )
+            ) : projectAlerts.length === 0 ? (
               <li className="px-3 py-6 text-center text-xs text-muted-foreground">
-                No stage save alerts yet.
+                {inboxEmpty}
               </li>
             ) : (
-              alerts.map((alert) => (
+              projectAlerts.map((alert) => (
                 <li
                   key={alert.id}
                   className={cn(
@@ -271,14 +450,14 @@ export function AppTopbarNotifications() {
                     alert.unread && "bg-muted/40",
                   )}
                 >
-                  <AlertBody alert={alert} />
+                  <ProjectAlertBody alert={alert} />
                   <div className="mt-2 flex flex-wrap items-center gap-2">
                     <Link
                       href={alert.form_path}
                       className="inline-flex h-7 cursor-pointer items-center rounded-lg border border-border/80 bg-background px-2.5 text-xs font-medium transition-colors duration-200 hover:bg-muted"
                       onClick={() => {
                         setOpen(false);
-                        if (alert.unread) void onMarkRead(alert.id);
+                        if (alert.unread) void onMarkProjectRead(alert.id);
                       }}
                     >
                       Open stage
@@ -287,7 +466,7 @@ export function AppTopbarNotifications() {
                       <button
                         type="button"
                         className="inline-flex h-7 cursor-pointer items-center rounded-lg px-2 text-xs font-medium text-muted-foreground transition-colors duration-200 hover:bg-muted hover:text-foreground"
-                        onClick={() => void onMarkRead(alert.id)}
+                        onClick={() => void onMarkProjectRead(alert.id)}
                       >
                         Mark read
                       </button>
@@ -303,7 +482,7 @@ export function AppTopbarNotifications() {
       : null;
 
   const toastStack =
-    mounted && popups.length > 0 && coords && !open
+    mounted && popupCount > 0 && coords && !open
       ? createPortal(
         <div
           ref={toastRef}
@@ -314,40 +493,75 @@ export function AppTopbarNotifications() {
             width: panelWidth,
           }}
         >
-          {popups.map((alert) => (
-            <div
-              key={`popup-${alert.id}`}
-              role="status"
-              className="rounded-xl border border-border/80 bg-card p-3 shadow-lg animate-in fade-in-0 slide-in-from-top-2 duration-200"
-            >
-              <div className="flex items-start justify-between gap-2">
-                <AlertBody alert={alert} />
-                <button
-                  type="button"
-                  aria-label="Dismiss notification"
-                  className="inline-flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-md text-muted-foreground transition-colors duration-200 hover:bg-muted hover:text-foreground"
-                  onClick={() => {
-                    setPopups((prev) => prev.filter((row) => row.id !== alert.id));
-                    if (alert.unread) void onMarkRead(alert.id);
-                  }}
-                >
-                  <X className="size-3.5" />
-                </button>
+          {mode === "crm"
+            ? crmPopups.map((item) => (
+              <div
+                key={`popup-${item.id}`}
+                role="status"
+                className="rounded-xl border border-border/80 bg-card p-3 shadow-lg animate-in fade-in-0 slide-in-from-top-2 duration-200"
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <CrmAlertBody item={item} />
+                  <button
+                    type="button"
+                    aria-label="Dismiss notification"
+                    className="inline-flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-md text-muted-foreground transition-colors duration-200 hover:bg-muted hover:text-foreground"
+                    onClick={() => {
+                      setCrmPopups((prev) => prev.filter((row) => row.id !== item.id));
+                      if (item.unread) onMarkCrmRead(item.id);
+                    }}
+                  >
+                    <X className="size-3.5" />
+                  </button>
+                </div>
+                <div className="mt-2">
+                  <Link
+                    href={item.href}
+                    className="inline-flex h-7 cursor-pointer items-center rounded-lg bg-primary px-2.5 text-xs font-medium text-primary-foreground transition-opacity duration-200 hover:opacity-90"
+                    onClick={() => {
+                      setCrmPopups((prev) => prev.filter((row) => row.id !== item.id));
+                      if (item.unread) onMarkCrmRead(item.id);
+                    }}
+                  >
+                    Open record
+                  </Link>
+                </div>
               </div>
-              <div className="mt-2">
-                <Link
-                  href={alert.form_path}
-                  className="inline-flex h-7 cursor-pointer items-center rounded-lg bg-primary px-2.5 text-xs font-medium text-primary-foreground transition-opacity duration-200 hover:opacity-90"
-                  onClick={() => {
-                    setPopups((prev) => prev.filter((row) => row.id !== alert.id));
-                    if (alert.unread) void onMarkRead(alert.id);
-                  }}
-                >
-                  Open stage
-                </Link>
+            ))
+            : projectPopups.map((alert) => (
+              <div
+                key={`popup-${alert.id}`}
+                role="status"
+                className="rounded-xl border border-border/80 bg-card p-3 shadow-lg animate-in fade-in-0 slide-in-from-top-2 duration-200"
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <ProjectAlertBody alert={alert} />
+                  <button
+                    type="button"
+                    aria-label="Dismiss notification"
+                    className="inline-flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-md text-muted-foreground transition-colors duration-200 hover:bg-muted hover:text-foreground"
+                    onClick={() => {
+                      setProjectPopups((prev) => prev.filter((row) => row.id !== alert.id));
+                      if (alert.unread) void onMarkProjectRead(alert.id);
+                    }}
+                  >
+                    <X className="size-3.5" />
+                  </button>
+                </div>
+                <div className="mt-2">
+                  <Link
+                    href={alert.form_path}
+                    className="inline-flex h-7 cursor-pointer items-center rounded-lg bg-primary px-2.5 text-xs font-medium text-primary-foreground transition-opacity duration-200 hover:opacity-90"
+                    onClick={() => {
+                      setProjectPopups((prev) => prev.filter((row) => row.id !== alert.id));
+                      if (alert.unread) void onMarkProjectRead(alert.id);
+                    }}
+                  >
+                    Open stage
+                  </Link>
+                </div>
               </div>
-            </div>
-          ))}
+            ))}
         </div>,
         document.body,
       )
