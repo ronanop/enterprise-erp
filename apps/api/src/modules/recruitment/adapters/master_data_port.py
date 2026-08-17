@@ -30,6 +30,7 @@ class RecruitmentMasterDataAdapter:
         date_of_joining: date,
         company_id: UUID | None = None,
         employee_code: str | None = None,
+        status: str = "onboarding",
     ):
         return self._employees.create_employee(
             ctx,
@@ -44,4 +45,5 @@ class RecruitmentMasterDataAdapter:
             designation=designation,
             date_of_joining=date_of_joining,
             hire_source="recruitment_onboarding",
+            status=status,
         )

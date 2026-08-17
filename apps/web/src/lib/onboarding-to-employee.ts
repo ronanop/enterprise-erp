@@ -6,6 +6,7 @@ import type {
   EducationEntry,
   EmployeeDocumentItem,
   EmployeeExtension,
+  EmployeeLifecycleStatus,
   EmployeeWizardDraft,
   GovernmentIds,
   PreviousEmploymentEntry,
@@ -27,6 +28,7 @@ function splitName(full: string): { first: string; last: string } {
 export function portalToWizardDraft(
   caseRow: OnboardingCase,
   employeeCode?: string,
+  lifecycleStatus: EmployeeLifecycleStatus = "onboarding",
 ): EmployeeWizardDraft {
   const p = caseRow.portal;
   const personal = emptyPersonal();
@@ -96,7 +98,10 @@ export function portalToWizardDraft(
   employment.shiftName = caseRow.shift || "";
   employment.leavePolicyName = caseRow.leavePolicy || "";
   employment.employmentType = caseRow.employmentType || "permanent";
+  employment.managementGroupId = caseRow.managementGroupId || "";
+  employment.managementGroupName = caseRow.managementGroupName || "";
   employment.reportingManagerName = caseRow.reportingManager || "";
+  employment.lifecycleStatus = lifecycleStatus;
 
   const documents: EmployeeDocumentItem[] = (p.documents || []).map((d) => ({
     id: d.id,

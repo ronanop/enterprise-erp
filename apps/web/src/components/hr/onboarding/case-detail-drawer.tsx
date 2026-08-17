@@ -11,10 +11,12 @@ import { HrStatusBadge } from "@/components/hr/hr-primitives";
 import {
   SetupDrawer,
   SetupField,
+  SetupSelect,
   SetupTextarea,
 } from "@/components/hr/setup/setup-drawer";
 import { Button } from "@/components/ui/button";
 import { getInvitationUrl } from "@/services/onboarding-management-service";
+import type { ManagementGroup } from "@/services/management-group-service";
 import type {
   ChecklistItem,
   OnboardingCase,
@@ -35,6 +37,7 @@ import { cn } from "@/lib/utils";
 type Props = {
   open: boolean;
   caseRow: OnboardingCase | null;
+  managementGroups: ManagementGroup[];
   onClose: () => void;
   onChecklist: (caseId: string, itemId: string, status: ChecklistItem["status"]) => void;
   onVerifyDoc: (
@@ -43,14 +46,15 @@ type Props = {
     status: OnboardingDocument["verifyStatus"],
   ) => void;
   onApprove: (caseId: string) => void;
-  onComplete: (caseId: string) => void;
-  onActivate: (caseId: string) => void;
+  onComplete: (caseId: string, managementGroup?: ManagementGroup) => void;
+  onActivate: (caseId: string, managementGroup?: ManagementGroup) => void;
   onInvite: (caseRow: OnboardingCase) => void;
 };
 
 export function CaseDetailDrawer({
   open,
   caseRow,
+  managementGroups,
   onClose,
   onChecklist,
   onVerifyDoc,
@@ -64,6 +68,9 @@ export function CaseDetailDrawer({
   );
   const [note, setNote] = useState("");
   const [previewDoc, setPreviewDoc] = useState<OnboardingDocument | null>(null);
+  const [managementGroupId, setManagementGroupId] = useState(
+    () => caseRow?.managementGroupId ?? "",
+  );
 
   const timeline = useMemo(() => {
     if (!caseRow) return [];
@@ -110,6 +117,8 @@ export function CaseDetailDrawer({
   const canActivate = canActivateOnboardingCase(caseRow);
   const isPendingJoin = caseRow.status === "pending_join";
   const joiningNotReached = isPendingJoin && !isJoiningDateReached(caseRow.joiningDate);
+  const selectedManagementGroup =
+    managementGroups.find((group) => group.id === managementGroupId) ?? undefined;
 
   const tabs = (
     [
@@ -155,7 +164,7 @@ export function CaseDetailDrawer({
             <Button
               type="button"
               className="cursor-pointer"
-              onClick={() => onComplete(caseRow.id)}
+              onClick={() => onComplete(caseRow.id, selectedManagementGroup)}
             >
               <UserCheck className="size-3.5" />
               Complete onboarding
@@ -171,7 +180,7 @@ export function CaseDetailDrawer({
                   ? `Available on or after ${caseRow.joiningDate}`
                   : "Activate employee for Workforce"
               }
-              onClick={() => onActivate(caseRow.id)}
+              onClick={() => onActivate(caseRow.id, selectedManagementGroup)}
             >
               <UserCheck className="size-3.5" />
               Activate employee
@@ -214,6 +223,27 @@ export function CaseDetailDrawer({
               <HrStatusBadge status={resolveOnboardingDisplayStatus(caseRow.status, caseRow.joiningDate)} />
             </div>
           </div>
+          {(canComplete || isPendingJoin) ? (
+            <SetupField
+              label="Employment group"
+              hint="Optional. Applies the group's default shift, calendars, and HRMS feature toggles."
+              labelClassName="normal-case"
+            >
+              <SetupSelect
+                value={managementGroupId}
+                onChange={(event) => setManagementGroupId(event.target.value)}
+              >
+                <option value="">No employment group</option>
+                {managementGroups
+                  .filter((group) => group.status === "active")
+                  .map((group) => (
+                    <option key={group.id} value={group.id}>
+                      {group.group_name} · {group.employment_type}
+                    </option>
+                  ))}
+              </SetupSelect>
+            </SetupField>
+          ) : null}
           {caseRow.status !== "joined" ? (
             <p className="rounded-lg border border-border/60 bg-muted/30 px-3 py-2 text-[11px] text-muted-foreground">
               {canApprove
@@ -225,9 +255,43 @@ export function CaseDetailDrawer({
                   : canComplete
                     ? "Complete onboarding to create the employee profile. If joining date is in the future, activation waits until that date."
                     : "After verification, complete onboarding to create the employee record."}{" "}
-              Assign shift, leave policy, and other details from Workforce once the employee is
-              active.
+              Employment group is optional; you can still assign shifts, leave policy, and other
+              details from Workforce once the employee is active.
             </p>
+          ) : null}
+          {isPendingJoin ? (
+            <div
+              className={cn(
+                "rounded-lg border px-3 py-3 text-xs",
+                canActivate
+                  ? "border-emerald-200 bg-emerald-50 text-emerald-900"
+                  : "border-amber-200 bg-amber-50 text-amber-950",
+              )}
+            >
+              <p className="font-medium">
+                {canActivate ? "Ready to activate" : "Waiting for joining date"}
+              </p>
+              <p className="mt-1 text-[11px] opacity-90">
+                {canActivate
+                  ? "Use Activate employee below to move this hire into Workforce (Probation)."
+                  : `Activate employee unlocks on ${caseRow.joiningDate}. Until then the person stays in Pending Join (not deactivated).`}
+              </p>
+              <Button
+                type="button"
+                size="sm"
+                className="mt-2 cursor-pointer"
+                disabled={!canActivate}
+                title={
+                  joiningNotReached
+                    ? `Available on or after ${caseRow.joiningDate}`
+                    : "Activate employee for Workforce"
+                }
+                onClick={() => onActivate(caseRow.id, selectedManagementGroup)}
+              >
+                <UserCheck className="size-3.5" />
+                Activate employee
+              </Button>
+            </div>
           ) : null}
           <div className="h-2 overflow-hidden rounded-full bg-muted">
             <div

@@ -722,7 +722,15 @@ def complete_onboarding(
     ctx: Annotated[TenantContext, Depends(require_permission("recruitment.onboarding:complete"))],
     db: Annotated[Session, Depends(get_db)],
 ):
-    return APIResponse(message="Completed", data=OnboardingService(db).complete(ctx, row_id, designation=body.designation))
+    return APIResponse(
+        message="Completed",
+        data=OnboardingService(db).complete(
+            ctx,
+            row_id,
+            designation=body.designation,
+            management_group_id=body.management_group_id,
+        ),
+    )
 
 @onboarding_tasks_router.get("", response_model=APIResponse[list[OnboardingTaskResponse]])
 def list_onboarding_tasks(

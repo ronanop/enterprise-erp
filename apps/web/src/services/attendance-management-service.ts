@@ -445,12 +445,15 @@ export function filterAttendanceRecords(
   records: AttendanceRecord[],
   query: string,
   filters: AttendanceFilters,
+  statsBucket: AttendanceStatBucket | null = null,
 ): AttendanceRecord[] {
   const q = query.trim().toLowerCase();
+  const today = todayIso();
   return records.filter((r) => {
+    if (statsBucket && !matchesAttendanceStatBucket(r, statsBucket, today)) return false;
     if (filters.branchId && r.branchId !== filters.branchId) return false;
     if (filters.shiftId && r.shiftId !== filters.shiftId) return false;
-    if (filters.status && r.status !== filters.status) return false;
+    if (!statsBucket && filters.status && r.status !== filters.status) return false;
     if (filters.dateFrom && r.attendanceDate < filters.dateFrom) return false;
     if (filters.dateTo && r.attendanceDate > filters.dateTo) return false;
     if (filters.location && !r.location.toLowerCase().includes(filters.location.toLowerCase())) {
@@ -475,17 +478,38 @@ export function filterAttendanceRecords(
   });
 }
 
-export function computeDashboardStats(records: AttendanceRecord[], date: string) {
-  const today = records.filter((r) => r.attendanceDate === date);
-  const present = today.filter((r) => ["present", "late"].includes(r.status)).length;
-  const absent = today.filter((r) => r.status === "absent").length;
-  const late = today.filter((r) => r.status === "late" || r.extension.isLate).length;
-  const half = today.filter((r) => r.status === "half_day").length;
-  const wfh = today.filter((r) => r.status === "work_from_home").length;
-  const leave = today.filter((r) => r.status === "leave").length;
-  const otHours = today.reduce((s, r) => s + r.overtimeHours, 0);
-  const missing = today.filter((r) => r.status === "missed_punch" || r.extension.missedPunch).length;
-  return { present, absent, late, half, wfh, leave, otHours: Math.round(otHours * 10) / 10, missing };
+export type AttendanceStatBucket = "present" | "absent" | "late" | "missing";
+
+export function matchesAttendanceStatBucket(
+  record: AttendanceRecord,
+  bucket: AttendanceStatBucket,
+  date: string,
+): boolean {
+  if (record.attendanceDate !== date) return false;
+  switch (bucket) {
+    case "present":
+      return record.status === "present" || record.status === "late";
+    case "absent":
+      return record.status === "absent";
+    case "late":
+      return record.status === "late" || record.extension.isLate;
+    case "missing":
+      return record.status === "missed_punch" || record.extension.missedPunch;
+    default:
+      return false;
+  }
+}
+
+export function computeDashboardStats(
+  records: AttendanceRecord[],
+  date: string,
+): Record<AttendanceStatBucket, number> {
+  return {
+    present: records.filter((r) => matchesAttendanceStatBucket(r, "present", date)).length,
+    absent: records.filter((r) => matchesAttendanceStatBucket(r, "absent", date)).length,
+    late: records.filter((r) => matchesAttendanceStatBucket(r, "late", date)).length,
+    missing: records.filter((r) => matchesAttendanceStatBucket(r, "missing", date)).length,
+  };
 }
 
 export async function markAttendance(payload: MarkAttendancePayload): Promise<void> {

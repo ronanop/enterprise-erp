@@ -255,13 +255,34 @@ function addressToJson(addr: PersonalInfo["currentAddress"]) {
 function mapLifecycle(
   masterStatus: string,
   profileStatus: string,
+  employmentStatus: string | undefined,
   extStatus: string | undefined,
 ): EmployeeRecord["lifecycleStatus"] {
-  const s = (extStatus || profileStatus || masterStatus || "active").toLowerCase();
-  if (["probation", "notice", "resigned", "archived", "inactive", "onboarding"].includes(s)) {
-    return s as EmployeeRecord["lifecycleStatus"];
+  // Prefer employment row (HR source of truth), then local extension, then master/profile.
+  const raw = (
+    employmentStatus ||
+    extStatus ||
+    masterStatus ||
+    profileStatus ||
+    "active"
+  ).toLowerCase();
+
+  if (raw === "active" || raw === "confirmed") return "active";
+  if (raw === "probation") return "probation";
+  if (raw === "onboarding" || raw === "draft") return "onboarding";
+  if (raw === "notice" || raw === "notice_period") return "notice";
+  if (raw === "resigned") return "resigned";
+  if (raw === "archived") return "archived";
+  if (
+    raw === "inactive" ||
+    raw === "separated" ||
+    raw === "ex_employee" ||
+    raw === "ended" ||
+    raw === "cancelled"
+  ) {
+    return "inactive";
   }
-  return s === "active" ? "active" : "inactive";
+  return "inactive";
 }
 
 function mergeRow(
@@ -326,6 +347,7 @@ function mergeRow(
     lifecycleStatus: mapLifecycle(
       String(master.status ?? ""),
       String(profile?.status ?? ""),
+      employment?.status ? String(employment.status) : undefined,
       ext.employment.lifecycleStatus,
     ),
     profilePhotoDataUrl: profilePhotoFromExtension(ext),
@@ -518,6 +540,7 @@ async function fetchEmployeeDirectoryUncached(): Promise<EmployeeDirectoryResult
       branchName: ext.employment.branchName || loc.branchName,
       employmentType: ext.employment.employmentType || loc.employmentType,
       joiningDate: ext.employment.joiningDate || loc.joiningDate,
+      lifecycleStatus: ext.employment.lifecycleStatus || loc.lifecycleStatus,
       profilePhotoDataUrl: profilePhotoFromExtension(ext) || loc.profilePhotoDataUrl,
       extension: ext,
     });
@@ -900,6 +923,7 @@ export async function applyOnboardingPortalToEmployee(
           "—",
         employmentType: draft.employment.employmentType || prev.employmentType,
         joiningDate: draft.employment.joiningDate || prev.joiningDate,
+        lifecycleStatus: draft.employment.lifecycleStatus || prev.lifecycleStatus,
         profilePhotoDataUrl: profilePhotoFromExtension(ext) || prev.profilePhotoDataUrl,
         extension: ext,
       };

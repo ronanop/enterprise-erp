@@ -1,6 +1,5 @@
 """Employment application service with lifecycle history."""
 
-from datetime import date
 from uuid import UUID
 
 from sqlalchemy.orm import Session
@@ -133,6 +132,7 @@ class EmploymentService:
         *,
         employee_code: str | None = None,
         shift_id: UUID | None = None,
+        management_group_id: UUID | None = None,
         start_probation: bool = True,
         probation_days: int = 90,
         mark_payroll_eligible: bool = True,
@@ -140,6 +140,9 @@ class EmploymentService:
         """Activate hire: optional permanent Emp ID, shift assign, payroll eligible, Active (+ probation)."""
         row = self.get(ctx, row_id)
         prev = row.status
+
+        if management_group_id and management_group_id != row.management_group_id:
+            row = self.update(ctx, row_id, management_group_id=management_group_id)
 
         emp = self._master.get_employee(ctx, row.employee_id)
         current_code = getattr(emp, "employee_code", "") or ""
@@ -178,6 +181,7 @@ class EmploymentService:
                 "payroll_eligible": bool(mark_payroll_eligible),
                 "employee_code": employee_code,
                 "shift_id": str(shift_id) if shift_id else None,
+                "management_group_id": str(management_group_id) if management_group_id else None,
             },
         )
 

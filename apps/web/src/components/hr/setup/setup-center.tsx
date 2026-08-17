@@ -77,12 +77,19 @@ function mapJobLevel(row: SetupRow): SetupRow {
 }
 
 function mapGrade(row: SetupRow): SetupRow {
+  const formatCtc = (v: unknown) => {
+    if (v == null || v === "") return "—";
+    const n = Number(v);
+    return Number.isFinite(n) ? n.toLocaleString("en-IN") : String(v);
+  };
   return {
     ...row,
     code: row.grade_code,
     name: row.grade_name,
-    min_salary: row.min_ctc ?? "",
-    max_salary: row.max_ctc ?? "",
+    min_ctc: row.min_ctc != null ? String(row.min_ctc) : "",
+    max_ctc: row.max_ctc != null ? String(row.max_ctc) : "",
+    min_salary: formatCtc(row.min_ctc),
+    max_salary: formatCtc(row.max_ctc),
   };
 }
 
@@ -228,6 +235,29 @@ const STATUS_FIELD: FieldDef = {
   ],
 };
 
+/** Branches / departments: draft|active|inactive (DB check). */
+const BRANCH_STATUS_FIELD: FieldDef = {
+  key: "status",
+  label: "Status",
+  type: "select",
+  options: [
+    { value: "active", label: "Active" },
+    { value: "inactive", label: "Inactive" },
+    { value: "draft", label: "Draft" },
+  ],
+};
+
+/** Job levels / grades: active|inactive only (DB check). */
+const ACTIVE_STATUS_FIELD: FieldDef = {
+  key: "status",
+  label: "Status",
+  type: "select",
+  options: [
+    { value: "active", label: "Active" },
+    { value: "inactive", label: "Inactive" },
+  ],
+};
+
 const HOLIDAY_STATUS_FIELD: FieldDef = {
   key: "status",
   label: "Status",
@@ -279,8 +309,13 @@ const TAB_CONFIG: Partial<Record<HrSetupTabId, TabConfig>> = {
         optionsSource: "employees",
         hint: "Employee who leads this branch",
       },
-      STATUS_FIELD,
+      BRANCH_STATUS_FIELD,
     ],
+    statusActions: {
+      activate: "active",
+      deactivate: "inactive",
+      archive: "inactive",
+    },
     buildCreateBody: (f) => ({
       company_id: f.company_id,
       branch_code: f.branch_code,
@@ -296,8 +331,10 @@ const TAB_CONFIG: Partial<Record<HrSetupTabId, TabConfig>> = {
       branch_name: f.branch_name,
       branch_type: f.branch_type || undefined,
       status: f.status,
-      address_line1: f.address_line1 || undefined,
-      city: f.city || undefined,
+      address_line1: f.address_line1 || null,
+      city: f.city || null,
+      state_code: f.state_code || null,
+      country_code: f.country_code || null,
       head_employee_id: f.head_employee_id || null,
     }),
   },
@@ -352,8 +389,13 @@ const TAB_CONFIG: Partial<Record<HrSetupTabId, TabConfig>> = {
         optionsSource: "employees",
         hint: "Shown on employee onboarding / add employee",
       },
-      STATUS_FIELD,
+      BRANCH_STATUS_FIELD,
     ],
+    statusActions: {
+      activate: "active",
+      deactivate: "inactive",
+      archive: "inactive",
+    },
     buildCreateBody: (f) => ({
       company_id: f.company_id,
       branch_id: f.branch_id,
@@ -407,8 +449,13 @@ const TAB_CONFIG: Partial<Record<HrSetupTabId, TabConfig>> = {
           { value: "exec", label: "Exec" },
         ],
       },
-      STATUS_FIELD,
+      ACTIVE_STATUS_FIELD,
     ],
+    statusActions: {
+      activate: "active",
+      deactivate: "inactive",
+      archive: "inactive",
+    },
     buildCreateBody: (f) => ({
       designation_code: f.designation_code,
       designation_name: f.designation_name,
@@ -435,9 +482,19 @@ const TAB_CONFIG: Partial<Record<HrSetupTabId, TabConfig>> = {
     fields: [
       { key: "level_name", label: "Level Name", required: true },
       { key: "level_code", label: "Code", required: true, readOnly: true },
-      { key: "rank_order", label: "Sort Order", type: "number" },
-      STATUS_FIELD,
+      {
+        key: "rank_order",
+        label: "Sort Order",
+        type: "number",
+        hint: "Lower numbers appear first in dropdowns (e.g. 1 = Junior, 5 = CXO)",
+      },
+      ACTIVE_STATUS_FIELD,
     ],
+    statusActions: {
+      activate: "active",
+      deactivate: "inactive",
+      archive: "inactive",
+    },
     buildCreateBody: (f) => ({
       level_code: f.level_code,
       level_name: f.level_name,
@@ -463,26 +520,51 @@ const TAB_CONFIG: Partial<Record<HrSetupTabId, TabConfig>> = {
       { key: "status", label: "Status" },
     ],
     fields: [
-      { key: "grade_name", label: "Grade Name", required: true, placeholder: "L1" },
+      { key: "grade_name", label: "Grade Name", required: true, placeholder: "e.g. L1 / Band A" },
       { key: "grade_code", label: "Code", required: true, readOnly: true },
-      { key: "min_ctc", label: "Minimum Salary", type: "number" },
-      { key: "max_ctc", label: "Maximum Salary", type: "number" },
-      STATUS_FIELD,
+      {
+        key: "min_ctc",
+        label: "Minimum Salary (Annual CTC)",
+        type: "number",
+        hint: "Annual CTC in INR — used by payroll salary bands",
+        placeholder: "360000",
+      },
+      {
+        key: "max_ctc",
+        label: "Maximum Salary (Annual CTC)",
+        type: "number",
+        hint: "Must be ≥ minimum when both are set",
+        placeholder: "600000",
+      },
+      ACTIVE_STATUS_FIELD,
     ],
-    buildCreateBody: (f) => ({
-      grade_code: f.grade_code,
-      grade_name: f.grade_name,
-      min_ctc: f.min_ctc ? Number(f.min_ctc) : null,
-      max_ctc: f.max_ctc ? Number(f.max_ctc) : null,
-      status: f.status || "active",
-    }),
-    buildUpdateBody: (f) => ({
-      grade_name: f.grade_name,
-      min_ctc: f.min_ctc != null && f.min_ctc !== "" ? Number(f.min_ctc) : null,
-      max_ctc: f.max_ctc != null && f.max_ctc !== "" ? Number(f.max_ctc) : null,
-      status: f.status,
-      version: f.version ? Number(f.version) : undefined,
-    }),
+    statusActions: {
+      activate: "active",
+      deactivate: "inactive",
+      archive: "inactive",
+    },
+    buildCreateBody: (f) => {
+      const min = f.min_ctc !== "" && f.min_ctc != null ? Number(f.min_ctc) : null;
+      const max = f.max_ctc !== "" && f.max_ctc != null ? Number(f.max_ctc) : null;
+      return {
+        grade_code: f.grade_code,
+        grade_name: f.grade_name,
+        min_ctc: Number.isFinite(min as number) ? min : null,
+        max_ctc: Number.isFinite(max as number) ? max : null,
+        status: f.status || "active",
+      };
+    },
+    buildUpdateBody: (f) => {
+      const min = f.min_ctc !== "" && f.min_ctc != null ? Number(f.min_ctc) : null;
+      const max = f.max_ctc !== "" && f.max_ctc != null ? Number(f.max_ctc) : null;
+      return {
+        grade_name: f.grade_name,
+        min_ctc: Number.isFinite(min as number) ? min : null,
+        max_ctc: Number.isFinite(max as number) ? max : null,
+        status: f.status,
+        version: f.version ? Number(f.version) : undefined,
+      };
+    },
   },
   "work-locations": {
     nameKeys: ["name", "location_name"],
@@ -830,8 +912,13 @@ const TAB_CONFIG: Partial<Record<HrSetupTabId, TabConfig>> = {
         type: "number",
         hint: "Day of month leave cycle starts (1–28)",
       },
-      STATUS_FIELD,
+      ACTIVE_STATUS_FIELD,
     ],
+    statusActions: {
+      activate: "active",
+      deactivate: "inactive",
+      archive: "inactive",
+    },
     buildCreateBody: (f) => ({
       leave_type_code: f.leave_type_code,
       leave_type_name: f.leave_type_name,

@@ -14,10 +14,6 @@ import {
   AttendanceDayDetailDrawer,
 } from "@/components/hr/attendance/attendance-calendar";
 import {
-  AttendanceReportsPanel,
-  AttendanceStatusChart,
-} from "@/components/hr/attendance/attendance-charts-reports";
-import {
   AttendanceCorrectionDrawer,
   AttendanceImportDrawer,
 } from "@/components/hr/attendance/attendance-import-correction";
@@ -48,13 +44,28 @@ import {
   todayIso,
   downloadTextFile,
   type AttendanceDirectory,
+  type AttendanceStatBucket,
 } from "@/services/attendance-management-service";
 import type { AttendanceFilters, AttendanceRecord } from "@/types/attendance-management";
 import { ATTENDANCE_STATUS_LABELS, emptyAttendanceFilters } from "@/types/attendance-management";
 
 const PAGE_SIZE = 15;
 
-type ViewMode = "table" | "employee" | "calendar" | "reports" | "audit";
+type ViewMode = "table" | "employee" | "calendar" | "audit";
+
+const STAT_CARDS: { key: AttendanceStatBucket; label: string }[] = [
+  { key: "present", label: "Today's Present" },
+  { key: "absent", label: "Today's Absent" },
+  { key: "missing", label: "Missing Punches" },
+  { key: "late", label: "Late Arrivals" },
+];
+
+const STAT_LABELS: Record<AttendanceStatBucket, string> = {
+  present: "Today's Present",
+  absent: "Today's Absent",
+  missing: "Missing Punches",
+  late: "Late Arrivals",
+};
 
 export function AttendanceManagementPage() {
   const [directory, setDirectory] = useState<AttendanceDirectory | null>(null);
@@ -65,6 +76,7 @@ export function AttendanceManagementPage() {
   const [page, setPage] = useState(1);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [view, setView] = useState<ViewMode>("table");
+  const [statsBucket, setStatsBucket] = useState<AttendanceStatBucket | null>(null);
   const [markOpen, setMarkOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
   const [correctionRecord, setCorrectionRecord] = useState<AttendanceRecord | null>(null);
@@ -89,26 +101,48 @@ export function AttendanceManagementPage() {
   }, [load]);
 
   const records = directory?.records ?? [];
+  const today = todayIso();
+
+  /** Card counts always reflect today within current org filters (ignore date/status/card). */
+  const stats = useMemo(() => {
+    const orgScoped = filterAttendanceRecords(
+      records,
+      "",
+      {
+        ...filters,
+        status: "",
+        dateFrom: "",
+        dateTo: "",
+      },
+      null,
+    );
+    return computeDashboardStats(orgScoped, today);
+  }, [records, filters, today]);
+
   const filtered = useMemo(
-    () => filterAttendanceRecords(records, query, filters),
-    [records, query, filters],
+    () => filterAttendanceRecords(records, query, filters, statsBucket),
+    [records, query, filters, statsBucket],
   );
   const calendarFiltered = useMemo(
     () =>
-      filterAttendanceRecords(records, query, {
-        ...filters,
-        dateFrom: "",
-        dateTo: "",
-      }),
+      filterAttendanceRecords(
+        records,
+        query,
+        {
+          ...filters,
+          dateFrom: "",
+          dateTo: "",
+        },
+        null,
+      ),
     [records, query, filters],
   );
-  const stats = useMemo(() => computeDashboardStats(filtered, todayIso()), [filtered]);
   const pageRows = useMemo(() => {
     const start = (page - 1) * PAGE_SIZE;
     return filtered.slice(start, start + PAGE_SIZE);
   }, [filtered, page]);
 
-  useEffect(() => setPage(1), [query, filters, view]);
+  useEffect(() => setPage(1), [query, filters, view, statsBucket]);
 
   const selectedRows = useMemo(
     () => records.filter((r) => selected.has(r.id)),
@@ -117,6 +151,20 @@ export function AttendanceManagementPage() {
 
   const authBlocked = !isAuthenticated() && !loading && !records.length;
   const auditRows = useMemo(() => deriveAttendanceAudit(filtered), [filtered]);
+
+  function selectStatCard(bucket: AttendanceStatBucket) {
+    const next = statsBucket === bucket ? null : bucket;
+    setStatsBucket(next);
+    setView("table");
+    if (next) {
+      setFilters((f) => ({
+        ...f,
+        status: "",
+        dateFrom: today,
+        dateTo: today,
+      }));
+    }
+  }
 
   function formatTime(iso: string) {
     if (!iso) return "—";
@@ -182,28 +230,46 @@ export function AttendanceManagementPage() {
         <EmsSkeleton />
       ) : (
         <>
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4 2xl:grid-cols-8">
-            {[
-              { label: "Today's Present", value: stats.present },
-              { label: "Today's Absent", value: stats.absent },
-              { label: "Late Arrivals", value: stats.late },
-              { label: "Half Day", value: stats.half },
-              { label: "Work From Home", value: stats.wfh },
-              { label: "On leave", value: stats.leave },
-              { label: "Overtime Hours", value: stats.otHours },
-              { label: "Missing Punches", value: stats.missing },
-            ].map((c) => (
-              <div
-                key={c.label}
-                className="rounded-xl border border-border/70 bg-card px-3 py-2.5 shadow-sm"
-              >
-                <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-                  {c.label}
-                </p>
-                <p className="mt-0.5 text-xl font-semibold">{c.value}</p>
-              </div>
-            ))}
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            {STAT_CARDS.map((card) => {
+              const active = statsBucket === card.key;
+              return (
+                <button
+                  key={card.key}
+                  type="button"
+                  onClick={() => selectStatCard(card.key)}
+                  aria-pressed={active}
+                  className={cn(
+                    "cursor-pointer rounded-xl border bg-card px-3 py-2.5 text-left shadow-sm transition-all duration-200",
+                    "hover:border-primary/40 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
+                    active ? "border-primary/50 ring-1 ring-primary/20" : "border-border/70",
+                  )}
+                >
+                  <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                    {card.label}
+                  </p>
+                  <p className="mt-0.5 text-xl font-semibold">{stats[card.key]}</p>
+                </button>
+              );
+            })}
           </div>
+
+          {statsBucket ? (
+            <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+              <span>Filtered by card:</span>
+              <span className="font-medium text-foreground">{STAT_LABELS[statsBucket]}</span>
+              <span>
+                · {filtered.length} record{filtered.length === 1 ? "" : "s"} (today)
+              </span>
+              <button
+                type="button"
+                className="cursor-pointer font-medium text-primary transition-colors duration-200 hover:underline"
+                onClick={() => setStatsBucket(null)}
+              >
+                Clear
+              </button>
+            </div>
+          ) : null}
 
           <div className="flex flex-wrap gap-2 border-b border-border/60 pb-2">
             {(
@@ -211,7 +277,6 @@ export function AttendanceManagementPage() {
                 ["table", "Register"],
                 ["employee", "By Employee"],
                 ["calendar", "Calendar"],
-                ["reports", "Reports"],
                 ["audit", "Audit Log"],
               ] as const
             ).map(([id, label]) => (
@@ -219,7 +284,7 @@ export function AttendanceManagementPage() {
                 key={id}
                 type="button"
                 className={cn(
-                  "cursor-pointer rounded-lg px-3 py-1.5 text-xs font-medium transition-colors",
+                  "cursor-pointer rounded-lg px-3 py-1.5 text-xs font-medium transition-colors duration-200",
                   view === id ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted",
                 )}
                 onClick={() => setView(id)}
@@ -244,13 +309,6 @@ export function AttendanceManagementPage() {
               onMonthChange={setCalendarMonth}
               onSelectDate={(date, rows) => setDayDetail({ date, rows })}
             />
-          ) : null}
-
-          {view === "reports" ? (
-            <div className="grid gap-4 lg:grid-cols-2">
-              <AttendanceStatusChart records={filtered} />
-              <AttendanceReportsPanel records={filtered} />
-            </div>
           ) : null}
 
           {view === "audit" ? (
@@ -324,7 +382,10 @@ export function AttendanceManagementPage() {
                     <button
                       type="button"
                       className="cursor-pointer text-[10px] text-primary"
-                      onClick={() => setFilters(emptyAttendanceFilters(todayIso()))}
+                      onClick={() => {
+                        setStatsBucket(null);
+                        setFilters(emptyAttendanceFilters(todayIso()));
+                      }}
                     >
                       Clear
                     </button>
@@ -377,8 +438,12 @@ export function AttendanceManagementPage() {
                   </SetupField>
                   <SetupField label="Status">
                     <SetupSelect
-                      value={filters.status}
-                      onChange={(e) => setFilters((f) => ({ ...f, status: e.target.value }))}
+                      value={statsBucket ? "" : filters.status}
+                      disabled={Boolean(statsBucket)}
+                      onChange={(e) => {
+                        setStatsBucket(null);
+                        setFilters((f) => ({ ...f, status: e.target.value }));
+                      }}
                     >
                       <option value="">All</option>
                       {Object.entries(ATTENDANCE_STATUS_LABELS).map(([k, v]) => (
@@ -406,6 +471,7 @@ export function AttendanceManagementPage() {
                     type="button"
                     className="cursor-pointer w-full rounded-lg border border-border/60 px-2 py-1.5 text-[11px] font-medium text-muted-foreground transition-colors hover:bg-muted"
                     onClick={() => {
+                      setStatsBucket(null);
                       const t = todayIso();
                       const [y, m] = t.split("-");
                       setFilters((f) => ({

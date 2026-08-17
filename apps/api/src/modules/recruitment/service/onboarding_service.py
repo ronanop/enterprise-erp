@@ -67,7 +67,14 @@ class OnboardingService:
         self._engine.approve(row)
         return self._repo.update(ctx, row_id, status=row.status)
 
-    def complete(self, ctx: TenantContext, row_id: UUID, *, designation: str):
+    def complete(
+        self,
+        ctx: TenantContext,
+        row_id: UUID,
+        *,
+        designation: str,
+        management_group_id: UUID | None = None,
+    ):
         """Create employee in onboarding status — Emp ID / Active / payroll wait for activation."""
         from uuid import uuid4
 
@@ -98,6 +105,7 @@ class OnboardingService:
             date_of_joining=offer.joining_date,
             company_id=row.company_id,
             employee_code=temp_code,
+            status="onboarding",
         )
 
         row.employee_id = employee.id
@@ -114,14 +122,9 @@ class OnboardingService:
             lifecycle_source="recruitment_onboarding",
             probation_start_date=offer.joining_date,
             payroll_eligible=False,
+            management_group_id=management_group_id,
         )
         # Stay in onboarding — activation assigns Emp ID, shift, payroll_eligible, then Active
-        try:
-            from modules.master_data.service.employee_service import EmployeeService
-
-            EmployeeService(self._db).update_employee(ctx, employee.id, status="onboarding")
-        except Exception:
-            pass
         row.hr_employment_request_id = employment.id
         row.payroll_handoff_status = PayrollHandoffStatus.PENDING.value
 

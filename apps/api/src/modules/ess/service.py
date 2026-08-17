@@ -53,6 +53,8 @@ from modules.ess.schemas import (
 )
 from modules.foundation.domain.value_objects import TenantContext
 from modules.foundation.models.notification import NtfEvent
+from modules.foundation.repository.base import utcnow
+from modules.foundation.service.notification_href import sanitize_inbox_href
 from modules.hr.domain.enums import HolidayCalendarStatus
 from modules.hr.models import HrRosterEntry, HrShift, HrShiftAssignment
 from modules.hr.service.attendance_correction_service import AttendanceCorrectionService
@@ -159,15 +161,16 @@ class EssService:
     @staticmethod
     def _notification_from_event(row: NtfEvent) -> EssNotificationResponse:
         payload = row.payload_json or {}
+        kind = str(payload.get("kind") or row.event_type)
         href_raw = payload.get("href") or payload.get("action_href")
         return EssNotificationResponse(
             id=row.id,
             title=str(payload.get("title") or row.event_type),
             body=str(payload.get("body") or ""),
-            kind=str(payload.get("kind") or row.event_type),
-            read=row.status in {"delivered", "read"},
+            kind=kind,
+            read=row.read_at is not None or row.status in {"delivered", "read"},
             created_at=row.created_at,
-            href=str(href_raw) if href_raw else None,
+            href=sanitize_inbox_href(href_raw, kind=kind),
         )
 
     def resolve_employee(self, ctx: TenantContext) -> EmployeeEntity:
@@ -1534,7 +1537,8 @@ class EssService:
             .where(
                 NtfEvent.tenant_id == ctx.tenant_id,
                 NtfEvent.recipient_user_id == emp.user_id,
-                NtfEvent.status.notin_(("delivered", "read")),
+                NtfEvent.read_at.is_(None),
+                NtfEvent.status != "read",
             )
         )
         return int(count or 0)
@@ -1549,7 +1553,8 @@ class EssService:
                 .where(
                     NtfEvent.tenant_id == ctx.tenant_id,
                     NtfEvent.recipient_user_id == emp.user_id,
-                    NtfEvent.status.notin_(("delivered", "read")),
+                    NtfEvent.read_at.is_(None),
+                    NtfEvent.status != "read",
                 )
                 .order_by(NtfEvent.created_at.desc())
                 .limit(1)
@@ -1563,6 +1568,8 @@ class EssService:
         row = self._db.get(NtfEvent, notification_id)
         if row is None or row.recipient_user_id != emp.user_id:
             raise NotFoundException("Notification not found")
+        if row.read_at is None:
+            row.read_at = utcnow()
         row.status = "read"
 
     def mark_all_notifications_read(self, ctx: TenantContext) -> int:
@@ -1574,11 +1581,15 @@ class EssService:
                 select(NtfEvent).where(
                     NtfEvent.tenant_id == ctx.tenant_id,
                     NtfEvent.recipient_user_id == emp.user_id,
-                    NtfEvent.status.notin_(("delivered", "read")),
+                    NtfEvent.read_at.is_(None),
+                    NtfEvent.status != "read",
                 )
             ).all()
         )
+        now = utcnow()
         for row in rows:
+            if row.read_at is None:
+                row.read_at = now
             row.status = "read"
         return len(rows)
 

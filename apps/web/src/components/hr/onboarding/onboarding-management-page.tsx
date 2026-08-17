@@ -50,6 +50,10 @@ import {
   type OnboardingDirectory,
   type OnboardingStatBucket,
 } from "@/services/onboarding-management-service";
+import {
+  listManagementGroups,
+  type ManagementGroup,
+} from "@/services/management-group-service";
 import type {
   InvitationChannel,
   OnboardingCase,
@@ -108,12 +112,17 @@ export function OnboardingManagementPage() {
   const [detailCase, setDetailCase] = useState<OnboardingCase | null>(null);
   const [docsCase, setDocsCase] = useState<OnboardingCase | null>(null);
   const [previewDoc, setPreviewDoc] = useState<OnboardingDocument | null>(null);
+  const [managementGroups, setManagementGroups] = useState<ManagementGroup[]>([]);
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const next = await loadOnboardingDirectory();
+      const [next, groups] = await Promise.all([
+        loadOnboardingDirectory(),
+        listManagementGroups().catch(() => []),
+      ]);
       setDir(next);
+      setManagementGroups(groups);
       setDocsCase((prev) =>
         prev ? (next.cases.find((c) => c.id === prev.id) ?? null) : null,
       );
@@ -652,8 +661,10 @@ export function OnboardingManagementPage() {
       />
 
       <CaseDetailDrawer
+        key={detailCase?.id ?? "no-case"}
         open={Boolean(detailCase)}
         caseRow={detailCase}
+        managementGroups={managementGroups}
         onClose={() => setDetailCase(null)}
         onInvite={(c) => {
           setDetailCase(null);
@@ -689,8 +700,11 @@ export function OnboardingManagementPage() {
             toast(e instanceof Error ? e.message : "Approval failed", "error");
           }
         }}
-        onComplete={(caseId) => {
-          void completeOnboarding(caseId)
+        onComplete={(caseId, managementGroup) => {
+          void completeOnboarding(caseId, {
+            managementGroupId: managementGroup?.id,
+            managementGroupName: managementGroup?.group_name,
+          })
             .then((completed) => {
               if (completed) {
                 const msg =
@@ -709,8 +723,11 @@ export function OnboardingManagementPage() {
               toast(e instanceof Error ? e.message : "Completion failed", "error");
             });
         }}
-        onActivate={(caseId) => {
-          void activateOnboardingEmployee(caseId)
+        onActivate={(caseId, managementGroup) => {
+          void activateOnboardingEmployee(caseId, {
+            managementGroupId: managementGroup?.id,
+            managementGroupName: managementGroup?.group_name,
+          })
             .then((activated) => {
               if (activated) {
                 toast(`Employee ${activated.employeeId} is now active in Workforce`);

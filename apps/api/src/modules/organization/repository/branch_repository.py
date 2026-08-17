@@ -53,6 +53,7 @@ class BranchRepository(OrgScopedRepository):
         country_code: str | None = None,
         head_employee_id: UUID | None = None,
     ) -> BranchEntity:
+        now = utcnow()
         row = OrgBranch(
             id=uuid4(),
             tenant_id=ctx.tenant_id,
@@ -66,6 +67,8 @@ class BranchRepository(OrgScopedRepository):
             country_code=country_code,
             head_employee_id=head_employee_id,
             status="active",
+            created_at=now,
+            updated_at=now,
             created_by=ctx.user_id,
             updated_by=ctx.user_id,
         )
@@ -83,7 +86,7 @@ class BranchRepository(OrgScopedRepository):
         if row is None:
             return None
         for key, value in fields.items():
-            if hasattr(row, key) and value is not None:
+            if hasattr(row, key):
                 setattr(row, key, value)
         row.updated_at = utcnow()
         row.updated_by = ctx.user_id
@@ -114,6 +117,15 @@ class BranchRepository(OrgScopedRepository):
             branch_name=row.branch_name,
             branch_type=row.branch_type,
             status=row.status,
+            address_line1=row.address_line1,
+            city=row.city,
+            state_code=row.state_code,
+            country_code=row.country_code,
+            head_employee_id=row.head_employee_id,
             version=row.version,
             is_deleted=row.is_deleted,
+            created_at=row.created_at,
+            created_by=row.created_by,
+            updated_at=row.updated_at,
+            updated_by=row.updated_by,
         )

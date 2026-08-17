@@ -1,6 +1,6 @@
 """Reusable SQLAlchemy column mixins per DBS v1.1."""
 
-from datetime import datetime
+from datetime import datetime, timezone
 from uuid import UUID
 
 from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, func
@@ -8,15 +8,24 @@ from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 
+def _utcnow() -> datetime:
+    """Client-side default when the DB column has no SERVER DEFAULT."""
+    return datetime.now(timezone.utc)
+
+
 class AuditMixin:
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), nullable=False
+        DateTime(timezone=True),
+        server_default=func.now(),
+        default=_utcnow,
+        nullable=False,
     )
     created_by: Mapped[UUID | None] = mapped_column(PG_UUID(as_uuid=True), nullable=True)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),
-        onupdate=func.now(),
+        onupdate=_utcnow,
+        default=_utcnow,
         nullable=False,
     )
     updated_by: Mapped[UUID | None] = mapped_column(PG_UUID(as_uuid=True), nullable=True)
