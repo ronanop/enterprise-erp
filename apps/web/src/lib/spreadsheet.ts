@@ -37,6 +37,17 @@ export function downloadCsv(filename: string, rows: SpreadsheetRow[]) {
   );
 }
 
+/** Decode CSV uploads without silently converting legacy Windows text to mojibake. */
+export function decodeCsvBuffer(buffer: ArrayBuffer): string {
+  const bytes = new Uint8Array(buffer);
+  try {
+    return new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+  } catch {
+    // Excel on legacy Windows commonly writes CSV as Windows-1252.
+    return new TextDecoder("windows-1252").decode(bytes);
+  }
+}
+
 function rowsToSheetCells(rows: SpreadsheetRow[]) {
   if (rows.length === 0) return [[""]];
   const headers = Object.keys(rows[0]);
@@ -153,7 +164,7 @@ export async function parseSpreadsheetFile(
 
   if (name.endsWith(".csv") || file.type === "text/csv") {
     const buffer = await file.arrayBuffer();
-    const text = new TextDecoder("utf-8").decode(buffer);
+    const text = decodeCsvBuffer(buffer);
     return parseCsvText(text);
   }
 

@@ -3,6 +3,7 @@ import type { ProjectsNavGroup } from "@/components/projects/projects-workspace-
 /** Delivery queues and portfolio admin surfaces — module admin only. */
 const ADMIN_ONLY_HREFS = new Set([
   "/projects/po-queue",
+  "/projects/tracker",
   "/projects/site-installations",
   "/projects/intake",
   "/projects/assignment",

@@ -15,6 +15,11 @@ import { Bell, CheckCheck, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { useAuthUser } from "@/hooks/use-auth-user";
+import {
+  dismissCrmApproval,
+  normalizeNotificationText,
+  readDismissedCrmApprovalIds,
+} from "@/lib/crm-notification-state";
 import { cn } from "@/lib/utils";
 import {
   listCrmApprovalInbox,
@@ -27,7 +32,7 @@ import {
 } from "@/services/projects-portal-service";
 
 const PROJECT_SEEN_POPUP_KEY = "prj_stage_save_alert_popup_seen";
-const CRM_SEEN_KEY = "crm_topbar_inbox_seen";
+const CRM_SEEN_POPUP_KEY = "crm_approval_popup_seen";
 const POLL_MS = 20_000;
 const PANEL_WIDTH = 352;
 const PANEL_GAP = 8;
@@ -85,17 +90,17 @@ function crmEntityHref(entityType: string, entityId: string): string {
   return "/crm/my-jobs";
 }
 
-function mapCrmInboxItem(row: CrmApprovalInboxItem, seen: Set<string>): CrmBellItem {
+function mapCrmInboxItem(row: CrmApprovalInboxItem): CrmBellItem {
   const payload = row.payload_json ?? {};
   const entityType = String(payload.entity_type ?? "");
   const entityId = String(payload.entity_id ?? "");
   return {
     id: row.id,
-    title: String(payload.title ?? "CRM approval update"),
-    body: String(payload.body ?? "Open the related record to review."),
+    title: normalizeNotificationText(String(payload.title ?? "CRM approval update")),
+    body: normalizeNotificationText(String(payload.body ?? "Open the related record to review.")),
     href: crmEntityHref(entityType, entityId),
     created_at: row.created_at,
-    unread: !seen.has(row.id),
+    unread: true,
   };
 }
 
@@ -231,13 +236,17 @@ export function AppTopbarNotifications() {
     }
     try {
       const rows = await listCrmApprovalInbox();
-      const seen = readIdSet(CRM_SEEN_KEY);
-      const mapped = rows.slice(0, 40).map((row) => mapCrmInboxItem(row, seen));
+      const dismissed = readDismissedCrmApprovalIds();
+      const mapped = rows
+        .filter((row) => !dismissed.has(row.id))
+        .slice(0, 40)
+        .map(mapCrmInboxItem);
       setCrmAlerts(mapped);
-      const fresh = mapped.filter((row) => row.unread && !seen.has(`popup:${row.id}`));
+      const popupSeen = readIdSet(CRM_SEEN_POPUP_KEY);
+      const fresh = mapped.filter((row) => !popupSeen.has(`crm:${row.id}`));
       if (fresh.length > 0) {
-        for (const row of fresh) seen.add(`popup:${row.id}`);
-        writeIdSet(CRM_SEEN_KEY, seen);
+        for (const row of fresh) popupSeen.add(`crm:${row.id}`);
+        writeIdSet(CRM_SEEN_POPUP_KEY, popupSeen);
         setCrmPopups(fresh.slice(0, 3));
       }
     } catch {
@@ -317,13 +326,8 @@ export function AppTopbarNotifications() {
   }, []);
 
   const onMarkCrmRead = useCallback((id: string) => {
-    const seen = readIdSet(CRM_SEEN_KEY);
-    seen.add(id);
-    seen.add(`popup:${id}`);
-    writeIdSet(CRM_SEEN_KEY, seen);
-    setCrmAlerts((prev) =>
-      prev.map((row) => (row.id === id ? { ...row, unread: false } : row)),
-    );
+    dismissCrmApproval(id);
+    setCrmAlerts((prev) => prev.filter((row) => row.id !== id));
     setCrmPopups((prev) => prev.filter((row) => row.id !== id));
   }, []);
 
@@ -333,13 +337,10 @@ export function AppTopbarNotifications() {
   }, [projectAlerts, onMarkProjectRead]);
 
   const onMarkAllCrmRead = useCallback(() => {
-    const seen = readIdSet(CRM_SEEN_KEY);
     for (const row of crmAlerts) {
-      seen.add(row.id);
-      seen.add(`popup:${row.id}`);
+      dismissCrmApproval(row.id);
     }
-    writeIdSet(CRM_SEEN_KEY, seen);
-    setCrmAlerts((prev) => prev.map((row) => ({ ...row, unread: false })));
+    setCrmAlerts([]);
     setCrmPopups([]);
   }, [crmAlerts]);
 

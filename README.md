@@ -55,7 +55,9 @@ cp .env.example .env
 docker compose up -d
 ```
 
-Services: PostgreSQL, Redis, RabbitMQ, MinIO, OpenSearch
+Services: Redis, RabbitMQ, MinIO, OpenSearch
+
+PostgreSQL is **not** in Docker — use the native instance on `172.16.200.26:5432` (`DATABASE_URL` in `.env`).
 
 ### 3. Backend API
 

@@ -15,6 +15,7 @@ import { ProjectPhaseListPage } from "@/components/projects/project-phase-list-p
 import { ProjectProfitabilityPage } from "@/components/projects/project-profitability-page";
 import { ProjectRiskListPage } from "@/components/projects/project-risk-list-page";
 import { ProjectTaskListPage } from "@/components/projects/project-task-list-page";
+import { ProjectTrackerPage } from "@/components/projects/project-tracker-page";
 import { ResourceAllocationListPage } from "@/components/projects/resource-allocation-list-page";
 import { ResourcePlanListPage } from "@/components/projects/resource-plan-list-page";
 import { SiteInstallationListPage } from "@/components/projects/site-installation-list-page";
@@ -61,6 +62,8 @@ export default async function ProjectsResourcePage({ params }: PageProps) {
       return <ProjectListPage />;
     case "po-queue":
       return <ProjectPoQueuePage />;
+    case "tracker":
+      return <ProjectTrackerPage />;
     case "project-phases":
       return <ProjectPhaseListPage />;
     case "project-milestones":

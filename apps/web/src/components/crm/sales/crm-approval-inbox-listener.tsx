@@ -7,29 +7,11 @@ import { AlertTriangle, X } from "lucide-react";
 
 import { listCrmApprovalInbox, type CrmApprovalInboxItem } from "@/services/sales-crm-service";
 import { cn } from "@/lib/utils";
-
-const SEEN_KEY = "crm_approval_inbox_seen";
-
-function readSeen(): Set<string> {
-  if (typeof window === "undefined") return new Set();
-  try {
-    const raw = sessionStorage.getItem(SEEN_KEY);
-    if (!raw) return new Set();
-    return new Set(JSON.parse(raw) as string[]);
-  } catch {
-    return new Set();
-  }
-}
-
-function writeSeen(ids: Set<string>) {
-  sessionStorage.setItem(SEEN_KEY, JSON.stringify([...ids].slice(-200)));
-}
-
-function markSeen(id: string) {
-  const seen = readSeen();
-  seen.add(id);
-  writeSeen(seen);
-}
+import {
+  dismissCrmApproval,
+  normalizeNotificationText,
+  readDismissedCrmApprovalIds,
+} from "@/lib/crm-notification-state";
 
 function entityHref(entityType: string, entityId: string): string {
   if (entityType === "opportunity") return `/crm/opportunities/${entityId}`;
@@ -94,7 +76,7 @@ export function CrmRejectionAlertCard({
     >
       <span className="flex min-w-0 flex-1 items-start gap-2">
         <AlertTriangle className="mt-0.5 size-4 shrink-0" aria-hidden />
-        <span className="min-w-0 break-words">
+        <span className="min-w-0 wrap-break-word">
           <span className="font-medium">{title}</span>
           <span className="mt-0.5 block text-xs text-amber-900/90">{body}</span>
         </span>
@@ -146,8 +128,8 @@ export function CrmEntityRejectionAlert({
           return entity.type === entityType && entity.id === entityId;
         });
         if (!cancelled) {
-          setAlert(match ?? null);
-          if (match) markSeen(match.id);
+          const dismissed = match ? readDismissedCrmApprovalIds().has(match.id) : false;
+          setAlert(match && !dismissed ? match : null);
         }
       } catch {
         if (!cancelled) setAlert(null);
@@ -160,8 +142,8 @@ export function CrmEntityRejectionAlert({
 
   if (dismissed || !alert) return null;
 
-  const title = String(alert.payload_json?.title ?? "Approval rejected");
-  const body = String(alert.payload_json?.body ?? "Please review and re-attach the document.");
+  const title = normalizeNotificationText(String(alert.payload_json?.title ?? "Approval rejected"));
+  const body = normalizeNotificationText(String(alert.payload_json?.body ?? "Please review and re-attach the document."));
 
   return (
     <CrmRejectionAlertCard
@@ -169,7 +151,7 @@ export function CrmEntityRejectionAlert({
       body={body}
       showOpenRecord={false}
       onDismiss={() => {
-        markSeen(alert.id);
+        dismissCrmApproval(alert.id);
         setDismissed(true);
       }}
     />
@@ -185,13 +167,12 @@ export function CrmApprovalInboxListener() {
   const poll = useCallback(async () => {
     try {
       const rows = await listCrmApprovalInbox();
-      const seen = readSeen();
+      const seen = readDismissedCrmApprovalIds();
       const open = parseOpenEntity(window.location.pathname);
       const rejections = rows.filter((row) => {
         if (row.event_type !== "crm.approval.rejected" || seen.has(row.id)) return false;
         // Matching open record is handled by CrmEntityRejectionAlert.
         if (isSameEntity(row, open)) {
-          markSeen(row.id);
           return false;
         }
         return true;
@@ -214,7 +195,6 @@ export function CrmApprovalInboxListener() {
     setAlerts((prev) => {
       const matched = prev.filter((row) => isSameEntity(row, openEntity));
       if (matched.length === 0) return prev;
-      for (const row of matched) markSeen(row.id);
       return prev.filter((row) => !isSameEntity(row, openEntity));
     });
   }, [openEntity]);
@@ -226,12 +206,12 @@ export function CrmApprovalInboxListener() {
       className={cn(
         "min-w-0 space-y-2",
         // Clear the fixed company/opportunity secondary rail (220px).
-        companyRail && "pl-[calc(220px-1rem)] sm:pl-[calc(220px-1.5rem)] lg:pl-[calc(220px-2rem)]",
+        companyRail && "pl-51 sm:pl-49 lg:pl-47",
       )}
     >
       {alerts.map((row) => {
-        const title = String(row.payload_json?.title ?? "Approval rejected");
-        const body = String(row.payload_json?.body ?? "Please review and re-attach the document.");
+        const title = normalizeNotificationText(String(row.payload_json?.title ?? "Approval rejected"));
+        const body = normalizeNotificationText(String(row.payload_json?.body ?? "Please review and re-attach the document."));
         const entity = alertEntity(row);
         const href = entityHref(entity.type, entity.id);
         return (
@@ -241,7 +221,7 @@ export function CrmApprovalInboxListener() {
             body={body}
             href={href}
             onDismiss={() => {
-              markSeen(row.id);
+              dismissCrmApproval(row.id);
               setAlerts((prev) => prev.filter((item) => item.id !== row.id));
             }}
           />

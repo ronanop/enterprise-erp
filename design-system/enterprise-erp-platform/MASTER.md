@@ -7,9 +7,8 @@
 ---
 
 **Project:** Enterprise ERP Platform
-**Generated:** 2026-07-23 10:25:27
-**Category:** B2B Service
-**Design Dials:** Variance 3/10 (Centered / Minimal) | Motion 3/10 (Subtle) | Density 9/10 (Dense / Dashboard)
+**Generated:** 2026-08-17 14:42:19
+**Category:** Smart Home/IoT Dashboard
 
 ---
 
@@ -21,16 +20,16 @@
 |------|-----|--------------|
 | Primary | `#0F172A` | `--color-primary` |
 | On Primary | `#FFFFFF` | `--color-on-primary` |
-| Secondary | `#334155` | `--color-secondary` |
-| Accent/CTA | `#0369A1` | `--color-accent` |
-| Background | `#F8FAFC` | `--color-background` |
-| Foreground | `#020617` | `--color-foreground` |
-| Muted | `#E8ECF1` | `--color-muted` |
-| Border | `#E2E8F0` | `--color-border` |
-| Destructive | `#DC2626` | `--color-destructive` |
+| Secondary | `#1E293B` | `--color-secondary` |
+| Accent/CTA | `#A16207` | `--color-accent` |
+| Background | `#020617` | `--color-background` |
+| Foreground | `#F8FAFC` | `--color-foreground` |
+| Muted | `#1A1E2F` | `--color-muted` |
+| Border | `#334155` | `--color-border` |
+| Destructive | `#22C55E` | `--color-destructive` |
 | Ring | `#0F172A` | `--color-ring` |
 
-**Color Notes:** Professional navy + blue CTA
+**Color Notes:** Dark code + star gold + fork silver + sponsor purple
 
 ### Typography
 
@@ -46,17 +45,15 @@
 
 ### Spacing Variables
 
-*Density: 9/10 — Dense / Dashboard*
-
 | Token | Value | Usage |
 |-------|-------|-------|
-| `--space-xs` | `2px` / `0.125rem` | Tight gaps |
-| `--space-sm` | `4px` / `0.25rem` | Icon gaps, inline spacing |
-| `--space-md` | `8px` / `0.5rem` | Standard padding |
-| `--space-lg` | `12px` / `0.75rem` | Section padding |
-| `--space-xl` | `16px` / `1rem` | Large gaps |
-| `--space-2xl` | `24px` / `1.5rem` | Section margins |
-| `--space-3xl` | `32px` / `2rem` | Hero padding |
+| `--space-xs` | `4px` / `0.25rem` | Tight gaps |
+| `--space-sm` | `8px` / `0.5rem` | Icon gaps, inline spacing |
+| `--space-md` | `16px` / `1rem` | Standard padding |
+| `--space-lg` | `24px` / `1.5rem` | Section padding |
+| `--space-xl` | `32px` / `2rem` | Large gaps |
+| `--space-2xl` | `48px` / `3rem` | Section margins |
+| `--space-3xl` | `64px` / `4rem` | Hero padding |
 
 ### Shadow Depths
 
@@ -76,7 +73,7 @@
 ```css
 /* Primary Button */
 .btn-primary {
-  background: #0369A1;
+  background: #A16207;
   color: white;
   padding: 12px 24px;
   border-radius: 8px;
@@ -107,7 +104,7 @@
 
 ```css
 .card {
-  background: #F8FAFC;
+  background: #020617;
   border-radius: 12px;
   padding: 24px;
   box-shadow: var(--shadow-md);
@@ -161,45 +158,28 @@
 
 ## Style Guidelines
 
-**Style:** Exaggerated Minimalism
+**Style:** Dark Mode (OLED)
 
-**Keywords:** Bold minimalism, oversized typography, high contrast, negative space, loud minimal, statement design
+**Keywords:** Dark theme, low light, high contrast, deep black, midnight blue, eye-friendly, OLED, night mode, power efficient
 
-**Best For:** Fashion, architecture, portfolios, agency landing pages, luxury brands, editorial
+**Best For:** Night-mode apps, coding platforms, entertainment, eye-strain prevention, OLED devices, low-light
 
-**Key Effects:** font-size: clamp(3rem 10vw 12rem), font-weight: 900, letter-spacing: -0.05em, massive whitespace
+**Key Effects:** Minimal glow (text-shadow: 0 0 10px), dark-to-light transitions, low white emission, high readability, visible focus
 
 ### Page Pattern
 
-**Pattern Name:** Interactive 3D Configurator
+**Pattern Name:** Portfolio Grid
 
-- **Conversion Strategy:** Increases ownership feeling. 360 view reduces return rates. Direct add-to-cart.
-- **CTA Placement:** Inside Configurator UI + Sticky Bottom Bar
-- **Section Order:** 1. Hero (Configurator), 2. Feature Highlight (synced), 3. Price/Specs, 4. Purchase
-
----
-
-## Motion
-
-**Page Transition** (Subtle) — Trigger: route change | Duration: 200-300ms | Easing: `power1.inOut`
-
-```js
-gsap.to(main, { opacity: 0, duration: 0.2, onComplete: () => { navigate(); gsap.fromTo(main, { opacity: 0 }, { opacity: 1, duration: 0.2 }); } });
-```
-
-**Framework notes:** Pair with the router's transition hooks (Next.js App Router transitions, React Router's useNavigate, Vue Router's beforeEach/afterEach)
-
-- ✅ Preload the destination route's critical assets before the exit tween finishes
-- ❌ Don't block navigation on animation; cap exit duration at ~250ms so the app never feels unresponsive
-- ⚡ Exit animation should always resolve faster than entrance (asymmetric timing) so back/forward feels snappy
+- **Conversion Strategy:** Visuals first. Filter by category. Fast loading essential.
+- **CTA Placement:** Project Card Hover + Footer Contact
+- **Section Order:** 1. Hero (Name/Role), 2. Project Grid (Masonry), 3. About/Philosophy, 4. Contact
 
 ---
 
 ## Anti-Patterns (Do NOT Use)
 
-- ❌ Playful design
-- ❌ Hidden credentials
-- ❌ AI purple/pink gradients
+- ❌ Slow updates
+- ❌ No automation
 
 ### Additional Forbidden Patterns
 

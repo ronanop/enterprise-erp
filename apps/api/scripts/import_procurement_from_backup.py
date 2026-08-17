@@ -45,7 +45,9 @@ INSERT_RE = re.compile(r"^INSERT INTO ([a-z_]+\.[a-z_]+) VALUES ", re.IGNORECASE
 
 def load_inserts(backup_path: Path) -> dict[str, list[str]]:
     grouped: dict[str, list[str]] = {}
-    for line in backup_path.read_text(encoding="utf-8", errors="replace").splitlines():
+    # A backup must be valid UTF-8. Replacing undecodable bytes would persist
+    # corrupt text into the target ERP database.
+    for line in backup_path.read_text(encoding="utf-8", errors="strict").splitlines():
         m = INSERT_RE.match(line.strip())
         if not m:
             continue

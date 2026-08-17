@@ -36,6 +36,7 @@ export const PROJECTS_NAV_GROUPS: readonly ProjectsNavGroup[] = [
       { title: "Completed Jobs", href: "/projects/completed-jobs" },
       { title: "PO Queue", href: "/projects/po-queue" },
       { title: "Projects", href: "/projects/projects" },
+      { title: "Tracker", href: "/projects/tracker" },
       { title: "All Sites", href: "/projects/site-installations" },
     ],
   },

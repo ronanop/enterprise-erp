@@ -1,6 +1,7 @@
 """Project ORM models."""
 
 from modules.project.models.change_request import PrjChangeRequest
+from modules.project.models.customer_tracker import PrjCustomerTracker
 from modules.project.models.project import PrjProject
 from modules.project.models.project_budget import PrjProjectBudget
 from modules.project.models.project_comment import PrjProjectComment
@@ -38,6 +39,7 @@ __all__ = [
     "PrjProjectIssue",
     "PrjProjectRisk",
     "PrjChangeRequest",
+    "PrjCustomerTracker",
     "PrjProjectDocument",
     "PrjProjectComment",
     "PrjProjectStatusHistory",

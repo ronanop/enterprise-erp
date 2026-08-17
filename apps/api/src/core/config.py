@@ -38,17 +38,17 @@ class Settings(BaseSettings):
     api_port: int = Field(default=8000, alias="API_PORT")
 
     database_url: str = Field(
-        default="postgresql+psycopg://erp:erp_dev_password@localhost:5432/erp",
+        default="postgresql+psycopg://erp-postgres:erp-postgres@172.16.200.26:5432/erp",
         alias="DATABASE_URL",
     )
 
-    redis_url: str = Field(default="redis://localhost:6379/0", alias="REDIS_URL")
+    redis_url: str = Field(default="redis://172.16.200.26:6379/0", alias="REDIS_URL")
     celery_broker_url: str = Field(
-        default="amqp://erp:erp_dev_password@localhost:5672//",
+        default="amqp://erp:erp_dev_password@172.16.200.26:5672//",
         alias="CELERY_BROKER_URL",
     )
     celery_result_backend: str = Field(
-        default="redis://localhost:6379/1",
+        default="redis://172.16.200.26:6379/1",
         alias="CELERY_RESULT_BACKEND",
     )
 
@@ -69,12 +69,21 @@ class Settings(BaseSettings):
         alias="CRM_UPLOAD_ROOT",
         description="Directory for CRM attachment files; default apps/api/var/crm-attachments",
     )
+    project_tracker_upload_root: str = Field(
+        default="",
+        alias="PROJECT_TRACKER_UPLOAD_ROOT",
+    )
 
-    minio_endpoint: str = Field(default="", alias="MINIO_ENDPOINT")
-    minio_root_user: str = Field(default="", alias="MINIO_ROOT_USER")
-    minio_root_password: str = Field(default="", alias="MINIO_ROOT_PASSWORD")
+    minio_endpoint: str = Field(default="172.16.200.26:9000", alias="MINIO_ENDPOINT")
+    minio_root_user: str = Field(default="erp_minio", alias="MINIO_ROOT_USER")
+    minio_root_password: str = Field(default="erp_minio_password", alias="MINIO_ROOT_PASSWORD")
     minio_bucket: str = Field(default="erp-documents", alias="MINIO_BUCKET")
     minio_secure: bool = Field(default=False, alias="MINIO_SECURE")
+
+    opensearch_url: str = Field(
+        default="http://172.16.200.26:9200",
+        alias="OPENSEARCH_URL",
+    )
 
     jwt_secret_key: str = Field(default="change-me-in-production", alias="JWT_SECRET_KEY")
     jwt_algorithm: str = Field(default="HS256", alias="JWT_ALGORITHM")
@@ -169,6 +178,12 @@ class Settings(BaseSettings):
         if self.crm_upload_root.strip():
             return Path(self.crm_upload_root)
         return _API_ROOT / "var" / "crm-attachments"
+
+    @property
+    def resolved_project_tracker_upload_root(self) -> Path:
+        if self.project_tracker_upload_root.strip():
+            return Path(self.project_tracker_upload_root)
+        return _API_ROOT / "var" / "project-trackers"
 
     @property
     def minio_configured(self) -> bool:

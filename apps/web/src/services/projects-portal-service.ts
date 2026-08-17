@@ -6,6 +6,8 @@
  */
 
 import { ApiClientError, apiClient, resourceService } from "@/services/api-client";
+import { getAccessToken } from "@/lib/auth";
+import { env } from "@/utils/env";
 
 function asArray<T>(data: T[] | T | null | undefined): T[] {
   if (Array.isArray(data)) return data;
@@ -18,6 +20,54 @@ function unwrap<T>(res: { data: T | null }): T {
     throw new ApiClientError("Empty response from server", 500);
   }
   return res.data;
+}
+
+// ---------------------------------------------------------------------------
+// Customer trackers
+// ---------------------------------------------------------------------------
+
+export const CUSTOMER_TRACKERS_API = "/projects/trackers";
+
+export type CustomerTracker = {
+  id: string;
+  project_id: string;
+  version_no: number;
+  file_name: string;
+  content_type: string | null;
+  file_size: number;
+  content_hash: string;
+  remarks: string | null;
+  company_id: string;
+  branch_id: string | null;
+  created_at: string | null;
+  created_by: string | null;
+};
+
+export async function listCustomerTrackers(): Promise<CustomerTracker[]> {
+  return asArray((await apiClient<CustomerTracker[]>(CUSTOMER_TRACKERS_API)).data);
+}
+
+export async function createCustomerTracker(body: {
+  project_id: string;
+  file_name: string;
+  content_base64: string;
+  content_type?: string;
+  remarks?: string;
+}): Promise<CustomerTracker> {
+  return unwrap(await apiClient<CustomerTracker>(CUSTOMER_TRACKERS_API, { method: "POST", body }));
+}
+
+export async function downloadCustomerTracker(tracker: CustomerTracker): Promise<void> {
+  const response = await fetch(`${env.apiUrl}${CUSTOMER_TRACKERS_API}/${tracker.id}/file`, {
+    headers: { Authorization: `Bearer ${getAccessToken()}` },
+  });
+  if (!response.ok) throw new ApiClientError("Unable to download tracker", response.status);
+  const url = URL.createObjectURL(await response.blob());
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = tracker.file_name;
+  link.click();
+  URL.revokeObjectURL(url);
 }
 
 export function formatInr(value: number | string | null | undefined): string {

@@ -696,6 +696,31 @@ class ProjectDocumentResponse(OrmModel):
     created_at: datetime | None = None
     version: int
 
+
+class CustomerTrackerCreate(BaseModel):
+    company_id: UUID | None = None
+    project_id: UUID
+    file_name: str = Field(min_length=1, max_length=255)
+    content_base64: str = Field(min_length=1)
+    content_type: str | None = Field(default=None, max_length=255)
+    remarks: str | None = None
+
+
+class CustomerTrackerResponse(OrmModel):
+    id: UUID
+    project_id: UUID
+    version_no: int
+    file_name: str
+    content_type: str | None
+    file_size: int
+    content_hash: str
+    remarks: str | None
+    company_id: UUID
+    branch_id: UUID | None
+    created_at: datetime | None = None
+    created_by: UUID | None = None
+
+
 class ProjectCommentCreate(BaseModel):
     company_id: UUID | None = None
     branch_id: UUID | None = None

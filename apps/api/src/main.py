@@ -16,6 +16,9 @@ from shared.router import api_v1_router
 @asynccontextmanager
 async def lifespan(application: FastAPI):
     setup_logging()
+    from core.infra_health import log_infrastructure_connections
+
+    log_infrastructure_connections()
     yield
 
 
