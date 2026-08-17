@@ -522,7 +522,15 @@ export function EmployeeManagementPage() {
                             <td className="px-2 py-2 text-xs">{formatEmploymentTypeLabel(row.employmentType)}</td>
                             <td className="px-2 py-2 text-xs">{row.joiningDate || "—"}</td>
                             <td className="px-2 py-2">
-                              <HrStatusBadge status={row.lifecycleStatus} />
+                              <HrStatusBadge
+                                status={
+                                  row.lifecycleStatus === "onboarding"
+                                    ? "Pending Join"
+                                    : row.lifecycleStatus === "inactive"
+                                      ? "Ex Employee"
+                                      : row.lifecycleStatus
+                                }
+                              />
                             </td>
                             <td className="px-2 py-2">
                               <RowActionsMenu

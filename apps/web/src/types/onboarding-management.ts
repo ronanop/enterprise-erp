@@ -244,6 +244,8 @@ export type OnboardingCase = {
   shift: string;
   leavePolicy: string;
   employmentType: string;
+  managementGroupId?: string;
+  managementGroupName?: string;
   employeeId?: string;
   buddy?: string;
   hrOwner: string;

@@ -77,6 +77,7 @@ class EmployeeRepository(MasterScopedRepository):
         reporting_manager_id: UUID | None = None,
         date_of_leaving: date | None = None,
         user_id: UUID | None = None,
+        status: str = "draft",
     ) -> EmployeeEntity:
         row = MasterEmployee(
             id=uuid4(),
@@ -94,7 +95,7 @@ class EmployeeRepository(MasterScopedRepository):
             reporting_manager_id=reporting_manager_id,
             date_of_leaving=date_of_leaving,
             user_id=user_id,
-            status="draft",
+            status=status,
             created_by=ctx.user_id,
             updated_by=ctx.user_id,
         )

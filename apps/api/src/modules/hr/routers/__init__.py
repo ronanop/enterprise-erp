@@ -436,6 +436,7 @@ def activate_employment(
             row_id,
             employee_code=payload.employee_code,
             shift_id=payload.shift_id,
+            management_group_id=payload.management_group_id,
             start_probation=payload.start_probation,
             probation_days=payload.probation_days,
             mark_payroll_eligible=payload.mark_payroll_eligible,

@@ -586,7 +586,12 @@ export function approveCandidateReview(caseId: string): OnboardingCase | null {
 /** Create employee profile after HR approval. Activates immediately if joining date has passed. */
 export async function completeOnboarding(
   caseId: string,
-  opts?: { employeeCode?: string; shiftId?: string },
+  opts?: {
+    employeeCode?: string;
+    shiftId?: string;
+    managementGroupId?: string;
+    managementGroupName?: string;
+  },
 ): Promise<OnboardingCase | null> {
   const c = getCaseById(caseId);
   if (!c) return null;
@@ -613,7 +618,10 @@ export async function completeOnboarding(
           "/recruitment/onboarding",
           apiOnboardingId,
           "complete",
-          { designation: c.designation || "Employee" },
+          {
+            designation: c.designation || "Employee",
+            management_group_id: opts?.managementGroupId || null,
+          },
         );
         employeeUuid = String(res.data?.employee_id ?? employeeUuid);
         employmentId = String(res.data?.hr_employment_request_id ?? "");
@@ -623,6 +631,7 @@ export async function completeOnboarding(
         await resourceService.action("/hr/employment", employmentId, "activate", {
           employee_code: employeeCode,
           shift_id: opts?.shiftId || null,
+          management_group_id: opts?.managementGroupId || null,
           start_probation: true,
           probation_days: 90,
           mark_payroll_eligible: true,
@@ -630,10 +639,19 @@ export async function completeOnboarding(
       }
 
       // Import portal personal / IDs / bank / photo onto the employee record
-      if (employeeUuid && employeeUuid !== employeeCode) {
+      if (employeeUuid) {
+        const lifecycle = activateNow ? "probation" : "onboarding";
         await applyOnboardingPortalToEmployee(
           employeeUuid,
-          portalToWizardDraft(c, employeeCode),
+          portalToWizardDraft(
+            {
+              ...c,
+              managementGroupId: opts?.managementGroupId || c.managementGroupId,
+              managementGroupName: opts?.managementGroupName || c.managementGroupName,
+            },
+            employeeCode,
+            lifecycle,
+          ),
         );
       }
 
@@ -646,6 +664,8 @@ export async function completeOnboarding(
         ...c,
         employeeId: employeeCode,
         apiEmploymentId: employmentId,
+        managementGroupId: opts?.managementGroupId || c.managementGroupId,
+        managementGroupName: opts?.managementGroupName || c.managementGroupName,
         checklist,
         status: activateNow ? "joined" : "pending_join",
         activatedAt: activateNow ? nowIso() : undefined,
@@ -693,7 +713,18 @@ export async function completeOnboarding(
     lifecycleStatus: activateNow ? "probation" : "onboarding",
   });
 
-  await applyOnboardingPortalToEmployee(local.id, portalToWizardDraft(c, employeeCode));
+  await applyOnboardingPortalToEmployee(
+    local.id,
+    portalToWizardDraft(
+      {
+        ...c,
+        managementGroupId: opts?.managementGroupId || c.managementGroupId,
+        managementGroupName: opts?.managementGroupName || c.managementGroupName,
+      },
+      employeeCode,
+      activateNow ? "probation" : "onboarding",
+    ),
+  );
 
   const checklist = buildPostJoinChecklist().map((item) =>
     ["GEN_EMP_ID", "CREATE_PROFILE", "APPROVE_INFO"].includes(item.code)
@@ -703,6 +734,8 @@ export async function completeOnboarding(
   const next = upsertCase({
     ...c,
     employeeId: local.employeeCode,
+    managementGroupId: opts?.managementGroupId || c.managementGroupId,
+    managementGroupName: opts?.managementGroupName || c.managementGroupName,
     checklist,
     status: activateNow ? "joined" : "pending_join",
     activatedAt: activateNow ? nowIso() : undefined,
@@ -738,7 +771,12 @@ export async function completeOnboarding(
 /** Activate a pending employee on or after joining date. */
 export async function activateOnboardingEmployee(
   caseId: string,
-  opts?: { employeeCode?: string; shiftId?: string },
+  opts?: {
+    employeeCode?: string;
+    shiftId?: string;
+    managementGroupId?: string;
+    managementGroupName?: string;
+  },
 ): Promise<OnboardingCase | null> {
   const c = getCaseById(caseId);
   if (!c) return null;
@@ -765,14 +803,23 @@ export async function activateOnboardingEmployee(
       await resourceService.action("/hr/employment", employmentId, "activate", {
         employee_code: employeeCode,
         shift_id: opts?.shiftId || null,
+        management_group_id: opts?.managementGroupId || c.managementGroupId || null,
         start_probation: true,
         probation_days: 90,
         mark_payroll_eligible: true,
       });
 
+      updateLocalEmployeeLifecycle(employeeCode, "probation");
+      // Also update extension keyed by prior UUID if HR store used it
+      if (c.employeeId && c.employeeId !== employeeCode) {
+        updateLocalEmployeeLifecycle(c.employeeId, "probation");
+      }
+
       const next = upsertCase({
         ...c,
         employeeId: employeeCode,
+        managementGroupId: opts?.managementGroupId || c.managementGroupId,
+        managementGroupName: opts?.managementGroupName || c.managementGroupName,
         status: "joined",
         activatedAt: nowIso(),
         progressPct: 100,
@@ -801,6 +848,8 @@ export async function activateOnboardingEmployee(
   const next = upsertCase({
     ...c,
     employeeId: employeeCode,
+    managementGroupId: opts?.managementGroupId || c.managementGroupId,
+    managementGroupName: opts?.managementGroupName || c.managementGroupName,
     status: "joined",
     activatedAt: nowIso(),
     progressPct: 100,

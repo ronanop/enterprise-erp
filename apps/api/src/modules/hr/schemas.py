@@ -300,6 +300,7 @@ class EmploymentActivateRequest(BaseModel):
 
     employee_code: str | None = None
     shift_id: UUID | None = None
+    management_group_id: UUID | None = None
     start_probation: bool = True
     probation_days: int = 90
     mark_payroll_eligible: bool = True

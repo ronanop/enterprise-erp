@@ -1,7 +1,7 @@
 """Recruitment Pydantic schemas."""
 
-from decimal import Decimal
 from datetime import date, datetime
+from decimal import Decimal
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict
@@ -616,3 +616,4 @@ class RecruitmentReportResponse(OrmModel):
 
 class OnboardingCompleteRequest(BaseModel):
     designation: str
+    management_group_id: UUID | None = None
