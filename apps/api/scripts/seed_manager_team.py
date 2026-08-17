@@ -6,7 +6,7 @@ Creates a clean team graph for DEMOCO / HQ:
     ├─ EMP-E01  Rahul Verma
     └─ EMP-E02  Kavya Menon
 
-  MGR-OPS  Ananya Desai   (Operations Manager)
+  MGR-SAL  Ananya Desai   (Sales Manager)
     ├─ EMP-O01  Imran Khan
     └─ EMP-O02  Sneha Joshi
 
@@ -86,15 +86,15 @@ TEAM = [
         None,
     ),
     (
-        "MGR-OPS",
+        "MGR-SAL",
         "Ananya",
         "Desai",
         "ananya.desai@example.com",
-        "manager.ops@example.com",
-        "DES-OM",
-        "Operations Manager",
+        "manager.sal@example.com",
+        "DES-SM",
+        "Sales Manager",
         "senior",
-        "OPS",
+        "SAL",
         date(2022, 5, 15),
         "1600000",
         "female",
@@ -136,14 +136,14 @@ TEAM = [
         "Khan",
         "imran.khan@example.com",
         "emp.o01@example.com",
-        "DES-OPS",
-        "Operations Executive",
+        "DES-SE",
+        "Sales Executive",
         "mid",
-        "OPS",
+        "SAL",
         date(2023, 11, 20),
         "900000",
         "male",
-        "MGR-OPS",
+        "MGR-SAL",
     ),
     (
         "EMP-O02",
@@ -154,17 +154,19 @@ TEAM = [
         "DES-CSL",
         "Support Specialist",
         "junior",
-        "OPS",
+        "SAL",
         date(2025, 2, 3),
         "720000",
         "female",
-        "MGR-OPS",
+        "MGR-SAL",
     ),
 ]
 
+# Align with canonical Cache HR department master (no OPS/QA/CS).
 DEPARTMENTS = [
     ("IT", "Information Technology"),
-    ("OPS", "Operations"),
+    ("SAL", "Sales"),
+    ("TD", "Technical Delivery"),
 ]
 
 LEAVE_TYPE_CODES = ("CL", "SL", "EL")
@@ -345,6 +347,22 @@ def seed(db) -> None:
                 "updated_by": admin_id,
             },
         )
+
+    extras = db.scalars(
+        select(OrgDepartment).where(
+            OrgDepartment.tenant_id == tenant_id,
+            OrgDepartment.company_id == company_id,
+            OrgDepartment.department_code.in_(("OPS", "QA", "CS", "SALES")),
+            OrgDepartment.is_deleted.is_(False),
+        )
+    ).all()
+    for row in extras:
+        row.is_deleted = True
+        row.status = "inactive"
+        row.updated_by = admin_id
+    if extras:
+        db.flush()
+        print(f"Soft-deleted extra departments: {', '.join(sorted({e.department_code for e in extras}))}")
 
     designations: dict[str, HrDesignation] = {}
     for row in TEAM:
@@ -666,7 +684,7 @@ def seed(db) -> None:
     print("  MGR-ENG Vikram Rao")
     print("    ├─ EMP-E01 Rahul Verma")
     print("    └─ EMP-E02 Kavya Menon")
-    print("  MGR-OPS Ananya Desai")
+    print("  MGR-SAL Ananya Desai")
     print("    ├─ EMP-O01 Imran Khan")
     print("    └─ EMP-O02 Sneha Joshi")
 

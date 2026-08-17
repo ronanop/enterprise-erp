@@ -1,9 +1,32 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  type Dispatch,
+  type ReactNode,
+  type SetStateAction,
+} from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { ArrowLeft, Download, KeyRound, Pencil, Save } from "lucide-react";
+import {
+  ArrowLeft,
+  BriefcaseBusiness,
+  Building2,
+  ChevronLeft,
+  Contact,
+  Download,
+  FileText,
+  GraduationCap,
+  KeyRound,
+  Landmark,
+  Pencil,
+  Save,
+  ShieldCheck,
+  UserRound,
+} from "lucide-react";
 
 import {
   EmsAvatar,
@@ -12,7 +35,13 @@ import {
   EmsTabBar,
 } from "@/components/hr/workforce/ems-primitives";
 import { HrEmptyState, HrStatusBadge } from "@/components/hr/hr-primitives";
-import { SetupDrawer, SetupField, SetupInput, SetupSelect } from "@/components/hr/setup/setup-drawer";
+import {
+  SetupDrawer,
+  SetupField,
+  SetupInput,
+  SetupSelect,
+  SetupTextarea,
+} from "@/components/hr/setup/setup-drawer";
 import { toast, SetupToastHost } from "@/components/hr/setup/setup-toast";
 import { PageHeader } from "@/components/layout/page-header";
 import { Button } from "@/components/ui/button";
@@ -27,8 +56,11 @@ import {
   formatEmploymentTypeLabel,
   formatMaritalStatusLabel,
   formatRelationshipLabel,
+  EMPLOYMENT_TYPE_OPTIONS,
   GENDER_OPTIONS,
   LIFECYCLE_STATUS_OPTIONS,
+  MARITAL_STATUS_OPTIONS,
+  RELATIONSHIP_OPTIONS,
 } from "@/config/hr-master-options";
 import type {
   BankDetails,
@@ -49,6 +81,33 @@ const TABS = [
   { id: "leave", label: "Leave" },
   { id: "payroll", label: "Payroll" },
   { id: "separation", label: "Offboarding" },
+];
+
+type ProfileEditSection =
+  | "choose"
+  | "personal"
+  | "employment"
+  | "government"
+  | "bank"
+  | "salary"
+  | "education"
+  | "history"
+  | "documents";
+
+const EDIT_SECTIONS: {
+  id: Exclude<ProfileEditSection, "choose">;
+  title: string;
+  description: string;
+  icon: typeof UserRound;
+}[] = [
+  { id: "personal", title: "Personal & contact", description: "Identity, contact details, addresses, and emergency contact.", icon: UserRound },
+  { id: "employment", title: "Employment", description: "Organisation, role, manager, work location, and status.", icon: Building2 },
+  { id: "government", title: "Government IDs", description: "Tax, identity, statutory, and licence details.", icon: ShieldCheck },
+  { id: "bank", title: "Bank accounts", description: "Onboarding and company salary account details.", icon: Landmark },
+  { id: "salary", title: "Payroll & salary", description: "Salary structure, statutory deductions, and tax setup.", icon: BriefcaseBusiness },
+  { id: "education", title: "Education", description: "Qualifications, institutions, and certificates.", icon: GraduationCap },
+  { id: "history", title: "Previous employment", description: "Prior employers and work history.", icon: Contact },
+  { id: "documents", title: "Documents", description: "Employee documents and file metadata.", icon: FileText },
 ];
 
 type LinkedData = {
@@ -137,6 +196,7 @@ export function EmployeeProfilePage({ employeeId }: { employeeId: string }) {
       : initialTab,
   );
   const [editOpen, setEditOpen] = useState(editMode);
+  const [editSection, setEditSection] = useState<ProfileEditSection>("choose");
   const [draft, setDraft] = useState<EmployeeWizardDraft | null>(null);
   const [linked, setLinked] = useState<LinkedData | null>(null);
   const [linkedLoading, setLinkedLoading] = useState(false);
@@ -279,7 +339,10 @@ export function EmployeeProfilePage({ employeeId }: { employeeId: string }) {
             <Button
               size="sm"
               className="cursor-pointer transition-colors duration-200"
-              onClick={() => setEditOpen(true)}
+              onClick={() => {
+                setEditSection("choose");
+                setEditOpen(true);
+              }}
             >
               <Pencil className="size-3.5" />
               Edit
@@ -562,162 +625,250 @@ export function EmployeeProfilePage({ employeeId }: { employeeId: string }) {
 
       <SetupDrawer
         open={editOpen}
-        title="Edit Employee"
-        description="Update profile details and the company salary account."
+        title={editSection === "choose" ? "Edit Employee" : `Edit · ${EDIT_SECTIONS.find((section) => section.id === editSection)?.title ?? "Employee"}`}
+        description={
+          editSection === "choose"
+            ? "Choose the details you want to update."
+            : "Update the selected employee details, then save your changes."
+        }
         wide
-        onClose={() => setEditOpen(false)}
+        onClose={() => {
+          setEditOpen(false);
+          setEditSection("choose");
+        }}
         footer={
           <>
+            {editSection !== "choose" ? (
+              <Button
+                variant="outline"
+                size="sm"
+                className="cursor-pointer transition-colors duration-200"
+                onClick={() => setEditSection("choose")}
+              >
+                <ChevronLeft className="size-3.5" />
+                All sections
+              </Button>
+            ) : null}
             <Button
               variant="outline"
               size="sm"
               className="cursor-pointer transition-colors duration-200"
-              onClick={() => setEditOpen(false)}
+              onClick={() => {
+                setEditOpen(false);
+                setEditSection("choose");
+              }}
             >
               Cancel
             </Button>
-            <Button
-              size="sm"
-              className="cursor-pointer transition-colors duration-200"
-              onClick={() => void saveEdit()}
-            >
-              <Save className="size-3.5" />
-              Save changes
-            </Button>
+            {editSection !== "choose" ? (
+              <Button
+                size="sm"
+                className="cursor-pointer transition-colors duration-200"
+                onClick={() => void saveEdit()}
+              >
+                <Save className="size-3.5" />
+                Save changes
+              </Button>
+            ) : null}
           </>
         }
       >
         {draft ? (
-          <div className="space-y-4">
-            <EmsFormGrid>
-              <SetupField label="First name">
-                <SetupInput
-                  value={draft.personal.firstName}
-                  onChange={(e) =>
-                    setDraft({ ...draft, personal: { ...draft.personal, firstName: e.target.value } })
-                  }
-                />
-              </SetupField>
-              <SetupField label="Last name">
-                <SetupInput
-                  value={draft.personal.lastName}
-                  onChange={(e) =>
-                    setDraft({ ...draft, personal: { ...draft.personal, lastName: e.target.value } })
-                  }
-                />
-              </SetupField>
-              <SetupField label="Official email">
-                <SetupInput
-                  value={draft.personal.officialEmail}
-                  onChange={(e) =>
-                    setDraft({
-                      ...draft,
-                      personal: { ...draft.personal, officialEmail: e.target.value },
-                    })
-                  }
-                />
-              </SetupField>
-              <SetupField label="Mobile">
-                <SetupInput
-                  value={draft.personal.mobile}
-                  onChange={(e) =>
-                    setDraft({ ...draft, personal: { ...draft.personal, mobile: e.target.value } })
-                  }
-                />
-              </SetupField>
-              <SetupField label="Designation">
-                <SetupInput
-                  value={draft.employment.designationName}
-                  onChange={(e) =>
-                    setDraft({
-                      ...draft,
-                      employment: { ...draft.employment, designationName: e.target.value },
-                    })
-                  }
-                />
-              </SetupField>
-              <SetupField label="Status">
-                <SetupSelect
-                  value={draft.employment.lifecycleStatus}
-                  onChange={(e) =>
-                    setDraft({
-                      ...draft,
-                      employment: {
-                        ...draft.employment,
-                        lifecycleStatus: e.target.value as typeof draft.employment.lifecycleStatus,
-                      },
-                    })
-                  }
-                >
-                  {LIFECYCLE_STATUS_OPTIONS.map((s) => (
-                    <option key={s.value} value={s.value}>
-                      {s.label}
-                    </option>
-                  ))}
-                </SetupSelect>
-              </SetupField>
-            </EmsFormGrid>
-
-            <div>
-              <h3 className="mb-2 text-xs font-semibold uppercase text-muted-foreground">
-                Company Salary Account
-              </h3>
-              <EmsFormGrid>
-                <SetupField label="Bank name">
-                  <SetupInput
-                    value={draft.companyBank.bankName}
-                    onChange={(e) =>
-                      setDraft({
-                        ...draft,
-                        companyBank: { ...draft.companyBank, bankName: e.target.value },
-                      })
-                    }
-                  />
-                </SetupField>
-                <SetupField label="Account holder">
-                  <SetupInput
-                    value={draft.companyBank.accountHolderName}
-                    onChange={(e) =>
-                      setDraft({
-                        ...draft,
-                        companyBank: { ...draft.companyBank, accountHolderName: e.target.value },
-                      })
-                    }
-                  />
-                </SetupField>
-                <SetupField label="Account number">
-                  <SetupInput
-                    value={draft.companyBank.accountNumber}
-                    onChange={(e) =>
-                      setDraft({
-                        ...draft,
-                        companyBank: {
-                          ...draft.companyBank,
-                          accountNumber: e.target.value,
-                          confirmAccountNumber: e.target.value,
-                        },
-                      })
-                    }
-                  />
-                </SetupField>
-                <SetupField label="IFSC">
-                  <SetupInput
-                    value={draft.companyBank.ifsc}
-                    onChange={(e) =>
-                      setDraft({
-                        ...draft,
-                        companyBank: { ...draft.companyBank, ifsc: e.target.value },
-                      })
-                    }
-                  />
-                </SetupField>
-              </EmsFormGrid>
-            </div>
-          </div>
+          <EmployeeEditForm section={editSection} draft={draft} setDraft={setDraft} onSelectSection={setEditSection} />
         ) : null}
       </SetupDrawer>
     </div>
   );
+}
+
+function EmployeeEditForm({
+  section,
+  draft,
+  setDraft,
+  onSelectSection,
+}: {
+  section: ProfileEditSection;
+  draft: EmployeeWizardDraft;
+  setDraft: Dispatch<SetStateAction<EmployeeWizardDraft | null>>;
+  onSelectSection: (section: ProfileEditSection) => void;
+}) {
+  const update = (patch: Partial<EmployeeWizardDraft>) =>
+    setDraft((current) => (current ? { ...current, ...patch } : current));
+  const patchPersonal = (personal: Partial<EmployeeWizardDraft["personal"]>) =>
+    update({ personal: { ...draft.personal, ...personal } });
+  const patchEmployment = (employment: Partial<EmployeeWizardDraft["employment"]>) =>
+    update({ employment: { ...draft.employment, ...employment } });
+
+  if (section === "choose") {
+    return (
+      <div className="grid gap-3 sm:grid-cols-2">
+        {EDIT_SECTIONS.map((item) => {
+          const Icon = item.icon;
+          return (
+            <button
+              key={item.id}
+              type="button"
+              onClick={() => onSelectSection(item.id)}
+              className="group flex cursor-pointer gap-3 rounded-xl border border-border/70 p-4 text-left transition-colors hover:border-primary/40 hover:bg-primary/5"
+            >
+              <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                <Icon className="size-4" />
+              </span>
+              <span>
+                <span className="block text-sm font-medium text-foreground">{item.title}</span>
+                <span className="mt-1 block text-xs leading-5 text-muted-foreground">{item.description}</span>
+              </span>
+            </button>
+          );
+        })}
+      </div>
+    );
+  }
+
+  if (section === "personal") {
+    const p = draft.personal;
+    return (
+      <div className="space-y-5">
+        <SectionHeading title="Personal details" />
+        <SetupField label="Profile photo" hint="JPG, JPEG, or PNG">
+          <input
+            type="file"
+            accept="image/png,image/jpeg"
+            className="block w-full cursor-pointer text-xs file:mr-2 file:cursor-pointer file:rounded-md file:border-0 file:bg-muted file:px-2 file:py-1"
+            onChange={(event) => {
+              const file = event.target.files?.[0];
+              if (!file) return;
+              void readFileAsDataUrl(file).then((profilePhotoDataUrl) => patchPersonal({ profilePhotoDataUrl }));
+            }}
+          />
+        </SetupField>
+        <EmsFormGrid>
+          <Field label="First name" value={p.firstName} onChange={(firstName) => patchPersonal({ firstName })} />
+          <Field label="Middle name" value={p.middleName} onChange={(middleName) => patchPersonal({ middleName })} />
+          <Field label="Last name" value={p.lastName} onChange={(lastName) => patchPersonal({ lastName })} />
+          <SetupField label="Gender"><SetupSelect value={p.gender} onChange={(e) => patchPersonal({ gender: e.target.value })}><option value="">Select gender</option>{GENDER_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</SetupSelect></SetupField>
+          <Field label="Date of birth" type="date" value={p.dateOfBirth} onChange={(dateOfBirth) => patchPersonal({ dateOfBirth })} />
+          <SetupField label="Marital status"><SetupSelect value={p.maritalStatus} onChange={(e) => patchPersonal({ maritalStatus: e.target.value })}><option value="">Select status</option>{MARITAL_STATUS_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</SetupSelect></SetupField>
+          <Field label="Blood group" value={p.bloodGroup} onChange={(bloodGroup) => patchPersonal({ bloodGroup })} />
+          <Field label="Nationality" value={p.nationality} onChange={(nationality) => patchPersonal({ nationality })} />
+          <Field label="Official email" type="email" value={p.officialEmail} onChange={(officialEmail) => patchPersonal({ officialEmail })} />
+          <Field label="Personal email" type="email" value={p.personalEmail} onChange={(personalEmail) => patchPersonal({ personalEmail })} />
+          <Field label="Mobile" value={p.mobile} onChange={(mobile) => patchPersonal({ mobile })} />
+          <Field label="Alternate mobile" value={p.alternateMobile} onChange={(alternateMobile) => patchPersonal({ alternateMobile })} />
+        </EmsFormGrid>
+        <SectionHeading title="Current address" />
+        <AddressFields value={p.currentAddress} onChange={(currentAddress) => patchPersonal({ currentAddress })} />
+        <SectionHeading title="Permanent address" />
+        <AddressFields value={p.permanentAddress} onChange={(permanentAddress) => patchPersonal({ permanentAddress })} />
+        <SectionHeading title="Emergency contact" />
+        <EmsFormGrid>
+          <Field label="Name" value={p.emergency.name} onChange={(name) => patchPersonal({ emergency: { ...p.emergency, name } })} />
+          <Field label="Phone" value={p.emergency.phone} onChange={(phone) => patchPersonal({ emergency: { ...p.emergency, phone } })} />
+          <SetupField label="Relationship"><SetupSelect value={p.emergency.relationship} onChange={(e) => patchPersonal({ emergency: { ...p.emergency, relationship: e.target.value } })}><option value="">Select relationship</option>{RELATIONSHIP_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</SetupSelect></SetupField>
+        </EmsFormGrid>
+      </div>
+    );
+  }
+
+  if (section === "employment") {
+    const e = draft.employment;
+    const fields: { label: string; key: keyof typeof e; type?: string }[] = [
+      { label: "Employee ID", key: "employeeCode" }, { label: "Joining date", key: "joiningDate", type: "date" },
+      { label: "Legal entity ID", key: "entityId" }, { label: "Legal entity", key: "entityName" },
+      { label: "Branch ID", key: "branchId" }, { label: "Branch", key: "branchName" },
+      { label: "Department ID", key: "departmentId" }, { label: "Department", key: "departmentName" },
+      { label: "Designation ID", key: "designationId" }, { label: "Designation", key: "designationName" },
+      { label: "Location ID", key: "locationId" }, { label: "Location", key: "location" },
+      { label: "Manager ID", key: "reportingManagerId" }, { label: "Reporting manager", key: "reportingManagerName" },
+      { label: "Management group ID", key: "managementGroupId" }, { label: "Management group", key: "managementGroupName" },
+      { label: "Grade", key: "grade" }, { label: "Job level", key: "jobLevel" },
+      { label: "Shift ID", key: "shiftId" }, { label: "Shift", key: "shiftName" },
+      { label: "Leave policy ID", key: "leavePolicyId" }, { label: "Leave policy", key: "leavePolicyName" },
+      { label: "Branch head", key: "branchHeadName" }, { label: "Department head", key: "departmentHeadName" },
+      { label: "Probation days", key: "probationPeriodDays" }, { label: "Confirmation date", key: "confirmationDate", type: "date" },
+    ];
+    return <div className="space-y-4"><p className="text-xs text-muted-foreground">Use the saved master IDs when changing organisation assignments.</p><EmsFormGrid>{fields.map(({ label, key, type }) => <Field key={key} label={label} type={type} value={e[key]} onChange={(value) => patchEmployment({ [key]: value })} />)}<SetupField label="Employment type"><SetupSelect value={e.employmentType} onChange={(event) => patchEmployment({ employmentType: event.target.value })}>{EMPLOYMENT_TYPE_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</SetupSelect></SetupField><SetupField label="Status"><SetupSelect value={e.lifecycleStatus} onChange={(event) => patchEmployment({ lifecycleStatus: event.target.value as typeof e.lifecycleStatus })}>{LIFECYCLE_STATUS_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</SetupSelect></SetupField></EmsFormGrid></div>;
+  }
+
+  if (section === "government") return <GovernmentForm draft={draft} update={update} />;
+  if (section === "bank") return <BankForm draft={draft} update={update} />;
+  if (section === "salary") return <SalaryForm draft={draft} update={update} />;
+  if (section === "education") return <EducationForm draft={draft} update={update} />;
+  if (section === "history") return <EmploymentHistoryForm draft={draft} update={update} />;
+  return <DocumentsForm draft={draft} update={update} />;
+}
+
+function Field({ label, value, onChange, type = "text" }: { label: string; value: string; onChange: (value: string) => void; type?: string }) {
+  return <SetupField label={label}><SetupInput type={type} value={value} onChange={(event) => onChange(event.target.value)} /></SetupField>;
+}
+
+function SectionHeading({ title }: { title: string }) {
+  return <h3 className="border-b border-border/60 pb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">{title}</h3>;
+}
+
+function AddressFields({ value, onChange }: { value: EmployeeWizardDraft["personal"]["currentAddress"]; onChange: (value: EmployeeWizardDraft["personal"]["currentAddress"]) => void }) {
+  return <EmsFormGrid><Field label="Address line 1" value={value.line1} onChange={(line1) => onChange({ ...value, line1 })} /><Field label="Address line 2" value={value.line2 ?? ""} onChange={(line2) => onChange({ ...value, line2 })} /><Field label="City" value={value.city} onChange={(city) => onChange({ ...value, city })} /><Field label="State" value={value.state} onChange={(state) => onChange({ ...value, state })} /><Field label="Country" value={value.country} onChange={(country) => onChange({ ...value, country })} /><Field label="Pincode" value={value.pincode} onChange={(pincode) => onChange({ ...value, pincode })} /></EmsFormGrid>;
+}
+
+function GovernmentForm({ draft, update }: EditFormProps) {
+  const g = draft.governmentIds;
+  const set = (governmentIds: Partial<typeof g>) => update({ governmentIds: { ...g, ...governmentIds } });
+  return <EmsFormGrid><Field label="Aadhaar" value={g.aadhaar} onChange={(aadhaar) => set({ aadhaar })} /><Field label="PAN" value={g.pan} onChange={(pan) => set({ pan })} /><Field label="Passport" value={g.passport} onChange={(passport) => set({ passport })} /><Field label="UAN" value={g.uan} onChange={(uan) => set({ uan })} /><Field label="ESIC" value={g.esic} onChange={(esic) => set({ esic })} /><Field label="Driving licence" value={g.drivingLicense} onChange={(drivingLicense) => set({ drivingLicense })} /><Field label="Voter ID" value={g.voterId} onChange={(voterId) => set({ voterId })} /><Field label="Issue date" type="date" value={g.issueDate} onChange={(issueDate) => set({ issueDate })} /><Field label="Expiry date" type="date" value={g.expiryDate} onChange={(expiryDate) => set({ expiryDate })} /></EmsFormGrid>;
+}
+
+function BankFields({ title, value, onChange }: { title: string; value: EmployeeWizardDraft["bank"]; onChange: (value: EmployeeWizardDraft["bank"]) => void }) {
+  return <div className="space-y-3"><SectionHeading title={title} /><EmsFormGrid><Field label="Bank name" value={value.bankName} onChange={(bankName) => onChange({ ...value, bankName })} /><Field label="Account holder" value={value.accountHolderName} onChange={(accountHolderName) => onChange({ ...value, accountHolderName })} /><Field label="Account number" value={value.accountNumber} onChange={(accountNumber) => onChange({ ...value, accountNumber, confirmAccountNumber: accountNumber })} /><Field label="IFSC" value={value.ifsc} onChange={(ifsc) => onChange({ ...value, ifsc })} /><Field label="Branch" value={value.branchName} onChange={(branchName) => onChange({ ...value, branchName })} /><Field label="SWIFT" value={value.swift} onChange={(swift) => onChange({ ...value, swift })} /><Field label="UPI ID" value={value.upiId} onChange={(upiId) => onChange({ ...value, upiId })} /></EmsFormGrid></div>;
+}
+
+function BankForm({ draft, update }: EditFormProps) {
+  return <div className="space-y-6"><BankFields title="Onboarding bank account" value={draft.bank} onChange={(bank) => update({ bank })} /><BankFields title="Company salary account" value={draft.companyBank} onChange={(companyBank) => update({ companyBank })} /></div>;
+}
+
+function SalaryForm({ draft, update }: EditFormProps) {
+  const s = draft.salary;
+  const set = (salary: Partial<typeof s>) => update({ salary: { ...s, ...salary } });
+  return <EmsFormGrid><Field label="CTC" value={s.ctc} onChange={(ctc) => set({ ctc })} /><Field label="Basic salary" value={s.basicSalary} onChange={(basicSalary) => set({ basicSalary })} /><Field label="Salary structure" value={s.salaryStructure} onChange={(salaryStructure) => set({ salaryStructure })} /><Field label="Payroll group" value={s.payrollGroup} onChange={(payrollGroup) => set({ payrollGroup })} /><Field label="Income tax regime" value={s.incomeTaxRegime} onChange={(incomeTaxRegime) => set({ incomeTaxRegime })} /><Toggle label="Provident fund (PF)" checked={s.pf} onChange={(pf) => set({ pf })} /><Toggle label="Employee state insurance (ESI)" checked={s.esi} onChange={(esi) => set({ esi })} /><Toggle label="Professional tax" checked={s.professionalTax} onChange={(professionalTax) => set({ professionalTax })} /></EmsFormGrid>;
+}
+
+function Toggle({ label, checked, onChange }: { label: string; checked: boolean; onChange: (checked: boolean) => void }) {
+  return <SetupField label={label}><label className="flex h-8 items-center gap-2 rounded-lg border border-input px-2.5 text-sm"><input type="checkbox" checked={checked} onChange={(event) => onChange(event.target.checked)} /> Enabled</label></SetupField>;
+}
+
+type EditFormProps = {
+  draft: EmployeeWizardDraft;
+  update: (patch: Partial<EmployeeWizardDraft>) => void;
+};
+
+function EducationForm({ draft, update }: EditFormProps) {
+  const updateRow = (index: number, patch: Partial<EmployeeWizardDraft["education"][number]>) => update({ education: draft.education.map((row, i) => i === index ? { ...row, ...patch } : row) });
+  return <div className="space-y-4"><Button type="button" size="sm" variant="outline" className="cursor-pointer" onClick={() => update({ education: [...draft.education, { id: `education-${Date.now()}`, degree: "", institution: "", field: "", year: "", grade: "" }] })}>Add qualification</Button>{draft.education.map((row, index) => <EditableRow key={row.id} title={`Qualification ${index + 1}`} onRemove={() => update({ education: draft.education.filter((_, i) => i !== index) })}><EmsFormGrid><Field label="Degree" value={row.degree} onChange={(degree) => updateRow(index, { degree })} /><Field label="Institution" value={row.institution} onChange={(institution) => updateRow(index, { institution })} /><Field label="Field of study" value={row.field} onChange={(field) => updateRow(index, { field })} /><Field label="Year" value={row.year} onChange={(year) => updateRow(index, { year })} /><Field label="Grade" value={row.grade} onChange={(grade) => updateRow(index, { grade })} /></EmsFormGrid></EditableRow>)}{!draft.education.length ? <EmptyEditState text="No education records yet." /> : null}</div>;
+}
+
+function EmploymentHistoryForm({ draft, update }: EditFormProps) {
+  const updateRow = (index: number, patch: Partial<EmployeeWizardDraft["previousEmployment"][number]>) => update({ previousEmployment: draft.previousEmployment.map((row, i) => i === index ? { ...row, ...patch } : row) });
+  return <div className="space-y-4"><Button type="button" size="sm" variant="outline" className="cursor-pointer" onClick={() => update({ previousEmployment: [...draft.previousEmployment, { id: `employment-${Date.now()}`, company: "", designation: "", fromDate: "", toDate: "", lastCtc: "", reasonForLeaving: "" }] })}>Add employer</Button>{draft.previousEmployment.map((row, index) => <EditableRow key={row.id} title={`Employer ${index + 1}`} onRemove={() => update({ previousEmployment: draft.previousEmployment.filter((_, i) => i !== index) })}><EmsFormGrid><Field label="Company" value={row.company} onChange={(company) => updateRow(index, { company })} /><Field label="Designation" value={row.designation} onChange={(designation) => updateRow(index, { designation })} /><Field label="From date" type="date" value={row.fromDate} onChange={(fromDate) => updateRow(index, { fromDate })} /><Field label="To date" type="date" value={row.toDate} onChange={(toDate) => updateRow(index, { toDate })} /><Field label="Last CTC" value={row.lastCtc} onChange={(lastCtc) => updateRow(index, { lastCtc })} /></EmsFormGrid><SetupField label="Reason for leaving"><SetupTextarea value={row.reasonForLeaving} onChange={(event) => updateRow(index, { reasonForLeaving: event.target.value })} /></SetupField></EditableRow>)}{!draft.previousEmployment.length ? <EmptyEditState text="No previous employment records yet." /> : null}</div>;
+}
+
+function DocumentsForm({ draft, update }: EditFormProps) {
+  const updateRow = (index: number, patch: Partial<EmployeeWizardDraft["documents"][number]>) => update({ documents: draft.documents.map((row, i) => i === index ? { ...row, ...patch } : row) });
+  return <div className="space-y-4"><Button type="button" size="sm" variant="outline" className="cursor-pointer" onClick={() => update({ documents: [...draft.documents, { id: `document-${Date.now()}`, documentType: "", documentNumber: "", issueDate: "", expiryDate: "", fileName: "", uploadedBy: "HR", uploadedAt: new Date().toISOString(), source: "manual" }] })}>Add document</Button>{draft.documents.map((row, index) => <EditableRow key={row.id} title={`Document ${index + 1}`} onRemove={() => update({ documents: draft.documents.filter((_, i) => i !== index) })}><EmsFormGrid><Field label="Document type" value={row.documentType} onChange={(documentType) => updateRow(index, { documentType })} /><Field label="Document number" value={row.documentNumber} onChange={(documentNumber) => updateRow(index, { documentNumber })} /><Field label="Issue date" type="date" value={row.issueDate} onChange={(issueDate) => updateRow(index, { issueDate })} /><Field label="Expiry date" type="date" value={row.expiryDate} onChange={(expiryDate) => updateRow(index, { expiryDate })} /><Field label="File name" value={row.fileName} onChange={(fileName) => updateRow(index, { fileName })} /><SetupField label="Replace file"><input type="file" className="block w-full cursor-pointer text-xs" onChange={(event) => { const file = event.target.files?.[0]; if (!file) return; void readFileAsDataUrl(file).then((fileDataUrl) => updateRow(index, { fileName: file.name, fileDataUrl })); }} /></SetupField></EmsFormGrid></EditableRow>)}{!draft.documents.length ? <EmptyEditState text="No employee documents yet." /> : null}</div>;
+}
+
+function EditableRow({ title, onRemove, children }: { title: string; onRemove: () => void; children: ReactNode }) {
+  return <section className="space-y-3 rounded-xl border border-border/70 p-3"><div className="flex items-center justify-between gap-3"><h3 className="text-sm font-medium">{title}</h3><Button type="button" variant="ghost" size="sm" className="cursor-pointer text-destructive hover:text-destructive" onClick={onRemove}>Remove</Button></div>{children}</section>;
+}
+
+function EmptyEditState({ text }: { text: string }) {
+  return <p className="rounded-lg border border-dashed border-border/80 p-4 text-center text-xs text-muted-foreground">{text}</p>;
+}
+
+function readFileAsDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result));
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(file);
+  });
 }
 
 function formatGenderLabel(value: string | null | undefined): string {

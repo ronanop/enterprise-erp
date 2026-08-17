@@ -383,41 +383,49 @@ def touch_names(db, model, unique: dict, name_fields: dict):
 
 
 def seed_org(db, tenant_id: UUID, company_id: UUID, branch_id: UUID, admin_id: UUID):
-    dept = ensure(
+    # Canonical Cache departments (matches seed_hr_workforce).
+    for code, name in (
+        ("HR", "Human Resources"),
+        ("FIN", "Finance"),
+        ("SAL", "Sales"),
+        ("IT", "Information Technology"),
+        ("TD", "Technical Delivery"),
+    ):
+        ensure(
+            db,
+            OrgDepartment,
+            {"tenant_id": tenant_id, "company_id": company_id, "department_code": code},
+            {
+                "branch_id": branch_id,
+                "department_name": name,
+                "status": "active",
+                "created_by": admin_id,
+                "updated_by": admin_id,
+            },
+        )
+
+    # Soft-delete legacy extras / duplicate SALES code if present.
+    extras = db.scalars(
+        select(OrgDepartment).where(
+            OrgDepartment.tenant_id == tenant_id,
+            OrgDepartment.company_id == company_id,
+            OrgDepartment.department_code.in_(("OPS", "QA", "CS", "SALES")),
+            OrgDepartment.is_deleted.is_(False),
+        )
+    ).all()
+    for row in extras:
+        row.is_deleted = True
+        row.status = "inactive"
+        row.updated_by = admin_id
+    if extras:
+        db.flush()
+
+    dept = get_one(
         db,
         OrgDepartment,
-        {"tenant_id": tenant_id, "company_id": company_id, "department_code": "HR"},
-        {
-            "branch_id": branch_id,
-            "department_name": "Human Resources",
-            "status": "active",
-            "created_by": admin_id,
-            "updated_by": admin_id,
-        },
-    )
-    ensure(
-        db,
-        OrgDepartment,
-        {"tenant_id": tenant_id, "company_id": company_id, "department_code": "FIN"},
-        {
-            "branch_id": branch_id,
-            "department_name": "Finance",
-            "status": "active",
-            "created_by": admin_id,
-            "updated_by": admin_id,
-        },
-    )
-    ensure(
-        db,
-        OrgDepartment,
-        {"tenant_id": tenant_id, "company_id": company_id, "department_code": "SALES"},
-        {
-            "branch_id": branch_id,
-            "department_name": "Sales",
-            "status": "active",
-            "created_by": admin_id,
-            "updated_by": admin_id,
-        },
+        tenant_id=tenant_id,
+        company_id=company_id,
+        department_code="HR",
     )
     bu = ensure(
         db,

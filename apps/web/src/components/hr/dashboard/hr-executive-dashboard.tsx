@@ -22,9 +22,7 @@ import {
 import {
   HrAuthBanner,
   HrEmptyState,
-  HrStatusBadge,
 } from "@/components/hr/hr-primitives";
-import { hrNotificationHref } from "@/lib/hr-notification-href";
 import {
   PremiumAreaChart,
   PremiumBarChart,
@@ -256,6 +254,15 @@ export function HrExecutiveDashboardPage() {
               ))}
             </select>
 
+            <div className="flex h-9 items-center gap-2 rounded-md border border-border/70 bg-muted/40 px-2.5 text-xs">
+              <span className="flex size-6 items-center justify-center rounded-full bg-primary text-[10px] font-semibold text-primary-foreground">
+                {(data?.displayName ?? "HR").slice(0, 1).toUpperCase()}
+              </span>
+              <span className="hidden font-medium sm:inline">
+                {DASHBOARD_ROLE_LABELS[role]}
+              </span>
+            </div>
+
             <Button
               size="sm"
               variant="outline"
@@ -266,15 +273,6 @@ export function HrExecutiveDashboardPage() {
               <RefreshCw className={cn("size-3.5", loading && "animate-spin")} />
               Refresh
             </Button>
-
-            <div className="flex h-9 items-center gap-2 rounded-md border border-border/70 bg-muted/40 px-2.5 text-xs">
-              <span className="flex size-6 items-center justify-center rounded-full bg-primary text-[10px] font-semibold text-primary-foreground">
-                {(data?.displayName ?? "HR").slice(0, 1).toUpperCase()}
-              </span>
-              <span className="hidden font-medium sm:inline">
-                {DASHBOARD_ROLE_LABELS[role]}
-              </span>
-            </div>
           </div>
         </div>
       </div>
@@ -396,22 +394,22 @@ export function HrExecutiveDashboardPage() {
                 Live from employees · attendance · leave · recruitment
               </p>
             </div>
-            <div className="grid gap-2.5 grid-cols-2 sm:grid-cols-3 xl:grid-cols-6">
+            <div className="grid auto-rows-fr gap-2.5 grid-cols-2 sm:grid-cols-3 xl:grid-cols-6">
               {kpiCards.map((k) => {
                 const Icon = k.icon;
                 const card = (
                   <div
                     className={cn(
-                      "rounded-xl border border-border/70 bg-card px-3 py-3 shadow-sm transition-shadow duration-200",
+                      "flex h-full min-h-[5.5rem] flex-col justify-between rounded-xl border border-border/70 bg-card px-3 py-3 shadow-sm transition-shadow duration-200",
                       k.href && "hover:border-primary/40 hover:shadow-md",
                     )}
                   >
                     <div className="flex items-start justify-between gap-2">
-                      <div>
-                        <p className="text-[10px] font-medium tracking-wide text-muted-foreground uppercase leading-tight">
+                      <div className="min-w-0">
+                        <p className="line-clamp-2 min-h-[2.25em] text-[10px] font-medium leading-tight tracking-wide text-muted-foreground uppercase">
                           {k.label}
                         </p>
-                        <p className="mt-0.5 text-[10px] text-muted-foreground/80">{k.hint}</p>
+                        <p className="mt-0.5 truncate text-[10px] text-muted-foreground/80">{k.hint}</p>
                       </div>
                       <Icon className="size-3.5 shrink-0 text-muted-foreground" />
                     </div>
@@ -421,11 +419,13 @@ export function HrExecutiveDashboardPage() {
                   </div>
                 );
                 return k.href ? (
-                  <Link key={k.label} href={k.href} className="cursor-pointer">
+                  <Link key={k.label} href={k.href} className="block h-full cursor-pointer">
                     {card}
                   </Link>
                 ) : (
-                  <div key={k.label}>{card}</div>
+                  <div key={k.label} className="h-full">
+                    {card}
+                  </div>
                 );
               })}
             </div>
@@ -532,93 +532,6 @@ export function HrExecutiveDashboardPage() {
               ) : null}
             </div>
           </section>
-
-          {/* Approvals / Notifications */}
-          <div className="grid gap-3 lg:grid-cols-2">
-            <section className="rounded-xl border border-border/70 bg-card shadow-sm">
-              <div className="flex items-center justify-between border-b border-border/70 px-4 py-3">
-                <div>
-                  <h2 className="text-sm font-semibold">Pending Approvals</h2>
-                  <p className="text-[11px] text-muted-foreground">
-                    Leave, attendance, payroll, offers
-                  </p>
-                </div>
-                <div className="flex items-center gap-2">
-                  <HrStatusBadge status={`${filteredApprovals.length} open`} />
-                  <Link
-                    href="/hr/ess"
-                    className="cursor-pointer text-[11px] font-medium text-primary hover:underline"
-                  >
-                    Employee Requests
-                  </Link>
-                </div>
-              </div>
-              <ul className="divide-y divide-border/60">
-                {filteredApprovals.length === 0 ? (
-                  <li className="p-6">
-                    <HrEmptyState title="All clear" description="No pending approvals." />
-                  </li>
-                ) : (
-                  filteredApprovals.slice(0, 8).map((a) => (
-                    <li key={a.id}>
-                      <Link
-                        href={a.href}
-                        className="flex cursor-pointer items-center gap-3 px-4 py-2.5 transition-colors duration-150 hover:bg-muted/40"
-                      >
-                        <div className="min-w-0 flex-1">
-                          <p className="truncate text-sm font-medium">{a.title}</p>
-                          <p className="text-[11px] text-muted-foreground">
-                            {a.requester} · {a.category}
-                          </p>
-                        </div>
-                        <HrStatusBadge status={a.status} />
-                        <ChevronRight className="size-3.5 text-muted-foreground" />
-                      </Link>
-                    </li>
-                  ))
-                )}
-              </ul>
-            </section>
-
-            <section className="rounded-xl border border-border/70 bg-card shadow-sm">
-              <div className="border-b border-border/70 px-4 py-3">
-                <h2 className="text-sm font-semibold">Notification Center</h2>
-                <p className="text-[11px] text-muted-foreground">
-                  Payroll, interviews, documents, policy
-                </p>
-              </div>
-              <ul className="divide-y divide-border/60">
-                {(data?.notifications ?? []).length === 0 ? (
-                  <li className="p-6">
-                    <HrEmptyState title="No notifications" />
-                  </li>
-                ) : (
-                  (data?.notifications ?? []).map((n) => (
-                    <li key={n.id}>
-                      <Link
-                        href={hrNotificationHref(n)}
-                        className={cn(
-                          "flex cursor-pointer items-start justify-between gap-2 px-4 py-2.5 transition-colors duration-150 hover:bg-muted/40",
-                          n.unread && "bg-muted/60",
-                        )}
-                      >
-                        <div className="min-w-0 flex-1">
-                          <p className="text-sm font-medium">{n.title}</p>
-                          <p className="mt-0.5 text-[11px] text-muted-foreground">{n.body}</p>
-                        </div>
-                        <div className="flex shrink-0 items-center gap-1.5 pt-0.5">
-                          {n.unread ? (
-                            <span className="size-1.5 rounded-full bg-primary" />
-                          ) : null}
-                          <ChevronRight className="size-3.5 text-muted-foreground" />
-                        </div>
-                      </Link>
-                    </li>
-                  ))
-                )}
-              </ul>
-            </section>
-          </div>
 
           {/* Activity + Reports */}
           <div className="grid gap-3 lg:grid-cols-[1.4fr_1fr]">
