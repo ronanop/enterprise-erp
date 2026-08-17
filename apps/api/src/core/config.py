@@ -61,7 +61,7 @@ class Settings(BaseSettings):
         ],
         alias="CORS_ORIGINS",
     )
-    # Optional regex for LAN/custom hosts (e.g. Coolify). Empty = disabled in production.
+    # Optional regex for LAN/custom hosts. Empty = disabled in production.
     cors_origin_regex: str | None = Field(default=None, alias="CORS_ORIGIN_REGEX")
 
     crm_upload_root: str = Field(
