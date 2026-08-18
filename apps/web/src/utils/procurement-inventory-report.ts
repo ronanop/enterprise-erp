@@ -50,19 +50,29 @@ export function isGrnNonBilledStockRow(row: ProcurementInventoryRow): boolean {
   return row.source === "grn";
 }
 
+/** GRN units plus reversal ledger rows used for net available stock. */
+export function isInventoryLedgerRow(row: ProcurementInventoryRow): boolean {
+  return row.source === "grn" || row.source === "grn_reversal";
+}
+
 function hasTrackedSerial(serial: string | null | undefined): boolean {
   const value = serial?.trim();
   if (!value) return false;
   return value.toUpperCase() !== "NA";
 }
 
-/** Quantity received on GRN but not yet billed (stock on hand). */
+/** Quantity received on GRN but not yet billed (stock on hand), including negative reversals. */
 export function nonBilledStockQuantity(row: ProcurementInventoryRow): number {
   const received = Number(row.received_quantity);
   const billing = Number(row.billing_quantity);
-  if (Number.isFinite(received) && received > 0) {
-    const billed = Number.isFinite(billing) ? billing : 0;
-    return Math.max(0, Math.round((received - billed) * 1e6) / 1e6);
+  if (Number.isFinite(received)) {
+    if (row.source === "grn_reversal" || received < 0) {
+      return Math.round(received * 1e6) / 1e6;
+    }
+    if (received > 0) {
+      const billed = Number.isFinite(billing) ? billing : 0;
+      return Math.max(0, Math.round((received - billed) * 1e6) / 1e6);
+    }
   }
   return 1;
 }

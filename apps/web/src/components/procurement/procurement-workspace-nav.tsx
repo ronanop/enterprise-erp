@@ -29,6 +29,7 @@ import { cn } from "@/lib/utils";
 import { useClientAuth } from "@/hooks/use-client-auth";
 import { useProcurementApprovals } from "@/hooks/use-procurement-approvals";
 import { useProcurementRole } from "@/hooks/use-procurement-role";
+import { useScmQueueUnreadCount } from "@/hooks/use-scm-queue-unread-count";
 import { authService } from "@/services/api-client";
 import { prefetchProcurementTab } from "@/services/procurement-service";
 import { useDeliveryReminderSweep } from "@/hooks/use-delivery-reminder-sweep";
@@ -120,12 +121,12 @@ function NavLinkItem({
       {badge && badge > 0 ? (
         <span
           className={cn(
-            "inline-flex min-w-5 items-center justify-center rounded-full px-1.5 py-0.5 text-[10px] font-bold",
+            "inline-flex min-w-5 items-center justify-center rounded-full px-1.5 py-0.5 text-[10px] font-bold leading-none tabular-nums shadow-sm",
             collapsed && "absolute right-1 top-1 min-w-4 px-1",
-            active ? "bg-amber-400 text-[#0F172A]" : "bg-amber-500 text-white",
+            active ? "bg-amber-400 text-[#0F172A]" : "bg-amber-500 text-slate-900",
           )}
         >
-          {badge}
+          {badge > 99 ? "99+" : badge}
         </span>
       ) : null}
     </Link>
@@ -190,6 +191,7 @@ export function ProcurementSidebar() {
   const signedIn = useClientAuth();
   const { role, isAdmin, switchRole } = useProcurementRole();
   const { pendingCount } = useProcurementApprovals();
+  const scmUnreadCount = useScmQueueUnreadCount();
   useDeliveryReminderSweep();
 
   useEffect(() => {
@@ -251,7 +253,13 @@ export function ProcurementSidebar() {
                 pathname={pathname}
                 router={router}
                 collapsed={collapsed}
-                badge={item.href === "/procurement/approval" && isAdmin ? pendingCount : undefined}
+                badge={
+                  item.href === "/procurement/approval" && isAdmin
+                    ? pendingCount
+                    : item.href === "/procurement/scm"
+                      ? scmUnreadCount
+                      : undefined
+                }
               />
             </li>
           ))}

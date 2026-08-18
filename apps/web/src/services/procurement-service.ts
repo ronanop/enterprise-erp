@@ -122,6 +122,15 @@ export function formatInr(value: number): string {
   }).format(value);
 }
 
+export function formatUsd(value: number): string {
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(Number.isFinite(value) ? value : 0);
+}
+
 export function asNumber(value: unknown): number {
   if (typeof value === "number" && Number.isFinite(value)) return value;
   if (typeof value === "string" && value.trim() !== "") {
@@ -326,6 +335,7 @@ export type ScmVendorPoLine = {
   last_receipt_billing?: boolean;
   last_receipt_billing_quantity?: number;
   unit_cost: number;
+  rate_currency?: string | null;
   line_total: number;
   status: string;
   grn_status: string;
@@ -335,6 +345,8 @@ export type ScmVendorPo = {
   id: string;
   document_number: string;
   document_date: string;
+  /** When the PO record was created (ISO datetime). */
+  created_at?: string | null;
   vendor_id: string;
   status: string;
   currency_code: string;
@@ -375,7 +387,9 @@ export type ProcOrder = {
   customer_name: string | null;
   approved_by_name?: string | null;
   customer_po_number?: string | null;
+  order_ref_cache?: string | null;
   ovf_date?: string | null;
+  customer_payment_days?: number;
   vendor_total?: number;
   customer_total?: number;
   customer_tax_amount?: number;
@@ -404,6 +418,7 @@ export type ProcOrder = {
     last_receipt_billing?: boolean;
     last_receipt_billing_quantity?: number;
     unit_cost: number;
+    rate_currency?: string | null;
     line_total: number;
     status: string;
   }>;
@@ -474,8 +489,16 @@ export async function createPoFromOvf(
     payment_terms?: string | null;
     expected_delivery_date?: string | null;
     entity_code: string;
+    order_ref_cache?: string | null;
     finalize?: boolean;
     hold?: boolean;
+    lines?: Array<{
+      product_name: string;
+      qty: number;
+      unit_price: number;
+      rate_currency?: "INR" | "USD";
+      tax_rate?: number;
+    }>;
   },
 ): Promise<ProcOrder> {
   const res = await apiClient<ProcOrder>(`${SCM_API}/ovf/${ovfId}/purchase-orders`, {
@@ -651,6 +674,11 @@ export type ScmReceiptBatch = {
   vendor_invoice_date?: string | null;
   vendor_invoice_quantity?: number | null;
   vendor_invoice_subtotal?: number | null;
+  reversed?: boolean;
+  reversal_status?: string;
+  reversed_at?: string | null;
+  reversed_by?: string | null;
+  reversal_reason?: string | null;
   lines: ScmReceiptBatchLine[];
   attachments?: ReceiptBatchAttachment[];
 };
@@ -702,6 +730,18 @@ export async function listOrderReceiptBatches(orderId: string): Promise<ScmRecei
   return unwrapData(res);
 }
 
+export async function reverseReceiptBatch(
+  batchId: string,
+  reason: string,
+): Promise<ScmReceiptBatch> {
+  const res = await apiClient<ScmReceiptBatch>(
+    `${SCM_API}/receipt-batches/${batchId}/reverse`,
+    { method: "POST", body: { reason } },
+  );
+  invalidateProcurementListCache();
+  return unwrapData(res);
+}
+
 export type ReceiptBatchAttachment = {
   id: string;
   file_name: string;
@@ -745,6 +785,7 @@ export type ScmCommercialAttachment = {
   content_type: string | null;
   size: number | null;
   category: string;
+  remarks: string | null;
   entity_type: string;
   entity_id: string;
 };
@@ -765,6 +806,7 @@ export async function uploadScmOvfAttachment(
     branch_id: string;
     company_id?: string | null;
     category?: string;
+    remarks?: string | null;
   },
 ): Promise<ScmCommercialAttachment> {
   const res = await apiClient<ScmCommercialAttachment>(`${SCM_API}/ovf/${ovfId}/attachments`, {
@@ -799,6 +841,7 @@ export async function uploadScmPoAttachment(
     branch_id: string;
     company_id?: string | null;
     category?: string;
+    remarks?: string | null;
   },
 ): Promise<ScmCommercialAttachment> {
   const res = await apiClient<ScmCommercialAttachment>(
@@ -841,6 +884,7 @@ export async function collectPoApprovalDocuments(input: {
     id: string;
     fileName: string;
     category: string;
+    remarks: string | null;
     entityType: string;
     source: "ovf" | "po";
   }>
@@ -858,6 +902,7 @@ export async function collectPoApprovalDocuments(input: {
     id: row.id,
     fileName: row.file_name,
     category: row.category || "other",
+    remarks: row.remarks || null,
     entityType: row.entity_type,
     source: row.entity_type === "purchase_order" ? ("po" as const) : ("ovf" as const),
   }));

@@ -66,24 +66,29 @@ function ApprovalDocuments({
   return (
     <ul className="space-y-1">
       {documents.map((doc) => (
-        <li key={doc.id} className="flex items-center gap-1.5">
+        <li key={doc.id} className="flex items-start gap-1.5">
           <Paperclip className="size-3 shrink-0 text-muted-foreground" aria-hidden />
-          <button
-            type="button"
-            className="min-w-0 cursor-pointer truncate text-left text-xs font-medium text-sky-800 transition-colors duration-200 hover:underline"
-            disabled={openingId === doc.id}
-            title={`${doc.source === "po" ? "PO" : "OVF"} · ${doc.category}`}
-            onClick={() => {
-              setOpeningId(doc.id);
-              void openScmCommercialAttachment(doc.id)
-                .catch((err) =>
-                  onOpenError(err instanceof Error ? err.message : "Failed to open document"),
-                )
-                .finally(() => setOpeningId(null));
-            }}
-          >
-            {openingId === doc.id ? "Opening…" : doc.fileName}
-          </button>
+          <div className="min-w-0">
+            <button
+              type="button"
+              className="min-w-0 cursor-pointer truncate text-left text-xs font-medium text-sky-800 transition-colors duration-200 hover:underline"
+              disabled={openingId === doc.id}
+              title={`${doc.source === "po" ? "PO" : "OVF"} · ${doc.category}`}
+              onClick={() => {
+                setOpeningId(doc.id);
+                void openScmCommercialAttachment(doc.id)
+                  .catch((err) =>
+                    onOpenError(err instanceof Error ? err.message : "Failed to open document"),
+                  )
+                  .finally(() => setOpeningId(null));
+              }}
+            >
+              {openingId === doc.id ? "Opening…" : doc.fileName}
+            </button>
+            {doc.remarks ? (
+              <p className="mt-0.5 text-[11px] text-muted-foreground">{doc.remarks}</p>
+            ) : null}
+          </div>
           <span className="shrink-0 text-[10px] uppercase tracking-wide text-muted-foreground">
             {doc.source === "po" ? "PO" : "OVF"}
           </span>

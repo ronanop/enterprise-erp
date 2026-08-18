@@ -18,6 +18,8 @@ export type PoGrnBillingRow = {
   grnNumbers: string[];
   qtyOrdered: number;
   qtyReceived: number;
+  /** Still to receive (ordered − received). */
+  qtyRemaining: number;
   qtyBilled: number;
   qtyUnbilled: number;
   receiptPct: number;
@@ -145,6 +147,7 @@ export function buildPoGrnBillingRows(
       grnNumbers,
       qtyOrdered: roundQty(qtyOrdered),
       qtyReceived: roundQty(qtyReceived),
+      qtyRemaining: roundQty(Math.max(0, qtyOrdered - qtyReceived)),
       qtyBilled: roundQty(qtyBilled),
       qtyUnbilled: roundQty(Math.max(0, qtyReceived - qtyBilled)),
       receiptPct,
@@ -166,6 +169,7 @@ export function poGrnBillingExportRows(rows: PoGrnBillingRow[]): Record<string, 
     "GRN numbers": row.grnNumbers.join(", "),
     Ordered: row.qtyOrdered,
     Received: row.qtyReceived,
+    Remaining: row.qtyRemaining,
     Billed: row.qtyBilled,
     Unbilled: row.qtyUnbilled,
     "Received %": row.receiptPct,

@@ -35,7 +35,7 @@ import {
   type DeliveryChallanRecord,
 } from "@/utils/delivery-challan-storage";
 import {
-  buildGrnExportRows,
+  buildGrnExportRowsWithBatches,
   exportGrnsXlsx,
 } from "@/utils/grns-excel-export";
 import { formatGrnStatusBadgeLabel, grnBadgeVariant } from "@/utils/grn-status-display";
@@ -50,6 +50,20 @@ function isReceiptEligible(status: string): boolean {
 function isPartialOrDelivered(grnStatus: string | null | undefined): boolean {
   const value = (grnStatus ?? "").toLowerCase();
   return value === "partial" || value === "closed" || value === "delivered";
+}
+
+function formatPoCreatedDate(row: ScmVendorPo): string {
+  const raw = row.created_at || row.document_date;
+  if (!raw) return "—";
+  const d = new Date(raw);
+  if (Number.isNaN(d.getTime())) {
+    return String(raw).slice(0, 10);
+  }
+  return d.toLocaleDateString("en-IN", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  });
 }
 
 function deliveryChallanHref(orderId: string): string {
@@ -211,7 +225,7 @@ export function GrnsListPage() {
 
   const tableColSpan = 10;
 
-  function onExport(mode: "all" | "filter") {
+  async function onExport(mode: "all" | "filter") {
     setExportOpen(false);
     setError(null);
     const source = mode === "all" ? rows : filtered;
@@ -224,11 +238,15 @@ export function GrnsListPage() {
       return;
     }
     const stamp = new Date().toISOString().slice(0, 10);
-    const exportRows = buildGrnExportRows(source, vendors);
-    exportGrnsXlsx(
-      mode === "all" ? `grns-all-${stamp}.xlsx` : `grns-filtered-${stamp}.xlsx`,
-      exportRows,
-    );
+    try {
+      const exportRows = await buildGrnExportRowsWithBatches(source, vendors);
+      exportGrnsXlsx(
+        mode === "all" ? `grns-all-${stamp}.xlsx` : `grns-filtered-${stamp}.xlsx`,
+        exportRows,
+      );
+    } catch (err) {
+      setError(formatApiError(err, "Export failed"));
+    }
   }
 
   async function onDownloadChallanPdf(challan: DeliveryChallanRecord) {
@@ -274,7 +292,7 @@ export function GrnsListPage() {
                     type="button"
                     role="menuitem"
                     className="flex w-full cursor-pointer flex-col items-start gap-0.5 px-3 py-2.5 text-left transition-colors duration-150 hover:bg-muted/60"
-                    onClick={() => onExport("all")}
+                    onClick={() => void onExport("all")}
                   >
                     <span className="text-sm font-medium text-foreground">Export all</span>
                     <span className="text-xs text-muted-foreground">
@@ -285,7 +303,7 @@ export function GrnsListPage() {
                     type="button"
                     role="menuitem"
                     className="flex w-full cursor-pointer flex-col items-start gap-0.5 border-t border-border px-3 py-2.5 text-left transition-colors duration-150 hover:bg-muted/60"
-                    onClick={() => onExport("filter")}
+                    onClick={() => void onExport("filter")}
                   >
                     <span className="text-sm font-medium text-foreground">Export by filter</span>
                     <span className="text-xs text-muted-foreground">
@@ -316,7 +334,15 @@ export function GrnsListPage() {
       />
 
       <div className="grid gap-3 sm:grid-cols-3">
-        <FinanceKpiCard label="Receipt POs" value={String(kpis.total)} icon={PackageCheck} />
+        <FinanceKpiCard
+          label={
+            <>
+              Receipt PO<span className="normal-case">s</span>
+            </>
+          }
+          value={String(kpis.total)}
+          icon={PackageCheck}
+        />
         <FinanceKpiCard
           label="GRN partial"
           value={String(kpis.partial)}
@@ -367,16 +393,16 @@ export function GrnsListPage() {
           <table className={cn(procurementUi.table, "min-w-[1100px]")}>
             <thead className={procurementUi.thead}>
               <tr>
-                <th className="px-3 py-2 font-medium">Company PO number</th>
-                <th className="px-3 py-2 font-medium">Date</th>
-                <th className="px-3 py-2 font-medium">Vendor</th>
-                <th className="px-3 py-2 font-medium">Vendor amt</th>
-                <th className="px-3 py-2 font-medium">Customer amt</th>
-                <th className="px-3 py-2 font-medium">Margin</th>
-                <th className="px-3 py-2 font-medium">GRN</th>
-                <th className="px-3 py-2 font-medium">Received</th>
+                <th className="px-3 py-2 font-bold">Company PO number</th>
+                <th className="px-3 py-2 font-bold">PO date</th>
+                <th className="px-3 py-2 font-bold">Vendor</th>
+                <th className="px-3 py-2 font-bold">Vendor amt</th>
+                <th className="px-3 py-2 font-bold">Customer amt</th>
+                <th className="px-3 py-2 font-bold">Margin</th>
+                <th className="px-3 py-2 font-bold">GRN</th>
+                <th className="px-3 py-2 font-bold">Received</th>
                 <th className={procurementUi.th}>Challans</th>
-                <th className="px-3 py-2 text-center font-medium">GRN detail</th>
+                <th className="px-3 py-2 text-center font-bold">GRN detail</th>
               </tr>
             </thead>
             <tbody>
@@ -422,7 +448,7 @@ export function GrnsListPage() {
                     <td className="px-3 py-2 font-medium tabular-nums">
                       {row.company_po_number || row.document_number || "—"}
                     </td>
-                    <td className="px-3 py-2 tabular-nums">{row.document_date}</td>
+                    <td className="px-3 py-2 tabular-nums">{formatPoCreatedDate(row)}</td>
                     <td className="px-3 py-2">
                       {vendors[row.vendor_id]?.label || row.vendor_id.slice(0, 8)}
                     </td>
@@ -489,6 +515,7 @@ export function GrnsListPage() {
           vendorLabel={historyOrder.vendorLabel}
           pdfContext={historyOrder.pdfContext}
           onClose={() => setHistoryOrder(null)}
+          onReversed={() => void load(true)}
         />
       ) : null}
     </div>

@@ -1,10 +1,11 @@
 import type { LucideIcon } from "lucide-react";
 import Link from "next/link";
+import type { ReactNode } from "react";
 
 import { cn } from "@/lib/utils";
 
 interface FinanceKpiCardProps {
-  label: string;
+  label: ReactNode;
   value: string;
   hint?: string;
   icon: LucideIcon;
@@ -34,7 +35,7 @@ export function FinanceKpiCard({
   const body = (
     <>
       <div className="flex items-start justify-between gap-2">
-        <p className="text-[11px] font-medium tracking-wide text-muted-foreground uppercase">{label}</p>
+        <p className="text-[11px] font-extrabold tracking-wide text-foreground uppercase">{label}</p>
         <span className={cn("flex size-8 items-center justify-center rounded-lg", toneStyles[tone])}>
           <Icon className="size-3.5" aria-hidden />
         </span>

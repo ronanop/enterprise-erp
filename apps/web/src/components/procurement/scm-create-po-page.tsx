@@ -1,9 +1,22 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ChevronDown, Eye, Minus, Plus, RefreshCw, Trash2 } from "lucide-react";
+import {
+  Building2,
+  CalendarDays,
+  ChevronDown,
+  ClipboardList,
+  Eye,
+  Landmark,
+  Minus,
+  Plus,
+  RefreshCw,
+  Trash2,
+  type LucideIcon,
+} from "lucide-react";
 
 import { ConfirmDialog } from "@/components/finance/journals/confirm-dialog";
 import { FinanceField, FinanceSelect, FinanceTextarea } from "@/components/finance/journals/finance-form-field";
@@ -16,11 +29,13 @@ import {
   VendorFormFields,
   type VendorFormDraft,
 } from "@/components/procurement/vendor-form-fields";
-import { ScmCommercialDocumentsPanel } from "@/components/procurement/scm-commercial-documents-panel";
+import {
+  ScmCommercialDocumentsPanel,
+  type PendingScmCommercialDocument,
+} from "@/components/procurement/scm-commercial-documents-panel";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
-import { useProcurementRole } from "@/hooks/use-procurement-role";
 import { submitPoFinalizeApproval } from "@/lib/procurement-approvals";
 import { scmHoldCreatePoNotice } from "@/utils/scm-ovf-hold";
 import { ApiClientError } from "@/services/api-client";
@@ -30,15 +45,19 @@ import {
   createVendorOption,
   emptyPostalAddress,
   formatInr,
+  formatUsd,
+  getPurchaseOrder,
   getScmOvfPreview,
   listVendorOptions,
   peekNextCompanyPoNumber,
+  uploadScmPoAttachment,
   updateVendorAddresses,
   type ScmOvfPreview,
   type VendorAddressEntry,
   type VendorOption,
   type VendorPostalAddress,
 } from "@/services/procurement-service";
+import { fileToBase64 } from "@/services/sales-crm-service";
 import {
   buildPoTaxesFromBuckets,
   previewPurchaseOrderPdf,
@@ -261,6 +280,63 @@ function newCustomShippingId(): string {
   return `${CUSTOM_SHIPPING_ID_PREFIX}${Date.now().toString(36)}`;
 }
 
+function PoField({
+  labelClassName,
+  ...props
+}: React.ComponentProps<typeof FinanceField>) {
+  return (
+    <FinanceField
+      {...props}
+      labelClassName={cn("text-xs text-foreground", labelClassName)}
+    />
+  );
+}
+
+type PoSectionTone = "white" | "teal";
+
+const PO_SECTION_TONE: Record<PoSectionTone, { card: string; icon: string; title: string }> = {
+  white: {
+    card: "border-border bg-card shadow-sm",
+    icon: "bg-muted text-foreground",
+    title: "text-foreground",
+  },
+  teal: {
+    card: "border-teal-200/80 bg-teal-50/70 shadow-sm",
+    icon: "bg-teal-100 text-teal-800",
+    title: "text-teal-950",
+  },
+};
+
+function PoSection({
+  title,
+  icon: Icon,
+  tone,
+  children,
+}: {
+  title: ReactNode;
+  icon: LucideIcon;
+  tone: PoSectionTone;
+  children: ReactNode;
+}) {
+  const styles = PO_SECTION_TONE[tone];
+  return (
+    <section className={cn("space-y-3 rounded-xl border p-4", styles.card)}>
+      <div className="flex items-center gap-2">
+        <span
+          className={cn(
+            "inline-flex size-7 shrink-0 items-center justify-center rounded-lg",
+            styles.icon,
+          )}
+        >
+          <Icon className="size-3.5" aria-hidden />
+        </span>
+        <h2 className={cn("text-xs font-semibold uppercase tracking-wide", styles.title)}>{title}</h2>
+      </div>
+      {children}
+    </section>
+  );
+}
+
 type PoFormState = {
   vendorId: string;
   vendorName: string;
@@ -281,6 +357,7 @@ type PoFormState = {
   companyPoNumber: string;
   customerPoNumber: string;
   customerPoDate: string;
+  orderRefCache: string;
   ovfApprover: string;
   customerName: string;
   customerGstNumber: string;
@@ -291,6 +368,8 @@ type PoFormState = {
   distiSign: "plus" | "minus";
   foreignAmount: string;
   freightTaxable: boolean;
+  /** INR per 1 USD — used when switching line rates between INR and USD. */
+  usdInrRate: string;
 };
 
 type PoLineRow = {
@@ -301,6 +380,7 @@ type PoLineRow = {
   poType: "Goods" | "Services";
   qty: string;
   rate: string;
+  rateCurrency: "INR" | "USD";
   taxPct: string;
 };
 
@@ -357,12 +437,37 @@ function formatRateValue(value: number): string {
   return String(rounded);
 }
 
+function inrRateToUsd(inrRate: number, usdInrRate: number): number {
+  if (!Number.isFinite(inrRate) || inrRate <= 0 || !Number.isFinite(usdInrRate) || usdInrRate <= 0) {
+    return 0;
+  }
+  return inrRate / usdInrRate;
+}
+
+function usdRateToInr(usdRate: number, usdInrRate: number): number {
+  if (!Number.isFinite(usdRate) || usdRate <= 0 || !Number.isFinite(usdInrRate) || usdInrRate <= 0) {
+    return 0;
+  }
+  return usdRate * usdInrRate;
+}
+
+function isUsdLine(row: PoLineRow): boolean {
+  return row.rateCurrency === "USD";
+}
+
+function allUsdLines(rows: PoLineRow[]): boolean {
+  return rows.length > 0 && rows.every(isUsdLine);
+}
+
 function lineSubtotal(
   row: PoLineRow,
   distiPct = 0,
   distiSign: "plus" | "minus" = "plus",
 ): number {
-  return toNumber(row.qty) * adjustedUnitRate(toNumber(row.rate), distiPct, distiSign);
+  const rate = isUsdLine(row)
+    ? toNumber(row.rate)
+    : adjustedUnitRate(toNumber(row.rate), distiPct, distiSign);
+  return toNumber(row.qty) * rate;
 }
 
 function lineGstAmount(
@@ -370,14 +475,16 @@ function lineGstAmount(
   distiPct = 0,
   distiSign: "plus" | "minus" = "plus",
 ): number {
+  if (isUsdLine(row)) return 0;
   return (lineSubtotal(row, distiPct, distiSign) * toNumber(row.taxPct)) / 100;
 }
 
-/** When every line shares one GST %, return it; otherwise null (mixed). */
+/** When every INR line shares one GST %, return it; otherwise null (mixed). */
 function uniformLineTaxPct(rows: PoLineRow[]): string | null {
-  if (rows.length === 0) return null;
-  const first = rows[0]?.taxPct ?? "18";
-  return rows.every((row) => row.taxPct === first) ? first : null;
+  const inrRows = rows.filter((row) => !isUsdLine(row));
+  if (inrRows.length === 0) return null;
+  const first = inrRows[0]?.taxPct ?? "18";
+  return inrRows.every((row) => row.taxPct === first) ? first : null;
 }
 
 function normalizeTaxOption(value: number | string | null | undefined, fallback = "18"): string {
@@ -409,6 +516,7 @@ function emptyForm(): PoFormState {
     companyPoNumber: "",
     customerPoNumber: "",
     customerPoDate: "",
+    orderRefCache: "",
     ovfApprover: "",
     customerName: "",
     customerGstNumber: "",
@@ -418,6 +526,7 @@ function emptyForm(): PoFormState {
     distiSign: "plus",
     foreignAmount: "0",
     freightTaxable: false,
+    usdInrRate: "",
   };
 }
 
@@ -430,6 +539,7 @@ function emptyLine(taxPct = "18"): PoLineRow {
     poType: "Goods",
     qty: "1",
     rate: "0",
+    rateCurrency: "INR",
     taxPct,
   };
 }
@@ -473,7 +583,6 @@ function ItemDetailsTextarea({
 
 export function ScmCreatePoPage({ ovfId }: { ovfId: string }) {
   const router = useRouter();
-  const { isAdmin } = useProcurementRole();
   const shippingMenuRef = useRef<HTMLDivElement>(null);
   const paymentTermsMenuRef = useRef<HTMLDivElement>(null);
   const [preview, setPreview] = useState<ScmOvfPreview | null>(null);
@@ -498,6 +607,10 @@ export function ScmCreatePoPage({ ovfId }: { ovfId: string }) {
   );
   const [poShippingExtras, setPoShippingExtras] = useState<PoShippingOption[]>([]);
   const [pdfPreviewBusy, setPdfPreviewBusy] = useState(false);
+  const [scmDocuments, setScmDocuments] = useState<PendingScmCommercialDocument[]>([]);
+  const [usdConvertLineId, setUsdConvertLineId] = useState<string | null>(null);
+  const [usdConvertRateDraft, setUsdConvertRateDraft] = useState("");
+  const [usdConvertError, setUsdConvertError] = useState<string | null>(null);
   const actionErrorRef = useRef<HTMLDivElement>(null);
 
   const oemName = (preview?.oem_name || "").trim();
@@ -565,6 +678,80 @@ export function ScmCreatePoPage({ ovfId }: { ovfId: string }) {
     },
     [],
   );
+
+  const setLineRateCurrency = useCallback(
+    (lineId: string, currency: "INR" | "USD") => {
+      setLines((current) =>
+        current.map((row) => {
+          if (row.id !== lineId) return row;
+          if (currency === "USD") {
+            return { ...row, rateCurrency: "USD", taxPct: "0" };
+          }
+          const exchange = toNumber(form.usdInrRate);
+          const inrRate =
+            row.rateCurrency === "USD" && exchange > 0
+              ? usdRateToInr(toNumber(row.rate), exchange)
+              : toNumber(row.rate);
+          return {
+            ...row,
+            rateCurrency: "INR",
+            taxPct: normalizeTaxOption(form.taxPercentage || "18"),
+            rate: inrRate > 0 ? formatRateValue(inrRate) : row.rate,
+          };
+        }),
+      );
+    },
+    [form.taxPercentage, form.usdInrRate],
+  );
+
+  const usdConvertLine = useMemo(
+    () => (usdConvertLineId ? lines.find((row) => row.id === usdConvertLineId) : null),
+    [lines, usdConvertLineId],
+  );
+
+  const usdConvertPreview = useMemo(() => {
+    if (!usdConvertLine) return null;
+    const inrRate = toNumber(usdConvertLine.rate);
+    const exchange = toNumber(usdConvertRateDraft);
+    if (inrRate <= 0 || exchange <= 0) return null;
+    return inrRateToUsd(inrRate, exchange);
+  }, [usdConvertLine, usdConvertRateDraft]);
+
+  function openUsdConvertDialog(lineId: string) {
+    setUsdConvertLineId(lineId);
+    setUsdConvertRateDraft(form.usdInrRate || "");
+    setUsdConvertError(null);
+  }
+
+  function closeUsdConvertDialog() {
+    setUsdConvertLineId(null);
+    setUsdConvertRateDraft("");
+    setUsdConvertError(null);
+  }
+
+  function confirmUsdConvert() {
+    if (!usdConvertLineId || !usdConvertLine) return;
+    const exchange = toNumber(usdConvertRateDraft);
+    if (!Number.isFinite(exchange) || exchange <= 0) {
+      setUsdConvertError("Enter how many INR equal 1 USD (e.g. 83.5).");
+      return;
+    }
+    const inrRate = toNumber(usdConvertLine.rate);
+    const usdRate = inrRateToUsd(inrRate, exchange);
+    setField("usdInrRate", formatRateValue(exchange));
+    setLines((current) =>
+      current.map((row) => {
+        if (row.id !== usdConvertLineId) return row;
+        return {
+          ...row,
+          rateCurrency: "USD",
+          taxPct: "0",
+          rate: inrRate > 0 ? formatRateValue(usdRate) : row.rate,
+        };
+      }),
+    );
+    closeUsdConvertDialog();
+  }
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -648,6 +835,7 @@ export function ScmCreatePoPage({ ovfId }: { ovfId: string }) {
           customerPoNumber: current.customerPoNumber || ovf.po_number || "",
           customerPoDate:
             current.customerPoDate || toDateInputValue(ovf.po_date),
+          orderRefCache: current.orderRefCache || "",
           ovfApprover: current.ovfApprover || ovf.ovf_approver || ovf.owner_name || "",
           customerName: current.customerName || ovf.customer_name || ovf.account_name || "",
           customerGstNumber: current.customerGstNumber || ovf.customer_gst || "",
@@ -673,6 +861,7 @@ export function ScmCreatePoPage({ ovfId }: { ovfId: string }) {
               poType: "Goods" as const,
               qty: String(ln.qty ?? 1),
               rate: String(ln.unit_price ?? 0),
+              rateCurrency: "INR" as const,
               taxPct: normalizeTaxOption(
                 ln.gst_pct != null && Number.isFinite(Number(ln.gst_pct))
                   ? ln.gst_pct
@@ -711,6 +900,18 @@ export function ScmCreatePoPage({ ovfId }: { ovfId: string }) {
           })
           .catch(() => undefined);
       }
+
+      if (ovf.purchase_order_id && ovf.purchase_order_status === "draft") {
+        void getPurchaseOrder(ovf.purchase_order_id, { includeCommercial: false })
+          .then((order) => {
+            const ref = (order.order_ref_cache || "").trim();
+            if (!ref) return;
+            setForm((current) =>
+              current.orderRefCache.trim() ? current : { ...current, orderRefCache: ref },
+            );
+          })
+          .catch(() => undefined);
+      }
     } catch (err) {
       setPreview(null);
       setError(err instanceof ApiClientError ? err.message : "Failed to load OVF");
@@ -739,14 +940,25 @@ export function ScmCreatePoPage({ ovfId }: { ovfId: string }) {
   }, [shippingMenuOpen, paymentTermsMenuOpen]);
 
   const distiPct = toNumber(form.distiAmount);
+  const allLinesUsd = useMemo(() => allUsdLines(lines), [lines]);
 
   const itemsSubtotal = useMemo(
     () =>
+      lines.reduce((sum, row) => {
+        if (allLinesUsd) return sum + lineSubtotal(row);
+        if (isUsdLine(row)) return sum;
+        return sum + lineSubtotal(row, distiPct, form.distiSign);
+      }, 0),
+    [lines, distiPct, form.distiSign, allLinesUsd],
+  );
+
+  const usdItemsSubtotal = useMemo(
+    () =>
       lines.reduce(
-        (sum, row) => sum + lineSubtotal(row, distiPct, form.distiSign),
+        (sum, row) => (isUsdLine(row) ? sum + lineSubtotal(row) : sum),
         0,
       ),
-    [lines, distiPct, form.distiSign],
+    [lines],
   );
 
   const freightAmount = useMemo(
@@ -755,6 +967,7 @@ export function ScmCreatePoPage({ ovfId }: { ovfId: string }) {
   );
 
   const gstAmount = useMemo(() => {
+    if (allLinesUsd) return 0;
     const linesGst = lines.reduce(
       (sum, row) => sum + lineGstAmount(row, distiPct, form.distiSign),
       0,
@@ -763,15 +976,26 @@ export function ScmCreatePoPage({ ovfId }: { ovfId: string }) {
       ? (freightAmount * toNumber(form.taxPercentage)) / 100
       : 0;
     return linesGst + freightGst;
-  }, [lines, distiPct, form.distiSign, form.freightTaxable, freightAmount, form.taxPercentage]);
+  }, [
+    allLinesUsd,
+    lines,
+    distiPct,
+    form.distiSign,
+    form.freightTaxable,
+    freightAmount,
+    form.taxPercentage,
+  ]);
 
   const entityGstState = companyLocationById(form.companyLocationId).gstState;
 
   const taxBreakdown = useMemo(() => {
-    const buckets = lines.map((row) => ({
-      taxableAmount: lineSubtotal(row, distiPct, form.distiSign),
-      taxPct: toNumber(row.taxPct),
-    }));
+    if (allLinesUsd) return [];
+    const buckets = lines
+      .filter((row) => !isUsdLine(row))
+      .map((row) => ({
+        taxableAmount: lineSubtotal(row, distiPct, form.distiSign),
+        taxPct: toNumber(row.taxPct),
+      }));
     if (form.freightTaxable && freightAmount > 0) {
       buckets.push({
         taxableAmount: freightAmount,
@@ -784,6 +1008,7 @@ export function ScmCreatePoPage({ ovfId }: { ovfId: string }) {
       destinationOfSupply: entityGstState,
     });
   }, [
+    allLinesUsd,
     lines,
     distiPct,
     form.distiSign,
@@ -796,12 +1021,16 @@ export function ScmCreatePoPage({ ovfId }: { ovfId: string }) {
 
   const uniformTaxPct = useMemo(() => uniformLineTaxPct(lines), [lines]);
 
-  const finalTotal = itemsSubtotal + freightAmount + gstAmount;
+  const finalTotal = allLinesUsd
+    ? itemsSubtotal
+    : itemsSubtotal + freightAmount + gstAmount;
 
   function applyGlobalTax(taxPct: string) {
     const next = normalizeTaxOption(taxPct, form.taxPercentage || "18");
     setField("taxPercentage", next);
-    setLines((current) => current.map((row) => ({ ...row, taxPct: next })));
+    setLines((current) =>
+      current.map((row) => (isUsdLine(row) ? row : { ...row, taxPct: next })),
+    );
   }
 
   function onVendorChange(vendorId: string) {
@@ -1156,19 +1385,75 @@ export function ScmCreatePoPage({ ovfId }: { ovfId: string }) {
     if (vendorId !== form.vendorId) {
       setForm((current) => ({ ...current, vendorId }));
     }
+
+    const poLines: Array<{
+      product_name: string;
+      qty: number;
+      unit_price: number;
+      rate_currency: "INR" | "USD";
+      tax_rate: number;
+    }> = [];
+    for (const row of lines) {
+      const productName = row.itemDetails.trim();
+      if (!productName) continue;
+      const qty = Number(row.qty);
+      const unitPrice = Number(row.rate);
+      if (!Number.isFinite(qty) || qty <= 0 || !Number.isFinite(unitPrice) || unitPrice <= 0) {
+        setError(`Vendor line '${productName}' needs qty and unit cost > 0`);
+        requestAnimationFrame(() => {
+          actionErrorRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+        });
+        return;
+      }
+      const usd = isUsdLine(row);
+      poLines.push({
+        product_name: productName,
+        qty,
+        unit_price: unitPrice,
+        rate_currency: usd ? "USD" : "INR",
+        tax_rate: usd ? 0 : toNumber(row.taxPct),
+      });
+    }
+    if (poLines.length === 0) {
+      setError("Add at least one vendor line with qty and unit cost > 0");
+      requestAnimationFrame(() => {
+        actionErrorRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+      });
+      return;
+    }
+
     setBusy(true);
     setError(null);
     try {
       await persistVendorDetails(vendorId);
-      const needsApproval = mode === "finalize" && !isAdmin;
+      const needsApproval = mode === "finalize";
       const order = await createPoFromOvf(ovfId, {
         vendor_id: vendorId,
         document_date: form.purchaseDate || undefined,
         payment_terms: form.paymentTerms || null,
         expected_delivery_date: form.deliveryDate || null,
         entity_code: location.entityCode,
-        finalize: mode === "finalize" && isAdmin,
+        order_ref_cache: form.orderRefCache?.trim() || null,
+        currency_code: poLines.length > 0 && poLines.every((ln) => ln.rate_currency === "USD")
+          ? "USD"
+          : "INR",
+        // A PO is always created as a draft. Only an administrator's
+        // acceptance from the Approval workspace may issue it.
+        finalize: false,
+        lines: poLines,
       });
+      for (const document of scmDocuments) {
+        await uploadScmPoAttachment(order.id, {
+          file_name: document.file.name,
+          content_base64: await fileToBase64(document.file),
+          content_type: document.file.type || "application/octet-stream",
+          branch_id: preview.branch_id,
+          company_id: preview.company_id,
+          category: document.category,
+          remarks: document.remarks.trim() || null,
+        });
+      }
+      setScmDocuments([]);
       if (needsApproval) {
         const documents = await collectPoApprovalDocuments({
           orderId: order.id,
@@ -1221,13 +1506,19 @@ export function ScmCreatePoPage({ ovfId }: { ovfId: string }) {
     setError(null);
     try {
       const pdfLines = lines
-        .map((row) => ({
-          partNo: (row.partNumber || row.itemDetails || "").trim() || "—",
-          description: (row.itemDetails || row.partNumber || "").trim() || "—",
-          hsnCode: row.hsnCode?.trim() || undefined,
-          qty: toNumber(row.qty),
-          unitPriceInr: adjustedUnitRate(toNumber(row.rate), distiPct, form.distiSign),
-        }))
+        .map((row) => {
+          const usd = isUsdLine(row);
+          return {
+            partNo: (row.partNumber || row.itemDetails || "").trim() || "—",
+            description: (row.itemDetails || row.partNumber || "").trim() || "—",
+            hsnCode: row.hsnCode?.trim() || undefined,
+            qty: toNumber(row.qty),
+            unitPriceInr: usd
+              ? toNumber(row.rate)
+              : adjustedUnitRate(toNumber(row.rate), distiPct, form.distiSign),
+            rateCurrency: usd ? ("USD" as const) : ("INR" as const),
+          };
+        })
         .filter((row) => row.qty > 0 || row.unitPriceInr > 0);
       if (pdfLines.length === 0) {
         setError("Add at least one line item to preview the PO PDF.");
@@ -1242,11 +1533,15 @@ export function ScmCreatePoPage({ ovfId }: { ovfId: string }) {
         DEFAULT_ENTITY_ADDRESS;
       const shipping =
         (form.shippingAddress || "").trim() || DEFAULT_SHIPPING_ADDRESS;
-      const buckets = lines.map((row) => ({
-        taxableAmount: lineSubtotal(row, distiPct, form.distiSign),
-        taxPct: toNumber(row.taxPct),
-      }));
-      if (form.freightTaxable && freightAmount > 0) {
+      const buckets: Array<{ taxableAmount: number; taxPct: number }> = allUsdLines(lines)
+        ? []
+        : lines
+            .filter((row) => !isUsdLine(row))
+            .map((row) => ({
+              taxableAmount: lineSubtotal(row, distiPct, form.distiSign),
+              taxPct: toNumber(row.taxPct),
+            }));
+      if (!allUsdLines(lines) && form.freightTaxable && freightAmount > 0) {
         buckets.push({
           taxableAmount: freightAmount,
           taxPct: toNumber(form.taxPercentage),
@@ -1270,14 +1565,17 @@ export function ScmCreatePoPage({ ovfId }: { ovfId: string }) {
           address: (form.vendorAddress || "").trim() || "—",
         },
         customerGstin: form.vendorGstNumber?.trim() || undefined,
-        orderRef: form.customerPoNumber?.trim() || undefined,
+        orderRef: form.orderRefCache?.trim() || undefined,
         poNumber:
           form.companyPoNumber?.trim() ||
           `PO/${location.entityCode}/PREVIEW`,
         date: form.purchaseDate || todayIso(),
         billingAddress: billing,
         shippingAddress: shipping,
-        currency: "INR",
+        currency:
+          pdfLines.length > 0 && pdfLines.every((row) => row.rateCurrency === "USD")
+            ? "USD"
+            : "INR",
         paymentTerms: form.paymentTerms?.trim() || "Net 30 days",
         lines: pdfLines,
         taxes,
@@ -1360,12 +1658,9 @@ export function ScmCreatePoPage({ ovfId }: { ovfId: string }) {
 
       {preview ? (
         <>
-          <section className="space-y-3 rounded-lg border border-border bg-card p-3">
-            <h2 className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-              Vendor &amp; supply
-            </h2>
+          <PoSection title="Vendor &amp; supply" icon={Building2} tone="white">
             <div className="space-y-3">
-              <FinanceField label="Vendor name *">
+              <PoField label="Vendor name *">
                 <div className="flex gap-2">
                   <FinanceSelect
                     value={form.vendorId}
@@ -1393,11 +1688,11 @@ export function ScmCreatePoPage({ ovfId }: { ovfId: string }) {
                     <Plus className="size-4" />
                   </Button>
                 </div>
-              </FinanceField>
+              </PoField>
               {form.vendorId && selectedVendor ? (
                 <>
                   {vendorAddressEntries.length > 1 ? (
-                    <FinanceField label="Saved address">
+                    <PoField label="Saved address">
                       <FinanceSelect
                         value={
                           vendorAddressEntries.some(
@@ -1419,10 +1714,10 @@ export function ScmCreatePoPage({ ovfId }: { ovfId: string }) {
                           </option>
                         ))}
                       </FinanceSelect>
-                    </FinanceField>
+                    </PoField>
                   ) : null}
-                  <FinanceField label="Vendor address">
-                    <div className="grid gap-3 rounded-lg border border-input bg-transparent px-2.5 py-2 text-sm md:grid-cols-2">
+                  <PoField label="Vendor address">
+                    <div className="grid gap-3 rounded-lg border border-border bg-card px-2.5 py-2 text-sm md:grid-cols-2">
                       {(
                         [
                           [
@@ -1464,8 +1759,8 @@ export function ScmCreatePoPage({ ovfId }: { ovfId: string }) {
                         );
                       })}
                     </div>
-                  </FinanceField>
-                  <FinanceField label="GST number *">
+                  </PoField>
+                  <PoField label="GST number *">
                     <Input
                       value={form.vendorGstNumber ?? ""}
                       onChange={(e) => setField("vendorGstNumber", e.target.value)}
@@ -1473,8 +1768,8 @@ export function ScmCreatePoPage({ ovfId }: { ovfId: string }) {
                       className="h-8"
                       placeholder="Vendor GSTIN"
                     />
-                  </FinanceField>
-                  <FinanceField label="Source of supply *">
+                  </PoField>
+                  <PoField label="Source of supply *">
                     <FinanceSelect
                       value={form.sourceOfSupply}
                       onChange={(e) => setField("sourceOfSupply", e.target.value)}
@@ -1487,8 +1782,8 @@ export function ScmCreatePoPage({ ovfId }: { ovfId: string }) {
                         </option>
                       ))}
                     </FinanceSelect>
-                  </FinanceField>
-                  <FinanceField label="Destination of supply *">
+                  </PoField>
+                  <PoField label="Destination of supply *">
                     <FinanceSelect
                       value={form.destinationOfSupply}
                       onChange={(e) => setField("destinationOfSupply", e.target.value)}
@@ -1501,18 +1796,15 @@ export function ScmCreatePoPage({ ovfId }: { ovfId: string }) {
                         </option>
                       ))}
                     </FinanceSelect>
-                  </FinanceField>
+                  </PoField>
                 </>
               ) : null}
             </div>
-          </section>
+          </PoSection>
 
-          <section className="space-y-3 rounded-lg border border-border bg-card p-3">
-            <h2 className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-              Our company &amp; addresses
-            </h2>
+          <PoSection title="Our company &amp; addresses" icon={Landmark} tone="white">
             <div className="space-y-3">
-              <FinanceField label="Entity name *" className="max-w-lg">
+              <PoField label="Entity name *" className="max-w-lg">
                 <FinanceSelect
                   value={form.companyLocationId}
                   onChange={(e) => onCompanyLocationChange(e.target.value)}
@@ -1535,18 +1827,18 @@ export function ScmCreatePoPage({ ovfId }: { ovfId: string }) {
                     reject / resubmit).
                   </p>
                 ) : null}
-              </FinanceField>
+              </PoField>
               <div className="grid grid-cols-1 gap-3 md:grid-cols-2 md:gap-x-6">
-                <FinanceField label="Billing address">
+                <PoField label="Billing address">
                   <FinanceTextarea
                     value={form.billingAddress || DEFAULT_ENTITY_ADDRESS}
                     readOnly
                     rows={8}
                     className="min-h-[11rem] cursor-default resize-none overflow-y-auto bg-muted/30 font-medium text-foreground"
                   />
-                </FinanceField>
+                </PoField>
                 <div className="block space-y-1">
-                  <span className="text-[11px] font-medium tracking-wide text-muted-foreground uppercase">
+                  <span className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
                     Shipping address
                   </span>
                   <div className="flex items-start gap-2">
@@ -1635,21 +1927,18 @@ export function ScmCreatePoPage({ ovfId }: { ovfId: string }) {
                 </div>
               </div>
             </div>
-          </section>
+          </PoSection>
 
-          <section className="space-y-3 rounded-lg border border-border bg-card p-3">
-            <h2 className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-              References &amp; dates
-            </h2>
+          <PoSection title="References &amp; dates" icon={CalendarDays} tone="white">
             <div className="grid gap-3 md:grid-cols-2">
-              <FinanceField label="Company PO number">
+              <PoField label="Company PO number">
                 <Input
                   value={form.companyPoNumber ?? ""}
                   readOnly
                   className="h-8 cursor-default bg-muted/30 font-medium text-foreground"
                 />
-              </FinanceField>
-              <FinanceField label="Purchase date">
+              </PoField>
+              <PoField label="Purchase date">
                 <Input
                   type="date"
                   value={form.purchaseDate ?? ""}
@@ -1657,8 +1946,8 @@ export function ScmCreatePoPage({ ovfId }: { ovfId: string }) {
                   disabled={disabled}
                   className="h-8"
                 />
-              </FinanceField>
-              <FinanceField label="Payment terms">
+              </PoField>
+              <PoField label="Payment terms">
                 <div ref={paymentTermsMenuRef} className="relative">
                   <div className="flex h-8 overflow-hidden rounded-lg border border-input focus-within:border-ring focus-within:ring-3 focus-within:ring-ring/50">
                     <Input
@@ -1723,23 +2012,33 @@ export function ScmCreatePoPage({ ovfId }: { ovfId: string }) {
                     </ul>
                   ) : null}
                 </div>
-              </FinanceField>
-              <FinanceField label="OVF number">
+              </PoField>
+              <PoField label="OVF number">
                 <Input
                   value={form.ovfNumber ?? ""}
                   readOnly
                   className="h-8 cursor-default bg-muted/30 font-medium text-foreground"
                 />
-              </FinanceField>
-              <FinanceField label="Customer PO number">
+              </PoField>
+              <PoField label="Order Ref. Cache">
+                <Input
+                  value={form.orderRefCache ?? ""}
+                  onChange={(e) => setField("orderRefCache", e.target.value)}
+                  disabled={disabled}
+                  className="h-8"
+                  autoComplete="off"
+                  aria-label="Order Ref. Cache"
+                />
+              </PoField>
+              <PoField label="Customer PO number">
                 <Input
                   value={form.customerPoNumber ?? ""}
                   onChange={(e) => setField("customerPoNumber", e.target.value)}
                   disabled={disabled}
                   className="h-8"
                 />
-              </FinanceField>
-              <FinanceField label="Customer PO date">
+              </PoField>
+              <PoField label="Customer PO date">
                 <Input
                   type="date"
                   value={form.customerPoDate ?? ""}
@@ -1747,16 +2046,16 @@ export function ScmCreatePoPage({ ovfId }: { ovfId: string }) {
                   disabled={disabled}
                   className="h-8"
                 />
-              </FinanceField>
-              <FinanceField label="Customer name">
+              </PoField>
+              <PoField label="Customer name">
                 <Input
                   value={form.customerName ?? ""}
                   onChange={(e) => setField("customerName", e.target.value)}
                   disabled={disabled}
                   className="h-8"
                 />
-              </FinanceField>
-              <FinanceField label="Customer delivery date">
+              </PoField>
+              <PoField label="Customer delivery date">
                 <Input
                   type="date"
                   value={form.deliveryDate ?? ""}
@@ -1764,28 +2063,26 @@ export function ScmCreatePoPage({ ovfId }: { ovfId: string }) {
                   disabled={disabled}
                   className="h-8"
                 />
-              </FinanceField>
+              </PoField>
             </div>
-          </section>
+          </PoSection>
 
-          {preview ? (
-            <ScmCommercialDocumentsPanel
-              ovfId={ovfId}
-              branchId={preview.branch_id}
-              companyId={preview.company_id}
-              title="OVF documents"
-              description="Sales attachments on this OVF are carried automatically into admin approval with the PO. No upload needed here."
-              allowUpload={false}
-            />
-          ) : null}
+          <ScmCommercialDocumentsPanel
+            ovfId={ovfId}
+            branchId={preview.branch_id}
+            companyId={preview.company_id}
+            title="OVF document"
+            allowUpload={false}
+            className="border-border bg-card"
+          />
 
-          <div className="overflow-hidden rounded-lg border border-border bg-card">
-            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-3 py-2.5">
-              <div className="min-w-0">
-                <h2 className="text-sm font-medium tracking-tight text-foreground">Line items</h2>
-                <p className="mt-0.5 text-[11px] text-muted-foreground">
-                  Set GST per line, or apply one rate to all when every item shares the same %.
-                </p>
+          <div className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
+            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border bg-card px-3 py-2.5">
+              <div className="flex min-w-0 items-center gap-2">
+                <span className="inline-flex size-7 shrink-0 items-center justify-center rounded-lg bg-muted text-foreground">
+                  <ClipboardList className="size-3.5" aria-hidden />
+                </span>
+                <h2 className="text-sm font-extrabold tracking-tight text-foreground">Line items</h2>
               </div>
               <div className="flex flex-wrap items-center gap-2">
                 <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
@@ -1796,10 +2093,14 @@ export function ScmCreatePoPage({ ovfId }: { ovfId: string }) {
                       if (!e.target.value) return;
                       applyGlobalTax(e.target.value);
                     }}
-                    disabled={disabled || lines.length === 0}
+                    disabled={disabled || lines.length === 0 || allLinesUsd}
                     className="h-8 w-[104px] cursor-pointer transition-colors duration-200"
                     aria-label="Apply GST percent to all line items"
-                    title="Sets the same GST % on every line"
+                    title={
+                      allLinesUsd
+                        ? "GST is not applied when every line is USD"
+                        : "Sets the same GST % on every INR line"
+                    }
                   >
                     {uniformTaxPct == null ? (
                       <option value="" disabled>
@@ -1816,19 +2117,19 @@ export function ScmCreatePoPage({ ovfId }: { ovfId: string }) {
               </div>
             </div>
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[1060px] text-left text-sm">
-                <thead className="border-b border-border bg-sky-50/80 text-[11px] tracking-wide text-slate-600 uppercase">
+              <table className="w-full min-w-[1180px] text-left text-sm">
+                <thead className="border-b border-border bg-muted/40 text-[11px] font-bold tracking-wide text-slate-600 uppercase">
                   <tr>
-                    <th className="px-2 py-2.5 font-semibold">S.No</th>
-                    <th className="min-w-[220px] px-2 py-2.5 font-semibold">Item details</th>
-                    <th className="min-w-[120px] px-2 py-2.5 font-semibold">Part number</th>
-                    <th className="min-w-[100px] px-2 py-2.5 font-semibold">HSN code</th>
-                    <th className="min-w-[100px] px-2 py-2.5 font-semibold">PO type</th>
-                    <th className="min-w-[72px] px-2 py-2.5 font-semibold">Qty</th>
-                    <th className="min-w-[110px] px-2 py-2.5 font-semibold">Rate (INR)</th>
-                    <th className="min-w-[88px] px-2 py-2.5 font-semibold">Tax %</th>
-                    <th className="min-w-[120px] px-2 py-2.5 font-semibold">Amount (INR)</th>
-                    <th className="px-2 py-2.5 font-semibold"> </th>
+                    <th className="px-2 py-2.5 font-bold">S.No</th>
+                    <th className="min-w-[220px] px-2 py-2.5 font-bold">Item details</th>
+                    <th className="min-w-[120px] px-2 py-2.5 font-bold">Part number</th>
+                    <th className="min-w-[100px] px-2 py-2.5 font-bold">HSN code</th>
+                    <th className="min-w-[100px] px-2 py-2.5 font-bold">PO type</th>
+                    <th className="min-w-[72px] px-2 py-2.5 font-bold">Qty</th>
+                    <th className="min-w-[168px] px-2 py-2.5 font-bold">Rate</th>
+                    <th className="min-w-[88px] px-2 py-2.5 font-bold">Tax %</th>
+                    <th className="min-w-[120px] px-2 py-2.5 font-bold">Amount</th>
+                    <th className="px-2 py-2.5 font-bold"> </th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1844,7 +2145,7 @@ export function ScmCreatePoPage({ ovfId }: { ovfId: string }) {
                       key={row.id}
                       className={cn(
                         "border-b border-border/70 align-top",
-                        index % 2 === 1 ? "bg-sky-50/50" : "bg-card",
+                        index % 2 === 1 ? "bg-muted/30" : "bg-card",
                       )}
                     >
                       <td className="px-2 py-2 tabular-nums text-muted-foreground">{index + 1}</td>
@@ -1902,47 +2203,81 @@ export function ScmCreatePoPage({ ovfId }: { ovfId: string }) {
                         />
                       </td>
                       <td className="px-2 py-2">
-                        <Input
-                          type="number"
-                          min={0}
-                          step="any"
-                          value={
-                            distiPct === 0
-                              ? (row.rate ?? "")
-                              : formatRateValue(
-                                  adjustedUnitRate(
-                                    toNumber(row.rate),
-                                    distiPct,
-                                    form.distiSign,
-                                  ),
-                                )
-                          }
-                          onChange={(e) => {
-                            const raw = e.target.value;
-                            if (raw === "") {
-                              setLineField(row.id, "rate", "");
-                              return;
+                        <div className="flex h-8 overflow-hidden rounded-md border border-input transition-colors duration-200 focus-within:border-ring focus-within:ring-3 focus-within:ring-ring/50">
+                          <select
+                            value={row.rateCurrency}
+                            onChange={(e) => {
+                              const next = e.target.value === "USD" ? "USD" : "INR";
+                              if (next === "USD" && !isUsdLine(row)) {
+                                openUsdConvertDialog(row.id);
+                                return;
+                              }
+                              if (next === "INR" && isUsdLine(row)) {
+                                setLineRateCurrency(row.id, "INR");
+                              }
+                            }}
+                            disabled={disabled}
+                            className="h-8 w-[58px] shrink-0 cursor-pointer border-0 border-r border-input bg-muted px-1 text-[11px] font-medium text-foreground outline-none transition-colors duration-200 disabled:cursor-not-allowed disabled:opacity-50"
+                            aria-label={`Rate currency for line ${index + 1}`}
+                            title="INR rolls into GST and total. USD asks for INR per $1, converts the unit rate, and has no GST."
+                          >
+                            <option value="INR">INR</option>
+                            <option value="USD">USD</option>
+                          </select>
+                          <Input
+                            type="number"
+                            min={0}
+                            step="any"
+                            value={
+                              isUsdLine(row) || distiPct === 0
+                                ? (row.rate ?? "")
+                                : formatRateValue(
+                                    adjustedUnitRate(
+                                      toNumber(row.rate),
+                                      distiPct,
+                                      form.distiSign,
+                                    ),
+                                  )
                             }
-                            const entered = toNumber(raw);
-                            const factor = distiFactor(distiPct, form.distiSign);
-                            const base =
-                              distiPct === 0 || factor === 0
-                                ? entered
-                                : entered / factor;
-                            setLineField(row.id, "rate", formatRateValue(base));
-                          }}
-                          disabled={disabled}
-                          className={cn("h-8", NO_SPINNER)}
-                          aria-label={`Rate for line ${index + 1}`}
-                        />
+                            onChange={(e) => {
+                              const raw = e.target.value;
+                              if (raw === "") {
+                                setLineField(row.id, "rate", "");
+                                return;
+                              }
+                              if (isUsdLine(row) || distiPct === 0) {
+                                setLineField(row.id, "rate", raw);
+                                return;
+                              }
+                              const entered = toNumber(raw);
+                              const factor = distiFactor(distiPct, form.distiSign);
+                              const base =
+                                distiPct === 0 || factor === 0
+                                  ? entered
+                                  : entered / factor;
+                              setLineField(row.id, "rate", formatRateValue(base));
+                            }}
+                            disabled={disabled}
+                            className={cn(
+                              "h-8 rounded-none border-0 shadow-none focus-visible:ring-0",
+                              NO_SPINNER,
+                            )}
+                            aria-label={`Rate for line ${index + 1}`}
+                          />
+                        </div>
                       </td>
                       <td className="px-2 py-2">
                         <FinanceSelect
-                          value={normalizeTaxOption(row.taxPct)}
+                          value={isUsdLine(row) ? "0" : normalizeTaxOption(row.taxPct)}
                           onChange={(e) => setLineField(row.id, "taxPct", e.target.value)}
-                          disabled={disabled}
+                          disabled={disabled || isUsdLine(row)}
                           className="h-8 w-[88px] cursor-pointer transition-colors duration-200"
                           aria-label={`Tax percent for line ${index + 1}`}
+                          title={
+                            isUsdLine(row)
+                              ? "USD lines have no GST"
+                              : "GST percent for this INR line"
+                          }
                         >
                           {TAX_OPTIONS.map((pct) => (
                             <option key={pct} value={pct}>
@@ -1953,7 +2288,9 @@ export function ScmCreatePoPage({ ovfId }: { ovfId: string }) {
                       </td>
                       <td className="px-2 py-2">
                         <div className="flex h-8 items-center rounded-md border border-border bg-muted/40 px-2 text-sm font-medium tabular-nums">
-                          {formatInr(lineSubtotal(row, distiPct, form.distiSign))}
+                          {isUsdLine(row)
+                            ? formatUsd(lineSubtotal(row))
+                            : formatInr(lineSubtotal(row, distiPct, form.distiSign))}
                         </div>
                       </td>
                       <td className="px-2 py-2">
@@ -1973,7 +2310,7 @@ export function ScmCreatePoPage({ ovfId }: { ovfId: string }) {
                 </tbody>
               </table>
             </div>
-            <div className="flex flex-wrap items-start justify-between gap-4 border-t border-border bg-muted/10 px-3 py-3">
+            <div className="flex flex-wrap items-start justify-between gap-4 border-t border-border bg-card px-3 py-3">
               <Button
                 type="button"
                 variant="outline"
@@ -2119,14 +2456,29 @@ export function ScmCreatePoPage({ ovfId }: { ovfId: string }) {
                     </div>
                   </div>
                 </div>
-                <div className="min-w-[180px] rounded-md border border-border bg-card px-3 py-2 text-sm">
+                <div className="min-w-[180px] rounded-lg border border-teal-200/80 bg-teal-50/80 px-3 py-2 text-sm shadow-sm">
                   <div className="flex items-center justify-between gap-4 text-muted-foreground">
                     <span>Total</span>
                     <span className="font-medium tabular-nums text-foreground">
-                      {formatInr(itemsSubtotal)}
+                      {allLinesUsd ? formatUsd(itemsSubtotal) : formatInr(itemsSubtotal)}
                     </span>
                   </div>
-                  {taxBreakdown.length > 0 ? (
+                  {!allLinesUsd && usdItemsSubtotal > 0 ? (
+                    <div className="mt-1 flex items-center justify-between gap-4 text-muted-foreground">
+                      <span>USD (not in total)</span>
+                      <span className="font-medium tabular-nums text-foreground">
+                        {formatUsd(usdItemsSubtotal)}
+                      </span>
+                    </div>
+                  ) : null}
+                  {allLinesUsd ? (
+                    <div className="mt-1 flex items-center justify-between gap-4 text-muted-foreground">
+                      <span>GST</span>
+                      <span className="font-medium tabular-nums text-foreground">
+                        {formatUsd(0)}
+                      </span>
+                    </div>
+                  ) : taxBreakdown.length > 0 ? (
                     taxBreakdown.map((tax) => (
                       <div
                         key={tax.label}
@@ -2148,12 +2500,24 @@ export function ScmCreatePoPage({ ovfId }: { ovfId: string }) {
                   )}
                   <div className="mt-1.5 flex items-center justify-between gap-4 border-t border-border pt-1.5 text-base font-semibold tabular-nums text-foreground">
                     <span>Final total</span>
-                    <span>{formatInr(finalTotal)}</span>
+                    <span>
+                      {allLinesUsd ? formatUsd(finalTotal) : formatInr(finalTotal)}
+                    </span>
                   </div>
                 </div>
               </div>
             </div>
           </div>
+
+          <ScmCommercialDocumentsPanel
+            branchId={preview.branch_id}
+            companyId={preview.company_id}
+            title="SCM documents"
+            allowUpload={!disabled}
+            className="border-border bg-card"
+            draftOnly
+            onDraftDocumentsChange={setScmDocuments}
+          />
 
           {preview.can_create_po ? (
             <div className="space-y-2">
@@ -2164,11 +2528,11 @@ export function ScmCreatePoPage({ ovfId }: { ovfId: string }) {
                   </div>
                 ) : null}
               </div>
-              <div className="flex flex-wrap gap-2">
+              <div className="flex flex-wrap gap-2 rounded-xl border border-sky-200/80 bg-sky-50/75 p-3 shadow-sm">
                 <Button
                   type="button"
                   variant="outline"
-                  className="cursor-pointer border-slate-300 bg-slate-50 text-slate-800 transition-colors duration-200 hover:bg-slate-100 hover:text-slate-900"
+                  className="cursor-pointer border-slate-300 bg-white text-slate-800 transition-colors duration-200 hover:bg-slate-100 hover:text-slate-900"
                   disabled={busy || pdfPreviewBusy}
                   onClick={() => {
                     setError(null);
@@ -2179,16 +2543,16 @@ export function ScmCreatePoPage({ ovfId }: { ovfId: string }) {
                 </Button>
                 <Button
                   type="button"
-                  className="cursor-pointer transition-colors duration-200"
+                  className="cursor-pointer bg-sky-700 text-white transition-colors duration-200 hover:bg-sky-800"
                   disabled={busy || pdfPreviewBusy}
                   onClick={() => void submit("finalize")}
                 >
-                  {isAdmin ? "Finalize & issue PO" : "Send for admin approval"}
+                  Send for admin approval
                 </Button>
                 <Button
                   type="button"
                   variant="outline"
-                  className="cursor-pointer transition-colors duration-200"
+                  className="cursor-pointer border-sky-300 bg-white text-sky-900 transition-colors duration-200 hover:bg-sky-100"
                   disabled={busy || pdfPreviewBusy}
                   onClick={() => void onPreviewPoPdf()}
                 >
@@ -2261,7 +2625,7 @@ export function ScmCreatePoPage({ ovfId }: { ovfId: string }) {
               {customShippingError}
             </p>
           ) : null}
-          <FinanceField label="Company name *">
+          <PoField label="Company name *">
             <Input
               value={customShippingDraft.companyName}
               onChange={(e) =>
@@ -2272,8 +2636,8 @@ export function ScmCreatePoPage({ ovfId }: { ovfId: string }) {
               }
               className="h-9"
             />
-          </FinanceField>
-          <FinanceField label="Street *">
+          </PoField>
+          <PoField label="Street *">
             <Input
               value={customShippingDraft.street}
               onChange={(e) =>
@@ -2284,9 +2648,9 @@ export function ScmCreatePoPage({ ovfId }: { ovfId: string }) {
               }
               className="h-9"
             />
-          </FinanceField>
+          </PoField>
           <div className="grid gap-3 sm:grid-cols-2">
-            <FinanceField label="City *">
+            <PoField label="City *">
               <Input
                 value={customShippingDraft.city}
                 onChange={(e) =>
@@ -2297,8 +2661,8 @@ export function ScmCreatePoPage({ ovfId }: { ovfId: string }) {
                 }
                 className="h-9"
               />
-            </FinanceField>
-            <FinanceField label="Pincode *">
+            </PoField>
+            <PoField label="Pincode *">
               <Input
                 value={customShippingDraft.pincode}
                 onChange={(e) =>
@@ -2309,9 +2673,9 @@ export function ScmCreatePoPage({ ovfId }: { ovfId: string }) {
                 }
                 className="h-9"
               />
-            </FinanceField>
+            </PoField>
           </div>
-          <FinanceField label="State *">
+          <PoField label="State *">
             <FinanceSelect
               value={customShippingDraft.state}
               onChange={(e) =>
@@ -2328,9 +2692,72 @@ export function ScmCreatePoPage({ ovfId }: { ovfId: string }) {
                 </option>
               ))}
             </FinanceSelect>
-          </FinanceField>
+          </PoField>
         </div>
       </ConfirmDialog>
+
+      {usdConvertLineId != null
+        ? createPortal(
+            <ConfirmDialog
+              open
+              title="Convert rate to USD"
+              description="Enter how many rupees equal 1 US dollar. The line unit rate will convert from INR to USD using this rate."
+              confirmLabel="Use USD rate"
+              cancelLabel="Cancel"
+              contentClassName="max-w-md p-6"
+              overlayClassName="z-[90]"
+              onConfirm={confirmUsdConvert}
+              onCancel={closeUsdConvertDialog}
+            >
+              <div className="mt-4 space-y-3">
+                {usdConvertError ? (
+                  <p className="rounded-md border border-destructive/30 bg-destructive/5 px-2.5 py-1.5 text-xs text-destructive">
+                    {usdConvertError}
+                  </p>
+                ) : null}
+                {usdConvertLine && toNumber(usdConvertLine.rate) > 0 ? (
+                  <p className="text-xs text-muted-foreground">
+                    Current INR unit rate:{" "}
+                    <span className="font-medium tabular-nums text-foreground">
+                      {formatInr(toNumber(usdConvertLine.rate))}
+                    </span>
+                  </p>
+                ) : null}
+                <PoField label="1 USD equals (INR) *">
+                  <Input
+                    type="number"
+                    min={0}
+                    step="any"
+                    inputMode="decimal"
+                    value={usdConvertRateDraft}
+                    onChange={(e) => {
+                      setUsdConvertRateDraft(e.target.value);
+                      setUsdConvertError(null);
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        confirmUsdConvert();
+                      }
+                    }}
+                    placeholder="e.g. 83.5"
+                    className={cn("h-9 tabular-nums", NO_SPINNER)}
+                    autoFocus
+                  />
+                </PoField>
+                {usdConvertPreview != null && usdConvertPreview > 0 ? (
+                  <p className="rounded-md border border-border bg-muted/40 px-2.5 py-2 text-xs text-muted-foreground">
+                    USD unit rate:{" "}
+                    <span className="font-semibold tabular-nums text-foreground">
+                      {formatUsd(usdConvertPreview)}
+                    </span>
+                  </p>
+                ) : null}
+              </div>
+            </ConfirmDialog>,
+            document.body,
+          )
+        : null}
     </div>
   );
 }

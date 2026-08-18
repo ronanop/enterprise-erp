@@ -19,6 +19,7 @@ from modules.procurement.adapters.master_data_adapter import (
 )
 from modules.procurement.domain.enums import OrderStatus
 from modules.procurement.domain.exceptions import InvalidDocumentState
+from modules.procurement.models.inventory_adjustment import ProcInventoryStockAdjustment
 from modules.procurement.models.inventory_import import ProcInventoryImportLine
 from modules.procurement.models.inventory_stock import ProcInventoryStockUnit
 from modules.procurement.models.order import ProcOrderHeader, ProcOrderLine
@@ -31,6 +32,12 @@ from modules.procurement.repository.order_repository import OrderRepository
 from modules.procurement.service.company_po_number_service import (
     normalize_entity_code,
     peek_next_company_po_number,
+)
+from modules.procurement.service.engines.receipt_reversal import (
+    assert_batch_reversible,
+    line_receipt_status,
+    order_receipt_status,
+    subtract_received,
 )
 from modules.procurement.service.order_service import OrderService
 from modules.procurement.service.procurement_scope_validator import ProcurementScopeValidator
@@ -85,6 +92,7 @@ class ScmHandoffService:
         self._inventory_import_table_ready: bool | None = None
         self._inventory_stock_table_ready: bool | None = None
         self._inventory_stock_qty_ready: bool | None = None
+        self._inventory_adjustment_table_ready: bool | None = None
         self._batch_line_billing_quantity_ready: bool | None = None
         self._crm = ProcurementCrmAdapter(db)
         self._master = ProcurementMasterDataAdapter(db)
@@ -131,6 +139,14 @@ class ScmHandoffService:
                 }
                 self._inventory_stock_qty_ready = "quantity" in cols
         return self._inventory_stock_qty_ready
+
+    def _inventory_adjustment_table_exists(self) -> bool:
+        if self._inventory_adjustment_table_ready is None:
+            self._inventory_adjustment_table_ready = inspect(self._db.get_bind()).has_table(
+                "proc_inventory_stock_adjustment",
+                schema="procurement",
+            )
+        return self._inventory_adjustment_table_ready
 
     def _receipt_batch_line_has_billing_quantity(self) -> bool:
         if self._batch_line_billing_quantity_ready is None:
@@ -402,6 +418,7 @@ class ScmHandoffService:
         company_id: UUID | None = None,
         lines: list[dict] | None = None,
         approved_by_name: str | None = None,
+        order_ref_cache: str | None = None,
         stock_unit_ids: list[UUID] | None = None,
         import_line_ids: list[UUID] | None = None,
     ) -> ProcOrderHeader:
@@ -413,6 +430,7 @@ class ScmHandoffService:
         code = normalize_entity_code(entity_code)
         self._master.get_vendor(ctx, vendor_id)
         approver = (approved_by_name or "").strip() or None
+        order_ref = (order_ref_cache or "").strip() or None
         company_po_number = peek_next_company_po_number(
             self._db, company_id=cid, entity_code=code
         )
@@ -431,6 +449,7 @@ class ScmHandoffService:
             entity_code=code,
             company_po_number=company_po_number,
             approved_by_name=approver,
+            order_ref_cache=order_ref,
         )
         line_rows = list(lines or [])
         if line_rows:
@@ -567,6 +586,51 @@ class ScmHandoffService:
             row.updated_at = now
         return len(rows)
 
+    def _order_line_payloads(
+        self,
+        ctx: TenantContext,
+        *,
+        company_id: UUID,
+        branch_id: UUID,
+        vendor_lines: list[dict],
+    ) -> list[dict]:
+        uom_id = self._master.resolve_default_uom_id(ctx, company_id)
+        product_map = self._master.resolve_products_by_names(
+            ctx,
+            company_id=company_id,
+            branch_id=branch_id,
+            product_names=[str(line["product_name"]) for line in vendor_lines],
+            uom_id=uom_id,
+        )
+        payloads: list[dict] = []
+        for idx, line in enumerate(vendor_lines, start=1):
+            product_name = str(line["product_name"])
+            product = product_map[(product_name or "").strip().lower() or "scm line item"]
+            qty = float(line["qty"])
+            unit_cost = float(line["unit_price"])
+            rate_currency = str(line.get("rate_currency") or "INR").strip().upper() or "INR"
+            if rate_currency != "USD":
+                rate_currency = "INR"
+            tax_rate = 0.0 if rate_currency == "USD" else float(line.get("tax_rate") or 0)
+            if qty <= 0 or unit_cost <= 0:
+                raise ConflictException(
+                    f"Vendor line '{product_name}' needs qty and unit cost > 0"
+                )
+            payloads.append(
+                {
+                    "line_number": idx,
+                    "product_id": product.id,
+                    "product_code": scm_line_product_code(product),
+                    "product_name": product_name[:255],
+                    "quantity": qty,
+                    "uom_id": getattr(product, "uom_id", None) or uom_id,
+                    "unit_cost": unit_cost,
+                    "rate_currency": rate_currency,
+                    "tax_rate": tax_rate,
+                }
+            )
+        return payloads
+
     def create_po_from_ovf(
         self,
         ctx: TenantContext,
@@ -578,11 +642,17 @@ class ScmHandoffService:
         payment_terms: str | None = None,
         expected_delivery_date: date | None = None,
         entity_code: str,
+        order_ref_cache: str | None = None,
         finalize: bool = False,
         hold: bool = False,
+        lines: list[dict] | None = None,
     ) -> ProcOrderHeader:
         if finalize and hold:
             raise ConflictException("Cannot finalize and hold a purchase order at the same time")
+        if finalize:
+            raise ConflictException(
+                "PO finalization requires approval. Create the PO as a draft and have an administrator issue it from Approval."
+            )
         handoff = self._crm.get_handoff(ctx, ovf_id)
         existing = self._orders.find_by_source(
             ctx,
@@ -590,6 +660,7 @@ class ScmHandoffService:
             source_document_type=self.SOURCE_DOC_TYPE,
             source_document_id=ovf_id,
         )
+        order_ref = (order_ref_cache or "").strip() or None
         if existing is not None and existing.status != OrderStatus.CANCELLED.value:
             if existing.status != OrderStatus.DRAFT.value:
                 raise ConflictException(
@@ -615,10 +686,38 @@ class ScmHandoffService:
                 payment_terms=terms,
                 expected_delivery_date=expected_delivery_date,
                 entity_code=code,
+                order_ref_cache=order_ref,
             )
             if updated is None:
                 raise ConflictException("Failed to update draft purchase order")
             order = updated
+
+            if lines is not None:
+                vendor_lines = [
+                    {
+                        "product_name": str(ln.get("product_name") or "").strip(),
+                        "qty": float(ln.get("qty") or 0),
+                        "unit_price": float(ln.get("unit_price") or 0),
+                        "rate_currency": str(ln.get("rate_currency") or "INR")
+                        .strip()
+                        .upper()
+                        or "INR",
+                        "tax_rate": float(ln.get("tax_rate") or 0),
+                    }
+                    for ln in lines
+                    if str(ln.get("product_name") or "").strip()
+                ]
+                if not vendor_lines:
+                    raise ConflictException("OVF has no vendor-side lines to purchase")
+                line_payloads = self._order_line_payloads(
+                    ctx,
+                    company_id=company_id,
+                    branch_id=branch_id,
+                    vendor_lines=vendor_lines,
+                )
+                _, order = self._order_service.replace_draft_lines(
+                    ctx, order.id, line_payloads
+                )
 
             if not order.company_po_number:
                 order.company_po_number = peek_next_company_po_number(
@@ -658,7 +757,20 @@ class ScmHandoffService:
         # Creating a PO releases any SCM Hold on the OVF.
         self._crm.set_scm_on_hold(ctx, ovf_id, on_hold=False)
 
-        vendor_lines = handoff.get("vendor_lines") or []
+        if lines:
+            vendor_lines = [
+                {
+                    "product_name": str(ln.get("product_name") or "").strip(),
+                    "qty": float(ln.get("qty") or 0),
+                    "unit_price": float(ln.get("unit_price") or 0),
+                    "rate_currency": str(ln.get("rate_currency") or "INR").strip().upper() or "INR",
+                    "tax_rate": float(ln.get("tax_rate") or 0),
+                }
+                for ln in lines
+                if str(ln.get("product_name") or "").strip()
+            ]
+        else:
+            vendor_lines = handoff.get("vendor_lines") or []
         if not vendor_lines:
             raise ConflictException("OVF has no vendor-side lines to purchase")
 
@@ -693,38 +805,15 @@ class ScmHandoffService:
             source_document_id=ovf_id,
             entity_code=code,
             company_po_number=company_po_number,
+            order_ref_cache=order_ref,
         )
 
-        uom_id = self._master.resolve_default_uom_id(ctx, company_id)
-        product_map = self._master.resolve_products_by_names(
+        line_payloads = self._order_line_payloads(
             ctx,
             company_id=company_id,
             branch_id=branch_id,
-            product_names=[str(line["product_name"]) for line in vendor_lines],
-            uom_id=uom_id,
+            vendor_lines=vendor_lines,
         )
-
-        line_payloads: list[dict] = []
-        for idx, line in enumerate(vendor_lines, start=1):
-            product_name = str(line["product_name"])
-            product = product_map[(product_name or "").strip().lower() or "scm line item"]
-            qty = float(line["qty"])
-            unit_cost = float(line["unit_price"])
-            if qty <= 0 or unit_cost <= 0:
-                raise ConflictException(
-                    f"Vendor line '{product_name}' needs qty and unit cost > 0"
-                )
-            line_payloads.append(
-                {
-                    "line_number": idx,
-                    "product_id": product.id,
-                    "product_code": scm_line_product_code(product),
-                    "product_name": product_name[:255],
-                    "quantity": qty,
-                    "uom_id": getattr(product, "uom_id", None) or uom_id,
-                    "unit_cost": unit_cost,
-                }
-            )
 
         created_lines, order = self._order_service.add_lines(ctx, order.id, line_payloads)
         if not created_lines:
@@ -839,6 +928,7 @@ class ScmHandoffService:
                     "id": order.id,
                     "document_number": order.document_number,
                     "document_date": order.document_date,
+                    "created_at": getattr(order, "created_at", None),
                     "vendor_id": order.vendor_id,
                     "status": order.status,
                     "currency_code": order.currency_code,
@@ -875,6 +965,7 @@ class ScmHandoffService:
                                 getattr(ln, "last_receipt_billing_quantity", 0) or 0
                             ),
                             "unit_cost": float(ln.unit_cost),
+                            "rate_currency": getattr(ln, "rate_currency", None) or "INR",
                             "line_total": float(ln.line_total),
                             "status": ln.status,
                             "grn_status": _grn_badge(
@@ -991,6 +1082,12 @@ class ScmHandoffService:
                 or batch_at is None
                 or (now - batch_at) > _RECEIPT_BATCH_WINDOW
             )
+            if not starting_new_batch and batch_id is not None:
+                existing_batch = self._db.get(ProcOrderReceiptBatch, batch_id)
+                if existing_batch is None or (
+                    getattr(existing_batch, "reversal_status", "posted") == "reversed"
+                ):
+                    starting_new_batch = True
             if starting_new_batch:
                 batch_id = uuid4()
                 next_seq = int(getattr(order, "grn_sequence", 0) or 0) + 1
@@ -1036,28 +1133,17 @@ class ScmHandoffService:
                 line.last_receipt_billing_quantity = 0.0
 
         active = [ln for ln in order.lines if not ln.is_deleted]
-        orderable = [ln for ln in active if float(ln.quantity or 0) > 0]
-        all_delivered = bool(orderable) and all(
-            float(ln.quantity_received or 0) >= float(ln.quantity or 0) for ln in orderable
-        )
-        any_received = any(float(ln.quantity_received or 0) > 0 for ln in active)
-        if all_delivered:
-            order.status = OrderStatus.RECEIVED.value
-            order.received_amount = float(order.total_amount or 0)
-        elif any_received:
-            order.status = OrderStatus.PARTIALLY_RECEIVED.value
-            order.received_amount = float(
-                sum(
-                    Decimal(str(ln.quantity_received or 0)) * Decimal(str(ln.unit_cost))
-                    for ln in active
-                )
-            )
-        elif order.status in {
+        header_status, received_amount = order_receipt_status(active)
+        if header_status == OrderStatus.SENT.value and order.status not in {
             OrderStatus.PARTIALLY_RECEIVED.value,
             OrderStatus.RECEIVED.value,
+            OrderStatus.CLOSED.value,
         }:
-            order.status = OrderStatus.SENT.value
-            order.received_amount = 0
+            # Keep issued/approved when there were never any receipts to roll back.
+            pass
+        else:
+            order.status = header_status
+            order.received_amount = float(received_amount)
 
         self._db.flush()
         self._audit.log_entity_change(
@@ -1168,6 +1254,7 @@ class ScmHandoffService:
             "content_type": row.content_type,
             "size": row.size,
             "category": getattr(row, "category", None) or "other",
+            "remarks": getattr(row, "remarks", None),
             "entity_type": row.entity_type,
             "entity_id": row.entity_id,
         }
@@ -1221,6 +1308,7 @@ class ScmHandoffService:
         branch_id: UUID,
         company_id: UUID | None,
         category: str = "other",
+        remarks: str | None = None,
     ):
         from modules.crm.service.attachment_service import AttachmentService
 
@@ -1231,6 +1319,7 @@ class ScmHandoffService:
             entity_id=ovf_id,
             file_name=file_name,
             category=category or "other",
+            remarks=remarks,
             branch_id=branch_id,
             company_id=company_id or preview.get("company_id"),
             content_base64=content_base64,
@@ -1263,6 +1352,7 @@ class ScmHandoffService:
         branch_id: UUID,
         company_id: UUID | None,
         category: str = "other",
+        remarks: str | None = None,
     ):
         from modules.crm.service.attachment_service import AttachmentService
 
@@ -1273,6 +1363,7 @@ class ScmHandoffService:
             entity_id=order_id,
             file_name=file_name,
             category=category or "other",
+            remarks=remarks,
             branch_id=branch_id,
             company_id=company_id or order.company_id,
             content_base64=content_base64,
@@ -1461,6 +1552,25 @@ class ScmHandoffService:
             "vendor_invoice_subtotal": float(sub) if sub is not None else None,
         }
 
+    @staticmethod
+    def _batch_reversal_fields(batch: ProcOrderReceiptBatch | None) -> dict:
+        if batch is None:
+            return {
+                "reversed": False,
+                "reversal_status": "posted",
+                "reversed_at": None,
+                "reversed_by": None,
+                "reversal_reason": None,
+            }
+        status = (getattr(batch, "reversal_status", None) or "posted").strip().lower()
+        return {
+            "reversed": status == "reversed",
+            "reversal_status": status,
+            "reversed_at": getattr(batch, "reversed_at", None),
+            "reversed_by": getattr(batch, "reversed_by", None),
+            "reversal_reason": getattr(batch, "reversal_reason", None),
+        }
+
     def list_receipt_batch_attachments(self, ctx: TenantContext, batch_id: UUID):
         from modules.crm.service.attachment_service import AttachmentService
 
@@ -1558,6 +1668,7 @@ class ScmHandoffService:
                         "lines": self._receipt_batch_line_payload(batch_lines, line_by_id),
                         "attachments": attachments_by_batch.get(batch.id, []),
                         **self._vendor_invoice_batch_fields(batch),
+                        **self._batch_reversal_fields(batch),
                     }
                 )
             return result
@@ -1626,9 +1737,245 @@ class ScmHandoffService:
                     **self._vendor_invoice_batch_fields(
                         current_batch if s == seq else None
                     ),
+                    **self._batch_reversal_fields(
+                        current_batch if s == seq else None
+                    ),
                 }
             )
         return fallback
+
+    def reverse_receipt_batch(
+        self,
+        ctx: TenantContext,
+        batch_id: UUID,
+        *,
+        reason: str,
+    ) -> dict:
+        reason_text = (reason or "").strip()
+        if not reason_text:
+            raise ConflictException("Reversal reason is required")
+        if not self._receipt_batch_tables_exist():
+            raise ConflictException("GRN receipt batches are not available on this database.")
+
+        batch = (
+            self._db.query(ProcOrderReceiptBatch)
+            .filter(
+                ProcOrderReceiptBatch.id == batch_id,
+                ProcOrderReceiptBatch.is_deleted.is_(False),
+            )
+            .with_for_update()
+            .first()
+        )
+        if batch is None:
+            raise NotFoundException("GRN receipt batch not found")
+        if batch.tenant_id != ctx.tenant_id:
+            raise NotFoundException("GRN receipt batch not found")
+
+        order = self._orders.get_order_for_update(ctx, batch.order_header_id)
+        if order is None:
+            raise NotFoundException("Purchase order not found")
+        self._scope.validate_company_access(ctx, order.company_id)
+        self._scope.validate_branch_access(ctx, order.branch_id)
+        assert_batch_reversible(
+            reversal_status=getattr(batch, "reversal_status", None),
+            order_status=order.status,
+        )
+
+        batch_lines = (
+            self._db.query(ProcOrderReceiptBatchLine)
+            .filter(
+                ProcOrderReceiptBatchLine.receipt_batch_id == batch.id,
+                ProcOrderReceiptBatchLine.is_deleted.is_(False),
+            )
+            .all()
+        )
+        line_by_id = {ln.id: ln for ln in (order.lines or []) if not getattr(ln, "is_deleted", False)}
+        now = utcnow()
+        for bl in batch_lines:
+            ol = line_by_id.get(bl.order_line_id)
+            if ol is None:
+                continue
+            ordered = Decimal(str(ol.quantity or 0))
+            current = Decimal(str(ol.quantity_received or 0))
+            received = subtract_received(current, Decimal(str(bl.quantity or 0)))
+            ol.quantity_received = float(received)
+            ol.status = line_receipt_status(ordered, received)
+            ol.updated_by = ctx.user_id
+            ol.updated_at = now
+
+        self._restore_last_receipt_after_reversal(ctx, order, exclude_batch_id=batch.id, now=now)
+
+        header_status, received_amount = order_receipt_status(
+            [ln for ln in (order.lines or []) if not getattr(ln, "is_deleted", False)]
+        )
+        order.status = header_status
+        order.received_amount = float(received_amount)
+        order.updated_by = ctx.user_id
+        order.updated_at = now
+        if getattr(order, "current_receipt_batch_id", None) == batch.id:
+            previous = self._latest_active_receipt_batch(order.id, exclude_id=batch.id)
+            order.current_receipt_batch_id = previous.id if previous is not None else None
+            order.current_receipt_batch_at = None
+            if previous is not None:
+                order.current_grn_number = previous.grn_number
+
+        batch.reversal_status = "reversed"
+        batch.reversed_at = now
+        batch.reversed_by = ctx.user_id
+        batch.reversal_reason = reason_text[:2000]
+        batch.updated_by = ctx.user_id
+        batch.updated_at = now
+
+        self._apply_inventory_reversal(ctx, order=order, batch=batch, reason=reason_text, now=now)
+        self._db.flush()
+        self._audit.log_entity_change(
+            tenant_id=ctx.tenant_id,
+            entity_name="proc_order_receipt_batch",
+            entity_id=batch.id,
+            operation="grn_reverse",
+            performed_by=ctx.user_id,
+            new_value={
+                "grn_number": batch.grn_number,
+                "reason": reason_text,
+                "order_status": order.status,
+            },
+        )
+
+        attachments = self._receipt_batch_attachment_summaries(ctx, [batch.id])
+        return {
+            "id": batch.id,
+            "sequence": int(batch.sequence),
+            "grn_number": batch.grn_number,
+            "receipt_at": batch.receipt_at,
+            "lines": self._receipt_batch_line_payload(batch_lines, line_by_id),
+            "attachments": attachments.get(batch.id, []),
+            **self._vendor_invoice_batch_fields(batch),
+            **self._batch_reversal_fields(batch),
+        }
+
+    def _latest_active_receipt_batch(
+        self, order_id: UUID, *, exclude_id: UUID
+    ) -> ProcOrderReceiptBatch | None:
+        return (
+            self._db.query(ProcOrderReceiptBatch)
+            .filter(
+                ProcOrderReceiptBatch.order_header_id == order_id,
+                ProcOrderReceiptBatch.id != exclude_id,
+                ProcOrderReceiptBatch.is_deleted.is_(False),
+                ProcOrderReceiptBatch.reversal_status != "reversed",
+            )
+            .order_by(ProcOrderReceiptBatch.sequence.desc())
+            .first()
+        )
+
+    def _restore_last_receipt_after_reversal(
+        self,
+        ctx: TenantContext,
+        order: ProcOrderHeader,
+        *,
+        exclude_batch_id: UUID,
+        now,
+    ) -> None:
+        remaining = (
+            self._db.query(ProcOrderReceiptBatchLine, ProcOrderReceiptBatch)
+            .join(
+                ProcOrderReceiptBatch,
+                ProcOrderReceiptBatchLine.receipt_batch_id == ProcOrderReceiptBatch.id,
+            )
+            .filter(
+                ProcOrderReceiptBatch.order_header_id == order.id,
+                ProcOrderReceiptBatch.id != exclude_batch_id,
+                ProcOrderReceiptBatch.is_deleted.is_(False),
+                ProcOrderReceiptBatch.reversal_status != "reversed",
+                ProcOrderReceiptBatchLine.is_deleted.is_(False),
+            )
+            .all()
+        )
+        latest_by_line: dict[UUID, tuple[ProcOrderReceiptBatchLine, ProcOrderReceiptBatch]] = {}
+        for bl, batch in remaining:
+            current = latest_by_line.get(bl.order_line_id)
+            if current is None or int(batch.sequence) > int(current[1].sequence):
+                latest_by_line[bl.order_line_id] = (bl, batch)
+
+        for ol in order.lines or []:
+            if getattr(ol, "is_deleted", False):
+                continue
+            pair = latest_by_line.get(ol.id)
+            if pair is None:
+                ol.last_receipt_qty = 0
+                ol.last_receipt_at = None
+                ol.last_receipt_batch_id = None
+                if hasattr(ol, "last_receipt_serial_numbers"):
+                    ol.last_receipt_serial_numbers = None
+                if hasattr(ol, "last_receipt_billing"):
+                    ol.last_receipt_billing = True
+                if hasattr(ol, "last_receipt_billing_quantity"):
+                    ol.last_receipt_billing_quantity = 0.0
+            else:
+                bl, batch = pair
+                ol.last_receipt_qty = float(bl.quantity or 0)
+                ol.last_receipt_at = batch.receipt_at
+                ol.last_receipt_batch_id = batch.id
+                if hasattr(ol, "last_receipt_serial_numbers"):
+                    ol.last_receipt_serial_numbers = list(bl.serial_numbers or []) or None
+                if hasattr(ol, "last_receipt_billing"):
+                    ol.last_receipt_billing = bool(getattr(bl, "billing", True))
+                if hasattr(ol, "last_receipt_billing_quantity"):
+                    ol.last_receipt_billing_quantity = float(
+                        getattr(bl, "billing_quantity", 0) or 0
+                    )
+            ol.updated_by = ctx.user_id
+            ol.updated_at = now
+
+    def _apply_inventory_reversal(
+        self,
+        ctx: TenantContext,
+        *,
+        order: ProcOrderHeader,
+        batch: ProcOrderReceiptBatch,
+        reason: str,
+        now,
+    ) -> None:
+        if not self._inventory_stock_table_exists():
+            return
+        units = (
+            self._db.query(ProcInventoryStockUnit)
+            .filter(ProcInventoryStockUnit.receipt_batch_id == batch.id)
+            .all()
+        )
+        on_hand = [unit for unit in units if not unit.is_deleted]
+        consumed = [unit for unit in units if unit.is_deleted]
+        for unit in on_hand:
+            unit.is_deleted = True
+            unit.deleted_at = now
+            unit.deleted_by = ctx.user_id
+            unit.updated_by = ctx.user_id
+            unit.updated_at = now
+
+        if not consumed or not self._inventory_adjustment_table_exists():
+            return
+        has_qty = self._inventory_stock_has_quantity()
+        for unit in consumed:
+            qty = float(getattr(unit, "quantity", None) or 1) if has_qty else 1.0
+            self._db.add(
+                ProcInventoryStockAdjustment(
+                    receipt_batch_id=batch.id,
+                    order_header_id=order.id,
+                    order_line_id=unit.order_line_id,
+                    stock_unit_id=unit.id,
+                    product_name=unit.product_name,
+                    grn_number=unit.grn_number,
+                    serial_number=unit.serial_number,
+                    unit_index=unit.unit_index,
+                    quantity=-abs(qty),
+                    reason=reason[:2000],
+                    tenant_id=order.tenant_id,
+                    company_id=order.company_id,
+                    branch_id=order.branch_id,
+                    created_by=ctx.user_id,
+                    updated_by=ctx.user_id,
+                )
+            )
 
     @staticmethod
     def _receipt_batch_line_payload(
@@ -2056,6 +2403,8 @@ class ScmHandoffService:
             )
 
             for batch in batches:
+                if (getattr(batch, "reversal_status", None) or "posted") == "reversed":
+                    continue
                 order_id = batch.order_header_id
                 order = order_cache.get(order_id)
                 if order is None:
@@ -2097,6 +2446,58 @@ class ScmHandoffService:
                                 "import_line_id": None,
                             }
                         )
+
+        if self._inventory_adjustment_table_exists():
+            adjustments = (
+                self._db.query(ProcInventoryStockAdjustment)
+                .filter(
+                    ProcInventoryStockAdjustment.tenant_id == ctx.tenant_id,
+                    ProcInventoryStockAdjustment.company_id == cid,
+                    ProcInventoryStockAdjustment.is_deleted.is_(False),
+                )
+                .order_by(ProcInventoryStockAdjustment.created_at.desc())
+                .all()
+            )
+            missing_order_ids = [
+                row.order_header_id
+                for row in adjustments
+                if row.order_header_id not in order_cache
+            ]
+            if missing_order_ids:
+                order_cache.update(self._inventory_order_headers(ctx, cid, list(set(missing_order_ids))))
+            line_ids = list({row.order_line_id for row in adjustments})
+            adj_lines = self._inventory_order_lines(ctx, line_ids)
+            for adj in adjustments:
+                order = order_cache.get(adj.order_header_id)
+                if order is None:
+                    continue
+                ol = adj_lines.get(adj.order_line_id)
+                po_number = (order.company_po_number or order.document_number or "").strip() or "—"
+                unit_cost = float(getattr(ol, "unit_cost", 0) or 0) if ol else 0.0
+                line_number = int(ol.line_number) if ol else 0
+                product_code = (getattr(ol, "product_code", None) or "").strip() if ol else ""
+                result.append(
+                    {
+                        "order_id": order.id,
+                        "order_line_id": adj.order_line_id,
+                        "receipt_batch_id": adj.receipt_batch_id,
+                        "grn_number": adj.grn_number,
+                        "receipt_at": adj.created_at,
+                        "company_po_number": po_number,
+                        "vendor_id": order.vendor_id,
+                        "product_name": adj.product_name,
+                        "line_number": line_number,
+                        "unit_index": adj.unit_index,
+                        "serial_number": adj.serial_number,
+                        "source": "grn_reversal",
+                        "received_quantity": float(adj.quantity or 0),
+                        "billing_quantity": 0,
+                        "unit_cost": unit_cost,
+                        "description": product_code or None,
+                        "stock_unit_id": adj.stock_unit_id,
+                        "import_line_id": None,
+                    }
+                )
 
         if self._inventory_import_table_exists():
             imports = (

@@ -100,6 +100,8 @@ class ProcOrderHeader(Base, *ProcTransactionMixin):
     current_grn_number: Mapped[str | None] = mapped_column(String(80), nullable=True)
     # Finance / sales approver for POs created outside CRM OVF (shown on PO lists & PDF).
     approved_by_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    # Manual CACHE order reference printed on PO PDF (optional).
+    order_ref_cache: Mapped[str | None] = mapped_column(String(100), nullable=True)
 
     lines: Mapped[list["ProcOrderLine"]] = relationship(
         back_populates="order_header",
@@ -142,6 +144,8 @@ class ProcOrderLine(Base, *ProcTransactionMixin):
         nullable=False,
     )
     unit_cost: Mapped[float] = mapped_column(Numeric(18, 4), nullable=False)
+    # INR lines roll into PO totals/GST. USD is informational on the PO only.
+    rate_currency: Mapped[str] = mapped_column(String(3), nullable=False, default="INR")
     discount_percent: Mapped[float] = mapped_column(Numeric(8, 4), nullable=False, default=0)
     discount_amount: Mapped[float] = mapped_column(Numeric(18, 4), nullable=False, default=0)
     tax_id: Mapped[UUID | None] = mapped_column(

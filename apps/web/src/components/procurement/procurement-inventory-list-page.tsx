@@ -1,10 +1,10 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
-import { Boxes, Package, Plus, RefreshCw, Upload } from "lucide-react";
+import { Boxes, IndianRupee, Package, RefreshCw, Upload } from "lucide-react";
 
 import { FinanceKpiCard } from "@/components/finance/finance-kpi-card";
+import { ProcurementInventoryCharts } from "@/components/procurement/procurement-inventory-charts";
 import {
   ProcurementInventoryImportDialog,
   INVENTORY_WITHOUT_PO,
@@ -32,11 +32,10 @@ import {
   type ProcurementInventoryRow,
   type VendorOption,
 } from "@/services/procurement-service";
-import { buildProcurementInventoryStockSummary, inventoryRowStableKey, isGrnNonBilledStockRow, nonBilledStockQuantity } from "@/utils/procurement-inventory-report";
+import { buildProcurementInventoryStockSummary, inventoryRowStableKey, isInventoryLedgerRow, nonBilledStockQuantity } from "@/utils/procurement-inventory-report";
 import { textTokenMatch } from "@/utils/procurement-search";
 
 export function ProcurementInventoryListPage() {
-  const router = useRouter();
   const cachedOnMount = peekProcurementInventoryFromCache();
   const [rows, setRows] = useState<ProcurementInventoryRow[]>(() => cachedOnMount ?? []);
   const [vendors, setVendors] = useState<Record<string, VendorOption>>({});
@@ -105,7 +104,7 @@ export function ProcurementInventoryListPage() {
 
   const reportSource = query.trim() ? filtered : rows;
   const grnStockRows = useMemo(
-    () => reportSource.filter(isGrnNonBilledStockRow),
+    () => reportSource.filter(isInventoryLedgerRow),
     [reportSource],
   );
   const grnStockTableRows = useMemo(() => {
@@ -123,10 +122,13 @@ export function ProcurementInventoryListPage() {
       return (a.unit_index ?? 0) - (b.unit_index ?? 0);
     });
   }, [grnStockRows]);
-  const stockSummary = useMemo(
-    () => buildProcurementInventoryStockSummary(grnStockRows),
-    [grnStockRows],
-  );
+  const stockSummary = useMemo(() => {
+    const labels: Record<string, string> = {};
+    for (const [id, vendor] of Object.entries(vendors)) {
+      labels[id] = vendor.label;
+    }
+    return buildProcurementInventoryStockSummary(grnStockRows, { vendorLabels: labels });
+  }, [grnStockRows, vendors]);
 
   async function onConfirmImport(draft: InventoryImportDraftRow[]) {
     setImportBusy(true);
@@ -154,16 +156,6 @@ export function ProcurementInventoryListPage() {
         title="Inventory"
         actions={
           <div className="flex flex-wrap gap-2">
-            <Button
-              type="button"
-              size="sm"
-              className="cursor-pointer transition-colors duration-200"
-              disabled={loading}
-              onClick={() => router.push("/procurement/inventory/create-po")}
-            >
-              <Plus className="mr-1.5 size-3.5" />
-              Create purchase order
-            </Button>
             <Button
               type="button"
               variant="outline"
@@ -216,26 +208,38 @@ export function ProcurementInventoryListPage() {
 
       {loading ? (
         <div className="space-y-3">
-          <div className="grid gap-3 sm:grid-cols-2">
+          <div className="grid gap-3 sm:grid-cols-3">
             <div className="h-[118px] animate-pulse rounded-md border border-border/60 bg-muted/20" />
             <div className="h-[118px] animate-pulse rounded-md border border-border/60 bg-muted/20" />
+            <div className="h-[118px] animate-pulse rounded-md border border-border/60 bg-muted/20" />
+          </div>
+          <div className="grid gap-3 lg:grid-cols-2">
+            <div className="h-[240px] animate-pulse rounded-md border border-border/60 bg-muted/20" />
+            <div className="h-[240px] animate-pulse rounded-md border border-border/60 bg-muted/20" />
           </div>
           <div className="h-32 animate-pulse rounded-md border border-border/60 bg-muted/20" />
         </div>
       ) : (
         <div className="space-y-3">
-          <div className="grid gap-3 sm:grid-cols-2">
+          <div className="grid gap-3 sm:grid-cols-3">
             <FinanceKpiCard
               label="Units in stock"
               value={String(stockSummary.totalUnits)}
               icon={Boxes}
             />
             <FinanceKpiCard
-              label="Products"
+              label="OEM name"
               value={String(stockSummary.productCount)}
               icon={Package}
             />
+            <FinanceKpiCard
+              label="Stock value"
+              value={formatInr(stockSummary.totalStockValue)}
+              icon={IndianRupee}
+            />
           </div>
+
+          <ProcurementInventoryCharts summary={stockSummary} />
 
           <div className={procurementUi.sectionCard}>
             <p className={procurementUi.sectionTitle}>GRN stock by product</p>
@@ -281,7 +285,10 @@ export function ProcurementInventoryListPage() {
                           <td
                             className={cn(
                               procurementUi.tdNumeric,
-                              "px-4 text-right font-mono tabular-nums text-foreground",
+                              "px-4 text-right font-mono tabular-nums",
+                              nonBilledStockQuantity(line) < 0
+                                ? "text-destructive"
+                                : "text-foreground",
                             )}
                           >
                             {nonBilledStockQuantity(line).toLocaleString("en-IN")}
@@ -320,6 +327,11 @@ export function ProcurementInventoryListPage() {
                             )}
                           >
                             {line.grn_number}
+                            {line.source === "grn_reversal" ? (
+                              <span className="ml-2 rounded-full border border-destructive/30 bg-destructive/10 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-destructive">
+                                Reversed
+                              </span>
+                            ) : null}
                           </td>
                         </tr>
                       ))}

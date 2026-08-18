@@ -9,6 +9,7 @@ import { ProcurementNavSearch } from "@/components/procurement/procurement-nav-s
 import { Button } from "@/components/ui/button";
 import { useClientAuth } from "@/hooks/use-client-auth";
 import { useProcurementRole } from "@/hooks/use-procurement-role";
+import { useScmQueueUnreadCount } from "@/hooks/use-scm-queue-unread-count";
 import {
   countUnreadPoApprovalDecisionNotifications,
   listUnreadPoApprovalDecisionNotifications,
@@ -18,22 +19,10 @@ import {
   type PoApprovalDecisionNotification,
 } from "@/lib/procurement-approval-notifications";
 import { cn } from "@/lib/utils";
-import {
-  loadProcurementOverview,
-  peekProcurementOverviewFromCache,
-} from "@/services/procurement-service";
-import { getUnseenScmOvfIds } from "@/utils/scm-queue-seen";
+import { loadProcurementOverview } from "@/services/procurement-service";
 
 const topbarIconBtn =
   "size-8 cursor-pointer rounded-lg border-border bg-background text-foreground shadow-none transition-colors duration-200 hover:bg-muted";
-
-function unreadScmFromOverview(): number {
-  const overview = peekProcurementOverviewFromCache();
-  const ids = (overview?.scmQueue ?? [])
-    .map((row) => String(row.ovf_id ?? ""))
-    .filter(Boolean);
-  return getUnseenScmOvfIds(ids).length;
-}
 
 export function AppTopbar() {
   const signedIn = useClientAuth();
@@ -42,19 +31,18 @@ export function AppTopbar() {
   const { isAdmin } = useProcurementRole();
   const showProcurementSearch =
     pathname === "/procurement" || pathname.startsWith("/procurement/");
-  const [scmUnread, setScmUnread] = useState(0);
+  const scmUnreadAll = useScmQueueUnreadCount();
+  const scmUnread = showProcurementSearch ? scmUnreadAll : 0;
   const [approvalUnread, setApprovalUnread] = useState(0);
   const [panelOpen, setPanelOpen] = useState(false);
   const [approvalItems, setApprovalItems] = useState<PoApprovalDecisionNotification[]>([]);
 
   const refreshUnread = useCallback(() => {
     if (!showProcurementSearch) {
-      setScmUnread(0);
       setApprovalUnread(0);
       setApprovalItems([]);
       return;
     }
-    setScmUnread(unreadScmFromOverview());
     if (isAdmin) {
       setApprovalUnread(0);
       setApprovalItems([]);
@@ -87,12 +75,14 @@ export function AppTopbar() {
     window.addEventListener("focus", onFocus);
     window.addEventListener(PROCUREMENT_APPROVAL_NOTIFICATIONS_EVENT, onFocus);
     window.addEventListener("storage", onFocus);
+    window.addEventListener("erp:scm-queue-seen", onFocus);
     return () => {
       cancelled = true;
       window.clearInterval(id);
       window.removeEventListener("focus", onFocus);
       window.removeEventListener(PROCUREMENT_APPROVAL_NOTIFICATIONS_EVENT, onFocus);
       window.removeEventListener("storage", onFocus);
+      window.removeEventListener("erp:scm-queue-seen", onFocus);
     };
   }, [showProcurementSearch, signedIn, refreshUnread, pathname]);
 

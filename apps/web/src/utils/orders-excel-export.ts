@@ -26,6 +26,12 @@ function roundMoney(value: number): number {
   return Math.round(value * 100) / 100;
 }
 
+function formatCustomerPaymentTerms(days: number | null | undefined): string {
+  const value = Number(days) || 0;
+  if (value <= 0) return "";
+  return `Net ${value} days`;
+}
+
 export function buildOrderExportRows(
   orders: ProcOrder[],
   vendors: Record<string, { label: string }>,
@@ -45,6 +51,7 @@ export function buildOrderExportRows(
         "",
       "Customer PO": order.customer_po_number?.trim() || "",
       "Customer PO date": formatDate(order.ovf_date),
+      "Customer payment terms": formatCustomerPaymentTerms(order.customer_payment_days),
       "Customer PO amount": roundMoney(customerTotal),
       "Tax amount": roundMoney(Number(order.customer_tax_amount) || 0),
       "Total amount with tax": roundMoney(Number(order.customer_total_with_tax) || 0),

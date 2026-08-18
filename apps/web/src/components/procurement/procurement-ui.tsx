@@ -223,7 +223,7 @@ export function ProcurementKpiCard({
     >
       <span className={cn("absolute inset-y-0 left-0 w-1", styles.bar)} aria-hidden />
       <div className="flex items-start justify-between gap-2 pl-1.5">
-        <p className="text-[11px] font-medium tracking-wide text-muted-foreground">
+        <p className="text-[11px] font-bold tracking-wide text-foreground">
           {label}
         </p>
         <span
@@ -238,7 +238,7 @@ export function ProcurementKpiCard({
       {loading ? (
         <div className="mt-2 ml-1.5 h-7 w-24 animate-pulse rounded bg-muted" />
       ) : (
-        <p className="mt-2 pl-1.5 text-2xl font-semibold tracking-tight text-foreground tabular-nums">
+        <p className="mt-2 pl-1.5 text-2xl font-normal tracking-tight text-foreground tabular-nums">
           {value}
         </p>
       )}

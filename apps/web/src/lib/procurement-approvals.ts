@@ -6,6 +6,7 @@ export type PoApprovalDocument = {
   id: string;
   fileName: string;
   category: string;
+  remarks: string | null;
   entityType: string;
   source: "ovf" | "po";
 };
@@ -39,6 +40,7 @@ function normalizeDocument(row: Partial<PoApprovalDocument> | null | undefined):
     id: row.id,
     fileName: row.fileName,
     category: row.category || "other",
+    remarks: row.remarks?.trim() || null,
     entityType: row.entityType || "ovf",
     source: row.source === "po" ? "po" : "ovf",
   };

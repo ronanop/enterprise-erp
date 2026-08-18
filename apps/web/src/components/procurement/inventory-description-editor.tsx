@@ -20,7 +20,7 @@ export function InventoryDescriptionEditor({
   onSaved: () => void;
   onError: (message: string | null) => void;
 }) {
-  const canEdit = Boolean(row.order_line_id);
+  const canEdit = Boolean(row.order_line_id) && row.source !== "grn_reversal";
   const [editing, setEditing] = useState(false);
   const [value, setValue] = useState(() => (row.description ?? "").trim());
   const [busy, setBusy] = useState(false);

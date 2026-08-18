@@ -405,26 +405,26 @@ export function ScmQueuePage() {
       <ProcurementListPanel id="procurement-list" className="scroll-mt-24">
         <div className="overflow-x-auto">
           <table className="w-full min-w-[1440px] text-left text-sm">
-            <thead className="border-b border-border bg-muted/40 text-xs uppercase tracking-wide text-muted-foreground">
+            <thead className="border-b border-border bg-muted/40 text-xs font-bold uppercase tracking-wide text-muted-foreground">
               <tr>
-                <th className="px-3 py-2 font-medium">PO number</th>
-                <th className="px-3 py-2 font-medium">Customer name</th>
-                <th className="px-3 py-2 font-medium">Customer pay terms</th>
-                <th className="px-3 py-2 font-medium">Vendor name</th>
-                <th className="px-3 py-2 font-medium">Vendor pay terms</th>
-                <th className="px-3 py-2 font-medium">OVF date</th>
-                <th className="px-3 py-2 font-medium text-right">Customer amt</th>
-                <th className="px-3 py-2 font-medium text-right">Vendor amt</th>
+                <th className="px-3 py-2 font-bold">PO number</th>
+                <th className="px-3 py-2 font-bold">Customer name</th>
+                <th className="px-3 py-2 font-bold">Customer pay terms</th>
+                <th className="px-3 py-2 font-bold">Vendor name</th>
+                <th className="px-3 py-2 font-bold">Vendor pay terms</th>
+                <th className="px-3 py-2 font-bold">OVF date</th>
+                <th className="px-3 py-2 font-bold text-right">Customer amt</th>
+                <th className="px-3 py-2 font-bold text-right">Vendor amt</th>
                 <th
-                  className="px-3 py-2 font-medium text-right"
+                  className="px-3 py-2 font-bold text-right"
                   title="Product margin minus freight, additional charges, and finance cost"
                 >
                   Net margin
                 </th>
-                <th className="px-3 py-2 font-medium text-right">Margin %</th>
-                <th className="px-3 py-2 font-medium">OVF status</th>
-                <th className="px-3 py-2 font-medium">View OVF</th>
-                <th className="px-3 py-2 font-medium">Action</th>
+                <th className="px-3 py-2 font-bold text-right">Margin %</th>
+                <th className="px-3 py-2 font-bold">OVF status</th>
+                <th className="px-3 py-2 font-bold">View OVF</th>
+                <th className="px-3 py-2 font-bold">Action</th>
               </tr>
             </thead>
             <tbody>

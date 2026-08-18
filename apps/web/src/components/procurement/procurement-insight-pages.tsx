@@ -5,19 +5,28 @@ import Link from "next/link";
 import {
   BarChart3,
   Boxes,
+  ChevronDown,
   ClipboardList,
   Download,
-  FileBarChart,
   FileSpreadsheet,
+  IndianRupee,
   PackageCheck,
   RefreshCw,
   ShoppingCart,
-  Truck,
+  type LucideIcon,
 } from "lucide-react";
 import * as XLSX from "xlsx";
+import {
+  Bar,
+  BarChart,
+  CartesianGrid,
+  Cell,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
 
-import { Exploded3dPieChart, type Exploded3dPieSlice } from "@/components/procurement/exploded-3d-pie";
-import { ProcurementPipelineFunnel } from "@/components/procurement/procurement-pipeline-funnel";
 import { ProcurementPageHeader } from "@/components/procurement/procurement-page-header";
 import {
   ProcurementErrorBanner,
@@ -43,20 +52,18 @@ import {
   type ScmVendorPo,
   type VendorOption,
 } from "@/services/procurement-service";
-import { buildGrnExportRows, exportGrnsXlsx } from "@/utils/grns-excel-export";
+import { buildGrnExportRowsWithBatches, exportGrnsXlsx } from "@/utils/grns-excel-export";
 import { grnBadgeVariant } from "@/utils/grn-status-display";
 import { buildOrderExportRows, exportOrdersXlsx } from "@/utils/orders-excel-export";
 import {
   buildProcurementInventoryStockSummary,
-  isGrnNonBilledStockRow,
+  isInventoryLedgerRow,
 } from "@/utils/procurement-inventory-report";
 import { buildProcurementPipelineMetrics } from "@/utils/procurement-pipeline-metrics";
 import {
   buildPoGrnBillingRows,
-  poGrnBillingExportRows,
 } from "@/utils/procurement-po-grn-billing";
-import { countPoBuckets, emptyPoBucketCounts, poOverviewBucketForOrder } from "@/utils/procurement-po-buckets";
-import { textTokenMatch } from "@/utils/procurement-search";
+import { countPoBuckets, deriveGrnStatus, emptyPoBucketCounts, poOverviewBucketForOrder, type PoOverviewBucket } from "@/utils/procurement-po-buckets";
 import { isScmOpenOvfRow } from "@/utils/scm-queue-ovf-status";
 
 function stampNow(): string {
@@ -137,11 +144,37 @@ function useProcurementInsightData() {
   return { data, loading, refreshing, error, reload: load };
 }
 
+type ReportTint = "sky" | "amber" | "emerald" | "teal" | "orange";
+
+const REPORT_TINT: Record<ReportTint, { card: string; icon: string }> = {
+  sky: {
+    card: "border-sky-200/80 bg-sky-50/70 hover:border-sky-300/90 hover:bg-sky-50",
+    icon: "border-sky-200/70 bg-sky-100 text-sky-800",
+  },
+  amber: {
+    card: "border-amber-200/80 bg-amber-50/70 hover:border-amber-300/90 hover:bg-amber-50",
+    icon: "border-amber-200/70 bg-amber-100 text-amber-800",
+  },
+  emerald: {
+    card: "border-emerald-200/80 bg-emerald-50/70 hover:border-emerald-300/90 hover:bg-emerald-50",
+    icon: "border-emerald-200/70 bg-emerald-100 text-emerald-800",
+  },
+  teal: {
+    card: "border-teal-200/80 bg-teal-50/70 hover:border-teal-300/90 hover:bg-teal-50",
+    icon: "border-teal-200/70 bg-teal-100 text-teal-800",
+  },
+  orange: {
+    card: "border-orange-200/80 bg-orange-50/70 hover:border-orange-300/90 hover:bg-orange-50",
+    icon: "border-orange-200/70 bg-orange-100 text-orange-800",
+  },
+};
+
 type ReportCard = {
   id: string;
   title: string;
   description: string;
   icon: typeof FileSpreadsheet;
+  tint: ReportTint;
   href?: string;
   countLabel: string;
   onExport: () => Promise<void>;
@@ -154,7 +187,7 @@ export function ProcurementReportsPage() {
   const [statusQuery, setStatusQuery] = useState("");
 
   const stockRows = useMemo(
-    () => (data?.inventory ?? []).filter(isGrnNonBilledStockRow),
+    () => (data?.inventory ?? []).filter(isInventoryLedgerRow),
     [data],
   );
   const issuedPos = useMemo(
@@ -176,68 +209,10 @@ export function ProcurementReportsPage() {
   }, [data]);
 
   const filteredPoStatusRows = useMemo(() => {
-    const tokens = statusQuery.trim().toLowerCase().split(/\s+/).filter(Boolean);
-    if (tokens.length === 0) return poStatusRows;
-    return poStatusRows.filter((row) =>
-      tokens.every(
-        (token) =>
-          textTokenMatch(row.companyPo, token) ||
-          textTokenMatch(row.vendor, token) ||
-          textTokenMatch(row.poStatus, token) ||
-          textTokenMatch(row.grnStatus, token) ||
-          row.grnNumbers.some((grn) => textTokenMatch(grn, token)),
-      ),
-    );
+    const q = statusQuery.trim().toLowerCase();
+    if (!q) return poStatusRows;
+    return poStatusRows.filter((row) => row.companyPo.toLowerCase().includes(q));
   }, [poStatusRows, statusQuery]);
-
-  const grnStatusSlices = useMemo((): Exploded3dPieSlice[] => {
-    const counts = { pending: 0, partial: 0, closed: 0 };
-    for (const row of poStatusRows) {
-      const key = row.grnStatusKey;
-      if (key === "partial") counts.partial += 1;
-      else if (key === "closed" || key === "delivered") counts.closed += 1;
-      else counts.pending += 1;
-    }
-    return [
-      {
-        key: "pending",
-        label: "GRN open",
-        value: counts.pending,
-        color: "#0369A1",
-        href: "/procurement/grns?filter=all",
-      },
-      {
-        key: "partial",
-        label: "GRN partial",
-        value: counts.partial,
-        color: "#C2410C",
-        href: "/procurement/grns?filter=partial",
-      },
-      {
-        key: "closed",
-        label: "GRN delivered",
-        value: counts.closed,
-        color: "#0F766E",
-        href: "/procurement/grns?filter=closed",
-      },
-    ].filter((s) => s.value > 0);
-  }, [poStatusRows]);
-
-  const grnDocSlices = useMemo((): Exploded3dPieSlice[] => {
-    let awaiting = 0;
-    let single = 0;
-    let multi = 0;
-    for (const row of poStatusRows) {
-      if (row.grnDocuments <= 0) awaiting += 1;
-      else if (row.grnDocuments === 1) single += 1;
-      else multi += 1;
-    }
-    return [
-      { key: "awaiting", label: "No GRN yet", value: awaiting, color: "#94A3B8" },
-      { key: "single", label: "1 GRN", value: single, color: "#0284C7" },
-      { key: "multi", label: "2+ GRNs", value: multi, color: "#0D9488" },
-    ].filter((s) => s.value > 0);
-  }, [poStatusRows]);
 
   async function runExport(id: string, action: () => Promise<void>) {
     setBusyId(id);
@@ -257,6 +232,7 @@ export function ProcurementReportsPage() {
       title: "Purchase orders",
       description: "Full commercial PO workbook — vendor, customer, margin, status.",
       icon: ShoppingCart,
+      tint: "sky",
       href: "/procurement/orders",
       countLabel: loading ? "…" : `${(data?.orders.length ?? 0).toLocaleString("en-IN")} POs`,
       onExport: async () => {
@@ -270,6 +246,7 @@ export function ProcurementReportsPage() {
       title: "Open / partial POs",
       description: "POs still awaiting full goods receipt.",
       icon: PackageCheck,
+      tint: "amber",
       href: "/procurement/orders?bucket=open",
       countLabel: loading
         ? "…"
@@ -285,23 +262,26 @@ export function ProcurementReportsPage() {
       },
     },
     {
-      id: "grns",
-      title: "GRN receipt status",
-      description: "Vendor PO receipt status with line-level ordered vs received.",
+      id: "orders-closed",
+      title: "Closed PO",
+      description: "Purchase orders with full goods receipt.",
       icon: PackageCheck,
-      href: "/procurement/grns",
-      countLabel: loading ? "…" : `${issuedPos.length.toLocaleString("en-IN")} issued POs`,
+      tint: "emerald",
+      href: "/procurement/orders?bucket=close",
+      countLabel: loading ? "…" : `${buckets.close.toLocaleString("en-IN")} closed`,
       onExport: async () => {
         if (!data) return;
-        const rows = buildGrnExportRows(issuedPos, data.vendors);
-        exportGrnsXlsx(`grn-receipt-status-${stampNow()}.xlsx`, rows);
+        const subset = data.orders.filter((order) => poOverviewBucketForOrder(order) === "close");
+        const rows = buildOrderExportRows(subset, data.vendors);
+        await exportOrdersXlsx(`purchase-orders-closed-${stampNow()}.xlsx`, rows);
       },
     },
     {
       id: "inventory",
-      title: "Inventory on hand",
+      title: "Inventory",
       description: "Non-billed GRN stock units — product, serial, PO, GRN, unit cost.",
       icon: Boxes,
+      tint: "teal",
       href: "/procurement/inventory",
       countLabel: loading ? "…" : `${stockRows.length.toLocaleString("en-IN")} units`,
       onExport: async () => {
@@ -321,69 +301,21 @@ export function ProcurementReportsPage() {
       },
     },
     {
-      id: "scm-queue",
-      title: "SCM queue",
-      description: "OVF queue snapshot — customer, vendor, PO link, hold state.",
-      icon: ClipboardList,
-      href: "/procurement/scm",
-      countLabel: loading
-        ? "…"
-        : `${(data?.scmQueue.length ?? 0).toLocaleString("en-IN")} OVFs`,
+      id: "grns",
+      title: "GRN receipt status",
+      description: "Vendor PO receipt status with line-level ordered vs received.",
+      icon: PackageCheck,
+      tint: "orange",
+      href: "/procurement/grns",
+      countLabel: loading ? "…" : `${issuedPos.length.toLocaleString("en-IN")} issued POs`,
       onExport: async () => {
         if (!data) return;
-        const rows = data.scmQueue.map((row, index) => ({
-          "#": index + 1,
-          "OVF no": row.ovf_no,
-          Customer: row.customer_name || row.account_name || "",
-          Vendor: row.vendor_name || row.oem_name || "",
-          "Customer PO": row.po_number || "",
-          "Company PO": row.company_po_number || row.purchase_order_number || "",
-          "PO status": row.purchase_order_status || "",
-          "On hold": row.scm_on_hold ? "Yes" : "No",
-          "Vendor total": Number(row.vendor_total) || 0,
-          Margin: Number(row.margin_amount) || 0,
-        }));
-        downloadSheet(`scm-queue-${stampNow()}.xlsx`, rows, "SCM Queue");
-      },
-    },
-    {
-      id: "vendor-spend",
-      title: "Vendor spend summary",
-      description: "Aggregated PO value by vendor for issued purchase orders.",
-      icon: Truck,
-      href: "/procurement/vendors",
-      countLabel: loading
-        ? "…"
-        : `${Object.keys(data?.vendors ?? {}).length.toLocaleString("en-IN")} vendors`,
-      onExport: async () => {
-        if (!data) return;
-        const spend = new Map<
-          string,
-          { vendor: string; orders: number; amount: number }
-        >();
-        for (const order of data.orders) {
-          const status = (order.status || "").toLowerCase();
-          if (status === "draft" || status === "cancelled") continue;
-          const vendor =
-            data.vendors[order.vendor_id]?.label || order.vendor_id || "Unknown";
-          const entry = spend.get(order.vendor_id) ?? {
-            vendor,
-            orders: 0,
-            amount: 0,
-          };
-          entry.orders += 1;
-          entry.amount += Number(order.vendor_total) || Number(order.total_amount) || 0;
-          spend.set(order.vendor_id, entry);
-        }
-        const rows = Array.from(spend.values())
-          .sort((a, b) => b.amount - a.amount)
-          .map((row, index) => ({
-            "#": index + 1,
-            Vendor: row.vendor,
-            "PO count": row.orders,
-            "Total amount": Math.round(row.amount * 100) / 100,
-          }));
-        downloadSheet(`vendor-spend-${stampNow()}.xlsx`, rows, "Vendor spend");
+        const rows = await buildGrnExportRowsWithBatches(
+          issuedPos,
+          data.vendors,
+          data.inventory,
+        );
+        exportGrnsXlsx(`grn-receipt-status-${stampNow()}.xlsx`, rows);
       },
     },
   ];
@@ -392,7 +324,6 @@ export function ProcurementReportsPage() {
     <ProcurementPage>
       <ProcurementPageHeader
         title="Reports"
-        description="On-demand Excel exports for procurement operations."
         actions={
           <Button
             type="button"
@@ -416,8 +347,8 @@ export function ProcurementReportsPage() {
       <section className="space-y-3 rounded-xl border border-border/80 bg-card p-4 shadow-sm">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="min-w-0">
-            <h2 className="text-sm font-semibold tracking-tight text-foreground">
-              PO → GRN → billing status
+            <h2 className="text-sm font-semibold uppercase tracking-tight text-foreground">
+              Purchase order fulfillment
             </h2>
           </div>
           <div className="flex shrink-0 items-center gap-2">
@@ -425,29 +356,10 @@ export function ProcurementReportsPage() {
               type="search"
               value={statusQuery}
               onChange={(e) => setStatusQuery(e.target.value)}
-              placeholder="Search PO, vendor, status…"
-              aria-label="Search PO GRN billing status"
+              placeholder="Search by PO number…"
+              aria-label="Search by company PO number"
               className={cn(procurementUi.searchInput, "w-[220px] shrink-0")}
             />
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              className="cursor-pointer transition-colors duration-200"
-              disabled={loading || busyId === "po-grn-billing" || filteredPoStatusRows.length === 0}
-              onClick={() =>
-                void runExport("po-grn-billing", async () => {
-                  downloadSheet(
-                    `po-grn-billing-status-${stampNow()}.xlsx`,
-                    poGrnBillingExportRows(filteredPoStatusRows),
-                    "PO GRN billing",
-                  );
-                })
-              }
-            >
-              <Download className="mr-1.5 size-3.5" />
-              {busyId === "po-grn-billing" ? "Exporting…" : "Export"}
-            </Button>
           </div>
         </div>
 
@@ -458,27 +370,25 @@ export function ProcurementReportsPage() {
                 <tr>
                   <th className={cn(procurementUi.th, "px-3")}>Company PO</th>
                   <th className={cn(procurementUi.th, "px-3")}>Vendor</th>
-                  <th className={cn(procurementUi.th, "px-3")}>PO status</th>
                   <th className={cn(procurementUi.th, "px-3")}>GRN status</th>
                   <th className={cn(procurementUi.th, "px-3 text-right")}>GRNs</th>
                   <th className={cn(procurementUi.th, "px-3 text-right")}>Ordered</th>
                   <th className={cn(procurementUi.th, "px-3 text-right")}>Received</th>
+                  <th className={cn(procurementUi.th, "px-3 text-right")}>Remaining</th>
                   <th className={cn(procurementUi.th, "px-3 text-right")}>Billed</th>
-                  <th className={cn(procurementUi.th, "px-3 text-right")}>Unbilled</th>
-                  <th className={cn(procurementUi.th, "px-3 text-right")}>Recv %</th>
                   <th className={cn(procurementUi.th, "px-3")}>GRN numbers</th>
                 </tr>
               </thead>
               <tbody>
                 {loading ? (
                   <tr>
-                    <td colSpan={11} className={procurementUi.empty}>
+                    <td colSpan={9} className={procurementUi.empty}>
                       Loading PO status…
                     </td>
                   </tr>
                 ) : filteredPoStatusRows.length === 0 ? (
                   <tr>
-                    <td colSpan={11} className={procurementUi.empty}>
+                    <td colSpan={9} className={procurementUi.empty}>
                       No issued purchase orders match this filter.
                     </td>
                   </tr>
@@ -494,7 +404,6 @@ export function ProcurementReportsPage() {
                         </Link>
                       </td>
                       <td className={cn(procurementUi.td, "px-3")}>{row.vendor}</td>
-                      <td className={cn(procurementUi.td, "px-3")}>{row.poStatus}</td>
                       <td className={cn(procurementUi.td, "px-3")}>
                         <Badge variant={grnBadgeVariant(row.grnStatusKey)} className="uppercase">
                           {row.grnStatus}
@@ -515,13 +424,10 @@ export function ProcurementReportsPage() {
                         {row.qtyReceived.toLocaleString("en-IN")}
                       </td>
                       <td className={cn(procurementUi.tdNumeric, "px-3 text-right font-mono")}>
+                        {row.qtyRemaining.toLocaleString("en-IN")}
+                      </td>
+                      <td className={cn(procurementUi.tdNumeric, "px-3 text-right font-mono")}>
                         {row.qtyBilled.toLocaleString("en-IN")}
-                      </td>
-                      <td className={cn(procurementUi.tdNumeric, "px-3 text-right font-mono")}>
-                        {row.qtyUnbilled.toLocaleString("en-IN")}
-                      </td>
-                      <td className={cn(procurementUi.tdNumeric, "px-3 text-right font-mono")}>
-                        {row.receiptPct}%
                       </td>
                       <td className={cn(procurementUi.td, "px-3")}>
                         {row.grnNumbers.length === 0 ? (
@@ -548,72 +454,34 @@ export function ProcurementReportsPage() {
         </div>
       </section>
 
-      <div className="grid items-stretch gap-4 lg:grid-cols-2 lg:gap-5">
-        <section className="rounded-xl border border-border/80 bg-card p-4 shadow-sm">
-          <h2 className="mb-3 text-sm font-semibold tracking-tight text-foreground">
-            GRN status mix
-          </h2>
-          {loading ? (
-            <p className="py-10 text-center text-sm text-muted-foreground">Loading…</p>
-          ) : grnStatusSlices.length === 0 ? (
-            <p className="py-10 text-center text-sm text-muted-foreground">No GRN data yet</p>
-          ) : (
-            <div className="rounded-xl border border-border/50 bg-gradient-to-b from-slate-50/90 to-white px-2.5 py-3">
-              <Exploded3dPieChart
-                slices={grnStatusSlices}
-                ariaLabel="GRN status mix by purchase order"
-                size={156}
-                layout="horizontal"
-                legendMode="count"
-              />
-            </div>
-          )}
-        </section>
-        <section className="rounded-xl border border-border/80 bg-card p-4 shadow-sm">
-          <h2 className="mb-3 text-sm font-semibold tracking-tight text-foreground">
-            GRNs per purchase order
-          </h2>
-          {loading ? (
-            <p className="py-10 text-center text-sm text-muted-foreground">Loading…</p>
-          ) : grnDocSlices.length === 0 ? (
-            <p className="py-10 text-center text-sm text-muted-foreground">No GRN data yet</p>
-          ) : (
-            <div className="rounded-xl border border-border/50 bg-gradient-to-b from-slate-50/90 to-white px-2.5 py-3">
-              <Exploded3dPieChart
-                slices={grnDocSlices}
-                ariaLabel="How many GRN documents each PO has"
-                size={156}
-                layout="horizontal"
-                legendMode="count"
-              />
-            </div>
-          )}
-        </section>
-      </div>
-
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
         {cards.map((card) => {
           const Icon = card.icon;
           const busy = busyId === card.id;
+          const tint = REPORT_TINT[card.tint];
           return (
             <div
               key={card.id}
-              className="flex h-full flex-col rounded-xl border border-border/80 bg-card p-4 shadow-sm"
+              className={cn(
+                "flex h-full flex-col rounded-xl border p-4 shadow-sm transition-[box-shadow,border-color,background-color] duration-200 hover:shadow-md",
+                tint.card,
+              )}
             >
               <div className="flex items-start gap-3">
-                <span className="inline-flex size-9 shrink-0 items-center justify-center rounded-lg border border-border/60 bg-muted/40 text-foreground">
+                <span
+                  className={cn(
+                    "inline-flex size-9 shrink-0 items-center justify-center rounded-lg border",
+                    tint.icon,
+                  )}
+                >
                   <Icon className="size-4" aria-hidden />
                 </span>
                 <div className="min-w-0 flex-1">
                   <h2 className="text-sm font-semibold tracking-tight text-foreground">
                     {card.title}
                   </h2>
-                  <p className="mt-1 text-xs text-muted-foreground">{card.description}</p>
                 </div>
               </div>
-              <p className="mt-3 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-                {card.countLabel}
-              </p>
               <div className="mt-auto flex flex-wrap gap-2 pt-4">
                 <Button
                   type="button"
@@ -645,30 +513,110 @@ export function ProcurementReportsPage() {
   );
 }
 
+const ANALYTICS_STAT_TINT = {
+  sky: {
+    card: "border-sky-200/80 bg-sky-50/70",
+    label: "text-sky-800",
+    value: "text-sky-950",
+    icon: "border-sky-200/70 bg-sky-100 text-sky-800",
+  },
+  amber: {
+    card: "border-amber-200/80 bg-amber-50/70",
+    label: "text-amber-800",
+    value: "text-amber-950",
+    icon: "border-amber-200/70 bg-amber-100 text-amber-800",
+  },
+  orange: {
+    card: "border-orange-200/80 bg-orange-50/70",
+    label: "text-orange-800",
+    value: "text-orange-950",
+    icon: "border-orange-200/70 bg-orange-100 text-orange-800",
+  },
+  emerald: {
+    card: "border-emerald-200/80 bg-emerald-50/70",
+    label: "text-emerald-800",
+    value: "text-emerald-950",
+    icon: "border-emerald-200/70 bg-emerald-100 text-emerald-800",
+  },
+} as const;
+
+type AnalyticsStatTint = keyof typeof ANALYTICS_STAT_TINT;
+
+const VENDOR_PO_STATUS_LABEL: Record<PoOverviewBucket, string> = {
+  draft: "Draft",
+  open: "Open",
+  partial: "Partial",
+  close: "Completed",
+};
+
+const VENDOR_PO_STATUS_BADGE: Record<
+  PoOverviewBucket,
+  "secondary" | "outline" | "warning" | "success"
+> = {
+  draft: "secondary",
+  open: "outline",
+  partial: "warning",
+  close: "success",
+};
+
+const VENDOR_BAR_COLORS = [
+  "#0369A1",
+  "#0F766E",
+  "#B45309",
+  "#C2410C",
+  "#047857",
+  "#475569",
+  "#A16207",
+  "#0284C7",
+] as const;
+
 function AnalyticsStat({
   label,
   value,
-  hint,
+  tint,
+  icon: Icon,
 }: {
   label: string;
   value: string;
-  hint?: string;
+  tint: AnalyticsStatTint;
+  icon: LucideIcon;
 }) {
+  const styles = ANALYTICS_STAT_TINT[tint];
   return (
-    <div className="rounded-xl border border-border/70 bg-card px-3.5 py-3 shadow-sm">
-      <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-        {label}
-      </p>
-      <p className="mt-1.5 font-mono text-xl font-semibold tabular-nums text-foreground">
+    <div
+      className={cn(
+        "rounded-xl border px-3.5 py-3 shadow-sm transition-[box-shadow,border-color] duration-200 hover:shadow-md",
+        styles.card,
+      )}
+    >
+      <div className="flex items-start justify-between gap-2">
+        <p className={cn("text-[11px] font-semibold uppercase tracking-wide", styles.label)}>
+          {label}
+        </p>
+        <span
+          className={cn(
+            "inline-flex size-8 shrink-0 items-center justify-center rounded-lg border",
+            styles.icon,
+          )}
+        >
+          <Icon className="size-3.5" aria-hidden />
+        </span>
+      </div>
+      <p
+        className={cn(
+          "mt-1.5 font-mono text-xl font-semibold tabular-nums",
+          styles.value,
+        )}
+      >
         {value}
       </p>
-      {hint ? <p className="mt-1 text-[11px] text-muted-foreground">{hint}</p> : null}
     </div>
   );
 }
 
 export function ProcurementAnalyticsPage() {
   const { data, loading, refreshing, error, reload } = useProcurementInsightData();
+  const [expandedVendorId, setExpandedVendorId] = useState<string | null>(null);
 
   const pipelineMetrics = useMemo(
     () =>
@@ -691,7 +639,7 @@ export function ProcurementAnalyticsPage() {
       labels[id] = vendor.label;
     }
     return buildProcurementInventoryStockSummary(
-      data.inventory.filter(isGrnNonBilledStockRow),
+      data.inventory.filter(isInventoryLedgerRow),
       { vendorLabels: labels },
     );
   }, [data]);
@@ -703,40 +651,75 @@ export function ProcurementAnalyticsPage() {
 
   const vendorSpend = useMemo(() => {
     if (!data) return [];
-    const map = new Map<string, { label: string; amount: number; orders: number }>();
+    const map = new Map<
+      string,
+      {
+        vendorId: string;
+        label: string;
+        amount: number;
+        orders: number;
+        pos: Array<{
+          id: string;
+          companyPo: string;
+          amount: number;
+          fulfillment: PoOverviewBucket;
+        }>;
+      }
+    >();
     for (const order of data.orders) {
       const status = (order.status || "").toLowerCase();
       if (status === "draft" || status === "cancelled") continue;
       const label = data.vendors[order.vendor_id]?.label || order.vendor_id;
-      const entry = map.get(order.vendor_id) ?? { label, amount: 0, orders: 0 };
-      entry.amount += Number(order.vendor_total) || Number(order.total_amount) || 0;
+      const amount = Number(order.vendor_total) || Number(order.total_amount) || 0;
+      const companyPo = (order.company_po_number || order.document_number || "—").trim();
+      const fulfillment = poOverviewBucketForOrder(order, deriveGrnStatus(order)) ?? "open";
+      const entry = map.get(order.vendor_id) ?? {
+        vendorId: order.vendor_id,
+        label,
+        amount: 0,
+        orders: 0,
+        pos: [],
+      };
+      entry.amount += amount;
       entry.orders += 1;
+      entry.pos.push({
+        id: order.id,
+        companyPo,
+        amount,
+        fulfillment,
+      });
       map.set(order.vendor_id, entry);
     }
     return Array.from(map.values())
+      .map((row) => ({
+        ...row,
+        pos: [...row.pos].sort((a, b) =>
+          a.companyPo.localeCompare(b.companyPo, undefined, { numeric: true }),
+        ),
+      }))
       .sort((a, b) => b.amount - a.amount)
       .slice(0, 8);
   }, [data]);
 
-  const maxSpend = Math.max(...vendorSpend.map((row) => row.amount), 1);
+  const vendorHistogram = useMemo(
+    () =>
+      vendorSpend.map((row) => ({
+        vendorId: row.vendorId,
+        name:
+          row.label.length > 14 ? `${row.label.slice(0, 12).trimEnd()}…` : row.label,
+        fullName: row.label,
+        amount: Math.round(row.amount * 100) / 100,
+        orders: row.orders,
+      })),
+    [vendorSpend],
+  );
 
   return (
     <ProcurementPage>
       <ProcurementPageHeader
         title="Analytics"
-        description="Live procurement KPIs, receipt progress, and vendor spend."
         actions={
           <div className="flex flex-wrap gap-2">
-            <Link
-              href="/procurement/reports"
-              className={cn(
-                buttonVariants({ variant: "outline", size: "sm" }),
-                "cursor-pointer transition-colors duration-200",
-              )}
-            >
-              <FileBarChart className="mr-1.5 size-3.5" />
-              Reports & exports
-            </Link>
             <Button
               type="button"
               variant="outline"
@@ -760,30 +743,28 @@ export function ProcurementAnalyticsPage() {
         <AnalyticsStat
           label="Open OVF"
           value={loading ? "—" : openOvf.toLocaleString("en-IN")}
-          hint="SCM queue awaiting PO"
+          tint="sky"
+          icon={ClipboardList}
         />
         <AnalyticsStat
           label="Open PO"
           value={loading ? "—" : buckets.open.toLocaleString("en-IN")}
-          hint={`${buckets.partial.toLocaleString("en-IN")} partial`}
+          tint="amber"
+          icon={ShoppingCart}
         />
         <AnalyticsStat
           label="GRN documents"
           value={loading ? "—" : pipelineMetrics.grns.toLocaleString("en-IN")}
-          hint={`${pipelineMetrics.posWithGrn.toLocaleString("en-IN")} POs with GRN`}
+          tint="orange"
+          icon={PackageCheck}
         />
         <AnalyticsStat
           label="Stock value"
           value={loading || !stockSummary ? "—" : formatInr(stockSummary.totalStockValue)}
-          hint={
-            stockSummary
-              ? `${stockSummary.totalUnits.toLocaleString("en-IN")} units on hand`
-              : undefined
-          }
+          tint="emerald"
+          icon={IndianRupee}
         />
       </div>
-
-      <ProcurementPipelineFunnel metrics={pipelineMetrics} loading={loading} />
 
       <div className="grid gap-4 lg:grid-cols-[58fr_42fr]">
         <section className="rounded-xl border border-border/80 bg-card p-4 shadow-sm">
@@ -802,23 +783,66 @@ export function ProcurementAnalyticsPage() {
           ) : (
             <ul className="space-y-2.5">
               {vendorSpend.map((row) => {
-                const width = Math.round((row.amount / maxSpend) * 100);
+                const expanded = expandedVendorId === row.vendorId;
                 return (
-                  <li key={row.label} className="min-w-0">
-                    <div className="mb-1 flex items-baseline justify-between gap-2">
-                      <p className="truncate text-sm font-medium text-foreground">{row.label}</p>
-                      <p className="shrink-0 font-mono text-xs tabular-nums text-muted-foreground">
-                        {formatInr(row.amount)} · {row.orders} PO
-                        {row.orders === 1 ? "" : "s"}
-                      </p>
-                    </div>
-                    <div className="h-1.5 overflow-hidden rounded-full bg-muted">
-                      <div
-                        className="h-full rounded-full bg-[#0369A1] transition-[width] duration-300"
-                        style={{ width: `${width}%` }}
-                        role="presentation"
-                      />
-                    </div>
+                  <li key={row.vendorId} className="min-w-0">
+                    <button
+                      type="button"
+                      className="w-full cursor-pointer rounded-lg text-left transition-colors duration-200 hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                      aria-expanded={expanded}
+                      aria-label={`${expanded ? "Hide" : "Show"} purchase orders for ${row.label}`}
+                      onClick={() =>
+                        setExpandedVendorId((prev) =>
+                          prev === row.vendorId ? null : row.vendorId,
+                        )
+                      }
+                    >
+                      <div className="flex items-center justify-between gap-2 px-1 py-0.5">
+                        <div className="flex min-w-0 items-center gap-1.5">
+                          <ChevronDown
+                            className={cn(
+                              "size-3.5 shrink-0 text-muted-foreground transition-transform duration-200",
+                              expanded && "rotate-180",
+                            )}
+                            aria-hidden
+                          />
+                          <p className="truncate text-sm font-medium text-foreground">
+                            {row.label}
+                          </p>
+                        </div>
+                        <p className="shrink-0 font-mono text-xs tabular-nums text-muted-foreground">
+                          {formatInr(row.amount)} · {row.orders} PO
+                          {row.orders === 1 ? "" : "s"}
+                        </p>
+                      </div>
+                    </button>
+                    {expanded ? (
+                      <ul className="mt-2 space-y-1 rounded-lg border border-border/70 bg-muted/20 px-2.5 py-2">
+                        {row.pos.map((po) => (
+                          <li
+                            key={po.id}
+                            className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-2"
+                          >
+                            <Link
+                              href={`/procurement/orders/${po.id}`}
+                              className="cursor-pointer truncate font-mono text-xs font-medium text-foreground transition-colors duration-200 hover:text-[#0369A1] hover:underline"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              {po.companyPo}
+                            </Link>
+                            <span className="shrink-0 font-mono text-[11px] tabular-nums text-muted-foreground">
+                              {formatInr(po.amount)}
+                            </span>
+                            <Badge
+                              variant={VENDOR_PO_STATUS_BADGE[po.fulfillment]}
+                              className="justify-self-end uppercase"
+                            >
+                              {VENDOR_PO_STATUS_LABEL[po.fulfillment]}
+                            </Badge>
+                          </li>
+                        ))}
+                      </ul>
+                    ) : null}
                   </li>
                 );
               })}
@@ -883,10 +907,109 @@ export function ProcurementAnalyticsPage() {
             href="/procurement/inventory"
             className="mt-3 inline-flex cursor-pointer text-xs font-medium text-[#0369A1] transition-colors duration-200 hover:underline"
           >
-            Open inventory
+            Open Inventory
           </Link>
         </section>
       </div>
+
+      <section className="rounded-xl border border-sky-200/80 bg-sky-50/50 p-4 shadow-sm">
+        <div className="mb-3 flex items-center justify-between gap-2">
+          <div className="flex min-w-0 items-center gap-2">
+            <span className="inline-flex size-8 shrink-0 items-center justify-center rounded-lg border border-sky-200/70 bg-sky-100 text-sky-800">
+              <BarChart3 className="size-3.5" aria-hidden />
+            </span>
+            <h2 className="text-sm font-semibold uppercase tracking-tight text-sky-900">
+              Vendor spend histogram
+            </h2>
+          </div>
+          <p className="shrink-0 font-mono text-xs tabular-nums text-sky-800/80">
+            {loading ? "—" : `${vendorSpend.length.toLocaleString("en-IN")} vendors`}
+          </p>
+        </div>
+        {loading ? (
+          <p className="flex h-[260px] items-center justify-center text-sm text-muted-foreground">
+            Loading…
+          </p>
+        ) : vendorHistogram.length === 0 ? (
+          <p className="flex h-[260px] items-center justify-center text-sm text-muted-foreground">
+            No issued purchase orders yet.
+          </p>
+        ) : (
+          <div
+            className="h-[280px] w-full"
+            role="img"
+            aria-label="Histogram of top vendors by purchase order value"
+          >
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart
+                data={vendorHistogram}
+                margin={{ top: 8, right: 12, left: 4, bottom: 8 }}
+              >
+                <CartesianGrid strokeDasharray="4 4" stroke="#BAE6FD" vertical={false} />
+                <XAxis
+                  dataKey="name"
+                  tick={{ fontSize: 11, fill: "#334155", fontWeight: 500 }}
+                  tickLine={false}
+                  axisLine={false}
+                  interval={0}
+                />
+                <YAxis
+                  tick={{ fontSize: 10, fill: "#64748B" }}
+                  tickLine={false}
+                  axisLine={false}
+                  width={64}
+                  tickFormatter={(value: number) => {
+                    if (value >= 1_00_00_000) return `${(value / 1_00_00_000).toFixed(1)}Cr`;
+                    if (value >= 1_00_000) return `${(value / 1_00_000).toFixed(1)}L`;
+                    if (value >= 1_000) return `${(value / 1_000).toFixed(0)}K`;
+                    return String(value);
+                  }}
+                />
+                <Tooltip
+                  cursor={{ fill: "rgba(3, 105, 161, 0.06)" }}
+                  content={({ active, payload }) => {
+                    if (!active || !payload?.length) return null;
+                    const row = payload[0]?.payload as
+                      | (typeof vendorHistogram)[number]
+                      | undefined;
+                    if (!row) return null;
+                    return (
+                      <div className="rounded-lg border border-sky-200/80 bg-card px-3 py-2 text-xs shadow-md">
+                        <p className="font-medium text-foreground">{row.fullName}</p>
+                        <p className="mt-1 tabular-nums text-sky-800">
+                          {formatInr(row.amount)}
+                        </p>
+                        <p className="tabular-nums text-muted-foreground">
+                          {row.orders.toLocaleString("en-IN")} PO
+                          {row.orders === 1 ? "" : "s"}
+                        </p>
+                      </div>
+                    );
+                  }}
+                />
+                <Bar
+                  dataKey="amount"
+                  radius={[6, 6, 0, 0]}
+                  maxBarSize={48}
+                  className="cursor-pointer"
+                  onClick={(data) => {
+                    const vendorId = (data as { vendorId?: string } | undefined)?.vendorId;
+                    if (!vendorId) return;
+                    setExpandedVendorId((prev) => (prev === vendorId ? null : vendorId));
+                  }}
+                >
+                  {vendorHistogram.map((row, index) => (
+                    <Cell
+                      key={row.vendorId}
+                      fill={VENDOR_BAR_COLORS[index % VENDOR_BAR_COLORS.length]}
+                    />
+                  ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        )}
+      </section>
     </ProcurementPage>
   );
 }

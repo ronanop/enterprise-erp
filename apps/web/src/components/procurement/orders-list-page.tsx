@@ -275,7 +275,6 @@ export function OrdersListPage() {
     <ProcurementPage>
       <PageHeader
         title="Purchase Orders"
-        description="Vendor purchase orders from SCM through GRN and delivery tracking."
         actions={
           <div className="flex flex-wrap items-center gap-2">
             <Button
@@ -369,10 +368,7 @@ export function OrdersListPage() {
       {error ? <ProcurementErrorBanner>{error}</ProcurementErrorBanner> : null}
 
       <ProcurementListPanel>
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border/80 px-3 py-2">
-          <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-            {filtered.length} orders
-          </p>
+        <div className="flex flex-wrap items-center justify-end gap-3 border-b border-border/80 px-3 py-2">
           <Input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
@@ -389,7 +385,7 @@ export function OrdersListPage() {
                 <th className="px-3 py-3.5 font-bold">Company PO number</th>
                 <th className="px-3 py-3.5 font-bold">PO date</th>
                 <th className="px-3 py-3.5 font-bold">Vendor</th>
-                <th className="px-3 py-3.5 font-bold">Customer / approved by</th>
+                <th className="px-3 py-3.5 font-bold">Customer</th>
                 <th className="px-3 py-3.5 font-bold">Amount</th>
                 <th className="px-3 py-3.5 font-bold">GRN</th>
               </tr>

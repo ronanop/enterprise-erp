@@ -2,8 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { ChevronDown, Plus, Trash2 } from "lucide-react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { ChevronDown, Plus, RefreshCw, Trash2 } from "lucide-react";
 
 import { ConfirmDialog } from "@/components/finance/journals/confirm-dialog";
 import { FinanceField, FinanceSelect, FinanceTextarea } from "@/components/finance/journals/finance-form-field";
@@ -24,9 +24,11 @@ import { ApiClientError, formatApiError } from "@/services/api-client";
 import {
   createPoFromInventory,
   createVendorOption,
+  listProcurementInventory,
   listVendorOptions,
   peekNextCompanyPoNumber,
   resolveVendorOrgScope,
+  type ProcurementInventoryRow,
   type VendorOption,
 } from "@/services/procurement-service";
 import {
@@ -37,6 +39,10 @@ import {
   formatCompanyShippingAddress,
   shippingOptionsForLocation,
 } from "@/utils/company-po-locations";
+import {
+  buildProcurementInventoryStockSummary,
+  isGrnNonBilledStockRow,
+} from "@/utils/procurement-inventory-report";
 
 const TAX_OPTIONS = ["0", "5", "12", "18", "28"] as const;
 const CUSTOM_SHIPPING_ID_PREFIX = "custom-po-";
@@ -47,7 +53,49 @@ type PoLineDraft = {
   description: string;
   quantity: number;
   unitCost: number;
+  fromStock?: boolean;
 };
+
+function stockRowKey(row: ProcurementInventoryRow, index: number): string {
+  return `${row.grn_number}-${row.company_po_number}-${row.line_number}-${row.unit_index}-${index}`;
+}
+
+function productLabel(row: ProcurementInventoryRow): string {
+  return (row.product_name || "").trim() || "Unnamed product";
+}
+
+function poGrnLabel(value: string | null | undefined): string {
+  const text = (value || "").trim();
+  return text || "—";
+}
+
+function keysForPoGrnGroup(
+  rows: ProcurementInventoryRow[],
+  group: { productName: string; companyPoNumber: string; grnNumber: string },
+): string[] {
+  const keys: string[] = [];
+  rows.forEach((row, index) => {
+    if (productLabel(row) !== group.productName) return;
+    if (poGrnLabel(row.company_po_number) !== group.companyPoNumber) return;
+    if (poGrnLabel(row.grn_number) !== group.grnNumber) return;
+    keys.push(stockRowKey(row, index));
+  });
+  return keys;
+}
+
+function groupSelectionState(
+  keys: string[],
+  selectedKeys: Set<string>,
+): "none" | "partial" | "all" {
+  if (keys.length === 0) return "none";
+  let count = 0;
+  for (const key of keys) {
+    if (selectedKeys.has(key)) count += 1;
+  }
+  if (count === 0) return "none";
+  if (count === keys.length) return "all";
+  return "partial";
+}
 
 type PoShippingOption = {
   id: string;
@@ -106,10 +154,14 @@ function toNumber(value: string): number {
 
 export function ProcurementManualCreatePoPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const fromInventory = searchParams.get("from") === "inventory";
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [vendors, setVendors] = useState<VendorOption[]>([]);
+  const [stockRows, setStockRows] = useState<ProcurementInventoryRow[]>([]);
+  const [selectedKeys, setSelectedKeys] = useState<Set<string>>(() => new Set());
   const [poLines, setPoLines] = useState<PoLineDraft[]>(() => [newLine()]);
 
   const [vendorId, setVendorId] = useState("");
@@ -159,12 +211,14 @@ export function ProcurementManualCreatePoPage() {
     setLoading(true);
     setError(null);
     try {
-      const [vendorRows, scope] = await Promise.all([
+      const [vendorRows, scope, inventory] = await Promise.all([
         listVendorOptions(),
         resolveVendorOrgScope().catch(() => null),
+        listProcurementInventory().catch(() => [] as ProcurementInventoryRow[]),
       ]);
       setVendors(vendorRows);
       setOrgScope(scope);
+      setStockRows(inventory.filter(isGrnNonBilledStockRow));
     } catch (err) {
       setError(formatApiError(err, "Failed to load vendors"));
     } finally {
@@ -175,6 +229,72 @@ export function ProcurementManualCreatePoPage() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  const stockSummary = useMemo(
+    () => buildProcurementInventoryStockSummary(stockRows),
+    [stockRows],
+  );
+
+  const allStockSelected =
+    stockRows.length > 0 &&
+    stockRows.every((row, index) => selectedKeys.has(stockRowKey(row, index)));
+
+  useEffect(() => {
+    const byProduct = new Map<string, { quantity: number; unitCost: number }>();
+    stockRows.forEach((row, index) => {
+      const key = stockRowKey(row, index);
+      if (!selectedKeys.has(key)) return;
+      const name = productLabel(row);
+      const entry = byProduct.get(name) ?? { quantity: 0, unitCost: 0 };
+      entry.quantity += 1;
+      const cost = Number(row.unit_cost) || 0;
+      if (cost > 0) entry.unitCost = cost;
+      byProduct.set(name, entry);
+    });
+    const stockDerived: PoLineDraft[] = Array.from(byProduct.entries()).map(
+      ([productName, data], idx) => ({
+        id: `stock-line-${idx}-${productName}`,
+        productName,
+        description: "From inventory stock",
+        quantity: data.quantity,
+        unitCost: data.unitCost,
+        fromStock: true,
+      }),
+    );
+    setPoLines((current) => {
+      const manual = current.filter((line) => !line.fromStock);
+      if (stockDerived.length === 0) {
+        return manual.length > 0 ? manual : [newLine()];
+      }
+      return [...stockDerived, ...manual.filter((line) => (line.productName || "").trim() || line.description || line.unitCost > 0 || line.quantity !== 1)];
+    });
+  }, [selectedKeys, stockRows]);
+
+  function togglePoGrnGroup(group: {
+    productName: string;
+    companyPoNumber: string;
+    grnNumber: string;
+  }) {
+    const keys = keysForPoGrnGroup(stockRows, group);
+    const state = groupSelectionState(keys, selectedKeys);
+    setSelectedKeys((prev) => {
+      const next = new Set(prev);
+      if (state === "all") {
+        for (const key of keys) next.delete(key);
+      } else {
+        for (const key of keys) next.add(key);
+      }
+      return next;
+    });
+  }
+
+  function toggleAllStock() {
+    if (allStockSelected) {
+      setSelectedKeys(new Set());
+      return;
+    }
+    setSelectedKeys(new Set(stockRows.map((row, index) => stockRowKey(row, index))));
+  }
 
   const companyLocation = useMemo(
     () => companyPoLocationByEntityCode(entityCode),
@@ -373,23 +493,68 @@ export function ProcurementManualCreatePoPage() {
       setError("Select a vendor.");
       return;
     }
-    const lines = poLines
-      .map((line) => {
-        const product = (line.productName || "").trim();
-        const description = (line.description || "").trim();
-        return {
-          product_name: description
-            ? `${product} — ${description}`.slice(0, 255)
-            : product,
-          quantity: Math.max(0, line.quantity),
+
+    const selectedRows = stockRows.filter((row, index) =>
+      selectedKeys.has(stockRowKey(row, index)),
+    );
+    const unitsByProduct = new Map<string, ProcurementInventoryRow[]>();
+    for (const row of selectedRows) {
+      const name = productLabel(row);
+      const list = unitsByProduct.get(name) ?? [];
+      list.push(row);
+      unitsByProduct.set(name, list);
+    }
+
+    const stockUnitIds: string[] = [];
+    const importLineIds: string[] = [];
+    const lines: Array<{ product_name: string; quantity: number; unit_cost: number }> = [];
+
+    for (const line of poLines) {
+      const product = (line.productName || "").trim();
+      if (!product) continue;
+      const description = (line.description || "").trim();
+      const productName = description
+        ? `${product} — ${description}`.slice(0, 255)
+        : product;
+
+      if (line.fromStock) {
+        const available = unitsByProduct.get(product) ?? [];
+        const qty = Math.min(
+          Math.max(1, Math.floor(line.quantity)),
+          available.length || line.quantity,
+        );
+        const consume = available.slice(0, Math.min(qty, available.length));
+        for (const row of consume) {
+          if (row.stock_unit_id) stockUnitIds.push(row.stock_unit_id);
+          else if (row.import_line_id) importLineIds.push(row.import_line_id);
+        }
+        if (consume.length === 0 && available.length === 0) continue;
+        lines.push({
+          product_name: productName,
+          quantity: consume.length > 0 ? consume.length : qty,
           unit_cost: Math.max(0, line.unitCost),
-        };
-      })
-      .filter((line) => line.product_name && line.quantity > 0);
+        });
+        continue;
+      }
+
+      const quantity = Math.max(0, line.quantity);
+      if (quantity <= 0) continue;
+      lines.push({
+        product_name: productName,
+        quantity,
+        unit_cost: Math.max(0, line.unitCost),
+      });
+    }
+
     if (lines.length === 0) {
       setError("Add at least one line with a product name and quantity greater than 0.");
       return;
     }
+    if (selectedKeys.size > 0 && stockUnitIds.length === 0 && importLineIds.length === 0) {
+      setError("Selected stock units are missing inventory IDs. Refresh stock and try again.");
+      return;
+    }
+
     setBusy(true);
     setError(null);
     try {
@@ -400,6 +565,8 @@ export function ProcurementManualCreatePoPage() {
         payment_terms: paymentTerms,
         approved_by_name: approvedByName,
         lines,
+        stock_unit_ids: stockUnitIds,
+        import_line_ids: importLineIds,
       });
       router.push(`/procurement/orders/${order.id}`);
     } catch (err) {
@@ -408,13 +575,29 @@ export function ProcurementManualCreatePoPage() {
     }
   }
 
+  const backHref = fromInventory ? "/procurement/inventory" : "/procurement/orders";
+  const backLabel = fromInventory ? "Inventory" : "Purchase Orders";
+
   return (
     <div className={cn(procurementUi.page, "max-w-[1400px]")}>
       <PageHeader
-        backHref="/procurement/orders"
-        backLabel="Purchase Orders"
+        backHref={backHref}
+        backLabel={backLabel}
         title="Create purchase order"
         titleClassName="text-2xl font-semibold tracking-tight sm:text-3xl"
+        actions={
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="cursor-pointer transition-colors duration-200"
+            disabled={loading || busy}
+            onClick={() => void load()}
+          >
+            <RefreshCw className={cn("mr-1.5 size-3.5", loading && "animate-spin")} />
+            Refresh stock
+          </Button>
+        }
       />
 
       {error ? (
@@ -606,12 +789,166 @@ export function ProcurementManualCreatePoPage() {
         </div>
       </section>
 
+      <section className="space-y-3 rounded-lg border border-border bg-card p-4">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h2 className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+            Select stock units (optional)
+          </h2>
+          <span className="text-xs text-muted-foreground">
+            {selectedKeys.size} of {stockSummary.totalUnits} unit
+            {stockSummary.totalUnits === 1 ? "" : "s"} selected
+            {stockSummary.productCount > 0
+              ? ` · ${stockSummary.productCount} product${stockSummary.productCount === 1 ? "" : "s"} in stock`
+              : ""}
+          </span>
+        </div>
+        <p className="text-xs text-muted-foreground">
+          Selecting stock adds PO lines and removes those units from inventory when the PO is created.
+          You can also add manual lines below.
+        </p>
+        {loading ? (
+          <p className="text-sm text-muted-foreground">Loading stock…</p>
+        ) : stockRows.length === 0 ? (
+          <p className="text-sm text-muted-foreground">
+            No stock on hand. Add manual line items below, or{" "}
+            <Link href="/procurement/inventory" className="text-[#0369A1] hover:underline">
+              open inventory
+            </Link>
+            .
+          </p>
+        ) : (
+          <div className="space-y-4">
+            {stockSummary.byProduct.length > 0 ? (
+              <div className="rounded-md border border-border/80 bg-muted/20">
+                <p className="border-b border-border/60 px-3 py-2 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+                  Units in stock by product
+                </p>
+                <div className="overflow-x-auto">
+                  <table className="w-full min-w-[280px] table-fixed text-left text-sm">
+                    <colgroup>
+                      <col className="w-[70%]" />
+                      <col className="w-[30%]" />
+                    </colgroup>
+                    <thead className="text-[11px] uppercase tracking-wide text-muted-foreground">
+                      <tr>
+                        <th className="px-5 py-2 font-medium">Product</th>
+                        <th className="px-5 py-2 text-right font-medium">In stock</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {stockSummary.byProduct.map((line) => (
+                        <tr key={line.productName} className="border-t border-border/50">
+                          <td className="px-5 py-2 font-medium">{line.productName}</td>
+                          <td className="px-5 py-2 text-right font-mono font-medium tabular-nums">
+                            {line.units}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            ) : null}
+
+            <div className={procurementUi.tableShell}>
+              <div className={procurementUi.tableScroll}>
+                <table
+                  className={cn(
+                    procurementUi.table,
+                    "min-w-[720px] table-fixed border-separate border-spacing-0",
+                  )}
+                >
+                  <colgroup>
+                    <col className="w-12" />
+                    <col className="w-[22%]" />
+                    <col className="w-[22%]" />
+                    <col className="w-[22%]" />
+                    <col className="w-[22%]" />
+                  </colgroup>
+                  <thead className={procurementUi.thead}>
+                    <tr>
+                      <th className={cn(procurementUi.th, "text-center")}>
+                        <input
+                          type="checkbox"
+                          className="size-4 cursor-pointer accent-primary"
+                          checked={allStockSelected}
+                          disabled={busy}
+                          aria-label="Select all"
+                          onChange={toggleAllStock}
+                        />
+                      </th>
+                      <th className={cn(procurementUi.th, "px-5")}>Product</th>
+                      <th className={cn(procurementUi.th, "px-5 text-right")}>Units</th>
+                      <th className={cn(procurementUi.th, "px-5")}>PO number</th>
+                      <th className={cn(procurementUi.th, "px-5")}>GRN number</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {stockSummary.byPoGrn.map((line) => {
+                      const group = {
+                        productName: line.productName,
+                        companyPoNumber: line.companyPoNumber,
+                        grnNumber: line.grnNumber,
+                      };
+                      const groupKeys = keysForPoGrnGroup(stockRows, group);
+                      const selection = groupSelectionState(groupKeys, selectedKeys);
+                      return (
+                        <tr
+                          key={`${line.productName}-${line.companyPoNumber}-${line.grnNumber}`}
+                          className={procurementUi.tr}
+                        >
+                          <td className={cn(procurementUi.td, "text-center")}>
+                            <input
+                              type="checkbox"
+                              className="size-4 cursor-pointer accent-primary"
+                              checked={selection === "all"}
+                              ref={(el) => {
+                                if (el) el.indeterminate = selection === "partial";
+                              }}
+                              disabled={busy}
+                              aria-label={`Select ${line.units} units for ${line.productName}`}
+                              onChange={() => togglePoGrnGroup(group)}
+                            />
+                          </td>
+                          <td className={cn(procurementUi.td, "px-5 font-medium")}>
+                            {line.productName}
+                          </td>
+                          <td
+                            className={cn(
+                              procurementUi.tdNumeric,
+                              "px-5 text-right font-mono font-medium text-foreground",
+                            )}
+                          >
+                            {line.units}
+                          </td>
+                          <td className={cn(procurementUi.td, "px-5 font-medium tabular-nums")}>
+                            {line.companyPoNumber}
+                          </td>
+                          <td
+                            className={cn(
+                              procurementUi.td,
+                              "px-5 font-mono text-xs tabular-nums text-muted-foreground",
+                            )}
+                          >
+                            {line.grnNumber}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        )}
+      </section>
+
       <div className="overflow-hidden rounded-lg border border-border bg-card">
         <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-4 py-3">
           <div>
             <h2 className="text-sm font-medium tracking-tight text-foreground">Line items</h2>
             <p className="text-xs text-muted-foreground">
-              No OVF — enter products, quantities, and rates manually.
+              Stock-selected lines deduct inventory on create. Add manual lines for products not from stock.
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
@@ -660,7 +997,8 @@ export function ProcurementManualCreatePoPage() {
                     <Input
                       className="h-8"
                       value={line.productName}
-                      disabled={busy}
+                      disabled={busy || Boolean(line.fromStock)}
+                      readOnly={Boolean(line.fromStock)}
                       placeholder="Product name"
                       onChange={(e) =>
                         updatePoLine(line.id, { productName: e.target.value })
@@ -683,7 +1021,8 @@ export function ProcurementManualCreatePoPage() {
                       className="ml-auto h-8 w-20 text-right tabular-nums"
                       inputMode="numeric"
                       value={String(line.quantity)}
-                      disabled={busy}
+                      disabled={busy || Boolean(line.fromStock)}
+                      readOnly={Boolean(line.fromStock)}
                       onChange={(e) => {
                         const n = Math.max(1, Math.floor(toNumber(e.target.value)));
                         updatePoLine(line.id, { quantity: n });
@@ -710,7 +1049,7 @@ export function ProcurementManualCreatePoPage() {
                       variant="ghost"
                       size="sm"
                       className="cursor-pointer text-muted-foreground transition-colors duration-200 hover:text-destructive"
-                      disabled={busy || poLines.length <= 1}
+                      disabled={busy || line.fromStock || poLines.length <= 1}
                       aria-label="Remove line"
                       onClick={() => removePoLine(line.id)}
                     >
@@ -786,7 +1125,7 @@ export function ProcurementManualCreatePoPage() {
 
       <div className="flex flex-wrap justify-end gap-2">
         <Link
-          href="/procurement/orders"
+          href={backHref}
           className={cn(
             buttonVariants({ variant: "outline" }),
             "cursor-pointer transition-colors duration-200",

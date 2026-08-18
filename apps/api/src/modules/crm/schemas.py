@@ -1268,6 +1268,7 @@ class AttachmentCreate(BaseModel):
     company_id: UUID | None = None
     file_name: str
     category: str = "other"
+    remarks: str | None = Field(default=None, max_length=2000)
     source: str = Field(default="upload", pattern="^(upload|link|google_drive|onedrive|dropbox|box)$")
     file_path: str | None = None
     content_base64: str | None = None
@@ -1283,6 +1284,7 @@ class AttachmentResponse(OrmModel):
     content_type: str | None
     size: int | None
     category: str
+    remarks: str | None = None
     source: str = "upload"
     uploaded_by: UUID | None
     company_id: UUID

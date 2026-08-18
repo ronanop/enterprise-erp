@@ -1,6 +1,6 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { useEffect, useRef, type ReactNode } from "react";
 
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -13,8 +13,10 @@ type ConfirmDialogProps = {
   cancelLabel?: string;
   tone?: "default" | "destructive";
   busy?: boolean;
+  confirmDisabled?: boolean;
   /** Extra classes for the dialog panel (e.g. wider forms: max-w-2xl). */
   contentClassName?: string;
+  overlayClassName?: string;
   onConfirm: () => void;
   onCancel: () => void;
   children?: ReactNode;
@@ -28,20 +30,39 @@ export function ConfirmDialog({
   cancelLabel = "Cancel",
   tone = "default",
   busy,
+  confirmDisabled,
   contentClassName,
+  overlayClassName,
   onConfirm,
   onCancel,
   children,
 }: ConfirmDialogProps) {
+  const openedAtRef = useRef(0);
+
+  useEffect(() => {
+    if (!open) return;
+    openedAtRef.current = Date.now();
+  }, [open]);
+
   if (!open) return null;
 
   const compact = !description && !children;
 
+  function handleOverlayClick() {
+    // Native <select> option clicks fire a leftover document click after onChange.
+    // Ignore that first click so the dialog stays open.
+    if (Date.now() - openedAtRef.current < 400) return;
+    onCancel();
+  }
+
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-foreground/40 p-4"
+      className={cn(
+        "fixed inset-0 z-[80] flex items-center justify-center bg-foreground/40 p-4",
+        overlayClassName,
+      )}
       role="presentation"
-      onClick={onCancel}
+      onClick={handleOverlayClick}
     >
       <div
         role="dialog"
@@ -95,7 +116,7 @@ export function ConfirmDialog({
             type="button"
             variant={tone === "destructive" ? "destructive" : "default"}
             onClick={onConfirm}
-            disabled={busy}
+            disabled={busy || confirmDisabled}
             className="cursor-pointer transition-colors duration-200"
           >
             {busy ? "Working…" : confirmLabel}

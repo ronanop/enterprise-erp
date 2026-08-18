@@ -2,13 +2,15 @@
 
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
-import { ExternalLink, FileDown, FileText, X } from "lucide-react";
+import { ExternalLink, FileDown, FileText, RotateCcw, X } from "lucide-react";
 
+import { ReverseGrnConfirmDialog } from "@/components/procurement/reverse-grn-confirm-dialog";
 import { Button } from "@/components/ui/button";
 import { formatApiError } from "@/services/api-client";
 import {
   listOrderReceiptBatches,
   openReceiptBatchAttachment,
+  reverseReceiptBatch,
   type ReceiptBatchAttachment,
   type ScmReceiptBatch,
 } from "@/services/procurement-service";
@@ -40,12 +42,18 @@ function formatSerials(serials: string[] | null | undefined): string {
   return serials.join(", ");
 }
 
+function isBatchReversed(batch: ScmReceiptBatch): boolean {
+  return Boolean(batch.reversed) || (batch.reversal_status || "").toLowerCase() === "reversed";
+}
+
 type GrnPdfPickDialogProps = {
   open: boolean;
   orderId: string;
   poLabel: string;
   pdfContext: GrnReceiptPdfContext;
+  canReverse?: boolean;
   onClose: () => void;
+  onReversed?: () => void;
 };
 
 export function GrnPdfPickDialog({
@@ -53,7 +61,9 @@ export function GrnPdfPickDialog({
   orderId,
   poLabel,
   pdfContext,
+  canReverse = false,
   onClose,
+  onReversed,
 }: GrnPdfPickDialogProps) {
   const [mounted, setMounted] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -62,6 +72,10 @@ export function GrnPdfPickDialog({
   const [rows, setRows] = useState<BatchRow[]>([]);
   const [selectedKey, setSelectedKey] = useState<string>("");
   const [openingId, setOpeningId] = useState<string | null>(null);
+  const [reverseTarget, setReverseTarget] = useState<ScmReceiptBatch | null>(null);
+  const [reverseReason, setReverseReason] = useState("");
+  const [reversing, setReversing] = useState(false);
+  const [success, setSuccess] = useState<string | null>(null);
 
   useEffect(() => {
     setMounted(true);
@@ -83,6 +97,9 @@ export function GrnPdfPickDialog({
     setError(null);
     setRows([]);
     setSelectedKey("");
+    setReverseTarget(null);
+    setReverseReason("");
+    setSuccess(null);
     void (async () => {
       try {
         const batches = await listOrderReceiptBatches(orderId);
@@ -114,6 +131,27 @@ export function GrnPdfPickDialog({
   if (!open || !mounted) return null;
 
   const downloading = downloadingKey !== null;
+  const busy = downloading || reversing;
+
+  async function reloadBatches(preferKey?: string) {
+    const batches = await listOrderReceiptBatches(orderId);
+    const printable = batches.filter((b) => batchUnits(b) > 0);
+    const sorted = [...printable].sort((a, b) => b.sequence - a.sequence);
+    const loaded = sorted.map((batch) => ({
+      batch,
+      attachments: batch.attachments ?? [],
+    }));
+    setRows(loaded);
+    if (loaded.length === 0) {
+      setSelectedKey("");
+      return;
+    }
+    const next =
+      (preferKey && loaded.find((row) => batchKey(row.batch) === preferKey)
+        ? preferKey
+        : null) || batchKey(loaded[0].batch);
+    setSelectedKey(next);
+  }
 
   async function onDownloadBatch(batch: ScmReceiptBatch) {
     const key = batchKey(batch);
@@ -130,12 +168,34 @@ export function GrnPdfPickDialog({
     }
   }
 
+  async function onConfirmReverse() {
+    const batch = reverseTarget;
+    const batchId = batch?.id?.trim();
+    const reason = reverseReason.trim();
+    if (!batch || !batchId || !reason || reversing) return;
+    setReversing(true);
+    setError(null);
+    try {
+      await reverseReceiptBatch(batchId, reason);
+      setReverseTarget(null);
+      setReverseReason("");
+      setSuccess(`GRN ${batch.grn_number} reversed.`);
+      await reloadBatches(batchKey(batch));
+      onReversed?.();
+    } catch (err) {
+      setError(formatApiError(err, "Failed to reverse GRN"));
+    } finally {
+      setReversing(false);
+    }
+  }
+
   return createPortal(
+    <>
     <div
       className="fixed inset-0 z-[200] flex items-center justify-center bg-foreground/40 p-4"
       role="presentation"
       onClick={() => {
-        if (!downloading) onClose();
+        if (!busy) onClose();
       }}
     >
       <div
@@ -158,7 +218,7 @@ export function GrnPdfPickDialog({
             size="icon"
             className="size-8 shrink-0 cursor-pointer"
             aria-label="Close"
-            disabled={downloading}
+            disabled={busy}
             onClick={onClose}
           >
             <X className="size-4" />
@@ -169,6 +229,12 @@ export function GrnPdfPickDialog({
           {error ? (
             <div className="mb-3 rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-xs text-destructive">
               {error}
+            </div>
+          ) : null}
+
+          {success ? (
+            <div className="mb-3 rounded-md border border-emerald-200/80 bg-emerald-50 px-3 py-2 text-xs text-emerald-900">
+              {success}
             </div>
           ) : null}
 
@@ -191,6 +257,7 @@ export function GrnPdfPickDialog({
                 const key = batchKey(batch);
                 const units = batchUnits(batch);
                 const selected = selectedKey === key;
+                const reversed = isBatchReversed(batch);
                 const radioId =
                   batch.id?.trim() || `grn-pdf-pick-seq-${batch.sequence}`;
                 return (
@@ -198,7 +265,9 @@ export function GrnPdfPickDialog({
                     key={key}
                     className={`rounded-lg border text-sm transition-colors duration-200 ${
                       selected
-                        ? "border-[#0369A1]/50 bg-sky-50/40"
+                        ? reversed
+                          ? "border-destructive/40 bg-destructive/5"
+                          : "border-[#0369A1]/50 bg-sky-50/40"
                         : "border-border/70 bg-card"
                     }`}
                   >
@@ -209,7 +278,7 @@ export function GrnPdfPickDialog({
                         name="grn-pdf-pick"
                         className="mt-0.5 size-3.5 shrink-0 cursor-pointer accent-[#0369A1]"
                         checked={selected}
-                        disabled={downloading}
+                        disabled={busy}
                         onChange={() => setSelectedKey(key)}
                       />
                       <label
@@ -219,16 +288,38 @@ export function GrnPdfPickDialog({
                         <span className="font-medium tabular-nums text-foreground">
                           GRN No. {batch.grn_number}
                         </span>
+                        {reversed ? (
+                          <span className="ml-2 rounded-full border border-destructive/30 bg-destructive/10 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-destructive">
+                            Reversed
+                          </span>
+                        ) : null}
                         <span className="mt-0.5 block text-xs text-muted-foreground">
                           {units} unit{units === 1 ? "" : "s"} in this GRN
                         </span>
                       </label>
+                      {canReverse && !reversed && batch.id ? (
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          className="h-8 w-8 shrink-0 cursor-pointer border-border p-0 text-destructive transition-colors duration-200 hover:bg-destructive/10 hover:text-destructive"
+                          disabled={busy}
+                          title={`Reverse GRN ${batch.grn_number}`}
+                          aria-label={`Reverse GRN ${batch.grn_number}`}
+                          onClick={() => {
+                            setReverseTarget(batch);
+                            setReverseReason("");
+                          }}
+                        >
+                          <RotateCcw className="size-4 stroke-[2]" />
+                        </Button>
+                      ) : null}
                       <Button
                         type="button"
                         size="sm"
                         variant="outline"
                         className="h-8 w-8 shrink-0 cursor-pointer border-border p-0 text-[#0369A1] transition-colors duration-200 hover:bg-sky-50 hover:text-[#0369A1]"
-                        disabled={units <= 0 || downloadingKey === key}
+                        disabled={units <= 0 || downloadingKey === key || reversing}
                         title={`Download GRN PDF for ${batch.grn_number}`}
                         aria-label={`Download GRN PDF for ${batch.grn_number}`}
                         onClick={() => void onDownloadBatch(batch)}
@@ -242,12 +333,13 @@ export function GrnPdfPickDialog({
                         <p className="font-medium text-foreground">Items in this GRN</p>
                         {(batch.lines?.length ?? 0) > 0 ? (
                           <div className="mt-1.5 overflow-x-auto rounded-md border border-border/60">
-                            <table className="w-full min-w-[300px] text-left">
+                            <table className="w-full min-w-[360px] text-left">
                               <thead className="border-b border-border/60 bg-muted/30 text-muted-foreground">
                                 <tr>
                                   <th className="px-2 py-1.5 font-medium">S No.</th>
                                   <th className="px-2 py-1.5 font-medium">Product</th>
                                   <th className="px-2 py-1.5 font-medium tabular-nums">Qty</th>
+                                  <th className="px-2 py-1.5 font-medium tabular-nums">Billing</th>
                                   <th className="px-2 py-1.5 font-medium">Serials</th>
                                 </tr>
                               </thead>
@@ -266,6 +358,13 @@ export function GrnPdfPickDialog({
                                     <td className="px-2 py-1.5 tabular-nums text-foreground">
                                       {ln.quantity}
                                     </td>
+                                    <td className="px-2 py-1.5 tabular-nums text-foreground">
+                                      {ln.billing === false
+                                        ? "0"
+                                        : ln.billing_quantity != null
+                                          ? ln.billing_quantity
+                                          : ln.quantity}
+                                    </td>
                                     <td
                                       className="max-w-[140px] truncate px-2 py-1.5 text-muted-foreground"
                                       title={formatSerials(ln.serial_numbers)}
@@ -282,6 +381,18 @@ export function GrnPdfPickDialog({
                             No line detail stored for this GRN.
                           </p>
                         )}
+
+                        {reversed ? (
+                          <p className="mt-3 text-xs text-destructive">
+                            Reversed
+                            {batch.reversed_at
+                              ? ` on ${formatInvoiceDate(batch.reversed_at)}`
+                              : ""}
+                            {batch.reversal_reason?.trim()
+                              ? ` · ${batch.reversal_reason.trim()}`
+                              : ""}
+                          </p>
+                        ) : null}
 
                         <p className="mt-3 font-medium text-foreground">Vendor invoice</p>
                         <dl className="mt-1.5 grid gap-1.5 sm:grid-cols-2">
@@ -357,7 +468,22 @@ export function GrnPdfPickDialog({
           ) : null}
         </div>
       </div>
-    </div>,
+    </div>
+    <ReverseGrnConfirmDialog
+      batch={reverseTarget}
+      reason={reverseReason}
+      reversing={reversing}
+      error={reverseTarget ? error : null}
+      onReasonChange={setReverseReason}
+      onCancel={() => {
+        if (!reversing) {
+          setReverseTarget(null);
+          setReverseReason("");
+        }
+      }}
+      onConfirm={() => void onConfirmReverse()}
+    />
+    </>,
     document.body,
   );
 }

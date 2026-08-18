@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   Building2,
+  Eye,
   FileDown,
   PackageCheck,
   RefreshCw,
@@ -20,7 +21,7 @@ import {
   type VendorInvoiceDraft,
   emptyVendorInvoiceDraft,
 } from "@/components/procurement/receipt-serials-dialog";
-import { ScmCommercialDocumentsPanel } from "@/components/procurement/scm-commercial-documents-panel";
+import { PoOrderDocumentsCard } from "@/components/procurement/po-order-documents-card";
 
 import { PageHeader } from "@/components/layout/page-header";
 import { Badge } from "@/components/ui/badge";
@@ -42,8 +43,8 @@ import {
 import { ApiClientError } from "@/services/api-client";
 import {
   collectPoApprovalDocuments,
-  finalizeScmOrder,
   formatInr,
+  formatUsd,
   getPurchaseOrder,
   listOrderReceiptBatches,
   listVendorOptions,
@@ -200,6 +201,31 @@ function formatQtyDraftValue(value: number): string {
 function formatCostDraftValue(value: number): string {
   if (!Number.isFinite(value) || value < 0) return "";
   return String(roundTo(value, 2));
+}
+
+function isUsdOrderLine(currency?: string | null): boolean {
+  return (currency || "INR").toUpperCase() === "USD";
+}
+
+function isUsdOrder(order: {
+  currency_code?: string | null;
+  lines?: Array<{ rate_currency?: string | null }>;
+}): boolean {
+  if ((order.currency_code || "").toUpperCase() === "USD") return true;
+  const lines = order.lines || [];
+  return lines.length > 0 && lines.every((ln) => isUsdOrderLine(ln.rate_currency));
+}
+
+function formatOrderLineMoney(value: number, currency?: string | null): string {
+  return isUsdOrderLine(currency) ? formatUsd(value) : formatInr(value);
+}
+
+function formatOrderTotal(order: {
+  currency_code?: string | null;
+  total_amount: number;
+  lines?: Array<{ rate_currency?: string | null }>;
+}): string {
+  return isUsdOrder(order) ? formatUsd(order.total_amount) : formatInr(order.total_amount);
 }
 
 /** Unit cost draft — never above the PO unit cost. */
@@ -418,27 +444,22 @@ export function OrderDetailPage({ orderId }: { orderId: string }) {
     setBusy(true);
     setError(null);
     try {
-      if (!isAdmin) {
-        const documents = await collectPoApprovalDocuments({
-          orderId: order.id,
-          ovfId: order.source_document_id,
-        });
-        submitPoFinalizeApproval({
-          orderId: order.id,
-          documentNumber: order.document_number,
-          companyPoNumber: order.company_po_number,
-          customerName: order.customer_name,
-          vendorId: order.vendor_id,
-          vendorName: vendorName || null,
-          ovfId: order.source_document_id,
-          documents,
-        });
-        setError(null);
-        router.replace(`${pathname}?approval=pending`);
-        return;
-      }
-      const updated = await finalizeScmOrder(order.id);
-      setOrder(updated);
+      const documents = await collectPoApprovalDocuments({
+        orderId: order.id,
+        ovfId: order.source_document_id,
+      });
+      submitPoFinalizeApproval({
+        orderId: order.id,
+        documentNumber: order.document_number,
+        companyPoNumber: order.company_po_number,
+        customerName: order.customer_name,
+        vendorId: order.vendor_id,
+        vendorName: vendorName || null,
+        ovfId: order.source_document_id,
+        documents,
+      });
+      setError(null);
+      router.replace(`${pathname}?approval=pending`);
     } catch (err) {
       setError(err instanceof ApiClientError ? err.message : "Failed to finalize PO");
     } finally {
@@ -771,7 +792,8 @@ export function OrderDetailPage({ orderId }: { orderId: string }) {
     order.status === "draft" &&
     order.source_module === "crm" &&
     (order.lines?.length ?? 0) > 0 &&
-    !finalizeBlockedByApproval;
+    !finalizeBlockedByApproval &&
+    !isAdmin;
   const editPoHref =
     order?.source_module === "crm" && order.source_document_id
       ? `/procurement/scm/ovf/${order.source_document_id}/po`
@@ -991,9 +1013,7 @@ export function OrderDetailPage({ orderId }: { orderId: string }) {
                 disabled={busy}
                 onClick={() => void onFinalize()}
               >
-                {isAdmin
-                  ? "Finalize & issue"
-                  : approvalRejected
+                {approvalRejected
                     ? "Resubmit for approval"
                     : "Send for admin approval"}
               </Button>
@@ -1147,7 +1167,7 @@ export function OrderDetailPage({ orderId }: { orderId: string }) {
                   <DetailItem label="Vendor payment terms">
                     {order.payment_terms?.trim() || "—"}
                   </DetailItem>
-                  <DetailItem label="Amount">{formatInr(order.total_amount)}</DetailItem>
+                  <DetailItem label="Amount">{formatOrderTotal(order)}</DetailItem>
                 </dl>
                 {vendorAddress.trim() ? (
                   <dl className="mt-3 grid gap-3 border-t border-border/60 pt-3 sm:grid-cols-2">
@@ -1191,10 +1211,10 @@ export function OrderDetailPage({ orderId }: { orderId: string }) {
                             {Number(ln.quantity) || 0}
                           </td>
                           <td className="px-3 py-2 text-right tabular-nums">
-                            {formatInr(ln.unit_cost)}
+                            {formatOrderLineMoney(ln.unit_cost, ln.rate_currency)}
                           </td>
                           <td className="px-3 py-2 text-right font-medium tabular-nums">
-                            {formatInr(ln.line_total)}
+                            {formatOrderLineMoney(ln.line_total, ln.rate_currency)}
                           </td>
                         </tr>
                       ))}
@@ -1207,10 +1227,10 @@ export function OrderDetailPage({ orderId }: { orderId: string }) {
                       ) : (
                         <tr className="border-t border-border bg-muted/20 font-semibold">
                           <td colSpan={4} className="px-3 py-2.5 text-right">
-                            Total
+                            {isUsdOrder(order) ? "Total (USD)" : "Total (INR)"}
                           </td>
                           <td className="px-3 py-2.5 text-right tabular-nums">
-                            {formatInr(order.total_amount)}
+                            {formatOrderTotal(order)}
                           </td>
                         </tr>
                       )}
@@ -1219,22 +1239,22 @@ export function OrderDetailPage({ orderId }: { orderId: string }) {
                 </div>
               </div>
 
-              <ScmCommercialDocumentsPanel
-                orderId={order.id}
-                ovfId={
-                  order.source_module === "crm" ? order.source_document_id : null
-                }
-                branchId={order.branch_id}
-                companyId={order.company_id}
-                title="Documents"
-                allowUpload={false}
-              />
-
               <PoFulfillmentCharts
                 poLabel={order.company_po_number?.trim() || order.document_number}
                 lines={orderLines}
                 batches={receiptBatches}
                 loading={loading}
+              />
+
+              <PoOrderDocumentsCard
+                orderId={order.id}
+                branchId={order.branch_id}
+                companyId={order.company_id}
+                receiptBatches={receiptBatches}
+                allowUpload={(order.status || "").toLowerCase() !== "cancelled"}
+                onChanged={() => {
+                  void listOrderReceiptBatches(orderId).then(setReceiptBatches).catch(() => {});
+                }}
               />
             </>
           ) : (
@@ -1332,17 +1352,17 @@ export function OrderDetailPage({ orderId }: { orderId: string }) {
               <table className={cn("w-full text-left text-sm", tableMinWidth)}>
                 <thead className="border-b border-border bg-muted/40 text-xs text-muted-foreground">
                   <tr>
-                    <th className="px-3 py-2 font-medium">S No.</th>
-                    <th className="px-3 py-2 font-medium">Product</th>
-                    <th className="px-3 py-2 font-medium">Ordered</th>
-                    <th className="px-3 py-2 text-center font-medium">Receive now</th>
+                    <th className="px-3 py-2 font-bold">S No.</th>
+                    <th className="px-3 py-2 font-bold">Product</th>
+                    <th className="px-3 py-2 font-bold">Ordered</th>
+                    <th className="px-3 py-2 text-center font-bold">Receive now</th>
                     {showReceiptColumns ? (
-                      <th className="px-3 py-2 font-medium">Remaining</th>
+                      <th className="px-3 py-2 font-bold">Remaining</th>
                     ) : null}
-                    <th className="px-3 py-2 font-medium">Unit cost</th>
-                    <th className="px-3 py-2 font-medium">Status</th>
-                    <th className="px-3 py-2 text-center font-medium">GRN PDF</th>
-                    <th className="px-3 py-2 text-center font-medium">PO PDF</th>
+                    <th className="px-3 py-2 font-bold">Unit cost</th>
+                    <th className="px-3 py-2 font-bold">Status</th>
+                    <th className="px-3 py-2 text-center font-bold">GRN details</th>
+                    <th className="px-3 py-2 text-center font-bold">PO PDF</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1413,14 +1433,16 @@ export function OrderDetailPage({ orderId }: { orderId: string }) {
                         ) : null}
                         <td className="px-3 py-2">
                           {locked || !showReceiptColumns ? (
-                            <span className="tabular-nums">{formatInr(ln.unit_cost)}</span>
+                            <span className="tabular-nums">
+                              {formatOrderLineMoney(ln.unit_cost, ln.rate_currency)}
+                            </span>
                           ) : (
                             <Input
                               className="h-8 w-28 font-mono text-sm tabular-nums"
                               type="text"
                               inputMode="decimal"
                               aria-label={`Unit cost for ${ln.product_name || ln.product_code || "line"}`}
-                              title={`Max ${formatInr(Number(ln.unit_cost) || 0)} (PO unit cost)`}
+                              title={`Max ${formatOrderLineMoney(Number(ln.unit_cost) || 0, ln.rate_currency)} (PO unit cost)`}
                               value={costDraft[ln.id] ?? ""}
                               disabled={
                                 !showGrnWorkspace ||
@@ -1458,11 +1480,11 @@ export function OrderDetailPage({ orderId }: { orderId: string }) {
                                   variant="outline"
                                   className="h-8 w-8 cursor-pointer border-border p-0 text-[#0369A1] transition-colors duration-200 hover:bg-sky-50 hover:text-[#0369A1]"
                                   disabled={!hasReceivedQty}
-                                  title="GRN numbers, vendor invoice documents, and PDF"
-                                  aria-label="GRN and vendor invoice"
+                                  title="View GRN details"
+                                  aria-label="View GRN details"
                                   onClick={() => setGrnPdfPickOpen(true)}
                                 >
-                                  <FileDown className="size-4 stroke-[2]" />
+                                  <Eye className="size-4 stroke-[2]" />
                                 </Button>
                               </div>
                             </td>
@@ -1547,7 +1569,9 @@ export function OrderDetailPage({ orderId }: { orderId: string }) {
           orderId={order.id}
           poLabel={order.company_po_number?.trim() || order.document_number}
           pdfContext={grnPdfContext}
+          canReverse={canReceipt}
           onClose={() => setGrnPdfPickOpen(false)}
+          onReversed={() => void load()}
         />
       ) : null}
     </div>

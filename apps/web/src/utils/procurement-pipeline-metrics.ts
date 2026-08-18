@@ -90,6 +90,59 @@ function derivePoReceiptBucket(
   return "partial";
 }
 
+export type PoReceiptStatus = "awaiting" | "partial" | "complete";
+
+export type PoReceiptBreakdownRow = {
+  id: string;
+  poNumber: string;
+  grnCount: number;
+  status: PoReceiptStatus;
+  qtyOrdered: number;
+  qtyReceived: number;
+  receiptPct: number;
+};
+
+/** Per-PO GRN counts and receipt completion for analytics drill-down. */
+export function buildPoReceiptBreakdown(
+  vendorPos: Array<ProcurementRow | ScmVendorPo>,
+): PoReceiptBreakdownRow[] {
+  const rows: PoReceiptBreakdownRow[] = [];
+  for (const raw of vendorPos) {
+    const po = asVendorPo(raw);
+    const bucket = derivePoReceiptBucket(po);
+    if (!bucket) continue;
+
+    let qtyOrdered = 0;
+    let qtyReceived = 0;
+    for (const ln of po.lines || []) {
+      const { ordered, received } = lineQty(ln);
+      qtyOrdered += ordered;
+      qtyReceived += Math.min(ordered || received, received);
+    }
+
+    rows.push({
+      id: String(po.id),
+      poNumber:
+        (po.company_po_number || "").trim() ||
+        (po.document_number || "").trim() ||
+        "—",
+      grnCount: countGrnDocumentsForPo(po),
+      status: bucket,
+      qtyOrdered,
+      qtyReceived,
+      receiptPct:
+        qtyOrdered > 0
+          ? Math.min(100, Math.round((qtyReceived / qtyOrdered) * 1000) / 10)
+          : 0,
+    });
+  }
+
+  return rows.sort((a, b) => {
+    if (b.grnCount !== a.grnCount) return b.grnCount - a.grnCount;
+    return a.poNumber.localeCompare(b.poNumber);
+  });
+}
+
 function asVendorPo(row: ProcurementRow | ScmVendorPo): ScmVendorPo {
   return row as ScmVendorPo;
 }

@@ -49,6 +49,8 @@
 }
 
 :root {
+  --font-jakarta-sans: "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-geist-mono: "Geist Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   /* Slate canvas + deep teal accents — enterprise ERP */
   --background: oklch(0.985 0.004 220);
   --foreground: oklch(0.22 0.02 240);

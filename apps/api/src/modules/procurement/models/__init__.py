@@ -2,6 +2,7 @@
 
 from modules.procurement.models.contract import ProcVendorContract, ProcVendorContractLine
 from modules.procurement.models.grn import ProcGrnHeader, ProcGrnLine
+from modules.procurement.models.inventory_adjustment import ProcInventoryStockAdjustment
 from modules.procurement.models.inventory_import import ProcInventoryImportLine
 from modules.procurement.models.inventory_stock import ProcInventoryStockUnit
 from modules.procurement.models.invoice import ProcInvoiceHeader, ProcInvoiceLine
@@ -26,6 +27,7 @@ __all__ = [
     "ProcGrnHeader",
     "ProcGrnLine",
     "ProcInventoryImportLine",
+    "ProcInventoryStockAdjustment",
     "ProcInventoryStockUnit",
     "ProcInvoiceHeader",
     "ProcInvoiceLine",

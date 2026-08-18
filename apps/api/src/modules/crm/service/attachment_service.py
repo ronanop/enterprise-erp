@@ -66,6 +66,7 @@ class AttachmentService:
         entity_id: UUID,
         file_name: str,
         category: str = "other",
+        remarks: str | None = None,
         source: str = "upload",
         branch_id: UUID,
         company_id: UUID | None = None,
@@ -100,6 +101,7 @@ class AttachmentService:
             content_type=content_type,
             size=size,
             category=category,
+            remarks=remarks.strip() if remarks else None,
             source=source,
             uploaded_by=ctx.user_id,
         )

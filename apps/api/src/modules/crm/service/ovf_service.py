@@ -138,7 +138,7 @@ class OvfService:
 
     def list_display_meta_by_ids(
         self, ctx: TenantContext, ovf_ids: Sequence[UUID]
-    ) -> dict[UUID, dict[str, str | date | None]]:
+    ) -> dict[UUID, dict[str, str | date | int | None]]:
         """Lightweight OVF fields for Procurement list enrichment (no ORM leak)."""
         rows = self._repo.list_by_ids(ctx, list(ovf_ids))
         return {
@@ -146,6 +146,7 @@ class OvfService:
                 "po_number": row.po_number,
                 "customer_name": row.customer_name,
                 "po_date": self._resolve_customer_po_display_date(ctx, row),
+                "customer_payment_days": int(row.customer_payment_days or 0),
             }
             for row in rows
         }
@@ -374,6 +375,7 @@ class OvfService:
             "description": "; ".join(desc_parts) if desc_parts else None,
             "customer_po_number": ovf.po_number,
             "customer_po_date": self._resolve_customer_po_display_date(ctx, ovf),
+            "customer_payment_days": int(ovf.customer_payment_days or 0),
         }
 
     def _resolve_oem_context(self, ctx: TenantContext, opportunity_id: UUID) -> dict[str, str | None]:

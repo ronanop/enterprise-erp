@@ -249,6 +249,7 @@ class OrderCreateRequest(BaseModel):
 class OrderUpdateRequest(BaseModel):
     payment_terms: str | None = None
     expected_delivery_date: date | None = None
+    order_ref_cache: str | None = Field(default=None, max_length=100)
     version: int | None = None
 
 
@@ -282,6 +283,8 @@ class OrderLineResponse(BaseModel):
     last_receipt_billing: bool = True
     last_receipt_billing_quantity: float = 0
     unit_cost: float
+    rate_currency: str = "INR"
+    tax_rate: float = 0
     line_total: float
     status: str
 
@@ -327,8 +330,10 @@ class OrderResponse(BaseModel):
     entity_code: str | None = None
     customer_name: str | None = None
     approved_by_name: str | None = None
+    order_ref_cache: str | None = None
     ovf_date: date | None = None
     customer_po_number: str | None = None
+    customer_payment_days: int = 0
     vendor_total: float = 0
     customer_total: float = 0
     customer_tax_amount: float = 0
@@ -475,6 +480,16 @@ class ScmOvfPreviewResponse(BaseModel):
     purchase_order_status: str | None = None
 
 
+class ScmCreatePoFromOvfLineRequest(BaseModel):
+    """Optional SCM Create-PO line overrides (form edits); otherwise OVF vendor lines are used."""
+
+    product_name: str = Field(min_length=1, max_length=255)
+    qty: float = Field(gt=0)
+    unit_price: float = Field(gt=0)
+    rate_currency: str = Field(default="INR", max_length=3)
+    tax_rate: float = Field(default=0, ge=0)
+
+
 class ScmCreatePoFromOvfRequest(BaseModel):
     vendor_id: UUID
     document_date: date | None = None
@@ -482,9 +497,12 @@ class ScmCreatePoFromOvfRequest(BaseModel):
     payment_terms: str | None = None
     expected_delivery_date: date | None = None
     entity_code: str
+    order_ref_cache: str | None = Field(default=None, max_length=100)
     finalize: bool = False
     # Hold: create draft then cancel so SCM Queue shows Hold and Create PO stays available.
     hold: bool = False
+    # When set, these lines are purchased instead of raw OVF vendor_lines (qty/rate edits, removals).
+    lines: list[ScmCreatePoFromOvfLineRequest] | None = None
 
 
 class ScmInventoryPoLineRequest(BaseModel):
@@ -501,6 +519,7 @@ class ScmCreateInventoryPoRequest(BaseModel):
     payment_terms: str | None = None
     expected_delivery_date: date | None = None
     approved_by_name: str | None = Field(default=None, max_length=255)
+    order_ref_cache: str | None = Field(default=None, max_length=100)
     lines: list[ScmInventoryPoLineRequest] = Field(default_factory=list)
     # Soft-delete these on-hand units when creating the PO (inventory deduction).
     stock_unit_ids: list[UUID] = Field(default_factory=list)
@@ -534,6 +553,7 @@ class ScmVendorPoLineResponse(BaseModel):
     last_receipt_billing: bool = True
     last_receipt_billing_quantity: float = 0
     unit_cost: float
+    rate_currency: str = "INR"
     line_total: float
     status: str
     grn_status: str
@@ -543,6 +563,7 @@ class ScmVendorPoResponse(BaseModel):
     id: UUID
     document_number: str
     document_date: date
+    created_at: datetime | None = None
     vendor_id: UUID
     status: str
     currency_code: str
@@ -641,6 +662,7 @@ class ScmCommercialAttachmentSummary(BaseModel):
     content_type: str | None = None
     size: int | None = None
     category: str = "other"
+    remarks: str | None = None
     entity_type: str
     entity_id: UUID
 
@@ -652,6 +674,7 @@ class ScmCommercialAttachmentCreate(BaseModel):
     branch_id: UUID
     company_id: UUID | None = None
     category: str = "other"
+    remarks: str | None = Field(default=None, max_length=2000)
 
 
 class ScmReceiptBatchResponse(BaseModel):
@@ -663,6 +686,11 @@ class ScmReceiptBatchResponse(BaseModel):
     vendor_invoice_date: date | None = None
     vendor_invoice_quantity: float | None = None
     vendor_invoice_subtotal: float | None = None
+    reversed: bool = False
+    reversal_status: str = "posted"
+    reversed_at: datetime | None = None
+    reversed_by: UUID | None = None
+    reversal_reason: str | None = None
     lines: list[ScmReceiptBatchLineResponse] = Field(default_factory=list)
     attachments: list[ScmReceiptBatchAttachmentSummary] = Field(default_factory=list)
 
@@ -697,6 +725,10 @@ class ScmReceiptBatchAttachmentCreate(BaseModel):
     content_type: str | None = None
     branch_id: UUID
     company_id: UUID | None = None
+
+
+class ScmReceiptBatchReverseRequest(BaseModel):
+    reason: str = Field(..., min_length=1, max_length=2000)
 
 
 # --- GRN ---

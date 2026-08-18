@@ -28,6 +28,7 @@ import {
 } from "recharts";
 
 import { Exploded3dPieChart, type Exploded3dPieSlice } from "@/components/procurement/exploded-3d-pie";
+import { WrappedYAxisTick } from "@/utils/chart-axis-label";
 import { PoLifecycleChartCard } from "@/components/procurement/procurement-dashboard-charts";
 import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -72,14 +73,30 @@ const HIST_BAR_COLORS: Record<string, { base: string; active: string }> = {
 function ChartCardHeader({
   title,
   icon: Icon,
+  tone = "sky",
 }: {
   title: string;
   icon: ComponentType<{ className?: string; "aria-hidden"?: boolean }>;
+  tone?: "sky" | "teal" | "amber" | "emerald";
 }) {
+  const iconTone =
+    tone === "teal"
+      ? "border-teal-200/80 bg-teal-100 text-teal-800"
+      : tone === "amber"
+        ? "border-amber-200/80 bg-amber-100 text-amber-800"
+        : tone === "emerald"
+          ? "border-emerald-200/80 bg-emerald-100 text-emerald-800"
+          : "border-sky-200/80 bg-sky-100 text-sky-800";
+
   return (
     <div className="mb-3 flex items-start justify-between gap-3">
       <div className="flex min-w-0 items-center gap-2.5">
-        <span className="inline-flex size-8 shrink-0 items-center justify-center rounded-xl border border-border/60 bg-muted/40 text-foreground">
+        <span
+          className={cn(
+            "inline-flex size-8 shrink-0 items-center justify-center rounded-xl border",
+            iconTone,
+          )}
+        >
           <Icon className="size-3.5" aria-hidden />
         </span>
         <div className="min-w-0">
@@ -201,8 +218,8 @@ function OverviewHistogram({
   const total = data.reduce((sum, row) => sum + row.count, 0);
 
   return (
-    <section className="flex h-full flex-col rounded-[1.35rem] border border-border/70 bg-card p-4 shadow-sm sm:p-5">
-      <ChartCardHeader title="Procurement volume" icon={BarChart3} />
+    <section className="flex h-full flex-col rounded-[1.35rem] border border-sky-200/80 bg-sky-50/70 p-4 shadow-sm sm:p-5">
+      <ChartCardHeader title="PROCUREMENT VOLUME" icon={BarChart3} tone="sky" />
 
       {loading ? (
         <div className="flex flex-1 items-center justify-center rounded-xl bg-muted/25 py-16 text-sm text-muted-foreground">
@@ -370,10 +387,7 @@ function InventoryStockPanel({
         a.productName.localeCompare(b.productName),
     );
     return rows.slice(0, 6).map((row) => ({
-      name:
-        row.productName.length > 22
-          ? `${row.productName.slice(0, 20)}…`
-          : row.productName,
+      name: row.productName,
       fullName: row.productName,
       units: row.units,
       stockValue: row.stockValue,
@@ -424,7 +438,7 @@ function InventoryStockPanel({
           </span>
           <div className="min-w-0">
             <h2 className="truncate text-sm font-semibold tracking-tight text-foreground">
-              Inventory Value
+              INVENTORY VALUE
             </h2>
           </div>
         </div>
@@ -435,7 +449,7 @@ function InventoryStockPanel({
             "h-8 cursor-pointer rounded-lg border-sky-200/80 bg-white/80 text-sky-900 transition-colors duration-200 hover:bg-sky-50",
           )}
         >
-          Open inventory
+          Open Inventory
         </Link>
       </div>
 
@@ -471,16 +485,16 @@ function InventoryStockPanel({
             </p>
           </div>
           {loading ? (
-            <div className="flex h-[210px] items-center justify-center text-sm text-muted-foreground">
+            <div className="flex h-[260px] items-center justify-center text-sm text-muted-foreground">
               Loading stock…
             </div>
           ) : topProducts.length === 0 ? (
-            <div className="flex h-[210px] items-center justify-center text-sm text-muted-foreground">
+            <div className="flex h-[260px] items-center justify-center text-sm text-muted-foreground">
               No stock units on hand
             </div>
           ) : (
             <div
-              className="h-[210px] w-full"
+              className="h-[260px] w-full"
               role="img"
               aria-label="Top products by inventory units"
             >
@@ -488,7 +502,7 @@ function InventoryStockPanel({
                 <BarChart
                   data={topProducts}
                   layout="vertical"
-                  margin={{ top: 4, right: 36, left: 4, bottom: 4 }}
+                  margin={{ top: 8, right: 36, left: 8, bottom: 8 }}
                 >
                   <CartesianGrid
                     strokeDasharray="4 4"
@@ -507,8 +521,9 @@ function InventoryStockPanel({
                   <YAxis
                     type="category"
                     dataKey="name"
-                    width={108}
-                    tick={{ fontSize: 11, fill: "#334155", fontWeight: 500 }}
+                    width={168}
+                    interval={0}
+                    tick={<WrappedYAxisTick maxCharsPerLine={16} maxLines={3} />}
                     tickLine={false}
                     axisLine={false}
                   />

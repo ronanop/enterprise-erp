@@ -196,7 +196,7 @@ services:
       - "${WEB_PUBLISH_PORT:-3000}:3000"
     depends_on:
       api:
-        condition: service_started
+        condition: service_healthy
     networks: [erp]
 
   employee-app:

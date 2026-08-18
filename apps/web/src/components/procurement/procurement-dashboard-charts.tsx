@@ -43,6 +43,7 @@ function ProcurementChartSection({
   title,
   subtitle,
   icon: Icon,
+  iconTone = "teal",
   children,
   className,
   headerAction,
@@ -51,11 +52,30 @@ function ProcurementChartSection({
   title: string;
   subtitle?: string;
   icon?: LucideIcon;
+  iconTone?: "sky" | "teal" | "amber" | "emerald";
   children: React.ReactNode;
   className?: string;
   headerAction?: React.ReactNode;
   onClick?: () => void;
 }) {
+  const iconToneClass =
+    iconTone === "sky"
+      ? "border-sky-200/80 bg-sky-100 text-sky-800"
+      : iconTone === "amber"
+        ? "border-amber-200/80 bg-amber-100 text-amber-800"
+        : iconTone === "emerald"
+          ? "border-emerald-200/80 bg-emerald-100 text-emerald-800"
+          : "border-teal-200/80 bg-teal-100 text-teal-800";
+
+  const panelToneClass =
+    iconTone === "sky"
+      ? "border-sky-200/80 bg-sky-50/70"
+      : iconTone === "amber"
+        ? "border-amber-200/80 bg-amber-50/70"
+        : iconTone === "emerald"
+          ? "border-emerald-200/80 bg-emerald-50/70"
+          : "border-teal-200/80 bg-teal-50/70";
+
   return (
     <section
       role={onClick ? "link" : undefined}
@@ -73,7 +93,8 @@ function ProcurementChartSection({
           : undefined
       }
       className={cn(
-        "flex flex-col rounded-2xl border border-border/70 bg-card p-4 shadow-sm sm:p-5",
+        "flex flex-col rounded-2xl border p-4 shadow-sm sm:p-5",
+        panelToneClass,
         onClick &&
           "cursor-pointer transition-[box-shadow,transform] duration-200 hover:shadow-md motion-safe:hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
         className,
@@ -83,7 +104,10 @@ function ProcurementChartSection({
         <div className="flex min-w-0 items-center gap-2.5">
           {Icon ? (
             <span
-              className="inline-flex size-8 shrink-0 items-center justify-center rounded-xl border border-border/60 bg-muted/40 text-foreground"
+              className={cn(
+                "inline-flex size-8 shrink-0 items-center justify-center rounded-xl border",
+                iconToneClass,
+              )}
               aria-hidden
             >
               <Icon className="size-3.5" />
@@ -213,8 +237,9 @@ export function PoLifecycleChartCard({
   const router = useRouter();
   return (
     <ProcurementChartSection
-      title="PO lifecycle"
+      title="PO LIFECYCLE"
       icon={PieChartIcon}
+      iconTone="teal"
       className={className}
       onClick={() => router.push("/procurement/orders")}
     >
@@ -237,7 +262,7 @@ export function OvfStatusChartCard({
   className?: string;
 }) {
   return (
-    <ProcurementChartSection title="OVF status" icon={PieChartIcon} className={className}>
+    <ProcurementChartSection title="OVF status" icon={PieChartIcon} iconTone="amber" className={className}>
       <ScmQueueDonut open={open} close={close} hold={hold} loading={loading} />
     </ProcurementChartSection>
   );

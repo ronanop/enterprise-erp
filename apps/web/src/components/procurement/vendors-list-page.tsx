@@ -123,25 +123,8 @@ export function VendorsListPage() {
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     if (!q) return rows;
-    return rows.filter((row) => {
-      const summary = poByVendor[row.id];
-      const poHaystack = (summary?.orders || [])
-        .map(
-          (po) =>
-            `${po.company_po_number || ""} ${po.document_number} ${po.customer_name || ""} ${po.status}`,
-        )
-        .join(" ")
-        .toLowerCase();
-      return (
-        row.label.toLowerCase().includes(q) ||
-        (row.vendorCode || "").toLowerCase().includes(q) ||
-        (row.taxNumber || "").toLowerCase().includes(q) ||
-        (row.address || "").toLowerCase().includes(q) ||
-        (row.vendorType || "").toLowerCase().includes(q) ||
-        poHaystack.includes(q)
-      );
-    });
-  }, [rows, query, poByVendor]);
+    return rows.filter((row) => row.label.toLowerCase().includes(q));
+  }, [rows, query]);
 
   function openAddDialog() {
     setEditing(null);
@@ -294,7 +277,8 @@ export function VendorsListPage() {
           <Input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Filter by vendor or PO…"
+            placeholder="Search by vendor name…"
+            aria-label="Search by vendor name"
             className="h-8 max-w-xs shadow-none"
           />
         </div>

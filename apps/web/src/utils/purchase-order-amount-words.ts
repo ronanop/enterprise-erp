@@ -67,11 +67,43 @@ export function amountInIndianWords(amount: number): string {
   return `${text} Only`;
 }
 
+export function amountInUsdWords(amount: number): string {
+  if (!Number.isFinite(amount) || amount < 0) return "US Dollar Zero Only";
+
+  const rounded = Math.round(amount * 100) / 100;
+  const dollars = Math.floor(rounded);
+  const cents = Math.round((rounded - dollars) * 100);
+
+  const crore = Math.floor(dollars / 1_00_00_000);
+  const lakh = Math.floor((dollars % 1_00_00_000) / 1_00_000);
+  const thousand = Math.floor((dollars % 1_00_000) / 1000);
+  const hundred = dollars % 1000;
+
+  const parts: string[] = [];
+  if (crore) parts.push(`${threeDigits(crore)} Crore`);
+  if (lakh) parts.push(`${threeDigits(lakh)} Lakh`);
+  if (thousand) parts.push(`${threeDigits(thousand)} Thousand`);
+  if (hundred) parts.push(threeDigits(hundred));
+
+  let text = parts.length ? `US Dollar ${parts.join(" ")}` : "US Dollar Zero";
+  if (cents > 0) {
+    text += ` and ${twoDigits(cents)} Cents`;
+  }
+  return `${text} Only`;
+}
+
 export function formatInrPdf(value: number): string {
   return new Intl.NumberFormat("en-IN", {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   }).format(Number.isFinite(value) ? value : 0);
+}
+
+export function formatUsdPdf(value: number): string {
+  return `$${new Intl.NumberFormat("en-US", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(Number.isFinite(value) ? value : 0)}`;
 }
 
 export function formatPoDate(value: string | Date): string {

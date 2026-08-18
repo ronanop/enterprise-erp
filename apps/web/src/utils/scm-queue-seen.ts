@@ -65,6 +65,11 @@ export function markScmQueueSeen(ovfIds: string[]): void {
   }
   writeSeen(next);
   markBootstrapped();
+  try {
+    window.dispatchEvent(new Event("erp:scm-queue-seen"));
+  } catch {
+    // ignore
+  }
 }
 
 export function isScmOvfUnseen(ovfId: string): boolean {

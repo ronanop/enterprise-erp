@@ -30,6 +30,7 @@ from modules.procurement.schemas import (
     ScmReceiptBatchAttachmentCreate,
     ScmReceiptBatchAttachmentSummary,
     ScmReceiptBatchResponse,
+    ScmReceiptBatchReverseRequest,
     ScmReceiptBatchVendorInvoiceUpdate,
     ScmUpdateOvfChargesRequest,
     ScmVendorInvoiceExtractRequest,
@@ -123,6 +124,7 @@ def create_scm_ovf_attachment(
         branch_id=body.branch_id,
         company_id=body.company_id,
         category=body.category,
+        remarks=body.remarks,
     )
     db.commit()
     return APIResponse(message="OVF document attached", data=AttachmentResponse.model_validate(row))
@@ -179,6 +181,7 @@ def create_scm_po_attachment(
         branch_id=body.branch_id,
         company_id=body.company_id,
         category=body.category,
+        remarks=body.remarks,
     )
     db.commit()
     return APIResponse(message="PO document attached", data=AttachmentResponse.model_validate(row))
@@ -420,6 +423,7 @@ def create_po_from_inventory(
         company_id=company_id,
         lines=[line.model_dump() for line in body.lines],
         approved_by_name=body.approved_by_name,
+        order_ref_cache=body.order_ref_cache,
         stock_unit_ids=list(body.stock_unit_ids or []),
         import_line_ids=list(body.import_line_ids or []),
     )
@@ -459,6 +463,24 @@ def list_order_receipt_batches(
             f"Failed to load GRN receipt batches: {exc}",
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
         ) from exc
+
+
+@scm_router.post(
+    "/receipt-batches/{batch_id}/reverse",
+    response_model=APIResponse[ScmReceiptBatchResponse],
+)
+def reverse_receipt_batch(
+    batch_id: UUID,
+    body: ScmReceiptBatchReverseRequest,
+    ctx: Annotated[TenantContext, Depends(require_permission("procurement.grn:update"))],
+    db: Annotated[Session, Depends(get_db)],
+) -> APIResponse[ScmReceiptBatchResponse]:
+    row = ScmHandoffService(db).reverse_receipt_batch(ctx, batch_id, reason=body.reason)
+    db.commit()
+    return APIResponse(
+        message="GRN reversed",
+        data=ScmReceiptBatchResponse.model_validate(row),
+    )
 
 
 @scm_router.patch(

@@ -30,7 +30,7 @@ import {
 import { countPoBuckets, emptyPoBucketCounts } from "@/utils/procurement-po-buckets";
 import {
   buildProcurementInventoryStockSummary,
-  isGrnNonBilledStockRow,
+  isInventoryLedgerRow,
   type ProcurementInventoryStockSummary,
 } from "@/utils/procurement-inventory-report";
 import {
@@ -52,7 +52,7 @@ function inventorySummaryFromCache(
 ): ProcurementInventoryStockSummary | null {
   const cached = peekProcurementInventoryFromCache();
   if (!cached) return null;
-  return buildProcurementInventoryStockSummary(cached.filter(isGrnNonBilledStockRow), {
+  return buildProcurementInventoryStockSummary(cached.filter(isInventoryLedgerRow), {
     vendorLabels,
   });
 }
@@ -74,7 +74,7 @@ export function ProcurementDashboard() {
       labels: Record<string, string>,
     ) => {
       setInventorySummary(
-        buildProcurementInventoryStockSummary(inventory.filter(isGrnNonBilledStockRow), {
+        buildProcurementInventoryStockSummary(inventory.filter(isInventoryLedgerRow), {
           vendorLabels: labels,
         }),
       );
@@ -220,7 +220,11 @@ export function ProcurementDashboard() {
         inventorySummary={inventorySummary}
       />
 
-      <ProcurementPipelineFunnel metrics={pipelineMetrics} loading={loading} />
+      <ProcurementPipelineFunnel
+        metrics={pipelineMetrics}
+        vendorPos={(data?.vendorPos ?? []).filter(isIssuedVendorPo)}
+        loading={loading}
+      />
     </ProcurementPage>
   );
 }

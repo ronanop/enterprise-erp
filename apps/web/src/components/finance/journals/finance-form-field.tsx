@@ -10,6 +10,7 @@ export function FinanceField({
   error,
   hint,
   className,
+  labelClassName,
   children,
 }: {
   label: string;
@@ -17,11 +18,17 @@ export function FinanceField({
   error?: string;
   hint?: string;
   className?: string;
+  labelClassName?: string;
   children: ReactNode;
 }) {
   return (
     <label className={cn("block space-y-1", className)} htmlFor={htmlFor}>
-      <span className="text-[11px] font-medium tracking-wide text-muted-foreground uppercase">
+      <span
+        className={cn(
+          "text-[11px] font-medium tracking-wide text-muted-foreground uppercase",
+          labelClassName,
+        )}
+      >
         {label}
       </span>
       {children}
