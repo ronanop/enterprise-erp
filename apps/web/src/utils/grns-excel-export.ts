@@ -1,5 +1,4 @@
-import * as XLSX from "xlsx";
-
+import { downloadXlsx } from "@/lib/spreadsheet";
 import type { ScmVendorPo } from "@/services/procurement-service";
 
 const HEADERS = [
@@ -14,15 +13,6 @@ const HEADERS = [
 ] as const;
 
 export type GrnExportRow = Record<(typeof HEADERS)[number], string | number>;
-
-function downloadBlob(filename: string, blob: Blob) {
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = filename;
-  a.click();
-  URL.revokeObjectURL(url);
-}
 
 function formatDate(value: string | null | undefined): string {
   if (!value) return "";
@@ -95,40 +85,10 @@ export function buildGrnExportRows(
   return rows;
 }
 
-export function exportGrnsXlsx(filename: string, rows: GrnExportRow[]) {
+export async function exportGrnsXlsx(filename: string, rows: GrnExportRow[]) {
   const data = rows.length
     ? rows
     : [Object.fromEntries(HEADERS.map((h) => [h, ""])) as GrnExportRow];
 
-  const ws = XLSX.utils.json_to_sheet(data, { header: [...HEADERS] });
-  const range = XLSX.utils.decode_range(ws["!ref"] || "A1");
-  ws["!autofilter"] = { ref: XLSX.utils.encode_range(range) };
-  ws["!views"] = [
-    {
-      state: "frozen",
-      ySplit: 1,
-      topLeftCell: "A2",
-      activeCell: "A2",
-    },
-  ];
-  ws["!cols"] = [
-    { wch: 8 },
-    { wch: 22 },
-    { wch: 12 },
-    { wch: 26 },
-    { wch: 14 },
-    { wch: 22 },
-    { wch: 12 },
-    { wch: 56 },
-  ];
-
-  const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, "GRNs");
-  const buffer = XLSX.write(wb, { bookType: "xlsx", type: "array" });
-  downloadBlob(
-    filename,
-    new Blob([buffer], {
-      type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-    }),
-  );
+  await downloadXlsx(filename, [{ name: "GRNs", rows: data }]);
 }

@@ -31,12 +31,20 @@ REPORT_TYPES = {
 }
 
 
+def _csv_cell(value: object) -> str:
+    text = "" if value is None else str(value)
+    if text[:1] in {"=", "+", "-", "@", "\t", "\r"}:
+        return f"'{text}"
+    return text
+
+
 def _csv_bytes(headers: list[str], rows: list[list]) -> bytes:
     buf = io.StringIO()
     buf.write("\ufeff")  # Excel-friendly UTF-8 BOM
     writer = csv.writer(buf)
-    writer.writerow(headers)
-    writer.writerows(rows)
+    writer.writerow([_csv_cell(h) for h in headers])
+    for row in rows:
+        writer.writerow([_csv_cell(cell) for cell in row])
     return buf.getvalue().encode("utf-8")
 
 

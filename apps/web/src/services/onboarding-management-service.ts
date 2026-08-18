@@ -31,6 +31,19 @@ const AUDIT_KEY = "erp_onboarding_audit_v1";
 const SEQ_KEY = "erp_onboarding_seq_v1";
 const INVITE_EXPIRY_DEFAULT_DAYS = 14;
 
+function tokensEqual(left: string | undefined, right: string): boolean {
+  if (!left) return false;
+  const enc = new TextEncoder();
+  const a = enc.encode(left);
+  const b = enc.encode(right);
+  const len = Math.max(a.length, b.length);
+  let diff = a.length ^ b.length;
+  for (let i = 0; i < len; i += 1) {
+    diff |= (a[i] ?? 0) ^ (b[i] ?? 0);
+  }
+  return diff === 0;
+}
+
 function actor(): string {
   if (typeof window === "undefined") return "HR User";
   try {
@@ -375,7 +388,7 @@ export function sendInvitation(
 }
 
 export function getCaseByToken(token: string): OnboardingCase | null {
-  const c = loadCases().find((x) => x.invitation?.token === token) ?? null;
+  const c = loadCases().find((x) => tokensEqual(x.invitation?.token, token)) ?? null;
   if (!c?.invitation) return null;
   if (new Date(c.invitation.expiresAt).getTime() < Date.now()) {
     return { ...c, status: "overdue" };
@@ -393,7 +406,7 @@ export function savePortalProgress(
   advanceStatus = true,
 ): OnboardingCase | null {
   const all = loadCases();
-  const idx = all.findIndex((x) => x.invitation?.token === token);
+  const idx = all.findIndex((x) => tokensEqual(x.invitation?.token, token));
   if (idx < 0) return null;
   const c = all[idx];
   const nextStatus: OnboardingCaseStatus =
@@ -415,7 +428,7 @@ export function submitPortal(token: string, portal: PortalPayload): OnboardingCa
     currentStep: "review",
   };
   const all = loadCases();
-  const idx = all.findIndex((x) => x.invitation?.token === token);
+  const idx = all.findIndex((x) => tokensEqual(x.invitation?.token, token));
   if (idx < 0) return null;
   const c = all[idx];
   const next = upsertCase({

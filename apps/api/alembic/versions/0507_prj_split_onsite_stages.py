@@ -103,8 +103,8 @@ def upgrade() -> None:
 
     # Soft-copy legacy onsite tracking into onsite_delivery (no forced rewrite of business fields)
     op.execute(
-        f"""
-        UPDATE {SCHEMA}.{TABLE}
+        """
+        UPDATE project.prj_site_installation
         SET onsite_delivery_assignee_employee_id = onsite_assignee_employee_id,
             onsite_delivery_assigned_date = onsite_assigned_date,
             onsite_delivery_finished_date = onsite_finished_date,
@@ -145,8 +145,8 @@ def downgrade() -> None:
         op.drop_column(TABLE, col, schema=SCHEMA)
 
     op.execute(
-        f"""
-        UPDATE {SCHEMA}.{TABLE}
+        """
+        UPDATE project.prj_site_installation
         SET workflow_stage = 'onsite'
         WHERE workflow_stage IN ('onsite_delivery', 'material_handover')
         """

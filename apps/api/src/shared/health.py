@@ -2,7 +2,6 @@
 
 from fastapi import APIRouter
 
-from core.config import settings
 from database.session import check_database_connection
 from shared.schemas import APIResponse
 
@@ -17,9 +16,7 @@ def health_check() -> APIResponse[dict[str, str]]:
         success=True,
         message="Service health check",
         data={
-            "status": "healthy",
-            "environment": settings.environment,
-            "version": settings.app_version,
+            "status": "healthy" if db_status == "healthy" else "unhealthy",
             "database": db_status,
         },
     )

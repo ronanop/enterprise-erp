@@ -266,7 +266,7 @@ export function GrnsListPage() {
     }
     const stamp = new Date().toISOString().slice(0, 10);
     const exportRows = buildGrnExportRows(source, vendors);
-    exportGrnsXlsx(
+    void exportGrnsXlsx(
       mode === "all" ? `grns-all-${stamp}.xlsx` : `grns-filtered-${stamp}.xlsx`,
       exportRows,
     );

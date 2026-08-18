@@ -21,6 +21,7 @@ import {
   exportApInvoicesXlsx,
   printApInvoicesTable,
 } from "@/lib/finance/ap-export";
+import { safeAppHref } from "@/lib/html";
 import { cn } from "@/lib/utils";
 import type { ApEntry } from "@/services/ap-service";
 import { formatInrPrecise } from "@/services/finance-service";
@@ -174,7 +175,7 @@ export function ApInvoiceTable(props: Props) {
                   <tr key={row.id} className="border-b border-border/50 transition-colors duration-150 hover:bg-muted/40">
                     {visible.has("invoice_no") ? (
                       <td className="px-2 py-1.5 font-mono text-xs">
-                        <Link href={detailHref(row)} className="cursor-pointer hover:underline">{row.document_number}</Link>
+                        <Link href={safeAppHref(detailHref(row))} className="cursor-pointer hover:underline">{row.document_number}</Link>
                       </td>
                     ) : null}
                     {visible.has("vendor") ? (

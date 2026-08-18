@@ -1,4 +1,4 @@
-import * as XLSX from "xlsx";
+import { parseSpreadsheetFile, parseSpreadsheetMatrix } from "@/lib/spreadsheet";
 
 export type InventoryExcelRow = {
   product: string;
@@ -47,39 +47,22 @@ function parseKeyed(json: Record<string, unknown>[]): InventoryExcelRow[] {
 }
 
 /** Product in column A, serial in column B (optional header row). */
-export function parseInventoryImportExcel(file: File): Promise<InventoryExcelParseResult> {
-  return new Promise((resolve) => {
-    const reader = new FileReader();
-    reader.onerror = () => resolve({ ok: false, message: "Could not read the Excel file." });
-    reader.onload = () => {
-      try {
-        const wb = XLSX.read(reader.result, { type: "array" });
-        const sheet = wb.Sheets[wb.SheetNames[0] ?? ""];
-        if (!sheet) {
-          resolve({ ok: false, message: "The workbook has no sheets." });
-          return;
-        }
-        const json = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { defval: "" });
-        let rows = parseKeyed(json);
-        if (rows.length === 0) {
-          const matrix = XLSX.utils.sheet_to_json(sheet, {
-            header: 1,
-            defval: "",
-          }) as unknown[][];
-          rows = parseMatrix(matrix);
-        }
-        if (rows.length === 0) {
-          resolve({
-            ok: false,
-            message: "No rows found. Use Product in column A and Serial in column B.",
-          });
-          return;
-        }
-        resolve({ ok: true, rows });
-      } catch {
-        resolve({ ok: false, message: "Could not parse the Excel file." });
-      }
-    };
-    reader.readAsArrayBuffer(file);
-  });
+export async function parseInventoryImportExcel(file: File): Promise<InventoryExcelParseResult> {
+  try {
+    const json = await parseSpreadsheetFile(file);
+    let rows = parseKeyed(json);
+    if (rows.length === 0) {
+      const matrix = await parseSpreadsheetMatrix(file);
+      rows = parseMatrix(matrix);
+    }
+    if (rows.length === 0) {
+      return {
+        ok: false,
+        message: "No rows found. Use Product in column A and Serial in column B.",
+      };
+    }
+    return { ok: true, rows };
+  } catch {
+    return { ok: false, message: "Could not parse the Excel file." };
+  }
 }

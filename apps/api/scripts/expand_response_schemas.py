@@ -32,11 +32,16 @@ MODULES = ROOT / "src" / "modules"
 orm_classes: dict[str, type] = {}
 
 
+_MODEL_MOD_RE = re.compile(
+    r"^modules(?:\.[A-Za-z_][A-Za-z0-9_]*)+\.models(?:\.[A-Za-z_][A-Za-z0-9_]*)*$"
+)
+
+
 def load_models() -> None:
     import modules
 
     for modinfo in pkgutil.walk_packages(modules.__path__, modules.__name__ + "."):
-        if ".models" not in modinfo.name:
+        if not _MODEL_MOD_RE.fullmatch(modinfo.name):
             continue
         try:
             m = importlib.import_module(modinfo.name)

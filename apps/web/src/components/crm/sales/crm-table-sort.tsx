@@ -92,7 +92,9 @@ export function sortRows<T, K extends string>(
   sortDir: SortDir,
   accessors: Record<K, (row: T) => SortValue>,
 ): T[] {
-  const getValue = accessors[sortBy];
+  const getValue = Object.prototype.hasOwnProperty.call(accessors, sortBy)
+    ? accessors[sortBy]
+    : undefined;
   if (!getValue) return rows;
   return [...rows].sort((a, b) => compareSortValues(getValue(a), getValue(b), sortDir));
 }

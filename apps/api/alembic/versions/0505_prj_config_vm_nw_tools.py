@@ -63,8 +63,8 @@ def upgrade() -> None:
 
     # Legacy combined firmware/N/W answers apply to both split fields.
     op.execute(
-        f"""
-        UPDATE {SCHEMA}.{TABLE}
+        """
+        UPDATE project.prj_site_installation
         SET nw_config_done = firmware_config_done,
             nw_config_date = firmware_config_date
         WHERE firmware_config_done = true

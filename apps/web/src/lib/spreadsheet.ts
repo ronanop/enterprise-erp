@@ -12,9 +12,14 @@ export function downloadBlob(filename: string, blob: Blob) {
   URL.revokeObjectURL(url);
 }
 
+function neutralizeCsvFormula(value: string): string {
+  if (/^[=+\-@\t\r]/.test(value)) return `'${value}`;
+  return value;
+}
+
 function escapeCsvCell(value: unknown): string {
   if (value == null) return "";
-  const str = String(value);
+  const str = neutralizeCsvFormula(String(value));
   if (/[",\n\r]/.test(str)) return `"${str.replace(/"/g, '""')}"`;
   return str;
 }
@@ -174,4 +179,17 @@ export async function parseSpreadsheetFile(
   }
 
   throw new Error("Unsupported file type. Please upload a .csv or .xlsx file.");
+}
+
+export async function parseSpreadsheetMatrix(file: File): Promise<unknown[][]> {
+  const name = file.name.toLowerCase();
+  if (name.endsWith(".csv") || file.type === "text/csv") {
+    const buffer = await file.arrayBuffer();
+    const text = decodeCsvBuffer(buffer);
+    const objects = parseCsvText(text);
+    if (objects.length === 0) return [];
+    const headers = Object.keys(objects[0]);
+    return [headers, ...objects.map((row) => headers.map((h) => row[h] ?? ""))];
+  }
+  return readSheet(file);
 }

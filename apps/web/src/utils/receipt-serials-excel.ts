@@ -1,4 +1,4 @@
-import * as XLSX from "xlsx";
+import { parseSpreadsheetFile, parseSpreadsheetMatrix } from "@/lib/spreadsheet";
 
 import {
   RECEIPT_SERIAL_NA,
@@ -16,6 +16,10 @@ export type ReceiptSerialImportLine = {
 export type ReceiptSerialImportResult =
   | { ok: true; serialDraft: Record<string, string[]>; warning?: string }
   | { ok: false; message: string };
+
+function isSafeRecordKey(key: string): boolean {
+  return key !== "__proto__" && key !== "constructor" && key !== "prototype";
+}
 
 function normalizeSerialValue(raw: string): string {
   const v = raw.trim();
@@ -53,7 +57,7 @@ function parseTemplateFormat(json: Record<string, unknown>[]): Map<string, Map<n
   const byLine = new Map<string, Map<number, string>>();
   for (const row of json) {
     const lineId = cellValue(row, TEMPLATE_HEADERS[0]);
-    if (!lineId) continue;
+    if (!lineId || !isSafeRecordKey(lineId)) continue;
     const unitIndex = Number(cellValue(row, TEMPLATE_HEADERS[3]));
     if (!Number.isFinite(unitIndex) || unitIndex < 1) continue;
     const serial = cellValue(row, TEMPLATE_HEADERS[4]);
@@ -115,7 +119,7 @@ function buildSerialDraftFromTemplate(
   const serialDraft: Record<string, string[]> = {};
   for (const line of expected) {
     const qty = Math.max(0, Math.floor(line.receiveQty));
-    if (qty <= 0) continue;
+    if (qty <= 0 || !isSafeRecordKey(line.lineId)) continue;
     const imported = byLine.get(line.lineId);
     const slots: string[] = [];
     for (let i = 1; i <= qty; i += 1) {
@@ -141,7 +145,7 @@ function buildSerialDraftFromProductRows(
 
   for (const line of expected) {
     const qty = Math.max(0, Math.floor(line.receiveQty));
-    if (qty > 0) {
+    if (qty > 0 && isSafeRecordKey(line.lineId)) {
       serialDraft[line.lineId] = resizeSerialSlots([], qty);
     }
   }
@@ -154,9 +158,11 @@ function buildSerialDraftFromProductRows(
     const target = cursors.find(
       (c) => c.filled < c.qty && receiptProductsMatch(c.productLabel, row.product),
     );
-    if (!target) continue;
+    if (!target || !isSafeRecordKey(target.lineId)) continue;
 
-    const slots = serialDraft[target.lineId];
+    const slots = Object.prototype.hasOwnProperty.call(serialDraft, target.lineId)
+      ? serialDraft[target.lineId]
+      : undefined;
     if (!slots) continue;
     slots[target.filled] = serial;
     target.filled += 1;
@@ -177,88 +183,66 @@ function countFilledSerials(serialDraft: Record<string, string[]>): number {
 }
 
 /** Apply Excel rows onto existing draft; supports template or Product + Serial columns. */
-export function importReceiptSerialsFromExcel(
+export async function importReceiptSerialsFromExcel(
   file: File,
   expected: ReceiptSerialImportLine[],
 ): Promise<ReceiptSerialImportResult> {
-  return new Promise((resolve) => {
-    const reader = new FileReader();
-    reader.onerror = () => resolve({ ok: false, message: "Could not read the Excel file." });
-    reader.onload = () => {
-      try {
-        const data = reader.result;
-        const wb = XLSX.read(data, { type: "array" });
-        const sheet = wb.Sheets[wb.SheetNames[0] ?? ""];
-        if (!sheet) {
-          resolve({ ok: false, message: "The workbook has no sheets." });
-          return;
-        }
+  try {
+    const activeExpected = expected.filter((l) => Math.floor(l.receiveQty) > 0);
+    if (activeExpected.length === 0) {
+      return {
+        ok: false,
+        message: "No receive quantities on this PO. Enter Receive now values before importing.",
+      };
+    }
 
-        const activeExpected = expected.filter((l) => Math.floor(l.receiveQty) > 0);
-        if (activeExpected.length === 0) {
-          resolve({
-            ok: false,
-            message: "No receive quantities on this PO. Enter Receive now values before importing.",
-          });
-          return;
-        }
+    const json = await parseSpreadsheetFile(file);
+    const byLine = parseTemplateFormat(json);
+    let serialDraft: Record<string, string[]>;
+    let warning: string | undefined;
 
-        const json = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { defval: "" });
-        const byLine = parseTemplateFormat(json);
-        let serialDraft: Record<string, string[]>;
-        let warning: string | undefined;
-
-        if (byLine.size > 0) {
-          serialDraft = buildSerialDraftFromTemplate(byLine, activeExpected);
-        } else {
-          let productRows = parseKeyedProductSerialRows(json);
-          if (productRows.length === 0) {
-            const matrix = XLSX.utils.sheet_to_json(sheet, {
-              header: 1,
-              defval: "",
-            }) as unknown[][];
-            productRows = parseMatrixProductSerialRows(matrix);
-          }
-          if (productRows.length === 0) {
-            resolve({
-              ok: false,
-              message:
-                "No serial rows found. Use two columns: Product | Serial Number (e.g. mouse, 5gt56), or export from this dialog first.",
-            });
-            return;
-          }
-          const result = buildSerialDraftFromProductRows(productRows, activeExpected);
-          serialDraft = result.serialDraft;
-          const filled = countFilledSerials(serialDraft);
-          if (filled === 0) {
-            resolve({
-              ok: false,
-              message:
-                "Serials did not match any receiving lines. Check product names (e.g. mouse → dell mouse).",
-            });
-            return;
-          }
-          if (result.matched < productRows.filter((r) => normalizeSerialValue(r.serial)).length) {
-            warning = "Some Excel rows could not be matched to a product line.";
-          }
-        }
-
-        const filled = countFilledSerials(serialDraft);
-        if (filled === 0) {
-          resolve({
-            ok: false,
-            message: "No serial numbers were imported. Check the file format and product names.",
-          });
-          return;
-        }
-
-        resolve({ ok: true, serialDraft, warning });
-      } catch {
-        resolve({ ok: false, message: "Could not parse the Excel file." });
+    if (byLine.size > 0) {
+      serialDraft = buildSerialDraftFromTemplate(byLine, activeExpected);
+    } else {
+      let productRows = parseKeyedProductSerialRows(json);
+      if (productRows.length === 0) {
+        const matrix = await parseSpreadsheetMatrix(file);
+        productRows = parseMatrixProductSerialRows(matrix);
       }
-    };
-    reader.readAsArrayBuffer(file);
-  });
+      if (productRows.length === 0) {
+        return {
+          ok: false,
+          message:
+            "No serial rows found. Use two columns: Product | Serial Number (e.g. mouse, 5gt56), or export from this dialog first.",
+        };
+      }
+      const result = buildSerialDraftFromProductRows(productRows, activeExpected);
+      serialDraft = result.serialDraft;
+      const filled = countFilledSerials(serialDraft);
+      if (filled === 0) {
+        return {
+          ok: false,
+          message:
+            "Serials did not match any receiving lines. Check product names (e.g. mouse → dell mouse).",
+        };
+      }
+      if (result.matched < productRows.filter((r) => normalizeSerialValue(r.serial)).length) {
+        warning = "Some Excel rows could not be matched to a product line.";
+      }
+    }
+
+    const filled = countFilledSerials(serialDraft);
+    if (filled === 0) {
+      return {
+        ok: false,
+        message: "No serial numbers were imported. Check the file format and product names.",
+      };
+    }
+
+    return { ok: true, serialDraft, warning };
+  } catch {
+    return { ok: false, message: "Could not parse the Excel file." };
+  }
 }
 
 /** Import all serial slots for one receiving line from Excel or a multi-line text file. */
@@ -334,21 +318,17 @@ function firstNonEmptySerialFromText(text: string): string {
   return whole;
 }
 
-function parseOneSerialFromWorkbook(
-  data: ArrayBuffer,
+async function parseOneSerialFromWorkbook(
+  file: File,
   context?: SingleSerialImportContext,
-): SingleSerialImportResult {
-  const wb = XLSX.read(data, { type: "array" });
-  const sheet = wb.Sheets[wb.SheetNames[0] ?? ""];
-  if (!sheet) {
-    return { ok: false, message: "The workbook has no sheets." };
-  }
+): Promise<SingleSerialImportResult> {
+  const json = await parseSpreadsheetFile(file);
+  const matrix = await parseSpreadsheetMatrix(file);
 
   const lineId = context?.lineId?.trim();
   const unitIndex = context?.unitIndex;
 
-  if (lineId && unitIndex != null && unitIndex >= 1) {
-    const json = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { defval: "" });
+  if (lineId && isSafeRecordKey(lineId) && unitIndex != null && unitIndex >= 1) {
     const byLine = parseTemplateFormat(json);
     const unitMap = byLine.get(lineId);
     const fromTemplate = unitMap?.get(Math.floor(unitIndex));
@@ -357,14 +337,12 @@ function parseOneSerialFromWorkbook(
     }
   }
 
-  const json = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { defval: "" });
   const productRows = parseKeyedProductSerialRows(json);
   if (productRows.length > 0) {
     const serial = normalizeSerialValue(productRows[0].serial);
     if (serial) return { ok: true, serial };
   }
 
-  const matrix = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: "" }) as unknown[][];
   const matrixRows = parseMatrixProductSerialRows(matrix);
   if (matrixRows.length > 0) {
     const serial = normalizeSerialValue(matrixRows[0].serial);
@@ -406,21 +384,8 @@ export function importOneSerialFromFile(
     });
   }
 
-  return new Promise((resolve) => {
-    const reader = new FileReader();
-    reader.onerror = () => resolve({ ok: false, message: "Could not read the file." });
-    reader.onload = () => {
-      try {
-        const data = reader.result;
-        if (!(data instanceof ArrayBuffer)) {
-          resolve({ ok: false, message: "Could not read the file." });
-          return;
-        }
-        resolve(parseOneSerialFromWorkbook(data, context));
-      } catch {
-        resolve({ ok: false, message: "Could not parse the file." });
-      }
-    };
-    reader.readAsArrayBuffer(file);
-  });
+  return parseOneSerialFromWorkbook(file, context).catch(() => ({
+    ok: false,
+    message: "Could not parse the file.",
+  }));
 }
