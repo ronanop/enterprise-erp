@@ -69,6 +69,7 @@ class SecUserModule(Base, TenantMixin):
         PG_UUID(as_uuid=True), ForeignKey("foundation.sec_user.id"), nullable=False
     )
     module_key: Mapped[str] = mapped_column(String(50), nullable=False)
+    role: Mapped[str] = mapped_column(String(20), nullable=False, default="member")
     assigned_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     assigned_by: Mapped[UUID | None] = mapped_column(PG_UUID(as_uuid=True), nullable=True)
 

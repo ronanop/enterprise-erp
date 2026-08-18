@@ -10,6 +10,7 @@ export function useAuthUser() {
   const [user, setUser] = useState<AuthSessionUser | null>(null);
   const [permissions, setPermissions] = useState<string[]>([]);
   const [moduleKeys, setModuleKeys] = useState<string[]>([]);
+  const [adminModuleKeys, setAdminModuleKeys] = useState<string[]>([]);
   const [projectModuleAdmin, setProjectModuleAdmin] = useState(false);
   const [loading, setLoading] = useState(true);
 
@@ -18,6 +19,7 @@ export function useAuthUser() {
       setUser(null);
       setPermissions([]);
       setModuleKeys([]);
+      setAdminModuleKeys([]);
       setProjectModuleAdmin(false);
       setLoading(false);
       return;
@@ -32,6 +34,7 @@ export function useAuthUser() {
           setUser(parsed.user);
           setPermissions(parsed.permissions);
           setModuleKeys(parsed.moduleKeys);
+          setAdminModuleKeys(parsed.adminModuleKeys);
           setProjectModuleAdmin(parsed.projectModuleAdmin);
         }
       } catch {
@@ -39,6 +42,7 @@ export function useAuthUser() {
           setUser(null);
           setPermissions([]);
           setModuleKeys([]);
+          setAdminModuleKeys([]);
           setProjectModuleAdmin(false);
         }
       } finally {
@@ -51,5 +55,13 @@ export function useAuthUser() {
     };
   }, []);
 
-  return { user, permissions, moduleKeys, projectModuleAdmin, loading, signedIn: Boolean(user) };
+  return {
+    user,
+    permissions,
+    moduleKeys,
+    adminModuleKeys,
+    projectModuleAdmin,
+    loading,
+    signedIn: Boolean(user),
+  };
 }

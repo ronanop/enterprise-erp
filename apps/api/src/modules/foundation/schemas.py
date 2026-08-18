@@ -84,6 +84,7 @@ class UserResponse(BaseModel):
     mfa_enabled: bool
     role_ids: list[UUID] = Field(default_factory=list)
     assigned_module_keys: list[str] = Field(default_factory=list)
+    admin_module_keys: list[str] = Field(default_factory=list)
 
 
 class UserModulesUpdateRequest(BaseModel):
@@ -93,7 +94,26 @@ class UserModulesUpdateRequest(BaseModel):
 class UserModulesResponse(BaseModel):
     user_id: UUID
     assigned_module_keys: list[str] = Field(default_factory=list)
+    admin_module_keys: list[str] = Field(default_factory=list)
     effective_module_keys: list[str] = Field(default_factory=list)
+
+
+class ModuleUserOption(BaseModel):
+    user_id: UUID
+    display_name: str
+    email: str
+
+
+class ModuleUserRecord(BaseModel):
+    user_id: UUID
+    display_name: str
+    email: str
+    role: str
+    status: str
+
+
+class ModuleUserCreateRequest(BaseModel):
+    user_id: UUID
 
 
 class RoleCreateRequest(BaseModel):

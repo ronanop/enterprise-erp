@@ -178,10 +178,12 @@ def me(
     service = UserService(db)
     user_entity = service.get_user(ctx.tenant_id, ctx.user_id)
     module_keys = service.effective_modules_for_user(user_entity)
+    admin_module_keys = service.effective_admin_modules_for_user(user_entity)
     data = {
         "user": UserService.to_response(user_entity),
         "permissions": permissions,
         "module_keys": module_keys,
+        "admin_module_keys": admin_module_keys,
     }
     from modules.project.service.project_module_admin import ProjectModuleAdminService
 

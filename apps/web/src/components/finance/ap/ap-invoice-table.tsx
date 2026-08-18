@@ -140,7 +140,7 @@ export function ApInvoiceTable(props: Props) {
       </div>
 
       <div className="overflow-x-auto">
-        <table className="w-full min-w-[1100px] border-collapse text-left text-sm">
+        <table className="w-full min-w-275 border-collapse text-left text-sm">
           <thead>
             <tr className="border-b border-border/70 bg-muted/40 text-[11px] font-medium tracking-wide text-muted-foreground uppercase">
               {(Object.keys(LABELS) as ColumnKey[]).map((key) => {
@@ -164,37 +164,37 @@ export function ApInvoiceTable(props: Props) {
           <tbody>
             {props.loading
               ? Array.from({ length: 8 }).map((_, i) => (
-                  <tr key={i}><td colSpan={10} className="px-2 py-2"><div className="h-6 animate-pulse rounded bg-muted/70" /></td></tr>
-                ))
+                <tr key={i}><td colSpan={10} className="px-2 py-2"><div className="h-6 animate-pulse rounded bg-muted/70" /></td></tr>
+              ))
               : null}
             {!props.loading && props.rows.length === 0 ? (
               <tr><td colSpan={10} className="px-4 py-10 text-center text-sm text-muted-foreground">No AP entries match the current filters.</td></tr>
             ) : null}
             {!props.loading
               ? props.rows.map((row) => (
-                  <tr key={row.id} className="border-b border-border/50 transition-colors duration-150 hover:bg-muted/40">
-                    {visible.has("invoice_no") ? (
-                      <td className="px-2 py-1.5 font-mono text-xs">
-                        <Link href={safeAppHref(detailHref(row))} className="cursor-pointer hover:underline">{row.document_number}</Link>
-                      </td>
-                    ) : null}
-                    {visible.has("vendor") ? (
-                      <td className="px-2 py-1.5">
-                        <Link href={`/finance/accounts-payable/vendors/${row.vendor_id}`} className="cursor-pointer hover:underline">
-                          {row.vendor_name ?? row.vendor_code ?? row.vendor_id.slice(0, 8)}
-                        </Link>
-                      </td>
-                    ) : null}
-                    {visible.has("invoice_date") ? <td className="px-2 py-1.5 font-mono text-xs">{row.document_date}</td> : null}
-                    {visible.has("due_date") ? <td className="px-2 py-1.5 font-mono text-xs">{row.due_date}</td> : null}
-                    {visible.has("status") ? <td className="px-2 py-1.5"><FinanceStatusBadge status={row.status} /></td> : null}
-                    {visible.has("currency") ? <td className="px-2 py-1.5 font-mono text-xs uppercase">{row.currency_code}</td> : null}
-                    {visible.has("outstanding") ? <td className="px-2 py-1.5 text-right font-mono text-xs tabular-nums">{formatInrPrecise(row.outstanding_amount ?? row.balance_amount)}</td> : null}
-                    {visible.has("paid") ? <td className="px-2 py-1.5 text-right font-mono text-xs tabular-nums">{formatInrPrecise(row.paid_amount ?? 0)}</td> : null}
-                    {visible.has("balance") ? <td className="px-2 py-1.5 text-right font-mono text-xs tabular-nums">{formatInrPrecise(row.balance_amount)}</td> : null}
-                    {visible.has("created_by") ? <td className="px-2 py-1.5 text-xs text-muted-foreground">{resolve(row.created_by)}</td> : null}
-                  </tr>
-                ))
+                <tr key={row.id} className="border-b border-border/50 transition-colors duration-150 hover:bg-muted/40">
+                  {visible.has("invoice_no") ? (
+                    <td className="px-2 py-1.5 font-mono text-xs">
+                      <Link href={safeAppHref(detailHref(row))} className="cursor-pointer hover:underline">{row.document_number}</Link>
+                    </td>
+                  ) : null}
+                  {visible.has("vendor") ? (
+                    <td className="px-2 py-1.5">
+                      <Link href={`/finance/accounts-payable/vendors/${row.vendor_id}`} className="cursor-pointer hover:underline">
+                        {row.vendor_name ?? row.vendor_code ?? row.vendor_id.slice(0, 8)}
+                      </Link>
+                    </td>
+                  ) : null}
+                  {visible.has("invoice_date") ? <td className="px-2 py-1.5 font-mono text-xs">{row.document_date}</td> : null}
+                  {visible.has("due_date") ? <td className="px-2 py-1.5 font-mono text-xs">{row.due_date}</td> : null}
+                  {visible.has("status") ? <td className="px-2 py-1.5"><FinanceStatusBadge status={row.status} /></td> : null}
+                  {visible.has("currency") ? <td className="px-2 py-1.5 font-mono text-xs uppercase">{row.currency_code}</td> : null}
+                  {visible.has("outstanding") ? <td className="px-2 py-1.5 text-right font-mono text-xs tabular-nums">{formatInrPrecise(row.outstanding_amount ?? row.balance_amount)}</td> : null}
+                  {visible.has("paid") ? <td className="px-2 py-1.5 text-right font-mono text-xs tabular-nums">{formatInrPrecise(row.paid_amount ?? 0)}</td> : null}
+                  {visible.has("balance") ? <td className="px-2 py-1.5 text-right font-mono text-xs tabular-nums">{formatInrPrecise(row.balance_amount)}</td> : null}
+                  {visible.has("created_by") ? <td className="px-2 py-1.5 text-xs text-muted-foreground">{resolve(row.created_by)}</td> : null}
+                </tr>
+              ))
               : null}
           </tbody>
           <tfoot>

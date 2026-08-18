@@ -1,16 +1,20 @@
-"""Project Management module admin — platform admin emails only (e.g. techbank)."""
+"""Project Management module admin — ERP admins, platform emails, or assigned module admins."""
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 from uuid import UUID
 
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from core.config import settings
+from modules.foundation.domain.erp_modules import ADMIN_USER_TYPES
 from modules.foundation.domain.value_objects import TenantContext
 from modules.foundation.models.security import SecUser
+from modules.foundation.repository.user_module_repository import UserModuleRepository
+
+PROJECT_MODULE_KEY = "projects"
 
 
 @dataclass(frozen=True)
@@ -24,6 +28,7 @@ class ProjectModuleAdminRecipient:
 class ProjectModuleAdminService:
     def __init__(self, db: Session) -> None:
         self._db = db
+        self._modules = UserModuleRepository(db)
 
     @staticmethod
     def is_admin_email(email: str | None) -> bool:
@@ -34,6 +39,10 @@ class ProjectModuleAdminService:
     def is_admin(self, ctx: TenantContext) -> bool:
         if ctx.user_id is None:
             return False
+        if ctx.user_type in ADMIN_USER_TYPES:
+            return True
+        if self._modules.is_module_admin(ctx.tenant_id, ctx.user_id, PROJECT_MODULE_KEY):
+            return True
         user = self._db.scalar(
             select(SecUser).where(
                 SecUser.id == ctx.user_id,
@@ -54,25 +63,35 @@ class ProjectModuleAdminService:
             )
 
     def list_admin_recipients(self, tenant_id: UUID) -> list[ProjectModuleAdminRecipient]:
-        """Active SecUser rows whose email is in the platform admin allowlist."""
-        emails = settings.microsoft_platform_admin_email_set()
-        if not emails:
+        """Platform-admin emails plus users assigned as Projects module admins."""
+        emails = set(settings.microsoft_platform_admin_email_set())
+        admin_ids = self._modules.list_admin_user_ids_for_module(tenant_id, PROJECT_MODULE_KEY)
+
+        conditions = [
+            SecUser.tenant_id == tenant_id,
+            SecUser.is_deleted.is_(False),
+            SecUser.status == "active",
+        ]
+        if emails and admin_ids:
+            stmt = select(SecUser).where(
+                *conditions,
+                or_(func.lower(SecUser.email).in_(sorted(emails)), SecUser.id.in_(admin_ids)),
+            )
+        elif emails:
+            stmt = select(SecUser).where(*conditions, func.lower(SecUser.email).in_(sorted(emails)))
+        elif admin_ids:
+            stmt = select(SecUser).where(*conditions, SecUser.id.in_(admin_ids))
+        else:
             return []
-        rows = list(
-            self._db.scalars(
-                select(SecUser).where(
-                    SecUser.tenant_id == tenant_id,
-                    SecUser.is_deleted.is_(False),
-                    SecUser.status == "active",
-                    func.lower(SecUser.email).in_(sorted(emails)),
-                )
-            ).all()
-        )
+
+        rows = list(self._db.scalars(stmt).all())
         out: list[ProjectModuleAdminRecipient] = []
+        seen: set[UUID] = set()
         for user in rows:
-            email = (user.email or "").strip().lower()
-            if email not in emails:
+            if user.id in seen:
                 continue
+            seen.add(user.id)
+            email = (user.email or "").strip().lower()
             out.append(
                 ProjectModuleAdminRecipient(
                     user_id=user.id,

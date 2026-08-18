@@ -5,7 +5,11 @@ from uuid import UUID
 from sqlalchemy.orm import Session
 
 from core.exceptions import AppException, ConflictException, NotFoundException
-from modules.foundation.domain.erp_modules import ERP_MODULE_KEY_SET, effective_module_keys
+from modules.foundation.domain.erp_modules import (
+    ERP_MODULE_KEY_SET,
+    effective_admin_module_keys,
+    effective_module_keys,
+)
 from modules.foundation.domain.entities import UserEntity
 from modules.foundation.repository.session_repository import SessionRepository
 from modules.foundation.repository.user_module_repository import UserModuleRepository
@@ -37,16 +41,21 @@ class UserService:
             mfa_enabled=user.mfa_enabled,
             role_ids=user.role_ids,
             assigned_module_keys=list(user.assigned_module_keys),
+            admin_module_keys=list(user.admin_module_keys),
         )
 
     def effective_modules_for_user(self, user: UserEntity) -> list[str]:
         return effective_module_keys(user.user_type, user.assigned_module_keys)
 
-    def get_user_modules(self, tenant_id: UUID, user_id: UUID) -> tuple[UserEntity, list[str], list[str]]:
+    def effective_admin_modules_for_user(self, user: UserEntity) -> list[str]:
+        return effective_admin_module_keys(user.user_type, user.admin_module_keys)
+
+    def get_user_modules(self, tenant_id: UUID, user_id: UUID) -> tuple[UserEntity, list[str], list[str], list[str]]:
         user = self.get_user(tenant_id, user_id)
         assigned = list(user.assigned_module_keys)
+        admin_keys = list(user.admin_module_keys)
         effective = self.effective_modules_for_user(user)
-        return user, assigned, effective
+        return user, assigned, admin_keys, effective
 
     def set_user_modules(
         self,
@@ -61,7 +70,7 @@ class UserService:
         invalid = [k for k in normalized if k not in ERP_MODULE_KEY_SET]
         if invalid:
             raise AppException(f"Unknown module keys: {', '.join(invalid)}")
-        self._modules.replace_for_user(
+        self._modules.replace_admin_keys(
             tenant_id=tenant_id,
             user_id=user_id,
             module_keys=normalized,
@@ -73,7 +82,7 @@ class UserService:
             entity_id=user_id,
             operation="update",
             performed_by=updated_by,
-            new_value={"module_keys": normalized},
+            new_value={"admin_module_keys": normalized},
         )
         return self.get_user(tenant_id, user_id)
 

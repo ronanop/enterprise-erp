@@ -157,5 +157,8 @@ class UserRepository(TenantScopedRepository):
             locked_until=row.locked_until,
             role_ids=[ur.role_id for ur in row.user_roles],
             assigned_module_keys=sorted(um.module_key for um in row.user_modules),
+            admin_module_keys=sorted(
+                um.module_key for um in row.user_modules if (um.role or "member") == "admin"
+            ),
             employee_id=row.employee_id,
         )

@@ -26,6 +26,7 @@ import {
   ShoppingCart,
   Target,
   Truck,
+  UserCog,
   UserPlus,
   Users,
   UserRound,
@@ -34,6 +35,7 @@ import {
 import { SidebarAccountSection } from "@/components/layout/sidebar-account-section";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { ModuleUsersNavTab } from "@/components/organization/module-users-nav-tab";
 import {
   getCrmSidebarFocus,
   isCompanyDealWorkspacePath,
@@ -41,6 +43,7 @@ import {
   setCrmSidebarFocus,
   type CrmSidebarFocus,
 } from "@/lib/crm-sidebar-focus";
+import { canManageModuleUsers } from "@/lib/module-access";
 import { cn } from "@/lib/utils";
 import { useAuthUser } from "@/hooks/use-auth-user";
 
@@ -151,6 +154,7 @@ export function CrmWorkspaceNav() {
               </li>
             );
           })}
+          <ModuleUsersNavTab moduleKey="crm" variant="pill" />
         </ul>
       </nav>
     </div>
@@ -162,13 +166,21 @@ export function CrmSidebar() {
   const pathname = usePathname();
   const [collapsed, setCollapsed] = useState(false);
   const [query, setQuery] = useState("");
-  const { signedIn } = useAuthUser();
+  const { signedIn, user, adminModuleKeys } = useAuthUser();
+
+  const navItems = useMemo(() => {
+    const items: CrmNavItem[] = [...CRM_NAV];
+    if (canManageModuleUsers("crm", adminModuleKeys, user?.userType)) {
+      items.push({ title: "Users", href: "/crm/users", icon: UserCog });
+    }
+    return items;
+  }, [adminModuleKeys, user?.userType]);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (!q) return CRM_NAV;
-    return CRM_NAV.filter((item) => item.title.toLowerCase().includes(q));
-  }, [query]);
+    if (!q) return navItems;
+    return navItems.filter((item) => item.title.toLowerCase().includes(q));
+  }, [navItems, query]);
 
   return (
     <aside
@@ -185,7 +197,7 @@ export function CrmSidebar() {
             <div className="min-w-0">
               <p className="truncate text-xs font-medium text-sidebar-foreground">Sales CRM</p>
               <p className="truncate text-[10px] text-sidebar-foreground/55">
-                {CRM_NAV.length} workspace panes
+                {navItems.length} workspace panes
               </p>
             </div>
           </div>
@@ -202,7 +214,7 @@ export function CrmSidebar() {
                   Sales CRM
                 </p>
                 <p className="truncate text-[11px] text-sidebar-foreground/55">
-                  {CRM_NAV.length} workspace panes
+                  {navItems.length} workspace panes
                 </p>
               </div>
             ) : null}

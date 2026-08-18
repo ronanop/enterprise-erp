@@ -50,3 +50,18 @@ export function canManageUserModules(permissions: string[], userType?: string): 
   if (isModuleAdmin(userType)) return true;
   return permissions.includes("foundation.user:update");
 }
+
+/** Organization Users is reserved for ERP-wide module-admin assignment. */
+export function moduleUsersHref(moduleKey: string): string {
+  if (moduleKey === "organization") return "/organization/module-users";
+  return `/${moduleKey}/users`;
+}
+
+export function canManageModuleUsers(
+  moduleKey: string,
+  adminModuleKeys: string[],
+  userType?: string,
+): boolean {
+  if (isModuleAdmin(userType)) return true;
+  return adminModuleKeys.includes(moduleKey);
+}

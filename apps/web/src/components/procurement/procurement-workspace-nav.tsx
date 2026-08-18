@@ -5,8 +5,11 @@ import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { ChevronLeft, ChevronRight, Package, Search } from "lucide-react";
 
+import { ModuleUsersNavTab } from "@/components/organization/module-users-nav-tab";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { useAuthUser } from "@/hooks/use-auth-user";
+import { canManageModuleUsers } from "@/lib/module-access";
 import { cn } from "@/lib/utils";
 import { prefetchProcurementTab } from "@/services/procurement-service";
 import { useDeliveryReminderSweep } from "@/hooks/use-delivery-reminder-sweep";
@@ -85,6 +88,7 @@ export function ProcurementWorkspaceNav() {
               </li>
             );
           })}
+          <ModuleUsersNavTab moduleKey="procurement" variant="pill" />
         </ul>
       </nav>
     </div>
@@ -92,18 +96,29 @@ export function ProcurementWorkspaceNav() {
 }
 
 /** Left sidebar chrome for standalone procurement tabs (replaces AppSidebar). */
+const PROCUREMENT_USERS_ITEM = { title: "Users", href: "/procurement/users" } as const;
+
 export function ProcurementSidebar() {
   const pathname = usePathname();
   const router = useRouter();
   const [collapsed, setCollapsed] = useState(false);
   const [query, setQuery] = useState("");
+  const { user, adminModuleKeys } = useAuthUser();
   useDeliveryReminderSweep();
+
+  const navItems = useMemo(() => {
+    const items: { title: string; href: string }[] = [...PROCUREMENT_NAV];
+    if (canManageModuleUsers("procurement", adminModuleKeys, user?.userType)) {
+      items.push(PROCUREMENT_USERS_ITEM);
+    }
+    return items;
+  }, [adminModuleKeys, user?.userType]);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (!q) return PROCUREMENT_NAV;
-    return PROCUREMENT_NAV.filter((item) => item.title.toLowerCase().includes(q));
-  }, [query]);
+    if (!q) return navItems;
+    return navItems.filter((item) => item.title.toLowerCase().includes(q));
+  }, [navItems, query]);
 
   return (
     <aside
@@ -123,7 +138,7 @@ export function ProcurementSidebar() {
               Procurement
             </p>
             <p className="truncate text-[11px] text-sidebar-foreground/55">
-              {PROCUREMENT_NAV.length} workspace panes
+              {navItems.length} workspace panes
             </p>
           </div>
         ) : null}

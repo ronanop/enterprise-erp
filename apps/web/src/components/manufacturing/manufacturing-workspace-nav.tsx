@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
+import { ModuleUsersNavTab } from "@/components/organization/module-users-nav-tab";
 import { cn } from "@/lib/utils";
 
 /** Primary manufacturing screens from FRD-13 screen inventory */
@@ -44,6 +45,7 @@ export function ManufacturingWorkspaceNav() {
             </li>
           );
         })}
+        <ModuleUsersNavTab moduleKey="manufacturing" />
       </ul>
     </nav>
   );

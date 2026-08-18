@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
+import { ModuleUsersNavTab } from "@/components/organization/module-users-nav-tab";
 import { cn } from "@/lib/utils";
 
 /** Primary payroll screens from FRD-10 screen inventory */
@@ -44,6 +45,7 @@ export function PayrollWorkspaceNav() {
             </li>
           );
         })}
+        <ModuleUsersNavTab moduleKey="payroll" />
       </ul>
     </nav>
   );

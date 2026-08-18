@@ -14,7 +14,10 @@ const ADMIN_ONLY_HREFS = new Set([
   "/projects/installation",
   "/projects/acceptance",
   "/projects/completed",
+  "/projects/users",
 ]);
+
+const PROJECTS_USERS_ITEM = { title: "Users", href: "/projects/users" } as const;
 
 /** Workspace links available to every Projects user. */
 const MEMBER_WORKSPACE_HREFS = [
@@ -29,7 +32,10 @@ export function filterProjectsNavGroups(
   isProjectModuleAdmin: boolean,
 ): ProjectsNavGroup[] {
   if (isProjectModuleAdmin) {
-    return groups.map((g) => ({ ...g, items: [...g.items] }));
+    return groups.map((g, index) => ({
+      ...g,
+      items: index === 0 ? [...g.items, PROJECTS_USERS_ITEM] : [...g.items],
+    }));
   }
 
   return [

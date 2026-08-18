@@ -126,12 +126,13 @@ def get_user_modules(
     db: Annotated[Session, Depends(get_db)],
 ) -> APIResponse[UserModulesResponse]:
     service = UserService(db)
-    user, assigned, effective = service.get_user_modules(ctx.tenant_id, user_id)
+    user, assigned, admin_keys, effective = service.get_user_modules(ctx.tenant_id, user_id)
     return APIResponse(
         message="User modules retrieved",
         data=UserModulesResponse(
             user_id=user.id,
             assigned_module_keys=assigned,
+            admin_module_keys=admin_keys,
             effective_module_keys=effective,
         ),
     )
