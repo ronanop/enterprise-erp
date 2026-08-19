@@ -44,12 +44,14 @@ from modules.hr.routers import (
     management_groups_router,
 )
 from modules.hr.routers.ess_policies_router import ess_policies_router
+from modules.hr.routers.employee_assets_router import employee_assets_router
 
 hr_router = APIRouter(prefix="/hr")
 hr_router.include_router(designations_router)
 hr_router.include_router(job_levels_router)
 hr_router.include_router(grades_router)
 hr_router.include_router(employee_profiles_router)
+hr_router.include_router(employee_assets_router)
 hr_router.include_router(employment_router)
 hr_router.include_router(department_assignments_router)
 hr_router.include_router(designation_assignments_router)

@@ -126,7 +126,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: GUTTER,
     borderBottomWidth: 1,
     borderBottomColor: "rgba(195,198,215,0.3)",
-    backgroundColor: "rgba(248,249,255,0.92)",
+    backgroundColor: colors.background,
   },
   left: { flexDirection: "row", alignItems: "center", gap: 12, flex: 1 },
   leftTight: { flexDirection: "row", alignItems: "center", gap: 8, flex: 1 },

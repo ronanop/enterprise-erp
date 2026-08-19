@@ -522,7 +522,7 @@ const styles = StyleSheet.create({
   },
   timelineCardSolid: {
     borderColor: "rgba(195,198,215,0.25)",
-    backgroundColor: "rgba(255,255,255,0.8)",
+    backgroundColor: colors.surfaceLowest,
   },
   timelineTitle: { fontSize: 16, fontWeight: "600", color: colors.onSurface },
   timelineSub: {

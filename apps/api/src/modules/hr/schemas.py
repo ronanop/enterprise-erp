@@ -1483,6 +1483,35 @@ class SeparationExitInterviewRequest(BaseModel):
     interviewer_notes: str | None = None
 
 
+class EmployeeAssetItem(BaseModel):
+    id: UUID
+    assignment_id: UUID | None = None
+    asset_code: str
+    asset_name: str
+    asset_type: str
+    serial_number: str | None = None
+    asset_status: str
+    assignment_status: str | None = None
+    document_number: str | None = None
+    allocated_at: datetime | None = None
+    expected_return_at: date | None = None
+    returned_at: datetime | None = None
+
+
+class EmployeeAssetOption(BaseModel):
+    id: UUID
+    asset_code: str
+    asset_name: str
+    asset_type: str
+    serial_number: str | None = None
+
+
+class EmployeeAssetAssignRequest(BaseModel):
+    asset_id: UUID
+    branch_id: UUID
+    expected_return_at: date | None = None
+
+
 class SeparationResponse(OrmModel):
     id: UUID
     company_id: UUID

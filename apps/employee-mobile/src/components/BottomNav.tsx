@@ -104,7 +104,7 @@ const styles = StyleSheet.create({
   nav: {
     borderTopWidth: 1,
     borderTopColor: "rgba(195,198,215,0.3)",
-    backgroundColor: "rgba(248,249,255,0.96)",
+    backgroundColor: colors.background,
     paddingTop: 8,
     shadowColor: "#000000",
     shadowOpacity: 0.05,

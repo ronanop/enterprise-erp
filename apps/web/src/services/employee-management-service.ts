@@ -43,6 +43,14 @@ function nowIso(): string {
   return new Date().toISOString();
 }
 
+function uuidOrNull(value: string): string | null {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+    value,
+  )
+    ? value
+    : null;
+}
+
 function actorLabel(): string {
   if (typeof window === "undefined") return "System";
   try {
@@ -252,6 +260,105 @@ function addressToJson(addr: PersonalInfo["currentAddress"]) {
   };
 }
 
+function addressFromJson(raw: unknown): PersonalInfo["currentAddress"] | null {
+  if (!raw || typeof raw !== "object") return null;
+  const o = raw as Record<string, unknown>;
+  const line1 = String(o.line1 ?? o.address_line1 ?? "").trim();
+  if (!line1 && !String(o.city ?? "").trim()) return null;
+  return {
+    line1,
+    line2: String(o.line2 ?? o.address_line2 ?? "").trim() || undefined,
+    city: String(o.city ?? "").trim(),
+    state: String(o.state ?? "").trim(),
+    country: String(o.country_code ?? o.country ?? "IN").trim() || "IN",
+    pincode: String(o.postal_code ?? o.pincode ?? "").trim(),
+  };
+}
+
+function pickStr(...values: unknown[]): string {
+  for (const v of values) {
+    const s = String(v ?? "").trim();
+    if (s) return s;
+  }
+  return "";
+}
+
+/** Fill empty extension.personal fields from employee master + HR profile so edit forms are prefilled. */
+function hydratePersonalFromMasterProfile(
+  ext: EmployeeExtension,
+  master: HrRow,
+  profile: HrRow | undefined,
+): EmployeeExtension {
+  const p = ext.personal;
+  const currentFromProfile = addressFromJson(profile?.current_address_json);
+  const permanentFromProfile = addressFromJson(profile?.permanent_address_json);
+  return {
+    ...ext,
+    personal: {
+      ...p,
+      firstName: pickStr(p.firstName, master.first_name, profile?.first_name),
+      middleName: pickStr(p.middleName, master.middle_name, profile?.middle_name),
+      lastName: pickStr(p.lastName, master.last_name, profile?.last_name),
+      gender: pickStr(p.gender, profile?.gender, master.gender).toLowerCase(),
+      dateOfBirth: toDateInput(pickStr(p.dateOfBirth, profile?.date_of_birth)),
+      maritalStatus: pickStr(p.maritalStatus, profile?.marital_status).toLowerCase(),
+      bloodGroup: pickStr(p.bloodGroup, profile?.blood_group),
+      nationality: pickStr(p.nationality, profile?.nationality, "Indian"),
+      mobile: pickStr(p.mobile, master.mobile, profile?.mobile),
+      officialEmail: pickStr(p.officialEmail, master.email, profile?.email),
+      personalEmail: pickStr(p.personalEmail, profile?.personal_email, profile?.alternate_email),
+      currentAddress: p.currentAddress.line1.trim()
+        ? p.currentAddress
+        : currentFromProfile ?? p.currentAddress,
+      permanentAddress: p.permanentAddress.line1.trim()
+        ? p.permanentAddress
+        : permanentFromProfile ?? p.permanentAddress,
+      emergency: {
+        name: pickStr(p.emergency.name, profile?.emergency_contact_name),
+        phone: pickStr(p.emergency.phone, profile?.emergency_contact_mobile),
+        relationship: pickStr(p.emergency.relationship, profile?.emergency_contact_relationship).toLowerCase(),
+      },
+      profilePhotoDataUrl: p.profilePhotoDataUrl,
+    },
+  };
+}
+
+function toDateInput(value: unknown): string {
+  const s = String(value ?? "").trim();
+  if (!s) return "";
+  return s.slice(0, 10);
+}
+
+function namesFromDisplay(displayName: string): { first: string; last: string } {
+  const parts = displayName.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return { first: "", last: "" };
+  if (parts.length === 1) return { first: parts[0]!, last: "" };
+  return { first: parts[0]!, last: parts.slice(1).join(" ") };
+}
+
+function hydratePersonalFromLocalRecord(
+  ext: EmployeeExtension,
+  loc: EmployeeRecord,
+): EmployeeExtension {
+  const p = ext.personal;
+  const names = namesFromDisplay(loc.displayName);
+  return {
+    ...ext,
+    personal: {
+      ...p,
+      firstName: pickStr(p.firstName, names.first),
+      lastName: pickStr(p.lastName, names.last),
+      gender: pickStr(p.gender, loc.gender).toLowerCase(),
+      dateOfBirth: toDateInput(p.dateOfBirth),
+      maritalStatus: p.maritalStatus.toLowerCase(),
+      mobile: pickStr(p.mobile, loc.mobile),
+      officialEmail: pickStr(p.officialEmail, loc.officialEmail),
+      nationality: pickStr(p.nationality, "Indian"),
+      profilePhotoDataUrl: p.profilePhotoDataUrl || loc.profilePhotoDataUrl,
+    },
+  };
+}
+
 function mapLifecycle(
   masterStatus: string,
   profileStatus: string,
@@ -294,20 +401,23 @@ function mergeRow(
   managerMap: Map<string, string>,
   ext: EmployeeExtension,
 ): EmployeeRecord {
+  const hydrated = hydratePersonalFromMasterProfile(ext, master, profile);
   const id = String(master.id);
-  const first = String(ext.personal.firstName || master.first_name || profile?.first_name || "");
-  const last = String(ext.personal.lastName || master.last_name || profile?.last_name || "");
-  const middle = ext.personal.middleName?.trim();
+  const first = hydrated.personal.firstName;
+  const last = hydrated.personal.lastName;
+  const middle = hydrated.personal.middleName?.trim();
   const displayName =
     [first, middle, last].filter(Boolean).join(" ").trim() ||
     employeeDisplayName(profile ?? master);
 
-  const departmentId = String(master.department_id ?? ext.employment.departmentId ?? "");
-  const branchId = String(master.branch_id ?? ext.employment.branchId ?? profile?.branch_id ?? "");
-  const locationName = String(
-    employment?.work_location_text ?? ext.employment.location ?? "",
+  const departmentId = String(master.department_id ?? hydrated.employment.departmentId ?? "");
+  const branchId = String(
+    master.branch_id ?? hydrated.employment.branchId ?? profile?.branch_id ?? "",
   );
-  const locationId = String(ext.employment.locationId ?? "");
+  const locationName = String(
+    employment?.work_location_text ?? hydrated.employment.location ?? "",
+  );
+  const locationId = String(hydrated.employment.locationId ?? "");
 
   return {
     id,
@@ -316,44 +426,49 @@ function mergeRow(
     profileVersion: profile?.version ? Number(profile.version) : undefined,
     employmentId: employment?.id ? String(employment.id) : undefined,
     employmentVersion: employment?.version ? Number(employment.version) : undefined,
-    employeeCode: String(master.employee_code ?? ext.employment.employeeCode ?? ""),
+    employeeCode: String(master.employee_code ?? hydrated.employment.employeeCode ?? ""),
     displayName,
-    officialEmail: String(ext.personal.officialEmail || master.email || profile?.email || ""),
-    mobile: String(ext.personal.mobile || master.mobile || ""),
+    officialEmail: hydrated.personal.officialEmail,
+    mobile: hydrated.personal.mobile,
     departmentId,
     departmentName:
-      ext.employment.departmentName ||
+      hydrated.employment.departmentName ||
       deptMap.get(departmentId) ||
       String(master.designation ?? "").split("·")[0] ||
       "—",
     designationName:
-      ext.employment.designationName ||
+      hydrated.employment.designationName ||
       String(master.designation ?? profile?.designation ?? "—"),
     branchId,
-    branchName: ext.employment.branchName || branchMap.get(branchId) || "—",
+    branchName: hydrated.employment.branchName || branchMap.get(branchId) || "—",
     locationId,
     locationName: locationName || "—",
-    reportingManagerId: String(master.reporting_manager_id ?? ext.employment.reportingManagerId ?? ""),
+    reportingManagerId: String(
+      master.reporting_manager_id ?? hydrated.employment.reportingManagerId ?? "",
+    ),
     reportingManagerName:
-      (ext.employment.reportingManagerName || "").trim() ||
+      (hydrated.employment.reportingManagerName || "").trim() ||
       managerMap.get(String(master.reporting_manager_id ?? "")) ||
       "—",
     employmentType: String(
-      employment?.employment_type ?? ext.employment.employmentType ?? "—",
+      employment?.employment_type ?? hydrated.employment.employmentType ?? "—",
     ),
     joiningDate: String(
-      employment?.date_of_joining ?? master.date_of_joining ?? ext.employment.joiningDate ?? "",
+      employment?.date_of_joining ??
+        master.date_of_joining ??
+        hydrated.employment.joiningDate ??
+        "",
     ),
     lifecycleStatus: mapLifecycle(
       String(master.status ?? ""),
       String(profile?.status ?? ""),
       employment?.status ? String(employment.status) : undefined,
-      ext.employment.lifecycleStatus,
+      hydrated.employment.lifecycleStatus,
     ),
-    profilePhotoDataUrl: profilePhotoFromExtension(ext),
-    gender: String(ext.personal.gender || profile?.gender || ""),
+    profilePhotoDataUrl: profilePhotoFromExtension(hydrated),
+    gender: hydrated.personal.gender,
     isDeleted: Boolean(master.is_deleted),
-    extension: ext,
+    extension: hydrated,
   };
 }
 
@@ -526,7 +641,10 @@ async function fetchEmployeeDirectoryUncached(): Promise<EmployeeDirectoryResult
   for (const loc of localEmployees) {
     if (seenIds.has(loc.id) || seenCodes.has(loc.employeeCode)) continue;
     const stored = extensions[loc.id];
-    const ext = defaultExtension(stored ?? loc.extension);
+    const ext = hydratePersonalFromLocalRecord(
+      defaultExtension(stored ?? loc.extension),
+      loc,
+    );
     const mgrName =
       (ext.employment.reportingManagerName || "").trim() ||
       (loc.reportingManagerName || "").trim() ||
@@ -1190,21 +1308,48 @@ export async function updateEmployeeRecord(  record: EmployeeRecord,
       aadhaar_number: nextExt.governmentIds.aadhaar || null,
       pan_number: nextExt.governmentIds.pan || null,
       uan_number: nextExt.governmentIds.uan || null,
-      // Company salary account (post-hire) is the authoritative payroll bank on profile
-      bank_account_number: nextExt.companyBank.accountNumber || nextExt.bank.accountNumber || null,
-      bank_ifsc: nextExt.companyBank.ifsc || nextExt.bank.ifsc || null,
-      bank_name: nextExt.companyBank.bankName || nextExt.bank.bankName || null,
-      bank_account_holder:
-        nextExt.companyBank.accountHolderName || nextExt.bank.accountHolderName || null,
+      bank_account_number: nextExt.bank.accountNumber || null,
+      bank_ifsc: nextExt.bank.ifsc || null,
+      bank_name: nextExt.bank.bankName || null,
+      bank_account_holder: nextExt.bank.accountHolderName || null,
+      education_json: nextExt.education.map((entry) => {
+        const education = { ...entry };
+        delete education.id;
+        return education;
+      }),
+      skills_json: nextExt.previousEmployment.length
+        ? {
+            previous_employment: nextExt.previousEmployment.map((entry) => {
+              const previousEmployment = { ...entry };
+              delete previousEmployment.id;
+              return previousEmployment;
+            }),
+          }
+        : null,
       status: nextExt.employment.lifecycleStatus,
     }).catch(() => undefined);
   }
 
   if (record.employmentId && patch.employment) {
+    const ctc = Number(nextExt.salary.ctc);
+    const employmentStatus = {
+      active: "active",
+      onboarding: "onboarding",
+      probation: "probation",
+      notice: "notice_period",
+      resigned: "separated",
+      archived: "ex_employee",
+      inactive: "ended",
+    }[nextExt.employment.lifecycleStatus];
     await resourceService
       .update("/hr/employment", record.employmentId, {
         version: record.employmentVersion,
+        employment_type: nextExt.employment.employmentType,
+        confirmation_date: nextExt.employment.confirmationDate || null,
         work_location_text: nextExt.employment.location || null,
+        management_group_id: uuidOrNull(nextExt.employment.managementGroupId),
+        ctc_amount: Number.isFinite(ctc) && ctc > 0 ? ctc : null,
+        status: employmentStatus,
       })
       .catch(() => undefined);
   }

@@ -3,9 +3,13 @@
 import { useState } from "react";
 import { Download, Upload } from "lucide-react";
 
-import { SetupDrawer, SetupField, SetupInput } from "@/components/hr/setup/setup-drawer";
+import { SetupDrawer, SetupField } from "@/components/hr/setup/setup-drawer";
 import { Button } from "@/components/ui/button";
 import { toast } from "@/components/hr/setup/setup-toast";
+import {
+  extractDataMatrix,
+  parseSpreadsheetFileAsMatrix,
+} from "@/lib/spreadsheet";
 import { downloadTextFile } from "@/services/employee-management-service";
 
 const SAMPLE_CSV = `first_name,last_name,official_email,mobile,department,designation,branch,joining_date,employment_type
@@ -24,31 +28,31 @@ export function EmployeeImportDrawer({
   const [preview, setPreview] = useState<string[][]>([]);
   const [errors, setErrors] = useState<string[]>([]);
 
-  function parseCsv(text: string): string[][] {
-    return text
-      .trim()
-      .split(/\r?\n/)
-      .map((line) => line.split(",").map((c) => c.replace(/^"|"$/g, "").trim()));
-  }
-
   async function onFile(file: File | null) {
     if (!file) return;
     setFileName(file.name);
-    const text = await file.text();
-    const rows = parseCsv(text);
-    setPreview(rows.slice(0, 6));
-    const issues: string[] = [];
-    if (rows.length < 2) issues.push("File must include header and at least one row.");
-    const header = rows[0]?.map((h) => h.toLowerCase()) ?? [];
-    if (!header.includes("official_email")) issues.push("Missing official_email column.");
-    setErrors(issues);
+    try {
+      const matrix = extractDataMatrix(
+        await parseSpreadsheetFileAsMatrix(file),
+        "official_email",
+      );
+      setPreview(matrix.slice(0, 6));
+      const issues: string[] = [];
+      if (matrix.length < 2) issues.push("File must include header and at least one row.");
+      const header = matrix[0]?.map((h) => h.toLowerCase()) ?? [];
+      if (!header.includes("official_email")) issues.push("Missing official_email column.");
+      setErrors(issues);
+    } catch (err) {
+      setPreview([]);
+      setErrors([err instanceof Error ? err.message : "Could not read file."]);
+    }
   }
 
   return (
     <SetupDrawer
       open={open}
       title="Import Employees"
-      description="Upload CSV or Excel-exported CSV. Validate before import."
+      description="Upload CSV or Excel (.xlsx). Validate before import."
       wide
       onClose={onClose}
       footer={
@@ -83,13 +87,13 @@ export function EmployeeImportDrawer({
           <Download className="size-3.5" />
           Download sample CSV
         </Button>
-        <SetupField label="Upload file" hint="CSV · Max 500 rows recommended">
+        <SetupField label="Upload file" hint="CSV or XLSX · Max 500 rows recommended">
           <label className="flex cursor-pointer items-center gap-2 rounded-lg border border-dashed border-border px-3 py-6 text-xs text-muted-foreground hover:bg-muted/30">
             <Upload className="size-4" />
-            {fileName || "Choose CSV file"}
+            {fileName || "Choose CSV or Excel file"}
             <input
               type="file"
-              accept=".csv,text/csv"
+              accept=".csv,.xlsx,.xlsm,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
               className="sr-only"
               onChange={(e) => void onFile(e.target.files?.[0] ?? null)}
             />

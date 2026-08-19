@@ -20,6 +20,11 @@ import {
   type ShiftRosterDirectory,
 } from "@/services/shift-roster-service";
 import { downloadManagerRosterXlsx } from "@/lib/roster-xlsx-export";
+import {
+  extractDataMatrix,
+  matrixToCsv,
+  parseSpreadsheetFileAsMatrix,
+} from "@/lib/spreadsheet";
 
 function currentMonth(): string {
   const d = new Date();
@@ -223,9 +228,23 @@ export function UploadManagerRosterDrawer({
   async function onFile(file: File | null) {
     if (!file) return;
     setFileName(file.name);
-    const text = await file.text();
-    setRaw(text);
     setValidation(null);
+    try {
+      const name = file.name.toLowerCase();
+      if (name.endsWith(".csv") || file.type === "text/csv") {
+        // Keep raw CSV (including # legend lines) for the existing validator.
+        setRaw(await file.text());
+        return;
+      }
+      const matrix = extractDataMatrix(
+        await parseSpreadsheetFileAsMatrix(file),
+        "employee_code",
+      );
+      setRaw(matrixToCsv(matrix));
+    } catch (err) {
+      setRaw("");
+      toast(err instanceof Error ? err.message : "Could not read file", "error");
+    }
   }
 
   function validate() {
@@ -239,7 +258,7 @@ export function UploadManagerRosterDrawer({
       return;
     }
     if (!raw.trim()) {
-      toast("Choose a CSV file first", "error");
+      toast("Choose a CSV or Excel file first", "error");
       return;
     }
     const result = validateManagerRosterCsv(directory, raw, { managerId, month });
@@ -280,7 +299,7 @@ export function UploadManagerRosterDrawer({
     <SetupDrawer
       open={open}
       title="Upload manager roster"
-      description="Select the same manager and month used on download, then upload the filled CSV."
+      description="Select the same manager and month used on download, then upload the filled CSV or Excel file."
       onClose={handleClose}
       wide
       footer={
@@ -316,7 +335,7 @@ export function UploadManagerRosterDrawer({
       }
     >
       <div className="space-y-3">
-        <SetupField label="Reporting manager" required hint="Must match the team in the CSV">
+        <SetupField label="Reporting manager" required hint="Must match the team in the file">
           <SetupSelect value={managerId} onChange={(e) => setManagerId(e.target.value)}>
             <option value="">Select manager</option>
             {managers.map((m) => (
@@ -330,13 +349,13 @@ export function UploadManagerRosterDrawer({
           <SetupInput type="month" value={month} onChange={(e) => setMonth(e.target.value)} />
         </SetupField>
         <SetupField
-          label="Roster CSV"
+          label="Roster file"
           required
-          hint="Columns: employee_code, employee_name, then date headers"
+          hint="CSV or XLSX · Columns: employee_code, employee_name, then date headers"
         >
           <input
             type="file"
-            accept=".csv,text/csv"
+            accept=".csv,.xlsx,.xlsm,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
             className="block w-full cursor-pointer text-xs"
             onChange={(e) => void onFile(e.target.files?.[0] ?? null)}
           />
@@ -349,8 +368,8 @@ export function UploadManagerRosterDrawer({
           Allowed cell values: shift <strong>codes</strong> from Shift master (e.g. A/B/C/D),{" "}
           <strong>WO</strong> (weekly off), <strong>HO</strong> (holiday), or blank (clear
           override). Day columns: full dates like <strong>2026-08-11 (Mon)</strong> (legacy{" "}
-          <strong>d01…d31</strong> headers still import). Older CSVs that still include
-          manager/month/department columns are accepted.
+          <strong>d01…d31</strong> headers still import). Re-upload the Excel file from Download
+          Excel, or a CSV with the same columns.
         </div>
 
         {directory && directory.shifts.length > 0 ? (

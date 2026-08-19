@@ -104,10 +104,17 @@ class AssetComponentResponse(OrmModel):
 class AssetAssignmentCreate(BaseModel):
     company_id: UUID | None = None
     branch_id: UUID
+    asset_id: UUID
+    allocation_type: str = "employee"
+    employee_id: UUID | None = None
+    department_id: UUID | None = None
+    project_id: UUID | None = None
+    expected_return_at: date | None = None
     status: str | None = None
 
 class AssetAssignmentUpdate(BaseModel):
     status: str | None = None
+    expected_return_at: date | None = None
     version: int | None = None
 
 class AssetAssignmentResponse(OrmModel):

@@ -60,6 +60,9 @@ HR_PERMISSIONS: list[tuple[str, str, str, str]] = [
     ("hr.management_group:read", "hr.management_group", "read", "hr"),
     ("hr.management_group:create", "hr.management_group", "create", "hr"),
     ("hr.management_group:update", "hr.management_group", "update", "hr"),
+    ("hr.employee_asset:read", "hr.employee_asset", "read", "hr"),
+    ("hr.employee_asset:assign", "hr.employee_asset", "assign", "hr"),
+    ("hr.employee_asset:return", "hr.employee_asset", "return", "hr"),
 ]
 
 HR_EMPLOYEE_PERMISSIONS = [
@@ -98,6 +101,7 @@ HR_MANAGER_PERMISSIONS = list(
             "hr.attendance:create",
             "hr.attendance:update",
             "hr.report:read",
+            "hr.employee_asset:read",
         ]
     )
 )
@@ -129,6 +133,9 @@ HR_EXECUTIVE_PERMISSIONS = list(
             "hr.management_group:read",
             "hr.management_group:create",
             "hr.management_group:update",
+            "hr.employee_asset:read",
+            "hr.employee_asset:assign",
+            "hr.employee_asset:return",
         ]
     )
 )

@@ -7,6 +7,11 @@ import { SetupDrawer, SetupField, SetupInput, SetupSelect, SetupTextarea } from 
 import { toast } from "@/components/hr/setup/setup-toast";
 import { Button } from "@/components/ui/button";
 import {
+  extractDataMatrix,
+  matrixToCsv,
+  parseSpreadsheetFileAsMatrix,
+} from "@/lib/spreadsheet";
+import {
   applyAttendanceCorrection,
   downloadTextFile,
   importAttendanceCsv,
@@ -55,7 +60,7 @@ export function AttendanceImportDrawer({
     <SetupDrawer
       open={open}
       title="Import Attendance"
-      description="CSV import with duplicate validation (employee + date)."
+      description="CSV or Excel import with duplicate validation (employee + date)."
       onClose={onClose}
       footer={
         <>
@@ -83,7 +88,7 @@ export function AttendanceImportDrawer({
                 .finally(() => setBusy(false));
             }}
           >
-            {busy ? "Importing…" : "Import CSV"}
+            {busy ? "Importing…" : "Import"}
           </Button>
         </>
       }
@@ -98,16 +103,32 @@ export function AttendanceImportDrawer({
         <Download className="size-3.5" />
         Download sample CSV
       </Button>
-      <SetupField label="Upload CSV">
+      <SetupField label="Upload CSV or Excel">
         <input
           type="file"
-          accept=".csv,text/csv"
+          accept=".csv,.xlsx,.xlsm,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
           className="cursor-pointer text-xs"
           onChange={(e) => {
             const file = e.target.files?.[0];
             if (!file) return;
             setFileName(file.name);
-            void file.text().then(setCsvText);
+            void (async () => {
+              try {
+                const name = file.name.toLowerCase();
+                if (name.endsWith(".csv") || file.type === "text/csv") {
+                  setCsvText(await file.text());
+                  return;
+                }
+                const matrix = extractDataMatrix(
+                  await parseSpreadsheetFileAsMatrix(file),
+                  "employee_code",
+                );
+                setCsvText(matrixToCsv(matrix));
+              } catch (err) {
+                setCsvText("");
+                toast(err instanceof Error ? err.message : "Could not read file", "error");
+              }
+            })();
           }}
         />
       </SetupField>

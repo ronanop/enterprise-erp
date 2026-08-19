@@ -16,6 +16,13 @@ export const RADIUS_FULL = 999;
 /** rounded-[1.15rem] */
 export const RADIUS_QUICK = 18.4;
 
+/**
+ * Elevated surfaces must stay opaque. Android paints `elevation` as an opaque
+ * rectangle behind the view, so a translucent fill lets that square bleed
+ * through the rounded corners as a visible white box.
+ */
+export const CARD_SURFACE = colors.surfaceLowest;
+
 /** Content gutter: px-5 */
 export const GUTTER = 20;
 /** Bottom nav clearance: pb-28 */
@@ -29,7 +36,7 @@ export const tokens = StyleSheet.create({
   /** ui.card — rounded-2xl bg-white/80 shadow border outlineVariant/30 */
   card: {
     borderRadius: RADIUS_CARD,
-    backgroundColor: "rgba(255,255,255,0.8)",
+    backgroundColor: CARD_SURFACE,
     borderWidth: 1,
     borderColor: "rgba(195,198,215,0.3)",
     shadowColor: "#000000",
@@ -43,7 +50,7 @@ export const tokens = StyleSheet.create({
   cardFlush: {
     borderRadius: RADIUS_CARD,
     overflow: "hidden",
-    backgroundColor: "rgba(255,255,255,0.8)",
+    backgroundColor: CARD_SURFACE,
     borderWidth: 1,
     borderColor: "rgba(195,198,215,0.3)",
     shadowColor: "#000000",
@@ -219,7 +226,7 @@ export const tokens = StyleSheet.create({
     borderRadius: RADIUS_CARD,
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.55)",
-    backgroundColor: "rgba(255,255,255,0.8)",
+    backgroundColor: CARD_SURFACE,
     paddingHorizontal: 12,
     paddingVertical: 14,
     shadowColor: "#000000",
@@ -231,7 +238,7 @@ export const tokens = StyleSheet.create({
 
   /** ui.glassNav — sticky header / bottom nav surface */
   glassNav: {
-    backgroundColor: "rgba(248,249,255,0.92)",
+    backgroundColor: colors.background,
     borderColor: "rgba(195,198,215,0.3)",
   },
 });

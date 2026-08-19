@@ -471,20 +471,36 @@ export function PayrollManagementPage() {
                   onClick={() => importRef.current?.click()}
                 >
                   <Upload className="size-3.5" />
-                  Import CSV
+                  Import CSV / Excel
                 </Button>
                 <input
                   ref={importRef}
                   type="file"
-                  accept=".csv"
+                  accept=".csv,.xlsx,.xlsm,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                   className="hidden"
                   onChange={async (e) => {
                     const f = e.target.files?.[0];
                     if (!f) return;
-                    const text = await f.text();
-                    const n = importStructuresCsv(text);
-                    toast(`Imported ${n} structures`);
-                    refresh();
+                    try {
+                      const name = f.name.toLowerCase();
+                      let text: string;
+                      if (name.endsWith(".csv") || f.type === "text/csv") {
+                        text = await f.text();
+                      } else {
+                        const { extractDataMatrix, matrixToCsv, parseSpreadsheetFileAsMatrix } =
+                          await import("@/lib/spreadsheet");
+                        const matrix = extractDataMatrix(
+                          await parseSpreadsheetFileAsMatrix(f),
+                          "name",
+                        );
+                        text = matrixToCsv(matrix);
+                      }
+                      const n = importStructuresCsv(text);
+                      toast(`Imported ${n} structures`);
+                      refresh();
+                    } catch (err) {
+                      toast(err instanceof Error ? err.message : "Import failed", "error");
+                    }
                     e.target.value = "";
                   }}
                 />

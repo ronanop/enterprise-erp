@@ -109,7 +109,13 @@ export function Screen({
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.background },
   body: { flex: 1 },
-  overlay: { ...StyleSheet.absoluteFillObject },
+  overlay: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    top: 0,
+    bottom: 0,
+  },
   content: {
     flexGrow: 1,
     paddingHorizontal: GUTTER,
