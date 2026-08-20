@@ -30,6 +30,7 @@
 | Phase 4 Task 6 — Navigation & E2E integration | **Complete** | 2026-08-05 |
 | Phase 5 — Business validation & UAT (analysis) | **Complete** | 2026-08-05 |
 | Phase 5B-2B — Assignment workflow integration (frontend) | **Complete** | 2026-08-05 |
+| Assignment CRUD workspace (wizard sections + list rules) | **Complete** | 2026-08-06 |
 | Phase 6 Sprint 1 — Register parity (UI) | **Complete** | 2026-08-05 |
 | Phase 7A — Excel export foundation | **Complete** | 2026-08-05 |
 | Phase 8A — Excel import foundation (preview) | **Complete** | 2026-08-05 |
@@ -37,6 +38,15 @@
 | Phase 8B — Excel import engine (commit) | **Complete** | 2026-08-05 |
 | Phase 8C — Migration validation & reconciliation | **Complete** | 2026-08-05 |
 | Phase 3.5+ — Sidebar & polish | Not started | — |
+
+---
+
+## Related: CR-005 — Asset Operations Workspace
+
+- **Phase 1** (2026-08-06): KPIs + embedded Asset Register — `../CR-005/CR-005-Phase-1-Dashboard-Workspace-Foundation.md`
+- **Phase 2** (2026-08-06): Tabbed Asset Detail Workspace drawer — `../CR-005/CR-005-Phase-2-Asset-Detail-Workspace.md`
+- **Phase 3** (2026-08-06): Operations panel + unified branch + recent activity — `../CR-005/CR-005-Phase-3-Dashboard-Operations-Panel.md`
+- **Phase 4** (2026-08-06): Sticky toolbar, global search, health/pending polish — `../CR-005/CR-005-Phase-4-Workspace-Polish.md`
 
 ---
 
@@ -344,6 +354,18 @@
 |---------------------|---------|
 | **`CR-004-Phase-5B-2B-Workflow-Integration.md`** | Full integration notes |
 | Tasks 1–5 + Phase 4 Task 6 | Service → containers → inventory → query → navigation E2E |
+
+---
+
+## Assignment CRUD workspace
+
+| Document / artifact | Purpose |
+|---------------------|---------|
+| **`CR-004-Assignment-CRUD-Workspace.md`** | CRUD rules, 5 form sections, reuse map |
+| **`CR-004-Assignment-Employee-Step.md`** | Step 1 Employee Information UI (search, auto-fill, skeleton) |
+| Wizard sections | Employee / Asset / Issued Items / Assignment Details / Review |
+| List actions | Create→wizard, Edit draft→`draftId`, Return→return wizard, Delete draft→`cancelDraft` |
+| Service | `list` + `cancelDraft` wrappers over existing APIs |
 
 ---
 

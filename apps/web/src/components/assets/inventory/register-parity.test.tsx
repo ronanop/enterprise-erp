@@ -1,6 +1,7 @@
 /** @vitest-environment jsdom */
 
 import { cleanup, render, screen, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { AdditionalInfoSection } from "@/components/assets/inventory/interaction/drawer-sections/additional-info-section";
@@ -275,6 +276,24 @@ describe("mapAssignmentHistoryEntries", () => {
     expect(returned?.deliveryReferenceNumber).toBe("DR-OLD");
   });
 
+  it("maps return condition when present on assignment payload", () => {
+    const entries = mapAssignmentHistoryEntries(
+      [
+        {
+          id: "asn-r",
+          status: "returned",
+          employee_id: "e1",
+          returned_at: "2026-08-06T00:00:00Z",
+          return_remarks: "ok",
+          return_condition: "outdated",
+          delivery_reference_status: "received",
+        },
+      ],
+      employeeLabels,
+    );
+    expect(entries[0]?.returnCondition).toBe("outdated");
+  });
+
   it("empty history", () => {
     expect(mapAssignmentHistoryEntries([])).toEqual([]);
   });
@@ -494,7 +513,8 @@ describe("AssignmentHistorySection", () => {
       />,
     );
     const section = screen.getByTestId("drawer-assignment-history");
-    expect(within(section).getByText("Priya")).toBeInTheDocument();
+    expect(within(section).getAllByText("Priya").length).toBeGreaterThan(0);
+    expect(within(section).getByText("Returned By")).toBeInTheDocument();
     expect(screen.getByTestId("history-return-remarks")).toHaveTextContent("scratch");
   });
 });
@@ -502,19 +522,24 @@ describe("AssignmentHistorySection", () => {
 describe("AssetDetailDrawer register parity rendering", () => {
   const data = mapInventoryRowToDrawerData(sampleRow());
 
-  it("renders earlier used by, delivery, remarks, history", () => {
+  it("renders earlier used by, delivery, remarks, history", async () => {
+    const user = userEvent.setup();
     render(<AssetDetailDrawer open onOpenChange={() => undefined} data={data} />);
     expect(screen.getByTestId("drawer-earlier-used-by")).toHaveTextContent("Priya");
+    await user.click(screen.getByRole("tab", { name: "Assignment" }));
     expect(screen.getByTestId("drawer-delivery-reference")).toHaveTextContent("DR-42");
     expect(screen.getByTestId("drawer-assignment-remarks")).toHaveTextContent("Handle carefully");
     expect(screen.getByTestId("drawer-return-remarks")).toHaveTextContent("screen scratch");
+    await user.click(screen.getByRole("tab", { name: "History" }));
     expect(screen.getByTestId("drawer-assignment-history")).toBeInTheDocument();
     expect(screen.getByText("Assignment history")).toBeInTheDocument();
   });
 
-  it("renders empty history section when none", () => {
+  it("renders empty history section when none", async () => {
+    const user = userEvent.setup();
     const empty = mapInventoryRowToDrawerData(sampleRow({ assignmentHistory: [] }));
     render(<AssetDetailDrawer open onOpenChange={() => undefined} data={empty} />);
+    await user.click(screen.getByRole("tab", { name: "History" }));
     expect(screen.getByText("No assignment history")).toBeInTheDocument();
   });
 

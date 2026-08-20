@@ -11,11 +11,13 @@ import {
   Send,
   ShieldCheck,
   SquarePen,
+  Trash2,
   Undo2,
   Users,
   X,
 } from "lucide-react";
 
+import { getAssignmentCrudCapabilities } from "@/components/assets/assignment-wizard/assignment-crud-rules";
 import { PageHeader } from "@/components/layout/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
@@ -31,7 +33,6 @@ import {
 } from "@/components/ui/select";
 import { getAccessTokenUserId, isAuthenticated } from "@/lib/auth";
 import {
-  DEMO_EMPLOYEE_ROSTER_LABELS,
   listDepartmentOptions,
   listEmployeeOptions,
   type OrgOption,
@@ -39,6 +40,7 @@ import {
 import { cn } from "@/lib/utils";
 import { listProjectOptions } from "@/services/projects-portal-service";
 import { ApiClientError, resourceService } from "@/services/api-client";
+import { assignmentFrontendService } from "@/services/assignment-frontend-service";
 import {
   buildAssignmentWizardHref,
   buildReturnWizardHref,
@@ -264,19 +266,12 @@ export function AssetAssignmentWorkspace() {
 
   function openCreate(preset?: Partial<AssignmentFormState>) {
     setError(null);
-    setModalRow(null);
-    const asset = preset?.asset_id ? assetMap.get(preset.asset_id) : undefined;
-    setForm({
-      ...EMPTY_FORM,
-      asset_id: preset?.asset_id ?? prefillAssetId ?? "",
-      branch_id: preset?.branch_id ?? asset?.branch_id ?? "",
-      employee_id: preset?.employee_id ?? "",
-      allocation_type: preset?.allocation_type ?? "employee",
-      department_id: preset?.department_id ?? "",
-      project_id: preset?.project_id ?? "",
-      expected_return_at: preset?.expected_return_at ?? "",
-    });
-    setModalMode("create");
+    router.push(
+      buildAssignmentWizardHref({
+        employeeId: preset?.employee_id || undefined,
+        assetId: preset?.asset_id || prefillAssetId || undefined,
+      }),
+    );
   }
 
   useEffect(() => {
@@ -296,22 +291,41 @@ export function AssetAssignmentWorkspace() {
   }
 
   function openEdit(row: AssignmentRow) {
-    if (row.status !== "draft") {
+    const caps = getAssignmentCrudCapabilities(row.status);
+    if (!caps.canEdit) {
       setError("Only draft assignments can be edited.");
       return;
     }
     setError(null);
-    setModalRow(row);
-    setForm({
-      asset_id: row.asset_id,
-      branch_id: row.branch_id,
-      allocation_type: row.allocation_type,
-      employee_id: row.employee_id ?? "",
-      department_id: row.department_id ?? "",
-      project_id: row.project_id ?? "",
-      expected_return_at: row.expected_return_at?.slice(0, 10) ?? "",
-    });
-    setModalMode("edit");
+    router.push(buildAssignmentWizardHref({ draftId: row.id }));
+  }
+
+  async function deleteDraft(row: AssignmentRow) {
+    const caps = getAssignmentCrudCapabilities(row.status);
+    if (!caps.canDelete) {
+      setError("Only draft assignments can be deleted. Active assignments cannot be deleted.");
+      return;
+    }
+    setActionLoading(true);
+    setError(null);
+    try {
+      await assignmentFrontendService.cancelDraft(row.id);
+      await load();
+      if (modalRow?.id === row.id) closeModal();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to delete draft assignment.");
+    } finally {
+      setActionLoading(false);
+    }
+  }
+
+  function openReturn(row: AssignmentRow) {
+    const caps = getAssignmentCrudCapabilities(row.status);
+    if (!caps.canReturn) {
+      setError("Only active assignments can be returned.");
+      return;
+    }
+    router.push(buildReturnWizardHref({ assignmentId: row.id, assetId: row.asset_id }));
   }
 
   function closeModal() {
@@ -454,7 +468,7 @@ export function AssetAssignmentWorkspace() {
     <div className="space-y-4">
       <PageHeader
         title="Asset assignments"
-        description="Allocate assets to employees, departments, projects, or branches with workflow approval and return."
+        description="CRUD workspace: create via Issue wizard, view details, edit drafts, return active assignments, delete drafts only."
         actions={
           <div className="flex flex-wrap gap-2">
             <Button
@@ -473,9 +487,10 @@ export function AssetAssignmentWorkspace() {
               size="sm"
               className="cursor-pointer transition-colors duration-200"
               onClick={() => router.push(buildAssignmentWizardHref({}))}
+              data-testid="allocate-asset-button"
             >
               <Plus className="mr-1 size-4" />
-              Add assignment
+              Allocate Asset
             </Button>
           </div>
         }
@@ -491,10 +506,10 @@ export function AssetAssignmentWorkspace() {
         <CardHeader className="pb-3">
           <CardTitle className="flex items-center gap-2 text-base">
             <Users className="size-4" aria-hidden />
-            Team roster
+            Quick allocate by employee
           </CardTitle>
         </CardHeader>
-        <CardContent className="space-y-2">
+        <CardContent className="space-y-2" data-testid="assignment-employee-roster">
           {employees.length > 0 ? (
             <div className="flex flex-wrap gap-2">
               {employees.map((emp) => (
@@ -511,22 +526,10 @@ export function AssetAssignmentWorkspace() {
               ))}
             </div>
           ) : (
-            <>
-              <p className="text-sm text-muted-foreground">
-                Load employees from Master Data to assign by name. Demo roster (after{" "}
-                <span className="font-mono text-xs">seed_demo_modules</span>):
-              </p>
-              <div className="flex flex-wrap gap-2">
-                {DEMO_EMPLOYEE_ROSTER_LABELS.map((label) => (
-                  <span
-                    key={label}
-                    className="rounded-md border border-border/70 bg-muted/30 px-2.5 py-1 text-xs text-muted-foreground"
-                  >
-                    {label}
-                  </span>
-                ))}
-              </div>
-            </>
+            <p className="text-sm text-muted-foreground" data-testid="assignment-roster-empty">
+              No employees loaded from Master Data. Use Allocate Asset to open the wizard, or add
+              employees in Organization / Master Data and refresh.
+            </p>
           )}
         </CardContent>
       </Card>
@@ -623,13 +626,27 @@ export function AssetAssignmentWorkspace() {
                   </tr>
                 ) : rows.length === 0 ? (
                   <tr>
-                    <td className="px-3 py-8 text-center text-muted-foreground" colSpan={6}>
-                      No assignments found.
+                    <td className="px-3 py-8 text-center" colSpan={6}>
+                      <div className="mx-auto max-w-md space-y-3" data-testid="assignment-list-empty">
+                        <p className="text-sm text-muted-foreground">
+                          No assignments found. Allocate an asset to create the first record.
+                        </p>
+                        <Button
+                          type="button"
+                          size="sm"
+                          className="cursor-pointer"
+                          onClick={() => router.push(buildAssignmentWizardHref({}))}
+                        >
+                          <Plus className="mr-1 size-4" />
+                          Allocate Asset
+                        </Button>
+                      </div>
                     </td>
                   </tr>
                 ) : (
                   rows.map((row) => {
                     const asset = assetMap.get(row.asset_id);
+                    const caps = getAssignmentCrudCapabilities(row.status);
                     return (
                       <tr key={row.id} className="border-t transition-colors duration-150 hover:bg-muted/40">
                         <td className="px-3 py-2 font-mono text-xs">{row.document_number}</td>
@@ -658,9 +675,9 @@ export function AssetAssignmentWorkspace() {
                             </button>
                             <button
                               type="button"
-                              title="Edit"
+                              title="Edit draft"
                               aria-label={`Edit ${row.document_number}`}
-                              disabled={row.status !== "draft"}
+                              disabled={!caps.canEdit}
                               className={cn(
                                 buttonVariants({ variant: "ghost", size: "icon" }),
                                 "cursor-pointer disabled:cursor-not-allowed disabled:opacity-40",
@@ -668,6 +685,33 @@ export function AssetAssignmentWorkspace() {
                               onClick={() => openEdit(row)}
                             >
                               <SquarePen className="size-4" />
+                            </button>
+                            <button
+                              type="button"
+                              title="Return"
+                              aria-label={`Return ${row.document_number}`}
+                              disabled={!caps.canReturn}
+                              className={cn(
+                                buttonVariants({ variant: "ghost", size: "icon" }),
+                                "cursor-pointer disabled:cursor-not-allowed disabled:opacity-40",
+                              )}
+                              onClick={() => openReturn(row)}
+                            >
+                              <Undo2 className="size-4" />
+                            </button>
+                            <button
+                              type="button"
+                              title="Delete draft"
+                              aria-label={`Delete ${row.document_number}`}
+                              disabled={!caps.canDelete || actionLoading}
+                              className={cn(
+                                buttonVariants({ variant: "ghost", size: "icon" }),
+                                "cursor-pointer text-destructive disabled:cursor-not-allowed disabled:opacity-40",
+                              )}
+                              onClick={() => void deleteDraft(row)}
+                              data-testid="assignment-delete-draft"
+                            >
+                              <Trash2 className="size-4" />
                             </button>
                           </div>
                         </td>
@@ -801,9 +845,10 @@ export function AssetAssignmentWorkspace() {
                     size="sm"
                     className="cursor-pointer"
                     disabled={actionLoading || modalRow.status !== "draft"}
-                    onClick={() => void runAction("cancel")}
+                    onClick={() => void deleteDraft(modalRow)}
                   >
-                    Cancel draft
+                    <Trash2 className="mr-1 size-4" />
+                    Delete draft
                   </Button>
                   <Button
                     type="button"
@@ -835,7 +880,7 @@ export function AssetAssignmentWorkspace() {
                     size="sm"
                     className="cursor-pointer"
                     disabled={actionLoading || modalRow.status !== "active"}
-                    onClick={() => void runAction("return")}
+                    onClick={() => openReturn(modalRow)}
                   >
                     <Undo2 className="mr-1 size-4" />
                     Return
@@ -852,6 +897,12 @@ export function AssetAssignmentWorkspace() {
                     <SquarePen className="mr-1 size-4" />
                     Edit draft
                   </Button>
+                ) : null}
+                {modalRow.status === "active" ? (
+                  <p className="text-xs text-muted-foreground">
+                    Assigned asset cannot be changed after activation. Use Return to close the
+                    assignment.
+                  </p>
                 ) : null}
               </div>
             ) : null}

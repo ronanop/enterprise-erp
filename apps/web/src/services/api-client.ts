@@ -17,9 +17,14 @@ type RequestOptions = Omit<RequestInit, "body"> & {
   body?: unknown;
   auth?: boolean;
   query?: Record<string, string | number | boolean | null | undefined>;
+  /** Override default request timeout (ms). Use 0 to disable. */
+  timeoutMs?: number;
   /** Internal: skip one refresh retry to avoid loops. */
   _retried?: boolean;
 };
+
+/** Default so hung backends never leave screens on permanent skeletons. */
+const DEFAULT_REQUEST_TIMEOUT_MS = 20_000;
 
 function buildUrl(path: string, query?: RequestOptions["query"]): string {
   const base = `${env.apiUrl}${path}`;
@@ -50,6 +55,7 @@ async function tryRefreshAccessToken(): Promise<boolean> {
           },
           body: JSON.stringify({ refresh_token: refreshToken }),
           cache: "no-store",
+          signal: AbortSignal.timeout(DEFAULT_REQUEST_TIMEOUT_MS),
         });
         const payload = (await response.json()) as ApiResponse<TokenData> | ErrorResponse;
         if (!response.ok || payload.success === false || !payload.data?.access_token) {
@@ -76,13 +82,20 @@ export async function apiClient<T>(
   path: string,
   options: RequestOptions = {},
 ): Promise<ApiResponse<T>> {
-  const { body, headers, auth = true, query, _retried, ...rest } = options;
+  const { body, headers, auth = true, query, timeoutMs, _retried, signal, ...rest } = options;
   const token = auth ? getAccessToken() : null;
+  const ms = timeoutMs === undefined ? DEFAULT_REQUEST_TIMEOUT_MS : timeoutMs;
+  const timeoutSignal = ms > 0 ? AbortSignal.timeout(ms) : undefined;
+  const mergedSignal =
+    signal && timeoutSignal
+      ? AbortSignal.any([signal, timeoutSignal])
+      : (signal ?? timeoutSignal);
 
   let response: Response;
   try {
     response = await fetch(buildUrl(path, query), {
       ...rest,
+      signal: mergedSignal,
       headers: {
         "Content-Type": "application/json",
         Accept: "application/json",
@@ -92,9 +105,14 @@ export async function apiClient<T>(
       body: body !== undefined ? JSON.stringify(body) : undefined,
       cache: "no-store",
     });
-  } catch {
+  } catch (err) {
+    const timedOut =
+      (err instanceof DOMException && err.name === "TimeoutError") ||
+      (err instanceof Error && /aborted|timeout/i.test(err.message));
     throw new ApiClientError(
-      "Cannot reach the API. Confirm the backend is running on port 8000.",
+      timedOut
+        ? "The API did not respond in time. Confirm Docker/Postgres is running, then retry."
+        : "Cannot reach the API. Confirm the backend is running on port 8000.",
       0,
     );
   }
@@ -147,9 +165,10 @@ export const authService = {
         body: { email, password },
       },
     ).then((res) => {
-      if (res.data?.access_token) {
-        setTokens(res.data.access_token, res.data.refresh_token);
+      if (!res.data?.access_token) {
+        throw new ApiClientError("Login response did not include an access token.", 0);
       }
+      setTokens(res.data.access_token, res.data.refresh_token);
       return res;
     }),
   me: () => apiClient<UserProfile>("/auth/me"),

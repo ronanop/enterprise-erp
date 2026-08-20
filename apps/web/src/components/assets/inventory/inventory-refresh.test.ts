@@ -26,6 +26,11 @@ describe("markInventoryStale / consumeInventoryStale", () => {
     expect(consumeInventoryStale()?.reason).toBe("return");
   });
 
+  it("marks register stale", () => {
+    markInventoryStale({ reason: "register", assetId: "a3" });
+    expect(consumeInventoryStale()).toMatchObject({ reason: "register", assetId: "a3" });
+  });
+
   it("consume clears the flag", () => {
     markInventoryStale({ reason: "issue" });
     consumeInventoryStale();

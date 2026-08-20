@@ -7,7 +7,7 @@ import { Loader2, QrCode, UserPlus, Wrench } from "lucide-react";
 import { AssetDiscoveryPanel } from "@/components/assets/asset-discovery-panel";
 import { PageHeader } from "@/components/layout/page-header";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   brandModelLabel,
@@ -18,6 +18,7 @@ import {
   prdStatusLabel,
 } from "@/domain/asset-prd";
 import { isAuthenticated } from "@/lib/auth";
+import { cn } from "@/lib/utils";
 import { listEmployeeOptions } from "@/lib/org-options";
 import {
   buildRegisterParityExpandable,
@@ -164,12 +165,16 @@ export function AssetDetailWorkspace({ assetId }: { assetId: string }) {
         description={`${asset.asset_code ?? ""} · ${prdStatusLabel(prdStatus)}`}
         actions={
           <div className="flex flex-wrap gap-2">
-            <Button variant="outline" size="sm" asChild className="cursor-pointer">
-              <Link href={`/assets/asset-assignments?assetId=${assetId}`}>
-                <UserPlus className="mr-1 size-4" />
-                Assign
-              </Link>
-            </Button>
+            <Link
+              href={`/assets/asset-assignments?assetId=${assetId}`}
+              className={cn(
+                buttonVariants({ variant: "outline", size: "sm" }),
+                "cursor-pointer transition-colors duration-200",
+              )}
+            >
+              <UserPlus className="mr-1 size-4" />
+              Assign
+            </Link>
             {activeAssignment ? (
               <Button
                 variant="outline"
@@ -181,18 +186,26 @@ export function AssetDetailWorkspace({ assetId }: { assetId: string }) {
                 Return
               </Button>
             ) : null}
-            <Button variant="outline" size="sm" asChild className="cursor-pointer">
-              <Link href={`/assets/asset-maintenances?assetId=${assetId}`}>
-                <Wrench className="mr-1 size-4" />
-                Maintenance
-              </Link>
-            </Button>
-            <Button variant="outline" size="sm" asChild className="cursor-pointer">
-              <Link href={`/assets/qr-barcode?assetId=${assetId}`}>
-                <QrCode className="mr-1 size-4" />
-                QR
-              </Link>
-            </Button>
+            <Link
+              href={`/assets/asset-maintenances?assetId=${assetId}`}
+              className={cn(
+                buttonVariants({ variant: "outline", size: "sm" }),
+                "cursor-pointer transition-colors duration-200",
+              )}
+            >
+              <Wrench className="mr-1 size-4" />
+              Maintenance
+            </Link>
+            <Link
+              href={`/assets/qr-barcode?assetId=${assetId}`}
+              className={cn(
+                buttonVariants({ variant: "outline", size: "sm" }),
+                "cursor-pointer transition-colors duration-200",
+              )}
+            >
+              <QrCode className="mr-1 size-4" />
+              QR
+            </Link>
           </div>
         }
       />

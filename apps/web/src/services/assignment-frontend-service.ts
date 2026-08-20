@@ -212,6 +212,41 @@ export const assignmentFrontendService = {
     }, "Failed to return assignment.");
   },
 
+  /**
+   * GET /assets/asset-assignments — paginated list (existing search API).
+   */
+  async list(params: {
+    page?: number;
+    page_size?: number;
+    status?: string;
+    q?: string;
+    branch_id?: string;
+    asset_id?: string;
+    allocation_type?: string;
+  } = {}): Promise<Paginated<AssignmentResponse>> {
+    return withAssignmentErrors(async () => {
+      const res = await resourceService.list<Paginated<AssignmentResponse>>(API_ASSIGNMENTS, params);
+      return parsePaginated<AssignmentResponse>(res.data);
+    }, "Failed to list assignments.");
+  },
+
+  /**
+   * Soft-delete draft via POST …/cancel. Active assignments cannot be cancelled this way for CRUD delete.
+   */
+  async cancelDraft(id: string): Promise<AssignmentResponse> {
+    return withAssignmentErrors(async () => {
+      const row = await assignmentFrontendService.loadAssignment(id);
+      if (row.status !== "draft") {
+        throw new AssignmentError(
+          "Only draft assignments can be deleted. Active assignments cannot be deleted.",
+          409,
+        );
+      }
+      const res = await resourceService.action<AssignmentResponse>(API_ASSIGNMENTS, id, "cancel");
+      return unwrapAssignment(res.data);
+    }, "Failed to delete assignment draft.");
+  },
+
   // --- Compatibility aliases (same endpoints; used by later integration layers) ---
 
   getAssignment(id: string): Promise<AssignmentResponse> {
@@ -293,13 +328,22 @@ export const assignmentFrontendService = {
 function assetRowToWizardAsset(row: AssetsRow): WizardAssetOption {
   const code = String(row.asset_code ?? "");
   const name = String(row.asset_name ?? row.id);
+  const configParts = [row.cpu, row.ram, row.storage, row.os]
+    .map((v) => (v == null ? "" : String(v).trim()))
+    .filter(Boolean);
   return {
     id: String(row.id),
     label: name,
     code,
     operationalStatus: String(row.operational_status ?? "READY_TO_MOVE"),
-    branchLabel: String(row.branch_id ?? "").slice(0, 8) || "—",
+    branchLabel: String(row.branch_name ?? row.branch_id ?? "").slice(0, 48) || "—",
     branchId: String(row.branch_id ?? ""),
+    serialNumber: String(row.serial_number ?? "—"),
+    make: String(row.manufacturer ?? "—"),
+    model: String(row.model ?? "—"),
+    configuration: configParts.length ? configParts.join(" / ") : String(row.configuration ?? "—"),
+    currentLocation: String(row.location ?? row.branch_name ?? row.branch_id ?? "—"),
+    earlierUsedBy: String(row.earlier_used_by ?? row.previous_holder ?? "—"),
   };
 }
 

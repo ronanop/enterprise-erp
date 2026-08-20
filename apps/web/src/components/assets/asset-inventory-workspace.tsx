@@ -7,11 +7,14 @@ import {
   AssetDetailDrawer,
   InventoryActionMenu,
   inventoryRowToAssetRef,
-  type InventoryActionPermissions,
-  type InventoryMenuActionId,
-  type InventoryQuickLinkId,
 } from "@/components/assets/inventory/interaction";
-import type { AssetDetailDrawerData } from "@/components/assets/inventory/interaction/inventory-interaction.types";
+import type {
+  AssetDetailDrawerActionId,
+  AssetDetailDrawerData,
+  InventoryActionPermissions,
+  InventoryMenuActionId,
+  InventoryQuickLinkId,
+} from "@/components/assets/inventory/interaction/inventory-interaction.types";
 import {
   INVENTORY_PRESETS,
   PRESET_EMPTY_COPY,
@@ -32,8 +35,20 @@ import { PageHeader } from "@/components/layout/page-header";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { cn } from "@/lib/utils";
-import { isOperationalStatus } from "@/components/assets/shared/asset-status";
+import {
+  OPERATIONAL_STATUS_LABELS,
+  OPERATIONAL_STATUS_VALUES,
+  isOperationalStatus,
+  type OperationalStatusValue,
+} from "@/components/assets/shared/asset-status";
 
 export type AssetInventoryWorkspaceProps = {
   preset: InventoryPresetId;
@@ -57,6 +72,8 @@ export type AssetInventoryWorkspaceProps = {
   pageSize: number;
   onPageChange: (page: number) => void;
   loading: boolean;
+  successToastMessage?: string | null;
+  highlightedRowId?: string | null;
   errorMessage?: string | null;
   onRetry?: () => void;
   expandedRowIds: Set<string>;
@@ -64,17 +81,31 @@ export type AssetInventoryWorkspaceProps = {
   actionPermissions?: Partial<InventoryActionPermissions>;
   onViewRow?: (row: InventoryRowViewModel) => void;
   onMenuAction?: (action: InventoryMenuActionId, row: InventoryRowViewModel) => void;
+  /** IT Admin — set operational status from the register dropdown. */
+  onOperationalStatusChange?: (
+    row: InventoryRowViewModel,
+    status: OperationalStatusValue,
+  ) => void;
   drawerOpen?: boolean;
   onDrawerOpenChange?: (open: boolean) => void;
   drawerData?: AssetDetailDrawerData | null;
   drawerQuickLinkEnabled?: Partial<Record<InventoryQuickLinkId, boolean>>;
   onDrawerQuickLink?: (link: InventoryQuickLinkId, row: InventoryRowViewModel) => void;
+  onDrawerAction?: (action: AssetDetailDrawerActionId, row: InventoryRowViewModel) => void;
   drawerRow?: InventoryRowViewModel | null;
   exportBusy?: boolean;
   exportError?: string | null;
   exportSuccess?: string | null;
   onExportExcel?: () => void;
   onExportCsv?: () => void;
+  /** When true, section chrome (Asset Register) instead of page header. */
+  embedded?: boolean;
+  /** Hide local branch selector (unified branch lives on dashboard). */
+  hideBranchSelector?: boolean;
+  /** Hide inline quick search when sticky global search is used. */
+  hideQuickSearch?: boolean;
+  /** CTA when register is empty (e.g. Add Asset). */
+  onAddAssetEmpty?: () => void;
 };
 
 const TABLE_COLUMNS = [
@@ -115,6 +146,8 @@ export function AssetInventoryWorkspace({
   pageSize,
   onPageChange,
   loading,
+  successToastMessage,
+  highlightedRowId,
   errorMessage,
   onRetry,
   expandedRowIds,
@@ -122,69 +155,154 @@ export function AssetInventoryWorkspace({
   actionPermissions,
   onViewRow,
   onMenuAction,
+  onOperationalStatusChange,
   drawerOpen = false,
   onDrawerOpenChange,
   drawerData = null,
   drawerQuickLinkEnabled,
   onDrawerQuickLink,
+  onDrawerAction,
   drawerRow = null,
   exportBusy,
   exportError,
   exportSuccess,
   onExportExcel,
   onExportCsv,
+  embedded = false,
+  hideBranchSelector = false,
+  hideQuickSearch = false,
+  onAddAssetEmpty,
 }: AssetInventoryWorkspaceProps) {
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
   const emptyCopy = PRESET_EMPTY_COPY[preset];
+  const hasActiveSearch = Boolean(quickSearch.trim() || draftFilters.search.trim());
+  const emptyVariant = hasActiveSearch
+    ? "no-search"
+    : preset === "all"
+      ? "no-assets"
+      : "no-results";
+
+  const emptyState = (
+    <EmptyState
+      variant={emptyVariant}
+      title={hasActiveSearch ? undefined : emptyCopy.title}
+      description={hasActiveSearch ? undefined : emptyCopy.description}
+      action={
+        !errorMessage && !hasActiveSearch && preset === "all" && onAddAssetEmpty ? (
+          <Button
+            type="button"
+            size="sm"
+            className="cursor-pointer"
+            onClick={onAddAssetEmpty}
+            data-testid="empty-add-asset"
+          >
+            Add Asset
+          </Button>
+        ) : null
+      }
+    />
+  );
+
+  const searchAndExport = (
+    <div className="flex w-full flex-col gap-3 sm:w-auto sm:min-w-[280px]">
+      {!hideQuickSearch ? (
+        <div className="flex gap-2">
+          <Input
+            value={quickSearch}
+            onChange={(e) => onQuickSearchChange(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") onQuickSearchSubmit();
+            }}
+            placeholder="Quick search…"
+            aria-label="Quick search"
+            className="flex-1"
+          />
+          <Button
+            type="button"
+            variant="secondary"
+            className="cursor-pointer shrink-0"
+            onClick={onQuickSearchSubmit}
+          >
+            Search
+          </Button>
+        </div>
+      ) : null}
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+        {!hideBranchSelector ? (
+          <BranchSelector
+            value={headerBranchId}
+            onChange={onHeaderBranchChange}
+            branches={branches}
+            aria-label="Branch"
+          />
+        ) : null}
+        <div className="flex flex-wrap items-center gap-2">
+          {onAddAssetEmpty ? (
+            <Button
+              type="button"
+              size="sm"
+              className="cursor-pointer"
+              onClick={onAddAssetEmpty}
+              data-testid="register-add-asset"
+            >
+              Add Asset
+            </Button>
+          ) : null}
+          {onExportExcel && onExportCsv ? (
+            <InventoryExportToolbar
+              exporting={exportBusy}
+              exportError={exportError}
+              exportSuccess={exportSuccess}
+              onExportExcel={onExportExcel}
+              onExportCsv={onExportCsv}
+              disabled={loading}
+            />
+          ) : null}
+        </div>
+      </div>
+    </div>
+  );
 
   return (
-    <div className="space-y-6" data-testid="asset-inventory-workspace">
-      <PageHeader
-        title="IT Asset Inventory"
-        description="Manage enterprise asset inventory"
-        actions={
-          <div className="flex w-full flex-col gap-3 sm:w-auto sm:min-w-[280px]">
-            <div className="flex gap-2">
-              <Input
-                value={quickSearch}
-                onChange={(e) => onQuickSearchChange(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") onQuickSearchSubmit();
-                }}
-                placeholder="Quick search…"
-                aria-label="Quick search"
-                className="flex-1"
-              />
-              <Button
-                type="button"
-                variant="secondary"
-                className="cursor-pointer shrink-0"
-                onClick={onQuickSearchSubmit}
-              >
-                Search
-              </Button>
-            </div>
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-              <BranchSelector
-                value={headerBranchId}
-                onChange={onHeaderBranchChange}
-                branches={branches}
-                aria-label="Branch"
-              />
-              {onExportExcel && onExportCsv ? (
-                <InventoryExportToolbar
-                  exporting={exportBusy}
-                  exportError={exportError}
-                  exportSuccess={exportSuccess}
-                  onExportExcel={onExportExcel}
-                  onExportCsv={onExportCsv}
-                  disabled={loading}
-                />
-              ) : null}
-            </div>
+    <div
+      className={cn(
+        "space-y-4 transition-opacity duration-200 motion-reduce:transition-none md:space-y-5",
+        embedded && "space-y-4",
+        loading && "opacity-90",
+      )}
+      data-testid="asset-inventory-workspace"
+      data-embedded={embedded ? "true" : "false"}
+    >
+      {successToastMessage ? (
+        <div
+          className="fixed top-4 right-4 z-50 rounded-lg border border-primary/20 bg-background px-4 py-3 shadow-lg"
+          role="status"
+          aria-live="polite"
+          data-testid="inventory-success-toast"
+        >
+          <p className="text-sm font-medium text-foreground">{successToastMessage}</p>
+        </div>
+      ) : null}
+      {embedded ? (
+        <div
+          className="flex flex-col gap-3 border-b border-border/50 pb-4 sm:flex-row sm:items-end sm:justify-between"
+          data-testid="asset-register-section-header"
+        >
+          <div className="min-w-0 space-y-1">
+            <h2 className="text-base font-medium tracking-tight text-foreground">Asset Register</h2>
+            <p className="text-xs text-muted-foreground">
+              Search, filter, and manage assets in this workspace.
+            </p>
           </div>
-        }
-      />
+          {searchAndExport}
+        </div>
+      ) : (
+        <PageHeader
+          title="Asset Register"
+          description="Manage enterprise asset inventory"
+          actions={searchAndExport}
+        />
+      )}
 
       <div
         className="flex flex-wrap gap-1.5"
@@ -266,11 +384,7 @@ export function AssetInventoryWorkspace({
             ) : rows.length === 0 ? (
               <tr>
                 <td colSpan={TABLE_COLUMNS.length + 2} className="p-6">
-                  <EmptyState
-                    variant="no-results"
-                    title={emptyCopy.title}
-                    description={emptyCopy.description}
-                  />
+                  {emptyState}
                 </td>
               </tr>
             ) : (
@@ -280,11 +394,13 @@ export function AssetInventoryWorkspace({
                   <InventoryTableRow
                     key={row.id}
                     row={row}
+                    highlighted={highlightedRowId === row.id}
                     expanded={expanded}
                     onToggleExpand={() => onToggleExpand(row.id)}
                     actionPermissions={actionPermissions}
                     onViewRow={onViewRow}
                     onMenuAction={onMenuAction}
+                    onOperationalStatusChange={onOperationalStatusChange}
                   />
                 );
               })
@@ -298,16 +414,13 @@ export function AssetInventoryWorkspace({
         {loading ? (
           <TableRowsSkeleton rows={4} />
         ) : rows.length === 0 ? (
-          <EmptyState
-            variant="no-results"
-            title={emptyCopy.title}
-            description={emptyCopy.description}
-          />
+          emptyState
         ) : (
           rows.map((row) => (
             <InventoryMobileCard
               key={row.id}
               row={row}
+              highlighted={highlightedRowId === row.id}
               actionPermissions={actionPermissions}
               onViewRow={onViewRow}
               onMenuAction={onMenuAction}
@@ -349,10 +462,16 @@ export function AssetInventoryWorkspace({
         onOpenChange={(open) => onDrawerOpenChange?.(open)}
         asset={drawerRow ? inventoryRowToAssetRef(drawerRow) : null}
         data={drawerData}
+        actionPermissions={actionPermissions}
         quickLinkEnabled={drawerQuickLinkEnabled}
         onQuickLink={
           drawerRow && onDrawerQuickLink
-            ? (link, asset) => onDrawerQuickLink(link, drawerRow)
+            ? (link) => onDrawerQuickLink(link, drawerRow)
+            : undefined
+        }
+        onAction={
+          drawerRow && onDrawerAction
+            ? (action) => onDrawerAction(action, drawerRow)
             : undefined
         }
       />
@@ -362,36 +481,63 @@ export function AssetInventoryWorkspace({
 
 function InventoryTableRow({
   row,
+  highlighted,
   expanded,
   onToggleExpand,
   actionPermissions,
   onViewRow,
   onMenuAction,
+  onOperationalStatusChange,
 }: {
   row: InventoryRowViewModel;
+  highlighted: boolean;
   expanded: boolean;
   onToggleExpand: () => void;
   actionPermissions?: Partial<InventoryActionPermissions>;
   onViewRow?: (row: InventoryRowViewModel) => void;
   onMenuAction?: (action: InventoryMenuActionId, row: InventoryRowViewModel) => void;
+  onOperationalStatusChange?: (
+    row: InventoryRowViewModel,
+    status: OperationalStatusValue,
+  ) => void;
 }) {
   const asset = inventoryRowToAssetRef(row);
-  const opsBadge = isOperationalStatus(row.operationalStatus) ? (
-    <StatusBadge kind="operational" status={row.operationalStatus} />
-  ) : (
-    row.operationalStatus
-  );
+  const statusValue = isOperationalStatus(row.operationalStatus)
+    ? row.operationalStatus
+    : undefined;
 
   return (
     <>
-      <tr className="border-t border-border/50 hover:bg-muted/20">
+      <tr
+        className={cn(
+          "cursor-pointer border-t border-border/50 transition-colors duration-200 hover:bg-muted/20",
+          highlighted &&
+            "border-primary/50 bg-primary/5 shadow-[inset_0_0_0_1px_hsl(var(--primary)/0.18)] motion-safe:animate-in motion-safe:fade-in-0 motion-safe:duration-300",
+        )}
+        data-testid="inventory-table-row"
+        data-asset-row-id={row.id}
+        data-highlighted={highlighted ? "true" : "false"}
+        onClick={() => onViewRow?.(row)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            onViewRow?.(row);
+          }
+        }}
+        tabIndex={0}
+        role="row"
+        aria-label={`Open details for ${row.laptopName}`}
+      >
         <td className="px-2 py-2">
           <button
             type="button"
             className="cursor-pointer rounded p-1 text-muted-foreground hover:bg-muted"
             aria-expanded={expanded}
             aria-label={expanded ? "Collapse row" : "Expand row"}
-            onClick={onToggleExpand}
+            onClick={(e) => {
+              e.stopPropagation();
+              onToggleExpand();
+            }}
           >
             {expanded ? <ChevronDown className="size-4" /> : <ChevronRight className="size-4" />}
           </button>
@@ -407,18 +553,56 @@ function InventoryTableRow({
         <td className="px-2 py-2 font-mono text-xs">{row.employeeId}</td>
         <td className="px-2 py-2">{row.department}</td>
         <td className="px-2 py-2">{row.branch}</td>
-        <td className="px-2 py-2">{opsBadge}</td>
+        <td
+          className="px-2 py-2"
+          onClick={(e) => e.stopPropagation()}
+          onKeyDown={(e) => e.stopPropagation()}
+        >
+          {onOperationalStatusChange && statusValue ? (
+            <Select
+              value={statusValue}
+              onValueChange={(value) => {
+                if (isOperationalStatus(value)) {
+                  onOperationalStatusChange(row, value);
+                }
+              }}
+            >
+              <SelectTrigger
+                className="h-8 min-w-[9.5rem] cursor-pointer"
+                data-testid="inventory-ops-status-select"
+                aria-label={`Operational status for ${row.assetTag}`}
+              >
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {OPERATIONAL_STATUS_VALUES.map((status) => (
+                  <SelectItem key={status} value={status} className="cursor-pointer">
+                    {OPERATIONAL_STATUS_LABELS[status]}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          ) : statusValue ? (
+            <StatusBadge kind="operational" status={statusValue} />
+          ) : (
+            row.operationalStatus
+          )}
+        </td>
         <td className="px-2 py-2">
           <StatusBadge kind="lifecycle" status={row.lifecycleStatus} />
         </td>
         <td className="px-2 py-2 whitespace-nowrap">{row.issueDate}</td>
         <td className="px-2 py-2">{row.location}</td>
-        <td className="px-2 py-2 text-right">
+        <td
+          className="px-2 py-2 text-right"
+          onClick={(e) => e.stopPropagation()}
+          onKeyDown={(e) => e.stopPropagation()}
+        >
           <InventoryActionMenu
             asset={asset}
             permissions={actionPermissions}
             onView={() => onViewRow?.(row)}
-            onMenuAction={(action, a) => onMenuAction?.(action, row)}
+            onMenuAction={(action) => onMenuAction?.(action, row)}
           />
         </td>
       </tr>
@@ -460,18 +644,30 @@ function InventoryTableRow({
 
 function InventoryMobileCard({
   row,
+  highlighted,
   actionPermissions,
   onViewRow,
   onMenuAction,
 }: {
   row: InventoryRowViewModel;
+  highlighted: boolean;
   actionPermissions?: Partial<InventoryActionPermissions>;
   onViewRow?: (row: InventoryRowViewModel) => void;
   onMenuAction?: (action: InventoryMenuActionId, row: InventoryRowViewModel) => void;
 }) {
   const asset = inventoryRowToAssetRef(row);
   return (
-    <Card className="border-border/80 shadow-sm">
+    <Card
+      className={cn(
+        "cursor-pointer border-border/80 shadow-sm transition-colors duration-200 hover:border-primary/25",
+        highlighted &&
+          "border-primary/50 bg-primary/5 shadow-[inset_0_0_0_1px_hsl(var(--primary)/0.18)] motion-safe:animate-in motion-safe:fade-in-0 motion-safe:duration-300",
+      )}
+      data-testid="inventory-mobile-card"
+      data-asset-row-id={row.id}
+      data-highlighted={highlighted ? "true" : "false"}
+      onClick={() => onViewRow?.(row)}
+    >
       <CardContent className="space-y-2 pt-4">
         <div className="flex items-start justify-between gap-2">
           <div>
@@ -488,13 +684,18 @@ function InventoryMobileCard({
         <p className="text-xs">
           Holder: {row.currentHolder} · {row.branch}
         </p>
-        <InventoryActionMenu
-          asset={asset}
-          permissions={actionPermissions}
-          onView={() => onViewRow?.(row)}
-          onMenuAction={(action) => onMenuAction?.(action, row)}
-          className="w-full justify-end"
-        />
+        <div
+          onClick={(e) => e.stopPropagation()}
+          onKeyDown={(e) => e.stopPropagation()}
+        >
+          <InventoryActionMenu
+            asset={asset}
+            permissions={actionPermissions}
+            onView={() => onViewRow?.(row)}
+            onMenuAction={(action) => onMenuAction?.(action, row)}
+            className="w-full justify-end"
+          />
+        </div>
       </CardContent>
     </Card>
   );

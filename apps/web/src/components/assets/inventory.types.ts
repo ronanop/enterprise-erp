@@ -34,8 +34,8 @@ export const PRESET_EMPTY_COPY: Record<
   { title: string; description: string }
 > = {
   all: {
-    title: "No assets found",
-    description: "Adjust filters or register a new asset.",
+    title: "No Assets",
+    description: "Register your first asset.",
   },
   ready: {
     title: "No ready assets",

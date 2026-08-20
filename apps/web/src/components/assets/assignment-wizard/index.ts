@@ -3,11 +3,13 @@ export {
   AssignmentWizardContainer,
   type AssignmentWizardContainerProps,
   type AssignmentWizardContainerService,
+  type AssignmentWizardSuccessResult,
 } from "./assignment-wizard-container";
 export {
   ReturnWizardContainer,
   type ReturnWizardContainerProps,
   type ReturnWizardContainerService,
+  type ReturnWizardSuccessResult,
 } from "./return-wizard-container";
 export { ReturnWizard, type ReturnWizardProps } from "./return-wizard";
 export {

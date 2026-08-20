@@ -91,7 +91,7 @@ beforeEach(() => {
       ],
       total: 1,
       page: 1,
-      page_size: 500,
+      page_size: 200,
     }),
   );
 });
@@ -100,7 +100,7 @@ async function openAssignMenu(user: ReturnType<typeof userEvent.setup>) {
   await waitFor(() => expect(screen.getAllByText("AST-99")[0]).toBeInTheDocument());
   const moreButtons = screen.getAllByRole("button", { name: "More actions" });
   await user.click(moreButtons[0]!);
-  await user.click(screen.getByRole("menuitem", { name: "Assign Asset" }));
+  await user.click(screen.getByRole("menuitem", { name: "Allocate Asset" }));
 }
 
 describe("Inventory → Issue", () => {
@@ -122,7 +122,7 @@ describe("Inventory → Issue", () => {
     await user.click(screen.getAllByRole("button", { name: /View/ })[0]!);
     expect(screen.getByTestId("asset-detail-drawer")).toBeInTheDocument();
     await user.click(screen.getAllByRole("button", { name: "More actions" })[0]!);
-    await user.click(screen.getByRole("menuitem", { name: "Assign Asset" }));
+    await user.click(screen.getByRole("menuitem", { name: "Allocate Asset" }));
     await waitFor(() => {
       expect(screen.queryByTestId("asset-detail-drawer")).not.toBeInTheDocument();
     });
@@ -135,6 +135,19 @@ describe("Inventory → Issue", () => {
     await openAssignMenu(user);
     await waitFor(() => expect(push).toHaveBeenCalledTimes(1));
   });
+
+  it("navigates from drawer Allocate Asset with assetId prefill", async () => {
+    const user = userEvent.setup();
+    render(<AssetInventoryContainer />);
+    await waitFor(() => expect(screen.getAllByText("AST-99")[0]).toBeInTheDocument());
+    await user.click(screen.getAllByRole("button", { name: /View/ })[0]!);
+    await user.click(screen.getByRole("button", { name: "Allocate Asset" }));
+    await waitFor(() => {
+      expect(push).toHaveBeenCalledWith(
+        expect.stringContaining("/assets/asset-assignments/new?assetId=asset-99"),
+      );
+    });
+  });
 });
 
 describe("Inventory → Return", () => {
@@ -143,7 +156,6 @@ describe("Inventory → Return", () => {
     render(<AssetInventoryContainer />);
     await waitFor(() => expect(screen.getAllByText("AST-88")[0]).toBeInTheDocument());
     const moreButtons = screen.getAllByRole("button", { name: "More actions" });
-    // second row is ASSIGNED asset
     await user.click(moreButtons[1]!);
     await user.click(screen.getByRole("menuitem", { name: "Return Asset" }));
     await waitFor(() => {
@@ -152,6 +164,16 @@ describe("Inventory → Return", () => {
       );
     });
     expect(push.mock.calls[0]?.[0]).toContain("intent=return");
+  });
+
+  it("hides Allocate Asset on Assigned register menu", async () => {
+    const user = userEvent.setup();
+    render(<AssetInventoryContainer />);
+    await waitFor(() => expect(screen.getAllByText("AST-88")[0]).toBeInTheDocument());
+    const moreButtons = screen.getAllByRole("button", { name: "More actions" });
+    await user.click(moreButtons[1]!);
+    expect(screen.queryByRole("menuitem", { name: "Allocate Asset" })).not.toBeInTheDocument();
+    expect(screen.getByRole("menuitem", { name: "Return Asset" })).toBeInTheDocument();
   });
 
   it("closes drawer before return navigation", async () => {
@@ -215,12 +237,13 @@ describe("Inventory selection & view", () => {
     expect(push).not.toHaveBeenCalled();
   });
 
-  it("navigates portal from drawer without closing workflow path", async () => {
+  it("navigates View History from Ready register menu", async () => {
     const user = userEvent.setup();
     render(<AssetInventoryContainer />);
     await waitFor(() => expect(screen.getAllByText("AST-99")[0]).toBeInTheDocument());
-    await user.click(screen.getAllByRole("button", { name: /View/ })[0]!);
-    await user.click(screen.getByRole("button", { name: "Portal" }));
-    expect(push).toHaveBeenCalledWith("/assets/information-portal/asset-99");
+    await user.click(screen.getAllByRole("button", { name: "More actions" })[0]!);
+    await user.click(screen.getByRole("menuitem", { name: "View History" }));
+    expect(push).toHaveBeenCalledWith(expect.stringContaining("/assets/assets/asset-99"));
+    expect(push.mock.calls[0]?.[0]).toContain("tab=activity");
   });
 });

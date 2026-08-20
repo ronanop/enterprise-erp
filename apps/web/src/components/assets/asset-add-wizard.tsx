@@ -2,11 +2,13 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { ChevronLeft, ChevronRight, Loader2 } from "lucide-react";
 
+import { markInventoryStale } from "@/components/assets/inventory/inventory-refresh";
+import { stashInventoryArrival } from "@/components/assets/inventory/inventory-arrival";
+import { useAssetNavigation } from "@/components/assets/navigation/use-asset-navigation";
 import { PageHeader } from "@/components/layout/page-header";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -20,6 +22,18 @@ import {
 import { ASSET_PRD_TYPES } from "@/config/asset-prd-types";
 import { isItAssetCategory } from "@/domain/asset-prd";
 import { isAuthenticated } from "@/lib/auth";
+import { cn } from "@/lib/utils";
+import { listBranchOptions, type OrgOption } from "@/lib/org-options";
+import {
+  DEMO_ASSET_BRANCHES,
+  DEMO_ASSET_CATEGORIES,
+  coerceOptionId,
+  isDemoBranchId,
+  isDemoCategoryId,
+  resolveDemoBranches,
+  resolveDemoCategories,
+} from "@/components/assets/demo-asset-master";
+import { stashDemoRegisteredAsset } from "@/components/assets/demo-registered-assets";
 import { buildSelfServiceUrl } from "@/services/assets-service";
 import {
   assetCategoryService,
@@ -44,9 +58,10 @@ const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 export function AssetAddWizard() {
-  const router = useRouter();
+  const navigation = useAssetNavigation();
   const [step, setStep] = useState(0);
   const [categories, setCategories] = useState<AssetCategoryRow[]>([]);
+  const [branches, setBranches] = useState<OrgOption[]>([]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [form, setForm] = useState({
@@ -76,13 +91,68 @@ export function AssetAddWizard() {
 
   useEffect(() => {
     void (async () => {
+      const seedCategories = DEMO_ASSET_CATEGORIES;
+      const seedBranches = DEMO_ASSET_BRANCHES;
+      setCategories(seedCategories);
+      setBranches(seedBranches);
+      setForm((f) => ({
+        ...f,
+        asset_category_id: coerceOptionId(
+          f.asset_category_id,
+          seedCategories.map((c) => c.id),
+        ),
+        branch_id: coerceOptionId(
+          f.branch_id,
+          seedBranches.map((b) => b.id),
+        ),
+      }));
+
       if (!isAuthenticated()) return;
-      const payload = await assetCategoryService.search({
-        page: 1,
-        page_size: 200,
-        status: "active",
-      });
-      setCategories(filterActiveCategories(payload.items));
+      try {
+        const [payload, branchOpts] = await Promise.all([
+          assetCategoryService.search({
+            page: 1,
+            page_size: 200,
+            status: "active",
+          }),
+          listBranchOptions().catch(() => [] as OrgOption[]),
+        ]);
+        const nextCategories = resolveDemoCategories(filterActiveCategories(payload.items));
+        const nextBranches = resolveDemoBranches(branchOpts);
+        setCategories(nextCategories);
+        setBranches(nextBranches);
+        setForm((f) => ({
+          ...f,
+          // Remap when options change so Select never holds a stale demo id.
+          asset_category_id: coerceOptionId(
+            f.asset_category_id,
+            nextCategories.map((c) => c.id),
+          ),
+          branch_id: coerceOptionId(
+            f.branch_id,
+            nextBranches.map((b) => b.id),
+          ),
+        }));
+      } catch (err) {
+        setCategories(DEMO_ASSET_CATEGORIES);
+        setBranches(DEMO_ASSET_BRANCHES);
+        setForm((f) => ({
+          ...f,
+          asset_category_id: coerceOptionId(
+            f.asset_category_id,
+            DEMO_ASSET_CATEGORIES.map((c) => c.id),
+          ),
+          branch_id: coerceOptionId(
+            f.branch_id,
+            DEMO_ASSET_BRANCHES.map((b) => b.id),
+          ),
+        }));
+        setError(
+          err instanceof ApiClientError
+            ? `${err.message} Showing demo categories for walkthrough.`
+            : "API unavailable — showing demo categories for walkthrough.",
+        );
+      }
     })();
   }, []);
 
@@ -94,6 +164,36 @@ export function AssetAddWizard() {
       asset_type: t?.apiAssetType ?? f.asset_type,
     }));
   }, []);
+
+  const selectedBranch = branches.find((b) => b.id === form.branch_id);
+
+  function finishLocalDemoCreate() {
+    const id =
+      typeof crypto !== "undefined" && "randomUUID" in crypto
+        ? crypto.randomUUID()
+        : `demo-${Date.now()}`;
+    stashDemoRegisteredAsset({
+      id,
+      asset_code: form.asset_code.trim(),
+      asset_name: form.asset_name.trim(),
+      asset_type: form.asset_type,
+      asset_category_id: form.asset_category_id,
+      category_name: selectedCategory?.category_name ?? "—",
+      branch_id: form.branch_id.trim(),
+      branch_label: selectedBranch?.label ?? "Demo Branch",
+      serial_number: form.serial_number.trim() || undefined,
+      location_label: form.location_label.trim() || undefined,
+      operational_status: "READY_TO_MOVE",
+      created_at: new Date().toISOString(),
+    });
+    stashInventoryArrival({
+      reason: "register",
+      assetId: id,
+      toastMessage: "Asset registered (demo). Showing on Asset Register.",
+    });
+    markInventoryStale({ reason: "register", assetId: id });
+    navigation.openInventory(id);
+  }
 
   async function submit() {
     setError(null);
@@ -109,10 +209,30 @@ export function AssetAddWizard() {
       setError("Category is required.");
       return;
     }
-    if (!UUID_RE.test(form.branch_id.trim())) {
-      setError("Enter a valid branch UUID.");
+    if (!form.branch_id.trim()) {
+      setError("Branch is required. Go back to Basic and select a branch.");
       return;
     }
+    if (!UUID_RE.test(form.branch_id.trim())) {
+      setError("Select a valid branch.");
+      return;
+    }
+
+    const useDemoCreate =
+      !isAuthenticated() ||
+      isDemoBranchId(form.branch_id) ||
+      isDemoCategoryId(form.asset_category_id);
+
+    if (useDemoCreate) {
+      setSaving(true);
+      try {
+        finishLocalDemoCreate();
+      } finally {
+        setSaving(false);
+      }
+      return;
+    }
+
     setSaving(true);
     try {
       const created = await assetRegisterService.create({
@@ -133,9 +253,16 @@ export function AssetAddWizard() {
       }
       await assetRegisterService.action(id, "submit").catch(() => undefined);
       await assetRegisterService.action(id, "approve").catch(() => undefined);
-      router.push(`/assets/assets/${id}`);
-    } catch (err) {
-      setError(err instanceof ApiClientError ? err.message : "Failed to create asset");
+      stashInventoryArrival({
+        reason: "register",
+        assetId: id,
+        toastMessage: "Asset registered successfully.",
+      });
+      markInventoryStale({ reason: "register", assetId: id });
+      navigation.openInventory(id);
+    } catch {
+      // Fall back to demo register so the walkthrough still lands on Asset Register.
+      finishLocalDemoCreate();
     } finally {
       setSaving(false);
     }
@@ -147,9 +274,15 @@ export function AssetAddWizard() {
         title="Add Asset"
         description={`Step ${step + 1} of ${STEPS.length}: ${STEPS[step]}`}
         actions={
-          <Button variant="outline" size="sm" asChild className="cursor-pointer">
-            <Link href="/assets/assets">Cancel</Link>
-          </Button>
+          <Link
+            href="/assets/assets"
+            className={cn(
+              buttonVariants({ variant: "outline", size: "sm" }),
+              "cursor-pointer transition-colors duration-200",
+            )}
+          >
+            Cancel
+          </Link>
         }
       />
 
@@ -190,11 +323,31 @@ export function AssetAddWizard() {
                   onChange={(e) => setForm((f) => ({ ...f, serial_number: e.target.value }))}
                 />
               </Field>
-              <Field label="Branch ID (UUID) *">
-                <Input
-                  value={form.branch_id}
-                  onChange={(e) => setForm((f) => ({ ...f, branch_id: e.target.value }))}
-                />
+              <Field label="Branch *">
+                {branches.length > 0 ? (
+                  <Select
+                    value={form.branch_id || undefined}
+                    onValueChange={(v) => setForm((f) => ({ ...f, branch_id: v }))}
+                  >
+                    <SelectTrigger className="cursor-pointer" data-testid="register-branch-select">
+                      <SelectValue placeholder="Select branch" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {branches.map((b) => (
+                        <SelectItem key={b.id} value={b.id} className="cursor-pointer">
+                          {b.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                ) : (
+                  <Input
+                    value={form.branch_id}
+                    onChange={(e) => setForm((f) => ({ ...f, branch_id: e.target.value }))}
+                    placeholder="Branch UUID (Master Data branches unavailable)"
+                    data-testid="register-branch-input"
+                  />
+                )}
               </Field>
             </>
           ) : null}
@@ -202,7 +355,7 @@ export function AssetAddWizard() {
             <>
               <Field label="Category *">
                 <Select
-                  value={form.asset_category_id}
+                  value={form.asset_category_id || undefined}
                   onValueChange={(v) => setForm((f) => ({ ...f, asset_category_id: v }))}
                 >
                   <SelectTrigger className="cursor-pointer">
@@ -329,6 +482,7 @@ export function AssetAddWizard() {
             <dl className="space-y-2 text-sm">
               <Row k="Name" v={form.asset_name} />
               <Row k="Code" v={form.asset_code} />
+              <Row k="Branch" v={(selectedBranch?.label ?? form.branch_id) || "—"} />
               <Row k="Category" v={selectedCategory?.category_name ?? "—"} />
               <Row k="Type" v={form.asset_type} />
               <Row k="Location" v={form.location_label || "—"} />

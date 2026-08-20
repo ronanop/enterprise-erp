@@ -43,6 +43,7 @@ const issueService = {
   submitDraft,
   activateAssignment,
   listReadyAssets,
+  getAsset,
   listComponents,
   formatError,
 };
@@ -114,14 +115,14 @@ describe("Container callbacks — Issue success path", () => {
         listEmployees={listEmployees}
       />,
     );
-    await waitFor(() => expect(listComponents).toHaveBeenCalledWith("a1"));
+    await waitFor(() => expect(listReadyAssets).toHaveBeenCalled());
     await waitFor(() => expect(screen.getByRole("heading", { name: /Issue asset/i })).toBeInTheDocument());
   });
 
   it("calls onSuccess after submit+activate", async () => {
-    const onSuccess = vi.fn((id: string) => {
-      markInventoryStale({ reason: "issue", assetId: "a1" });
-      expect(id).toBe("new-1");
+    const onSuccess = vi.fn((result: { assignmentId: string; assetId: string }) => {
+      markInventoryStale({ reason: "issue", assetId: result.assetId });
+      expect(result.assignmentId).toBe("new-1");
     });
     const user = userEvent.setup();
     render(
@@ -138,7 +139,11 @@ describe("Container callbacks — Issue success path", () => {
     await user.click(screen.getByRole("button", { name: /^Next$/i }));
     await user.click(screen.getByRole("button", { name: /^Next$/i }));
     await user.click(screen.getByRole("button", { name: /^Submit$/i }));
-    await waitFor(() => expect(onSuccess).toHaveBeenCalledWith("new-1"));
+    await waitFor(() =>
+      expect(onSuccess).toHaveBeenCalledWith(
+        expect.objectContaining({ assignmentId: "new-1", assetId: "a1", employeeId: "e1" }),
+      ),
+    );
     expect(peekInventoryStale()).toBe(true);
     expect(consumeInventoryStale()?.reason).toBe("issue");
   });
@@ -197,8 +202,8 @@ describe("Container callbacks — Return success path", () => {
   });
 
   it("marks inventory stale on return success", async () => {
-    const onSuccess = vi.fn(() => {
-      markInventoryStale({ reason: "return", assetId: "a1" });
+    const onSuccess = vi.fn((result: { assetId: string }) => {
+      markInventoryStale({ reason: "return", assetId: result.assetId });
     });
     const user = userEvent.setup();
     render(
@@ -214,7 +219,11 @@ describe("Container callbacks — Return success path", () => {
     await user.click(screen.getByRole("button", { name: /^Next$/i }));
     await user.click(screen.getByRole("button", { name: /^Next$/i }));
     await user.click(screen.getByRole("button", { name: /Confirm return/i }));
-    await waitFor(() => expect(onSuccess).toHaveBeenCalled());
+    await waitFor(() =>
+      expect(onSuccess).toHaveBeenCalledWith(
+        expect.objectContaining({ assetId: "a1", returnCondition: "good" }),
+      ),
+    );
     expect(consumeInventoryStale()?.reason).toBe("return");
   });
 

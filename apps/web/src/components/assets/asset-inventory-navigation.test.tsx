@@ -66,7 +66,7 @@ beforeEach(() => {
       items: [],
       total: 0,
       page: 1,
-      page_size: 500,
+      page_size: 200,
     }),
   );
 });
@@ -90,7 +90,7 @@ describe("AssetInventoryContainer navigation", () => {
     expect(screen.getAllByText("AST-99")[0]).toBeInTheDocument();
     const moreButtons = screen.getAllByRole("button", { name: "More actions" });
     await user.click(moreButtons[0]!);
-    await user.click(screen.getByRole("menuitem", { name: "Assign Asset" }));
+    await user.click(screen.getByRole("menuitem", { name: "Allocate Asset" }));
     await waitFor(() => {
       expect(push).toHaveBeenCalledWith(
         expect.stringContaining("/assets/asset-assignments/new?assetId=asset-99"),
@@ -98,14 +98,14 @@ describe("AssetInventoryContainer navigation", () => {
     });
   });
 
-  it("navigates on portal quick link from drawer", async () => {
+  it("navigates on history menu action", async () => {
     const user = userEvent.setup();
     render(<AssetInventoryContainer />);
     await waitFor(() => expect(assetOperationsService.listAssets).toHaveBeenCalled());
     expect(screen.getAllByText("AST-99")[0]).toBeInTheDocument();
-    const viewButtons = screen.getAllByRole("button", { name: /View/ });
-    await user.click(viewButtons[0]!);
-    await user.click(screen.getByRole("button", { name: "Portal" }));
-    expect(push).toHaveBeenCalledWith("/assets/information-portal/asset-99");
+    const moreButtons = screen.getAllByRole("button", { name: "More actions" });
+    await user.click(moreButtons[0]!);
+    await user.click(screen.getByRole("menuitem", { name: "View History" }));
+    expect(push).toHaveBeenCalledWith(expect.stringContaining("tab=activity"));
   });
 });

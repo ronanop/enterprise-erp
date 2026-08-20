@@ -10,7 +10,7 @@
 const INVENTORY_STALE_KEY = "cr004.inventory.stale";
 
 export type InventoryStalePayload = {
-  reason: "issue" | "return";
+  reason: "issue" | "return" | "register";
   assetId?: string;
   at: number;
 };
@@ -38,7 +38,12 @@ export function consumeInventoryStale(): InventoryStalePayload | null {
     if (!raw) return null;
     window.sessionStorage.removeItem(INVENTORY_STALE_KEY);
     const parsed = JSON.parse(raw) as InventoryStalePayload;
-    if (!parsed || (parsed.reason !== "issue" && parsed.reason !== "return")) return null;
+    if (
+      !parsed ||
+      (parsed.reason !== "issue" && parsed.reason !== "return" && parsed.reason !== "register")
+    ) {
+      return null;
+    }
     return parsed;
   } catch {
     try {

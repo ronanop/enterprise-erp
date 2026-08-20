@@ -39,6 +39,14 @@ export type ReturnWizardContainerService = {
   formatError: (err: unknown, fallback: string) => string;
 };
 
+export type ReturnWizardSuccessResult = {
+  assignmentId: string;
+  assetId: string;
+  assetName?: string;
+  assetCode?: string;
+  returnCondition?: string;
+};
+
 export type ReturnWizardContainerProps = {
   /** Preferred: load this assignment directly. */
   assignmentId?: string;
@@ -47,7 +55,7 @@ export type ReturnWizardContainerProps = {
   /** Optional seed for return condition / remarks. */
   initialState?: Partial<ReturnWizardState>;
   onCancel?: () => void;
-  onSuccess?: () => void;
+  onSuccess?: (result: ReturnWizardSuccessResult) => void;
   service?: ReturnWizardContainerService;
   listEmployees?: () => Promise<{ id: string; label: string }[]>;
 };
@@ -152,15 +160,21 @@ export function ReturnWizardContainer({
       setActionError(null);
       try {
         const body = returnWizardStateToBody(state) as AssignmentReturnRequest;
-        await service.returnAsset(assignmentId, body);
-        onSuccessRef.current?.();
+        const row = await service.returnAsset(assignmentId, body);
+        onSuccessRef.current?.({
+          assignmentId: row.id || assignmentId,
+          assetId: row.asset_id || assetId || "",
+          assetName: summary?.assetName,
+          assetCode: summary?.assetCode,
+          returnCondition: state.returnCondition,
+        });
       } catch (err) {
         setActionError(service.formatError(err, "Return failed."));
       } finally {
         setSubmitting(false);
       }
     },
-    [assignmentId, service],
+    [assetId, assignmentId, service, summary],
   );
 
   if (loadError && !loading) {

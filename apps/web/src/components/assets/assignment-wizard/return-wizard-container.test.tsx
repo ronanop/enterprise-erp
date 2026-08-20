@@ -237,7 +237,17 @@ describe("ReturnWizardContainer — submit", () => {
     await advanceToReview(user);
     await user.click(screen.getByRole("button", { name: /Confirm return/i }));
     await waitFor(() => expect(returnAsset).toHaveBeenCalled());
-    await waitFor(() => expect(onSuccess).toHaveBeenCalled());
+    await waitFor(() =>
+      expect(onSuccess).toHaveBeenCalledWith(
+        expect.objectContaining({
+          assignmentId: "asg-1",
+          assetId: "a1",
+          assetName: "Laptop",
+          assetCode: "AST-1",
+          returnCondition: "good",
+        }),
+      ),
+    );
   });
 
   it("sends default good condition payload", async () => {

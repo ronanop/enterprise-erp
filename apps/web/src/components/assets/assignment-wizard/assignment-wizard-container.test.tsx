@@ -20,6 +20,7 @@ const updateDraft = vi.fn();
 const submitDraft = vi.fn();
 const activateAssignment = vi.fn();
 const listReadyAssets = vi.fn();
+const getAsset = vi.fn();
 const listComponents = vi.fn();
 const formatError = vi.fn((err: unknown, fallback: string) =>
   err instanceof Error ? err.message : fallback,
@@ -32,11 +33,14 @@ const service: AssignmentWizardContainerService = {
   submitDraft,
   activateAssignment,
   listReadyAssets,
+  getAsset,
   listComponents,
   formatError,
 };
 
-const listEmployees = vi.fn(() => Promise.resolve([{ id: "e1", label: "Emp One" }]));
+const listEmployees = vi.fn(() =>
+  Promise.resolve([{ id: "e1", label: "Emp One", name: "Emp One", employeeCode: "E1" }]),
+);
 
 const draftRow: AssignmentResponse = {
   id: "d1",
@@ -84,8 +88,19 @@ async function goToReview(user: ReturnType<typeof userEvent.setup>) {
 beforeEach(() => {
   vi.clearAllMocks();
   listReadyAssets.mockResolvedValue(readyAssets());
-  listComponents.mockResolvedValue([{ id: "c1", label: "Dock", status: "active" }]);
-  listEmployees.mockResolvedValue([{ id: "e1", label: "Emp One" }]);
+  listComponents.mockResolvedValue([]);
+  getAsset.mockResolvedValue({
+    id: "a1",
+    asset_code: "AST-1",
+    asset_name: "Laptop",
+    operational_status: "READY_TO_MOVE",
+    branch_id: "b1",
+    branch_name: "HQ",
+    serial_number: "SN-1",
+    manufacturer: "Lenovo",
+    model: "T14",
+  });
+  listEmployees.mockResolvedValue([{ id: "e1", label: "Emp One", name: "Emp One", employeeCode: "E1" }]);
   createDraft.mockResolvedValue({ ...draftRow, id: "new-1", version: 1 });
   updateDraft.mockResolvedValue({ ...draftRow, version: 2 });
   loadDraft.mockResolvedValue(draftRow);
@@ -130,11 +145,11 @@ describe("AssignmentWizardContainer — loading", () => {
       />,
     );
     await waitFor(() => expect(loadDraft).toHaveBeenCalledWith("d1"));
-    await waitFor(() => expect(listComponents).toHaveBeenCalledWith("a1"));
     await waitForWizard();
   });
 
-  it("loads components for initialState.assetId", async () => {
+  it("shows standard issued accessories catalog", async () => {
+    const user = userEvent.setup();
     render(
       <AssignmentWizardContainer
         initialState={{ assetId: "a1", employeeId: "e1", branchId: "b1" }}
@@ -142,8 +157,78 @@ describe("AssignmentWizardContainer — loading", () => {
         listEmployees={listEmployees}
       />,
     );
-    await waitFor(() => expect(listComponents).toHaveBeenCalledWith("a1"));
     await waitForWizard();
+    await user.click(screen.getByRole("button", { name: /^Next$/i }));
+    await user.click(screen.getByRole("button", { name: /^Next$/i }));
+    expect(screen.getByTestId("issued-items-section")).toBeInTheDocument();
+    expect(screen.getByText("Charger")).toBeInTheDocument();
+    expect(screen.getByText("Laptop Bag")).toBeInTheDocument();
+  });
+
+  it("shows read-only asset information first when assetId is prefilled", async () => {
+    render(
+      <AssignmentWizardContainer
+        initialState={{ assetId: "a1" }}
+        service={service}
+        listEmployees={listEmployees}
+      />,
+    );
+    await waitForWizard();
+    expect(screen.getByTestId("asset-information-section")).toBeInTheDocument();
+    expect(screen.queryByRole("listbox", { name: /Select asset/i })).not.toBeInTheDocument();
+    expect(screen.getByText(/prefilled from the register drawer/i)).toBeInTheDocument();
+    expect(screen.getByText("AST-1")).toBeInTheDocument();
+    expect(screen.getByText("READY_TO_MOVE")).toBeInTheDocument();
+  });
+
+  it("loads asset by id when prefilled asset is not in ready list", async () => {
+    listReadyAssets.mockResolvedValueOnce([]);
+    render(
+      <AssignmentWizardContainer
+        initialState={{ assetId: "a1" }}
+        service={service}
+        listEmployees={listEmployees}
+      />,
+    );
+    await waitFor(() => expect(getAsset).toHaveBeenCalledWith("a1"));
+    await waitForWizard();
+  });
+
+  it("shows load error when prefilled asset id is invalid", async () => {
+    listReadyAssets.mockResolvedValueOnce([]);
+    getAsset.mockRejectedValueOnce(new Error("Asset not found"));
+    render(
+      <AssignmentWizardContainer
+        initialState={{ assetId: "missing-asset" }}
+        service={service}
+        listEmployees={listEmployees}
+      />,
+    );
+    await waitFor(() => {
+      expect(screen.getByRole("alert")).toHaveTextContent(/Asset not found/i);
+    });
+  });
+
+  it("shows business validation when prefilled asset is already assigned", async () => {
+    listReadyAssets.mockResolvedValueOnce([]);
+    getAsset.mockResolvedValueOnce({
+      id: "a2",
+      asset_code: "AST-2",
+      asset_name: "Busy Laptop",
+      operational_status: "ASSIGNED",
+      branch_id: "b1",
+      branch_name: "HQ",
+    });
+    render(
+      <AssignmentWizardContainer
+        initialState={{ assetId: "a2" }}
+        service={service}
+        listEmployees={listEmployees}
+      />,
+    );
+    await waitFor(() => {
+      expect(screen.getByRole("alert")).toHaveTextContent(/already assigned|not Ready To Move/i);
+    });
   });
 
   it("shows load error when listReadyAssets fails", async () => {
@@ -166,15 +251,15 @@ describe("AssignmentWizardContainer — loading", () => {
     });
   });
 
-  it("shows auth error when not signed in", async () => {
+  it("loads demo ready assets when not signed in", async () => {
     const { isAuthenticated } = await import("@/lib/auth");
     vi.mocked(isAuthenticated).mockReturnValueOnce(false);
     render(
       <AssignmentWizardContainer service={service} listEmployees={listEmployees} />,
     );
-    await waitFor(() => {
-      expect(screen.getByRole("alert")).toHaveTextContent(/Sign in/i);
-    });
+    await waitForWizard();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    expect(listReadyAssets).not.toHaveBeenCalled();
   });
 
   it("retries load after failure", async () => {
@@ -324,7 +409,9 @@ describe("AssignmentWizardContainer — submit and activate", () => {
     await waitFor(() => expect(createDraft).toHaveBeenCalled());
     await waitFor(() => expect(submitDraft).toHaveBeenCalledWith("new-1"));
     await waitFor(() => expect(activateAssignment).toHaveBeenCalledWith("new-1"));
-    await waitFor(() => expect(onSuccess).toHaveBeenCalledWith("new-1"));
+    await waitFor(() => expect(onSuccess).toHaveBeenCalledWith(
+      expect.objectContaining({ assignmentId: "new-1", assetId: "a1", employeeId: "e1" }),
+    ));
   });
 
   it("update → submit → activate for existing draft", async () => {
@@ -344,7 +431,9 @@ describe("AssignmentWizardContainer — submit and activate", () => {
     await waitFor(() => expect(updateDraft).toHaveBeenCalled());
     await waitFor(() => expect(submitDraft).toHaveBeenCalledWith("d1"));
     await waitFor(() => expect(activateAssignment).toHaveBeenCalledWith("d1"));
-    await waitFor(() => expect(onSuccess).toHaveBeenCalledWith("d1"));
+    await waitFor(() => expect(onSuccess).toHaveBeenCalledWith(
+      expect.objectContaining({ assignmentId: "d1", assetId: "a1" }),
+    ));
   });
 
   it("still succeeds when activateAssignment fails", async () => {
@@ -362,7 +451,35 @@ describe("AssignmentWizardContainer — submit and activate", () => {
     await waitForWizard();
     await goToReview(user);
     await user.click(screen.getByRole("button", { name: /^Submit$/i }));
-    await waitFor(() => expect(onSuccess).toHaveBeenCalledWith("new-1"));
+    await waitFor(() => expect(onSuccess).toHaveBeenCalledWith(
+      expect.objectContaining({ assignmentId: "new-1", assetId: "a1", employeeId: "e1" }),
+    ));
+  });
+
+  it("includes employee label in onSuccess payload", async () => {
+    const onSuccess = vi.fn();
+    const user = userEvent.setup();
+    render(
+      <AssignmentWizardContainer
+        initialState={{ employeeId: "e1", assetId: "a1", branchId: "b1" }}
+        service={service}
+        listEmployees={listEmployees}
+        onSuccess={onSuccess}
+      />,
+    );
+    await waitForWizard();
+    await goToReview(user);
+    await user.click(screen.getByRole("button", { name: /^Submit$/i }));
+    await waitFor(() =>
+      expect(onSuccess).toHaveBeenCalledWith(
+        expect.objectContaining({
+          assignmentId: "new-1",
+          assetId: "a1",
+          employeeId: "e1",
+          employeeLabel: "Emp One",
+        }),
+      ),
+    );
   });
 
   it("shows error and skips activate when submitDraft fails", async () => {
@@ -509,7 +626,7 @@ describe("AssignmentWizardContainer — payload mapping", () => {
 });
 
 describe("AssignmentWizardContainer — asset change", () => {
-  it("reloads components when asset selected", async () => {
+  it("updates branch when asset selected", async () => {
     const user = userEvent.setup();
     listReadyAssets.mockResolvedValue([
       ...readyAssets(),
@@ -533,37 +650,7 @@ describe("AssignmentWizardContainer — asset change", () => {
     await user.click(screen.getByRole("button", { name: /^Next$/i }));
     await waitFor(() => screen.getByRole("option", { name: /Monitor/i }));
     await user.click(screen.getByRole("option", { name: /Monitor/i }));
-    await waitFor(() => expect(listComponents).toHaveBeenCalledWith("a2"));
-  });
-
-  it("clears issued items when listComponents fails on asset change", async () => {
-    const user = userEvent.setup();
-    listComponents
-      .mockResolvedValueOnce([{ id: "c1", label: "Dock", status: "active" }])
-      .mockRejectedValueOnce(new Error("components down"));
-    listReadyAssets.mockResolvedValue([
-      ...readyAssets(),
-      {
-        id: "a2",
-        label: "Monitor",
-        code: "AST-2",
-        operationalStatus: "READY_TO_MOVE",
-        branchLabel: "HQ",
-        branchId: "b1",
-      },
-    ]);
-    render(
-      <AssignmentWizardContainer
-        initialState={{ employeeId: "e1", assetId: "a1", branchId: "b1" }}
-        service={service}
-        listEmployees={listEmployees}
-      />,
-    );
-    await waitForWizard();
-    await user.click(screen.getByRole("button", { name: /^Next$/i }));
-    await waitFor(() => screen.getByRole("option", { name: /Monitor/i }));
-    await user.click(screen.getByRole("option", { name: /Monitor/i }));
-    await waitFor(() => expect(listComponents).toHaveBeenCalledWith("a2"));
+    expect(screen.getAllByText("AST-2").length).toBeGreaterThan(0);
   });
 });
 

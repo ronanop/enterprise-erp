@@ -1,16 +1,28 @@
 "use client";
 
 import type { ReturnSummaryView } from "@/components/assets/assignment-wizard/assignment-wizard-mapper";
-import { MOCK_RETURN_SUMMARY } from "@/components/assets/assignment-wizard/wizard-mock-data";
-import { StatusBadge } from "@/components/assets/shared";
+import { EmptyState, StatusBadge } from "@/components/assets/shared";
 
 export type ReturnSummaryStepProps = {
-  summary?: ReturnSummaryView;
+  summary?: ReturnSummaryView | null;
 };
 
-export function ReturnSummaryStep({ summary = MOCK_RETURN_SUMMARY }: ReturnSummaryStepProps) {
+export function ReturnSummaryStep({ summary }: ReturnSummaryStepProps) {
+  if (!summary) {
+    return (
+      <div data-testid="return-summary-empty">
+        <EmptyState
+          variant="no-results"
+          compact
+          title="Assignment summary unavailable"
+          description="Return context could not be loaded. Go back and open return from an active assignment."
+        />
+      </div>
+    );
+  }
+
   return (
-    <div className="grid gap-4">
+    <div className="grid gap-4" data-testid="return-summary-section">
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div>
           <p className="font-mono text-xs text-muted-foreground">{summary.assetCode}</p>
@@ -37,9 +49,6 @@ export function ReturnSummaryStep({ summary = MOCK_RETURN_SUMMARY }: ReturnSumma
           <dd>{summary.deliveryReferenceNumber}</dd>
         </div>
       </dl>
-      <p className="text-xs text-muted-foreground">
-        {summary === MOCK_RETURN_SUMMARY ? "Demo summary — live data loads in the workflow container." : null}
-      </p>
     </div>
   );
 }

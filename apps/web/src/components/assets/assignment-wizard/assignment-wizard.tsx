@@ -12,22 +12,24 @@ import { EmployeeStep } from "@/components/assets/assignment-wizard/steps/employ
 import { IssuedItemsStep } from "@/components/assets/assignment-wizard/steps/issued-items-step";
 import type {
   WizardAssetOption,
+  WizardEmployeeOption,
   WizardIssuedItemOption,
   WizardSelectOption,
 } from "@/components/assets/assignment-wizard/assignment-wizard-mapper";
 import {
   ASSIGNMENT_WIZARD_STEPS,
   EMPTY_ASSIGNMENT_WIZARD_STATE,
+  PREFILLED_ASSIGNMENT_WIZARD_STEPS,
   type AssignmentWizardState,
 } from "@/components/assets/assignment-wizard/wizard-types";
-import { validateAssignmentStep } from "@/components/assets/assignment-wizard/wizard-validation";
+import { validateAssignmentStepId } from "@/components/assets/assignment-wizard/wizard-validation";
 
 export type AssignmentWizardProps = {
   loading?: boolean;
   saving?: boolean;
   branchLabel?: string;
   initialState?: Partial<AssignmentWizardState>;
-  employees?: WizardSelectOption[];
+  employees?: WizardEmployeeOption[];
   assets?: WizardAssetOption[];
   issuedItems?: WizardIssuedItemOption[];
   onCancel?: () => void;
@@ -36,6 +38,12 @@ export type AssignmentWizardProps = {
   onAssetChange?: (assetId: string) => void;
   /** Last-step primary action label (container may pass Submit). */
   finishLabel?: string;
+  /** View-only mode (no edits). */
+  readOnly?: boolean;
+  /** Lock asset picklist (e.g. post-activation). */
+  lockAsset?: boolean;
+  /** Query/drawer-provided asset id; show read-only asset step and skip duplicate pick. */
+  prefilledAsset?: boolean;
 };
 
 export function AssignmentWizard({
@@ -51,7 +59,11 @@ export function AssignmentWizard({
   onFinish,
   onAssetChange,
   finishLabel = "Save draft",
+  readOnly,
+  lockAsset,
+  prefilledAsset = false,
 }: AssignmentWizardProps) {
+  const steps = prefilledAsset ? PREFILLED_ASSIGNMENT_WIZARD_STEPS : ASSIGNMENT_WIZARD_STEPS;
   const [step, setStep] = useState(0);
   const [maxVisited, setMaxVisited] = useState(0);
   const [state, setState] = useState<AssignmentWizardState>({
@@ -70,35 +82,35 @@ export function AssignmentWizard({
     (p: Partial<AssignmentWizardState>) => {
       setState((s) => {
         const next = { ...s, ...p };
-        if (p.assetId && p.assetId !== s.assetId) {
-          onAssetChange?.(p.assetId);
-        }
         return next;
       });
+      if (p.assetId) {
+        queueMicrotask(() => onAssetChange?.(p.assetId!));
+      }
       setStepError(null);
     },
     [onAssetChange],
   );
 
   const goTo = useCallback((index: number) => {
-    if (index < 0 || index >= ASSIGNMENT_WIZARD_STEPS.length) return;
+    if (index < 0 || index >= steps.length) return;
     setStep(index);
     setMaxVisited((m) => Math.max(m, index));
     setStepError(null);
-  }, []);
+  }, [steps.length]);
 
   const tryNext = useCallback(() => {
-    const err = validateAssignmentStep(step, state);
+    const err = validateAssignmentStepId(steps[step]?.id ?? "", state);
     if (err) {
       setStepError(err);
       return;
     }
     goTo(step + 1);
-  }, [goTo, state, step]);
+  }, [goTo, state, step, steps]);
 
   const tryFinish = useCallback(() => {
-    for (let i = 0; i < ASSIGNMENT_WIZARD_STEPS.length - 1; i += 1) {
-      const err = validateAssignmentStep(i, state);
+    for (let i = 0; i < steps.length - 1; i += 1) {
+      const err = validateAssignmentStepId(steps[i]?.id ?? "", state);
       if (err) {
         setStepError(err);
         goTo(i);
@@ -106,10 +118,10 @@ export function AssignmentWizard({
       }
     }
     onFinish?.(state);
-  }, [goTo, onFinish, state]);
+  }, [goTo, onFinish, state, steps]);
 
   const busy = Boolean(loading || saving);
-  const stepMeta = ASSIGNMENT_WIZARD_STEPS[step];
+  const stepMeta = steps[step];
   const assetOptionsForReview: WizardSelectOption[] =
     assets?.map((a) => ({ id: a.id, label: `${a.code} — ${a.label}` })) ?? [];
 
@@ -121,12 +133,12 @@ export function AssignmentWizard({
       loading={loading}
       progress={
         <div className="lg:hidden">
-          <WizardProgressBar currentIndex={step} totalSteps={ASSIGNMENT_WIZARD_STEPS.length} />
+          <WizardProgressBar currentIndex={step} totalSteps={steps.length} />
         </div>
       }
       sidebar={
         <WizardStepper
-          steps={ASSIGNMENT_WIZARD_STEPS}
+          steps={steps}
           currentIndex={step}
           maxVisitedIndex={maxVisited}
           onStepClick={goTo}
@@ -134,17 +146,30 @@ export function AssignmentWizard({
         />
       }
       footer={
-        <WizardFooter
-          isFirst={step === 0}
-          isLast={step === ASSIGNMENT_WIZARD_STEPS.length - 1}
-          loading={busy}
-          finishLabel={finishLabel}
-          onBack={() => goTo(step - 1)}
-          onNext={tryNext}
-          onCancel={() => onCancel?.()}
-          onSaveDraft={() => onSaveDraft?.(state)}
-          onFinish={tryFinish}
-        />
+        readOnly ? (
+          <WizardFooter
+            isFirst={step === 0}
+            isLast={step === steps.length - 1}
+            loading={busy}
+            finishLabel="Close"
+            onBack={() => goTo(step - 1)}
+            onNext={tryNext}
+            onCancel={() => onCancel?.()}
+            onFinish={() => onCancel?.()}
+          />
+        ) : (
+          <WizardFooter
+            isFirst={step === 0}
+            isLast={step === steps.length - 1}
+            loading={busy}
+            finishLabel={finishLabel}
+            onBack={() => goTo(step - 1)}
+            onNext={tryNext}
+            onCancel={() => onCancel?.()}
+            onSaveDraft={() => onSaveDraft?.(state)}
+            onFinish={tryFinish}
+          />
+        )
       }
     >
       {stepError ? (
@@ -152,13 +177,33 @@ export function AssignmentWizard({
           {stepError}
         </p>
       ) : null}
-      {step === 0 ? (
-        <EmployeeStep state={state} onChange={patch} showAdvancedAllocation employees={employees} />
+      {stepMeta?.id === "employee" ? (
+        <EmployeeStep
+          state={state}
+          onChange={patch}
+          showAdvancedAllocation
+          employees={employees}
+          readOnly={readOnly}
+          loading={loading}
+        />
       ) : null}
-      {step === 1 ? <AssetStep state={state} onChange={patch} assets={assets} /> : null}
-      {step === 2 ? <IssuedItemsStep state={state} onChange={patch} items={issuedItems} /> : null}
-      {step === 3 ? <DeliveryStep state={state} onChange={patch} /> : null}
-      {step === 4 ? (
+      {stepMeta?.id === "asset" ? (
+        <AssetStep
+          state={state}
+          onChange={patch}
+          assets={assets}
+          prefilledAsset={prefilledAsset}
+          lockAsset={prefilledAsset || lockAsset}
+          readOnly={readOnly}
+        />
+      ) : null}
+      {stepMeta?.id === "issued-items" ? (
+        <IssuedItemsStep state={state} onChange={patch} items={issuedItems} readOnly={readOnly} />
+      ) : null}
+      {stepMeta?.id === "delivery" ? (
+        <DeliveryStep state={state} onChange={patch} readOnly={readOnly} />
+      ) : null}
+      {stepMeta?.id === "review" ? (
         <AssignmentReviewStep
           state={state}
           employees={employees}

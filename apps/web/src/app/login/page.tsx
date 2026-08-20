@@ -1,7 +1,6 @@
 "use client";
 
 import { FormEvent, useState } from "react";
-import { useRouter } from "next/navigation";
 import Link from "next/link";
 
 import { Button } from "@/components/ui/button";
@@ -17,7 +16,6 @@ import { env } from "@/utils/env";
 import { cn } from "@/lib/utils";
 
 export default function LoginPage() {
-  const router = useRouter();
   const [email, setEmail] = useState(env.demoEmail);
   const [password, setPassword] = useState(env.demoPassword || DEMO_PASSWORD);
   const [error, setError] = useState<string | null>(null);
@@ -29,18 +27,23 @@ export default function LoginPage() {
     setError(null);
   }
 
-  async function onSubmit(event: FormEvent) {
+  async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setLoading(true);
     setError(null);
     try {
-      const trimmed = email.trim();
-      await authService.login(trimmed, password);
-      router.replace(getPostLoginRedirect(trimmed));
-      router.refresh();
+      const formData = new FormData(event.currentTarget);
+      const trimmed =
+        String(formData.get("email") ?? email).trim() || email.trim();
+      const nextPassword = String(formData.get("password") ?? password) || password;
+      setEmail(trimmed);
+      setPassword(nextPassword);
+      await authService.login(trimmed, nextPassword);
+      const href = getPostLoginRedirect(trimmed);
+      // Hard navigation so post-login always lands (client soft-replace can stall).
+      window.location.assign(href);
     } catch (err) {
       setError(err instanceof ApiClientError ? err.message : "Login failed");
-    } finally {
       setLoading(false);
     }
   }
@@ -93,6 +96,7 @@ export default function LoginPage() {
                 </label>
                 <Input
                   id="email"
+                  name="email"
                   type="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
@@ -110,6 +114,7 @@ export default function LoginPage() {
                 </label>
                 <Input
                   id="password"
+                  name="password"
                   type="password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}

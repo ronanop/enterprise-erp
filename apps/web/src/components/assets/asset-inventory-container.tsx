@@ -3,12 +3,17 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { AssetInventoryWorkspace } from "@/components/assets/asset-inventory-workspace";
+import { consumeInventoryArrival } from "@/components/assets/inventory/inventory-arrival";
+import { consumeInventoryFocusAsset } from "@/components/assets/inventory/inventory-focus";
 import {
   mapInventoryRowToDrawerData,
 } from "@/components/assets/inventory/interaction/inventory-drawer.mapper";
-import type { InventoryMenuActionId } from "@/components/assets/inventory/interaction/inventory-interaction.types";
-import type { InventoryQuickLinkId } from "@/components/assets/inventory/interaction/inventory-interaction.types";
-import type { AssetDetailDrawerData } from "@/components/assets/inventory/interaction/inventory-interaction.types";
+import type {
+  AssetDetailDrawerActionId,
+  AssetDetailDrawerData,
+  InventoryMenuActionId,
+  InventoryQuickLinkId,
+} from "@/components/assets/inventory/interaction/inventory-interaction.types";
 import { dispatchInventoryQuickLink } from "@/components/assets/navigation/asset-navigation";
 import {
   buildInventoryActionPermissions,
@@ -51,7 +56,17 @@ import {
   assetOperationsService,
   filterActiveCategories,
 } from "@/services/assets-service";
+import { resolveDemoCategories } from "@/components/assets/demo-asset-master";
+import {
+  enrichInventoryRowForDemo,
+  listDemoRegisteredAssets,
+  mapDemoRegisteredToInventoryRows,
+  setOperationalStatusOverride,
+} from "@/components/assets/demo-registered-assets";
 import { ApiClientError } from "@/services/api-client";
+import type { OperationalStatusValue } from "@/components/assets/shared/asset-status";
+import { assetRegisterService } from "@/services/assets-service";
+
 
 const PAGE_SIZE = 25;
 
@@ -67,6 +82,24 @@ const DEFAULT_UI_SNAPSHOT: InventoryUiSnapshot = {
 function readInventoryUiOnMount(): InventoryUiSnapshot {
   if (typeof window === "undefined") return DEFAULT_UI_SNAPSHOT;
   return peekInventoryUiSnapshot() ?? DEFAULT_UI_SNAPSHOT;
+}
+
+function readInventoryEntryOnMount() {
+  const arrival = consumeInventoryArrival();
+  if (arrival) {
+    return {
+      initialUi: DEFAULT_UI_SNAPSHOT,
+      focusAssetId: arrival.assetId,
+      successToastMessage: arrival.toastMessage,
+      reopenDrawer: arrival.reason === "issue" || arrival.reason === "return",
+    };
+  }
+  return {
+    initialUi: readInventoryUiOnMount(),
+    focusAssetId: consumeInventoryFocusAsset(),
+    successToastMessage: null,
+    reopenDrawer: false,
+  };
 }
 
 export async function fetchInventoryPage(input: {
@@ -95,26 +128,64 @@ export async function fetchInventoryPage(input: {
 
   const [assetList, assignmentList] = await Promise.all([
     listAssets(query),
-    listAssignments({ page: 1, page_size: 500, branch_id }),
+    listAssignments({ page: 1, page_size: 200, branch_id }),
   ]);
 
   return { assetList, assignmentList };
 }
 
-export function AssetInventoryContainer() {
+export type AssetInventoryContainerProps = {
+  /** Controlled branch (unified with operations dashboard). */
+  branchId?: string;
+  onBranchChange?: (branchId: string) => void;
+  /** Section chrome when embedded in Asset Operations workspace. */
+  embedded?: boolean;
+  /** Register export handler with parent (e.g. Quick Action Export). */
+  onRegisterExport?: (runExport: () => void) => void;
+  /** Hide inline quick search when sticky global search owns filtering. */
+  hideQuickSearch?: boolean;
+  /** Applied global search (reuses inventory `filters.search` / API `q`). */
+  forcedSearch?: string;
+  /** Empty-register CTA (Add Asset). Defaults to register wizard. */
+  onAddAssetEmpty?: () => void;
+};
+
+export function AssetInventoryContainer({
+  branchId: controlledBranchId,
+  onBranchChange,
+  embedded = false,
+  onRegisterExport,
+  hideQuickSearch = false,
+  forcedSearch,
+  onAddAssetEmpty,
+}: AssetInventoryContainerProps = {}) {
   const navigation = useAssetNavigation();
+  const handleAddAsset = useCallback(() => {
+    if (onAddAssetEmpty) onAddAssetEmpty();
+    else navigation.openRegisterNew();
+  }, [navigation, onAddAssetEmpty]);
   const { can } = useUserPermissions();
   const actionPermissions = useMemo(() => buildInventoryActionPermissions(can), [can]);
   const quickLinkPermissions = useMemo(() => buildInventoryQuickLinkPermissions(can), [can]);
+  const entryRef = useRef(readInventoryEntryOnMount());
+  const entryState = entryRef.current;
 
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [drawerRow, setDrawerRow] = useState<InventoryRowViewModel | null>(null);
   const [drawerData, setDrawerData] = useState<AssetDetailDrawerData | null>(null);
 
-  const initialUiRef = useRef(readInventoryUiOnMount());
+  const initialUiRef = useRef(entryState.initialUi);
   const initialUi = initialUiRef.current;
   const [preset, setPreset] = useState<InventoryPresetId>(initialUi.preset);
-  const [headerBranchId, setHeaderBranchId] = useState(initialUi.headerBranchId);
+  const [internalBranchId, setInternalBranchId] = useState(initialUi.headerBranchId);
+  const headerBranchId = controlledBranchId ?? internalBranchId;
+  const setHeaderBranchId = useCallback(
+    (id: string) => {
+      if (onBranchChange) onBranchChange(id);
+      else setInternalBranchId(id);
+    },
+    [onBranchChange],
+  );
   const [draftFilters, setDraftFilters] = useState<InventoryFilterValues>(initialUi.draftFilters);
   const [appliedFilters, setAppliedFilters] = useState<InventoryFilterValues>(initialUi.appliedFilters);
   const [quickSearch, setQuickSearch] = useState(initialUi.quickSearch);
@@ -128,6 +199,11 @@ export function AssetInventoryContainer() {
   const [exporting, setExporting] = useState(false);
   const [exportError, setExportError] = useState<string | null>(null);
   const [exportSuccess, setExportSuccess] = useState<string | null>(null);
+  const [highlightedAssetId, setHighlightedAssetId] = useState<string | null>(entryState.focusAssetId);
+  const [successToastMessage, setSuccessToastMessage] = useState<string | null>(
+    entryState.successToastMessage,
+  );
+  const [reopenDrawerAfterLoad, setReopenDrawerAfterLoad] = useState(entryState.reopenDrawer);
 
   const [branches, setBranches] = useState<Array<{ id: string; label: string }>>([]);
   const [departments, setDepartments] = useState<Array<{ id: string; label: string }>>([]);
@@ -147,7 +223,12 @@ export function AssetInventoryContainer() {
       setBranches(branchOpts);
       setDepartments(deptOpts);
       setEmployeeLabels(Object.fromEntries(empOpts.map((e) => [e.id, e.label])));
-      setCategories(filterActiveCategories(catRes.items));
+      setCategories(
+        resolveDemoCategories(filterActiveCategories(catRes.items)).map((c) => ({
+          id: c.id,
+          category_name: c.category_name,
+        })),
+      );
     })();
   }, []);
 
@@ -186,15 +267,41 @@ export function AssetInventoryContainer() {
         assignmentsByAssetId,
         assignmentHistoryByAssetId,
         employeeLabels,
-      });
-      const filtered = applyClientInventoryFilters(mapped, appliedFilters, assetList.items);
+      }).map(enrichInventoryRowForDemo);
+      const presetStatus = PRESET_OPERATIONAL_STATUS[preset];
+      const filterStatus = appliedFilters.operationalStatus || undefined;
+      const statusGate = filterStatus || presetStatus;
+      const demoRows = mapDemoRegisteredToInventoryRows(listDemoRegisteredAssets()).filter(
+        (row) =>
+          !statusGate ||
+          String(row.operationalStatus).toUpperCase() === String(statusGate).toUpperCase(),
+      );
+      const demoIds = new Set(demoRows.map((r) => r.id));
+      const merged = [
+        ...demoRows,
+        ...mapped.filter((r) => !demoIds.has(r.id)),
+      ];
+      const filtered = applyClientInventoryFilters(merged, appliedFilters, assetList.items);
 
       setRows(filtered);
-      setTotal(assetList.total);
+      setTotal(Math.max(assetList.total + demoRows.length, filtered.length));
     } catch (err) {
-      setErrorMessage(err instanceof ApiClientError ? err.message : "Failed to load inventory");
-      setRows([]);
-      setTotal(0);
+      const demoRows = mapDemoRegisteredToInventoryRows(listDemoRegisteredAssets());
+      if (demoRows.length > 0) {
+        const presetStatus = PRESET_OPERATIONAL_STATUS[preset];
+        const gated = demoRows.filter(
+          (row) =>
+            !presetStatus ||
+            String(row.operationalStatus).toUpperCase() === String(presetStatus).toUpperCase(),
+        );
+        setRows(gated.map(enrichInventoryRowForDemo));
+        setTotal(gated.length);
+        setErrorMessage(null);
+      } else {
+        setErrorMessage(err instanceof ApiClientError ? err.message : "Failed to load inventory");
+        setRows([]);
+        setTotal(0);
+      }
     } finally {
       setLoading(false);
     }
@@ -287,7 +394,7 @@ export function AssetInventoryContainer() {
 
   const onMenuAction = useCallback(
     (action: InventoryMenuActionId, row: InventoryRowViewModel) => {
-      if (action === "assign" || action === "return") {
+      if (action === "assign" || action === "return" || action === "dispose") {
         snapshotUiForWorkflow();
       }
       handleInventoryMenuWorkflow({
@@ -295,6 +402,7 @@ export function AssetInventoryContainer() {
         assetId: row.id,
         navigation,
         closeDrawer,
+        operationalStatus: row.operationalStatus,
       });
     },
     [closeDrawer, navigation, snapshotUiForWorkflow],
@@ -305,6 +413,90 @@ export function AssetInventoryContainer() {
       dispatchInventoryQuickLink(navigation, link, row.id);
     },
     [navigation],
+  );
+
+  const onDrawerAction = useCallback(
+    (action: AssetDetailDrawerActionId, row: InventoryRowViewModel) => {
+      const status = row.operationalStatus;
+      switch (action) {
+        case "assign":
+          snapshotUiForWorkflow();
+          handleInventoryMenuWorkflow({
+            action: "assign",
+            assetId: row.id,
+            navigation,
+            closeDrawer,
+            operationalStatus: status,
+          });
+          break;
+        case "return":
+          snapshotUiForWorkflow();
+          handleInventoryMenuWorkflow({
+            action: "return",
+            assetId: row.id,
+            navigation,
+            closeDrawer,
+            operationalStatus: status,
+          });
+          break;
+        case "dispose":
+          snapshotUiForWorkflow();
+          handleInventoryMenuWorkflow({
+            action: "dispose",
+            assetId: row.id,
+            navigation,
+            closeDrawer,
+            operationalStatus: status,
+          });
+          break;
+        case "edit":
+          handleInventoryMenuWorkflow({
+            action: "edit",
+            assetId: row.id,
+            navigation,
+            closeDrawer,
+            operationalStatus: status,
+          });
+          break;
+        case "delete":
+          handleInventoryMenuWorkflow({
+            action: "delete",
+            assetId: row.id,
+            navigation,
+            closeDrawer,
+            operationalStatus: status,
+          });
+          break;
+        case "history":
+          handleInventoryMenuWorkflow({
+            action: "history",
+            assetId: row.id,
+            navigation,
+            closeDrawer,
+            operationalStatus: status,
+          });
+          break;
+        case "transfer":
+          navigation.openTransfer(row.id);
+          break;
+        case "maintenance":
+          navigation.openMaintenance(row.id);
+          break;
+        case "portal":
+          navigation.openPortal(row.id);
+          break;
+        case "printLabel":
+        case "printQr":
+        case "printBarcode":
+          navigation.openQr(row.id);
+          break;
+        default: {
+          const _exhaustive: never = action;
+          return _exhaustive;
+        }
+      }
+    },
+    [closeDrawer, navigation, snapshotUiForWorkflow],
   );
 
   const runExport = useCallback(
@@ -352,6 +544,79 @@ export function AssetInventoryContainer() {
     ],
   );
 
+  useEffect(() => {
+    if (!onRegisterExport) return;
+    onRegisterExport(() => {
+      void runExport("xlsx");
+    });
+  }, [onRegisterExport, runExport]);
+
+  useEffect(() => {
+    if (controlledBranchId == null) return;
+    setPage(1);
+  }, [controlledBranchId]);
+
+  useEffect(() => {
+    if (!successToastMessage) return;
+    const timer = window.setTimeout(() => setSuccessToastMessage(null), 3200);
+    return () => window.clearTimeout(timer);
+  }, [successToastMessage]);
+
+  useEffect(() => {
+    if (!drawerOpen || !drawerRow?.id) return;
+    const fresh = rows.find((row) => row.id === drawerRow.id);
+    if (!fresh) return;
+    setDrawerRow(fresh);
+    setDrawerData(mapInventoryRowToDrawerData(fresh));
+  }, [drawerOpen, drawerRow?.id, rows]);
+
+  useEffect(() => {
+    if (!reopenDrawerAfterLoad || loading || !highlightedAssetId) return;
+    const row = rows.find((item) => item.id === highlightedAssetId);
+    if (!row) return;
+    setDrawerRow(row);
+    setDrawerData(mapInventoryRowToDrawerData(row));
+    setDrawerOpen(true);
+    setReopenDrawerAfterLoad(false);
+  }, [highlightedAssetId, loading, reopenDrawerAfterLoad, rows]);
+
+  useEffect(() => {
+    if (forcedSearch === undefined) return;
+    const next = forcedSearch.trim();
+    setQuickSearch(next);
+    setDraftFilters((f) => ({ ...f, search: next }));
+    setAppliedFilters((f) => ({ ...f, search: next }));
+    setPage(1);
+  }, [forcedSearch]);
+
+  useEffect(() => {
+    if (!highlightedAssetId || loading) return;
+    const rowPresent = rows.some((row) => row.id === highlightedAssetId);
+    if (!rowPresent) return;
+    const timer = window.setTimeout(() => setHighlightedAssetId(null), 3200);
+    return () => window.clearTimeout(timer);
+  }, [highlightedAssetId, loading, rows]);
+
+  const onOperationalStatusChange = useCallback(
+    (row: InventoryRowViewModel, status: OperationalStatusValue) => {
+      setOperationalStatusOverride(row.id, status);
+      setRows((prev) =>
+        prev.map((item) =>
+          item.id === row.id
+            ? enrichInventoryRowForDemo({ ...item, operationalStatus: status })
+            : item,
+        ),
+      );
+      setSuccessToastMessage(`Operational status set to ${status.replaceAll("_", " ").toLowerCase()}.`);
+      void assetRegisterService
+        .update(row.id, { operational_status: status })
+        .catch(() => {
+          /* demo override already applied locally */
+        });
+    },
+    [],
+  );
+
   return (
     <AssetInventoryWorkspace
       preset={preset}
@@ -378,6 +643,8 @@ export function AssetInventoryContainer() {
       pageSize={PAGE_SIZE}
       onPageChange={setPage}
       loading={loading}
+      successToastMessage={successToastMessage}
+      highlightedRowId={highlightedAssetId}
       errorMessage={errorMessage}
       onRetry={() => setReloadToken((t) => t + 1)}
       expandedRowIds={expandedRowIds}
@@ -385,17 +652,23 @@ export function AssetInventoryContainer() {
       actionPermissions={actionPermissions}
       onViewRow={onViewRow}
       onMenuAction={onMenuAction}
+      onOperationalStatusChange={onOperationalStatusChange}
       drawerOpen={drawerOpen}
       onDrawerOpenChange={setDrawerOpen}
       drawerData={drawerData}
       drawerRow={drawerRow}
       drawerQuickLinkEnabled={quickLinkPermissions}
       onDrawerQuickLink={onDrawerQuickLink}
+      onDrawerAction={onDrawerAction}
       exportBusy={exporting}
       exportError={exportError}
       exportSuccess={exportSuccess}
       onExportExcel={() => void runExport("xlsx")}
       onExportCsv={() => void runExport("csv")}
+      embedded={embedded}
+      hideBranchSelector={controlledBranchId != null}
+      hideQuickSearch={hideQuickSearch}
+      onAddAssetEmpty={handleAddAsset}
     />
   );
 }

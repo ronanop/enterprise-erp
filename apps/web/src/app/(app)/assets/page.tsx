@@ -1,5 +1,5 @@
-import { AssetOperationsContainer } from "@/components/assets/asset-operations-container";
+import { AssetModuleHub } from "@/components/assets/asset-module-hub";
 
 export default function AssetsPage() {
-  return <AssetOperationsContainer />;
+  return <AssetModuleHub />;
 }

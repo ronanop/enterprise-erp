@@ -21,6 +21,8 @@ export type RegisterAssignmentLike = {
   delivery_reference_status?: string | null;
   assignment_remarks?: string | null;
   return_remarks?: string | null;
+  /** Present when API includes return condition on returned assignments. */
+  return_condition?: string | null;
 };
 
 /** Excel Employee Asset Register columns → ERP ownership / source. */
@@ -265,6 +267,7 @@ export type AssignmentHistoryEntryView = {
   deliveryReferenceStatus: string;
   assignmentRemarks: string;
   returnRemarks: string;
+  returnCondition: string;
 };
 
 function formatShortDate(value: unknown): string {
@@ -314,6 +317,7 @@ export function mapAssignmentHistoryEntries(
       deliveryReferenceStatus: formatDeliveryReferenceStatus(row.delivery_reference_status),
       assignmentRemarks: formatAssignmentRemarksDisplay(row.assignment_remarks),
       returnRemarks: displayOrDash(row.return_remarks),
+      returnCondition: displayOrDash(row.return_condition),
     }));
 }
 

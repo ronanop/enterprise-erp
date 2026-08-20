@@ -3708,6 +3708,32 @@ def seed_assets(db, tenant_id, company_id, branch_id, admin_id, dept_id, employe
             "updated_by": admin_id,
         },
     )
+    ensure(
+        db,
+        AstAssetCategory,
+        {"tenant_id": tenant_id, "company_id": company_id, "category_code": "FURN"},
+        {
+            "category_name": "Furniture & Fixtures",
+            "default_useful_life_months": 60,
+            "default_depreciation_method": "straight_line",
+            "status": "active",
+            "created_by": admin_id,
+            "updated_by": admin_id,
+        },
+    )
+    ensure(
+        db,
+        AstAssetCategory,
+        {"tenant_id": tenant_id, "company_id": company_id, "category_code": "VEH"},
+        {
+            "category_name": "Vehicles",
+            "default_useful_life_months": 48,
+            "default_depreciation_method": "straight_line",
+            "status": "active",
+            "created_by": admin_id,
+            "updated_by": admin_id,
+        },
+    )
     laptop_custodian = employees[3] if len(employees) > 3 else employees[0]
     asset = ensure(
         db,

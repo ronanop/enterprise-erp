@@ -21,13 +21,14 @@ const updateDraft = vi.fn();
 const submitDraft = vi.fn();
 const activateAssignment = vi.fn();
 const listReadyAssets = vi.fn();
-const listComponents = vi.fn();
 const formatError = vi.fn((err: unknown, fb: string) => (err instanceof Error ? err.message : fb));
 
 const loadAssignment = vi.fn();
 const findActiveAssignmentForAsset = vi.fn();
 const getAsset = vi.fn();
 const returnAsset = vi.fn();
+
+const listComponents = vi.fn();
 
 const issueService = {
   createDraft,
@@ -36,6 +37,7 @@ const issueService = {
   submitDraft,
   activateAssignment,
   listReadyAssets,
+  getAsset,
   listComponents,
   formatError,
 };
@@ -112,7 +114,7 @@ describe("draft resume via query → props", () => {
         listEmployees={listEmployees}
       />,
     );
-    await waitFor(() => expect(listComponents).toHaveBeenCalledWith("a1"));
+    await waitFor(() => expect(listReadyAssets).toHaveBeenCalled());
     expect(loadDraft).not.toHaveBeenCalled();
   });
 

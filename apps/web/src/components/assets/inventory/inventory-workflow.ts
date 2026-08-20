@@ -7,9 +7,10 @@ import type { InventoryMenuActionId } from "@/components/assets/inventory/intera
 import type { AssetNavigation } from "@/components/assets/navigation/asset-navigation";
 import { dispatchInventoryMenuAction } from "@/components/assets/navigation/asset-navigation";
 import { assignmentNavigationPaths } from "@/components/assets/navigation/assignment-navigation";
+import { isStatusActionAllowed } from "@/components/assets/inventory/status-driven-actions";
 
 export function isInventoryWorkflowAction(action: InventoryMenuActionId): boolean {
-  return action === "assign" || action === "return";
+  return action === "assign" || action === "return" || action === "dispose";
 }
 
 /**
@@ -21,11 +22,26 @@ export function handleInventoryMenuWorkflow(input: {
   assetId: string;
   navigation: AssetNavigation;
   closeDrawer: () => void;
+  operationalStatus?: string | null;
 }): void {
+  if (input.action === "assign" && !isStatusActionAllowed(input.operationalStatus, "assign")) {
+    return;
+  }
+  if (input.action === "return" && !isStatusActionAllowed(input.operationalStatus, "return")) {
+    return;
+  }
+  if (input.action === "dispose" && !isStatusActionAllowed(input.operationalStatus, "dispose")) {
+    return;
+  }
   if (isInventoryWorkflowAction(input.action)) {
     input.closeDrawer();
   }
-  dispatchInventoryMenuAction(input.navigation, input.action, input.assetId);
+  dispatchInventoryMenuAction(
+    input.navigation,
+    input.action,
+    input.assetId,
+    input.operationalStatus,
+  );
 }
 
 /** Map existing navigation href assetId into wizard container seed (page host). */

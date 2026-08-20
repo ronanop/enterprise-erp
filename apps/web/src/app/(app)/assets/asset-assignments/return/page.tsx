@@ -9,6 +9,10 @@ import {
   returnPropsFromSearchParams,
 } from "@/components/assets/assignment-wizard/assignment-wizard-page-props";
 import { WizardLoadErrorBanner } from "@/components/assets/assignment-wizard/wizard-load-error-banner";
+import {
+  buildReturnSuccessToast,
+  stashInventoryArrival,
+} from "@/components/assets/inventory/inventory-arrival";
 import { markInventoryStale } from "@/components/assets/inventory/inventory-refresh";
 import {
   assignmentNavigationPaths,
@@ -61,9 +65,20 @@ export default function ReturnAssetWizardPage() {
         assetId={mapped.assetId}
         assignmentId={mapped.assignmentId}
         onCancel={() => assignmentNav.openInventory(mapped.query.assetId)}
-        onSuccess={() => {
-          markInventoryStale({ reason: "return", assetId: mapped.query.assetId });
-          assignmentNav.openInventory(mapped.query.assetId);
+        onSuccess={(result) => {
+          const assetId =
+            (result.assetId || mapped.query.assetId || "").trim() || undefined;
+          if (assetId) {
+            stashInventoryArrival({
+              reason: "return",
+              assetId,
+              toastMessage: buildReturnSuccessToast(result.assetName || result.assetCode),
+            });
+            markInventoryStale({ reason: "return", assetId });
+          } else {
+            markInventoryStale({ reason: "return" });
+          }
+          assignmentNav.openInventory(assetId);
         }}
       />
       <p className="text-center text-xs text-muted-foreground">

@@ -11,6 +11,7 @@ import {
   WizardProgressBar,
   WizardStepper,
   ASSIGNMENT_WIZARD_STEPS,
+  PREFILLED_ASSIGNMENT_WIZARD_STEPS,
   RETURN_WIZARD_STEPS,
   EMPTY_ASSIGNMENT_WIZARD_STATE,
 } from "@/components/assets/assignment-wizard";
@@ -105,10 +106,10 @@ describe("validateAssignmentStep", () => {
         deliveryReferenceStatus: "issued",
         deliveryReferenceNumber: "",
       }),
-    ).toMatch(/reference number/i);
+    ).toMatch(/required/i);
   });
 
-  it("allows pending without delivery number", () => {
+  it("allows Not Applicable (pending) without delivery number", () => {
     expect(
       validateAssignmentStep(3, {
         ...EMPTY_ASSIGNMENT_WIZARD_STATE,
@@ -116,6 +117,16 @@ describe("validateAssignmentStep", () => {
         deliveryReferenceNumber: "",
       }),
     ).toBeNull();
+  });
+
+  it("requires delivery number when status received", () => {
+    expect(
+      validateAssignmentStep(3, {
+        ...EMPTY_ASSIGNMENT_WIZARD_STATE,
+        deliveryReferenceStatus: "received",
+        deliveryReferenceNumber: "",
+      }),
+    ).toMatch(/required/i);
   });
 });
 
@@ -156,7 +167,7 @@ describe("WizardStepper", () => {
         onStepClick={onStepClick}
       />,
     );
-    await user.click(screen.getByRole("button", { name: /Employee/i }));
+    await user.click(screen.getByRole("button", { name: /Employee Information/i }));
     expect(onStepClick).toHaveBeenCalledWith(0);
   });
 });
@@ -221,7 +232,7 @@ describe("AssignmentWizard", () => {
   it("renders issue asset title and first step", () => {
     render(<AssignmentWizard onCancel={vi.fn()} />);
     expect(screen.getByRole("heading", { name: /Issue asset/i })).toBeInTheDocument();
-    expect(screen.getByLabelText(/Employee/i)).toBeInTheDocument();
+    expect(screen.getByTestId("employee-information-section")).toBeInTheDocument();
   });
 
   it("blocks next without employee", async () => {
@@ -229,7 +240,7 @@ describe("AssignmentWizard", () => {
     render(<AssignmentWizard onCancel={vi.fn()} />);
     await user.click(screen.getByRole("button", { name: /Next/i }));
     expect(screen.getByRole("alert")).toHaveTextContent(/employee/i);
-    expect(screen.getByLabelText(/Employee/i)).toBeInTheDocument();
+    expect(screen.getByTestId("employee-information-section")).toBeInTheDocument();
   });
 
   it("advances to asset step when employee preset", async () => {
@@ -241,7 +252,7 @@ describe("AssignmentWizard", () => {
       />,
     );
     await user.click(screen.getByRole("button", { name: /Next/i }));
-    expect(screen.getByText(/Showing demo assets/i)).toBeInTheDocument();
+    expect(screen.getByText(/Select a Ready To Move asset/i)).toBeInTheDocument();
   });
 
   it("reaches review step and calls onFinish", async () => {
@@ -262,9 +273,53 @@ describe("AssignmentWizard", () => {
     await user.click(screen.getByRole("button", { name: /Next/i }));
     await user.click(screen.getByRole("button", { name: /Next/i }));
     await user.click(screen.getByRole("button", { name: /Next/i }));
-    expect(screen.getByText(/save the assignment draft/i)).toBeInTheDocument();
+    expect(screen.getByText(/Confirm to submit this assignment/i)).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: /Save draft/i }));
     expect(onFinish).toHaveBeenCalled();
+  });
+
+  it("starts on read-only asset step when asset is prefilled", () => {
+    render(
+      <AssignmentWizard
+        onCancel={vi.fn()}
+        prefilledAsset
+        initialState={{ assetId: "asset-1" }}
+        assets={[
+          {
+            id: "asset-1",
+            code: "AST-1",
+            label: "ThinkPad",
+            operationalStatus: "READY_TO_MOVE",
+            branchLabel: "HQ",
+          },
+        ]}
+      />,
+    );
+    expect(screen.getByTestId("asset-information-section")).toBeInTheDocument();
+    expect(screen.queryByRole("listbox", { name: /Select asset/i })).not.toBeInTheDocument();
+    expect(screen.getByText(/prefilled from the register drawer/i)).toBeInTheDocument();
+  });
+
+  it("moves from prefilled asset step to employee step", async () => {
+    const user = userEvent.setup();
+    render(
+      <AssignmentWizard
+        onCancel={vi.fn()}
+        prefilledAsset
+        initialState={{ assetId: "asset-1" }}
+        assets={[
+          {
+            id: "asset-1",
+            code: "AST-1",
+            label: "ThinkPad",
+            operationalStatus: "READY_TO_MOVE",
+            branchLabel: "HQ",
+          },
+        ]}
+      />,
+    );
+    await user.click(screen.getByRole("button", { name: /Next/i }));
+    expect(screen.getByTestId("employee-information-section")).toBeInTheDocument();
   });
 
   it("calls onSaveDraft from footer", async () => {
@@ -349,11 +404,12 @@ describe("AssetStep empty state", () => {
 });
 
 describe("IssuedItemsStep empty state", () => {
-  it("shows no accessories message", () => {
+  it("falls back to standard accessory checklist when items empty", () => {
     render(
       <IssuedItemsStep state={EMPTY_ASSIGNMENT_WIZARD_STATE} onChange={vi.fn()} items={[]} />,
     );
-    expect(screen.getByText(/No registered accessories/i)).toBeInTheDocument();
+    expect(screen.getByText("Charger")).toBeInTheDocument();
+    expect(screen.getByText("Other Items")).toBeInTheDocument();
   });
 });
 
@@ -364,13 +420,25 @@ describe("RETURN_WIZARD_STEPS", () => {
 });
 
 describe("ASSIGNMENT_WIZARD_STEPS", () => {
-  it("matches freeze labels", () => {
+  it("matches CRUD section labels", () => {
     expect(ASSIGNMENT_WIZARD_STEPS.map((s) => s.label)).toEqual([
-      "Employee",
-      "Asset",
-      "Issued items",
-      "Delivery",
-      "Review",
+      "Employee Information",
+      "Asset Information",
+      "Issued Items",
+      "Assignment Details",
+      "Review & Confirm",
+    ]);
+  });
+});
+
+describe("PREFILLED_ASSIGNMENT_WIZARD_STEPS", () => {
+  it("starts with asset information for drawer launches", () => {
+    expect(PREFILLED_ASSIGNMENT_WIZARD_STEPS.map((s) => s.id)).toEqual([
+      "asset",
+      "employee",
+      "issued-items",
+      "delivery",
+      "review",
     ]);
   });
 });

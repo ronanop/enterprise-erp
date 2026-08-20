@@ -4,11 +4,19 @@ export type WizardStepMeta = {
 };
 
 export const ASSIGNMENT_WIZARD_STEPS: WizardStepMeta[] = [
-  { id: "employee", label: "Employee" },
-  { id: "asset", label: "Asset" },
-  { id: "issued-items", label: "Issued items" },
-  { id: "delivery", label: "Delivery" },
-  { id: "review", label: "Review" },
+  { id: "employee", label: "Employee Information" },
+  { id: "asset", label: "Asset Information" },
+  { id: "issued-items", label: "Issued Items" },
+  { id: "delivery", label: "Assignment Details" },
+  { id: "review", label: "Review & Confirm" },
+];
+
+export const PREFILLED_ASSIGNMENT_WIZARD_STEPS: WizardStepMeta[] = [
+  { id: "asset", label: "Asset Information" },
+  { id: "employee", label: "Employee Information" },
+  { id: "issued-items", label: "Issued Items" },
+  { id: "delivery", label: "Assignment Details" },
+  { id: "review", label: "Review & Confirm" },
 ];
 
 export const RETURN_WIZARD_STEPS: WizardStepMeta[] = [
@@ -28,6 +36,8 @@ export type AssignmentWizardState = {
   departmentId: string;
   projectId: string;
   expectedReturnAt: string;
+  /** Display / review only — server sets allocated_at on activation. */
+  issuedAt: string;
   assetId: string;
   branchId: string;
   draftId: string;
@@ -50,6 +60,7 @@ export const EMPTY_ASSIGNMENT_WIZARD_STATE: AssignmentWizardState = {
   departmentId: "",
   projectId: "",
   expectedReturnAt: "",
+  issuedAt: "",
   assetId: "",
   branchId: "",
   draftId: "",

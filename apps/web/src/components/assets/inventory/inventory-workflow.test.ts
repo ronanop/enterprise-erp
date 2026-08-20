@@ -9,9 +9,10 @@ import {
 import { createAssetNavigation } from "@/components/assets/navigation/asset-navigation";
 
 describe("isInventoryWorkflowAction", () => {
-  it("detects assign and return", () => {
+  it("detects assign, return, and dispose", () => {
     expect(isInventoryWorkflowAction("assign")).toBe(true);
     expect(isInventoryWorkflowAction("return")).toBe(true);
+    expect(isInventoryWorkflowAction("dispose")).toBe(true);
   });
 
   it("ignores other menu actions", () => {
@@ -54,6 +55,7 @@ describe("handleInventoryMenuWorkflow", () => {
       assetId: "asset-99",
       navigation,
       closeDrawer,
+      operationalStatus: "READY_TO_MOVE",
     });
     expect(closeDrawer).toHaveBeenCalledOnce();
     expect(push).toHaveBeenCalledWith(
@@ -70,6 +72,7 @@ describe("handleInventoryMenuWorkflow", () => {
       assetId: "asset-99",
       navigation,
       closeDrawer,
+      operationalStatus: "ASSIGNED",
     });
     expect(closeDrawer).toHaveBeenCalledOnce();
     expect(push).toHaveBeenCalledWith(
@@ -86,6 +89,7 @@ describe("handleInventoryMenuWorkflow", () => {
       assetId: "asset-99",
       navigation: createAssetNavigation(push),
       closeDrawer,
+      operationalStatus: "READY_TO_MOVE",
     });
     expect(closeDrawer).not.toHaveBeenCalled();
     expect(push).toHaveBeenCalledWith("/assets/assets/asset-99");
@@ -99,8 +103,37 @@ describe("handleInventoryMenuWorkflow", () => {
       assetId: "a1",
       navigation: createAssetNavigation(push),
       closeDrawer,
+      operationalStatus: "READY_TO_MOVE",
     });
     expect(push).toHaveBeenCalledTimes(1);
     expect(closeDrawer).toHaveBeenCalledTimes(1);
+  });
+
+  it("blocks assign when status is ASSIGNED", () => {
+    const push = vi.fn();
+    const closeDrawer = vi.fn();
+    handleInventoryMenuWorkflow({
+      action: "assign",
+      assetId: "a1",
+      navigation: createAssetNavigation(push),
+      closeDrawer,
+      operationalStatus: "ASSIGNED",
+    });
+    expect(closeDrawer).not.toHaveBeenCalled();
+    expect(push).not.toHaveBeenCalled();
+  });
+
+  it("blocks return when status is READY_TO_MOVE", () => {
+    const push = vi.fn();
+    const closeDrawer = vi.fn();
+    handleInventoryMenuWorkflow({
+      action: "return",
+      assetId: "a1",
+      navigation: createAssetNavigation(push),
+      closeDrawer,
+      operationalStatus: "READY_TO_MOVE",
+    });
+    expect(closeDrawer).not.toHaveBeenCalled();
+    expect(push).not.toHaveBeenCalled();
   });
 });

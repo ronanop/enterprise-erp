@@ -67,17 +67,60 @@
 
 ---
 
+## CR-005 — Asset Operations Workspace
+
+**Phase 1 status:** Complete (2026-08-06) — Dashboard Workspace Foundation (frontend layout)  
+**Phase 2 status:** Complete (2026-08-06) — Asset Detail Workspace (tabbed drawer)  
+**Phase 3 status:** Complete (2026-08-06) — Dashboard Operations Panel  
+**Phase 4 status:** Complete (2026-08-06) — Workspace Experience & Productivity Polish
+
+### Delivered (Phase 1)
+
+- Converted `/assets` dashboard into Asset Operations Workspace layout
+- Header: title, workspace subtitle, Branch Selector, Refresh
+- KPI strip via existing dashboard-summary API + `StatCard` (order locked)
+- Embedded existing `AssetInventoryContainer` below KPIs (no new table/page/API)
+- Doc: `CR-005/CR-005-Phase-1-Dashboard-Workspace-Foundation.md`
+
+### Delivered (Phase 2)
+
+- Asset Detail Workspace inside existing drawer (no page leave)
+- Row click opens drawer; ⋮ menu retained
+- Tabs: Overview, Configuration, Assignment, History, Timeline, Documents
+- Header QR/barcode + bottom actions via existing navigation routes
+- Doc: `CR-005/CR-005-Phase-2-Asset-Detail-Workspace.md`
+
+### Delivered (Phase 3)
+
+- Operations quick actions (Add / Allocate / Return / Import / Export) → existing routes/workflows
+- Recent Activity panel (max 10) from existing list APIs
+- Unified branch state for KPIs, inventory, activity
+- Asset Register section chrome (removed duplicate inventory page title when embedded)
+- Doc: `CR-005/CR-005-Phase-3-Dashboard-Operations-Panel.md`
+
+### Delivered (Phase 4)
+
+- Sticky operations toolbar with unified global search (reuses inventory `q`)
+- Compact Asset Health + Pending Actions widgets from existing KPIs/queues
+- Smart empty states; drawer sticky actions; Today/Yesterday/Earlier activity grouping
+- Doc: `CR-005/CR-005-Phase-4-Workspace-Polish.md`
+
+### Entry routes
+
+- `/assets` — simple 3-module hub (Asset · Asset Allocation · Add Asset)
+- `/assets/operations` — full CR-005 Operations Workspace
+
+### Non-goals respected
+
+- No backend / API schema changes
+- No duplicate pages, forms, or workflow engines
+
+---
+
 ## Pending
 
 ### CR-004 — IT Asset Operations & Inventory Management
 
-**Phase 1 status:** Complete (2026-08-03) — documentation only  
+**Status:** Substantially complete through Phase 8C — see `CR-004/CR-004-Implementation-Summary.md`
 
-**Phase 1.1 status:** Complete (2026-08-03) — **architecture lock** (`CR-004-Decision-Log.md`)
-
-- Business analysis, workflow mapping, gap analysis, transition matrix
-- Architecture recommendation + locked decisions (ops status column, engine, no PATCH, derived Current Holder)
-- Implementation roadmap (Phases 2–7)
-- Folder: `docs/08_IMPLEMENTATION/CHANGE_REQUESTS/CR-004/`
-
-**Implementation:** Not started — **Phase 2** (backend foundation) approved to begin when stakeholders sign off decision log
+Folder: `docs/08_IMPLEMENTATION/CHANGE_REQUESTS/CR-004/`

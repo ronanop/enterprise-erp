@@ -74,7 +74,7 @@ beforeEach(() => {
     Promise.resolve({ items: [readyAsset], total: 1, page: 1, page_size: 25 }),
   );
   vi.spyOn(assetOperationsService, "listAssignments").mockImplementation(() =>
-    Promise.resolve({ items: [], total: 0, page: 1, page_size: 500 }),
+    Promise.resolve({ items: [], total: 0, page: 1, page_size: 200 }),
   );
 });
 
@@ -86,7 +86,7 @@ describe("E2E — Inventory → Issue navigation", () => {
     await user.click(screen.getAllByRole("button", { name: /View/ })[0]!);
     expect(screen.getByTestId("asset-detail-drawer")).toBeInTheDocument();
     await user.click(screen.getAllByRole("button", { name: "More actions" })[0]!);
-    await user.click(screen.getByRole("menuitem", { name: "Assign Asset" }));
+    await user.click(screen.getByRole("menuitem", { name: "Allocate Asset" }));
     await waitFor(() => expect(screen.queryByTestId("asset-detail-drawer")).not.toBeInTheDocument());
     expect(push).toHaveBeenCalledTimes(1);
     expect(push).toHaveBeenCalledWith(ASSIGNMENT_DEEP_LINKS.newAsset("asset-99"));
@@ -97,7 +97,7 @@ describe("E2E — Inventory → Issue navigation", () => {
     render(<AssetInventoryContainer />);
     await waitFor(() => expect(screen.getAllByText("AST-99")[0]).toBeInTheDocument());
     await user.click(screen.getAllByRole("button", { name: "More actions" })[0]!);
-    await user.click(screen.getByRole("menuitem", { name: "Assign Asset" }));
+    await user.click(screen.getByRole("menuitem", { name: "Allocate Asset" }));
     const snap = consumeInventoryUiSnapshot();
     expect(snap).not.toBeNull();
     expect(snap?.preset).toBe("all");

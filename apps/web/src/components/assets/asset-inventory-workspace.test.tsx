@@ -60,6 +60,8 @@ function renderWorkspace(overrides: Partial<ComponentProps<typeof AssetInventory
       pageSize={25}
       onPageChange={vi.fn()}
       loading={false}
+      successToastMessage={null}
+      highlightedRowId={null}
       expandedRowIds={new Set()}
       onToggleExpand={vi.fn()}
       {...overrides}
@@ -72,9 +74,18 @@ afterEach(() => cleanup());
 describe("AssetInventoryWorkspace", () => {
   it("renders header and presets", () => {
     renderWorkspace();
-    expect(screen.getByText("IT Asset Inventory")).toBeInTheDocument();
+    expect(screen.getByText("Asset Register")).toBeInTheDocument();
     expect(screen.getByTestId("inventory-preset-tabs")).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "Assigned" })).toBeInTheDocument();
+  });
+
+  it("renders embedded section header without local branch selector", () => {
+    renderWorkspace({ embedded: true, hideBranchSelector: true });
+    expect(screen.getByTestId("asset-register-section-header")).toBeInTheDocument();
+    expect(screen.getByTestId("asset-inventory-workspace").getAttribute("data-embedded")).toBe(
+      "true",
+    );
+    expect(screen.queryByRole("group", { name: "Branch" })).not.toBeInTheDocument();
   });
 
   it("shows table row on desktop", () => {
@@ -99,6 +110,24 @@ describe("AssetInventoryWorkspace", () => {
     expect(onViewRow).toHaveBeenCalledWith(sampleRow);
   });
 
+  it("calls onViewRow when table row clicked", async () => {
+    const user = userEvent.setup();
+    const onViewRow = vi.fn();
+    renderWorkspace({ onViewRow });
+    await user.click(screen.getByTestId("inventory-table-row"));
+    expect(onViewRow).toHaveBeenCalledWith(sampleRow);
+  });
+
+  it("does not open drawer from expand chevron alone", async () => {
+    const user = userEvent.setup();
+    const onViewRow = vi.fn();
+    const onToggleExpand = vi.fn();
+    renderWorkspace({ onViewRow, onToggleExpand });
+    await user.click(screen.getByRole("button", { name: "Expand row" }));
+    expect(onToggleExpand).toHaveBeenCalledWith("1");
+    expect(onViewRow).not.toHaveBeenCalled();
+  });
+
   it("opens drawer when drawerOpen", () => {
     renderWorkspace({
       drawerOpen: true,
@@ -106,14 +135,30 @@ describe("AssetInventoryWorkspace", () => {
       drawerData: {
         assetTag: sampleRow.assetTag,
         laptopName: sampleRow.laptopName,
+        manufacturer: sampleRow.manufacturer,
+        model: sampleRow.model,
         currentHolder: sampleRow.currentHolder,
+        department: sampleRow.department,
+        employeeId: sampleRow.employeeId,
+        location: sampleRow.location,
         configuration: sampleRow.configuration,
+        configurationParts: {
+          cpu: "i7",
+          ram: "16GB",
+          storage: "—",
+          os: "—",
+          accessories: "—",
+        },
         branch: sampleRow.branch,
         operationalStatus: sampleRow.operationalStatus,
         lifecycleStatus: sampleRow.lifecycleStatus,
+        qrValue: "/assets/information-portal/1",
+        timeline: [],
+        history: [],
       },
     });
     expect(screen.getByTestId("asset-detail-drawer")).toBeInTheDocument();
+    expect(screen.getByTestId("drawer-workspace-header")).toBeInTheDocument();
   });
 
   it("shows loading skeleton in table", () => {
@@ -175,5 +220,17 @@ describe("AssetInventoryWorkspace", () => {
     await user.click(screen.getByTestId("inventory-export-trigger"));
     await user.click(screen.getByTestId("inventory-export-xlsx"));
     expect(onExportExcel).toHaveBeenCalledOnce();
+  });
+
+  it("renders success toast when message provided", () => {
+    renderWorkspace({ successToastMessage: "Asset registered successfully." });
+    expect(screen.getByTestId("inventory-success-toast")).toHaveTextContent(
+      "Asset registered successfully.",
+    );
+  });
+
+  it("marks highlighted table row", () => {
+    renderWorkspace({ highlightedRowId: "1" });
+    expect(screen.getByTestId("inventory-table-row")).toHaveAttribute("data-highlighted", "true");
   });
 });

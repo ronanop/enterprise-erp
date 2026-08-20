@@ -2,8 +2,11 @@
 
 export type InventoryMenuActionId =
   | "viewDetails"
+  | "edit"
   | "assign"
   | "return"
+  | "delete"
+  | "dispose"
   | "portal"
   | "discovery"
   | "qr"
@@ -13,8 +16,11 @@ export type InventoryMenuActionId =
 
 export type InventoryActionPermissions = {
   viewDetails: boolean;
+  edit: boolean;
   assign: boolean;
   return: boolean;
+  delete: boolean;
+  dispose: boolean;
   portal: boolean;
   discovery: boolean;
   qr: boolean;
@@ -25,8 +31,11 @@ export type InventoryActionPermissions = {
 
 export const DEFAULT_INVENTORY_ACTION_PERMISSIONS: InventoryActionPermissions = {
   viewDetails: true,
+  edit: true,
   assign: true,
   return: true,
+  delete: true,
+  dispose: true,
   portal: true,
   discovery: true,
   qr: true,
@@ -42,6 +51,7 @@ export type InventoryAssetRef = {
   id: string;
   assetTag?: string;
   laptopName?: string;
+  operationalStatus?: string;
 };
 
 export type AssetDetailDrawerAssignment = {
@@ -74,34 +84,81 @@ export type AssetDetailDrawerHistoryEntry = {
   deliveryReferenceStatus: string;
   assignmentRemarks: string;
   returnRemarks: string;
+  returnCondition?: string;
 };
 
-/** Presentational drawer payload (mapped by container in a later phase). */
+export type AssetDetailDrawerConfigParts = {
+  cpu: string;
+  ram: string;
+  storage: string;
+  os: string;
+  accessories: string;
+};
+
+export type AssetDetailDrawerTimelineEvent = {
+  id: string;
+  label: string;
+  at: string;
+  kind: "milestone" | "assigned" | "returned" | "status";
+};
+
+export type AssetDetailDrawerTabId =
+  | "overview"
+  | "configuration"
+  | "assignment"
+  | "history"
+  | "timeline"
+  | "documents";
+
+export type AssetDetailDrawerActionId =
+  | "assign"
+  | "return"
+  | "edit"
+  | "delete"
+  | "dispose"
+  | "history"
+  | "transfer"
+  | "maintenance"
+  | "portal"
+  | "printLabel"
+  | "printQr"
+  | "printBarcode";
+
+/** Presentational drawer payload (mapped from inventory row — no new APIs). */
 export type AssetDetailDrawerData = {
   assetTag: string;
   laptopName: string;
+  manufacturer: string;
+  model: string;
   currentHolder: string;
+  department: string;
+  employeeId: string;
+  location: string;
   configuration: string;
+  configurationParts: AssetDetailDrawerConfigParts;
   branch: string;
   operationalStatus: string;
   lifecycleStatus: string;
+  /** Value encoded in drawer QR (existing portal route). */
+  qrValue: string;
   assignment?: AssetDetailDrawerAssignment | null;
   additional?: AssetDetailDrawerAdditional | null;
   history?: AssetDetailDrawerHistoryEntry[] | null;
+  timeline?: AssetDetailDrawerTimelineEvent[] | null;
 };
 
 export const INVENTORY_MENU_ITEMS: Array<{
   id: InventoryMenuActionId;
   label: string;
   permissionKey: keyof InventoryActionPermissions;
+  /** Maps to status-driven capability when set. */
+  statusAction?: "view" | "edit" | "assign" | "return" | "delete" | "history" | "dispose";
 }> = [
-  { id: "viewDetails", label: "View Details", permissionKey: "viewDetails" },
-  { id: "assign", label: "Assign Asset", permissionKey: "assign" },
-  { id: "return", label: "Return Asset", permissionKey: "return" },
-  { id: "portal", label: "Information Portal", permissionKey: "portal" },
-  { id: "discovery", label: "Discovery", permissionKey: "discovery" },
-  { id: "qr", label: "QR Code", permissionKey: "qr" },
-  { id: "transfer", label: "Transfer", permissionKey: "transfer" },
-  { id: "maintenance", label: "Maintenance", permissionKey: "maintenance" },
-  { id: "history", label: "History", permissionKey: "history" },
+  { id: "viewDetails", label: "View Details", permissionKey: "viewDetails", statusAction: "view" },
+  { id: "edit", label: "Edit", permissionKey: "edit", statusAction: "edit" },
+  { id: "assign", label: "Allocate Asset", permissionKey: "assign", statusAction: "assign" },
+  { id: "return", label: "Return Asset", permissionKey: "return", statusAction: "return" },
+  { id: "delete", label: "Delete", permissionKey: "delete", statusAction: "delete" },
+  { id: "dispose", label: "Complete Disposal", permissionKey: "dispose", statusAction: "dispose" },
+  { id: "history", label: "View History", permissionKey: "history", statusAction: "history" },
 ];

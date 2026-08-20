@@ -1,11 +1,6 @@
 "use client";
 
 import type { WizardSelectOption } from "@/components/assets/assignment-wizard/assignment-wizard-mapper";
-import {
-  MOCK_ASSETS,
-  MOCK_EMPLOYEES,
-  MOCK_ISSUED_ITEMS,
-} from "@/components/assets/assignment-wizard/wizard-mock-data";
 import type { AssignmentWizardState } from "@/components/assets/assignment-wizard/wizard-types";
 
 export type AssignmentReviewStepProps = {
@@ -21,14 +16,15 @@ function labelFor(id: string, options: WizardSelectOption[]) {
 
 export function AssignmentReviewStep({
   state,
-  employees = MOCK_EMPLOYEES,
-  assets = MOCK_ASSETS,
-  issuedItems = MOCK_ISSUED_ITEMS,
+  employees = [],
+  assets = [],
+  issuedItems = [],
 }: AssignmentReviewStepProps) {
   const issuedLabels = issuedItems.filter((i) => state.issuedItemIds.includes(i.id)).map((i) => i.label);
 
   return (
-    <div className="grid gap-4">
+    <div className="grid gap-4" data-testid="assignment-review-section">
+      <h3 className="text-sm font-medium tracking-tight">Review & Confirm</h3>
       <dl className="grid gap-3 text-sm sm:grid-cols-2">
         <div>
           <dt className="text-xs text-muted-foreground">Employee</dt>
@@ -43,11 +39,19 @@ export function AssignmentReviewStep({
           <dd>{issuedLabels.length ? issuedLabels.join(", ") : "—"}</dd>
         </div>
         <div>
-          <dt className="text-xs text-muted-foreground">Delivery status</dt>
-          <dd className="capitalize">{state.deliveryReferenceStatus}</dd>
+          <dt className="text-xs text-muted-foreground">Issued date</dt>
+          <dd>{state.issuedAt || "— (set on activation)"}</dd>
         </div>
         <div>
-          <dt className="text-xs text-muted-foreground">Delivery reference</dt>
+          <dt className="text-xs text-muted-foreground">Delivery status</dt>
+          <dd className="capitalize">
+            {state.deliveryReferenceStatus === "pending"
+              ? "Not Applicable"
+              : state.deliveryReferenceStatus}
+          </dd>
+        </div>
+        <div>
+          <dt className="text-xs text-muted-foreground">Delivery challan</dt>
           <dd>{state.deliveryReferenceNumber || "—"}</dd>
         </div>
         <div>
@@ -60,7 +64,8 @@ export function AssignmentReviewStep({
         </div>
       </dl>
       <p className="rounded-md border border-border/70 bg-muted/20 px-3 py-2 text-xs text-muted-foreground">
-        Confirm to save the assignment draft. Use Submit from the assignment list when ready for approval.
+        Confirm to submit this assignment. Asset cannot be changed after activation. Only draft
+        assignments can be deleted.
       </p>
     </div>
   );

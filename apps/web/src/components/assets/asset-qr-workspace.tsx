@@ -7,11 +7,12 @@ import { Loader2, Printer, QrCode, Search } from "lucide-react";
 import { QRCodeCanvas } from "qrcode.react";
 
 import { PageHeader } from "@/components/layout/page-header";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { isAuthenticated } from "@/lib/auth";
+import { cn } from "@/lib/utils";
 import {
   assetRegisterService,
   buildSelfServiceUrl,
@@ -127,15 +128,25 @@ export function AssetQrWorkspace() {
                   <Printer className="mr-1 size-4" />
                   Print label
                 </Button>
-                <Button variant="outline" size="sm" asChild className="cursor-pointer">
-                  <Link href={`/assets/assets/${asset.id}`}>
-                    <QrCode className="mr-1 size-4" />
-                    Open details
-                  </Link>
-                </Button>
-                <Button variant="outline" size="sm" asChild className="cursor-pointer">
-                  <Link href={`/assets/information-portal/${asset.id}`}>Information portal</Link>
-                </Button>
+                <Link
+                  href={`/assets/assets/${asset.id}`}
+                  className={cn(
+                    buttonVariants({ variant: "outline", size: "sm" }),
+                    "cursor-pointer transition-colors duration-200",
+                  )}
+                >
+                  <QrCode className="mr-1 size-4" />
+                  Open details
+                </Link>
+                <Link
+                  href={`/assets/information-portal/${asset.id}`}
+                  className={cn(
+                    buttonVariants({ variant: "outline", size: "sm" }),
+                    "cursor-pointer transition-colors duration-200",
+                  )}
+                >
+                  Information portal
+                </Link>
               </div>
             </CardContent>
           </Card>

@@ -5,6 +5,8 @@
  * AssetNavigation delegates Issue/Return hrefs here.
  */
 
+import { stashInventoryFocusAsset } from "@/components/assets/inventory/inventory-focus";
+
 export type AssignmentWizardHrefParams = {
   assetId?: string;
   employeeId?: string;
@@ -60,27 +62,10 @@ export type AssignmentNavigation = {
   buildReturnWizardHref: typeof buildReturnWizardHref;
 };
 
-const FOCUS_ASSET_KEY = "cr004.assignment.focusAssetId";
-
-export function stashInventoryFocusAsset(assetId: string | undefined): void {
-  if (typeof window === "undefined" || !assetId?.trim()) return;
-  try {
-    window.sessionStorage.setItem(FOCUS_ASSET_KEY, assetId.trim());
-  } catch {
-    /* ignore */
-  }
-}
-
-export function consumeInventoryFocusAsset(): string | null {
-  if (typeof window === "undefined") return null;
-  try {
-    const id = window.sessionStorage.getItem(FOCUS_ASSET_KEY);
-    window.sessionStorage.removeItem(FOCUS_ASSET_KEY);
-    return id;
-  } catch {
-    return null;
-  }
-}
+export {
+  consumeInventoryFocusAsset,
+  stashInventoryFocusAsset,
+} from "@/components/assets/inventory/inventory-focus";
 
 export function createAssignmentNavigation(push: AssetNavigateFn): AssignmentNavigation {
   return {

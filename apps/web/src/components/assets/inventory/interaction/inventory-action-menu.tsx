@@ -10,6 +10,7 @@ import {
   type InventoryAssetRef,
   type InventoryMenuActionId,
 } from "@/components/assets/inventory/interaction/inventory-interaction.types";
+import { isStatusActionAllowed } from "@/components/assets/inventory/status-driven-actions";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
@@ -18,6 +19,7 @@ export type InventoryActionMenuProps = {
   onView?: (asset: InventoryAssetRef) => void;
   onMenuAction?: (action: InventoryMenuActionId, asset: InventoryAssetRef) => void;
   permissions?: Partial<InventoryActionPermissions>;
+  operationalStatus?: string | null;
   disabled?: boolean;
   className?: string;
 };
@@ -27,18 +29,24 @@ export function InventoryActionMenu({
   onView,
   onMenuAction,
   permissions: permissionsProp,
+  operationalStatus,
   disabled,
   className,
 }: InventoryActionMenuProps) {
   const permissions = { ...DEFAULT_INVENTORY_ACTION_PERMISSIONS, ...permissionsProp };
+  const status = operationalStatus ?? asset.operationalStatus;
   const [open, setOpen] = useState(false);
   const menuId = useId();
   const containerRef = useRef<HTMLDivElement>(null);
 
+  const canView = permissions.viewDetails && isStatusActionAllowed(status, "view");
   const menuItems = INVENTORY_MENU_ITEMS.filter((item) => {
     if (item.id === "viewDetails") return false;
-    return permissions[item.permissionKey];
+    if (!permissions[item.permissionKey]) return false;
+    if (item.statusAction && !isStatusActionAllowed(status, item.statusAction)) return false;
+    return true;
   });
+  const hasAnyAction = canView || menuItems.length > 0;
 
   useEffect(() => {
     if (!open) return;
@@ -58,7 +66,7 @@ export function InventoryActionMenu({
 
   return (
     <div ref={containerRef} className={cn("relative inline-flex items-center gap-1", className)}>
-      {permissions.viewDetails ? (
+      {canView ? (
         <Button
           type="button"
           variant="ghost"
@@ -110,6 +118,11 @@ export function InventoryActionMenu({
             </div>
           ) : null}
         </>
+      ) : null}
+      {!hasAnyAction ? (
+        <span className="text-xs text-muted-foreground" data-testid="inventory-action-empty">
+          No actions available
+        </span>
       ) : null}
     </div>
   );

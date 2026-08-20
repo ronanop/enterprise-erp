@@ -1,11 +1,14 @@
-import type { AssignmentWizardState } from "@/components/assets/assignment-wizard/wizard-types";
+import {
+  ASSIGNMENT_WIZARD_STEPS,
+  type AssignmentWizardState,
+} from "@/components/assets/assignment-wizard/wizard-types";
 
-export function validateAssignmentStep(
-  stepIndex: number,
+export function validateAssignmentStepId(
+  stepId: string,
   state: AssignmentWizardState,
 ): string | null {
-  switch (stepIndex) {
-    case 0: {
+  switch (stepId) {
+    case "employee": {
       if (state.allocationType === "employee" && !state.employeeId) {
         return "Select an employee to continue.";
       }
@@ -17,11 +20,11 @@ export function validateAssignmentStep(
       }
       return null;
     }
-    case 1:
+    case "asset":
       return state.assetId ? null : "Select an asset to continue.";
-    case 2:
+    case "issued-items":
       return null;
-    case 3: {
+    case "delivery": {
       if (state.deliveryReferenceStatus === "issued" || state.deliveryReferenceStatus === "received") {
         if (!state.deliveryReferenceNumber.trim()) {
           return "Delivery reference number is required for Issued or Received status.";
@@ -29,11 +32,19 @@ export function validateAssignmentStep(
       }
       return null;
     }
-    case 4:
+    case "review":
       return null;
     default:
       return null;
   }
+}
+
+export function validateAssignmentStep(
+  stepIndex: number,
+  state: AssignmentWizardState,
+): string | null {
+  const stepId = ASSIGNMENT_WIZARD_STEPS[stepIndex]?.id;
+  return stepId ? validateAssignmentStepId(stepId, state) : null;
 }
 
 export function validateReturnStep(stepIndex: number): string | null {

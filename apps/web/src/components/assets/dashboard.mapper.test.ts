@@ -10,6 +10,7 @@ import {
   mapAssignmentsToActivityRows,
   mapDashboardPayloadToViewModel,
   mapDashboardSummaryToKpis,
+  mapOperationsPayloadToRecentActivity,
   resolveBranchLabel,
 } from "@/components/assets/dashboard.mapper";
 import type { AssetDashboardSummaryDto, AssetPaginatedListResult } from "@/services/assets-service";
@@ -185,5 +186,72 @@ describe("branchLookupFromOptions", () => {
         { id: "2", label: "Mumbai" },
       ]),
     ).toEqual({ "1": "Noida", "2": "Mumbai" });
+  });
+});
+
+describe("mapOperationsPayloadToRecentActivity", () => {
+  it("maps registered, assigned, returned, disposed, transfer and caps at 10", () => {
+    const items = mapOperationsPayloadToRecentActivity({
+      recentAssets: {
+        items: [{ id: "1", asset_code: "AST-1", created_at: "2026-08-05T10:00:00.000Z" }],
+        total: 1,
+        page: 1,
+        page_size: 10,
+      },
+      assignmentsList: {
+        items: [
+          {
+            id: "a1",
+            document_number: "ASN-1",
+            status: "active",
+            allocated_at: "2026-08-04T10:00:00.000Z",
+            employee_id: "e1",
+          },
+          {
+            id: "a2",
+            document_number: "ASN-2",
+            status: "returned",
+            returned_at: "2026-08-03T10:00:00.000Z",
+          },
+        ],
+        total: 2,
+        page: 1,
+        page_size: 10,
+      },
+      disposalList: {
+        items: [
+          {
+            id: "d1",
+            asset_code: "AST-D",
+            operational_status: "DISPOSED",
+            status: "disposed",
+            updated_at: "2026-08-02T10:00:00.000Z",
+          },
+        ],
+        total: 1,
+        page: 1,
+        page_size: 10,
+      },
+      transferList: {
+        items: [
+          {
+            id: "t1",
+            document_number: "TR-1",
+            status: "completed",
+            updated_at: "2026-08-01T10:00:00.000Z",
+          },
+        ],
+        total: 1,
+        page: 1,
+        page_size: 10,
+      },
+      limit: 10,
+    });
+    expect(items.length).toBeLessThanOrEqual(10);
+    expect(items.some((i) => i.kind === "registered")).toBe(true);
+    expect(items.some((i) => i.kind === "assigned")).toBe(true);
+    expect(items.some((i) => i.kind === "returned")).toBe(true);
+    expect(items.some((i) => i.kind === "disposed")).toBe(true);
+    expect(items.some((i) => i.kind === "transfer")).toBe(true);
   });
 });

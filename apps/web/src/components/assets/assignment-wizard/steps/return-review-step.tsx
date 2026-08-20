@@ -1,8 +1,8 @@
 "use client";
 
-import type { ReturnWizardState } from "@/components/assets/assignment-wizard/wizard-types";
 import type { ReturnSummaryView } from "@/components/assets/assignment-wizard/assignment-wizard-mapper";
-import { MOCK_RETURN_SUMMARY } from "@/components/assets/assignment-wizard/wizard-mock-data";
+import type { ReturnWizardState } from "@/components/assets/assignment-wizard/wizard-types";
+import { EmptyState } from "@/components/assets/shared";
 
 const CONDITION_LABELS: Record<ReturnWizardState["returnCondition"], string> = {
   good: "Good — return to stock",
@@ -12,12 +12,25 @@ const CONDITION_LABELS: Record<ReturnWizardState["returnCondition"], string> = {
 
 export type ReturnReviewStepProps = {
   state: ReturnWizardState;
-  summary?: ReturnSummaryView;
+  summary?: ReturnSummaryView | null;
 };
 
-export function ReturnReviewStep({ state, summary = MOCK_RETURN_SUMMARY }: ReturnReviewStepProps) {
+export function ReturnReviewStep({ state, summary }: ReturnReviewStepProps) {
+  if (!summary) {
+    return (
+      <div data-testid="return-review-empty">
+        <EmptyState
+          variant="no-results"
+          compact
+          title="Cannot review return"
+          description="Assignment summary is missing. Reload the return wizard from an active assignment."
+        />
+      </div>
+    );
+  }
+
   return (
-    <div className="grid gap-4">
+    <div className="grid gap-4" data-testid="return-review-section">
       <dl className="grid gap-3 text-sm">
         <div>
           <dt className="text-xs text-muted-foreground">Asset</dt>

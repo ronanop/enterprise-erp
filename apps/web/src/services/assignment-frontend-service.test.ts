@@ -302,6 +302,35 @@ describe("payload mapping", () => {
       },
     );
   });
+
+  it("list calls existing search endpoint", async () => {
+    vi.mocked(resourceService.list).mockResolvedValue(
+      ok({ items: [draftResponse], total: 1, page: 1, page_size: 10 }),
+    );
+    const page = await assignmentFrontendService.list({ status: "draft", page: 1 });
+    expect(page.items).toHaveLength(1);
+    expect(resourceService.list).toHaveBeenCalledWith("/assets/asset-assignments", {
+      status: "draft",
+      page: 1,
+    });
+  });
+
+  it("cancelDraft rejects non-draft assignments", async () => {
+    vi.mocked(resourceService.get).mockResolvedValue(ok({ ...draftResponse, status: "active" }));
+    await expect(assignmentFrontendService.cancelDraft("asg-1")).rejects.toThrow(/Only draft/);
+  });
+
+  it("cancelDraft soft-deletes draft via cancel action", async () => {
+    vi.mocked(resourceService.get).mockResolvedValue(ok(draftResponse));
+    vi.mocked(resourceService.action).mockResolvedValue(ok({ ...draftResponse, status: "cancelled" }));
+    const row = await assignmentFrontendService.cancelDraft("asg-1");
+    expect(row.status).toBe("cancelled");
+    expect(resourceService.action).toHaveBeenCalledWith(
+      "/assets/asset-assignments",
+      "asg-1",
+      "cancel",
+    );
+  });
 });
 
 describe("compatibility aliases", () => {

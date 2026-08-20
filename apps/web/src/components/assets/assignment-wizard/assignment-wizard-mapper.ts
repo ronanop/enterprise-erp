@@ -6,14 +6,47 @@ import type {
 
 export type WizardSelectOption = { id: string; label: string };
 
+export type WizardEmployeeOption = WizardSelectOption & {
+  employeeCode?: string;
+  name?: string;
+  department?: string;
+  departmentId?: string;
+  designation?: string;
+  branch?: string;
+  phone?: string;
+  email?: string;
+  manager?: string;
+  employmentStatus?: string;
+};
+
 export type WizardAssetOption = WizardSelectOption & {
   code: string;
   operationalStatus: string;
   branchLabel: string;
   branchId: string;
+  serialNumber?: string;
+  make?: string;
+  model?: string;
+  configuration?: string;
+  currentLocation?: string;
+  earlierUsedBy?: string;
 };
 
 export type WizardIssuedItemOption = WizardSelectOption & { status: string };
+
+/** Fixed accessory checklist for Issued Items (stored via assignment_remarks). */
+export const STANDARD_ISSUED_ACCESSORIES: WizardIssuedItemOption[] = [
+  { id: "charger", label: "Charger", status: "accessory" },
+  { id: "mouse", label: "Mouse", status: "accessory" },
+  { id: "keyboard", label: "Keyboard", status: "accessory" },
+  { id: "laptop-bag", label: "Laptop Bag", status: "accessory" },
+  { id: "dock", label: "Dock", status: "accessory" },
+  { id: "hdmi-cable", label: "HDMI Cable", status: "accessory" },
+  { id: "adapter", label: "Adapter", status: "accessory" },
+  { id: "headset", label: "Headset", status: "accessory" },
+  { id: "other", label: "Other Items", status: "accessory" },
+];
+
 
 export type AssignmentApiRow = {
   id: string;
@@ -97,6 +130,7 @@ export function assignmentRowToWizardState(
     departmentId: row.department_id ?? "",
     projectId: row.project_id ?? "",
     expectedReturnAt: row.expected_return_at?.slice(0, 10) ?? "",
+    issuedAt: row.allocated_at?.slice(0, 10) ?? "",
     assetId: row.asset_id,
     branchId: row.branch_id,
     draftId: row.id,

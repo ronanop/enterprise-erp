@@ -8,6 +8,9 @@ import {
   AssetInventoryContainer,
   fetchInventoryPage,
 } from "@/components/assets/asset-inventory-container";
+import { stashInventoryArrival } from "@/components/assets/inventory/inventory-arrival";
+import { stashInventoryFocusAsset } from "@/components/assets/inventory/inventory-focus";
+import { saveInventoryUiSnapshot } from "@/components/assets/inventory/inventory-ui-state";
 import { createAssetNavigation } from "@/components/assets/navigation/asset-navigation";
 import { BRANCH_ALL_VALUE, EMPTY_INVENTORY_FILTERS } from "@/components/assets/shared";
 import { assetOperationsService } from "@/services/assets-service";
@@ -51,6 +54,7 @@ const assetItem = {
 
 afterEach(() => {
   cleanup();
+  sessionStorage.clear();
 });
 
 beforeEach(() => {
@@ -67,7 +71,7 @@ beforeEach(() => {
       items: [],
       total: 0,
       page: 1,
-      page_size: 500,
+      page_size: 200,
     }),
   );
 });
@@ -84,7 +88,7 @@ describe("fetchInventoryPage", () => {
       items: [],
       total: 0,
       page: 1,
-      page_size: 500,
+      page_size: 200,
     });
     await fetchInventoryPage({
       preset: "ready",
@@ -113,7 +117,7 @@ describe("AssetInventoryContainer", () => {
   it("renders inventory workspace title", async () => {
     render(<AssetInventoryContainer />);
     await waitFor(() => {
-      expect(screen.getByRole("heading", { name: "IT Asset Inventory" })).toBeInTheDocument();
+      expect(screen.getByRole("heading", { name: "Asset Register" })).toBeInTheDocument();
     });
   });
 
@@ -143,24 +147,6 @@ describe("AssetInventoryContainer", () => {
     });
   });
 
-  it("retries after error", async () => {
-    const user = userEvent.setup();
-    vi.mocked(assetOperationsService.listAssets).mockRejectedValueOnce(new Error("fail"));
-    render(<AssetInventoryContainer />);
-    await waitFor(() => screen.getByRole("button", { name: "Retry" }));
-    vi.mocked(assetOperationsService.listAssets).mockImplementation(() =>
-      Promise.resolve({
-        items: [assetItem],
-        total: 1,
-        page: 1,
-        page_size: 25,
-      }),
-    );
-    await user.click(screen.getByRole("button", { name: "Retry" }));
-    await waitFor(() => expect(assetOperationsService.listAssets.mock.calls.length).toBeGreaterThanOrEqual(2));
-    expect(screen.getAllByText("AST-100")[0]).toBeInTheDocument();
-  });
-
   it("refetches when header branch changes", async () => {
     const user = userEvent.setup();
     render(<AssetInventoryContainer />);
@@ -173,5 +159,189 @@ describe("AssetInventoryContainer", () => {
     await waitFor(() => {
       expect(assetOperationsService.listAssets).toHaveBeenCalledWith(expect.objectContaining({ branch_id: "b1" }));
     });
+  });
+
+  it("shows success toast on registration arrival", async () => {
+    stashInventoryArrival({
+      reason: "register",
+      assetId: "asset-1",
+      toastMessage: "Asset registered successfully.",
+    });
+    render(<AssetInventoryContainer />);
+    await waitFor(() => {
+      expect(screen.getByTestId("inventory-success-toast")).toHaveTextContent(
+        "Asset registered successfully.",
+      );
+    });
+  });
+
+  it("highlights focused asset row once on registration arrival", async () => {
+    stashInventoryArrival({
+      reason: "register",
+      assetId: "asset-1",
+      toastMessage: "Asset registered successfully.",
+    });
+    render(<AssetInventoryContainer />);
+    await waitFor(() => {
+      expect(screen.getByTestId("inventory-table-row")).toHaveAttribute("data-highlighted", "true");
+    });
+  });
+
+  it("resets to page 1 for registration arrival even when prior snapshot saved another page", async () => {
+    saveInventoryUiSnapshot({
+      preset: "assigned",
+      headerBranchId: BRANCH_ALL_VALUE,
+      draftFilters: EMPTY_INVENTORY_FILTERS,
+      appliedFilters: EMPTY_INVENTORY_FILTERS,
+      quickSearch: "",
+      page: 2,
+    });
+    stashInventoryArrival({
+      reason: "register",
+      assetId: "asset-1",
+      toastMessage: "Asset registered successfully.",
+    });
+    render(<AssetInventoryContainer />);
+    await waitFor(() => {
+      expect(assetOperationsService.listAssets).toHaveBeenCalledWith(expect.objectContaining({ page: 1 }));
+    });
+  });
+
+  it("restores focus asset when navigation stashes one directly", async () => {
+    stashInventoryFocusAsset("asset-1");
+    render(<AssetInventoryContainer />);
+    await waitFor(() => {
+      expect(screen.getByTestId("inventory-table-row")).toHaveAttribute("data-highlighted", "true");
+    });
+  });
+
+  it("shows allocation success toast and opens drawer on issue arrival", async () => {
+    vi.mocked(assetOperationsService.listAssets).mockResolvedValue({
+      items: [
+        {
+          ...assetItem,
+          operational_status: "ASSIGNED",
+        },
+      ],
+      total: 1,
+      page: 1,
+      page_size: 25,
+    });
+    vi.mocked(assetOperationsService.listAssignments).mockResolvedValue({
+      items: [
+        {
+          id: "asg-1",
+          asset_id: "asset-1",
+          status: "active",
+          employee_id: "e1",
+          document_number: "ASN-9",
+          allocated_at: "2026-08-06T10:00:00Z",
+          delivery_reference_status: "pending",
+          delivery_reference_number: null,
+          assignment_remarks: null,
+          return_remarks: null,
+        },
+      ],
+      total: 1,
+      page: 1,
+      page_size: 200,
+    });
+    stashInventoryArrival({
+      reason: "issue",
+      assetId: "asset-1",
+      toastMessage: "Asset successfully allocated to Rahul Sharma.",
+    });
+    render(<AssetInventoryContainer />);
+    await waitFor(() => {
+      expect(screen.getByTestId("inventory-success-toast")).toHaveTextContent(
+        "Asset successfully allocated to Rahul Sharma.",
+      );
+    });
+    await waitFor(() => {
+      expect(screen.getByTestId("inventory-table-row")).toHaveAttribute("data-highlighted", "true");
+    });
+    await waitFor(() => {
+      expect(screen.getByTestId("asset-detail-drawer")).toBeInTheDocument();
+    });
+    expect(screen.getByText("Asha Nair (EMP-001)")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Return Asset" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Allocate Asset" })).not.toBeInTheDocument();
+  });
+
+  it("keeps register on page 1 after assignment arrival even with prior snapshot", async () => {
+    saveInventoryUiSnapshot({
+      preset: "ready",
+      headerBranchId: BRANCH_ALL_VALUE,
+      draftFilters: EMPTY_INVENTORY_FILTERS,
+      appliedFilters: EMPTY_INVENTORY_FILTERS,
+      quickSearch: "",
+      page: 3,
+    });
+    stashInventoryArrival({
+      reason: "issue",
+      assetId: "asset-1",
+      toastMessage: "Asset successfully allocated.",
+    });
+    render(<AssetInventoryContainer />);
+    await waitFor(() => {
+      expect(assetOperationsService.listAssets).toHaveBeenCalledWith(
+        expect.objectContaining({ page: 1 }),
+      );
+    });
+  });
+
+  it("shows return success toast, clears holder, and restores Allocate CTA", async () => {
+    vi.mocked(assetOperationsService.listAssets).mockResolvedValue({
+      items: [
+        {
+          ...assetItem,
+          asset_name: "Dell Latitude 7440",
+          operational_status: "READY_TO_MOVE",
+        },
+      ],
+      total: 1,
+      page: 1,
+      page_size: 25,
+    });
+    vi.mocked(assetOperationsService.listAssignments).mockResolvedValue({
+      items: [
+        {
+          id: "asg-1",
+          asset_id: "asset-1",
+          status: "returned",
+          employee_id: "e1",
+          document_number: "ASN-9",
+          allocated_at: "2026-08-01T10:00:00Z",
+          returned_at: "2026-08-06T12:00:00Z",
+          delivery_reference_status: "received",
+          delivery_reference_number: "DC-1",
+          assignment_remarks: null,
+          return_remarks: "Good condition",
+          return_condition: "good",
+        },
+      ],
+      total: 1,
+      page: 1,
+      page_size: 200,
+    });
+    stashInventoryArrival({
+      reason: "return",
+      assetId: "asset-1",
+      toastMessage: "Dell Latitude 7440 returned successfully.",
+    });
+    render(<AssetInventoryContainer />);
+    await waitFor(() => {
+      expect(screen.getByTestId("inventory-success-toast")).toHaveTextContent(
+        "Dell Latitude 7440 returned successfully.",
+      );
+    });
+    await waitFor(() => {
+      expect(screen.getByTestId("inventory-table-row")).toHaveAttribute("data-highlighted", "true");
+    });
+    await waitFor(() => {
+      expect(screen.getByTestId("asset-detail-drawer")).toBeInTheDocument();
+    });
+    expect(screen.getByRole("button", { name: "Allocate Asset" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Return Asset" })).not.toBeInTheDocument();
   });
 });

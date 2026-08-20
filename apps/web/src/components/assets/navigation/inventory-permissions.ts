@@ -6,8 +6,11 @@ export function buildInventoryActionPermissions(
 ): InventoryActionPermissions {
   return {
     viewDetails: can("asset.asset:read"),
+    edit: can("asset.asset:update"),
     assign: can("asset.assignment:create"),
     return: can("asset.assignment:return"),
+    delete: can("asset.asset:delete") || can("asset.asset:cancel"),
+    dispose: can("asset.disposal:create") || can("asset.disposal:update"),
     portal: can("asset.asset:read"),
     discovery: can("asset.asset:read"),
     qr: can("asset.asset:read"),
