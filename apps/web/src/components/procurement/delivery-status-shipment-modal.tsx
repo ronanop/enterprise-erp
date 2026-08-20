@@ -51,7 +51,7 @@ export function DeliveryStatusShipmentModal({
         setSaving(false);
         return;
       }
-      onSaved?.("Shipment status updated.");
+      onSaved?.("Delivery status saved.");
       onClose();
     } catch {
       setError("Could not save delivery status. Try again.");
@@ -72,7 +72,7 @@ export function DeliveryStatusShipmentModal({
   return (
     <ConfirmDialog
       open={open}
-      title="Update shipment status"
+      title="Update delivery status"
       description={subtitle}
       confirmLabel="Save status"
       cancelLabel="Cancel"
@@ -84,12 +84,7 @@ export function DeliveryStatusShipmentModal({
       {form ? (
         <div className="mt-4">
           {error ? <p className="mb-3 text-sm text-destructive">{error}</p> : null}
-          <DeliveryStatusForm
-            value={form}
-            onChange={setForm}
-            mode="shipment-only"
-            showLocationSection={false}
-          />
+          <DeliveryStatusForm value={form} onChange={setForm} />
         </div>
       ) : null}
     </ConfirmDialog>

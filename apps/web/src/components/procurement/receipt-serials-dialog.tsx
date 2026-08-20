@@ -4,7 +4,11 @@ import { useEffect, useState, type Dispatch, type SetStateAction } from "react";
 import { createPortal } from "react-dom";
 import { FileText, X } from "lucide-react";
 
-import { ReceiptSerialsTable } from "@/components/procurement/receipt-line-serials";
+import {
+  ReceiptSerialsTable,
+  type GrnLineDisposition,
+  type GrnUnitKind,
+} from "@/components/procurement/receipt-line-serials";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
@@ -21,6 +25,8 @@ export type ReceiptSerialDialogLine = {
   productLabel: string;
   additional: number;
   billingQuantity: number;
+  disposition: GrnLineDisposition;
+  unitKinds?: GrnUnitKind[];
 };
 
 export type VendorInvoiceDraft = {
@@ -47,7 +53,7 @@ type ReceiptSerialsDialogProps = {
   busy?: boolean;
   error?: string | null;
   onSerialDraftChange: (lineId: string, slots: string[]) => void;
-  onBillingQuantityChange?: (lineId: string, billingQuantity: number) => void;
+  onUnitKindChange?: (lineId: string, unitIndex: number, kind: GrnUnitKind) => void;
   onSerialImportError?: (message: string | null) => void;
   vendorInvoice: VendorInvoiceDraft;
   onVendorInvoiceChange: Dispatch<SetStateAction<VendorInvoiceDraft>>;
@@ -63,7 +69,7 @@ export function ReceiptSerialsDialog({
   busy,
   error,
   onSerialDraftChange,
-  onBillingQuantityChange,
+  onUnitKindChange,
   onSerialImportError,
   vendorInvoice,
   onVendorInvoiceChange,
@@ -181,7 +187,7 @@ export function ReceiptSerialsDialog({
         role="dialog"
         aria-modal="true"
         aria-labelledby="receipt-serials-dialog-title"
-        className="flex max-h-[min(90vh,720px)] w-full max-w-3xl flex-col rounded-xl border border-border/80 bg-card shadow-lg"
+        className="flex max-h-[min(90vh,720px)] w-full max-w-4xl flex-col rounded-xl border border-border/80 bg-card shadow-lg"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="grid shrink-0 grid-cols-[1fr_auto_1fr] items-center gap-3 border-b border-border/60 px-5 py-4">
@@ -351,7 +357,7 @@ export function ReceiptSerialsDialog({
                 serialDraft={serialDraft}
                 disabled={busy}
                 onChange={onSerialDraftChange}
-                onBillingQuantityChange={onBillingQuantityChange}
+                onUnitKindChange={onUnitKindChange}
                 onImportError={onSerialImportError}
               />
             )}

@@ -1,11 +1,11 @@
-import { redirect } from "next/navigation";
+import { DeliveryChallanFormPage } from "@/components/procurement/delivery-challan-form-page";
 
 interface PageProps {
   params: Promise<{ challanId: string }>;
 }
 
-/** Saved challans are immutable — use the list page and PDF download only. */
+/** Opens a saved challan in read-only (locked) mode. */
 export default async function DeliveryChallanDetailPage({ params }: PageProps) {
-  await params;
-  redirect("/procurement/delivery-challan");
+  const { challanId } = await params;
+  return <DeliveryChallanFormPage challanId={challanId} />;
 }

@@ -21,7 +21,7 @@ class ProcurementCrmAdapter:
 
     def get_ovf_display_meta(
         self, ctx: TenantContext, ovf_ids: list[UUID]
-    ) -> dict[UUID, dict[str, str | date | None]]:
+    ) -> dict[UUID, dict[str, str | date | int | None]]:
         return self._ovfs.list_display_meta_by_ids(ctx, ovf_ids)
 
     def get_handoff(self, ctx: TenantContext, ovf_id: UUID) -> dict[str, Any]:

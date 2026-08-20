@@ -117,7 +117,7 @@ export function ProcurementInventoryImportDialog({
       >
         <div className="flex shrink-0 items-start justify-between gap-3 border-b border-border/60 px-5 py-4">
           <div className="min-w-0">
-            <h2 id="inventory-import-title" className="text-base font-extrabold tracking-tight">
+            <h2 id="inventory-import-title" className="text-sm font-medium tracking-tight">
               Import inventory from Excel
             </h2>
             <p className="mt-1 text-xs text-muted-foreground">

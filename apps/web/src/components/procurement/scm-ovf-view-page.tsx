@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 
 import { ScmCreatePoEntry } from "@/components/procurement/scm-create-po-entry";
+import { ScmCommercialDocumentsPanel } from "@/components/procurement/scm-commercial-documents-panel";
 import { ConfirmDialog } from "@/components/finance/journals/confirm-dialog";
 import { FinanceStatusBadge } from "@/components/finance/finance-status-badge";
 import { FinanceField } from "@/components/finance/journals/finance-form-field";
@@ -29,7 +30,9 @@ import {
   scmHoldDayCountDisplay,
   scmHoldSinceDisplay,
 } from "@/utils/scm-ovf-hold";
+import { formatOvfDeliveryPeriodDisplay } from "@/utils/ovf-delivery-period";
 import { downloadScmOvfPdf } from "@/utils/scm-ovf-pdf";
+import { findStockAvailability, ovfCreatePoRemainderHref, ovfFromStockHref } from "@/utils/ovf-stock";
 import { ApiClientError } from "@/services/api-client";
 import {
   getScmOvfPreview,
@@ -37,6 +40,7 @@ import {
   releaseScmOvfHold,
   updateScmOvfCharges,
   type ScmOvfPreview,
+  type ScmStockAvailability,
   type ScmVendorLine,
 } from "@/services/procurement-service";
 
@@ -97,6 +101,7 @@ function deriveScmOvfQueueStatus(preview: ScmOvfPreview): ScmOvfQueueStatus {
     return "draft";
   }
   if (preview.scm_on_hold || poStatus === "hold" || poStatus === "cancelled") return "hold";
+  if (preview.stock_fulfillment_status === "complete" && !preview.can_create_po) return "close";
   if (!preview.purchase_order_id || preview.can_create_po) return "open";
   if (poStatus === "submitted" || poStatus === "") return "open";
   return "close";
@@ -137,10 +142,10 @@ function DetailItem({
 }) {
   return (
     <div className={cn("min-w-0 space-y-1", className)}>
-      <dt className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+      <dt className="text-xs font-bold uppercase tracking-wide text-foreground">
         {label}
       </dt>
-      <dd className="text-sm font-medium text-foreground break-words">{children}</dd>
+      <dd className="text-sm font-normal text-slate-600 break-words">{children}</dd>
     </div>
   );
 }
@@ -181,9 +186,11 @@ function SectionCard({
 function ChargeTable({
   rows,
   emptyLabel,
+  stockAvailability,
 }: {
   rows: ScmVendorLine[];
   emptyLabel: string;
+  stockAvailability?: ScmStockAvailability[];
 }) {
   const totals = useMemo(() => {
     return rows.reduce(
@@ -206,6 +213,8 @@ function ChargeTable({
             <col className="min-w-[120px]" />
             <col className="min-w-[140px]" />
             <col className="w-16" />
+            <col className="w-16" />
+            <col className="w-16" />
             <col className="w-[7.25rem]" />
             <col className="w-[7.25rem]" />
             <col className="w-[7.25rem]" />
@@ -217,6 +226,8 @@ function ChargeTable({
               <th className="px-3 py-2 text-left font-medium">Product</th>
               <th className="px-3 py-2 text-left font-medium">Description</th>
               <th className="px-3 py-2 text-right font-medium tabular-nums">Qty</th>
+              <th className="px-3 py-2 text-right font-medium tabular-nums">In stock</th>
+              <th className="px-3 py-2 text-right font-medium tabular-nums">Allocated</th>
               <th className="px-3 py-2 text-right font-medium tabular-nums whitespace-nowrap">
                 Unit (INR)
               </th>
@@ -234,12 +245,14 @@ function ChargeTable({
           <tbody>
             {rows.length === 0 ? (
               <tr>
-                <td colSpan={8} className="px-3 py-6 text-center text-muted-foreground">
+                <td colSpan={10} className="px-3 py-6 text-center text-muted-foreground">
                   {emptyLabel}
                 </td>
               </tr>
             ) : (
-              rows.map((row, index) => (
+              rows.map((row, index) => {
+                const stock = findStockAvailability(stockAvailability, row.product_name);
+                return (
                 <tr key={row.line_id} className="border-b border-border/70">
                   <td className="px-3 py-2 tabular-nums text-muted-foreground">{index + 1}</td>
                   <td className="px-3 py-2 font-medium">{textOrDash(row.product_name)}</td>
@@ -247,6 +260,12 @@ function ChargeTable({
                     {textOrDash(row.description || row.product_name)}
                   </td>
                   <td className="px-3 py-2 text-right tabular-nums">{row.qty}</td>
+                  <td className="px-3 py-2 text-right tabular-nums text-muted-foreground">
+                    {stock ? stock.on_hand_qty : "—"}
+                  </td>
+                  <td className="px-3 py-2 text-right tabular-nums text-muted-foreground">
+                    {stock ? stock.allocated_qty : "—"}
+                  </td>
                   <td className="px-3 py-2 text-right tabular-nums">
                     {moneyPrecise(row.unit_price)}
                   </td>
@@ -260,13 +279,14 @@ function ChargeTable({
                     {moneyPrecise(row.total_with_gst)}
                   </td>
                 </tr>
-              ))
+                );
+              })
             )}
           </tbody>
           {rows.length > 0 ? (
             <tfoot className="border-t border-border bg-muted/30 text-sm font-semibold">
               <tr>
-                <td colSpan={5} className="px-3 py-2 text-right">
+                <td colSpan={7} className="px-3 py-2 text-right">
                   Totals
                 </td>
                 <td className="px-3 py-2 text-right tabular-nums whitespace-nowrap">
@@ -447,6 +467,11 @@ export function ScmOvfViewPage({ ovfId }: { ovfId: string }) {
   const canUnholdOvf = Boolean(
     preview?.can_create_po && preview?.scm_on_hold && !chargesLockedByPo,
   );
+  const canFulfillFromStock = Boolean(
+    preview?.stock_availability?.some(
+      (row) => Number(row.remaining_qty) > 0 && Number(row.on_hand_qty) > 0,
+    ),
+  );
   const showActiveHold = Boolean(preview?.scm_on_hold || queueStatus === "hold");
   const holdHistory = useMemo(() => {
     if (!preview?.scm_hold_history?.length) return [];
@@ -536,6 +561,11 @@ export function ScmOvfViewPage({ ovfId }: { ovfId: string }) {
             {preview?.can_create_po ? (
               <ScmCreatePoEntry
                 ovfId={ovfId}
+                href={
+                  preview.stock_fulfillment_status === "partial"
+                    ? ovfCreatePoRemainderHref(ovfId)
+                    : undefined
+                }
                 scmOnHold={Boolean(preview.scm_on_hold) || queueStatus === "hold"}
                 scmOnHoldAt={preview.scm_on_hold_at}
                 className="cursor-pointer transition-colors duration-200"
@@ -550,6 +580,18 @@ export function ScmOvfViewPage({ ovfId }: { ovfId: string }) {
                 )}
               >
                 Open purchase order
+              </Link>
+            ) : null}
+            {canFulfillFromStock ? (
+              <Link
+                href={ovfFromStockHref(ovfId)}
+                className={cn(
+                  buttonVariants({ size: "sm", variant: "outline" }),
+                  "cursor-pointer transition-colors duration-200",
+                )}
+              >
+                <Package className="mr-1.5 size-3.5" />
+                Fulfill from inventory
               </Link>
             ) : null}
           </div>
@@ -614,7 +656,7 @@ export function ScmOvfViewPage({ ovfId }: { ovfId: string }) {
                   </DetailItem>
                   {preview.scm_on_hold_remark?.trim() ? (
                     <DetailItem label="Hold remark" className="sm:col-span-2 lg:col-span-3">
-                      <span className="whitespace-pre-wrap font-medium text-foreground">
+                      <span className="whitespace-pre-wrap text-slate-600">
                         {preview.scm_on_hold_remark.trim()}
                       </span>
                     </DetailItem>
@@ -624,7 +666,7 @@ export function ScmOvfViewPage({ ovfId }: { ovfId: string }) {
             </dl>
             {holdHistory.length > 0 ? (
               <div className="mt-3 border-t border-border/60 pt-3">
-                <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+                <p className="text-xs font-bold uppercase tracking-wide text-foreground">
                   Hold history
                 </p>
                 <div className="mt-2 overflow-hidden rounded-md border border-border">
@@ -680,31 +722,30 @@ export function ScmOvfViewPage({ ovfId }: { ovfId: string }) {
                 <DetailItem label="Customer PO date">
                   {formatPoDate(preview.po_date)}
                 </DetailItem>
+                <DetailItem label="Delivery period">
+                  {formatOvfDeliveryPeriodDisplay(preview.delivery_period)}
+                </DetailItem>
               </dl>
               <div className="grid gap-3 sm:grid-cols-2">
                 <div className="rounded-md border border-border/70 bg-muted/20 p-3 space-y-3">
-                  <p className="text-[11px] font-semibold uppercase tracking-wide text-foreground">
-                    Billing
+                  <p className="text-xs font-bold uppercase tracking-wide text-foreground">
+                    Bill to
                   </p>
                   <dl className="space-y-3">
-                    <DetailItem label="Address">
-                      <span className="whitespace-pre-wrap font-medium leading-relaxed text-foreground">
-                        {textOrDash(preview.billing_address)}
-                      </span>
-                    </DetailItem>
+                    <dd className="text-sm font-normal leading-relaxed text-slate-600 break-words whitespace-pre-wrap">
+                      {textOrDash(preview.billing_address)}
+                    </dd>
                     <DetailItem label="State">{textOrDash(preview.billing_state)}</DetailItem>
                   </dl>
                 </div>
                 <div className="rounded-md border border-border/70 bg-muted/20 p-3 space-y-3">
-                  <p className="text-[11px] font-semibold uppercase tracking-wide text-foreground">
-                    Shipping
+                  <p className="text-xs font-bold uppercase tracking-wide text-foreground">
+                    Ship to
                   </p>
                   <dl className="space-y-3">
-                    <DetailItem label="Address">
-                      <span className="whitespace-pre-wrap font-medium leading-relaxed text-foreground">
-                        {textOrDash(preview.shipping_address)}
-                      </span>
-                    </DetailItem>
+                    <dd className="text-sm font-normal leading-relaxed text-slate-600 break-words whitespace-pre-wrap">
+                      {textOrDash(preview.shipping_address)}
+                    </dd>
                     <DetailItem label="State">{textOrDash(preview.shipping_state)}</DetailItem>
                   </dl>
                 </div>
@@ -712,6 +753,7 @@ export function ScmOvfViewPage({ ovfId }: { ovfId: string }) {
               <ChargeTable
                 rows={preview.customer_lines || []}
                 emptyLabel="No customer charge lines on this OVF."
+                stockAvailability={preview.stock_availability}
               />
             </div>
           </SectionCard>
@@ -720,6 +762,7 @@ export function ScmOvfViewPage({ ovfId }: { ovfId: string }) {
             <ChargeTable
               rows={preview.vendor_lines || []}
               emptyLabel="No vendor purchase lines on this OVF."
+              stockAvailability={preview.stock_availability}
             />
           </SectionCard>
 
@@ -798,6 +841,15 @@ export function ScmOvfViewPage({ ovfId }: { ovfId: string }) {
               ) : null}
             </div>
           </SectionCard>
+
+          <ScmCommercialDocumentsPanel
+            ovfId={ovfId}
+            branchId={preview.branch_id}
+            companyId={preview.company_id}
+            title="OVF documents"
+            description="Files attached by sales on this OVF. They are included automatically when the PO is sent for admin approval."
+            allowUpload={false}
+          />
         </>
       ) : null}
 

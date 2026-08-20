@@ -47,8 +47,8 @@ export function runDeliveryReminderSweep(): DeliveryReminderNotice[] {
   const notices: DeliveryReminderNotice[] = [];
 
   for (const status of listDeliveryStatuses()) {
-    const email = status.reminderEmail.trim();
-    const expected = status.expectedDeliveryDate.trim();
+    const email = (status.reminderEmail || "").trim();
+    const expected = (status.expectedDeliveryDate || "").trim();
     if (!email || !expected) continue;
 
     const notifyOn = addDays(expected, -1);

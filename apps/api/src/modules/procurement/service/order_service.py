@@ -14,6 +14,7 @@ from modules.procurement.domain.enums import OrderStatus, ProcEntityType
 from modules.procurement.domain.exceptions import InvalidDocumentState, SegregationOfDutiesError
 from modules.procurement.domain.value_objects import LineTotals
 from modules.procurement.models.order import ProcOrderHeader
+from modules.procurement.repository.base import utcnow
 from modules.procurement.repository.order_repository import OrderRepository
 from modules.procurement.schemas import OrderResponse
 from modules.procurement.service.document_number_service import DocumentNumberService
@@ -120,6 +121,7 @@ class OrderService:
                 updates: dict[str, object] = {
                     "customer_name": ovf.get("customer_name"),
                     "customer_po_number": ovf.get("po_number"),
+                    "customer_payment_days": int(ovf.get("customer_payment_days") or 0),
                 }
                 po_date = ovf.get("po_date")
                 if po_date is not None:
@@ -153,6 +155,11 @@ class OrderService:
                             "description": summary.get("description"),
                             "customer_po_number": summary.get("customer_po_number")
                             or ovf.get("po_number"),
+                            "customer_payment_days": int(
+                                summary.get("customer_payment_days")
+                                or ovf.get("customer_payment_days")
+                                or 0
+                            ),
                         }
                     )
                     if summary.get("customer_po_date") is not None:
@@ -188,6 +195,7 @@ class OrderService:
         entity_code: str | None = None,
         company_po_number: str | None = None,
         approved_by_name: str | None = None,
+        order_ref_cache: str | None = None,
     ):
         cid = self._scope.resolve_company_id(ctx, company_id)
         self._scope.validate_branch_access(ctx, branch_id)
@@ -220,6 +228,7 @@ class OrderService:
             entity_code=entity_code,
             company_po_number=company_po_number,
             approved_by_name=(approved_by_name or "").strip() or None,
+            order_ref_cache=(order_ref_cache or "").strip() or None,
         )
         self._audit.log_entity_change(
             tenant_id=ctx.tenant_id,
@@ -266,12 +275,20 @@ class OrderService:
         _ = list(order.lines or [])
         created = []
         for fields in line_fields:
-            line = self._repo.add_line(ctx, order, flush=False, **fields)
+            payload = dict(fields)
+            currency = str(payload.get("rate_currency") or "INR").strip().upper() or "INR"
+            payload["rate_currency"] = "USD" if currency == "USD" else "INR"
+            if payload["rate_currency"] == "USD":
+                payload["tax_rate"] = 0
+            line = self._repo.add_line(ctx, order, flush=False, **payload)
+            tax_rate = Decimal("0") if payload["rate_currency"] == "USD" else Decimal(
+                str(getattr(line, "tax_rate", 0) or 0)
+            )
             totals = LineTotals.compute(
                 quantity=Decimal(str(line.quantity)),
                 unit_cost=Decimal(str(line.unit_cost)),
                 discount_amount=Decimal(str(getattr(line, "discount_amount", 0) or 0)),
-                tax_rate=Decimal(str(getattr(line, "tax_rate", 0) or 0)),
+                tax_rate=tax_rate,
             )
             line.tax_amount = float(totals.tax_amount)
             line.line_total = float(totals.line_total)
@@ -281,15 +298,47 @@ class OrderService:
         self._db.flush()
         return created, order
 
+    def replace_draft_lines(
+        self, ctx: TenantContext, order_id: UUID, line_fields: list[dict]
+    ):
+        """Soft-delete existing draft lines and insert the replacement set."""
+        order = self.get_order(ctx, order_id)
+        if order.status != OrderStatus.DRAFT.value:
+            raise InvalidDocumentState("Lines can only be replaced on draft orders")
+        now = utcnow()
+        for line in list(order.lines or []):
+            if getattr(line, "is_deleted", False):
+                continue
+            line.is_deleted = True
+            line.deleted_at = now
+            line.deleted_by = ctx.user_id
+        self._db.flush()
+        if not line_fields:
+            self._refresh_totals(order)
+            self._db.flush()
+            return [], order
+        return self.add_lines(ctx, order_id, line_fields)
+
     def _refresh_totals(self, order: ProcOrderHeader) -> None:
         active = [ln for ln in order.lines if not getattr(ln, "is_deleted", False)]
+        currencies = {
+            "USD" if (getattr(ln, "rate_currency", None) or "INR").upper() == "USD" else "INR"
+            for ln in active
+        }
+        all_usd = bool(active) and currencies == {"USD"}
         subtotal = Decimal("0")
         discount = Decimal("0")
         tax = Decimal("0")
         for line in active:
+            currency = (getattr(line, "rate_currency", None) or "INR").upper()
+            is_usd = currency == "USD"
+            if is_usd and not all_usd:
+                continue
             subtotal += Decimal(str(line.quantity)) * Decimal(str(line.unit_cost))
             discount += Decimal(str(line.discount_amount))
-            tax += Decimal(str(line.tax_amount))
+            if not is_usd:
+                tax += Decimal(str(line.tax_amount))
+        order.currency_code = "USD" if all_usd else "INR"
         order.subtotal_amount = float(subtotal.quantize(Decimal("0.0001")))
         order.discount_amount = float(discount.quantize(Decimal("0.0001")))
         order.tax_amount = float(tax.quantize(Decimal("0.0001")))

@@ -25,6 +25,11 @@ import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
+import {
+  latestPoApprovalByOrderId,
+  PROCUREMENT_APPROVALS_EVENT,
+  type PoApprovalRequest,
+} from "@/lib/procurement-approvals";
 import { ApiClientError } from "@/services/api-client";
 import {
   formatInr,
@@ -33,10 +38,13 @@ import {
   peekScmQueueFromCache,
   type ScmQueueItem,
 } from "@/services/procurement-service";
+import { textTokenMatch } from "@/utils/procurement-search";
 import { getUnseenScmOvfIds, markScmQueueSeen } from "@/utils/scm-queue-seen";
+import { ovfCreatePoRemainderHref, ovfFromStockHref } from "@/utils/ovf-stock";
 
 type QueueFilter = "all" | "open" | "close" | "hold";
 type OvfStatus = "open" | "close" | "hold" | "draft";
+type PoQueueStatus = "create_po" | "draft" | "approval_pending" | "rejected" | "issued" | "from_stock";
 
 function formatReceivedDate(value?: string | null): string {
   if (!value) return "—";
@@ -74,20 +82,53 @@ function parseQueueFilter(value: string | null): QueueFilter {
 
 /**
  * OVF status for SCM queue:
- * - Open   = no vendor PO yet
+ * - Open   = no vendor PO yet, or draft PO not yet sent for approval
  * - Draft  = draft vendor PO created from OVF (not finalized)
- * - Close  = PO finalized (issued)
+ * - Close  = PO finalized, or forwarded to admin for approval
  * - Hold   = SCM parked the OVF without a live PO (or cancelled PO)
  */
-function deriveOvfStatus(row: ScmQueueItem): OvfStatus {
+function deriveOvfStatus(
+  row: ScmQueueItem,
+  approvalsByOrder: Map<string, PoApprovalRequest>,
+): OvfStatus {
   const status = (row.purchase_order_status || "").toLowerCase();
+  const approval = row.purchase_order_id
+    ? approvalsByOrder.get(row.purchase_order_id)
+    : undefined;
+  if (row.purchase_order_id && approval?.status === "pending" && status === "draft") {
+    return "close";
+  }
   if (status === "draft" && row.purchase_order_id && !row.can_create_po) {
     return "draft";
   }
   if (row.scm_on_hold || status === "hold" || status === "cancelled") return "hold";
+  if (row.stock_fulfillment_status === "complete" && !row.can_create_po) return "close";
   if (!row.purchase_order_id || row.can_create_po) return "open";
   if (status === "submitted" || status === "") return "open";
   return "close";
+}
+
+function derivePoStatus(
+  row: ScmQueueItem,
+  approvalsByOrder: Map<string, PoApprovalRequest>,
+): PoQueueStatus {
+  const status = (row.purchase_order_status || "").toLowerCase();
+  const approval = row.purchase_order_id
+    ? approvalsByOrder.get(row.purchase_order_id)
+    : undefined;
+  if (row.purchase_order_id && approval?.status === "pending") return "approval_pending";
+  if (row.purchase_order_id && approval?.status === "rejected" && status === "draft") {
+    return "rejected";
+  }
+  if (row.stock_fulfillment_status === "complete" && !row.can_create_po && !row.purchase_order_id) {
+    return "from_stock";
+  }
+  if (status === "draft" && row.purchase_order_id) return "draft";
+  if (!row.purchase_order_id || status === "cancelled" || status === "hold") {
+    return "create_po";
+  }
+  if (row.can_create_po && !row.purchase_order_id) return "create_po";
+  return "issued";
 }
 
 function payTermsLabel(days: number | null | undefined): string {
@@ -122,9 +163,11 @@ function scmQueueRowMatchesSearch(
       return poDigits.includes(token) || poDigits.endsWith(token);
     }
 
-    const nameHit = customerName.includes(token) || vendorName.includes(token);
-    const poHit = poNumber.includes(token);
-    return nameHit || poHit;
+    return (
+      textTokenMatch(customerName, token) ||
+      textTokenMatch(vendorName, token) ||
+      textTokenMatch(poNumber, token)
+    );
   });
 }
 
@@ -153,6 +196,22 @@ function OvfStatusBadge({ status }: { status: OvfStatus }) {
   );
 }
 
+function poStatusChipClass(status: PoQueueStatus): string {
+  if (status === "approval_pending") {
+    return "border-amber-200/80 bg-amber-50 text-amber-900 hover:bg-amber-100";
+  }
+  if (status === "rejected") {
+    return "border-red-200/80 bg-red-50 text-red-800 hover:bg-red-100";
+  }
+  if (status === "draft") {
+    return "border-sky-200/80 bg-sky-50 text-sky-900 hover:bg-sky-100";
+  }
+  if (status === "from_stock") {
+    return "border-emerald-200/80 bg-emerald-50 text-emerald-900 hover:bg-emerald-100";
+  }
+  return "border-emerald-200/80 bg-emerald-50 text-emerald-900 hover:bg-emerald-100";
+}
+
 export function ScmQueuePage() {
   const router = useRouter();
   const pathname = usePathname();
@@ -165,7 +224,10 @@ export function ScmQueuePage() {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [newOvfIds, setNewOvfIds] = useState<Set<string>>(new Set());
-  const [query, setQuery] = useState("");
+  const [query, setQuery] = useState(() => searchParams.get("q")?.trim() ?? "");
+  const [approvalsByOrder, setApprovalsByOrder] = useState<Map<string, PoApprovalRequest>>(
+    () => latestPoApprovalByOrderId(),
+  );
   const queueOvfIdsRef = useRef<string[]>([]);
 
   const setFilter = useCallback(
@@ -207,6 +269,19 @@ export function ScmQueuePage() {
   }, [load]);
 
   useEffect(() => {
+    const syncApprovals = () => {
+      setApprovalsByOrder(latestPoApprovalByOrderId());
+    };
+    syncApprovals();
+    window.addEventListener(PROCUREMENT_APPROVALS_EVENT, syncApprovals);
+    window.addEventListener("storage", syncApprovals);
+    return () => {
+      window.removeEventListener(PROCUREMENT_APPROVALS_EVENT, syncApprovals);
+      window.removeEventListener("storage", syncApprovals);
+    };
+  }, []);
+
+  useEffect(() => {
     if (loading) return;
     const ids = rows.map((row) => row.ovf_id).filter(Boolean);
     queueOvfIdsRef.current = ids;
@@ -222,12 +297,19 @@ export function ScmQueuePage() {
   }, []);
 
   const enriched = useMemo(
-    () => rows.map((row) => ({ ...row, ovf_status: deriveOvfStatus(row) })),
-    [rows],
+    () =>
+      rows.map((row) => ({
+        ...row,
+        ovf_status: deriveOvfStatus(row, approvalsByOrder),
+        po_status: derivePoStatus(row, approvalsByOrder),
+      })),
+    [rows, approvalsByOrder],
   );
 
   const kpis = useMemo(() => {
-    const open = enriched.filter((r) => r.ovf_status === "open" || r.ovf_status === "draft").length;
+    const open = enriched.filter(
+      (r) => r.ovf_status === "open" || r.ovf_status === "draft",
+    ).length;
     const close = enriched.filter((r) => r.ovf_status === "close").length;
     const hold = enriched.filter((r) => r.ovf_status === "hold").length;
     return { open, close, hold, total: rows.length };
@@ -236,7 +318,9 @@ export function ScmQueuePage() {
   const filtered = useMemo(() => {
     let list = enriched;
     if (filter === "open") {
-      list = enriched.filter((r) => r.ovf_status === "open" || r.ovf_status === "draft");
+      list = enriched.filter(
+        (r) => r.ovf_status === "open" || r.ovf_status === "draft",
+      );
     } else if (filter === "close" || filter === "hold") {
       list = enriched.filter((r) => r.ovf_status === filter);
     }
@@ -257,7 +341,6 @@ export function ScmQueuePage() {
     <ProcurementPage>
       <PageHeader
         title="SCM Queue"
-        description="Finance-approved OVFs awaiting vendor PO creation, issuance, and SCM hold actions."
         actions={
           <div className="flex flex-wrap items-center gap-2">
             <Button
@@ -292,27 +375,27 @@ export function ScmQueuePage() {
 
       <div className="grid gap-2.5 sm:grid-cols-2 xl:grid-cols-4">
         <ProcurementKpiCard
-          label="Total OVF"
+          label="TOTAL OVF"
           value={String(kpis.total)}
           icon={ClipboardList}
           href="/procurement/scm"
         />
         <ProcurementKpiCard
-          label="Open"
+          label="OPEN OVF"
           value={String(kpis.open)}
           tone="warning"
           icon={ShoppingCart}
           href="/procurement/scm?filter=open"
         />
         <ProcurementKpiCard
-          label="Close"
+          label="CLOSE OVF"
           value={String(kpis.close)}
           tone="success"
           icon={CircleCheckBig}
           href="/procurement/scm?filter=close"
         />
         <ProcurementKpiCard
-          label="Hold"
+          label="HOLD OVF"
           value={String(kpis.hold)}
           tone="danger"
           icon={PauseCircle}
@@ -355,26 +438,26 @@ export function ScmQueuePage() {
       <ProcurementListPanel id="procurement-list" className="scroll-mt-24">
         <div className="overflow-x-auto">
           <table className="w-full min-w-[1440px] text-left text-sm">
-            <thead className="border-b border-border bg-muted/40 text-xs uppercase tracking-wide text-muted-foreground">
+            <thead className="border-b border-border bg-muted/40 text-xs font-bold uppercase tracking-wide text-muted-foreground">
               <tr>
-                <th className="px-3 py-2 font-medium">PO number</th>
-                <th className="px-3 py-2 font-medium">Customer name</th>
-                <th className="px-3 py-2 font-medium">Customer pay terms</th>
-                <th className="px-3 py-2 font-medium">Vendor name</th>
-                <th className="px-3 py-2 font-medium">Vendor pay terms</th>
-                <th className="px-3 py-2 font-medium">OVF date</th>
-                <th className="px-3 py-2 font-medium text-right">Customer amt</th>
-                <th className="px-3 py-2 font-medium text-right">Vendor amt</th>
+                <th className="px-3 py-2 font-bold">PO number</th>
+                <th className="px-3 py-2 font-bold">Customer name</th>
+                <th className="px-3 py-2 font-bold">Customer pay terms</th>
+                <th className="px-3 py-2 font-bold">Vendor name</th>
+                <th className="px-3 py-2 font-bold">Vendor pay terms</th>
+                <th className="px-3 py-2 font-bold">OVF date</th>
+                <th className="px-3 py-2 font-bold text-right">Customer amt</th>
+                <th className="px-3 py-2 font-bold text-right">Vendor amt</th>
                 <th
-                  className="px-3 py-2 font-medium text-right"
+                  className="px-3 py-2 font-bold text-right"
                   title="Product margin minus freight, additional charges, and finance cost"
                 >
                   Net margin
                 </th>
-                <th className="px-3 py-2 font-medium text-right">Margin %</th>
-                <th className="px-3 py-2 font-medium">OVF status</th>
-                <th className="px-3 py-2 font-medium">View OVF</th>
-                <th className="px-3 py-2 font-medium">Action</th>
+                <th className="px-3 py-2 font-bold text-right">Margin %</th>
+                <th className="px-3 py-2 font-bold">OVF status</th>
+                <th className="px-3 py-2 font-bold">View OVF</th>
+                <th className="px-3 py-2 font-bold">PO status</th>
               </tr>
             </thead>
             <tbody>
@@ -403,6 +486,11 @@ export function ScmQueuePage() {
               {filtered.map((row) => {
                 const isNew = newOvfIds.has(row.ovf_id);
                 const ovfStatus = row.ovf_status;
+                const poStatus = row.po_status;
+                const createPoHref =
+                  row.stock_fulfillment_status === "partial"
+                    ? ovfCreatePoRemainderHref(row.ovf_id)
+                    : `/procurement/scm/ovf/${row.ovf_id}/po`;
                 return (
                   <tr
                     key={row.ovf_id}
@@ -450,7 +538,24 @@ export function ScmQueuePage() {
                       {formatNetMarginPct(row.margin_amount, row.customer_total)}
                     </td>
                     <td className="px-3 py-2">
-                      <OvfStatusBadge status={ovfStatus} />
+                      <span className="inline-flex flex-wrap items-center gap-1.5">
+                        <OvfStatusBadge status={ovfStatus} />
+                        {row.stock_fulfillment_status === "complete" ? (
+                          <Badge
+                            variant="outline"
+                            className="border-emerald-300 bg-emerald-50 font-medium text-emerald-900"
+                          >
+                            Stock complete
+                          </Badge>
+                        ) : row.stock_fulfillment_status === "partial" ? (
+                          <Badge
+                            variant="outline"
+                            className="border-amber-300 bg-amber-50 font-medium text-amber-900"
+                          >
+                            Partial stock
+                          </Badge>
+                        ) : null}
+                      </span>
                     </td>
                     <td className="px-3 py-2">
                       <Link
@@ -464,33 +569,73 @@ export function ScmQueuePage() {
                       </Link>
                     </td>
                     <td className="px-3 py-2">
-                      {ovfStatus === "hold" || (ovfStatus === "open" && row.can_create_po) ? (
+                      {poStatus === "create_po" ? (
                         <ScmCreatePoEntry
                           ovfId={row.ovf_id}
+                          href={createPoHref}
                           scmOnHold={ovfStatus === "hold" && Boolean(row.scm_on_hold)}
                           scmOnHoldAt={row.scm_on_hold_at}
                           className="cursor-pointer transition-colors duration-200"
                         />
-                      ) : ovfStatus === "draft" ||
-                        (ovfStatus === "open" && row.purchase_order_id) ? (
+                      ) : poStatus === "from_stock" ? (
                         <Link
-                          href={`/procurement/orders/${row.purchase_order_id}`}
+                          href={ovfFromStockHref(row.ovf_id)}
                           className={cn(
-                            buttonVariants({ size: "sm", variant: "outline" }),
-                            "cursor-pointer transition-colors duration-200",
+                            "inline-flex cursor-pointer items-center rounded-md border px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide",
+                            "transition-colors duration-200",
+                            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1",
+                            poStatusChipClass("from_stock"),
                           )}
                         >
-                          Open PO
+                          From stock
+                        </Link>
+                      ) : poStatus === "draft" ? (
+                        <Link
+                          href={createPoHref}
+                          className={cn(
+                            "inline-flex cursor-pointer items-center rounded-md border px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide",
+                            "transition-colors duration-200",
+                            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1",
+                            poStatusChipClass("draft"),
+                          )}
+                        >
+                          Draft
+                        </Link>
+                      ) : poStatus === "approval_pending" && row.purchase_order_id ? (
+                        <Link
+                          href={`/procurement/orders/${row.purchase_order_id}?from=scm`}
+                          className={cn(
+                            "inline-flex cursor-pointer items-center rounded-md border px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide",
+                            "transition-colors duration-200",
+                            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1",
+                            poStatusChipClass("approval_pending"),
+                          )}
+                        >
+                          Approval pending
+                        </Link>
+                      ) : poStatus === "rejected" ? (
+                        <Link
+                          href={createPoHref}
+                          className={cn(
+                            "inline-flex cursor-pointer items-center rounded-md border px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide",
+                            "transition-colors duration-200",
+                            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1",
+                            poStatusChipClass("rejected"),
+                          )}
+                        >
+                          Rejected
                         </Link>
                       ) : row.purchase_order_id ? (
                         <Link
-                          href={`/procurement/orders/${row.purchase_order_id}`}
+                          href={`/procurement/orders/${row.purchase_order_id}?from=scm`}
                           className={cn(
-                            buttonVariants({ size: "sm", variant: "outline" }),
-                            "cursor-pointer transition-colors duration-200",
+                            "inline-flex cursor-pointer items-center rounded-md border px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide",
+                            "transition-colors duration-200",
+                            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1",
+                            poStatusChipClass("issued"),
                           )}
                         >
-                          View PO
+                          Approved
                         </Link>
                       ) : (
                         <span className="text-xs text-muted-foreground">—</span>

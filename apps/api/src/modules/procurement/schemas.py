@@ -249,6 +249,7 @@ class OrderCreateRequest(BaseModel):
 class OrderUpdateRequest(BaseModel):
     payment_terms: str | None = None
     expected_delivery_date: date | None = None
+    order_ref_cache: str | None = Field(default=None, max_length=100)
     version: int | None = None
 
 
@@ -282,6 +283,8 @@ class OrderLineResponse(BaseModel):
     last_receipt_billing: bool = True
     last_receipt_billing_quantity: float = 0
     unit_cost: float
+    rate_currency: str = "INR"
+    tax_rate: float = 0
     line_total: float
     status: str
 
@@ -327,8 +330,10 @@ class OrderResponse(BaseModel):
     entity_code: str | None = None
     customer_name: str | None = None
     approved_by_name: str | None = None
+    order_ref_cache: str | None = None
     ovf_date: date | None = None
     customer_po_number: str | None = None
+    customer_payment_days: int = 0
     vendor_total: float = 0
     customer_total: float = 0
     customer_tax_amount: float = 0
@@ -347,6 +352,14 @@ class OrderResponse(BaseModel):
 
 
 # --- SCM handoff (CRM OVF → vendor PO → GRN) ---
+
+
+class ScmStockAvailability(BaseModel):
+    product_name: str
+    required_qty: float = 0
+    on_hand_qty: float = 0
+    allocated_qty: float = 0
+    remaining_qty: float = 0
 
 
 class ScmQueueItemResponse(BaseModel):
@@ -380,6 +393,9 @@ class ScmQueueItemResponse(BaseModel):
     scm_on_hold: bool = False
     scm_on_hold_at: datetime | None = None
     can_create_po: bool = True
+    stock_fulfillment_status: str = "none"
+    remaining_demand_qty: float = 0
+    stock_availability: list[ScmStockAvailability] = Field(default_factory=list)
 
 
 class ScmNextCompanyPoResponse(BaseModel):
@@ -417,6 +433,55 @@ class ScmOvfHoldHistoryEntry(BaseModel):
 
 class ScmOvfHoldRequest(BaseModel):
     remark: str = Field(..., min_length=1, max_length=2000)
+
+
+class ScmOvfStockAllocationRow(BaseModel):
+    id: UUID
+    stock_unit_id: UUID
+    product_name: str
+    quantity: float
+    serial_number: str
+
+
+class ScmFulfillFromStockLineRequest(BaseModel):
+    product_name: str = Field(min_length=1, max_length=255)
+    stock_unit_ids: list[UUID] = Field(default_factory=list)
+
+
+class ScmFulfillFromStockRequest(BaseModel):
+    lines: list[ScmFulfillFromStockLineRequest] = Field(min_length=1)
+
+
+class ScmOvfStockChallanLine(BaseModel):
+    product_name: str
+    description: str | None = None
+    quantity: float
+    serial_number: str
+    rate: float = 0
+    stock_unit_id: UUID
+
+
+class ScmOvfStockChallanPrefill(BaseModel):
+    ovf_id: UUID
+    ovf_no: str
+    source_key: str
+    customer_name: str | None = None
+    customer_bill_to: str | None = None
+    customer_ship_to: str | None = None
+    customer_gst: str | None = None
+    po_number: str | None = None
+    po_date: date | None = None
+    kind_attn: str | None = None
+    lines: list[ScmOvfStockChallanLine] = Field(default_factory=list)
+
+
+class ScmFulfillFromStockResponse(BaseModel):
+    ovf_id: UUID
+    stock_fulfillment_status: str
+    remaining_demand_qty: float = 0
+    stock_availability: list[ScmStockAvailability] = Field(default_factory=list)
+    stock_allocations: list[ScmOvfStockAllocationRow] = Field(default_factory=list)
+    challan_prefill: ScmOvfStockChallanPrefill
 
 
 class ScmOvfPreviewResponse(BaseModel):
@@ -473,6 +538,20 @@ class ScmOvfPreviewResponse(BaseModel):
     scm_hold_history: list[ScmOvfHoldHistoryEntry] = Field(default_factory=list)
     scm_on_hold_remark: str | None = None
     purchase_order_status: str | None = None
+    stock_fulfillment_status: str = "none"
+    remaining_demand_qty: float = 0
+    stock_availability: list[ScmStockAvailability] = Field(default_factory=list)
+    stock_allocations: list[ScmOvfStockAllocationRow] = Field(default_factory=list)
+
+
+class ScmCreatePoFromOvfLineRequest(BaseModel):
+    """Optional SCM Create-PO line overrides (form edits); otherwise OVF vendor lines are used."""
+
+    product_name: str = Field(min_length=1, max_length=255)
+    qty: float = Field(gt=0)
+    unit_price: float = Field(gt=0)
+    rate_currency: str = Field(default="INR", max_length=3)
+    tax_rate: float = Field(default=0, ge=0)
 
 
 class ScmCreatePoFromOvfRequest(BaseModel):
@@ -482,9 +561,12 @@ class ScmCreatePoFromOvfRequest(BaseModel):
     payment_terms: str | None = None
     expected_delivery_date: date | None = None
     entity_code: str
+    order_ref_cache: str | None = Field(default=None, max_length=100)
     finalize: bool = False
     # Hold: create draft then cancel so SCM Queue shows Hold and Create PO stays available.
     hold: bool = False
+    # When set, these lines are purchased instead of raw OVF vendor_lines (qty/rate edits, removals).
+    lines: list[ScmCreatePoFromOvfLineRequest] | None = None
 
 
 class ScmInventoryPoLineRequest(BaseModel):
@@ -501,7 +583,11 @@ class ScmCreateInventoryPoRequest(BaseModel):
     payment_terms: str | None = None
     expected_delivery_date: date | None = None
     approved_by_name: str | None = Field(default=None, max_length=255)
+    order_ref_cache: str | None = Field(default=None, max_length=100)
     lines: list[ScmInventoryPoLineRequest] = Field(default_factory=list)
+    # Soft-delete these on-hand units when creating the PO (inventory deduction).
+    stock_unit_ids: list[UUID] = Field(default_factory=list)
+    import_line_ids: list[UUID] = Field(default_factory=list)
 
 
 class ScmUpdateOvfChargesRequest(BaseModel):
@@ -531,6 +617,7 @@ class ScmVendorPoLineResponse(BaseModel):
     last_receipt_billing: bool = True
     last_receipt_billing_quantity: float = 0
     unit_cost: float
+    rate_currency: str = "INR"
     line_total: float
     status: str
     grn_status: str
@@ -540,6 +627,7 @@ class ScmVendorPoResponse(BaseModel):
     id: UUID
     document_number: str
     document_date: date
+    created_at: datetime | None = None
     vendor_id: UUID
     status: str
     currency_code: str
@@ -619,11 +707,38 @@ class ScmInventorySerialUpdate(BaseModel):
     serial_number: str = Field(..., min_length=1, max_length=120)
 
 
+class ScmInventoryDescriptionUpdate(BaseModel):
+    description: str = Field(..., max_length=50)
+
+
 class ScmReceiptBatchAttachmentSummary(BaseModel):
     id: UUID
     file_name: str
     content_type: str | None = None
     size: int | None = None
+
+
+class ScmCommercialAttachmentSummary(BaseModel):
+    """OVF / purchase-order commercial documents visible to SCM and approvers."""
+
+    id: UUID
+    file_name: str
+    content_type: str | None = None
+    size: int | None = None
+    category: str = "other"
+    remarks: str | None = None
+    entity_type: str
+    entity_id: UUID
+
+
+class ScmCommercialAttachmentCreate(BaseModel):
+    file_name: str
+    content_base64: str
+    content_type: str | None = None
+    branch_id: UUID
+    company_id: UUID | None = None
+    category: str = "other"
+    remarks: str | None = Field(default=None, max_length=2000)
 
 
 class ScmReceiptBatchResponse(BaseModel):
@@ -635,6 +750,11 @@ class ScmReceiptBatchResponse(BaseModel):
     vendor_invoice_date: date | None = None
     vendor_invoice_quantity: float | None = None
     vendor_invoice_subtotal: float | None = None
+    reversed: bool = False
+    reversal_status: str = "posted"
+    reversed_at: datetime | None = None
+    reversed_by: UUID | None = None
+    reversal_reason: str | None = None
     lines: list[ScmReceiptBatchLineResponse] = Field(default_factory=list)
     attachments: list[ScmReceiptBatchAttachmentSummary] = Field(default_factory=list)
 
@@ -669,6 +789,10 @@ class ScmReceiptBatchAttachmentCreate(BaseModel):
     content_type: str | None = None
     branch_id: UUID
     company_id: UUID | None = None
+
+
+class ScmReceiptBatchReverseRequest(BaseModel):
+    reason: str = Field(..., min_length=1, max_length=2000)
 
 
 # --- GRN ---

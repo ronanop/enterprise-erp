@@ -4,8 +4,17 @@ import {
   formatEntityGstBlock,
   resolveCompanyEntity,
 } from "@/config/company-entities";
-import type { ProcOrder, ScmOvfPreview } from "@/services/procurement-service";
-import type { DeliveryChallanLine } from "@/utils/delivery-challan-storage";
+import {
+  getPurchaseOrder,
+  getScmOvfPreview,
+  type ProcOrder,
+  type ScmOvfPreview,
+} from "@/services/procurement-service";
+import type {
+  DeliveryChallanLine,
+  DeliveryChallanRecord,
+} from "@/utils/delivery-challan-storage";
+import { upsertDeliveryChallan } from "@/utils/delivery-challan-storage";
 
 export type ChallanPrefillHeader = {
   entityName: string;
@@ -35,7 +44,7 @@ function formatPoDateDisplay(iso: string | null | undefined): string {
   });
 }
 
-/** PDF grid line: `PO/CDT/001 & 31 July, 2026` */
+/** PDF / form line: customer PO with date, e.g. `CUST-PO-001 & 31 July, 2026` */
 export function formatPoNumberDateLine(poNumber: string, poDateIso: string): string {
   const po = poNumber.trim();
   if (!po) return "";
@@ -62,14 +71,14 @@ export function buildChallanPrefillHeader(
   ovf: ScmOvfPreview | null,
   entityCode?: string | null,
 ): ChallanPrefillHeader {
-  const poNumber = order.company_po_number?.trim() || order.document_number;
-  const entity = resolveCompanyEntity(entityCode ?? null, poNumber);
-  const dispatchState = entityGstState(entityCode ?? order.entity_code ?? null, poNumber);
+  const companyPoNumber = order.company_po_number?.trim() || order.document_number;
+  const entity = resolveCompanyEntity(entityCode ?? null, companyPoNumber);
+  const dispatchState = entityGstState(entityCode ?? order.entity_code ?? null, companyPoNumber);
   const shipFrom = formatEntityAddressBlock(entity);
   const customerName = resolveChallanCustomerDisplayName(order, ovf);
   const billTo = (ovf?.billing_address || "").trim();
   const shipTo = (ovf?.shipping_address || "").trim();
-  const poDateIso = ovf?.po_date || order.document_date;
+  const customerPo = resolveCustomerPoFields(order, ovf);
   const attnParts = [
     ovf?.shipping_contact_person,
     ovf?.billing_contact_person,
@@ -83,12 +92,68 @@ export function buildChallanPrefillHeader(
     customerShipTo: shipTo || billTo || customerName,
     customerGstNo: (ovf?.customer_gst || "").trim(),
     kindAttn: attnParts.join(" / "),
-    poNumber,
-    poDate: poDateIso?.slice(0, 10) || order.document_date,
-    poNumberDate: formatPoNumberDateLine(poNumber, poDateIso?.slice(0, 10) || order.document_date),
+    poNumber: customerPo.poNumber,
+    poDate: customerPo.poDate,
+    poNumberDate: formatPoNumberDateLine(customerPo.poNumber, customerPo.poDate),
     shipFromAddress: shipFrom,
     taxPercentage: String(ovf?.tax_percentage ?? 18),
     remarks: "Not for Sale, Delivery Purpose Only",
+  };
+}
+
+/** Customer PO number + date from order enrichment / OVF (never company PO/CDT/…). */
+export function resolveCustomerPoFields(
+  order: ProcOrder,
+  ovf: ScmOvfPreview | null,
+): { poNumber: string; poDate: string } {
+  const poNumber =
+    order.customer_po_number?.trim() ||
+    ovf?.po_number?.trim() ||
+    "";
+  const poDateIso =
+    ovf?.po_date ||
+    order.ovf_date ||
+    "";
+  const poDate = (poDateIso || "").slice(0, 10);
+  return { poNumber, poDate };
+}
+
+/** True when stored value is the Cache/company PO (legacy challan mistake). */
+export function isCompanyPoStoredValue(
+  value: string,
+  order: ProcOrder | null | undefined,
+): boolean {
+  const v = (value || "").trim();
+  if (!v || !order) return false;
+  const company = (order.company_po_number || "").trim();
+  const doc = (order.document_number || "").trim();
+  return (Boolean(company) && v === company) || (Boolean(doc) && v === doc);
+}
+
+/**
+ * Prefer customer PO on challan records that still hold company PO from older prefills.
+ */
+export function applyCustomerPoToChallanFields<
+  T extends { purchaseOrderNumber: string; poDate: string; poNumberDate?: string },
+>(fields: T, order: ProcOrder, ovf: ScmOvfPreview | null): T {
+  const customer = resolveCustomerPoFields(order, ovf);
+  if (!customer.poNumber) return fields;
+  const shouldReplace =
+    !fields.purchaseOrderNumber.trim() ||
+    isCompanyPoStoredValue(fields.purchaseOrderNumber, order);
+  if (!shouldReplace) return fields;
+  return {
+    ...fields,
+    purchaseOrderNumber: customer.poNumber,
+    poDate: customer.poDate || fields.poDate,
+    ...(fields.poNumberDate !== undefined
+      ? {
+          poNumberDate: formatPoNumberDateLine(
+            customer.poNumber,
+            customer.poDate || fields.poDate,
+          ),
+        }
+      : {}),
   };
 }
 
@@ -137,13 +202,57 @@ export function orderLineToChallanLine(
   ln: ProcOrder["lines"][number],
   defaultShipTo: string,
 ): DeliveryChallanLine {
+  const product = (ln.product_name || ln.product_code || "").trim();
   return {
     id: crypto.randomUUID(),
-    itemName: (ln.product_name || ln.product_code || "").trim(),
+    product,
+    itemName: "",
     quantitySent: String(Number(ln.quantity) || 0),
     hsnSac: "",
     assetNo: "-",
     rate: String(Number(ln.unit_cost) || 0),
     shipTo: defaultShipTo,
   };
+}
+
+/**
+ * Load order/OVF and replace legacy company PO on a saved challan (persists when corrected).
+ */
+export async function resolveChallanRecordCustomerPo(
+  record: DeliveryChallanRecord,
+  options?: { persist?: boolean },
+): Promise<DeliveryChallanRecord> {
+  if (!record.orderId) return record;
+  try {
+    const order = await getPurchaseOrder(record.orderId);
+    let ovf: ScmOvfPreview | null = null;
+    if (order.source_module === "crm" && order.source_document_id) {
+      try {
+        ovf = await getScmOvfPreview(order.source_document_id);
+      } catch {
+        ovf = null;
+      }
+    }
+    const corrected = applyCustomerPoToChallanFields(record, order, ovf);
+    if (
+      corrected.purchaseOrderNumber === record.purchaseOrderNumber &&
+      corrected.poDate === record.poDate
+    ) {
+      return record;
+    }
+    const next: DeliveryChallanRecord = {
+      ...record,
+      purchaseOrderNumber: corrected.purchaseOrderNumber,
+      poDate: corrected.poDate,
+      poNumberDate:
+        corrected.poNumberDate ||
+        formatPoNumberDateLine(corrected.purchaseOrderNumber, corrected.poDate),
+    };
+    if (options?.persist !== false) {
+      upsertDeliveryChallan(next);
+    }
+    return next;
+  } catch {
+    return record;
+  }
 }

@@ -1,18 +1,32 @@
 "use client";
 
-import { CalendarClock, MapPin, PackageSearch } from "lucide-react";
+import type { ReactNode } from "react";
+import { useMemo, useState } from "react";
+import { FileText, Truck, Upload } from "lucide-react";
 
-import { FinanceField, FinanceSelect, FinanceTextarea } from "@/components/finance/journals/finance-form-field";
-import { DeliverySectionCard } from "@/components/procurement/delivery-section-card";
-import { Input } from "@/components/ui/input";
 import {
-  SHIPMENT_STATUS_OPTIONS,
-  applyShipmentStatusToActualDate,
-  isDeliveredShipmentStatus,
+  FinanceField,
+  FinanceSelect,
+  FinanceTextarea,
+} from "@/components/finance/journals/finance-form-field";
+import { DeliverySectionCard } from "@/components/procurement/delivery-section-card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { fileToBase64 } from "@/services/sales-crm-service";
+import {
+  addCustomCourierProvider,
+  allCourierProviderOptions,
+  COURIER_ADD_OTHER,
+  readCustomCourierProviders,
+} from "@/utils/delivery-courier-providers";
+import {
+  deriveDeliveryStatusLabel,
+  openStoredDeliveryFile,
+  type DeliveryStatusAttachment,
+  SURFACE_MODE_OPTIONS,
   type DeliveryStatusFormErrors,
   type DeliveryStatusRecord,
 } from "@/utils/delivery-status-storage";
-
 export type DeliveryStatusFormValue = Omit<DeliveryStatusRecord, "challanId" | "updatedAt">;
 
 type DeliveryStatusFormProps = {
@@ -21,189 +35,402 @@ type DeliveryStatusFormProps = {
   compact?: boolean;
   showLocationSection?: boolean;
   fieldErrors?: DeliveryStatusFormErrors;
-  /** After first save — only shipment status is editable. */
   mode?: "initial" | "tracking" | "shipment-only";
 };
 
-function todayIso(): string {
-  return new Date().toISOString().slice(0, 10);
+function withDerivedStatus(value: DeliveryStatusFormValue): DeliveryStatusFormValue {
+  return {
+    ...value,
+    shipmentStatus: deriveDeliveryStatusLabel(value),
+    trackingNumber: value.docketNumber ?? "",
+  };
+}
+
+function safeText(value: string | null | undefined): string {
+  return value ?? "";
 }
 
 export function DeliveryStatusForm({
   value,
   onChange,
-  compact,
-  showLocationSection = true,
   fieldErrors = {},
-  mode = "initial",
 }: DeliveryStatusFormProps) {
+  const actualDeliveryDate = safeText(value.actualDeliveryDate);
+  const dispatchDate = safeText(value.dispatchDate);
+  const expectedDeliveryDate = safeText(value.expectedDeliveryDate);
+  const [customCouriers, setCustomCouriers] = useState(readCustomCourierProviders);
+  const [otherCourierDraft, setOtherCourierDraft] = useState("");
+  const courierOptions = useMemo(() => {
+    const base = allCourierProviderOptions();
+    const current = safeText(value.courierProvider).trim();
+    if (current && !base.some((opt) => opt.toLowerCase() === current.toLowerCase())) {
+      return [...base, current];
+    }
+    return base;
+  }, [customCouriers, value.courierProvider]);
+  const courierSelectValue = useMemo(() => {
+    const current = safeText(value.courierProvider).trim();
+    if (!current) return "";
+    const match = courierOptions.find((opt) => opt.toLowerCase() === current.toLowerCase());
+    return match ?? COURIER_ADD_OTHER;
+  }, [value.courierProvider, courierOptions]);
+  const showOtherCourierInput = courierSelectValue === COURIER_ADD_OTHER;
+
   function patch(partial: Partial<DeliveryStatusFormValue>) {
-    onChange(applyShipmentStatusToActualDate({ ...value, ...partial }));
+    onChange(withDerivedStatus({ ...value, ...partial }));
   }
 
-  function onShipmentStatusChange(nextStatus: string) {
-    const base = { ...value, shipmentStatus: nextStatus };
-    onChange(applyShipmentStatusToActualDate(base));
-  }
-
-  const statusCard = (
-    <DeliverySectionCard title="Shipment status" icon={PackageSearch}>
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-        <FinanceField label="Shipment status">
-          <FinanceSelect
-            value={value.shipmentStatus}
-            onChange={(e) => onShipmentStatusChange(e.target.value)}
-            className="h-8"
-          >
-            {SHIPMENT_STATUS_OPTIONS.map((option) => (
-              <option key={option} value={option}>
-                {option}
-              </option>
-            ))}
-          </FinanceSelect>
-        </FinanceField>
-        {isDeliveredShipmentStatus(value.shipmentStatus) && value.actualDeliveryDate ? (
-          <p className="text-xs text-muted-foreground sm:col-span-2 lg:col-span-3">
-            Actual delivery date recorded:{" "}
-            <span className="font-medium tabular-nums text-foreground">
-              {value.actualDeliveryDate}
-            </span>
-          </p>
-        ) : null}
-      </div>
-    </DeliverySectionCard>
-  );
-
-  const datesCard = (
-    <DeliverySectionCard title="Delivery dates" icon={CalendarClock}>
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-        <FinanceField label="Dispatch date *" error={fieldErrors.dispatchDate}>
-          <Input
-            type="date"
-            required
-            value={value.dispatchDate}
-            onChange={(e) => patch({ dispatchDate: e.target.value })}
-            className="h-8"
-          />
-        </FinanceField>
-        <FinanceField label="Reminder email *" error={fieldErrors.reminderEmail}>
-          <Input
-            type="email"
-            required
-            autoComplete="email"
-            value={value.reminderEmail}
-            onChange={(e) => patch({ reminderEmail: e.target.value })}
-            className="h-8"
-            placeholder="name@company.com"
-          />
-        </FinanceField>
-        <FinanceField label="Expected delivery date *" error={fieldErrors.expectedDeliveryDate}>
-          <Input
-            type="date"
-            required
-            value={value.expectedDeliveryDate}
-            onChange={(e) => patch({ expectedDeliveryDate: e.target.value })}
-            className="h-8"
-            min={value.dispatchDate || todayIso()}
-          />
-        </FinanceField>
-      </div>
-    </DeliverySectionCard>
-  );
-
-  const courierCard = (
-    <DeliverySectionCard title="Courier & tracking" icon={PackageSearch}>
-      <div className="grid gap-3 sm:grid-cols-2">
-        <FinanceField label="Courier / transport details">
-          <FinanceTextarea
-            value={value.courierTransportDetails}
-            onChange={(e) => patch({ courierTransportDetails: e.target.value })}
-            rows={compact ? 2 : 3}
-            placeholder="Courier name, contact, vehicle, etc."
-          />
-        </FinanceField>
-        <FinanceField label="Tracking number (if applicable)">
-          <Input
-            value={value.trackingNumber}
-            onChange={(e) => patch({ trackingNumber: e.target.value })}
-            className="h-8"
-            placeholder="AWB / tracking ID"
-          />
-        </FinanceField>
-      </div>
-    </DeliverySectionCard>
-  );
-
-  const locationCard = (
-    <DeliverySectionCard title="Delivery location & receiver" icon={MapPin}>
-      <div className="grid gap-3 sm:grid-cols-2">
-        <FinanceField label="Delivery location">
-          <FinanceTextarea
-            value={value.deliveryLocation}
-            onChange={(e) => patch({ deliveryLocation: e.target.value })}
-            rows={compact ? 2 : 4}
-            placeholder="Full delivery address"
-          />
-        </FinanceField>
-        <FinanceField label="Receiver details">
-          <FinanceTextarea
-            value={value.receiverDetails}
-            onChange={(e) => patch({ receiverDetails: e.target.value })}
-            rows={compact ? 2 : 4}
-            placeholder="Receiver name, phone, ID proof, remarks"
-          />
-        </FinanceField>
-      </div>
-    </DeliverySectionCard>
-  );
-
-  if (mode === "shipment-only") {
-    return <div className="space-y-4">{statusCard}</div>;
-  }
-
-  const savedDetailsCard =
-    mode === "tracking" ? (
-      <DeliverySectionCard title="Saved shipment details" icon={CalendarClock}>
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          <ReadOnlySummary label="Dispatch date" value={value.dispatchDate} />
-          <ReadOnlySummary label="Reminder email" value={value.reminderEmail} />
-          <ReadOnlySummary label="Expected delivery" value={value.expectedDeliveryDate} />
-          <ReadOnlySummary label="Courier / transport" value={value.courierTransportDetails} />
-          <ReadOnlySummary label="Tracking number" value={value.trackingNumber} />
-        </div>
-      </DeliverySectionCard>
-    ) : null;
-
-  if (compact) {
-    return (
-      <div className="space-y-3">
-        {savedDetailsCard}
-        {statusCard}
-        {mode === "initial" ? datesCard : null}
-        {mode === "initial" ? courierCard : null}
-        {showLocationSection && mode === "initial" ? locationCard : null}
-      </div>
-    );
+  async function onPickFile(
+    fileList: FileList | null,
+    field: "cacheInvoiceDocument" | "podDocument",
+  ) {
+    const file = fileList?.[0];
+    if (!file) return;
+    const contentBase64 = await fileToBase64(file);
+    patch({
+      [field]: {
+        fileName: file.name,
+        contentBase64,
+        contentType: file.type || "application/octet-stream",
+      } satisfies DeliveryStatusAttachment,
+    });
   }
 
   return (
     <div className="space-y-4">
-      {savedDetailsCard}
-      {statusCard}
-      {mode === "initial" ? datesCard : null}
-      {mode === "initial" ? courierCard : null}
-      {showLocationSection && mode === "initial" ? locationCard : null}
+      <DeliverySectionCard title="Cache invoice" icon={FileText}>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <FinanceField label="Cache invoice number *" error={fieldErrors.cacheInvoiceNumber}>
+            <Input
+              value={safeText(value.cacheInvoiceNumber)}
+              onChange={(e) => patch({ cacheInvoiceNumber: e.target.value })}
+              className="h-8"
+              placeholder="Invoice no."
+            />
+          </FinanceField>
+          <FileField
+            label="Cache invoice document *"
+            error={fieldErrors.cacheInvoiceDocument}
+          >
+            <FilePickRow
+              file={value.cacheInvoiceDocument}
+              onPick={(files) => void onPickFile(files, "cacheInvoiceDocument")}
+              onClear={() => patch({ cacheInvoiceDocument: null })}
+              inputId="cache-invoice-document"
+            />
+          </FileField>
+        </div>
+      </DeliverySectionCard>
+
+      <DeliverySectionCard title="Dispatch detail" icon={Truck}>
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          <FinanceField label="Status *" error={fieldErrors.deliveryMode}>
+            <FinanceSelect
+              value={safeText(value.deliveryMode)}
+              onChange={(e) => {
+                const next = e.target.value === "courier" ? "courier" : e.target.value === "hand" ? "hand" : "";
+                patch({
+                  deliveryMode: next,
+                  ...(next === "courier"
+                    ? { deliveryBoyName: "", itemType: "", podDocument: null }
+                    : { docketNumber: "", courierProvider: "" }),
+                });
+              }}
+              className="h-8 cursor-pointer transition-colors duration-200"
+            >
+              <option value="">Select…</option>
+              <option value="hand">By hand</option>
+              <option value="courier">Courier</option>
+            </FinanceSelect>
+          </FinanceField>
+        </div>
+
+        {value.deliveryMode === "hand" || value.deliveryMode === "courier" ? (
+          <>
+            <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-3">
+              <FinanceField
+                label="Estimated delivery date"
+                error={fieldErrors.expectedDeliveryDate}
+              >
+                <Input
+                  type="date"
+                  value={expectedDeliveryDate}
+                  onChange={(e) => patch({ expectedDeliveryDate: e.target.value })}
+                  className="h-8"
+                />
+              </FinanceField>
+              <FinanceField
+                label={value.deliveryMode === "hand" ? "Dispatch date *" : "Dispatch date"}
+                error={fieldErrors.dispatchDate}
+              >
+                <Input
+                  type="date"
+                  value={dispatchDate}
+                  onChange={(e) => patch({ dispatchDate: e.target.value })}
+                  className="h-8"
+                />
+              </FinanceField>
+              <FinanceField
+                label="Delivered date"
+                error={fieldErrors.actualDeliveryDate}
+                hint={
+                  value.deliveryMode === "hand" && actualDeliveryDate.trim()
+                    ? "POD attachment is required when a delivered date is set."
+                    : undefined
+                }
+              >
+                <Input
+                  type="date"
+                  value={actualDeliveryDate}
+                  min={dispatchDate || undefined}
+                  onChange={(e) => patch({ actualDeliveryDate: e.target.value })}
+                  className="h-8"
+                />
+              </FinanceField>
+            </div>
+            <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              <FinanceField label="No. of boxes" error={fieldErrors.boxCount}>
+                <Input
+                  type="text"
+                  inputMode="numeric"
+                  value={safeText(value.boxCount)}
+                  onChange={(e) =>
+                    patch({ boxCount: e.target.value.replace(/[^\d]/g, "") })
+                  }
+                  className="h-8"
+                  placeholder="0"
+                />
+              </FinanceField>
+              <FinanceField label="Mode of surface" error={fieldErrors.surfaceMode}>
+                <FinanceSelect
+                  value={safeText(value.surfaceMode)}
+                  onChange={(e) => patch({ surfaceMode: e.target.value })}
+                  className="h-8 cursor-pointer transition-colors duration-200"
+                >
+                  <option value="">Select…</option>
+                  {SURFACE_MODE_OPTIONS.map((mode) => (
+                    <option key={mode} value={mode}>
+                      {mode}
+                    </option>
+                  ))}
+                </FinanceSelect>
+              </FinanceField>
+            </div>
+            <FinanceField label="Remarks" error={fieldErrors.remarks} className="mt-3">
+              <FinanceTextarea
+                value={safeText(value.remarks)}
+                onChange={(e) => patch({ remarks: e.target.value })}
+                rows={3}
+                placeholder="Add remarks"
+              />
+            </FinanceField>
+          </>
+        ) : null}
+
+        {value.deliveryMode === "hand" ? (
+          <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            <FinanceField label="Delivery person *" error={fieldErrors.deliveryBoyName}>
+              <Input
+                value={safeText(value.deliveryBoyName)}
+                onChange={(e) => patch({ deliveryBoyName: e.target.value })}
+                className="h-8"
+              />
+            </FinanceField>
+            <FinanceField label="Item *" error={fieldErrors.itemType}>
+              <FinanceSelect
+                value={safeText(value.itemType)}
+                onChange={(e) => {
+                  const next =
+                    e.target.value === "hardware"
+                      ? "hardware"
+                      : e.target.value === "software"
+                        ? "software"
+                        : "";
+                  patch({
+                    itemType: next,
+                  });
+                }}
+                className="h-8 cursor-pointer transition-colors duration-200"
+              >
+                <option value="">Select…</option>
+                <option value="hardware">Hardware</option>
+                <option value="software">Software</option>
+              </FinanceSelect>
+            </FinanceField>
+            {(value.itemType === "hardware" || value.itemType === "software") &&
+            actualDeliveryDate.trim() ? (
+              <FileField
+                label="POD attachment *"
+                error={fieldErrors.podDocument}
+                className="sm:col-span-2"
+              >
+                <FilePickRow
+                  file={value.podDocument}
+                  onPick={(files) => void onPickFile(files, "podDocument")}
+                  onClear={() => patch({ podDocument: null })}
+                  inputId="pod-document"
+                />
+              </FileField>
+            ) : null}
+          </div>
+        ) : null}
+
+        {value.deliveryMode === "courier" ? (
+          <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            <FinanceField label="Courier *" error={fieldErrors.courierProvider}>
+              <FinanceSelect
+                value={courierSelectValue}
+                onChange={(e) => {
+                  const next = e.target.value;
+                  if (next === COURIER_ADD_OTHER) {
+                    setOtherCourierDraft(safeText(value.courierProvider));
+                    patch({ courierProvider: "" });
+                    return;
+                  }
+                  patch({ courierProvider: next });
+                }}
+                className="h-8 cursor-pointer transition-colors duration-200"
+              >
+                <option value="">Select…</option>
+                {courierOptions.map((provider) => (
+                  <option key={provider} value={provider}>
+                    {provider}
+                  </option>
+                ))}
+                <option value={COURIER_ADD_OTHER}>Add other…</option>
+              </FinanceSelect>
+            </FinanceField>
+            {showOtherCourierInput ? (
+              <div className="flex items-end gap-2 sm:col-span-2">
+                <FinanceField label="Other courier" className="min-w-0 flex-1">
+                  <Input
+                    value={otherCourierDraft || safeText(value.courierProvider)}
+                    onChange={(e) => setOtherCourierDraft(e.target.value)}
+                    className="h-8"
+                    placeholder="Enter courier name"
+                  />
+                </FinanceField>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="h-8 shrink-0 cursor-pointer transition-colors duration-200"
+                  disabled={!otherCourierDraft.trim()}
+                  onClick={() => {
+                    const name = otherCourierDraft.trim();
+                    if (!name) return;
+                    const updated = addCustomCourierProvider(name);
+                    setCustomCouriers(updated);
+                    patch({ courierProvider: name });
+                    setOtherCourierDraft("");
+                  }}
+                >
+                  Add
+                </Button>
+              </div>
+            ) : null}
+            <FinanceField label="Docket number *" error={fieldErrors.docketNumber}>
+              <Input
+                value={safeText(value.docketNumber)}
+                onChange={(e) => patch({ docketNumber: e.target.value })}
+                className="h-8"
+                placeholder="Docket / AWB no."
+              />
+            </FinanceField>
+          </div>
+        ) : null}
+      </DeliverySectionCard>
     </div>
   );
 }
 
-function ReadOnlySummary({ label, value }: { label: string; value: string }) {
+function FileField({
+  label,
+  error,
+  className,
+  children,
+}: {
+  label: string;
+  error?: string;
+  className?: string;
+  children: ReactNode;
+}) {
   return (
-    <div className="space-y-0.5">
-      <div className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-        {label}
+    <div className={className}>
+      <div className="space-y-1">
+        <span className="text-[11px] font-medium tracking-wide text-muted-foreground uppercase">
+          {label}
+        </span>
+        {children}
+        {error ? <p className="text-xs text-destructive">{error}</p> : null}
       </div>
-      <div className="text-sm text-foreground">{value.trim() || "—"}</div>
+    </div>
+  );
+}
+
+function FilePickRow({
+  file,
+  onPick,
+  onClear,
+  inputId,
+}: {
+  file: DeliveryStatusAttachment | null;
+  onPick: (files: FileList | null) => void;
+  onClear: () => void;
+  inputId: string;
+}) {
+  return (
+    <div className="flex min-w-0 items-center gap-2">
+      <input
+        id={inputId}
+        type="file"
+        accept=".pdf,.png,.jpg,.jpeg,.webp"
+        className="sr-only"
+        onChange={(e) => {
+          onPick(e.target.files);
+          e.currentTarget.value = "";
+        }}
+      />
+      {file ? (
+        <>
+          <button
+            type="button"
+            className="min-w-0 cursor-pointer truncate text-left text-sm font-medium text-[#0369A1] transition-colors duration-200 hover:underline"
+            onClick={() => openStoredDeliveryFile(file)}
+          >
+            {file.fileName}
+          </button>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            className="h-8 shrink-0 cursor-pointer transition-colors duration-200"
+            onClick={() => document.getElementById(inputId)?.click()}
+          >
+            Replace
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            variant="ghost"
+            className="h-8 shrink-0 cursor-pointer transition-colors duration-200"
+            onClick={onClear}
+          >
+            Remove
+          </Button>
+        </>
+      ) : (
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          className="h-8 cursor-pointer gap-1.5 transition-colors duration-200"
+          onClick={() => document.getElementById(inputId)?.click()}
+        >
+          <Upload className="size-3.5" />
+          Upload
+        </Button>
+      )}
     </div>
   );
 }
@@ -212,14 +439,28 @@ export function deliveryStatusToFormValue(
   record: DeliveryStatusRecord,
 ): DeliveryStatusFormValue {
   return {
-    shipmentStatus: record.shipmentStatus,
-    dispatchDate: record.dispatchDate,
-    reminderEmail: record.reminderEmail,
-    expectedDeliveryDate: record.expectedDeliveryDate,
-    actualDeliveryDate: record.actualDeliveryDate,
-    courierTransportDetails: record.courierTransportDetails,
-    trackingNumber: record.trackingNumber,
-    deliveryLocation: record.deliveryLocation,
-    receiverDetails: record.receiverDetails,
+    shipmentStatus: record.shipmentStatus || "Pending",
+    dispatchDate: record.dispatchDate ?? "",
+    reminderEmail: record.reminderEmail ?? "",
+    expectedDeliveryDate: record.expectedDeliveryDate ?? "",
+    actualDeliveryDate: record.actualDeliveryDate ?? "",
+    courierTransportDetails: record.courierTransportDetails ?? "",
+    courierProvider: record.courierProvider ?? record.courierTransportDetails ?? "",
+    trackingNumber: record.docketNumber || record.trackingNumber || "",
+    deliveryLocation: record.deliveryLocation ?? "",
+    receiverDetails: record.receiverDetails ?? "",
+    cachePoNumber: record.cachePoNumber ?? "",
+    customerPoNumber: record.customerPoNumber ?? "",
+    customerName: record.customerName ?? "",
+    cacheInvoiceNumber: record.cacheInvoiceNumber ?? "",
+    cacheInvoiceDocument: record.cacheInvoiceDocument ?? null,
+    deliveryMode: record.deliveryMode ?? "",
+    deliveryBoyName: record.deliveryBoyName ?? "",
+    itemType: record.itemType ?? "",
+    podDocument: record.podDocument ?? null,
+    docketNumber: record.docketNumber || record.trackingNumber || "",
+    boxCount: record.boxCount ?? "",
+    surfaceMode: record.surfaceMode ?? "",
+    remarks: record.remarks ?? "",
   };
 }

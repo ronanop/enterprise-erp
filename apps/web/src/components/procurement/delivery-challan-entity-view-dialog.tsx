@@ -53,7 +53,7 @@ export function DeliveryChallanEntityViewDialog({
         className="flex w-full max-w-md flex-col rounded-lg border border-border/80 bg-card p-5 shadow-lg"
         onClick={(e) => e.stopPropagation()}
       >
-        <h2 id="challan-entity-view-title" className="text-base font-extrabold tracking-tight">
+        <h2 id="challan-entity-view-title" className="text-sm font-medium tracking-tight">
           Entity details
         </h2>
         <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">{subtitle}</p>

@@ -10,7 +10,7 @@ import {
   formatGrnSerialSummary,
   groupInventoryByPoAndGrn,
 } from "@/utils/procurement-inventory-grouping";
-import { isGrnNonBilledStockRow } from "@/utils/procurement-inventory-report";
+import { isInventoryLedgerRow } from "@/utils/procurement-inventory-report";
 
 function formatReceiptDate(value: string | null): string {
   if (!value) return "—";
@@ -38,7 +38,7 @@ export function GrnStockSummaryTable({
   query = "",
 }: GrnStockSummaryTableProps) {
   const filtered = useMemo(() => {
-    const grnRows = rows.filter(isGrnNonBilledStockRow);
+    const grnRows = rows.filter(isInventoryLedgerRow);
     const q = query.trim().toLowerCase();
     if (!q) return grnRows;
     return grnRows.filter((row) => {
@@ -74,7 +74,7 @@ export function GrnStockSummaryTable({
                 <td colSpan={7} className={procurementUi.empty}>
                   {loading
                     ? "Loading GRN list…"
-                    : rows.filter(isGrnNonBilledStockRow).length === 0
+                    : rows.filter(isInventoryLedgerRow).length === 0
                       ? "No GRN stock units. Receive on a GRN with partial billing to see not-billed units here."
                       : "No rows match your search."}
                 </td>

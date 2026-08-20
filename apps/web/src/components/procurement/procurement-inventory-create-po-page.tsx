@@ -345,6 +345,42 @@ export function ProcurementInventoryCreatePoPage() {
       setError("Select at least one stock unit to add PO lines.");
       return;
     }
+
+    const selectedRows = stockRows.filter((row, index) =>
+      selectedKeys.has(stockRowKey(row, index)),
+    );
+    const unitsByProduct = new Map<string, ProcurementInventoryRow[]>();
+    for (const row of selectedRows) {
+      const name = (row.product_name || "").trim() || "Unnamed product";
+      const list = unitsByProduct.get(name) ?? [];
+      list.push(row);
+      unitsByProduct.set(name, list);
+    }
+
+    const stockUnitIds: string[] = [];
+    const importLineIds: string[] = [];
+    const lines: Array<{ product_name: string; quantity: number; unit_cost: number }> = [];
+
+    for (const line of poLines) {
+      const available = unitsByProduct.get(line.productName) ?? [];
+      const qty = Math.min(Math.max(1, Math.floor(line.quantity)), available.length || line.quantity);
+      const consume = available.slice(0, Math.min(qty, available.length));
+      for (const row of consume) {
+        if (row.stock_unit_id) stockUnitIds.push(row.stock_unit_id);
+        else if (row.import_line_id) importLineIds.push(row.import_line_id);
+      }
+      lines.push({
+        product_name: line.productName,
+        quantity: consume.length > 0 ? consume.length : qty,
+        unit_cost: line.unitCost,
+      });
+    }
+
+    if (stockUnitIds.length === 0 && importLineIds.length === 0) {
+      setError("Selected stock units are missing inventory IDs. Refresh stock and try again.");
+      return;
+    }
+
     setBusy(true);
     setError(null);
     try {
@@ -354,11 +390,9 @@ export function ProcurementInventoryCreatePoPage() {
         document_date: documentDate,
         payment_terms: paymentTerms,
         approved_by_name: approvedByName,
-        lines: poLines.map((line) => ({
-          product_name: line.productName,
-          quantity: line.quantity,
-          unit_cost: line.unitCost,
-        })),
+        lines,
+        stock_unit_ids: stockUnitIds,
+        import_line_ids: importLineIds,
       });
       router.push(`/procurement/orders/${order.id}`);
     } catch (err) {
@@ -562,160 +596,11 @@ export function ProcurementInventoryCreatePoPage() {
         </div>
       </section>
 
-      <section className="space-y-3 rounded-lg border border-border bg-card p-4">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <h2 className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-            Select stock units
-          </h2>
-          <span className="text-xs text-muted-foreground">
-            {selectedKeys.size} of {stockSummary.totalUnits} unit
-            {stockSummary.totalUnits === 1 ? "" : "s"} selected
-            {stockSummary.productCount > 0
-              ? ` · ${stockSummary.productCount} product${stockSummary.productCount === 1 ? "" : "s"} in stock`
-              : ""}
-          </span>
-        </div>
-        {loading ? (
-          <p className="text-sm text-muted-foreground">Loading stock…</p>
-        ) : stockRows.length === 0 ? (
-          <p className="text-sm text-muted-foreground">
-            No stock on hand.{" "}
-            <Link href="/procurement/inventory" className="text-[#0369A1] hover:underline">
-              Back to inventory
-            </Link>
-          </p>
-        ) : (
-          <div className="space-y-4">
-            {stockSummary.byProduct.length > 0 ? (
-              <div className="rounded-md border border-border/80 bg-muted/20">
-                <p className="border-b border-border/60 px-3 py-2 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-                  Units in stock by product
-                </p>
-                <div className="overflow-x-auto">
-                  <table className="w-full min-w-[280px] table-fixed text-left text-sm">
-                    <colgroup>
-                      <col className="w-[70%]" />
-                      <col className="w-[30%]" />
-                    </colgroup>
-                    <thead className="text-[11px] uppercase tracking-wide text-muted-foreground">
-                      <tr>
-                        <th className="px-5 py-2 font-medium">Product</th>
-                        <th className="px-5 py-2 text-right font-medium">In stock</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {stockSummary.byProduct.map((line) => (
-                        <tr key={line.productName} className="border-t border-border/50">
-                          <td className="px-5 py-2 font-medium">{line.productName}</td>
-                          <td
-                            className="px-5 py-2 text-right font-mono font-medium tabular-nums"
-                          >
-                            {line.units}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            ) : null}
-
-            <div className={procurementUi.tableShell}>
-              <div className={procurementUi.tableScroll}>
-                <table
-                  className={cn(
-                    procurementUi.table,
-                    "min-w-[720px] table-fixed border-separate border-spacing-0",
-                  )}
-                >
-                  <colgroup>
-                    <col className="w-12" />
-                    <col className="w-[22%]" />
-                    <col className="w-[22%]" />
-                    <col className="w-[22%]" />
-                    <col className="w-[22%]" />
-                  </colgroup>
-                  <thead className={procurementUi.thead}>
-                    <tr>
-                      <th className={cn(procurementUi.th, "text-center")}>
-                        <input
-                          type="checkbox"
-                          className="size-4 cursor-pointer accent-primary"
-                          checked={allSelected}
-                          disabled={busy}
-                          aria-label="Select all"
-                          onChange={toggleAllStock}
-                        />
-                      </th>
-                      <th className={cn(procurementUi.th, "px-5")}>Product</th>
-                      <th className={cn(procurementUi.th, "px-5 text-right")}>Units</th>
-                      <th className={cn(procurementUi.th, "px-5")}>PO number</th>
-                      <th className={cn(procurementUi.th, "px-5")}>GRN number</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {stockSummary.byPoGrn.map((line) => {
-                      const group = {
-                        productName: line.productName,
-                        companyPoNumber: line.companyPoNumber,
-                        grnNumber: line.grnNumber,
-                      };
-                      const groupKeys = keysForPoGrnGroup(stockRows, group);
-                      const selection = groupSelectionState(groupKeys, selectedKeys);
-                      return (
-                        <tr
-                          key={`${line.productName}-${line.companyPoNumber}-${line.grnNumber}`}
-                          className={procurementUi.tr}
-                        >
-                          <td className={cn(procurementUi.td, "text-center")}>
-                            <input
-                              type="checkbox"
-                              className="size-4 cursor-pointer accent-primary"
-                              checked={selection === "all"}
-                              ref={(el) => {
-                                if (el) el.indeterminate = selection === "partial";
-                              }}
-                              disabled={busy}
-                              aria-label={`Select ${line.units} units for ${line.productName}`}
-                              onChange={() => togglePoGrnGroup(group)}
-                            />
-                          </td>
-                          <td className={cn(procurementUi.td, "px-5 font-medium")}>
-                            {line.productName}
-                          </td>
-                          <td
-                            className={cn(
-                              procurementUi.tdNumeric,
-                              "px-5 text-right font-mono font-medium text-foreground",
-                            )}
-                          >
-                            {line.units}
-                          </td>
-                          <td className={cn(procurementUi.td, "px-5 font-medium tabular-nums")}>
-                            {line.companyPoNumber}
-                          </td>
-                          <td
-                            className={cn(
-                              procurementUi.td,
-                              "px-5 font-mono text-xs tabular-nums text-muted-foreground",
-                            )}
-                          >
-                            {line.grnNumber}
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          </div>
-        )}
-      </section>
-
       <div className="overflow-hidden rounded-lg border border-border bg-card">
         <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-4 py-3">
-          <h2 className="text-base font-extrabold tracking-tight text-foreground">PO line items</h2>
+          <div className="min-w-0 space-y-0.5">
+            <h2 className="text-sm font-medium tracking-tight text-foreground">PO line items</h2>
+          </div>
           <label className="flex items-center gap-2 text-xs text-muted-foreground">
             Tax %
             <FinanceSelect
@@ -758,7 +643,13 @@ export function ProcurementInventoryCreatePoPage() {
                         value={String(line.quantity)}
                         disabled={busy}
                         onChange={(e) => {
-                          const n = Math.max(1, Math.floor(toNumber(e.target.value)));
+                          const selectedForProduct = stockRows.filter((row, index) => {
+                            if (!selectedKeys.has(stockRowKey(row, index))) return false;
+                            const name = (row.product_name || "").trim() || "Unnamed product";
+                            return name === line.productName;
+                          }).length;
+                          const maxQty = Math.max(1, selectedForProduct);
+                          const n = Math.min(maxQty, Math.max(1, Math.floor(toNumber(e.target.value))));
                           updatePoLine(line.id, { quantity: n });
                         }}
                       />

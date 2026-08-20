@@ -15,8 +15,8 @@ export const procurementUi = {
   tableScroll: "overflow-x-auto",
   table: "w-full text-left text-[13px] leading-snug",
   thead:
-    "border-b border-border/80 bg-muted/20 text-[10px] font-semibold uppercase tracking-[0.07em] text-muted-foreground",
-  th: "px-3 py-2.5",
+    "border-b border-border/80 bg-muted/20 text-[10px] font-bold uppercase tracking-[0.07em] text-foreground",
+  th: "px-3 py-2.5 font-bold",
   tr: "border-b border-border/50 transition-colors duration-150 last:border-0 hover:bg-muted/20",
   td: "px-3 py-2 align-middle",
   tdMuted: "px-3 py-2 align-middle text-muted-foreground",
@@ -112,7 +112,7 @@ export function ProcurementSection({
         <div className="flex min-w-0 items-center gap-2.5">
           {icon ? <ProcurementIconBadge icon={icon} /> : null}
           <div className="min-w-0">
-            <h2 className="truncate text-base font-extrabold tracking-tight">{title}</h2>
+            <h2 className="truncate text-sm font-medium tracking-tight">{title}</h2>
             {subtitle ? <p className="text-[11px] text-muted-foreground">{subtitle}</p> : null}
           </div>
         </div>
@@ -215,10 +215,15 @@ export function ProcurementKpiCard({
 }) {
   const styles = KPI_TONE[tone];
   const body = (
-    <div className="group relative overflow-hidden rounded-xl border border-border/80 bg-card p-3.5 shadow-sm transition-[box-shadow,border-color] duration-200 hover:border-border hover:shadow-md">
+    <div
+      className={cn(
+        "relative overflow-hidden rounded-xl border border-border/80 bg-card p-3.5 shadow-sm transition-[box-shadow,border-color] duration-200",
+        href && "hover:border-border hover:shadow-md",
+      )}
+    >
       <span className={cn("absolute inset-y-0 left-0 w-1", styles.bar)} aria-hidden />
       <div className="flex items-start justify-between gap-2 pl-1.5">
-        <p className="text-[11px] font-medium tracking-wide text-muted-foreground uppercase">
+        <p className="text-[11px] font-bold tracking-wide text-foreground">
           {label}
         </p>
         <span
@@ -233,7 +238,7 @@ export function ProcurementKpiCard({
       {loading ? (
         <div className="mt-2 ml-1.5 h-7 w-24 animate-pulse rounded bg-muted" />
       ) : (
-        <p className="mt-2 pl-1.5 text-2xl font-semibold tracking-tight text-foreground tabular-nums">
+        <p className="mt-2 pl-1.5 text-2xl font-normal tracking-tight text-foreground tabular-nums">
           {value}
         </p>
       )}
@@ -242,16 +247,14 @@ export function ProcurementKpiCard({
           {hint}
         </p>
       ) : null}
-      {href ? (
-        <ArrowUpRight
-          className="absolute right-3 bottom-3 size-4 text-muted-foreground/0 transition-colors duration-200 group-hover:text-muted-foreground"
-        />
-      ) : null}
     </div>
   );
   if (href) {
     return (
-      <Link href={href} className="cursor-pointer">
+      <Link
+        href={href}
+        className="block h-full w-full cursor-pointer rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+      >
         {body}
       </Link>
     );

@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { FileText, Package } from "lucide-react";
 
 import { ProcurementPageHeader } from "@/components/procurement/procurement-page-header";
 import { procurementUi } from "@/components/procurement/procurement-ui";
@@ -12,28 +12,29 @@ import {
   type DeliveryStatusFormValue,
 } from "@/components/procurement/delivery-status-form";
 import { DeliverySectionCard } from "@/components/procurement/delivery-section-card";
+import { FinanceField } from "@/components/finance/journals/finance-form-field";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import {
-  formatChallanGrnSummary,
-  getDeliveryChallan,
-  type DeliveryChallanLine,
-  type DeliveryChallanRecord,
-} from "@/utils/delivery-challan-storage";
-import { sendDeliveryDispatchNotification } from "@/utils/delivery-dispatch-email";
+  getPurchaseOrder,
+  listOrderReceiptBatches,
+} from "@/services/procurement-service";
+import {
+  deliveryStatusGrnItemRowsFromBatches,
+  deliveryStatusGrnItemRowsFromChallan,
+  matchChallanReceiptBatches,
+  resolveChallanReceiptBatches,
+  type DeliveryStatusGrnItemRow,
+} from "@/utils/delivery-challan-grn";
+import { formatChallanGrnSummary, getDeliveryChallan, type DeliveryChallanRecord } from "@/utils/delivery-challan-storage";
+import { persistDeliveryStatusFromForm } from "@/utils/delivery-status-persist";
 import { setDeliveryStatusFlash } from "@/utils/delivery-status-flash";
 import {
-  applyShipmentStatusToActualDate,
-  firstDeliveryStatusFormError,
-  getDeliveryStatus,
-  isDeliveryStatusPersisted,
   resolveDeliveryStatusForChallan,
-  upsertDeliveryStatus,
   validateDeliveryStatusForm,
   type DeliveryStatusFormErrors,
 } from "@/utils/delivery-status-storage";
-import { runDeliveryReminderSweep } from "@/utils/delivery-status-reminders";
-import { FileText } from "lucide-react";
 
 type DeliveryStatusEditPanelProps = {
   challanId: string;
@@ -45,53 +46,7 @@ function ReadOnlyField({ label, value }: { label: string; value: string }) {
       <div className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
         {label}
       </div>
-      <div className="text-sm font-medium text-foreground">{value.trim() || "—"}</div>
-    </div>
-  );
-}
-
-function ChallanLinesTable({ lines }: { lines: DeliveryChallanLine[] }) {
-  const rows = lines.filter((line) => line.itemName.trim());
-  if (rows.length === 0) {
-    return (
-      <p className="text-sm text-muted-foreground">No line items recorded on this challan.</p>
-    );
-  }
-
-  return (
-    <div className={procurementUi.tableShell}>
-      <div className={procurementUi.tableScroll}>
-        <table className={cn(procurementUi.table, "min-w-[640px]")}>
-          <thead className={procurementUi.thead}>
-            <tr>
-              <th className={cn(procurementUi.th, "w-12")}>S.No</th>
-              <th className={procurementUi.th}>Description</th>
-              <th className={cn(procurementUi.th, "w-28")}>HSN / SAC</th>
-              <th className={cn(procurementUi.th, "w-24")}>Asset no.</th>
-              <th className={cn(procurementUi.th, "w-20 text-right")}>Qty sent</th>
-              <th className={cn(procurementUi.th, "w-28 text-right")}>Rate (vendor)</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((line, index) => (
-              <tr key={line.id} className={procurementUi.tr}>
-                <td className={cn(procurementUi.tdNumeric, "text-muted-foreground")}>
-                  {index + 1}
-                </td>
-                <td className={procurementUi.td}>{line.itemName}</td>
-                <td className={procurementUi.tdMuted}>{line.hsnSac.trim() || "—"}</td>
-                <td className={procurementUi.tdMuted}>{line.assetNo.trim() || "—"}</td>
-                <td className={cn(procurementUi.tdNumeric, "text-right font-medium")}>
-                  {line.quantitySent.trim() || "—"}
-                </td>
-                <td className={cn(procurementUi.tdNumeric, "text-right")}>
-                  {line.rate.trim() || "—"}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      <div className="text-sm font-medium tabular-nums text-foreground">{(value ?? "").trim() || "—"}</div>
     </div>
   );
 }
@@ -100,75 +55,107 @@ export function DeliveryStatusEditPanel({ challanId }: DeliveryStatusEditPanelPr
   const router = useRouter();
   const [challan, setChallan] = useState<DeliveryChallanRecord | null>(null);
   const [form, setForm] = useState<DeliveryStatusFormValue | null>(null);
-  const [trackingOnly, setTrackingOnly] = useState(false);
+  const [grnItems, setGrnItems] = useState<DeliveryStatusGrnItemRow[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<DeliveryStatusFormErrors>({});
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    const row = getDeliveryChallan(challanId);
-    setChallan(row);
-    setTrackingOnly(isDeliveryStatusPersisted(challanId));
-    if (row) {
-      const status = resolveDeliveryStatusForChallan(row);
-      setForm(deliveryStatusToFormValue(status));
-    } else {
+    try {
+      const row = getDeliveryChallan(challanId);
+      setChallan(row);
+      if (!row) {
+        setForm(null);
+        setGrnItems([]);
+        return;
+      }
+      const seeded = deliveryStatusToFormValue(resolveDeliveryStatusForChallan(row));
+      const fromChallan =
+        String(row.purchaseOrderNumber ?? "").trim() &&
+        String(row.purchaseOrderNumber ?? "").trim() !== String(row.companyPoNumber ?? "").trim()
+          ? String(row.purchaseOrderNumber ?? "").trim()
+          : "";
+      if (!String(seeded.customerPoNumber ?? "").trim() && fromChallan) {
+        seeded.customerPoNumber = fromChallan;
+      }
+      if (!String(seeded.customerName ?? "").trim()) {
+        seeded.customerName = String(row.customerName ?? "").trim();
+      }
+      setForm(seeded);
+      setGrnItems(deliveryStatusGrnItemRowsFromChallan(row));
+      setError(null);
+
+      const orderId = row.orderId;
+      if (!orderId) return;
+
+      let cancelled = false;
+      void (async () => {
+        try {
+          const [order, batches] = await Promise.all([
+            getPurchaseOrder(orderId),
+            listOrderReceiptBatches(orderId).catch(() => []),
+          ]);
+          if (cancelled) return;
+          const resolved = resolveChallanReceiptBatches(batches, order);
+          const matched = matchChallanReceiptBatches(resolved, row);
+          const liveRows = deliveryStatusGrnItemRowsFromBatches(matched, order);
+          if (liveRows.length > 0) setGrnItems(liveRows);
+          const fromOrder = String(order.customer_po_number ?? "").trim();
+          const fromOrderCustomer = String(order.customer_name ?? "").trim();
+          setForm((prev) => {
+            if (!prev) return prev;
+            let next = prev;
+            if (!String(prev.customerPoNumber ?? "").trim()) {
+              const seedPo = fromOrder || fromChallan;
+              if (seedPo) next = { ...next, customerPoNumber: seedPo };
+            }
+            if (!String(prev.customerName ?? "").trim() && fromOrderCustomer) {
+              next = { ...next, customerName: fromOrderCustomer };
+            }
+            return next === prev ? prev : next;
+          });
+        } catch {
+          // Keep challan line items already shown.
+        }
+      })();
+
+      return () => {
+        cancelled = true;
+      };
+    } catch {
+      setChallan(null);
       setForm(null);
+      setGrnItems([]);
+      setError("Could not load this delivery status record.");
     }
   }, [challanId]);
 
   async function onSave() {
     if (!challan || !form || saving) return;
-
-    if (!trackingOnly) {
-      const errors = validateDeliveryStatusForm(form);
-      setFieldErrors(errors);
-      const message = firstDeliveryStatusFormError(errors);
-      if (message) {
-        setError(message);
-        return;
-      }
+    const errors = validateDeliveryStatusForm(form);
+    setFieldErrors(errors);
+    const message = Object.values(errors).find(Boolean);
+    if (message) {
+      setError(message);
+      return;
     }
 
     setError(null);
     setSaving(true);
     try {
-      const saved = getDeliveryStatus(challan.id);
-      const base =
-        trackingOnly && saved
-          ? deliveryStatusToFormValue(saved)
-          : form;
-      const normalized = applyShipmentStatusToActualDate({
-        ...base,
-        shipmentStatus: form.shipmentStatus,
-      });
-
-      upsertDeliveryStatus({
-        challanId: challan.id,
-        ...normalized,
-      });
-      runDeliveryReminderSweep();
-
-      if (!trackingOnly) {
-        const email = await sendDeliveryDispatchNotification(challan, normalized);
-        if (email.ok) {
-          setDeliveryStatusFlash({
-            variant: "success",
-            message: "Delivery status saved. Dispatch email sent to the reminder address.",
-          });
-        } else {
-          setDeliveryStatusFlash({
-            variant: "warning",
-            message: `Delivery status saved. Dispatch email failed: ${email.message ?? "Unknown error"}`,
-          });
-        }
-      } else {
-        setDeliveryStatusFlash({
-          variant: "success",
-          message: "Shipment status updated.",
-        });
+      const result = await persistDeliveryStatusFromForm(challan, form);
+      if (!result.ok) {
+        setFieldErrors(result.fieldErrors ?? {});
+        setError(result.message);
+        setSaving(false);
+        return;
       }
-
+      setDeliveryStatusFlash({
+        variant: result.emailWarning ? "warning" : "success",
+        message: result.emailWarning
+          ? `Delivery status saved. Dispatch email failed: ${result.emailWarning}`
+          : "Delivery status saved.",
+      });
       router.replace("/procurement/delivery-status");
     } catch {
       setError("Could not save delivery status. Try again.");
@@ -181,45 +168,27 @@ export function DeliveryStatusEditPanel({ challanId }: DeliveryStatusEditPanelPr
       <div className={procurementUi.page}>
         <ProcurementPageHeader
           title="Delivery status"
-          backHref="/procurement/delivery-challan"
-          backLabel="Delivery Challan"
+          backHref="/procurement/delivery-status"
+          backLabel="Delivery status"
         />
         <p className="text-sm text-muted-foreground">
-          Challan not found. It may have been removed — return to the list and try again.
+          Record not found. Return to the list and try again.
         </p>
       </div>
     );
   }
 
+  const poNumber =
+    String(form?.cachePoNumber ?? "").trim() ||
+    String(challan.companyPoNumber ?? "").trim() ||
+    String(challan.purchaseOrderNumber ?? "").trim();
+
   return (
     <div className={procurementUi.page}>
       <ProcurementPageHeader
-        backHref="/procurement/delivery-challan"
-        backLabel="Delivery Challan"
-        title={trackingOnly ? "Update shipment status" : "Set up delivery status"}
-        actions={
-          <div className="flex flex-wrap items-center gap-2">
-            <Link href="/procurement/delivery-status">
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="cursor-pointer transition-colors duration-200"
-              >
-                Cancel
-              </Button>
-            </Link>
-            <Button
-              type="button"
-              size="sm"
-              className="cursor-pointer transition-colors duration-200"
-              disabled={!form || saving}
-              onClick={() => void onSave()}
-            >
-              {saving ? "Saving…" : "Save status"}
-            </Button>
-          </div>
-        }
+        backHref="/procurement/delivery-status"
+        backLabel="Delivery status"
+        title="Delivery status"
       />
 
       {error ? (
@@ -228,44 +197,116 @@ export function DeliveryStatusEditPanel({ challanId }: DeliveryStatusEditPanelPr
         </div>
       ) : null}
 
-      <DeliverySectionCard title="From delivery challan" icon={FileText}>
-        <div className="space-y-4">
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            <ReadOnlyField label="Challan number" value={challan.challanNumber} />
-            <ReadOnlyField label="Challan date" value={challan.challanDate} />
-            <ReadOnlyField label="PO number" value={challan.purchaseOrderNumber} />
-            <ReadOnlyField label="GRN" value={formatChallanGrnSummary(challan)} />
-            <ReadOnlyField label="Customer" value={challan.customerName} />
-            <ReadOnlyField label="Vendor" value={challan.vendorName} />
-            <ReadOnlyField label="Entity" value={challan.entityName} />
-          </div>
-          <div className="space-y-2">
-            <h3 className={procurementUi.sectionTitle}>Line items</h3>
-            <ChallanLinesTable lines={challan.lines} />
-          </div>
+      <DeliverySectionCard title="PO details" icon={FileText}>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <ReadOnlyField label="PO number" value={poNumber} />
+          <ReadOnlyField label="GRN number" value={formatChallanGrnSummary(challan)} />
+          {form ? (
+            <FinanceField label="Customer name" error={fieldErrors.customerName}>
+              <Input
+                value={form.customerName ?? ""}
+                onChange={(e) => {
+                  const next = { ...form, customerName: e.target.value };
+                  setForm(next);
+                  if (Object.keys(fieldErrors).length > 0) {
+                    setFieldErrors(validateDeliveryStatusForm(next));
+                  }
+                }}
+                className="h-8"
+                placeholder="Enter customer name"
+              />
+            </FinanceField>
+          ) : null}
+          {form ? (
+            <FinanceField
+              label="Customer PO number"
+              error={fieldErrors.customerPoNumber}
+            >
+              <Input
+                value={form.customerPoNumber ?? ""}
+                onChange={(e) => {
+                  const next = { ...form, customerPoNumber: e.target.value };
+                  setForm(next);
+                  if (Object.keys(fieldErrors).length > 0) {
+                    setFieldErrors(validateDeliveryStatusForm(next));
+                  }
+                }}
+                className="h-8"
+                placeholder="Enter customer PO number"
+              />
+            </FinanceField>
+          ) : null}
         </div>
       </DeliverySectionCard>
 
-      <p className="text-xs text-muted-foreground">
-        {trackingOnly
-          ? "Challan details are read-only. Change shipment status below and save."
-          : "Complete dispatch details and reminder email, then save to send the dispatch notification."}
-      </p>
+      <DeliverySectionCard
+        title="GRN items"
+        icon={Package}
+        subtitle="Items received on this GRN"
+      >
+        <GrnItemsTable rows={grnItems} />
+      </DeliverySectionCard>
 
       {form ? (
-        <DeliveryStatusForm
-          value={form}
-          onChange={(next) => {
-            setForm(next);
-            if (!trackingOnly && Object.keys(fieldErrors).length > 0) {
-              setFieldErrors(validateDeliveryStatusForm(next));
-            }
-          }}
-          showLocationSection={false}
-          fieldErrors={fieldErrors}
-          mode={trackingOnly ? "tracking" : "initial"}
-        />
+        <>
+          <DeliveryStatusForm
+            value={form}
+            onChange={(next) => {
+              setForm(next);
+              if (Object.keys(fieldErrors).length > 0) {
+                setFieldErrors(validateDeliveryStatusForm(next));
+              }
+            }}
+            fieldErrors={fieldErrors}
+          />
+          <div className="flex justify-end">
+            <Button
+              type="button"
+              size="sm"
+              className="cursor-pointer transition-colors duration-200"
+              disabled={saving}
+              onClick={() => void onSave()}
+            >
+              {saving ? "Saving…" : "Save"}
+            </Button>
+          </div>
+        </>
       ) : null}
+    </div>
+  );
+}
+
+function GrnItemsTable({ rows }: { rows: DeliveryStatusGrnItemRow[] }) {
+  if (rows.length === 0) {
+    return <p className="text-sm text-muted-foreground">No GRN items recorded yet.</p>;
+  }
+
+  return (
+    <div className={procurementUi.tableShell}>
+      <div className={procurementUi.tableScroll}>
+        <table className={cn(procurementUi.table, "min-w-[560px]")}>
+          <thead className={procurementUi.thead}>
+            <tr>
+              <th className={procurementUi.th}>Product name</th>
+              <th className={procurementUi.th}>Description</th>
+              <th className={cn(procurementUi.th, "w-24 text-right")}>GRN qty</th>
+              <th className={cn(procurementUi.th, "w-28 text-right")}>Unit rate</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((row) => (
+              <tr key={row.id} className={procurementUi.tr}>
+                <td className={procurementUi.td}>{row.product}</td>
+                <td className={procurementUi.tdMuted}>{row.description || "—"}</td>
+                <td className={cn(procurementUi.tdNumeric, "text-right font-medium")}>
+                  {row.grnQty}
+                </td>
+                <td className={cn(procurementUi.tdNumeric, "text-right")}>{row.unitCost}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }

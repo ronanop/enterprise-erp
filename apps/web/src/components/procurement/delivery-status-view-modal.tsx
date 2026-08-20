@@ -15,7 +15,6 @@ import {
 import { Button } from "@/components/ui/button";
 import type { DeliveryChallanRecord } from "@/utils/delivery-challan-storage";
 import {
-  isDeliveryStatusPersisted,
   resolveDeliveryStatusForChallan,
   validateDeliveryStatusForm,
   type DeliveryStatusFormErrors,
@@ -41,8 +40,6 @@ export function DeliveryStatusViewModal({
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
-  const trackingOnly = challan ? isDeliveryStatusPersisted(challan.id) : false;
-
   useEffect(() => {
     if (!open || !challan) {
       setForm(null);
@@ -56,10 +53,6 @@ export function DeliveryStatusViewModal({
 
   async function onConfirm() {
     if (!challan || !form || saving) return;
-    if (!trackingOnly) {
-      onClose();
-      return;
-    }
     setError(null);
     setSaving(true);
     try {
@@ -70,7 +63,7 @@ export function DeliveryStatusViewModal({
         setSaving(false);
         return;
       }
-      onSaved?.("Shipment status updated.");
+      onSaved?.("Delivery status saved.");
       onClose();
     } catch {
       setError("Could not save delivery status. Try again.");
@@ -83,9 +76,9 @@ export function DeliveryStatusViewModal({
   return (
     <ConfirmDialog
       open={open}
-      title="Delivery challan"
-      description={challan.challanNumber}
-      confirmLabel={trackingOnly ? "Save status" : "Close"}
+      title="Delivery status"
+      description={challan.companyPoNumber || challan.purchaseOrderNumber}
+      confirmLabel="Save"
       cancelLabel="Cancel"
       busy={saving}
       contentClassName="max-w-3xl"
@@ -99,35 +92,31 @@ export function DeliveryStatusViewModal({
           <DeliveryChallanReadOnlyPanel challan={challan} />
         </DeliverySectionCard>
 
-        {form && trackingOnly ? (
-          <>
-            <p className="text-xs text-muted-foreground">
-              Update shipment status below and save.
-            </p>
-            <DeliveryStatusForm
-              value={form}
-              onChange={(next) => {
-                setForm(next);
-                if (Object.keys(fieldErrors).length > 0) {
-                  setFieldErrors(validateDeliveryStatusForm(next));
-                }
-              }}
-              showLocationSection={false}
-              fieldErrors={fieldErrors}
-              mode="tracking"
-            />
-          </>
+        {form ? (
+          <DeliveryStatusForm
+            value={form}
+            onChange={(next) => {
+              setForm(next);
+              if (Object.keys(fieldErrors).length > 0) {
+                setFieldErrors(validateDeliveryStatusForm(next));
+              }
+            }}
+            fieldErrors={fieldErrors}
+          />
         ) : null}
 
-        {form && !trackingOnly ? (
-          <div className="flex justify-end">
-            <Link href={deliveryStatusUpdateHref(challan.id)} onClick={onClose}>
-              <Button type="button" size="sm" className="cursor-pointer transition-colors duration-200">
-                Set up delivery status
-              </Button>
-            </Link>
-          </div>
-        ) : null}
+        <div className="flex justify-end">
+          <Link href={deliveryStatusUpdateHref(challan.id)} onClick={onClose}>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className="cursor-pointer transition-colors duration-200"
+            >
+              Open full page
+            </Button>
+          </Link>
+        </div>
       </div>
     </ConfirmDialog>
   );

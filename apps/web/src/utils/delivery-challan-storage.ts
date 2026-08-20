@@ -1,5 +1,8 @@
 export type DeliveryChallanLine = {
   id: string;
+  /** Product / part number. */
+  product: string;
+  /** Item description (legacy field name: itemName). */
   itemName: string;
   quantitySent: string;
   hsnSac: string;
@@ -13,6 +16,9 @@ export type ChallanItemsSourceMode = "full_po" | "selected_grns";
 
 /** Gate pass mode: Returnable (RGP) vs Non-returnable (NRGP). */
 export type DeliveryChallanMode = "RGP" | "NRGP";
+
+/** Whether this challan covers billed GRN lines or delivery-challan (stock) lines. */
+export type GrnChallanKind = "billing" | "delivery_challan";
 
 export type DeliveryChallanRecord = {
   id: string;
@@ -45,6 +51,13 @@ export type DeliveryChallanRecord = {
   itemsSourceMode: ChallanItemsSourceMode;
   selectedGrnKeys: string[];
   selectedGrnNumbers: string[];
+  /** Billing vs delivery-challan GRN classification. */
+  grnKind?: GrnChallanKind;
+  /** Customer / cache invoice captured on billing GRNs. */
+  invoiceNumber?: string;
+  invoiceDate?: string;
+  /** Company PO (Cache PO), when known. */
+  companyPoNumber?: string;
   lines: DeliveryChallanLine[];
   deliveryMode: DeliveryChallanMode;
   transportDetails: string;
@@ -58,9 +71,19 @@ export type DeliveryChallanRecord = {
 const STORAGE_KEY = "erp.procurement.delivery-challans";
 
 function normalizeLine(line: Partial<DeliveryChallanLine> & { id: string }): DeliveryChallanLine {
+  let product = (line.product ?? "").trim();
+  let itemName = (line.itemName ?? "").trim();
+  // Legacy / wrong mapping put product name in description — move it to product.
+  if (!product && itemName) {
+    product = itemName;
+    itemName = "";
+  } else if (product && itemName && product.toLowerCase() === itemName.toLowerCase()) {
+    itemName = "";
+  }
   return {
     id: line.id,
-    itemName: line.itemName ?? "",
+    product,
+    itemName,
     quantitySent: line.quantitySent ?? "",
     hsnSac: line.hsnSac ?? "",
     assetNo: line.assetNo ?? "-",
@@ -94,8 +117,15 @@ function normalizeRecord(raw: DeliveryChallanRecord): DeliveryChallanRecord {
     deliveredBy: raw.deliveredBy ?? "",
     vendorName: raw.vendorName ?? legacySupplier ?? "",
     itemsSourceMode: raw.itemsSourceMode ?? "full_po",
-    selectedGrnKeys: raw.selectedGrnKeys ?? [],
-    selectedGrnNumbers: raw.selectedGrnNumbers ?? [],
+    selectedGrnKeys: (raw.selectedGrnKeys ?? []).map((k) => String(k ?? "")).filter(Boolean),
+    selectedGrnNumbers: (raw.selectedGrnNumbers ?? []).map((n) => String(n ?? "").trim()).filter(Boolean),
+    grnKind:
+      raw.grnKind === "billing" || raw.grnKind === "delivery_challan"
+        ? raw.grnKind
+        : undefined,
+    invoiceNumber: raw.invoiceNumber ?? "",
+    invoiceDate: raw.invoiceDate ?? "",
+    companyPoNumber: raw.companyPoNumber ?? "",
     lines: (raw.lines || []).map((ln) => normalizeLine(ln)),
     deliveryMode: raw.deliveryMode === "RGP" ? "RGP" : "NRGP",
   };
@@ -111,7 +141,16 @@ function readAll(): DeliveryChallanRecord[] {
     const raw = window.localStorage.getItem(STORAGE_KEY);
     if (!raw) return [];
     const parsed = JSON.parse(raw) as DeliveryChallanRecord[];
-    return Array.isArray(parsed) ? parsed.map(normalizeRecord) : [];
+    return Array.isArray(parsed)
+      ? parsed.flatMap((row) => {
+          try {
+            if (!row || typeof row !== "object") return [];
+            return [normalizeRecord(row)];
+          } catch {
+            return [];
+          }
+        })
+      : [];
   } catch {
     return [];
   }
@@ -147,7 +186,7 @@ export function findDeliveryChallanByOrderId(orderId: string): DeliveryChallanRe
 
 /** Display label for GRN(s) covered by a challan. */
 export function formatChallanGrnSummary(record: DeliveryChallanRecord): string {
-  const nums = (record.selectedGrnNumbers || []).map((n) => n.trim()).filter(Boolean);
+  const nums = (record.selectedGrnNumbers || []).map((n) => String(n ?? "").trim()).filter(Boolean);
   if (nums.length > 0) return nums.join(", ");
   if (record.itemsSourceMode === "full_po") return "Full PO";
   return "—";
@@ -174,10 +213,11 @@ export function upsertDeliveryChallan(
 }
 
 export function formatChallanItemsSummary(lines: DeliveryChallanLine[]): string {
-  const items = lines.filter((ln) => ln.itemName.trim());
+  const items = lines.filter((ln) => (ln.itemName || "").trim() || (ln.product || "").trim());
   if (items.length === 0) return "—";
   if (items.length === 1) {
-    return `${items[0].itemName} (${items[0].quantitySent || "0"})`;
+    const label = (items[0].itemName || "").trim() || (items[0].product || "").trim() || "Item";
+    return `${label} (${items[0].quantitySent || "0"})`;
   }
   return `${items.length} items`;
 }
@@ -185,6 +225,7 @@ export function formatChallanItemsSummary(lines: DeliveryChallanLine[]): string 
 export function emptyChallanLine(): DeliveryChallanLine {
   return {
     id: crypto.randomUUID(),
+    product: "",
     itemName: "",
     quantitySent: "",
     hsnSac: "",

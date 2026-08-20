@@ -19,6 +19,14 @@ _SCM_PLACEHOLDER_CODE = "SCM-PURCHASED"
 _SCM_PLACEHOLDER_NAME = "SCM Purchased Item"
 
 
+def scm_line_product_code(product) -> str | None:
+    """Return catalog code for PO lines; hide the SCM placeholder stub code."""
+    code = (getattr(product, "product_code", None) or "").strip()
+    if not code or code.upper() == _SCM_PLACEHOLDER_CODE:
+        return None
+    return code
+
+
 class ProcurementMasterDataAdapter:
     def __init__(self, db: Session) -> None:
         self._db = db

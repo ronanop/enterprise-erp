@@ -11,7 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
-import { ApiClientError } from "@/services/api-client";
+import { formatApiError } from "@/services/api-client";
 import {
   formatInr,
   invalidateProcurementListCache,
@@ -21,7 +21,7 @@ import {
   type ProcOrder,
 } from "@/services/procurement-service";
 import { buildOrderExportRows, exportOrdersXlsx } from "@/utils/orders-excel-export";
-import { formatGrnStatusBadgeLabel } from "@/utils/grn-status-display";
+import { formatGrnStatusBadgeLabel, grnBadgeVariant } from "@/utils/grn-status-display";
 import {
   countPoBuckets,
   deriveGrnStatus,
@@ -31,6 +31,7 @@ import {
   PO_OVERVIEW_BUCKET_LABELS,
   type PoOverviewBucket,
 } from "@/utils/procurement-po-buckets";
+import { textTokenMatch } from "@/utils/procurement-search";
 
 const BUCKETS: PoOverviewBucket[] = ["open", "partial", "close", "draft"];
 
@@ -80,7 +81,7 @@ export function OrdersOverviewPage() {
       setRows(orders);
     } catch (err) {
       if (!hadInstant) setRows([]);
-      setError(err instanceof ApiClientError ? err.message : "Failed to load purchase orders");
+      setError(formatApiError(err, "Failed to load purchase orders"));
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -109,11 +110,11 @@ export function OrdersOverviewPage() {
     return list.filter((row) => {
       const vendor = vendors[row.vendor_id]?.label || "";
       return (
-        (row.company_po_number || "").toLowerCase().includes(q) ||
-        (row.customer_name || "").toLowerCase().includes(q) ||
-        (row.approved_by_name || "").toLowerCase().includes(q) ||
-        row.document_number.toLowerCase().includes(q) ||
-        vendor.toLowerCase().includes(q)
+        textTokenMatch(row.company_po_number || "", q) ||
+        textTokenMatch(row.customer_name || "", q) ||
+        textTokenMatch(row.approved_by_name || "", q) ||
+        textTokenMatch(row.document_number, q) ||
+        textTokenMatch(vendor, q)
       );
     });
   }, [enriched, bucket, query, vendors]);
@@ -135,7 +136,7 @@ export function OrdersOverviewPage() {
       const exportRows = buildOrderExportRows(source, vendors);
       await exportOrdersXlsx(`purchase-orders-${slug}-${stamp}.xlsx`, exportRows);
     } catch (err) {
-      setError(err instanceof ApiClientError ? err.message : "Failed to export purchase orders");
+      setError(formatApiError(err, "Failed to export purchase orders"));
     } finally {
       setExportBusy(false);
     }
@@ -282,7 +283,7 @@ export function OrdersOverviewPage() {
                   <td className={procurementUi.td}>{orderCustomerOrApproverLabel(row) || "—"}</td>
                   <td className={cn(procurementUi.tdNumeric)}>{formatInr(row.total_amount)}</td>
                   <td className={procurementUi.td}>
-                    <Badge variant="outline" className="uppercase">
+                    <Badge variant={grnBadgeVariant(row.grn_status ?? "pending")} className="uppercase">
                       {formatGrnStatusBadgeLabel(row.grn_status ?? "pending")}
                     </Badge>
                   </td>

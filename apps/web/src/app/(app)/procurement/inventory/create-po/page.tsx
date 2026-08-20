@@ -1,5 +1,5 @@
-import { ProcurementInventoryCreatePoPage } from "@/components/procurement/procurement-inventory-create-po-page";
+import { redirect } from "next/navigation";
 
 export default function ProcurementInventoryCreatePoRoute() {
-  return <ProcurementInventoryCreatePoPage />;
+  redirect("/procurement/orders/create?from=inventory");
 }

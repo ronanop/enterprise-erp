@@ -11,6 +11,7 @@ import { scmHoldCreatePoNotice, scmHoldDayCountDisplay, scmHoldSinceDisplay } fr
 
 type ScmCreatePoEntryProps = {
   ovfId: string;
+  href?: string;
   scmOnHold?: boolean;
   scmOnHoldAt?: string | null;
   className?: string;
@@ -20,6 +21,7 @@ type ScmCreatePoEntryProps = {
 
 export function ScmCreatePoEntry({
   ovfId,
+  href,
   scmOnHold,
   scmOnHoldAt,
   className,
@@ -28,7 +30,7 @@ export function ScmCreatePoEntry({
 }: ScmCreatePoEntryProps) {
   const router = useRouter();
   const [dialogOpen, setDialogOpen] = useState(false);
-  const poHref = `/procurement/scm/ovf/${ovfId}/po`;
+  const poHref = href || `/procurement/scm/ovf/${ovfId}/po`;
   const holdNotice = scmOnHold ? scmHoldCreatePoNotice(scmOnHoldAt) : null;
   const content = (
     <>

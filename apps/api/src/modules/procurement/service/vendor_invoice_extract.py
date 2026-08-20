@@ -10,15 +10,6 @@ from io import BytesIO
 from typing import Any
 
 
-def _decode_text_bytes(raw: bytes) -> str:
-    """Decode user text without silently discarding invalid bytes."""
-    try:
-        return raw.decode("utf-8")
-    except UnicodeDecodeError:
-        # Legacy Windows CSV/text files are commonly encoded as CP1252.
-        return raw.decode("cp1252")
-
-
 def _decode_pdf_parentheses(raw: bytes) -> str:
     parts: list[str] = []
     for match in re.finditer(rb"\((?:\\.|[^\\)])*\)", raw):
@@ -88,7 +79,7 @@ def _text_from_xls(raw: bytes) -> str | None:
 def _text_from_bytes(raw: bytes, file_name: str) -> str:
     lower = file_name.lower()
     if lower.endswith((".txt", ".csv")):
-        return _decode_text_bytes(raw)
+        return raw.decode("utf-8", errors="ignore")
     if lower.endswith((".xlsx", ".xlsm")):
         excel_text = _text_from_excel(raw)
         if excel_text:
@@ -102,7 +93,7 @@ def _text_from_bytes(raw: bytes, file_name: str) -> str:
         if pypdf_text:
             return pypdf_text
         if raw[:4] != b"%PDF":
-            plain = _decode_text_bytes(raw).strip()
+            plain = raw.decode("utf-8", errors="ignore").strip()
             if plain:
                 return plain
         return _decode_pdf_parentheses(raw)
@@ -111,8 +102,8 @@ def _text_from_bytes(raw: bytes, file_name: str) -> str:
     ):
         return ""
     if lower.endswith((".doc", ".docx")):
-        return _decode_text_bytes(raw)
-    return _decode_text_bytes(raw)
+        return raw.decode("utf-8", errors="ignore")
+    return raw.decode("utf-8", errors="ignore")
 
 
 def _parse_amount(token: str) -> float | None:

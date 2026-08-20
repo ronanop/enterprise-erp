@@ -18,13 +18,7 @@ import {
   type ScmVendorPo,
   type VendorOption,
 } from "@/services/procurement-service";
-import { formatGrnStatusBadgeLabel } from "@/utils/grn-status-display";
-
-function grnTone(status: string): "default" | "secondary" | "destructive" | "outline" {
-  if (status === "closed" || status === "delivered") return "default";
-  if (status === "partial") return "secondary";
-  return "outline";
-}
+import { formatGrnStatusBadgeLabel, grnBadgeVariant } from "@/utils/grn-status-display";
 
 export function VendorPoListPage() {
   const [rows, setRows] = useState<ScmVendorPo[]>([]);
@@ -183,7 +177,7 @@ export function VendorPoListPage() {
                     <FinanceStatusBadge status={row.status} />
                   </td>
                   <td className="px-3 py-2">
-                    <Badge variant={grnTone(row.grn_status)} className="uppercase">
+                    <Badge variant={grnBadgeVariant(row.grn_status)} className="uppercase">
                       {formatGrnStatusBadgeLabel(row.grn_status)}
                     </Badge>
                   </td>
