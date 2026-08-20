@@ -2,29 +2,59 @@ import type { DeliveryChallanRecord } from "@/utils/delivery-challan-storage";
 import { formatChallanGrnSummary } from "@/utils/delivery-challan-storage";
 
 export const SHIPMENT_STATUS_OPTIONS = [
+  "Pending",
+  "By hand",
+  "Courier",
+  "Delivered",
   "Pending dispatch",
   "Dispatched",
   "In transit",
   "Out for delivery",
-  "Delivered",
   "Failed delivery",
   "Returned",
 ] as const;
 
 export type ShipmentStatus = (typeof SHIPMENT_STATUS_OPTIONS)[number];
 
+export const DELIVERY_MODE_OPTIONS = ["hand", "courier"] as const;
+export type DeliveryMode = (typeof DELIVERY_MODE_OPTIONS)[number];
+
+export const SURFACE_MODE_OPTIONS = ["By air", "By surface", "By hand", "DP"] as const;
+export const COURIER_PROVIDER_OPTIONS = ["Bluedart", "EDL", "Logimart", "Sunil tempo"] as const;
+export const ITEM_TYPE_OPTIONS = ["hardware", "software"] as const;
+export type DeliveryItemType = (typeof ITEM_TYPE_OPTIONS)[number];
+
+export type DeliveryStatusAttachment = {
+  fileName: string;
+  contentBase64: string;
+  contentType: string;
+};
+
 export type DeliveryStatusRecord = {
   challanId: string;
   shipmentStatus: string;
   dispatchDate: string;
-  /** Notified 1 day before expected delivery. */
   reminderEmail: string;
   expectedDeliveryDate: string;
   actualDeliveryDate: string;
   courierTransportDetails: string;
+  courierProvider: string;
   trackingNumber: string;
   deliveryLocation: string;
   receiverDetails: string;
+  cachePoNumber: string;
+  customerPoNumber: string;
+  customerName: string;
+  cacheInvoiceNumber: string;
+  cacheInvoiceDocument: DeliveryStatusAttachment | null;
+  deliveryMode: DeliveryMode | "";
+  deliveryBoyName: string;
+  itemType: DeliveryItemType | "";
+  podDocument: DeliveryStatusAttachment | null;
+  docketNumber: string;
+  boxCount: string;
+  surfaceMode: string;
+  remarks: string;
   updatedAt: string;
 };
 
@@ -40,19 +70,102 @@ export type DeliveryStatusRow = DeliveryStatusRecord & {
 
 const STORAGE_KEY = "erp.procurement.delivery-status";
 
-function normalize(raw: Partial<DeliveryStatusRecord> & { challanId: string }): DeliveryStatusRecord {
+function asText(value: unknown): string {
+  if (value == null) return "";
+  return String(value);
+}
+
+function normalizeAttachment(
+  raw: Partial<DeliveryStatusAttachment> | null | undefined,
+): DeliveryStatusAttachment | null {
+  if (!raw?.fileName?.trim() || !raw.contentBase64?.trim()) return null;
   return {
+    fileName: raw.fileName.trim(),
+    contentBase64: raw.contentBase64,
+    contentType: raw.contentType?.trim() || "application/octet-stream",
+  };
+}
+
+function normalizeMode(value: string | undefined): DeliveryMode | "" {
+  if (value === "hand" || value === "courier") return value;
+  return "";
+}
+
+function normalizeItemType(value: string | undefined): DeliveryItemType | "" {
+  if (value === "hardware" || value === "software") return value;
+  return "";
+}
+
+function normalizeSurfaceMode(value: string | undefined): string {
+  const raw = asText(value).trim();
+  if (!raw) return "";
+  const legacy: Record<string, string> = {
+    Surface: "By surface",
+    Air: "By air",
+    Road: "By surface",
+    Rail: "By surface",
+  };
+  if (legacy[raw]) return legacy[raw];
+  if ((SURFACE_MODE_OPTIONS as readonly string[]).includes(raw)) return raw;
+  return raw;
+}
+
+export function deriveDeliveryStatusLabel(
+  value: Pick<
+    DeliveryStatusRecord,
+    "actualDeliveryDate" | "deliveryMode" | "itemType" | "podDocument" | "shipmentStatus"
+  >,
+): string {
+  const deliveredDate = asText(value.actualDeliveryDate).trim();
+  if (deliveredDate) {
+    if (value.deliveryMode === "hand" && !value.podDocument) {
+      return "By hand";
+    }
+    return "Delivered";
+  }
+  if (value.deliveryMode === "courier") return "Courier";
+  if (value.deliveryMode === "hand") return "By hand";
+  const legacy = (value.shipmentStatus || "").trim();
+  if (legacy && legacy !== "Pending dispatch") return legacy;
+  return "Pending";
+}
+
+function normalize(raw: Partial<DeliveryStatusRecord> & { challanId: string }): DeliveryStatusRecord {
+  const cacheInvoiceDocument = normalizeAttachment(raw.cacheInvoiceDocument);
+  const podDocument = normalizeAttachment(raw.podDocument);
+  const deliveryMode = normalizeMode(raw.deliveryMode);
+  const itemType = normalizeItemType(raw.itemType);
+  const actualDeliveryDate = raw.actualDeliveryDate ?? "";
+  const base: DeliveryStatusRecord = {
     challanId: raw.challanId,
-    shipmentStatus: raw.shipmentStatus?.trim() || SHIPMENT_STATUS_OPTIONS[0],
+    shipmentStatus: asText(raw.shipmentStatus).trim() || "Pending",
     dispatchDate: raw.dispatchDate ?? "",
     reminderEmail: raw.reminderEmail ?? "",
     expectedDeliveryDate: raw.expectedDeliveryDate ?? "",
-    actualDeliveryDate: raw.actualDeliveryDate ?? "",
+    actualDeliveryDate,
     courierTransportDetails: raw.courierTransportDetails ?? "",
-    trackingNumber: raw.trackingNumber ?? "",
+    courierProvider: raw.courierProvider ?? raw.courierTransportDetails ?? "",
+    trackingNumber: raw.trackingNumber ?? raw.docketNumber ?? "",
     deliveryLocation: raw.deliveryLocation ?? "",
-    receiverDetails: raw.receiverDetails ?? "",
+    receiverDetails: raw.receiverDetails ?? raw.deliveryBoyName ?? "",
+    cachePoNumber: raw.cachePoNumber ?? "",
+    customerPoNumber: raw.customerPoNumber ?? "",
+    customerName: raw.customerName ?? "",
+    cacheInvoiceNumber: raw.cacheInvoiceNumber ?? "",
+    cacheInvoiceDocument,
+    deliveryMode,
+    deliveryBoyName: raw.deliveryBoyName ?? "",
+    itemType,
+    podDocument,
+    docketNumber: raw.docketNumber ?? raw.trackingNumber ?? "",
+    boxCount: raw.boxCount ?? "",
+    surfaceMode: normalizeSurfaceMode(raw.surfaceMode),
+    remarks: raw.remarks ?? "",
     updatedAt: raw.updatedAt ?? "",
+  };
+  return {
+    ...base,
+    shipmentStatus: deriveDeliveryStatusLabel(base),
   };
 }
 
@@ -62,7 +175,16 @@ function readAll(): DeliveryStatusRecord[] {
     const raw = window.localStorage.getItem(STORAGE_KEY);
     if (!raw) return [];
     const parsed = JSON.parse(raw) as DeliveryStatusRecord[];
-    return Array.isArray(parsed) ? parsed.map((row) => normalize(row)) : [];
+    return Array.isArray(parsed)
+      ? parsed.flatMap((row) => {
+          try {
+            if (!row || typeof row !== "object") return [];
+            return [normalize(row)];
+          } catch {
+            return [];
+          }
+        })
+      : [];
   } catch {
     return [];
   }
@@ -76,7 +198,6 @@ export function getDeliveryStatus(challanId: string): DeliveryStatusRecord | nul
   return readAll().find((row) => row.challanId === challanId) ?? null;
 }
 
-/** True after the user has saved delivery status at least once for this challan. */
 export function isDeliveryStatusPersisted(challanId: string): boolean {
   const row = getDeliveryStatus(challanId);
   return Boolean(row?.updatedAt?.trim());
@@ -101,20 +222,37 @@ export function upsertDeliveryStatus(
 
 export function defaultStatusFromChallan(challan: DeliveryChallanRecord): DeliveryStatusRecord {
   const transport = [challan.transportDetails, challan.driverVehicleDetails]
-    .map((s) => s.trim())
+    .map((s) => asText(s).trim())
     .filter(Boolean)
     .join("\n");
   return normalize({
     challanId: challan.id,
-    shipmentStatus: SHIPMENT_STATUS_OPTIONS[0],
+    shipmentStatus: "Pending",
     dispatchDate: challan.challanDate || "",
     reminderEmail: "",
     expectedDeliveryDate: "",
     actualDeliveryDate: "",
     courierTransportDetails: transport,
+    courierProvider: "",
     trackingNumber: "",
     deliveryLocation: challan.customerShipTo?.trim() || challan.customerBillTo?.trim() || "",
     receiverDetails: challan.kindAttn?.trim() ? `Kind attn: ${challan.kindAttn.trim()}` : "",
+    cachePoNumber:
+      challan.companyPoNumber?.trim() ||
+      challan.purchaseOrderNumber?.trim() ||
+      "",
+    customerPoNumber: customerPoFromChallan(challan),
+    customerName: challan.customerName?.trim() || "",
+    cacheInvoiceNumber: "",
+    cacheInvoiceDocument: null,
+    deliveryMode: "",
+    deliveryBoyName: "",
+    itemType: "",
+    podDocument: null,
+    docketNumber: "",
+    boxCount: "",
+    surfaceMode: "",
+    remarks: "",
     updatedAt: "",
   });
 }
@@ -125,15 +263,26 @@ export function resolveDeliveryStatusForChallan(
   return getDeliveryStatus(challan.id) ?? defaultStatusFromChallan(challan);
 }
 
+function customerPoFromChallan(challan: DeliveryChallanRecord): string {
+  const company = challan.companyPoNumber?.trim() || "";
+  const po = challan.purchaseOrderNumber?.trim() || "";
+  if (po && po !== company) return po;
+  return "";
+}
+
 export function deliveryStatusRowFromChallan(challan: DeliveryChallanRecord): DeliveryStatusRow {
   const status = resolveDeliveryStatusForChallan(challan);
   return {
     ...status,
     challanNumber: challan.challanNumber,
     challanDate: challan.challanDate,
-    purchaseOrderNumber: challan.purchaseOrderNumber,
+    purchaseOrderNumber:
+      asText(status.cachePoNumber).trim() ||
+      challan.companyPoNumber?.trim() ||
+      challan.purchaseOrderNumber ||
+      "",
     grnSummary: formatChallanGrnSummary(challan),
-    customerName: challan.customerName,
+    customerName: asText(status.customerName).trim() || challan.customerName || "",
     vendorName: challan.vendorName,
     orderId: challan.orderId,
   };
@@ -142,10 +291,11 @@ export function deliveryStatusRowFromChallan(challan: DeliveryChallanRecord): De
 export function shipmentStatusBadgeVariant(
   status: string,
 ): "default" | "secondary" | "destructive" | "outline" | "success" | "warning" {
-  const value = status.toLowerCase();
+  const value = asText(status).toLowerCase();
   if (value === "delivered") return "success";
   if (value === "failed delivery" || value === "returned") return "destructive";
-  if (value === "pending dispatch") return "warning";
+  if (value === "pending" || value === "pending dispatch") return "warning";
+  if (value === "by hand" || value === "courier") return "secondary";
   if (value === "dispatched" || value === "in transit" || value === "out for delivery") {
     return "secondary";
   }
@@ -153,33 +303,78 @@ export function shipmentStatusBadgeVariant(
 }
 
 export type DeliveryStatusFormErrors = Partial<
-  Record<"dispatchDate" | "reminderEmail" | "expectedDeliveryDate", string>
+  Record<
+    | "cacheInvoiceNumber"
+    | "cacheInvoiceDocument"
+    | "customerPoNumber"
+    | "customerName"
+    | "deliveryMode"
+    | "deliveryBoyName"
+    | "dispatchDate"
+    | "actualDeliveryDate"
+    | "itemType"
+    | "podDocument"
+    | "docketNumber"
+    | "courierProvider"
+    | "reminderEmail"
+    | "expectedDeliveryDate"
+    | "boxCount"
+    | "surfaceMode"
+    | "remarks",
+    string
+  >
 >;
-
-const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export function validateDeliveryStatusForm(
   value: Omit<DeliveryStatusRecord, "challanId" | "updatedAt">,
 ): DeliveryStatusFormErrors {
   const errors: DeliveryStatusFormErrors = {};
-  if (!value.dispatchDate.trim()) {
-    errors.dispatchDate = "Dispatch date is required.";
+  if (!asText(value.cacheInvoiceNumber).trim()) {
+    errors.cacheInvoiceNumber = "Cache invoice number is required.";
   }
-  if (!value.reminderEmail.trim()) {
-    errors.reminderEmail = "Reminder email is required.";
-  } else if (!EMAIL_PATTERN.test(value.reminderEmail.trim())) {
-    errors.reminderEmail = "Enter a valid email address.";
+  if (!value.cacheInvoiceDocument?.fileName) {
+    errors.cacheInvoiceDocument = "Upload the Cache invoice document.";
   }
-  if (!value.expectedDeliveryDate.trim()) {
-    errors.expectedDeliveryDate = "Expected delivery date is required.";
+  if (value.deliveryMode !== "hand" && value.deliveryMode !== "courier") {
+    errors.deliveryMode = "Select By hand or Courier.";
   }
+
+  if (value.deliveryMode === "hand") {
+    if (!asText(value.deliveryBoyName).trim()) {
+      errors.deliveryBoyName = "Delivery person is required.";
+    }
+    if (!asText(value.dispatchDate).trim()) {
+      errors.dispatchDate = "Dispatch date is required.";
+    }
+    if (value.itemType !== "hardware" && value.itemType !== "software") {
+      errors.itemType = "Select hardware or software.";
+    }
+    if (
+      asText(value.actualDeliveryDate).trim() &&
+      (value.itemType === "hardware" || value.itemType === "software") &&
+      !value.podDocument?.fileName
+    ) {
+      errors.podDocument = "POD attachment is required when a delivery date is set.";
+    }
+  }
+
+  if (value.deliveryMode === "courier") {
+    if (!asText(value.docketNumber).trim()) {
+      errors.docketNumber = "Docket number is required for courier.";
+    }
+    if (!asText(value.courierProvider).trim()) {
+      errors.courierProvider = "Select a courier.";
+    }
+  }
+
   if (
-    value.dispatchDate.trim() &&
-    value.expectedDeliveryDate.trim() &&
-    value.expectedDeliveryDate < value.dispatchDate
+    asText(value.dispatchDate).trim() &&
+    asText(value.actualDeliveryDate).trim() &&
+    asText(value.actualDeliveryDate) < asText(value.dispatchDate)
   ) {
-    errors.expectedDeliveryDate = "Must be on or after dispatch date.";
+    errors.actualDeliveryDate = "Delivered date must be on or after dispatch date.";
   }
+
   return errors;
 }
 
@@ -191,18 +386,24 @@ export function firstDeliveryStatusFormError(errors: DeliveryStatusFormErrors): 
 }
 
 export function isDeliveredShipmentStatus(status: string): boolean {
-  return status.trim().toLowerCase() === "delivered";
+  return asText(status).trim().toLowerCase() === "delivered";
 }
 
-/** Sets actual delivery date when status is Delivered; clears it otherwise. */
+/** Kept for older call sites; new flow derives status from dates and mode. */
 export function applyShipmentStatusToActualDate<
   T extends Pick<DeliveryStatusRecord, "shipmentStatus" | "actualDeliveryDate">,
->(value: T, today = new Date().toISOString().slice(0, 10)): T {
-  if (isDeliveredShipmentStatus(value.shipmentStatus)) {
-    return {
-      ...value,
-      actualDeliveryDate: value.actualDeliveryDate.trim() || today,
-    };
+>(value: T): T {
+  return value;
+}
+
+export function openStoredDeliveryFile(file: DeliveryStatusAttachment): void {
+  const binary = atob(file.contentBase64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i += 1) {
+    bytes[i] = binary.charCodeAt(i);
   }
-  return { ...value, actualDeliveryDate: "" };
+  const blob = new Blob([bytes], { type: file.contentType || "application/octet-stream" });
+  const url = URL.createObjectURL(blob);
+  window.open(url, "_blank", "noopener,noreferrer");
+  window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
 }

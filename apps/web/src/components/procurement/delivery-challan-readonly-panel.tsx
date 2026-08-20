@@ -41,7 +41,7 @@ function ChallanLinesTable({ lines }: { lines: DeliveryChallanLine[] }) {
               <th className={cn(procurementUi.th, "w-28")}>HSN / SAC</th>
               <th className={cn(procurementUi.th, "w-24")}>Asset no.</th>
               <th className={cn(procurementUi.th, "w-20 text-right")}>Qty sent</th>
-              <th className={cn(procurementUi.th, "w-28 text-right")}>Rate (vendor)</th>
+              <th className={cn(procurementUi.th, "w-28 text-right")}>Rate</th>
             </tr>
           </thead>
           <tbody>

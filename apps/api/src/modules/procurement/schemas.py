@@ -354,6 +354,14 @@ class OrderResponse(BaseModel):
 # --- SCM handoff (CRM OVF → vendor PO → GRN) ---
 
 
+class ScmStockAvailability(BaseModel):
+    product_name: str
+    required_qty: float = 0
+    on_hand_qty: float = 0
+    allocated_qty: float = 0
+    remaining_qty: float = 0
+
+
 class ScmQueueItemResponse(BaseModel):
     ovf_id: UUID
     ovf_no: str
@@ -385,6 +393,9 @@ class ScmQueueItemResponse(BaseModel):
     scm_on_hold: bool = False
     scm_on_hold_at: datetime | None = None
     can_create_po: bool = True
+    stock_fulfillment_status: str = "none"
+    remaining_demand_qty: float = 0
+    stock_availability: list[ScmStockAvailability] = Field(default_factory=list)
 
 
 class ScmNextCompanyPoResponse(BaseModel):
@@ -422,6 +433,55 @@ class ScmOvfHoldHistoryEntry(BaseModel):
 
 class ScmOvfHoldRequest(BaseModel):
     remark: str = Field(..., min_length=1, max_length=2000)
+
+
+class ScmOvfStockAllocationRow(BaseModel):
+    id: UUID
+    stock_unit_id: UUID
+    product_name: str
+    quantity: float
+    serial_number: str
+
+
+class ScmFulfillFromStockLineRequest(BaseModel):
+    product_name: str = Field(min_length=1, max_length=255)
+    stock_unit_ids: list[UUID] = Field(default_factory=list)
+
+
+class ScmFulfillFromStockRequest(BaseModel):
+    lines: list[ScmFulfillFromStockLineRequest] = Field(min_length=1)
+
+
+class ScmOvfStockChallanLine(BaseModel):
+    product_name: str
+    description: str | None = None
+    quantity: float
+    serial_number: str
+    rate: float = 0
+    stock_unit_id: UUID
+
+
+class ScmOvfStockChallanPrefill(BaseModel):
+    ovf_id: UUID
+    ovf_no: str
+    source_key: str
+    customer_name: str | None = None
+    customer_bill_to: str | None = None
+    customer_ship_to: str | None = None
+    customer_gst: str | None = None
+    po_number: str | None = None
+    po_date: date | None = None
+    kind_attn: str | None = None
+    lines: list[ScmOvfStockChallanLine] = Field(default_factory=list)
+
+
+class ScmFulfillFromStockResponse(BaseModel):
+    ovf_id: UUID
+    stock_fulfillment_status: str
+    remaining_demand_qty: float = 0
+    stock_availability: list[ScmStockAvailability] = Field(default_factory=list)
+    stock_allocations: list[ScmOvfStockAllocationRow] = Field(default_factory=list)
+    challan_prefill: ScmOvfStockChallanPrefill
 
 
 class ScmOvfPreviewResponse(BaseModel):
@@ -478,6 +538,10 @@ class ScmOvfPreviewResponse(BaseModel):
     scm_hold_history: list[ScmOvfHoldHistoryEntry] = Field(default_factory=list)
     scm_on_hold_remark: str | None = None
     purchase_order_status: str | None = None
+    stock_fulfillment_status: str = "none"
+    remaining_demand_qty: float = 0
+    stock_availability: list[ScmStockAvailability] = Field(default_factory=list)
+    stock_allocations: list[ScmOvfStockAllocationRow] = Field(default_factory=list)
 
 
 class ScmCreatePoFromOvfLineRequest(BaseModel):

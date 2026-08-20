@@ -236,6 +236,9 @@ export type ScmQueueItem = {
   scm_on_hold?: boolean;
   scm_on_hold_at?: string | null;
   can_create_po: boolean;
+  stock_fulfillment_status?: "none" | "partial" | "complete" | string;
+  remaining_demand_qty?: number;
+  stock_availability?: ScmStockAvailability[];
 };
 
 export type ScmVendorLine = {
@@ -258,6 +261,54 @@ export type ScmMarginLine = {
   qty: number;
   margin_amount: number;
   margin_pct: number;
+};
+
+export type ScmStockAvailability = {
+  product_name: string;
+  required_qty: number;
+  on_hand_qty: number;
+  allocated_qty: number;
+  remaining_qty: number;
+};
+
+export type ScmOvfStockAllocation = {
+  id: string;
+  stock_unit_id: string;
+  product_name: string;
+  quantity: number;
+  serial_number: string;
+};
+
+export type ScmOvfStockChallanLine = {
+  product_name: string;
+  description?: string | null;
+  quantity: number;
+  serial_number: string;
+  rate: number;
+  stock_unit_id: string;
+};
+
+export type ScmOvfStockChallanPrefill = {
+  ovf_id: string;
+  ovf_no: string;
+  source_key: string;
+  customer_name: string | null;
+  customer_bill_to: string | null;
+  customer_ship_to: string | null;
+  customer_gst: string | null;
+  po_number: string | null;
+  po_date: string | null;
+  kind_attn: string | null;
+  lines: ScmOvfStockChallanLine[];
+};
+
+export type ScmFulfillFromStockResult = {
+  ovf_id: string;
+  stock_fulfillment_status: string;
+  remaining_demand_qty: number;
+  stock_availability: ScmStockAvailability[];
+  stock_allocations: ScmOvfStockAllocation[];
+  challan_prefill: ScmOvfStockChallanPrefill;
 };
 
 export type ScmOvfPreview = {
@@ -316,6 +367,10 @@ export type ScmOvfPreview = {
   scm_hold_history?: ScmOvfHoldHistoryEntry[];
   scm_on_hold_remark?: string | null;
   purchase_order_status?: string | null;
+  stock_fulfillment_status?: "none" | "partial" | "complete" | string;
+  remaining_demand_qty?: number;
+  stock_availability?: ScmStockAvailability[];
+  stock_allocations?: ScmOvfStockAllocation[];
 };
 
 export type ScmOvfHoldHistoryEntry = {
@@ -410,6 +465,7 @@ export type ProcOrder = {
     product_id: string;
     product_code: string | null;
     product_name: string | null;
+    description?: string | null;
     quantity: number;
     quantity_received: number;
     last_receipt_qty?: number;
@@ -444,6 +500,21 @@ export async function listScmQueue(): Promise<ScmQueueItem[]> {
 
 export async function getScmOvfPreview(ovfId: string): Promise<ScmOvfPreview> {
   const res = await apiClient<ScmOvfPreview>(`${SCM_API}/ovf/${ovfId}`);
+  return unwrapData(res);
+}
+
+export async function fulfillOvfFromStock(
+  ovfId: string,
+  lines: Array<{ product_name: string; stock_unit_ids: string[] }>,
+): Promise<ScmFulfillFromStockResult> {
+  const res = await apiClient<ScmFulfillFromStockResult>(
+    `${SCM_API}/ovf/${ovfId}/fulfill-from-stock`,
+    {
+      method: "POST",
+      body: { lines },
+    },
+  );
+  invalidateProcurementListCache();
   return unwrapData(res);
 }
 

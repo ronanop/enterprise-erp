@@ -23,6 +23,7 @@ from modules.procurement.models.inventory_adjustment import ProcInventoryStockAd
 from modules.procurement.models.inventory_import import ProcInventoryImportLine
 from modules.procurement.models.inventory_stock import ProcInventoryStockUnit
 from modules.procurement.models.order import ProcOrderHeader, ProcOrderLine
+from modules.procurement.models.ovf_stock_allocation import ProcOvfStockAllocation
 from modules.procurement.models.receipt_batch import (
     ProcOrderReceiptBatch,
     ProcOrderReceiptBatchLine,
@@ -93,6 +94,7 @@ class ScmHandoffService:
         self._inventory_stock_table_ready: bool | None = None
         self._inventory_stock_qty_ready: bool | None = None
         self._inventory_adjustment_table_ready: bool | None = None
+        self._ovf_stock_allocation_table_ready: bool | None = None
         self._batch_line_billing_quantity_ready: bool | None = None
         self._crm = ProcurementCrmAdapter(db)
         self._master = ProcurementMasterDataAdapter(db)
@@ -161,6 +163,198 @@ class ScmHandoffService:
             self._batch_line_billing_quantity_ready = "billing_quantity" in cols
         return self._batch_line_billing_quantity_ready
 
+    def _ovf_stock_allocation_table_exists(self) -> bool:
+        if self._ovf_stock_allocation_table_ready is None:
+            self._ovf_stock_allocation_table_ready = inspect(self._db.get_bind()).has_table(
+                "proc_ovf_stock_allocation",
+                schema="procurement",
+            )
+        return self._ovf_stock_allocation_table_ready
+
+    @staticmethod
+    def _product_key(name: str | None) -> str:
+        return (name or "").strip().lower()
+
+    @staticmethod
+    def _ovf_stock_source_key(ovf_id: UUID) -> str:
+        return f"ovf-stock:{ovf_id}"
+
+    @staticmethod
+    def _demand_by_product(customer_lines: list, vendor_lines: list) -> dict[str, dict]:
+        source = customer_lines if customer_lines else vendor_lines
+        out: dict[str, dict] = {}
+        for ln in source or []:
+            key = ScmHandoffService._product_key(ln.get("product_name"))
+            if not key:
+                continue
+            qty = float(ln.get("qty") or 0)
+            if key not in out:
+                out[key] = {
+                    "product_name": (ln.get("product_name") or "").strip(),
+                    "required_qty": 0.0,
+                }
+            out[key]["required_qty"] += qty
+        return out
+
+    def _on_hand_qty_by_product(self, ctx: TenantContext, company_id: UUID) -> dict[str, float]:
+        if not self._inventory_stock_table_exists():
+            return {}
+        rows = (
+            self._db.query(ProcInventoryStockUnit)
+            .filter(
+                ProcInventoryStockUnit.tenant_id == ctx.tenant_id,
+                ProcInventoryStockUnit.company_id == company_id,
+                ProcInventoryStockUnit.is_deleted.is_(False),
+            )
+            .all()
+        )
+        totals: dict[str, float] = defaultdict(float)
+        for row in rows:
+            totals[self._product_key(row.product_name)] += float(getattr(row, "quantity", None) or 1)
+        return dict(totals)
+
+    def _allocations_by_ovf(
+        self,
+        ctx: TenantContext,
+        ovf_ids: list[UUID],
+    ) -> dict[UUID, list[ProcOvfStockAllocation]]:
+        if not ovf_ids or not self._ovf_stock_allocation_table_exists():
+            return {}
+        rows = (
+            self._db.query(ProcOvfStockAllocation)
+            .filter(
+                ProcOvfStockAllocation.tenant_id == ctx.tenant_id,
+                ProcOvfStockAllocation.ovf_id.in_(ovf_ids),
+                ProcOvfStockAllocation.is_deleted.is_(False),
+            )
+            .all()
+        )
+        grouped: dict[UUID, list[ProcOvfStockAllocation]] = defaultdict(list)
+        for row in rows:
+            grouped[row.ovf_id].append(row)
+        return dict(grouped)
+
+    def _stock_snapshot(
+        self,
+        *,
+        on_hand: dict[str, float],
+        customer_lines: list,
+        vendor_lines: list,
+        allocations: list[ProcOvfStockAllocation],
+    ) -> dict:
+        demand = self._demand_by_product(customer_lines, vendor_lines)
+        allocated_by_product: dict[str, float] = defaultdict(float)
+        for row in allocations:
+            allocated_by_product[self._product_key(row.product_name)] += float(row.quantity or 0)
+        availability: list[dict] = []
+        remaining_total = 0.0
+        allocated_total = 0.0
+        for item in demand.values():
+            key = self._product_key(item["product_name"])
+            required = float(item["required_qty"] or 0)
+            allocated = float(allocated_by_product.get(key, 0) or 0)
+            remaining = max(0.0, round(required - allocated, 4))
+            availability.append(
+                {
+                    "product_name": item["product_name"],
+                    "required_qty": required,
+                    "on_hand_qty": float(on_hand.get(key, 0) or 0),
+                    "allocated_qty": allocated,
+                    "remaining_qty": remaining,
+                }
+            )
+            remaining_total += remaining
+            allocated_total += allocated
+        if allocated_total <= 1e-9:
+            status = "none"
+        elif remaining_total <= 1e-9:
+            status = "complete"
+        else:
+            status = "partial"
+        return {
+            "stock_availability": availability,
+            "stock_fulfillment_status": status,
+            "remaining_demand_qty": remaining_total,
+            "has_demand": bool(demand),
+        }
+
+    def _serialize_allocations(self, rows: list[ProcOvfStockAllocation]) -> list[dict]:
+        return [
+            {
+                "id": row.id,
+                "stock_unit_id": row.stock_unit_id,
+                "product_name": row.product_name,
+                "quantity": float(row.quantity or 0),
+                "serial_number": row.serial_number,
+            }
+            for row in rows
+        ]
+
+    def _challan_prefill_from_allocations(
+        self,
+        handoff: dict,
+        allocations: list[ProcOvfStockAllocation],
+        unit_cost_by_id: dict[UUID, float] | None = None,
+    ) -> dict:
+        ovf_id = handoff["ovf_id"]
+        attn_parts = [
+            (handoff.get("shipping_contact_person") or "").strip(),
+            (handoff.get("billing_contact_person") or "").strip(),
+        ]
+        # Same product → one challan line with summed qty (serials joined).
+        grouped: dict[str, dict] = {}
+        for row in allocations:
+            key = self._product_key(row.product_name)
+            qty = float(row.quantity or 0)
+            if qty <= 0:
+                continue
+            rate = 0.0
+            if unit_cost_by_id:
+                rate = float(unit_cost_by_id.get(row.stock_unit_id, 0) or 0)
+            serial = (row.serial_number or "").strip()
+            if key not in grouped:
+                grouped[key] = {
+                    "product_name": row.product_name,
+                    "quantity": 0.0,
+                    "rate_total": 0.0,
+                    "serials": [],
+                    "stock_unit_id": row.stock_unit_id,
+                }
+            bucket = grouped[key]
+            bucket["quantity"] += qty
+            bucket["rate_total"] += rate * qty
+            if serial and serial not in ("—", "-") and serial not in bucket["serials"]:
+                bucket["serials"].append(serial)
+        lines = []
+        for bucket in grouped.values():
+            qty = float(bucket["quantity"])
+            serials: list[str] = bucket["serials"]
+            joined = ", ".join(serials) if serials else "—"
+            lines.append(
+                {
+                    "product_name": bucket["product_name"],
+                    "description": joined,
+                    "quantity": qty,
+                    "serial_number": joined,
+                    "rate": (float(bucket["rate_total"]) / qty) if qty else 0.0,
+                    "stock_unit_id": bucket["stock_unit_id"],
+                }
+            )
+        return {
+            "ovf_id": ovf_id,
+            "ovf_no": handoff.get("ovf_no") or "",
+            "source_key": self._ovf_stock_source_key(ovf_id),
+            "customer_name": handoff.get("customer_name") or handoff.get("account_name"),
+            "customer_bill_to": handoff.get("billing_address"),
+            "customer_ship_to": handoff.get("shipping_address"),
+            "customer_gst": handoff.get("customer_gst"),
+            "po_number": handoff.get("po_number"),
+            "po_date": handoff.get("po_date"),
+            "kind_attn": " / ".join([p for p in attn_parts if p]) or None,
+            "lines": lines,
+        }
+
+
     def list_scm_queue(self, ctx: TenantContext, company_id: UUID | None = None) -> list[dict]:
         cid = self._scope.resolve_company_id(ctx, company_id)
         ovfs = self._crm.list_shared_ovfs(ctx, cid)
@@ -169,6 +363,8 @@ class ScmHandoffService:
         if not vendor_pool:
             vendor_pool = self._master.list_vendors(ctx, company_id=None, branch_scoped=False)
         items: list[dict] = []
+        on_hand = self._on_hand_qty_by_product(ctx, cid)
+        alloc_map = self._allocations_by_ovf(ctx, [ovf.id for ovf in ovfs])
         for ovf in ovfs:
             existing = self._orders.find_by_source(
                 ctx,
@@ -238,7 +434,16 @@ class ScmHandoffService:
                 existing is not None and existing.status == OrderStatus.CANCELLED.value
             )
             scm_on_hold = bool(getattr(ovf, "scm_on_hold", False)) or is_cancelled
-            can_create = existing is None or is_cancelled
+            stock = self._stock_snapshot(
+                on_hand=on_hand,
+                customer_lines=handoff.get("customer_lines") or [],
+                vendor_lines=handoff.get("vendor_lines") or [],
+                allocations=alloc_map.get(ovf.id, []),
+            )
+            remaining_demand = float(stock["remaining_demand_qty"] or 0)
+            can_create = (existing is None or is_cancelled) and (
+                not stock["has_demand"] or remaining_demand > 1e-9
+            )
             items.append(
                 {
                     "ovf_id": ovf.id,
@@ -292,6 +497,9 @@ class ScmHandoffService:
                     "scm_on_hold": scm_on_hold,
                     "scm_on_hold_at": resolve_scm_hold_started_at(ovf),
                     "can_create_po": can_create,
+                    "stock_fulfillment_status": stock["stock_fulfillment_status"],
+                    "remaining_demand_qty": remaining_demand,
+                    "stock_availability": stock["stock_availability"],
                 }
             )
         def _queue_received_sort_key(row: dict) -> str:
@@ -355,14 +563,26 @@ class ScmHandoffService:
         is_cancelled = (
             existing is not None and existing.status == OrderStatus.CANCELLED.value
         )
+        company_id = handoff["company_id"]
+        allocations = self._allocations_by_ovf(ctx, [ovf_id]).get(ovf_id, [])
+        stock = self._stock_snapshot(
+            on_hand=self._on_hand_qty_by_product(ctx, company_id),
+            customer_lines=handoff.get("customer_lines") or [],
+            vendor_lines=handoff.get("vendor_lines") or [],
+            allocations=allocations,
+        )
+        remaining_demand = float(stock["remaining_demand_qty"] or 0)
         handoff["purchase_order_id"] = None if is_cancelled else (existing.id if existing else None)
         handoff["purchase_order_number"] = (
             None if is_cancelled else (existing.document_number if existing else None)
         )
         handoff["can_create_po"] = (
-            existing is None
-            or is_cancelled
-            or (existing is not None and existing.status == OrderStatus.DRAFT.value)
+            (
+                existing is None
+                or is_cancelled
+                or (existing is not None and existing.status == OrderStatus.DRAFT.value)
+            )
+            and (not stock["has_demand"] or remaining_demand > 1e-9)
         )
         handoff["purchase_order_status"] = _queue_po_status(existing)
         handoff["scm_on_hold"] = bool(handoff.get("scm_on_hold")) or is_cancelled
@@ -387,7 +607,151 @@ class ScmHandoffService:
                 oem_name=handoff.get("oem_name"),
             )
         handoff["vendor_name"] = vendor_name
+        handoff["stock_fulfillment_status"] = stock["stock_fulfillment_status"]
+        handoff["remaining_demand_qty"] = remaining_demand
+        handoff["stock_availability"] = stock["stock_availability"]
+        handoff["stock_allocations"] = self._serialize_allocations(allocations)
         return handoff
+
+    def fulfill_ovf_from_stock(
+        self,
+        ctx: TenantContext,
+        ovf_id: UUID,
+        lines: list[dict],
+    ) -> dict:
+        """Allocate on-hand GRN stock units to OVF demand and deduct them."""
+        if not self._ovf_stock_allocation_table_exists():
+            raise ConflictException(
+                "Stock allocation is not available on this database. Run alembic upgrade head."
+            )
+        if not self._inventory_stock_table_exists():
+            raise ConflictException("Inventory stock is not available on this database.")
+        handoff = self._crm.get_handoff(ctx, ovf_id)
+        company_id = handoff["company_id"]
+        existing_allocs = self._allocations_by_ovf(ctx, [ovf_id]).get(ovf_id, [])
+        snapshot = self._stock_snapshot(
+            on_hand=self._on_hand_qty_by_product(ctx, company_id),
+            customer_lines=handoff.get("customer_lines") or [],
+            vendor_lines=handoff.get("vendor_lines") or [],
+            allocations=existing_allocs,
+        )
+        remaining_by_product = {
+            self._product_key(row["product_name"]): float(row["remaining_qty"] or 0)
+            for row in snapshot["stock_availability"]
+        }
+        requested_ids: list[UUID] = []
+        line_specs: list[tuple[str, str, list[UUID]]] = []
+        for raw in lines or []:
+            product_name = (raw.get("product_name") or "").strip()
+            key = self._product_key(product_name)
+            ids = list({uid for uid in (raw.get("stock_unit_ids") or []) if uid is not None})
+            if not key or not ids:
+                continue
+            line_specs.append((product_name, key, ids))
+            requested_ids.extend(ids)
+        if not requested_ids:
+            raise ConflictException("Select at least one stock unit to fulfill.")
+        if len(set(requested_ids)) != len(requested_ids):
+            raise ConflictException("The same stock unit cannot be allocated more than once.")
+
+        already = {
+            row.stock_unit_id
+            for row in existing_allocs
+        }
+        overlap = [str(uid) for uid in requested_ids if uid in already]
+        if overlap:
+            raise ConflictException("Some selected stock units are already allocated to this OVF.")
+
+        units = (
+            self._db.query(ProcInventoryStockUnit)
+            .filter(
+                ProcInventoryStockUnit.id.in_(requested_ids),
+                ProcInventoryStockUnit.tenant_id == ctx.tenant_id,
+                ProcInventoryStockUnit.company_id == company_id,
+                ProcInventoryStockUnit.is_deleted.is_(False),
+            )
+            .all()
+        )
+        unit_by_id = {unit.id: unit for unit in units}
+        missing = [str(uid) for uid in requested_ids if uid not in unit_by_id]
+        if missing:
+            raise ConflictException(
+                "Some selected stock units are no longer available. Refresh inventory and try again."
+            )
+
+        qty_by_product: dict[str, float] = defaultdict(float)
+        for product_name, key, ids in line_specs:
+            if key not in remaining_by_product:
+                raise ConflictException(
+                    f'"{product_name}" is not on this OVF demand. Unmatched products stay on Create PO.'
+                )
+            for uid in ids:
+                unit = unit_by_id[uid]
+                if self._product_key(unit.product_name) != key:
+                    raise ConflictException(
+                        f"Stock unit product '{unit.product_name}' does not match '{product_name}'."
+                    )
+                qty_by_product[key] += float(getattr(unit, "quantity", None) or 1)
+            if qty_by_product[key] - remaining_by_product[key] > 1e-6:
+                raise ConflictException(
+                    f'Selected quantity for "{product_name}" exceeds remaining demand.'
+                )
+
+        created: list[ProcOvfStockAllocation] = []
+        for uid in requested_ids:
+            unit = unit_by_id[uid]
+            row = ProcOvfStockAllocation(
+                ovf_id=ovf_id,
+                stock_unit_id=unit.id,
+                product_name=unit.product_name,
+                quantity=float(getattr(unit, "quantity", None) or 1),
+                serial_number=unit.serial_number or "—",
+                tenant_id=ctx.tenant_id,
+                company_id=company_id,
+                branch_id=unit.branch_id,
+                created_by=ctx.user_id,
+                updated_by=ctx.user_id,
+            )
+            self._db.add(row)
+            created.append(row)
+
+        self._consume_inventory_stock_units(ctx, company_id, requested_ids)
+        self._db.flush()
+
+        line_by_id = self._inventory_order_lines(
+            ctx,
+            list({unit.order_line_id for unit in units}),
+        )
+        unit_cost_by_id = {
+            unit.id: float(getattr(line_by_id.get(unit.order_line_id), "unit_cost", 0) or 0)
+            for unit in units
+        }
+        all_allocs = existing_allocs + created
+        preview = self.get_ovf_preview(ctx, ovf_id)
+        self._audit.log_entity_change(
+            tenant_id=ctx.tenant_id,
+            entity_name="proc_ovf_stock_allocation",
+            entity_id=ovf_id,
+            operation="fulfill_from_stock",
+            performed_by=ctx.user_id,
+            new_value={
+                "ovf_id": str(ovf_id),
+                "stock_unit_ids": [str(uid) for uid in requested_ids],
+                "stock_fulfillment_status": preview.get("stock_fulfillment_status"),
+            },
+        )
+        return {
+            "ovf_id": ovf_id,
+            "stock_fulfillment_status": preview.get("stock_fulfillment_status") or "none",
+            "remaining_demand_qty": preview.get("remaining_demand_qty") or 0,
+            "stock_availability": preview.get("stock_availability") or [],
+            "stock_allocations": preview.get("stock_allocations") or [],
+            "challan_prefill": self._challan_prefill_from_allocations(
+                handoff,
+                all_allocs,
+                unit_cost_by_id,
+            ),
+        }
 
     def peek_next_company_po(
         self,

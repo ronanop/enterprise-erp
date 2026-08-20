@@ -74,6 +74,13 @@ import {
   shipmentStatusBadgeVariant,
 } from "@/utils/delivery-status-storage";
 import { deliveryStatusUpdateHref } from "@/utils/delivery-status-routes";
+import { receiptBatchKey } from "@/utils/delivery-challan-grn";
+import { addPendingGrnChallan } from "@/utils/grn-challan-pending";
+import {
+  billingQuantityFromUnitKinds,
+  dispositionFromBillingQuantity,
+  resizeUnitKinds,
+} from "@/components/procurement/receipt-line-serials";
 import { receiptGrnLabelForOrder } from "@/utils/receipt-grn-label";
 import {
   resizeSerialSlots,
@@ -358,16 +365,6 @@ export function OrderDetailPage({ orderId }: { orderId: string }) {
       router.back();
     }
   }, [router, searchParams]);
-
-  const openChallanPanel = useCallback(() => {
-    setChallanSavedBanner(null);
-    if (searchParams.get("challan") !== "1") {
-      const params = new URLSearchParams(searchParams.toString());
-      params.set("challan", "1");
-      router.push(`${pathname}?${params.toString()}`, { scroll: false });
-    }
-    setChallanOpen(true);
-  }, [pathname, router, searchParams]);
 
   useEffect(() => {
     refreshSavedChallans();
@@ -661,9 +658,6 @@ export function OrderDetailPage({ orderId }: { orderId: string }) {
       }
 
       setOrder(refreshed);
-      void listOrderReceiptBatches(orderId)
-        .then((batches) => setReceiptBatches(batches))
-        .catch(() => setReceiptBatches([]));
       {
         const drafts = emptyReceiptDrafts(refreshed.lines || []);
         setQtyDraft(drafts.qty);
@@ -673,6 +667,70 @@ export function OrderDetailPage({ orderId }: { orderId: string }) {
       setPendingReceiptLines([]);
       setVendorInvoiceDraft(emptyVendorInvoiceDraft());
       setReceiptSerialOpen(false);
+
+      const batches = await listOrderReceiptBatches(orderId).catch(() => [] as ScmReceiptBatch[]);
+      setReceiptBatches(batches);
+
+      const latestBatch =
+        batches.find((batch) => batch.id && String(batch.id) === String(batchId)) ||
+        [...batches].reverse().find((batch) => (batch.lines || []).some((ln) => Number(ln.quantity) > 0)) ||
+        batches[batches.length - 1] ||
+        null;
+      const batchKey = latestBatch ? receiptBatchKey(latestBatch) : "";
+      const grnNumber =
+        (latestBatch?.grn_number || refreshed.current_grn_number || "").trim();
+      const hasBilling = pending.some((row) => row.billingQuantity > 1e-9);
+      const hasDeliveryChallan = pending.some(
+        (row) => row.additional - row.billingQuantity > 1e-9,
+      );
+      function itemsSummaryForKind(kind: "billing" | "delivery_challan"): string {
+        const parts = pending
+          .map((row) => {
+            const quantity =
+              kind === "billing"
+                ? row.billingQuantity
+                : Math.max(0, row.additional - row.billingQuantity);
+            return { label: row.productLabel, quantity };
+          })
+          .filter((row) => row.quantity > 1e-9);
+        if (parts.length === 0) return "—";
+        if (parts.length === 1) {
+          const qty = Number.isInteger(parts[0].quantity)
+            ? String(parts[0].quantity)
+            : String(Math.round(parts[0].quantity * 1e6) / 1e6);
+          return `${parts[0].label} (${qty})`;
+        }
+        return `${parts.length} items`;
+      }
+      if (batchKey && grnNumber) {
+        const basePending = {
+          orderId: refreshed.id,
+          batchKey,
+          grnNumber,
+          purchaseOrderNumber:
+            refreshed.company_po_number?.trim() ||
+            refreshed.document_number?.trim() ||
+            "",
+          vendorName: vendorName.trim(),
+          customerName:
+            (refreshed.customer_name?.trim() || order?.customer_name?.trim() || ""),
+        };
+        if (hasDeliveryChallan) {
+          addPendingGrnChallan({
+            ...basePending,
+            kind: "delivery_challan",
+            itemsSummary: itemsSummaryForKind("delivery_challan"),
+          });
+        }
+        if (hasBilling) {
+          addPendingGrnChallan({
+            ...basePending,
+            kind: "billing",
+            itemsSummary: itemsSummaryForKind("billing"),
+          });
+        }
+      }
+      router.push("/procurement/delivery-challan");
     } catch (err) {
       const detail =
         err instanceof ApiClientError
@@ -720,8 +778,9 @@ export function OrderDetailPage({ orderId }: { orderId: string }) {
         lineNo: line.line_number,
         productLabel: label,
         additional,
-        // Default: bill full receive qty on vendor invoice; lower billing to add remainder to stock.
-        billingQuantity: additional,
+        disposition: "delivery_challan",
+        billingQuantity: 0,
+        unitKinds: resizeUnitKinds(undefined, Math.max(serialUnitCount(additional), 1)),
       });
     }
 
@@ -994,17 +1053,6 @@ export function OrderDetailPage({ orderId }: { orderId: string }) {
                 Record GRN
               </Button>
             ) : null}
-            {showGrnWorkspace && hasReceivedQty && !challanOpen ? (
-              <Button
-                type="button"
-                size="sm"
-                className="cursor-pointer transition-colors duration-200"
-                onClick={() => openChallanPanel()}
-              >
-                <Truck className="mr-1.5 size-3.5" />
-                {savedChallans.length > 0 ? "Add delivery challan" : "Create delivery challan"}
-              </Button>
-            ) : null}
             {canFinalize && !showGrnWorkspace ? (
               <Button
                 type="button"
@@ -1132,11 +1180,9 @@ export function OrderDetailPage({ orderId }: { orderId: string }) {
                 orderId: order.id,
                 onClose: closeChallanPanel,
                 onSaved: () => {
-                  setChallanSavedBanner(
-                    "Delivery challan saved. Create another for the next GRN if needed.",
-                  );
                   refreshSavedChallans();
                   closeChallanPanel();
+                  setChallanSavedBanner("Delivery challan saved.");
                 },
               }}
             />
@@ -1548,11 +1594,27 @@ export function OrderDetailPage({ orderId }: { orderId: string }) {
           onSerialDraftChange={(lineId, slots) =>
             setSerialDraft((prev) => ({ ...prev, [lineId]: slots }))
           }
-          onBillingQuantityChange={(lineId, billingQuantity) => {
+          onUnitKindChange={(lineId, unitIndex, kind) => {
             setPendingReceiptLines((prev) =>
-              prev.map((row) =>
-                row.lineId === lineId ? { ...row, billingQuantity } : row,
-              ),
+              prev.map((row) => {
+                if (row.lineId !== lineId) return row;
+                const rowCount = Math.max(serialUnitCount(row.additional), 1);
+                const unitKinds = resizeUnitKinds(row.unitKinds, rowCount);
+                unitKinds[unitIndex] = kind;
+                const billingQuantity = billingQuantityFromUnitKinds(
+                  unitKinds,
+                  row.additional,
+                );
+                return {
+                  ...row,
+                  unitKinds,
+                  billingQuantity,
+                  disposition: dispositionFromBillingQuantity(
+                    row.additional,
+                    billingQuantity,
+                  ),
+                };
+              }),
             );
           }}
           onSerialImportError={setReceiptModalError}

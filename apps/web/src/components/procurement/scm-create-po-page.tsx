@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   Building2,
   CalendarDays,
@@ -12,6 +12,7 @@ import {
   Eye,
   Landmark,
   Minus,
+  Package,
   Plus,
   RefreshCw,
   Trash2,
@@ -64,6 +65,7 @@ import {
   type PurchaseOrderPdfInput,
 } from "@/utils/purchase-order-pdf";
 import { matchVendorByOem } from "@/utils/vendor-oem-match";
+import { ovfProductKey } from "@/utils/ovf-stock";
 
 function applyVendorAddressFields(
   entry: VendorAddressEntry | null | undefined,
@@ -382,6 +384,10 @@ type PoLineRow = {
   rate: string;
   rateCurrency: "INR" | "USD";
   taxPct: string;
+  /** INR per 1 USD for this line only. */
+  usdInrRate: string;
+  /** Original INR unit rate, restored when switching USD back to INR. */
+  inrRateSnapshot: string;
 };
 
 const PAYMENT_TERM_PRESETS = [
@@ -432,9 +438,8 @@ function adjustedUnitRate(
 }
 
 function formatRateValue(value: number): string {
-  if (!Number.isFinite(value)) return "0";
-  const rounded = Math.round(value * 1e6) / 1e6;
-  return String(rounded);
+  if (!Number.isFinite(value)) return "0.00";
+  return (Math.round(value * 100) / 100).toFixed(2);
 }
 
 function inrRateToUsd(inrRate: number, usdInrRate: number): number {
@@ -541,6 +546,8 @@ function emptyLine(taxPct = "18"): PoLineRow {
     rate: "0",
     rateCurrency: "INR",
     taxPct,
+    usdInrRate: "",
+    inrRateSnapshot: "",
   };
 }
 
@@ -583,6 +590,8 @@ function ItemDetailsTextarea({
 
 export function ScmCreatePoPage({ ovfId }: { ovfId: string }) {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const remainderFromStock = searchParams.get("from") === "stock-remainder";
   const shippingMenuRef = useRef<HTMLDivElement>(null);
   const paymentTermsMenuRef = useRef<HTMLDivElement>(null);
   const [preview, setPreview] = useState<ScmOvfPreview | null>(null);
@@ -655,6 +664,36 @@ export function ScmCreatePoPage({ ovfId }: { ovfId: string }) {
     [vendors, oemName],
   );
 
+  const inventoryTakenRows = useMemo(() => {
+    if (!remainderFromStock || !preview) return [];
+    const fromAvailability = (preview.stock_availability || []).filter(
+      (row) => Number(row.allocated_qty) > 0,
+    );
+    if (fromAvailability.length > 0) return fromAvailability;
+    const byProduct = new Map<
+      string,
+      { product_name: string; required_qty: number; allocated_qty: number; remaining_qty: number; on_hand_qty: number }
+    >();
+    for (const row of preview.stock_allocations || []) {
+      const key = ovfProductKey(row.product_name);
+      const qty = Number(row.quantity) || 0;
+      if (!key || qty <= 0) continue;
+      const prev = byProduct.get(key);
+      if (prev) {
+        prev.allocated_qty += qty;
+      } else {
+        byProduct.set(key, {
+          product_name: row.product_name,
+          required_qty: qty,
+          allocated_qty: qty,
+          remaining_qty: 0,
+          on_hand_qty: 0,
+        });
+      }
+    }
+    return [...byProduct.values()];
+  }, [remainderFromStock, preview]);
+
   const setField = useCallback(<K extends keyof PoFormState>(key: K, value: PoFormState[K]) => {
     setForm((current) => ({ ...current, [key]: value }));
   }, []);
@@ -662,9 +701,14 @@ export function ScmCreatePoPage({ ovfId }: { ovfId: string }) {
   const setLineField = useCallback(
     <K extends keyof PoLineRow>(lineId: string, key: K, value: PoLineRow[K]) => {
       setLines((current) => {
-        const next = current.map((row) =>
-          row.id === lineId ? { ...row, [key]: value } : row,
-        );
+        const next = current.map((row) => {
+          if (row.id !== lineId) return row;
+          const nextRow = { ...row, [key]: value };
+          if (key === "rate" && row.rateCurrency === "USD") {
+            nextRow.inrRateSnapshot = "";
+          }
+          return nextRow;
+        });
         if (key === "taxPct") {
           const uniform = uniformLineTaxPct(next);
           if (uniform != null) {
@@ -687,16 +731,20 @@ export function ScmCreatePoPage({ ovfId }: { ovfId: string }) {
           if (currency === "USD") {
             return { ...row, rateCurrency: "USD", taxPct: "0" };
           }
-          const exchange = toNumber(form.usdInrRate);
-          const inrRate =
+          const snapshot = row.inrRateSnapshot.trim();
+          const exchange = toNumber(row.usdInrRate || form.usdInrRate);
+          const converted =
             row.rateCurrency === "USD" && exchange > 0
               ? usdRateToInr(toNumber(row.rate), exchange)
               : toNumber(row.rate);
+          const restored =
+            snapshot || (converted > 0 ? formatRateValue(converted) : row.rate);
           return {
             ...row,
             rateCurrency: "INR",
             taxPct: normalizeTaxOption(form.taxPercentage || "18"),
-            rate: inrRate > 0 ? formatRateValue(inrRate) : row.rate,
+            rate: restored,
+            inrRateSnapshot: "",
           };
         }),
       );
@@ -704,22 +752,10 @@ export function ScmCreatePoPage({ ovfId }: { ovfId: string }) {
     [form.taxPercentage, form.usdInrRate],
   );
 
-  const usdConvertLine = useMemo(
-    () => (usdConvertLineId ? lines.find((row) => row.id === usdConvertLineId) : null),
-    [lines, usdConvertLineId],
-  );
-
-  const usdConvertPreview = useMemo(() => {
-    if (!usdConvertLine) return null;
-    const inrRate = toNumber(usdConvertLine.rate);
-    const exchange = toNumber(usdConvertRateDraft);
-    if (inrRate <= 0 || exchange <= 0) return null;
-    return inrRateToUsd(inrRate, exchange);
-  }, [usdConvertLine, usdConvertRateDraft]);
-
   function openUsdConvertDialog(lineId: string) {
+    const line = lines.find((row) => row.id === lineId);
     setUsdConvertLineId(lineId);
-    setUsdConvertRateDraft(form.usdInrRate || "");
+    setUsdConvertRateDraft(line?.usdInrRate || form.usdInrRate || "");
     setUsdConvertError(null);
   }
 
@@ -730,26 +766,33 @@ export function ScmCreatePoPage({ ovfId }: { ovfId: string }) {
   }
 
   function confirmUsdConvert() {
-    if (!usdConvertLineId || !usdConvertLine) return;
+    const targetId = usdConvertLineId;
+    if (!targetId) return;
     const exchange = toNumber(usdConvertRateDraft);
     if (!Number.isFinite(exchange) || exchange <= 0) {
       setUsdConvertError("Enter how many INR equal 1 USD (e.g. 83.5).");
       return;
     }
-    const inrRate = toNumber(usdConvertLine.rate);
-    const usdRate = inrRateToUsd(inrRate, exchange);
-    setField("usdInrRate", formatRateValue(exchange));
-    setLines((current) =>
-      current.map((row) => {
-        if (row.id !== usdConvertLineId) return row;
+    const exchangeText = formatRateValue(exchange);
+    const fx = toNumber(exchangeText);
+    setField("usdInrRate", exchangeText);
+    setLines((current) => {
+      const target = current.find((row) => row.id === targetId);
+      if (!target) return current;
+      const inrRate = toNumber(target.rate);
+      const usdRate = inrRateToUsd(inrRate, fx);
+      return current.map((row) => {
+        if (row.id !== targetId) return row;
         return {
           ...row,
-          rateCurrency: "USD",
+          rateCurrency: "USD" as const,
           taxPct: "0",
+          usdInrRate: exchangeText,
+          inrRateSnapshot: target.rate,
           rate: inrRate > 0 ? formatRateValue(usdRate) : row.rate,
         };
-      }),
-    );
+      });
+    });
     closeUsdConvertDialog();
   }
 
@@ -852,14 +895,23 @@ export function ScmCreatePoPage({ ovfId }: { ovfId: string }) {
       });
       setLines((current) => {
         if (current.length > 0) return current;
-        return ovf.vendor_lines.length > 0
-          ? ovf.vendor_lines.map((ln) => ({
-              id: ln.line_id,
+        const vendorLines = ovf.vendor_lines || [];
+        const mapped = vendorLines
+          .map((ln) => {
+            const avail = (ovf.stock_availability || []).find(
+              (row) => ovfProductKey(row.product_name) === ovfProductKey(ln.product_name),
+            );
+            const qty = remainderFromStock
+              ? Math.max(0, Number(avail?.remaining_qty ?? ln.qty) || 0)
+              : Number(ln.qty ?? 1);
+            if (remainderFromStock && qty <= 0) return null;
+            return {
+              id: crypto.randomUUID(),
               itemDetails: ln.product_name,
               partNumber: "",
               hsnCode: "",
               poType: "Goods" as const,
-              qty: String(ln.qty ?? 1),
+              qty: String(qty),
               rate: String(ln.unit_price ?? 0),
               rateCurrency: "INR" as const,
               taxPct: normalizeTaxOption(
@@ -868,13 +920,26 @@ export function ScmCreatePoPage({ ovfId }: { ovfId: string }) {
                   : defaultTax,
                 defaultTax,
               ),
-            }))
-          : [emptyLine(defaultTax)];
+              usdInrRate: "",
+              inrRateSnapshot: "",
+            };
+          })
+          .filter((row): row is NonNullable<typeof row> => row !== null);
+        return mapped.length > 0 ? mapped : [emptyLine(defaultTax)];
       });
 
       if (ovf.purchase_order_id && ovf.can_create_po && ovf.purchase_order_status === "draft") {
         setBanner(
           `Editing draft ${ovf.company_po_number || ovf.purchase_order_number}. Same company PO number is kept on save.`,
+        );
+      } else if (remainderFromStock && ovf.can_create_po) {
+        const taken = (ovf.stock_availability || [])
+          .filter((row) => Number(row.allocated_qty) > 0)
+          .map((row) => `${row.product_name} × ${row.allocated_qty}`);
+        setBanner(
+          taken.length > 0
+            ? `Taken from inventory: ${taken.join(", ")}. Vendor lines below are remaining demand only.`
+            : "Vendor quantities are remaining demand after stock allocation.",
         );
       } else if (!ovf.can_create_po && ovf.purchase_order_id) {
         setBanner(`PO ${ovf.purchase_order_number} already exists for this OVF.`);
@@ -918,7 +983,7 @@ export function ScmCreatePoPage({ ovfId }: { ovfId: string }) {
     } finally {
       setLoading(false);
     }
-  }, [ovfId]);
+  }, [ovfId, remainderFromStock]);
 
   useEffect(() => {
     void load();
@@ -1646,6 +1711,52 @@ export function ScmCreatePoPage({ ovfId }: { ovfId: string }) {
         </div>
       ) : null}
 
+      {remainderFromStock && inventoryTakenRows.length > 0 ? (
+        <div className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
+          <div className="flex items-center gap-2 border-b border-border bg-muted/30 px-3 py-2.5">
+            <span className="inline-flex size-7 shrink-0 items-center justify-center rounded-lg bg-muted text-foreground">
+              <Package className="size-3.5" aria-hidden />
+            </span>
+            <div className="min-w-0">
+              <h2 className="text-sm font-extrabold tracking-tight text-foreground">
+                Taken from inventory
+              </h2>
+              <p className="text-xs text-muted-foreground">
+                Already allocated to this OVF — not included in the PO qty below.
+              </p>
+            </div>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[640px] text-left text-sm">
+              <thead className="border-b border-border bg-muted/40 text-[11px] font-bold tracking-wide text-slate-600 uppercase">
+                <tr>
+                  <th className="px-3 py-2 font-bold">Product</th>
+                  <th className="px-3 py-2 text-right font-bold">OVF qty</th>
+                  <th className="px-3 py-2 text-right font-bold">From inventory</th>
+                  <th className="px-3 py-2 text-right font-bold">Remaining for PO</th>
+                </tr>
+              </thead>
+              <tbody>
+                {inventoryTakenRows.map((row) => (
+                  <tr key={ovfProductKey(row.product_name)} className="border-b border-border/70">
+                    <td className="px-3 py-2 font-medium">{row.product_name}</td>
+                    <td className="px-3 py-2 text-right tabular-nums text-muted-foreground">
+                      {row.required_qty}
+                    </td>
+                    <td className="px-3 py-2 text-right tabular-nums font-medium text-foreground">
+                      {row.allocated_qty}
+                    </td>
+                    <td className="px-3 py-2 text-right tabular-nums">
+                      {row.remaining_qty}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      ) : null}
+
       {error ? (
         <div className="rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">
           {error}
@@ -2083,6 +2194,11 @@ export function ScmCreatePoPage({ ovfId }: { ovfId: string }) {
                   <ClipboardList className="size-3.5" aria-hidden />
                 </span>
                 <h2 className="text-sm font-extrabold tracking-tight text-foreground">Line items</h2>
+                {remainderFromStock ? (
+                  <p className="text-xs text-muted-foreground">
+                    Quantities are remaining demand after inventory allocation.
+                  </p>
+                ) : null}
               </div>
               <div className="flex flex-wrap items-center gap-2">
                 <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
@@ -2126,7 +2242,7 @@ export function ScmCreatePoPage({ ovfId }: { ovfId: string }) {
                     <th className="min-w-[100px] px-2 py-2.5 font-bold">HSN code</th>
                     <th className="min-w-[100px] px-2 py-2.5 font-bold">PO type</th>
                     <th className="min-w-[72px] px-2 py-2.5 font-bold">Qty</th>
-                    <th className="min-w-[168px] px-2 py-2.5 font-bold">Rate</th>
+                    <th className="min-w-[168px] px-2 py-2.5 text-center font-bold">Rate</th>
                     <th className="min-w-[88px] px-2 py-2.5 font-bold">Tax %</th>
                     <th className="min-w-[120px] px-2 py-2.5 font-bold">Amount</th>
                     <th className="px-2 py-2.5 font-bold"> </th>
@@ -2142,7 +2258,7 @@ export function ScmCreatePoPage({ ovfId }: { ovfId: string }) {
                   ) : null}
                   {lines.map((row, index) => (
                     <tr
-                      key={row.id}
+                      key={`${row.id}-${index}`}
                       className={cn(
                         "border-b border-border/70 align-top",
                         index % 2 === 1 ? "bg-muted/30" : "bg-card",
@@ -2227,7 +2343,7 @@ export function ScmCreatePoPage({ ovfId }: { ovfId: string }) {
                           <Input
                             type="number"
                             min={0}
-                            step="any"
+                            step="0.01"
                             value={
                               isUsdLine(row) || distiPct === 0
                                 ? (row.rate ?? "")
@@ -2256,6 +2372,12 @@ export function ScmCreatePoPage({ ovfId }: { ovfId: string }) {
                                   ? entered
                                   : entered / factor;
                               setLineField(row.id, "rate", formatRateValue(base));
+                            }}
+                            onBlur={() => {
+                              if (row.rate === "") return;
+                              if (isUsdLine(row) || distiPct === 0) {
+                                setLineField(row.id, "rate", formatRateValue(toNumber(row.rate)));
+                              }
                             }}
                             disabled={disabled}
                             className={cn(
@@ -2700,8 +2822,7 @@ export function ScmCreatePoPage({ ovfId }: { ovfId: string }) {
         ? createPortal(
             <ConfirmDialog
               open
-              title="Convert rate to USD"
-              description="Enter how many rupees equal 1 US dollar. The line unit rate will convert from INR to USD using this rate."
+              title="USD rate"
               confirmLabel="Use USD rate"
               cancelLabel="Cancel"
               contentClassName="max-w-md p-6"
@@ -2713,14 +2834,6 @@ export function ScmCreatePoPage({ ovfId }: { ovfId: string }) {
                 {usdConvertError ? (
                   <p className="rounded-md border border-destructive/30 bg-destructive/5 px-2.5 py-1.5 text-xs text-destructive">
                     {usdConvertError}
-                  </p>
-                ) : null}
-                {usdConvertLine && toNumber(usdConvertLine.rate) > 0 ? (
-                  <p className="text-xs text-muted-foreground">
-                    Current INR unit rate:{" "}
-                    <span className="font-medium tabular-nums text-foreground">
-                      {formatInr(toNumber(usdConvertLine.rate))}
-                    </span>
                   </p>
                 ) : null}
                 <PoField label="1 USD equals (INR) *">
@@ -2740,19 +2853,10 @@ export function ScmCreatePoPage({ ovfId }: { ovfId: string }) {
                         confirmUsdConvert();
                       }
                     }}
-                    placeholder="e.g. 83.5"
                     className={cn("h-9 tabular-nums", NO_SPINNER)}
                     autoFocus
                   />
                 </PoField>
-                {usdConvertPreview != null && usdConvertPreview > 0 ? (
-                  <p className="rounded-md border border-border bg-muted/40 px-2.5 py-2 text-xs text-muted-foreground">
-                    USD unit rate:{" "}
-                    <span className="font-semibold tabular-nums text-foreground">
-                      {formatUsd(usdConvertPreview)}
-                    </span>
-                  </p>
-                ) : null}
               </div>
             </ConfirmDialog>,
             document.body,

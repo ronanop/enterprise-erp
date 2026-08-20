@@ -18,6 +18,8 @@ from modules.procurement.schemas import (
     ScmCommercialAttachmentSummary,
     ScmCreateInventoryPoRequest,
     ScmCreatePoFromOvfRequest,
+    ScmFulfillFromStockRequest,
+    ScmFulfillFromStockResponse,
     ScmInventoryDescriptionUpdate,
     ScmInventoryImportRequest,
     ScmInventorySerialUpdate,
@@ -251,6 +253,28 @@ def update_scm_ovf_charges(
     return APIResponse(
         message="OVF freight and finance updated",
         data=ScmOvfPreviewResponse.model_validate(row),
+    )
+
+
+@scm_router.post(
+    "/ovf/{ovf_id}/fulfill-from-stock",
+    response_model=APIResponse[ScmFulfillFromStockResponse],
+)
+def fulfill_ovf_from_stock(
+    ovf_id: UUID,
+    body: ScmFulfillFromStockRequest,
+    ctx: Annotated[TenantContext, Depends(require_permission("procurement.order:create"))],
+    db: Annotated[Session, Depends(get_db)],
+) -> APIResponse[ScmFulfillFromStockResponse]:
+    row = ScmHandoffService(db).fulfill_ovf_from_stock(
+        ctx,
+        ovf_id,
+        [line.model_dump() for line in body.lines],
+    )
+    db.commit()
+    return APIResponse(
+        message="OVF demand allocated from inventory stock",
+        data=ScmFulfillFromStockResponse.model_validate(row),
     )
 
 

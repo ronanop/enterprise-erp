@@ -6,7 +6,7 @@ export async function sendDeliveryDispatchNotification(
   status: DeliveryStatusFormValue,
   options?: { timeoutMs?: number },
 ): Promise<{ ok: boolean; message?: string }> {
-  const to = status.reminderEmail.trim();
+  const to = (status.reminderEmail || "").trim();
   if (!to) {
     return { ok: false, message: "Reminder email is missing." };
   }

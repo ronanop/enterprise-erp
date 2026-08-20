@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   ArrowLeft,
   Eye,
@@ -32,9 +32,9 @@ import {
   type ScmReceiptBatch,
   type VendorOption,
 } from "@/services/procurement-service";
-import { ChallanGrnMultiSelect } from "@/components/procurement/challan-grn-multi-select";
 import {
   fullPoChallanLines,
+  mergeOvfStockAllocationsToChallanLines,
   mergeSelectedGrnChallanLines,
   receiptBatchKey,
   resolveChallanReceiptBatches,
@@ -62,7 +62,11 @@ import {
   upsertDeliveryChallan,
   type DeliveryChallanLine,
   type DeliveryChallanMode,
+  type GrnChallanKind,
 } from "@/utils/delivery-challan-storage";
+import { patchPendingGrnChallan } from "@/utils/grn-challan-pending";
+import { deliveryStatusUpdateHref } from "@/utils/delivery-status-routes";
+import { ovfStockSourceKey } from "@/utils/ovf-stock";
 
 function todayIso(): string {
   return new Date().toISOString().slice(0, 10);
@@ -111,7 +115,12 @@ type DeliveryChallanFormPageProps = {
 
 export function DeliveryChallanFormPage({ challanId, embedded }: DeliveryChallanFormPageProps) {
   const searchParams = useSearchParams();
+  const router = useRouter();
   const orderIdParam = embedded?.orderId ?? searchParams.get("orderId");
+  const grnKeyParam = searchParams.get("grnKey");
+  const kindParam = searchParams.get("kind") as GrnChallanKind | null;
+  const ovfIdParam = searchParams.get("ovfId");
+  const isOvfStock = searchParams.get("source") === "ovf_stock" && Boolean(ovfIdParam?.trim());
   const returnToParam = searchParams.get("returnTo");
   const returnTo = useMemo(() => safeProcurementReturnTo(returnToParam), [returnToParam]);
   const backHref = resolveChallanModuleExitHref(returnTo);
@@ -148,6 +157,9 @@ export function DeliveryChallanFormPage({ challanId, embedded }: DeliveryChallan
   const [receiverSignature, setReceiverSignature] = useState("");
   const [itemsSourceMode, setItemsSourceMode] = useState<ChallanItemsSourceMode>("full_po");
   const [selectedGrnKeys, setSelectedGrnKeys] = useState<string[]>([]);
+  const [grnKind, setGrnKind] = useState<GrnChallanKind | "">("");
+  const [invoiceNumber, setInvoiceNumber] = useState("");
+  const [invoiceDate, setInvoiceDate] = useState("");
   const [loadedOrder, setLoadedOrder] = useState<ProcOrder | null>(null);
   const [ovfContext, setOvfContext] = useState<ScmOvfPreview | null>(null);
   const [grnBatches, setGrnBatches] = useState<ScmReceiptBatch[]>([]);
@@ -155,7 +167,7 @@ export function DeliveryChallanFormPage({ challanId, embedded }: DeliveryChallan
   const [hasSaved, setHasSaved] = useState(!isNew);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [pdfBusy, setPdfBusy] = useState(false);
-  const [prefillBusy, setPrefillBusy] = useState(Boolean(challanId || orderIdParam));
+  const [prefillBusy, setPrefillBusy] = useState(Boolean(challanId || orderIdParam || isOvfStock));
   const skipAutoApplyLinesRef = useRef(Boolean(challanId));
   const linesLockedFromSaveRef = useRef(Boolean(challanId));
 
@@ -183,10 +195,11 @@ export function DeliveryChallanFormPage({ challanId, embedded }: DeliveryChallan
         new Set(keys),
         loadedOrder,
         defaultShipTo,
+        grnKind || undefined,
       );
       setLines(merged.length > 0 ? merged : [emptyChallanLine()]);
     },
-    [defaultShipTo, effectiveGrnBatches, itemsSourceMode, loadedOrder, ovfContext, selectedGrnKeys],
+    [defaultShipTo, effectiveGrnBatches, grnKind, itemsSourceMode, loadedOrder, ovfContext, selectedGrnKeys],
   );
 
   const selectedGrnNumbers = useMemo(() => {
@@ -357,6 +370,9 @@ export function DeliveryChallanFormPage({ challanId, embedded }: DeliveryChallan
     setReceiverSignature(saved.receiverSignature);
     setItemsSourceMode(saved.itemsSourceMode ?? "full_po");
     setSelectedGrnKeys(saved.selectedGrnKeys ?? []);
+    setGrnKind(saved.grnKind ?? "");
+    setInvoiceNumber(saved.invoiceNumber ?? "");
+    setInvoiceDate(saved.invoiceDate ?? "");
   }
 
   useEffect(() => {
@@ -410,6 +426,51 @@ export function DeliveryChallanFormPage({ challanId, embedded }: DeliveryChallan
     }
 
     if (!orderIdParam) {
+      if (isOvfStock && ovfIdParam) {
+        let cancelled = false;
+        setPrefillBusy(true);
+        setLoadError(null);
+        void (async () => {
+          try {
+            const ovf = await getScmOvfPreview(ovfIdParam);
+            if (cancelled) return;
+            setOvfContext(ovf);
+            setOrderId(ovfIdParam);
+            setItemsSourceMode("selected_grns");
+            setSelectedGrnKeys([ovfStockSourceKey(ovfIdParam)]);
+            setGrnKind("delivery_challan");
+            skipAutoApplyLinesRef.current = true;
+            linesLockedFromSaveRef.current = true;
+            const customer = (ovf.customer_name || ovf.account_name || "").trim();
+            setCustomerName(customer);
+            setCustomerBillTo((ovf.billing_address || "").trim() || customer);
+            setCustomerShipTo((ovf.shipping_address || "").trim() || (ovf.billing_address || "").trim() || customer);
+            setCustomerGstNo((ovf.customer_gst || "").trim());
+            const attn = [ovf.shipping_contact_person, ovf.billing_contact_person]
+              .map((value) => (value || "").trim())
+              .filter(Boolean)
+              .join(" / ");
+            setKindAttn(attn);
+            setPurchaseOrderNumber((ovf.po_number || "").trim());
+            setPoDate((ovf.po_date || "").slice(0, 10));
+            setVendorName((ovf.vendor_name || ovf.oem_name || "").trim());
+            setRemarks("Not for Sale, Delivery Purpose Only");
+            const seed = (ovf.ovf_no || "OVF").replace(/\//g, "-").slice(-6);
+            setChallanNumber((current) => current || `CT/23-24/${seed}`);
+            const allocLines = mergeOvfStockAllocationsToChallanLines(ovf.stock_allocations);
+            setLines(allocLines.length > 0 ? allocLines : [emptyChallanLine()]);
+          } catch (err) {
+            if (!cancelled) {
+              setLoadError(formatApiError(err, "Failed to load OVF stock allocation for challan."));
+            }
+          } finally {
+            if (!cancelled) setPrefillBusy(false);
+          }
+        })();
+        return () => {
+          cancelled = true;
+        };
+      }
       setPrefillBusy(false);
       return;
     }
@@ -425,12 +486,51 @@ export function DeliveryChallanFormPage({ challanId, embedded }: DeliveryChallan
         setLoadedOrder(order);
         setOvfContext(ovf);
         setGrnBatches(batches);
+        const resolvedHeader = (() => {
+          const h = buildChallanPrefillHeader(order, ovf, order.entity_code);
+          return h;
+        })();
         applyPrefillHeader(order, ovf, poNumber, vendor?.label || "");
-        setItemsSourceMode("full_po");
-        setSelectedGrnKeys([]);
-        skipAutoApplyLinesRef.current = false;
-        const itemLines = fullPoChallanLines(order, "", ovf);
-        setLines(itemLines.length > 0 ? itemLines : [emptyChallanLine()]);
+        const fromGrn = grnKeyParam?.trim() || "";
+        const kind = kindParam === "billing" || kindParam === "delivery_challan" ? kindParam : "";
+        if (fromGrn && kind && resolvedHeader.customerName) {
+          patchPendingGrnChallan(orderIdParam, fromGrn, kind, {
+            customerName: resolvedHeader.customerName,
+          });
+        }
+        if (fromGrn) {
+          setItemsSourceMode("selected_grns");
+          setSelectedGrnKeys([fromGrn]);
+          setGrnKind(kind);
+          // Skip the auto-apply effect triggered by the state setters above — we
+          // already compute and set the correct lines immediately below.
+          skipAutoApplyLinesRef.current = true;
+          const resolvedBatches = resolveChallanReceiptBatches(batches, order);
+          const matchedBatch = resolvedBatches.find(
+            (batch) => receiptBatchKey(batch) === fromGrn,
+          );
+          if (matchedBatch?.vendor_invoice_number) {
+            setInvoiceNumber(String(matchedBatch.vendor_invoice_number).trim());
+          }
+          if (matchedBatch?.vendor_invoice_date) {
+            setInvoiceDate(String(matchedBatch.vendor_invoice_date).slice(0, 10));
+          }
+          const merged = mergeSelectedGrnChallanLines(
+            resolvedBatches,
+            new Set([fromGrn]),
+            order,
+            "",
+            kind || undefined,
+          );
+          setLines(merged.length > 0 ? merged : [emptyChallanLine()]);
+        } else {
+          setItemsSourceMode("full_po");
+          setSelectedGrnKeys([]);
+          // Skip the auto-apply effect — we set lines directly below.
+          skipAutoApplyLinesRef.current = true;
+          const itemLines = fullPoChallanLines(order, "", ovf);
+          setLines(itemLines.length > 0 ? itemLines : [emptyChallanLine()]);
+        }
       } catch (err) {
         if (!cancelled) {
           setLoadError(
@@ -447,7 +547,7 @@ export function DeliveryChallanFormPage({ challanId, embedded }: DeliveryChallan
     return () => {
       cancelled = true;
     };
-  }, [challanId, orderIdParam]);
+  }, [challanId, grnKeyParam, kindParam, orderIdParam, isOvfStock, ovfIdParam]);
 
   const setLineField = useCallback(
     (id: string, key: keyof Omit<DeliveryChallanLine, "id">, value: string) => {
@@ -505,6 +605,9 @@ export function DeliveryChallanFormPage({ challanId, embedded }: DeliveryChallan
       itemsSourceMode,
       selectedGrnKeys,
       selectedGrnNumbers,
+      grnKind: grnKind || undefined,
+      invoiceNumber: invoiceNumber.trim() || undefined,
+      invoiceDate: invoiceDate.trim() || undefined,
       lines,
       deliveryMode,
       transportDetails: transportDetails.trim(),
@@ -527,9 +630,34 @@ export function DeliveryChallanFormPage({ challanId, embedded }: DeliveryChallan
       setLoadError("Customer name is required.");
       return;
     }
+    if (grnKind === "billing") {
+      if (!invoiceNumber.trim()) {
+        setLoadError("Invoice number is required for billing GRNs.");
+        return;
+      }
+      if (!invoiceDate.trim()) {
+        setLoadError("Invoice date is required for billing GRNs.");
+        return;
+      }
+    }
     setLoadError(null);
     upsertDeliveryChallan(buildSavePayload());
+    if (orderId && selectedGrnKeys[0]) {
+      const gk = grnKind === "billing" || grnKind === "delivery_challan" ? grnKind : undefined;
+      if (gk) {
+        patchPendingGrnChallan(orderId, selectedGrnKeys[0], gk, {
+          status: "saved",
+          docNumber: grnKind === "billing" ? invoiceNumber.trim() || challanNumber.trim() : challanNumber.trim(),
+          docDate: grnKind === "billing" ? invoiceDate.trim() || challanDate.trim() : challanDate.trim(),
+          savedRecordId: recordId,
+        });
+      }
+    }
     setHasSaved(true);
+    if (!embedded) {
+      router.push(deliveryStatusUpdateHref(recordId));
+      return;
+    }
     setBanner("Delivery challan saved. You can download the PDF now.");
     if (embedded) {
       embedded.onSaved?.(recordId);
@@ -580,19 +708,8 @@ export function DeliveryChallanFormPage({ challanId, embedded }: DeliveryChallan
 
   const footerActions = (
     <div className="flex flex-wrap items-center justify-end gap-2">
-      {!embedded ? (
-        <Link
-          href={backHref}
-          className={cn(
-            buttonVariants({ size: "sm", variant: "outline" }),
-            "cursor-pointer transition-colors duration-200",
-          )}
-        >
-          <ArrowLeft className="mr-1.5 size-3.5" />
-          Back
-        </Link>
-      ) : null}
-      {!isLocked ? (
+      {null}
+      {!isLocked && !hasSaved ? (
         <Button
           type="button"
           size="sm"
@@ -600,7 +717,7 @@ export function DeliveryChallanFormPage({ challanId, embedded }: DeliveryChallan
           disabled={prefillBusy || !recordId}
           onClick={onSave}
         >
-          Save challan
+          Save
         </Button>
       ) : null}
       <Button
@@ -662,7 +779,7 @@ export function DeliveryChallanFormPage({ challanId, embedded }: DeliveryChallan
       ) : null}
 
       <fieldset
-        disabled={isLocked}
+        disabled={isLocked || hasSaved}
         className="m-0 min-w-0 space-y-4 border-0 p-0 disabled:opacity-100"
       >
       <DeliverySectionCard title="Challan & purchase order" icon={FileText}>
@@ -700,7 +817,33 @@ export function DeliveryChallanFormPage({ challanId, embedded }: DeliveryChallan
               className="h-8"
             />
           </FinanceField>
+          {selectedGrnNumbers.length > 0 ? (
+            <FinanceField label="GRN number">
+              <Input value={selectedGrnNumbers.join(", ")} readOnly className="h-8 bg-muted/30" />
+            </FinanceField>
+          ) : null}
         </div>
+        {grnKind === "billing" ? (
+          <div className="mt-3 grid gap-3 sm:grid-cols-2">
+            <FinanceField label="Invoice number *">
+              <Input
+                value={invoiceNumber}
+                onChange={(e) => setInvoiceNumber(e.target.value)}
+                className="h-8"
+                placeholder="Customer / cache invoice no."
+              />
+            </FinanceField>
+            <FinanceField label="Invoice date *">
+              <Input
+                type="date"
+                value={invoiceDate}
+                onChange={(e) => setInvoiceDate(e.target.value)}
+                className="h-8"
+              />
+            </FinanceField>
+          </div>
+        ) : null}
+        {null}
       </DeliverySectionCard>
 
       <DeliverySectionCard title="Customer" icon={FileText}>
@@ -761,54 +904,7 @@ export function DeliveryChallanFormPage({ challanId, embedded }: DeliveryChallan
         </div>
       </DeliverySectionCard>
 
-      {loadedOrder ? (
-        <DeliverySectionCard title="Items on challan" icon={ListChecks}>
-          <div className="space-y-4">
-            <fieldset className="space-y-2">
-              <legend className="text-xs font-medium text-muted-foreground">Source</legend>
-              <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:gap-4">
-                <label className="flex cursor-pointer items-center gap-2 text-sm">
-                  <input
-                    type="radio"
-                    name="challan-items-source"
-                    className="size-4 cursor-pointer accent-primary"
-                    checked={itemsSourceMode === "full_po"}
-                    onChange={() => onItemsSourceModeChange("full_po")}
-                  />
-                  <span className="font-medium text-foreground">All PO line items</span>
-                </label>
-                <label className="flex cursor-pointer items-start gap-2 text-sm">
-                  <input
-                    type="radio"
-                    name="challan-items-source"
-                    className="mt-0.5 size-4 cursor-pointer accent-primary"
-                    checked={itemsSourceMode === "selected_grns"}
-                    onChange={() => onItemsSourceModeChange("selected_grns")}
-                    disabled={effectiveGrnBatches.length === 0}
-                  />
-                  <span>
-                    <span className="font-medium text-foreground">Selected GRN(s)</span>
-                    {effectiveGrnBatches.length === 0 ? (
-                      <span className="mt-0.5 block text-xs text-muted-foreground">
-                        Open this form from a PO with saved GRN receipts (GRN list → Create
-                        challan).
-                      </span>
-                    ) : null}
-                  </span>
-                </label>
-              </div>
-            </fieldset>
-            {itemsSourceMode === "selected_grns" && effectiveGrnBatches.length > 0 ? (
-              <ChallanGrnMultiSelect
-                batches={effectiveGrnBatches}
-                selectedKeys={selectedGrnKeys}
-                disabled={isLocked}
-                onChange={onSelectedGrnKeysChange}
-              />
-            ) : null}
-          </div>
-        </DeliverySectionCard>
-      ) : null}
+      {null /* Items on challan / Source section hidden */}
 
       <DeliverySectionCard title="Line items" icon={Package}>
         <div className="erp-scroll overflow-x-auto rounded-md border border-border">
@@ -821,7 +917,7 @@ export function DeliveryChallanFormPage({ challanId, embedded }: DeliveryChallan
                 <th className="w-24 px-2 py-2 font-medium">HSN/SAC</th>
                 <th className="w-20 px-2 py-2 font-medium">Asset</th>
                 <th className="w-20 px-2 py-2 font-medium">Qty</th>
-                <th className="w-24 px-2 py-2 font-medium">Rate (vendor)</th>
+                <th className="w-24 px-2 py-2 font-medium">Rate</th>
                 <th className="w-16 px-2 py-2 font-medium"> </th>
               </tr>
             </thead>
@@ -886,8 +982,9 @@ export function DeliveryChallanFormPage({ challanId, embedded }: DeliveryChallan
                       type="button"
                       aria-label="Remove line"
                       title="Remove"
-                      className="inline-flex size-8 cursor-pointer items-center justify-center rounded-md text-destructive transition-colors duration-200 hover:bg-destructive/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                      className="inline-flex size-8 cursor-pointer items-center justify-center rounded-md text-destructive transition-colors duration-200 hover:bg-destructive/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-40"
                       onClick={() => removeLine(row.id)}
+                      disabled={isOvfStock}
                     >
                       <Trash2 className="size-4" aria-hidden />
                     </button>
@@ -903,6 +1000,7 @@ export function DeliveryChallanFormPage({ challanId, embedded }: DeliveryChallan
           size="sm"
           className="mt-2 h-7 cursor-pointer px-2 text-xs"
           onClick={addLine}
+          disabled={isOvfStock}
         >
           Add item
         </Button>

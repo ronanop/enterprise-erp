@@ -96,6 +96,17 @@ function writePoApprovals(rows: PoApprovalRequest[]): void {
   emitChange();
 }
 
+export function latestPoApprovalByOrderId(): Map<string, PoApprovalRequest> {
+  const map = new Map<string, PoApprovalRequest>();
+  for (const row of readPoApprovals()) {
+    const prev = map.get(row.orderId);
+    const ts = row.decidedAt || row.createdAt;
+    const prevTs = prev ? prev.decidedAt || prev.createdAt : "";
+    if (!prev || ts > prevTs) map.set(row.orderId, row);
+  }
+  return map;
+}
+
 export function listPendingPoApprovals(): PoApprovalRequest[] {
   return readPoApprovals()
     .filter((row) => row.status === "pending")

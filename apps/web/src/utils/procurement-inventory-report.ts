@@ -24,6 +24,18 @@ export type ProcurementInventoryStockTableRow = {
   units: number;
 };
 
+export type GrnStockByProductRow = {
+  productKey: string;
+  productName: string;
+  stockQty: number;
+  avgUnitCost: number;
+  description: string;
+  serialSummary: string;
+  grnSummary: string;
+  hasReversal: boolean;
+  lines: ProcurementInventoryRow[];
+};
+
 export type ProcurementInventoryStockSummary = {
   totalUnits: number;
   productCount: number;
@@ -38,6 +50,75 @@ export type ProcurementInventoryStockSummary = {
 function productLabel(row: ProcurementInventoryRow): string {
   const name = row.product_name?.trim();
   return name || "Unnamed product";
+}
+
+/** Case-insensitive product key — same item from different POs/GRNs merges in stock views. */
+export function inventoryProductKey(name: string | null | undefined): string {
+  return (name || "").trim().toLowerCase();
+}
+
+function formatSerialSummaryFromRows(rows: ProcurementInventoryRow[]): string {
+  const serials = rows
+    .map((row) => (row.serial_number ?? "").trim())
+    .filter((serial) => serial && serial.toUpperCase() !== "NA" && serial !== "—" && serial !== "-");
+  if (serials.length === 0) return "—";
+  const unique = [...new Set(serials)];
+  if (unique.length <= 3) return unique.join(", ");
+  return `${unique.slice(0, 3).join(", ")} +${unique.length - 3} more`;
+}
+
+function formatGrnSummaryFromRows(rows: ProcurementInventoryRow[]): string {
+  const grns = [...new Set(rows.map((row) => row.grn_number?.trim()).filter(Boolean))] as string[];
+  if (grns.length === 0) return "—";
+  if (grns.length <= 2) return grns.join(", ");
+  return `${grns.slice(0, 2).join(", ")} +${grns.length - 2} more`;
+}
+
+/** One row per product — aggregates units from all POs/GRNs for the same product name. */
+export function groupGrnStockByProduct(rows: ProcurementInventoryRow[]): GrnStockByProductRow[] {
+  const map = new Map<string, { displayName: string; lines: ProcurementInventoryRow[] }>();
+  for (const row of rows) {
+    const key = inventoryProductKey(row.product_name);
+    if (!key) continue;
+    const entry = map.get(key) ?? { displayName: productLabel(row), lines: [] };
+    if (!map.has(key)) {
+      entry.displayName = productLabel(row);
+    }
+    entry.lines.push(row);
+    map.set(key, entry);
+  }
+
+  return Array.from(map.entries())
+    .map(([productKey, { displayName, lines }]) => {
+      const stockQty = lines.reduce((sum, row) => sum + nonBilledStockQuantity(row), 0);
+      const stockValue = lines.reduce(
+        (sum, row) => sum + unitCostOf(row) * nonBilledStockQuantity(row),
+        0,
+      );
+      const roundedQty = Math.round(stockQty * 1e6) / 1e6;
+      const descriptions = [
+        ...new Set(lines.map((row) => (row.description ?? "").trim()).filter(Boolean)),
+      ];
+      return {
+        productKey,
+        productName: displayName,
+        stockQty: roundedQty,
+        avgUnitCost: roundedQty > 0 ? stockValue / roundedQty : 0,
+        description:
+          descriptions.length === 1
+            ? descriptions[0]!
+            : descriptions.length > 1
+              ? "Multiple"
+              : "—",
+        serialSummary: formatSerialSummaryFromRows(lines),
+        grnSummary: formatGrnSummaryFromRows(lines),
+        hasReversal: lines.some((row) => row.source === "grn_reversal"),
+        lines,
+      };
+    })
+    .sort((a, b) =>
+      a.productName.localeCompare(b.productName, undefined, { sensitivity: "base" }),
+    );
 }
 
 function unitCostOf(row: ProcurementInventoryRow): number {
@@ -139,7 +220,13 @@ export function buildProcurementInventoryStockSummary(
   const vendorLabels = options?.vendorLabels ?? {};
   const productMap = new Map<
     string,
-    { units: number; grns: Set<string>; serials: number; stockValue: number }
+    {
+      displayName: string;
+      units: number;
+      grns: Set<string>;
+      serials: number;
+      stockValue: number;
+    }
   >();
   const vendorMap = new Map<
     string,
@@ -150,16 +237,21 @@ export function buildProcurementInventoryStockSummary(
 
   for (const row of rows) {
     const name = productLabel(row);
+    const productKey = inventoryProductKey(row.product_name) || name;
     const qty = nonBilledStockQuantity(row);
     const cost = unitCostOf(row) * qty;
     totalStockValue += cost;
 
-    const entry = productMap.get(name) ?? {
+    const entry = productMap.get(productKey) ?? {
+      displayName: name,
       units: 0,
       grns: new Set<string>(),
       serials: 0,
       stockValue: 0,
     };
+    if (!productMap.has(productKey)) {
+      entry.displayName = name;
+    }
     entry.units = Math.round((entry.units + qty) * 1e6) / 1e6;
     entry.stockValue += cost;
     if (row.grn_number && row.grn_number !== "Imported") {
@@ -168,7 +260,7 @@ export function buildProcurementInventoryStockSummary(
     if (hasTrackedSerial(row.serial_number)) {
       entry.serials += 1;
     }
-    productMap.set(name, entry);
+    productMap.set(productKey, entry);
 
     const vendorId = (row.vendor_id || "").trim() || null;
     const vendorKey = vendorId || "__unassigned__";
@@ -187,8 +279,8 @@ export function buildProcurementInventoryStockSummary(
   }
 
   const byProduct = Array.from(productMap.entries())
-    .map(([productName, data]) => ({
-      productName,
+    .map(([, data]) => ({
+      productName: data.displayName,
       units: data.units,
       grnCount: data.grns.size,
       serialsRecorded: data.serials,

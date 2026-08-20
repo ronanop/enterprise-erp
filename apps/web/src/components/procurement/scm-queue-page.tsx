@@ -26,8 +26,9 @@ import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import {
-  listPendingPoApprovals,
+  latestPoApprovalByOrderId,
   PROCUREMENT_APPROVALS_EVENT,
+  type PoApprovalRequest,
 } from "@/lib/procurement-approvals";
 import { ApiClientError } from "@/services/api-client";
 import {
@@ -39,9 +40,11 @@ import {
 } from "@/services/procurement-service";
 import { textTokenMatch } from "@/utils/procurement-search";
 import { getUnseenScmOvfIds, markScmQueueSeen } from "@/utils/scm-queue-seen";
+import { ovfCreatePoRemainderHref, ovfFromStockHref } from "@/utils/ovf-stock";
 
 type QueueFilter = "all" | "open" | "close" | "hold";
-type OvfStatus = "open" | "close" | "hold" | "draft" | "pending_approval";
+type OvfStatus = "open" | "close" | "hold" | "draft";
+type PoQueueStatus = "create_po" | "draft" | "approval_pending" | "rejected" | "issued" | "from_stock";
 
 function formatReceivedDate(value?: string | null): string {
   if (!value) return "—";
@@ -79,31 +82,53 @@ function parseQueueFilter(value: string | null): QueueFilter {
 
 /**
  * OVF status for SCM queue:
- * - Open   = no vendor PO yet
+ * - Open   = no vendor PO yet, or draft PO not yet sent for approval
  * - Draft  = draft vendor PO created from OVF (not finalized)
- * - Pending approval = finalize request sent to admin
- * - Close  = PO finalized (issued)
+ * - Close  = PO finalized, or forwarded to admin for approval
  * - Hold   = SCM parked the OVF without a live PO (or cancelled PO)
  */
 function deriveOvfStatus(
   row: ScmQueueItem,
-  pendingOrderIds: Set<string>,
+  approvalsByOrder: Map<string, PoApprovalRequest>,
 ): OvfStatus {
   const status = (row.purchase_order_status || "").toLowerCase();
-  if (
-    row.purchase_order_id &&
-    pendingOrderIds.has(row.purchase_order_id) &&
-    status === "draft"
-  ) {
-    return "pending_approval";
+  const approval = row.purchase_order_id
+    ? approvalsByOrder.get(row.purchase_order_id)
+    : undefined;
+  if (row.purchase_order_id && approval?.status === "pending" && status === "draft") {
+    return "close";
   }
   if (status === "draft" && row.purchase_order_id && !row.can_create_po) {
     return "draft";
   }
   if (row.scm_on_hold || status === "hold" || status === "cancelled") return "hold";
+  if (row.stock_fulfillment_status === "complete" && !row.can_create_po) return "close";
   if (!row.purchase_order_id || row.can_create_po) return "open";
   if (status === "submitted" || status === "") return "open";
   return "close";
+}
+
+function derivePoStatus(
+  row: ScmQueueItem,
+  approvalsByOrder: Map<string, PoApprovalRequest>,
+): PoQueueStatus {
+  const status = (row.purchase_order_status || "").toLowerCase();
+  const approval = row.purchase_order_id
+    ? approvalsByOrder.get(row.purchase_order_id)
+    : undefined;
+  if (row.purchase_order_id && approval?.status === "pending") return "approval_pending";
+  if (row.purchase_order_id && approval?.status === "rejected" && status === "draft") {
+    return "rejected";
+  }
+  if (row.stock_fulfillment_status === "complete" && !row.can_create_po && !row.purchase_order_id) {
+    return "from_stock";
+  }
+  if (status === "draft" && row.purchase_order_id) return "draft";
+  if (!row.purchase_order_id || status === "cancelled" || status === "hold") {
+    return "create_po";
+  }
+  if (row.can_create_po && !row.purchase_order_id) return "create_po";
+  return "issued";
 }
 
 function payTermsLabel(days: number | null | undefined): string {
@@ -154,9 +179,7 @@ function OvfStatusBadge({ status }: { status: OvfStatus }) {
         ? "Close"
         : status === "draft"
           ? "Draft"
-          : status === "pending_approval"
-            ? "Pending approval"
-            : "Hold";
+          : "Hold";
   return (
     <Badge
       variant="outline"
@@ -165,13 +188,28 @@ function OvfStatusBadge({ status }: { status: OvfStatus }) {
         status === "open" && "border-amber-300 bg-amber-50 text-amber-900",
         status === "close" && "border-emerald-300 bg-emerald-50 text-emerald-900",
         status === "draft" && "border-sky-300 bg-sky-50 text-sky-900",
-        status === "pending_approval" && "border-amber-300 bg-amber-50 text-amber-900",
         status === "hold" && "border-red-300 bg-red-50 text-red-800",
       )}
     >
       {label}
     </Badge>
   );
+}
+
+function poStatusChipClass(status: PoQueueStatus): string {
+  if (status === "approval_pending") {
+    return "border-amber-200/80 bg-amber-50 text-amber-900 hover:bg-amber-100";
+  }
+  if (status === "rejected") {
+    return "border-red-200/80 bg-red-50 text-red-800 hover:bg-red-100";
+  }
+  if (status === "draft") {
+    return "border-sky-200/80 bg-sky-50 text-sky-900 hover:bg-sky-100";
+  }
+  if (status === "from_stock") {
+    return "border-emerald-200/80 bg-emerald-50 text-emerald-900 hover:bg-emerald-100";
+  }
+  return "border-emerald-200/80 bg-emerald-50 text-emerald-900 hover:bg-emerald-100";
 }
 
 export function ScmQueuePage() {
@@ -187,8 +225,8 @@ export function ScmQueuePage() {
   const [error, setError] = useState<string | null>(null);
   const [newOvfIds, setNewOvfIds] = useState<Set<string>>(new Set());
   const [query, setQuery] = useState(() => searchParams.get("q")?.trim() ?? "");
-  const [pendingOrderIds, setPendingOrderIds] = useState<Set<string>>(() =>
-    new Set(listPendingPoApprovals().map((row) => row.orderId)),
+  const [approvalsByOrder, setApprovalsByOrder] = useState<Map<string, PoApprovalRequest>>(
+    () => latestPoApprovalByOrderId(),
   );
   const queueOvfIdsRef = useRef<string[]>([]);
 
@@ -232,7 +270,7 @@ export function ScmQueuePage() {
 
   useEffect(() => {
     const syncApprovals = () => {
-      setPendingOrderIds(new Set(listPendingPoApprovals().map((row) => row.orderId)));
+      setApprovalsByOrder(latestPoApprovalByOrderId());
     };
     syncApprovals();
     window.addEventListener(PROCUREMENT_APPROVALS_EVENT, syncApprovals);
@@ -262,17 +300,15 @@ export function ScmQueuePage() {
     () =>
       rows.map((row) => ({
         ...row,
-        ovf_status: deriveOvfStatus(row, pendingOrderIds),
+        ovf_status: deriveOvfStatus(row, approvalsByOrder),
+        po_status: derivePoStatus(row, approvalsByOrder),
       })),
-    [rows, pendingOrderIds],
+    [rows, approvalsByOrder],
   );
 
   const kpis = useMemo(() => {
     const open = enriched.filter(
-      (r) =>
-        r.ovf_status === "open" ||
-        r.ovf_status === "draft" ||
-        r.ovf_status === "pending_approval",
+      (r) => r.ovf_status === "open" || r.ovf_status === "draft",
     ).length;
     const close = enriched.filter((r) => r.ovf_status === "close").length;
     const hold = enriched.filter((r) => r.ovf_status === "hold").length;
@@ -283,10 +319,7 @@ export function ScmQueuePage() {
     let list = enriched;
     if (filter === "open") {
       list = enriched.filter(
-        (r) =>
-          r.ovf_status === "open" ||
-          r.ovf_status === "draft" ||
-          r.ovf_status === "pending_approval",
+        (r) => r.ovf_status === "open" || r.ovf_status === "draft",
       );
     } else if (filter === "close" || filter === "hold") {
       list = enriched.filter((r) => r.ovf_status === filter);
@@ -424,7 +457,7 @@ export function ScmQueuePage() {
                 <th className="px-3 py-2 font-bold text-right">Margin %</th>
                 <th className="px-3 py-2 font-bold">OVF status</th>
                 <th className="px-3 py-2 font-bold">View OVF</th>
-                <th className="px-3 py-2 font-bold">Action</th>
+                <th className="px-3 py-2 font-bold">PO status</th>
               </tr>
             </thead>
             <tbody>
@@ -453,6 +486,11 @@ export function ScmQueuePage() {
               {filtered.map((row) => {
                 const isNew = newOvfIds.has(row.ovf_id);
                 const ovfStatus = row.ovf_status;
+                const poStatus = row.po_status;
+                const createPoHref =
+                  row.stock_fulfillment_status === "partial"
+                    ? ovfCreatePoRemainderHref(row.ovf_id)
+                    : `/procurement/scm/ovf/${row.ovf_id}/po`;
                 return (
                   <tr
                     key={row.ovf_id}
@@ -500,7 +538,24 @@ export function ScmQueuePage() {
                       {formatNetMarginPct(row.margin_amount, row.customer_total)}
                     </td>
                     <td className="px-3 py-2">
-                      <OvfStatusBadge status={ovfStatus} />
+                      <span className="inline-flex flex-wrap items-center gap-1.5">
+                        <OvfStatusBadge status={ovfStatus} />
+                        {row.stock_fulfillment_status === "complete" ? (
+                          <Badge
+                            variant="outline"
+                            className="border-emerald-300 bg-emerald-50 font-medium text-emerald-900"
+                          >
+                            Stock complete
+                          </Badge>
+                        ) : row.stock_fulfillment_status === "partial" ? (
+                          <Badge
+                            variant="outline"
+                            className="border-amber-300 bg-amber-50 font-medium text-amber-900"
+                          >
+                            Partial stock
+                          </Badge>
+                        ) : null}
+                      </span>
                     </td>
                     <td className="px-3 py-2">
                       <Link
@@ -514,44 +569,73 @@ export function ScmQueuePage() {
                       </Link>
                     </td>
                     <td className="px-3 py-2">
-                      {ovfStatus === "hold" || (ovfStatus === "open" && row.can_create_po) ? (
+                      {poStatus === "create_po" ? (
                         <ScmCreatePoEntry
                           ovfId={row.ovf_id}
+                          href={createPoHref}
                           scmOnHold={ovfStatus === "hold" && Boolean(row.scm_on_hold)}
                           scmOnHoldAt={row.scm_on_hold_at}
                           className="cursor-pointer transition-colors duration-200"
                         />
-                      ) : ovfStatus === "pending_approval" && row.purchase_order_id ? (
+                      ) : poStatus === "from_stock" ? (
                         <Link
-                          href={`/procurement/orders/${row.purchase_order_id}?from=scm`}
+                          href={ovfFromStockHref(row.ovf_id)}
                           className={cn(
-                            "inline-flex cursor-pointer items-center rounded-md border border-amber-200/80 bg-amber-50 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide text-amber-900",
-                            "transition-colors duration-200 hover:bg-amber-100",
+                            "inline-flex cursor-pointer items-center rounded-md border px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide",
+                            "transition-colors duration-200",
                             "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1",
+                            poStatusChipClass("from_stock"),
                           )}
                         >
-                          Pending approval
+                          From stock
                         </Link>
-                      ) : ovfStatus === "draft" ||
-                        (ovfStatus === "open" && row.purchase_order_id) ? (
+                      ) : poStatus === "draft" ? (
+                        <Link
+                          href={createPoHref}
+                          className={cn(
+                            "inline-flex cursor-pointer items-center rounded-md border px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide",
+                            "transition-colors duration-200",
+                            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1",
+                            poStatusChipClass("draft"),
+                          )}
+                        >
+                          Draft
+                        </Link>
+                      ) : poStatus === "approval_pending" && row.purchase_order_id ? (
                         <Link
                           href={`/procurement/orders/${row.purchase_order_id}?from=scm`}
                           className={cn(
-                            buttonVariants({ size: "sm", variant: "outline" }),
-                            "cursor-pointer transition-colors duration-200",
+                            "inline-flex cursor-pointer items-center rounded-md border px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide",
+                            "transition-colors duration-200",
+                            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1",
+                            poStatusChipClass("approval_pending"),
                           )}
                         >
-                          Open PO
+                          Approval pending
+                        </Link>
+                      ) : poStatus === "rejected" ? (
+                        <Link
+                          href={createPoHref}
+                          className={cn(
+                            "inline-flex cursor-pointer items-center rounded-md border px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide",
+                            "transition-colors duration-200",
+                            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1",
+                            poStatusChipClass("rejected"),
+                          )}
+                        >
+                          Rejected
                         </Link>
                       ) : row.purchase_order_id ? (
                         <Link
                           href={`/procurement/orders/${row.purchase_order_id}?from=scm`}
                           className={cn(
-                            buttonVariants({ size: "sm", variant: "outline" }),
-                            "cursor-pointer transition-colors duration-200",
+                            "inline-flex cursor-pointer items-center rounded-md border px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide",
+                            "transition-colors duration-200",
+                            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1",
+                            poStatusChipClass("issued"),
                           )}
                         >
-                          View PO
+                          Approved
                         </Link>
                       ) : (
                         <span className="text-xs text-muted-foreground">—</span>

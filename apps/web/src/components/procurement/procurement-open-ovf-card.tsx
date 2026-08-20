@@ -40,7 +40,7 @@ export function ProcurementOpenOvfCard({
 }) {
   const [dialogOpen, setDialogOpen] = useState(false);
   const openRows = useMemo(
-    () => sortByAmountDesc(queue.filter(isScmOpenOvfRow)),
+    () => sortByAmountDesc(queue.filter((row) => isScmOpenOvfRow(row))),
     [queue],
   );
   const count = openRows.length;

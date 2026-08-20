@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { RefreshCw } from "lucide-react";
+import { FileSpreadsheet, RefreshCw } from "lucide-react";
 
 import {
   ProcurementListSearch,
@@ -12,53 +12,44 @@ import { procurementUi } from "@/components/procurement/procurement-ui";
 import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { listDeliveryChallans, getDeliveryChallan, type DeliveryChallanRecord } from "@/utils/delivery-challan-storage";
+import { listDeliveryChallans } from "@/utils/delivery-challan-storage";
+import {
+  buildDeliveryStatusExportRows,
+  exportDeliveryStatusXlsx,
+} from "@/utils/delivery-status-excel-export";
+import { consumeDeliveryStatusFlash } from "@/utils/delivery-status-flash";
+import { deliveryStatusUpdateHref } from "@/utils/delivery-status-routes";
 import {
   deliveryStatusRowFromChallan,
-  getDeliveryStatus,
-  isDeliveryStatusPersisted,
   shipmentStatusBadgeVariant,
   type DeliveryStatusRow,
 } from "@/utils/delivery-status-storage";
-import { DeliveryStatusShipmentModal } from "@/components/procurement/delivery-status-shipment-modal";
-import { DeliveryStatusViewModal } from "@/components/procurement/delivery-status-view-modal";
-import { deliveryStatusUpdateHref } from "@/utils/delivery-status-routes";
-import {
-  consumeDeliveryStatusFlash,
-  setDeliveryStatusFlash,
-} from "@/utils/delivery-status-flash";
+
+function loadDeliveryStatusRows(): DeliveryStatusRow[] {
+  return listDeliveryChallans().flatMap((challan) => {
+    try {
+      return [deliveryStatusRowFromChallan(challan)];
+    } catch {
+      return [];
+    }
+  });
+}
 
 export function DeliveryStatusListPage() {
-  const [challans, setChallans] = useState<DeliveryChallanRecord[]>(() => listDeliveryChallans());
+  const [version, setVersion] = useState(0);
   const [query, setQuery] = useState("");
-  const [statusVersion, setStatusVersion] = useState(0);
   const [flash, setFlash] = useState<ReturnType<typeof consumeDeliveryStatusFlash>>(null);
-  const [viewChallanId, setViewChallanId] = useState<string | null>(null);
-  const [updateChallanId, setUpdateChallanId] = useState<string | null>(null);
-
-  const viewChallan = viewChallanId ? getDeliveryChallan(viewChallanId) : null;
-  const updateChallan = updateChallanId ? getDeliveryChallan(updateChallanId) : null;
-
-  function onModalSaved(message: string) {
-    setDeliveryStatusFlash({ variant: "success", message });
-    load();
-    setViewChallanId(null);
-    setUpdateChallanId(null);
-  }
+  const [rows, setRows] = useState<DeliveryStatusRow[]>([]);
+  const [exportError, setExportError] = useState<string | null>(null);
 
   const load = useCallback(() => {
-    setChallans(listDeliveryChallans());
-    setStatusVersion((v) => v + 1);
-    setFlash(consumeDeliveryStatusFlash());
+    setVersion((v) => v + 1);
   }, []);
 
   useEffect(() => {
-    load();
-  }, [load]);
-
-  const rows = useMemo((): DeliveryStatusRow[] => {
-    return challans.map((challan) => deliveryStatusRowFromChallan(challan));
-  }, [challans, statusVersion]);
+    setFlash(consumeDeliveryStatusFlash());
+    setRows(loadDeliveryStatusRows());
+  }, [version]);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -66,13 +57,12 @@ export function DeliveryStatusListPage() {
     return rows.filter((row) => {
       const haystack = [
         row.purchaseOrderNumber,
+        row.customerPoNumber,
         row.grnSummary,
-        row.challanNumber,
-        row.customerName,
-        row.vendorName,
+        row.cacheInvoiceNumber,
         row.shipmentStatus,
-        row.trackingNumber,
-        row.courierTransportDetails,
+        row.docketNumber,
+        row.deliveryBoyName,
       ]
         .join(" ")
         .toLowerCase();
@@ -80,12 +70,35 @@ export function DeliveryStatusListPage() {
     });
   }, [rows, query]);
 
+  function onExport() {
+    setExportError(null);
+    if (rows.length === 0) {
+      setExportError("No delivery status rows available to export.");
+      return;
+    }
+    const stamp = new Date().toISOString().slice(0, 10);
+    exportDeliveryStatusXlsx(
+      `delivery-status-${stamp}.xlsx`,
+      buildDeliveryStatusExportRows(rows),
+    );
+  }
+
   return (
     <div className={procurementUi.page}>
       <ProcurementPageHeader
         title="Delivery status"
         actions={
           <div className="flex flex-wrap items-center gap-2">
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className="cursor-pointer transition-colors duration-200"
+              onClick={onExport}
+            >
+              <FileSpreadsheet className="mr-1.5 size-3.5 text-[#0369A1]" />
+              Export to Excel
+            </Button>
             <Button
               type="button"
               variant="outline"
@@ -113,132 +126,78 @@ export function DeliveryStatusListPage() {
         </div>
       ) : null}
 
+      {exportError ? (
+        <div className="rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">
+          {exportError}
+        </div>
+      ) : null}
+
       <ProcurementListSearch
         value={query}
         onChange={setQuery}
-        placeholder="Search…"
+        placeholder="Search PO, GRN, or invoice…"
         aria-label="Search delivery status"
       />
 
       <div className={procurementUi.tableShell}>
         <div className={procurementUi.tableScroll}>
-          <table className={cn(procurementUi.table, "min-w-[880px]")}>
+          <table className={cn(procurementUi.table, "min-w-[720px]")}>
             <thead className={procurementUi.thead}>
               <tr>
-                <th className={procurementUi.th}>PO</th>
-                <th className={procurementUi.th}>GRN</th>
-                <th className={procurementUi.th}>Challan</th>
-                <th className={procurementUi.th}>Customer</th>
-                <th className={procurementUi.th}>Status</th>
-                <th className={procurementUi.th}>Dispatch</th>
-                <th className={procurementUi.th}>Expected</th>
-                <th className={procurementUi.th}> </th>
+                <th className={procurementUi.th}>PO number</th>
+                <th className={procurementUi.th}>GRN number</th>
+                <th className={procurementUi.th}>Cache invoice number</th>
+                <th className={procurementUi.th}>Delivery status</th>
+                <th className={procurementUi.th}>View</th>
               </tr>
             </thead>
             <tbody>
               {filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className={procurementUi.empty}>
-                    {challans.length === 0
-                      ? "No challans to track yet."
+                  <td colSpan={5} className={procurementUi.empty}>
+                    {rows.length === 0
+                      ? "No GRNs to track yet."
                       : "No rows match your search."}
                   </td>
                 </tr>
               ) : null}
-              {filtered.map((row, index) => {
-                const prev = index > 0 ? filtered[index - 1] : null;
-                const samePoAsPrev =
-                  prev && prev.purchaseOrderNumber === row.purchaseOrderNumber;
-                const saved = getDeliveryStatus(row.challanId);
-                const statusLabel = saved?.shipmentStatus || row.shipmentStatus;
-                return (
-                  <tr
-                    key={row.challanId}
-                    className={cn(procurementUi.tr, samePoAsPrev && "bg-muted/10")}
-                  >
-                    <td className={cn(procurementUi.td, "font-medium tabular-nums")}>
-                      {row.purchaseOrderNumber}
-                    </td>
-                    <td className={cn(procurementUi.tdNumeric, "text-muted-foreground")}>
-                      {row.grnSummary}
-                    </td>
-                    <td className={cn(procurementUi.tdNumeric)}>{row.challanNumber}</td>
-                    <td className={procurementUi.tdMuted}>{row.customerName || "—"}</td>
-                    <td className={procurementUi.td}>
-                      <Badge
-                        variant={shipmentStatusBadgeVariant(statusLabel)}
-                        className={procurementUi.statusBadge}
-                      >
-                        {statusLabel}
-                      </Badge>
-                    </td>
-                    <td className={cn(procurementUi.tdNumeric, "text-muted-foreground")}>
-                      {row.dispatchDate || "—"}
-                    </td>
-                    <td className={cn(procurementUi.tdNumeric, "text-muted-foreground")}>
-                      {row.expectedDeliveryDate || "—"}
-                    </td>
-                    <td className={procurementUi.td}>
-                      <div className="flex flex-wrap items-center justify-end gap-0.5">
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="ghost"
-                          className={cn(
-                            procurementUi.actionBtn,
-                            "text-[#0369A1] hover:text-[#0369A1]",
-                          )}
-                          onClick={() => setViewChallanId(row.challanId)}
-                        >
-                          View
-                        </Button>
-                        {isDeliveryStatusPersisted(row.challanId) ? (
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="ghost"
-                            className={cn(
-                              procurementUi.actionBtn,
-                              "text-[#0369A1] hover:text-[#0369A1]",
-                            )}
-                            onClick={() => setUpdateChallanId(row.challanId)}
-                          >
-                            Update
-                          </Button>
-                        ) : (
-                          <Link
-                            href={deliveryStatusUpdateHref(row.challanId)}
-                            className={cn(
-                              buttonVariants({ size: "sm", variant: "ghost" }),
-                              procurementUi.actionBtn,
-                              "text-[#0369A1] hover:text-[#0369A1]",
-                            )}
-                          >
-                            Set up
-                          </Link>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
+              {filtered.map((row) => (
+                <tr key={row.challanId} className={procurementUi.tr}>
+                  <td className={cn(procurementUi.td, "font-medium tabular-nums")}>
+                    {row.purchaseOrderNumber || "—"}
+                  </td>
+                  <td className={cn(procurementUi.tdNumeric, "text-muted-foreground")}>
+                    {row.grnSummary || "—"}
+                  </td>
+                  <td className={cn(procurementUi.tdNumeric)}>
+                    {String(row.cacheInvoiceNumber ?? "").trim() || "—"}
+                  </td>
+                  <td className={procurementUi.td}>
+                    <Badge
+                      variant={shipmentStatusBadgeVariant(row.shipmentStatus)}
+                      className={procurementUi.statusBadge}
+                    >
+                      {row.shipmentStatus}
+                    </Badge>
+                  </td>
+                  <td className={procurementUi.td}>
+                    <Link
+                      href={deliveryStatusUpdateHref(row.challanId)}
+                      className={cn(
+                        buttonVariants({ size: "sm", variant: "ghost" }),
+                        procurementUi.actionBtn,
+                        "text-[#0369A1] hover:text-[#0369A1]",
+                      )}
+                    >
+                      View
+                    </Link>
+                  </td>
+                </tr>
+              ))}
             </tbody>
           </table>
         </div>
       </div>
-
-      <DeliveryStatusViewModal
-        open={viewChallanId !== null}
-        challan={viewChallan}
-        onClose={() => setViewChallanId(null)}
-        onSaved={onModalSaved}
-      />
-      <DeliveryStatusShipmentModal
-        open={updateChallanId !== null}
-        challan={updateChallan}
-        onClose={() => setUpdateChallanId(null)}
-        onSaved={onModalSaved}
-      />
     </div>
   );
 }

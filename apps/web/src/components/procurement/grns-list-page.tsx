@@ -1,8 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ChevronDown, CircleDot, Eye, FileSpreadsheet, PackageCheck, RefreshCw } from "lucide-react";
+import { CircleDot, Eye, FileSpreadsheet, PackageCheck, RefreshCw } from "lucide-react";
 
 import { FinanceKpiCard } from "@/components/finance/finance-kpi-card";
 import { GrnDeliveryChallanMenu } from "@/components/procurement/grn-delivery-challan-menu";
@@ -128,8 +128,6 @@ export function GrnsListPage() {
     () => (typeof window === "undefined" ? {} : challansByOrderIdMap()),
   );
   const [error, setError] = useState<string | null>(null);
-  const [exportOpen, setExportOpen] = useState(false);
-  const exportMenuRef = useRef<HTMLDivElement | null>(null);
   const [historyOrder, setHistoryOrder] = useState<{
     id: string;
     poLabel: string;
@@ -177,17 +175,6 @@ export function GrnsListPage() {
     void load();
   }, [load]);
 
-  useEffect(() => {
-    if (!exportOpen) return;
-    function onPointerDown(event: MouseEvent) {
-      if (!exportMenuRef.current?.contains(event.target as Node)) {
-        setExportOpen(false);
-      }
-    }
-    document.addEventListener("mousedown", onPointerDown);
-    return () => document.removeEventListener("mousedown", onPointerDown);
-  }, [exportOpen]);
-
   const filtered = useMemo(() => {
     let list = rows;
     if (filter === "partial") {
@@ -225,25 +212,17 @@ export function GrnsListPage() {
 
   const tableColSpan = 10;
 
-  async function onExport(mode: "all" | "filter") {
-    setExportOpen(false);
+  async function onExport() {
     setError(null);
-    const source = mode === "all" ? rows : filtered;
+    const source = rows;
     if (source.length === 0) {
-      setError(
-        mode === "filter"
-          ? "No GRNs match the current filter to export."
-          : "No GRNs available to export.",
-      );
+      setError("No GRNs available to export.");
       return;
     }
     const stamp = new Date().toISOString().slice(0, 10);
     try {
       const exportRows = await buildGrnExportRowsWithBatches(source, vendors);
-      exportGrnsXlsx(
-        mode === "all" ? `grns-all-${stamp}.xlsx` : `grns-filtered-${stamp}.xlsx`,
-        exportRows,
-      );
+      exportGrnsXlsx(`grns-all-${stamp}.xlsx`, exportRows);
     } catch (err) {
       setError(formatApiError(err, "Export failed"));
     }
@@ -268,51 +247,17 @@ export function GrnsListPage() {
         title="GRNs"
         actions={
           <div className="flex flex-wrap items-center gap-2">
-            <div className="relative" ref={exportMenuRef}>
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                className="cursor-pointer transition-colors duration-200"
-                disabled={loading}
-                aria-expanded={exportOpen}
-                aria-haspopup="menu"
-                onClick={() => setExportOpen((open) => !open)}
-              >
-                <FileSpreadsheet className="mr-1.5 size-3.5 text-[#0369A1]" />
-                Export to Excel
-                <ChevronDown className="ml-1 size-3.5" />
-              </Button>
-              {exportOpen ? (
-                <div
-                  role="menu"
-                  className="absolute right-0 z-20 mt-1 w-56 overflow-hidden rounded-md border border-border bg-card shadow-md"
-                >
-                  <button
-                    type="button"
-                    role="menuitem"
-                    className="flex w-full cursor-pointer flex-col items-start gap-0.5 px-3 py-2.5 text-left transition-colors duration-150 hover:bg-muted/60"
-                    onClick={() => void onExport("all")}
-                  >
-                    <span className="text-sm font-medium text-foreground">Export all</span>
-                    <span className="text-xs text-muted-foreground">
-                      Every partial or delivered GRN PO
-                    </span>
-                  </button>
-                  <button
-                    type="button"
-                    role="menuitem"
-                    className="flex w-full cursor-pointer flex-col items-start gap-0.5 border-t border-border px-3 py-2.5 text-left transition-colors duration-150 hover:bg-muted/60"
-                    onClick={() => void onExport("filter")}
-                  >
-                    <span className="text-sm font-medium text-foreground">Export by filter</span>
-                    <span className="text-xs text-muted-foreground">
-                      Only rows matching the current filter
-                    </span>
-                  </button>
-                </div>
-              ) : null}
-            </div>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className="cursor-pointer transition-colors duration-200"
+              disabled={loading}
+              onClick={() => void onExport()}
+            >
+              <FileSpreadsheet className="mr-1.5 size-3.5 text-[#0369A1]" />
+              Export to Excel
+            </Button>
             <Button
               type="button"
               size="sm"

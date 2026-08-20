@@ -70,18 +70,19 @@ function stampNow(): string {
   return new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
 }
 
-function downloadSheet(
+function downloadWorkbook(
   filename: string,
-  rows: Record<string, string | number>[],
-  sheetName: string,
+  sheets: Array<{ name: string; rows: Record<string, string | number>[] }>,
 ) {
-  const data =
-    rows.length > 0
-      ? rows
-      : [{ Note: "No rows available for this export." }];
-  const ws = XLSX.utils.json_to_sheet(data);
   const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, sheetName);
+  for (const sheet of sheets) {
+    const data =
+      sheet.rows.length > 0
+        ? sheet.rows
+        : [{ Note: "No rows available for this export." }];
+    const ws = XLSX.utils.json_to_sheet(data);
+    XLSX.utils.book_append_sheet(wb, ws, sheet.name.slice(0, 31));
+  }
   const buffer = XLSX.write(wb, { bookType: "xlsx", type: "array" });
   const blob = new Blob([buffer], {
     type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -92,6 +93,14 @@ function downloadSheet(
   a.download = filename;
   a.click();
   URL.revokeObjectURL(url);
+}
+
+function downloadSheet(
+  filename: string,
+  rows: Record<string, string | number>[],
+  sheetName: string,
+) {
+  downloadWorkbook(filename, [{ name: sheetName, rows }]);
 }
 
 type InsightData = {
@@ -144,7 +153,7 @@ function useProcurementInsightData() {
   return { data, loading, refreshing, error, reload: load };
 }
 
-type ReportTint = "sky" | "amber" | "emerald" | "teal" | "orange";
+type ReportTint = "sky" | "amber" | "emerald" | "teal" | "orange" | "slate";
 
 const REPORT_TINT: Record<ReportTint, { card: string; icon: string }> = {
   sky: {
@@ -166,6 +175,10 @@ const REPORT_TINT: Record<ReportTint, { card: string; icon: string }> = {
   orange: {
     card: "border-orange-200/80 bg-orange-50/70 hover:border-orange-300/90 hover:bg-orange-50",
     icon: "border-orange-200/70 bg-orange-100 text-orange-800",
+  },
+  slate: {
+    card: "border-slate-200/80 bg-slate-50/80 hover:border-slate-300/90 hover:bg-slate-50",
+    icon: "border-slate-200/70 bg-slate-100 text-slate-800",
   },
 };
 
@@ -316,6 +329,57 @@ export function ProcurementReportsPage() {
           data.inventory,
         );
         exportGrnsXlsx(`grn-receipt-status-${stampNow()}.xlsx`, rows);
+      },
+    },
+    {
+      id: "complete",
+      title: "Complete report",
+      description:
+        "All five reports in one workbook — POs, open/partial, closed, inventory, GRN.",
+      icon: FileSpreadsheet,
+      tint: "slate",
+      countLabel: loading ? "…" : "All reports",
+      onExport: async () => {
+        if (!data) return;
+        const openPartial = data.orders.filter((order) => {
+          const bucket = poOverviewBucketForOrder(order);
+          return bucket === "open" || bucket === "partial";
+        });
+        const closed = data.orders.filter(
+          (order) => poOverviewBucketForOrder(order) === "close",
+        );
+        const inventoryRows = stockRows.map((row, index) => ({
+          "#": index + 1,
+          Product: row.product_name ?? "",
+          Description: row.description ?? "",
+          "Stock qty": 1,
+          "Unit cost": Number(row.unit_cost) || 0,
+          "Serial number": row.serial_number ?? "",
+          "Company PO": row.company_po_number ?? "",
+          "GRN number": row.grn_number ?? "",
+          Vendor: row.vendor_id ? data.vendors[row.vendor_id]?.label || row.vendor_id : "",
+        }));
+        const grnRows = await buildGrnExportRowsWithBatches(
+          issuedPos,
+          data.vendors,
+          data.inventory,
+        );
+        downloadWorkbook(`procurement-complete-report-${stampNow()}.xlsx`, [
+          {
+            name: "Purchase orders",
+            rows: buildOrderExportRows(data.orders, data.vendors),
+          },
+          {
+            name: "Open partial POs",
+            rows: buildOrderExportRows(openPartial, data.vendors),
+          },
+          {
+            name: "Closed PO",
+            rows: buildOrderExportRows(closed, data.vendors),
+          },
+          { name: "Inventory", rows: inventoryRows },
+          { name: "GRN receipt status", rows: grnRows },
+        ]);
       },
     },
   ];
@@ -645,7 +709,7 @@ export function ProcurementAnalyticsPage() {
   }, [data]);
 
   const openOvf = useMemo(
-    () => (data?.scmQueue ?? []).filter(isScmOpenOvfRow).length,
+    () => (data?.scmQueue ?? []).filter((row) => isScmOpenOvfRow(row)).length,
     [data],
   );
 

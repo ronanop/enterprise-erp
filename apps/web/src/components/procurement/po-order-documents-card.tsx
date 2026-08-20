@@ -54,8 +54,61 @@ type UnifiedDocument = {
   displayName: string;
   category: string;
   source: string;
+  entityType: string;
   open: () => Promise<void>;
 };
+
+function isOvfEntity(entityType: string): boolean {
+  return entityType === "ovf" || entityType === "quote" || entityType === "opportunity";
+}
+
+function DocumentList({
+  loading,
+  rows,
+  emptyLabel,
+  openingId,
+}: {
+  loading: boolean;
+  rows: UnifiedDocument[];
+  emptyLabel: string;
+  openingId: string | null;
+}) {
+  if (loading) {
+    return <p className="text-xs text-muted-foreground">Loading documents…</p>;
+  }
+  if (rows.length === 0) {
+    return <p className="text-xs text-muted-foreground">{emptyLabel}</p>;
+  }
+  return (
+    <ul className="space-y-1.5">
+      {rows.map((row) => (
+        <li
+          key={row.id}
+          className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-border/60 px-3 py-2"
+        >
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-sm font-medium text-foreground">{row.displayName}</p>
+            <div className="mt-1 flex flex-wrap gap-1.5">
+              <Badge variant="secondary">{row.source}</Badge>
+              <Badge variant="outline">{categoryLabel(row.category)}</Badge>
+            </div>
+          </div>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            className="h-8 cursor-pointer gap-1.5 transition-colors duration-200"
+            disabled={openingId != null}
+            onClick={() => void row.open()}
+          >
+            <Eye className="size-3.5" />
+            View
+          </Button>
+        </li>
+      ))}
+    </ul>
+  );
+}
 
 export function PoOrderDocumentsCard({
   orderId,
@@ -125,6 +178,7 @@ export function PoOrderDocumentsCard({
       displayName: row.remarks?.trim() || row.file_name,
       category: row.category || "other",
       source: sourceLabel(row.entity_type),
+      entityType: row.entity_type,
       open: async () => {
         setOpeningId(row.id);
         try {
@@ -139,6 +193,7 @@ export function PoOrderDocumentsCard({
       displayName: row.file_name,
       category: "vendor_invoice",
       source: sourceLabel("receipt_batch", row.grnNumber),
+      entityType: "receipt_batch",
       open: async () => {
         setOpeningId(row.id);
         try {
@@ -152,6 +207,15 @@ export function PoOrderDocumentsCard({
       a.displayName.localeCompare(b.displayName, undefined, { sensitivity: "base" }),
     );
   }, [commercialRows, grnAttachments]);
+
+  const ovfDocuments = useMemo(
+    () => documents.filter((row) => isOvfEntity(row.entityType)),
+    [documents],
+  );
+  const scmDocuments = useMemo(
+    () => documents.filter((row) => !isOvfEntity(row.entityType)),
+    [documents],
+  );
 
   function openAttachTarget(
     target: { kind: "preset"; category: string; label: string } | { kind: "other" },
@@ -198,23 +262,20 @@ export function PoOrderDocumentsCard({
 
   const presetAttached = useMemo(() => {
     const map = new Map<string, UnifiedDocument>();
-    for (const row of documents) {
+    for (const row of scmDocuments) {
       if (row.category === "customer_po" || row.category === "vendor_quote") {
         if (!map.has(row.category)) map.set(row.category, row);
       }
     }
     return map;
-  }, [documents]);
+  }, [scmDocuments]);
 
   const canUpload = allowUpload && Boolean(branchId);
+  const cardClass =
+    "space-y-3 rounded-lg border border-border bg-card p-4 shadow-sm";
 
   return (
-    <section
-      className={cn(
-        "space-y-3 rounded-lg border border-border bg-card p-4 shadow-sm",
-        className,
-      )}
-    >
+    <div className={cn("space-y-5", className)}>
       <input
         ref={attachInputRef}
         type="file"
@@ -222,66 +283,59 @@ export function PoOrderDocumentsCard({
         onChange={(e) => void onAttachFilePicked(e.target.files)}
       />
 
-      <div className="flex flex-wrap items-start justify-between gap-2">
+      <section className={cardClass}>
         <div className="min-w-0 space-y-0.5">
           <h2 className="flex items-center gap-2 text-sm font-bold tracking-tight">
             <Paperclip className="size-3.5 text-[#0369A1]" aria-hidden />
-            SCM documents
+            OVF documents
           </h2>
           <p className="text-xs text-muted-foreground">
-            PO attachments, vendor quotes, customer POs, and GRN vendor invoices in one place.
+            Files from the OVF, quote, and opportunity.
           </p>
         </div>
-        {canUpload ? (
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            className="h-8 cursor-pointer gap-1.5 transition-colors duration-200"
-            disabled={uploading}
-            onClick={() => setAttachDialogOpen(true)}
-          >
-            <Upload className="size-3.5" />
-            Attach document
-          </Button>
-        ) : null}
-      </div>
+        <DocumentList
+          loading={loading}
+          rows={ovfDocuments}
+          emptyLabel="No OVF documents attached."
+          openingId={openingId}
+        />
+      </section>
 
-      {error ? <p className="text-xs text-destructive">{error}</p> : null}
-
-      {loading ? (
-        <p className="text-xs text-muted-foreground">Loading documents…</p>
-      ) : documents.length === 0 ? (
-        <p className="text-xs text-muted-foreground">No documents attached yet.</p>
-      ) : (
-        <ul className="space-y-1.5">
-          {documents.map((row) => (
-            <li
-              key={row.id}
-              className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-border/60 px-3 py-2"
+      <section className={cardClass}>
+        <div className="flex flex-wrap items-start justify-between gap-2">
+          <div className="min-w-0 space-y-0.5">
+            <h2 className="flex items-center gap-2 text-sm font-bold tracking-tight">
+              <Paperclip className="size-3.5 text-[#0369A1]" aria-hidden />
+              SCM documents
+            </h2>
+            <p className="text-xs text-muted-foreground">
+              PO attachments and GRN vendor invoices.
+            </p>
+          </div>
+          {canUpload ? (
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className="h-8 cursor-pointer gap-1.5 transition-colors duration-200"
+              disabled={uploading}
+              onClick={() => setAttachDialogOpen(true)}
             >
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-medium text-foreground">{row.displayName}</p>
-                <div className="mt-1 flex flex-wrap gap-1.5">
-                  <Badge variant="secondary">{row.source}</Badge>
-                  <Badge variant="outline">{categoryLabel(row.category)}</Badge>
-                </div>
-              </div>
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                className="h-8 cursor-pointer gap-1.5 transition-colors duration-200"
-                disabled={openingId != null}
-                onClick={() => void row.open()}
-              >
-                <Eye className="size-3.5" />
-                View
-              </Button>
-            </li>
-          ))}
-        </ul>
-      )}
+              <Upload className="size-3.5" />
+              Attach document
+            </Button>
+          ) : null}
+        </div>
+
+        {error ? <p className="text-xs text-destructive">{error}</p> : null}
+
+        <DocumentList
+          loading={loading}
+          rows={scmDocuments}
+          emptyLabel="No SCM documents attached yet."
+          openingId={openingId}
+        />
+      </section>
 
       <ConfirmDialog
         open={attachDialogOpen}
@@ -356,6 +410,6 @@ export function PoOrderDocumentsCard({
           </div>
         </div>
       </ConfirmDialog>
-    </section>
+    </div>
   );
 }

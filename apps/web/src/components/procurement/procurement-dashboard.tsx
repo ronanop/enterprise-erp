@@ -147,12 +147,12 @@ export function ProcurementDashboard() {
   }, [data?.scmQueue]);
 
   const openOvfCount = useMemo(
-    () => scmQueueItems.filter(isScmOpenOvfRow).length,
+    () => scmQueueItems.filter((row) => isScmOpenOvfRow(row)).length,
     [scmQueueItems],
   );
 
   const holdOvfCount = useMemo(
-    () => scmQueueItems.filter(isScmHoldOvfRow).length,
+    () => scmQueueItems.filter((row) => isScmHoldOvfRow(row)).length,
     [scmQueueItems],
   );
 

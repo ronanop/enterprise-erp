@@ -10,8 +10,6 @@ import {
   INVENTORY_WITHOUT_PO,
   type InventoryImportDraftRow,
 } from "@/components/procurement/procurement-inventory-import-dialog";
-import { InventorySerialEditor } from "@/components/procurement/inventory-serial-editor";
-import { InventoryDescriptionEditor } from "@/components/procurement/inventory-description-editor";
 import {
   ProcurementListSearch,
   ProcurementPageHeader,
@@ -32,7 +30,12 @@ import {
   type ProcurementInventoryRow,
   type VendorOption,
 } from "@/services/procurement-service";
-import { buildProcurementInventoryStockSummary, inventoryRowStableKey, isInventoryLedgerRow, nonBilledStockQuantity } from "@/utils/procurement-inventory-report";
+import {
+  buildProcurementInventoryStockSummary,
+  groupGrnStockByProduct,
+  isInventoryLedgerRow,
+} from "@/utils/procurement-inventory-report";
+import { InventoryProductDetailDialog } from "@/components/procurement/inventory-product-detail-dialog";
 import { textTokenMatch } from "@/utils/procurement-search";
 
 export function ProcurementInventoryListPage() {
@@ -47,8 +50,9 @@ export function ProcurementInventoryListPage() {
   const [importOpen, setImportOpen] = useState(false);
   const [importBusy, setImportBusy] = useState(false);
   const [importError, setImportError] = useState<string | null>(null);
-  const [serialSaveError, setSerialSaveError] = useState<string | null>(null);
   const [purchaseOrders, setPurchaseOrders] = useState<ProcOrder[]>([]);
+  const [detailProductKey, setDetailProductKey] = useState<string | null>(null);
+  const [detailError, setDetailError] = useState<string | null>(null);
 
   const load = useCallback(async (force = false) => {
     if (force) invalidateProcurementListCache();
@@ -107,21 +111,14 @@ export function ProcurementInventoryListPage() {
     () => reportSource.filter(isInventoryLedgerRow),
     [reportSource],
   );
-  const grnStockTableRows = useMemo(() => {
-    return [...grnStockRows].sort((a, b) => {
-      const product = (a.product_name ?? "").localeCompare(b.product_name ?? "", undefined, {
-        sensitivity: "base",
-      });
-      if (product !== 0) return product;
-      const po = (a.company_po_number ?? "").localeCompare(b.company_po_number ?? "", undefined, {
-        numeric: true,
-      });
-      if (po !== 0) return po;
-      const line = (a.line_number ?? 0) - (b.line_number ?? 0);
-      if (line !== 0) return line;
-      return (a.unit_index ?? 0) - (b.unit_index ?? 0);
-    });
-  }, [grnStockRows]);
+  const grnStockByProduct = useMemo(
+    () => groupGrnStockByProduct(grnStockRows),
+    [grnStockRows],
+  );
+  const detailProduct = useMemo(
+    () => grnStockByProduct.find((row) => row.productKey === detailProductKey) ?? null,
+    [grnStockByProduct, detailProductKey],
+  );
   const stockSummary = useMemo(() => {
     const labels: Record<string, string> = {};
     for (const [id, vendor] of Object.entries(vendors)) {
@@ -193,9 +190,9 @@ export function ProcurementInventoryListPage() {
         </div>
       ) : null}
 
-      {serialSaveError ? (
+      {detailError ? (
         <div className="rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">
-          {serialSaveError}
+          {detailError}
         </div>
       ) : null}
 
@@ -268,30 +265,28 @@ export function ProcurementInventoryListPage() {
                       </tr>
                     </thead>
                     <tbody>
-                      {grnStockTableRows.map((line, index) => (
-                        <tr
-                          key={inventoryRowStableKey(line, index)}
-                          className={procurementUi.tr}
-                        >
+                      {grnStockByProduct.map((line) => (
+                        <tr key={line.productKey} className={procurementUi.tr}>
                           <td className={cn(procurementUi.td, "px-4")}>
                             <button
                               type="button"
                               className="cursor-pointer text-left font-medium text-foreground transition-colors duration-200 hover:text-[#0369A1] hover:underline"
-                              onClick={() => setQuery(line.product_name ?? "")}
+                              onClick={() => {
+                                setDetailError(null);
+                                setDetailProductKey(line.productKey);
+                              }}
                             >
-                              {line.product_name?.trim() || "—"}
+                              {line.productName}
                             </button>
                           </td>
                           <td
                             className={cn(
                               procurementUi.tdNumeric,
                               "px-4 text-right font-mono tabular-nums",
-                              nonBilledStockQuantity(line) < 0
-                                ? "text-destructive"
-                                : "text-foreground",
+                              line.stockQty < 0 ? "text-destructive" : "text-foreground",
                             )}
                           >
-                            {nonBilledStockQuantity(line).toLocaleString("en-IN")}
+                            {line.stockQty.toLocaleString("en-IN")}
                           </td>
                           <td
                             className={cn(
@@ -299,11 +294,9 @@ export function ProcurementInventoryListPage() {
                               "px-4 max-w-[220px] text-muted-foreground",
                             )}
                           >
-                            <InventoryDescriptionEditor
-                              row={line}
-                              onSaved={() => void load(true)}
-                              onError={setSerialSaveError}
-                            />
+                            <span className="line-clamp-2" title={line.description}>
+                              {line.description}
+                            </span>
                           </td>
                           <td
                             className={cn(
@@ -311,23 +304,26 @@ export function ProcurementInventoryListPage() {
                               "px-4 text-right font-mono tabular-nums",
                             )}
                           >
-                            {formatInr(Number(line.unit_cost) || 0)}
+                            {formatInr(line.avgUnitCost)}
                           </td>
-                          <td className={cn(procurementUi.td, "px-4 min-w-[140px]")}>
-                            <InventorySerialEditor
-                              row={line}
-                              onSaved={() => void load(true)}
-                              onError={setSerialSaveError}
-                            />
+                          <td
+                            className={cn(
+                              procurementUi.td,
+                              "px-4 min-w-[140px] font-mono text-xs text-muted-foreground",
+                            )}
+                            title={line.serialSummary}
+                          >
+                            <span className="line-clamp-2">{line.serialSummary}</span>
                           </td>
                           <td
                             className={cn(
                               procurementUi.td,
                               "px-4 font-mono text-xs tabular-nums text-muted-foreground",
                             )}
+                            title={line.grnSummary}
                           >
-                            {line.grn_number}
-                            {line.source === "grn_reversal" ? (
+                            <span className="line-clamp-2">{line.grnSummary}</span>
+                            {line.hasReversal ? (
                               <span className="ml-2 rounded-full border border-destructive/30 bg-destructive/10 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-destructive">
                                 Reversed
                               </span>
@@ -343,6 +339,14 @@ export function ProcurementInventoryListPage() {
           </div>
         </div>
       )}
+
+      <InventoryProductDetailDialog
+        open={Boolean(detailProductKey && detailProduct)}
+        product={detailProduct}
+        onClose={() => setDetailProductKey(null)}
+        onRefresh={() => void load(true)}
+        onError={setDetailError}
+      />
 
       <ProcurementInventoryImportDialog
         open={importOpen}

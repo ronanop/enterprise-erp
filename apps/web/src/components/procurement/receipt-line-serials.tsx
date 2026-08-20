@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Upload } from "lucide-react";
 
 import {
@@ -17,12 +17,17 @@ import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 
+export type GrnLineDisposition = "bill" | "delivery_challan" | "split";
+export type GrnUnitKind = "bill" | "delivery_challan";
+
 export type ReceiptSerialTableLine = {
   lineId: string;
   lineNo: number;
   productLabel: string;
   additional: number;
   billingQuantity: number;
+  disposition: GrnLineDisposition;
+  unitKinds?: GrnUnitKind[];
 };
 
 type ReceiptSerialsTableProps = {
@@ -30,35 +35,9 @@ type ReceiptSerialsTableProps = {
   serialDraft: Record<string, string[]>;
   disabled?: boolean;
   onChange: (lineId: string, slots: string[]) => void;
-  onBillingQuantityChange?: (lineId: string, billingQuantity: number) => void;
+  onUnitKindChange?: (lineId: string, unitIndex: number, kind: GrnUnitKind) => void;
   onImportError?: (message: string | null) => void;
 };
-
-function clampBillingQtyInput(raw: string, maxAllowed: number): string {
-  const value = raw.trim();
-  if (value === "" || value === ".") return value;
-  if (!/^\d*\.?\d*$/.test(value)) return value;
-  let next = value;
-  if (value.includes(".")) {
-    const [intPart = "", frac = ""] = value.split(".");
-    const normalizedInt = intPart.replace(/^0+(?=\d)/, "") || "0";
-    next = `${normalizedInt}.${frac}`;
-  } else {
-    next = value.replace(/^0+(?=\d)/, "");
-  }
-  if (next === "" || next === ".") return next;
-  const n = Number(next);
-  if (!Number.isFinite(n)) return next;
-  if (n > maxAllowed) return String(maxAllowed);
-  return next;
-}
-
-function parseBillingDraft(raw: string): number {
-  const next = raw.trim();
-  if (next === "" || next === ".") return 0;
-  const n = Number(next);
-  return Number.isFinite(n) ? n : 0;
-}
 
 function formatQtyLabel(qty: number): string {
   if (!Number.isFinite(qty)) return "0";
@@ -66,89 +45,100 @@ function formatQtyLabel(qty: number): string {
   return Number.isInteger(rounded) ? String(rounded) : String(rounded);
 }
 
-/** Local text draft so values like 0.5 can be typed without the field clearing on "0". */
-function BillingQuantityField({
-  lineId,
-  productLabel,
-  receiveQty,
-  billingQuantity,
+export function dispositionFromBillingQuantity(
+  receiveQty: number,
+  billingQuantity: number,
+): GrnLineDisposition {
+  const bill = Math.max(0, Math.min(receiveQty, billingQuantity));
+  if (bill <= 1e-9) return "delivery_challan";
+  if (bill >= receiveQty - 1e-9) return "bill";
+  return "split";
+}
+
+export function resizeUnitKinds(prev: GrnUnitKind[] | undefined, count: number): GrnUnitKind[] {
+  if (count <= 0) return [];
+  const next = (prev ?? []).slice(0, count);
+  while (next.length < count) next.push("delivery_challan");
+  return next;
+}
+
+export function billingQuantityFromUnitKinds(
+  kinds: GrnUnitKind[],
+  receiveQty: number,
+): number {
+  const units = serialUnitCount(receiveQty);
+  if (units <= 0) {
+    return kinds[0] === "bill" ? receiveQty : 0;
+  }
+  const billed = kinds.filter((kind) => kind === "bill").length;
+  return Math.min(receiveQty, billed);
+}
+
+function UnitKindSlide({
+  kind,
   disabled,
-  onBillingQuantityChange,
+  productLabel,
+  unitIndex,
+  onChange,
 }: {
-  lineId: string;
-  productLabel: string;
-  receiveQty: number;
-  billingQuantity: number;
+  kind: GrnUnitKind;
   disabled?: boolean;
-  onBillingQuantityChange: (lineId: string, billingQuantity: number) => void;
+  productLabel: string;
+  unitIndex: number;
+  onChange: (kind: GrnUnitKind) => void;
 }) {
-  const [focused, setFocused] = useState(false);
-  const [draft, setDraft] = useState(() =>
-    billingQuantity > 0 ? String(billingQuantity) : "",
-  );
-
-  useEffect(() => {
-    if (focused) return;
-    setDraft(billingQuantity > 0 ? String(billingQuantity) : "");
-  }, [billingQuantity, focused]);
-
-  const display = focused ? draft : billingQuantity > 0 ? String(billingQuantity) : "";
-  const billedQty = Math.max(0, Number(billingQuantity) || 0);
-  const unbilledQty = Math.max(0, Math.round((receiveQty - billedQty) * 1e6) / 1e6);
-
+  const isBilling = kind === "bill";
   return (
     <div
-      className="mx-auto flex w-fit flex-col items-center gap-0.5"
-      title="Bill any amount up to receiving qty (decimals allowed). Unbilled qty goes to stock."
-    >
-      <div className="flex w-fit items-center gap-1 rounded-md border border-border bg-muted/30 p-1">
-        <label className="flex cursor-pointer items-center px-1">
-          <input
-            type="checkbox"
-            className="size-4 cursor-pointer accent-primary"
-            checked={billingQuantity > 0}
-            disabled={disabled}
-            aria-label={`Bill ${productLabel}`}
-            onChange={(e) => {
-              onBillingQuantityChange(lineId, e.target.checked ? receiveQty : 0);
-            }}
-          />
-        </label>
-        <Input
-          className="h-7 w-16 border-0 bg-transparent text-center text-xs tabular-nums shadow-none focus-visible:ring-0"
-          type="text"
-          inputMode="decimal"
-          placeholder="0"
-          disabled={disabled}
-          value={display}
-          aria-label={`Bill quantity for ${productLabel}`}
-          onFocus={(e) => {
-            setFocused(true);
-            setDraft(billingQuantity > 0 ? String(billingQuantity) : "");
-            e.currentTarget.select();
-          }}
-          onBlur={() => {
-            const next = clampBillingQtyInput(draft, receiveQty);
-            const parsed = Math.max(0, Math.min(receiveQty, parseBillingDraft(next)));
-            const rounded = Math.round(parsed * 1e6) / 1e6;
-            setDraft(rounded > 0 ? String(rounded) : "");
-            onBillingQuantityChange(lineId, rounded);
-            setFocused(false);
-          }}
-          onChange={(e) => {
-            const next = clampBillingQtyInput(e.target.value, receiveQty);
-            setDraft(next);
-            onBillingQuantityChange(lineId, parseBillingDraft(next));
-          }}
-        />
-      </div>
-      {unbilledQty > 1e-9 ? (
-        <span className="text-[10px] tabular-nums text-teal-700">
-          Stock {formatQtyLabel(unbilledQty)}
-        </span>
-      ) : (
-        <span className="text-[10px] text-muted-foreground">Fully billed</span>
+      role="group"
+      aria-label={`Billing or delivery challan for unit ${unitIndex + 1} of ${productLabel}`}
+      className={cn(
+        "relative inline-flex h-8 w-[8.25rem] shrink-0 overflow-hidden rounded-lg border p-0.5",
+        "transition-[border-color,background-color] duration-200 motion-reduce:transition-none",
+        isBilling
+          ? "border-sky-300/80 bg-sky-50"
+          : "border-teal-300/80 bg-teal-50",
+        disabled && "opacity-50",
       )}
+    >
+      <span
+        aria-hidden
+        className={cn(
+          "pointer-events-none absolute inset-y-0.5 left-0.5 w-[calc(50%-2px)] rounded-md shadow-sm",
+          "transition-[transform,background-color] duration-200 ease-out motion-reduce:transition-none",
+          isBilling ? "translate-x-0 bg-sky-700" : "translate-x-full bg-teal-700",
+        )}
+      />
+      <button
+        type="button"
+        disabled={disabled}
+        aria-pressed={isBilling}
+        className={cn(
+          "relative z-10 h-full flex-1 cursor-pointer rounded-md text-[10px] font-semibold uppercase tracking-wide",
+          "transition-[color,opacity] duration-200 motion-reduce:transition-none",
+          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
+          "disabled:cursor-not-allowed",
+          isBilling ? "text-white" : "text-sky-900",
+        )}
+        onClick={() => onChange("bill")}
+      >
+        Billing
+      </button>
+      <button
+        type="button"
+        disabled={disabled}
+        aria-pressed={!isBilling}
+        className={cn(
+          "relative z-10 h-full flex-1 cursor-pointer rounded-md text-[10px] font-semibold uppercase tracking-wide",
+          "transition-[color,opacity] duration-200 motion-reduce:transition-none",
+          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
+          "disabled:cursor-not-allowed",
+          !isBilling ? "text-white" : "text-teal-900",
+        )}
+        onClick={() => onChange("delivery_challan")}
+      >
+        DC
+      </button>
     </div>
   );
 }
@@ -158,7 +148,7 @@ export function ReceiptSerialsTable({
   serialDraft,
   disabled,
   onChange,
-  onBillingQuantityChange,
+  onUnitKindChange,
   onImportError,
 }: ReceiptSerialsTableProps) {
   const [importingLineId, setImportingLineId] = useState<string | null>(null);
@@ -197,14 +187,14 @@ export function ReceiptSerialsTable({
   return (
     <div className={procurementUi.tableShell}>
       <div className={procurementUi.tableScroll}>
-        <table className={cn(procurementUi.table, "min-w-[640px]")}>
+        <table className={cn(procurementUi.table, "min-w-[760px]")}>
           <thead className={procurementUi.thead}>
             <tr>
               <th className={cn(procurementUi.th, "w-12 text-center")}>S No.</th>
               <th className={procurementUi.th}>Product</th>
               <th className={cn(procurementUi.th, "w-20 text-right")}>Receiving</th>
-              <th className={cn(procurementUi.th, "w-32 text-center")}>Billing</th>
               <th className={cn(procurementUi.th, "w-16 text-right")}>Unit</th>
+              <th className={cn(procurementUi.th, "w-[8rem] text-center")}>Billing / DC</th>
               <th className={procurementUi.th}>Serial number</th>
               <th className={cn(procurementUi.th, "w-24 text-center")}>NA</th>
               <th className={cn(procurementUi.th, "w-[7.5rem] text-center")}>Import</th>
@@ -216,6 +206,7 @@ export function ReceiptSerialsTable({
               const unitCount = serialUnitCount(receiveQty);
               const rowCount = Math.max(unitCount, 1);
               const slots = resizeSerialSlots(serialDraft[line.lineId] || [], unitCount);
+              const kinds = resizeUnitKinds(line.unitKinds, rowCount);
               const lineImporting = importingLineId === line.lineId;
               const productSNo = lineIndex + 1;
               const rowspanCell = "align-middle";
@@ -225,6 +216,7 @@ export function ReceiptSerialsTable({
                 const value = slots[index] ?? "";
                 const isNa = value.trim().toUpperCase() === RECEIPT_SERIAL_NA;
                 const fractionalOnly = unitCount <= 0;
+                const unitKind = kinds[index] ?? "delivery_challan";
                 return (
                   <tr key={`${line.lineId}-${index}`} className={procurementUi.tr}>
                     {index === 0 ? (
@@ -243,7 +235,7 @@ export function ReceiptSerialsTable({
                       <>
                         <td
                           rowSpan={rowCount}
-                          className={cn(procurementUi.td, rowspanCell)}
+                          className={cn(procurementUi.td, rowspanCell, "min-w-[160px]")}
                         >
                           <span className="font-medium text-foreground">{line.productLabel}</span>
                         </td>
@@ -257,23 +249,6 @@ export function ReceiptSerialsTable({
                         >
                           {receiveLabel}
                         </td>
-                        <td
-                          rowSpan={rowCount}
-                          className={cn(procurementUi.td, rowspanCell, "text-center")}
-                        >
-                          {onBillingQuantityChange ? (
-                            <BillingQuantityField
-                              lineId={line.lineId}
-                              productLabel={line.productLabel}
-                              receiveQty={receiveQty}
-                              billingQuantity={line.billingQuantity}
-                              disabled={disabled}
-                              onBillingQuantityChange={onBillingQuantityChange}
-                            />
-                          ) : (
-                            <span className="text-xs text-muted-foreground">—</span>
-                          )}
-                        </td>
                       </>
                     ) : null}
                     <td
@@ -283,6 +258,21 @@ export function ReceiptSerialsTable({
                       )}
                     >
                       {fractionalOnly ? "—" : index + 1}
+                    </td>
+                    <td className={cn(procurementUi.td, "align-middle text-center")}>
+                      {onUnitKindChange ? (
+                        <UnitKindSlide
+                          kind={unitKind}
+                          disabled={disabled || lineImporting}
+                          productLabel={line.productLabel}
+                          unitIndex={index}
+                          onChange={(kind) => onUnitKindChange(line.lineId, index, kind)}
+                        />
+                      ) : (
+                        <span className="text-xs text-muted-foreground">
+                          {unitKind === "bill" ? "Billing" : "DC"}
+                        </span>
+                      )}
                     </td>
                     <td className={cn(procurementUi.td, "align-middle")}>
                       {fractionalOnly ? (
