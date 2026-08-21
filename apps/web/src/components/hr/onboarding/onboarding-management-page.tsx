@@ -2,9 +2,12 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
+  ClipboardList,
   Download,
   Eye,
+  FileText,
   FolderOpen,
+  LayoutList,
   Mail,
   Plus,
   Send,
@@ -23,6 +26,8 @@ import {
   HrEmptyState,
   HrStatusBadge,
   HrToolbar,
+  HrUnderlineTabs,
+  type HrTabItem,
 } from "@/components/hr/hr-primitives";
 import { SetupDrawer } from "@/components/hr/setup/setup-drawer";
 import { toast, SetupToastHost } from "@/components/hr/setup/setup-toast";
@@ -182,7 +187,6 @@ export function OnboardingManagementPage() {
       <SetupToastHost />
       <PageHeader
         title="Employee Onboarding"
-        description="Manage pre-joining activities, document collection, onboarding tasks, and employee activation."
         actions={
           <HrToolbar onRefresh={() => void load()} loading={loading}>
             <Button size="sm" className="cursor-pointer" onClick={() => setStartOpen(true)}>
@@ -262,30 +266,18 @@ export function OnboardingManagementPage() {
         </div>
       ) : null}
 
-      <div className="flex flex-wrap gap-1 border-b border-border/70 pb-px">
-        {(
+      <HrUnderlineTabs
+        tabs={
           [
-            ["cases", "Cases"],
-            ["checklist", "Checklist Board"],
-            ["documents", "Documents"],
-            ["audit", "Audit"],
-          ] as const
-        ).map(([id, label]) => (
-          <button
-            key={id}
-            type="button"
-            className={cn(
-              "cursor-pointer rounded-t-md px-3 py-2 text-xs font-medium transition-colors duration-200",
-              tab === id
-                ? "border border-b-0 border-border bg-card text-foreground"
-                : "text-muted-foreground hover:text-foreground",
-            )}
-            onClick={() => setTab(id)}
-          >
-            {label}
-          </button>
-        ))}
-      </div>
+            { id: "cases", label: "Cases", icon: LayoutList },
+            { id: "checklist", label: "Checklist Board", icon: ClipboardList },
+            { id: "documents", label: "Documents", icon: FolderOpen },
+            { id: "audit", label: "Audit", icon: FileText },
+          ] satisfies HrTabItem[]
+        }
+        value={tab}
+        onChange={(id) => setTab(id as Tab)}
+      />
 
       {loading && !dir ? <EmsSkeleton /> : null}
 

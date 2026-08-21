@@ -207,6 +207,17 @@ def update_location(
     return APIResponse(message="Location updated", data=loc.__dict__)
 
 
+@locations_router.delete("/{location_id}", response_model=APIResponse[None])
+def delete_location(
+    location_id: UUID,
+    ctx: Annotated[TenantContext, Depends(require_permission("organization.location:delete"))],
+    db: Annotated[Session, Depends(get_db)],
+) -> APIResponse[None]:
+    LocationService(db).delete_location(ctx, location_id)
+    db.commit()
+    return APIResponse(message="Location deleted", data=None)
+
+
 @cost_centers_router.get("", response_model=APIResponse[list])
 def list_cost_centers(
     ctx: Annotated[TenantContext, Depends(require_permission("organization.cost_center:read"))],

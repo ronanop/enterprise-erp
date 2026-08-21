@@ -1,13 +1,13 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { CheckCircle2, Circle, UserCheck } from "lucide-react";
+import { CheckCircle2, Circle, ClipboardList, FileText, Globe, LayoutList, UserCheck } from "lucide-react";
 
 import {
   OnboardingDocumentPreviewDialog,
   OnboardingDocumentRow,
 } from "@/components/hr/onboarding/onboarding-document-preview";
-import { HrStatusBadge } from "@/components/hr/hr-primitives";
+import { HrStatusBadge, HrUnderlineTabs, type HrTabItem } from "@/components/hr/hr-primitives";
 import {
   SetupDrawer,
   SetupField,
@@ -120,15 +120,13 @@ export function CaseDetailDrawer({
   const selectedManagementGroup =
     managementGroups.find((group) => group.id === managementGroupId) ?? undefined;
 
-  const tabs = (
-    [
-      ["overview", "Overview"],
-      ["portal", "Portal"],
-      ["docs", "Documents"],
-      ...(showChecklist ? [["checklist", "Checklist"] as const] : []),
-      ["timeline", "Timeline"],
-    ] as const
-  );
+  const drawerTabs: HrTabItem[] = [
+    { id: "overview", label: "Overview", icon: LayoutList },
+    { id: "portal", label: "Portal", icon: Globe },
+    { id: "docs", label: "Documents", icon: FileText },
+    ...(showChecklist ? [{ id: "checklist", label: "Checklist", icon: ClipboardList }] : []),
+    { id: "timeline", label: "Timeline", icon: CheckCircle2 },
+  ];
 
   return (
     <SetupDrawer
@@ -189,23 +187,14 @@ export function CaseDetailDrawer({
         </>
       }
     >
-      <div className="mb-3 flex flex-wrap gap-1">
-        {tabs.map(([id, label]) => (
-          <button
-            key={id}
-            type="button"
-            className={cn(
-              "cursor-pointer rounded-md px-2.5 py-1 text-[11px] font-medium transition-colors duration-200",
-              tab === id
-                ? "bg-primary text-primary-foreground"
-                : "bg-muted text-muted-foreground hover:text-foreground",
-            )}
-            onClick={() => setTab(id)}
-          >
-            {label}
-          </button>
-        ))}
-      </div>
+      <HrUnderlineTabs
+        embedded
+        size="sm"
+        className="mb-3"
+        tabs={drawerTabs}
+        value={tab}
+        onChange={setTab}
+      />
 
       {tab === "overview" ? (
         <div className="space-y-3 text-xs">

@@ -314,6 +314,21 @@ class LocationRepository(OrgScopedRepository):
             geofence_radius_meters=row.geofence_radius_meters,
         )
 
+    def soft_delete(self, ctx: TenantContext, location_id: UUID) -> bool:
+        row = self.db.scalar(
+            select(OrgLocation).where(
+                OrgLocation.id == location_id,
+                OrgLocation.tenant_id == ctx.tenant_id,
+            )
+        )
+        if row is None or row.is_deleted:
+            return False
+        row.is_deleted = True
+        row.deleted_at = utcnow()
+        row.deleted_by = ctx.user_id
+        self.db.flush()
+        return True
+
 
 class CostCenterRepository(OrgScopedRepository):
     def __init__(self, db: Session) -> None:

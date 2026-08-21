@@ -116,6 +116,17 @@ class LocationService:
         )
         return loc
 
+    def delete_location(self, ctx: TenantContext, location_id: UUID) -> None:
+        if not self._repo.soft_delete(ctx, location_id):
+            raise NotFoundException("Location not found")
+        self._audit.log_entity_change(
+            tenant_id=ctx.tenant_id,
+            entity_name="org_location",
+            entity_id=location_id,
+            operation="delete",
+            performed_by=ctx.user_id,
+        )
+
 
 class CostCenterService:
     def __init__(self, db: Session) -> None:

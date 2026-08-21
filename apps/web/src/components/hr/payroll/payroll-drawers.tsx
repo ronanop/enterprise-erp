@@ -515,13 +515,15 @@ export function AssignSalaryDrawer({
   onClose,
   structures,
   employees,
+  initial,
   onSubmit,
 }: {
   open: boolean;
   onClose: () => void;
   structures: SalaryStructure[];
   employees: HrMasterOption[];
-  onSubmit: (input: Omit<EmployeeSalary, "id">) => void;
+  initial?: EmployeeSalary | null;
+  onSubmit: (input: Omit<EmployeeSalary, "id"> & { id?: string }) => void;
 }) {
   const [employeeKey, setEmployeeKey] = useState("");
   const [structureId, setStructureId] = useState(structures[0]?.id ?? "");
@@ -531,63 +533,112 @@ export function AssignSalaryDrawer({
   const [bankAccount, setBankAccount] = useState("");
   const [taxRegime, setTaxRegime] = useState<TaxRegime>("new");
 
+  const editing = Boolean(initial);
   const structure = structures.find((s) => s.id === structureId);
-  const employee = (employees ?? []).find((e) => e.id === employeeKey);
+  const employee = (employees ?? []).find(
+    (e) => e.id === employeeKey || e.code === employeeKey || e.code === initial?.employeeId,
+  );
 
   useEffect(() => {
     if (!open) return;
-    if (structures[0] && !structureId) setStructureId(structures[0].id);
-  }, [open, structures, structureId]);
+    if (initial) {
+      const match =
+        (employees ?? []).find(
+          (e) =>
+            e.code === initial.employeeId ||
+            e.id === initial.employeeId ||
+            e.label.toLowerCase().includes(initial.employeeName.toLowerCase()),
+        ) ?? null;
+      setEmployeeKey(match?.id ?? initial.employeeId);
+      setStructureId(initial.structureId || structures[0]?.id || "");
+      setEffectiveDate(initial.effectiveDate || "");
+      setMonthlyCtc(String(initial.monthlyCtc || 0));
+      setPayrollGroup(initial.payrollGroup || "General");
+      setBankAccount(initial.bankAccount || "");
+      setTaxRegime(initial.taxRegime || "new");
+      return;
+    }
+    setEmployeeKey("");
+    setStructureId(structures[0]?.id ?? "");
+    setEffectiveDate("");
+    setMonthlyCtc("50000");
+    setPayrollGroup("General");
+    setBankAccount("");
+    setTaxRegime("new");
+  }, [open, initial, structures, employees]);
 
   useEffect(() => {
-    if (!employee) return;
+    if (!open || editing || !employee) return;
     if (employee.monthlyCtc) setMonthlyCtc(String(employee.monthlyCtc));
     if (employee.bankAccount) setBankAccount(employee.bankAccount);
-  }, [employee]);
+  }, [employee, open, editing]);
 
   return (
     <SetupDrawer
       open={open}
       onClose={onClose}
       wide
-      title="Assign Employee Salary"
-      description="Pick an employee from Workforce. Structure comes from Payroll masters."
+      title={editing ? "Edit Employee Salary" : "Assign Employee Salary"}
+      description={
+        editing
+          ? "Update CTC, structure, and bank details for this employee."
+          : "Pick an employee from Workforce. Re-assigning the same person updates their existing salary."
+      }
       footer={
         <Button
           type="button"
           className="cursor-pointer"
-          disabled={!employee || !structureId}
+          disabled={!employeeKey || !structureId}
           onClick={() => {
-            if (!employee) return;
+            const emp =
+              employee ??
+              ({
+                id: employeeKey,
+                code: initial?.employeeId ?? employeeKey,
+                label: initial?.employeeName ?? employeeKey,
+                department: initial?.department,
+                bankAccount,
+              } as HrMasterOption);
             onSubmit({
-              employeeId: employee.code || employee.id,
-              employeeName: employee.label.split(" · ")[0],
+              id: initial?.id,
+              employeeId: emp.code || initial?.employeeId || emp.id,
+              employeeName: (emp.label?.split(" · ")[0] || initial?.employeeName || emp.id).trim(),
               structureId,
-              structureName: structure?.name ?? "",
+              structureName: structure?.name ?? initial?.structureName ?? "",
               effectiveDate,
               monthlyCtc: Number(monthlyCtc) || 0,
               annualCtc: (Number(monthlyCtc) || 0) * 12,
               payrollGroup,
-              bankAccount: bankAccount || employee.bankAccount || "",
+              bankAccount: bankAccount || emp.bankAccount || "",
               taxRegime,
               salaryStatus: "active",
-              department: employee.department || "General",
+              department: emp.department || initial?.department || "General",
             });
             onClose();
           }}
         >
-          Assign
+          {editing ? "Save changes" : "Assign"}
         </Button>
       }
     >
       <div className="space-y-3">
-        <EmployeeSelect
-          value={employeeKey}
-          options={employees}
-          required
-          onChange={setEmployeeKey}
-        />
-        {employee ? (
+        {editing ? (
+          <SetupField label="Employee">
+            <SetupInput
+              value={`${initial?.employeeName ?? ""} (${initial?.employeeId ?? ""})`}
+              readOnly
+              disabled
+            />
+          </SetupField>
+        ) : (
+          <EmployeeSelect
+            value={employeeKey}
+            options={employees}
+            required
+            onChange={setEmployeeKey}
+          />
+        )}
+        {!editing && employee ? (
           <p className="text-[11px] text-muted-foreground">
             ID {employee.code || employee.id}
             {employee.department ? ` · ${employee.department}` : ""}

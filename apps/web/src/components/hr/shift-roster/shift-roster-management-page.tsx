@@ -2,12 +2,16 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
+  CalendarDays,
+  ClipboardList,
+  Clock3,
   Download,
   Pencil,
   Plus,
   Repeat,
   Upload,
   UserPlus,
+  Users,
 } from "lucide-react";
 
 import { AssignShiftDrawer, CreateRotationDrawer } from "@/components/hr/shift-roster/assign-rotation-drawers";
@@ -22,6 +26,8 @@ import {
   HrEmptyState,
   HrStatusBadge,
   HrToolbar,
+  HrUnderlineTabs,
+  type HrTabItem,
 } from "@/components/hr/hr-primitives";
 import { SetupDrawer, SetupField, SetupInput, SetupSelect } from "@/components/hr/setup/setup-drawer";
 import { toast, SetupToastHost } from "@/components/hr/setup/setup-toast";
@@ -122,7 +128,6 @@ export function ShiftRosterManagementPage() {
       <SetupToastHost />
       <PageHeader
         title="Shift & Roster"
-        description="Manage shifts, rotations, weekly offs, and employee assignments."
         actions={
           <HrToolbar onRefresh={() => void load()} loading={loading}>
             <Button size="sm" className="cursor-pointer" onClick={() => { setEditingShift(null); setCreateShiftOpen(true); }}>
@@ -186,33 +191,23 @@ export function ShiftRosterManagementPage() {
         </div>
       ) : null}
 
-      <div className="flex flex-wrap gap-2 border-b border-border/60 pb-2">
-        {(
+      <HrUnderlineTabs
+        tabs={
           [
-            ["shifts", "Shift Master"],
-            ["assignments", "Assignments"],
-            ["calendar", "Roster Calendar"],
-            ["rotations", "Rotations"],
-            ["rules", "Rules & Swap"],
-            ["audit", "Audit Log"],
-          ] as const
-        ).map(([id, label]) => (
-          <button
-            key={id}
-            type="button"
-            className={cn(
-              "cursor-pointer rounded-lg px-3 py-1.5 text-xs font-medium transition-colors",
-              tab === id ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted",
-            )}
-            onClick={() => {
-              setTab(id);
-              setPage(1);
-            }}
-          >
-            {label}
-          </button>
-        ))}
-      </div>
+            { id: "shifts", label: "Shift Master", icon: Clock3 },
+            { id: "assignments", label: "Assignments", icon: Users },
+            { id: "calendar", label: "Roster Calendar", icon: CalendarDays },
+            { id: "rotations", label: "Rotations", icon: Repeat },
+            { id: "rules", label: "Rules & Swap", icon: Pencil },
+            { id: "audit", label: "Audit Log", icon: ClipboardList },
+          ] satisfies HrTabItem[]
+        }
+        value={tab}
+        onChange={(id) => {
+          setTab(id as Tab);
+          setPage(1);
+        }}
+      />
 
       {tab !== "calendar" && tab !== "audit" ? (
         <div className="flex flex-wrap gap-2">

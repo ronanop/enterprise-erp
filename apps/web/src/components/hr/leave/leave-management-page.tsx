@@ -3,9 +3,7 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { Plus } from "lucide-react";
 
-import { ApplyLeaveDrawer } from "@/components/hr/leave/apply-leave-drawer";
 import { LeaveApprovalDrawer } from "@/components/hr/leave/leave-panels";
 import { LeaveStatusBadge } from "@/components/hr/leave/leave-status-badge";
 import {
@@ -16,7 +14,6 @@ import {
 import { toast, SetupToastHost } from "@/components/hr/setup/setup-toast";
 import { EmsPagination, EmsSkeleton } from "@/components/hr/workforce/ems-primitives";
 import { PageHeader } from "@/components/layout/page-header";
-import { Button } from "@/components/ui/button";
 import { FilterSelect } from "@/components/ui/filter-select";
 import { Input } from "@/components/ui/input";
 import { isAuthenticated } from "@/lib/auth";
@@ -64,7 +61,6 @@ export function LeaveManagementPage() {
   const [query, setQuery] = useState("");
   const [filters, setFilters] = useState<LeaveFilters>(() => emptyLeaveFilters());
   const [page, setPage] = useState(1);
-  const [applyOpen, setApplyOpen] = useState(false);
   const [approvalRequest, setApprovalRequest] = useState<LeaveRequestRecord | null>(null);
 
   const statusBucket = searchParams.get("status");
@@ -117,15 +113,7 @@ export function LeaveManagementPage() {
       <SetupToastHost />
       <PageHeader
         title="Leave Management"
-        description="Review and approve employee leave requests."
-        actions={
-          <HrToolbar onRefresh={() => void load()} loading={loading}>
-            <Button size="sm" className="cursor-pointer" onClick={() => setApplyOpen(true)}>
-              <Plus className="size-3.5" />
-              Apply Leave
-            </Button>
-          </HrToolbar>
-        }
+        actions={<HrToolbar onRefresh={() => void load()} loading={loading} />}
       />
 
       {authBlocked ? <HrAuthBanner /> : null}
@@ -189,33 +177,8 @@ export function LeaveManagementPage() {
         </div>
       ) : null}
 
-      <p className="shrink-0 text-[11px] text-muted-foreground">
-        Configure leave type masters in{" "}
-        <Link
-          href="/hr/setup?section=leave&tab=leave-types"
-          className="cursor-pointer font-medium text-primary transition-colors duration-200 hover:underline"
-        >
-          HR Setup → Leave Types
-        </Link>
-        .
-      </p>
-
       <div className="flex min-h-0 flex-1 flex-col gap-3">
           <div className="shrink-0 rounded-lg border border-border/70 bg-card px-3 py-2.5 shadow-sm">
-            <div className="mb-2 flex items-center justify-between gap-2">
-              <p className="text-[11px] font-semibold text-foreground">Filter Requests</p>
-              <button
-                type="button"
-                className="cursor-pointer text-[11px] font-medium text-primary hover:underline"
-                onClick={() => {
-                  setFilters(emptyLeaveFilters());
-                  setQuery("");
-                }}
-              >
-                Clear all
-              </button>
-            </div>
-
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-9">
               <FilterControl label="Search" className="col-span-2">
                 <Input
@@ -300,12 +263,7 @@ export function LeaveManagementPage() {
             <div className="flex min-h-0 flex-1 items-center justify-center rounded-lg border border-dashed border-border/70 bg-card/40">
               <HrEmptyState
                 title="No Leave Requests"
-                description="Apply Leave to create the first request with policy validation."
-                action={
-                  <Button size="sm" className="cursor-pointer" onClick={() => setApplyOpen(true)}>
-                    Apply Leave
-                  </Button>
-                }
+                description="No leave requests match the current filters."
               />
             </div>
           ) : (
@@ -444,13 +402,6 @@ export function LeaveManagementPage() {
             </div>
           )}
         </div>
-
-      <ApplyLeaveDrawer
-        open={applyOpen}
-        directory={dir}
-        onClose={() => setApplyOpen(false)}
-        onSaved={() => void load()}
-      />
     </div>
   );
 }

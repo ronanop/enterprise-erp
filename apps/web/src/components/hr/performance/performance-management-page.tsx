@@ -2,12 +2,17 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  Download,
-  Plus,
-  Target,
-  ClipboardList,
-  MessageSquare,
   AlertTriangle,
+  BarChart3,
+  CalendarDays,
+  ClipboardList,
+  Download,
+  LayoutDashboard,
+  MessageSquare,
+  Plus,
+  Shield,
+  Target,
+  Users,
 } from "lucide-react";
 
 import {
@@ -27,6 +32,8 @@ import {
   HrEmptyState,
   HrStatusBadge,
   HrToolbar,
+  HrUnderlineTabs,
+  type HrTabItem,
 } from "@/components/hr/hr-primitives";
 import { toast, SetupToastHost } from "@/components/hr/setup/setup-toast";
 import { EmsPagination, EmsSkeleton } from "@/components/hr/workforce/ems-primitives";
@@ -141,7 +148,6 @@ export function PerformanceManagementPage() {
       <SetupToastHost />
       <PageHeader
         title="Performance Management"
-        description="Track employee goals, KPIs, reviews, and appraisal cycles."
         actions={
           <HrToolbar onRefresh={() => void load()} loading={loading}>
             <Button size="sm" className="cursor-pointer" onClick={() => setCycleOpen(true)}>
@@ -203,39 +209,28 @@ export function PerformanceManagementPage() {
         ))}
       </div>
 
-      <div className="flex flex-wrap gap-1 border-b border-border/70">
-        {(
+      <HrUnderlineTabs
+        size="sm"
+        tabs={
           [
-            ["dashboard", "Dashboard"],
-            ["goals", "Goals"],
-            ["kpis", "KPIs"],
-            ["okrs", "OKRs"],
-            ["cycles", "Review Cycles"],
-            ["reviews", "Reviews"],
-            ["feedback", "Feedback"],
-            ["meetings", "1:1s"],
-            ["probation", "Probation"],
-            ["pip", "PIP"],
-            ["appraisals", "Appraisals"],
-            ["reports", "Reports"],
-            ["audit", "Audit"],
-          ] as const
-        ).map(([id, label]) => (
-          <button
-            key={id}
-            type="button"
-            className={cn(
-              "cursor-pointer rounded-t-md px-2.5 py-2 text-[11px] font-medium transition-colors duration-200",
-              tab === id
-                ? "border border-b-0 border-border bg-card text-foreground"
-                : "text-muted-foreground hover:text-foreground",
-            )}
-            onClick={() => setTab(id)}
-          >
-            {label}
-          </button>
-        ))}
-      </div>
+            { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
+            { id: "goals", label: "Goals", icon: Target },
+            { id: "kpis", label: "KPIs", icon: BarChart3 },
+            { id: "okrs", label: "OKRs", icon: Target },
+            { id: "cycles", label: "Review Cycles", icon: CalendarDays },
+            { id: "reviews", label: "Reviews", icon: ClipboardList },
+            { id: "feedback", label: "Feedback", icon: MessageSquare },
+            { id: "meetings", label: "1:1s", icon: Users },
+            { id: "probation", label: "Probation", icon: Shield },
+            { id: "pip", label: "PIP", icon: AlertTriangle },
+            { id: "appraisals", label: "Appraisals", icon: ClipboardList },
+            { id: "reports", label: "Reports", icon: BarChart3 },
+            { id: "audit", label: "Audit", icon: Shield },
+          ] satisfies HrTabItem[]
+        }
+        value={tab}
+        onChange={(id) => setTab(id as Tab)}
+      />
 
       {loading && !dir ? <EmsSkeleton /> : null}
 

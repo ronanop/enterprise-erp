@@ -39,6 +39,34 @@ import { DASHBOARD_ROLE_LABELS } from "@/types/hr-executive-dashboard";
 
 const ROLE_KEY = "erp_hr_dashboard_role_v1";
 
+/** Map free-text work locations to clean city labels for charts. */
+function normalizeLocationCity(raw: string | null | undefined): string {
+  const text = String(raw ?? "").trim();
+  if (!text) return "Unassigned";
+
+  const lower = text.toLowerCase();
+  const rules: Array<{ test: RegExp; city: string }> = [
+    { test: /\b(new\s*delhi|delhi|sultanpur|greater\s*kailash|noida|gurgaon|gurugram)\b/, city: "Delhi" },
+    { test: /\b(mumbai|bombay)\b/, city: "Mumbai" },
+    { test: /\b(bengaluru|bangalore)\b/, city: "Bengaluru" },
+    { test: /\b(hyderabad)\b/, city: "Hyderabad" },
+    { test: /\b(chennai|madras)\b/, city: "Chennai" },
+    { test: /\b(pune)\b/, city: "Pune" },
+    { test: /\b(kolkata|calcutta)\b/, city: "Kolkata" },
+    { test: /\b(ahmedabad)\b/, city: "Ahmedabad" },
+    { test: /\b(jaipur)\b/, city: "Jaipur" },
+    { test: /\b(chandigarh)\b/, city: "Chandigarh" },
+  ];
+  for (const rule of rules) {
+    if (rule.test.test(lower)) return rule.city;
+  }
+
+  // Prefer the first comma-separated segment when it looks like a place name.
+  const first = text.split(",")[0]?.trim() ?? text;
+  if (first.length <= 24) return first;
+  return first.slice(0, 22) + "…";
+}
+
 type MasterEmployee = HrRow & {
   id?: string;
   department_id?: string;
@@ -182,12 +210,31 @@ function buildJoinedPeople(
   overview: HrOverview,
   employees: MasterEmployee[],
   departments: Department[],
+  branches: Array<{ id: string; city?: string; branch_name?: string }> = [],
 ) {
   const empById = new Map(employees.map((e) => [String(e.id), e]));
   const deptById = new Map(departments.map((d) => [String(d.id), d]));
+  const branchById = new Map(branches.map((b) => [String(b.id), b]));
   const profileByEmp = new Map(
     overview.profiles.map((p) => [String(p.employee_id ?? p.id), p]),
   );
+
+  // Prefer work_location_text; fall back to branch city (Delhi / Mumbai / …).
+  const locationByEmp = new Map<string, string>();
+  for (const e of overview.employment) {
+    const eid = String(e.employee_id ?? "");
+    if (!eid) continue;
+    const loc = String(e.work_location_text ?? "").trim();
+    if (loc) {
+      if (!locationByEmp.has(eid)) locationByEmp.set(eid, normalizeLocationCity(loc));
+      continue;
+    }
+    const branch = branchById.get(String(e.branch_id ?? ""));
+    const fromBranch = normalizeLocationCity(
+      String(branch?.city ?? branch?.branch_name ?? ""),
+    );
+    if (!locationByEmp.has(eid)) locationByEmp.set(eid, fromBranch);
+  }
 
   const people = employees.map((emp) => {
     const profile = profileByEmp.get(String(emp.id));
@@ -198,6 +245,7 @@ function buildJoinedPeople(
       departmentName: String(
         dept?.department_name ?? dept?.department_code ?? emp.designation ?? "Unassigned",
       ),
+      locationName: String(locationByEmp.get(String(emp.id)) ?? "Unassigned"),
       gender: String(profile?.gender ?? "unspecified").toLowerCase(),
       dob: profile?.date_of_birth,
       doj: emp.date_of_joining,
@@ -213,6 +261,7 @@ function buildJoinedPeople(
         emp: { id: eid },
         profile,
         departmentName: "Unassigned",
+        locationName: String(locationByEmp.get(eid) ?? "Unassigned"),
         gender: String(profile.gender ?? "unspecified").toLowerCase(),
         dob: profile.date_of_birth,
         doj: undefined,
@@ -351,6 +400,16 @@ function buildCharts(
   const departmentWise = [...deptMap.entries()]
     .map(([label, value]) => ({ label, value }))
     .sort((a, b) => b.value - a.value);
+
+  const locationMap = new Map<string, number>();
+  for (const p of people) {
+    const label = p.locationName || "Unassigned";
+    locationMap.set(label, (locationMap.get(label) ?? 0) + 1);
+  }
+  const locationWise = [...locationMap.entries()]
+    .map(([label, value]) => ({ label, value }))
+    .sort((a, b) => b.value - a.value)
+    .slice(0, 10);
 
   const genderMap = new Map<string, number>();
   for (const p of people) {
@@ -500,6 +559,7 @@ function buildCharts(
   return {
     employeeGrowth,
     departmentWise,
+    locationWise,
     genderDiversity,
     ageDistribution,
     hiringFunnel,
@@ -983,6 +1043,7 @@ export async function loadHrExecutiveDashboard(
   let overview: HrOverview | null = null;
   let employees: MasterEmployee[] = [];
   let departments: Department[] = [];
+  let branches: Array<{ id: string; city?: string; branch_name?: string }> = [];
   let recruitment: Awaited<ReturnType<typeof loadRecruitmentOverview>> | null = null;
   let payroll: Awaited<ReturnType<typeof loadPayrollOverview>> | null = null;
   let essInbox: HrEssInboxItem[] = [];
@@ -990,10 +1051,11 @@ export async function loadHrExecutiveDashboard(
   let authBlocked = false;
 
   try {
-    const [ov, empRows, deptRows, rec, pay, inbox] = await Promise.all([
+    const [ov, empRows, deptRows, branchRows, rec, pay, inbox] = await Promise.all([
       loadHrOverview(),
       safeRows("/employees"),
       safeRows("/departments"),
+      safeRows("/branches"),
       loadRecruitmentOverview().catch(() => null),
       loadPayrollOverview().catch(() => null),
       loadHrEssInbox({ includeCompoff: true }).catch(() => [] as HrEssInboxItem[]),
@@ -1001,6 +1063,11 @@ export async function loadHrExecutiveDashboard(
     overview = ov;
     employees = empRows as MasterEmployee[];
     departments = deptRows as Department[];
+    branches = (branchRows as Array<Record<string, unknown>>).map((b) => ({
+      id: String(b.id),
+      city: b.city != null ? String(b.city) : undefined,
+      branch_name: b.branch_name != null ? String(b.branch_name) : undefined,
+    }));
     recruitment = rec;
     payroll = pay;
     essInbox = inbox;
@@ -1036,7 +1103,7 @@ export async function loadHrExecutiveDashboard(
     };
   }
 
-  const { people, empById } = buildJoinedPeople(overview, employees, departments);
+  const { people, empById } = buildJoinedPeople(overview, employees, departments, branches);
   const stats = buildStats(overview, people, recruitment, payroll);
   const approvals = [
     ...buildApprovals(overview, empById, recruitment),

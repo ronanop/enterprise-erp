@@ -35,6 +35,23 @@ const PAY_CTX_KEY = "erp_pay_api_context_v1";
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
+function employeeSalaryKey(employeeId: string): string {
+  return String(employeeId ?? "")
+    .trim()
+    .toLowerCase();
+}
+
+/** Keep one salary row per employee (last occurrence wins). */
+export function dedupeEmployeeSalaries(rows: EmployeeSalary[]): EmployeeSalary[] {
+  const seen = new Map<string, EmployeeSalary>();
+  for (const row of rows) {
+    const key = employeeSalaryKey(row.employeeId);
+    if (!key) continue;
+    seen.set(key, row);
+  }
+  return [...seen.values()];
+}
+
 const K = {
   structures: "erp_pay_structures_v1",
   salaries: "erp_pay_salaries_v1",
@@ -343,21 +360,28 @@ export async function loadPayrollDirectory(): Promise<PayrollDirectory> {
     }
 
     if (overview.employeeSalaries.length) {
-      salaries = overview.employeeSalaries.map((e, i) => ({
-        id: String(e.id ?? crypto.randomUUID()),
-        employeeId: String(e.employee_code ?? e.employee_id ?? `EMP-${i + 1}`),
-        employeeName: String(e.employee_name ?? e.full_name ?? `Employee ${i + 1}`),
-        structureId: String(e.salary_structure_id ?? structures[0]?.id ?? ""),
-        structureName: String(e.structure_name ?? structures[0]?.name ?? "Default"),
-        effectiveDate: String(e.effective_from ?? e.effective_date ?? "").slice(0, 10),
-        monthlyCtc: Number(e.monthly_ctc ?? e.ctc ?? 50000),
-        annualCtc: Number(e.annual_ctc ?? (Number(e.monthly_ctc ?? 50000) * 12)),
-        payrollGroup: String(e.payroll_group ?? "General"),
-        bankAccount: String(e.bank_account ?? "XXXX1234"),
-        taxRegime: String(e.tax_regime ?? "new").includes("old") ? "old" : "new",
-        salaryStatus: "active",
-        department: String(e.department_name ?? "—"),
-      }));
+      salaries = dedupeEmployeeSalaries(
+        overview.employeeSalaries.map((e, i) => {
+          const monthly = Number(
+            e.gross_amount ?? e.monthly_ctc ?? (e.ctc_amount != null ? Number(e.ctc_amount) / 12 : e.ctc) ?? 50000,
+          );
+          return {
+            id: String(e.id ?? crypto.randomUUID()),
+            employeeId: String(e.employee_code ?? e.employee_id ?? `EMP-${i + 1}`),
+            employeeName: String(e.employee_name ?? e.full_name ?? `Employee ${i + 1}`),
+            structureId: String(e.salary_structure_id ?? structures[0]?.id ?? ""),
+            structureName: String(e.structure_name ?? structures[0]?.name ?? "Default"),
+            effectiveDate: String(e.effective_from ?? e.effective_date ?? "").slice(0, 10),
+            monthlyCtc: monthly,
+            annualCtc: Number(e.annual_ctc ?? e.ctc_amount ?? monthly * 12),
+            payrollGroup: String(e.payroll_group ?? "General"),
+            bankAccount: String(e.bank_account ?? "XXXX1234"),
+            taxRegime: String(e.tax_regime ?? "new").includes("old") ? ("old" as const) : ("new" as const),
+            salaryStatus: "active" as const,
+            department: String(e.department_name ?? "—"),
+          };
+        }),
+      );
       save(K.salaries, salaries);
     }
 
@@ -501,6 +525,10 @@ export async function loadPayrollDirectory(): Promise<PayrollDirectory> {
     save(K.structures, structures);
   }
 
+  const beforeDedupe = salaries.length;
+  salaries = dedupeEmployeeSalaries(salaries);
+  if (salaries.length !== beforeDedupe) save(K.salaries, salaries);
+
   runs = runs.map(normalizePayrollRun);
 
   return {
@@ -623,9 +651,19 @@ export function resetStructuresToCacheDigitech(): SalaryStructure[] {
 }
 
 export async function assignEmployeeSalary(
-  input: Omit<EmployeeSalary, "id">,
+  input: Omit<EmployeeSalary, "id"> & { id?: string },
 ): Promise<EmployeeSalary> {
-  const row: EmployeeSalary = { ...input, id: crypto.randomUUID() };
+  const all = load<EmployeeSalary>(K.salaries);
+  const key = employeeSalaryKey(input.employeeId);
+  const existingIdx = all.findIndex((s) => employeeSalaryKey(s.employeeId) === key);
+  const existing = existingIdx >= 0 ? all[existingIdx] : undefined;
+  const id = input.id || existing?.id || crypto.randomUUID();
+  const row: EmployeeSalary = {
+    ...input,
+    id,
+    annualCtc: input.annualCtc || (Number(input.monthlyCtc) || 0) * 12,
+  };
+
   try {
     const ctx = readJson<{
       branchId?: string;
@@ -635,18 +673,25 @@ export async function assignEmployeeSalary(
     const structureIsUuid = UUID_RE.test(input.structureId);
     const employeeIsUuid = UUID_RE.test(input.employeeId);
     const employmentId = ctx.employmentId;
-    if (ctx.branchId && structureIsUuid && employeeIsUuid && employmentId && UUID_RE.test(employmentId)) {
+    const payload = {
+      salary_structure_id: structureIsUuid ? input.structureId : undefined,
+      effective_from: input.effectiveDate || nowIso().slice(0, 10),
+      ctc_amount: input.monthlyCtc * 12,
+      gross_amount: input.monthlyCtc,
+      currency_code: "INR",
+      status: "active",
+    };
+
+    if (UUID_RE.test(id) && existing) {
+      await resourceService.update("/payroll/employee-salaries", id, payload);
+    } else if (ctx.branchId && structureIsUuid && employeeIsUuid && employmentId && UUID_RE.test(employmentId)) {
       const res = await resourceService.create<Record<string, unknown>>("/payroll/employee-salaries", {
         branch_id: ctx.branchId,
         employee_id: input.employeeId,
         salary_structure_id: input.structureId,
         employment_id: employmentId,
         department_id: ctx.departmentId || null,
-        effective_from: input.effectiveDate || nowIso().slice(0, 10),
-        ctc_amount: input.monthlyCtc * 12,
-        gross_amount: input.monthlyCtc,
-        currency_code: "INR",
-        status: "active",
+        ...payload,
       });
       const apiId = String(res.data?.id ?? "");
       if (apiId) row.id = apiId;
@@ -654,12 +699,18 @@ export async function assignEmployeeSalary(
   } catch (err) {
     console.warn("assignEmployeeSalary API failed; local cache kept", err);
   }
-  const all = load<EmployeeSalary>(K.salaries);
-  all.unshift(row);
-  save(K.salaries, all);
+
+  if (existingIdx >= 0) {
+    const without = all.filter((s) => employeeSalaryKey(s.employeeId) !== key);
+    without.unshift(row);
+    save(K.salaries, without);
+  } else {
+    all.unshift(row);
+    save(K.salaries, dedupeEmployeeSalaries(all));
+  }
   appendPayrollAudit({
-    action: "salary_assigned",
-    detail: `${row.employeeName} → ${row.structureName}`,
+    action: existing ? "salary_updated" : "salary_assigned",
+    detail: `${row.employeeName} → ${row.structureName} (${formatInr(row.monthlyCtc)}/mo)`,
     actor: actor(),
   });
   return row;

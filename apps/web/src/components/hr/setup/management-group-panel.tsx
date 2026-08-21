@@ -225,12 +225,18 @@ export function ManagementGroupPanel({ tab }: { tab: HrSetupTab }) {
   }, [rows, query]);
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="text-xs text-muted-foreground">
-          Management groups (employment groups) control default shifts, calendars, and HRMS feature toggles.
-        </p>
-        <div className="flex gap-2">
+        <div className="relative min-w-[12rem] flex-1 max-w-md">
+          <Search className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search groups…"
+            className="h-9 pl-8"
+          />
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
           <Button
             size="sm"
             variant="outline"
@@ -246,16 +252,6 @@ export function ManagementGroupPanel({ tab }: { tab: HrSetupTab }) {
             Add management group
           </Button>
         </div>
-      </div>
-
-      <div className="relative max-w-md">
-        <Search className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted-foreground" />
-        <Input
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder="Search groups…"
-          className="h-9 pl-8"
-        />
       </div>
 
       <div className="overflow-hidden rounded-lg border border-border bg-card">

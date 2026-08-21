@@ -6,8 +6,6 @@ import {
   Briefcase,
   CalendarDays,
   ClipboardCheck,
-  Download,
-  FileSpreadsheet,
   FileText,
   LayoutGrid,
   Search,
@@ -21,7 +19,6 @@ import {
 
 import {
   HrAuthBanner,
-  HrEmptyState,
 } from "@/components/hr/hr-primitives";
 import {
   PremiumAreaChart,
@@ -35,8 +32,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import {
-  downloadBlob,
-  exportDashboardCsv,
   getDashboardRole,
   greetingForHour,
   loadHrExecutiveDashboard,
@@ -445,17 +440,25 @@ export function HrExecutiveDashboardPage() {
             <div className="grid gap-3 lg:grid-cols-2 xl:grid-cols-3">
               {showPeopleAnalytics ? (
                 <>
-                  <PremiumAreaChart
-                    title="Employee Growth"
-                    subtitle="Cumulative headcount by joining date"
+                  <PremiumBarChart
+                    title="Head Count"
+                    subtitle="Employees by joining month (cumulative)"
                     data={charts?.employeeGrowth ?? []}
-                    color="#0F766E"
+                    showValues
                   />
                   <PremiumBarChart
                     title="Department-wise Employees"
                     subtitle="master_employee → org_department"
                     data={charts?.departmentWise ?? []}
                     layout="horizontal"
+                    showValues
+                  />
+                  <PremiumBarChart
+                    title="Location-wise Employees"
+                    subtitle="Cities — Delhi, Mumbai, Bengaluru & others"
+                    data={charts?.locationWise ?? []}
+                    layout="horizontal"
+                    showValues
                   />
                   <PremiumDonutChart
                     title="Gender Diversity"
@@ -466,6 +469,7 @@ export function HrExecutiveDashboardPage() {
                     title="Age Distribution"
                     subtitle="hr_employee_profile.date_of_birth"
                     data={charts?.ageDistribution ?? []}
+                    showValues
                   />
                 </>
               ) : null}
@@ -532,105 +536,6 @@ export function HrExecutiveDashboardPage() {
               ) : null}
             </div>
           </section>
-
-          {/* Activity + Reports */}
-          <div className="grid gap-3 lg:grid-cols-[1.4fr_1fr]">
-            <section className="rounded-xl border border-border/70 bg-card shadow-sm">
-              <div className="border-b border-border/70 px-4 py-3">
-                <h2 className="text-sm font-semibold">Recent Activities</h2>
-                <p className="text-[11px] text-muted-foreground">Organization timeline</p>
-              </div>
-              <ul className="relative space-y-0 px-4 py-3">
-                {(data?.activities ?? []).length === 0 ? (
-                  <HrEmptyState title="No recent activity" />
-                ) : (
-                  (data?.activities ?? []).slice(0, 12).map((a, idx) => (
-                    <li key={a.id} className="relative flex gap-3 pb-4 last:pb-0">
-                      {idx < (data?.activities.length ?? 0) - 1 ? (
-                        <span className="absolute top-3 left-[7px] h-[calc(100%-8px)] w-px bg-border" />
-                      ) : null}
-                      <span className="relative z-[1] mt-1 size-3.5 shrink-0 rounded-full border-2 border-primary bg-card" />
-                      <div className="min-w-0 flex-1">
-                        <p className="text-sm font-medium">{a.action}</p>
-                        <p className="text-[11px] text-muted-foreground">{a.detail}</p>
-                        <p className="mt-0.5 text-[10px] text-muted-foreground">
-                          {a.actor} · {new Date(a.at).toLocaleString("en-IN")}
-                        </p>
-                      </div>
-                    </li>
-                  ))
-                )}
-              </ul>
-            </section>
-
-            <section className="rounded-xl border border-border/70 bg-card p-4 shadow-sm">
-              <h2 className="text-sm font-semibold">Quick Reports</h2>
-              <p className="mt-0.5 text-[11px] text-muted-foreground">
-                Export Excel / CSV or open module reports
-              </p>
-              <div className="mt-3 space-y-2">
-                {(data?.reports ?? []).map((r) => (
-                  <Link
-                    key={r.id}
-                    href={r.href}
-                    className="flex cursor-pointer items-center justify-between gap-2 rounded-lg border border-border/60 px-3 py-2.5 transition-colors duration-150 hover:bg-muted/50"
-                  >
-                    <div>
-                      <p className="text-sm font-medium">{r.title}</p>
-                      <p className="text-[11px] text-muted-foreground">{r.description}</p>
-                    </div>
-                    <ChevronRight className="size-3.5 text-muted-foreground" />
-                  </Link>
-                ))}
-              </div>
-              <div className="mt-4 flex flex-wrap gap-2">
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="cursor-pointer"
-                  disabled={!data}
-                  onClick={() => {
-                    if (!data) return;
-                    downloadBlob(
-                      `hr-dashboard-${new Date().toISOString().slice(0, 10)}.csv`,
-                      exportDashboardCsv(data),
-                    );
-                    toast("Downloaded Excel/CSV");
-                  }}
-                >
-                  <FileSpreadsheet className="size-3.5" />
-                  Download Excel
-                </Button>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="cursor-pointer"
-                  disabled={!data}
-                  onClick={() => {
-                    if (!data) return;
-                    const text = [
-                      "HRMS Executive Dashboard",
-                      `Role: ${DASHBOARD_ROLE_LABELS[data.role]}`,
-                      `Generated: ${new Date().toLocaleString()}`,
-                      "",
-                      ...Object.entries(data.stats).map(
-                        ([k, v]) => `${k}: ${v}`,
-                      ),
-                    ].join("\n");
-                    downloadBlob(
-                      `hr-dashboard-${new Date().toISOString().slice(0, 10)}.txt`,
-                      text,
-                      "text/plain",
-                    );
-                    toast("Downloaded PDF-ready summary");
-                  }}
-                >
-                  <Download className="size-3.5" />
-                  Download PDF
-                </Button>
-              </div>
-            </section>
-          </div>
         </>
       )}
     </div>

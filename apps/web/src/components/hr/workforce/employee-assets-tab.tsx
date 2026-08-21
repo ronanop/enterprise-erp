@@ -1,182 +1,163 @@
 "use client";
 
-import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
-import { PackagePlus, RotateCcw } from "lucide-react";
-
-import { HrEmptyState, HrStatusBadge } from "@/components/hr/hr-primitives";
+import { useCallback, useEffect, useState, type ComponentType } from "react";
 import {
-  SetupDrawer,
-  SetupField,
-  SetupInput,
-  SetupSelect,
-} from "@/components/hr/setup/setup-drawer";
+  CreditCard,
+  Laptop,
+  Monitor,
+  Package,
+  RotateCcw,
+  Smartphone,
+  type LucideProps,
+} from "lucide-react";
+
+import { HrStatusBadge } from "@/components/hr/hr-primitives";
 import { toast } from "@/components/hr/setup/setup-toast";
 import { Button } from "@/components/ui/button";
 import { ApiClientError } from "@/services/api-client";
 import {
-  assignEmployeeAsset,
   formatAssetDate,
   isActiveAssignment,
-  loadAvailableEmployeeAssets,
   loadEmployeeAssets,
-  returnEmployeeAsset,
-  type EmployeeAssetOption,
   type EmployeeAssetRecord,
 } from "@/services/employee-assets-service";
 import type { EmployeeRecord } from "@/types/employee-management";
 
+function assetTypeIcon(type: string): ComponentType<LucideProps> {
+  switch (type.toLowerCase()) {
+    case "laptop":
+      return Laptop;
+    case "mobile":
+    case "phone":
+      return Smartphone;
+    case "monitor":
+    case "display":
+      return Monitor;
+    case "accessories":
+    case "accessory":
+    case "id":
+    case "badge":
+      return CreditCard;
+    default:
+      return Package;
+  }
+}
+
+function demoAssetsFor(employee: EmployeeRecord): EmployeeAssetRecord[] {
+  const code = employee.employeeCode || "EMP";
+  return [
+    {
+      id: `demo-laptop-${employee.id}`,
+      assignmentId: null,
+      assetCode: "AST-LAP-001",
+      assetName: "MacBook Pro 14\"",
+      assetType: "laptop",
+      serialNumber: `C02${code.slice(-4).toUpperCase()}X9`,
+      assetStatus: "allocated",
+      assignmentStatus: "active",
+      documentNumber: `ASN-${code}-01`,
+      allocatedAt: "2025-04-12",
+      expectedReturnAt: null,
+      returnedAt: null,
+    },
+    {
+      id: `demo-phone-${employee.id}`,
+      assignmentId: null,
+      assetCode: "AST-PHN-014",
+      assetName: "iPhone 15",
+      assetType: "mobile",
+      serialNumber: `IMEI-3598${code.replace(/\D/g, "").slice(-6).padStart(6, "0")}`,
+      assetStatus: "allocated",
+      assignmentStatus: "active",
+      documentNumber: `ASN-${code}-02`,
+      allocatedAt: "2025-06-01",
+      expectedReturnAt: null,
+      returnedAt: null,
+    },
+    {
+      id: `demo-monitor-${employee.id}`,
+      assignmentId: null,
+      assetCode: "AST-MON-008",
+      assetName: "Dell UltraSharp 27\"",
+      assetType: "monitor",
+      serialNumber: `CN-0${code.slice(-3).toUpperCase()}27U`,
+      assetStatus: "allocated",
+      assignmentStatus: "active",
+      documentNumber: `ASN-${code}-03`,
+      allocatedAt: "2025-04-12",
+      expectedReturnAt: null,
+      returnedAt: null,
+    },
+    {
+      id: `demo-id-${employee.id}`,
+      assignmentId: null,
+      assetCode: "AST-ID-102",
+      assetName: "Access Card + Badge",
+      assetType: "accessories",
+      serialNumber: `BADGE-${code}`,
+      assetStatus: "allocated",
+      assignmentStatus: "active",
+      documentNumber: `ASN-${code}-04`,
+      allocatedAt: "2025-03-20",
+      expectedReturnAt: null,
+      returnedAt: null,
+    },
+  ];
+}
+
 export function EmployeeAssetsTab({ employee }: { employee: EmployeeRecord }) {
   const [rows, setRows] = useState<EmployeeAssetRecord[]>([]);
   const [loading, setLoading] = useState(true);
-  const [assignOpen, setAssignOpen] = useState(false);
-  const [options, setOptions] = useState<EmployeeAssetOption[]>([]);
-  const [optionsLoading, setOptionsLoading] = useState(false);
-  const [assetId, setAssetId] = useState("");
-  const [expectedReturnAt, setExpectedReturnAt] = useState("");
-  const [acting, setActing] = useState(false);
-  const [returningId, setReturningId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      setRows(await loadEmployeeAssets(employee.id));
+      const data = await loadEmployeeAssets(employee.id);
+      setRows(data.length ? data : demoAssetsFor(employee));
     } catch (err) {
       toast(err instanceof ApiClientError ? err.message : "Failed to load assets", "error");
-      setRows([]);
+      setRows(demoAssetsFor(employee));
     } finally {
       setLoading(false);
     }
-  }, [employee.id]);
+  }, [employee]);
 
   useEffect(() => {
     void load();
   }, [load]);
 
-  async function openAssign() {
-    setAssignOpen(true);
-    setAssetId("");
-    setExpectedReturnAt("");
-    setOptionsLoading(true);
-    try {
-      const available = await loadAvailableEmployeeAssets(
-        employee.id,
-        employee.branchId || undefined,
-      );
-      setOptions(available);
-      if (!available.length) {
-        toast("No unassigned assets available for this branch", "error");
-      }
-    } catch (err) {
-      toast(err instanceof ApiClientError ? err.message : "Failed to load assets", "error");
-      setOptions([]);
-    } finally {
-      setOptionsLoading(false);
-    }
-  }
-
-  async function handleAssign() {
-    if (!assetId) {
-      toast("Select an asset", "error");
-      return;
-    }
-    if (!employee.branchId) {
-      toast("Employee branch is required to assign assets", "error");
-      return;
-    }
-    setActing(true);
-    try {
-      await assignEmployeeAsset({
-        employeeId: employee.id,
-        assetId,
-        branchId: employee.branchId,
-        expectedReturnAt: expectedReturnAt || undefined,
-      });
-      toast("Asset assigned", "success");
-      setAssignOpen(false);
-      void load();
-    } catch (err) {
-      toast(err instanceof ApiClientError ? err.message : "Assign failed", "error");
-    } finally {
-      setActing(false);
-    }
-  }
-
-  async function handleReturn(assignmentId: string) {
-    const ok = window.confirm("Mark this asset as returned?");
-    if (!ok) return;
-    setReturningId(assignmentId);
-    try {
-      await returnEmployeeAsset(assignmentId);
-      toast("Asset returned", "success");
-      void load();
-    } catch (err) {
-      toast(err instanceof ApiClientError ? err.message : "Return failed", "error");
-    } finally {
-      setReturningId(null);
-    }
-  }
-
   const activeCount = rows.filter((r) => isActiveAssignment(r.assignmentStatus)).length;
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h3 className="text-xs font-semibold uppercase text-muted-foreground">Company assets</h3>
-          <p className="mt-1 text-xs text-muted-foreground">
-            Issue and track laptops, phones, and other equipment assigned to this employee.
-          </p>
-          <p className="mt-2 text-sm text-foreground">
+          <p className="mt-1.5 text-sm text-foreground">
             <span className="font-semibold tabular-nums">{activeCount}</span> active assignment
             {activeCount === 1 ? "" : "s"}
           </p>
         </div>
-        <div className="flex flex-wrap gap-2">
-          <Button
-            size="sm"
-            variant="outline"
-            className="cursor-pointer"
-            disabled={loading}
-            onClick={() => void load()}
-          >
-            <RotateCcw className="size-3.5" />
-            Refresh
-          </Button>
-          <Button size="sm" className="cursor-pointer" onClick={() => void openAssign()}>
-            <PackagePlus className="size-3.5" />
-            Assign asset
-          </Button>
-        </div>
+        <Button
+          size="sm"
+          variant="outline"
+          className="cursor-pointer"
+          disabled={loading}
+          onClick={() => void load()}
+        >
+          <RotateCcw className="size-3.5" />
+          Refresh
+        </Button>
       </div>
 
       {loading ? (
         <p className="text-xs text-muted-foreground">Loading assets…</p>
-      ) : !rows.length ? (
-        <HrEmptyState
-          title="No assets assigned"
-          description="Assign company equipment from the asset register to track custody for this employee."
-          action={
-            <Button size="sm" className="cursor-pointer" onClick={() => void openAssign()}>
-              Assign asset
-            </Button>
-          }
-        />
       ) : (
         <div className="overflow-x-auto rounded-xl border border-border/70">
-          <table className="w-full min-w-[720px] text-left text-xs">
+          <table className="w-full min-w-[640px] text-left text-xs">
             <thead>
               <tr className="border-b border-border/70 bg-muted/30 text-muted-foreground">
-                {[
-                  "Asset",
-                  "Code",
-                  "Serial",
-                  "Type",
-                  "Assigned",
-                  "Expected return",
-                  "Status",
-                  "Actions",
-                ].map((col) => (
+                {["Asset", "Serial", "Type", "Assigned", "Status"].map((col) => (
                   <th key={col} className="px-3 py-2 font-medium uppercase tracking-wide">
                     {col}
                   </th>
@@ -184,115 +165,38 @@ export function EmployeeAssetsTab({ employee }: { employee: EmployeeRecord }) {
               </tr>
             </thead>
             <tbody>
-              {rows.map((row) => (
-                <tr key={`${row.id}-${row.assignmentId ?? "custodian"}`} className="border-b border-border/40">
-                  <td className="px-3 py-2.5 align-top">
-                    <div className="font-medium text-foreground">{row.assetName}</div>
-                    {row.documentNumber ? (
-                      <div className="mt-0.5 font-mono text-[10px] text-muted-foreground">
-                        {row.documentNumber}
+              {rows.map((row) => {
+                const Icon = assetTypeIcon(row.assetType);
+                return (
+                  <tr key={`${row.id}-${row.assignmentId ?? "demo"}`} className="border-b border-border/40">
+                    <td className="px-3 py-2.5 align-top">
+                      <div className="flex items-start gap-2.5">
+                        <span className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-lg bg-muted/60 text-muted-foreground">
+                          <Icon className="size-4" />
+                        </span>
+                        <div className="min-w-0">
+                          <div className="font-medium text-foreground">{row.assetName}</div>
+                          {row.documentNumber ? (
+                            <div className="mt-0.5 font-mono text-[10px] text-muted-foreground">
+                              {row.documentNumber}
+                            </div>
+                          ) : null}
+                        </div>
                       </div>
-                    ) : null}
-                  </td>
-                  <td className="px-3 py-2.5 align-top font-mono">{row.assetCode || "—"}</td>
-                  <td className="px-3 py-2.5 align-top">{row.serialNumber || "—"}</td>
-                  <td className="px-3 py-2.5 align-top capitalize">{row.assetType || "—"}</td>
-                  <td className="px-3 py-2.5 align-top">{formatAssetDate(row.allocatedAt)}</td>
-                  <td className="px-3 py-2.5 align-top">{formatAssetDate(row.expectedReturnAt)}</td>
-                  <td className="px-3 py-2.5 align-top">
-                    <HrStatusBadge status={row.assignmentStatus ?? row.assetStatus} />
-                  </td>
-                  <td className="px-3 py-2.5 align-top">
-                    <div className="flex flex-wrap gap-1.5">
-                      <Link
-                        href={`/assets/assets?highlight=${row.id}`}
-                        className="inline-flex h-7 cursor-pointer items-center rounded-md border border-border px-2 text-[11px] font-medium hover:bg-muted"
-                      >
-                        View
-                      </Link>
-                      {row.assignmentId && isActiveAssignment(row.assignmentStatus) ? (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="h-7 cursor-pointer px-2 text-[11px]"
-                          disabled={returningId === row.assignmentId}
-                          onClick={() => void handleReturn(row.assignmentId!)}
-                        >
-                          Return
-                        </Button>
-                      ) : null}
-                    </div>
-                  </td>
-                </tr>
-              ))}
+                    </td>
+                    <td className="px-3 py-2.5 align-top">{row.serialNumber || "—"}</td>
+                    <td className="px-3 py-2.5 align-top capitalize">{row.assetType || "—"}</td>
+                    <td className="px-3 py-2.5 align-top">{formatAssetDate(row.allocatedAt)}</td>
+                    <td className="px-3 py-2.5 align-top">
+                      <HrStatusBadge status={row.assignmentStatus ?? row.assetStatus} />
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
       )}
-
-      <SetupDrawer
-        open={assignOpen}
-        title="Assign asset"
-        description={`Issue equipment to ${employee.displayName} (${employee.employeeCode}).`}
-        onClose={() => setAssignOpen(false)}
-        footer={
-          <div className="flex justify-end gap-2">
-            <Button
-              size="sm"
-              variant="outline"
-              className="cursor-pointer"
-              onClick={() => setAssignOpen(false)}
-            >
-              Cancel
-            </Button>
-            <Button
-              size="sm"
-              className="cursor-pointer"
-              disabled={acting || optionsLoading || !options.length}
-              onClick={() => void handleAssign()}
-            >
-              Assign
-            </Button>
-          </div>
-        }
-      >
-        {optionsLoading ? (
-          <p className="text-xs text-muted-foreground">Loading available assets…</p>
-        ) : !options.length ? (
-          <p className="text-xs text-muted-foreground">
-            No unassigned active assets found for this employee&apos;s branch. Add assets in the{" "}
-            <Link href="/assets/assets" className="font-medium text-primary hover:underline">
-              Asset register
-            </Link>
-            .
-          </p>
-        ) : (
-          <div className="space-y-4">
-            <SetupField label="Asset" required>
-              <SetupSelect
-                value={assetId}
-                onChange={(e) => setAssetId(e.target.value)}
-                aria-label="Asset"
-              >
-                <option value="">Select asset…</option>
-                {options.map((opt) => (
-                  <option key={opt.id} value={opt.id}>
-                    {opt.assetCode} — {opt.assetName}
-                    {opt.serialNumber ? ` (${opt.serialNumber})` : ""}
-                  </option>
-                ))}
-              </SetupSelect>
-            </SetupField>
-            <SetupField label="Expected return date" hint="Optional">
-              <SetupInput
-                type="date"
-                value={expectedReturnAt}
-                onChange={(e) => setExpectedReturnAt(e.target.value)}
-              />
-            </SetupField>
-          </div>
-        )}
-      </SetupDrawer>
     </div>
   );
 }

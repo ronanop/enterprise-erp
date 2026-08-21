@@ -27,18 +27,6 @@ export function AppShell({ children }: AppShellProps) {
             {children}
           </div>
         </main>
-        <footer className="shrink-0 border-t border-border/70 bg-card/40 px-4 py-3 text-[11px] text-muted-foreground sm:px-6">
-          <div className="mx-auto flex max-w-[1400px] flex-wrap items-center justify-between gap-2">
-            <span className="font-medium tracking-tight">
-              {hrMode ? "HRMS workspace" : "Architecture Baseline v1.1"}
-            </span>
-            <span>
-              {hrMode
-                ? "Workforce · Leave · Attendance · Talent · Hire · Pay"
-                : "Clean Architecture · DDD · Modular Monolith"}
-            </span>
-          </div>
-        </footer>
       </div>
     </div>
   );

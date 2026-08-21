@@ -283,7 +283,6 @@ export function EmployeeWizardPage() {
       <SetupToastHost />
       <PageHeader
         title="Add Employee"
-        description="Same details as onboarding — filled by HR here. No invitation link is sent. Education and previous employment are optional."
         actions={
           <div className="flex flex-wrap gap-2">
             <Button

@@ -3,13 +3,17 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import {
+  BarChart3,
   Briefcase,
+  CalendarClock,
+  ClipboardList,
   Download,
+  FileCheck2,
+  LayoutDashboard,
   Plus,
   Upload,
   UserPlus,
-  CalendarClock,
-  FileCheck2,
+  Users,
 } from "lucide-react";
 
 import { CandidateDrawer } from "@/components/hr/recruitment/candidate-drawer";
@@ -22,6 +26,8 @@ import {
   HrEmptyState,
   HrStatusBadge,
   HrToolbar,
+  HrUnderlineTabs,
+  type HrTabItem,
 } from "@/components/hr/hr-primitives";
 import { SetupDrawer, SetupField, SetupTextarea } from "@/components/hr/setup/setup-drawer";
 import { toast, SetupToastHost } from "@/components/hr/setup/setup-toast";
@@ -168,7 +174,6 @@ export function RecruitmentAtsPage() {
       <SetupToastHost />
       <PageHeader
         title="Recruitment"
-        description="Manage job openings, candidates, interviews, offers, and hiring pipeline."
         actions={
           <HrToolbar onRefresh={() => void load()} loading={loading}>
             <Button size="sm" className="cursor-pointer" onClick={() => { setEditJob(null); setJobOpen(true); }}>
@@ -227,35 +232,24 @@ export function RecruitmentAtsPage() {
         ))}
       </div>
 
-      <div className="flex flex-wrap gap-1 border-b border-border/70">
-        {(
+      <HrUnderlineTabs
+        size="sm"
+        tabs={
           [
-            ["dashboard", "Dashboard"],
-            ["jobs", "Job Openings"],
-            ["candidates", "Candidates"],
-            ["pipeline", "Pipeline"],
-            ["interviews", "Interviews"],
-            ["offers", "Offers"],
-            ["documents", "Documents"],
-            ["reports", "Reports"],
-            ["audit", "Audit"],
-          ] as const
-        ).map(([id, label]) => (
-          <button
-            key={id}
-            type="button"
-            className={cn(
-              "cursor-pointer rounded-t-md px-3 py-2 text-xs font-medium transition-colors duration-200",
-              tab === id
-                ? "border border-b-0 border-border bg-card text-foreground"
-                : "text-muted-foreground hover:text-foreground",
-            )}
-            onClick={() => setTab(id)}
-          >
-            {label}
-          </button>
-        ))}
-      </div>
+            { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
+            { id: "jobs", label: "Job Openings", icon: Briefcase },
+            { id: "candidates", label: "Candidates", icon: Users },
+            { id: "pipeline", label: "Pipeline", icon: ClipboardList },
+            { id: "interviews", label: "Interviews", icon: CalendarClock },
+            { id: "offers", label: "Offers", icon: FileCheck2 },
+            { id: "documents", label: "Documents", icon: FileCheck2 },
+            { id: "reports", label: "Reports", icon: BarChart3 },
+            { id: "audit", label: "Audit", icon: ClipboardList },
+          ] satisfies HrTabItem[]
+        }
+        value={tab}
+        onChange={(id) => setTab(id as Tab)}
+      />
 
       {loading && !dir ? <EmsSkeleton /> : null}
 

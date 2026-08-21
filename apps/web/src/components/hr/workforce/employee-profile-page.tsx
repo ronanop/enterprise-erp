@@ -15,6 +15,7 @@ import {
   ArrowLeft,
   BriefcaseBusiness,
   Building2,
+  CalendarDays,
   ChevronLeft,
   Contact,
   Download,
@@ -22,10 +23,13 @@ import {
   GraduationCap,
   KeyRound,
   Landmark,
+  Laptop,
   Pencil,
   Save,
   ShieldCheck,
+  UserMinus,
   UserRound,
+  Wallet,
 } from "lucide-react";
 
 import { EmployeeAssetsTab } from "@/components/hr/workforce/employee-assets-tab";
@@ -78,16 +82,16 @@ import { emptyBank } from "@/types/employee-management";
 import { cn } from "@/lib/utils";
 
 const TABS = [
-  { id: "overview", label: "Overview" },
-  { id: "employment", label: "Employment" },
-  { id: "gov", label: "Government IDs" },
-  { id: "bank", label: "Bank" },
-  { id: "documents", label: "Documents" },
-  { id: "assets", label: "Assets" },
-  { id: "attendance", label: "Attendance" },
-  { id: "leave", label: "Leave" },
-  { id: "payroll", label: "Payroll" },
-  { id: "separation", label: "Offboarding" },
+  { id: "overview", label: "Overview", icon: UserRound },
+  { id: "employment", label: "Employment", icon: BriefcaseBusiness },
+  { id: "gov", label: "Gov IDs", icon: ShieldCheck },
+  { id: "bank", label: "Bank", icon: Landmark },
+  { id: "documents", label: "Docs", icon: FileText },
+  { id: "assets", label: "Assets", icon: Laptop },
+  { id: "attendance", label: "Attendance", icon: CalendarDays },
+  { id: "leave", label: "Leave", icon: Contact },
+  { id: "payroll", label: "Payroll", icon: Wallet },
+  { id: "separation", label: "Offboarding", icon: UserMinus },
 ];
 
 type ProfileEditSection =
@@ -499,7 +503,6 @@ export function EmployeeProfilePage({ employeeId }: { employeeId: string }) {
       <SetupToastHost />
       <PageHeader
         title={record.displayName}
-        description={`${record.employeeCode} · ${record.designationName}`}
         actions={
           <div className="flex flex-wrap gap-2">
             <Link href="/hr/workforce">

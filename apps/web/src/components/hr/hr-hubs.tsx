@@ -95,7 +95,6 @@ export function WorkforceHub() {
     <div className="space-y-5">
       <PageHeader
         title="Workforce"
-        description="Employee directory — profiles, employment status, and quick access to HR records."
         actions={
           <HrToolbar onRefresh={() => void load()} loading={loading}>
             <Link href="/hr/employee-profiles" className="inline-flex h-7 cursor-pointer items-center gap-1 rounded-lg bg-primary px-2.5 text-[0.8rem] font-medium text-primary-foreground hover:bg-primary/80">All profiles</Link>
@@ -174,7 +173,6 @@ export function LeaveHub() {
     <div className="space-y-5">
       <PageHeader
         title="Leave Management"
-        description="Balances, requests, and approval-friendly leave tracking."
         actions={
           <HrToolbar onRefresh={() => void load()} loading={loading}>
             <Button size="sm" className="cursor-pointer" onClick={() => setOpen(true)}>
@@ -264,7 +262,6 @@ export function TimeHub() {
     <div className="space-y-5">
       <PageHeader
         title="Attendance / Time"
-        description="Daily attendance, presence mix, and late/absent indicators."
         actions={
           <HrToolbar onRefresh={() => void load()} loading={loading}>
             <Button size="sm" className="cursor-pointer" onClick={() => setOpen(true)}>
@@ -329,7 +326,6 @@ export function SetupHub() {
     <div className="space-y-5">
       <PageHeader
         title="HR Setup"
-        description="Masters for designations, shifts, leave types, and holiday calendars."
         actions={
           <HrToolbar onRefresh={() => void load()} loading={loading}>
             <Button size="sm" className="cursor-pointer" onClick={() => setOpen(true)}>
@@ -409,7 +405,6 @@ export function ShiftsHub() {
     <div className="space-y-5">
       <PageHeader
         title="Shifts & Roster"
-        description="Shift masters and employee shift assignments."
         actions={<HrToolbar onRefresh={() => void load()} loading={loading} />}
       />
       {authBlocked ? <HrAuthBanner /> : null}
@@ -476,7 +471,6 @@ export function TalentHub() {
     <div className="space-y-5">
       <PageHeader
         title="Talent / Performance"
-        description="Reviews, goals, and appraisals."
         actions={<HrToolbar onRefresh={() => void load()} loading={loading} />}
       />
       {authBlocked ? <HrAuthBanner /> : null}
@@ -521,7 +515,6 @@ export function TrainingHubPage() {
     <div className="space-y-5">
       <PageHeader
         title="Training / Learning"
-        description="Programs, assignments, and completion status."
         actions={<HrToolbar onRefresh={() => void load()} loading={loading} />}
       />
       {authBlocked ? <HrAuthBanner /> : null}
@@ -625,7 +618,6 @@ export function ReportsHub() {
     <div className="space-y-5">
       <PageHeader
         title="HR Reports & KPIs"
-        description="Workforce health snapshot and CSV exports from live HR data."
         actions={<HrToolbar onRefresh={() => void load()} loading={loading} />}
       />
       {authBlocked ? <HrAuthBanner /> : null}
@@ -688,7 +680,6 @@ export function PayrollHubInHr() {
     <div className="space-y-5">
       <PageHeader
         title="Payroll"
-        description="Payroll cycle snapshot inside HRMS. Full payroll workspace remains under /payroll."
         actions={
           <HrToolbar onRefresh={() => void load()} loading={loading}>
             <Link href="/payroll" className="inline-flex h-7 cursor-pointer items-center rounded-lg border border-border bg-background px-2.5 text-[0.8rem] font-medium transition-colors hover:bg-muted">Open payroll module</Link>
@@ -752,7 +743,6 @@ export function RecruitmentHubInHr() {
     <div className="space-y-5">
       <PageHeader
         title="Recruitment"
-        description="Open roles and hiring pipeline inside HRMS."
         actions={
           <HrToolbar onRefresh={() => void load()} loading={loading}>
             <Link href="/recruitment" className="inline-flex h-7 cursor-pointer items-center rounded-lg border border-border bg-background px-2.5 text-[0.8rem] font-medium transition-colors hover:bg-muted">Open recruitment module</Link>
@@ -811,7 +801,6 @@ export function OnboardingHub() {
     <div className="space-y-5">
       <PageHeader
         title="Onboarding"
-        description="Pre-employee handoff and onboarding task tracking."
         actions={
           <HrToolbar onRefresh={() => void load()} loading={loading}>
             <Link href="/recruitment/onboarding" className="inline-flex h-7 cursor-pointer items-center rounded-lg border border-border bg-background px-2.5 text-[0.8rem] font-medium transition-colors hover:bg-muted">Open onboarding list</Link>

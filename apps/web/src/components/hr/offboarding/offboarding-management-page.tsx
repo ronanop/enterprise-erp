@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Check, Plus } from "lucide-react";
+import { Check, ClipboardList, FileText, GitBranch, MessageSquare, Plus, Wallet } from "lucide-react";
 
 import {
   ExitInterviewDrawer,
@@ -14,6 +14,8 @@ import {
   HrLoadingBlock,
   HrStatusBadge,
   HrToolbar,
+  HrUnderlineTabs,
+  type HrTabItem,
 } from "@/components/hr/hr-primitives";
 import { toast, SetupToastHost } from "@/components/hr/setup/setup-toast";
 import { PageHeader } from "@/components/layout/page-header";
@@ -36,12 +38,12 @@ import {
 
 type TabId = "resignations" | "workflow" | "clearance" | "exit_interview" | "fnf";
 
-const TABS: { id: TabId; label: string }[] = [
-  { id: "resignations", label: "Resignations" },
-  { id: "workflow", label: "Exit Workflow" },
-  { id: "clearance", label: "Clearance" },
-  { id: "exit_interview", label: "Exit Interview" },
-  { id: "fnf", label: "FNF Settlement" },
+const TABS: HrTabItem[] = [
+  { id: "resignations", label: "Resignations", icon: FileText },
+  { id: "workflow", label: "Exit Workflow", icon: GitBranch },
+  { id: "clearance", label: "Clearance", icon: ClipboardList },
+  { id: "exit_interview", label: "Exit Interview", icon: MessageSquare },
+  { id: "fnf", label: "FNF Settlement", icon: Wallet },
 ];
 
 function WorkflowStrip({ c }: { c: OffboardingCase }) {
@@ -214,7 +216,6 @@ export function OffboardingManagementPage() {
       <SetupToastHost />
       <PageHeader
         title="Offboarding"
-        description="Resignation, exit workflow, clearance checklist, exit interview, and full & final (FNF) settlement."
         actions={
           <HrToolbar onRefresh={() => void load()} loading={loading}>
             <Button
@@ -254,23 +255,7 @@ export function OffboardingManagementPage() {
         ]}
       />
 
-      <div className="flex flex-wrap gap-1 border-b border-border/60 pb-px">
-        {TABS.map((t) => (
-          <button
-            key={t.id}
-            type="button"
-            onClick={() => setTab(t.id)}
-            className={cn(
-              "cursor-pointer rounded-t-md px-3 py-2 text-xs font-medium transition-colors duration-200",
-              tab === t.id
-                ? "border-b-2 border-primary text-foreground"
-                : "text-muted-foreground hover:text-foreground",
-            )}
-          >
-            {t.label}
-          </button>
-        ))}
-      </div>
+      <HrUnderlineTabs tabs={TABS} value={tab} onChange={(id) => setTab(id as TabId)} />
 
       {tab !== "resignations" && cases.length > 0 ? (
         <div className="rounded-xl border border-border/70 bg-card px-4 py-3 shadow-sm">

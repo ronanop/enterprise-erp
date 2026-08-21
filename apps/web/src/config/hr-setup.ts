@@ -128,14 +128,6 @@ export const hrSetupSections: HrSetupSection[] = [
         codePrefix: "LOC",
       },
       {
-        id: "rooms",
-        title: "Meeting Room",
-        description: "Meeting rooms, conference halls, and training rooms with capacity & features",
-        source: "api",
-        apiPath: "/hr/training-rooms",
-        codePrefix: "ROOM",
-      },
-      {
         id: "entities",
         title: "Legal Entities",
         description: "Company / legal entities for employee assignment",
@@ -220,6 +212,16 @@ export const hrSetupSections: HrSetupSection[] = [
     ],
   },
 ];
+
+/** Standalone Meeting Room module (sidebar) — not an Admin Setup tab. */
+export const meetingRoomTab: HrSetupTab = {
+  id: "rooms",
+  title: "Meeting Room",
+  description: "Meeting rooms, conference halls, and training rooms with capacity & features",
+  source: "api",
+  apiPath: "/hr/training-rooms",
+  codePrefix: "ROOM",
+};
 
 export const setupSectionIcons: Record<HrSetupSectionId, LucideIcon> = {
   organization: Building2,

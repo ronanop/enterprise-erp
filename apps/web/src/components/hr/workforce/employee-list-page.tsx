@@ -183,7 +183,6 @@ export function EmployeeManagementPage() {
       <SetupToastHost />
       <PageHeader
         title="Employee Management"
-        description="Manage employee profiles, employment records, documents, and lifecycle."
         actions={
           <HrToolbar onRefresh={() => void load()} loading={loading}>
             <Link href="/hr/workforce/new">

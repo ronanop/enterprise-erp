@@ -513,7 +513,6 @@ export function SetupEntityPanel({
               {tab.source === "api" ? "Live API" : tab.source === "local" ? "Config store" : "Derived"}
             </Badge>
           </div>
-          <p className="mt-0.5 text-xs text-muted-foreground">{tab.description}</p>
         </div>
         <div className="flex flex-wrap gap-2">
           <Button type="button" variant="outline" size="sm" className="cursor-pointer" onClick={() => void load()}>
@@ -821,7 +820,6 @@ export function SetupEntityPanel({
               ? `View ${singularTabTitle(tab.title)}`
               : `Edit ${singularTabTitle(tab.title)}`
         }
-        description={tab.description}
         wide
         onClose={() => setMode(null)}
         footer={

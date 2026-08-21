@@ -8,6 +8,7 @@ import {
   BarChart,
   CartesianGrid,
   Cell,
+  LabelList,
   Pie,
   PieChart,
   ResponsiveContainer,
@@ -187,13 +188,17 @@ export function PremiumBarChart({
   data,
   formatValue,
   layout = "vertical",
+  showValues = false,
 }: {
   title: string;
   subtitle?: string;
   data: NamedCount[];
   formatValue?: FormatFn;
   layout?: "vertical" | "horizontal";
+  /** Draw count labels on each bar (good for location / head-count). */
+  showValues?: boolean;
 }) {
+  const fmt = formatValue ?? defaultFormat;
   const rows = useMemo(() => data.map((d) => ({ name: d.label, value: d.value })), [data]);
   if (!rows.length) {
     return (
@@ -204,16 +209,42 @@ export function PremiumBarChart({
   }
 
   const horizontal = layout === "horizontal";
+  const total = rows.reduce((s, r) => s + r.value, 0);
+  const chartHeight = Math.max(220, horizontal ? 48 + rows.length * 36 : 220);
+
   return (
-    <ChartShell title={title} subtitle={subtitle}>
-      <div className="h-[220px] w-full motion-safe:animate-in motion-safe:fade-in-0 motion-safe:duration-300">
+    <ChartShell
+      title={title}
+      subtitle={subtitle}
+      legend={
+        showValues ? (
+          <span className="rounded-full bg-muted px-2 py-0.5 font-mono text-[10px] tabular-nums text-muted-foreground">
+            Total {fmt(total)}
+          </span>
+        ) : undefined
+      }
+    >
+      <div
+        className="w-full motion-safe:animate-in motion-safe:fade-in-0 motion-safe:duration-300"
+        style={{ height: chartHeight }}
+      >
         <ResponsiveContainer width="100%" height="100%">
           <BarChart
             data={rows}
             layout={horizontal ? "vertical" : "horizontal"}
-            margin={{ top: 8, right: 8, left: horizontal ? 8 : -12, bottom: 0 }}
+            margin={{
+              top: 8,
+              right: showValues ? 36 : 8,
+              left: horizontal ? 4 : -12,
+              bottom: 0,
+            }}
           >
-            <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" horizontal={!horizontal} vertical={horizontal} />
+            <CartesianGrid
+              strokeDasharray="3 3"
+              stroke="var(--border)"
+              horizontal={!horizontal}
+              vertical={horizontal}
+            />
             {horizontal ? (
               <>
                 <XAxis
@@ -221,13 +252,14 @@ export function PremiumBarChart({
                   tick={{ fontSize: 11, fill: "var(--muted-foreground)" }}
                   axisLine={false}
                   tickLine={false}
-                  tickFormatter={(v) => formatValue?.(Number(v)) ?? String(v)}
+                  tickFormatter={(v) => fmt(Number(v))}
+                  allowDecimals={false}
                 />
                 <YAxis
                   type="category"
                   dataKey="name"
-                  width={88}
-                  tick={{ fontSize: 11, fill: "var(--muted-foreground)" }}
+                  width={96}
+                  tick={{ fontSize: 12, fill: "var(--foreground)", fontWeight: 500 }}
                   axisLine={false}
                   tickLine={false}
                 />
@@ -245,15 +277,24 @@ export function PremiumBarChart({
                   axisLine={false}
                   tickLine={false}
                   width={40}
-                  tickFormatter={(v) => formatValue?.(Number(v)) ?? String(v)}
+                  tickFormatter={(v) => fmt(Number(v))}
+                  allowDecimals={false}
                 />
               </>
             )}
-            <Tooltip content={<ChartTooltip formatValue={formatValue} />} cursor={{ fill: "var(--muted)", opacity: 0.45 }} />
-            <Bar dataKey="value" name="Value" radius={horizontal ? [0, 6, 6, 0] : [6, 6, 0, 0]} maxBarSize={36}>
+            <Tooltip content={<ChartTooltip formatValue={fmt} />} cursor={{ fill: "var(--muted)", opacity: 0.45 }} />
+            <Bar dataKey="value" name="Employees" radius={horizontal ? [0, 6, 6, 0] : [6, 6, 0, 0]} maxBarSize={36}>
               {rows.map((_, i) => (
                 <Cell key={rows[i].name} fill={HR_CHART_COLORS[i % HR_CHART_COLORS.length]} />
               ))}
+              {showValues ? (
+                <LabelList
+                  dataKey="value"
+                  position={horizontal ? "right" : "top"}
+                  formatter={(v) => fmt(Number(v ?? 0))}
+                  className="fill-foreground text-[11px] font-semibold tabular-nums"
+                />
+              ) : null}
             </Bar>
           </BarChart>
         </ResponsiveContainer>

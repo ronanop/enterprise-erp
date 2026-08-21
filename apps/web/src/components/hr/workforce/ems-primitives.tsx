@@ -4,6 +4,7 @@ import type { ReactNode } from "react";
 import { ChevronLeft, ChevronRight, User } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { HrUnderlineTabs, type HrTabItem } from "@/components/hr/hr-primitives";
 import { cn } from "@/lib/utils";
 
 export function EmsSkeleton({ rows = 6 }: { rows?: number }) {
@@ -146,28 +147,19 @@ export function EmsTabBar({
   active,
   onChange,
 }: {
-  tabs: { id: string; label: string }[];
+  tabs: HrTabItem[];
   active: string;
   onChange: (id: string) => void;
 }) {
   return (
-    <div className="erp-scroll flex gap-1 overflow-x-auto border-b border-border/70 pb-px">
-      {tabs.map((tab) => (
-        <button
-          key={tab.id}
-          type="button"
-          className={cn(
-            "cursor-pointer shrink-0 rounded-t-lg px-3 py-2 text-xs font-medium transition-colors",
-            active === tab.id
-              ? "border border-b-0 border-border/70 bg-card text-foreground"
-              : "text-muted-foreground hover:bg-muted/50 hover:text-foreground",
-          )}
-          onClick={() => onChange(tab.id)}
-        >
-          {tab.label}
-        </button>
-      ))}
-    </div>
+    <HrUnderlineTabs
+      embedded
+      size="sm"
+      tabs={tabs}
+      value={active}
+      onChange={onChange}
+      className="border-b border-border/70"
+    />
   );
 }
 

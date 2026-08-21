@@ -3,6 +3,7 @@
 import type { ReactNode } from "react";
 import { useEffect } from "react";
 import Link from "next/link";
+import type { LucideIcon } from "lucide-react";
 import { Inbox, RefreshCw } from "lucide-react";
 
 import { redirectToLogin } from "@/lib/auth";
@@ -225,6 +226,76 @@ export function HrTable({
           </tbody>
         </table>
       </div>
+    </div>
+  );
+}
+
+export type HrTabItem = {
+  id: string;
+  label: string;
+  icon?: LucideIcon;
+  badge?: number | string;
+};
+
+/** Underline tabs with optional icon + label (uses theme primary, not hard-coded blue). */
+export function HrUnderlineTabs({
+  tabs,
+  value,
+  onChange,
+  className,
+  trailing,
+  embedded,
+  size = "md",
+}: {
+  tabs: HrTabItem[];
+  value: string;
+  onChange: (id: string) => void;
+  className?: string;
+  trailing?: ReactNode;
+  /** Skip outer card chrome when tabs sit inside another container. */
+  embedded?: boolean;
+  size?: "sm" | "md";
+}) {
+  const pad = size === "sm" ? "px-2.5 py-2 text-xs" : "px-3 py-2.5 text-sm sm:px-4";
+  const iconSize = size === "sm" ? "size-3.5" : "size-4";
+
+  return (
+    <div
+      className={cn(
+        "flex flex-wrap items-center justify-between gap-2",
+        !embedded && "rounded-xl border border-border/70 bg-card px-2 shadow-sm",
+        className,
+      )}
+    >
+      <div className="flex min-w-0 items-center gap-0.5 overflow-x-auto overflow-y-hidden">
+        {tabs.map((t) => {
+          const active = value === t.id;
+          const Icon = t.icon;
+          return (
+            <button
+              key={t.id}
+              type="button"
+              onClick={() => onChange(t.id)}
+              className={cn(
+                "-mb-px flex shrink-0 cursor-pointer items-center gap-2 border-b-[3px] transition-colors",
+                pad,
+                active
+                  ? "border-primary font-semibold text-primary"
+                  : "border-transparent font-normal text-muted-foreground hover:text-foreground",
+              )}
+            >
+              {Icon ? <Icon className={cn(iconSize, "shrink-0")} /> : null}
+              <span className="whitespace-nowrap">{t.label}</span>
+              {t.badge != null && t.badge !== 0 ? (
+                <span className="rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium text-primary">
+                  {t.badge}
+                </span>
+              ) : null}
+            </button>
+          );
+        })}
+      </div>
+      {trailing ? <div className="flex shrink-0 flex-wrap items-center gap-2 pb-1">{trailing}</div> : null}
     </div>
   );
 }

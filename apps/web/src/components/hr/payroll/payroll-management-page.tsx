@@ -2,12 +2,21 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  Banknote,
+  BarChart3,
+  CheckCircle,
+  ClipboardList,
   Download,
   FileText,
+  Gift,
+  LayoutDashboard,
   Lock,
   Plus,
+  Receipt,
   Unlock,
   Upload,
+  Users,
+  Wallet,
 } from "lucide-react";
 
 import {
@@ -26,6 +35,8 @@ import {
   HrEmptyState,
   HrStatusBadge,
   HrToolbar,
+  HrUnderlineTabs,
+  type HrTabItem,
 } from "@/components/hr/hr-primitives";
 import { toast, SetupToastHost } from "@/components/hr/setup/setup-toast";
 import { EmsPagination, EmsSkeleton } from "@/components/hr/workforce/ems-primitives";
@@ -66,7 +77,7 @@ import {
   loadHrMasterDirectory,
   type HrMasterOption,
 } from "@/services/hr-master-connector";
-import type { PayslipRecord, SalaryStructure } from "@/types/payroll-management";
+import type { PayslipRecord, SalaryStructure, EmployeeSalary } from "@/types/payroll-management";
 import {
   emptyPayrollFilters,
   RUN_STATUS_LABELS,
@@ -91,20 +102,20 @@ type Tab =
   | "reports"
   | "audit";
 
-const TABS: { id: Tab; label: string }[] = [
-  { id: "dashboard", label: "Dashboard" },
-  { id: "structures", label: "Salary Structures" },
-  { id: "employees", label: "Employee Salary" },
-  { id: "process", label: "Monthly Process" },
-  { id: "approvals", label: "Approvals" },
-  { id: "locks", label: "Month Lock" },
-  { id: "revisions", label: "Revisions" },
-  { id: "bonuses", label: "Bonuses" },
-  { id: "reimbursements", label: "Reimbursements" },
-  { id: "loans", label: "Loans" },
-  { id: "payslips", label: "Payslips" },
-  { id: "reports", label: "Reports" },
-  { id: "audit", label: "Audit" },
+const TABS: { id: Tab; label: string; icon: HrTabItem["icon"] }[] = [
+  { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
+  { id: "structures", label: "Salary Structures", icon: Wallet },
+  { id: "employees", label: "Employee Salary", icon: Users },
+  { id: "process", label: "Monthly Process", icon: ClipboardList },
+  { id: "approvals", label: "Approvals", icon: CheckCircle },
+  { id: "locks", label: "Month Lock", icon: Lock },
+  { id: "revisions", label: "Revisions", icon: FileText },
+  { id: "bonuses", label: "Bonuses", icon: Gift },
+  { id: "reimbursements", label: "Reimbursements", icon: Receipt },
+  { id: "loans", label: "Loans", icon: Banknote },
+  { id: "payslips", label: "Payslips", icon: FileText },
+  { id: "reports", label: "Reports", icon: BarChart3 },
+  { id: "audit", label: "Audit", icon: ClipboardList },
 ];
 
 function ApprovalTimeline({ status }: { status: string }) {
@@ -172,6 +183,7 @@ export function PayrollManagementPage() {
   const [lockOpen, setLockOpen] = useState(false);
   const [unlockOpen, setUnlockOpen] = useState(false);
   const [assignOpen, setAssignOpen] = useState(false);
+  const [editingSalary, setEditingSalary] = useState<EmployeeSalary | null>(null);
   const [bonusOpen, setBonusOpen] = useState(false);
   const [adjOpen, setAdjOpen] = useState(false);
   const [reimbOpen, setReimbOpen] = useState(false);
@@ -248,7 +260,6 @@ export function PayrollManagementPage() {
       <SetupToastHost />
       <PageHeader
         title="Payroll Management"
-        description="Salary processing with attendance-based pay (present, leave, absent) and selectable pay cycles (e.g. 20th to next 20th)."
         actions={
           <HrToolbar onRefresh={() => void load()} loading={loading}>
             <Button size="sm" className="cursor-pointer" onClick={() => setRunOpen(true)}>
@@ -335,23 +346,7 @@ export function PayrollManagementPage() {
         ))}
       </div>
 
-      <div className="flex flex-wrap gap-1 border-b border-border/60 pb-px">
-        {TABS.map((t) => (
-          <button
-            key={t.id}
-            type="button"
-            onClick={() => setTab(t.id)}
-            className={cn(
-              "cursor-pointer rounded-t-md px-3 py-2 text-xs font-medium transition-colors duration-200",
-              tab === t.id
-                ? "border-b-2 border-primary text-foreground"
-                : "text-muted-foreground hover:text-foreground",
-            )}
-          >
-            {t.label}
-          </button>
-        ))}
-      </div>
+      <HrUnderlineTabs tabs={TABS} value={tab} onChange={(id) => setTab(id as Tab)} size="sm" />
 
       {loading && !dir ? (
         <EmsSkeleton rows={6} />
@@ -560,7 +555,14 @@ export function PayrollManagementPage() {
 
           {tab === "employees" ? (
             <section className="space-y-3">
-              <Button size="sm" className="cursor-pointer" onClick={() => setAssignOpen(true)}>
+              <Button
+                size="sm"
+                className="cursor-pointer"
+                onClick={() => {
+                  setEditingSalary(null);
+                  setAssignOpen(true);
+                }}
+              >
                 <Plus className="size-3.5" />
                 Assign Salary
               </Button>
@@ -588,7 +590,15 @@ export function PayrollManagementPage() {
                     </thead>
                     <tbody>
                       {dir?.salaries.map((s) => (
-                        <tr key={s.id} className="border-b border-border/50 hover:bg-muted/30">
+                        <tr
+                          key={s.id}
+                          className="cursor-pointer border-b border-border/50 hover:bg-muted/30"
+                          onClick={() => {
+                            setEditingSalary(s);
+                            setAssignOpen(true);
+                          }}
+                          title="Click to edit salary"
+                        >
                           <td className="px-3 py-2 font-mono text-xs">{s.employeeId}</td>
                           <td className="px-3 py-2 font-medium">{s.employeeName}</td>
                           <td className="px-3 py-2">{s.structureName}</td>
@@ -1514,12 +1524,18 @@ export function PayrollManagementPage() {
       />
       <AssignSalaryDrawer
         open={assignOpen}
-        onClose={() => setAssignOpen(false)}
+        onClose={() => {
+          setAssignOpen(false);
+          setEditingSalary(null);
+        }}
         structures={dir?.structures ?? []}
         employees={employees}
+        initial={editingSalary}
         onSubmit={async (input) => {
+          const wasEdit = Boolean(editingSalary);
           await assignEmployeeSalary(input);
-          toast("Salary assigned");
+          toast(wasEdit ? "Salary updated" : "Salary assigned");
+          setEditingSalary(null);
           refresh();
         }}
       />

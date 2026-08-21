@@ -41,6 +41,7 @@ export type HrDashboardStats = {
 export type HrDashboardCharts = {
   employeeGrowth: NamedCount[];
   departmentWise: NamedCount[];
+  locationWise: NamedCount[];
   genderDiversity: NamedCount[];
   ageDistribution: NamedCount[];
   hiringFunnel: NamedCount[];

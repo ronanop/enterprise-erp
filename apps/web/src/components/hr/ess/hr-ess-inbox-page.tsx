@@ -28,7 +28,6 @@ type StatusFilter =
   | "all"
   | "pending"
   | "submitted"
-  | "manager_approved"
   | "approved"
   | "rejected";
 
@@ -44,7 +43,6 @@ const STATUS_FILTERS: { id: StatusFilter; label: string }[] = [
   { id: "all", label: "All Status" },
   { id: "pending", label: "Pending" },
   { id: "submitted", label: "Submitted" },
-  { id: "manager_approved", label: "Reporting Manager OK" },
   { id: "approved", label: "Approved" },
   { id: "rejected", label: "Rejected" },
 ];
@@ -61,7 +59,6 @@ function matchesStatus(item: HrEssInboxItem, status: StatusFilter): boolean {
   if (status === "all") return true;
   if (status === "pending") return item.pending;
   if (status === "submitted") return st === "submitted";
-  if (status === "manager_approved") return st === "manager_approved";
   if (status === "approved") return st === "approved";
   if (status === "rejected") return st === "rejected";
   return true;
@@ -135,10 +132,7 @@ export function HrEssInboxPage() {
   return (
     <div className="space-y-5">
       <SetupToastHost />
-      <PageHeader
-        title="Employee Requests"
-        description="Employee requests and approvals — leave, comp off, attendance regularization, OT, and on-duty. Filter by type and status."
-      />
+      <PageHeader title="Employee Requests" />
 
       {authBlocked ? <HrAuthBanner /> : null}
 
@@ -203,9 +197,6 @@ export function HrEssInboxPage() {
             <RefreshCw className={cn("size-3.5", loading && "animate-spin")} />
             Refresh
           </Button>
-          <p className="w-full text-right text-[11px] text-muted-foreground sm:w-auto sm:pl-1">
-            {filtered.length} / {items.length}
-          </p>
         </div>
       </div>
 
