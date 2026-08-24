@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Pencil, Plus, Trash2 } from "lucide-react";
+import { Eye, Pencil, Plus, Trash2 } from "lucide-react";
 
 import {
   SetupDrawer,
@@ -22,6 +22,7 @@ import {
 export function OnboardingPoliciesPanel() {
   const [rows, setRows] = useState<OnboardingPolicyDoc[]>([]);
   const [open, setOpen] = useState(false);
+  const [mode, setMode] = useState<"view" | "edit" | "create">("create");
   const [editing, setEditing] = useState<OnboardingPolicyDoc | null>(null);
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
@@ -38,6 +39,7 @@ export function OnboardingPoliciesPanel() {
 
   function openCreate() {
     setEditing(null);
+    setMode("create");
     setTitle("");
     setBody("");
     setSortOrder(String((rows.length || 0) + 1));
@@ -45,8 +47,19 @@ export function OnboardingPoliciesPanel() {
     setOpen(true);
   }
 
+  function openView(row: OnboardingPolicyDoc) {
+    setEditing(row);
+    setMode("view");
+    setTitle(row.title);
+    setBody(row.body);
+    setSortOrder(String(row.sortOrder));
+    setStatus(row.status);
+    setOpen(true);
+  }
+
   function openEdit(row: OnboardingPolicyDoc) {
     setEditing(row);
+    setMode("edit");
     setTitle(row.title);
     setBody(row.body);
     setSortOrder(String(row.sortOrder));
@@ -72,7 +85,7 @@ export function OnboardingPoliciesPanel() {
       sortOrder: Number(sortOrder) || 0,
       status,
     });
-    toast(editing ? "Policy updated" : "Policy added", "success");
+    toast(editing && mode === "edit" ? "Policy updated" : "Policy added", "success");
     setOpen(false);
     reload();
   }
@@ -135,6 +148,16 @@ export function OnboardingPoliciesPanel() {
                         size="sm"
                         variant="ghost"
                         className="h-7 cursor-pointer px-2"
+                        title="View"
+                        onClick={() => openView(row)}
+                      >
+                        <Eye className="size-3.5" />
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="h-7 cursor-pointer px-2"
+                        title="Edit"
                         onClick={() => openEdit(row)}
                       >
                         <Pencil className="size-3.5" />
@@ -143,6 +166,7 @@ export function OnboardingPoliciesPanel() {
                         size="sm"
                         variant="ghost"
                         className="h-7 cursor-pointer px-2 text-destructive"
+                        title="Delete"
                         onClick={() => remove(row)}
                       >
                         <Trash2 className="size-3.5" />
@@ -159,33 +183,62 @@ export function OnboardingPoliciesPanel() {
       <SetupDrawer
         open={open}
         onClose={() => setOpen(false)}
-        title={editing ? "Edit policy" : "Add policy"}
-        description="This text is shown when the candidate opens the policy on the onboarding portal."
+        title={
+          mode === "view" ? "View policy" : mode === "edit" ? "Edit policy" : "Add policy"
+        }
+        description={
+          mode === "view"
+            ? "Read-only preview of policy content shown on the onboarding portal."
+            : "This text is shown when the candidate opens the policy on the onboarding portal."
+        }
         footer={
-          <>
-            <Button variant="outline" size="sm" className="cursor-pointer" onClick={() => setOpen(false)}>
-              Cancel
-            </Button>
-            <Button size="sm" className="cursor-pointer" onClick={save}>
-              Save
-            </Button>
-          </>
+          mode === "view" ? (
+            <>
+              <Button variant="outline" size="sm" className="cursor-pointer" onClick={() => setOpen(false)}>
+                Close
+              </Button>
+              <Button
+                size="sm"
+                className="cursor-pointer"
+                onClick={() => {
+                  if (editing) openEdit(editing);
+                }}
+              >
+                Edit
+              </Button>
+            </>
+          ) : (
+            <>
+              <Button variant="outline" size="sm" className="cursor-pointer" onClick={() => setOpen(false)}>
+                Cancel
+              </Button>
+              <Button size="sm" className="cursor-pointer" onClick={save}>
+                Save
+              </Button>
+            </>
+          )
         }
       >
         <div className="space-y-3">
           <SetupField label="Title" required>
-            <SetupInput value={title} onChange={(e) => setTitle(e.target.value)} />
+            <SetupInput
+              value={title}
+              readOnly={mode === "view"}
+              onChange={(e) => setTitle(e.target.value)}
+            />
           </SetupField>
           <SetupField label="Sort order">
             <SetupInput
               type="number"
               value={sortOrder}
+              readOnly={mode === "view"}
               onChange={(e) => setSortOrder(e.target.value)}
             />
           </SetupField>
           <SetupField label="Status">
             <SetupSelect
               value={status}
+              disabled={mode === "view"}
               onChange={(e) => setStatus(e.target.value as "active" | "inactive")}
             >
               <option value="active">Active</option>
@@ -193,7 +246,13 @@ export function OnboardingPoliciesPanel() {
             </SetupSelect>
           </SetupField>
           <SetupField label="Policy content" required hint="Shown in the portal policy viewer">
-            <SetupTextarea value={body} onChange={(e) => setBody(e.target.value)} rows={12} />
+            {mode === "view" ? (
+              <div className="max-h-80 overflow-y-auto rounded-lg border border-border/70 bg-muted/20 p-3 text-sm whitespace-pre-wrap">
+                {body || "—"}
+              </div>
+            ) : (
+              <SetupTextarea value={body} onChange={(e) => setBody(e.target.value)} rows={12} />
+            )}
           </SetupField>
         </div>
       </SetupDrawer>

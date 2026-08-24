@@ -164,20 +164,7 @@ export const hrSetupSections: HrSetupSection[] = [
         description: "Reporting managers derived from roles",
         source: "derived",
       },
-      {
-        id: "document-types",
-        title: "Document Types",
-        description: "KYC catalog — drives onboarding uploads",
-        source: "local",
-        codePrefix: "DOC",
-      },
-      {
-        id: "onboarding-policies",
-        title: "Onboarding Policies",
-        description: "Policy text shown to candidates before signature",
-        source: "local",
-        codePrefix: "POL",
-      },
+      // Document Types & Onboarding Policies moved to EDoc (/hr/edoc)
     ],
   },
   {
@@ -186,13 +173,14 @@ export const hrSetupSections: HrSetupSection[] = [
     description: "Policies, types, and holidays",
     icon: CalendarDays,
     tabs: [
-      {
-        id: "leave-policies",
-        title: "Leave Policies",
-        description: "Accrual and approval rules",
-        source: "local",
-        codePrefix: "LP",
-      },
+      // Leave Policies — hidden for now (managed elsewhere / future release)
+      // {
+      //   id: "leave-policies",
+      //   title: "Leave Policies",
+      //   description: "Accrual and approval rules",
+      //   source: "local",
+      //   codePrefix: "LP",
+      // },
       {
         id: "leave-types",
         title: "Leave Types",

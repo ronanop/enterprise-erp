@@ -22,7 +22,6 @@ import { HrStatusBadge, HrUnderlineTabs, type HrTabItem } from "@/components/hr/
 import {
   getSetupSection,
   getSetupTab,
-  hrSetupSections,
   meetingRoomTab,
   setupTabIcons,
   type HrSetupTab,
@@ -1534,25 +1533,6 @@ export function HrSetupCenter() {
       </div>
 
       <div className="space-y-4">
-        <div className="rounded-xl border border-border/70 bg-card px-2 pt-2 shadow-sm">
-          <p className="px-2 pb-1.5 text-[10px] font-medium tracking-[0.14em] text-muted-foreground uppercase">
-            Configuration
-          </p>
-          <HrUnderlineTabs
-            embedded
-            size="sm"
-            tabs={hrSetupSections.map(
-              (s): HrTabItem => ({
-                id: s.id,
-                label: s.title,
-                icon: s.icon,
-              }),
-            )}
-            value={section.id}
-            onChange={(id) => go(id)}
-          />
-        </div>
-
         <div className="w-full min-w-0 space-y-4">
           <HrUnderlineTabs
             embedded

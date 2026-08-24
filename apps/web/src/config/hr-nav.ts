@@ -124,7 +124,7 @@ export const hrNavGroups: HrNavGroup[] = [
         title: "EDoc",
         href: "/hr/edoc",
         icon: FileStack,
-        description: "Employee documents, policies & acceptance records",
+        description: "Employee docs, document types & onboarding policies",
       },
       {
         title: "Org Setup",

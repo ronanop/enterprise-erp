@@ -1,8 +1,10 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { FileText, Search, Shield, Users } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import { CheckCircle2, FileText, FolderTree, Search, Shield, Users } from "lucide-react";
 
+import { EdocDocumentTypesPanel } from "@/components/hr/edoc/edoc-document-types-panel";
+import { OnboardingPoliciesPanel } from "@/components/hr/setup/onboarding-policies-panel";
 import { PageHeader } from "@/components/layout/page-header";
 import { HrLoadingBlock, HrUnderlineTabs, type HrTabItem } from "@/components/hr/hr-primitives";
 import { SetupToastHost, toast } from "@/components/hr/setup/setup-toast";
@@ -11,15 +13,67 @@ import { cn } from "@/lib/utils";
 import { loadOnboardingDirectory } from "@/services/onboarding-management-service";
 import { listOnboardingPolicies } from "@/services/onboarding-policies-service";
 import { loadEmployeeDirectory } from "@/services/employee-management-service";
+import { loadOffboardingCases } from "@/services/offboarding-service";
 import type { OnboardingCase, OnboardingDocument } from "@/types/onboarding-management";
 import type { EmployeeRecord } from "@/types/employee-management";
+import type { ExitDocument } from "@/types/offboarding";
 
-type EdocTab = "employees" | "policies" | "other";
+type EdocTab = "employees" | "document-types" | "onboarding-policies" | "other";
 
 const TABS: HrTabItem[] = [
   { id: "employees", label: "Employee Docs", icon: Users },
-  { id: "policies", label: "Policies", icon: Shield },
+  { id: "document-types", label: "Document Types", icon: FolderTree },
+  { id: "onboarding-policies", label: "Onboarding Policies", icon: Shield },
   { id: "other", label: "Other", icon: FileText },
+];
+
+type DocSectionId =
+  | "photo"
+  | "resume"
+  | "education"
+  | "bank"
+  | "employment_letters"
+  | "other"
+  | "policies"
+  | "offboarding";
+
+type DocSectionDef = {
+  id: DocSectionId;
+  title: string;
+  hint: string;
+};
+
+const DOC_SECTIONS: DocSectionDef[] = [
+  {
+    id: "photo",
+    title: "Passport photo",
+    hint: "Profile / passport-size photograph",
+  },
+  {
+    id: "resume",
+    title: "Resume",
+    hint: "CV / resume uploaded at onboarding",
+  },
+  {
+    id: "education",
+    title: "Education",
+    hint: "10th, 12th and other education certificates",
+  },
+  {
+    id: "bank",
+    title: "Bank details",
+    hint: "Cancelled cheque / passbook proof",
+  },
+  {
+    id: "employment_letters",
+    title: "Payslips & letters",
+    hint: "Salary slips, relieving and experience letters",
+  },
+  {
+    id: "other",
+    title: "Other documents",
+    hint: "Certificates and unclassified uploads",
+  },
 ];
 
 type EmployeeDocBundle = {
@@ -34,12 +88,15 @@ type EmployeeDocBundle = {
   policiesAcceptedAt?: string;
   signature?: string;
   signatureFileName?: string;
+  signatureDataUrl?: string;
   caseCode?: string;
+  offboardingDocs: ExitDocument[];
+  offboardingCaseCode?: string;
 };
 
 function docsFromEmployee(emp: EmployeeRecord): OnboardingDocument[] {
   const ext = emp.extension?.documents ?? [];
-  return ext.map((d, i) => ({
+  const docs: OnboardingDocument[] = ext.map((d, i) => ({
     id: d.id || `emp-doc-${i}`,
     kind: (d.documentType as OnboardingDocument["kind"]) || "other",
     typeCode: d.documentType,
@@ -48,6 +105,96 @@ function docsFromEmployee(emp: EmployeeRecord): OnboardingDocument[] {
     verifyStatus: "pending" as const,
     fileDataUrl: d.fileDataUrl,
   }));
+
+  const photoUrl =
+    emp.profilePhotoDataUrl || emp.extension?.personal?.profilePhotoDataUrl;
+  if (photoUrl && !docs.some((d) => d.kind === "photo" || d.typeCode === "DOC-PHOTO")) {
+    docs.unshift({
+      id: `photo-${emp.id}`,
+      kind: "photo",
+      typeCode: "DOC-PHOTO",
+      fileName: "Passport photo",
+      uploadedAt: emp.extension?.updatedAt || "",
+      verifyStatus: "verified",
+      fileDataUrl: photoUrl,
+      mimeType: "image/jpeg",
+    });
+  }
+  return docs;
+}
+
+function normalizeBlob(d: OnboardingDocument): string {
+  return `${d.kind || ""} ${d.typeCode || ""} ${d.fileName || ""}`.toLowerCase();
+}
+
+function matchSection(d: OnboardingDocument): DocSectionId {
+  const code = (d.typeCode || "").toUpperCase();
+  const kind = (d.kind || "").toLowerCase();
+  const blob = normalizeBlob(d);
+
+  if (kind === "photo" || code === "DOC-PHOTO" || blob.includes("passport photo")) {
+    return "photo";
+  }
+  if (kind === "resume" || code === "DOC-RESUME" || blob.includes("resume") || blob.includes("cv")) {
+    return "resume";
+  }
+  if (
+    kind === "education" ||
+    code === "DOC-10TH" ||
+    code === "DOC-12TH" ||
+    code === "DOC-GRAD" ||
+    code.startsWith("DOC-10") ||
+    code.startsWith("DOC-12") ||
+    blob.includes("marksheet") ||
+    blob.includes("education") ||
+    blob.includes("degree")
+  ) {
+    return "education";
+  }
+  if (
+    kind === "cancelled_cheque" ||
+    kind === "bank_details" ||
+    code === "DOC-CHEQUE" ||
+    blob.includes("cheque") ||
+    blob.includes("passbook") ||
+    blob.includes("bank")
+  ) {
+    return "bank";
+  }
+  if (
+    kind === "salary_slips" ||
+    kind === "relieving_letter" ||
+    kind === "appointment_letter" ||
+    kind === "experience" ||
+    kind === "previous_employer" ||
+    code === "DOC-SLIPS" ||
+    code === "DOC-REL" ||
+    code === "DOC-APPT" ||
+    blob.includes("salary") ||
+    blob.includes("relieving") ||
+    blob.includes("experience") ||
+    blob.includes("appointment")
+  ) {
+    return "employment_letters";
+  }
+  return "other";
+}
+
+function groupDocs(docs: OnboardingDocument[]): Record<DocSectionId, OnboardingDocument[]> {
+  const empty: Record<DocSectionId, OnboardingDocument[]> = {
+    photo: [],
+    resume: [],
+    education: [],
+    bank: [],
+    employment_letters: [],
+    other: [],
+    policies: [],
+    offboarding: [],
+  };
+  for (const d of docs) {
+    empty[matchSection(d)].push(d);
+  }
+  return empty;
 }
 
 export function EdocManagementPage() {
@@ -62,9 +209,10 @@ export function EdocManagementPage() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [dir, empDir] = await Promise.all([
+      const [dir, empDir, offboarding] = await Promise.all([
         loadOnboardingDirectory().catch(() => ({ cases: [] as OnboardingCase[] })),
         loadEmployeeDirectory().catch(() => ({ records: [] as EmployeeRecord[] })),
+        loadOffboardingCases().catch(() => [] as Awaited<ReturnType<typeof loadOffboardingCases>>),
       ]);
       setPolicyCatalog(listOnboardingPolicies(true));
       const employees = empDir.records ?? [];
@@ -89,6 +237,7 @@ export function EdocManagementPage() {
           employeeId: emp.id,
           documents: docsFromEmployee(emp),
           policiesAccepted: [],
+          offboardingDocs: [],
         };
         byEmpId.set(emp.id, bundle);
         if (email) byEmail.set(email, bundle);
@@ -105,6 +254,7 @@ export function EdocManagementPage() {
         const acceptedAt = c.portal?.policies?.acceptedAt;
         const signature = c.portal?.policies?.signature;
         const signatureFileName = c.portal?.policies?.signatureFileName;
+        const signatureDataUrl = c.portal?.policies?.signatureDataUrl;
 
         if (existing) {
           const seen = new Set(existing.documents.map((d) => d.id));
@@ -115,6 +265,7 @@ export function EdocManagementPage() {
           if (acceptedAt) existing.policiesAcceptedAt = acceptedAt;
           if (signature) existing.signature = signature;
           if (signatureFileName) existing.signatureFileName = signatureFileName;
+          if (signatureDataUrl) existing.signatureDataUrl = signatureDataUrl;
           existing.caseCode = c.caseCode;
         } else {
           const bundle: EmployeeDocBundle = {
@@ -129,9 +280,27 @@ export function EdocManagementPage() {
             policiesAcceptedAt: acceptedAt,
             signature,
             signatureFileName,
+            signatureDataUrl,
             caseCode: c.caseCode,
+            offboardingDocs: [],
           };
           bundlesPush(byEmail, byEmpId, bundle);
+        }
+      }
+
+      for (const ob of offboarding) {
+        const docs = ob.documents ?? [];
+        if (!docs.length) continue;
+        const existing =
+          (ob.employeeId && byEmpId.get(ob.employeeId)) ||
+          [...byEmpId.values(), ...byEmail.values()].find(
+            (b) =>
+              b.code.toLowerCase() === (ob.employeeCode || "").toLowerCase() ||
+              b.name.toLowerCase() === (ob.employeeName || "").toLowerCase(),
+          );
+        if (existing) {
+          existing.offboardingDocs = [...existing.offboardingDocs, ...docs];
+          existing.offboardingCaseCode = ob.documentNumber;
         }
       }
 
@@ -169,6 +338,11 @@ export function EdocManagementPage() {
     [bundles, selectedKey],
   );
 
+  const grouped = useMemo(
+    () => (selected ? groupDocs(selected.documents) : null),
+    [selected],
+  );
+
   const policyTitle = (id: string) =>
     policyCatalog.find((p) => p.id === id)?.title ?? id.replace(/_/g, " ");
 
@@ -183,38 +357,17 @@ export function EdocManagementPage() {
         onChange={(id) => setTab(id as EdocTab)}
       />
 
-      {loading ? (
-        <HrLoadingBlock label="Loading documents…" />
-      ) : tab === "policies" ? (
-        <section className="rounded-xl border border-border/70 bg-card p-4 shadow-sm">
-          <h2 className="text-sm font-semibold">Policy library</h2>
-          <p className="mt-1 text-xs text-muted-foreground">
-            Managed in Org Setup → Employment → Onboarding Policies. Active policies appear on the
-            candidate portal.
-          </p>
-          <ul className="mt-3 space-y-2">
-            {policyCatalog.map((p) => (
-              <li
-                key={p.id}
-                className="rounded-lg border border-border/60 px-3 py-2 text-sm"
-              >
-                <div className="flex items-center justify-between gap-2">
-                  <span className="font-medium">{p.title}</span>
-                  <span className="text-[10px] uppercase text-muted-foreground">{p.status}</span>
-                </div>
-                <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">{p.body}</p>
-              </li>
-            ))}
-            {policyCatalog.length === 0 ? (
-              <p className="text-xs text-muted-foreground">No policies configured yet.</p>
-            ) : null}
-          </ul>
-        </section>
+      {tab === "document-types" ? (
+        <EdocDocumentTypesPanel />
+      ) : tab === "onboarding-policies" ? (
+        <OnboardingPoliciesPanel />
       ) : tab === "other" ? (
         <section className="rounded-xl border border-border/70 bg-card p-4 shadow-sm text-sm text-muted-foreground">
           Other organisational document packs (contracts, templates) can be added here. Employee KYC
           and policy acceptance are under Employee Docs.
         </section>
+      ) : loading ? (
+        <HrLoadingBlock label="Loading documents…" />
       ) : (
         <div className="grid gap-3 lg:grid-cols-[minmax(0,18rem)_1fr]">
           <aside className="rounded-xl border border-border/70 bg-card shadow-sm">
@@ -252,6 +405,7 @@ export function EdocManagementPage() {
                         {b.code}
                         {b.documents.length ? ` · ${b.documents.length} docs` : ""}
                         {b.policiesAccepted.length ? ` · ${b.policiesAccepted.length} policies` : ""}
+                        {b.offboardingDocs.length ? ` · exit` : ""}
                       </p>
                     </button>
                   </li>
@@ -260,10 +414,10 @@ export function EdocManagementPage() {
             </ul>
           </aside>
 
-          <section className="min-w-0 space-y-3 rounded-xl border border-border/70 bg-card p-4 shadow-sm">
-            {!selected ? (
+          <section className="erp-scroll max-h-[calc(100vh-14rem)] min-w-0 space-y-3 overflow-y-auto rounded-xl border border-border/70 bg-card p-4 shadow-sm">
+            {!selected || !grouped ? (
               <p className="py-12 text-center text-sm text-muted-foreground">
-                Select an employee to view documents and accepted policies.
+                Select an employee to view documents section-wise.
               </p>
             ) : (
               <>
@@ -273,76 +427,134 @@ export function EdocManagementPage() {
                     {selected.code}
                     {selected.email ? ` · ${selected.email}` : ""}
                     {selected.caseCode ? ` · Onboarding ${selected.caseCode}` : ""}
+                    {selected.offboardingCaseCode
+                      ? ` · Exit ${selected.offboardingCaseCode}`
+                      : ""}
                   </p>
                 </div>
 
-                <div>
-                  <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                    Collected documents
-                  </h3>
-                  {selected.documents.length === 0 ? (
-                    <p className="mt-2 text-xs text-muted-foreground">No documents on file.</p>
-                  ) : (
-                    <ul className="mt-2 space-y-1.5">
-                      {selected.documents.map((d) => (
-                        <li
-                          key={d.id}
-                          className="flex items-center justify-between gap-2 rounded-lg border border-border/60 px-3 py-2 text-sm"
-                        >
-                          <div className="min-w-0">
-                            <p className="truncate font-medium">{d.fileName}</p>
-                            <p className="text-[10px] text-muted-foreground">
-                              {d.kind}
-                              {d.uploadedAt ? ` · ${String(d.uploadedAt).slice(0, 10)}` : ""}
-                              {d.verifyStatus ? ` · ${d.verifyStatus}` : ""}
-                            </p>
-                          </div>
-                          {d.fileDataUrl ? (
-                            <button
-                              type="button"
-                              className="shrink-0 cursor-pointer text-xs font-medium text-primary underline-offset-2 hover:underline"
-                              onClick={() => setPreviewDoc(d)}
-                            >
-                              View
-                            </button>
-                          ) : null}
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </div>
+                {DOC_SECTIONS.map((sec) => {
+                  const rows = grouped[sec.id];
+                  const hideEmptyOther = sec.id === "other" && rows.length === 0;
+                  if (hideEmptyOther) return null;
+                  return (
+                    <DocSectionCard
+                      key={sec.id}
+                      title={sec.title}
+                      hint={sec.hint}
+                      count={rows.length}
+                    >
+                      {rows.length === 0 ? (
+                        <p className="text-xs text-muted-foreground">Not uploaded</p>
+                      ) : (
+                        <ul className="space-y-1.5">
+                          {rows.map((d) => (
+                            <DocRow
+                              key={d.id}
+                              fileName={d.fileName}
+                              meta={[
+                                d.kind,
+                                d.uploadedAt ? String(d.uploadedAt).slice(0, 10) : "",
+                                d.verifyStatus || "",
+                              ]
+                                .filter(Boolean)
+                                .join(" · ")}
+                              previewable={Boolean(d.fileDataUrl)}
+                              thumbUrl={
+                                d.kind === "photo" || d.mimeType?.startsWith("image/")
+                                  ? d.fileDataUrl
+                                  : undefined
+                              }
+                              onView={() => setPreviewDoc(d)}
+                            />
+                          ))}
+                        </ul>
+                      )}
+                    </DocSectionCard>
+                  );
+                })}
 
-                <div>
-                  <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                    Policies accepted at onboarding
-                  </h3>
+                <DocSectionCard
+                  title="Policies accepted"
+                  hint="Policies agreed and signed during onboarding"
+                  count={selected.policiesAccepted.length}
+                >
                   {selected.policiesAccepted.length === 0 ? (
-                    <p className="mt-2 text-xs text-muted-foreground">
+                    <p className="text-xs text-muted-foreground">
                       No policy acceptance recorded for this person.
                     </p>
                   ) : (
-                    <ul className="mt-2 space-y-1.5">
+                    <ul className="space-y-1.5">
                       {selected.policiesAccepted.map((id) => (
                         <li
                           key={id}
-                          className="rounded-lg border border-border/60 px-3 py-2 text-sm"
+                          className="flex items-start gap-2 rounded-lg border border-border/60 px-3 py-2 text-sm"
                         >
-                          {policyTitle(id)}
+                          <CheckCircle2 className="mt-0.5 size-3.5 shrink-0 text-emerald-600" />
+                          <span>{policyTitle(id)}</span>
                         </li>
                       ))}
                     </ul>
                   )}
                   {selected.policiesAcceptedAt ? (
-                    <p className="mt-1 text-[10px] text-muted-foreground">
+                    <p className="mt-2 text-[10px] text-muted-foreground">
                       Accepted {selected.policiesAcceptedAt.slice(0, 19).replace("T", " ")}
                     </p>
                   ) : null}
-                  {selected.signature || selected.signatureFileName ? (
-                    <p className="mt-2 text-xs text-muted-foreground">
-                      Signature: {selected.signatureFileName || selected.signature}
-                    </p>
+                  {selected.signature || selected.signatureFileName || selected.signatureDataUrl ? (
+                    <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                      <span>
+                        Signature: {selected.signatureFileName || selected.signature || "Uploaded"}
+                      </span>
+                      {selected.signatureDataUrl ? (
+                        <button
+                          type="button"
+                          className="cursor-pointer font-medium text-primary underline-offset-2 hover:underline"
+                          onClick={() =>
+                            setPreviewDoc({
+                              id: "signature",
+                              kind: "signature",
+                              fileName: selected.signatureFileName || "Signature",
+                              uploadedAt: selected.policiesAcceptedAt || "",
+                              verifyStatus: "verified",
+                              fileDataUrl: selected.signatureDataUrl,
+                              mimeType: "image/png",
+                            })
+                          }
+                        >
+                          View
+                        </button>
+                      ) : null}
+                    </div>
                   ) : null}
-                </div>
+                </DocSectionCard>
+
+                {selected.offboardingDocs.length > 0 ? (
+                  <DocSectionCard
+                    title="Offboarding"
+                    hint="Exit / relieving documents from separation workflow"
+                    count={selected.offboardingDocs.length}
+                  >
+                    <ul className="space-y-1.5">
+                      {selected.offboardingDocs.map((d) => (
+                        <li
+                          key={d.id}
+                          className="rounded-lg border border-border/60 px-3 py-2 text-sm"
+                        >
+                          <p className="font-medium">{d.name}</p>
+                          <p className="text-[10px] text-muted-foreground">
+                            {d.docType.replace(/_/g, " ")}
+                            {d.fileName ? ` · ${d.fileName}` : ""}
+                            {d.uploadedAt ? ` · ${d.uploadedAt.slice(0, 10)}` : ""}
+                          </p>
+                          {d.notes ? (
+                            <p className="mt-1 text-xs text-muted-foreground">{d.notes}</p>
+                          ) : null}
+                        </li>
+                      ))}
+                    </ul>
+                  </DocSectionCard>
+                ) : null}
               </>
             )}
           </section>
@@ -387,6 +599,88 @@ export function EdocManagementPage() {
         </div>
       ) : null}
     </div>
+  );
+}
+
+function DocSectionCard({
+  title,
+  hint,
+  count,
+  children,
+}: {
+  title: string;
+  hint: string;
+  count: number;
+  children: ReactNode;
+}) {
+  return (
+    <div className="rounded-lg border border-border/60 bg-muted/10 p-3">
+      <div className="mb-2 flex items-start justify-between gap-2">
+        <div>
+          <h3 className="text-xs font-semibold uppercase tracking-wide text-foreground">
+            {title}
+          </h3>
+          <p className="text-[10px] text-muted-foreground">{hint}</p>
+        </div>
+        <span
+          className={cn(
+            "rounded-full px-2 py-0.5 text-[10px] font-medium",
+            count > 0
+              ? "bg-emerald-500/10 text-emerald-700"
+              : "bg-muted text-muted-foreground",
+          )}
+        >
+          {count > 0 ? `${count} file${count === 1 ? "" : "s"}` : "Empty"}
+        </span>
+      </div>
+      {children}
+    </div>
+  );
+}
+
+function DocRow({
+  fileName,
+  meta,
+  previewable,
+  thumbUrl,
+  onView,
+}: {
+  fileName: string;
+  meta: string;
+  previewable: boolean;
+  thumbUrl?: string;
+  onView: () => void;
+}) {
+  return (
+    <li className="flex items-center justify-between gap-2 rounded-lg border border-border/60 bg-card px-3 py-2 text-sm">
+      <div className="flex min-w-0 items-center gap-2">
+        {thumbUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={thumbUrl}
+            alt=""
+            className="size-9 shrink-0 rounded-md border border-border/60 object-cover"
+          />
+        ) : (
+          <FileText className="size-4 shrink-0 text-muted-foreground" />
+        )}
+        <div className="min-w-0">
+          <p className="truncate font-medium">{fileName}</p>
+          {meta ? <p className="truncate text-[10px] text-muted-foreground">{meta}</p> : null}
+        </div>
+      </div>
+      {previewable ? (
+        <button
+          type="button"
+          className="shrink-0 cursor-pointer text-xs font-medium text-primary underline-offset-2 hover:underline"
+          onClick={onView}
+        >
+          View
+        </button>
+      ) : (
+        <span className="shrink-0 text-[10px] text-muted-foreground">No preview</span>
+      )}
+    </li>
   );
 }
 
