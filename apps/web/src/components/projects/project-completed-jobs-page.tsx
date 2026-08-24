@@ -1,8 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useMemo } from "react";
+import { useCallback, useMemo } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { CheckCircle2 } from "lucide-react";
 
 import { MyJobOpenStepButton } from "@/components/projects/my-job-open-step-button";
@@ -21,14 +20,8 @@ import {
 } from "@/services/projects-portal-service";
 
 export function ProjectCompletedJobsPage() {
-  const router = useRouter();
-  const { projectModuleAdmin, loading: authLoading } = useAuthUser();
+  const { loading: authLoading } = useAuthUser();
   const load = useCallback(async () => listProjectCompletedJobs(), []);
-
-  useEffect(() => {
-    if (authLoading || !projectModuleAdmin) return;
-    router.replace("/projects/projects");
-  }, [authLoading, projectModuleAdmin, router]);
 
   const columns = useMemo<RecordColumn<ProjectMyJob>[]>(
     () => [
@@ -82,7 +75,7 @@ export function ProjectCompletedJobsPage() {
     [],
   );
 
-  if (authLoading || projectModuleAdmin) {
+  if (authLoading) {
     return (
       <div className="space-y-3">
         <div className="h-8 w-48 animate-pulse rounded bg-muted" />
