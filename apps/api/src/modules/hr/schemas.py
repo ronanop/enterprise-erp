@@ -224,7 +224,11 @@ class EmploymentResponse(OrmModel):
     probation_start_date: date | None = None
     probation_end_date: date | None = None
     confirmation_date: date | None = None
+    contract_end_date: date | None = None
     notice_period_days: int | None = None
+    ctc_amount: Decimal | None = None
+    currency_code: str | None = None
+    work_location_text: str | None = None
     lifecycle_source: str | None = None
     payroll_eligible: bool = False
     management_group_id: UUID | None = None
@@ -1483,6 +1487,13 @@ class SeparationExitInterviewRequest(BaseModel):
     interviewer_notes: str | None = None
 
 
+class SeparationDocumentUploadRequest(BaseModel):
+    name: str
+    doc_type: str = "other"
+    notes: str | None = None
+    file_name: str | None = None
+
+
 class EmployeeAssetItem(BaseModel):
     id: UUID
     assignment_id: UUID | None = None
@@ -1585,3 +1596,40 @@ class HrEssInboxItemResponse(OrmModel):
     pending: bool
     available_actions: list[str]
     api_path: str
+
+class EmployeeImportRow(BaseModel):
+    """Normalized Excel row for workforce bulk import."""
+
+    employee_code: str
+    name: str
+    entity: str | None = None
+    organisation: str | None = None
+    organization: str | None = None
+    base_location: str | None = None
+    designation: str | None = None
+    department: str | None = None
+    reporting_manager: str | None = None
+    email: str | None = None
+    mobile: str | None = None
+    joining_date: str | None = None
+
+
+class EmployeeImportRequest(BaseModel):
+    rows: list[EmployeeImportRow]
+
+
+class EmployeeImportResultRow(BaseModel):
+    row: int
+    employee_code: str
+    action: str
+    employee_id: str
+    company: str
+
+
+class EmployeeImportResponse(BaseModel):
+    created: int
+    updated: int
+    skipped: int
+    warnings: list[str] = []
+    errors: list[str] = []
+    results: list[EmployeeImportResultRow] = []

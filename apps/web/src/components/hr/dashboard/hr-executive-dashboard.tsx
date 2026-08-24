@@ -24,8 +24,8 @@ import {
   PremiumAreaChart,
   PremiumBarChart,
   PremiumDonutChart,
-  PremiumFunnelChart,
 } from "@/components/hr/dashboard/hr-analytics-charts";
+import { CustomizableAnalyticsBoard } from "@/components/hr/dashboard/customizable-analytics-board";
 import { toast, SetupToastHost } from "@/components/hr/setup/setup-toast";
 import { EmsSkeleton } from "@/components/hr/workforce/ems-primitives";
 import { Button } from "@/components/ui/button";
@@ -159,31 +159,34 @@ export function HrExecutiveDashboardPage() {
     label: string;
     value: number | undefined;
     icon: typeof Users;
-    hint: string;
     href?: string;
   }[] = [
-    { label: "Headcount", value: stats?.totalEmployees, icon: Users, hint: "Active workforce" },
-    { label: "Present Today", value: stats?.presentToday, icon: ClipboardCheck, hint: "Attendance" },
     {
-      label: "On Leave",
+      label: "Headcount",
+      value: stats?.totalEmployees,
+      icon: Users,
+      href: "/hr/workforce",
+    },
+    {
+      label: "On leave today",
       value: stats?.onLeave,
       icon: CalendarDays,
-      hint: "Approved today",
       href: "/hr/leave?view=on-leave-today",
     },
     {
-      label: "Pending Approvals",
-      value: stats?.pendingApprovals,
-      icon: ClipboardCheck,
-      hint: "Leave requests",
-      href: "/hr/leave?status=pending",
+      label: "Open roles",
+      value: stats?.openPositions,
+      icon: Briefcase,
+      href: "/hr/recruitment",
     },
-    { label: "Open Roles", value: stats?.openPositions, icon: Briefcase, hint: "Requisitions" },
-    { label: "Pipeline", value: stats?.candidatesInPipeline, icon: Users, hint: "Active applicants" },
+    {
+      label: "Onboarding in process",
+      value: stats?.onboardingInProcess,
+      icon: UserPlus,
+      href: "/hr/onboarding",
+    },
   ];
 
-  const showRecruiting = role === "hr" || role === "super_admin" || role === "recruiter";
-  const showPayroll = role === "hr" || role === "super_admin" || role === "finance";
   const showPeopleAnalytics = role !== "employee" && role !== "recruiter";
 
   return (
@@ -381,31 +384,25 @@ export function HrExecutiveDashboardPage() {
             </DashboardListBox>
           </section>
 
-          {/* Key metrics — below top boxes */}
+          {/* Key metrics — titles only */}
           <section>
-            <div className="mb-2 flex items-end justify-between gap-2">
+            <div className="mb-2">
               <h2 className="text-sm font-semibold tracking-tight">Key Metrics</h2>
-              <p className="text-[11px] text-muted-foreground">
-                Live from employees · attendance · leave · recruitment
-              </p>
             </div>
-            <div className="grid auto-rows-fr gap-2.5 grid-cols-2 sm:grid-cols-3 xl:grid-cols-6">
+            <div className="grid auto-rows-fr gap-2.5 grid-cols-2 xl:grid-cols-4">
               {kpiCards.map((k) => {
                 const Icon = k.icon;
                 const card = (
                   <div
                     className={cn(
-                      "flex h-full min-h-[5.5rem] flex-col justify-between rounded-xl border border-border/70 bg-card px-3 py-3 shadow-sm transition-shadow duration-200",
+                      "flex h-full min-h-[5rem] flex-col justify-between rounded-xl border border-border/70 bg-card px-3 py-3 shadow-sm transition-shadow duration-200",
                       k.href && "hover:border-primary/40 hover:shadow-md",
                     )}
                   >
                     <div className="flex items-start justify-between gap-2">
-                      <div className="min-w-0">
-                        <p className="line-clamp-2 min-h-[2.25em] text-[10px] font-medium leading-tight tracking-wide text-muted-foreground uppercase">
-                          {k.label}
-                        </p>
-                        <p className="mt-0.5 truncate text-[10px] text-muted-foreground/80">{k.hint}</p>
-                      </div>
+                      <p className="text-[10px] font-medium tracking-wide text-muted-foreground uppercase">
+                        {k.label}
+                      </p>
                       <Icon className="size-3.5 shrink-0 text-muted-foreground" />
                     </div>
                     <p className="mt-1.5 text-xl font-semibold tabular-nums text-foreground">
@@ -426,116 +423,90 @@ export function HrExecutiveDashboardPage() {
             </div>
           </section>
 
-          {/* Analytics — premium charts */}
-          <section className="space-y-3">
-            <div className="flex items-end justify-between gap-2">
-              <div>
-                <h2 className="text-sm font-semibold tracking-tight">HR Analytics</h2>
-                <p className="mt-0.5 text-[11px] text-muted-foreground">
-                  Pie · trends · funnel — live from related ERP tables
-                </p>
-              </div>
-            </div>
-
-            <div className="grid gap-3 lg:grid-cols-2 xl:grid-cols-3">
-              {showPeopleAnalytics ? (
-                <>
-                  <PremiumBarChart
-                    title="Head Count"
-                    subtitle="Employees by joining month (cumulative)"
-                    data={charts?.employeeGrowth ?? []}
-                    showValues
-                  />
-                  <PremiumBarChart
-                    title="Department-wise Employees"
-                    subtitle="master_employee → org_department"
-                    data={charts?.departmentWise ?? []}
-                    layout="horizontal"
-                    showValues
-                  />
-                  <PremiumBarChart
-                    title="Location-wise Employees"
-                    subtitle="Cities — Delhi, Mumbai, Bengaluru & others"
-                    data={charts?.locationWise ?? []}
-                    layout="horizontal"
-                    showValues
-                  />
-                  <PremiumDonutChart
-                    title="Gender Diversity"
-                    subtitle="hr_employee_profile.gender"
-                    data={charts?.genderDiversity ?? []}
-                  />
-                  <PremiumBarChart
-                    title="Age Distribution"
-                    subtitle="hr_employee_profile.date_of_birth"
-                    data={charts?.ageDistribution ?? []}
-                    showValues
-                  />
-                </>
-              ) : null}
-
-              {showRecruiting ? (
-                <PremiumFunnelChart
-                  title="Hiring Funnel"
-                  subtitle="recruitment.rec_application stages"
-                  data={charts?.hiringFunnel ?? []}
-                />
-              ) : null}
-
-              {role !== "recruiter" && role !== "finance" ? (
-                <>
-                  <PremiumAreaChart
-                    title="Attendance Trend"
-                    subtitle="Present / WFH days by month"
-                    data={charts?.attendanceTrend ?? []}
-                    color="#0891B2"
-                  />
-                  <PremiumAreaChart
-                    title="Leave Trend"
-                    subtitle="Submitted + approved requests by month"
-                    data={charts?.leaveTrend ?? []}
-                    color="#D97706"
-                  />
-                </>
-              ) : null}
-
-              {showPayroll ? (
-                <PremiumAreaChart
-                  title="Payroll Cost Trend"
-                  subtitle="Est. monthly CTC from hr_employment"
-                  data={charts?.payrollCostTrend ?? []}
-                  color="#2563EB"
-                  formatValue={(n) =>
-                    n >= 100000
-                      ? `₹${(n / 100000).toFixed(1)}L`
-                      : `₹${n.toLocaleString("en-IN")}`
-                  }
-                />
-              ) : null}
-
-              {showPeopleAnalytics ? (
-                <>
-                  <PremiumAreaChart
-                    title="Attrition Trend"
-                    subtitle="% exits / headcount"
-                    data={charts?.attritionTrend ?? []}
-                    color="#DC2626"
-                    formatValue={(n) => `${n}%`}
-                  />
-                  <PremiumDonutChart
-                    title="Performance Distribution"
-                    subtitle="hr_performance_review.overall_rating"
-                    data={charts?.performanceDistribution ?? []}
-                  />
-                  <PremiumDonutChart
-                    title="Training Completion"
-                    subtitle="hr_training_attendance"
-                    data={charts?.trainingCompletion ?? []}
-                  />
-                </>
-              ) : null}
-            </div>
-          </section>
+          {/* Analytics — department & location stacked; editable layout */}
+          {showPeopleAnalytics ? (
+            <CustomizableAnalyticsBoard
+              items={[
+                {
+                  id: "department",
+                  defaultColSpan: 12,
+                  defaultHeight: Math.max(280, 48 + (charts?.departmentWise?.length ?? 8) * 36),
+                  node: (
+                    <PremiumBarChart
+                      title="Department-wise Employees"
+                      data={charts?.departmentWise ?? []}
+                      layout="horizontal"
+                      showValues
+                    />
+                  ),
+                },
+                {
+                  id: "location",
+                  defaultColSpan: 12,
+                  defaultHeight: Math.max(280, 48 + (charts?.locationWise?.length ?? 8) * 36),
+                  node: (
+                    <PremiumBarChart
+                      title="Location-wise Employees"
+                      data={charts?.locationWise ?? []}
+                      layout="horizontal"
+                      showValues
+                    />
+                  ),
+                },
+                {
+                  id: "headcount",
+                  defaultColSpan: 6,
+                  defaultHeight: 260,
+                  node: (
+                    <PremiumBarChart
+                      title="Head Count"
+                      data={charts?.employeeGrowth ?? []}
+                      showValues
+                    />
+                  ),
+                },
+                {
+                  id: "gender",
+                  defaultColSpan: 6,
+                  defaultHeight: 260,
+                  node: (
+                    <PremiumDonutChart
+                      title="Gender Diversity"
+                      data={charts?.genderDiversity ?? []}
+                    />
+                  ),
+                },
+                ...(role !== "recruiter" && role !== "finance"
+                  ? [
+                      {
+                        id: "attendance",
+                        defaultColSpan: 6,
+                        defaultHeight: 260,
+                        node: (
+                          <PremiumAreaChart
+                            title="Attendance Trend"
+                            data={charts?.attendanceTrend ?? []}
+                            color="#0891B2"
+                          />
+                        ),
+                      },
+                      {
+                        id: "leave",
+                        defaultColSpan: 6,
+                        defaultHeight: 260,
+                        node: (
+                          <PremiumAreaChart
+                            title="Leave Trend"
+                            data={charts?.leaveTrend ?? []}
+                            color="#D97706"
+                          />
+                        ),
+                      },
+                    ]
+                  : []),
+              ]}
+            />
+          ) : null}
         </>
       )}
     </div>

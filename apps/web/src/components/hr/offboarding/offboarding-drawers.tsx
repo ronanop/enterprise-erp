@@ -251,3 +251,115 @@ export function ExitInterviewDrawer({
     </SetupDrawer>
   );
 }
+
+export function ExitDocumentDrawer({
+  open,
+  onClose,
+  caseId,
+  onSaved,
+}: {
+  open: boolean;
+  onClose: () => void;
+  caseId: string;
+  onSaved: () => void;
+}) {
+  const [name, setName] = useState("");
+  const [docType, setDocType] = useState("resignation_letter");
+  const [notes, setNotes] = useState("");
+  const [fileName, setFileName] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    setName("");
+    setDocType("resignation_letter");
+    setNotes("");
+    setFileName(null);
+    setError(null);
+  }, [open]);
+
+  async function submit() {
+    setError(null);
+    if (!name.trim()) {
+      setError("Document name is required.");
+      return;
+    }
+    setSaving(true);
+    try {
+      const { offboardingAction } = await import("@/services/offboarding-service");
+      await offboardingAction(caseId, "documents", {
+        name: name.trim(),
+        doc_type: docType,
+        notes: notes.trim() || null,
+        file_name: fileName,
+      });
+      onSaved();
+      onClose();
+    } catch (e) {
+      setError(isApiError(e));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <SetupDrawer
+      open={open}
+      onClose={onClose}
+      title="Upload Exit Document"
+      description="Record exit paperwork (resignation letter, relieving, experience letter, etc.)."
+      footer={
+        <>
+          <Button variant="outline" size="sm" className="cursor-pointer" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button
+            size="sm"
+            className="cursor-pointer"
+            disabled={saving}
+            onClick={() => void submit()}
+          >
+            {saving ? "Saving…" : "Save document"}
+          </Button>
+        </>
+      }
+    >
+      <div className="space-y-3">
+        {error ? <p className="text-xs text-destructive">{error}</p> : null}
+        <SetupField label="Document name" required>
+          <SetupInput
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="e.g. Resignation letter"
+          />
+        </SetupField>
+        <SetupField label="Type">
+          <SetupSelect value={docType} onChange={(e) => setDocType(e.target.value)}>
+            <option value="resignation_letter">Resignation letter</option>
+            <option value="relieving_letter">Relieving letter</option>
+            <option value="experience_letter">Experience letter</option>
+            <option value="noc">NOC / clearance</option>
+            <option value="other">Other</option>
+          </SetupSelect>
+        </SetupField>
+        <SetupField label="File reference" hint="Optional — attach filename for tracking">
+          <SetupInput
+            type="file"
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              setFileName(f?.name ?? null);
+              if (f && !name.trim()) setName(f.name.replace(/\.[^.]+$/, ""));
+            }}
+          />
+          {fileName ? (
+            <p className="mt-1 text-[10px] text-muted-foreground">Selected: {fileName}</p>
+          ) : null}
+        </SetupField>
+        <SetupField label="Notes">
+          <SetupTextarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={3} />
+        </SetupField>
+      </div>
+    </SetupDrawer>
+  );
+}

@@ -258,6 +258,9 @@ export type OnboardingCase = {
   updatedAt: string;
   activatedAt?: string;
   progressPct: number;
+  /** Candidate accepted privacy / T&C before portal steps */
+  termsAcceptedAt?: string;
+  termsVersion?: string;
 };
 
 export type OnboardingAuditEntry = {

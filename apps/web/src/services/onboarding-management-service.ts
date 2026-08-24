@@ -4,7 +4,7 @@
  * onboarding rows are merged when available.
  */
 
-import { resourceService } from "@/services/api-client";
+import { ApiClientError, apiClient, resourceService } from "@/services/api-client";
 import { registerLocalEmployee, updateLocalEmployeeLifecycle } from "@/services/hr-master-connector";
 import { applyOnboardingPortalToEmployee } from "@/services/employee-management-service";
 import { loadRecruitmentOverview, type RecruitmentRow } from "@/services/recruitment-service";
@@ -14,6 +14,7 @@ import { previewNextEmployeeCode } from "@/services/employee-management-service"
 import {
   DEFAULT_MANAGER_CHECKLIST,
   POST_JOIN_HR_CHECKLIST,
+  emptyEducationMarks,
   emptyPortal,
   PORTAL_STEPS,
   type ChecklistItem,
@@ -32,6 +33,108 @@ const CASES_KEY = "erp_onboarding_cases_v1";
 const AUDIT_KEY = "erp_onboarding_audit_v1";
 const SEQ_KEY = "erp_onboarding_seq_v1";
 const INVITE_EXPIRY_DEFAULT_DAYS = 14;
+export const ONBOARDING_TERMS_VERSION = "v1";
+
+function normalizeApiCase(raw: Record<string, unknown>): OnboardingCase | null {
+  if (!raw || typeof raw !== "object") return null;
+  const id = String(raw.id ?? "");
+  if (!id) return null;
+  const portal = (raw.portal as PortalPayload) || emptyPortal("", "", "");
+  const invitation = raw.invitation as OnboardingCase["invitation"] | undefined;
+  return refreshCaseDerived({
+    id,
+    caseCode: String(raw.caseCode ?? raw.case_code ?? ""),
+    candidateId: String(raw.candidateId ?? raw.candidate_id ?? ""),
+    candidateName: String(raw.candidateName ?? raw.candidate_name ?? ""),
+    candidateEmail: String(raw.candidateEmail ?? raw.candidate_email ?? ""),
+    candidatePhone: String(raw.candidatePhone ?? raw.candidate_phone ?? ""),
+    offerId: String(raw.offerId ?? ""),
+    offerCode: String(raw.offerCode ?? ""),
+    joiningDate: String(raw.joiningDate ?? ""),
+    entityId: raw.entityId != null ? String(raw.entityId) : undefined,
+    entityName: raw.entityName != null ? String(raw.entityName) : undefined,
+    department: String(raw.department ?? ""),
+    designation: String(raw.designation ?? ""),
+    reportingManager: String(raw.reportingManager ?? ""),
+    branch: String(raw.branch ?? ""),
+    shift: String(raw.shift ?? ""),
+    leavePolicy: String(raw.leavePolicy ?? ""),
+    employmentType: String(raw.employmentType ?? ""),
+    managementGroupId: raw.managementGroupId != null ? String(raw.managementGroupId) : undefined,
+    managementGroupName:
+      raw.managementGroupName != null ? String(raw.managementGroupName) : undefined,
+    employeeId: raw.employeeId != null ? String(raw.employeeId) : undefined,
+    buddy: raw.buddy != null ? String(raw.buddy) : undefined,
+    hrOwner: String(raw.hrOwner ?? "HR User"),
+    status: String(raw.status ?? "draft") as OnboardingCaseStatus,
+    invitation,
+    portal: {
+      ...portal,
+      educationMarks: portal.educationMarks ?? emptyEducationMarks(),
+    },
+    checklist: Array.isArray(raw.checklist) ? (raw.checklist as ChecklistItem[]) : [],
+    apiOnboardingId: raw.apiOnboardingId != null ? String(raw.apiOnboardingId) : undefined,
+    createdAt: String(raw.createdAt ?? nowIso()),
+    updatedAt: String(raw.updatedAt ?? nowIso()),
+    activatedAt: raw.activatedAt != null ? String(raw.activatedAt) : undefined,
+    progressPct: Number(raw.progressPct ?? 0),
+    termsAcceptedAt: raw.termsAcceptedAt != null ? String(raw.termsAcceptedAt) : undefined,
+    termsVersion: raw.termsVersion != null ? String(raw.termsVersion) : undefined,
+  });
+}
+
+async function syncCaseToApi(caseRow: OnboardingCase): Promise<OnboardingCase> {
+  try {
+    const res = await apiClient<Record<string, unknown>>("/hr/digital-onboarding", {
+      method: "POST",
+      body: { case: caseRow },
+    });
+    const normalized = normalizeApiCase((res.data ?? {}) as Record<string, unknown>);
+    if (normalized) {
+      upsertCaseLocal(normalized);
+      return normalized;
+    }
+  } catch {
+    /* keep local copy if API unavailable */
+  }
+  return caseRow;
+}
+
+async function fetchCasesFromApi(): Promise<OnboardingCase[]> {
+  try {
+    const res = await apiClient<Record<string, unknown>[]>("/hr/digital-onboarding", {
+      method: "GET",
+    });
+    const rows = Array.isArray(res.data) ? res.data : [];
+    return rows
+      .map((r) => normalizeApiCase(r as Record<string, unknown>))
+      .filter((c): c is OnboardingCase => Boolean(c));
+  } catch {
+    return [];
+  }
+}
+
+/** Clear-text portal PII for hire / employee import (HR only). */
+export async function fetchPortalFullCase(caseId: string): Promise<OnboardingCase | null> {
+  try {
+    const res = await apiClient<Record<string, unknown>>(
+      `/hr/digital-onboarding/${encodeURIComponent(caseId)}/portal-full`,
+      { method: "GET" },
+    );
+    return normalizeApiCase((res.data ?? {}) as Record<string, unknown>);
+  } catch {
+    return null;
+  }
+}
+
+function mergeCasesById(preferred: OnboardingCase[], fallback: OnboardingCase[]): OnboardingCase[] {
+  const map = new Map<string, OnboardingCase>();
+  for (const c of fallback) map.set(c.id, c);
+  for (const c of preferred) map.set(c.id, c);
+  return Array.from(map.values()).sort(
+    (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime(),
+  );
+}
 
 function actor(): string {
   if (typeof window === "undefined") return "HR User";
@@ -158,6 +261,10 @@ function upsertCase(next: OnboardingCase): OnboardingCase | null {
   return refreshed;
 }
 
+function upsertCaseLocal(next: OnboardingCase): OnboardingCase | null {
+  return upsertCase(next);
+}
+
 function candidateName(row: RecruitmentRow): string {
   return (
     String(row.full_name ?? row.candidate_name ?? row.display_name ?? "").trim() ||
@@ -218,7 +325,20 @@ export async function loadOnboardingDirectory(): Promise<OnboardingDirectory> {
     /* offline / unauthenticated — local cases still load */
   }
 
-  const cases = loadCases();
+  const localCases = loadCases();
+  const apiCases = await fetchCasesFromApi();
+  // Push any local-only cases to API so invitations survive browser clear
+  if (apiCases.length >= 0) {
+    const apiIds = new Set(apiCases.map((c) => c.id));
+    for (const local of localCases) {
+      if (!apiIds.has(local.id) && local.invitation?.token) {
+        await syncCaseToApi(local);
+      }
+    }
+  }
+  const refreshedApi = apiCases.length ? await fetchCasesFromApi() : apiCases;
+  const cases = mergeCasesById(refreshedApi, localCases);
+  saveCases(cases);
   const departments = Array.from(
     new Set(cases.map((c) => c.department).filter((d) => d && d !== "—")),
   ).sort();
@@ -369,6 +489,7 @@ export async function startOnboarding(input: StartOnboardingInput): Promise<Onbo
   };
 
   const saved = upsertCase(caseRow);
+  if (!saved) throw new Error("Could not save onboarding case locally");
   appendOnboardingAudit({
     caseId: saved.id,
     action: "start_onboarding",
@@ -376,17 +497,8 @@ export async function startOnboarding(input: StartOnboardingInput): Promise<Onbo
     actor: actor(),
   });
 
-  // Best-effort API create — schema is minimal; ignore failures
-  try {
-    await resourceService.create("/recruitment/onboarding", {
-      branch_id: null,
-      status: "draft",
-    });
-  } catch {
-    /* local case is source of truth for enterprise UI */
-  }
-
-  return saved;
+  const synced = await syncCaseToApi(saved);
+  return synced;
 }
 
 export function getInvitationUrl(token: string): string {
@@ -394,18 +506,19 @@ export function getInvitationUrl(token: string): string {
   return `${window.location.origin}/onboarding/${token}`;
 }
 
-export function sendInvitation(
+export async function sendInvitation(
   caseId: string,
   channel: InvitationChannel,
   expiryDays?: number,
-): OnboardingCase | null {
+): Promise<OnboardingCase | null> {
   const all = loadCases();
   const c = all.find((x) => x.id === caseId);
   if (!c) return null;
 
   const expires = new Date();
   expires.setDate(expires.getDate() + (expiryDays ?? INVITE_EXPIRY_DEFAULT_DAYS));
-  const token = c.invitation?.token || crypto.randomUUID().replace(/-/g, "").slice(0, 16);
+  // Always mint a fresh token so “new link” works after resend
+  const token = crypto.randomUUID().replace(/-/g, "").slice(0, 16);
 
   const next: OnboardingCase = {
     ...c,
@@ -418,15 +531,19 @@ export function sendInvitation(
       lastChannel: channel,
       resendCount: (c.invitation?.resendCount ?? 0) + (c.invitation?.sentAt ? 1 : 0),
     },
+    // New invitation clears prior terms so candidate re-confirms on the new link
+    termsAcceptedAt: undefined,
+    termsVersion: undefined,
   };
   const saved = upsertCase(next);
+  if (!saved) return null;
   appendOnboardingAudit({
     caseId,
     action: "send_invitation",
     detail: `Invitation via ${channel} → ${getInvitationUrl(token)}`,
     actor: actor(),
   });
-  return saved;
+  return syncCaseToApi(saved);
 }
 
 export function getCaseByToken(token: string): OnboardingCase | null {
@@ -438,15 +555,83 @@ export function getCaseByToken(token: string): OnboardingCase | null {
   return c;
 }
 
+/** Resolve invitation from API (works after browser clear / Incognito). */
+export async function getCaseByTokenAsync(token: string): Promise<OnboardingCase | null> {
+  try {
+    const res = await apiClient<Record<string, unknown>>(`/public/onboarding/${encodeURIComponent(token)}`, {
+      method: "GET",
+      auth: false,
+    });
+    const normalized = normalizeApiCase((res.data ?? {}) as Record<string, unknown>);
+    if (normalized) {
+      upsertCaseLocal(normalized);
+      if ((res.data as { _expired?: boolean })?._expired) {
+        return { ...normalized, status: "overdue" };
+      }
+      return normalized;
+    }
+  } catch (e) {
+    if (e instanceof ApiClientError && e.status === 404) return null;
+    /* fall through to local */
+  }
+  return getCaseByToken(token);
+}
+
+export async function acceptOnboardingTerms(token: string): Promise<OnboardingCase | null> {
+  try {
+    const res = await apiClient<Record<string, unknown>>(
+      `/public/onboarding/${encodeURIComponent(token)}/accept-terms`,
+      {
+        method: "POST",
+        auth: false,
+        body: { terms_version: ONBOARDING_TERMS_VERSION },
+      },
+    );
+    const normalized = normalizeApiCase((res.data ?? {}) as Record<string, unknown>);
+    if (normalized) {
+      upsertCaseLocal(normalized);
+      return normalized;
+    }
+  } catch (e) {
+    if (e instanceof ApiClientError) throw e;
+  }
+  const local = getCaseByToken(token);
+  if (!local) return null;
+  const next = {
+    ...local,
+    termsAcceptedAt: nowIso(),
+    termsVersion: ONBOARDING_TERMS_VERSION,
+  };
+  return upsertCase(next);
+}
+
 export function getCaseById(id: string): OnboardingCase | null {
   return loadCases().find((c) => c.id === id) ?? null;
 }
 
-export function savePortalProgress(
+export async function savePortalProgress(
   token: string,
   portal: PortalPayload,
   advanceStatus = true,
-): OnboardingCase | null {
+): Promise<OnboardingCase | null> {
+  try {
+    const res = await apiClient<Record<string, unknown>>(
+      `/public/onboarding/${encodeURIComponent(token)}/portal`,
+      {
+        method: "POST",
+        auth: false,
+        body: { portal, advance_status: advanceStatus },
+      },
+    );
+    const normalized = normalizeApiCase((res.data ?? {}) as Record<string, unknown>);
+    if (normalized) {
+      upsertCaseLocal(normalized);
+      return normalized;
+    }
+  } catch (e) {
+    if (e instanceof ApiClientError && e.status === 400) throw e;
+  }
+
   const all = loadCases();
   const idx = all.findIndex((x) => x.invitation?.token === token);
   if (idx < 0) return null;
@@ -461,30 +646,46 @@ export function savePortalProgress(
     detail: `Candidate saved step ${portal.currentStep}`,
     actor: c.candidateName,
   });
+  void syncCaseToApi(next);
   return next;
 }
 
-export function submitPortal(token: string, portal: PortalPayload): OnboardingCase | null {
+export async function submitPortal(token: string, portal: PortalPayload): Promise<OnboardingCase | null> {
   const submitted: PortalPayload = {
     ...portal,
     submittedAt: nowIso(),
-    currentStep: "review",
   };
+  try {
+    const res = await apiClient<Record<string, unknown>>(
+      `/public/onboarding/${encodeURIComponent(token)}/submit`,
+      {
+        method: "POST",
+        auth: false,
+        body: { portal: submitted },
+      },
+    );
+    const normalized = normalizeApiCase((res.data ?? {}) as Record<string, unknown>);
+    if (normalized) {
+      upsertCaseLocal(normalized);
+      return normalized;
+    }
+  } catch (e) {
+    if (e instanceof ApiClientError && e.status === 400) throw e;
+  }
+
   const all = loadCases();
   const idx = all.findIndex((x) => x.invitation?.token === token);
   if (idx < 0) return null;
   const c = all[idx];
-  const next = upsertCase({
-    ...c,
-    portal: submitted,
-    status: "hr_review",
-  });
+  const next = upsertCase({ ...c, portal: submitted, status: "hr_review" });
+  if (!next) return null;
   appendOnboardingAudit({
     caseId: c.id,
     action: "portal_submit",
     detail: "Candidate submitted onboarding forms",
     actor: c.candidateName,
   });
+  void syncCaseToApi(next);
   return next;
 }
 
@@ -593,8 +794,21 @@ export async function completeOnboarding(
     managementGroupName?: string;
   },
 ): Promise<OnboardingCase | null> {
-  const c = getCaseById(caseId);
-  if (!c) return null;
+  const localCase = getCaseById(caseId);
+  if (!localCase) return null;
+
+  // Prefer clear PII from API for employee import; HR list views stay masked
+  const full = await fetchPortalFullCase(caseId);
+  const c: OnboardingCase = full
+    ? {
+        ...localCase,
+        ...full,
+        portal: full.portal,
+        status: localCase.status,
+        checklist: localCase.checklist,
+        employeeId: localCase.employeeId,
+      }
+    : localCase;
 
   if (!["ready_to_join"].includes(c.status)) {
     throw new Error("Approve the candidate submission before completing onboarding.");

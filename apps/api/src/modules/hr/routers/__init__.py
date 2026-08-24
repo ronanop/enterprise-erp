@@ -107,6 +107,7 @@ from modules.hr.schemas import (
     SeparationCompleteRequest,
     SeparationChecklistUpdate,
     SeparationCreate,
+    SeparationDocumentUploadRequest,
     SeparationExitInterviewRequest,
     SeparationResponse,
     ShiftAssignmentCreate,
@@ -1997,6 +1998,19 @@ def save_separation_exit_interview(
     return APIResponse(
         message="Exit interview saved",
         data=SeparationService(db).save_exit_interview(ctx, row_id, **body.model_dump()),
+    )
+
+
+@separation_router.post("/{row_id}/documents", response_model=APIResponse[SeparationResponse])
+def upload_separation_document(
+    row_id: UUID,
+    body: SeparationDocumentUploadRequest,
+    ctx: Annotated[TenantContext, Depends(require_permission("hr.separation:approve"))],
+    db: Annotated[Session, Depends(get_db)],
+):
+    return APIResponse(
+        message="Document recorded",
+        data=SeparationService(db).add_document(ctx, row_id, **body.model_dump()),
     )
 
 

@@ -19,6 +19,16 @@ import {
   emptySalary,
 } from "@/types/employee-management";
 import { previewNextEmployeeCode } from "@/services/employee-management-service";
+import {
+  maskAadhaar,
+  maskAccount,
+  maskAddress,
+  maskDob,
+  maskEmail,
+  maskKeepLast,
+  maskPan,
+  maskPhone,
+} from "@/lib/pii-mask";
 
 function splitName(full: string): { first: string; last: string } {
   const parts = full.trim().split(/\s+/).filter(Boolean);
@@ -143,23 +153,27 @@ export function summarizePortalDetails(portal: PortalPayload): {
         [portal.personal.firstName, portal.personal.middleName, portal.personal.lastName]
           .filter(Boolean)
           .join(" "),
-        portal.personal.personalEmail || portal.personal.email,
-        portal.personal.phone,
-        portal.personal.dob,
+        maskEmail(portal.personal.personalEmail || portal.personal.email),
+        maskPhone(portal.personal.phone),
+        maskDob(portal.personal.dob),
         portal.personal.gender,
-        portal.personal.address && `Current: ${portal.personal.address}`,
+        portal.personal.address && `Current: ${maskAddress(portal.personal.address)}`,
         (portal.personal.permanentAddress || portal.personal.address) &&
-          `Permanent: ${portal.personal.sameAsCurrentAddress ? portal.personal.address : portal.personal.permanentAddress || portal.personal.address}`,
+          `Permanent: ${maskAddress(
+            portal.personal.sameAsCurrentAddress
+              ? portal.personal.address
+              : portal.personal.permanentAddress || portal.personal.address,
+          )}`,
       ].filter(Boolean),
     },
     {
       title: "Government IDs",
       lines: [
-        portal.governmentIds.aadhaar && `Aadhaar: ${portal.governmentIds.aadhaar}`,
-        portal.governmentIds.pan && `PAN: ${portal.governmentIds.pan}`,
-        portal.governmentIds.passport && `Passport: ${portal.governmentIds.passport}`,
-        portal.governmentIds.uan && `UAN: ${portal.governmentIds.uan}`,
-        portal.governmentIds.esic && `ESIC: ${portal.governmentIds.esic}`,
+        portal.governmentIds.aadhaar && `Aadhaar: ${maskAadhaar(portal.governmentIds.aadhaar)}`,
+        portal.governmentIds.pan && `PAN: ${maskPan(portal.governmentIds.pan)}`,
+        portal.governmentIds.passport && `Passport: ${maskKeepLast(portal.governmentIds.passport)}`,
+        portal.governmentIds.uan && `UAN: ${maskKeepLast(portal.governmentIds.uan)}`,
+        portal.governmentIds.esic && `ESIC: ${maskKeepLast(portal.governmentIds.esic)}`,
       ].filter(Boolean) as string[],
     },
     {
@@ -167,7 +181,7 @@ export function summarizePortalDetails(portal: PortalPayload): {
       lines: [
         portal.bank.bankName,
         portal.bank.accountHolder,
-        portal.bank.accountNumber && `A/C …${portal.bank.accountNumber.slice(-4)}`,
+        portal.bank.accountNumber && `A/C ${maskAccount(portal.bank.accountNumber)}`,
         portal.bank.ifsc,
       ].filter(Boolean) as string[],
     },
@@ -176,7 +190,7 @@ export function summarizePortalDetails(portal: PortalPayload): {
       lines: [
         portal.emergency.name,
         portal.emergency.relationship,
-        portal.emergency.phone,
+        maskPhone(portal.emergency.phone),
       ].filter(Boolean),
     },
     {

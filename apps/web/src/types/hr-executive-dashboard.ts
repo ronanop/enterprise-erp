@@ -36,6 +36,8 @@ export type HrDashboardStats = {
   upcomingAnniversaries: number;
   onProbation: number;
   onNoticePeriod: number;
+  /** Invitation links sent / active onboarding cases */
+  onboardingInProcess: number;
 };
 
 export type HrDashboardCharts = {

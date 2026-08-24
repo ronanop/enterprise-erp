@@ -79,6 +79,14 @@ import type {
   PersonalInfo,
 } from "@/types/employee-management";
 import { emptyBank } from "@/types/employee-management";
+import {
+  maskAadhaar,
+  maskAccount as maskAccountNumber,
+  maskEmail,
+  maskKeepLast,
+  maskPan,
+  maskPhone,
+} from "@/lib/pii-mask";
 import { cn } from "@/lib/utils";
 
 const TABS = [
@@ -311,7 +319,7 @@ function bankFilled(b?: BankDetails | null) {
 
 function maskAccount(account?: string) {
   if (!account) return "—";
-  return account.length <= 4 ? account : `••••${account.slice(-4)}`;
+  return maskAccountNumber(account) || "—";
 }
 
 function formatAttendanceMonthLabel(ym: string): string {
@@ -551,7 +559,7 @@ export function EmployeeProfilePage({ employeeId }: { employeeId: string }) {
           <Info label="Employment type" value={formatEmploymentTypeLabel(record.employmentType)} />
           <Info label="Status" value={<HrStatusBadge status={record.lifecycleStatus} />} />
           <Info label="Email" value={record.officialEmail} />
-          <Info label="Phone" value={record.mobile} />
+          <Info label="Phone" value={maskPhone(record.mobile) || "—"} />
         </div>
       </div>
 
@@ -591,11 +599,17 @@ export function EmployeeProfilePage({ employeeId }: { employeeId: string }) {
 
         {tab === "gov" ? (
           <EmsFormGrid>
-            <Info label="Aadhaar" value={record.extension.governmentIds.aadhaar || "—"} />
-            <Info label="PAN" value={record.extension.governmentIds.pan || "—"} />
-            <Info label="Passport" value={record.extension.governmentIds.passport || "—"} />
-            <Info label="UAN" value={record.extension.governmentIds.uan || "—"} />
-            <Info label="DL" value={record.extension.governmentIds.drivingLicense || "—"} />
+            <Info label="Aadhaar" value={maskAadhaar(record.extension.governmentIds.aadhaar) || "—"} />
+            <Info label="PAN" value={maskPan(record.extension.governmentIds.pan) || "—"} />
+            <Info
+              label="Passport"
+              value={maskKeepLast(record.extension.governmentIds.passport) || "—"}
+            />
+            <Info label="UAN" value={maskKeepLast(record.extension.governmentIds.uan) || "—"} />
+            <Info
+              label="DL"
+              value={maskKeepLast(record.extension.governmentIds.drivingLicense) || "—"}
+            />
           </EmsFormGrid>
         ) : null}
 
@@ -1841,8 +1855,8 @@ function OverviewTab({
                 label="Official email"
                 value={p.officialEmail || record.officialEmail}
               />
-              <OverviewField label="Personal email" value={p.personalEmail} hideIfEmpty />
-              <OverviewField label="Mobile" value={p.mobile || record.mobile} />
+              <OverviewField label="Personal email" value={maskEmail(p.personalEmail) || undefined} hideIfEmpty />
+              <OverviewField label="Mobile" value={maskPhone(p.mobile || record.mobile) || undefined} />
             </div>
           </OverviewCard>
         </div>
@@ -1877,7 +1891,7 @@ function OverviewTab({
                 label="Relationship"
                 value={formatRelationshipLabel(p.emergency.relationship)}
               />
-              <OverviewField label="Phone" value={p.emergency.phone} />
+              <OverviewField label="Phone" value={maskPhone(p.emergency.phone) || undefined} />
             </div>
           </OverviewCard>
         </div>

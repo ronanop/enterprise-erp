@@ -211,6 +211,8 @@ export type EmployeeRecord = {
   designationName: string;
   branchId: string;
   branchName: string;
+  companyId: string;
+  companyName: string;
   locationId: string;
   locationName: string;
   reportingManagerId: string;

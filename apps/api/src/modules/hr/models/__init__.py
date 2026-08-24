@@ -39,6 +39,7 @@ from modules.hr.models.biometric_device import HrBiometricDevice
 from modules.hr.models.compoff_request import HrCompoffRequest
 from modules.hr.models.shift_rotation import HrShiftRotation
 from modules.hr.models.shift_swap import HrShiftSwapRequest
+from modules.hr.models.digital_onboarding import HrDigitalOnboarding
 
 __all__ = [
     "HrDesignation",
@@ -79,6 +80,7 @@ __all__ = [
     "HrTrainingRoom",
     "HrTrainingRequest",
     "HrSeparation",
+    "HrDigitalOnboarding",
     "HrLifecycleEvent",
     "HrJobLevel",
     "HrGrade",

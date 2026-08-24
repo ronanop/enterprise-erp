@@ -45,6 +45,8 @@ from modules.hr.routers import (
 )
 from modules.hr.routers.ess_policies_router import ess_policies_router
 from modules.hr.routers.employee_assets_router import employee_assets_router
+from modules.hr.routers.employee_import import employee_import_router
+from modules.hr.routers.digital_onboarding import digital_onboarding_router
 
 hr_router = APIRouter(prefix="/hr")
 hr_router.include_router(designations_router)
@@ -52,6 +54,7 @@ hr_router.include_router(job_levels_router)
 hr_router.include_router(grades_router)
 hr_router.include_router(employee_profiles_router)
 hr_router.include_router(employee_assets_router)
+hr_router.include_router(employee_import_router)
 hr_router.include_router(employment_router)
 hr_router.include_router(department_assignments_router)
 hr_router.include_router(designation_assignments_router)
@@ -88,3 +91,4 @@ hr_router.include_router(reports_router)
 hr_router.include_router(ess_inbox_router)
 hr_router.include_router(ess_policies_router)
 hr_router.include_router(management_groups_router)
+hr_router.include_router(digital_onboarding_router)

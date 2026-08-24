@@ -147,6 +147,8 @@ export function registerLocalEmployee(
     designationName: employment.designationName,
     branchId: "",
     branchName: employment.branchName,
+    companyId: "",
+    companyName: "—",
     locationId: "",
     locationName: employment.location || "—",
     reportingManagerId: "",

@@ -174,11 +174,14 @@ export function OnboardingManagementPage() {
     setInviteCase(created);
   }
 
-  function handleSend(caseId: string, channel: InvitationChannel, expiryDays: number) {
-    const updated = sendInvitation(caseId, channel, expiryDays);
+  async function handleSend(caseId: string, channel: InvitationChannel, expiryDays: number) {
+    const updated = await sendInvitation(caseId, channel, expiryDays);
     if (updated) {
       toast(`Invitation sent via ${channel}`);
-      void load();
+      setInviteCase(updated);
+      await load();
+    } else {
+      toast("Could not send invitation — save the case and try again", "error");
     }
   }
 

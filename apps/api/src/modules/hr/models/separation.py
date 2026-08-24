@@ -21,7 +21,10 @@ class HrSeparation(Base, *HrTransactionMixin):
             name="ck_hr_sep_type",
         ),
         CheckConstraint(
-            "status IN ('draft','submitted','manager_approved','hr_approved','completed','cancelled')",
+            "status IN ("
+            "'draft','submitted','manager_approved','it_approved','accounts_approved',"
+            "'hr_approved','completed','cancelled'"
+            ")",
             name="ck_hr_sep_status",
         ),
         CheckConstraint(

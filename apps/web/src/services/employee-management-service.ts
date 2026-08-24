@@ -39,6 +39,22 @@ const LOCAL_EMP_KEY = "erp_hr_local_employees_v1";
 const ACTIVITY_KEY = "erp_employee_activity_v1";
 const AUDIT_KEY = "erp_employee_audit_v1";
 
+/** Classic seed / fake local-only demo employee codes. */
+const DEMO_EMP_CODE_RE =
+  /^(EMP-\d{3}|EMP-T\d{2}|EMP-ESS-\d+|EMP-E\d{2}|EMP-O\d{2}|MGR-ENG|MGR-SAL)$/i;
+
+function isDemoEmployeeCode(code: string | undefined | null): boolean {
+  return DEMO_EMP_CODE_RE.test(String(code || "").trim());
+}
+
+/** Drop leftover demo rows from browser local store (EMP-001…, EMP-T0x, etc.). */
+function purgeLocalDemoEmployees(): void {
+  if (typeof window === "undefined") return;
+  const locals = readJson<EmployeeRecord[]>(LOCAL_EMP_KEY, []);
+  const kept = locals.filter((r) => !isDemoEmployeeCode(r.employeeCode));
+  if (kept.length !== locals.length) writeJson(LOCAL_EMP_KEY, kept);
+}
+
 function nowIso(): string {
   return new Date().toISOString();
 }
@@ -121,113 +137,12 @@ function saveExtension(employeeId: string, ext: EmployeeExtension): void {
   setEmployeeExtension(employeeId, ext);
 }
 
-/** Demo entity IDs from HR Setup → Legal Entities defaults. */
-const DEMO_ENTITY_DIGITECH = {
-  id: "ent-cache-digitech",
-  name: "Cache Digitech Pvt Ltd",
-};
-const DEMO_ENTITY_TECH = {
-  id: "ent-cache-tech",
-  name: "Cache Technologies",
-};
-
-/**
- * Assign legal entities for demo workforce when missing:
- * EMP-001..004,007 → Cache Digitech; EMP-005,006,008+ → Cache Technologies.
- * Also ensures a few Tech-entity local rows exist for filter demos.
- */
-function applyDemoEntityAssignments(records: EmployeeRecord[]): void {
-  if (typeof window === "undefined") return;
-
-  const digitechCodes = new Set(["EMP-001", "EMP-002", "EMP-003", "EMP-004", "EMP-007"]);
-  const techCodes = new Set(["EMP-005", "EMP-006", "EMP-008"]);
-
-  for (const row of records) {
-    if (row.extension.employment.entityId) continue;
-    const code = (row.employeeCode || "").toUpperCase();
-    let entity = DEMO_ENTITY_DIGITECH;
-    if (techCodes.has(code)) entity = DEMO_ENTITY_TECH;
-    else if (!digitechCodes.has(code) && /^EMP-0(0[5-9]|[1-9]\d)/.test(code)) {
-      entity = DEMO_ENTITY_TECH;
-    }
-    const nextExt = defaultExtension({
-      ...row.extension,
-      employment: {
-        ...row.extension.employment,
-        entityId: entity.id,
-        entityName: entity.name,
-      },
-    });
-    saveExtension(row.id, nextExt);
-    row.extension = nextExt;
-  }
-
-  const techCount = records.filter(
-    (r) => r.extension.employment.entityId === DEMO_ENTITY_TECH.id,
-  ).length;
-  if (techCount >= 2) return;
-
-  const local = readJson<EmployeeRecord[]>(LOCAL_EMP_KEY, []);
-  const extras: { code: string; first: string; last: string; designation: string }[] = [
-    { code: "EMP-T01", first: "Vikram", last: "Desai", designation: "Support Engineer" },
-    { code: "EMP-T02", first: "Ananya", last: "Rao", designation: "Business Analyst" },
-    { code: "EMP-T03", first: "Imran", last: "Sheikh", designation: "QA Engineer" },
-  ];
-  const existingCodes = new Set(records.map((r) => r.employeeCode.toUpperCase()));
-  let added = 0;
-  for (const extra of extras) {
-    if (existingCodes.has(extra.code)) continue;
-    if (techCount + added >= 3) break;
-    const id = crypto.randomUUID();
-    const employment = emptyEmployment(extra.code);
-    employment.entityId = DEMO_ENTITY_TECH.id;
-    employment.entityName = DEMO_ENTITY_TECH.name;
-    employment.designationName = extra.designation;
-    employment.departmentName = "IT";
-    employment.branchName = "Head Office";
-    employment.joiningDate = "2024-08-01";
-    employment.lifecycleStatus = "active";
-    employment.employmentType = "permanent";
-    const ext = defaultExtension({
-      personal: {
-        ...emptyPersonal(),
-        firstName: extra.first,
-        lastName: extra.last,
-        officialEmail: `${extra.first.toLowerCase()}.${extra.last.toLowerCase()}@cachetech.example.com`,
-        mobile: `98${String(10000000 + added).slice(0, 8)}`,
-      },
-      employment,
-    });
-    saveExtension(id, ext);
-    const record: EmployeeRecord = {
-      id,
-      masterVersion: 1,
-      employeeCode: extra.code,
-      displayName: `${extra.first} ${extra.last}`,
-      officialEmail: ext.personal.officialEmail,
-      mobile: ext.personal.mobile,
-      departmentId: "",
-      departmentName: "IT",
-      designationName: extra.designation,
-      branchId: "",
-      branchName: "Head Office",
-      locationId: "",
-      locationName: "",
-      reportingManagerId: "",
-      reportingManagerName: "—",
-      employmentType: "permanent",
-      joiningDate: employment.joiningDate,
-      lifecycleStatus: "active",
-      profilePhotoDataUrl: undefined,
-      gender: "",
-      isDeleted: false,
-      extension: ext,
-    };
-    local.push(record);
-    records.push(record);
-    added += 1;
-  }
-  if (added > 0) writeJson(LOCAL_EMP_KEY, local);
+/** Map org companies to Digitech / Technologies style entity labels. */
+function entityLabelForCompany(companyName: string, companyCode: string): string {
+  const blob = `${companyName} ${companyCode}`.toLowerCase();
+  if (blob.includes("digitech")) return "Cache Digitech";
+  if (blob.includes("technolog")) return "Cache Technologies";
+  return companyName || companyCode || "—";
 }
 
 function appendActivity(event: Omit<ActivityEvent, "id" | "at">): void {
@@ -399,6 +314,8 @@ function mergeRow(
   deptMap: Map<string, string>,
   branchMap: Map<string, string>,
   managerMap: Map<string, string>,
+  companyMap: Map<string, { name: string; code: string }>,
+  locationByName: Map<string, string>,
   ext: EmployeeExtension,
 ): EmployeeRecord {
   const hydrated = hydratePersonalFromMasterProfile(ext, master, profile);
@@ -415,9 +332,58 @@ function mergeRow(
     master.branch_id ?? hydrated.employment.branchId ?? profile?.branch_id ?? "",
   );
   const locationName = String(
-    employment?.work_location_text ?? hydrated.employment.location ?? "",
+    employment?.work_location_text ??
+      employment?.work_location ??
+      hydrated.employment.location ??
+      "",
+  ).trim();
+  const locationId =
+    String(hydrated.employment.locationId ?? "") ||
+    (locationName ? locationByName.get(locationName.toLowerCase()) || "" : "");
+
+  const companyId = String(master.company_id ?? "");
+  const companyInfo = companyMap.get(companyId);
+  const extEntity = (hydrated.employment.entityName || "").trim();
+  // Prefer Excel-synced entity label when present (Digitech / Technologies)
+  const entityName = /technolog/i.test(extEntity)
+    ? "Cache Technologies"
+    : /digitech/i.test(extEntity)
+      ? "Cache Digitech"
+      : companyInfo
+        ? entityLabelForCompany(companyInfo.name, companyInfo.code)
+        : extEntity || "—";
+  const companyName = /technolog/i.test(extEntity)
+    ? "Cache Technologies & Infotech"
+    : companyInfo?.name || "—";
+
+  const managerId = String(
+    master.reporting_manager_id ?? hydrated.employment.reportingManagerId ?? "",
   );
-  const locationId = String(hydrated.employment.locationId ?? "");
+  const managerFromMap = managerId ? managerMap.get(managerId) : undefined;
+  const managerFromExt = (hydrated.employment.reportingManagerName || "").trim();
+  const reportingManagerName =
+    managerFromMap ||
+    (managerFromExt && managerFromExt !== "—" ? managerFromExt : "") ||
+    "—";
+
+  const nextExt: EmployeeExtension = {
+    ...hydrated,
+    employment: {
+      ...hydrated.employment,
+      entityId: companyId || hydrated.employment.entityId,
+      entityName,
+      location: locationName || hydrated.employment.location,
+      locationId: locationId || hydrated.employment.locationId,
+      reportingManagerId: managerId || hydrated.employment.reportingManagerId,
+      reportingManagerName:
+        reportingManagerName !== "—"
+          ? reportingManagerName
+          : hydrated.employment.reportingManagerName,
+      designationName:
+        hydrated.employment.designationName ||
+        String(master.designation ?? profile?.designation ?? ""),
+    },
+  };
 
   return {
     id,
@@ -437,19 +403,16 @@ function mergeRow(
       String(master.designation ?? "").split("·")[0] ||
       "—",
     designationName:
-      hydrated.employment.designationName ||
+      nextExt.employment.designationName ||
       String(master.designation ?? profile?.designation ?? "—"),
     branchId,
     branchName: hydrated.employment.branchName || branchMap.get(branchId) || "—",
+    companyId,
+    companyName,
     locationId,
     locationName: locationName || "—",
-    reportingManagerId: String(
-      master.reporting_manager_id ?? hydrated.employment.reportingManagerId ?? "",
-    ),
-    reportingManagerName:
-      (hydrated.employment.reportingManagerName || "").trim() ||
-      managerMap.get(String(master.reporting_manager_id ?? "")) ||
-      "—",
+    reportingManagerId: managerId,
+    reportingManagerName,
     employmentType: String(
       employment?.employment_type ?? hydrated.employment.employmentType ?? "—",
     ),
@@ -468,7 +431,7 @@ function mergeRow(
     profilePhotoDataUrl: profilePhotoFromExtension(hydrated),
     gender: hydrated.personal.gender,
     isDeleted: Boolean(master.is_deleted),
-    extension: hydrated,
+    extension: nextExt,
   };
 }
 
@@ -483,6 +446,7 @@ export type EmployeeDirectoryOptions = {
   employees: { id: string; label: string }[];
   managementGroups: { id: string; label: string; employmentType: string; shiftId: string }[];
   shifts: { id: string; label: string }[];
+  companies: { id: string; label: string; code: string }[];
 };
 
 export type EmployeeDirectoryResult = {
@@ -495,27 +459,51 @@ const DIRECTORY_CACHE_TTL_MS = 20_000;
 let directoryCache: { at: number; value: EmployeeDirectoryResult } | null = null;
 let directoryInflight: Promise<EmployeeDirectoryResult> | null = null;
 
+/** API pagination max is `le=200` — larger page_size returns 422. */
+const API_PAGE_SIZE = 200;
+const API_MAX_PAGES = 25;
+
 /** Clear cached HR directory after creates/updates (or wait for TTL in dev). */
 export function invalidateEmployeeDirectoryCache(): void {
   directoryCache = null;
 }
 
+async function listAllPages(apiPath: string): Promise<{ data: HrRow[]; error?: unknown }> {
+  const all: HrRow[] = [];
+  try {
+    for (let page = 1; page <= API_MAX_PAGES; page += 1) {
+      const res = await resourceService.list(apiPath, {
+        page_size: API_PAGE_SIZE,
+        page,
+      });
+      const chunk = (Array.isArray(res.data) ? res.data : []) as HrRow[];
+      all.push(...chunk);
+      if (chunk.length < API_PAGE_SIZE) break;
+    }
+    return { data: all };
+  } catch (error) {
+    return { data: all, error };
+  }
+}
+
 async function loadOptions(): Promise<EmployeeDirectoryOptions> {
-  const [branches, departments, locations, designations, employees, shifts, mgmtGroups] =
+  const [branches, departments, locations, designations, employees, shifts, mgmtGroups, companies] =
     await Promise.all([
-    resourceService.list("/branches", { page_size: 200 }).catch(() => ({ data: [] })),
-    resourceService.list("/departments", { page_size: 200 }).catch(() => ({ data: [] })),
-    resourceService.list("/locations", { page_size: 500 }).catch(() => ({ data: [] })),
-    resourceService.list("/hr/designations", { page_size: 200 }).catch(() => ({ data: [] })),
-    resourceService.list("/employees", { page_size: 200 }).catch(() => ({ data: [] })),
-    resourceService.list("/hr/shifts", { page_size: 200 }).catch(() => ({ data: [] })),
-    resourceService.list("/hr/management-groups", { page_size: 200 }).catch(() => ({ data: [] })),
+    listAllPages("/branches"),
+    listAllPages("/departments"),
+    listAllPages("/locations"),
+    listAllPages("/hr/designations"),
+    listAllPages("/employees"),
+    listAllPages("/hr/shifts"),
+    listAllPages("/hr/management-groups"),
+    listAllPages("/companies"),
   ]);
 
   const asRows = (d: unknown) =>
     (Array.isArray(d) ? d : []).filter((r): r is HrRow => !!r && typeof r === "object");
 
   const empRows = asRows(employees.data) as EmployeeMasterRow[];
+  const companyRows = asRows(companies.data);
 
   return {
     branches: asRows(branches.data).map((r) => ({
@@ -551,22 +539,32 @@ async function loadOptions(): Promise<EmployeeDirectoryOptions> {
       employmentType: String(r.employment_type ?? "permanent"),
       shiftId: String(r.default_shift_id ?? ""),
     })),
+    companies: companyRows.map((r) => {
+      const name = String(r.company_name ?? r.name ?? r.company_code ?? r.id);
+      const code = String(r.company_code ?? "");
+      return {
+        id: String(r.id),
+        label: name,
+        code,
+      };
+    }),
   };
 }
 
 async function fetchEmployeeDirectoryUncached(): Promise<EmployeeDirectoryResult> {
   await ensureEmployeeExtensionsLoaded();
+  purgeLocalDemoEmployees();
 
   const [masters, profiles, employment, options] = await Promise.all([
-    resourceService.list("/employees", { page_size: 200, page: 1 }).catch((e) => ({ data: [], error: e })),
-    resourceService.list("/hr/employee-profiles", { page_size: 200, page: 1 }).catch((e) => ({ data: [], error: e })),
-    resourceService.list("/hr/employment", { page_size: 200, page: 1 }).catch((e) => ({ data: [], error: e })),
+    listAllPages("/employees"),
+    listAllPages("/hr/employee-profiles"),
+    listAllPages("/hr/employment"),
     loadOptions(),
   ]);
 
   const errors: string[] = [];
-  if ("error" in masters && masters.error) errors.push("Could not load employees");
-  if ("error" in profiles && profiles.error) errors.push("Could not load HR profiles");
+  if (masters.error) errors.push("Could not load employees");
+  if (profiles.error) errors.push("Could not load HR profiles");
 
   const masterRows = (Array.isArray(masters.data) ? masters.data : []) as HrRow[];
   const profileRows = (Array.isArray(profiles.data) ? profiles.data : []) as HrRow[];
@@ -586,6 +584,15 @@ async function fetchEmployeeDirectoryUncached(): Promise<EmployeeDirectoryResult
   const deptMap = new Map(options.departments.map((d) => [d.id, d.label]));
   const branchMap = new Map(options.branches.map((b) => [b.id, b.label]));
   const employeeNameMap = new Map(options.employees.map((m) => [m.id, m.label.split(" (")[0]]));
+  const companyMapFull = new Map<string, { name: string; code: string }>();
+  for (const c of options.companies) {
+    companyMapFull.set(c.id, { name: c.label, code: c.code });
+  }
+
+  const locationByName = new Map<string, string>();
+  for (const loc of options.locations) {
+    locationByName.set(loc.label.toLowerCase(), loc.id);
+  }
 
   const extensions = loadExtensions();
 
@@ -630,12 +637,16 @@ async function fetchEmployeeDirectoryUncached(): Promise<EmployeeDirectoryResult
         deptMap,
         branchMap,
         employeeNameMap,
+        companyMapFull,
+        locationByName,
         ext,
       );
     });
 
   // Merge onboarding-activated / locally registered employees (shared HR connector)
-  const localEmployees = readJson<EmployeeRecord[]>(LOCAL_EMP_KEY, []);
+  const localEmployees = readJson<EmployeeRecord[]>(LOCAL_EMP_KEY, []).filter(
+    (r) => !isDemoEmployeeCode(r.employeeCode),
+  );
   const seenIds = new Set(records.map((r) => r.id));
   const seenCodes = new Set(records.map((r) => r.employeeCode));
   for (const loc of localEmployees) {
@@ -651,6 +662,8 @@ async function fetchEmployeeDirectoryUncached(): Promise<EmployeeDirectoryResult
       "—";
     records.push({
       ...loc,
+      companyId: loc.companyId || loc.extension?.employment?.entityId || "",
+      companyName: loc.companyName || loc.extension?.employment?.entityName || "—",
       reportingManagerId: ext.employment.reportingManagerId || loc.reportingManagerId || "",
       reportingManagerName: mgrName,
       departmentName: ext.employment.departmentName || loc.departmentName,
@@ -792,8 +805,6 @@ async function fetchEmployeeDirectoryUncached(): Promise<EmployeeDirectoryResult
     };
   }
 
-  applyDemoEntityAssignments(records);
-
   return { records, options, errors };
 }
 
@@ -824,7 +835,21 @@ export function filterEmployees(
   const q = query.trim().toLowerCase();
   return records.filter((r) => {
     if (filters.branchId && r.branchId !== filters.branchId) return false;
-    if (filters.entityId && r.extension.employment.entityId !== filters.entityId) return false;
+    if (filters.entityId) {
+      const eid = filters.entityId.toLowerCase();
+      const entityLabel = (
+        r.extension.employment.entityName ||
+        r.companyName ||
+        ""
+      ).toLowerCase();
+      if (eid === "technology" || eid === "technologies") {
+        if (!entityLabel.includes("technolog")) return false;
+      } else if (eid === "digitech") {
+        if (entityLabel.includes("technolog") || !entityLabel.includes("digitech")) return false;
+      } else if (r.companyId !== filters.entityId && r.extension.employment.entityId !== filters.entityId) {
+        return false;
+      }
+    }
     if (filters.departmentId && r.departmentId !== filters.departmentId) return false;
     if (filters.designation && r.designationName !== filters.designation) return false;
     if (filters.employmentType && r.employmentType !== filters.employmentType) return false;
@@ -833,13 +858,9 @@ export function filterEmployees(
       return false;
     }
     if (filters.location) {
-      const locId = r.locationId;
-      const locName = r.locationName;
-      if (filters.location.length === 36 && locId) {
-        if (locId !== filters.location) return false;
-      } else if (!locName || !locName.toLowerCase().includes(filters.location.toLowerCase())) {
-        return false;
-      }
+      const locName = (r.locationName || "").trim();
+      if (!locName || locName === "—") return false;
+      if (locName.toLowerCase() !== filters.location.toLowerCase()) return false;
     }
     if (filters.gender && r.gender !== filters.gender) return false;
     if (filters.joiningFrom && r.joiningDate && r.joiningDate < filters.joiningFrom) return false;
@@ -971,6 +992,8 @@ export async function createExistingEmployee(input: {
     designationName: input.designationName,
     branchId: input.branchId,
     branchName: "—",
+    companyId: "",
+    companyName: "—",
     locationId: "",
     locationName: "—",
     reportingManagerId: input.reportingManagerId || "",
@@ -1214,6 +1237,8 @@ export async function createEmployeeFromWizard(
     designationName,
     branchId,
     branchName: draft.employment.branchName || "—",
+    companyId: "",
+    companyName: "—",
     locationId: draft.employment.locationId || "",
     locationName: draft.employment.location || "—",
     reportingManagerId: reportingManagerId || "",
@@ -1407,14 +1432,16 @@ export async function bulkUpdateEmployees(
 
 export function exportEmployeesCsv(records: EmployeeRecord[]): string {
   const headers = [
-    "Employee ID",
-    "Name",
+    "Emp Code",
+    "NAME",
+    "Entity",
+    "Organisation",
+    "Base Location",
+    "Designation",
+    "Department",
+    "Reporting Manager",
     "Email",
     "Mobile",
-    "Department",
-    "Designation",
-    "Branch",
-    "Reporting manager",
     "Employment Type",
     "Joining Date",
     "Status",
@@ -1423,12 +1450,14 @@ export function exportEmployeesCsv(records: EmployeeRecord[]): string {
     [
       r.employeeCode,
       r.displayName,
+      r.extension.employment.entityName || "",
+      r.companyName || r.branchName,
+      r.locationName,
+      r.designationName,
+      r.departmentName,
+      r.reportingManagerName,
       r.officialEmail,
       r.mobile,
-      r.departmentName,
-      r.designationName,
-      r.branchName,
-      r.reportingManagerName,
       r.employmentType,
       r.joiningDate,
       r.lifecycleStatus,

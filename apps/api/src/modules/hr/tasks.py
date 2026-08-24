@@ -428,7 +428,15 @@ def separation_followups() -> dict:
             db.scalars(
                 select(HrSeparation).where(
                     HrSeparation.is_deleted.is_(False),
-                    HrSeparation.status.in_(["submitted", "manager_approved", "hr_approved"]),
+                    HrSeparation.status.in_(
+                        [
+                            "submitted",
+                            "manager_approved",
+                            "it_approved",
+                            "accounts_approved",
+                            "hr_approved",
+                        ]
+                    ),
                 )
             ).all()
         )

@@ -15,6 +15,7 @@ import { SetupEntityPanel, type FieldDef } from "@/components/hr/setup/setup-ent
 import { HolidayCalendarPanel } from "@/components/hr/setup/holiday-calendar-panel";
 import { AttendancePolicyPanel } from "@/components/hr/setup/attendance-policy-panel";
 import { ManagementGroupPanel } from "@/components/hr/setup/management-group-panel";
+import { OnboardingPoliciesPanel } from "@/components/hr/setup/onboarding-policies-panel";
 import { SetupToastHost } from "@/components/hr/setup/setup-toast";
 import { toApiTimeValue, toTimeInputValue } from "@/components/hr/setup/setup-drawer";
 import { HrStatusBadge, HrUnderlineTabs, type HrTabItem } from "@/components/hr/hr-primitives";
@@ -1457,6 +1458,9 @@ function TabPanel({ tab }: { tab: HrSetupTab }) {
   if (tab.id === "employment-types") {
     return <ManagementGroupPanel tab={tab} />;
   }
+  if (tab.id === "onboarding-policies") {
+    return <OnboardingPoliciesPanel />;
+  }
   const cfg = TAB_CONFIG[tab.id];
   if (!cfg) {
     return (
@@ -1518,7 +1522,7 @@ export function HrSetupCenter() {
           HRMS
         </Link>
         <ChevronRight className="size-3" />
-        <span className="text-foreground">Admin Setup</span>
+        <span className="text-foreground">Org Setup</span>
         <ChevronRight className="size-3" />
         <span className="text-foreground">{section.title}</span>
         <ChevronRight className="size-3" />
@@ -1526,7 +1530,7 @@ export function HrSetupCenter() {
       </nav>
 
       <div>
-        <h1 className="text-lg font-bold tracking-tight uppercase">Admin Setup</h1>
+        <h1 className="text-lg font-bold tracking-tight uppercase">Org Setup</h1>
       </div>
 
       <div className="space-y-4">

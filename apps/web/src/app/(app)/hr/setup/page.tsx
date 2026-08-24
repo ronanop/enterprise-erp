@@ -5,7 +5,7 @@ import { HrLoadingBlock } from "@/components/hr/hr-primitives";
 
 export default function HrSetupPage() {
   return (
-    <Suspense fallback={<HrLoadingBlock label="Loading Admin Setup…" />}>
+    <Suspense fallback={<HrLoadingBlock label="Loading Org Setup…" />}>
       <HrSetupCenter />
     </Suspense>
   );

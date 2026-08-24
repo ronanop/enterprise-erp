@@ -250,6 +250,7 @@ class LocationRepository(OrgScopedRepository):
         latitude: float | None = None,
         longitude: float | None = None,
         geofence_radius_meters: int | None = None,
+        status: str = "active",
     ) -> LocationEntity:
         row = OrgLocation(
             id=uuid4(),
@@ -262,7 +263,7 @@ class LocationRepository(OrgScopedRepository):
             latitude=latitude,
             longitude=longitude,
             geofence_radius_meters=geofence_radius_meters,
-            status="draft",
+            status=status if status in {"draft", "active", "inactive"} else "active",
             created_by=ctx.user_id,
             updated_by=ctx.user_id,
         )

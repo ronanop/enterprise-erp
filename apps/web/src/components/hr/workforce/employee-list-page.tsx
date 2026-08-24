@@ -18,7 +18,6 @@ import {
 
 import {
   EmsAvatar,
-  EmsPagination,
   EmsSkeleton,
 } from "@/components/hr/workforce/ems-primitives";
 import { EmployeeImportDrawer } from "@/components/hr/workforce/employee-import-drawer";
@@ -61,8 +60,6 @@ import {
   type SetupMasterOption,
 } from "@/services/hr-setup-service";
 
-const PAGE_SIZE = 12;
-
 const EMPTY_FILTERS: EmployeeListFilters = {
   branchId: "",
   entityId: "",
@@ -76,7 +73,7 @@ const EMPTY_FILTERS: EmployeeListFilters = {
   gender: "",
 };
 
-const ADVANCED_FILTER_KEYS: (keyof EmployeeListFilters)[] = ["entityId", "gender"];
+const ADVANCED_FILTER_KEYS: (keyof EmployeeListFilters)[] = ["gender"];
 
 function countAdvancedFilters(filters: EmployeeListFilters): number {
   return ADVANCED_FILTER_KEYS.filter((key) => Boolean(filters[key])).length;
@@ -89,7 +86,6 @@ export function EmployeeManagementPage() {
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState("");
   const [filters, setFilters] = useState<EmployeeListFilters>(EMPTY_FILTERS);
-  const [page, setPage] = useState(1);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [importOpen, setImportOpen] = useState(false);
   const [confirm, setConfirm] = useState<{
@@ -136,14 +132,6 @@ export function EmployeeManagementPage() {
   );
   const stats = useMemo(() => computeEmployeeStats(records), [records]);
   const advancedFilterCount = useMemo(() => countAdvancedFilters(filters), [filters]);
-  const pageRows = useMemo(() => {
-    const start = (page - 1) * PAGE_SIZE;
-    return filtered.slice(start, start + PAGE_SIZE);
-  }, [filtered, page]);
-
-  useEffect(() => {
-    setPage(1);
-  }, [query, filters]);
 
   useEffect(() => {
     if (advancedFilterCount > 0) setMoreFiltersOpen(true);
@@ -157,7 +145,7 @@ export function EmployeeManagementPage() {
   );
 
   function toggleAll(checked: boolean) {
-    if (checked) setSelected(new Set(pageRows.map((r) => r.id)));
+    if (checked) setSelected(new Set(filtered.map((r) => r.id)));
     else setSelected(new Set());
   }
 
@@ -285,22 +273,6 @@ export function EmployeeManagementPage() {
 
           {moreFiltersOpen ? (
             <div className="flex flex-wrap gap-2 rounded-lg border border-border/60 bg-muted/20 p-2">
-              <div className="w-44">
-                <SetupField label="Entity">
-                  <SetupSelect
-                    className="h-8 text-xs"
-                    value={filters.entityId}
-                    onChange={(e) => setFilters((f) => ({ ...f, entityId: e.target.value }))}
-                  >
-                    <option value="">All entities</option>
-                    {entityOptions.map((ent) => (
-                      <option key={ent.value} value={ent.value}>
-                        {ent.label}
-                      </option>
-                    ))}
-                  </SetupSelect>
-                </SetupField>
-              </div>
               <div className="w-36">
                 <SetupField label="Gender">
                   <SetupSelect
@@ -383,7 +355,7 @@ export function EmployeeManagementPage() {
                 </div>
               ) : null}
 
-              {!pageRows.length ? (
+              {!filtered.length ? (
                 <HrEmptyState
                   title="No employees match"
                   description="Adjust filters or add a new employee with the guided wizard."
@@ -405,20 +377,38 @@ export function EmployeeManagementPage() {
                             <input
                               type="checkbox"
                               className="cursor-pointer"
-                              checked={pageRows.length > 0 && pageRows.every((r) => selected.has(r.id))}
+                              checked={filtered.length > 0 && filtered.every((r) => selected.has(r.id))}
                               onChange={(e) => toggleAll(e.target.checked)}
                             />
                           </th>
-                          <HeaderFilterTh label="Employee" />
-                          <HeaderFilterTh label="ID" />
-                          <HeaderFilterTh label="Department">
+                          <HeaderFilterTh label="Emp Code" exactCase />
+                          <HeaderFilterTh label="NAME" exactCase />
+                          <HeaderFilterTh label="Entity" exactCase>
                             <HeaderFilterSelect
-                              value={filters.departmentId}
-                              onChange={(v) => setFilters((f) => ({ ...f, departmentId: v }))}
-                              options={options?.departments.map((d) => ({ value: d.id, label: d.label })) ?? []}
+                              value={filters.entityId}
+                              onChange={(v) => setFilters((f) => ({ ...f, entityId: v }))}
+                              options={[
+                                { value: "digitech", label: "Digitech" },
+                                { value: "technology", label: "Technologies" },
+                              ]}
                             />
                           </HeaderFilterTh>
-                          <HeaderFilterTh label="Designation">
+                          <HeaderFilterTh label="Organisation" exactCase />
+                          <HeaderFilterTh label="Base Location" exactCase>
+                            <HeaderFilterSelect
+                              value={filters.location}
+                              onChange={(v) => setFilters((f) => ({ ...f, location: v }))}
+                              options={[
+                                ...new Map(
+                                  (options?.locations ?? []).map((loc) => [
+                                    loc.label.toLowerCase(),
+                                    { value: loc.label, label: loc.label },
+                                  ]),
+                                ).values(),
+                              ]}
+                            />
+                          </HeaderFilterTh>
+                          <HeaderFilterTh label="Designation" exactCase>
                             <HeaderFilterSelect
                               value={filters.designation}
                               onChange={(v) => setFilters((f) => ({ ...f, designation: v }))}
@@ -427,27 +417,14 @@ export function EmployeeManagementPage() {
                                 .map((d) => ({ value: d, label: d }))}
                             />
                           </HeaderFilterTh>
-                          <HeaderFilterTh label="Branch">
+                          <HeaderFilterTh label="Department" exactCase>
                             <HeaderFilterSelect
-                              value={filters.branchId}
-                              onChange={(v) =>
-                                setFilters((f) => ({ ...f, branchId: v, location: "" }))
-                              }
-                              options={options?.branches.map((b) => ({ value: b.id, label: b.label })) ?? []}
+                              value={filters.departmentId}
+                              onChange={(v) => setFilters((f) => ({ ...f, departmentId: v }))}
+                              options={options?.departments.map((d) => ({ value: d.id, label: d.label })) ?? []}
                             />
                           </HeaderFilterTh>
-                          <HeaderFilterTh label="Location">
-                            <HeaderFilterSelect
-                              value={filters.location}
-                              onChange={(v) => setFilters((f) => ({ ...f, location: v }))}
-                              options={
-                                options?.locations
-                                  .filter((loc) => !filters.branchId || loc.branchId === filters.branchId)
-                                  .map((loc) => ({ value: loc.id, label: loc.label })) ?? []
-                              }
-                            />
-                          </HeaderFilterTh>
-                          <HeaderFilterTh label="Reporting Manager">
+                          <HeaderFilterTh label="Reporting Manager" exactCase>
                             <HeaderFilterSelect
                               value={filters.reportingManagerId}
                               onChange={(v) => setFilters((f) => ({ ...f, reportingManagerId: v }))}
@@ -488,7 +465,7 @@ export function EmployeeManagementPage() {
                         </tr>
                       </thead>
                       <tbody>
-                        {pageRows.map((row) => (
+                        {filtered.map((row) => (
                           <tr
                             key={row.id}
                             className="border-b border-border/50 transition-colors hover:bg-muted/30"
@@ -501,6 +478,9 @@ export function EmployeeManagementPage() {
                                 onChange={() => toggleOne(row.id)}
                               />
                             </td>
+                            <td className="px-2 py-2 font-mono text-xs text-muted-foreground">
+                              {row.employeeCode}
+                            </td>
                             <td className="px-2 py-2">
                               <Link
                                 href={`/hr/workforce/${row.id}`}
@@ -510,14 +490,21 @@ export function EmployeeManagementPage() {
                                 <span className="font-medium">{row.displayName}</span>
                               </Link>
                             </td>
-                            <td className="px-2 py-2 font-mono text-xs text-muted-foreground">
-                              {row.employeeCode}
+                            <td className="px-2 py-2 text-xs">{excelEntityCell(row)}</td>
+                            <td className="px-2 py-2 text-xs">{excelOrganisationCell(row)}</td>
+                            <td className="px-2 py-2 text-xs">
+                              {row.locationName && row.locationName !== "—"
+                                ? row.locationName
+                                : row.extension.employment.location?.trim() || "—"}
                             </td>
-                            <td className="px-2 py-2 text-xs">{row.departmentName}</td>
                             <td className="px-2 py-2 text-xs">{row.designationName}</td>
-                            <td className="px-2 py-2 text-xs">{row.branchName}</td>
-                            <td className="px-2 py-2 text-xs">{row.locationName}</td>
-                            <td className="px-2 py-2 text-xs">{row.reportingManagerName?.trim() || "—"}</td>
+                            <td className="px-2 py-2 text-xs">{row.departmentName}</td>
+                            <td className="px-2 py-2 text-xs">
+                              {row.reportingManagerName?.trim() &&
+                              row.reportingManagerName !== "—"
+                                ? row.reportingManagerName
+                                : row.extension.employment.reportingManagerName?.trim() || "—"}
+                            </td>
                             <td className="px-2 py-2 text-xs">{formatEmploymentTypeLabel(row.employmentType)}</td>
                             <td className="px-2 py-2 text-xs">{row.joiningDate || "—"}</td>
                             <td className="px-2 py-2">
@@ -590,12 +577,16 @@ export function EmployeeManagementPage() {
                       </tbody>
                     </table>
                   </div>
-                  <EmsPagination
-                    page={page}
-                    pageSize={PAGE_SIZE}
-                    total={filtered.length}
-                    onPageChange={setPage}
-                  />
+                  <div className="flex items-center border-t border-border/70 px-4 py-2.5 text-xs text-muted-foreground">
+                    <span>
+                      {filtered.length === 0
+                        ? "No employees"
+                        : `Showing ${filtered.length} employee${filtered.length === 1 ? "" : "s"}`}
+                      {query || Object.values(filters).some(Boolean)
+                        ? ` (filtered from ${records.length})`
+                        : ""}
+                    </span>
+                  </div>
                 </div>
               )}
           </div>
@@ -627,20 +618,52 @@ export function EmployeeManagementPage() {
 function HeaderFilterTh({
   label,
   children,
+  exactCase = false,
 }: {
   label: string;
   children?: ReactNode;
+  /** Keep label casing (Excel-style) instead of forcing uppercase */
+  exactCase?: boolean;
 }) {
   return (
     <th className="px-1.5 py-2 align-bottom">
       <div className="space-y-1">
-        <span className="block whitespace-nowrap text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+        <span
+          className={cn(
+            "block whitespace-nowrap text-[10px] font-semibold tracking-wide text-muted-foreground",
+            exactCase ? "normal-case" : "uppercase",
+          )}
+        >
           {label}
         </span>
         {children ?? <span className="block h-7" />}
       </div>
     </th>
   );
+}
+
+/** Excel Entity column: Digitech | Technologies */
+function excelEntityCell(row: {
+  extension: { employment: { entityName?: string } };
+  companyName?: string;
+}): string {
+  const blob = `${row.extension.employment.entityName || ""} ${row.companyName || ""}`.toLowerCase();
+  if (blob.includes("technolog")) return "Technologies";
+  if (blob.includes("digitech")) return "Digitech";
+  return row.extension.employment.entityName?.trim() || "—";
+}
+
+/** Excel Organisation column is always Cache for this workforce sheet */
+function excelOrganisationCell(row: {
+  extension: { employment: { entityName?: string } };
+  companyName?: string;
+  branchName?: string;
+}): string {
+  const blob = `${row.extension.employment.entityName || ""} ${row.companyName || ""}`.toLowerCase();
+  if (blob.includes("digitech") || blob.includes("technolog") || blob.includes("cache")) {
+    return "Cache";
+  }
+  return row.companyName || row.branchName || "—";
 }
 
 function HeaderFilterSelect({

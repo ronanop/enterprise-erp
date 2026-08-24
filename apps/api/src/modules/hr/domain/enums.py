@@ -202,6 +202,8 @@ class SeparationStatus(str, Enum):
     DRAFT = "draft"
     SUBMITTED = "submitted"
     MANAGER_APPROVED = "manager_approved"
+    IT_APPROVED = "it_approved"
+    ACCOUNTS_APPROVED = "accounts_approved"
     HR_APPROVED = "hr_approved"
     COMPLETED = "completed"
     CANCELLED = "cancelled"

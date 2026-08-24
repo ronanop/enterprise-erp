@@ -1,10 +1,11 @@
 """Separation service — completes via Master Data identity sync; FNF via payroll."""
 
 import copy
-from datetime import date
-from uuid import UUID
+from datetime import date, datetime, timezone
+from uuid import UUID, uuid4
 
 from sqlalchemy.orm import Session
+from core.exceptions import NotFoundException
 from modules.foundation.domain.value_objects import TenantContext
 from modules.foundation.service.audit_service import AuditService
 from modules.hr.adapters.master_data_port import HrMasterDataAdapter
@@ -24,9 +25,20 @@ DEFAULT_CHECKLIST = [
     {"key": "exit_interview", "label": "Exit interview", "done": False, "notes": None},
 ]
 
+# Maps approval stage → checklist key auto-cleared on that approval
+_STAGE_CHECKLIST_KEY = {
+    "it": "it",
+    "accounts": "finance",
+    "hr": "hr",
+}
+
 
 def default_clearance() -> dict:
-    return {"checklist": [dict(item) for item in DEFAULT_CHECKLIST], "exit_interview": None}
+    return {
+        "checklist": [dict(item) for item in DEFAULT_CHECKLIST],
+        "exit_interview": None,
+        "documents": [],
+    }
 
 
 class SeparationService:
@@ -93,16 +105,43 @@ class SeparationService:
 
     def approve(self, ctx: TenantContext, row_id: UUID, *, stage: str = "manager"):
         row = self.get(ctx, row_id)
-        if stage == "manager":
+        stage_key = (stage or "manager").strip().lower()
+        if stage_key == "manager":
             self._engine.manager_approve(row)
-        else:
+        elif stage_key in {"it", "it_approved"}:
+            self._engine.it_approve(row)
+            stage_key = "it"
+        elif stage_key in {"accounts", "accounts_approved", "finance"}:
+            self._engine.accounts_approve(row)
+            stage_key = "accounts"
+        elif stage_key in {"hr", "hr_approved"}:
             self._engine.hr_approve(row)
-        updated = self._repo.update(ctx, row_id, status=row.status)
+            stage_key = "hr"
+        else:
+            raise InvalidSeparationState(
+                "stage must be one of: manager, it, accounts, hr"
+            )
+
+        update_kwargs: dict = {"status": row.status}
+        checklist_key = _STAGE_CHECKLIST_KEY.get(stage_key)
+        if checklist_key:
+            clearance = self._clearance_for_update(row)
+            new_checklist: list[dict] = []
+            for item in clearance.get("checklist") or []:
+                entry = dict(item)
+                if str(entry.get("key")) == checklist_key:
+                    entry["done"] = True
+                    entry["notes"] = entry.get("notes") or f"Auto-cleared on {stage_key} approval"
+                new_checklist.append(entry)
+            clearance["checklist"] = new_checklist
+            update_kwargs["clearance_json"] = clearance
+
+        updated = self._repo.update(ctx, row_id, **update_kwargs)
         try:
             from modules.hr.service.hr_notify import notify_employee, notify_users_with_permission
 
             doc = row.document_number
-            if stage == "manager":
+            if stage_key == "manager":
                 notify_employee(
                     self._db,
                     tenant_id=ctx.tenant_id,
@@ -113,7 +152,7 @@ class SeparationService:
                     title="Exit request approved by manager",
                     body=(
                         f"Your offboarding case {doc} was approved by your reporting manager. "
-                        "HR approval is pending."
+                        "IT approval is pending."
                     ),
                     kind="separation",
                     extra={"separation_id": str(row.id), "document_number": doc},
@@ -123,11 +162,39 @@ class SeparationService:
                     self._db,
                     tenant_id=ctx.tenant_id,
                     permission_code="hr.separation:approve",
+                    template_code="hr.separation_pending_it",
+                    template_name="Exit Pending IT",
+                    event_type="hr.separation_pending_it",
+                    title="Exit approved by manager — IT action needed",
+                    body=f"Offboarding {doc} was approved by the reporting manager. Please complete IT approval.",
+                    kind="separation",
+                    extra={"separation_id": str(row.id), "document_number": doc},
+                    exclude_user_ids={ctx.user_id} if ctx.user_id else None,
+                )
+            elif stage_key == "it":
+                notify_users_with_permission(
+                    self._db,
+                    tenant_id=ctx.tenant_id,
+                    permission_code="hr.separation:approve",
+                    template_code="hr.separation_pending_accounts",
+                    template_name="Exit Pending Accounts",
+                    event_type="hr.separation_pending_accounts",
+                    title="Exit IT approved — Accounts action needed",
+                    body=f"Offboarding {doc} was approved by IT. Please complete Accounts approval.",
+                    kind="separation",
+                    extra={"separation_id": str(row.id), "document_number": doc},
+                    exclude_user_ids={ctx.user_id} if ctx.user_id else None,
+                )
+            elif stage_key == "accounts":
+                notify_users_with_permission(
+                    self._db,
+                    tenant_id=ctx.tenant_id,
+                    permission_code="hr.separation:approve",
                     template_code="hr.separation_pending_hr",
                     template_name="Exit Pending HR",
                     event_type="hr.separation_pending_hr",
-                    title="Exit approved by manager — HR action needed",
-                    body=f"Offboarding {doc} was approved by the reporting manager. Please complete HR approval.",
+                    title="Exit Accounts approved — HR action needed",
+                    body=f"Offboarding {doc} was approved by Accounts. Please complete HR approval.",
                     kind="separation",
                     extra={"separation_id": str(row.id), "document_number": doc},
                     exclude_user_ids={ctx.user_id} if ctx.user_id else None,
@@ -143,7 +210,7 @@ class SeparationService:
                     title="Exit request approved by HR",
                     body=(
                         f"Your offboarding case {doc} was approved by HR. "
-                        "Clearance and full & final settlement will follow."
+                        "Exit interview, documents, and full & final settlement will follow."
                     ),
                     kind="separation",
                     extra={"separation_id": str(row.id), "document_number": doc},
@@ -159,6 +226,8 @@ class SeparationService:
             clearance = {**default_clearance(), **{k: v for k, v in clearance.items() if k != "checklist"}}
             if "exit_interview" not in clearance:
                 clearance["exit_interview"] = None
+        if not isinstance(clearance.get("documents"), list):
+            clearance["documents"] = []
         return clearance
 
     def _clearance_for_update(self, row: HrSeparation) -> dict:
@@ -210,6 +279,8 @@ class SeparationService:
         interviewer_notes: str | None = None,
     ):
         row = self.get(ctx, row_id)
+        if row.status != "hr_approved":
+            raise InvalidSeparationState("Exit interview can be recorded after HR approval")
         clearance = self._clearance_for_update(row)
         clearance["exit_interview"] = {
             "answers": answers,
@@ -231,6 +302,55 @@ class SeparationService:
             entity_id=row_id,
             operation="exit_interview",
             performed_by=ctx.user_id,
+        )
+        return updated
+
+    def add_document(
+        self,
+        ctx: TenantContext,
+        row_id: UUID,
+        *,
+        name: str,
+        doc_type: str = "other",
+        notes: str | None = None,
+        file_name: str | None = None,
+    ):
+        row = self.get(ctx, row_id)
+        if row.status not in {
+            "hr_approved",
+            "accounts_approved",
+            "it_approved",
+            "manager_approved",
+            "completed",
+        }:
+            raise InvalidSeparationState("Upload exit documents after manager approval")
+        if row.status == "completed":
+            raise InvalidSeparationState("Cannot upload documents on a completed exit")
+        title = (name or "").strip()
+        if not title:
+            raise InvalidSeparationState("Document name is required")
+        clearance = self._clearance_for_update(row)
+        docs = list(clearance.get("documents") or [])
+        docs.append(
+            {
+                "id": str(uuid4()),
+                "name": title,
+                "doc_type": (doc_type or "other").strip().lower() or "other",
+                "notes": notes,
+                "file_name": file_name,
+                "uploaded_at": datetime.now(timezone.utc).isoformat(),
+                "uploaded_by": str(ctx.user_id) if ctx.user_id else None,
+            }
+        )
+        clearance["documents"] = docs
+        updated = self._repo.update(ctx, row_id, clearance_json=clearance)
+        self._audit.log_entity_change(
+            tenant_id=ctx.tenant_id,
+            entity_name="hr_separation",
+            entity_id=row_id,
+            operation="exit_document_upload",
+            performed_by=ctx.user_id,
+            new_value={"name": title, "doc_type": doc_type},
         )
         return updated
 
@@ -292,9 +412,15 @@ class SeparationService:
         from modules.payroll.service.payroll_run_service import PayrollRunService
 
         row = self.get(ctx, row_id)
-        if row.status not in {"hr_approved", "manager_approved"}:
+        if row.status != "hr_approved":
             raise InvalidSeparationState(
-                "FNF can be prepared only after manager or HR approval"
+                "FNF can be prepared only after HR approval "
+                "(Manager → IT → Accounts → HR)"
+            )
+        clearance = self._ensure_clearance(row)
+        if not clearance.get("exit_interview"):
+            raise InvalidSeparationState(
+                "Record the exit interview before preparing FNF"
             )
         if row.fnf_status in {"settled", "waived"}:
             raise InvalidSeparationState(f"FNF already {row.fnf_status}")
@@ -467,8 +593,8 @@ class SeparationService:
 
     def waive_fnf(self, ctx: TenantContext, row_id: UUID, *, reason: str | None = None):
         row = self.get(ctx, row_id)
-        if row.status not in {"hr_approved", "manager_approved"}:
-            raise InvalidSeparationState("Waive FNF only after approval")
+        if row.status != "hr_approved":
+            raise InvalidSeparationState("Waive FNF only after HR approval")
         clearance = dict(row.clearance_json or {})
         clearance["fnf"] = {"status": "waived", "reason": reason}
         return self._repo.update(
@@ -480,9 +606,12 @@ class SeparationService:
 
     def complete(self, ctx: TenantContext, row_id: UUID, *, approved_last_working_date: date | None = None):
         row = self.get(ctx, row_id)
-        if row.fnf_status not in {"settled", "waived", "calculated"}:
+        clearance = self._ensure_clearance(row)
+        if not clearance.get("exit_interview"):
+            raise InvalidSeparationState("Exit interview is required before completing separation")
+        if row.fnf_status not in {"settled", "waived"}:
             raise InvalidSeparationState(
-                "Prepare and calculate FNF (or waive) before completing separation"
+                "Settle or waive FNF before completing separation"
             )
         self._engine.complete(row)
         lwd = approved_last_working_date or row.approved_last_working_date or row.requested_last_working_date

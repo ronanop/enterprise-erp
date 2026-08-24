@@ -17,10 +17,13 @@ import {
   RELATIONSHIP_OPTIONS,
 } from "@/config/hr-master-options";
 import {
-  getCaseByToken,
+  acceptOnboardingTerms,
+  getCaseByTokenAsync,
+  ONBOARDING_TERMS_VERSION,
   savePortalProgress,
   submitPortal,
 } from "@/services/onboarding-management-service";
+import { ApiClientError } from "@/services/api-client";
 import { MAX_DOCUMENT_BYTES, MAX_PHOTO_BYTES, readFileAsDataUrl } from "@/services/employee-management-service";
 import {
   listPortalDocumentTypes,
@@ -33,10 +36,19 @@ import type {
   PortalPayload,
   PortalStepId,
 } from "@/types/onboarding-management";
-import { POLICY_DOCS, PORTAL_STEPS, emptyEducationMarks } from "@/types/onboarding-management";
+import { PORTAL_STEPS, emptyEducationMarks } from "@/types/onboarding-management";
 import type { PortalDocumentSection } from "@/services/hr-setup-service";
+import {
+  maskAadhaar,
+  maskAccount,
+  maskEmail,
+  maskPan,
+  maskPhone,
+} from "@/lib/pii-mask";
+import { listActivePoliciesForPortal } from "@/services/onboarding-policies-service";
 
 const AADHAAR_LEN = 16;
+const PHONE_LEN = 10;
 const PAN_RE = /^[A-Z]{5}[0-9]{4}[A-Z]$/;
 const ACCOUNT_MIN = 9;
 const ACCOUNT_MAX = 18;
@@ -44,6 +56,15 @@ const IFSC_RE = /^[A-Z]{4}0[A-Z0-9]{6}$/;
 
 function digitsOnly(value: string) {
   return value.replace(/\D/g, "");
+}
+
+function isValidPhone10(value: string): boolean {
+  return digitsOnly(value).length === PHONE_LEN;
+}
+
+function isValidPan(value: string): boolean {
+  const pan = value.trim().toUpperCase();
+  return pan.length === 10 && PAN_RE.test(pan);
 }
 
 function hasPassportPhoto(data: PortalPayload): boolean {
@@ -66,12 +87,25 @@ function validateStep(
       const email = (portal.personal.personalEmail || portal.personal.email).trim();
       if (!email) return "Personal email is required.";
       if (!portal.personal.phone.trim()) return "Phone number is required.";
+      if (!isValidPhone10(portal.personal.phone)) {
+        return "Wrong format — phone must be exactly 10 digits.";
+      }
       if (!portal.personal.address.trim()) return "Current address is required.";
       const permanent = portal.personal.sameAsCurrentAddress
         ? portal.personal.address.trim()
         : (portal.personal.permanentAddress || "").trim();
       if (!permanent) return "Permanent address is required.";
       if (!portal.personal.gender.trim()) return "Gender is required.";
+      if (!portal.personal.dob?.trim()) return "Date of birth is required.";
+      {
+        const dob = new Date(portal.personal.dob);
+        if (Number.isNaN(dob.getTime())) return "Enter a valid date of birth.";
+        const today = new Date();
+        let age = today.getFullYear() - dob.getFullYear();
+        const m = today.getMonth() - dob.getMonth();
+        if (m < 0 || (m === 0 && today.getDate() < dob.getDate())) age -= 1;
+        if (age < 18) return "Candidate must be at least 18 years old.";
+      }
       if (!portal.personal.maritalStatus.trim()) return "Marital status is required.";
       if (!hasPassportPhoto(portal)) return "Passport photo is required.";
       return null;
@@ -82,8 +116,9 @@ function validateStep(
       if (aadhaar.length !== AADHAAR_LEN) {
         return `Aadhaar must be exactly ${AADHAAR_LEN} digits.`;
       }
-      if (!PAN_RE.test(pan)) {
-        return "PAN must be 10 characters (e.g. ABCDE1234F).";
+      if (!pan) return "PAN is required.";
+      if (!isValidPan(pan)) {
+        return "Wrong format — PAN must be 10 characters like ABCDE1234F.";
       }
       return null;
     }
@@ -97,13 +132,16 @@ function validateStep(
         return `Account number must be ${ACCOUNT_MIN}–${ACCOUNT_MAX} digits.`;
       }
       if (!IFSC_RE.test(ifsc)) {
-        return "IFSC must be 11 characters (e.g. HDFC0001234).";
+        return "Wrong format — IFSC must be 11 characters (e.g. HDFC0001234).";
       }
       return null;
     }
     case "emergency": {
       if (!portal.emergency.name.trim()) return "Emergency contact name is required.";
       if (!portal.emergency.phone.trim()) return "Emergency contact phone number is required.";
+      if (!isValidPhone10(portal.emergency.phone)) {
+        return "Wrong format — phone must be exactly 10 digits.";
+      }
       return null;
     }
     case "documents": {
@@ -186,18 +224,6 @@ const DOC_SECTION_META: {
   },
 ];
 
-const DEMO_POLICY_BODY: Record<string, string> = {
-  handbook:
-    "Employee Handbook (demo)\n\nWelcome to the organization. This handbook outlines workplace expectations, leave entitlements, attendance rules, and HR contacts. Full PDF will be linked by HR in production.",
-  nda: "Non-Disclosure Agreement (demo)\n\nYou agree not to disclose confidential company information, customer data, or trade secrets during and after employment. This is seed content for onboarding preview.",
-  it_policy:
-    "IT Policy (demo)\n\nUse company devices and accounts responsibly. Do not share passwords. Report security incidents promptly. Personal software installs require IT approval.",
-  code_of_conduct:
-    "Code of Conduct (demo)\n\nTreat colleagues with respect. Zero tolerance for harassment or discrimination. Follow conflict-of-interest and gift policies.",
-  privacy:
-    "Privacy Policy (demo)\n\nWe process personal data for employment, payroll, and compliance. Data is retained per statutory requirements and shared only with authorized processors.",
-};
-
 function asDocumentKind(kind: string): DocumentKind {
   const known: DocumentKind[] = [
     "photo",
@@ -226,7 +252,11 @@ export function CandidateOnboardingPortal({ token }: { token: string }) {
   const [stepError, setStepError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [done, setDone] = useState(false);
-  const [policyPreview, setPolicyPreview] = useState<(typeof POLICY_DOCS)[number] | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [termsChecked, setTermsChecked] = useState(false);
+  const [acceptingTerms, setAcceptingTerms] = useState(false);
+  const [policyPreview, setPolicyPreview] = useState<{ id: string; label: string } | null>(null);
+  const [policyDocs, setPolicyDocs] = useState<{ id: string; label: string; body: string }[]>([]);
   const [docTypes, setDocTypes] = useState<PortalDocumentType[]>([]);
   const [photoUploading, setPhotoUploading] = useState(false);
   const portalRef = useRef<PortalPayload | null>(null);
@@ -245,29 +275,66 @@ export function CandidateOnboardingPortal({ token }: { token: string }) {
   }
 
   useEffect(() => {
-    const c = getCaseByToken(token);
-    if (!c) {
-      setError("This onboarding link is invalid or has been removed.");
-      return;
-    }
-    if (c.invitation && new Date(c.invitation.expiresAt).getTime() < Date.now()) {
-      setError("This onboarding link has expired. Please contact HR for a new invitation.");
+    let cancelled = false;
+    setLoading(true);
+    setError(null);
+    void (async () => {
+      const c = await getCaseByTokenAsync(token);
+      if (cancelled) return;
+      if (!c) {
+        setError("This onboarding link is invalid or has been removed.");
+        setLoading(false);
+        return;
+      }
+      if (c.invitation && new Date(c.invitation.expiresAt).getTime() < Date.now()) {
+        setError("This onboarding link has expired. Please contact HR for a new invitation.");
+        setCaseRow(c);
+        setLoading(false);
+        return;
+      }
+      if (c.portal.submittedAt || c.status === "joined") {
+        setDone(true);
+      }
       setCaseRow(c);
-      return;
-    }
-    if (c.portal.submittedAt || c.status === "joined") {
-      setDone(true);
-    }
-    setCaseRow(c);
-    setPortal({
-      ...c.portal,
-      educationMarks: c.portal.educationMarks ?? emptyEducationMarks(),
-    });
+      setPortal({
+        ...c.portal,
+        educationMarks: c.portal.educationMarks ?? emptyEducationMarks(),
+      });
+      setLoading(false);
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, [token]);
 
   useEffect(() => {
     void listPortalDocumentTypes().then(setDocTypes);
+    setPolicyDocs(listActivePoliciesForPortal());
   }, []);
+
+  const termsAccepted = Boolean(caseRow?.termsAcceptedAt);
+
+  async function handleAcceptTerms() {
+    if (!termsChecked) {
+      setStepError("Please tick the box to accept the terms before continuing.");
+      return;
+    }
+    setAcceptingTerms(true);
+    setStepError(null);
+    try {
+      const updated = await acceptOnboardingTerms(token);
+      if (!updated) {
+        setError("Could not record your acceptance. Please try again.");
+        return;
+      }
+      setCaseRow(updated);
+    } catch (e) {
+      const msg = e instanceof ApiClientError ? e.message : "Could not accept terms.";
+      setStepError(msg);
+    } finally {
+      setAcceptingTerms(false);
+    }
+  }
 
   const stepIdx = useMemo(() => {
     if (!portal) return 0;
@@ -303,8 +370,14 @@ export function CandidateOnboardingPortal({ token }: { token: string }) {
     const next = { ...p, currentStep: step };
     applyPortal(next);
     setStepError(null);
-    const saved = savePortalProgress(token, next);
-    if (!saved) setStepError("Could not save progress. Please try again.");
+    void (async () => {
+      try {
+        const saved = await savePortalProgress(token, next);
+        if (!saved) setStepError("Could not save progress. Please try again.");
+      } catch (e) {
+        setStepError(e instanceof ApiClientError ? e.message : "Could not save progress.");
+      }
+    })();
   }
 
   function validateCurrentStep(): string | null {
@@ -323,7 +396,15 @@ export function CandidateOnboardingPortal({ token }: { token: string }) {
     }
     setStepError(null);
     let nextPortal = p;
-    if (p.currentStep === "government_ids") {
+    if (p.currentStep === "personal") {
+      nextPortal = {
+        ...p,
+        personal: {
+          ...p.personal,
+          phone: digitsOnly(p.personal.phone).slice(0, PHONE_LEN),
+        },
+      };
+    } else if (p.currentStep === "government_ids") {
       nextPortal = {
         ...p,
         governmentIds: {
@@ -341,6 +422,14 @@ export function CandidateOnboardingPortal({ token }: { token: string }) {
           ifsc: p.bank.ifsc.trim().toUpperCase(),
         },
       };
+    } else if (p.currentStep === "emergency") {
+      nextPortal = {
+        ...p,
+        emergency: {
+          ...p.emergency,
+          phone: digitsOnly(p.emergency.phone).slice(0, PHONE_LEN),
+        },
+      };
     }
     const i = PORTAL_STEPS.findIndex((s) => s.id === p.currentStep);
     if (i >= PORTAL_STEPS.length - 1) {
@@ -349,8 +438,14 @@ export function CandidateOnboardingPortal({ token }: { token: string }) {
     }
     const advanced = { ...nextPortal, currentStep: PORTAL_STEPS[i + 1].id };
     applyPortal(advanced);
-    const saved = savePortalProgress(token, advanced);
-    if (!saved) setStepError("Could not save progress. Please try again.");
+    void (async () => {
+      try {
+        const saved = await savePortalProgress(token, advanced);
+        if (!saved) setStepError("Could not save progress. Please try again.");
+      } catch (e) {
+        setStepError(e instanceof ApiClientError ? e.message : "Could not save progress.");
+      }
+    })();
   }
 
   function prevStep() {
@@ -414,9 +509,14 @@ export function CandidateOnboardingPortal({ token }: { token: string }) {
     };
 
     applyPortal(nextPortal);
-    const saved = savePortalProgress(token, nextPortal);
-    if (!saved) {
-      setStepError("Could not save the file. Try a smaller image or clear browser storage.");
+    try {
+      const saved = await savePortalProgress(token, nextPortal);
+      if (!saved) {
+        setStepError("Could not save the file. Try a smaller image or clear browser storage.");
+        return false;
+      }
+    } catch (e) {
+      setStepError(e instanceof ApiClientError ? e.message : "Could not save the file.");
       return false;
     }
     return true;
@@ -430,8 +530,12 @@ export function CandidateOnboardingPortal({ token }: { token: string }) {
       documents: p.documents.filter((d) => d.id !== docId),
     };
     applyPortal(nextPortal);
-    const saved = savePortalProgress(token, nextPortal);
-    if (!saved) setStepError("Could not update documents. Please try again.");
+    try {
+      const saved = await savePortalProgress(token, nextPortal);
+      if (!saved) setStepError("Could not update documents. Please try again.");
+    } catch (e) {
+      setStepError(e instanceof ApiClientError ? e.message : "Could not update documents.");
+    }
   }
 
   async function onPickFile(docType: PortalDocumentType, file: File | undefined) {
@@ -512,8 +616,10 @@ export function CandidateOnboardingPortal({ token }: { token: string }) {
     if (!p) return;
     setSaving(true);
     try {
-      const saved = savePortalProgress(token, p);
+      const saved = await savePortalProgress(token, p);
       if (!saved) setStepError("Could not save progress. Please try again.");
+    } catch (e) {
+      setStepError(e instanceof ApiClientError ? e.message : "Could not save progress.");
     } finally {
       setSaving(false);
     }
@@ -534,17 +640,26 @@ export function CandidateOnboardingPortal({ token }: { token: string }) {
     setError(null);
     setStepError(null);
     try {
-      const submitted = submitPortal(token, p);
+      const submitted = await submitPortal(token, p);
       if (submitted) {
         setDone(true);
         setCaseRow(submitted);
-        applyPortal(submitted.portal);
       } else {
         setError("Could not submit onboarding. Please try again.");
       }
+    } catch (e) {
+      setError(e instanceof ApiClientError ? e.message : "Could not submit onboarding. Please try again.");
     } finally {
       setSaving(false);
     }
+  }
+
+  if (loading) {
+    return (
+      <Shell>
+        <p className="text-sm text-muted-foreground">Loading your onboarding portal…</p>
+      </Shell>
+    );
   }
 
   if (error && !caseRow) {
@@ -578,6 +693,70 @@ export function CandidateOnboardingPortal({ token }: { token: string }) {
           {caseRow.employeeId ? (
             <p className="mt-3 font-mono text-sm text-emerald-950">Employee ID: {caseRow.employeeId}</p>
           ) : null}
+        </div>
+      </Shell>
+    );
+  }
+
+  if (!termsAccepted) {
+    return (
+      <Shell>
+        <div className="mx-auto max-w-xl space-y-4 rounded-xl border border-border/70 bg-card p-5 shadow-sm">
+          <div>
+            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+              {caseRow.caseCode} · {caseRow.entityName || "Employer"}
+            </p>
+            <h1 className="mt-1 text-lg font-semibold text-foreground">
+              Welcome, {caseRow.candidateName}
+            </h1>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Before you begin onboarding, please review and accept how we collect and use your
+              personal information.
+            </p>
+          </div>
+
+          <div className="max-h-56 space-y-2 overflow-y-auto rounded-lg border border-border/60 bg-muted/20 p-3 text-xs leading-relaxed text-muted-foreground">
+            <p className="font-medium text-foreground">Terms &amp; privacy notice ({ONBOARDING_TERMS_VERSION})</p>
+            <p>
+              We collect personal details, government IDs, bank information, emergency contacts, and
+              employment documents solely for employment onboarding, payroll setup, statutory
+              compliance, and workplace administration.
+            </p>
+            <p>
+              Your information is processed by authorized HR and payroll staff of the hiring entity
+              and will not be sold to third parties. You may contact HR to correct inaccurate data.
+              Providing false information may delay or cancel your joining.
+            </p>
+            <p>
+              By continuing you confirm that you are the invited candidate, that the information you
+              submit is accurate to the best of your knowledge, and that you consent to this
+              processing for employment purposes.
+            </p>
+          </div>
+
+          <label className="flex cursor-pointer items-start gap-2.5 rounded-lg border border-border/60 px-3 py-2.5 text-sm">
+            <input
+              type="checkbox"
+              className="mt-0.5 size-4 cursor-pointer accent-primary"
+              checked={termsChecked}
+              onChange={(e) => setTermsChecked(e.target.checked)}
+            />
+            <span>
+              I have read and accept the terms &amp; conditions and consent to the collection and use
+              of my personal information for employment onboarding.
+            </span>
+          </label>
+
+          {stepError ? <p className="text-xs text-destructive">{stepError}</p> : null}
+          {error ? <p className="text-xs text-destructive">{error}</p> : null}
+
+          <Button
+            className="w-full cursor-pointer"
+            disabled={acceptingTerms || !termsChecked}
+            onClick={() => void handleAcceptTerms()}
+          >
+            {acceptingTerms ? "Saving…" : "Accept & continue to onboarding"}
+          </Button>
         </div>
       </Shell>
     );
@@ -695,10 +874,15 @@ export function CandidateOnboardingPortal({ token }: { token: string }) {
                 ))}
               </SetupSelect>
             </SetupField>
-            <SetupField label="Date of birth">
+            <SetupField label="Date of birth" required>
               <SetupInput
                 type="date"
                 value={portal.personal.dob}
+                max={(() => {
+                  const d = new Date();
+                  d.setFullYear(d.getFullYear() - 18);
+                  return d.toISOString().slice(0, 10);
+                })()}
                 onChange={(e) =>
                   patchPortal({ personal: { ...portal.personal, dob: e.target.value } })
                 }
@@ -719,11 +903,20 @@ export function CandidateOnboardingPortal({ token }: { token: string }) {
                 ))}
               </SetupSelect>
             </SetupField>
-            <SetupField label="Phone" required>
+            <SetupField label="Phone" required hint="Exactly 10 digits">
               <SetupInput
+                inputMode="numeric"
+                autoComplete="tel"
+                maxLength={PHONE_LEN}
+                placeholder="10-digit mobile number"
                 value={portal.personal.phone}
                 onChange={(e) =>
-                  patchPortal({ personal: { ...portal.personal, phone: e.target.value } })
+                  patchPortal({
+                    personal: {
+                      ...portal.personal,
+                      phone: digitsOnly(e.target.value).slice(0, PHONE_LEN),
+                    },
+                  })
                 }
               />
             </SetupField>
@@ -867,7 +1060,7 @@ export function CandidateOnboardingPortal({ token }: { token: string }) {
                 }
               />
             </SetupField>
-            <SetupField label="PAN" required hint="Format: ABCDE1234F">
+            <SetupField label="PAN" required hint="Format: ABCDE1234F (10 characters)">
               <SetupInput
                 autoComplete="off"
                 placeholder="ABCDE1234F"
@@ -1027,11 +1220,20 @@ export function CandidateOnboardingPortal({ token }: { token: string }) {
                 ))}
               </SetupSelect>
             </SetupField>
-            <SetupField label="Phone" required>
+            <SetupField label="Phone" required hint="Exactly 10 digits">
               <SetupInput
+                inputMode="numeric"
+                autoComplete="tel"
+                maxLength={PHONE_LEN}
+                placeholder="10-digit mobile number"
                 value={portal.emergency.phone}
                 onChange={(e) =>
-                  patchPortal({ emergency: { ...portal.emergency, phone: e.target.value } })
+                  patchPortal({
+                    emergency: {
+                      ...portal.emergency,
+                      phone: digitsOnly(e.target.value).slice(0, PHONE_LEN),
+                    },
+                  })
                 }
               />
             </SetupField>
@@ -1203,7 +1405,7 @@ export function CandidateOnboardingPortal({ token }: { token: string }) {
         {step.id === "policies" ? (
           <div className="space-y-3">
             <ul className="space-y-2 text-xs">
-              {POLICY_DOCS.map((p) => (
+              {policyDocs.map((p) => (
                 <li
                   key={p.id}
                   className="flex items-center justify-between rounded-lg border border-border/70 px-3 py-2"
@@ -1215,13 +1417,19 @@ export function CandidateOnboardingPortal({ token }: { token: string }) {
                   <button
                     type="button"
                     className="cursor-pointer font-medium text-primary underline-offset-2 hover:underline"
-                    onClick={() => setPolicyPreview(p)}
+                    onClick={() => setPolicyPreview({ id: p.id, label: p.label })}
                   >
-                    View PDF
+                    View
                   </button>
                 </li>
               ))}
             </ul>
+            {policyDocs.length === 0 ? (
+              <p className="text-xs text-amber-800">
+                No active policies configured. HR should add them under Org Setup → Employment →
+                Onboarding Policies.
+              </p>
+            ) : null}
             <label className="flex cursor-pointer items-start gap-2 text-xs">
               <input
                 type="checkbox"
@@ -1232,15 +1440,14 @@ export function CandidateOnboardingPortal({ token }: { token: string }) {
                     policies: {
                       ...portal.policies,
                       agreed: e.target.checked,
-                      policies: POLICY_DOCS.map((p) => p.id),
+                      policies: policyDocs.map((p) => p.id),
                       acceptedAt: e.target.checked ? new Date().toISOString() : undefined,
                     },
                   })
                 }
               />
               <span>
-                I agree to the Employee Handbook, NDA, IT Policy, Code of Conduct, and Privacy
-                Policy.
+                I agree to the company policies listed above.
                 <span className="text-destructive"> *</span>
               </span>
             </label>
@@ -1305,12 +1512,23 @@ export function CandidateOnboardingPortal({ token }: { token: string }) {
               label="Name"
               value={`${portal.personal.firstName} ${portal.personal.lastName}`}
             />
-            <ReviewRow label="Personal Email" value={portal.personal.personalEmail || portal.personal.email} />
-            <ReviewRow label="Aadhaar" value={portal.governmentIds.aadhaar || "—"} />
-            <ReviewRow label="PAN" value={portal.governmentIds.pan || "—"} />
+            <ReviewRow
+              label="Personal Email"
+              value={maskEmail(portal.personal.personalEmail || portal.personal.email) || "—"}
+            />
+            <ReviewRow label="Phone" value={maskPhone(portal.personal.phone) || "—"} />
+            <ReviewRow label="Aadhaar" value={maskAadhaar(portal.governmentIds.aadhaar) || "—"} />
+            <ReviewRow label="PAN" value={maskPan(portal.governmentIds.pan) || "—"} />
             <ReviewRow label="Bank" value={portal.bank.bankName || "—"} />
-            <ReviewRow label="Account" value={portal.bank.accountNumber || "—"} />
-            <ReviewRow label="Emergency" value={portal.emergency.name || "—"} />
+            <ReviewRow label="Account" value={maskAccount(portal.bank.accountNumber) || "—"} />
+            <ReviewRow
+              label="Emergency"
+              value={
+                portal.emergency.name
+                  ? `${portal.emergency.name} · ${maskPhone(portal.emergency.phone) || "—"}`
+                  : "—"
+              }
+            />
             <ReviewRow
               label="Education"
               value={
@@ -1452,11 +1670,9 @@ export function CandidateOnboardingPortal({ token }: { token: string }) {
               </button>
             </div>
             <div className="max-h-[60vh] overflow-y-auto px-4 py-4">
-              <p className="mb-2 text-[10px] font-medium tracking-wide text-muted-foreground uppercase">
-                Demo policy preview
-              </p>
               <pre className="whitespace-pre-wrap font-sans text-sm leading-relaxed text-foreground">
-                {DEMO_POLICY_BODY[policyPreview.id] ?? "Demo policy content."}
+                {policyDocs.find((p) => p.id === policyPreview.id)?.body ||
+                  "No policy content configured. Ask HR to update Org Setup → Employment → Onboarding Policies."}
               </pre>
             </div>
             <div className="flex justify-end border-t border-border/70 px-4 py-3">

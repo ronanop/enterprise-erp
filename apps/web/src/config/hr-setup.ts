@@ -36,6 +36,7 @@ export type HrSetupTabId =
   | "employment-type"
   | "reporting"
   | "document-types"
+  | "onboarding-policies"
   | "leave-policies"
   | "leave-types"
   | "holiday-calendar"
@@ -170,6 +171,13 @@ export const hrSetupSections: HrSetupSection[] = [
         source: "local",
         codePrefix: "DOC",
       },
+      {
+        id: "onboarding-policies",
+        title: "Onboarding Policies",
+        description: "Policy text shown to candidates before signature",
+        source: "local",
+        codePrefix: "POL",
+      },
     ],
   },
   {
@@ -213,7 +221,7 @@ export const hrSetupSections: HrSetupSection[] = [
   },
 ];
 
-/** Standalone Meeting Room module (sidebar) — not an Admin Setup tab. */
+/** Standalone Meeting Room module (sidebar) — not an Org Setup tab. */
 export const meetingRoomTab: HrSetupTab = {
   id: "rooms",
   title: "Meeting Room",
@@ -242,6 +250,7 @@ export const setupTabIcons: Partial<Record<HrSetupTabId, LucideIcon>> = {
   "employment-type": Briefcase,
   reporting: Users,
   "document-types": FileText,
+  "onboarding-policies": Shield,
   "leave-policies": Shield,
   "leave-types": CalendarDays,
   "holiday-calendar": CalendarDays,

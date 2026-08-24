@@ -1,6 +1,6 @@
 "use client";
 
-import { useId, useMemo, type ReactNode } from "react";
+import { useId, useMemo, type ReactNode, createContext, useContext } from "react";
 import {
   Area,
   AreaChart,
@@ -38,6 +38,13 @@ type FormatFn = (n: number) => string;
 
 function defaultFormat(n: number): string {
   return n.toLocaleString("en-IN");
+}
+
+export const ChartHeightContext = createContext<number | null>(null);
+
+function useChartHeight(fallback: number): number {
+  const ctx = useContext(ChartHeightContext);
+  return ctx != null && ctx > 0 ? ctx : fallback;
 }
 
 function ChartShell({
@@ -79,9 +86,12 @@ function ChartShell({
   );
 }
 
-function EmptyChart() {
+function EmptyChart({ height = 220 }: { height?: number }) {
   return (
-    <div className="flex h-[220px] items-center justify-center text-xs text-muted-foreground">
+    <div
+      className="flex items-center justify-center text-xs text-muted-foreground"
+      style={{ height }}
+    >
       No data available
     </div>
   );
@@ -132,17 +142,21 @@ export function PremiumAreaChart({
   color?: string;
 }) {
   const gradId = useId().replace(/:/g, "");
+  const chartH = useChartHeight(220);
   const rows = useMemo(() => data.map((d) => ({ name: d.label, value: d.value })), [data]);
   if (!rows.length) {
     return (
       <ChartShell title={title} subtitle={subtitle}>
-        <EmptyChart />
+        <EmptyChart height={chartH} />
       </ChartShell>
     );
   }
   return (
     <ChartShell title={title} subtitle={subtitle}>
-      <div className="h-[220px] w-full motion-safe:animate-in motion-safe:fade-in-0 motion-safe:duration-300">
+      <div
+        className="w-full motion-safe:animate-in motion-safe:fade-in-0 motion-safe:duration-300"
+        style={{ height: chartH }}
+      >
         <ResponsiveContainer width="100%" height="100%">
           <AreaChart data={rows} margin={{ top: 8, right: 8, left: -12, bottom: 0 }}>
             <defs>
@@ -200,17 +214,18 @@ export function PremiumBarChart({
 }) {
   const fmt = formatValue ?? defaultFormat;
   const rows = useMemo(() => data.map((d) => ({ name: d.label, value: d.value })), [data]);
+  const horizontal = layout === "horizontal";
+  const autoH = Math.max(220, horizontal ? 48 + Math.max(rows.length, 1) * 36 : 220);
+  const chartHeight = useChartHeight(autoH);
   if (!rows.length) {
     return (
       <ChartShell title={title} subtitle={subtitle}>
-        <EmptyChart />
+        <EmptyChart height={chartHeight} />
       </ChartShell>
     );
   }
 
-  const horizontal = layout === "horizontal";
   const total = rows.reduce((s, r) => s + r.value, 0);
-  const chartHeight = Math.max(220, horizontal ? 48 + rows.length * 36 : 220);
 
   return (
     <ChartShell
@@ -314,6 +329,7 @@ export function PremiumDonutChart({
   data: NamedCount[];
   formatValue?: FormatFn;
 }) {
+  const chartH = useChartHeight(220);
   const rows = useMemo(
     () => data.filter((d) => d.value > 0).map((d) => ({ name: d.label, value: d.value })),
     [data],
@@ -323,7 +339,7 @@ export function PremiumDonutChart({
   if (!rows.length) {
     return (
       <ChartShell title={title} subtitle={subtitle}>
-        <EmptyChart />
+        <EmptyChart height={chartH} />
       </ChartShell>
     );
   }
@@ -338,7 +354,10 @@ export function PremiumDonutChart({
         </span>
       }
     >
-      <div className="grid h-[220px] grid-cols-[1.1fr_0.9fr] items-center gap-2">
+      <div
+        className="grid grid-cols-[1.1fr_0.9fr] items-center gap-2"
+        style={{ height: chartH }}
+      >
         <div className="relative h-full min-h-[180px] w-full motion-safe:animate-in motion-safe:fade-in-0 motion-safe:duration-300">
           <ResponsiveContainer width="100%" height="100%">
             <PieChart>

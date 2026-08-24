@@ -4,7 +4,6 @@ import { useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Building2 } from "lucide-react";
 
-import { Button } from "@/components/ui/button";
 import { isAuthenticated, redirectToLogin } from "@/lib/auth";
 import { setStoredOrgContext } from "@/lib/org-context-storage";
 import { ApiClientError, contextService } from "@/services/api-client";
@@ -124,14 +123,9 @@ export function SelectCompanyForm() {
                 <p className="font-medium">{company.company_name}</p>
                 <p className="text-xs text-muted-foreground">{company.company_code}</p>
               </div>
-              <Button
-                size="sm"
-                variant="outline"
-                className="pointer-events-none shadow-none"
-                disabled={selectingId === company.id}
-              >
+              <span className="inline-flex h-8 items-center rounded-lg border border-border bg-background px-3 text-xs font-medium text-foreground">
                 {selectingId === company.id ? "Switching…" : "Continue"}
-              </Button>
+              </span>
             </button>
           ))}
         </div>

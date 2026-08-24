@@ -278,6 +278,7 @@ function buildStats(
   people: ReturnType<typeof buildJoinedPeople>["people"],
   recruitment: Awaited<ReturnType<typeof loadRecruitmentOverview>> | null,
   payroll: Awaited<ReturnType<typeof loadPayrollOverview>> | null,
+  onboardingInProcess = 0,
 ): HrDashboardStats {
   const today = todayIso();
   const activeEmployees = people.filter((p) =>
@@ -373,6 +374,7 @@ function buildStats(
     upcomingAnniversaries,
     onProbation,
     onNoticePeriod,
+    onboardingInProcess,
   };
 }
 
@@ -1047,11 +1049,12 @@ export async function loadHrExecutiveDashboard(
   let recruitment: Awaited<ReturnType<typeof loadRecruitmentOverview>> | null = null;
   let payroll: Awaited<ReturnType<typeof loadPayrollOverview>> | null = null;
   let essInbox: HrEssInboxItem[] = [];
+  let onboardingInProcess = 0;
   let partial = false;
   let authBlocked = false;
 
   try {
-    const [ov, empRows, deptRows, branchRows, rec, pay, inbox] = await Promise.all([
+    const [ov, empRows, deptRows, branchRows, rec, pay, inbox, onboardingDir] = await Promise.all([
       loadHrOverview(),
       safeRows("/employees"),
       safeRows("/departments"),
@@ -1059,6 +1062,9 @@ export async function loadHrExecutiveDashboard(
       loadRecruitmentOverview().catch(() => null),
       loadPayrollOverview().catch(() => null),
       loadHrEssInbox({ includeCompoff: true }).catch(() => [] as HrEssInboxItem[]),
+      import("@/services/onboarding-management-service")
+        .then((m) => m.loadOnboardingDirectory())
+        .catch(() => null),
     ]);
     overview = ov;
     employees = empRows as MasterEmployee[];
@@ -1071,6 +1077,13 @@ export async function loadHrExecutiveDashboard(
     recruitment = rec;
     payroll = pay;
     essInbox = inbox;
+    if (onboardingDir?.cases) {
+      onboardingInProcess = onboardingDir.cases.filter((c) => {
+        const st = String(c.status ?? "").toLowerCase();
+        if (["joined", "cancelled"].includes(st)) return false;
+        return Boolean(c.invitation?.sentAt) || ["invitation_sent", "in_progress", "submitted", "hr_review"].includes(st);
+      }).length;
+    }
     partial = Boolean(overview.partial);
     authBlocked =
       overview.statusCodes.includes(401) ||
@@ -1104,7 +1117,7 @@ export async function loadHrExecutiveDashboard(
   }
 
   const { people, empById } = buildJoinedPeople(overview, employees, departments, branches);
-  const stats = buildStats(overview, people, recruitment, payroll);
+  const stats = buildStats(overview, people, recruitment, payroll, onboardingInProcess);
   const approvals = [
     ...buildApprovals(overview, empById, recruitment),
     ...buildRequestsFromInbox(essInbox),

@@ -3,6 +3,7 @@ import { listHrEmployeeOptions } from "@/services/hr-service";
 import type { HrRow } from "@/services/hr-service";
 import type {
   ClearanceChecklistItem,
+  ExitDocument,
   ExitInterviewData,
   OffboardingCase,
   SeparationType,
@@ -25,6 +26,7 @@ function parseDone(raw: unknown): boolean {
 function parseClearance(raw: unknown): {
   checklist: ClearanceChecklistItem[];
   exitInterview: ExitInterviewData | null;
+  documents: ExitDocument[];
   fnfMeta: Record<string, unknown> | null;
 } {
   const c = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
@@ -43,11 +45,28 @@ function parseClearance(raw: unknown): {
     ? {
         answers: (ei.answers as Record<string, string>) ?? {},
         interviewerNotes: ei.interviewer_notes != null ? String(ei.interviewer_notes) : null,
-        capturedAt: ei.captured_at != null ? String(ei.captured_at) : undefined,
+        capturedAt:
+          ei.captured_at != null
+            ? String(ei.captured_at)
+            : ei.completed_at != null
+              ? String(ei.completed_at)
+              : undefined,
       }
     : null;
+  const docsRaw = Array.isArray(c.documents) ? c.documents : [];
+  const documents = docsRaw.map((item) => {
+    const o = item as Record<string, unknown>;
+    return {
+      id: String(o.id ?? ""),
+      name: String(o.name ?? "Document"),
+      docType: String(o.doc_type ?? "other"),
+      notes: o.notes != null ? String(o.notes) : null,
+      fileName: o.file_name != null ? String(o.file_name) : null,
+      uploadedAt: o.uploaded_at != null ? String(o.uploaded_at) : null,
+    };
+  });
   const fnfMeta = (c.fnf as Record<string, unknown>) ?? null;
-  return { checklist, exitInterview, fnfMeta };
+  return { checklist, exitInterview, documents, fnfMeta };
 }
 
 function parseEmployeeLabel(label: string): { name: string; code: string } {
@@ -61,7 +80,7 @@ export function mapOffboardingRow(
   employeeNames: Map<string, string>,
   employeeCodes: Map<string, string>,
 ): OffboardingCase {
-  const { checklist, exitInterview, fnfMeta } = parseClearance(row.clearance_json);
+  const { checklist, exitInterview, documents, fnfMeta } = parseClearance(row.clearance_json);
   const employeeId = String(row.employee_id ?? "");
   const fallbackCode = employeeId ? employeeId.slice(0, 8) : "—";
   return {
@@ -81,6 +100,7 @@ export function mapOffboardingRow(
     reason: row.reason != null ? String(row.reason) : null,
     checklist,
     exitInterview,
+    documents,
     fnfMeta,
   };
 }
@@ -139,7 +159,7 @@ export async function createOffboardingCase(input: {
 }
 
 export function patchOffboardingCaseFromRow(c: OffboardingCase, row: HrRow): OffboardingCase {
-  const { checklist, exitInterview, fnfMeta } = parseClearance(row.clearance_json);
+  const { checklist, exitInterview, documents, fnfMeta } = parseClearance(row.clearance_json);
   return {
     ...c,
     status: String(row.status ?? c.status),
@@ -149,6 +169,7 @@ export function patchOffboardingCaseFromRow(c: OffboardingCase, row: HrRow): Off
       : c.fnfPayrollRunId,
     checklist,
     exitInterview,
+    documents,
     fnfMeta,
   };
 }

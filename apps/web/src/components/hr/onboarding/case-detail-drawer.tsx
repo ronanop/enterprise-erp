@@ -24,6 +24,7 @@ import type {
 } from "@/types/onboarding-management";
 import { PORTAL_STEPS } from "@/types/onboarding-management";
 import { resolveOnboardingDisplayStatus } from "@/lib/onboarding-display-status";
+import { maskAadhaar, maskEmail, maskPan, maskPhone } from "@/lib/pii-mask";
 import {
   canActivateOnboardingCase,
   canApproveOnboardingCase,
@@ -326,11 +327,14 @@ export function CaseDetailDrawer({
             <p className="font-medium text-foreground">Personal snapshot</p>
             <p className="mt-1 text-muted-foreground">
               {caseRow.portal.personal.firstName} {caseRow.portal.personal.lastName} ·{" "}
-              {caseRow.portal.personal.email || caseRow.candidateEmail}
+              {maskEmail(caseRow.portal.personal.email || caseRow.candidateEmail)}
             </p>
             <p className="text-muted-foreground">
-              PAN {caseRow.portal.governmentIds.pan || "—"} · Aadhaar{" "}
-              {caseRow.portal.governmentIds.aadhaar || "—"}
+              Phone {maskPhone(caseRow.portal.personal.phone || caseRow.candidatePhone) || "—"}
+            </p>
+            <p className="text-muted-foreground">
+              PAN {maskPan(caseRow.portal.governmentIds.pan) || "—"} · Aadhaar{" "}
+              {maskAadhaar(caseRow.portal.governmentIds.aadhaar) || "—"}
             </p>
           </div>
         </div>
