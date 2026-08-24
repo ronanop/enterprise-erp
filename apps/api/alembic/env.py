@@ -29,6 +29,7 @@ import modules.asset.models  # noqa: F401 — register ORM metadata
 import modules.service.models  # noqa: F401 — register ORM metadata
 import modules.helpdesk.models  # noqa: F401 — register ORM metadata
 import modules.document.models  # noqa: F401 — register ORM metadata
+import modules.marketing.models  # noqa: F401 — register ORM metadata
 import modules.grc.models  # noqa: F401 — register ORM metadata
 import modules.analytics.models  # noqa: F401 — register ORM metadata
 import modules.integration.models  # noqa: F401 — register ORM metadata

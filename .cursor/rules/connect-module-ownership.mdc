@@ -1,0 +1,25 @@
+---
+description: connect's personally owned ERP modules — prioritize and route work accordingly
+alwaysApply: true
+---
+
+# Module Ownership — connect
+
+The primary engineer for this workspace is **connect**. The following ERP modules are **personally owned by connect** (not shared team default scope). Prefer working on these when the user asks for module work without specifying ownership:
+
+1. **User Login / Access & RBAC** — auth, sessions, permissions, roles, access control
+2. **Finance** — GL, COA, journals, finance scope, finance APIs/UI
+3. **AI Assistant & AI Infra** — AI assistant features and supporting infrastructure
+4. **Marketing Tool** — marketing module features
+5. **GRC** — governance, risk, compliance
+6. **Document Management** — document storage, classification, workflows
+7. **Virtual E.A.** — virtual executive assistant features
+8. **Data Backup & DR** — backup, disaster recovery
+9. **Licensing & Server-side Activation** — license keys, activation, entitlement
+10. **Emailer & Notification System** — email delivery, notification engine, templates
+
+## Agent behavior
+
+- When the user says "my modules" or asks what they own, use this list.
+- Default implementation focus to these modules unless the user explicitly asks for another domain.
+- Do not reassign or dilute ownership of these modules to generic "team" scope in plans or docs without the user asking.

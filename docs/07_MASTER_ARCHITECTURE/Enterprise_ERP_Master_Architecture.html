@@ -1,0 +1,1956 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Enterprise ERP Platform — Master Architecture</title>
+  <style>
+@page {
+  size: A4;
+  margin: 14mm 12mm 16mm 12mm;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  font-family: "Segoe UI", Arial, Helvetica, sans-serif;
+  font-size: 10pt;
+  line-height: 1.4;
+  color: #0f172a;
+  background: #fff;
+  margin: 0;
+  padding: 0;
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+
+h1 {
+  font-size: 20pt;
+  color: #0f172a;
+  border-bottom: 2px solid #1e3a5f;
+  padding-bottom: 8px;
+  margin: 0 0 14px;
+  page-break-after: avoid;
+}
+
+h2 {
+  font-size: 14pt;
+  color: #1e3a5f;
+  margin: 22px 0 10px;
+  padding-top: 4px;
+  border-top: 1px solid #e2e8f0;
+  page-break-after: avoid;
+  break-after: avoid-page;
+}
+
+h3 {
+  font-size: 11.5pt;
+  color: #334155;
+  margin: 16px 0 8px;
+  page-break-after: avoid;
+  break-after: avoid-page;
+}
+
+h4 {
+  font-size: 10.5pt;
+  color: #475569;
+  margin: 12px 0 6px;
+  page-break-after: avoid;
+}
+
+p, li { orphans: 3; widows: 3; }
+
+ul, ol { padding-left: 1.6em; margin: 6px 0 10px; }
+ol { padding-left: 2.2em; list-style-position: outside; }
+li { margin: 2px 0; }
+ol li { padding-left: 0.35em; }
+
+/* Tables — critical for print fidelity */
+table {
+  width: 100% !important;
+  max-width: 100% !important;
+  border-collapse: collapse;
+  margin: 10px 0 14px;
+  font-size: 8pt;
+  table-layout: fixed;
+  page-break-inside: auto;
+  word-wrap: break-word;
+  overflow-wrap: anywhere;
+}
+
+thead { display: table-header-group; }
+tr { page-break-inside: avoid; break-inside: avoid; }
+
+th, td {
+  border: 1px solid #94a3b8;
+  padding: 5px 6px;
+  vertical-align: top;
+  text-align: left;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+  hyphens: auto;
+}
+
+th {
+  background: #e2e8f0 !important;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+code {
+  font-family: Consolas, "Courier New", monospace;
+  font-size: 8pt;
+  background: #f1f5f9;
+  padding: 1px 3px;
+  border-radius: 2px;
+}
+
+pre {
+  font-family: Consolas, "Courier New", monospace;
+  font-size: 7.5pt;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  padding: 8px;
+  white-space: pre-wrap;
+  word-break: break-word;
+  page-break-inside: avoid;
+}
+
+.figure {
+  margin: 12px 0 16px;
+  page-break-inside: avoid;
+  break-inside: avoid;
+}
+
+.figure-caption {
+  font-size: 8.5pt;
+  color: #475569;
+  font-style: italic;
+  margin: 0 0 4px;
+}
+
+img.diagram {
+  display: block;
+  width: auto !important;
+  max-width: 100% !important;
+  max-height: 210mm;
+  height: auto !important;
+  margin: 0 auto;
+  border: 1px solid #cbd5e1;
+  background: #fff;
+  object-fit: contain;
+}
+
+a { color: #1e3a5f; text-decoration: none; }
+hr { border: none; border-top: 1px solid #cbd5e1; margin: 18px 0; }
+strong { color: #0f172a; }
+
+blockquote {
+  margin: 8px 0;
+  padding: 6px 10px;
+  border-left: 3px solid #1e3a5f;
+  background: #f8fafc;
+  color: #334155;
+}
+</style>
+</head>
+<body>
+<h1 id="enterprise-erp-platform-master-architecture-document">Enterprise ERP Platform — Master Architecture Document</h1>
+<p><strong>Document type:</strong> Solution Architecture &amp; Shipping Master<br />
+<strong>Product:</strong> Enterprise ERP Platform (ConnectPlus-aligned portfolio)<br />
+<strong>Baseline:</strong> Architecture Lock v1.1 · ADR-001 · ADR-002<br />
+<strong>Classification:</strong> Internal — Confidential<br />
+<strong>Audience:</strong> Engineering, Architecture, DevOps, Product  </p>
+<p>This is the <strong>master architecture document</strong> for the full ERP portfolio. It consolidates system design, current locked technology stack, module features and flows, Mermaid architecture diagrams, and shipping strategies for <strong>on-premise</strong> and <strong>AWS</strong>. Calendar timelines and month-based phase dates are intentionally omitted.</p>
+<hr />
+<h2 id="contents">Contents</h2>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>Section</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td><a href="#1-executive-summary">Executive Summary</a></td>
+</tr>
+<tr>
+<td>2</td>
+<td><a href="#2-product-scope-and-module-map">Product Scope and Module Map</a></td>
+</tr>
+<tr>
+<td>3</td>
+<td><a href="#3-architectural-principles">Architectural Principles</a></td>
+</tr>
+<tr>
+<td>4</td>
+<td><a href="#4-high-level-system-architecture">High-Level System Architecture</a></td>
+</tr>
+<tr>
+<td>5</td>
+<td><a href="#5-technology-stack-current--locked">Technology Stack (Current / Locked)</a></td>
+</tr>
+<tr>
+<td>6</td>
+<td><a href="#6-clean-architecture-and-request-flow">Clean Architecture and Request Flow</a></td>
+</tr>
+<tr>
+<td>7</td>
+<td><a href="#7-multi-tenancy-and-security">Multi-Tenancy and Security</a></td>
+</tr>
+<tr>
+<td>8</td>
+<td><a href="#8-data-and-storage-architecture">Data and Storage Architecture</a></td>
+</tr>
+<tr>
+<td>9</td>
+<td><a href="#9-platform-engines">Platform Engines</a></td>
+</tr>
+<tr>
+<td>10</td>
+<td><a href="#10-cross-domain-business-flows">Cross-Domain Business Flows</a></td>
+</tr>
+<tr>
+<td>11</td>
+<td><a href="#11-module-catalog--full-portfolio">Module Catalog — Full Portfolio</a></td>
+</tr>
+<tr>
+<td>12</td>
+<td><a href="#12-roadmap-platform-extensions">Roadmap Platform Extensions</a></td>
+</tr>
+<tr>
+<td>13</td>
+<td><a href="#13-integration-strategy">Integration Strategy</a></td>
+</tr>
+<tr>
+<td>14</td>
+<td><a href="#14-on-premise-deployment-plan">On-Premise Deployment Plan</a></td>
+</tr>
+<tr>
+<td>15</td>
+<td><a href="#15-aws-deployment-plan">AWS Deployment Plan</a></td>
+</tr>
+<tr>
+<td>16</td>
+<td><a href="#16-devops-environments-and-cicd">DevOps, Environments, and CI/CD</a></td>
+</tr>
+<tr>
+<td>17</td>
+<td><a href="#17-quality-observability-and-compliance">Quality, Observability, and Compliance</a></td>
+</tr>
+<tr>
+<td>18</td>
+<td><a href="#18-key-risks-and-mitigations">Key Risks and Mitigations</a></td>
+</tr>
+<tr>
+<td>19</td>
+<td><a href="#19-document-hierarchy-and-compliance">Document Hierarchy and Compliance</a></td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="1-executive-summary">1. Executive Summary</h2>
+<p>The Enterprise ERP Platform is a <strong>modular monolith</strong> ERP ecosystem covering foundation platform services and twenty-plus business domains — Finance, CRM, Sales, Procurement, Inventory, Manufacturing, Quality, HR, Payroll, Projects, Assets, Service, Helpdesk, Documents, GRC, Analytics, Integration, Ecommerce, Portal, Marketing, and employee self-service — with roadmap extensions for AI Assistant / Virtual E.A., Licensing, and Backup &amp; DR.</p>
+<p>Every module shares:</p>
+<ul>
+<li>One identity and RBAC model  </li>
+<li>One design system (Next.js + Tailwind + ShadCN)  </li>
+<li>One API surface (<code>/api/v1</code>)  </li>
+<li>One transactional database (PostgreSQL) with tenant isolation  </li>
+<li>Shared Workflow, Notification, Audit, and Integration engines  </li>
+</ul>
+<p><strong>Central decisions (locked):</strong></p>
+<table>
+<thead>
+<tr>
+<th>Decision</th>
+<th>Choice</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Architecture</td>
+<td>Modular monolith · Clean Architecture · DDD (ADR-001)</td>
+</tr>
+<tr>
+<td>Backend</td>
+<td>Python 3.13+ · FastAPI · SQLAlchemy 2 · Alembic · Pydantic v2 · Celery (ADR-002)</td>
+</tr>
+<tr>
+<td>Frontend</td>
+<td>Next.js 16+ · TypeScript · Tailwind · ShadCN · Zod</td>
+</tr>
+<tr>
+<td>OLTP</td>
+<td>PostgreSQL</td>
+</tr>
+<tr>
+<td>Cache / broker</td>
+<td>Redis · RabbitMQ</td>
+</tr>
+<tr>
+<td>Search / objects</td>
+<td>OpenSearch · MinIO or AWS S3</td>
+</tr>
+<tr>
+<td>Deploy artifact</td>
+<td>Docker images (API, worker, beat, web, employee-app)</td>
+</tr>
+<tr>
+<td>Cloud primary</td>
+<td>AWS (EKS/ECS, RDS, S3, ElastiCache, OpenSearch)</td>
+</tr>
+<tr>
+<td>On-prem</td>
+<td>Same containers · Compose / K3s / customer Kubernetes</td>
+</tr>
+</tbody>
+</table>
+<p>SaaS (cloud or private datacenter) and on-premise share <strong>one codebase and one image pipeline</strong>; configuration and infrastructure topology differ by destination.</p>
+<hr />
+<h2 id="2-product-scope-and-module-map">2. Product Scope and Module Map</h2>
+<h3 id="21-domain-grouping">2.1 Domain grouping</h3>
+<div class="figure"><p class="figure-caption">Figure 1</p><img class="diagram" src="diagrams/diagram_01.png" alt="Architecture diagram 1" /></div>
+
+<h3 id="22-module-portfolio-summary">2.2 Module portfolio (summary)</h3>
+<table>
+<thead>
+<tr>
+<th>Domain</th>
+<th>Modules</th>
+<th>Shared core entities</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Platform</td>
+<td>Foundation, Email/Notifications, Organization, Master Data, Integration Hub</td>
+<td>Tenant, user, role, company, branch, employee/customer/vendor/product masters</td>
+</tr>
+<tr>
+<td>Financial</td>
+<td>Finance, Payroll (GL side), Assets (depreciation)</td>
+<td>COA, journal, period, cost center, tax, currency</td>
+</tr>
+<tr>
+<td>Commercial</td>
+<td>CRM, Sales, Marketing, Ecommerce, Portal</td>
+<td>Account, lead, opportunity, order, invoice, campaign</td>
+</tr>
+<tr>
+<td>Supply</td>
+<td>Procurement, Inventory, Manufacturing, Quality, SCM (ops)</td>
+<td>Item, vendor, UoM, BOM, WO, inspection, GRN</td>
+</tr>
+<tr>
+<td>People</td>
+<td>HR, Recruitment, ESS, Payroll</td>
+<td>Employee, attendance, leave, salary structure</td>
+</tr>
+<tr>
+<td>Delivery</td>
+<td>Projects, Assets, Service, Helpdesk, DMS</td>
+<td>Project, asset, ticket, document, SLA</td>
+</tr>
+<tr>
+<td>Insight</td>
+<td>Analytics, GRC, AI/EA (roadmap), Licensing (roadmap), Backup/DR (roadmap)</td>
+<td>KPI, policy, risk, entitlement, backup job</td>
+</tr>
+</tbody>
+</table>
+<h3 id="23-sell-together-and-sell-alone">2.3 Sell-together and sell-alone</h3>
+<p>Every module must satisfy:</p>
+<ol>
+<li><strong>Licensing contract</strong> — entitlement service (roadmap) disables unlicensed APIs, UI, and jobs (not merely hides menus).  </li>
+<li><strong>Degradation contract</strong> — defined behavior when a sibling module is absent (e.g. Sales exports invoices when Finance is not licensed).  </li>
+</ol>
+<hr />
+<h2 id="3-architectural-principles">3. Architectural Principles</h2>
+<table>
+<thead>
+<tr>
+<th>Principle</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Modular monolith first</td>
+<td>One deployable API; strict module packages; extract services only with evidence</td>
+</tr>
+<tr>
+<td>Clean Architecture</td>
+<td>Router → Service → Repository → DB; domain free of ORM</td>
+</tr>
+<tr>
+<td>DDD bounded contexts</td>
+<td>No cross-module table access; integrate via APIs / events / engines</td>
+</tr>
+<tr>
+<td>API-first</td>
+<td>Versioned REST/OpenAPI before UI</td>
+</tr>
+<tr>
+<td>Multi-tenant by construction</td>
+<td><code>tenant_id</code> (and company/branch) on transactional data</td>
+</tr>
+<tr>
+<td>Soft delete + audit</td>
+<td>No physical DELETE on business tables; audit columns mandatory</td>
+</tr>
+<tr>
+<td>Config over customization</td>
+<td>Workflows, settings, custom fields — not forks</td>
+</tr>
+<tr>
+<td>One artifact, many destinations</td>
+<td>Same images for AWS, private cloud, and on-prem</td>
+</tr>
+<tr>
+<td>Engines mandatory</td>
+<td>Workflow, Notification, Audit, Integration must not be bypassed</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Forbidden without EARB/ADR:</strong> NestJS, Prisma, MongoDB as primary OLTP, business logic in routers, UI→DB access, cross-module SQL, manual production schema changes.</p>
+<hr />
+<h2 id="4-high-level-system-architecture">4. High-Level System Architecture</h2>
+<div class="figure"><p class="figure-caption">Figure 2</p><img class="diagram" src="diagrams/diagram_02.png" alt="Architecture diagram 2" /></div>
+
+<h3 id="layer-responsibilities">Layer responsibilities</h3>
+<table>
+<thead>
+<tr>
+<th>Layer</th>
+<th>Responsibility</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Clients</td>
+<td>Admin web, employee ESS app, integrators</td>
+</tr>
+<tr>
+<td>Edge</td>
+<td>TLS termination, WAF, rate limiting, routing</td>
+</tr>
+<tr>
+<td>API</td>
+<td>AuthN/Z, tenancy middleware, domain routers/services</td>
+</tr>
+<tr>
+<td>Workers</td>
+<td>Email delivery, async jobs, scheduled syncs</td>
+</tr>
+<tr>
+<td>Data</td>
+<td>OLTP, cache/sessions, broker, search, object storage</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="5-technology-stack-current-locked">5. Technology Stack (Current / Locked)</h2>
+<p>Aligned with <a href="../05_ARCHITECTURE_LOCK/ERP_Architecture_Lock_Report_v1.1.md">ERP Architecture Lock Report v1.1</a>.</p>
+<h3 id="51-stack-at-a-glance">5.1 Stack at a glance</h3>
+<table>
+<thead>
+<tr>
+<th>Layer</th>
+<th>Primary choice</th>
+<th>Role</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Frontend (admin)</td>
+<td>Next.js 16+ · React · TypeScript · Tailwind · ShadCN · Zod</td>
+<td>ERP admin shell and module UIs</td>
+</tr>
+<tr>
+<td>Frontend (ESS)</td>
+<td>Next.js employee-app</td>
+<td>Employee self-service</td>
+</tr>
+<tr>
+<td>Backend API</td>
+<td>Python 3.13+ · FastAPI · Uvicorn</td>
+<td>HTTP API modular monolith</td>
+</tr>
+<tr>
+<td>Prod process mgr</td>
+<td>Gunicorn + Uvicorn workers</td>
+<td>Production API serving</td>
+</tr>
+<tr>
+<td>ORM / migrations</td>
+<td>SQLAlchemy 2.0 · Alembic</td>
+<td>Infrastructure layer only</td>
+</tr>
+<tr>
+<td>Validation</td>
+<td>Pydantic v2</td>
+<td>Request/response schemas</td>
+</tr>
+<tr>
+<td>Async jobs</td>
+<td>Celery · Celery Beat · RabbitMQ</td>
+<td>Notifications, scheduled work</td>
+</tr>
+<tr>
+<td>Cache / sessions</td>
+<td>Redis</td>
+<td>Cache, RBAC cache, sessions, Celery backend</td>
+</tr>
+<tr>
+<td>OLTP</td>
+<td>PostgreSQL</td>
+<td>Single transactional standard</td>
+</tr>
+<tr>
+<td>Search</td>
+<td>OpenSearch</td>
+<td>Full-text / analytics indexing</td>
+</tr>
+<tr>
+<td>Object storage</td>
+<td>MinIO (on-prem/local) · AWS S3 (cloud)</td>
+<td>Documents, exports, backups</td>
+</tr>
+<tr>
+<td>Auth federation</td>
+<td>Microsoft Entra ID (OIDC) · JWT sessions</td>
+<td>SSO + local auth / MFA</td>
+</tr>
+<tr>
+<td>Email</td>
+<td>Microsoft Graph adapter</td>
+<td>Outbound notification email</td>
+</tr>
+<tr>
+<td>Containers</td>
+<td>Docker</td>
+<td><code>api</code>, <code>worker</code>, <code>beat</code>, <code>web</code>, <code>employee-app</code></td>
+</tr>
+<tr>
+<td>Orchestration</td>
+<td>Kubernetes Ready · Terraform Ready</td>
+<td>Target production</td>
+</tr>
+<tr>
+<td>Design system</td>
+<td><code>design-system/enterprise-erp-platform/MASTER.md</code></td>
+<td>Data-dense · Swiss minimal</td>
+</tr>
+</tbody>
+</table>
+<h3 id="52-repository-layout">5.2 Repository layout</h3>
+<pre><code class="language-text">enterprise-erp-platform/
+├── apps/api/          # FastAPI modular monolith
+├── apps/web/          # Next.js admin
+├── apps/employee-app/ # Next.js ESS
+├── docs/              # BRD FRD SDD DBS ERD Architecture Lock Master
+├── design-system/     # UI tokens and page overrides
+├── docker-compose.yml # Infra: Redis RabbitMQ MinIO OpenSearch
+└── infrastructure/    # IaC growth area
+</code></pre>
+<h3 id="53-backend-module-packages-mounted">5.3 Backend module packages (mounted)</h3>
+<p><code>foundation</code>, <code>organization</code>, <code>master_data</code>, <code>finance</code>, <code>sales</code>, <code>procurement</code>, <code>inventory</code>, <code>manufacturing</code>, <code>quality</code>, <code>crm</code>, <code>hr</code>, <code>ess</code>, <code>payroll</code>, <code>recruitment</code>, <code>project</code>, <code>asset</code>, <code>service</code>, <code>helpdesk</code>, <code>document</code>, <code>grc</code>, <code>analytics</code>, <code>integration</code>, <code>ecommerce</code>, <code>portal</code> (+ marketing scaffolding).</p>
+<p>Mandatory flow inside every module:</p>
+<pre><code class="language-text">Router → Service → Repository → Database
+</code></pre>
+<hr />
+<h2 id="6-clean-architecture-and-request-flow">6. Clean Architecture and Request Flow</h2>
+<div class="figure"><p class="figure-caption">Figure 3</p><img class="diagram" src="diagrams/diagram_03.png" alt="Architecture diagram 3" /></div>
+
+<hr />
+<h2 id="7-multi-tenancy-and-security">7. Multi-Tenancy and Security</h2>
+<h3 id="71-tenancy-model">7.1 Tenancy model</h3>
+<div class="figure"><p class="figure-caption">Figure 4</p><img class="diagram" src="diagrams/diagram_04.png" alt="Architecture diagram 4" /></div>
+
+<table>
+<thead>
+<tr>
+<th>Concern</th>
+<th>Rule</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Isolation</td>
+<td><code>tenant_id</code> on transactional tables; company/branch scoping where applicable</td>
+</tr>
+<tr>
+<td>Auth</td>
+<td>JWT access + refresh; MFA; Microsoft OAuth supported</td>
+</tr>
+<tr>
+<td>AuthZ</td>
+<td>RBAC: role → permissions; module membership; org scope</td>
+</tr>
+<tr>
+<td>Secrets</td>
+<td>Env / secret store — never commit production secrets</td>
+</tr>
+<tr>
+<td>Data</td>
+<td>Soft delete; audit columns <code>created_at/by</code>, <code>updated_at/by</code>, <code>version</code></td>
+</tr>
+<tr>
+<td>Transport</td>
+<td>TLS everywhere in deployed environments</td>
+</tr>
+</tbody>
+</table>
+<h3 id="72-security-controls-target">7.2 Security controls (target)</h3>
+<p>Edge WAF/DDoS · short-lived tokens · input validation · OWASP-aligned engineering · encrypted backups · immutable audit from mutation path · ISO 27001 / SOC 2 posture for SaaS offerings.</p>
+<hr />
+<h2 id="8-data-and-storage-architecture">8. Data and Storage Architecture</h2>
+<h3 id="81-logical-layout">8.1 Logical layout</h3>
+<table>
+<thead>
+<tr>
+<th>Store</th>
+<th>Holds</th>
+<th>Isolation</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>PostgreSQL</td>
+<td>All module transactional data, masters, workflow/notification/audit</td>
+<td>Tenant (+ company/branch) filters</td>
+</tr>
+<tr>
+<td>Redis</td>
+<td>Cache, sessions, rate limits, Celery results</td>
+<td>Key prefixes per tenant where applicable</td>
+</tr>
+<tr>
+<td>RabbitMQ</td>
+<td>Task queues</td>
+<td>Vhost / queue naming by env</td>
+</tr>
+<tr>
+<td>OpenSearch</td>
+<td>Search indexes</td>
+<td>Index or filter per tenant</td>
+</tr>
+<tr>
+<td>MinIO / S3</td>
+<td>Documents, attachments, exports, backup objects</td>
+<td>Prefix/bucket per tenant</td>
+</tr>
+</tbody>
+</table>
+<h3 id="82-database-standards-dbs">8.2 Database standards (DBS)</h3>
+<ul>
+<li>UUID primary keys  </li>
+<li>Table/prefix standards per domain  </li>
+<li>Alembic-only schema changes  </li>
+<li>Soft delete — no physical DELETE on business tables  </li>
+<li>No cross-module foreign-key coupling across bounded contexts  </li>
+</ul>
+<div class="figure"><p class="figure-caption">Figure 5</p><img class="diagram" src="diagrams/diagram_05.png" alt="Architecture diagram 5" /></div>
+
+<hr />
+<h2 id="9-platform-engines">9. Platform Engines</h2>
+<table>
+<thead>
+<tr>
+<th>Engine</th>
+<th>Responsibility</th>
+<th>Home</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Identity &amp; RBAC</td>
+<td>Login, MFA, OAuth, roles, permissions, module members</td>
+<td>Foundation</td>
+</tr>
+<tr>
+<td>Workflow</td>
+<td>Definitions, instances, approvals, escalation</td>
+<td>Foundation</td>
+</tr>
+<tr>
+<td>Notification / Email</td>
+<td>Templates, events, deliveries, Graph send, FCM devices</td>
+<td>Foundation + Email UI</td>
+</tr>
+<tr>
+<td>Audit</td>
+<td>Immutable mutation/event logs</td>
+<td>Foundation</td>
+</tr>
+<tr>
+<td>Integration Hub</td>
+<td>Connectors, webhooks, sync jobs, mappings, DLQ</td>
+<td>Integration module</td>
+</tr>
+<tr>
+<td>Document service</td>
+<td>Versioned library consumed cross-module</td>
+<td>Document module</td>
+</tr>
+<tr>
+<td>Settings</td>
+<td>System and tenant configuration</td>
+<td>Foundation</td>
+</tr>
+</tbody>
+</table>
+<div class="figure"><p class="figure-caption">Figure 6</p><img class="diagram" src="diagrams/diagram_06.png" alt="Architecture diagram 6" /></div>
+
+<hr />
+<h2 id="10-cross-domain-business-flows">10. Cross-Domain Business Flows</h2>
+<h3 id="101-enterprise-dependency-chain">10.1 Enterprise dependency chain</h3>
+<div class="figure"><p class="figure-caption">Figure 7</p><img class="diagram" src="diagrams/diagram_07.png" alt="Architecture diagram 7" /></div>
+
+<h3 id="102-order-to-cash">10.2 Order-to-cash</h3>
+<div class="figure"><p class="figure-caption">Figure 8</p><img class="diagram" src="diagrams/diagram_08.png" alt="Architecture diagram 8" /></div>
+
+<h3 id="103-procure-to-pay">10.3 Procure-to-pay</h3>
+<div class="figure"><p class="figure-caption">Figure 9</p><img class="diagram" src="diagrams/diagram_09.png" alt="Architecture diagram 9" /></div>
+
+<h3 id="104-hire-to-pay">10.4 Hire-to-pay</h3>
+<div class="figure"><p class="figure-caption">Figure 10</p><img class="diagram" src="diagrams/diagram_10.png" alt="Architecture diagram 10" /></div>
+
+<h3 id="105-plan-to-produce">10.5 Plan-to-produce</h3>
+<div class="figure"><p class="figure-caption">Figure 11</p><img class="diagram" src="diagrams/diagram_11.png" alt="Architecture diagram 11" /></div>
+
+<h3 id="106-crm-scm-bridge-product-path">10.6 CRM → SCM bridge (product path)</h3>
+<div class="figure"><p class="figure-caption">Figure 12</p><img class="diagram" src="diagrams/diagram_12.png" alt="Architecture diagram 12" /></div>
+
+<h3 id="107-service-itsm">10.7 Service / ITSM</h3>
+<div class="figure"><p class="figure-caption">Figure 13</p><img class="diagram" src="diagrams/diagram_13.png" alt="Architecture diagram 13" /></div>
+
+<h3 id="108-record-to-report">10.8 Record-to-report</h3>
+<div class="figure"><p class="figure-caption">Figure 14</p><img class="diagram" src="diagrams/diagram_14.png" alt="Architecture diagram 14" /></div>
+
+<hr />
+<h2 id="11-module-catalog-full-portfolio">11. Module Catalog — Full Portfolio</h2>
+<p>Maturity legend: <strong>Implemented</strong> · <strong>Partial</strong> · <strong>Scaffold</strong> · <strong>Roadmap</strong>.</p>
+<hr />
+<h3 id="111-foundation-auth-rbac-workflow-audit-settings">11.1 Foundation (Auth, RBAC, Workflow, Audit, Settings)</h3>
+<table>
+<thead>
+<tr>
+<th></th>
+<th></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Web</strong></td>
+<td><code>/foundation</code></td>
+</tr>
+<tr>
+<td><strong>API</strong></td>
+<td><code>/tenants</code>, <code>/users</code>, <code>/roles</code>, <code>/permissions</code>, <code>/workflows/*</code>, <code>/audit/*</code>, <code>/settings</code>, <code>/auth/*</code></td>
+</tr>
+<tr>
+<td><strong>Maturity</strong></td>
+<td>Implemented</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Features</strong></p>
+<ul>
+<li>Local login, MFA verify, refresh/logout, <code>/me</code>  </li>
+<li>Microsoft Entra OAuth (config, login, callback, exchange)  </li>
+<li>Tenants, users, roles, permissions  </li>
+<li>Module admin/member assignment  </li>
+<li>RBAC with Redis-cached permission resolution  </li>
+<li>Org context (tenant / company / branch)  </li>
+<li>Workflow definitions and instances  </li>
+<li>Audit logs  </li>
+<li>System settings  </li>
+</ul>
+<p><strong>Key flows:</strong> Authenticate → session → authorized API call; submit → approve/reject/escalate workflow; every mutation audited.</p>
+<hr />
+<h3 id="112-email-notification-system">11.2 Email &amp; Notification System</h3>
+<table>
+<thead>
+<tr>
+<th></th>
+<th></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Web</strong></td>
+<td><code>/email</code></td>
+</tr>
+<tr>
+<td><strong>API</strong></td>
+<td><code>/notifications/*</code>, <code>/notifications/email/*</code></td>
+</tr>
+<tr>
+<td><strong>Maturity</strong></td>
+<td>Implemented</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Features</strong></p>
+<ul>
+<li>Notification templates, events, deliveries  </li>
+<li>Microsoft Graph email send, test, overview KPIs  </li>
+<li>Compose UI; delivery and event logs  </li>
+<li>Device token registration (FCM) for push path  </li>
+<li>Celery-backed async delivery  </li>
+</ul>
+<p><strong>Key flows:</strong> Event → template render → Graph/FCM delivery → status logging.</p>
+<hr />
+<h3 id="113-organization">11.3 Organization</h3>
+<table>
+<thead>
+<tr>
+<th></th>
+<th></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Web</strong></td>
+<td><code>/organization</code></td>
+</tr>
+<tr>
+<td><strong>API</strong></td>
+<td><code>/companies</code>, <code>/branches</code>, <code>/departments</code>, <code>/business-units</code>, <code>/locations</code>, <code>/cost-centers</code>, <code>/profit-centers</code>, <code>/organization/tree</code></td>
+</tr>
+<tr>
+<td><strong>Maturity</strong></td>
+<td>Implemented</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Features:</strong> Multi-company hierarchy; branches; departments; BUs; locations; cost/profit centers; org tree.</p>
+<hr />
+<h3 id="114-master-data">11.4 Master Data</h3>
+<table>
+<thead>
+<tr>
+<th></th>
+<th></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Web</strong></td>
+<td><code>/master-data</code></td>
+</tr>
+<tr>
+<td><strong>API</strong></td>
+<td><code>/employees</code>, <code>/customers</code>, <code>/vendors</code>, <code>/products</code>, <code>/product-categories</code>, <code>/uoms</code>, <code>/currencies</code>, <code>/taxes</code>, <code>/assets</code>, <code>/warehouses</code></td>
+</tr>
+<tr>
+<td><strong>Maturity</strong></td>
+<td>Implemented</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Features:</strong> Central masters consumed by all operational modules; uniqueness and governance; no duplicate masters inside business modules.</p>
+<hr />
+<h3 id="115-finance-accounting">11.5 Finance &amp; Accounting</h3>
+<table>
+<thead>
+<tr>
+<th></th>
+<th></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Web</strong></td>
+<td><code>/finance/**</code> (custom UX)</td>
+</tr>
+<tr>
+<td><strong>API</strong></td>
+<td><code>/finance/*</code></td>
+</tr>
+<tr>
+<td><strong>Maturity</strong></td>
+<td>Implemented</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Features</strong></p>
+<ul>
+<li>Account groups &amp; chart of accounts  </li>
+<li>Fiscal years and periods  </li>
+<li>Journals (lines, submit, approve, reject, post, reverse)  </li>
+<li>GL inquiry, trial balance preview, account ledger  </li>
+<li>AR / AP workspaces and aging  </li>
+<li>Tax register, currency rates, asset transactions  </li>
+<li>Reports: TB, BS, P&amp;L, cash flow, journal register, tax summary, cost center, aging  </li>
+<li>Posting / journal / ledger / balance / period-closing engines  </li>
+<li>Finance scope / SoD governance hooks  </li>
+</ul>
+<p><strong>Key flows:</strong> Draft journal → approve → post → GL; subledger activity → financial statements; period close.</p>
+<hr />
+<h3 id="116-crm">11.6 CRM</h3>
+<table>
+<thead>
+<tr>
+<th></th>
+<th></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Web</strong></td>
+<td><code>/crm</code></td>
+</tr>
+<tr>
+<td><strong>API</strong></td>
+<td><code>/crm/*</code></td>
+</tr>
+<tr>
+<td><strong>Maturity</strong></td>
+<td>Implemented</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Features:</strong> Companies, leads, assignments, activities, opportunities, stages, pipelines, quotes, OVF, contacts, campaigns, interactions, tasks, follow-ups, meetings, call/email/visit logs, CSAT/feedback.</p>
+<p><strong>Key flows:</strong> Company → Lead → Opportunity → Quote → OVF → Won/Lost; campaign membership.</p>
+<hr />
+<h3 id="117-sales">11.7 Sales</h3>
+<table>
+<thead>
+<tr>
+<th></th>
+<th></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Web</strong></td>
+<td><code>/sales</code></td>
+</tr>
+<tr>
+<td><strong>API</strong></td>
+<td><code>/sales/*</code></td>
+</tr>
+<tr>
+<td><strong>Maturity</strong></td>
+<td>Implemented</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Features:</strong> Price lists, discount rules, customer credit, quotations, sales orders, deliveries, invoices, returns.</p>
+<p><strong>Key flows:</strong> Quotation → Order → Delivery → Invoice → Payment/AR; credit holds; returns/credit notes.</p>
+<hr />
+<h3 id="118-procurement-scm-operations">11.8 Procurement &amp; SCM Operations</h3>
+<table>
+<thead>
+<tr>
+<th></th>
+<th></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Web</strong></td>
+<td><code>/procurement</code></td>
+</tr>
+<tr>
+<td><strong>API</strong></td>
+<td><code>/procurement/*</code></td>
+</tr>
+<tr>
+<td><strong>Maturity</strong></td>
+<td>Implemented (advanced SCM planning Partial vs FRD-15)</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Features:</strong> SCM queue, requisitions, RFQs, vendor quotations, comparisons, POs, GRNs, delivery challan/status, vendor invoices, returns, contracts, vendor performance.</p>
+<p><strong>Key flows:</strong> P2P full cycle; OVF → SCM queue → PO → GRN → challan.</p>
+<hr />
+<h3 id="119-inventory-warehouse">11.9 Inventory &amp; Warehouse</h3>
+<table>
+<thead>
+<tr>
+<th></th>
+<th></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Web</strong></td>
+<td><code>/inventory</code></td>
+</tr>
+<tr>
+<td><strong>API</strong></td>
+<td><code>/inventory/*</code></td>
+</tr>
+<tr>
+<td><strong>Maturity</strong></td>
+<td>Implemented</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Features:</strong> Stock, bins, batches, serials, reservations, transfers, adjustments, cycle counts, policies, valuation, reports.</p>
+<p><strong>Key flows:</strong> GRN putaway → reserve → issue/transfer → count/adjust → valuation.</p>
+<hr />
+<h3 id="1110-manufacturing">11.10 Manufacturing</h3>
+<table>
+<thead>
+<tr>
+<th></th>
+<th></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Web</strong></td>
+<td><code>/manufacturing</code></td>
+</tr>
+<tr>
+<td><strong>API</strong></td>
+<td><code>/manufacturing/*</code></td>
+</tr>
+<tr>
+<td><strong>Maturity</strong></td>
+<td>Implemented</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Features:</strong> BOMs, routings, work centers, machines, production orders, material issues/returns, production receipts, scrap, WIP, variances.</p>
+<p><strong>Key flows:</strong> Plan → WO → issue → execute → FG receipt → WIP/variance close.</p>
+<hr />
+<h3 id="1111-quality-management">11.11 Quality Management</h3>
+<table>
+<thead>
+<tr>
+<th></th>
+<th></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Web</strong></td>
+<td><code>/quality</code></td>
+</tr>
+<tr>
+<td><strong>API</strong></td>
+<td><code>/quality/*</code></td>
+</tr>
+<tr>
+<td><strong>Maturity</strong></td>
+<td>Implemented</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Features:</strong> Inspection/sampling plans, characteristics, defect types, incoming/in-process/final inspections, NCRs, CAPAs, supplier quality, complaints, audits, scores.</p>
+<p><strong>Key flows:</strong> Plan → inspect → release/hold; NCR → CAPA.</p>
+<hr />
+<h3 id="1112-hrms">11.12 HRMS</h3>
+<table>
+<thead>
+<tr>
+<th></th>
+<th></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Web</strong></td>
+<td><code>/hr</code></td>
+</tr>
+<tr>
+<td><strong>API</strong></td>
+<td><code>/hr/*</code></td>
+</tr>
+<tr>
+<td><strong>Maturity</strong></td>
+<td>Implemented</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Features:</strong> Designations, profiles, employment, shifts, holidays, leave types/balances/requests, attendance, documents, performance, goals, appraisals, training, separation.</p>
+<p><strong>Key flows:</strong> Hire-to-retire; leave approval; attendance → payroll handoff.</p>
+<hr />
+<h3 id="1113-recruitment">11.13 Recruitment</h3>
+<table>
+<thead>
+<tr>
+<th></th>
+<th></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Web</strong></td>
+<td><code>/recruitment</code></td>
+</tr>
+<tr>
+<td><strong>API</strong></td>
+<td><code>/recruitment/*</code></td>
+</tr>
+<tr>
+<td><strong>Maturity</strong></td>
+<td>Implemented</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Features:</strong> Requisitions, postings, sources, recruiters, candidates, applications/stages, interviews/feedback, offers, BGV, talent pools, onboarding tasks.</p>
+<p><strong>Key flows:</strong> Requisition → apply → interview → offer → BGV → onboard → HR employee.</p>
+<hr />
+<h3 id="1114-employee-self-service-ess">11.14 Employee Self-Service (ESS)</h3>
+<table>
+<thead>
+<tr>
+<th></th>
+<th></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Web</strong></td>
+<td>Employee app (not admin registry)</td>
+</tr>
+<tr>
+<td><strong>API</strong></td>
+<td><code>/ess/*</code></td>
+</tr>
+<tr>
+<td><strong>Maturity</strong></td>
+<td>Implemented (API + employee-app)</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Features:</strong> Profile, leave, attendance corrections, on-duty/comp-off, payslips, KYC/bank, documents, assets, performance, holidays, announcements, device tokens, notifications.</p>
+<hr />
+<h3 id="1115-payroll">11.15 Payroll</h3>
+<table>
+<thead>
+<tr>
+<th></th>
+<th></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Web</strong></td>
+<td><code>/payroll</code></td>
+</tr>
+<tr>
+<td><strong>API</strong></td>
+<td><code>/payroll/*</code></td>
+</tr>
+<tr>
+<td><strong>Maturity</strong></td>
+<td>Implemented</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Features:</strong> Periods, salary structures/components, employee salaries, earning/deduction types, tax/statutory, runs, payslips, bonuses, reimbursements, loans, adjustments, summaries, Finance posting.</p>
+<p><strong>Key flows:</strong> Attendance/leave → run → approve → payslip → GL → bank file (FRD).</p>
+<hr />
+<h3 id="1116-project-management">11.16 Project Management</h3>
+<table>
+<thead>
+<tr>
+<th></th>
+<th></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Web</strong></td>
+<td><code>/projects</code></td>
+</tr>
+<tr>
+<td><strong>API</strong></td>
+<td><code>/projects/*</code></td>
+</tr>
+<tr>
+<td><strong>Maturity</strong></td>
+<td>Implemented</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Features:</strong> Projects, phases, milestones, tasks, timesheets, resource plans/allocations, budgets, costs, issues, risks, change requests, documents.</p>
+<p><strong>Key flows:</strong> Approve → plan → execute → timesheet cost → close / bill.</p>
+<hr />
+<h3 id="1117-asset-management">11.17 Asset Management</h3>
+<table>
+<thead>
+<tr>
+<th></th>
+<th></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Web</strong></td>
+<td><code>/assets</code></td>
+</tr>
+<tr>
+<td><strong>API</strong></td>
+<td><code>/assets/*</code></td>
+</tr>
+<tr>
+<td><strong>Maturity</strong></td>
+<td>Implemented</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Features:</strong> Categories, assets, components, assignments, transfers, locations, warranties, insurance, maintenance plans/work, depreciation, disposals, audits, meter readings.</p>
+<p><strong>Key flows:</strong> Register → assign → maintain → depreciate → dispose.</p>
+<hr />
+<h3 id="1118-service-management">11.18 Service Management</h3>
+<table>
+<thead>
+<tr>
+<th></th>
+<th></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Web</strong></td>
+<td><code>/service</code></td>
+</tr>
+<tr>
+<td><strong>API</strong></td>
+<td><code>/service/*</code></td>
+</tr>
+<tr>
+<td><strong>Maturity</strong></td>
+<td>Implemented</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Features:</strong> Categories, requests, tickets, assignments, schedules, work orders, tasks, visits, materials, time entries, SLAs, escalations, contracts, feedback.</p>
+<p><strong>Key flows:</strong> Request → assign → WO/visit → complete → feedback → optional billing.</p>
+<hr />
+<h3 id="1119-helpdesk">11.19 Helpdesk</h3>
+<table>
+<thead>
+<tr>
+<th></th>
+<th></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Web</strong></td>
+<td><code>/helpdesk</code></td>
+</tr>
+<tr>
+<td><strong>API</strong></td>
+<td><code>/helpdesk/*</code></td>
+</tr>
+<tr>
+<td><strong>Maturity</strong></td>
+<td>Implemented</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Features:</strong> Categories, priorities, tickets, assignments, comments, SLAs, escalations, knowledge base/articles, resolutions, support teams, shifts, schedules, feedback.</p>
+<p><strong>Key flows:</strong> Report → assign → resolve → CSAT; SLA breach → escalate.</p>
+<hr />
+<h3 id="1120-document-management-dms">11.20 Document Management (DMS)</h3>
+<table>
+<thead>
+<tr>
+<th></th>
+<th></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Web</strong></td>
+<td><code>/documents</code></td>
+</tr>
+<tr>
+<td><strong>API</strong></td>
+<td><code>/documents/*</code></td>
+</tr>
+<tr>
+<td><strong>Maturity</strong></td>
+<td>Partial / scaffold-rich (storage/OCR hardening ongoing)</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Features:</strong> Folders, documents, versions, tags, permissions, shares, approvals, workflows, templates, retention, archives, comments, checkouts, audits, attachments, reports.</p>
+<p><strong>Key flows:</strong> Upload → review → approve → publish; retain → archive.</p>
+<hr />
+<h3 id="1121-grc-governance-risk-compliance">11.21 GRC (Governance, Risk, Compliance)</h3>
+<table>
+<thead>
+<tr>
+<th></th>
+<th></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Web</strong></td>
+<td><code>/grc</code></td>
+</tr>
+<tr>
+<td><strong>API</strong></td>
+<td><code>/grc/*</code></td>
+</tr>
+<tr>
+<td><strong>Maturity</strong></td>
+<td>Scaffold / broad CRUD (+ dashboard)</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Features:</strong> Policies/versions/acknowledgements, controls/tests, risk categories/register/assessments/treatments, compliance frameworks/requirements/assessments, audit plans/audits/findings, corrective actions, exceptions, incidents, notifications, reports.</p>
+<p><strong>Key flows:</strong> Risk identify → assess → treat → control test; audit → finding → CAPA; policy lifecycle.</p>
+<hr />
+<h3 id="1122-analytics-bi">11.22 Analytics (BI)</h3>
+<table>
+<thead>
+<tr>
+<th></th>
+<th></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Web</strong></td>
+<td><code>/analytics</code></td>
+</tr>
+<tr>
+<td><strong>API</strong></td>
+<td><code>/analytics/*</code></td>
+</tr>
+<tr>
+<td><strong>Maturity</strong></td>
+<td>Implemented</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Features:</strong> Dashboards, widgets, reports, schedules, datasets, metrics, KPIs, dimensions, alert rules, subscriptions, imports/exports.</p>
+<p><strong>Key flows:</strong> Dataset → metric/KPI → dashboard/report → schedule/alert.</p>
+<hr />
+<h3 id="1123-integration-hub">11.23 Integration Hub</h3>
+<table>
+<thead>
+<tr>
+<th></th>
+<th></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Web</strong></td>
+<td><code>/integration</code></td>
+</tr>
+<tr>
+<td><strong>API</strong></td>
+<td><code>/integration/*</code></td>
+</tr>
+<tr>
+<td><strong>Maturity</strong></td>
+<td>Implemented</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Features:</strong> External systems, connectors, API credentials, OAuth clients, webhooks, event definitions, message/retry/DLQ queues, mappings, sync jobs/logs, rate limits.</p>
+<p><strong>Key flows:</strong> Connect → map → sync; webhook ingest → retry/DLQ.</p>
+<hr />
+<h3 id="1124-ecommerce">11.24 Ecommerce</h3>
+<table>
+<thead>
+<tr>
+<th></th>
+<th></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Web</strong></td>
+<td><code>/ecommerce</code></td>
+</tr>
+<tr>
+<td><strong>API</strong></td>
+<td><code>/ecommerce/*</code></td>
+</tr>
+<tr>
+<td><strong>Maturity</strong></td>
+<td>Implemented</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Features:</strong> Stores, channels, listings, carts, orders, payments, shipments, return requests, coupons, promotions, marketplace connectors.</p>
+<p><strong>Key flows:</strong> Channel order → pay → fulfill → ERP inventory/sales sync; returns.</p>
+<hr />
+<h3 id="1125-customer-portal">11.25 Customer Portal</h3>
+<table>
+<thead>
+<tr>
+<th></th>
+<th></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Web</strong></td>
+<td><code>/portal</code></td>
+</tr>
+<tr>
+<td><strong>API</strong></td>
+<td><code>/portal/*</code></td>
+</tr>
+<tr>
+<td><strong>Maturity</strong></td>
+<td>Implemented</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Features:</strong> Portal accounts, profiles, sessions, dashboards, notifications, messages, order/invoice views, document access, support tickets, service requests, preferences, login audits.</p>
+<p><strong>Key flows:</strong> Portal login → view commercial docs → raise ticket/service.</p>
+<hr />
+<h3 id="1126-marketing-social-media">11.26 Marketing &amp; Social Media</h3>
+<table>
+<thead>
+<tr>
+<th></th>
+<th></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Web</strong></td>
+<td>Registry pending</td>
+</tr>
+<tr>
+<td><strong>API</strong></td>
+<td><code>/marketing/*</code> (scaffolding) + CRM campaigns</td>
+</tr>
+<tr>
+<td><strong>Maturity</strong></td>
+<td>Partial / in progress</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Features:</strong> CRM campaigns; marketing FRD scope — platforms/accounts, content requests, AI/Celery generation pipeline, versions/scores, brand voice, research/trends, competitors, calendar, publish jobs (stub), analytics summary; ecommerce promos/coupons adjacent.</p>
+<p><strong>Key flows:</strong> Campaign → content request → generate → score → calendar → publish/approve.</p>
+<hr />
+<h2 id="12-roadmap-platform-extensions">12. Roadmap Platform Extensions</h2>
+<p>These are part of the product vision and ownership scope; not yet first-class API packages.</p>
+<h3 id="121-ai-assistant-ai-infrastructure">12.1 AI Assistant &amp; AI Infrastructure</h3>
+<p><strong>Target features:</strong> LLM gateway; permission-aware RAG over ERP + DMS; tool-calling against OpenAPI; in-module copilots; eval/guardrails; audit of AI actions.</p>
+<div class="figure"><p class="figure-caption">Figure 15</p><img class="diagram" src="diagrams/diagram_15.png" alt="Architecture diagram 15" /></div>
+
+<h3 id="122-virtual-executive-assistant">12.2 Virtual Executive Assistant</h3>
+<p><strong>Target features:</strong> Skills/performance graph; assessments/certifications; reminders; calendar/meeting assist; email draft/summarize; proactive insights; human-in-the-loop for consequential actions; consent/transparency controls.</p>
+<h3 id="123-licensing-server-side-activation">12.3 Licensing &amp; Server-side Activation</h3>
+<p><strong>Target features:</strong> Module entitlements, seats, license keys, online/offline activation, metering, renewal/expiry, grace periods, license audit — required for sell-alone and on-prem.</p>
+<div class="figure"><p class="figure-caption">Figure 16</p><img class="diagram" src="diagrams/diagram_16.png" alt="Architecture diagram 16" /></div>
+
+<h3 id="124-data-backup-dr">12.4 Data Backup &amp; DR</h3>
+<p><strong>Target features:</strong> Scheduled full/incremental/WAL backups; encryption; restore verification; per-tenant PITR tooling; DR runbooks; RPO/RTO targets; alignment with GRC BCM.</p>
+<p>Ops today: PostgreSQL external hosting, manual dumps under <code>backups/</code>, SDD/DBS standards — product module still roadmap.</p>
+<hr />
+<h2 id="13-integration-strategy">13. Integration Strategy</h2>
+<h3 id="131-hub-pattern">13.1 Hub pattern</h3>
+<p>All external connectivity prefers the Integration Hub: credential vaulting, scheduled/webhook syncs, field mapping, retries, DLQ, connector health.</p>
+<h3 id="132-priority-connectors">13.2 Priority connectors</h3>
+<table>
+<thead>
+<tr>
+<th>Area</th>
+<th>Examples</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Identity</td>
+<td>Microsoft Entra ID OIDC/SCIM</td>
+</tr>
+<tr>
+<td>Email / collab</td>
+<td>Microsoft Graph mail</td>
+</tr>
+<tr>
+<td>Object storage</td>
+<td>MinIO / S3</td>
+</tr>
+<tr>
+<td>Payments / banking</td>
+<td>Host-to-host, payment status APIs</td>
+</tr>
+<tr>
+<td>Tax / e-invoice</td>
+<td>Country packs (GST etc.)</td>
+</tr>
+<tr>
+<td>Commerce</td>
+<td>Shopify/Magento-style channels via Ecommerce module</td>
+</tr>
+<tr>
+<td>Signatures</td>
+<td>DocuSign / Adobe Sign via DMS</td>
+</tr>
+<tr>
+<td>Catch-all</td>
+<td>Public OpenAPI, outbound webhooks, CSV/Excel import-export</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="14-on-premise-deployment-plan">14. On-Premise Deployment Plan</h2>
+<p>Same signed container images as cloud; topology changes by customer size.</p>
+<h3 id="141-installation-profiles">14.1 Installation profiles</h3>
+<div class="figure"><p class="figure-caption">Figure 17</p><img class="diagram" src="diagrams/diagram_17.png" alt="Architecture diagram 17" /></div>
+
+<table>
+<thead>
+<tr>
+<th>Profile</th>
+<th>Target</th>
+<th>Shape</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Compact</strong></td>
+<td>≤ ~100 users</td>
+<td>One VM/host: API, worker, beat, web, Postgres, Redis, RabbitMQ, MinIO; optional warm standby</td>
+</tr>
+<tr>
+<td><strong>Standard</strong></td>
+<td>~100–1,000 users</td>
+<td>K3s cluster; HA Postgres (Patroni or managed); replicated Redis/RabbitMQ; MinIO erasure coding</td>
+</tr>
+<tr>
+<td><strong>Enterprise</strong></td>
+<td>1,000+ / regulated</td>
+<td>Customer Kubernetes; customer-managed DB; AD/LDAP federation; air-gap capable; customer DR</td>
+</tr>
+</tbody>
+</table>
+<h3 id="142-compact-reference-topology">14.2 Compact reference topology</h3>
+<div class="figure"><p class="figure-caption">Figure 18</p><img class="diagram" src="diagrams/diagram_18.png" alt="Architecture diagram 18" /></div>
+
+<h3 id="143-on-prem-packaging-checklist">14.3 On-prem packaging checklist</h3>
+<table>
+<thead>
+<tr>
+<th>Item</th>
+<th>Guidance</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Installer</td>
+<td>CLI (<code>cpctl</code> or equivalent) validates OS, disk, ports; applies Compose/Helm; runs Alembic; health checks</td>
+</tr>
+<tr>
+<td>Config</td>
+<td><code>.env</code> / sealed secrets — DB URL, JWT, Graph/SSO optional, storage endpoints</td>
+</tr>
+<tr>
+<td>Licensing</td>
+<td>Offline signed license files (roadmap entitlement service)</td>
+</tr>
+<tr>
+<td>Updates</td>
+<td>Online registry pull or offline signed bundle; pre-upgrade backup mandatory</td>
+</tr>
+<tr>
+<td>AI</td>
+<td>Customer LLM keys, vendor gateway, or local GPU inference — config only, no code fork</td>
+</tr>
+<tr>
+<td>Existing artifacts</td>
+<td><code>apps/api/Dockerfile</code> (roles: <code>api</code> / <code>worker</code> / <code>beat</code> / <code>migrate</code>), <code>apps/web/Dockerfile</code>, <code>apps/employee-app/Dockerfile</code>, root <code>docker-compose.yml</code> (infra services)</td>
+</tr>
+</tbody>
+</table>
+<h3 id="144-on-prem-backup-dr">14.4 On-prem backup &amp; DR</h3>
+<ul>
+<li>Nightly DB dump + continuous WAL where feasible  </li>
+<li>Object-storage versioning for documents  </li>
+<li>Documented restore drill  </li>
+<li>Optional secondary site replication for Standard/Enterprise  </li>
+</ul>
+<hr />
+<h2 id="15-aws-deployment-plan">15. AWS Deployment Plan</h2>
+<p>Primary cloud target per SDD Volume 4.</p>
+<h3 id="151-service-mapping">15.1 Service mapping</h3>
+<table>
+<thead>
+<tr>
+<th>Function</th>
+<th>AWS service</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Compute</td>
+<td>EKS (preferred) or ECS Fargate</td>
+</tr>
+<tr>
+<td>API / workers</td>
+<td>Kubernetes Deployments or ECS services</td>
+</tr>
+<tr>
+<td>Frontend</td>
+<td>EKS/ECS + ALB, or CloudFront → S3/SSR containers</td>
+</tr>
+<tr>
+<td>Database</td>
+<td>Amazon RDS PostgreSQL (Multi-AZ)</td>
+</tr>
+<tr>
+<td>Cache</td>
+<td>ElastiCache Redis</td>
+</tr>
+<tr>
+<td>Broker</td>
+<td>Amazon MQ (RabbitMQ) or self-managed on EKS</td>
+</tr>
+<tr>
+<td>Search</td>
+<td>Amazon OpenSearch Service</td>
+</tr>
+<tr>
+<td>Objects</td>
+<td>Amazon S3</td>
+</tr>
+<tr>
+<td>Secrets</td>
+<td>AWS Secrets Manager</td>
+</tr>
+<tr>
+<td>TLS / DNS</td>
+<td>ACM · Route 53</td>
+</tr>
+<tr>
+<td>Edge</td>
+<td>CloudFront · AWS WAF</td>
+</tr>
+<tr>
+<td>Observability</td>
+<td>CloudWatch · OpenTelemetry · Grafana (optional)</td>
+</tr>
+<tr>
+<td>IaC</td>
+<td>Terraform</td>
+</tr>
+</tbody>
+</table>
+<h3 id="152-target-aws-topology">15.2 Target AWS topology</h3>
+<div class="figure"><p class="figure-caption">Figure 19</p><img class="diagram" src="diagrams/diagram_19.png" alt="Architecture diagram 19" /></div>
+
+<h3 id="153-network">15.3 Network</h3>
+<div class="figure"><p class="figure-caption">Figure 20</p><img class="diagram" src="diagrams/diagram_20.png" alt="Architecture diagram 20" /></div>
+
+<p><strong>Rule:</strong> Databases and brokers are never publicly accessible.</p>
+<h3 id="154-kubernetes-workload-set">15.4 Kubernetes workload set</h3>
+<table>
+<thead>
+<tr>
+<th>Workload</th>
+<th>Image / role</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>erp-web</code></td>
+<td><code>apps/web</code></td>
+<td>HPA on CPU/RPS</td>
+</tr>
+<tr>
+<td><code>erp-api</code></td>
+<td><code>apps/api</code> role=<code>api</code></td>
+<td>Gunicorn+Uvicorn; HPA</td>
+</tr>
+<tr>
+<td><code>erp-worker</code></td>
+<td><code>apps/api</code> role=<code>worker</code></td>
+<td>Scale on queue depth</td>
+</tr>
+<tr>
+<td><code>erp-beat</code></td>
+<td><code>apps/api</code> role=<code>beat</code></td>
+<td>Single active replica</td>
+</tr>
+<tr>
+<td><code>erp-migrate</code></td>
+<td>Job</td>
+<td>Alembic before rollout</td>
+</tr>
+<tr>
+<td><code>erp-employee</code></td>
+<td><code>apps/employee-app</code></td>
+<td>Optional public path</td>
+</tr>
+</tbody>
+</table>
+<p>Ingress, ConfigMaps, Secrets, NetworkPolicies, and PodDisruptionBudgets are mandatory for production.</p>
+<h3 id="155-environment-promotion-no-calendar-dates">15.5 Environment promotion (no calendar dates)</h3>
+<div class="figure"><p class="figure-caption">Figure 21</p><img class="diagram" src="diagrams/diagram_21.png" alt="Architecture diagram 21" /></div>
+
+<p>Promotion is artifact-based: the <strong>same image digests</strong> move forward; only config/secrets change.</p>
+<h3 id="156-saas-control-plane-concerns-on-aws">15.6 SaaS control-plane concerns on AWS</h3>
+<ul>
+<li>Automated tenant provisioning (schema/DB + seed + DNS)  </li>
+<li>Entitlements and metering (Licensing roadmap)  </li>
+<li>Per-tenant backup/export  </li>
+<li>Status page and error budgets  </li>
+<li>Multi-AZ RDS; S3 cross-region replication for DR; defined RPO/RTO  </li>
+</ul>
+<hr />
+<h2 id="16-devops-environments-and-cicd">16. DevOps, Environments, and CI/CD</h2>
+<h3 id="161-target-pipeline">16.1 Target pipeline</h3>
+<div class="figure"><p class="figure-caption">Figure 22</p><img class="diagram" src="diagrams/diagram_22.png" alt="Architecture diagram 22" /></div>
+
+<table>
+<thead>
+<tr>
+<th>Practice</th>
+<th>Standard</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Source</td>
+<td>GitHub</td>
+</tr>
+<tr>
+<td>Branches</td>
+<td><code>main</code>, <code>develop</code>, <code>feature/*</code></td>
+</tr>
+<tr>
+<td>CI</td>
+<td>Build API/web images; unit/integration tests; architecture/guardrail checks</td>
+</tr>
+<tr>
+<td>CD</td>
+<td>GitOps (Argo CD) or pipeline deploy to EKS/ECS</td>
+</tr>
+<tr>
+<td>Migrations</td>
+<td>Forward-only Alembic; expand/contract; run as release Job</td>
+</tr>
+<tr>
+<td>Secrets</td>
+<td>Secrets Manager / sealed secrets — not git</td>
+</tr>
+</tbody>
+</table>
+<h3 id="162-current-repo-reality">16.2 Current repo reality</h3>
+<table>
+<thead>
+<tr>
+<th>Present</th>
+<th>Gap</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Dockerfiles for api/web/employee-app</td>
+<td>Full-stack prod Compose/Helm not checked in</td>
+</tr>
+<tr>
+<td>Infra Compose (Redis, RabbitMQ, MinIO, OpenSearch)</td>
+<td>Postgres assumed external / platform-provided</td>
+</tr>
+<tr>
+<td><code>.env.example</code></td>
+<td>No Terraform/EKS manifests yet</td>
+</tr>
+<tr>
+<td>Coolify-style env used operationally</td>
+<td>Formalize as one of the deploy profiles</td>
+</tr>
+</tbody>
+</table>
+<p>This master document defines the <strong>target</strong>; implementation closes the IaC/CI gaps without changing ADR-001/002.</p>
+<hr />
+<h2 id="17-quality-observability-and-compliance">17. Quality, Observability, and Compliance</h2>
+<table>
+<thead>
+<tr>
+<th>Area</th>
+<th>Practice</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>API contracts</td>
+<td>OpenAPI; breaking changes fail review</td>
+</tr>
+<tr>
+<td>Domain tests</td>
+<td>High coverage on finance/payroll math and posting</td>
+</tr>
+<tr>
+<td>Module matrix</td>
+<td>Standalone degradation tests when licensing lands</td>
+</tr>
+<tr>
+<td>E2E golden paths</td>
+<td>O2C, P2P, hire-to-pay, record-to-report</td>
+</tr>
+<tr>
+<td>Security</td>
+<td>Auth/RBAC tests; no cross-tenant leaks</td>
+</tr>
+<tr>
+<td>Telemetry</td>
+<td>Structured logs, metrics, traces (OpenTelemetry)</td>
+</tr>
+<tr>
+<td>Compliance</td>
+<td>Audit engine; GRC module; ISO 27001 / SOC 2 target for SaaS</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="18-key-risks-and-mitigations">18. Key Risks and Mitigations</h2>
+<table>
+<thead>
+<tr>
+<th>Risk</th>
+<th>Mitigation</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Scope explosion across 20+ modules</td>
+<td>Depth before breadth; sellable increments; dependency order Foundation → Org → MDM → business</td>
+</tr>
+<tr>
+<td>Tenancy / permission leak</td>
+<td>Tenant middleware + query filters; automated cross-tenant tests; pen tests</td>
+</tr>
+<tr>
+<td>Payroll / tax correctness</td>
+<td>Country packs; domain experts; property-based tests</td>
+</tr>
+<tr>
+<td>On-prem support burden</td>
+<td>One artifact; LTS channels; installer automation; partner first-line</td>
+</tr>
+<tr>
+<td>AI hallucination / unauthorized action</td>
+<td>Grounding, citations, user-scoped tools, confirmation, full AI audit</td>
+</tr>
+<tr>
+<td>Cursor/AI code drift</td>
+<td><code>.cursor/rules</code>, ADRs in-repo, human review, architecture tests</td>
+</tr>
+<tr>
+<td>Backup/DR only manual today</td>
+<td>Productize Backup &amp; DR module; automate verify restores</td>
+</tr>
+<tr>
+<td>Licensing absent</td>
+<td>Block sell-alone GA until entitlement service ships</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="19-document-hierarchy-and-compliance">19. Document Hierarchy and Compliance</h2>
+<pre><code class="language-text">BRD → FRD (Master + domain FRDs) → SDD v1.1 → DBS v1.1 → ERD → Physical Schema
+    → SQLAlchemy Models → Alembic → OpenAPI → Code
+</code></pre>
+<table>
+<thead>
+<tr>
+<th>Document set</th>
+<th>Path</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>BRD</td>
+<td><code>docs/01_BRD/</code></td>
+</tr>
+<tr>
+<td>FRD</td>
+<td><code>docs/02_FRD/</code></td>
+</tr>
+<tr>
+<td>SDD</td>
+<td><code>docs/03_SDD/</code></td>
+</tr>
+<tr>
+<td>DBS</td>
+<td><code>docs/04_DBS/</code></td>
+</tr>
+<tr>
+<td>Architecture Lock</td>
+<td><code>docs/05_ARCHITECTURE_LOCK/</code></td>
+</tr>
+<tr>
+<td>ERD</td>
+<td><code>docs/06_ERD/</code></td>
+</tr>
+<tr>
+<td><strong>This master</strong></td>
+<td><code>docs/07_MASTER_ARCHITECTURE/</code></td>
+</tr>
+<tr>
+<td>Design system</td>
+<td><code>design-system/enterprise-erp-platform/MASTER.md</code></td>
+</tr>
+</tbody>
+</table>
+<p>No deviation from Architecture Lock v1.1 without EARB approval and an updated ADR.</p>
+<hr />
+<h2 id="appendix-a-connect-ownership-implementation-focus">Appendix A — Connect ownership (implementation focus)</h2>
+<p>Primary engineer ownership for delivery prioritization:</p>
+<ol>
+<li>User Login / Access &amp; RBAC  </li>
+<li>Finance  </li>
+<li>AI Assistant &amp; AI Infra  </li>
+<li>Marketing Tool  </li>
+<li>GRC  </li>
+<li>Document Management  </li>
+<li>Virtual E.A.  </li>
+<li>Data Backup &amp; DR  </li>
+<li>Licensing &amp; Server-side Activation  </li>
+<li>Emailer &amp; Notification System  </li>
+</ol>
+<hr />
+<h2 id="appendix-b-related-source-anchors">Appendix B — Related source anchors</h2>
+<table>
+<thead>
+<tr>
+<th>Concern</th>
+<th>Location</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>API mount list</td>
+<td><code>apps/api/src/shared/router.py</code></td>
+</tr>
+<tr>
+<td>Web module registry</td>
+<td><code>apps/web/src/config/modules.ts</code></td>
+</tr>
+<tr>
+<td>Architecture lock</td>
+<td><code>docs/05_ARCHITECTURE_LOCK/ERP_Architecture_Lock_Report_v1.1.md</code></td>
+</tr>
+<tr>
+<td>Infra Compose</td>
+<td><code>docker-compose.yml</code></td>
+</tr>
+<tr>
+<td>API container entry</td>
+<td><code>apps/api/docker/entrypoint.sh</code></td>
+</tr>
+</tbody>
+</table>
+<hr />
+<p><em>End of Master Architecture Document</em></p>
+</body>
+</html>
