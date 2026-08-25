@@ -5,7 +5,6 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   Building2,
-  FileText,
   MapPin,
   Package,
   Truck,
@@ -25,7 +24,6 @@ import {
 import {
   FinanceField,
   FinanceSelect,
-  FinanceTextarea,
 } from "@/components/finance/journals/finance-form-field";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -804,12 +802,6 @@ export function LeadFormPage({ companyAccountId }: { companyAccountId: string })
             />
           </FinanceField>
         </div>
-      </CrmSection>
-
-      <CrmSection title="Additional Information" icon={FileText}>
-        <FinanceField label="Description">
-          <FinanceTextarea value={form.notes ?? ""} onChange={(e) => set("notes", e.target.value)} />
-        </FinanceField>
       </CrmSection>
 
       <div className="flex justify-end gap-2">

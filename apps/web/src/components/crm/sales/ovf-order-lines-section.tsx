@@ -16,6 +16,7 @@ export type CustomerChargeRow = {
   serverId?: string;
   fromQuote?: boolean;
   product_name: string;
+  description: string;
   qty: string;
   unit_price: string;
   total: string;
@@ -30,6 +31,8 @@ export type VendorChargeRow = {
   key: string;
   serverId?: string;
   fromQuote?: boolean;
+  product_name: string;
+  description: string;
   qty: string;
   unit_price: string;
   total: string;
@@ -52,6 +55,7 @@ export function emptyCustomerRow(): CustomerChargeRow {
     key: newKey(),
     fromQuote: false,
     product_name: "",
+    description: "",
     qty: "",
     unit_price: "",
     total: "",
@@ -67,6 +71,8 @@ export function emptyVendorRow(): VendorChargeRow {
   return {
     key: newKey(),
     fromQuote: false,
+    product_name: "",
+    description: "",
     qty: "",
     unit_price: "",
     total: "",
@@ -106,6 +112,27 @@ function qtyAsInt(value: string | number | null | undefined): string {
   return Number.isFinite(n) ? String(n) : "";
 }
 
+function quoteDesc(quoteLine: QuoteLine | undefined): string {
+  return (quoteLine?.description ?? "").trim();
+}
+
+function quoteByProductName(quoteLines: QuoteLine[]): Map<string, QuoteLine> {
+  const map = new Map<string, QuoteLine>();
+  for (const line of quoteLines) {
+    const key = (line.product_name || "").trim().toLowerCase();
+    if (key && !map.has(key)) map.set(key, line);
+  }
+  return map;
+}
+
+function quoteByLineNo(quoteLines: QuoteLine[]): Map<number, QuoteLine> {
+  const map = new Map<number, QuoteLine>();
+  for (const line of quoteLines) {
+    map.set(Number(line.line_no), line);
+  }
+  return map;
+}
+
 export function customerRowsFromQuoteLines(quoteLines: QuoteLine[]): CustomerChargeRow[] {
   return quoteLines.map((quoteLine) => customerFromQuote(quoteLine));
 }
@@ -114,7 +141,12 @@ export function vendorRowsFromQuoteLines(quoteLines: QuoteLine[]): VendorChargeR
   return quoteLines.map((quoteLine) => vendorFromQuote(quoteLine));
 }
 
-export function customerRowsFromOvfLines(lines: OvfLine[]): CustomerChargeRow[] {
+export function customerRowsFromOvfLines(
+  lines: OvfLine[],
+  quoteLines: QuoteLine[] = [],
+): CustomerChargeRow[] {
+  const byName = quoteByProductName(quoteLines);
+  const byNo = quoteByLineNo(quoteLines);
   return lines
     .filter((line) => line.side === "customer_po")
     .map((line) => {
@@ -122,11 +154,14 @@ export function customerRowsFromOvfLines(lines: OvfLine[]): CustomerChargeRow[] 
       const unitPrice = moneyAsFixed(line.unit_price ?? 0);
       const gstPct = String(GST_PCT);
       const money = moneyFromQtyPrice(qty, unitPrice, gstPct);
+      const quoteLine =
+        byName.get((line.product_name || "").trim().toLowerCase()) ?? byNo.get(Number(line.line_no));
       return {
         key: line.id,
         serverId: line.id,
         fromQuote: false,
         product_name: line.product_name,
+        description: quoteDesc(quoteLine),
         qty,
         unit_price: unitPrice,
         total: money.total,
@@ -139,7 +174,11 @@ export function customerRowsFromOvfLines(lines: OvfLine[]): CustomerChargeRow[] 
     });
 }
 
-export function vendorRowsFromOvfLines(lines: OvfLine[]): VendorChargeRow[] {
+export function vendorRowsFromOvfLines(
+  lines: OvfLine[],
+  quoteLines: QuoteLine[] = [],
+): VendorChargeRow[] {
+  const byNo = quoteByLineNo(quoteLines);
   return lines
     .filter((line) => line.side === "vendor")
     .map((line) => {
@@ -147,10 +186,13 @@ export function vendorRowsFromOvfLines(lines: OvfLine[]): VendorChargeRow[] {
       const unitPrice = moneyAsFixed(line.unit_price ?? 0);
       const gstPct = String(GST_PCT);
       const money = moneyFromQtyPrice(qty, unitPrice, gstPct);
+      const quoteLine = byNo.get(Number(line.line_no));
       return {
         key: line.id,
         serverId: line.id,
         fromQuote: false,
+        product_name: quoteLine?.product_name ?? "",
+        description: quoteDesc(quoteLine),
         qty,
         unit_price: unitPrice,
         total: money.total,
@@ -176,6 +218,7 @@ export function customerFromQuote(quoteLine: QuoteLine, ovfLine?: OvfLine): Cust
     serverId: ovfLine?.id,
     fromQuote: true,
     product_name: quoteLine.product_name,
+    description: quoteDesc(quoteLine),
     qty,
     unit_price: unitPrice,
     total: money.total,
@@ -196,6 +239,8 @@ export function vendorFromQuote(quoteLine: QuoteLine, ovfLine?: OvfLine): Vendor
     key: ovfLine?.id ?? `quote-vendor-${quoteLine.id}`,
     serverId: ovfLine?.id,
     fromQuote: true,
+    product_name: quoteLine.product_name,
+    description: quoteDesc(quoteLine),
     qty,
     unit_price: unitPrice,
     total: money.total,
@@ -449,10 +494,11 @@ export function OvfOrderLinesSection({
             )
           }
         >
-          <table className="w-full min-w-[1100px] border-collapse text-left">
+          <table className="w-full min-w-[1240px] border-collapse text-left">
             <thead>
               <tr className="bg-[#eef2f6]">
                 <th className={thClass("min-w-[160px]")}>Product Name</th>
+                <th className={thClass("min-w-[200px]")}>Description</th>
                 <th className={thClass("min-w-[88px]")}>Quantity</th>
                 <th className={thClass("min-w-[130px]")}>Unit Product Amt (₹)</th>
                 <th className={thClass("min-w-[110px]")}>Total.</th>
@@ -467,7 +513,7 @@ export function OvfOrderLinesSection({
             <tbody>
               {customerRows.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="px-3 py-6 text-center text-[12px] text-muted-foreground">
+                  <td colSpan={9} className="px-3 py-6 text-center text-[12px] text-muted-foreground">
                     No customer charge rows. Click + Add row to create one.
                   </td>
                 </tr>
@@ -479,6 +525,13 @@ export function OvfOrderLinesSection({
                         readOnly={disabled || Boolean(row.fromQuote)}
                         value={row.product_name}
                         onChange={(v) => updateCustomerRow(row.key, { product_name: v })}
+                      />
+                    </td>
+                    <td className={tdClass()}>
+                      <ChargesField
+                        readOnly={disabled || Boolean(row.fromQuote)}
+                        value={row.description}
+                        onChange={(v) => updateCustomerRow(row.key, { description: v })}
                       />
                     </td>
                     <td className={tdClass()}>
@@ -572,9 +625,11 @@ export function OvfOrderLinesSection({
             )
           }
         >
-          <table className="w-full min-w-[1280px] border-collapse text-left">
+          <table className="w-full min-w-[1480px] border-collapse text-left">
             <thead>
               <tr className="bg-[#eef2f6]">
+                <th className={thClass("min-w-[160px]")}>Product Name</th>
+                <th className={thClass("min-w-[200px]")}>Description</th>
                 <th className={thClass("min-w-[88px]")}>Quantity.</th>
                 <th className={thClass("min-w-[130px]")}>Unit Purchase (₹)</th>
                 <th className={thClass("min-w-[110px]")}>Total</th>
@@ -592,13 +647,27 @@ export function OvfOrderLinesSection({
             <tbody>
               {vendorRows.length === 0 ? (
                 <tr>
-                  <td colSpan={10} className="px-3 py-6 text-center text-[12px] text-muted-foreground">
+                  <td colSpan={12} className="px-3 py-6 text-center text-[12px] text-muted-foreground">
                     No vendor charge rows. Click + Add row to create one.
                   </td>
                 </tr>
               ) : (
                 vendorRows.map((row) => (
                   <tr key={row.key} className="border-t border-[#e8edf3]">
+                    <td className={tdClass()}>
+                      <ChargesField
+                        readOnly={disabled || Boolean(row.fromQuote)}
+                        value={row.product_name}
+                        onChange={(v) => updateVendorRow(row.key, { product_name: v })}
+                      />
+                    </td>
+                    <td className={tdClass()}>
+                      <ChargesField
+                        readOnly={disabled || Boolean(row.fromQuote)}
+                        value={row.description}
+                        onChange={(v) => updateVendorRow(row.key, { description: v })}
+                      />
+                    </td>
                     <td className={tdClass()}>
                       <ChargesField
                         readOnly={disabled || Boolean(row.fromQuote)}

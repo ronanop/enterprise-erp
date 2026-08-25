@@ -38,7 +38,7 @@ export function OvfListPage({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
-  const { sortBy, sortDir, onSort } = useTableSort<SortKey>("ovf_no");
+  const { sortBy, sortDir, onSort } = useTableSort<SortKey>("created_at", "desc");
 
   const load = useCallback(async () => {
     setLoading(true);

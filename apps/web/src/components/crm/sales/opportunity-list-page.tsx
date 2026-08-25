@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { Handshake } from "lucide-react";
 
-import { CrmErrorBanner, CrmInfoBanner, CrmListPanel, CrmPage, CRM_TABLE_HEAD_ROW } from "@/components/crm/crm-ui";
+import { CrmErrorBanner, CrmListPanel, CrmPage, CRM_TABLE_HEAD_ROW } from "@/components/crm/crm-ui";
 import { FinanceStatusBadge } from "@/components/finance/finance-status-badge";
 import { CrmListToolbar } from "@/components/crm/sales/crm-list-toolbar";
 import { CrmSortableTh, sortRows, useTableSort } from "@/components/crm/sales/crm-table-sort";
@@ -33,7 +33,7 @@ export function OpportunityListPage({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
-  const { sortBy, sortDir, onSort } = useTableSort<SortKey>("opportunity_name");
+  const { sortBy, sortDir, onSort } = useTableSort<SortKey>("created_at", "desc");
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -92,12 +92,6 @@ export function OpportunityListPage({
           title="Opportunities"
           description="Deals converted from a Lead — BOQ to Won/Lost sales blueprint."
         />
-      ) : null}
-
-      {!embedded ? (
-        <CrmInfoBanner>
-          Opportunities are created only by converting a Lead — there is no direct “create” action here.
-        </CrmInfoBanner>
       ) : null}
 
       {error ? <CrmErrorBanner>{error}</CrmErrorBanner> : null}

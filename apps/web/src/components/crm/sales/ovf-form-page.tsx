@@ -161,17 +161,18 @@ export function OvfFormPage({ quoteId, ovfId }: { quoteId?: string; ovfId?: stri
             409,
           );
         }
-        const [quoteRow, opportunityRow, ovfLines] = await Promise.all([
+        const [quoteRow, opportunityRow, ovfLines, quoteLines] = await Promise.all([
           getQuote(ovfRow.quote_id),
           getOpportunity(ovfRow.opportunity_id),
           listOvfLines(ovfId).catch(() => []),
+          listQuoteLines(ovfRow.quote_id).catch(() => []),
         ]);
         setOvf(ovfRow);
         setQuote(quoteRow);
         setOpportunity(opportunityRow);
         setVendorNameOptions(await distributorOptionsForOpportunity(opportunityRow));
-        setCustomerRows(customerRowsFromOvfLines(ovfLines));
-        setVendorRows(vendorRowsFromOvfLines(ovfLines));
+        setCustomerRows(customerRowsFromOvfLines(ovfLines, quoteLines));
+        setVendorRows(vendorRowsFromOvfLines(ovfLines, quoteLines));
         setForm({
           po_number: ovfRow.po_number ?? "",
           po_date: ovfRow.po_date ? String(ovfRow.po_date).slice(0, 10) : "",

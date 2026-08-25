@@ -40,6 +40,7 @@ import {
   getSalesLead,
   listEmployeeOptions,
   listOvfLines,
+  listQuoteLines,
   markOvfDealWon,
   sendOvfForApproval,
   shareOvfToScm,
@@ -84,17 +85,18 @@ export function OvfDetailPage({ ovfId }: { ovfId: string }) {
       ]);
       setOvf(ovfRow);
       setBlueprint(bp);
-      setCustomerRows(customerRowsFromOvfLines(ovfLines));
-      setVendorRows(vendorRowsFromOvfLines(ovfLines));
 
-      const [quoteRow, oppRow, employeeRows] = await Promise.all([
+      const [quoteRow, oppRow, employeeRows, quoteLines] = await Promise.all([
         getQuote(ovfRow.quote_id).catch(() => null),
         getOpportunity(ovfRow.opportunity_id).catch(() => null),
         listEmployeeOptions().catch(() => [] as Option[]),
+        listQuoteLines(ovfRow.quote_id).catch(() => []),
       ]);
       setQuote(quoteRow);
       setOpportunity(oppRow);
       setEmployees(employeeRows);
+      setCustomerRows(customerRowsFromOvfLines(ovfLines, quoteLines));
+      setVendorRows(vendorRowsFromOvfLines(ovfLines, quoteLines));
       if (oppRow?.lead_id) {
         const lead = await getSalesLead(oppRow.lead_id).catch(() => null);
         setVendorNameOptions(parseLeadDistributorNames(lead?.distributor_name));

@@ -21,7 +21,6 @@ import {
   Package,
   Receipt,
   ScrollText,
-  Search,
   ShieldCheck,
   ShoppingCart,
   Target,
@@ -34,7 +33,6 @@ import {
 
 import { SidebarAccountSection } from "@/components/layout/sidebar-account-section";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { ModuleUsersNavTab } from "@/components/organization/module-users-nav-tab";
 import {
   getCrmSidebarFocus,
@@ -165,7 +163,6 @@ export function CrmWorkspaceNav() {
 export function CrmSidebar() {
   const pathname = usePathname();
   const [collapsed, setCollapsed] = useState(false);
-  const [query, setQuery] = useState("");
   const { signedIn, user, adminModuleKeys } = useAuthUser();
 
   const navItems = useMemo(() => {
@@ -175,12 +172,6 @@ export function CrmSidebar() {
     }
     return items;
   }, [adminModuleKeys, user?.userType]);
-
-  const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    if (!q) return navItems;
-    return navItems.filter((item) => item.title.toLowerCase().includes(q));
-  }, [navItems, query]);
 
   return (
     <aside
@@ -222,21 +213,6 @@ export function CrmSidebar() {
         </div>
       )}
 
-      {!collapsed ? (
-        <div className="px-3 pb-3">
-          <div className="relative">
-            <Search className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-sidebar-foreground/40" />
-            <Input
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search CRM…"
-              className="h-9 border-sidebar-border bg-white/5 pl-8 text-sidebar-foreground placeholder:text-sidebar-foreground/40 focus-visible:ring-sidebar-ring"
-              aria-label="Search CRM panes"
-            />
-          </div>
-        </div>
-      ) : null}
-
       <nav aria-label="CRM workspace" className="erp-scroll flex-1 overflow-y-auto px-2.5 py-2">
         {!collapsed ? (
           <p className="mb-2 px-2.5 text-[10px] font-medium tracking-[0.14em] text-sidebar-foreground/40 uppercase">
@@ -244,7 +220,7 @@ export function CrmSidebar() {
           </p>
         ) : null}
         <ul className="space-y-0.5">
-          {filtered.map((item) => {
+          {navItems.map((item) => {
             const active = isCrmNavActive(pathname, item.href);
             const Icon = item.icon;
             return (
