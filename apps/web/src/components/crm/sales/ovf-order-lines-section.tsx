@@ -355,8 +355,9 @@ type OvfOrderLinesSectionProps = {
   vendorRows: VendorChargeRow[];
   onCustomerRowsChange?: (rows: CustomerChargeRow[]) => void;
   onVendorRowsChange?: (rows: VendorChargeRow[]) => void;
+  /** Distributor names selected on the lead — options for Distributor Name. */
+  vendorNameOptions?: readonly string[];
   disabled?: boolean;
-  onValidationError?: (message: string) => void;
 };
 
 export function OvfOrderLinesSection({
@@ -364,11 +365,17 @@ export function OvfOrderLinesSection({
   vendorRows,
   onCustomerRowsChange,
   onVendorRowsChange,
+  vendorNameOptions = [],
   disabled = false,
-  onValidationError,
 }: OvfOrderLinesSectionProps) {
   const totalSaleValue = sumLineTotals(customerRows);
   const totalPurchaseValue = sumLineTotals(vendorRows);
+  const vendorOptions = Array.from(
+    new Set([
+      ...vendorNameOptions.map((name) => name.trim()).filter(Boolean),
+      ...vendorRows.map((row) => row.vendor_name.trim()).filter(Boolean),
+    ]),
+  );
 
   function updateCustomerRow(key: string, patch: Partial<CustomerChargeRow>, recalc = false) {
     if (disabled || !onCustomerRowsChange) return;
@@ -402,21 +409,11 @@ export function OvfOrderLinesSection({
 
   function onAddCustomerRow() {
     if (disabled || !onCustomerRowsChange) return;
-    const message = validateChargeAttachments(customerRows, []);
-    if (message) {
-      onValidationError?.(message);
-      return;
-    }
     onCustomerRowsChange([...customerRows, emptyCustomerRow()]);
   }
 
   function onAddVendorRow() {
     if (disabled || !onVendorRowsChange) return;
-    const message = validateChargeAttachments([], vendorRows);
-    if (message) {
-      onValidationError?.(message);
-      return;
-    }
     onVendorRowsChange([...vendorRows, emptyVendorRow()]);
   }
 
@@ -584,7 +581,7 @@ export function OvfOrderLinesSection({
                 <th className={thClass("min-w-[90px]")}>GST ({GST_PCT}%)</th>
                 <th className={thClass("min-w-[140px]")}>Total Amount in GST</th>
                 <th className={thClass("min-w-[150px]")}>Total Amount with GST</th>
-                <th className={thClass("min-w-[140px]")}>Vendor Name</th>
+                <th className={thClass("min-w-[140px]")}>Distributor Name</th>
                 <th className={thClass("min-w-[130px]")}>Contact Person</th>
                 <th className={thClass("min-w-[130px]")}>Contact Number.</th>
                 <th className={thClass("min-w-[120px]")}>
@@ -657,11 +654,25 @@ export function OvfOrderLinesSection({
                       />
                     </td>
                     <td className={tdClass()}>
-                      <ChargesField
-                        readOnly={disabled}
+                      <select
+                        disabled={disabled}
                         value={row.vendor_name}
-                        onChange={(v) => updateVendorRow(row.key, { vendor_name: v })}
-                      />
+                        onChange={(e) => updateVendorRow(row.key, { vendor_name: e.target.value })}
+                        className={cn(
+                          "flex h-9 w-full min-w-[140px] cursor-pointer rounded-[4px] border border-[#cfd7e3] bg-white px-2.5 text-[13px] shadow-none outline-none transition-colors duration-200",
+                          "focus-visible:border-sky-400 focus-visible:ring-1 focus-visible:ring-sky-300",
+                          disabled && "cursor-default bg-[#f8fafc] opacity-70",
+                          !row.vendor_name && "text-muted-foreground",
+                        )}
+                        aria-label="Distributor name"
+                      >
+                        <option value="">{vendorOptions.length ? "Select distributor…" : "No distributors on lead"}</option>
+                        {vendorOptions.map((name) => (
+                          <option key={name} value={name}>
+                            {name}
+                          </option>
+                        ))}
+                      </select>
                     </td>
                     <td className={tdClass()}>
                       <ChargesField

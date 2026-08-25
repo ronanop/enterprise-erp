@@ -1,4 +1,5 @@
 const RAW_LEAD_DISTRIBUTOR_OPTIONS = [
+  "IN STOCK",
   "Redington",
   "Ingram Micro",
   "TD SYNNEX",

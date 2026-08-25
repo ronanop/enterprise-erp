@@ -138,12 +138,16 @@ export function QuoteDetailPage({ quoteId }: { quoteId: string }) {
     try {
       if (action === "send_for_approval") {
         const assignedUserId = payload.assigned_user_id;
+        const assignedUserIds = Array.isArray(payload.assigned_user_ids)
+          ? payload.assigned_user_ids.filter((id): id is string => typeof id === "string" && Boolean(id.trim()))
+          : [];
         if (typeof assignedUserId !== "string" || !assignedUserId.trim()) {
           throw new ApiClientError("Select an approver before sending for approval.", 400);
         }
         await sendQuoteForApproval(quoteId, {
           team_role: typeof payload.team_role === "string" ? payload.team_role : undefined,
           assigned_user_id: assignedUserId,
+          assigned_user_ids: assignedUserIds.length > 0 ? assignedUserIds : [assignedUserId],
           remarks: typeof payload.remarks === "string" ? payload.remarks : null,
         });
       } else if (action === "approve_internally") {

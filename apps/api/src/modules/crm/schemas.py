@@ -1178,6 +1178,8 @@ class QuoteMarginSummaryResponse(BaseModel):
 
 class QuoteSendForApprovalRequest(BaseModel):
     team_role: str = "management"
+    assigned_user_id: UUID | None = None
+    assigned_user_ids: list[UUID] | None = None
     remarks: str | None = None
 
 

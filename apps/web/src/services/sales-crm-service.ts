@@ -885,7 +885,12 @@ export async function getQuoteBlueprint(quoteId: string): Promise<BlueprintState
 
 export async function sendQuoteForApproval(
   quoteId: string,
-  body: { team_role?: string; assigned_user_id: string; remarks?: string | null },
+  body: {
+    team_role?: string;
+    assigned_user_id: string;
+    assigned_user_ids?: string[];
+    remarks?: string | null;
+  },
 ): Promise<Quote> {
   return unwrap(
     await apiClient<Quote>(`${CRM_QUOTES_API}/${quoteId}/send-for-approval`, {

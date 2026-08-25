@@ -27,6 +27,7 @@ import { FinanceStatusBadge } from "@/components/finance/finance-status-badge";
 import { PageHeader } from "@/components/layout/page-header";
 import { Button } from "@/components/ui/button";
 import { ApiClientError } from "@/services/api-client";
+import { parseLeadDistributorNames } from "@/lib/crm/lead-distributor-options";
 import {
   applyOvfAction,
   formatInr,
@@ -36,6 +37,7 @@ import {
   getOvf,
   getOvfBlueprint,
   getQuote,
+  getSalesLead,
   listEmployeeOptions,
   listOvfLines,
   markOvfDealWon,
@@ -65,6 +67,7 @@ export function OvfDetailPage({ ovfId }: { ovfId: string }) {
   const [employees, setEmployees] = useState<Option[]>([]);
   const [customerRows, setCustomerRows] = useState<CustomerChargeRow[]>([]);
   const [vendorRows, setVendorRows] = useState<VendorChargeRow[]>([]);
+  const [vendorNameOptions, setVendorNameOptions] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [banner, setBanner] = useState<{ text: string; tone: "success" | "error" } | null>(null);
@@ -92,6 +95,12 @@ export function OvfDetailPage({ ovfId }: { ovfId: string }) {
       setQuote(quoteRow);
       setOpportunity(oppRow);
       setEmployees(employeeRows);
+      if (oppRow?.lead_id) {
+        const lead = await getSalesLead(oppRow.lead_id).catch(() => null);
+        setVendorNameOptions(parseLeadDistributorNames(lead?.distributor_name));
+      } else {
+        setVendorNameOptions([]);
+      }
 
       const accountId = ovfRow.company_account_id ?? oppRow?.company_account_id ?? null;
       setCompany(accountId ? await getCompany(accountId).catch(() => null) : null);
@@ -379,7 +388,12 @@ export function OvfDetailPage({ ovfId }: { ovfId: string }) {
         </CrmDetailGrid>
       </CrmSection>
 
-      <OvfOrderLinesSection customerRows={customerRows} vendorRows={vendorRows} disabled />
+      <OvfOrderLinesSection
+        customerRows={customerRows}
+        vendorRows={vendorRows}
+        vendorNameOptions={vendorNameOptions}
+        disabled
+      />
     </CrmPage>
   );
 }

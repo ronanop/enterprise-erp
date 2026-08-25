@@ -8,6 +8,8 @@ Product rules enforced here:
      lock the record.
 """
 
+from __future__ import annotations
+
 from decimal import Decimal
 from typing import Any
 from uuid import UUID
@@ -390,7 +392,8 @@ class QuoteService:
         quote_id: UUID,
         *,
         team_role: str = "management",
-        assigned_user_id: UUID,
+        assigned_user_id: UUID | None = None,
+        assigned_user_ids: list[UUID] | None = None,
         remarks: str | None = None,
     ) -> CrmQuote:
         quote = self.get(ctx, quote_id)
@@ -402,6 +405,7 @@ class QuoteService:
         ApprovalTaskService(self._db).route_approval(
             ctx,
             assigned_user_id=assigned_user_id,
+            assigned_user_ids=assigned_user_ids,
             title=f"Approve Quote {quote.quote_no} — margin review",
             entity_type="quote",
             entity_id=quote.id,
