@@ -11,17 +11,11 @@ import {
 import type { DeliveryChallanRecord } from "@/utils/delivery-challan-storage";
 import { formatChallanGrnSummary } from "@/utils/delivery-challan-storage";
 import {
-  applyShipmentStatusToActualDate,
-  firstDeliveryStatusFormError,
-  getDeliveryStatus,
-  isDeliveryStatusPersisted,
   resolveDeliveryStatusForChallan,
-  upsertDeliveryStatus,
   validateDeliveryStatusForm,
   type DeliveryStatusFormErrors,
 } from "@/utils/delivery-status-storage";
-import { runDeliveryReminderSweep } from "@/utils/delivery-status-reminders";
-import { sendDeliveryDispatchNotification } from "@/utils/delivery-dispatch-email";
+import { persistDeliveryStatusFromForm } from "@/utils/delivery-status-persist";
 
 type DeliveryStatusUpdateDialogProps = {
   open: boolean;
@@ -40,11 +34,12 @@ export function DeliveryStatusUpdateDialog({
   const [fieldErrors, setFieldErrors] = useState<DeliveryStatusFormErrors>({});
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
-  const trackingOnly = challan ? isDeliveryStatusPersisted(challan.id) : false;
 
   useEffect(() => {
     if (!open || !challan) {
       setForm(null);
+      setFieldErrors({});
+      setError(null);
       return;
     }
     const status = resolveDeliveryStatusForChallan(challan);
@@ -53,31 +48,21 @@ export function DeliveryStatusUpdateDialog({
 
   async function onConfirm() {
     if (!challan || !form || saving) return;
-    if (!trackingOnly) {
-      const errors = validateDeliveryStatusForm(form);
-      setFieldErrors(errors);
-      const message = firstDeliveryStatusFormError(errors);
-      if (message) {
-        setError(message);
-        return;
-      }
+    const errors = validateDeliveryStatusForm(form);
+    setFieldErrors(errors);
+    if (Object.values(errors).some(Boolean)) {
+      setError(Object.values(errors).find(Boolean) ?? "Complete the required fields.");
+      return;
     }
     setError(null);
     setSaving(true);
     try {
-      const saved = getDeliveryStatus(challan.id);
-      const base = trackingOnly && saved ? deliveryStatusToFormValue(saved) : form;
-      const normalized = applyShipmentStatusToActualDate({
-        ...base,
-        shipmentStatus: form.shipmentStatus,
-      });
-      upsertDeliveryStatus({
-        challanId: challan.id,
-        ...normalized,
-      });
-      runDeliveryReminderSweep();
-      if (!trackingOnly) {
-        await sendDeliveryDispatchNotification(challan, normalized);
+      const result = await persistDeliveryStatusFromForm(challan, form);
+      if (!result.ok) {
+        setFieldErrors(result.fieldErrors ?? {});
+        setError(result.message);
+        setSaving(false);
+        return;
       }
       onSaved?.();
       onClose();
@@ -90,9 +75,8 @@ export function DeliveryStatusUpdateDialog({
   if (!challan) return null;
 
   const subtitle = [
-    challan.purchaseOrderNumber,
+    challan.companyPoNumber || challan.purchaseOrderNumber,
     formatChallanGrnSummary(challan),
-    challan.challanNumber,
   ]
     .filter(Boolean)
     .join(" · ");
@@ -102,10 +86,11 @@ export function DeliveryStatusUpdateDialog({
       open={open}
       title="Update delivery status"
       description={subtitle}
-      confirmLabel="Save status"
+      confirmLabel="Save"
       cancelLabel="Cancel"
+      busy={saving}
       contentClassName="max-w-2xl"
-      onConfirm={onConfirm}
+      onConfirm={() => void onConfirm()}
       onCancel={onClose}
     >
       {form ? (
@@ -121,9 +106,7 @@ export function DeliveryStatusUpdateDialog({
                 setFieldErrors(validateDeliveryStatusForm(next));
               }
             }}
-            compact
             fieldErrors={fieldErrors}
-            mode={trackingOnly ? "tracking" : "initial"}
           />
         </div>
       ) : null}

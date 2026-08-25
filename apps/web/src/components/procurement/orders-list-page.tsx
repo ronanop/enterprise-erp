@@ -1,13 +1,12 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
-  CircleDot,
-  FileDown,
   FileSpreadsheet,
   PackageCheck,
+  PackageOpen,
+  Plus,
   RefreshCw,
   ShoppingCart,
 } from "lucide-react";
@@ -21,13 +20,12 @@ import {
   procurementUi,
 } from "@/components/procurement/procurement-ui";
 import { Badge } from "@/components/ui/badge";
-import { Button, buttonVariants } from "@/components/ui/button";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
-import { ApiClientError } from "@/services/api-client";
+import { formatApiError } from "@/services/api-client";
 import {
   formatInr,
-  getPurchaseOrder,
   listPurchaseOrders,
   listVendorOptions,
   invalidateProcurementListCache,
@@ -40,32 +38,13 @@ import {
 } from "@/utils/orders-excel-export";
 import {
   formatGrnStatusBadgeLabel,
+  grnBadgeVariant,
   grnStatusMatchesSearch,
 } from "@/utils/grn-status-display";
-import { deriveGrnStatus } from "@/utils/procurement-po-buckets";
-import { downloadOrderPdf } from "@/utils/purchase-order-pdf";
+import { textTokenMatch } from "@/utils/procurement-search";
+import { deriveGrnStatus, filterOrdersByPoBucket, parsePoOverviewBucket, countPoBuckets, poOverviewBucketForOrder } from "@/utils/procurement-po-buckets";
 
-type StatusFilter =
-  | "all"
-  | "draft"
-  | "open"
-  | "issued"
-  | "delivered"
-  | "cancelled"
-  | "grn_pending"
-  | "grn_partial"
-  | "grn_closed";
-
-const CLOSED_STATUSES = new Set([
-  "draft",
-  "received",
-  "delivered",
-  "closed",
-  "cancelled",
-  "completed",
-]);
-
-const DELIVERED_STATUSES = new Set(["received", "delivered", "closed"]);
+type StatusFilter = "all" | "draft" | "open" | "partial" | "closed" | "cancelled";
 
 function orderCustomerOrApproverLabel(order: ProcOrder): string {
   const customer = (order.customer_name || "").trim();
@@ -78,21 +57,12 @@ function parseStatusFilter(value: string | null): StatusFilter {
     "all",
     "draft",
     "open",
-    "issued",
-    "delivered",
+    "partial",
+    "closed",
     "cancelled",
-    "grn_pending",
-    "grn_partial",
-    "grn_closed",
   ];
   if (value && (allowed as string[]).includes(value)) return value as StatusFilter;
   return "all";
-}
-
-function grnTone(status: string): "default" | "secondary" | "destructive" | "outline" {
-  if (status === "closed" || status === "delivered") return "default";
-  if (status === "partial") return "secondary";
-  return "outline";
 }
 
 function isDraft(status: string): boolean {
@@ -103,18 +73,43 @@ function isCancelled(status: string): boolean {
   return status.toLowerCase() === "cancelled";
 }
 
-function isIssued(status: string): boolean {
-  const value = status.toLowerCase();
-  return value !== "draft" && value !== "cancelled";
-}
+/** Match list filter — numeric tokens prefer company PO sequence (005 → PO/CDT/005). */
+function orderMatchesQuery(
+  row: ProcOrder,
+  vendorLabel: string,
+  rawQuery: string,
+): boolean {
+  const tokens = rawQuery.trim().toLowerCase().split(/\s+/).filter(Boolean);
+  if (tokens.length === 0) return true;
 
-function isOpenPo(status: string): boolean {
-  const value = status.toLowerCase();
-  return Boolean(value) && !CLOSED_STATUSES.has(value);
-}
+  const companyPo = (row.company_po_number || "").trim().toLowerCase();
+  const docNo = (row.document_number || "").trim().toLowerCase();
+  const customer = (row.customer_name || "").trim().toLowerCase();
+  const approved = (row.approved_by_name || "").trim().toLowerCase();
+  const vendor = vendorLabel.trim().toLowerCase();
+  const companyPoDigits = companyPo.replace(/\D/g, "");
 
-function isDeliveredPo(status: string): boolean {
-  return DELIVERED_STATUSES.has(status.toLowerCase());
+  return tokens.every((token) => {
+    if (/^\d+$/.test(token)) {
+      if (companyPo.includes(token)) return true;
+      if (companyPoDigits.includes(token) || companyPoDigits.endsWith(token)) return true;
+      // Only fall back to system document number when there is no company PO.
+      if (!companyPo) {
+        const docDigits = docNo.replace(/\D/g, "");
+        return docNo.includes(token) || docDigits.endsWith(token);
+      }
+      return false;
+    }
+    return (
+      textTokenMatch(companyPo, token) ||
+      textTokenMatch(docNo, token) ||
+      textTokenMatch(customer, token) ||
+      textTokenMatch(approved, token) ||
+      textTokenMatch(vendor, token) ||
+      textTokenMatch(row.status, token) ||
+      grnStatusMatchesSearch(row.grn_status ?? "pending", token)
+    );
+  });
 }
 
 export function OrdersListPage() {
@@ -122,6 +117,11 @@ export function OrdersListPage() {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const statusFilter = parseStatusFilter(searchParams.get("filter"));
+  const bucketFilter = (() => {
+    const raw = searchParams.get("bucket");
+    if (!raw) return null;
+    return parsePoOverviewBucket(raw);
+  })();
 
   const cachedOrdersOnMount = peekPurchaseOrdersFromCache();
   const [rows, setRows] = useState<ProcOrder[]>(() => cachedOrdersOnMount ?? []);
@@ -129,13 +129,13 @@ export function OrdersListPage() {
   const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(() => cachedOrdersOnMount === null);
   const [refreshing, setRefreshing] = useState(false);
-  const [pdfBusyId, setPdfBusyId] = useState<string | null>(null);
   const [exportBusy, setExportBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const setStatusFilter = useCallback(
     (next: StatusFilter) => {
       const params = new URLSearchParams(searchParams.toString());
+      params.delete("bucket");
       if (next === "all") params.delete("filter");
       else params.set("filter", next);
       const qs = params.toString();
@@ -171,7 +171,7 @@ export function OrdersListPage() {
       if (!hadInstant) {
         setRows([]);
       }
-      setError(err instanceof ApiClientError ? err.message : "Failed to load purchase orders");
+      setError(formatApiError(err, "Failed to load purchase orders"));
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -192,64 +192,54 @@ export function OrdersListPage() {
   );
 
   const kpis = useMemo(() => {
+    const buckets = countPoBuckets(enriched);
     return {
       total: enriched.length,
-      draft: enriched.filter((row) => isDraft(row.status)).length,
-      open: enriched.filter((row) => isOpenPo(row.status)).length,
-      issued: enriched.filter((row) => isIssued(row.status)).length,
-      delivered: enriched.filter((row) => isDeliveredPo(row.status)).length,
-      grnPending: enriched.filter((row) => row.grn_status === "pending").length,
-      grnPartial: enriched.filter((row) => row.grn_status === "partial").length,
-      grnClosed: enriched.filter((row) => row.grn_status === "closed").length,
+      open: buckets.open,
+      partial: buckets.partial,
+      closed: buckets.close,
+      draft: buckets.draft,
     };
   }, [enriched]);
 
   const filtered = useMemo(() => {
     let list = enriched;
-    switch (statusFilter) {
-      case "draft":
-        list = list.filter((row) => isDraft(row.status));
-        break;
-      case "open":
-        list = list.filter((row) => isOpenPo(row.status));
-        break;
-      case "issued":
-        list = list.filter((row) => isIssued(row.status));
-        break;
-      case "delivered":
-        list = list.filter((row) => isDeliveredPo(row.status));
-        break;
-      case "cancelled":
-        list = list.filter((row) => isCancelled(row.status));
-        break;
-      case "grn_pending":
-        list = list.filter((row) => row.grn_status === "pending");
-        break;
-      case "grn_partial":
-        list = list.filter((row) => row.grn_status === "partial");
-        break;
-      case "grn_closed":
-        list = list.filter((row) => row.grn_status === "closed");
-        break;
-      default:
-        break;
+    if (bucketFilter) {
+      list = filterOrdersByPoBucket(list, bucketFilter);
+    } else {
+      switch (statusFilter) {
+        case "draft":
+          list = list.filter((row) => isDraft(row.status));
+          break;
+        case "open":
+          list = list.filter(
+            (row) => poOverviewBucketForOrder(row, row.grn_status) === "open",
+          );
+          break;
+        case "partial":
+          list = list.filter(
+            (row) => poOverviewBucketForOrder(row, row.grn_status) === "partial",
+          );
+          break;
+        case "closed":
+          list = list.filter(
+            (row) => poOverviewBucketForOrder(row, row.grn_status) === "close",
+          );
+          break;
+        case "cancelled":
+          list = list.filter((row) => isCancelled(row.status));
+          break;
+        default:
+          break;
+      }
     }
 
-    const q = query.trim().toLowerCase();
+    const q = query.trim();
     if (!q) return list;
-    return list.filter((row) => {
-      const vendor = vendors[row.vendor_id]?.label || "";
-      return (
-        (row.company_po_number || "").toLowerCase().includes(q) ||
-        (row.customer_name || "").toLowerCase().includes(q) ||
-        (row.approved_by_name || "").toLowerCase().includes(q) ||
-        row.document_number.toLowerCase().includes(q) ||
-        row.status.toLowerCase().includes(q) ||
-        grnStatusMatchesSearch(row.grn_status ?? "pending", q) ||
-        vendor.toLowerCase().includes(q)
-      );
-    });
-  }, [enriched, statusFilter, query, vendors]);
+    return list.filter((row) =>
+      orderMatchesQuery(row, vendors[row.vendor_id]?.label || "", q),
+    );
+  }, [enriched, statusFilter, bucketFilter, query, vendors]);
 
   async function onExport() {
     setError(null);
@@ -266,26 +256,9 @@ export function OrdersListPage() {
       const exportRows = buildOrderExportRows(source, vendors);
       await exportOrdersXlsx(`purchase-orders-all-${stamp}.xlsx`, exportRows);
     } catch (err) {
-      setError(err instanceof ApiClientError ? err.message : "Failed to export purchase orders");
+      setError(formatApiError(err, "Failed to export purchase orders"));
     } finally {
       setExportBusy(false);
-    }
-  }
-
-  async function onDownloadPdf(orderId: string) {
-    setPdfBusyId(orderId);
-    setError(null);
-    try {
-      const order = await getPurchaseOrder(orderId);
-      const vendor = vendors[order.vendor_id];
-      await downloadOrderPdf(order, {
-        name: vendor?.label || order.vendor_id,
-        address: vendor?.address || "",
-      });
-    } catch (err) {
-      setError(err instanceof ApiClientError ? err.message : "Failed to download PO PDF");
-    } finally {
-      setPdfBusyId(null);
     }
   }
 
@@ -293,11 +266,8 @@ export function OrdersListPage() {
     { key: "all", label: "All" },
     { key: "draft", label: "Draft" },
     { key: "open", label: "Open" },
-    { key: "issued", label: "Issued" },
-    { key: "delivered", label: "Delivered" },
-    { key: "grn_pending", label: "GRN open" },
-    { key: "grn_partial", label: "GRN partial" },
-    { key: "grn_closed", label: "GRN closed" },
+    { key: "partial", label: "Partial" },
+    { key: "closed", label: "Closed" },
     { key: "cancelled", label: "Cancelled" },
   ];
 
@@ -305,9 +275,18 @@ export function OrdersListPage() {
     <ProcurementPage>
       <PageHeader
         title="Purchase Orders"
-        description="Vendor purchase orders from SCM through GRN and delivery tracking."
         actions={
           <div className="flex flex-wrap items-center gap-2">
+            <Button
+              type="button"
+              size="sm"
+              className="cursor-pointer transition-colors duration-200"
+              disabled={loading}
+              onClick={() => router.push("/procurement/orders/create")}
+            >
+              <Plus className="mr-1.5 size-3.5" />
+              Create purchase order
+            </Button>
             <Button
               type="button"
               size="sm"
@@ -341,30 +320,30 @@ export function OrdersListPage() {
 
       <div className="grid gap-2.5 sm:grid-cols-2 xl:grid-cols-4">
         <ProcurementKpiCard
-          label="All POs"
+          label="ALL POs"
           value={String(kpis.total)}
           icon={ShoppingCart}
           href="/procurement/orders"
         />
         <ProcurementKpiCard
-          label="Draft"
-          value={String(kpis.draft)}
+          label="PARTIAL PO"
+          value={String(kpis.partial)}
           tone="warning"
-          icon={CircleDot}
-          href="/procurement/orders?filter=draft"
+          icon={PackageOpen}
+          href="/procurement/orders?bucket=partial"
         />
         <ProcurementKpiCard
-          label="Open"
+          label="OPEN PO"
           value={String(kpis.open)}
           icon={ShoppingCart}
-          href="/procurement/orders?filter=open"
+          href="/procurement/orders?bucket=open"
         />
         <ProcurementKpiCard
-          label="Delivered"
-          value={String(kpis.delivered)}
+          label="CLOSE PO"
+          value={String(kpis.closed)}
           tone="success"
           icon={PackageCheck}
-          href="/procurement/orders?filter=delivered"
+          href="/procurement/orders?bucket=close"
         />
       </div>
 
@@ -389,43 +368,39 @@ export function OrdersListPage() {
       {error ? <ProcurementErrorBanner>{error}</ProcurementErrorBanner> : null}
 
       <ProcurementListPanel>
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border/80 px-3 py-2">
-          <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-            {filtered.length} orders
-          </p>
+        <div className="flex flex-wrap items-center justify-end gap-3 border-b border-border/80 px-3 py-2">
           <Input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Filter…"
+            placeholder="PO number, vendor, customer…"
             className={procurementUi.searchInput}
+            aria-label="Search purchase orders"
           />
         </div>
         <div className={procurementUi.tableScroll}>
-          <table className={cn(procurementUi.table, "min-w-[1080px]")}>
+          <table className={cn(procurementUi.table, "min-w-[1080px] leading-normal")}>
             <thead className={procurementUi.thead}>
               <tr>
-                <th className="px-3 py-2 font-medium">S.No</th>
-                <th className="px-3 py-2 font-medium">Company PO number</th>
-                <th className="px-3 py-2 font-medium">PO date</th>
-                <th className="px-3 py-2 font-medium">Vendor</th>
-                <th className="px-3 py-2 font-medium">Customer / approved by</th>
-                <th className="px-3 py-2 font-medium">Amount</th>
-                <th className="px-3 py-2 font-medium">GRN</th>
-                <th className="px-3 py-2 font-medium">Action</th>
-                <th className="px-3 py-2 text-center font-medium">PDF</th>
+                <th className="px-3 py-3.5 font-bold">S.No</th>
+                <th className="px-3 py-3.5 font-bold">Company PO number</th>
+                <th className="px-3 py-3.5 font-bold">PO date</th>
+                <th className="px-3 py-3.5 font-bold">Vendor</th>
+                <th className="px-3 py-3.5 font-bold">Customer</th>
+                <th className="px-3 py-3.5 font-bold">Amount</th>
+                <th className="px-3 py-3.5 font-bold">GRN</th>
               </tr>
             </thead>
             <tbody>
               {loading && filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="px-3 py-8 text-center text-muted-foreground">
+                  <td colSpan={7} className="px-3 py-8 text-center text-muted-foreground">
                     Loading purchase orders…
                   </td>
                 </tr>
               ) : null}
               {!loading && filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="px-3 py-8 text-center text-muted-foreground">
+                  <td colSpan={7} className="px-3 py-8 text-center text-muted-foreground">
                     No purchase orders match this filter.
                   </td>
                 </tr>
@@ -436,66 +411,27 @@ export function OrdersListPage() {
                 <tr
                   key={row.id}
                   className={cn(
-                    "border-b border-border/70 cursor-pointer transition-colors duration-150",
-                    "hover:bg-muted/40 active:bg-muted/55",
+                    "border-b border-border/70 cursor-pointer transition-colors duration-200",
+                    "hover:bg-sky-50 active:bg-sky-100/80",
                   )}
                   onClick={() => router.push(orderHref)}
                 >
-                  <td className="px-3 py-2 tabular-nums text-muted-foreground">{index + 1}</td>
-                  <td className="px-3 py-2 font-medium tabular-nums">
+                  <td className="px-3 py-3.5 tabular-nums text-muted-foreground">{index + 1}</td>
+                  <td className="px-3 py-3.5 font-medium tabular-nums">
                     {row.company_po_number || row.document_number || "—"}
                   </td>
-                  <td className={cn(procurementUi.tdNumeric, "text-muted-foreground")}>
+                  <td className={cn(procurementUi.tdNumeric, "py-3.5 text-muted-foreground")}>
                     {row.document_date || "—"}
                   </td>
-                  <td className="px-3 py-2">
+                  <td className="px-3 py-3.5">
                     {vendors[row.vendor_id]?.label || row.vendor_id.slice(0, 8)}
                   </td>
-                  <td className="px-3 py-2">{orderCustomerOrApproverLabel(row) || "—"}</td>
-                  <td className="px-3 py-2 tabular-nums">{formatInr(row.total_amount)}</td>
-                  <td className="px-3 py-2">
-                    <Badge variant={grnTone(row.grn_status ?? "pending")} className="uppercase">
+                  <td className="px-3 py-3.5">{orderCustomerOrApproverLabel(row) || "—"}</td>
+                  <td className="px-3 py-3.5 tabular-nums">{formatInr(row.total_amount)}</td>
+                  <td className="px-3 py-3.5">
+                    <Badge variant={grnBadgeVariant(row.grn_status ?? "pending")} className="uppercase">
                       {formatGrnStatusBadgeLabel(row.grn_status ?? "pending")}
                     </Badge>
-                  </td>
-                  <td className="px-3 py-2" onClick={(e) => e.stopPropagation()}>
-                    <Link
-                      href={orderHref}
-                      className={cn(
-                        buttonVariants({
-                          size: "sm",
-                          variant: isDraft(row.status) ? "default" : "outline",
-                        }),
-                        "cursor-pointer transition-colors duration-200",
-                      )}
-                      title={
-                        isDraft(row.status)
-                          ? "Open draft to review, then finalize & issue inside"
-                          : "Open purchase order"
-                      }
-                    >
-                      {isDraft(row.status) ? "Review draft" : "Open"}
-                    </Link>
-                  </td>
-                  <td className="px-3 py-2" onClick={(e) => e.stopPropagation()}>
-                    <div className="flex justify-center">
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="outline"
-                        className="h-8 w-8 cursor-pointer border-border p-0 text-[#0369A1] transition-colors duration-200 hover:bg-sky-50 hover:text-[#0369A1]"
-                        disabled={pdfBusyId === row.id || isDraft(row.status)}
-                        title={
-                          isDraft(row.status)
-                            ? "Finalize the PO before downloading PDF"
-                            : "Download PO PDF"
-                        }
-                        aria-label={`Download PDF for ${row.document_number}`}
-                        onClick={() => void onDownloadPdf(row.id)}
-                      >
-                        <FileDown className="size-4 stroke-[2]" />
-                      </Button>
-                    </div>
                   </td>
                 </tr>
                 );

@@ -16,6 +16,7 @@ from modules.hr.router import hr_router
 from modules.integration.router import integration_router
 from modules.inventory.router import inventory_router
 from modules.manufacturing.router import manufacturing_router
+from modules.marketing.router import marketing_router
 from modules.master_data.router import master_data_router
 from modules.organization.router import organization_router
 from modules.payroll.router import payroll_router
@@ -51,6 +52,7 @@ api_v1_router.include_router(project_router)
 api_v1_router.include_router(service_router)
 api_v1_router.include_router(helpdesk_router)
 api_v1_router.include_router(document_router)
+api_v1_router.include_router(marketing_router)
 api_v1_router.include_router(grc_router)
 api_v1_router.include_router(analytics_router)
 api_v1_router.include_router(integration_router)

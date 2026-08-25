@@ -1,13 +1,10 @@
 import type { DeliveryChallanRecord } from "@/utils/delivery-challan-storage";
 import type { DeliveryStatusFormValue } from "@/components/procurement/delivery-status-form";
-import { deliveryStatusToFormValue } from "@/components/procurement/delivery-status-form";
 import { sendDeliveryDispatchNotification } from "@/utils/delivery-dispatch-email";
 import { runDeliveryReminderSweep } from "@/utils/delivery-status-reminders";
 import {
-  applyShipmentStatusToActualDate,
+  deriveDeliveryStatusLabel,
   firstDeliveryStatusFormError,
-  getDeliveryStatus,
-  isDeliveryStatusPersisted,
   upsertDeliveryStatus,
   validateDeliveryStatusForm,
   type DeliveryStatusFormErrors,
@@ -21,22 +18,27 @@ export async function persistDeliveryStatusFromForm(
   challan: DeliveryChallanRecord,
   form: DeliveryStatusFormValue,
 ): Promise<PersistDeliveryStatusResult> {
-  const trackingOnly = isDeliveryStatusPersisted(challan.id);
-
-  if (!trackingOnly) {
-    const errors = validateDeliveryStatusForm(form);
-    const message = firstDeliveryStatusFormError(errors);
-    if (message) {
-      return { ok: false, message, fieldErrors: errors };
-    }
+  const errors = validateDeliveryStatusForm(form);
+  const message = firstDeliveryStatusFormError(errors);
+  if (message) {
+    return { ok: false, message, fieldErrors: errors };
   }
 
-  const saved = getDeliveryStatus(challan.id);
-  const base = trackingOnly && saved ? deliveryStatusToFormValue(saved) : form;
-  const normalized = applyShipmentStatusToActualDate({
-    ...base,
-    shipmentStatus: form.shipmentStatus,
-  });
+  const normalized: DeliveryStatusFormValue = {
+    ...form,
+    shipmentStatus: deriveDeliveryStatusLabel(form),
+    trackingNumber: form.docketNumber ?? "",
+    cachePoNumber:
+      form.cachePoNumber?.trim() ||
+      challan.companyPoNumber?.trim() ||
+      challan.purchaseOrderNumber ||
+      "",
+    customerPoNumber: form.customerPoNumber?.trim() || "",
+    customerName: form.customerName?.trim() || challan.customerName?.trim() || "",
+    courierTransportDetails:
+      form.courierProvider?.trim() || form.courierTransportDetails?.trim() || "",
+    courierProvider: form.courierProvider?.trim() || "",
+  };
 
   upsertDeliveryStatus({
     challanId: challan.id,
@@ -44,7 +46,7 @@ export async function persistDeliveryStatusFromForm(
   });
   runDeliveryReminderSweep();
 
-  if (!trackingOnly) {
+  if (normalized.reminderEmail?.trim()) {
     const email = await sendDeliveryDispatchNotification(challan, normalized);
     if (!email.ok) {
       return {
@@ -55,5 +57,5 @@ export async function persistDeliveryStatusFromForm(
     }
   }
 
-  return { ok: true, trackingOnly };
+  return { ok: true, trackingOnly: false };
 }

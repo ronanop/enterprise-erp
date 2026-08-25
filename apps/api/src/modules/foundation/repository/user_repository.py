@@ -18,7 +18,10 @@ class UserRepository(TenantScopedRepository):
     def get_by_id(self, tenant_id: UUID, user_id: UUID) -> UserEntity | None:
         stmt = (
             select(SecUser)
-            .options(selectinload(SecUser.user_roles), selectinload(SecUser.user_modules))
+            .options(
+                selectinload(SecUser.user_roles).selectinload(SecUserRole.role),
+                selectinload(SecUser.user_modules),
+            )
             .where(
                 SecUser.id == user_id,
                 SecUser.tenant_id == tenant_id,
@@ -47,7 +50,10 @@ class UserRepository(TenantScopedRepository):
     def list_users(self, tenant_id: UUID) -> list[UserEntity]:
         stmt = (
             select(SecUser)
-            .options(selectinload(SecUser.user_roles), selectinload(SecUser.user_modules))
+            .options(
+                selectinload(SecUser.user_roles).selectinload(SecUserRole.role),
+                selectinload(SecUser.user_modules),
+            )
             .where(SecUser.tenant_id == tenant_id, SecUser.is_deleted.is_(False))
         )
         return [self._to_entity(r) for r in self.db.scalars(stmt).all()]
@@ -156,6 +162,9 @@ class UserRepository(TenantScopedRepository):
             failed_login_count=row.failed_login_count,
             locked_until=row.locked_until,
             role_ids=[ur.role_id for ur in row.user_roles],
+            role_codes=sorted(
+                {ur.role.role_code for ur in row.user_roles if ur.role is not None}
+            ),
             assigned_module_keys=sorted(um.module_key for um in row.user_modules),
             admin_module_keys=sorted(
                 um.module_key for um in row.user_modules if (um.role or "member") == "admin"

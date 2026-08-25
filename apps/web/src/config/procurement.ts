@@ -25,7 +25,7 @@ export type ProcurementPipelineStage = {
   key: string;
   title: string;
   href: string;
-  resource: "scm" | "orders" | "grns" | "delivery-challan" | "delivery-status";
+  resource: "scm" | "orders" | "grns";
 };
 
 export const PROCUREMENT_MODULE_KEY = "procurement";
@@ -47,23 +47,11 @@ export const procurementWorkspaceGroups: ProcurementWorkspaceGroup[] = [
   },
 ];
 
-/** Current SCM lifecycle: approved OVF → PO → GRN → delivery */
+/** Current SCM lifecycle: approved OVF → PO → GRN */
 export const procurementPipelineStages: ProcurementPipelineStage[] = [
   { key: "scm", title: "SCM Queue", href: "/procurement/scm", resource: "scm" },
   { key: "order", title: "Purchase Order", href: "/procurement/orders", resource: "orders" },
   { key: "grn", title: "GRN", href: "/procurement/grns", resource: "grns" },
-  {
-    key: "delivery-challan",
-    title: "Delivery Challan",
-    href: "/procurement/delivery-challan",
-    resource: "delivery-challan",
-  },
-  {
-    key: "delivery-status",
-    title: "Delivery Status",
-    href: "/procurement/delivery-status",
-    resource: "delivery-status",
-  },
 ];
 
 export function getProcurementResources(): ModuleResource[] {

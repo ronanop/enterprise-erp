@@ -51,6 +51,7 @@ celery_app.autodiscover_tasks(
         "modules.service",
         "modules.helpdesk",
         "modules.document",
+        "modules.marketing",
         "modules.grc",
         "modules.analytics",
         "modules.integration",

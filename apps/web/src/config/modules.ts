@@ -39,6 +39,7 @@ export type ErpModule = {
     | "service"
     | "helpdesk"
     | "document"
+    | "marketing"
     | "grc"
     | "analytics"
     | "integration"
@@ -1601,6 +1602,95 @@ export const erpModules: ErpModule[] = [
         title: "Archives",
         description: "Archived records vault",
         apiPath: "/documents/archives",
+      },
+    ],
+  },
+  {
+    key: "marketing",
+    title: "Marketing & Social",
+    description:
+      "Marketing operations — campaigns, tasks, AI studio, Microsoft 365, workload analytics, and publishing.",
+    href: "/marketing",
+    group: "operations",
+    icon: "marketing",
+    resources: [
+      {
+        key: "campaigns",
+        title: "Campaigns",
+        description: "Marketing campaigns",
+        apiPath: "/marketing/campaigns",
+      },
+      {
+        key: "content-requests",
+        title: "Content Requests",
+        description: "AI generation requests",
+        apiPath: "/marketing/content-requests",
+      },
+      {
+        key: "content",
+        title: "Generated Content",
+        description: "Drafts and scored content",
+        apiPath: "/marketing/content",
+      },
+      {
+        key: "research",
+        title: "Research",
+        description: "Topic research reports",
+        apiPath: "/marketing/research",
+      },
+      {
+        key: "trends",
+        title: "Trends",
+        description: "Trend discovery",
+        apiPath: "/marketing/trends",
+      },
+      {
+        key: "brand-voices",
+        title: "Brand Voice",
+        description: "Brand voice profiles",
+        apiPath: "/marketing/brand-voices",
+      },
+      {
+        key: "platforms",
+        title: "Platforms",
+        description: "Channel catalog",
+        apiPath: "/marketing/platforms",
+      },
+      {
+        key: "social-accounts",
+        title: "Social Accounts",
+        description: "Connected social accounts",
+        apiPath: "/marketing/social-accounts",
+      },
+      {
+        key: "calendar",
+        title: "Calendar",
+        description: "Publishing calendar",
+        apiPath: "/marketing/calendar",
+      },
+      {
+        key: "competitors",
+        title: "Competitors",
+        description: "Competitor watchlist",
+        apiPath: "/marketing/competitors",
+      },
+      {
+        key: "publish-jobs",
+        title: "Publish Jobs",
+        description: "Outbound publish queue",
+        apiPath: "/marketing/publish-jobs",
+      },
+      {
+        key: "pillars",
+        title: "Content Pillars",
+        description: "Strategic content themes",
+        apiPath: "/marketing/pillars",
+      },
+      {
+        key: "tasks",
+        title: "Tasks",
+        description: "Nested campaign tasks",
+        apiPath: "/marketing/tasks",
       },
     ],
   },

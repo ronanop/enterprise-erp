@@ -4,7 +4,7 @@ import { cachedFetch, invalidateClientCache, peekCachedValue } from "@/lib/clien
 import { env } from "@/utils/env";
 
 /** Short TTL so tab switches reuse in-flight / recent list responses. */
-const PROCUREMENT_LIST_TTL_MS = 45_000;
+const PROCUREMENT_LIST_TTL_MS = 300_000;
 
 export const PROCUREMENT_INVENTORY_CACHE_KEY = "erp.procurement.inventory";
 export const PROCUREMENT_OVERVIEW_CACHE_KEY = "erp.procurement.overview";
@@ -122,6 +122,15 @@ export function formatInr(value: number): string {
   }).format(value);
 }
 
+export function formatUsd(value: number): string {
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(Number.isFinite(value) ? value : 0);
+}
+
 export function asNumber(value: unknown): number {
   if (typeof value === "number" && Number.isFinite(value)) return value;
   if (typeof value === "string" && value.trim() !== "") {
@@ -227,6 +236,9 @@ export type ScmQueueItem = {
   scm_on_hold?: boolean;
   scm_on_hold_at?: string | null;
   can_create_po: boolean;
+  stock_fulfillment_status?: "none" | "partial" | "complete" | string;
+  remaining_demand_qty?: number;
+  stock_availability?: ScmStockAvailability[];
 };
 
 export type ScmVendorLine = {
@@ -249,6 +261,54 @@ export type ScmMarginLine = {
   qty: number;
   margin_amount: number;
   margin_pct: number;
+};
+
+export type ScmStockAvailability = {
+  product_name: string;
+  required_qty: number;
+  on_hand_qty: number;
+  allocated_qty: number;
+  remaining_qty: number;
+};
+
+export type ScmOvfStockAllocation = {
+  id: string;
+  stock_unit_id: string;
+  product_name: string;
+  quantity: number;
+  serial_number: string;
+};
+
+export type ScmOvfStockChallanLine = {
+  product_name: string;
+  description?: string | null;
+  quantity: number;
+  serial_number: string;
+  rate: number;
+  stock_unit_id: string;
+};
+
+export type ScmOvfStockChallanPrefill = {
+  ovf_id: string;
+  ovf_no: string;
+  source_key: string;
+  customer_name: string | null;
+  customer_bill_to: string | null;
+  customer_ship_to: string | null;
+  customer_gst: string | null;
+  po_number: string | null;
+  po_date: string | null;
+  kind_attn: string | null;
+  lines: ScmOvfStockChallanLine[];
+};
+
+export type ScmFulfillFromStockResult = {
+  ovf_id: string;
+  stock_fulfillment_status: string;
+  remaining_demand_qty: number;
+  stock_availability: ScmStockAvailability[];
+  stock_allocations: ScmOvfStockAllocation[];
+  challan_prefill: ScmOvfStockChallanPrefill;
 };
 
 export type ScmOvfPreview = {
@@ -307,6 +367,10 @@ export type ScmOvfPreview = {
   scm_hold_history?: ScmOvfHoldHistoryEntry[];
   scm_on_hold_remark?: string | null;
   purchase_order_status?: string | null;
+  stock_fulfillment_status?: "none" | "partial" | "complete" | string;
+  remaining_demand_qty?: number;
+  stock_availability?: ScmStockAvailability[];
+  stock_allocations?: ScmOvfStockAllocation[];
 };
 
 export type ScmOvfHoldHistoryEntry = {
@@ -323,7 +387,10 @@ export type ScmVendorPoLine = {
   quantity_received: number;
   last_receipt_qty?: number;
   last_receipt_batch_id?: string | null;
+  last_receipt_billing?: boolean;
+  last_receipt_billing_quantity?: number;
   unit_cost: number;
+  rate_currency?: string | null;
   line_total: number;
   status: string;
   grn_status: string;
@@ -333,6 +400,8 @@ export type ScmVendorPo = {
   id: string;
   document_number: string;
   document_date: string;
+  /** When the PO record was created (ISO datetime). */
+  created_at?: string | null;
   vendor_id: string;
   status: string;
   currency_code: string;
@@ -373,7 +442,9 @@ export type ProcOrder = {
   customer_name: string | null;
   approved_by_name?: string | null;
   customer_po_number?: string | null;
+  order_ref_cache?: string | null;
   ovf_date?: string | null;
+  customer_payment_days?: number;
   vendor_total?: number;
   customer_total?: number;
   customer_tax_amount?: number;
@@ -394,13 +465,16 @@ export type ProcOrder = {
     product_id: string;
     product_code: string | null;
     product_name: string | null;
+    description?: string | null;
     quantity: number;
     quantity_received: number;
     last_receipt_qty?: number;
     last_receipt_batch_id?: string | null;
     last_receipt_serial_numbers?: string[] | null;
     last_receipt_billing?: boolean;
+    last_receipt_billing_quantity?: number;
     unit_cost: number;
+    rate_currency?: string | null;
     line_total: number;
     status: string;
   }>;
@@ -426,6 +500,21 @@ export async function listScmQueue(): Promise<ScmQueueItem[]> {
 
 export async function getScmOvfPreview(ovfId: string): Promise<ScmOvfPreview> {
   const res = await apiClient<ScmOvfPreview>(`${SCM_API}/ovf/${ovfId}`);
+  return unwrapData(res);
+}
+
+export async function fulfillOvfFromStock(
+  ovfId: string,
+  lines: Array<{ product_name: string; stock_unit_ids: string[] }>,
+): Promise<ScmFulfillFromStockResult> {
+  const res = await apiClient<ScmFulfillFromStockResult>(
+    `${SCM_API}/ovf/${ovfId}/fulfill-from-stock`,
+    {
+      method: "POST",
+      body: { lines },
+    },
+  );
+  invalidateProcurementListCache();
   return unwrapData(res);
 }
 
@@ -471,8 +560,16 @@ export async function createPoFromOvf(
     payment_terms?: string | null;
     expected_delivery_date?: string | null;
     entity_code: string;
+    order_ref_cache?: string | null;
     finalize?: boolean;
     hold?: boolean;
+    lines?: Array<{
+      product_name: string;
+      qty: number;
+      unit_price: number;
+      rate_currency?: "INR" | "USD";
+      tax_rate?: number;
+    }>;
   },
 ): Promise<ProcOrder> {
   const res = await apiClient<ProcOrder>(`${SCM_API}/ovf/${ovfId}/purchase-orders`, {
@@ -543,6 +640,8 @@ export async function createPoFromInventory(payload: {
   payment_terms?: string | null;
   approved_by_name?: string | null;
   lines?: Array<{ product_name: string; quantity: number; unit_cost?: number }>;
+  stock_unit_ids?: string[];
+  import_line_ids?: string[];
 }): Promise<ProcOrder> {
   const res = await apiClient<ProcOrder>(`${SCM_API}/inventory/purchase-orders`, {
     method: "POST",
@@ -553,6 +652,8 @@ export async function createPoFromInventory(payload: {
       payment_terms: payload.payment_terms ?? null,
       approved_by_name: payload.approved_by_name?.trim() || null,
       lines: payload.lines ?? [],
+      stock_unit_ids: payload.stock_unit_ids ?? [],
+      import_line_ids: payload.import_line_ids ?? [],
     },
   });
   invalidateProcurementListCache();
@@ -584,6 +685,17 @@ export async function updateInventoryImportSerial(
   await apiClient(`${SCM_API}/inventory/import-lines/${importLineId}/serial`, {
     method: "PATCH",
     body: { serial_number },
+  });
+  invalidateProcurementListCache();
+}
+
+export async function updateInventoryOrderLineDescription(
+  orderLineId: string,
+  description: string,
+): Promise<void> {
+  await apiClient(`${SCM_API}/inventory/order-lines/${orderLineId}/description`, {
+    method: "PATCH",
+    body: { description },
   });
   invalidateProcurementListCache();
 }
@@ -633,6 +745,11 @@ export type ScmReceiptBatch = {
   vendor_invoice_date?: string | null;
   vendor_invoice_quantity?: number | null;
   vendor_invoice_subtotal?: number | null;
+  reversed?: boolean;
+  reversal_status?: string;
+  reversed_at?: string | null;
+  reversed_by?: string | null;
+  reversal_reason?: string | null;
   lines: ScmReceiptBatchLine[];
   attachments?: ReceiptBatchAttachment[];
 };
@@ -684,6 +801,18 @@ export async function listOrderReceiptBatches(orderId: string): Promise<ScmRecei
   return unwrapData(res);
 }
 
+export async function reverseReceiptBatch(
+  batchId: string,
+  reason: string,
+): Promise<ScmReceiptBatch> {
+  const res = await apiClient<ScmReceiptBatch>(
+    `${SCM_API}/receipt-batches/${batchId}/reverse`,
+    { method: "POST", body: { reason } },
+  );
+  invalidateProcurementListCache();
+  return unwrapData(res);
+}
+
 export type ReceiptBatchAttachment = {
   id: string;
   file_name: string;
@@ -721,6 +850,135 @@ export async function openReceiptBatchAttachment(attachmentId: string): Promise<
   window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
 }
 
+export type ScmCommercialAttachment = {
+  id: string;
+  file_name: string;
+  content_type: string | null;
+  size: number | null;
+  category: string;
+  remarks: string | null;
+  entity_type: string;
+  entity_id: string;
+};
+
+export async function listScmOvfAttachments(ovfId: string): Promise<ScmCommercialAttachment[]> {
+  const res = await apiClient<ScmCommercialAttachment[]>(
+    `${SCM_API}/ovf/${ovfId}/attachments`,
+  );
+  return unwrapData(res);
+}
+
+export async function uploadScmOvfAttachment(
+  ovfId: string,
+  body: {
+    file_name: string;
+    content_base64: string;
+    content_type?: string | null;
+    branch_id: string;
+    company_id?: string | null;
+    category?: string;
+    remarks?: string | null;
+  },
+): Promise<ScmCommercialAttachment> {
+  const res = await apiClient<ScmCommercialAttachment>(`${SCM_API}/ovf/${ovfId}/attachments`, {
+    method: "POST",
+    body,
+  });
+  return unwrapData(res);
+}
+
+export async function listScmPoAttachments(orderId: string): Promise<ScmCommercialAttachment[]> {
+  const res = await apiClient<ScmCommercialAttachment[]>(
+    `${SCM_API}/orders/${orderId}/attachments`,
+  );
+  return unwrapData(res);
+}
+
+export async function listScmOrderCommercialDocuments(
+  orderId: string,
+): Promise<ScmCommercialAttachment[]> {
+  const res = await apiClient<ScmCommercialAttachment[]>(
+    `${SCM_API}/orders/${orderId}/commercial-documents`,
+  );
+  return unwrapData(res);
+}
+
+export async function uploadScmPoAttachment(
+  orderId: string,
+  body: {
+    file_name: string;
+    content_base64: string;
+    content_type?: string | null;
+    branch_id: string;
+    company_id?: string | null;
+    category?: string;
+    remarks?: string | null;
+  },
+): Promise<ScmCommercialAttachment> {
+  const res = await apiClient<ScmCommercialAttachment>(
+    `${SCM_API}/orders/${orderId}/attachments`,
+    {
+      method: "POST",
+      body,
+    },
+  );
+  return unwrapData(res);
+}
+
+export async function openScmCommercialAttachment(attachmentId: string): Promise<void> {
+  const token = getAccessToken();
+  const response = await fetch(
+    `${env.apiUrl}${SCM_API}/commercial-attachments/${attachmentId}/content`,
+    {
+      headers: {
+        Accept: "*/*",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      cache: "no-store",
+    },
+  );
+  if (!response.ok) {
+    throw new Error(`Failed to open attachment (${response.status})`);
+  }
+  const blob = await response.blob();
+  const url = URL.createObjectURL(blob);
+  window.open(url, "_blank", "noopener,noreferrer");
+  window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+}
+
+/** OVF + PO commercial pack used when sending a PO for admin approval. */
+export async function collectPoApprovalDocuments(input: {
+  orderId: string;
+  ovfId?: string | null;
+}): Promise<
+  Array<{
+    id: string;
+    fileName: string;
+    category: string;
+    remarks: string | null;
+    entityType: string;
+    source: "ovf" | "po";
+  }>
+> {
+  const docs = await listScmOrderCommercialDocuments(input.orderId).catch(async () => {
+    const [ovfDocs, poDocs] = await Promise.all([
+      input.ovfId
+        ? listScmOvfAttachments(input.ovfId).catch(() => [] as ScmCommercialAttachment[])
+        : Promise.resolve([] as ScmCommercialAttachment[]),
+      listScmPoAttachments(input.orderId).catch(() => [] as ScmCommercialAttachment[]),
+    ]);
+    return [...ovfDocs, ...poDocs];
+  });
+  return docs.map((row) => ({
+    id: row.id,
+    fileName: row.file_name,
+    category: row.category || "other",
+    remarks: row.remarks || null,
+    entityType: row.entity_type,
+    source: row.entity_type === "purchase_order" ? ("po" as const) : ("ovf" as const),
+  }));
+}
+
 export async function getPurchaseOrder(
   orderId: string,
   options?: { includeCommercial?: boolean },
@@ -732,18 +990,34 @@ export async function getPurchaseOrder(
   return unwrapData(res);
 }
 
+async function fetchPurchaseOrders(options?: {
+  includeCommercial?: boolean;
+}): Promise<ProcOrder[]> {
+  const res = await resourceService.list<ProcOrder>("/procurement/orders", {
+    page: 1,
+    page_size: 200,
+    ...(options?.includeCommercial ? { include_commercial: true } : {}),
+  });
+  return normalizeRows(res.data) as unknown as ProcOrder[];
+}
+
 export async function listPurchaseOrders(options?: {
   includeCommercial?: boolean;
 }): Promise<ProcOrder[]> {
   if (options?.includeCommercial) {
-    const res = await resourceService.list<ProcOrder>("/procurement/orders", {
-      include_commercial: true,
-    });
-    return normalizeRows(res.data) as unknown as ProcOrder[];
+    return fetchPurchaseOrders({ includeCommercial: true });
   }
   return cachedFetch(PROCUREMENT_ORDERS_CACHE_KEY, PROCUREMENT_LIST_TTL_MS, async () => {
-    const res = await resourceService.list<ProcOrder>("/procurement/orders");
-    return normalizeRows(res.data) as unknown as ProcOrder[];
+    try {
+      return await fetchPurchaseOrders();
+    } catch (err) {
+      // One short retry — API is often briefly unreachable right after Docker recreate.
+      if (err instanceof ApiClientError && err.status === 0) {
+        await new Promise((resolve) => setTimeout(resolve, 1500));
+        return fetchPurchaseOrders();
+      }
+      throw err;
+    }
   });
 }
 

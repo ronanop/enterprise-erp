@@ -3,6 +3,7 @@
 from datetime import datetime, timedelta, timezone
 from uuid import UUID, uuid4
 
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from core.config import settings
@@ -12,7 +13,8 @@ from modules.foundation.domain.exceptions import (
     AccountLockedException,
     InvalidCredentialsException,
 )
-from modules.foundation.models.security import SecUser
+from modules.foundation.domain.erp_modules import resolve_session_user_type
+from modules.foundation.models.security import SecRole, SecUser, SecUserRole
 from modules.foundation.repository.session_repository import SessionRepository
 from modules.foundation.repository.user_repository import UserRepository
 from modules.foundation.service.audit_service import AuditService
@@ -149,6 +151,7 @@ class AuthService:
         if user_model is None:
             raise UnauthorizedException("User not found")
 
+        session_user_type = self._session_user_type(user_model)
         new_refresh, _ = self._jwt.create_refresh_token(user_id=user_id, session_id=session_id)
         refresh_days = settings.jwt_refresh_token_expire_days
         new_row = self._sessions.store_refresh_token(
@@ -163,7 +166,7 @@ class AuthService:
         access = self._jwt.create_access_token(
             user_id=user_id,
             tenant_id=session.tenant_id,
-            user_type=user_model.user_type,
+            user_type=session_user_type,
             session_id=session_id,
         )
         # Keep Redis session alive alongside refreshed tokens.
@@ -183,6 +186,26 @@ class AuthService:
             user_id=user_id,
         )
 
+    def _role_codes_for_user(self, user_id: UUID) -> list[str]:
+        stmt = (
+            select(SecRole.role_code)
+            .join(SecUserRole, SecUserRole.role_id == SecRole.id)
+            .where(SecUserRole.user_id == user_id, SecRole.is_deleted.is_(False))
+        )
+        return list(self._db.scalars(stmt).all())
+
+    def _session_user_type(self, user: SecUser) -> str:
+        resolved = resolve_session_user_type(
+            user.user_type,
+            user.email,
+            self._role_codes_for_user(user.id),
+            platform_admin_emails=settings.microsoft_platform_admin_email_set(),
+        )
+        if resolved != user.user_type:
+            user.user_type = resolved
+            self._db.flush()
+        return resolved
+
     def _issue_tokens(
         self,
         user: SecUser,
@@ -190,6 +213,7 @@ class AuthService:
         ip_address: str | None,
         user_agent: str | None,
     ) -> dict:
+        user_type = self._session_user_type(user)
         expires_at = datetime.now(timezone.utc) + timedelta(seconds=settings.session_ttl_seconds)
         provisional_session_id = uuid4()
         session = self._sessions.create_session(
@@ -203,7 +227,7 @@ class AuthService:
         access = self._jwt.create_access_token(
             user_id=user.id,
             tenant_id=user.tenant_id,
-            user_type=user.user_type,
+            user_type=user_type,
             session_id=session.id,
         )
         refresh, _ = self._jwt.create_refresh_token(user_id=user.id, session_id=session.id)

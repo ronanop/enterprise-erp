@@ -33,12 +33,12 @@ export function ProcurementPoSummaryCard({
         type="button"
         onClick={() => setDialogOpen(true)}
         className={cn(
-          "flex h-full min-h-[11rem] w-full cursor-pointer flex-col rounded-xl border border-border/80 bg-card p-3.5 text-left shadow-sm",
-          "transition-[box-shadow,border-color] duration-200 hover:border-primary/30 hover:shadow-md",
+          "flex h-full min-h-[11rem] w-full cursor-pointer flex-col rounded-2xl border border-border/70 bg-card p-4 text-left shadow-sm",
+          "transition-[box-shadow,border-color] duration-200 hover:border-primary/20 hover:shadow-md",
         )}
       >
         <div className="flex items-start justify-between gap-2">
-          <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+          <p className="text-sm font-semibold tracking-tight text-foreground">
             Purchase orders
           </p>
           <span className="flex size-8 items-center justify-center rounded-lg bg-accent text-accent-foreground">
@@ -48,16 +48,16 @@ export function ProcurementPoSummaryCard({
         <ul className="mt-2 space-y-1.5">
           {BUCKET_ORDER.map((bucket) => (
             <li key={bucket} className="flex items-center justify-between gap-2 text-sm">
-              <span className="min-w-0 truncate text-muted-foreground">
+              <span className="min-w-0 truncate font-normal text-muted-foreground">
                 {PO_OVERVIEW_BUCKET_LABELS[bucket]}
               </span>
-              <span className="font-mono text-sm font-medium tabular-nums text-foreground">
+              <span className="font-mono text-sm font-normal tabular-nums text-foreground">
                 {loading ? "—" : String(counts[bucket])}
               </span>
             </li>
           ))}
         </ul>
-        <p className="mt-3 flex items-center gap-1 text-[11px] font-medium text-[#0369A1]">
+        <p className="mt-3 flex items-center gap-1 text-[11px] font-normal text-[#0369A1]">
           View breakdown &amp; export
           <ChevronRight className="size-3.5" aria-hidden />
         </p>

@@ -32,7 +32,9 @@ export function InventorySerialEditor({
   onSaved: () => void;
   onError: (message: string | null) => void;
 }) {
-  const canEdit = Boolean(row.stock_unit_id || row.import_line_id);
+  const canEdit = Boolean(
+    (row.stock_unit_id || row.import_line_id) && row.source !== "grn_reversal",
+  );
   const [value, setValue] = useState(() => displaySerial(row.serial_number));
   const [busy, setBusy] = useState(false);
 

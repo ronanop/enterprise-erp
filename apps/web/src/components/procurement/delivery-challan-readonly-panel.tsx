@@ -21,7 +21,7 @@ function ReadOnlyField({ label, value }: { label: string; value: string }) {
 }
 
 function ChallanLinesTable({ lines }: { lines: DeliveryChallanLine[] }) {
-  const rows = lines.filter((line) => line.itemName.trim());
+  const rows = lines.filter((line) => line.itemName.trim() || line.product.trim());
 
   if (rows.length === 0) {
     return (
@@ -32,15 +32,16 @@ function ChallanLinesTable({ lines }: { lines: DeliveryChallanLine[] }) {
   return (
     <div className={procurementUi.tableShell}>
       <div className={procurementUi.tableScroll}>
-        <table className={cn(procurementUi.table, "min-w-[640px]")}>
+        <table className={cn(procurementUi.table, "min-w-[720px]")}>
           <thead className={procurementUi.thead}>
             <tr>
               <th className={cn(procurementUi.th, "w-12")}>S.No</th>
+              <th className={cn(procurementUi.th, "w-36")}>Product</th>
               <th className={procurementUi.th}>Description</th>
               <th className={cn(procurementUi.th, "w-28")}>HSN / SAC</th>
               <th className={cn(procurementUi.th, "w-24")}>Asset no.</th>
               <th className={cn(procurementUi.th, "w-20 text-right")}>Qty sent</th>
-              <th className={cn(procurementUi.th, "w-28 text-right")}>Rate (vendor)</th>
+              <th className={cn(procurementUi.th, "w-28 text-right")}>Rate</th>
             </tr>
           </thead>
           <tbody>
@@ -49,7 +50,8 @@ function ChallanLinesTable({ lines }: { lines: DeliveryChallanLine[] }) {
                 <td className={cn(procurementUi.tdNumeric, "text-muted-foreground")}>
                   {index + 1}
                 </td>
-                <td className={procurementUi.td}>{line.itemName}</td>
+                <td className={procurementUi.tdMuted}>{line.product.trim() || "—"}</td>
+                <td className={procurementUi.td}>{line.itemName.trim() || "—"}</td>
                 <td className={procurementUi.tdMuted}>{line.hsnSac.trim() || "—"}</td>
                 <td className={procurementUi.tdMuted}>{line.assetNo.trim() || "—"}</td>
                 <td className={cn(procurementUi.tdNumeric, "text-right font-medium")}>

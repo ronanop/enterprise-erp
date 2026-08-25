@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { FileDown, FileText, ListChecks, Package, PenLine, Truck, X } from "lucide-react";
 
 import { DeliverySectionCard } from "@/components/procurement/delivery-section-card";
@@ -12,6 +12,7 @@ import {
   downloadDeliveryChallanPdf,
   openDeliveryChallanPdfPreview,
 } from "@/utils/delivery-challan-pdf";
+import { resolveChallanRecordCustomerPo } from "@/utils/delivery-challan-prefill";
 import {
   formatChallanGrnSummary,
   formatDeliveryModeLabel,
@@ -47,7 +48,7 @@ function DetailBlock({ label, value }: { label: string; value: string }) {
 }
 
 function ChallanItemsTable({ lines }: { lines: DeliveryChallanLine[] }) {
-  const rows = lines.filter((line) => line.itemName.trim());
+  const rows = lines.filter((line) => line.itemName.trim() || line.product.trim());
   if (rows.length === 0) {
     return (
       <p className="text-sm text-muted-foreground">No line items on this challan.</p>
@@ -57,10 +58,11 @@ function ChallanItemsTable({ lines }: { lines: DeliveryChallanLine[] }) {
   return (
     <div className={procurementUi.tableShell}>
       <div className={procurementUi.tableScroll}>
-        <table className={cn(procurementUi.table, "min-w-[720px]")}>
+        <table className={cn(procurementUi.table, "min-w-[820px]")}>
           <thead className={procurementUi.thead}>
             <tr>
               <th className={cn(procurementUi.th, "w-12")}>S.No</th>
+              <th className={cn(procurementUi.th, "w-36")}>Product</th>
               <th className={procurementUi.th}>Description</th>
               <th className={cn(procurementUi.th, "w-24")}>HSN / SAC</th>
               <th className={cn(procurementUi.th, "w-20 text-right")}>Qty</th>
@@ -79,7 +81,8 @@ function ChallanItemsTable({ lines }: { lines: DeliveryChallanLine[] }) {
                   <td className={cn(procurementUi.tdNumeric, "text-muted-foreground")}>
                     {index + 1}
                   </td>
-                  <td className={procurementUi.td}>{line.itemName}</td>
+                  <td className={procurementUi.tdMuted}>{line.product.trim() || "—"}</td>
+                  <td className={procurementUi.td}>{line.itemName.trim() || "—"}</td>
                   <td className={procurementUi.tdMuted}>{line.hsnSac.trim() || "—"}</td>
                   <td className={cn(procurementUi.tdNumeric, "text-right")}>
                     {line.quantitySent.trim() || "—"}
@@ -108,25 +111,44 @@ export function DeliveryChallanViewDialog({
 }: DeliveryChallanViewDialogProps) {
   const [pdfBusy, setPdfBusy] = useState(false);
   const [pdfError, setPdfError] = useState<string | null>(null);
+  const [resolvedChallan, setResolvedChallan] = useState<DeliveryChallanRecord | null>(challan);
+
+  useEffect(() => {
+    if (!open || !challan) {
+      setResolvedChallan(null);
+      return;
+    }
+    setResolvedChallan(challan);
+    let cancelled = false;
+    void (async () => {
+      const next = await resolveChallanRecordCustomerPo(challan);
+      if (!cancelled) setResolvedChallan(next);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [open, challan]);
+
+  const display = resolvedChallan || challan;
 
   const taxSummary = useMemo(() => {
-    if (!challan) return null;
+    if (!display) return null;
     return computeDeliveryChallanTaxSummary({
-      lines: challan.lines,
-      taxPct: Number(challan.taxPercentage) || 18,
-      sourceOfSupply: challan.billingState,
-      destinationOfSupply: challan.shippingState,
+      lines: display.lines,
+      taxPct: Number(display.taxPercentage) || 18,
+      sourceOfSupply: display.billingState,
+      destinationOfSupply: display.shippingState,
       formatAmount: formatInrPdf,
     });
-  }, [challan]);
+  }, [display]);
 
-  if (!open || !challan) return null;
+  if (!open || !display) return null;
 
-  const pdfInput = buildDeliveryChallanPdfInputFromRecord(challan);
-  const grnLabel = formatChallanGrnSummary(challan);
+  const pdfInput = buildDeliveryChallanPdfInputFromRecord(display);
+  const grnLabel = formatChallanGrnSummary(display);
   const itemsSourceLabel =
-    challan.itemsSourceMode === "selected_grns"
-      ? `Selected GRN(s): ${challan.selectedGrnNumbers.join(", ") || grnLabel}`
+    display.itemsSourceMode === "selected_grns"
+      ? `Selected GRN(s): ${display.selectedGrnNumbers.join(", ") || grnLabel}`
       : "All PO line items";
 
   async function onDownloadPdf() {
@@ -175,9 +197,9 @@ export function DeliveryChallanViewDialog({
               Delivery challan
             </h2>
             <p className="mt-1 text-xs text-muted-foreground">
-              {challan.challanNumber}
-              {challan.documentType ? ` · ${challan.documentType}` : ""}
-              {challan.copyLabel ? ` · ${challan.copyLabel}` : ""}
+              {display.challanNumber}
+              {display.documentType ? ` · ${display.documentType}` : ""}
+              {display.copyLabel ? ` · ${display.copyLabel}` : ""}
             </p>
           </div>
           <Button
@@ -201,22 +223,22 @@ export function DeliveryChallanViewDialog({
 
           <DeliverySectionCard title="Challan & purchase order" icon={FileText}>
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-              <DetailBlock label="Challan number" value={challan.challanNumber} />
-              <DetailBlock label="Challan date" value={challan.challanDate} />
-              <DetailBlock label="PO number" value={challan.purchaseOrderNumber} />
-              <DetailBlock label="PO date" value={challan.poDate} />
+              <DetailBlock label="Challan number" value={display.challanNumber} />
+              <DetailBlock label="Challan date" value={display.challanDate} />
+              <DetailBlock label="Customer PO number" value={display.purchaseOrderNumber} />
+              <DetailBlock label="Customer PO date" value={display.poDate} />
               <DetailBlock label="GRN" value={grnLabel} />
-              <DetailBlock label="Vendor" value={challan.vendorName} />
+              <DetailBlock label="Vendor" value={display.vendorName} />
               <DetailBlock label="Items source" value={itemsSourceLabel} />
             </div>
           </DeliverySectionCard>
 
           <DeliverySectionCard title="Entity" icon={Package}>
             <div className="grid gap-4 sm:grid-cols-2">
-              <DetailBlock label="Entity name" value={challan.entityName} />
-              <DetailBlock label="GST / registration" value={challan.entityGstBlock} />
+              <DetailBlock label="Entity name" value={display.entityName} />
+              <DetailBlock label="GST / registration" value={display.entityGstBlock} />
               <div className="sm:col-span-2">
-                <DetailBlock label="Address" value={challan.entityAddressBlock} />
+                <DetailBlock label="Address" value={display.entityAddressBlock} />
               </div>
             </div>
           </DeliverySectionCard>
@@ -224,23 +246,23 @@ export function DeliveryChallanViewDialog({
           <DeliverySectionCard title="Customer & delivery" icon={FileText}>
             <div className="space-y-4">
               <div className="grid gap-4 sm:grid-cols-2">
-                <DetailBlock label="Customer name" value={challan.customerName} />
-                <DetailBlock label="Customer GST no." value={challan.customerGstNo} />
+                <DetailBlock label="Customer name" value={display.customerName} />
+                <DetailBlock label="Customer GST no." value={display.customerGstNo} />
               </div>
               <div className="grid gap-4 sm:grid-cols-2">
-                <DetailBlock label="Bill to" value={challan.customerBillTo} />
-                <DetailBlock label="Ship to" value={challan.customerShipTo} />
+                <DetailBlock label="Bill to" value={display.customerBillTo} />
+                <DetailBlock label="Ship to" value={display.customerShipTo} />
               </div>
               <div className="grid gap-4 sm:grid-cols-2">
-                <DetailBlock label="Billing state" value={challan.billingState} />
-                <DetailBlock label="Shipping state" value={challan.shippingState} />
+                <DetailBlock label="Billing state" value={display.billingState} />
+                <DetailBlock label="Shipping state" value={display.shippingState} />
               </div>
-              <DetailBlock label="Kind attn / site contact" value={challan.kindAttn} />
+              <DetailBlock label="Kind attn / site contact" value={display.kindAttn} />
             </div>
           </DeliverySectionCard>
 
           <DeliverySectionCard title="Items on challan" icon={ListChecks}>
-            <ChallanItemsTable lines={challan.lines} />
+            <ChallanItemsTable lines={display.lines} />
           </DeliverySectionCard>
 
           {taxSummary ? (
@@ -267,8 +289,8 @@ export function DeliveryChallanViewDialog({
                   </tbody>
                 </table>
               </div>
-              {challan.taxRemarks.trim() ? (
-                <p className="mt-2 text-xs text-muted-foreground">{challan.taxRemarks}</p>
+              {display.taxRemarks.trim() ? (
+                <p className="mt-2 text-xs text-muted-foreground">{display.taxRemarks}</p>
               ) : null}
             </DeliverySectionCard>
           ) : null}
@@ -277,21 +299,21 @@ export function DeliveryChallanViewDialog({
             <div className="grid gap-4 sm:grid-cols-2">
               <DetailBlock
                 label="Mode of delivery"
-                value={formatDeliveryModeLabel(challan.deliveryMode)}
+                value={formatDeliveryModeLabel(display.deliveryMode)}
               />
-              <DetailBlock label="Transport details" value={challan.transportDetails} />
-              <DetailBlock label="Driver / vehicle" value={challan.driverVehicleDetails} />
+              <DetailBlock label="Transport details" value={display.transportDetails} />
+              <DetailBlock label="Driver / vehicle" value={display.driverVehicleDetails} />
             </div>
           </DeliverySectionCard>
 
           <DeliverySectionCard title="Prepared & signatures" icon={PenLine}>
             <div className="grid gap-4 sm:grid-cols-2">
-              <DetailBlock label="Prepared by" value={challan.preparedBy} />
-              <DetailBlock label="Delivered by" value={challan.deliveredBy} />
+              <DetailBlock label="Prepared by" value={display.preparedBy} />
+              <DetailBlock label="Delivered by" value={display.deliveredBy} />
             </div>
             <div className="mt-4 grid gap-4 sm:grid-cols-2">
-              <DetailBlock label="Sender signature" value={challan.senderSignature} />
-              <DetailBlock label="Receiver signature" value={challan.receiverSignature} />
+              <DetailBlock label="Sender signature" value={display.senderSignature} />
+              <DetailBlock label="Receiver signature" value={display.receiverSignature} />
             </div>
           </DeliverySectionCard>
         </div>

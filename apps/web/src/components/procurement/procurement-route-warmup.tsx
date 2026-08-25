@@ -1,26 +1,38 @@
 "use client";
 
 import { useEffect } from "react";
+import { usePathname, useRouter } from "next/navigation";
 
-import { prefetchProcurementTab } from "@/services/procurement-service";
+import {
+  ALL_PROCUREMENT_NAV,
+  PROCUREMENT_NAV,
+  warmAllProcurementNavTargets,
+  warmProcurementNavTarget,
+} from "@/components/procurement/procurement-workspace-nav";
 
-const PROCUREMENT_TAB_PATHS = [
-  "/procurement",
-  "/procurement/scm",
-  "/procurement/orders",
-  "/procurement/grns",
-  "/procurement/delivery-challan",
-  "/procurement/delivery-status",
-  "/procurement/vendors",
-  "/procurement/inventory",
-] as const;
-
-/** Warm procurement list APIs as soon as the workspace mounts (before tab clicks). */
+/** Prefetch procurement routes and list APIs while the workspace is open. */
 export function ProcurementRouteWarmup() {
+  const router = useRouter();
+  const pathname = usePathname();
+
   useEffect(() => {
-    for (const href of PROCUREMENT_TAB_PATHS) {
-      prefetchProcurementTab(href);
+    if (typeof requestIdleCallback !== "undefined") {
+      const id = requestIdleCallback(() => warmAllProcurementNavTargets(router), { timeout: 2500 });
+      return () => cancelIdleCallback(id);
     }
-  }, []);
+    const timer = window.setTimeout(() => warmAllProcurementNavTargets(router), 150);
+    return () => window.clearTimeout(timer);
+  }, [router]);
+
+  useEffect(() => {
+    const active =
+      ALL_PROCUREMENT_NAV.find((item) =>
+        item.href === "/procurement"
+          ? pathname === "/procurement"
+          : pathname === item.href || pathname.startsWith(`${item.href}/`),
+      ) ?? PROCUREMENT_NAV[0];
+    warmProcurementNavTarget(router, active.href);
+  }, [pathname, router]);
+
   return null;
 }

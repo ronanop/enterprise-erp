@@ -32,6 +32,12 @@ class ProcOrderReceiptBatch(Base, *ProcTransactionMixin):
     vendor_invoice_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     vendor_invoice_quantity: Mapped[float | None] = mapped_column(Numeric(18, 4), nullable=True)
     vendor_invoice_subtotal: Mapped[float | None] = mapped_column(Numeric(18, 4), nullable=True)
+    reversal_status: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="posted", server_default="posted"
+    )
+    reversed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    reversed_by: Mapped[UUID | None] = mapped_column(PG_UUID(as_uuid=True), nullable=True)
+    reversal_reason: Mapped[str | None] = mapped_column(String(2000), nullable=True)
 
     lines: Mapped[list["ProcOrderReceiptBatchLine"]] = relationship(
         back_populates="receipt_batch",
