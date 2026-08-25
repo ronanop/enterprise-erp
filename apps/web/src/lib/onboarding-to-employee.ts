@@ -111,6 +111,7 @@ export function portalToWizardDraft(
   employment.managementGroupId = caseRow.managementGroupId || "";
   employment.managementGroupName = caseRow.managementGroupName || "";
   employment.reportingManagerName = caseRow.reportingManager || "";
+  employment.probationPeriodDays = caseRow.probationPeriodDays || "90";
   employment.lifecycleStatus = lifecycleStatus;
 
   const documents: EmployeeDocumentItem[] = (p.documents || []).map((d) => ({

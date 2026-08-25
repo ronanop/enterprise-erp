@@ -4,14 +4,10 @@ import { leaveStatusDisplay, type LeaveStatusDisplay } from "@/types/leave-manag
 import { cn } from "@/lib/utils";
 
 const RIBBON_STYLES: Record<LeaveStatusDisplay, string> = {
-  Pending:
-    "border-l-amber-500 bg-amber-50 text-amber-950 ring-1 ring-amber-200/80 dark:bg-amber-950/30 dark:text-amber-100",
-  Approved:
-    "border-l-emerald-500 bg-emerald-50 text-emerald-950 ring-1 ring-emerald-200/80 dark:bg-emerald-950/30 dark:text-emerald-100",
-  Rejected:
-    "border-l-red-500 bg-red-50 text-red-950 ring-1 ring-red-200/80 dark:bg-red-950/30 dark:text-red-100",
-  Cancelled:
-    "border-l-slate-400 bg-slate-50 text-slate-700 ring-1 ring-slate-200/80 dark:bg-slate-900/40 dark:text-slate-200",
+  Pending: "border-l-hrms-warning bg-hrms-peach text-hrms-warning",
+  Approved: "border-l-hrms-success bg-hrms-mint text-hrms-success",
+  Rejected: "border-l-hrms-danger bg-hrms-pink text-hrms-danger",
+  Cancelled: "border-l-border bg-muted text-muted-foreground",
 };
 
 /** Distinct leave ribbon badge — Pending / Approved / Rejected / Cancelled. */

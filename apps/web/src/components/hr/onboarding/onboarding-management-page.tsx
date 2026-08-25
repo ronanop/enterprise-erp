@@ -1,8 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import {
-  ClipboardList,
   Download,
   Eye,
   FileText,
@@ -37,7 +37,9 @@ import { Button } from "@/components/ui/button";
 import { FilterSelect } from "@/components/ui/filter-select";
 import { Input } from "@/components/ui/input";
 import { isAuthenticated } from "@/lib/auth";
+import { isJoiningDateReached } from "@/lib/onboarding-workflow";
 import { cn } from "@/lib/utils";
+import { loadEmployeeDirectory } from "@/services/employee-management-service";
 import {
   activateOnboardingEmployee,
   approveCandidateReview,
@@ -51,7 +53,10 @@ import {
   sendInvitation,
   startOnboarding,
   updateChecklistItem,
+  updateOnboardingAssignment,
   verifyDocument,
+  copyInvitationLink,
+  openDocumentReuploadMailto,
   type OnboardingDirectory,
   type OnboardingStatBucket,
 } from "@/services/onboarding-management-service";
@@ -74,7 +79,19 @@ import { resolveOnboardingDisplayStatus } from "@/lib/onboarding-display-status"
 
 const PAGE = 10;
 
-type Tab = "cases" | "checklist" | "documents" | "audit";
+type Tab = "onboarding" | "documents" | "audit";
+
+/** Active onboarding = still in pipeline (not joined / cancelled). */
+const ACTIVE_ONBOARDING_STATUSES = new Set([
+  "draft",
+  "invitation_sent",
+  "in_progress",
+  "submitted",
+  "hr_review",
+  "ready_to_join",
+  "pending_join",
+  "overdue",
+]);
 
 const STAT_CARDS: {
   key: OnboardingStatBucket;
@@ -82,17 +99,17 @@ const STAT_CARDS: {
   statKey: keyof ReturnType<typeof computeOnboardingStats>;
   tab: Tab;
 }[] = [
-  { key: "invitations_sent", label: "Invitations Sent", statKey: "invitationsSent", tab: "cases" },
-  { key: "pending_forms", label: "Pending Forms", statKey: "pendingForms", tab: "cases" },
+  { key: "invitations_sent", label: "Invitations Sent", statKey: "invitationsSent", tab: "onboarding" },
+  { key: "pending_forms", label: "Pending Forms", statKey: "pendingForms", tab: "onboarding" },
   {
     key: "documents_pending",
     label: "Documents Pending",
     statKey: "documentsPending",
     tab: "documents",
   },
-  { key: "ready_to_join", label: "Ready to Join", statKey: "readyToJoin", tab: "cases" },
-  { key: "pending_join", label: "Pending Join", statKey: "pendingJoin", tab: "cases" },
-  { key: "joined_today", label: "Joined Today", statKey: "joinedToday", tab: "cases" },
+  { key: "ready_to_join", label: "Ready to Join", statKey: "readyToJoin", tab: "onboarding" },
+  { key: "pending_join", label: "Pending Join", statKey: "pendingJoin", tab: "onboarding" },
+  { key: "joined_today", label: "Joined Today", statKey: "joinedToday", tab: "onboarding" },
 ];
 
 const STAT_LABELS: Record<OnboardingStatBucket, string> = {
@@ -105,9 +122,10 @@ const STAT_LABELS: Record<OnboardingStatBucket, string> = {
 };
 
 export function OnboardingManagementPage() {
+  const router = useRouter();
   const [dir, setDir] = useState<OnboardingDirectory | null>(null);
   const [loading, setLoading] = useState(true);
-  const [tab, setTab] = useState<Tab>("cases");
+  const [tab, setTab] = useState<Tab>("onboarding");
   const [query, setQuery] = useState("");
   const [filters, setFilters] = useState<OnboardingFilters>(() => emptyOnboardingFilters());
   const [statsBucket, setStatsBucket] = useState<OnboardingStatBucket | null>(null);
@@ -118,6 +136,19 @@ export function OnboardingManagementPage() {
   const [docsCase, setDocsCase] = useState<OnboardingCase | null>(null);
   const [previewDoc, setPreviewDoc] = useState<OnboardingDocument | null>(null);
   const [managementGroups, setManagementGroups] = useState<ManagementGroup[]>([]);
+
+  async function openEmployeeDetails(employeeKey: string | undefined) {
+    if (!employeeKey) return;
+    try {
+      const { records } = await loadEmployeeDirectory();
+      const found = records.find(
+        (r) => r.id === employeeKey || r.employeeCode === employeeKey,
+      );
+      router.push(`/hr/workforce/${found?.id ?? employeeKey}`);
+    } catch {
+      router.push(`/hr/workforce/${employeeKey}`);
+    }
+  }
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -153,6 +184,14 @@ export function OnboardingManagementPage() {
   }, [filtered, page]);
 
   useEffect(() => setPage(1), [query, filters, tab, statsBucket]);
+
+  const activeDocumentFolders = useMemo(() => {
+    const source = statsBucket ? filtered : (dir?.cases ?? []);
+    return source.filter(
+      (c) =>
+        ACTIVE_ONBOARDING_STATUSES.has(c.status) && c.portal.documents.length > 0,
+    );
+  }, [dir, filtered, statsBucket]);
 
   const audit = useMemo(() => listOnboardingAudit(), [dir, tab]);
   const authBlocked = !isAuthenticated() && !loading && !(dir?.cases.length);
@@ -272,8 +311,7 @@ export function OnboardingManagementPage() {
       <HrUnderlineTabs
         tabs={
           [
-            { id: "cases", label: "Cases", icon: LayoutList },
-            { id: "checklist", label: "Checklist Board", icon: ClipboardList },
+            { id: "onboarding", label: "Onboarding", icon: LayoutList },
             { id: "documents", label: "Documents", icon: FolderOpen },
             { id: "audit", label: "Audit", icon: FileText },
           ] satisfies HrTabItem[]
@@ -284,7 +322,7 @@ export function OnboardingManagementPage() {
 
       {loading && !dir ? <EmsSkeleton /> : null}
 
-      {tab === "cases" ? (
+      {tab === "onboarding" ? (
         <div className="space-y-3">
           <div className="flex flex-wrap items-end gap-2">
             <div className="min-w-[12rem] flex-1 space-y-1 sm:max-w-sm">
@@ -424,92 +462,45 @@ export function OnboardingManagementPage() {
         </div>
       ) : null}
 
-      {tab === "checklist" ? (
-        <div className="grid gap-3 lg:grid-cols-2">
-          {(dir?.cases ?? [])
-            .filter((c) => c.status === "joined" && c.checklist.length > 0)
-            .slice(0, 8)
-            .map((c) => (
-              <div key={c.id} className="rounded-xl border border-border/70 bg-card p-3">
-                <div className="mb-2 flex items-center justify-between gap-2">
-                  <div>
-                    <p className="text-sm font-medium">{c.candidateName}</p>
-                    <p className="text-[10px] text-muted-foreground">{c.caseCode}</p>
-                  </div>
-                  <HrStatusBadge status={resolveOnboardingDisplayStatus(c.status, c.joiningDate)} />
-                </div>
-                <ul className="space-y-1">
-                  {c.checklist.slice(0, 6).map((t) => (
-                    <li key={t.id} className="flex items-center gap-2 text-xs">
-                      <input
-                        type="checkbox"
-                        className="cursor-pointer"
-                        checked={t.status === "done"}
-                        onChange={(e) => {
-                          updateChecklistItem(c.id, t.id, e.target.checked ? "done" : "pending");
-                          void load();
-                        }}
-                      />
-                      <span className="flex-1">{t.name}</span>
-                      <span className="text-[10px] text-muted-foreground uppercase">{t.owner}</span>
-                    </li>
-                  ))}
-                </ul>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  className="mt-2 h-7 cursor-pointer"
-                  onClick={() => setDetailCase(c)}
-                >
-                  Full checklist
-                </Button>
-              </div>
-            ))}
-          {(dir?.cases ?? []).filter((c) => !["joined", "cancelled"].includes(c.status)).length ===
-          0 ? (
-            <HrEmptyState title="No Post-Join Checklists" description="Checklists appear after onboarding is completed and the employee is created." />
-          ) : null}
-        </div>
-      ) : null}
-
       {tab === "documents" ? (
         <div className="space-y-2">
           <p className="text-[11px] text-muted-foreground">
-            One folder per candidate. Open{" "}
-            <span className="font-medium text-foreground">View</span> to see every uploaded file,
-            then preview, verify, or reject inside the directory.
+            Folders for active onboarding candidates with uploads. Open{" "}
+            <span className="font-medium text-foreground">View</span> to preview, verify, or reject.
           </p>
-          {(statsBucket ? filtered : (dir?.cases ?? []).filter((c) => c.portal.documents.length > 0)).map(
-            (c) => {
-              const docs = c.portal.documents;
-              const verified = docs.filter((d) => d.verifyStatus === "verified").length;
-              const pending = docs.filter((d) => d.verifyStatus === "pending").length;
-              const rejected = docs.filter((d) => d.verifyStatus === "rejected").length;
-              return (
-                <div
-                  key={c.id}
-                  className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-border/70 bg-card px-3 py-2.5 text-xs"
+          {activeDocumentFolders.map((c) => {
+            const docs = c.portal.documents;
+            const verified = docs.filter((d) => d.verifyStatus === "verified").length;
+            const pending = docs.filter((d) => d.verifyStatus === "pending").length;
+            const rejected = docs.filter((d) => d.verifyStatus === "rejected").length;
+            return (
+              <div
+                key={c.id}
+                className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-border/70 bg-card px-3 py-2.5 text-xs"
+              >
+                <button
+                  type="button"
+                  className="flex min-w-0 flex-1 cursor-pointer items-start gap-2 rounded-md px-1 py-0.5 -mx-1 text-left transition-colors duration-200 hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+                  onClick={() => setDocsCase(c)}
                 >
-                  <button
-                    type="button"
-                    className="flex min-w-0 flex-1 cursor-pointer items-start gap-2 rounded-md px-1 py-0.5 -mx-1 text-left transition-colors duration-200 hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
-                    onClick={() => setDocsCase(c)}
-                  >
-                    <FolderOpen className="mt-0.5 size-4 shrink-0 text-primary" />
-                    <div className="min-w-0">
-                      <p className="truncate font-medium text-foreground">
-                        {c.candidateName} documents
-                      </p>
-                      <p className="text-[10px] text-muted-foreground">
-                        {docs.length} file{docs.length === 1 ? "" : "s"}
-                        {verified ? ` · ${verified} verified` : ""}
-                        {pending ? ` · ${pending} pending` : ""}
-                        {rejected ? ` · ${rejected} rejected` : ""}
-                        {c.department ? ` · ${c.department}` : ""}
-                      </p>
-                    </div>
-                  </button>
+                  <FolderOpen className="mt-0.5 size-4 shrink-0 text-primary" />
+                  <div className="min-w-0">
+                    <p className="truncate font-medium text-foreground">
+                      {c.candidateName} documents
+                    </p>
+                    <p className="text-[10px] text-muted-foreground">
+                      {c.caseCode} · {docs.length} file{docs.length === 1 ? "" : "s"}
+                      {verified ? ` · ${verified} verified` : ""}
+                      {pending ? ` · ${pending} pending` : ""}
+                      {rejected ? ` · ${rejected} rejected` : ""}
+                      {c.department ? ` · ${c.department}` : ""}
+                    </p>
+                  </div>
+                </button>
+                <div className="flex items-center gap-2">
+                  <HrStatusBadge
+                    status={resolveOnboardingDisplayStatus(c.status, c.joiningDate)}
+                  />
                   <Button
                     type="button"
                     size="sm"
@@ -521,17 +512,16 @@ export function OnboardingManagementPage() {
                     View
                   </Button>
                 </div>
-              );
-            },
-          )}
-          {(statsBucket ? filtered : (dir?.cases ?? []).filter((c) => c.portal.documents.length > 0))
-            .length === 0 ? (
+              </div>
+            );
+          })}
+          {activeDocumentFolders.length === 0 ? (
             <HrEmptyState
-              title="No Documents Yet"
+              title="No active onboarding documents"
               description={
                 statsBucket
-                  ? "No cases match this card filter."
-                  : "Documents appear after candidates upload via the secure portal."
+                  ? "No active cases with uploads match this card filter."
+                  : "Folders appear when an active onboarding candidate uploads documents via the portal."
               }
             />
           ) : null}
@@ -607,14 +597,34 @@ export function OnboardingManagementPage() {
                   subtitle={d.kind.replace(/_/g, " ")}
                   onView={setPreviewDoc}
                   onVerify={() => {
-                    verifyDocument(docsCase.id, d.id, "verified");
-                    toast("Document verified");
-                    void load();
+                    void (async () => {
+                      const next = await verifyDocument(docsCase.id, d.id, "verified");
+                      if (!next) {
+                        toast("Failed to verify document", "error");
+                        return;
+                      }
+                      setDocsCase(next);
+                      toast("Document verified");
+                      void load();
+                    })();
                   }}
                   onReject={() => {
-                    verifyDocument(docsCase.id, d.id, "rejected");
-                    toast("Document rejected");
-                    void load();
+                    void (async () => {
+                      const next = await verifyDocument(docsCase.id, d.id, "rejected");
+                      if (!next) {
+                        toast("Failed to reject document", "error");
+                        return;
+                      }
+                      setDocsCase(next);
+                      const copied = await copyInvitationLink(next);
+                      openDocumentReuploadMailto(next);
+                      toast(
+                        copied
+                          ? "Document rejected — candidate invited to re-upload (link copied)"
+                          : "Document rejected — candidate portal reopened for re-upload",
+                      );
+                      void load();
+                    })();
                   }}
                 />
               ))
@@ -673,69 +683,139 @@ export function OnboardingManagementPage() {
             setDetailCase(d.cases.find((x) => x.id === caseId) ?? null);
           });
         }}
-        onVerifyDoc={(caseId, docId, status) => {
-          verifyDocument(caseId, docId, status);
-          toast(status === "verified" ? "Document verified" : "Document rejected");
-          void load().then(async () => {
-            const d = await loadOnboardingDirectory();
-            setDir(d);
-            setDetailCase(d.cases.find((x) => x.id === caseId) ?? null);
-          });
-        }}
-        onApprove={(caseId) => {
+        onSaveAssignment={async (caseId, input) => {
           try {
-            approveCandidateReview(caseId);
-            toast("Candidate submission approved");
+            const next = await updateOnboardingAssignment(caseId, input);
+            if (!next) {
+              toast("Failed to save assignment", "error");
+              return;
+            }
+            toast("Assignment saved");
+            setDetailCase(next);
+            setDir((prev) =>
+              prev
+                ? {
+                    ...prev,
+                    cases: prev.cases.map((c) => (c.id === next.id ? next : c)),
+                  }
+                : prev,
+            );
+            void load();
+          } catch (e) {
+            toast(e instanceof Error ? e.message : "Failed to save assignment", "error");
+            throw e;
+          }
+        }}
+        onVerifyDoc={(caseId, docId, status) => {
+          void (async () => {
+            const next = await verifyDocument(caseId, docId, status);
+            if (!next) {
+              toast("Failed to update document status", "error");
+              return;
+            }
+            if (status === "rejected") {
+              const copied = await copyInvitationLink(next);
+              openDocumentReuploadMailto(next);
+              toast(
+                copied
+                  ? "Document rejected — candidate invited to re-upload (link copied)"
+                  : "Document rejected — candidate portal reopened for re-upload",
+              );
+            } else {
+              toast("Document verified");
+            }
+            setDetailCase(next);
+            setDir((prev) =>
+              prev
+                ? {
+                    ...prev,
+                    cases: prev.cases.map((c) => (c.id === next.id ? next : c)),
+                  }
+                : prev,
+            );
             void load().then(async () => {
               const d = await loadOnboardingDirectory();
               setDir(d);
-              setDetailCase(d.cases.find((x) => x.id === caseId) ?? null);
+              setDetailCase(d.cases.find((x) => x.id === caseId) ?? next);
             });
-          } catch (e) {
-            toast(e instanceof Error ? e.message : "Approval failed", "error");
-          }
+          })();
         }}
-        onComplete={(caseId, managementGroup) => {
-          void completeOnboarding(caseId, {
+        onApprove={(caseId) => {
+          void (async () => {
+            try {
+              const next = await approveCandidateReview(caseId);
+              if (!next) {
+                toast("Approval failed", "error");
+                return;
+              }
+              toast("Candidate submission approved");
+              setDetailCase(next);
+              setDir((prev) =>
+                prev
+                  ? {
+                      ...prev,
+                      cases: prev.cases.map((c) => (c.id === next.id ? next : c)),
+                    }
+                  : prev,
+              );
+              void load().then(async () => {
+                const d = await loadOnboardingDirectory();
+                setDir(d);
+                setDetailCase(d.cases.find((x) => x.id === caseId) ?? next);
+              });
+            } catch (e) {
+              toast(e instanceof Error ? e.message : "Approval failed", "error");
+            }
+          })();
+        }}
+        onComplete={(caseId, managementGroup) =>
+          completeOnboarding(caseId, {
             managementGroupId: managementGroup?.id,
             managementGroupName: managementGroup?.group_name,
           })
-            .then((completed) => {
-              if (completed) {
-                const msg =
-                  completed.status === "pending_join"
-                    ? `Profile created (${completed.employeeId}) — activates on ${completed.joiningDate}`
-                    : `Employee ${completed.employeeId} activated — complete assignments in Workforce`;
-                toast(msg);
-                void load().then(async () => {
-                  const d = await loadOnboardingDirectory();
-                  setDir(d);
-                  setDetailCase(d.cases.find((x) => x.id === caseId) ?? null);
-                });
-              }
+            .then(async (completed) => {
+              if (!completed) return;
+              const pendingJoin = completed.status === "pending_join";
+              toast(
+                pendingJoin
+                  ? "Added to list. Active on joining date."
+                  : `Employee ${completed.employeeId} activated`,
+              );
+              await openEmployeeDetails(completed.employeeId);
+              setDetailCase(null);
+              void load();
             })
             .catch((e) => {
               toast(e instanceof Error ? e.message : "Completion failed", "error");
-            });
-        }}
-        onActivate={(caseId, managementGroup) => {
-          void activateOnboardingEmployee(caseId, {
-            managementGroupId: managementGroup?.id,
-            managementGroupName: managementGroup?.group_name,
-          })
-            .then((activated) => {
-              if (activated) {
-                toast(`Employee ${activated.employeeId} is now active in Workforce`);
-                void load().then(async () => {
-                  const d = await loadOnboardingDirectory();
-                  setDir(d);
-                  setDetailCase(d.cases.find((x) => x.id === caseId) ?? null);
-                });
-              }
+              throw e;
             })
-            .catch((e) => {
-              toast(e instanceof Error ? e.message : "Activation failed", "error");
+        }
+        onActivate={async (caseId, managementGroup) => {
+          const current =
+            detailCase?.id === caseId
+              ? detailCase
+              : (dir?.cases.find((c) => c.id === caseId) ?? null);
+          if (current && !isJoiningDateReached(current.joiningDate)) {
+            toast("Added to list. Active on joining date.");
+            await openEmployeeDetails(current.employeeId);
+            setDetailCase(null);
+            return;
+          }
+          try {
+            const activated = await activateOnboardingEmployee(caseId, {
+              managementGroupId: managementGroup?.id,
+              managementGroupName: managementGroup?.group_name,
             });
+            if (activated) {
+              toast(`Employee ${activated.employeeId} is now active in Workforce`);
+              await openEmployeeDetails(activated.employeeId);
+              setDetailCase(null);
+              void load();
+            }
+          } catch (e) {
+            toast(e instanceof Error ? e.message : "Activation failed", "error");
+            throw e;
+          }
         }}
       />
     </div>

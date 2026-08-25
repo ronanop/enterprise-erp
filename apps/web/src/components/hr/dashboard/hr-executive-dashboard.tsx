@@ -44,6 +44,7 @@ import type {
   HrExecutiveDashboard,
 } from "@/types/hr-executive-dashboard";
 import { DASHBOARD_ROLE_LABELS } from "@/types/hr-executive-dashboard";
+import { HRMS_CHART_STROKES, hrmsPastelSurface } from "@/config/hrms-theme";
 
 const QUICK_ACTIONS = [
   { label: "Employee", href: "/hr/workforce", icon: Users },
@@ -92,13 +93,46 @@ const REQUEST_LABELS: Record<string, string> = {
   attendance_correction: "Attendance correction",
 };
 
-function useClock() {
+function DashboardClock() {
   const [now, setNow] = useState(() => new Date());
   useEffect(() => {
     const id = window.setInterval(() => setNow(new Date()), 1000);
     return () => window.clearInterval(id);
   }, []);
-  return now;
+  return (
+    <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+      <span>
+        {now.toLocaleDateString("en-IN", {
+          weekday: "long",
+          day: "numeric",
+          month: "long",
+          year: "numeric",
+        })}
+      </span>
+      <span className="hidden sm:inline">·</span>
+      <span className="font-mono tabular-nums">
+        {now.toLocaleTimeString("en-IN", {
+          hour: "2-digit",
+          minute: "2-digit",
+          second: "2-digit",
+        })}
+      </span>
+    </div>
+  );
+}
+
+function GreetingTitle({ role, displayName }: { role: DashboardRole; displayName?: string }) {
+  const [hour, setHour] = useState(() => new Date().getHours());
+  useEffect(() => {
+    // Refresh greeting at most once a minute — avoid re-rendering the whole dashboard every second
+    const id = window.setInterval(() => setHour(new Date().getHours()), 60_000);
+    return () => window.clearInterval(id);
+  }, []);
+  return (
+    <h1 className="mt-1 text-xl font-semibold tracking-tight text-foreground sm:text-2xl">
+      {greetingForHour(new Date(2000, 0, 1, hour))}, {displayName ?? DASHBOARD_ROLE_LABELS[role]}
+    </h1>
+  );
 }
 
 export function HrExecutiveDashboardPage() {
@@ -106,7 +140,6 @@ export function HrExecutiveDashboardPage() {
   const [loading, setLoading] = useState(true);
   const [role, setRole] = useState<DashboardRole>("hr");
   const [query, setQuery] = useState("");
-  const now = useClock();
 
   const load = useCallback(async (r?: DashboardRole) => {
     setLoading(true);
@@ -194,34 +227,15 @@ export function HrExecutiveDashboardPage() {
       <SetupToastHost />
 
       {/* Top section */}
-      <div className="rounded-xl border border-border/70 bg-card px-4 py-4 shadow-sm sm:px-5">
+      <div className="rounded-2xl border border-border bg-card px-4 py-4 shadow-sm sm:px-5">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div>
             <p className="text-[11px] font-medium tracking-wide text-muted-foreground uppercase">
               HRMS Executive Dashboard
               {role === "super_admin" ? " · All companies" : null}
             </p>
-            <h1 className="mt-1 text-xl font-semibold tracking-tight text-foreground sm:text-2xl">
-              {greetingForHour(now)}, {data?.displayName ?? DASHBOARD_ROLE_LABELS[role]}
-            </h1>
-            <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
-              <span>
-                {now.toLocaleDateString("en-IN", {
-                  weekday: "long",
-                  day: "numeric",
-                  month: "long",
-                  year: "numeric",
-                })}
-              </span>
-              <span className="hidden sm:inline">·</span>
-              <span className="font-mono tabular-nums">
-                {now.toLocaleTimeString("en-IN", {
-                  hour: "2-digit",
-                  minute: "2-digit",
-                  second: "2-digit",
-                })}
-              </span>
-            </div>
+            <GreetingTitle role={role} displayName={data?.displayName} />
+            <DashboardClock />
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
@@ -320,9 +334,9 @@ export function HrExecutiveDashboardPage() {
                     <Link
                       key={a.href + a.label}
                       href={a.href}
-                      className="group flex cursor-pointer flex-col items-start gap-1.5 rounded-lg border border-border/60 bg-muted/30 px-2.5 py-2.5 transition-[border-color,background-color] duration-200 hover:border-primary/35 hover:bg-primary/5"
+                      className="group flex cursor-pointer flex-col items-start gap-1.5 rounded-xl border border-border bg-hrms-lavender px-2.5 py-2.5 transition-all duration-200 hover:border-primary hover:bg-primary hover:text-primary-foreground"
                     >
-                      <span className="flex size-7 items-center justify-center rounded-md bg-primary/10 text-primary">
+                      <span className="flex size-7 items-center justify-center rounded-lg bg-primary text-primary-foreground">
                         <Icon className="size-3.5" />
                       </span>
                       <span className="text-[11px] font-medium leading-tight text-foreground">
@@ -355,7 +369,11 @@ export function HrExecutiveDashboardPage() {
 
             <DashboardListBox
               title="Today's attendance"
-              subtitle={now.toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "short" })}
+              subtitle={new Date().toLocaleDateString("en-IN", {
+                weekday: "long",
+                day: "numeric",
+                month: "short",
+              })}
               icon={ClipboardCheck}
               footerHref="/hr/time"
               footerLabel="Attendance"
@@ -390,13 +408,14 @@ export function HrExecutiveDashboardPage() {
               <h2 className="text-sm font-semibold tracking-tight">Key Metrics</h2>
             </div>
             <div className="grid auto-rows-fr gap-2.5 grid-cols-2 xl:grid-cols-4">
-              {kpiCards.map((k) => {
+              {kpiCards.map((k, i) => {
                 const Icon = k.icon;
                 const card = (
                   <div
                     className={cn(
-                      "flex h-full min-h-[5rem] flex-col justify-between rounded-xl border border-border/70 bg-card px-3 py-3 shadow-sm transition-shadow duration-200",
-                      k.href && "hover:border-primary/40 hover:shadow-md",
+                      "flex h-full min-h-[5rem] flex-col justify-between rounded-2xl border border-border px-3 py-3 shadow-sm transition-all duration-200",
+                      hrmsPastelSurface(i),
+                      k.href && "hover:border-primary/30 hover:shadow-md",
                     )}
                   >
                     <div className="flex items-start justify-between gap-2">
@@ -429,8 +448,8 @@ export function HrExecutiveDashboardPage() {
               items={[
                 {
                   id: "department",
-                  defaultColSpan: 12,
-                  defaultHeight: Math.max(280, 48 + (charts?.departmentWise?.length ?? 8) * 36),
+                  defaultColSpan: 6,
+                  defaultHeight: 320,
                   node: (
                     <PremiumBarChart
                       title="Department-wise Employees"
@@ -442,8 +461,8 @@ export function HrExecutiveDashboardPage() {
                 },
                 {
                   id: "location",
-                  defaultColSpan: 12,
-                  defaultHeight: Math.max(280, 48 + (charts?.locationWise?.length ?? 8) * 36),
+                  defaultColSpan: 6,
+                  defaultHeight: 320,
                   node: (
                     <PremiumBarChart
                       title="Location-wise Employees"
@@ -456,7 +475,7 @@ export function HrExecutiveDashboardPage() {
                 {
                   id: "headcount",
                   defaultColSpan: 6,
-                  defaultHeight: 260,
+                  defaultHeight: 300,
                   node: (
                     <PremiumBarChart
                       title="Head Count"
@@ -468,7 +487,7 @@ export function HrExecutiveDashboardPage() {
                 {
                   id: "gender",
                   defaultColSpan: 6,
-                  defaultHeight: 260,
+                  defaultHeight: 300,
                   node: (
                     <PremiumDonutChart
                       title="Gender Diversity"
@@ -481,24 +500,24 @@ export function HrExecutiveDashboardPage() {
                       {
                         id: "attendance",
                         defaultColSpan: 6,
-                        defaultHeight: 260,
+                        defaultHeight: 300,
                         node: (
                           <PremiumAreaChart
                             title="Attendance Trend"
                             data={charts?.attendanceTrend ?? []}
-                            color="#0891B2"
+                            color={HRMS_CHART_STROKES.teal}
                           />
                         ),
                       },
                       {
                         id: "leave",
                         defaultColSpan: 6,
-                        defaultHeight: 260,
+                        defaultHeight: 300,
                         node: (
                           <PremiumAreaChart
                             title="Leave Trend"
                             data={charts?.leaveTrend ?? []}
-                            color="#D97706"
+                            color={HRMS_CHART_STROKES.orange}
                           />
                         ),
                       },
@@ -536,7 +555,7 @@ function DashboardListBox({
   return (
     <section
       className={cn(
-        "flex flex-col rounded-xl border border-border/70 bg-card shadow-sm",
+        "flex flex-col rounded-2xl border border-border bg-card shadow-sm",
         portrait
           ? "min-h-[300px] xl:aspect-[3/4] xl:min-h-0 xl:max-h-[440px]"
           : "min-h-[280px]",
@@ -548,7 +567,7 @@ function DashboardListBox({
           <h2 className="text-sm font-semibold tracking-tight">{title}</h2>
           <p className="text-[11px] text-muted-foreground">{subtitle}</p>
         </div>
-        <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+        <span className="flex size-8 shrink-0 items-center justify-center rounded-xl bg-primary text-primary-foreground">
           <Icon className="size-4" />
         </span>
       </div>
@@ -557,7 +576,7 @@ function DashboardListBox({
         <div className="border-t border-border/70 px-4 py-2">
           <Link
             href={footerHref}
-            className="inline-flex cursor-pointer items-center gap-1 text-[11px] font-medium text-primary transition-colors duration-150 hover:text-primary/80"
+            className="inline-flex cursor-pointer items-center gap-1 text-[11px] font-semibold text-foreground transition-colors duration-150 hover:underline"
           >
             {footerLabel}
             <ChevronRight className="size-3" />
@@ -580,10 +599,10 @@ function AttendanceStat({
   vertical?: boolean;
 }) {
   const tones = {
-    present: "border-emerald-200/80 bg-emerald-50 text-emerald-900",
-    absent: "border-red-200/80 bg-red-50 text-red-900",
-    leave: "border-amber-200/80 bg-amber-50 text-amber-950",
-    onDuty: "border-sky-200/80 bg-sky-50 text-sky-950",
+    present: "border-transparent bg-hrms-mint text-hrms-success",
+    absent: "border-transparent bg-hrms-pink text-hrms-danger",
+    leave: "border-transparent bg-hrms-peach text-hrms-warning",
+    onDuty: "border-transparent bg-hrms-blue text-hrms-info",
   };
   return (
     <div

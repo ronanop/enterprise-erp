@@ -18,11 +18,17 @@ export type AnalyticsLayoutItem = {
   id: string;
   /** Column span 1–12 on large screens */
   colSpan: number;
-  /** Chart area height in px */
+  /** Total card height in px (includes title + padding) */
   height: number;
 };
 
-const STORAGE_KEY = "erp_hr_analytics_layout_v1";
+/** Bumped so prior uneven layouts are reset once. */
+const STORAGE_KEY = "erp_hr_analytics_layout_v2";
+
+/** Space reserved for ChartShell title row + padding. */
+export const CHART_SHELL_CHROME = 64;
+/** Space reserved for edit toolbar when editing. */
+const EDIT_TOOLBAR_H = 40;
 
 type Props = {
   items: { id: string; defaultColSpan?: number; defaultHeight?: number; node: ReactNode }[];
@@ -36,14 +42,13 @@ function loadLayout(defaults: AnalyticsLayoutItem[]): AnalyticsLayoutItem[] {
     const parsed = JSON.parse(raw) as AnalyticsLayoutItem[];
     if (!Array.isArray(parsed) || !parsed.length) return defaults;
     const byId = new Map(parsed.map((p) => [p.id, p]));
-    // Keep order from saved when possible, append new charts
     const ordered: AnalyticsLayoutItem[] = [];
     for (const p of parsed) {
       if (defaults.some((d) => d.id === p.id)) {
         ordered.push({
           id: p.id,
           colSpan: Math.min(12, Math.max(3, Number(p.colSpan) || 12)),
-          height: Math.min(720, Math.max(180, Number(p.height) || 280)),
+          height: Math.min(720, Math.max(220, Number(p.height) || 300)),
         });
       }
     }
@@ -62,7 +67,7 @@ export function CustomizableAnalyticsBoard({ items }: Props) {
       items.map((it) => ({
         id: it.id,
         colSpan: it.defaultColSpan ?? 12,
-        height: it.defaultHeight ?? 280,
+        height: it.defaultHeight ?? 300,
       })),
     [items],
   );
@@ -138,19 +143,24 @@ export function CustomizableAnalyticsBoard({ items }: Props) {
         </div>
       </div>
 
-      <div className="grid grid-cols-12 gap-3">
+      <div className="grid grid-cols-12 items-stretch gap-4">
         {layout.map((item) => {
           const node = nodeById.get(item.id);
           if (!node) return null;
+          const plotHeight = Math.max(
+            180,
+            item.height - CHART_SHELL_CHROME - (editing ? EDIT_TOOLBAR_H : 0),
+          );
           return (
             <div
               key={item.id}
               className={cn(
-                "col-span-12",
-                editing && "rounded-2xl ring-1 ring-primary/25 ring-offset-2 ring-offset-background",
+                "col-span-12 flex min-h-0 flex-col",
+                editing && "rounded-2xl outline outline-1 outline-primary/30",
               )}
               style={{
                 gridColumn: `span ${item.colSpan} / span ${item.colSpan}`,
+                height: item.height,
               }}
               draggable={editing}
               onDragStart={() => editing && setDragId(item.id)}
@@ -158,7 +168,10 @@ export function CustomizableAnalyticsBoard({ items }: Props) {
               onDrop={() => editing && onDrop(item.id)}
             >
               {editing ? (
-                <div className="mb-1.5 flex flex-wrap items-center gap-2 rounded-lg border border-dashed border-primary/30 bg-primary/5 px-2.5 py-1.5 text-[11px] text-muted-foreground">
+                <div
+                  className="flex h-10 shrink-0 flex-wrap items-center gap-2 rounded-t-2xl border border-b-0 border-dashed border-primary/30 bg-primary/5 px-2.5 text-[11px] text-muted-foreground"
+                  style={{ height: EDIT_TOOLBAR_H }}
+                >
                   <GripVertical className="size-3.5 shrink-0 cursor-grab" />
                   <span className="font-medium text-foreground">Drag to reorder</span>
                   <label className="ml-auto flex items-center gap-1">
@@ -180,14 +193,14 @@ export function CustomizableAnalyticsBoard({ items }: Props) {
                     Height
                     <input
                       type="number"
-                      min={180}
+                      min={220}
                       max={720}
                       step={20}
                       className="h-7 w-16 rounded border border-input bg-background px-1.5 font-mono"
                       value={item.height}
                       onChange={(e) =>
                         patchItem(item.id, {
-                          height: Math.min(720, Math.max(180, Number(e.target.value) || 280)),
+                          height: Math.min(720, Math.max(220, Number(e.target.value) || 300)),
                         })
                       }
                     />
@@ -195,8 +208,10 @@ export function CustomizableAnalyticsBoard({ items }: Props) {
                   </label>
                 </div>
               ) : null}
-              <div data-chart-height={item.height}>
-                <ChartHeightContext.Provider value={item.height}>
+              <div
+                className={cn("min-h-0 flex-1", editing && "overflow-hidden rounded-b-2xl")}
+              >
+                <ChartHeightContext.Provider value={plotHeight}>
                   {node}
                 </ChartHeightContext.Provider>
               </div>

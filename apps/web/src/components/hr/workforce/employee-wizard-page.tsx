@@ -10,6 +10,8 @@ import { SetupDrawer, SetupField, SetupInput, SetupSelect, SetupTextarea } from 
 import { toast, SetupToastHost } from "@/components/hr/setup/setup-toast";
 import { PageHeader } from "@/components/layout/page-header";
 import { Button } from "@/components/ui/button";
+import { SearchableSelect } from "@/components/ui/searchable-select";
+import { COUNTRY_OPTIONS, INDIA_STATE_OPTIONS } from "@/config/geo-options";
 import { loadEmployeeIdConfig, saveEmployeeIdConfig } from "@/config/employee-id";
 import { portalToWizardDraft, summarizePortalDetails } from "@/lib/onboarding-to-employee";
 import { resolveOrgHeadsForEmployment } from "@/lib/hr/org-heads";
@@ -570,17 +572,29 @@ export function EmployeeWizardPage() {
                 />
               </SetupField>
               <SetupField label="State">
-                <SetupInput
-                  placeholder="e.g. Karnataka"
+                <SearchableSelect
                   value={draft.personal.currentAddress.state}
-                  onChange={(e) => patchPersonal({ currentAddress: { ...draft.personal.currentAddress, state: e.target.value } })}
+                  onChange={(state) =>
+                    patchPersonal({
+                      currentAddress: { ...draft.personal.currentAddress, state },
+                    })
+                  }
+                  options={INDIA_STATE_OPTIONS}
+                  placeholder="Select state…"
+                  searchPlaceholder="Search state…"
                 />
               </SetupField>
               <SetupField label="Country">
-                <SetupInput
-                  placeholder="e.g. India"
+                <SearchableSelect
                   value={draft.personal.currentAddress.country}
-                  onChange={(e) => patchPersonal({ currentAddress: { ...draft.personal.currentAddress, country: e.target.value } })}
+                  onChange={(country) =>
+                    patchPersonal({
+                      currentAddress: { ...draft.personal.currentAddress, country },
+                    })
+                  }
+                  options={COUNTRY_OPTIONS}
+                  placeholder="Select country…"
+                  searchPlaceholder="Search country…"
                 />
               </SetupField>
               <SetupField label="Pincode">

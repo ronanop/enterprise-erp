@@ -27,13 +27,22 @@ export function EmsAvatar({
   name,
   photoUrl,
   size = "md",
+  shape = "circle",
 }: {
   name: string;
   photoUrl?: string;
-  size?: "sm" | "md" | "lg";
+  size?: "sm" | "md" | "lg" | "xl";
+  shape?: "circle" | "rounded";
 }) {
   const dim =
-    size === "lg" ? "size-16 text-lg" : size === "sm" ? "size-8 text-xs" : "size-10 text-sm";
+    size === "xl"
+      ? "size-36 text-2xl"
+      : size === "lg"
+        ? "size-16 text-lg"
+        : size === "sm"
+          ? "size-8 text-xs"
+          : "size-10 text-sm";
+  const radius = shape === "rounded" ? "rounded-xl" : "rounded-full";
   const initials = name
     .split(" ")
     .filter(Boolean)
@@ -43,13 +52,14 @@ export function EmsAvatar({
   if (photoUrl) {
     return (
       // eslint-disable-next-line @next/next/no-img-element
-      <img src={photoUrl} alt="" className={cn("rounded-full object-cover", dim)} />
+      <img src={photoUrl} alt="" className={cn("shrink-0 object-cover", radius, dim)} />
     );
   }
   return (
     <div
       className={cn(
-        "flex shrink-0 items-center justify-center rounded-full bg-primary/10 font-medium text-primary",
+        "flex shrink-0 items-center justify-center bg-primary font-semibold text-primary-foreground",
+        radius,
         dim,
       )}
     >
@@ -128,9 +138,9 @@ export function EmsStepper({
             className={cn(
               "rounded-lg border px-2.5 py-1 text-[11px] font-medium tracking-wide uppercase transition-colors",
               active
-                ? "border-primary bg-primary/5 text-primary"
+                ? "border-foreground bg-primary text-primary-foreground"
                 : done
-                  ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+                  ? "border-transparent bg-hrms-mint text-hrms-success"
                   : "border-border bg-muted/30 text-muted-foreground",
             )}
           >

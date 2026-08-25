@@ -1,15 +1,41 @@
 """Branch service."""
 
+from __future__ import annotations
+
+import re
 from uuid import UUID
 
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from core.exceptions import NotFoundException
+from core.exceptions import ConflictException, NotFoundException
 from modules.foundation.domain.value_objects import TenantContext
 from modules.foundation.service.audit_service import AuditService
 from modules.organization.repository.branch_repository import BranchRepository
 from modules.organization.repository.company_repository import CompanyRepository
 from modules.organization.service.org_scope_validator import OrgScopeValidator
+
+_CODE_RE = re.compile(r"^([A-Za-z]+)-(\d+)$")
+
+
+def _next_branch_code(existing: list[str], preferred: str | None = None) -> str:
+    """Pick preferred if free; otherwise mint PREFIX-(max+1) from existing codes."""
+    used = {c.strip().upper() for c in existing if c and str(c).strip()}
+    preferred_clean = (preferred or "").strip()
+    if preferred_clean and preferred_clean.upper() not in used:
+        return preferred_clean
+
+    prefix = "BR"
+    max_n = 0
+    if preferred_clean:
+        m = _CODE_RE.match(preferred_clean)
+        if m:
+            prefix = m.group(1).upper()
+    for code in used:
+        m = _CODE_RE.match(code)
+        if m and m.group(1).upper() == prefix:
+            max_n = max(max_n, int(m.group(2)))
+    return f"{prefix}-{max_n + 1:03d}"
 
 
 class BranchService:
@@ -48,25 +74,60 @@ class BranchService:
         if self._companies.get_by_id(ctx, company_id) is None:
             raise NotFoundException("Company not found")
         self._scope.validate_company_access(ctx, company_id)
-        branch = self._repo.create(
-            ctx,
-            company_id=company_id,
-            branch_code=branch_code,
-            branch_name=branch_name,
-            branch_type=branch_type,
-            address_line1=address_line1,
-            city=city,
-            state_code=state_code,
-            country_code=country_code,
-            head_employee_id=head_employee_id,
+
+        # Include soft-deleted codes — unique constraint still applies to them
+        self._repo.liberate_deleted_branch_codes(ctx, company_id=company_id)
+        existing_codes = self._repo.list_branch_codes(
+            ctx, company_id=company_id, include_deleted=True
         )
+        resolved_code = _next_branch_code(existing_codes, preferred=branch_code)
+
+        try:
+            branch = self._repo.create(
+                ctx,
+                company_id=company_id,
+                branch_code=resolved_code,
+                branch_name=branch_name,
+                branch_type=branch_type,
+                address_line1=address_line1,
+                city=city,
+                state_code=state_code,
+                country_code=country_code,
+                head_employee_id=head_employee_id,
+            )
+        except IntegrityError as exc:
+            self._repo.db.rollback()
+            # Race: another request took the code — allocate again once
+            existing_codes = self._repo.list_branch_codes(
+                ctx, company_id=company_id, include_deleted=True
+            )
+            resolved_code = _next_branch_code(existing_codes, preferred=None)
+            try:
+                branch = self._repo.create(
+                    ctx,
+                    company_id=company_id,
+                    branch_code=resolved_code,
+                    branch_name=branch_name,
+                    branch_type=branch_type,
+                    address_line1=address_line1,
+                    city=city,
+                    state_code=state_code,
+                    country_code=country_code,
+                    head_employee_id=head_employee_id,
+                )
+            except IntegrityError as exc2:
+                self._repo.db.rollback()
+                raise ConflictException(
+                    f"Could not allocate a unique branch code. Last tried '{resolved_code}'."
+                ) from exc2
+
         self._audit.log_entity_change(
             tenant_id=ctx.tenant_id,
             entity_name="org_branch",
             entity_id=branch.id,
             operation="create",
             performed_by=ctx.user_id,
-            new_value={"branch_code": branch_code, "company_id": str(company_id)},
+            new_value={"branch_code": resolved_code, "company_id": str(company_id)},
         )
         return branch
 

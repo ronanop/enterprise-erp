@@ -1,21 +1,39 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { CheckCircle2, Circle, ClipboardList, FileText, Globe, LayoutList, UserCheck } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import {
+  CheckCircle2,
+  Circle,
+  ClipboardList,
+  FileText,
+  Globe,
+  LayoutList,
+  Loader2,
+  Save,
+  UserCheck,
+} from "lucide-react";
 
 import {
   OnboardingDocumentPreviewDialog,
   OnboardingDocumentRow,
 } from "@/components/hr/onboarding/onboarding-document-preview";
+import { MasterSelect } from "@/components/hr/shared/employee-select";
 import { HrStatusBadge, HrUnderlineTabs, type HrTabItem } from "@/components/hr/hr-primitives";
 import {
   SetupDrawer,
   SetupField,
+  SetupInput,
   SetupSelect,
   SetupTextarea,
 } from "@/components/hr/setup/setup-drawer";
 import { Button } from "@/components/ui/button";
-import { getInvitationUrl } from "@/services/onboarding-management-service";
+import { EMPLOYMENT_TYPE_OPTIONS, formatEmploymentTypeLabel } from "@/config/hr-master-options";
+import { getInvitationUrl, type OnboardingAssignmentInput } from "@/services/onboarding-management-service";
+import {
+  loadHrMasterDirectory,
+  type HrMasterOption,
+} from "@/services/hr-master-connector";
+import { listEmploymentTypeOptions, listEntityOptions, loadSetupOrgLookups } from "@/services/hr-setup-service";
 import type { ManagementGroup } from "@/services/management-group-service";
 import type {
   ChecklistItem,
@@ -46,11 +64,40 @@ type Props = {
     docId: string,
     status: OnboardingDocument["verifyStatus"],
   ) => void;
+  onSaveAssignment: (caseId: string, input: OnboardingAssignmentInput) => Promise<void>;
   onApprove: (caseId: string) => void;
-  onComplete: (caseId: string, managementGroup?: ManagementGroup) => void;
-  onActivate: (caseId: string, managementGroup?: ManagementGroup) => void;
+  onComplete: (caseId: string, managementGroup?: ManagementGroup) => void | Promise<void>;
+  onActivate: (caseId: string, managementGroup?: ManagementGroup) => void | Promise<void>;
   onInvite: (caseRow: OnboardingCase) => void;
 };
+
+type AssignmentForm = {
+  joiningDate: string;
+  entityId: string;
+  entityName: string;
+  department: string;
+  designation: string;
+  reportingManager: string;
+  branch: string;
+  branchId: string;
+  employmentType: string;
+  probationPeriodDays: string;
+};
+
+function formFromCase(c: OnboardingCase): AssignmentForm {
+  return {
+    joiningDate: c.joiningDate || "",
+    entityId: c.entityId || "",
+    entityName: c.entityName || "",
+    department: c.department || "",
+    designation: c.designation || "",
+    reportingManager: c.reportingManager || "",
+    branch: c.branch || "",
+    branchId: c.branchId || "",
+    employmentType: c.employmentType || "permanent",
+    probationPeriodDays: c.probationPeriodDays || "90",
+  };
+}
 
 export function CaseDetailDrawer({
   open,
@@ -59,6 +106,7 @@ export function CaseDetailDrawer({
   onClose,
   onChecklist,
   onVerifyDoc,
+  onSaveAssignment,
   onApprove,
   onComplete,
   onActivate,
@@ -72,6 +120,60 @@ export function CaseDetailDrawer({
   const [managementGroupId, setManagementGroupId] = useState(
     () => caseRow?.managementGroupId ?? "",
   );
+  const [form, setForm] = useState<AssignmentForm | null>(null);
+  const [savingAssignment, setSavingAssignment] = useState(false);
+  const [actionBusy, setActionBusy] = useState<"complete" | "activate" | null>(null);
+  const [masters, setMasters] = useState<{
+    departments: HrMasterOption[];
+    designations: HrMasterOption[];
+    managers: HrMasterOption[];
+    branches: HrMasterOption[];
+  }>({
+    departments: [],
+    designations: [],
+    managers: [],
+    branches: [],
+  });
+  const [employmentTypes, setEmploymentTypes] = useState(EMPLOYMENT_TYPE_OPTIONS);
+  const [entities, setEntities] = useState<{ value: string; label: string }[]>([]);
+
+  useEffect(() => {
+    if (!open) setActionBusy(null);
+  }, [open]);
+
+  useEffect(() => {
+    if (!caseRow) {
+      setForm(null);
+      return;
+    }
+    setForm(formFromCase(caseRow));
+    setManagementGroupId(caseRow.managementGroupId ?? "");
+  }, [caseRow?.id, caseRow?.updatedAt]);
+
+  useEffect(() => {
+    if (!open) return;
+    void Promise.all([
+      loadHrMasterDirectory(),
+      listEmploymentTypeOptions(),
+      listEntityOptions(),
+      loadSetupOrgLookups(),
+    ]).then(([m, types, entityOpts, org]) => {
+      // Prefer Org Setup → Branches (Sultanpur, etc.) so HR sees company branches
+      const orgBranches: HrMasterOption[] = org.branches.map((b) => ({
+        id: b.value,
+        label: b.label,
+        companyId: b.companyId,
+      }));
+      setMasters({
+        departments: m.departments,
+        designations: m.designations,
+        managers: m.managers,
+        branches: orgBranches.length ? orgBranches : m.branches,
+      });
+      setEmploymentTypes(types);
+      setEntities(entityOpts);
+    });
+  }, [open]);
 
   const timeline = useMemo(() => {
     if (!caseRow) return [];
@@ -108,7 +210,7 @@ export function CaseDetailDrawer({
     return items;
   }, [caseRow]);
 
-  if (!caseRow) return null;
+  if (!caseRow || !form) return null;
 
   const hrTasks = caseRow.checklist.filter((t) => t.owner === "hr");
   const mgrTasks = caseRow.checklist.filter((t) => t.owner === "manager");
@@ -120,6 +222,27 @@ export function CaseDetailDrawer({
   const joiningNotReached = isPendingJoin && !isJoiningDateReached(caseRow.joiningDate);
   const selectedManagementGroup =
     managementGroups.find((group) => group.id === managementGroupId) ?? undefined;
+  const assignmentEditable = !["joined", "cancelled"].includes(caseRow.status);
+
+  async function runComplete() {
+    if (actionBusy) return;
+    setActionBusy("complete");
+    try {
+      await onComplete(caseRow.id, selectedManagementGroup);
+    } finally {
+      setActionBusy(null);
+    }
+  }
+
+  async function runActivate() {
+    if (actionBusy) return;
+    setActionBusy("activate");
+    try {
+      await onActivate(caseRow.id, selectedManagementGroup);
+    } finally {
+      setActionBusy(null);
+    }
+  }
 
   const drawerTabs: HrTabItem[] = [
     { id: "overview", label: "Overview", icon: LayoutList },
@@ -128,6 +251,32 @@ export function CaseDetailDrawer({
     ...(showChecklist ? [{ id: "checklist", label: "Checklist", icon: ClipboardList }] : []),
     { id: "timeline", label: "Timeline", icon: CheckCircle2 },
   ];
+
+  async function handleSaveAssignment() {
+    if (!caseRow || !form) return;
+    setSavingAssignment(true);
+    try {
+      const entity = entities.find((e) => e.value === form.entityId);
+      await onSaveAssignment(caseRow.id, {
+        joiningDate: form.joiningDate,
+        entityId: form.entityId,
+        entityName: entity?.label || form.entityName,
+        department: form.department,
+        designation: form.designation,
+        reportingManager: form.reportingManager,
+        branch: form.branch,
+        branchId: form.branchId || undefined,
+        employmentType: form.employmentType,
+        probationPeriodDays: form.probationPeriodDays,
+      });
+    } finally {
+      setSavingAssignment(false);
+    }
+  }
+
+  function patchForm(partial: Partial<AssignmentForm>) {
+    setForm((prev) => (prev ? { ...prev, ...partial } : prev));
+  }
 
   return (
     <SetupDrawer
@@ -138,13 +287,20 @@ export function CaseDetailDrawer({
       description={`${caseRow.caseCode} · ${resolveOnboardingDisplayStatus(caseRow.status, caseRow.joiningDate)} · ${caseRow.progressPct}%`}
       footer={
         <>
-          <Button type="button" variant="outline" className="cursor-pointer" onClick={onClose}>
+          <Button
+            type="button"
+            variant="outline"
+            className="cursor-pointer"
+            disabled={Boolean(actionBusy)}
+            onClick={onClose}
+          >
             Close
           </Button>
           <Button
             type="button"
             variant="outline"
             className="cursor-pointer"
+            disabled={Boolean(actionBusy)}
             onClick={() => onInvite(caseRow)}
           >
             Invitation
@@ -154,6 +310,7 @@ export function CaseDetailDrawer({
               type="button"
               variant="outline"
               className="cursor-pointer"
+              disabled={Boolean(actionBusy)}
               onClick={() => onApprove(caseRow.id)}
             >
               Approve submission
@@ -163,31 +320,50 @@ export function CaseDetailDrawer({
             <Button
               type="button"
               className="cursor-pointer"
-              onClick={() => onComplete(caseRow.id, selectedManagementGroup)}
+              disabled={Boolean(actionBusy)}
+              onClick={() => void runComplete()}
             >
-              <UserCheck className="size-3.5" />
-              Complete onboarding
+              {actionBusy === "complete" ? (
+                <Loader2 className="size-3.5 animate-spin" />
+              ) : (
+                <UserCheck className="size-3.5" />
+              )}
+              {actionBusy === "complete" ? "Opening…" : "Complete onboarding"}
             </Button>
           ) : null}
           {isPendingJoin ? (
             <Button
               type="button"
               className="cursor-pointer"
-              disabled={!canActivate}
+              disabled={Boolean(actionBusy)}
               title={
                 joiningNotReached
-                  ? `Available on or after ${caseRow.joiningDate}`
+                  ? `Joining date ${caseRow.joiningDate} — will stay on Pending Join until then`
                   : "Activate employee for Workforce"
               }
-              onClick={() => onActivate(caseRow.id, selectedManagementGroup)}
+              onClick={() => void runActivate()}
             >
-              <UserCheck className="size-3.5" />
-              Activate employee
+              {actionBusy === "activate" ? (
+                <Loader2 className="size-3.5 animate-spin" />
+              ) : (
+                <UserCheck className="size-3.5" />
+              )}
+              {actionBusy === "activate" ? "Opening employee…" : "Activate employee"}
             </Button>
           ) : null}
         </>
       }
     >
+      {actionBusy ? (
+        <div className="mb-3 flex items-center gap-2 rounded-lg border border-primary/30 bg-primary/5 px-3 py-2 text-xs text-foreground">
+          <Loader2 className="size-3.5 shrink-0 animate-spin text-primary" />
+          <span>
+            {actionBusy === "activate"
+              ? "Activating employee and opening details…"
+              : "Completing onboarding and opening employee details…"}
+          </span>
+        </div>
+      ) : null}
       <HrUnderlineTabs
         embedded
         size="sm"
@@ -199,20 +375,168 @@ export function CaseDetailDrawer({
 
       {tab === "overview" ? (
         <div className="space-y-3 text-xs">
-          <div className="grid gap-2 sm:grid-cols-2">
-            <Info label="Joining" value={caseRow.joiningDate} />
-            <Info label="Legal entity" value={caseRow.entityName || "—"} />
-            <Info label="Department" value={caseRow.department} />
-            <Info label="Designation" value={caseRow.designation} />
-            <Info label="Reporting manager" value={caseRow.reportingManager || "—"} />
-            <Info label="Branch" value={caseRow.branch} />
-            <Info label="HR owner" value={caseRow.hrOwner} />
-            <Info label="Employee ID" value={caseRow.employeeId || "Assigned after completion"} />
+          <div className="flex flex-wrap items-center justify-between gap-2">
             <div>
-              <p className="text-[10px] uppercase text-muted-foreground">Status</p>
-              <HrStatusBadge status={resolveOnboardingDisplayStatus(caseRow.status, caseRow.joiningDate)} />
+              <p className="text-[10px] uppercase text-muted-foreground">Case status</p>
+              <HrStatusBadge
+                status={resolveOnboardingDisplayStatus(caseRow.status, caseRow.joiningDate)}
+              />
             </div>
+            <p className="text-[11px] text-muted-foreground">
+              Employee ID:{" "}
+              <span className="font-medium text-foreground">
+                {caseRow.employeeId || "Assigned after completion"}
+              </span>
+            </p>
           </div>
+
+          {assignmentEditable ? (
+            <p className="rounded-lg border border-border/60 bg-muted/30 px-3 py-2 text-[11px] text-muted-foreground">
+              After verifying documents, assign department, designation, reporting manager,
+              employment type, and probation here. Save, then Approve submission.
+            </p>
+          ) : null}
+
+          <div className="grid gap-3 sm:grid-cols-2">
+            {assignmentEditable ? (
+              <>
+                <SetupField label="Joining date" required>
+                  <SetupInput
+                    type="date"
+                    value={form.joiningDate}
+                    onChange={(e) => patchForm({ joiningDate: e.target.value })}
+                  />
+                </SetupField>
+                <SetupField label="Legal entity" hint="HR Setup → Legal Entities">
+                  <SetupSelect
+                    value={form.entityId}
+                    onChange={(e) => {
+                      const id = e.target.value;
+                      const ent = entities.find((x) => x.value === id);
+                      patchForm({ entityId: id, entityName: ent?.label || "" });
+                    }}
+                  >
+                    <option value="">Select entity…</option>
+                    {entities.map((e) => (
+                      <option key={e.value} value={e.value}>
+                        {e.label}
+                      </option>
+                    ))}
+                  </SetupSelect>
+                </SetupField>
+                <SetupField label="Employment type" required>
+                  <SetupSelect
+                    value={form.employmentType}
+                    onChange={(e) => patchForm({ employmentType: e.target.value })}
+                  >
+                    {employmentTypes.map((t) => (
+                      <option key={t.value} value={t.value}>
+                        {t.label}
+                      </option>
+                    ))}
+                  </SetupSelect>
+                </SetupField>
+                <SetupField
+                  label="Probation period (days)"
+                  hint="Applied when the employee is activated (0 = no probation)"
+                >
+                  <SetupInput
+                    type="number"
+                    min={0}
+                    max={730}
+                    value={form.probationPeriodDays}
+                    onChange={(e) => patchForm({ probationPeriodDays: e.target.value })}
+                  />
+                </SetupField>
+                <MasterSelect
+                  label="Department"
+                  required
+                  value={masters.departments.find((d) => d.label === form.department)?.id || ""}
+                  options={masters.departments}
+                  onChange={(_id, opt) => patchForm({ department: opt?.label || "" })}
+                  placeholder="Select department…"
+                />
+                <MasterSelect
+                  label="Designation"
+                  required
+                  value={masters.designations.find((d) => d.label === form.designation)?.id || ""}
+                  options={masters.designations}
+                  onChange={(_id, opt) => patchForm({ designation: opt?.label || "" })}
+                  placeholder="Select designation…"
+                />
+                <MasterSelect
+                  label="Reporting manager"
+                  hint="Employees marked as reporting managers"
+                  value={
+                    masters.managers.find((m) => m.label.startsWith(form.reportingManager))?.id ||
+                    ""
+                  }
+                  options={masters.managers}
+                  onChange={(_id, opt) =>
+                    patchForm({
+                      reportingManager: opt ? opt.label.split(" (")[0] : "",
+                    })
+                  }
+                  placeholder="Select manager…"
+                />
+                <MasterSelect
+                  label="Branch"
+                  hint="Org Setup → Branches (company branches e.g. Sultanpur)"
+                  value={
+                    form.branchId ||
+                    masters.branches.find((b) => b.label === form.branch)?.id ||
+                    ""
+                  }
+                  options={masters.branches}
+                  onChange={(id, opt) =>
+                    patchForm({
+                      branchId: id,
+                      branch: opt?.label || "",
+                    })
+                  }
+                  placeholder={
+                    masters.branches.length
+                      ? "Select company branch…"
+                      : "No branches — add in Org Setup → Branches"
+                  }
+                />
+              </>
+            ) : (
+              <>
+                <Info label="Joining date" value={caseRow.joiningDate || "—"} />
+                <Info label="Legal entity" value={caseRow.entityName || "—"} />
+                <Info
+                  label="Employment type"
+                  value={formatEmploymentTypeLabel(caseRow.employmentType)}
+                />
+                <Info
+                  label="Probation"
+                  value={`${caseRow.probationPeriodDays || "90"} days`}
+                />
+                <Info label="Department" value={caseRow.department || "—"} />
+                <Info label="Designation" value={caseRow.designation || "—"} />
+                <Info label="Reporting manager" value={caseRow.reportingManager || "—"} />
+                <Info label="Branch" value={caseRow.branch || "—"} />
+                <Info label="HR owner" value={caseRow.hrOwner || "—"} />
+              </>
+            )}
+          </div>
+
+          {assignmentEditable ? (
+            <div className="flex justify-end">
+              <Button
+                type="button"
+                size="sm"
+                className="cursor-pointer gap-1"
+                disabled={savingAssignment}
+                onClick={() => void handleSaveAssignment()}
+              >
+                <Save className="size-3.5" />
+                {savingAssignment ? "Saving…" : "Save details"}
+              </Button>
+            </div>
+          ) : null}
+
           {(canComplete || isPendingJoin) ? (
             <SetupField
               label="Employment group"
@@ -237,14 +561,14 @@ export function CaseDetailDrawer({
           {caseRow.status !== "joined" ? (
             <p className="rounded-lg border border-border/60 bg-muted/30 px-3 py-2 text-[11px] text-muted-foreground">
               {canApprove
-                ? "Verify all documents, then approve the submission."
+                ? "Verify all documents, save assignment on Overview, then approve the submission."
                 : isPendingJoin
                   ? joiningNotReached
                     ? `Employee profile created (${caseRow.employeeId}). Activation is available on or after ${caseRow.joiningDate}. They appear under Pending Join in Employee Management until then.`
                     : `Employee profile ready (${caseRow.employeeId}). Click Activate employee to move them to Probation in Workforce.`
                   : canComplete
-                    ? "Complete onboarding to create the employee profile. If joining date is in the future, activation waits until that date."
-                    : "After verification, complete onboarding to create the employee record."}{" "}
+                    ? "Complete onboarding to create the employee profile and open their details. If joining date is in the future, they are added to the list and activate on that date."
+                    : "After verification and assignment, complete onboarding to create the employee record."}{" "}
               Employment group is optional; you can still assign shifts, leave policy, and other
               details from Workforce once the employee is active.
             </p>
@@ -264,22 +588,26 @@ export function CaseDetailDrawer({
               <p className="mt-1 text-[11px] opacity-90">
                 {canActivate
                   ? "Use Activate employee below to move this hire into Workforce (Probation)."
-                  : `Activate employee unlocks on ${caseRow.joiningDate}. Until then the person stays in Pending Join (not deactivated).`}
+                  : `If you activate before ${caseRow.joiningDate}, they stay on the employee list and become active on the joining date.`}
               </p>
               <Button
                 type="button"
                 size="sm"
                 className="mt-2 cursor-pointer"
-                disabled={!canActivate}
+                disabled={Boolean(actionBusy)}
                 title={
                   joiningNotReached
-                    ? `Available on or after ${caseRow.joiningDate}`
+                    ? `Added to list — active on ${caseRow.joiningDate}`
                     : "Activate employee for Workforce"
                 }
-                onClick={() => onActivate(caseRow.id, selectedManagementGroup)}
+                onClick={() => void runActivate()}
               >
-                <UserCheck className="size-3.5" />
-                Activate employee
+                {actionBusy === "activate" ? (
+                  <Loader2 className="size-3.5 animate-spin" />
+                ) : (
+                  <UserCheck className="size-3.5" />
+                )}
+                {actionBusy === "activate" ? "Opening employee…" : "Activate employee"}
               </Button>
             </div>
           ) : null}
@@ -387,29 +715,128 @@ export function CaseDetailDrawer({
         </div>
       ) : null}
 
-      {tab === "timeline" ? (
-        <ol className="space-y-3 border-l border-border pl-4">
-          {timeline.map((t) => (
-            <li key={t.label} className="relative text-xs">
+      {tab === "timeline" ? <CircularTimeline items={timeline} /> : null}
+    </SetupDrawer>
+  );
+}
+
+function CircularTimeline({
+  items,
+}: {
+  items: { label: string; at?: string; done: boolean }[];
+}) {
+  const n = items.length;
+  if (!n) return null;
+
+  const doneCount = items.filter((i) => i.done).length;
+  const allDone = doneCount === n;
+  const currentIdx = allDone ? n - 1 : Math.min(doneCount, n - 1);
+  const current = items[currentIdx];
+
+  const size = 220;
+  const cx = size / 2;
+  const cy = size / 2;
+  const r = 78;
+  const circ = 2 * Math.PI * r;
+  const progress = doneCount / n;
+  const dashOffset = circ * (1 - progress);
+
+  return (
+    <div className="flex flex-col items-center gap-6 py-2">
+      <div className="relative" style={{ width: size, height: size }}>
+        <svg width={size} height={size} className="-rotate-90" aria-hidden>
+          <circle
+            cx={cx}
+            cy={cy}
+            r={r}
+            fill="none"
+            stroke="currentColor"
+            strokeWidth={6}
+            className="text-border"
+          />
+          <circle
+            cx={cx}
+            cy={cy}
+            r={r}
+            fill="none"
+            stroke="currentColor"
+            strokeWidth={6}
+            strokeLinecap="round"
+            strokeDasharray={circ}
+            strokeDashoffset={dashOffset}
+            className="text-emerald-500 transition-[stroke-dashoffset] duration-700 ease-[cubic-bezier(0.22,1,0.36,1)]"
+          />
+        </svg>
+
+        {items.map((item, i) => {
+          const angle = (i / n) * 2 * Math.PI - Math.PI / 2;
+          const x = cx + r * Math.cos(angle);
+          const y = cy + r * Math.sin(angle);
+          const isCurrent = i === currentIdx && !allDone;
+
+          return (
+            <div
+              key={item.label}
+              className="absolute -translate-x-1/2 -translate-y-1/2"
+              style={{ left: x, top: y }}
+            >
               <span
                 className={cn(
-                  "absolute -left-[21px] top-0.5 size-2.5 rounded-full border-2 border-card",
-                  t.done ? "bg-emerald-500" : "bg-muted-foreground/40",
+                  "block size-3 rounded-full border-2 border-card transition-all duration-500",
+                  item.done ? "scale-100 bg-emerald-500" : "scale-90 bg-muted-foreground/40",
+                  isCurrent && "scale-125 ring-4 ring-emerald-500/25",
                 )}
               />
-              <p className={cn("font-medium", t.done ? "text-foreground" : "text-muted-foreground")}>
-                {t.label}
-              </p>
-              {t.at ? (
-                <p className="text-[10px] text-muted-foreground">
-                  {new Date(t.at).toLocaleString()}
-                </p>
-              ) : null}
-            </li>
-          ))}
-        </ol>
-      ) : null}
-    </SetupDrawer>
+            </div>
+          );
+        })}
+
+        <div
+          key={current?.label}
+          className="absolute inset-0 flex flex-col items-center justify-center px-8 text-center animate-in fade-in-0 zoom-in-95 duration-300"
+        >
+          <p className="text-[10px] uppercase tracking-wide text-muted-foreground">
+            {allDone ? "Complete" : "Current"}
+          </p>
+          <p className="mt-0.5 text-sm font-semibold text-foreground">{current?.label}</p>
+          {current?.at ? (
+            <p className="mt-1 text-[10px] text-muted-foreground">
+              {new Date(current.at).toLocaleString()}
+            </p>
+          ) : null}
+          <p className="mt-2 text-xs text-muted-foreground">
+            {doneCount}/{n} steps
+          </p>
+        </div>
+      </div>
+
+      <ol className="grid w-full max-w-xs grid-cols-1 gap-1.5">
+        {items.map((t, i) => (
+          <li
+            key={t.label}
+            className={cn(
+              "flex items-center gap-2 rounded-md px-2 py-1 text-xs transition-colors duration-300",
+              i === currentIdx ? "bg-emerald-500/10" : "bg-transparent",
+            )}
+          >
+            <span
+              className={cn(
+                "size-2 shrink-0 rounded-full transition-colors duration-500",
+                t.done ? "bg-emerald-500" : "bg-muted-foreground/40",
+              )}
+            />
+            <span className={cn("font-medium", t.done ? "text-foreground" : "text-muted-foreground")}>
+              {t.label}
+            </span>
+            {t.at ? (
+              <span className="ml-auto text-[10px] text-muted-foreground">
+                {new Date(t.at).toLocaleDateString()}
+              </span>
+            ) : null}
+          </li>
+        ))}
+      </ol>
+    </div>
   );
 }
 

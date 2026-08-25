@@ -42,12 +42,28 @@ class OrgScopeRepository:
     def user_has_branch_access(self, ctx: TenantContext, branch_id: UUID) -> bool:
         if ctx.user_type in {"super_admin", "tenant_admin", "company_admin"}:
             return True
+        # Explicit assignment to this branch
         stmt = select(SecUserOrgScope).where(
             SecUserOrgScope.user_id == ctx.user_id,
             SecUserOrgScope.tenant_id == ctx.tenant_id,
             SecUserOrgScope.branch_id == branch_id,
         )
-        return self.db.scalar(stmt) is not None
+        if self.db.scalar(stmt) is not None:
+            return True
+        # Company-scoped users (e.g. HR with TENANT_ADMIN role, user_type=employee)
+        # may manage every branch under companies they already have access to.
+        from modules.organization.models.branch import OrgBranch
+
+        branch = self.db.scalar(
+            select(OrgBranch).where(
+                OrgBranch.id == branch_id,
+                OrgBranch.tenant_id == ctx.tenant_id,
+                OrgBranch.is_deleted.is_(False),
+            )
+        )
+        if branch is None:
+            return False
+        return self.user_has_company_access(ctx, branch.company_id)
 
     def assign_scope(
         self,

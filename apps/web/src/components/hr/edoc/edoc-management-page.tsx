@@ -1,9 +1,18 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
-import { CheckCircle2, FileText, FolderTree, Search, Shield, Users } from "lucide-react";
+import {
+  CheckCircle2,
+  ChevronDown,
+  FileText,
+  FolderTree,
+  Search,
+  Shield,
+  Users,
+} from "lucide-react";
 
 import { EdocDocumentTypesPanel } from "@/components/hr/edoc/edoc-document-types-panel";
+import { EdocOtherDocumentsPanel } from "@/components/hr/edoc/edoc-other-documents-panel";
 import { OnboardingPoliciesPanel } from "@/components/hr/setup/onboarding-policies-panel";
 import { PageHeader } from "@/components/layout/page-header";
 import { HrLoadingBlock, HrUnderlineTabs, type HrTabItem } from "@/components/hr/hr-primitives";
@@ -46,8 +55,8 @@ type DocSectionDef = {
 const DOC_SECTIONS: DocSectionDef[] = [
   {
     id: "photo",
-    title: "Passport photo",
-    hint: "Profile / passport-size photograph",
+    title: "Photo",
+    hint: "Upload passport size photo — max 300 KB, JPG or PNG only",
   },
   {
     id: "resume",
@@ -113,7 +122,7 @@ function docsFromEmployee(emp: EmployeeRecord): OnboardingDocument[] {
       id: `photo-${emp.id}`,
       kind: "photo",
       typeCode: "DOC-PHOTO",
-      fileName: "Passport photo",
+      fileName: "Photo",
       uploadedAt: emp.extension?.updatedAt || "",
       verifyStatus: "verified",
       fileDataUrl: photoUrl,
@@ -362,10 +371,7 @@ export function EdocManagementPage() {
       ) : tab === "onboarding-policies" ? (
         <OnboardingPoliciesPanel />
       ) : tab === "other" ? (
-        <section className="rounded-xl border border-border/70 bg-card p-4 shadow-sm text-sm text-muted-foreground">
-          Other organisational document packs (contracts, templates) can be added here. Employee KYC
-          and policy acceptance are under Employee Docs.
-        </section>
+        <EdocOtherDocumentsPanel />
       ) : loading ? (
         <HrLoadingBlock label="Loading documents…" />
       ) : (
@@ -439,10 +445,11 @@ export function EdocManagementPage() {
                   if (hideEmptyOther) return null;
                   return (
                     <DocSectionCard
-                      key={sec.id}
+                      key={`${selected.key}-${sec.id}`}
                       title={sec.title}
                       hint={sec.hint}
                       count={rows.length}
+                      defaultOpen={false}
                     >
                       {rows.length === 0 ? (
                         <p className="text-xs text-muted-foreground">Not uploaded</p>
@@ -475,9 +482,11 @@ export function EdocManagementPage() {
                 })}
 
                 <DocSectionCard
+                  key={`${selected.key}-policies`}
                   title="Policies accepted"
                   hint="Policies agreed and signed during onboarding"
                   count={selected.policiesAccepted.length}
+                  defaultOpen={false}
                 >
                   {selected.policiesAccepted.length === 0 ? (
                     <p className="text-xs text-muted-foreground">
@@ -531,9 +540,11 @@ export function EdocManagementPage() {
 
                 {selected.offboardingDocs.length > 0 ? (
                   <DocSectionCard
+                    key={`${selected.key}-offboarding`}
                     title="Offboarding"
                     hint="Exit / relieving documents from separation workflow"
                     count={selected.offboardingDocs.length}
+                    defaultOpen={false}
                   >
                     <ul className="space-y-1.5">
                       {selected.offboardingDocs.map((d) => (
@@ -606,25 +617,42 @@ function DocSectionCard({
   title,
   hint,
   count,
+  defaultOpen = false,
   children,
 }: {
   title: string;
   hint: string;
   count: number;
+  defaultOpen?: boolean;
   children: ReactNode;
 }) {
+  const [open, setOpen] = useState(defaultOpen);
+
   return (
-    <div className="rounded-lg border border-border/60 bg-muted/10 p-3">
-      <div className="mb-2 flex items-start justify-between gap-2">
-        <div>
-          <h3 className="text-xs font-semibold uppercase tracking-wide text-foreground">
-            {title}
-          </h3>
-          <p className="text-[10px] text-muted-foreground">{hint}</p>
+    <div className="overflow-hidden rounded-lg border border-border/60 bg-muted/10">
+      <button
+        type="button"
+        className="flex w-full cursor-pointer items-start justify-between gap-2 px-3 py-3 text-left transition-colors hover:bg-muted/30"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+      >
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2">
+            <ChevronDown
+              className={cn(
+                "size-3.5 shrink-0 text-muted-foreground transition-transform",
+                open ? "rotate-0" : "-rotate-90",
+              )}
+            />
+            <h3 className="text-xs font-semibold uppercase tracking-wide text-foreground">
+              {title}
+            </h3>
+          </div>
+          <p className="mt-0.5 pl-5 text-[10px] text-muted-foreground">{hint}</p>
         </div>
         <span
           className={cn(
-            "rounded-full px-2 py-0.5 text-[10px] font-medium",
+            "shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium",
             count > 0
               ? "bg-emerald-500/10 text-emerald-700"
               : "bg-muted text-muted-foreground",
@@ -632,8 +660,8 @@ function DocSectionCard({
         >
           {count > 0 ? `${count} file${count === 1 ? "" : "s"}` : "Empty"}
         </span>
-      </div>
-      {children}
+      </button>
+      {open ? <div className="border-t border-border/50 px-3 py-3">{children}</div> : null}
     </div>
   );
 }

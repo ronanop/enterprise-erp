@@ -17,7 +17,7 @@ import {
 } from "@/services/hr-master-connector";
 import { validateEmail, validateMobile } from "@/lib/employee-validators";
 import { EMPLOYMENT_TYPE_OPTIONS } from "@/config/hr-master-options";
-import { listEmploymentTypeOptions, listEntityOptions } from "@/services/hr-setup-service";
+import { listEmploymentTypeOptions, listEntityOptions, loadSetupOrgLookups } from "@/services/hr-setup-service";
 import type { StartOnboardingInput } from "@/types/onboarding-management";
 
 type Props = {
@@ -64,22 +64,31 @@ export function StartOnboardingDrawer({ open, onClose, onSubmit }: Props) {
       loadHrMasterDirectory(),
       listEmploymentTypeOptions(),
       listEntityOptions(),
-    ]).then(([m, types, entityOpts]) => {
+      loadSetupOrgLookups(),
+    ]).then(([m, types, entityOpts, org]) => {
+      const orgBranches = org.branches.map((b) => ({
+        id: b.value,
+        label: b.label,
+        companyId: b.companyId,
+      }));
       setMasters({
         departments: m.departments,
         designations: m.designations,
         managers: m.managers,
-        branches: m.branches,
+        branches: orgBranches.length ? orgBranches : m.branches,
       });
       setEmploymentTypes(types);
       setEntities(entityOpts);
-      setBranch((prev) => prev || m.branches[0]?.label || "Head Office");
+      setBranch((prev) => prev || orgBranches[0]?.label || m.branches[0]?.label || "Head Office");
       setEntityId((prev) => prev || entityOpts[0]?.value || "");
       if (!m.designations.length) {
         toast("No designations found — add them in HR Setup → Designations", "error");
       }
       if (!entityOpts.length) {
         toast("No legal entities found — add them in HR Setup → Legal Entities", "error");
+      }
+      if (!orgBranches.length && !m.branches.length) {
+        toast("No branches found — add them in Org Setup → Branches", "error");
       }
     });
   }, [open]);
@@ -284,12 +293,18 @@ export function StartOnboardingDrawer({ open, onClose, onSubmit }: Props) {
               setReportingManager(opt ? opt.label.split(" (")[0] : "")
             }
           />
-          <MasterSelect
-            label="Branch"
-            value={masters.branches.find((b) => b.label === branch)?.id || branch}
-            options={masters.branches}
-            onChange={(_id, opt) => setBranch(opt?.label || _id)}
-          />
+                  <MasterSelect
+                    label="Branch"
+                    hint="Org Setup → Branches"
+                    value={masters.branches.find((b) => b.label === branch)?.id || ""}
+                    options={masters.branches}
+                    onChange={(_id, opt) => setBranch(opt?.label || "")}
+                    placeholder={
+                      masters.branches.length
+                        ? "Select company branch…"
+                        : "No branches — add in Org Setup → Branches"
+                    }
+                  />
         </div>
 
         <SetupField label="Invitation link expiry (days)" hint="Secure portal link validity (1–90)">

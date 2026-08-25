@@ -891,7 +891,7 @@ export function computeEmployeeStats(records: EmployeeRecord[]) {
 }
 
 export function getEmployeeById(records: EmployeeRecord[], id: string): EmployeeRecord | undefined {
-  return records.find((r) => r.id === id);
+  return records.find((r) => r.id === id || r.employeeCode === id);
 }
 
 export function listActivity(employeeId: string): ActivityEvent[] {

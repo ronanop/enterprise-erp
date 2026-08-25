@@ -44,11 +44,11 @@ export function HrPipelineFunnel({ counts, loading }: HrPipelineFunnelProps) {
                 <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-muted">
                   <div
                     className={cn(
-                      "h-full rounded-full bg-sky-600 transition-[width] duration-300",
-                      index === 1 && "bg-sky-700",
-                      index === 2 && "bg-teal-600",
-                      index === 3 && "bg-emerald-600",
-                      index === 4 && "bg-slate-500",
+                      "h-full rounded-full bg-primary transition-[width] duration-300",
+                      index === 1 && "bg-hrms-teal",
+                      index === 2 && "bg-hrms-success",
+                      index === 3 && "bg-hrms-warning",
+                      index === 4 && "bg-hrms-info",
                     )}
                     style={{ width: `${width}%` }}
                     role="presentation"

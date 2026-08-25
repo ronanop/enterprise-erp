@@ -3,11 +3,12 @@
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useMemo, useState } from "react";
-import { ChevronDown, ChevronLeft, ChevronRight, Search } from "lucide-react";
+import { ChevronDown, ChevronLeft, ChevronRight, Moon, Search, Sun } from "lucide-react";
 
 import { flattenHrNavHrefs, hrNavGroups, type HrNavItem } from "@/config/hr-nav";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { useHrmsColorMode } from "@/hooks/use-hrms-color-mode";
 import { cn } from "@/lib/utils";
 
 function navHrefMatches(pathname: string, search: string, href: string): boolean {
@@ -65,24 +66,21 @@ function NavLinkRow({
       href={item.href}
       title={collapsed ? item.title : undefined}
       className={cn(
-        "group relative flex cursor-pointer items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm transition-colors duration-200",
+        "group relative flex cursor-pointer items-center gap-2.5 rounded-xl px-2.5 py-2 text-sm transition-all duration-200",
         nested && "py-1.5 pl-9 text-[13px]",
         active
-          ? "bg-sidebar-accent text-sidebar-accent-foreground shadow-sm"
-          : "text-sidebar-foreground/70 hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground",
+          ? "bg-[#9B5BB8] text-white"
+          : "text-[#AEB6C3] hover:bg-[#2A2A2A] hover:text-white",
         collapsed && "justify-center px-0",
       )}
     >
-      {active ? (
-        <span className="absolute inset-y-1.5 left-0 w-0.5 rounded-full bg-sidebar-primary" />
-      ) : null}
       <Icon
         className={cn(
           "size-4 shrink-0",
           nested && "size-3.5",
           active
-            ? "text-sidebar-primary"
-            : "text-sidebar-foreground/50 group-hover:text-sidebar-foreground/80",
+            ? "text-white"
+            : "text-white group-hover:text-white",
         )}
       />
       {!collapsed ? <span className="truncate font-medium">{item.title}</span> : null}
@@ -143,11 +141,11 @@ function SidebarNavBody({
   }, [pathname, search]);
 
   return (
-    <nav className="erp-scroll flex-1 space-y-1 overflow-y-auto px-2 pb-3">
+    <nav className="erp-scroll flex-1 space-y-1 overflow-y-auto bg-[#0A0A0A] px-2 pb-3">
       {filtered.map((group) => (
         <div key={group.label || "main"}>
           {!collapsed && group.label ? (
-            <p className="mb-2 px-2.5 text-[10px] font-medium tracking-[0.14em] text-sidebar-foreground/40 uppercase">
+            <p className="mb-2 px-2.5 text-[10px] font-medium tracking-[0.14em] text-[#AEB6C3] uppercase">
               {group.label}
             </p>
           ) : null}
@@ -180,31 +178,29 @@ function SidebarNavBody({
                   <button
                     type="button"
                     className={cn(
-                      "group relative flex w-full cursor-pointer items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-sm transition-colors duration-200",
+                      "group relative flex w-full cursor-pointer items-center gap-2.5 rounded-xl px-2.5 py-2 text-left text-sm transition-all duration-200",
                       parentActive
-                        ? "bg-sidebar-accent/80 text-sidebar-accent-foreground"
-                        : "text-sidebar-foreground/70 hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground",
+                        ? "bg-[#9B5BB8] text-white"
+                        : "text-[#AEB6C3] hover:bg-[#2A2A2A] hover:text-white",
                     )}
                     onClick={() =>
                       setOpenMenus((prev) => ({ ...prev, [item.href]: !expanded }))
                     }
                     aria-expanded={expanded}
                   >
-                    {parentActive ? (
-                      <span className="absolute inset-y-1.5 left-0 w-0.5 rounded-full bg-sidebar-primary" />
-                    ) : null}
                     <Icon
                       className={cn(
                         "size-4 shrink-0",
                         parentActive
-                          ? "text-sidebar-primary"
-                          : "text-sidebar-foreground/50 group-hover:text-sidebar-foreground/80",
+                          ? "text-white"
+                          : "text-white group-hover:text-white",
                       )}
                     />
                     <span className="min-w-0 flex-1 truncate font-medium">{item.title}</span>
                     <ChevronDown
                       className={cn(
-                        "size-3.5 shrink-0 text-sidebar-foreground/40 transition-transform duration-200",
+                        "size-3.5 shrink-0 transition-transform duration-200",
+                        parentActive ? "text-white/80" : "text-[#AEB6C3]",
                         expanded && "rotate-180",
                       )}
                     />
@@ -237,56 +233,68 @@ function SidebarNavBody({
 export function HrSidebar() {
   const [collapsed, setCollapsed] = useState(false);
   const [query, setQuery] = useState("");
+  const { dark, toggle } = useHrmsColorMode();
 
   return (
     <aside
       className={cn(
-        "sticky top-0 z-20 flex h-dvh shrink-0 flex-col border-r border-sidebar-border bg-sidebar text-sidebar-foreground transition-[width] duration-200",
+        "sticky top-0 z-20 flex h-dvh shrink-0 flex-col border-r border-[#222222] bg-[#0A0A0A] text-white transition-[width] duration-200",
         collapsed ? "w-[72px]" : "w-[260px]",
       )}
     >
-      <div className={cn("flex items-center gap-3 px-4 py-5", collapsed && "justify-center px-2")}>
-        <div className="flex size-9 items-center justify-center rounded-xl bg-sidebar-primary text-[11px] font-semibold tracking-wide text-sidebar-primary-foreground shadow-sm">
+      <div className={cn("flex items-center gap-3 bg-[#0A0A0A] px-4 py-5", collapsed && "justify-center px-2")}>
+        <div className="flex size-9 items-center justify-center rounded-xl bg-[#9B5BB8] text-[11px] font-bold tracking-wide text-white">
           HR
         </div>
         {!collapsed ? (
           <div className="min-w-0 flex-1">
-            <p className="truncate text-sm font-medium tracking-tight text-sidebar-foreground">
+            <p className="truncate text-sm font-medium tracking-tight text-white">
               HRMS
             </p>
-            <p className="truncate text-[11px] text-sidebar-foreground/55">People operations</p>
+            <p className="truncate text-[11px] text-[#AEB6C3]">People operations</p>
           </div>
         ) : null}
       </div>
 
       {!collapsed ? (
-        <div className="px-3 pb-3">
+        <div className="bg-[#0A0A0A] px-3 pb-3">
           <div className="relative">
-            <Search className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-sidebar-foreground/40" />
+            <Search className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-[#AEB6C3]" />
             <Input
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder="Search HR…"
-              className="h-9 border-sidebar-border bg-white/5 pl-8 text-sidebar-foreground placeholder:text-sidebar-foreground/40 focus-visible:ring-sidebar-ring"
+              className="h-9 rounded-xl border-[#222222] bg-[#2A2A2A] pl-8 text-white placeholder:text-[#AEB6C3] focus-visible:ring-[#9B5BB8]"
             />
           </div>
         </div>
       ) : null}
 
-      <Suspense fallback={<div className="flex-1" />}>
+      <Suspense fallback={<div className="flex-1 bg-[#0A0A0A]" />}>
         <SidebarNavBody collapsed={collapsed} query={query} />
       </Suspense>
 
-      <div className="space-y-1 border-t border-sidebar-border p-2.5">
+      <div className="space-y-1 border-t border-[#222222] bg-[#0A0A0A] p-2.5">
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          onClick={toggle}
+          className="w-full cursor-pointer justify-center text-[#AEB6C3] hover:bg-[#2A2A2A] hover:text-white"
+          aria-label={dark ? "Switch to light mode" : "Switch to dark mode"}
+        >
+          {dark ? <Sun className="size-4 text-white" /> : <Moon className="size-4 text-white" />}
+          {!collapsed ? <span className="ml-1">{dark ? "Light mode" : "Dark mode"}</span> : null}
+        </Button>
         <Button
           type="button"
           variant="ghost"
           size="sm"
           onClick={() => setCollapsed((v) => !v)}
-          className="w-full cursor-pointer justify-center text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+          className="w-full cursor-pointer justify-center text-[#AEB6C3] hover:bg-[#2A2A2A] hover:text-white"
           aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
         >
-          {collapsed ? <ChevronRight className="size-4" /> : <ChevronLeft className="size-4" />}
+          {collapsed ? <ChevronRight className="size-4 text-white" /> : <ChevronLeft className="size-4 text-white" />}
           {!collapsed ? <span className="ml-1">Collapse</span> : null}
         </Button>
       </div>

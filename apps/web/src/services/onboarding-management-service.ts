@@ -57,9 +57,16 @@ function normalizeApiCase(raw: Record<string, unknown>): OnboardingCase | null {
     designation: String(raw.designation ?? ""),
     reportingManager: String(raw.reportingManager ?? ""),
     branch: String(raw.branch ?? ""),
+    branchId: raw.branchId != null ? String(raw.branchId) : undefined,
     shift: String(raw.shift ?? ""),
     leavePolicy: String(raw.leavePolicy ?? ""),
     employmentType: String(raw.employmentType ?? ""),
+    probationPeriodDays:
+      raw.probationPeriodDays != null
+        ? String(raw.probationPeriodDays)
+        : raw.probation_period_days != null
+          ? String(raw.probation_period_days)
+          : "90",
     managementGroupId: raw.managementGroupId != null ? String(raw.managementGroupId) : undefined,
     managementGroupName:
       raw.managementGroupName != null ? String(raw.managementGroupName) : undefined,
@@ -471,6 +478,7 @@ export async function startOnboarding(input: StartOnboardingInput): Promise<Onbo
     shift: "",
     leavePolicy: "",
     employmentType: input.employmentType,
+    probationPeriodDays: "90",
     buddy: undefined,
     hrOwner: input.hrOwner || actor(),
     status: "draft",
@@ -720,28 +728,98 @@ export function updateChecklistItem(
   return next;
 }
 
-export function verifyDocument(
+export async function verifyDocument(
   caseId: string,
   docId: string,
   verifyStatus: OnboardingDocument["verifyStatus"],
   notes?: string,
-): OnboardingCase | null {
+): Promise<OnboardingCase | null> {
   const c = getCaseById(caseId);
   if (!c) return null;
   const documents = c.portal.documents.map((d) =>
     d.id === docId ? { ...d, verifyStatus, notes } : d,
   );
+
+  let portal: PortalPayload = { ...c.portal, documents };
+  let status = c.status;
+  let invitation = c.invitation;
+
+  // Rejection re-opens the candidate portal on Documents and refreshes the invite link.
+  if (verifyStatus === "rejected") {
+    const { submittedAt: _submitted, ...portalRest } = portal;
+    portal = {
+      ...portalRest,
+      documents,
+      currentStep: "documents",
+    };
+    if (!["joined", "cancelled"].includes(c.status)) {
+      status = "in_progress";
+    }
+    if (invitation?.token) {
+      const expires = new Date();
+      expires.setDate(expires.getDate() + INVITE_EXPIRY_DEFAULT_DAYS);
+      invitation = {
+        ...invitation,
+        sentAt: nowIso(),
+        expiresAt: expires.toISOString(),
+        resendCount: (invitation.resendCount ?? 0) + 1,
+        lastChannel: invitation.lastChannel ?? invitation.channel ?? "email",
+      };
+    }
+  }
+
   const next = upsertCase({
     ...c,
-    portal: { ...c.portal, documents },
+    portal,
+    status,
+    invitation,
   });
+  if (!next) return null;
   appendOnboardingAudit({
     caseId,
     action: "verify_document",
     detail: `Document ${docId.slice(0, 8)} → ${verifyStatus}`,
     actor: actor(),
   });
-  return next;
+  if (verifyStatus === "rejected") {
+    const rejectedName =
+      documents.find((d) => d.id === docId)?.fileName ?? docId.slice(0, 8);
+    appendOnboardingAudit({
+      caseId,
+      action: "request_document_reupload",
+      detail: `Portal reopened for re-upload of ${rejectedName}${
+        invitation?.token ? ` → ${getInvitationUrl(invitation.token)}` : ""
+      }`,
+      actor: actor(),
+    });
+  }
+  return syncCaseToApi(next);
+}
+
+/** Open the candidate's mail client with a re-upload link (no server mailer). */
+export function openDocumentReuploadMailto(caseRow: OnboardingCase): void {
+  if (typeof window === "undefined") return;
+  const token = caseRow.invitation?.token;
+  if (!token || !caseRow.candidateEmail?.trim()) return;
+  const url = getInvitationUrl(token);
+  const rejected = caseRow.portal.documents.filter((d) => d.verifyStatus === "rejected");
+  const names = rejected.map((d) => d.fileName).filter(Boolean).join(", ") || "document(s)";
+  const subject = encodeURIComponent("Action required: re-upload onboarding document");
+  const body = encodeURIComponent(
+    `Hi ${caseRow.candidateName},\n\nHR has rejected the following onboarding document(s): ${names}.\n\nPlease open this secure link, replace the rejected file(s) under Upload Documents, and submit again:\n\n${url}\n\nThank you.`,
+  );
+  window.open(`mailto:${caseRow.candidateEmail}?subject=${subject}&body=${body}`, "_blank");
+}
+
+export async function copyInvitationLink(caseRow: OnboardingCase): Promise<boolean> {
+  const token = caseRow.invitation?.token;
+  if (!token || typeof navigator === "undefined" || !navigator.clipboard) return false;
+  try {
+    await navigator.clipboard.writeText(getInvitationUrl(token));
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 export function markReadyToJoin(caseId: string): OnboardingCase | null {
@@ -757,7 +835,66 @@ export function markReadyToJoin(caseId: string): OnboardingCase | null {
   return next;
 }
 
-export function approveCandidateReview(caseId: string): OnboardingCase | null {
+export type OnboardingAssignmentInput = {
+  joiningDate: string;
+  entityId?: string;
+  entityName?: string;
+  department: string;
+  designation: string;
+  reportingManager: string;
+  branch: string;
+  branchId?: string;
+  employmentType: string;
+  probationPeriodDays: string;
+  shift?: string;
+  leavePolicy?: string;
+};
+
+/** HR updates assignment fields on Overview (after doc review / before complete). */
+export async function updateOnboardingAssignment(
+  caseId: string,
+  input: OnboardingAssignmentInput,
+): Promise<OnboardingCase | null> {
+  const c = getCaseById(caseId);
+  if (!c) return null;
+  if (["joined", "cancelled"].includes(c.status)) {
+    throw new Error("Cannot change assignment after the employee is joined or the case is cancelled.");
+  }
+  const days = Number(input.probationPeriodDays);
+  if (!Number.isFinite(days) || days < 0 || days > 730) {
+    throw new Error("Probation period must be between 0 and 730 days.");
+  }
+  if (!input.joiningDate.trim()) throw new Error("Joining date is required.");
+  if (!input.designation.trim()) throw new Error("Designation is required.");
+  if (!input.department.trim()) throw new Error("Department is required.");
+  if (!input.employmentType.trim()) throw new Error("Employment type is required.");
+
+  const next = upsertCase({
+    ...c,
+    joiningDate: input.joiningDate.trim(),
+    entityId: input.entityId || c.entityId,
+    entityName: input.entityName || c.entityName,
+    department: input.department.trim(),
+    designation: input.designation.trim(),
+    reportingManager: input.reportingManager.trim(),
+    branch: input.branch.trim(),
+    branchId: input.branchId?.trim() || undefined,
+    employmentType: input.employmentType.trim(),
+    probationPeriodDays: String(Math.round(days)),
+    shift: input.shift?.trim() ?? c.shift,
+    leavePolicy: input.leavePolicy?.trim() ?? c.leavePolicy,
+  });
+  if (!next) return null;
+  appendOnboardingAudit({
+    caseId,
+    action: "update_assignment",
+    detail: `Assignment updated · ${next.designation} · ${next.department} · ${next.employmentType} · probation ${next.probationPeriodDays}d`,
+    actor: actor(),
+  });
+  return syncCaseToApi(next);
+}
+
+export async function approveCandidateReview(caseId: string): Promise<OnboardingCase | null> {
   const c = getCaseById(caseId);
   if (!c) return null;
   if (!c.portal.submittedAt) {
@@ -769,19 +906,28 @@ export function approveCandidateReview(caseId: string): OnboardingCase | null {
   }
   const rejected = c.portal.documents.filter((d) => d.verifyStatus === "rejected");
   if (rejected.length > 0) {
-    throw new Error("Some documents were rejected — ask the candidate to re-upload.");
+    throw new Error(
+      "Some documents were rejected — the candidate has been asked to re-upload. Wait for their re-submission.",
+    );
   }
-  const today = new Date().toISOString().slice(0, 10);
-  const nextStatus: OnboardingCaseStatus =
-    c.joiningDate && c.joiningDate > today ? "ready_to_join" : "ready_to_join";
-  const next = upsertCase({ ...c, status: nextStatus });
+  if (!c.department?.trim() || !c.designation?.trim()) {
+    throw new Error("Set department and designation on Overview before approving.");
+  }
+  if (!c.joiningDate?.trim()) {
+    throw new Error("Set joining date on Overview before approving.");
+  }
+  if (!c.employmentType?.trim()) {
+    throw new Error("Set employment type on Overview before approving.");
+  }
+  const next = upsertCase({ ...c, status: "ready_to_join" });
+  if (!next) return null;
   appendOnboardingAudit({
     caseId,
     action: "approve_review",
     detail: "HR approved candidate information and documents",
     actor: actor(),
   });
-  return next;
+  return syncCaseToApi(next);
 }
 
 /** Create employee profile after HR approval. Activates immediately if joining date has passed. */
@@ -846,8 +992,8 @@ export async function completeOnboarding(
           employee_code: employeeCode,
           shift_id: opts?.shiftId || null,
           management_group_id: opts?.managementGroupId || null,
-          start_probation: true,
-          probation_days: 90,
+          start_probation: (Number(c.probationPeriodDays) || 90) > 0,
+          probation_days: Number(c.probationPeriodDays) || 90,
           mark_payroll_eligible: true,
         });
       }
@@ -1018,8 +1164,8 @@ export async function activateOnboardingEmployee(
         employee_code: employeeCode,
         shift_id: opts?.shiftId || null,
         management_group_id: opts?.managementGroupId || c.managementGroupId || null,
-        start_probation: true,
-        probation_days: 90,
+        start_probation: (Number(c.probationPeriodDays) || 90) > 0,
+        probation_days: Number(c.probationPeriodDays) || 90,
         mark_payroll_eligible: true,
       });
 

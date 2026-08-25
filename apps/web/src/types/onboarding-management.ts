@@ -241,9 +241,13 @@ export type OnboardingCase = {
   designation: string;
   reportingManager: string;
   branch: string;
+  /** Org Setup → Branches row id */
+  branchId?: string;
   shift: string;
   leavePolicy: string;
   employmentType: string;
+  /** Probation length in days (applied on activate). Default 90. */
+  probationPeriodDays?: string;
   managementGroupId?: string;
   managementGroupName?: string;
   employeeId?: string;

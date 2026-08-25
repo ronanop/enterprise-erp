@@ -20,19 +20,17 @@ import {
 import { cn } from "@/lib/utils";
 import type { NamedCount } from "@/types/hr-executive-dashboard";
 
-/** Premium ERP chart palette — teal / slate / amber (no purple/pink gradients). */
+/** Premium chart palette — purple, teal, green, orange, blue, pink. */
 export const HR_CHART_COLORS = [
-  "#0F766E",
-  "#0891B2",
-  "#2563EB",
-  "#D97706",
-  "#DC2626",
-  "#475569",
-  "#059669",
-  "#0E7490",
+  "#9B5BB8",
+  "#00BBAA",
+  "#01BD7E",
+  "#FF8904",
+  "#155DFD",
+  "#FF2057",
 ] as const;
 
-const FUNNEL_COLORS = ["#0F766E", "#0D9488", "#14B8A6", "#2DD4BF", "#5EEAD4"];
+const FUNNEL_COLORS = ["#9B5BB8", "#00BBAA", "#01BD7E", "#FF8904", "#155DFD"];
 
 type FormatFn = (n: number) => string;
 
@@ -63,8 +61,8 @@ function ChartShell({
   return (
     <div
       className={cn(
-        "group relative rounded-2xl border border-border/60 bg-card p-4 shadow-sm",
-        "transition-[box-shadow,border-color] duration-200 hover:border-primary/25 hover:shadow-md",
+        "group relative flex h-full min-h-0 flex-col overflow-hidden rounded-2xl border border-border bg-card p-4 shadow-sm",
+        "transition-[box-shadow,border-color] duration-200 hover:border-primary/30 hover:shadow-md",
         className,
       )}
     >
@@ -72,7 +70,7 @@ function ChartShell({
         className="pointer-events-none absolute inset-x-0 top-0 h-px overflow-hidden bg-gradient-to-r from-transparent via-primary/40 to-transparent"
         aria-hidden
       />
-      <div className="mb-3 flex items-start justify-between gap-3">
+      <div className="mb-3 flex shrink-0 items-start justify-between gap-3">
         <div className="min-w-0">
           <h3 className="text-sm font-semibold tracking-tight text-foreground">{title}</h3>
           {subtitle ? (
@@ -81,7 +79,7 @@ function ChartShell({
         </div>
         {legend}
       </div>
-      {children}
+      <div className="min-h-0 flex-1">{children}</div>
     </div>
   );
 }
@@ -89,12 +87,18 @@ function ChartShell({
 function EmptyChart({ height = 220 }: { height?: number }) {
   return (
     <div
-      className="flex items-center justify-center text-xs text-muted-foreground"
-      style={{ height }}
+      className="flex h-full min-h-[120px] items-center justify-center text-xs text-muted-foreground"
+      style={height ? { minHeight: Math.min(height, 180) } : undefined}
     >
       No data available
     </div>
   );
+}
+
+function truncateLabel(value: string, max = 14): string {
+  const s = String(value ?? "");
+  if (s.length <= max) return s;
+  return `${s.slice(0, max - 1)}…`;
 }
 
 function ChartTooltip({
@@ -153,10 +157,7 @@ export function PremiumAreaChart({
   }
   return (
     <ChartShell title={title} subtitle={subtitle}>
-      <div
-        className="w-full motion-safe:animate-in motion-safe:fade-in-0 motion-safe:duration-300"
-        style={{ height: chartH }}
-      >
+      <div className="h-full w-full min-h-0">
         <ResponsiveContainer width="100%" height="100%">
           <AreaChart data={rows} margin={{ top: 8, right: 8, left: -12, bottom: 0 }}>
             <defs>
@@ -188,6 +189,7 @@ export function PremiumAreaChart({
               strokeWidth={2.25}
               fill={`url(#area-${gradId})`}
               activeDot={{ r: 4, strokeWidth: 0 }}
+              isAnimationActive={false}
             />
           </AreaChart>
         </ResponsiveContainer>
@@ -239,10 +241,7 @@ export function PremiumBarChart({
         ) : undefined
       }
     >
-      <div
-        className="w-full motion-safe:animate-in motion-safe:fade-in-0 motion-safe:duration-300"
-        style={{ height: chartHeight }}
-      >
+      <div className="h-full w-full min-h-0">
         <ResponsiveContainer width="100%" height="100%">
           <BarChart
             data={rows}
@@ -250,8 +249,8 @@ export function PremiumBarChart({
             margin={{
               top: 8,
               right: showValues ? 36 : 8,
-              left: horizontal ? 4 : -12,
-              bottom: 0,
+              left: horizontal ? 8 : -12,
+              bottom: 4,
             }}
           >
             <CartesianGrid
@@ -273,10 +272,11 @@ export function PremiumBarChart({
                 <YAxis
                   type="category"
                   dataKey="name"
-                  width={96}
-                  tick={{ fontSize: 12, fill: "var(--foreground)", fontWeight: 500 }}
+                  width={118}
+                  tick={{ fontSize: 11, fill: "var(--foreground)", fontWeight: 500 }}
                   axisLine={false}
                   tickLine={false}
+                  tickFormatter={(v) => truncateLabel(String(v), 15)}
                 />
               </>
             ) : (
@@ -298,7 +298,13 @@ export function PremiumBarChart({
               </>
             )}
             <Tooltip content={<ChartTooltip formatValue={fmt} />} cursor={{ fill: "var(--muted)", opacity: 0.45 }} />
-            <Bar dataKey="value" name="Employees" radius={horizontal ? [0, 6, 6, 0] : [6, 6, 0, 0]} maxBarSize={36}>
+            <Bar
+              dataKey="value"
+              name="Employees"
+              radius={horizontal ? [0, 6, 6, 0] : [6, 6, 0, 0]}
+              maxBarSize={36}
+              isAnimationActive={false}
+            >
               {rows.map((_, i) => (
                 <Cell key={rows[i].name} fill={HR_CHART_COLORS[i % HR_CHART_COLORS.length]} />
               ))}
@@ -354,11 +360,8 @@ export function PremiumDonutChart({
         </span>
       }
     >
-      <div
-        className="grid grid-cols-[1.1fr_0.9fr] items-center gap-2"
-        style={{ height: chartH }}
-      >
-        <div className="relative h-full min-h-[180px] w-full motion-safe:animate-in motion-safe:fade-in-0 motion-safe:duration-300">
+      <div className="flex h-full min-h-0 flex-col gap-3 sm:grid sm:grid-cols-[1.15fr_0.85fr] sm:items-center sm:gap-3">
+        <div className="relative min-h-[160px] w-full flex-1">
           <ResponsiveContainer width="100%" height="100%">
             <PieChart>
               <Pie
@@ -367,11 +370,12 @@ export function PremiumDonutChart({
                 nameKey="name"
                 cx="50%"
                 cy="50%"
-                innerRadius="58%"
-                outerRadius="82%"
+                innerRadius="55%"
+                outerRadius="80%"
                 paddingAngle={2}
                 stroke="var(--card)"
                 strokeWidth={2}
+                isAnimationActive={false}
               >
                 {rows.map((_, i) => (
                   <Cell key={rows[i].name} fill={HR_CHART_COLORS[i % HR_CHART_COLORS.length]} />
@@ -387,7 +391,7 @@ export function PremiumDonutChart({
             </p>
           </div>
         </div>
-        <ul className="space-y-2 pr-1">
+        <ul className="shrink-0 space-y-1.5 sm:pr-1">
           {rows.map((r, i) => {
             const pct = total ? Math.round((r.value / total) * 100) : 0;
             return (
@@ -429,7 +433,7 @@ export function PremiumFunnelChart({
 
   return (
     <ChartShell title={title} subtitle={subtitle}>
-      <div className="flex min-h-[220px] flex-col items-center justify-center gap-1.5 py-1 motion-safe:animate-in motion-safe:fade-in-0 motion-safe:duration-300">
+      <div className="flex min-h-[220px] flex-col items-center justify-center gap-1.5 py-1">
         {data.map((d, i) => {
           // Keep a clear funnel taper while ensuring labels fit.
           const widthPct = Math.max(46, Math.round((d.value / max) * 100));

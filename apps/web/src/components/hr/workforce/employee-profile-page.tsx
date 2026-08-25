@@ -50,6 +50,8 @@ import {
 import { toast, SetupToastHost } from "@/components/hr/setup/setup-toast";
 import { PageHeader } from "@/components/layout/page-header";
 import { Button } from "@/components/ui/button";
+import { SearchableSelect } from "@/components/ui/searchable-select";
+import { COUNTRY_OPTIONS, INDIA_STATE_OPTIONS } from "@/config/geo-options";
 import {
   getEmployeeById,
   loadEmployeeDirectory,
@@ -543,9 +545,16 @@ export function EmployeeProfilePage({ employeeId }: { employeeId: string }) {
         }
       />
 
-      <div className="flex flex-col gap-4 rounded-xl border border-border/70 bg-card p-4 shadow-sm md:flex-row md:items-start">
-        <EmsAvatar name={record.displayName} photoUrl={record.profilePhotoDataUrl} size="lg" />
-        <div className="min-w-0 flex-1 grid gap-2 sm:grid-cols-2 lg:grid-cols-3 text-sm">
+      <div className="flex flex-col overflow-hidden rounded-xl border border-border/70 bg-card shadow-sm sm:flex-row">
+        <div className="flex shrink-0 items-center justify-center p-4 sm:border-r sm:border-border/70">
+          <EmsAvatar
+            name={record.displayName}
+            photoUrl={record.profilePhotoDataUrl}
+            size="xl"
+            shape="rounded"
+          />
+        </div>
+        <div className="min-w-0 flex-1 grid gap-2 p-4 sm:grid-cols-2 lg:grid-cols-3 text-sm">
           <Info label="Employee ID" value={record.employeeCode} />
           <Info
             label="Legal entity"
@@ -567,7 +576,7 @@ export function EmployeeProfilePage({ employeeId }: { employeeId: string }) {
 
       <div className="min-h-[200px] rounded-xl border border-border/70 bg-card p-4 shadow-sm">
         {tab === "overview" ? (
-          <OverviewTab record={record} linked={linked} linkedLoading={linkedLoading} />
+          <OverviewTab record={record} />
         ) : null}
 
         {tab === "employment" ? (
@@ -1239,8 +1248,24 @@ function AddressFields({
       <Field label="Address line 1" required={required} value={value.line1} onChange={(line1) => onChange({ ...value, line1 })} />
       <Field label="Address line 2" value={value.line2 ?? ""} onChange={(line2) => onChange({ ...value, line2 })} />
       <Field label="City" required={required} value={value.city} onChange={(city) => onChange({ ...value, city })} />
-      <Field label="State" required={required} value={value.state} onChange={(state) => onChange({ ...value, state })} />
-      <Field label="Country" value={value.country} onChange={(country) => onChange({ ...value, country })} />
+      <SetupField label="State" required={required}>
+        <SearchableSelect
+          value={value.state}
+          onChange={(state) => onChange({ ...value, state })}
+          options={INDIA_STATE_OPTIONS}
+          placeholder="Select state…"
+          searchPlaceholder="Search state…"
+        />
+      </SetupField>
+      <SetupField label="Country">
+        <SearchableSelect
+          value={value.country}
+          onChange={(country) => onChange({ ...value, country })}
+          options={COUNTRY_OPTIONS}
+          placeholder="Select country…"
+          searchPlaceholder="Search country…"
+        />
+      </SetupField>
       <Field label="Pincode" required={required} value={value.pincode} onChange={(pincode) => onChange({ ...value, pincode })} />
     </EmsFormGrid>
   );
@@ -1766,18 +1791,10 @@ function OverviewField({
 
 function OverviewTab({
   record,
-  linked,
-  linkedLoading,
 }: {
   record: EmployeeRecord;
-  linked: LinkedData | null;
-  linkedLoading: boolean;
 }) {
   const p = record.extension.personal;
-  const docCount =
-    (record.extension.documents?.length ?? 0) + (linked?.hrDocuments.length ?? 0);
-  const attendanceCount = linkedLoading ? null : (linked?.attendance.length ?? 0);
-  const leaveCount = linkedLoading ? null : (linked?.leaveRequests.length ?? 0);
 
   const fullAddress = formatAddressLine([
     p.currentAddress.line1,
@@ -1798,29 +1815,6 @@ function OverviewTab({
 
   return (
     <div className="space-y-4 text-sm">
-      <div>
-        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-          At a glance
-        </p>
-        <div className="mt-2 grid gap-3 sm:grid-cols-3">
-          {[
-            { label: "Attendance records", value: attendanceCount },
-            { label: "Leave requests", value: leaveCount },
-            { label: "Documents on file", value: docCount },
-          ].map((stat) => (
-            <div
-              key={stat.label}
-              className="rounded-xl border border-border/70 bg-muted/25 px-4 py-3"
-            >
-              <p className="text-[11px] font-medium text-muted-foreground">{stat.label}</p>
-              <p className="mt-1 text-2xl font-semibold tabular-nums tracking-tight text-foreground">
-                {stat.value == null ? "…" : stat.value}
-              </p>
-            </div>
-          ))}
-        </div>
-      </div>
-
       <div className="grid items-stretch gap-4 lg:grid-cols-2">
         <div className="flex flex-col gap-4">
           <OverviewCard title="Personal">

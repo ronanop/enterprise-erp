@@ -116,7 +116,7 @@ export function LeaveTypeEditDrawer({
   const [isPaid, setIsPaid] = useState(true);
   const [requiresAttachment, setRequiresAttachment] = useState(false);
   const [status, setStatus] = useState("active");
-  const [color, setColor] = useState("#059669");
+  const [color, setColor] = useState("#9B5BB8");
   const [carryForwardAllowed, setCarryForwardAllowed] = useState(true);
   const [approvalRequired, setApprovalRequired] = useState(true);
   const [genderRestriction, setGenderRestriction] = useState("");

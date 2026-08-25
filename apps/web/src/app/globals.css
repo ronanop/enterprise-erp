@@ -39,6 +39,16 @@
   --color-popover: var(--popover);
   --color-card-foreground: var(--card-foreground);
   --color-card: var(--card);
+  --color-hrms-lavender: #F4EDFB;
+  --color-hrms-mint: #ECFDF5;
+  --color-hrms-peach: #FFFBEA;
+  --color-hrms-blue: #EEF6FF;
+  --color-hrms-pink: #FFF2F2;
+  --color-hrms-success: #00A866;
+  --color-hrms-warning: #FF8904;
+  --color-hrms-danger: #FF2057;
+  --color-hrms-info: #155DFD;
+  --color-hrms-teal: #00BBAA;
   --radius-sm: calc(var(--radius) * 0.6);
   --radius-md: calc(var(--radius) * 0.8);
   --radius-lg: var(--radius);
@@ -139,6 +149,233 @@
   ::selection {
     background: oklch(0.72 0.1 190 / 28%);
   }
+}
+
+/* ── HRMS only: Premium Neo-Brutalist (scoped to .hrms-theme) ── */
+.hrms-theme {
+  --background: #FAFAFA;
+  --foreground: #0A0A0A;
+  --card: #FFFFFF;
+  --card-foreground: #0A0A0A;
+  --popover: #FFFFFF;
+  --popover-foreground: #0A0A0A;
+  --primary: #9B5BB8;
+  --primary-foreground: #FFFFFF;
+  --secondary: #F4EDFB;
+  --secondary-foreground: #0A0A0A;
+  --muted: #F4F4F5;
+  --muted-foreground: #666666;
+  --accent: #F4EDFB;
+  --accent-foreground: #0A0A0A;
+  --destructive: #FF2057;
+  --border: #EAEAEA;
+  --input: #EAEAEA;
+  --ring: #9B5BB8;
+  --chart-1: #9B5BB8;
+  --chart-2: #00BBAA;
+  --chart-3: #01BD7E;
+  --chart-4: #FF8904;
+  --chart-5: #155DFD;
+  --radius: 0.75rem;
+  --sidebar: #0A0A0A;
+  --sidebar-foreground: #FFFFFF;
+  --sidebar-primary: #9B5BB8;
+  --sidebar-primary-foreground: #FFFFFF;
+  --sidebar-accent: #2A2A2A;
+  --sidebar-accent-foreground: #FFFFFF;
+  --sidebar-border: #222222;
+  --sidebar-ring: #9B5BB8;
+  --hrms-card-shadow: 0 1px 2px rgb(10 10 10 / 0.04), 0 8px 24px rgb(10 10 10 / 0.04);
+  background-color: var(--background);
+  background-image: radial-gradient(
+    900px 280px at 12% -8%,
+    color-mix(in srgb, #9B5BB8 7%, transparent),
+    transparent 70%
+  );
+  color: var(--foreground);
+}
+
+.dark .hrms-theme,
+.hrms-theme.dark {
+  --background: #0A0A0A;
+  --foreground: #FFFFFF;
+  --card: #282828;
+  --card-foreground: #FFFFFF;
+  --popover: #282828;
+  --popover-foreground: #FFFFFF;
+  --primary: #9B5BB8;
+  --primary-foreground: #FFFFFF;
+  --secondary: #282828;
+  --secondary-foreground: #FFFFFF;
+  --muted: #1F1F1F;
+  --muted-foreground: #AEB6C3;
+  --accent: #32243A;
+  --accent-foreground: #FFFFFF;
+  --destructive: #FF2057;
+  --border: rgb(255 255 255 / 10%);
+  --input: rgb(255 255 255 / 12%);
+  --ring: #9B5BB8;
+  --sidebar: #0A0A0A;
+  --sidebar-foreground: #FFFFFF;
+  --sidebar-primary: #9B5BB8;
+  --sidebar-primary-foreground: #FFFFFF;
+  --sidebar-accent: #2A2A2A;
+  --sidebar-accent-foreground: #FFFFFF;
+  --sidebar-border: #222222;
+  --sidebar-ring: #9B5BB8;
+  --hrms-card-shadow: 0 1px 2px rgb(0 0 0 / 0.4), 0 10px 28px rgb(0 0 0 / 0.35);
+  background-color: var(--background);
+  background-image: radial-gradient(
+    900px 280px at 12% -8%,
+    color-mix(in srgb, #9B5BB8 12%, transparent),
+    transparent 70%
+  );
+}
+
+.hrms-theme ::selection {
+  background: color-mix(in srgb, #9B5BB8 28%, transparent);
+  color: var(--foreground);
+}
+
+.hrms-theme aside {
+  background-color: #0A0A0A;
+  background-image: none;
+  color: #ffffff;
+  border-color: #222222;
+}
+
+.hrms-theme aside .erp-scroll {
+  scrollbar-color: #2a2a2a #0a0a0a;
+}
+
+.hrms-theme aside .erp-scroll::-webkit-scrollbar-track {
+  background: #0a0a0a;
+}
+
+.hrms-theme aside .erp-scroll::-webkit-scrollbar-thumb {
+  background: #2a2a2a;
+}
+
+.hrms-theme [data-slot="card"] {
+  border-radius: var(--radius-xl);
+  border-color: var(--border);
+  box-shadow: var(--hrms-card-shadow);
+}
+
+.hrms-theme [data-slot="button"] {
+  font-weight: 600;
+}
+
+.hrms-theme [data-slot="button"]:where([class*="bg-primary"]):hover {
+  filter: brightness(1.06);
+}
+
+.hrms-theme .erp-scroll {
+  scrollbar-color: #C8C8C8 #F4F4F5;
+}
+
+.dark .hrms-theme .erp-scroll,
+.hrms-theme.dark .erp-scroll {
+  scrollbar-color: #AEB6C3 #282828;
+}
+
+.hrms-theme .erp-scroll::-webkit-scrollbar-track {
+  background: var(--muted);
+}
+
+.hrms-theme .erp-scroll::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--muted-foreground) 45%, transparent);
+}
+
+.hrms-theme .erp-scroll::-webkit-scrollbar-thumb:hover {
+  background: var(--muted-foreground);
+}
+
+.hrms-theme.dark .bg-hrms-lavender,
+.hrms-theme.dark [class*="bg-hrms-lavender"] {
+  background-color: color-mix(in srgb, #9B5BB8 22%, #282828);
+}
+.hrms-theme.dark .bg-hrms-mint,
+.hrms-theme.dark [class*="bg-hrms-mint"] {
+  background-color: color-mix(in srgb, #00A866 18%, #282828);
+}
+.hrms-theme.dark .bg-hrms-peach,
+.hrms-theme.dark [class*="bg-hrms-peach"] {
+  background-color: color-mix(in srgb, #FF8904 16%, #282828);
+}
+.hrms-theme.dark .bg-hrms-blue,
+.hrms-theme.dark [class*="bg-hrms-blue"] {
+  background-color: color-mix(in srgb, #155DFD 18%, #282828);
+}
+.hrms-theme.dark .bg-hrms-pink,
+.hrms-theme.dark [class*="bg-hrms-pink"] {
+  background-color: color-mix(in srgb, #FF2057 16%, #282828);
+}
+
+/* Remap leftover Tailwind status utilities inside HRMS only */
+.hrms-theme [class*="bg-emerald-50"],
+.hrms-theme [class*="bg-emerald-100"],
+.hrms-theme [class*="bg-emerald-200"] {
+  background-color: #ECFDF5;
+}
+.hrms-theme [class*="bg-emerald-500"],
+.hrms-theme [class*="bg-emerald-600"] {
+  background-color: #00A866;
+}
+.hrms-theme [class*="bg-amber-50"],
+.hrms-theme [class*="bg-amber-100"],
+.hrms-theme [class*="bg-amber-200"] {
+  background-color: #FFFBEA;
+}
+.hrms-theme [class*="bg-amber-500"] {
+  background-color: #FF8904;
+}
+.hrms-theme [class*="bg-sky-50"],
+.hrms-theme [class*="bg-sky-100"],
+.hrms-theme [class*="bg-sky-200"] {
+  background-color: #EEF6FF;
+}
+.hrms-theme [class*="bg-sky-500"],
+.hrms-theme [class*="bg-sky-600"] {
+  background-color: #155DFD;
+}
+.hrms-theme [class*="bg-teal-50"],
+.hrms-theme [class*="bg-teal-100"] {
+  background-color: #ECFDF5;
+}
+.hrms-theme [class*="bg-red-50"],
+.hrms-theme [class*="bg-red-100"] {
+  background-color: #FFF2F2;
+}
+.hrms-theme [class*="bg-red-400"],
+.hrms-theme [class*="bg-red-500"] {
+  background-color: #FF2057;
+}
+.hrms-theme [class*="text-emerald-"] {
+  color: #00A866;
+}
+.hrms-theme [class*="text-amber-"] {
+  color: #FF8904;
+}
+.hrms-theme [class*="text-sky-"] {
+  color: #155DFD;
+}
+.hrms-theme [class*="text-teal-"] {
+  color: #00BBAA;
+}
+.hrms-theme [class*="border-emerald-"] {
+  border-color: #ECFDF5;
+}
+.hrms-theme [class*="border-amber-"] {
+  border-color: #FFFBEA;
+}
+.hrms-theme [class*="border-sky-"],
+.hrms-theme [class*="border-teal-"] {
+  border-color: #EEF6FF;
+}
+.hrms-theme [class*="border-red-200"],
+.hrms-theme [class*="border-red-300"] {
+  border-color: #FFF2F2;
 }
 
 /* Soft scrollbars for dense ERP lists — always visible, aligned to the scroll container */

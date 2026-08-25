@@ -30,8 +30,10 @@ import { HrStatusBadge } from "@/components/hr/hr-primitives";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 import { RowActionsItem, RowActionsMenu } from "@/components/ui/row-actions-menu";
 import { nextCode, type HrSetupTab } from "@/config/hr-setup";
+import { getStoredOrgContext } from "@/lib/org-context-storage";
 import { ApiClientError, resourceService } from "@/services/api-client";
 import {
   archiveLocal,
@@ -52,7 +54,16 @@ import { cn } from "@/lib/utils";
 export type FieldDef = {
   key: string;
   label: string;
-  type?: "text" | "number" | "date" | "time" | "select" | "textarea" | "checkbox" | "equipment_list";
+  type?:
+    | "text"
+    | "number"
+    | "date"
+    | "time"
+    | "select"
+    | "searchable"
+    | "textarea"
+    | "checkbox"
+    | "equipment_list";
   required?: boolean;
   readOnly?: boolean;
   options?: { value: string; label: string }[];
@@ -166,6 +177,21 @@ function formatAuditWho(value: unknown, usersById: Record<string, string>): stri
   }
   // UUID → short readable fallback
   if (/^[0-9a-f-]{36}$/i.test(id)) return `User ${id.slice(0, 8)}…`;
+  return id;
+}
+
+function resolveEmployeeLabel(
+  value: unknown,
+  employees: { value: string; label: string }[],
+): string {
+  if (value == null || value === "" || value === "—") return "—";
+  const id = String(value).trim();
+  const found = employees.find((e) => e.value === id);
+  if (found) {
+    // Label is often "Name · CODE" — show name only in the grid
+    return found.label.split(" · ")[0]?.trim() || found.label;
+  }
+  if (/^[0-9a-f-]{36}$/i.test(id)) return "—";
   return id;
 }
 
@@ -328,16 +354,41 @@ export function SetupEntityPanel({
   }
 
   function openCreate() {
-    const codes = rows.map((r) => String(r[codeKey] ?? r.code ?? ""));
+    const codes = rows.flatMap((r) =>
+      [r[codeKey], r.code, r.branch_code, r.department_code, r.designation_code]
+        .map((v) => String(v ?? ""))
+        .filter(Boolean),
+    );
     const prefix = tab.codePrefix ?? "CFG";
     const initial: Record<string, string> = {};
+    const usedCodes = [...codes];
     for (const f of fields) {
-      if (f.key === codeKey || f.key === "code" || f.key.endsWith("_code") || f.key === "document_number") {
-        initial[f.key] = nextCode(prefix, codes);
+      // Only mint the entity identity code — never state_code / country_code / etc.
+      const isIdentityCode =
+        f.key === codeKey || f.key === "code" || f.key === "document_number";
+      if (isIdentityCode) {
+        const minted = nextCode(prefix, usedCodes);
+        initial[f.key] = minted;
+        usedCodes.push(minted);
       } else if (f.type === "checkbox") {
         initial[f.key] = "false";
       } else if (f.key === "status") {
         initial[f.key] = "active";
+      } else if (f.key === "country_code" && f.type === "searchable") {
+        initial[f.key] = "IN";
+      } else if (f.key === "company_id") {
+        // Prefer the signed-in org company so created branches appear in the list
+        const sessionCompanyId = getStoredOrgContext()?.companyId
+          ? String(getStoredOrgContext()?.companyId)
+          : "";
+        const companies = orgLookups.companies;
+        if (sessionCompanyId && companies.some((c) => c.value === sessionCompanyId)) {
+          initial[f.key] = sessionCompanyId;
+        } else if (f.autoDefault && companies[0]) {
+          initial[f.key] = companies[0].value;
+        } else {
+          initial[f.key] = "";
+        }
       } else if (f.type === "time" && f.key === "start_time") {
         initial[f.key] = "09:00";
       } else if (f.type === "time" && f.key === "end_time") {
@@ -438,7 +489,21 @@ export function SetupEntityPanel({
         }
       } else if (tab.apiPath) {
         if (mode === "create") {
-          const body = buildCreateBody ? buildCreateBody(form) : form;
+          // Avoid duplicate identity codes (e.g. BR-001 already used)
+          let createForm = { ...form };
+          if (codeKey && createForm[codeKey]) {
+            const existing = new Set(
+              rows.flatMap((r) =>
+                [r[codeKey], r.code].map((v) => String(v ?? "").toUpperCase()).filter(Boolean),
+              ),
+            );
+            let code = String(createForm[codeKey]);
+            if (existing.has(code.toUpperCase())) {
+              code = nextCode(tab.codePrefix ?? "CFG", Array.from(existing));
+              createForm = { ...createForm, [codeKey]: code };
+            }
+          }
+          const body = buildCreateBody ? buildCreateBody(createForm) : createForm;
           await resourceService.create(tab.apiPath, body);
         } else if (active) {
           const body = buildUpdateBody ? buildUpdateBody(form) : form;
@@ -714,6 +779,18 @@ export function SetupEntityPanel({
                                 <HrStatusBadge status={cell(row, "status")} />
                               </div>
                             )
+                            : c.key === "head"
+                              ? (() => {
+                                  const label = resolveEmployeeLabel(
+                                    row.head ?? row.head_employee_id,
+                                    orgLookups.employees,
+                                  );
+                                  return (
+                                    <span className="block truncate" title={label}>
+                                      {label}
+                                    </span>
+                                  );
+                                })()
                             : (
                               <span className="block truncate" title={cell(row, c.key, ...nameKeys)}>
                                 {cell(row, c.key, ...nameKeys)}
@@ -860,6 +937,17 @@ export function SetupEntityPanel({
                     disabled={readOnly || f.readOnly}
                     onChange={(e) => setForm((prev) => ({ ...prev, [f.key]: e.target.value }))}
                     placeholder={f.placeholder}
+                  />
+                ) : f.type === "searchable" ? (
+                  <SearchableSelect
+                    value={form[f.key] ?? ""}
+                    disabled={readOnly || f.readOnly}
+                    options={resolveFieldOptions(f)}
+                    placeholder={f.placeholder || (f.required ? "Select…" : "None")}
+                    searchPlaceholder={`Search ${f.label.toLowerCase()}…`}
+                    onChange={(value) =>
+                      setForm((prev) => ({ ...prev, [f.key]: value }))
+                    }
                   />
                 ) : f.type === "select" || f.optionsSource ? (
                   <SetupSelect

@@ -161,7 +161,7 @@ export function OnboardingDocumentRow({
           <Eye className="size-3" />
           View
         </Button>
-        {onVerify ? (
+        {doc.verifyStatus === "pending" && onVerify ? (
           <Button
             type="button"
             size="sm"
@@ -176,7 +176,7 @@ export function OnboardingDocumentRow({
             Verify
           </Button>
         ) : null}
-        {onReject ? (
+        {doc.verifyStatus === "pending" && onReject ? (
           <Button
             type="button"
             size="sm"

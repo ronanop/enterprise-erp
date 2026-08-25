@@ -28,6 +28,7 @@ import {
   type HrSetupTabId,
 } from "@/config/hr-setup";
 import { cell, type SetupRow } from "@/services/hr-setup-service";
+import { COUNTRY_CODE_OPTIONS, INDIA_STATE_CODE_OPTIONS } from "@/config/geo-options";
 import { cn } from "@/lib/utils";
 
 function mapBranch(row: SetupRow): SetupRow {
@@ -278,7 +279,6 @@ const TAB_CONFIG: Partial<Record<HrSetupTabId, TabConfig>> = {
     mapApiRow: mapBranch,
     columns: [
       { key: "name", label: "Branch Name" },
-      { key: "code", label: "Code" },
       { key: "location", label: "Location" },
       { key: "head", label: "Head" },
       { key: "status", label: "Status" },
@@ -302,8 +302,20 @@ const TAB_CONFIG: Partial<Record<HrSetupTabId, TabConfig>> = {
       ]},
       { key: "address_line1", label: "Address" },
       { key: "city", label: "City" },
-      { key: "state_code", label: "State" },
-      { key: "country_code", label: "Country", placeholder: "IN" },
+      {
+        key: "state_code",
+        label: "State",
+        type: "searchable",
+        options: INDIA_STATE_CODE_OPTIONS,
+        placeholder: "Select state…",
+      },
+      {
+        key: "country_code",
+        label: "Country",
+        type: "searchable",
+        options: COUNTRY_CODE_OPTIONS,
+        placeholder: "Select country…",
+      },
       {
         key: "head_employee_id",
         label: "Branch head",

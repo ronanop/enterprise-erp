@@ -82,16 +82,16 @@ export function LeaveCalendarView({
 
       <div className="mb-2 flex flex-wrap gap-3 text-[10px] text-muted-foreground">
         <span className="inline-flex items-center gap-1">
-          <span className="size-2 rounded-full bg-emerald-500" /> Approved
+          <span className="size-2 rounded-full bg-hrms-success" /> Approved
         </span>
         <span className="inline-flex items-center gap-1">
-          <span className="size-2 rounded-full bg-amber-500" /> Pending
+          <span className="size-2 rounded-full bg-hrms-warning" /> Pending
         </span>
         <span className="inline-flex items-center gap-1">
-          <span className="size-2 rounded-full bg-sky-500" /> Holiday
+          <span className="size-2 rounded-full bg-hrms-info" /> Holiday
         </span>
         <span className="inline-flex items-center gap-1">
-          <span className="size-2 rounded-full bg-slate-300" /> Weekend
+          <span className="size-2 rounded-full bg-muted-foreground/30" /> Weekend
         </span>
       </div>
 
@@ -124,10 +124,10 @@ export function LeaveCalendarView({
               type="button"
               className={cn(
                 "cursor-pointer flex min-h-[3.25rem] flex-col items-center justify-center rounded-lg border p-1 text-xs transition-colors hover:bg-muted/50",
-                isHol && "border-sky-200 bg-sky-50",
+                isHol && "border-hrms-blue bg-hrms-blue",
                 isWe && !isHol && "bg-muted/40",
-                approved && "border-emerald-200 bg-emerald-50",
-                pending && !approved && "border-amber-200 bg-amber-50",
+                approved && "border-hrms-mint bg-hrms-mint",
+                pending && !approved && "border-hrms-peach bg-hrms-peach",
               )}
               onClick={() => setDayDetail({ date: key, rows })}
             >

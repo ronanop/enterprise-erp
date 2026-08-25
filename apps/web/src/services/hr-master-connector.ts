@@ -30,6 +30,7 @@ export type HrMasterOption = {
   departmentId?: string;
   branchId?: string;
   branchName?: string;
+  companyId?: string;
   headEmployeeId?: string;
   shiftId?: string;
   shiftName?: string;

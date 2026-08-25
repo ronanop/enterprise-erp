@@ -107,7 +107,7 @@ function validateStep(
         if (age < 18) return "Candidate must be at least 18 years old.";
       }
       if (!portal.personal.maritalStatus.trim()) return "Marital status is required.";
-      if (!hasPassportPhoto(portal)) return "Passport photo is required.";
+      if (!hasPassportPhoto(portal)) return "Photo is required.";
       return null;
     }
     case "government_ids": {
@@ -147,6 +147,9 @@ function validateStep(
     case "documents": {
       if (!portal.documents.some((d) => d.kind === "resume" || d.typeCode === "DOC-RESUME")) {
         return "Please upload your Resume (required).";
+      }
+      if (portal.documents.some((d) => d.verifyStatus === "rejected")) {
+        return "Please re-upload documents marked as rejected before continuing.";
       }
       const excludedFromMandatory = new Set([
         "DOC-CHEQUE",
@@ -292,14 +295,21 @@ export function CandidateOnboardingPortal({ token }: { token: string }) {
         setLoading(false);
         return;
       }
-      if (c.portal.submittedAt || c.status === "joined") {
+      const hasRejected = c.portal.documents.some((d) => d.verifyStatus === "rejected");
+      if (c.status === "joined") {
+        setDone(true);
+      } else if (hasRejected) {
+        setDone(false);
+      } else if (c.portal.submittedAt) {
         setDone(true);
       }
       setCaseRow(c);
-      setPortal({
+      const nextPortal = {
         ...c.portal,
         educationMarks: c.portal.educationMarks ?? emptyEducationMarks(),
-      });
+        ...(hasRejected ? { currentStep: "documents" as const } : {}),
+      };
+      setPortal(nextPortal);
       setLoading(false);
     })();
     return () => {
@@ -311,6 +321,19 @@ export function CandidateOnboardingPortal({ token }: { token: string }) {
     void listPortalDocumentTypes().then(setDocTypes);
     setPolicyDocs(listActivePoliciesForPortal());
   }, []);
+
+  useEffect(() => {
+    if (!portal || portal.currentStep !== "documents") return;
+    const rejected = portal.documents.filter((d) => d.verifyStatus === "rejected");
+    if (!rejected.length) return;
+    const t = window.setTimeout(() => {
+      const target =
+        document.querySelector<HTMLElement>("[id^='doc-rejected-']") ||
+        document.getElementById("rejected-docs-banner");
+      target?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 150);
+    return () => window.clearTimeout(t);
+  }, [portal?.currentStep, portal?.documents]);
 
   const termsAccepted = Boolean(caseRow?.termsAcceptedAt);
 
@@ -486,7 +509,16 @@ export function CandidateOnboardingPortal({ token }: { token: string }) {
     if (!p) return false;
 
     const rest = options?.append
-      ? p.documents
+      ? p.documents.filter((d) => {
+          // Drop rejected files of the same type so a new upload replaces them
+          if (d.verifyStatus === "rejected") {
+            if (typeCode) {
+              return !(d.typeCode === typeCode || d.typeCode?.startsWith(`${typeCode}-`));
+            }
+            return d.kind !== kind;
+          }
+          return true;
+        })
       : p.documents.filter((d) => {
           if (typeCode) {
             if (d.typeCode === typeCode) return false;
@@ -767,6 +799,7 @@ export function CandidateOnboardingPortal({ token }: { token: string }) {
     [...portal.documents]
       .reverse()
       .find((d) => d.typeCode === typeCode || (!d.typeCode && d.kind === kind));
+  const rejectedDocs = portal.documents.filter((d) => d.verifyStatus === "rejected");
 
   return (
     <Shell>
@@ -832,6 +865,20 @@ export function CandidateOnboardingPortal({ token }: { token: string }) {
       <div className="rounded-xl border border-border/70 bg-card p-4 shadow-sm">
         <h2 className="text-sm font-semibold">{step.label}</h2>
         <p className="mb-4 text-xs text-muted-foreground">{step.description}</p>
+
+        {rejectedDocs.length > 0 ? (
+          <div
+            id="rejected-docs-banner"
+            className="mb-4 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2.5 text-xs text-amber-950"
+          >
+            <p className="font-semibold">Action required: re-upload rejected documents</p>
+            <p className="mt-1 text-amber-900/90">
+              HR rejected:{" "}
+              {rejectedDocs.map((d) => d.fileName).join(", ")}. Replace those files below, then
+              continue to Review and submit again.
+            </p>
+          </div>
+        ) : null}
 
         {step.id === "personal" ? (
           <div className="grid gap-3 sm:grid-cols-2">
@@ -999,7 +1046,7 @@ export function CandidateOnboardingPortal({ token }: { token: string }) {
             </div>
             <div className="sm:col-span-2">
               <FilePickField
-                label="Passport photo"
+                label="Photo"
                 required
                 accept="image/jpeg,image/png,image/webp,.jpg,.jpeg,.png,.webp"
                 fileName={
@@ -1010,18 +1057,18 @@ export function CandidateOnboardingPortal({ token }: { token: string }) {
                 }
                 hint={
                   photoUploading
-                    ? "Uploading passport photo…"
-                    : "Upload from this device (PC or phone) — max 300 KB, JPG or PNG only"
+                    ? "Uploading photo…"
+                    : "Upload passport size photo — max 300 KB, JPG or PNG only"
                 }
                 disabled={photoUploading}
                 onFile={async (file) => {
                   if (!file) return;
                   if (!file.type.startsWith("image/")) {
-                    setStepError("Passport photo must be an image file (JPG or PNG).");
+                    setStepError("Photo must be an image file (JPG or PNG).");
                     return;
                   }
                   if (file.size > MAX_PHOTO_BYTES) {
-                    setStepError("Passport photo must be under 300 KB.");
+                    setStepError("Photo must be under 300 KB.");
                     return;
                   }
                   setStepError(null);
@@ -1105,16 +1152,6 @@ export function CandidateOnboardingPortal({ token }: { token: string }) {
                 onChange={(e) =>
                   patchPortal({
                     governmentIds: { ...portal.governmentIds, uan: e.target.value },
-                  })
-                }
-              />
-            </SetupField>
-            <SetupField label="ESIC">
-              <SetupInput
-                value={portal.governmentIds.esic}
-                onChange={(e) =>
-                  patchPortal({
-                    governmentIds: { ...portal.governmentIds, esic: e.target.value },
                   })
                 }
               />
@@ -1292,41 +1329,62 @@ export function CandidateOnboardingPortal({ token }: { token: string }) {
                               (d) =>
                                 d.typeCode === t.code || d.typeCode?.startsWith(`${t.code}-`),
                             );
+                            const sectionRejected = files.some((d) => d.verifyStatus === "rejected");
                             return (
-                              <MultiFilePickField
+                              <div
                                 key={t.id}
-                                label={t.name}
-                                required={t.mandatory}
-                                accept={t.accept || ".pdf,image/*"}
-                                files={files.map((d) => ({ id: d.id, name: d.fileName }))}
-                                hint={
-                                  t.maxSizeMb
-                                    ? `Select multiple files · max ${t.maxSizeMb} MB each`
-                                    : "Select multiple files from this device"
-                                }
-                                onFiles={(list) => void onPickFiles(t, list)}
-                                onRemove={(id) => void removeDocument(id)}
-                              />
+                                id={sectionRejected ? `doc-rejected-${t.code}` : undefined}
+                              >
+                                <MultiFilePickField
+                                  label={t.name}
+                                  required={t.mandatory}
+                                  accept={t.accept || ".pdf,image/*"}
+                                  files={files.map((d) => ({
+                                    id: d.id,
+                                    name: d.fileName,
+                                    verifyStatus: d.verifyStatus,
+                                  }))}
+                                  hint={
+                                    sectionRejected
+                                      ? "Rejected — choose a new file to replace"
+                                      : t.maxSizeMb
+                                        ? `Select multiple files · max ${t.maxSizeMb} MB each`
+                                        : "Select multiple files from this device"
+                                  }
+                                  emphasized={sectionRejected}
+                                  onFiles={(list) => void onPickFiles(t, list)}
+                                  onRemove={(id) => void removeDocument(id)}
+                                />
+                              </div>
                             );
                           }
+                          const doc = latestDoc(t.code, t.kind);
+                          const rejected = doc?.verifyStatus === "rejected";
                           return (
-                            <FilePickField
+                            <div
                               key={t.id}
-                              label={
-                                t.code === "DOC-CHEQUE"
-                                  ? "Cancelled Cheque / Passbook"
-                                  : t.name
-                              }
-                              required={t.mandatory}
-                              accept={t.accept || ".pdf,image/*"}
-                              fileName={latestDoc(t.code, t.kind)?.fileName}
-                              hint={
-                                t.maxSizeMb
-                                  ? `Upload from this device · max ${t.maxSizeMb} MB`
-                                  : "Upload from this device"
-                              }
-                              onFile={(file) => onPickFile(t, file)}
-                            />
+                              id={rejected ? `doc-rejected-${t.code}` : undefined}
+                            >
+                              <FilePickField
+                                label={
+                                  t.code === "DOC-CHEQUE"
+                                    ? "Cancelled Cheque / Passbook"
+                                    : t.name
+                                }
+                                required={t.mandatory}
+                                accept={t.accept || ".pdf,image/*"}
+                                fileName={doc?.fileName}
+                                verifyStatus={doc?.verifyStatus}
+                                hint={
+                                  rejected
+                                    ? "Rejected by HR — upload a new file"
+                                    : t.maxSizeMb
+                                      ? `Upload from this device · max ${t.maxSizeMb} MB`
+                                      : "Upload from this device"
+                                }
+                                onFile={(file) => onPickFile(t, file)}
+                              />
+                            </div>
                           );
                         })}
                         {showRelieving ? (
@@ -1340,9 +1398,20 @@ export function CandidateOnboardingPortal({ token }: { token: string }) {
                                   d.typeCode === "DOC-REL" ||
                                   d.typeCode?.startsWith("DOC-REL-"),
                               )
-                              .map((d) => ({ id: d.id, name: d.fileName }))}
+                              .map((d) => ({
+                                id: d.id,
+                                name: d.fileName,
+                                verifyStatus: d.verifyStatus,
+                              }))}
                             hint="Optional — select up to 3 files (latest + previous). PDF, JPG, or PNG · max 2 MB each"
                             maxFiles={3}
+                            emphasized={portal.documents.some(
+                              (d) =>
+                                d.verifyStatus === "rejected" &&
+                                (d.kind === "relieving_letter" ||
+                                  d.typeCode === "DOC-REL" ||
+                                  d.typeCode?.startsWith("DOC-REL-")),
+                            )}
                             onFiles={(list) =>
                               void onPickCappedFiles({
                                 label: "Previous / Latest 3 Relieving Letters",
@@ -1372,9 +1441,20 @@ export function CandidateOnboardingPortal({ token }: { token: string }) {
                                   d.typeCode === "DOC-SLIPS" ||
                                   d.typeCode?.startsWith("DOC-SLIPS-"),
                               )
-                              .map((d) => ({ id: d.id, name: d.fileName }))}
+                              .map((d) => ({
+                                id: d.id,
+                                name: d.fileName,
+                                verifyStatus: d.verifyStatus,
+                              }))}
                             hint="Optional — select up to 3 files (latest + previous). PDF, JPG, or PNG · max 2 MB each"
                             maxFiles={3}
+                            emphasized={portal.documents.some(
+                              (d) =>
+                                d.verifyStatus === "rejected" &&
+                                (d.kind === "salary_slips" ||
+                                  d.typeCode === "DOC-SLIPS" ||
+                                  d.typeCode?.startsWith("DOC-SLIPS-")),
+                            )}
                             onFiles={(list) =>
                               void onPickCappedFiles({
                                 label: "Previous / Latest 3 Salary Slips",
@@ -1699,6 +1779,7 @@ function FilePickField({
   fileName,
   hint,
   disabled,
+  verifyStatus,
   onFile,
 }: {
   label: string;
@@ -1707,9 +1788,12 @@ function FilePickField({
   fileName?: string;
   hint?: string;
   disabled?: boolean;
+  verifyStatus?: "pending" | "verified" | "rejected";
   onFile: (file: File | undefined) => void | Promise<void>;
 }) {
   const inputId = `file-${label.replace(/\s+/g, "-").toLowerCase()}`;
+  const rejected = verifyStatus === "rejected";
+  const verified = verifyStatus === "verified";
   return (
     <SetupField label={label} required={required} hint={hint}>
       <label
@@ -1717,13 +1801,24 @@ function FilePickField({
         className={cn(
           "flex h-10 w-full items-center gap-2 rounded-lg border border-dashed border-input bg-transparent px-2.5 text-sm transition-colors",
           disabled ? "cursor-not-allowed opacity-60" : "cursor-pointer hover:border-ring hover:bg-muted/40",
-          fileName && "border-emerald-300 bg-emerald-50/50",
+          verified && "border-emerald-300 bg-emerald-50/50",
+          rejected && "border-amber-400 bg-amber-50 ring-1 ring-amber-300",
+          fileName && !rejected && !verified && "border-emerald-300 bg-emerald-50/50",
         )}
       >
         <Upload className="size-3.5 shrink-0 text-muted-foreground" />
         <span className={cn("truncate", fileName ? "text-foreground" : "text-muted-foreground")}>
           {fileName || "Choose file…"}
         </span>
+        {rejected ? (
+          <span className="ml-auto shrink-0 rounded bg-amber-200/80 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-amber-950">
+            Rejected
+          </span>
+        ) : verified ? (
+          <span className="ml-auto shrink-0 rounded bg-emerald-200/80 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-emerald-950">
+            Verified
+          </span>
+        ) : null}
         <input
           id={inputId}
           type="file"
@@ -1747,15 +1842,17 @@ function MultiFilePickField({
   files,
   hint,
   maxFiles,
+  emphasized,
   onFiles,
   onRemove,
 }: {
   label: string;
   required?: boolean;
   accept: string;
-  files: { id: string; name: string }[];
+  files: { id: string; name: string; verifyStatus?: "pending" | "verified" | "rejected" }[];
   hint?: string;
   maxFiles?: number;
+  emphasized?: boolean;
   onFiles: (files: FileList | null) => void | Promise<void>;
   onRemove: (id: string) => void | Promise<void>;
 }) {
@@ -1771,7 +1868,8 @@ function MultiFilePickField({
             atLimit
               ? "cursor-not-allowed opacity-60"
               : "cursor-pointer hover:border-ring hover:bg-muted/40",
-            files.length > 0 && "border-emerald-300 bg-emerald-50/50",
+            files.length > 0 && !emphasized && "border-emerald-300 bg-emerald-50/50",
+            emphasized && "border-amber-400 bg-amber-50 ring-1 ring-amber-300",
           )}
         >
           <Upload className="size-3.5 shrink-0 text-muted-foreground" />
@@ -1802,17 +1900,32 @@ function MultiFilePickField({
             {files.map((f) => (
               <li
                 key={f.id}
-                className="flex items-center justify-between gap-2 rounded-md border border-border/60 bg-card px-2.5 py-1.5 text-xs"
+                className={cn(
+                  "flex items-center justify-between gap-2 rounded-md border border-border/60 bg-card px-2.5 py-1.5 text-xs",
+                  f.verifyStatus === "rejected" && "border-amber-300 bg-amber-50",
+                  f.verifyStatus === "verified" && "border-emerald-200 bg-emerald-50/60",
+                )}
               >
                 <span className="truncate font-medium">{f.name}</span>
-                <button
-                  type="button"
-                  className="cursor-pointer shrink-0 rounded p-0.5 text-muted-foreground hover:bg-muted hover:text-destructive"
-                  aria-label={`Remove ${f.name}`}
-                  onClick={() => void onRemove(f.id)}
-                >
-                  <X className="size-3.5" />
-                </button>
+                <span className="flex shrink-0 items-center gap-1">
+                  {f.verifyStatus === "rejected" ? (
+                    <span className="rounded bg-amber-200/80 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-amber-950">
+                      Rejected
+                    </span>
+                  ) : f.verifyStatus === "verified" ? (
+                    <span className="rounded bg-emerald-200/80 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-emerald-950">
+                      Verified
+                    </span>
+                  ) : null}
+                  <button
+                    type="button"
+                    className="cursor-pointer rounded p-0.5 text-muted-foreground hover:bg-muted hover:text-destructive"
+                    aria-label={`Remove ${f.name}`}
+                    onClick={() => void onRemove(f.id)}
+                  >
+                    <X className="size-3.5" />
+                  </button>
+                </span>
               </li>
             ))}
           </ul>
@@ -1824,7 +1937,7 @@ function MultiFilePickField({
 
 function Shell({ children }: { children: React.ReactNode }) {
   return (
-    <div className="min-h-screen bg-[#F8FAFC] px-4 py-8 sm:px-6">
+    <div className="hrms-theme min-h-screen bg-background px-4 py-8 text-foreground sm:px-6">
       <div className="mx-auto max-w-3xl">{children}</div>
     </div>
   );

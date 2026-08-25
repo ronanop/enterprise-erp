@@ -50,7 +50,7 @@ export const DEFAULT_DOCUMENT_TYPES: SetupRow[] = [
   {
     id: "doc-type-photo",
     code: "DOC-PHOTO",
-    name: "Passport photo",
+    name: "Photo",
     kind: "photo",
     section: "identity",
     mandatory: true,

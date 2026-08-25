@@ -296,7 +296,7 @@ export function RunPayrollDrawer({
             })}
           </SetupSelect>
         </SetupField>
-        <div className="rounded-lg border border-teal-200/80 bg-teal-50/50 px-3 py-2 text-xs text-teal-950">
+        <div className="rounded-xl border border-hrms-mint bg-hrms-mint px-3 py-2 text-xs text-foreground">
           <p className="font-medium">Pay period</p>
           <p className="mt-0.5 tabular-nums">
             {loadingPreview ? "Calculating…" : cycleLabel || "—"}

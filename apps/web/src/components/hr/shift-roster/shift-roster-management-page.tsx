@@ -247,34 +247,30 @@ export function ShiftRosterManagementPage() {
         ) : (
           <div className="overflow-hidden rounded-xl border border-border/70 bg-card shadow-sm">
             <div className="erp-scroll overflow-x-auto">
-              <table className="w-full min-w-[900px] text-sm">
+              <table className="w-full min-w-[720px] text-left text-sm">
                 <thead className="sticky top-0 border-b bg-muted/90 backdrop-blur-sm">
                   <tr className="text-[10px] uppercase text-muted-foreground">
                     <th className="px-2 py-2 text-left">Shift</th>
-                    <th className="px-2 py-2">Code</th>
-                    <th className="px-2 py-2">Type</th>
-                    <th className="px-2 py-2">Timing</th>
-                    <th className="px-2 py-2">Grace</th>
-                    <th className="px-2 py-2">Night</th>
-                    <th className="px-2 py-2">Status</th>
+                    <th className="px-2 py-2 text-left">Type</th>
+                    <th className="px-2 py-2 text-left">Timing</th>
+                    <th className="px-2 py-2 text-left">Night</th>
+                    <th className="px-2 py-2 text-left">Status</th>
                     <th className="px-2 py-2 text-right">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
                   {shiftPage.map((s) => (
                     <tr key={s.id} className="border-b border-border/50 hover:bg-muted/30">
-                      <td className="px-2 py-2">
+                      <td className="px-2 py-2 text-left">
                         <span className="inline-flex items-center gap-2">
                           <span className="size-2.5 rounded-full" style={{ backgroundColor: s.extension.color }} />
                           <span className="font-medium">{s.shiftName}</span>
                         </span>
                       </td>
-                      <td className="px-2 py-2 font-mono text-xs">{s.shiftCode}</td>
-                      <td className="px-2 py-2 text-xs capitalize">{s.shiftType}</td>
-                      <td className="px-2 py-2 text-xs">{s.startTime} – {s.endTime}</td>
-                      <td className="px-2 py-2 text-xs">{s.graceMinutes}m</td>
-                      <td className="px-2 py-2 text-xs">{s.isOvernight ? "Yes" : "—"}</td>
-                      <td className="px-2 py-2"><HrStatusBadge status={s.status} /></td>
+                      <td className="px-2 py-2 text-left text-xs capitalize">{s.shiftType}</td>
+                      <td className="px-2 py-2 text-left text-xs">{s.startTime} – {s.endTime}</td>
+                      <td className="px-2 py-2 text-left text-xs">{s.isOvernight ? "Yes" : "—"}</td>
+                      <td className="px-2 py-2 text-left"><HrStatusBadge status={s.status} /></td>
                       <td className="px-2 py-2 text-right">
                         <Button
                           type="button"

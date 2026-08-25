@@ -10,18 +10,19 @@ import { redirectToLogin } from "@/lib/auth";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { hrmsPastelSurface } from "@/config/hrms-theme";
 import { cn } from "@/lib/utils";
 
 export function HrStatusBadge({ status }: { status: string }) {
   const s = status.toLowerCase();
   const tone =
     s.includes("active") || s.includes("approved") || s.includes("present") || s.includes("paid")
-      ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+      ? "border-transparent bg-hrms-mint text-hrms-success"
       : s.includes("pending") || s.includes("draft") || s.includes("submitted") || s.includes("open") || s.includes("onboarding")
-        ? "border-amber-200 bg-amber-50 text-amber-900"
+        ? "border-transparent bg-hrms-peach text-hrms-warning"
         : s.includes("absent") || s.includes("reject") || s.includes("cancel") || s.includes("lost")
-          ? "border-red-200 bg-red-50 text-red-800"
-          : "border-border bg-muted text-muted-foreground";
+          ? "border-transparent bg-hrms-pink text-hrms-danger"
+          : "border-transparent bg-hrms-blue text-hrms-info";
   return (
     <span
       className={cn(
@@ -44,8 +45,8 @@ export function HrEmptyState({
   action?: ReactNode;
 }) {
   return (
-    <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-border/80 bg-card/40 px-6 py-12 text-center">
-      <div className="mb-3 flex size-10 items-center justify-center rounded-full bg-muted">
+    <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-border bg-card px-6 py-12 text-center shadow-sm">
+      <div className="mb-3 flex size-10 items-center justify-center rounded-full bg-hrms-lavender">
         <Inbox className="size-4 text-muted-foreground" />
       </div>
       <p className="text-sm font-medium text-foreground">{title}</p>
@@ -63,7 +64,7 @@ export function HrAuthBanner() {
   }, []);
 
   return (
-    <div className="rounded-xl border border-dashed border-amber-300/80 bg-amber-50 px-4 py-3 text-sm text-amber-950">
+    <div className="rounded-2xl border border-hrms-peach bg-hrms-peach px-4 py-3 text-sm text-foreground">
       Session not found. Redirecting to sign in…{" "}
       <Link href="/login" className="cursor-pointer font-medium underline underline-offset-2">
         Go to login
@@ -74,7 +75,7 @@ export function HrAuthBanner() {
 
 export function HrLoadingBlock({ label = "Loading…" }: { label?: string }) {
   return (
-    <div className="flex items-center gap-2 rounded-xl border border-border/70 bg-card px-4 py-8 text-sm text-muted-foreground">
+    <div className="flex items-center gap-2 rounded-2xl border border-border bg-card px-4 py-8 text-sm text-muted-foreground shadow-sm">
       <RefreshCw className="size-4 animate-spin" />
       {label}
     </div>
@@ -130,10 +131,11 @@ export function HrKpiGrid({
 
   return (
     <div className={cn("grid grid-cols-2 gap-3", desktopCols, className)}>
-      {items.map((item) => {
+      {items.map((item, index) => {
         const itemKey = item.key ?? item.label;
         const clickable = Boolean(onItemClick);
         const active = activeKey === itemKey;
+        const pastel = hrmsPastelSurface(index);
         const inner = (
           <>
             <p className="text-[11px] font-medium tracking-wide text-muted-foreground uppercase">
@@ -151,7 +153,10 @@ export function HrKpiGrid({
           return (
             <div
               key={itemKey}
-              className="rounded-xl border border-border/70 bg-card px-4 py-3 shadow-sm"
+              className={cn(
+                "rounded-2xl border border-border px-4 py-3 shadow-sm",
+                pastel,
+              )}
             >
               {inner}
             </div>
@@ -163,10 +168,11 @@ export function HrKpiGrid({
             type="button"
             onClick={() => onItemClick?.(itemKey)}
             className={cn(
-              "cursor-pointer rounded-xl border bg-card px-4 py-3 text-left shadow-sm transition-colors",
+              "cursor-pointer rounded-2xl border px-4 py-3 text-left shadow-sm transition-all",
+              pastel,
               active
-                ? "border-primary bg-primary/5 ring-1 ring-primary/30"
-                : "border-border/70 hover:border-primary/40 hover:bg-muted/30",
+                ? "border-foreground/20 ring-2 ring-primary"
+                : "border-border hover:brightness-[0.98]",
             )}
           >
             {inner}
@@ -192,7 +198,7 @@ export function HrTable({
     return <HrEmptyState title={emptyTitle} description={emptyDescription} />;
   }
   return (
-    <div className="overflow-hidden rounded-xl border border-border/70 bg-card shadow-sm">
+    <div className="overflow-hidden rounded-2xl border border-border bg-card shadow-sm">
       <div className="erp-scroll overflow-x-auto">
         <table className="w-full min-w-[640px] text-left text-sm">
           <thead className="border-b border-border/70 bg-muted/40">
@@ -263,7 +269,7 @@ export function HrUnderlineTabs({
     <div
       className={cn(
         "flex flex-wrap items-center justify-between gap-2",
-        !embedded && "rounded-xl border border-border/70 bg-card px-2 shadow-sm",
+        !embedded && "rounded-2xl border border-border bg-card px-2 shadow-sm",
         className,
       )}
     >
@@ -280,14 +286,14 @@ export function HrUnderlineTabs({
                 "-mb-px flex shrink-0 cursor-pointer items-center gap-2 border-b-[3px] transition-colors",
                 pad,
                 active
-                  ? "border-primary font-semibold text-primary"
+                  ? "border-primary font-semibold text-foreground"
                   : "border-transparent font-normal text-muted-foreground hover:text-foreground",
               )}
             >
               {Icon ? <Icon className={cn(iconSize, "shrink-0")} /> : null}
               <span className="whitespace-nowrap">{t.label}</span>
               {t.badge != null && t.badge !== 0 ? (
-                <span className="rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium text-primary">
+                <span className="rounded-full bg-primary px-1.5 py-0.5 text-[10px] font-semibold text-primary-foreground">
                   {t.badge}
                 </span>
               ) : null}
@@ -343,11 +349,11 @@ export function HrSetupCard({
   return (
     <Link
       href={href}
-      className="group block cursor-pointer rounded-xl border border-border/70 bg-card p-4 shadow-sm transition-colors duration-200 hover:border-primary/30 hover:bg-muted/30"
+      className="group block cursor-pointer rounded-2xl border border-border bg-card p-4 shadow-sm transition-all duration-200 hover:border-primary/40 hover:shadow-md"
     >
       <div className="flex items-start justify-between gap-2">
         <div>
-          <p className="text-sm font-semibold text-foreground group-hover:text-primary">
+          <p className="text-sm font-semibold text-foreground">
             {title}
           </p>
           <p className="mt-1 text-xs text-muted-foreground">{description}</p>
