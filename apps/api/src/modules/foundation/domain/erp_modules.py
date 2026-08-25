@@ -25,24 +25,61 @@ ERP_MODULE_KEYS: tuple[str, ...] = (
     "integration",
     "ecommerce",
     "portal",
+    "marketing",
 )
 
 ERP_MODULE_KEY_SET = frozenset(ERP_MODULE_KEYS)
 
 ADMIN_USER_TYPES = frozenset({"super_admin", "tenant_admin"})
+ADMIN_ROLE_CODES = frozenset({"SUPER_ADMIN", "TENANT_ADMIN"})
 
 MODULE_ROLE_ADMIN = "admin"
 MODULE_ROLE_MEMBER = "member"
 MODULE_ROLES = frozenset({MODULE_ROLE_ADMIN, MODULE_ROLE_MEMBER})
 
 
-def effective_module_keys(user_type: str, assigned: list[str]) -> list[str]:
+def has_platform_module_access(user_type: str, role_codes: list[str] | None = None) -> bool:
     if user_type in ADMIN_USER_TYPES:
+        return True
+    codes = {c.upper() for c in (role_codes or [])}
+    return bool(ADMIN_ROLE_CODES & codes)
+
+
+def resolve_session_user_type(
+    stored_user_type: str,
+    email: str,
+    role_codes: list[str] | None = None,
+    *,
+    platform_admin_emails: set[str] | None = None,
+) -> str:
+    """Entra sync often assigns TENANT_ADMIN while leaving user_type as employee."""
+    if platform_admin_emails and email.lower() in platform_admin_emails:
+        return "super_admin"
+    if stored_user_type in ADMIN_USER_TYPES:
+        return stored_user_type
+    codes = {c.upper() for c in (role_codes or [])}
+    if "SUPER_ADMIN" in codes:
+        return "super_admin"
+    if "TENANT_ADMIN" in codes:
+        return "tenant_admin"
+    return stored_user_type
+
+
+def effective_module_keys(
+    user_type: str,
+    assigned: list[str],
+    role_codes: list[str] | None = None,
+) -> list[str]:
+    if has_platform_module_access(user_type, role_codes):
         return list(ERP_MODULE_KEYS)
     return sorted({k for k in assigned if k in ERP_MODULE_KEY_SET})
 
 
-def effective_admin_module_keys(user_type: str, admin_assigned: list[str]) -> list[str]:
-    if user_type in ADMIN_USER_TYPES:
+def effective_admin_module_keys(
+    user_type: str,
+    admin_assigned: list[str],
+    role_codes: list[str] | None = None,
+) -> list[str]:
+    if has_platform_module_access(user_type, role_codes):
         return list(ERP_MODULE_KEYS)
     return sorted({k for k in admin_assigned if k in ERP_MODULE_KEY_SET})

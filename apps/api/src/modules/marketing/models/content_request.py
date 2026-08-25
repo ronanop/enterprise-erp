@@ -1,8 +1,9 @@
 """Content request ORM."""
 
+from datetime import datetime
 from uuid import UUID, uuid4
 
-from sqlalchemy import CheckConstraint, ForeignKey, String, Text
+from sqlalchemy import CheckConstraint, DateTime, ForeignKey, String, Text
 from sqlalchemy.dialects.postgresql import JSONB, UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -18,7 +19,11 @@ class MktContentRequest(Base, *MktTransactionMixin):
             name="ck_mkt_content_request_status",
         ),
         CheckConstraint(
-            "content_type IN ('post','thread','blog','newsletter','script','ad','carousel','other')",
+            "content_type IN ("
+            "'post','thread','blog','newsletter','script','ad','carousel','other',"
+            "'whitepaper','case_study','landing_page','press_release','email',"
+            "'ad_copy','event_content'"
+            ")",
             name="ck_mkt_content_request_type",
         ),
         {"schema": "marketing"},
@@ -62,6 +67,12 @@ class MktContentRequest(Base, *MktTransactionMixin):
     tone: Mapped[str | None] = mapped_column(String(100), nullable=True)
     language_code: Mapped[str] = mapped_column(String(10), nullable=False, default="en")
     goal: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    purpose: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    technical_depth: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    keywords: Mapped[str | None] = mapped_column(Text, nullable=True)
+    reference_notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    assigned_to_user_id: Mapped[UUID | None] = mapped_column(PG_UUID(as_uuid=True), nullable=True, index=True)
+    due_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     inputs: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     celery_task_id: Mapped[str | None] = mapped_column(String(100), nullable=True)
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)

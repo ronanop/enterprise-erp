@@ -17,6 +17,14 @@ from modules.marketing.routers import (
     social_accounts_router,
     trends_router,
 )
+from modules.marketing.routers.ops import (
+    ai_ops_router,
+    approvals_router,
+    m365_router,
+    ops_router,
+    tasks_router,
+    workload_router,
+)
 
 marketing_router = APIRouter(prefix="/marketing")
 marketing_router.include_router(platforms_router)
@@ -32,3 +40,9 @@ marketing_router.include_router(competitors_router)
 marketing_router.include_router(calendar_router)
 marketing_router.include_router(publish_router)
 marketing_router.include_router(analytics_router)
+marketing_router.include_router(tasks_router)
+marketing_router.include_router(approvals_router)
+marketing_router.include_router(m365_router)
+marketing_router.include_router(workload_router)
+marketing_router.include_router(ops_router)
+marketing_router.include_router(ai_ops_router)

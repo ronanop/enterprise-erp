@@ -45,10 +45,10 @@ class UserService:
         )
 
     def effective_modules_for_user(self, user: UserEntity) -> list[str]:
-        return effective_module_keys(user.user_type, user.assigned_module_keys)
+        return effective_module_keys(user.user_type, user.assigned_module_keys, user.role_codes)
 
     def effective_admin_modules_for_user(self, user: UserEntity) -> list[str]:
-        return effective_admin_module_keys(user.user_type, user.admin_module_keys)
+        return effective_admin_module_keys(user.user_type, user.admin_module_keys, user.role_codes)
 
     def get_user_modules(self, tenant_id: UUID, user_id: UUID) -> tuple[UserEntity, list[str], list[str], list[str]]:
         user = self.get_user(tenant_id, user_id)

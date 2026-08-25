@@ -11,6 +11,7 @@ from core.config import settings
 from core.redis import SessionStore
 from database.session import get_db
 from modules.foundation.dependencies import get_client_ip, get_current_user, get_tenant_context
+from modules.foundation.domain.erp_modules import resolve_session_user_type
 from modules.foundation.domain.exceptions import MicrosoftLoginNotConfiguredException
 from modules.foundation.domain.value_objects import TenantContext
 from modules.foundation.models.security import SecUser
@@ -177,6 +178,12 @@ def me(
     permissions = sorted(rbac.get_user_permissions(ctx.user_id, ctx.tenant_id))
     service = UserService(db)
     user_entity = service.get_user(ctx.tenant_id, ctx.user_id)
+    user_entity.user_type = resolve_session_user_type(
+        user_entity.user_type,
+        user_entity.email,
+        user_entity.role_codes,
+        platform_admin_emails=settings.microsoft_platform_admin_email_set(),
+    )
     module_keys = service.effective_modules_for_user(user_entity)
     admin_module_keys = service.effective_admin_modules_for_user(user_entity)
     data = {

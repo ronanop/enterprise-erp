@@ -31,3 +31,12 @@
 - [ ] Live OAuth social publishers via Integration Hub
 - [ ] OpenAI live adapters (replace deterministic pipeline)
 - [ ] Full Content Intelligence feature parity (flows, inbox, marketplace)
+
+## Phase F — Marketing operations (v1.2)
+- [x] Nested tasks, execute/delegate/hybrid, time entries
+- [x] Multi-level approvals + ops audit events
+- [x] Microsoft Graph adapter (Teams/SharePoint/OneDrive/Outlook) with offline queue
+- [x] Workload engine + operations / my-work / M365 UI
+- [x] AI ops expand (improve, review, creative, video, knowledge) without removing v1 pipeline
+- [ ] Live Graph channel posts and SharePoint folder creation under Team sites
+- [ ] Azure Cognitive Search index (ERP search currently uses SQL + Graph payload metadata)

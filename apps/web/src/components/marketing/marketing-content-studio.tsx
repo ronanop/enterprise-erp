@@ -11,6 +11,10 @@ import { formatApiError } from "@/services/api-client";
 import {
   createContentRequest,
   listGeneratedContent,
+  aiCreative,
+  aiImprove,
+  aiReview,
+  aiVideo,
   type MarketingGeneratedContent,
 } from "@/services/marketing-service";
 
@@ -19,6 +23,7 @@ export function MarketingContentStudio() {
   const [tone, setTone] = useState("professional");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [assist, setAssist] = useState<string>("");
   const [rows, setRows] = useState<MarketingGeneratedContent[]>([]);
 
   const reload = useCallback(async () => {
@@ -99,6 +104,82 @@ export function MarketingContentStudio() {
         <p className="text-sm text-destructive" role="alert">
           {error}
         </p>
+      ) : null}
+
+      <div className="flex flex-wrap gap-2">
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="cursor-pointer transition-colors duration-200"
+          disabled={!topic.trim()}
+          onClick={async () => {
+            try {
+              const res = await aiCreative(topic.trim());
+              setAssist(JSON.stringify(res.data ?? res, null, 2));
+            } catch (err) {
+              setError(formatApiError(err, "Creative assist failed"));
+            }
+          }}
+        >
+          Creative brief
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="cursor-pointer transition-colors duration-200"
+          disabled={!topic.trim()}
+          onClick={async () => {
+            try {
+              const res = await aiVideo(topic.trim());
+              setAssist(JSON.stringify(res.data ?? res, null, 2));
+            } catch (err) {
+              setError(formatApiError(err, "Video assist failed"));
+            }
+          }}
+        >
+          Video assist
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="cursor-pointer transition-colors duration-200"
+          disabled={rows.length === 0}
+          onClick={async () => {
+            try {
+              const res = await aiImprove(rows[0]?.body ?? "", "simplify");
+              setAssist(JSON.stringify(res.data ?? res, null, 2));
+            } catch (err) {
+              setError(formatApiError(err, "Improve failed"));
+            }
+          }}
+        >
+          Improve latest
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="cursor-pointer transition-colors duration-200"
+          disabled={rows.length === 0}
+          onClick={async () => {
+            try {
+              const res = await aiReview(rows[0]?.body ?? "");
+              setAssist(JSON.stringify(res.data ?? res, null, 2));
+            } catch (err) {
+              setError(formatApiError(err, "Review failed"));
+            }
+          }}
+        >
+          AI review
+        </Button>
+      </div>
+      {assist ? (
+        <pre className="max-h-48 overflow-auto rounded-md border border-border/70 bg-muted/30 p-3 text-[11px] leading-relaxed">
+          {assist}
+        </pre>
       ) : null}
 
       <div className="space-y-2">

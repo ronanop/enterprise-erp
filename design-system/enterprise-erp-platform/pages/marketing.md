@@ -18,6 +18,11 @@
 | Route | Purpose |
 |-------|---------|
 | `/marketing` | Overview KPIs, pipeline, quick links |
+| `/marketing/operations` | Campaign health, delays, utilization |
+| `/marketing/my-work` | Individual tasks |
+| `/marketing/tasks` | Nested task execution / delegation |
+| `/marketing/m365` | Teams / SharePoint / OneDrive |
+| `/marketing/workload` | Resource balancing |
 | `/marketing/campaigns` | Marketing campaigns (optional CRM campaign link) |
 | `/marketing/content` | Content studio — requests + generated drafts |
 | `/marketing/research` | Research & trends |

@@ -5,7 +5,7 @@ from decimal import Decimal
 from uuid import UUID, uuid4
 
 from sqlalchemy import CheckConstraint, Date, ForeignKey, Numeric, String, Text, UniqueConstraint
-from sqlalchemy.dialects.postgresql import UUID as PG_UUID
+from sqlalchemy.dialects.postgresql import JSONB, UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from database.base import Base
@@ -21,8 +21,16 @@ class MktCampaign(Base, *MktMasterMixin):
             name="ck_mkt_campaign_status",
         ),
         CheckConstraint(
-            "campaign_type IN ('brand','product','social','email','event','mixed')",
+            "campaign_type IN ("
+            "'brand','product','social','email','event','mixed',"
+            "'product_launch','webinar','social_campaign','lead_generation',"
+            "'brand_awareness','customer_success','partner_marketing','internal_communication'"
+            ")",
             name="ck_mkt_campaign_type",
+        ),
+        CheckConstraint(
+            "priority IN ('low','medium','high','critical')",
+            name="ck_mkt_campaign_priority",
         ),
         {"schema": "marketing"},
     )
@@ -45,4 +53,9 @@ class MktCampaign(Base, *MktMasterMixin):
     # Soft link to CRM campaign — no cross-module FK (C-02)
     crm_campaign_id: Mapped[UUID | None] = mapped_column(PG_UUID(as_uuid=True), nullable=True, index=True)
     owner_user_id: Mapped[UUID | None] = mapped_column(PG_UUID(as_uuid=True), nullable=True, index=True)
+    priority: Mapped[str] = mapped_column(String(20), nullable=False, default="medium")
+    success_metrics: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    stakeholders: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    departments: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    approvers: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     status: Mapped[str] = mapped_column(String(30), nullable=False, default="draft", index=True)

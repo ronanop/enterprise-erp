@@ -22,5 +22,14 @@
 | `mkt_competitor` | Master | Competitor watchlist |
 | `mkt_calendar_entry` | Transaction | Scheduled content |
 | `mkt_publish_job` | Transaction | Outbound publish queue |
+| `mkt_task` | Transaction | Nested tasks; execute/delegate/hybrid |
+| `mkt_time_entry` | Detail | Hours against a task |
+| `mkt_approval` | Transaction | Levels 1–5 approval actions |
+| `mkt_m365_workspace` | Transaction | Teams/SharePoint campaign workspace |
+| `mkt_m365_file` | Transaction | OneDrive draft / SharePoint asset metadata |
+| `mkt_m365_meeting` | Transaction | Outlook/Teams meetings |
+| `mkt_ops_event` | Transaction | Marketing operations audit trail |
+
+Campaign extras: `priority`, `success_metrics`, `stakeholders`, `departments`, `approvers`.
 
 All transactional tables include `tenant_id`, `company_id`, `branch_id` (nullable where master), audit + soft delete + version.

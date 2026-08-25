@@ -36,6 +36,15 @@ MARKETING_PERMISSIONS: list[tuple[str, str, str, str]] = [
     ("marketing.publish:create", "marketing.publish", "create", "marketing"),
     ("marketing.publish:update", "marketing.publish", "update", "marketing"),
     ("marketing.analytics:read", "marketing.analytics", "read", "marketing"),
+    ("marketing.task:read", "marketing.task", "read", "marketing"),
+    ("marketing.task:create", "marketing.task", "create", "marketing"),
+    ("marketing.task:update", "marketing.task", "update", "marketing"),
+    ("marketing.approval:read", "marketing.approval", "read", "marketing"),
+    ("marketing.approval:act", "marketing.approval", "act", "marketing"),
+    ("marketing.m365:read", "marketing.m365", "read", "marketing"),
+    ("marketing.m365:update", "marketing.m365", "update", "marketing"),
+    ("marketing.workload:read", "marketing.workload", "read", "marketing"),
+    ("marketing.ops:read", "marketing.ops", "read", "marketing"),
 ]
 
 _ALL = [p[0] for p in MARKETING_PERMISSIONS]

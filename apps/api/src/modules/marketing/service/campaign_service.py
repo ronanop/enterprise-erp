@@ -12,6 +12,7 @@ from modules.marketing.domain.exceptions import NotFoundException, ValidationExc
 from modules.marketing.models import MktCampaign
 from modules.marketing.repository.base import MktScopedRepository
 from modules.marketing.service.number_service import MarketingNumberService
+from modules.marketing.service.ops_service import M365Service
 
 
 class CampaignService:
@@ -55,6 +56,7 @@ class CampaignService:
             performed_by=ctx.user_id,
             new_value={"campaign_code": row.campaign_code, "campaign_name": row.campaign_name},
         )
+        M365Service(self.db).provision_for_campaign(ctx, row)
         return row
 
     def update(self, ctx: TenantContext, row_id: UUID, **fields) -> MktCampaign:

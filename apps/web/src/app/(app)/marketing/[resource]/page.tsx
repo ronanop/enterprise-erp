@@ -9,7 +9,7 @@ interface PageProps {
 
 export default async function MarketingResourcePage({ params }: PageProps) {
   const { resource: resourceKey } = await params;
-  if (resourceKey === "content" || resourceKey === "analytics") {
+  if (resourceKey === "content" || resourceKey === "analytics" || resourceKey === "tasks") {
     notFound();
   }
   const mod = getModule("marketing");

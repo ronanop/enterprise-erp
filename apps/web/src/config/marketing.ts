@@ -2,7 +2,10 @@ import type { LucideIcon } from "lucide-react";
 import {
   BarChart3,
   CalendarDays,
+  Cloud,
   FileText,
+  Gauge,
+  ListTodo,
   Megaphone,
   Search,
   Share2,
@@ -22,6 +25,24 @@ export type MarketingQuickLink = {
 };
 
 export const marketingQuickLinks: MarketingQuickLink[] = [
+  {
+    title: "Operations",
+    description: "Campaign health and bottlenecks",
+    href: "/marketing/operations",
+    icon: Gauge,
+  },
+  {
+    title: "Tasks",
+    description: "Execute, delegate, or hybrid work",
+    href: "/marketing/tasks",
+    icon: ListTodo,
+  },
+  {
+    title: "Microsoft 365",
+    description: "Teams, SharePoint, OneDrive",
+    href: "/marketing/m365",
+    icon: Cloud,
+  },
   {
     title: "Content Studio",
     description: "Create and score AI drafts",

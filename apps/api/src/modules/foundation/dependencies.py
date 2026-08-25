@@ -50,6 +50,9 @@ def get_tenant_context(
     user_id = UUID(payload["sub"])
     tenant_id = UUID(payload["tenant_id"])
     user_type = str(payload["user_type"])
+    user_row = db.get(SecUser, user_id)
+    if user_row is not None and user_row.user_type:
+        user_type = user_row.user_type
 
     if not company_id:
         from modules.foundation.service.org_context_service import OrgContextService
@@ -103,6 +106,8 @@ def require_permission(permission_code: str) -> Callable:
         db: Annotated[Session, Depends(get_db)],
     ) -> TenantContext:
         rbac = RBACService(db)
+        if ctx.user_type in {"super_admin", "tenant_admin"}:
+            return ctx
         if not rbac.has_permission(ctx.user_id, ctx.tenant_id, permission_code):
             raise ForbiddenException(f"Missing permission: {permission_code}")
         return ctx

@@ -1609,7 +1609,7 @@ export const erpModules: ErpModule[] = [
     key: "marketing",
     title: "Marketing & Social",
     description:
-      "Content intelligence — campaigns, AI content studio, research, brand voice, calendar, social accounts, and analytics.",
+      "Marketing operations — campaigns, tasks, AI studio, Microsoft 365, workload analytics, and publishing.",
     href: "/marketing",
     group: "operations",
     icon: "marketing",
@@ -1685,6 +1685,12 @@ export const erpModules: ErpModule[] = [
         title: "Content Pillars",
         description: "Strategic content themes",
         apiPath: "/marketing/pillars",
+      },
+      {
+        key: "tasks",
+        title: "Tasks",
+        description: "Nested campaign tasks",
+        apiPath: "/marketing/tasks",
       },
     ],
   },

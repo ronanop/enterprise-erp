@@ -49,3 +49,15 @@ PostgreSQL schema `marketing`, tables prefixed `mkt_`.
 
 - Optional `crm_campaign_id` UUID on `mkt_campaign` (no cross-module FK write)
 - Document Management for heavy assets (future); v1 stores brand source metadata only
+
+## 8. Operations platform (v1.2)
+
+Upgrade preserves all v1 AI generation and extends marketing into operations:
+
+- Nested campaign tasks with execute / delegate / hybrid
+- Five-level approvals (approve, reject, comment, escalate, request revision)
+- Microsoft Graph adapter for Teams workspace, SharePoint library structure, OneDrive drafts, Outlook meetings (offline queue when Graph token unavailable)
+- Workload scores, utilization, overload/underutilized signals
+- Ops audit events plus Foundation audit engine
+- AI improve / review / creative / video / knowledge search endpoints (`/marketing/ai/*`)
+

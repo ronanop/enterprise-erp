@@ -8,9 +8,14 @@ import { cn } from "@/lib/utils";
 
 const MARKETING_NAV = [
   { title: "Overview", href: "/marketing" },
+  { title: "Operations", href: "/marketing/operations" },
+  { title: "My Work", href: "/marketing/my-work" },
   { title: "Campaigns", href: "/marketing/campaigns" },
+  { title: "Tasks", href: "/marketing/tasks" },
   { title: "Content Studio", href: "/marketing/content" },
   { title: "Requests", href: "/marketing/content-requests" },
+  { title: "Microsoft 365", href: "/marketing/m365" },
+  { title: "Workload", href: "/marketing/workload" },
   { title: "Research", href: "/marketing/research" },
   { title: "Trends", href: "/marketing/trends" },
   { title: "Brand Voice", href: "/marketing/brand-voices" },

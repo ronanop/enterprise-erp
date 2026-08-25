@@ -53,6 +53,11 @@ class CampaignCreate(BaseModel):
     currency_code: str | None = None
     crm_campaign_id: UUID | None = None
     owner_user_id: UUID | None = None
+    priority: str = "medium"
+    success_metrics: dict | None = None
+    stakeholders: dict | None = None
+    departments: dict | None = None
+    approvers: dict | None = None
 
 
 class CampaignUpdate(BaseModel):
@@ -65,6 +70,11 @@ class CampaignUpdate(BaseModel):
     currency_code: str | None = None
     crm_campaign_id: UUID | None = None
     owner_user_id: UUID | None = None
+    priority: str | None = None
+    success_metrics: dict | None = None
+    stakeholders: dict | None = None
+    departments: dict | None = None
+    approvers: dict | None = None
     status: str | None = None
     version: int | None = None
 
@@ -83,6 +93,11 @@ class CampaignResponse(OrmModel):
     currency_code: str | None
     crm_campaign_id: UUID | None
     owner_user_id: UUID | None
+    priority: str
+    success_metrics: dict | None
+    stakeholders: dict | None
+    departments: dict | None
+    approvers: dict | None
     status: str
     version: int
 
@@ -209,6 +224,12 @@ class ContentRequestCreate(BaseModel):
     tone: str | None = None
     language_code: str = "en"
     goal: str | None = None
+    purpose: str | None = None
+    technical_depth: str | None = None
+    keywords: str | None = None
+    reference_notes: str | None = None
+    assigned_to_user_id: UUID | None = None
+    due_at: datetime | None = None
     inputs: dict | None = None
     generate_now: bool = True
 
@@ -228,6 +249,12 @@ class ContentRequestResponse(OrmModel):
     tone: str | None
     language_code: str
     goal: str | None
+    purpose: str | None
+    technical_depth: str | None
+    keywords: str | None
+    reference_notes: str | None
+    assigned_to_user_id: UUID | None
+    due_at: datetime | None
     inputs: dict | None
     celery_task_id: str | None
     error_message: str | None
@@ -418,3 +445,189 @@ class AnalyticsOverviewResponse(BaseModel):
     brand_voices: int
     competitors: int
     research_reports: int
+
+
+class TaskCreate(BaseModel):
+    company_id: UUID | None = None
+    branch_id: UUID | None = None
+    campaign_id: UUID | None = None
+    parent_task_id: UUID | None = None
+    content_request_id: UUID | None = None
+    title: str
+    description: str | None = None
+    task_kind: str = "general"
+    execution_mode: str = "execute"
+    complexity: int = Field(default=3, ge=1, le=5)
+    estimated_hours: Decimal | None = None
+    due_at: datetime | None = None
+    is_urgent: bool = False
+    owner_user_id: UUID | None = None
+    assignee_user_id: UUID | None = None
+    reviewer_user_id: UUID | None = None
+
+
+class TaskUpdate(BaseModel):
+    title: str | None = None
+    description: str | None = None
+    task_kind: str | None = None
+    execution_mode: str | None = None
+    complexity: int | None = None
+    estimated_hours: Decimal | None = None
+    actual_hours: Decimal | None = None
+    due_at: datetime | None = None
+    is_urgent: bool | None = None
+    assignee_user_id: UUID | None = None
+    reviewer_user_id: UUID | None = None
+    status: str | None = None
+    version: int | None = None
+
+
+class TaskResponse(OrmModel):
+    id: UUID
+    company_id: UUID
+    campaign_id: UUID | None
+    parent_task_id: UUID | None
+    task_code: str
+    title: str
+    description: str | None
+    task_kind: str
+    execution_mode: str
+    complexity: int
+    estimated_hours: Decimal | None
+    actual_hours: Decimal | None
+    due_at: datetime | None
+    is_urgent: bool
+    owner_user_id: UUID | None
+    assignee_user_id: UUID | None
+    delegated_by_user_id: UUID | None
+    reviewer_user_id: UUID | None
+    status: str
+    version: int
+
+
+class DelegateBody(BaseModel):
+    assignee_user_id: UUID
+
+
+class TimeEntryCreate(BaseModel):
+    hours: Decimal
+    entry_type: str = "work"
+    notes: str | None = None
+
+
+class TimeEntryResponse(OrmModel):
+    id: UUID
+    task_id: UUID
+    user_id: UUID
+    hours: Decimal
+    entry_type: str
+    notes: str | None
+    status: str
+
+
+class ApprovalActBody(BaseModel):
+    entity_type: str
+    entity_id: UUID
+    approval_level: int = Field(ge=1, le=5)
+    action: str
+    comment: str | None = None
+    campaign_id: UUID | None = None
+    company_id: UUID | None = None
+
+
+class ApprovalResponse(OrmModel):
+    id: UUID
+    campaign_id: UUID | None
+    entity_type: str
+    entity_id: UUID
+    approval_level: int
+    actor_user_id: UUID
+    action: str
+    comment: str | None
+    status: str
+
+
+class M365WorkspaceResponse(OrmModel):
+    id: UUID
+    campaign_id: UUID
+    display_name: str
+    teams_group_id: str | None
+    teams_channel_id: str | None
+    teams_web_url: str | None
+    sharepoint_web_url: str | None
+    folder_structure: dict | None
+    provision_status: str
+    last_error: str | None
+    status: str
+
+
+class M365FileCreate(BaseModel):
+    company_id: UUID | None = None
+    workspace_id: UUID | None = None
+    campaign_id: UUID | None = None
+    file_name: str
+    folder_path: str = "/Content"
+    storage_tier: str = "onedrive"
+    department: str | None = None
+    extra_metadata: dict | None = None
+
+
+class M365FileResponse(OrmModel):
+    id: UUID
+    campaign_id: UUID | None
+    file_name: str
+    folder_path: str
+    storage_tier: str
+    version_label: str
+    approval_stage: str | None
+    status: str
+
+
+class MeetingCreate(BaseModel):
+    company_id: UUID | None = None
+    campaign_id: UUID | None = None
+    task_id: UUID | None = None
+    meeting_type: str = "campaign"
+    subject: str
+    starts_at: datetime
+    ends_at: datetime
+    attendee_emails: list[str] | None = None
+
+
+class MeetingResponse(OrmModel):
+    id: UUID
+    campaign_id: UUID | None
+    meeting_type: str
+    subject: str
+    starts_at: datetime
+    ends_at: datetime
+    join_url: str | None
+    status: str
+    last_error: str | None
+
+
+class AiImproveBody(BaseModel):
+    text: str
+    mode: str = "simplify"
+
+
+class AiTopicBody(BaseModel):
+    topic: str
+
+
+class SearchQuery(BaseModel):
+    query: str
+
+
+class OpsEventResponse(OrmModel):
+    id: UUID
+    campaign_id: UUID | None
+    entity_type: str
+    entity_id: UUID | None
+    actor_user_id: UUID | None
+    action: str
+    old_value: dict | None
+    new_value: dict | None
+    comment: str | None
+    created_at: datetime
+    status: str

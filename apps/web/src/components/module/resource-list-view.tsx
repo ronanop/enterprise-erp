@@ -346,8 +346,8 @@ export function ResourceListView({
               ) : null}
               {status === 403 && authenticated ? (
                 <p className="text-sm text-muted-foreground">
-                  Your role is missing this permission. Sign out and sign back in as{" "}
-                  <code className="rounded bg-muted px-1">admin@example.com</code>.
+                  Your role is missing this permission. Sign out and sign back in with a Microsoft
+                  account that has this module assigned, or ask an administrator to grant access.
                 </p>
               ) : null}
             </div>
