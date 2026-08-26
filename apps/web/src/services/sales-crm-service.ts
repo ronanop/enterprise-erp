@@ -1017,6 +1017,7 @@ export type OvfLine = {
   contact_number?: string | null;
   qty: number;
   unit_price: number;
+  gst_pct?: number | null;
   line_total: number;
   version: number;
 };
@@ -1030,6 +1031,8 @@ export type OvfLineFormInput = {
   contact_number?: string | null;
   qty?: number;
   unit_price?: number;
+  gst_pct?: number | null;
+  line_total?: number | null;
 };
 
 export async function listOvfs(params?: {
@@ -1079,7 +1082,12 @@ export async function getOvfBlueprint(id: string): Promise<BlueprintState> {
 
 export async function sendOvfForApproval(
   id: string,
-  body: { team_role?: string; remarks?: string | null },
+  body: {
+    team_role?: string;
+    remarks?: string | null;
+    assigned_user_id?: string;
+    assigned_user_ids?: string[];
+  },
 ): Promise<Ovf> {
   return unwrap(
     await apiClient<Ovf>(`${CRM_OVF_API}/${id}/send-for-approval`, { method: "POST", body }),

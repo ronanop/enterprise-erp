@@ -8,8 +8,6 @@ import {
   CrmDetailGrid,
   CrmDetailItem,
   CrmErrorBanner,
-  CrmHeadlineBand,
-  CrmHeadlineStat,
   CrmPage,
   CrmSection,
 } from "@/components/crm/crm-ui";
@@ -19,7 +17,9 @@ import { BlueprintActions, BlueprintStateBadge } from "@/components/crm/sales/bl
 import {
   OvfOrderLinesSection,
   customerRowsFromOvfLines,
+  emptyChargeAttachment,
   vendorRowsFromOvfLines,
+  type ChargeAttachment,
   type CustomerChargeRow,
   type VendorChargeRow,
 } from "@/components/crm/sales/ovf-order-lines-section";
@@ -69,6 +69,8 @@ export function OvfDetailPage({ ovfId }: { ovfId: string }) {
   const [employees, setEmployees] = useState<Option[]>([]);
   const [customerRows, setCustomerRows] = useState<CustomerChargeRow[]>([]);
   const [vendorRows, setVendorRows] = useState<VendorChargeRow[]>([]);
+  const [customerPo, setCustomerPo] = useState<ChargeAttachment>(emptyChargeAttachment);
+  const [vendorQuote, setVendorQuote] = useState<ChargeAttachment>(emptyChargeAttachment);
   const [vendorNameOptions, setVendorNameOptions] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -103,8 +105,10 @@ export function OvfDetailPage({ ovfId }: { ovfId: string }) {
       setQuote(quoteRow);
       setOpportunity(oppRow);
       setEmployees(employeeRows);
-      setCustomerRows(customerRowsFromOvfLines(ovfLines, quoteLines, poNames));
-      setVendorRows(vendorRowsFromOvfLines(ovfLines, quoteLines, quoteNames));
+      setCustomerRows(customerRowsFromOvfLines(ovfLines, quoteLines));
+      setVendorRows(vendorRowsFromOvfLines(ovfLines, quoteLines));
+      setCustomerPo({ fileName: poNames[0] ?? "", file: null });
+      setVendorQuote({ fileName: quoteNames[0] ?? "", file: null });
       if (oppRow?.lead_id) {
         const lead = await getSalesLead(oppRow.lead_id).catch(() => null);
         setVendorNameOptions(parseLeadDistributorNames(lead?.distributor_name));
@@ -132,7 +136,20 @@ export function OvfDetailPage({ ovfId }: { ovfId: string }) {
     setError(null);
     try {
       if (action === "send_for_approval") {
-        await sendOvfForApproval(ovfId, { team_role: payload.team_role, remarks: payload.remarks });
+        const assignedUserId =
+          typeof payload.assigned_user_id === "string" ? payload.assigned_user_id : undefined;
+        const assignedUserIds = Array.isArray(payload.assigned_user_ids)
+          ? payload.assigned_user_ids.filter((id): id is string => typeof id === "string" && Boolean(id.trim()))
+          : [];
+        if (!assignedUserId && assignedUserIds.length === 0) {
+          throw new ApiClientError("Select an approver before sending for approval.", 400);
+        }
+        await sendOvfForApproval(ovfId, {
+          team_role: payload.team_role,
+          remarks: payload.remarks,
+          assigned_user_id: assignedUserId ?? assignedUserIds[0],
+          assigned_user_ids: assignedUserIds.length > 0 ? assignedUserIds : assignedUserId ? [assignedUserId] : undefined,
+        });
       } else if (action === "share_to_scm") {
         await shareOvfToScm(ovfId);
       } else if (action === "deal_won") {
@@ -297,26 +314,6 @@ export function OvfDetailPage({ ovfId }: { ovfId: string }) {
         disabled={busy}
       />
 
-      <CrmHeadlineBand>
-        <div className="grid divide-y divide-white/10 sm:grid-cols-2 sm:divide-x sm:divide-y-0 lg:grid-cols-4">
-          <CrmHeadlineStat label="Total Margin" value={`${ovf.total_margin_pct}%`} />
-          <CrmHeadlineStat
-            label="Margin Amount"
-            value={formatInrPrecise(ovf.total_margin_amount)}
-          />
-          <CrmHeadlineStat
-            label="PO Number"
-            value={ovf.po_number?.trim() || "—"}
-            sub={`Finance ${ovf.finance_cost_pct}%`}
-          />
-          <CrmHeadlineStat
-            label="SCM Shared"
-            value={ovf.shared_to_scm ? "Yes" : "No"}
-            sub={ovf.deal_won ? `Won ${formatInr(ovf.deal_won_amount ?? 0)}` : `v${ovf.version}`}
-          />
-        </div>
-      </CrmHeadlineBand>
-
       <CrmSection title="OVF Details" subtitle="Module, shipping, and commercial charges" icon={ClipboardCheck}>
         <h3 className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
           OVF Module Information
@@ -401,6 +398,8 @@ export function OvfDetailPage({ ovfId }: { ovfId: string }) {
       <OvfOrderLinesSection
         customerRows={customerRows}
         vendorRows={vendorRows}
+        customerPo={customerPo}
+        vendorQuote={vendorQuote}
         vendorNameOptions={vendorNameOptions}
         disabled
       />

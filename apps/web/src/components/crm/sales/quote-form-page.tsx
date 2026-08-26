@@ -112,7 +112,7 @@ function newLine(source?: SalesLead | null): LineDraft {
     key: crypto.randomUUID(),
     product_name: productName,
     hsn_sac: "",
-    description: source?.notes ?? "",
+    description: "",
     line_type: ["hardware", "software", "services"].includes(sourceType) ? sourceType : "hardware",
     qty: "1",
     unit_cost: "0",
@@ -599,15 +599,6 @@ export function QuoteFormPage({
           <FinanceField label="Entity Email"><Input type="email" value={form.entity_email} onChange={(e) => setField("entity_email", e.target.value)} /></FinanceField>
           <FinanceField label="Entity GST No."><Input value={form.entity_gst} onChange={(e) => setField("entity_gst", e.target.value)} /></FinanceField>
         </div>
-      </CrmSection>
-
-      <CrmSection title="Additional Information" icon={FileText} className="min-w-0 overflow-x-clip">
-        <FinanceField label="Remark">
-          <FinanceTextarea
-            value={form.description}
-            onChange={(e) => setField("description", e.target.value)}
-          />
-        </FinanceField>
       </CrmSection>
 
       <CrmSection title="Terms and Conditions" icon={Scale} className="min-w-0 overflow-x-clip">

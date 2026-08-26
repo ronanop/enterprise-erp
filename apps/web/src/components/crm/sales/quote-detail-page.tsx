@@ -17,8 +17,6 @@ import { exportQuotePdf, loadSellerLetterhead } from "@/lib/crm/export-quote-pdf
 
 import {
   CrmErrorBanner,
-  CrmHeadlineBand,
-  CrmHeadlineStat,
   CrmPage,
   CrmSection,
   CrmWarnBanner,
@@ -42,7 +40,6 @@ import {
   applyQuoteAction,
   approveQuoteInternally,
   formatInr,
-  formatInrPrecise,
   fullName,
   getOpportunity,
   getQuote,
@@ -342,30 +339,6 @@ export function QuoteDetailPage({ quoteId }: { quoteId: string }) {
         </CrmWarnBanner>
       ) : null}
 
-      <CrmHeadlineBand>
-        <div className="grid divide-y divide-white/10 sm:grid-cols-2 sm:divide-x sm:divide-y-0 lg:grid-cols-4">
-          <CrmHeadlineStat label="Grand Total" value={formatInrPrecise(quote.grand_total)} />
-          <CrmHeadlineStat
-            label="Avg Margin"
-            value={`${quote.avg_margin_pct}%`}
-            sub={
-              margin?.requires_management_approval
-                ? `Below ${margin.required_threshold_pct}% threshold`
-                : undefined
-            }
-          />
-          <CrmHeadlineStat
-            label="Stage"
-            value={quote.quote_stage.replaceAll("_", " ")}
-          />
-          <CrmHeadlineStat
-            label="Approval"
-            value={quote.approval_status.replaceAll("_", " ")}
-            sub={`Freight ${formatInr(quote.freight)}`}
-          />
-        </div>
-      </CrmHeadlineBand>
-
       <CrmSection title="Quote Information" icon={FileText}>
         <div className="grid min-w-0 gap-x-6 gap-y-3 md:grid-cols-2">
           <CrmReadOnlyField
@@ -398,10 +371,6 @@ export function QuoteDetailPage({ quoteId }: { quoteId: string }) {
           <CrmReadOnlyField label="Entity Email" value={textOrDash(quote.entity_email)} />
           <CrmReadOnlyField label="Entity GST No." value={textOrDash(quote.entity_gst)} />
         </div>
-      </CrmSection>
-
-      <CrmSection title="Additional Information" icon={FileText}>
-        <CrmReadOnlyTextarea label="Remark" value={textOrDash(quote.description)} />
       </CrmSection>
 
       <CrmSection title="Terms and Conditions" icon={Scale}>

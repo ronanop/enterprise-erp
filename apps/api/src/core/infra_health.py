@@ -9,6 +9,7 @@ import httpx
 from sqlalchemy import text
 
 from core.config import settings
+from core.infra_resolve import ACTIVE_INFRA_SOURCE
 from core.logging import get_logger
 from core.redis import get_redis
 from database.session import engine
@@ -133,7 +134,10 @@ def log_infrastructure_connections() -> dict[str, bool]:
         ("opensearch", _check_opensearch),
     )
     results: dict[str, bool] = {}
-    logger.info("Checking infrastructure connections…")
+    logger.info(
+        "Checking infrastructure connections (source=%s)…",
+        ACTIVE_INFRA_SOURCE,
+    )
     for name, probe in checks:
         ok, target, detail = probe()
         results[name] = ok

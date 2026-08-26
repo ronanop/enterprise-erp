@@ -23,8 +23,8 @@ const PROJECTS_USERS_ITEM = { title: "Users", href: "/projects/users" } as const
 const MEMBER_WORKSPACE_HREFS = [
   "/projects",
   "/projects/my-jobs",
-  "/projects/completed-jobs",
   "/projects/projects",
+  "/projects/completed-jobs",
 ] as const;
 
 export function filterProjectsNavGroups(

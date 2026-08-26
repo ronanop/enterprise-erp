@@ -11,12 +11,14 @@ import {
   OvfOrderLinesSection,
   customerRowsFromOvfLines,
   customerRowsFromQuoteLines,
+  emptyChargeAttachment,
   persistOvfOrderLinesAfterCreate,
   persistOvfOrderLinesOnUpdate,
   sumLineTotals,
   validateChargeAttachments,
   vendorRowsFromOvfLines,
   vendorRowsFromQuoteLines,
+  type ChargeAttachment,
   type CustomerChargeRow,
   type VendorChargeRow,
 } from "@/components/crm/sales/ovf-order-lines-section";
@@ -146,6 +148,8 @@ export function OvfFormPage({ quoteId, ovfId }: { quoteId?: string; ovfId?: stri
   const [mandateMessage, setMandateMessage] = useState("");
   const [customerRows, setCustomerRows] = useState<CustomerChargeRow[]>([]);
   const [vendorRows, setVendorRows] = useState<VendorChargeRow[]>([]);
+  const [customerPo, setCustomerPo] = useState<ChargeAttachment>(emptyChargeAttachment);
+  const [vendorQuote, setVendorQuote] = useState<ChargeAttachment>(emptyChargeAttachment);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -179,8 +183,10 @@ export function OvfFormPage({ quoteId, ovfId }: { quoteId?: string; ovfId?: stri
         setQuote(quoteRow);
         setOpportunity(opportunityRow);
         setVendorNameOptions(await distributorOptionsForOpportunity(opportunityRow));
-        setCustomerRows(customerRowsFromOvfLines(ovfLines, quoteLines, poNames));
-        setVendorRows(vendorRowsFromOvfLines(ovfLines, quoteLines, quoteNames));
+        setCustomerRows(customerRowsFromOvfLines(ovfLines, quoteLines));
+        setVendorRows(vendorRowsFromOvfLines(ovfLines, quoteLines));
+        setCustomerPo({ fileName: poNames[0] ?? "", file: null });
+        setVendorQuote({ fileName: quoteNames[0] ?? "", file: null });
         setForm({
           po_number: ovfRow.po_number ?? "",
           po_date: ovfRow.po_date ? String(ovfRow.po_date).slice(0, 10) : "",
@@ -279,6 +285,8 @@ export function OvfFormPage({ quoteId, ovfId }: { quoteId?: string; ovfId?: stri
       setVendorNameOptions(await distributorOptionsForOpportunity(opportunityRow));
       setCustomerRows(customerRowsFromQuoteLines(quoteLines));
       setVendorRows(vendorRowsFromQuoteLines(quoteLines));
+      setCustomerPo(emptyChargeAttachment());
+      setVendorQuote(emptyChargeAttachment());
       setForm((current) => ({
         ...current,
         customer_name: companyRow?.customer_name ?? quoteRow.entity_name ?? "",
@@ -363,7 +371,7 @@ export function OvfFormPage({ quoteId, ovfId }: { quoteId?: string; ovfId?: stri
       setMandateOpen(true);
       return;
     }
-    const chargeError = validateChargeAttachments(customerRows, vendorRows);
+    const chargeError = validateChargeAttachments(customerPo, vendorQuote);
     if (chargeError) {
       setError(chargeError);
       return;
@@ -380,6 +388,7 @@ export function OvfFormPage({ quoteId, ovfId }: { quoteId?: string; ovfId?: stri
           saved.company_id ?? opportunity.company_account_id,
           customerRows,
           vendorRows,
+          { customerPo, vendorQuote },
           { addOvfLine, updateOvfLine, createAttachment, fileToBase64 },
         );
         await updateOvf(saved.id, {
@@ -404,6 +413,7 @@ export function OvfFormPage({ quoteId, ovfId }: { quoteId?: string; ovfId?: stri
         created.company_id ?? opportunity.company_account_id,
         customerRows,
         vendorRows,
+        { customerPo, vendorQuote },
         { listOvfLines, addOvfLine, updateOvfLine, createAttachment, fileToBase64 },
       );
       router.push(`/crm/ovf/${created.id}`);
@@ -497,6 +507,10 @@ export function OvfFormPage({ quoteId, ovfId }: { quoteId?: string; ovfId?: stri
         vendorRows={vendorRows}
         onCustomerRowsChange={setCustomerRows}
         onVendorRowsChange={setVendorRows}
+        customerPo={customerPo}
+        vendorQuote={vendorQuote}
+        onCustomerPoChange={setCustomerPo}
+        onVendorQuoteChange={setVendorQuote}
         vendorNameOptions={vendorNameOptions}
         disabled={saving}
       />

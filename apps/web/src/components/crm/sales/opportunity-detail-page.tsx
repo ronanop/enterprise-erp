@@ -160,9 +160,26 @@ export function OpportunityDetailPage({ opportunityId }: { opportunityId: string
       const ovf = ovfs[0];
       if (ovf && OVF_FOLLOW_ON.has(action)) {
         if (action === "send_for_approval") {
+          const assignedUserId =
+            typeof payload.assigned_user_id === "string" ? payload.assigned_user_id : undefined;
+          const assignedUserIds = Array.isArray(payload.assigned_user_ids)
+            ? payload.assigned_user_ids.filter(
+              (id): id is string => typeof id === "string" && Boolean(id.trim()),
+            )
+            : [];
+          if (!assignedUserId && assignedUserIds.length === 0) {
+            throw new ApiClientError("Select an approver before sending for approval.", 400);
+          }
           await sendOvfForApproval(ovf.id, {
             team_role: typeof payload.team_role === "string" ? payload.team_role : undefined,
             remarks: typeof payload.remarks === "string" ? payload.remarks : null,
+            assigned_user_id: assignedUserId ?? assignedUserIds[0],
+            assigned_user_ids:
+              assignedUserIds.length > 0
+                ? assignedUserIds
+                : assignedUserId
+                  ? [assignedUserId]
+                  : undefined,
           });
         } else if (action === "share_to_scm") {
           await shareOvfToScm(ovf.id);

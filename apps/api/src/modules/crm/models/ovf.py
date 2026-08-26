@@ -135,4 +135,5 @@ class CrmOvfLine(Base, *CrmTransactionMixin):
     contact_number: Mapped[str | None] = mapped_column(String(100), nullable=True)
     qty: Mapped[Decimal] = mapped_column(Numeric(18, 4), nullable=False, default=1)
     unit_price: Mapped[Decimal] = mapped_column(Numeric(18, 4), nullable=False, default=0)
+    gst_pct: Mapped[Decimal] = mapped_column(Numeric(6, 3), nullable=False, default=Decimal("18"))
     line_total: Mapped[Decimal] = mapped_column(Numeric(18, 4), nullable=False, default=0)

@@ -1,5 +1,5 @@
 import { clearTokens, getAccessToken, getRefreshToken, setTokens } from "@/lib/auth";
-import { env } from "@/utils/env";
+import { env, getApiUrl, resolveApiUrl, setApiUrl } from "@/utils/env";
 import type { ApiResponse, ErrorResponse, TokenData, UserProfile } from "@/types/api";
 
 export class ApiClientError extends Error {
@@ -32,10 +32,16 @@ type RequestOptions = Omit<RequestInit, "body"> & {
   query?: Record<string, string | number | boolean | null | undefined>;
   /** Internal: skip one refresh retry to avoid loops. */
   _retried?: boolean;
+  /** Internal: skip one API-base failover retry. */
+  _apiFailover?: boolean;
 };
 
-function buildUrl(path: string, query?: RequestOptions["query"]): string {
-  const base = `${env.apiUrl}${path}`;
+function buildUrl(
+  path: string,
+  query?: RequestOptions["query"],
+  baseUrl: string = getApiUrl(),
+): string {
+  const base = `${baseUrl}${path}`;
   if (!query) return base;
   const params = new URLSearchParams();
   for (const [key, value] of Object.entries(query)) {
@@ -47,6 +53,23 @@ function buildUrl(path: string, query?: RequestOptions["query"]): string {
 }
 
 let refreshInFlight: Promise<boolean> | null = null;
+let apiBaseReady: Promise<string> | null = null;
+
+function ensureApiBase(): Promise<string> {
+  if (!apiBaseReady) {
+    apiBaseReady = resolveApiUrl().catch(() => getApiUrl());
+  }
+  return apiBaseReady;
+}
+
+async function failoverApiBase(): Promise<void> {
+  const before = getApiUrl();
+  const resolved = await resolveApiUrl(true);
+  if (resolved === before && env.apiUrlFallback !== before) {
+    setApiUrl(env.apiUrlFallback);
+  }
+  apiBaseReady = Promise.resolve(getApiUrl());
+}
 
 async function tryRefreshAccessToken(): Promise<boolean> {
   const refreshToken = getRefreshToken();
@@ -55,6 +78,7 @@ async function tryRefreshAccessToken(): Promise<boolean> {
   if (!refreshInFlight) {
     refreshInFlight = (async () => {
       try {
+        await ensureApiBase();
         const response = await fetch(buildUrl("/auth/refresh"), {
           method: "POST",
           headers: {
@@ -89,8 +113,10 @@ export async function apiClient<T>(
   path: string,
   options: RequestOptions = {},
 ): Promise<ApiResponse<T>> {
-  const { body, headers, auth = true, query, _retried, ...rest } = options;
+  const { body, headers, auth = true, query, _retried, _apiFailover, ...rest } = options;
   const token = auth ? getAccessToken() : null;
+
+  await ensureApiBase();
 
   let response: Response;
   try {
@@ -106,6 +132,10 @@ export async function apiClient<T>(
       cache: "no-store",
     });
   } catch {
+    if (!_apiFailover) {
+      await failoverApiBase();
+      return apiClient<T>(path, { ...options, _apiFailover: true });
+    }
     throw new ApiClientError(
       "Cannot reach the API. Confirm the backend is running on port 8000.",
       0,
@@ -179,7 +209,7 @@ export const authService = {
     }),
   microsoftLoginUrl: (returnTo = "/organization") => {
     const path = `/auth/microsoft/login?return_to=${encodeURIComponent(returnTo)}`;
-    return `${env.apiUrl}${path}`;
+    return `${getApiUrl()}${path}`;
   },
   exchangeMicrosoftCode: (code: string) =>
     apiClient<TokenData>("/auth/microsoft/exchange", {
@@ -231,8 +261,10 @@ export async function downloadApiFile(
   query?: Record<string, string | number | boolean | null | undefined>,
   fallbackName = "export.bin",
   _retried = false,
+  _apiFailover = false,
 ): Promise<void> {
   const token = getAccessToken();
+  await ensureApiBase();
   let response: Response;
   try {
     response = await fetch(buildUrl(path, query), {
@@ -244,6 +276,10 @@ export async function downloadApiFile(
       cache: "no-store",
     });
   } catch {
+    if (!_apiFailover) {
+      await failoverApiBase();
+      return downloadApiFile(path, query, fallbackName, _retried, true);
+    }
     throw new ApiClientError(
       "Cannot reach the API. Confirm the backend is running on port 8000.",
       0,
@@ -253,7 +289,7 @@ export async function downloadApiFile(
   if (response.status === 401 && !_retried) {
     const refreshed = await tryRefreshAccessToken();
     if (refreshed) {
-      return downloadApiFile(path, query, fallbackName, true);
+      return downloadApiFile(path, query, fallbackName, true, _apiFailover);
     }
     clearTokens();
     throw new ApiClientError("Session expired. Please sign in again.", 401);

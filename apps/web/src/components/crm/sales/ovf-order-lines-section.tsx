@@ -28,8 +28,6 @@ export type CustomerChargeRow = {
   gst_pct: string;
   total_gst: string;
   total_with_gst: string;
-  add_po: string;
-  poFile?: File | null;
 };
 
 export type VendorChargeRow = {
@@ -47,9 +45,17 @@ export type VendorChargeRow = {
   vendor_name: string;
   contact_person: string;
   contact_number: string;
-  add_quote: string;
-  quoteFile?: File | null;
 };
+
+/** One Customer PO / Vendor Quote for the whole charges table (not per product row). */
+export type ChargeAttachment = {
+  fileName: string;
+  file: File | null;
+};
+
+export function emptyChargeAttachment(): ChargeAttachment {
+  return { fileName: "", file: null };
+}
 
 function newKey() {
   return `row-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -67,8 +73,6 @@ export function emptyCustomerRow(): CustomerChargeRow {
     gst_pct: String(GST_PCT),
     total_gst: "",
     total_with_gst: "",
-    add_po: "",
-    poFile: null,
   };
 }
 
@@ -87,8 +91,6 @@ export function emptyVendorRow(): VendorChargeRow {
     vendor_name: "",
     contact_person: "",
     contact_number: "",
-    add_quote: "",
-    quoteFile: null,
   };
 }
 
@@ -154,18 +156,27 @@ export function vendorRowsFromQuoteLines(quoteLines: QuoteLine[]): VendorChargeR
 export function customerRowsFromOvfLines(
   lines: OvfLine[],
   quoteLines: QuoteLine[] = [],
-  poFileNames: string[] = [],
 ): CustomerChargeRow[] {
   const byName = quoteByProductName(quoteLines);
   const byNo = quoteByLineNo(quoteLines);
   const sorted = [...lines]
     .filter((line) => line.side === "customer_po")
-    .sort((a, b) => Number(a.line_no) - Number(b.line_no));
-  return sorted.map((line, index) => {
+    .sort((a, b) => Number(a.line_no) - Number(b.line_no) || a.product_name.localeCompare(b.product_name));
+  return sorted.map((line) => {
     const qty = qtyAsInt(line.qty);
     const unitPrice = moneyAsFixed(line.unit_price ?? 0);
-    const gstPct = String(GST_PCT);
-    const money = moneyFromQtyPrice(qty, unitPrice, gstPct);
+    const gstPct = String(Number(line.gst_pct) > 0 ? line.gst_pct : GST_PCT);
+    const storedTotal = moneyAsFixed(line.line_total);
+    const money =
+      storedTotal !== ""
+        ? {
+          total: storedTotal,
+          total_gst: moneyAsFixed((Number(storedTotal) * (Number(gstPct) || 0)) / 100),
+          total_with_gst: moneyAsFixed(
+            Number(storedTotal) + (Number(storedTotal) * (Number(gstPct) || 0)) / 100,
+          ),
+        }
+        : moneyFromQtyPrice(qty, unitPrice, gstPct);
     const quoteLine =
       byName.get((line.product_name || "").trim().toLowerCase()) ?? byNo.get(Number(line.line_no));
     return {
@@ -180,8 +191,6 @@ export function customerRowsFromOvfLines(
       gst_pct: gstPct,
       total_gst: money.total_gst,
       total_with_gst: money.total_with_gst,
-      add_po: poFileNames[index] ?? "",
-      poFile: null,
     } satisfies CustomerChargeRow;
   });
 }
@@ -189,17 +198,26 @@ export function customerRowsFromOvfLines(
 export function vendorRowsFromOvfLines(
   lines: OvfLine[],
   quoteLines: QuoteLine[] = [],
-  quoteFileNames: string[] = [],
 ): VendorChargeRow[] {
   const byNo = quoteByLineNo(quoteLines);
   const sorted = [...lines]
     .filter((line) => line.side === "vendor")
-    .sort((a, b) => Number(a.line_no) - Number(b.line_no));
-  return sorted.map((line, index) => {
+    .sort((a, b) => Number(a.line_no) - Number(b.line_no) || a.product_name.localeCompare(b.product_name));
+  return sorted.map((line) => {
     const qty = qtyAsInt(line.qty);
     const unitPrice = moneyAsFixed(line.unit_price ?? 0);
-    const gstPct = String(GST_PCT);
-    const money = moneyFromQtyPrice(qty, unitPrice, gstPct);
+    const gstPct = String(Number(line.gst_pct) > 0 ? line.gst_pct : GST_PCT);
+    const storedTotal = moneyAsFixed(line.line_total);
+    const money =
+      storedTotal !== ""
+        ? {
+          total: storedTotal,
+          total_gst: moneyAsFixed((Number(storedTotal) * (Number(gstPct) || 0)) / 100),
+          total_with_gst: moneyAsFixed(
+            Number(storedTotal) + (Number(storedTotal) * (Number(gstPct) || 0)) / 100,
+          ),
+        }
+        : moneyFromQtyPrice(qty, unitPrice, gstPct);
     const quoteLine = byNo.get(Number(line.line_no));
     const storedDistributor = (line.distributor_name ?? "").trim();
     const quoteProduct = (quoteLine?.product_name ?? "").trim();
@@ -232,8 +250,6 @@ export function vendorRowsFromOvfLines(
       vendor_name: distributor,
       contact_person: (line.contact_person ?? "").trim(),
       contact_number: (line.contact_number ?? "").trim(),
-      add_quote: quoteFileNames[index] ?? "",
-      quoteFile: null,
     } satisfies VendorChargeRow;
   });
 }
@@ -255,8 +271,6 @@ export function customerFromQuote(quoteLine: QuoteLine, ovfLine?: OvfLine): Cust
     gst_pct: gstPct,
     total_gst: money.total_gst,
     total_with_gst: money.total_with_gst,
-    add_po: "",
-    poFile: null,
   };
 }
 
@@ -280,33 +294,64 @@ export function vendorFromQuote(quoteLine: QuoteLine, ovfLine?: OvfLine): Vendor
     vendor_name: (ovfLine?.distributor_name ?? "").trim(),
     contact_person: (ovfLine?.contact_person ?? "").trim(),
     contact_number: (ovfLine?.contact_number ?? "").trim(),
-    add_quote: "",
-    quoteFile: null,
   };
 }
 
-function customerLinePayload(row: CustomerChargeRow) {
+function customerLinePayload(row: CustomerChargeRow): OvfLineFormInput {
+  const qty = Math.round(Number(row.qty)) || 1;
+  const unitPrice = Number(moneyAsFixed(Number(row.unit_price) || 0)) || 0;
+  const total = Number(moneyAsFixed(Number(row.total) || qty * unitPrice)) || 0;
   return {
     product_name: row.product_name.trim(),
     description: row.description.trim() || null,
     distributor_name: null,
     contact_person: null,
     contact_number: null,
-    qty: Math.round(Number(row.qty)) || 1,
-    unit_price: Number(moneyAsFixed(Number(row.unit_price) || 0)) || 0,
+    qty,
+    unit_price: unitPrice,
+    gst_pct: Number(row.gst_pct) || GST_PCT,
+    line_total: total,
   };
 }
 
-function vendorLinePayload(row: VendorChargeRow) {
+function vendorLinePayload(row: VendorChargeRow): OvfLineFormInput {
+  const qty = Math.round(Number(row.qty)) || 1;
+  const unitPrice = Number(moneyAsFixed(Number(row.unit_price) || 0)) || 0;
+  const total = Number(moneyAsFixed(Number(row.total) || qty * unitPrice)) || 0;
   return {
     product_name: row.product_name.trim() || row.vendor_name.trim(),
     description: row.description.trim() || null,
     distributor_name: row.vendor_name.trim() || null,
     contact_person: row.contact_person.trim() || null,
     contact_number: row.contact_number.trim() || null,
-    qty: Math.round(Number(row.qty)) || 1,
-    unit_price: Number(moneyAsFixed(Number(row.unit_price) || 0)) || 0,
+    qty,
+    unit_price: unitPrice,
+    gst_pct: Number(row.gst_pct) || GST_PCT,
+    line_total: total,
   };
+}
+
+function takeMatchingLine(
+  pool: OvfLine[],
+  row: { serverId?: string; product_name: string; vendor_name?: string },
+): OvfLine | undefined {
+  if (row.serverId) {
+    const byId = pool.findIndex((line) => line.id === row.serverId);
+    if (byId >= 0) return pool.splice(byId, 1)[0];
+  }
+  const product = (row.product_name || "").trim().toLowerCase();
+  if (product) {
+    const byProduct = pool.findIndex((line) => (line.product_name || "").trim().toLowerCase() === product);
+    if (byProduct >= 0) return pool.splice(byProduct, 1)[0];
+  }
+  const vendor = (row.vendor_name || "").trim().toLowerCase();
+  if (vendor) {
+    const byDist = pool.findIndex(
+      (line) => (line.distributor_name || line.product_name || "").trim().toLowerCase() === vendor,
+    );
+    if (byDist >= 0) return pool.splice(byDist, 1)[0];
+  }
+  return pool.shift();
 }
 
 export function sumLineTotals(rows: { total: string }[]) {
@@ -314,14 +359,14 @@ export function sumLineTotals(rows: { total: string }[]) {
 }
 
 export function validateChargeAttachments(
-  customerRows: CustomerChargeRow[],
-  vendorRows: VendorChargeRow[],
+  customerPo: ChargeAttachment,
+  vendorQuote: ChargeAttachment,
 ): string | null {
-  if (customerRows.find((row) => !row.serverId && !row.add_po.trim())) {
-    return "Add PO * is required for every Customer Charges row.";
+  if (!customerPo.fileName.trim()) {
+    return "Add PO * is required for Customer Charges.";
   }
-  if (vendorRows.find((row) => !row.serverId && !row.add_quote.trim())) {
-    return "Add Quote * is required for every Vendor Charges row.";
+  if (!vendorQuote.fileName.trim()) {
+    return "Add Quote * is required for Vendor Charges.";
   }
   return null;
 }
@@ -363,19 +408,24 @@ function ChargesField({
 function ChargesTableShell({
   title,
   children,
+  headerRight,
   footerLeft,
   totalLabel,
   totalValue,
 }: {
   title: string;
   children: ReactNode;
+  headerRight?: ReactNode;
   footerLeft: ReactNode;
   totalLabel: string;
   totalValue: string;
 }) {
   return (
     <div className="space-y-3">
-      <h3 className="text-[15px] font-semibold text-foreground">{title}</h3>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h3 className="text-[15px] font-semibold text-foreground">{title}</h3>
+        {headerRight ? <div className="shrink-0">{headerRight}</div> : null}
+      </div>
       <div className="overflow-x-auto rounded-md border border-[#e2e8f0]">{children}</div>
       <div className="flex flex-wrap items-center justify-between gap-3">
         {footerLeft}
@@ -454,6 +504,10 @@ type OvfOrderLinesSectionProps = {
   vendorRows: VendorChargeRow[];
   onCustomerRowsChange?: (rows: CustomerChargeRow[]) => void;
   onVendorRowsChange?: (rows: VendorChargeRow[]) => void;
+  customerPo?: ChargeAttachment;
+  vendorQuote?: ChargeAttachment;
+  onCustomerPoChange?: (attachment: ChargeAttachment) => void;
+  onVendorQuoteChange?: (attachment: ChargeAttachment) => void;
   /** Distributor names selected on the lead — options for Distributor Name. */
   vendorNameOptions?: readonly string[];
   disabled?: boolean;
@@ -464,17 +518,25 @@ export function OvfOrderLinesSection({
   vendorRows,
   onCustomerRowsChange,
   onVendorRowsChange,
+  customerPo = emptyChargeAttachment(),
+  vendorQuote = emptyChargeAttachment(),
+  onCustomerPoChange,
+  onVendorQuoteChange,
   vendorNameOptions = [],
   disabled = false,
 }: OvfOrderLinesSectionProps) {
   const totalSaleValue = sumLineTotals(customerRows);
   const totalPurchaseValue = sumLineTotals(vendorRows);
+  // Lead distributors only — never merge row values (those can be OEM/product names).
   const vendorOptions = Array.from(
-    new Set([
-      ...vendorNameOptions.map((name) => name.trim()).filter(Boolean),
-      ...vendorRows.map((row) => row.vendor_name.trim()).filter(Boolean),
-    ]),
+    new Set(vendorNameOptions.map((name) => name.trim()).filter(Boolean)),
   );
+  function selectedDistributor(value: string): string {
+    const trimmed = value.trim();
+    if (!trimmed) return "";
+    const match = vendorOptions.find((name) => name.toLowerCase() === trimmed.toLowerCase());
+    return match ?? "";
+  }
 
   function updateCustomerRow(key: string, patch: Partial<CustomerChargeRow>, recalc = false) {
     if (disabled || !onCustomerRowsChange) return;
@@ -516,6 +578,38 @@ export function OvfOrderLinesSection({
     onVendorRowsChange([...vendorRows, emptyVendorRow()]);
   }
 
+  const customerAttachmentControl = (
+    <div className="flex min-w-0 flex-wrap items-center gap-2">
+      <span className="text-[12px] font-medium whitespace-nowrap text-[#475569]">
+        Add PO <span className="text-destructive">*</span>
+      </span>
+      <div className="w-[220px] max-w-full">
+        <ChargesLocalFileUpload
+          fileName={customerPo.fileName}
+          required={!disabled}
+          disabled={disabled || !onCustomerPoChange}
+          onFileSelected={(file) => onCustomerPoChange?.({ fileName: file.name, file })}
+        />
+      </div>
+    </div>
+  );
+
+  const vendorAttachmentControl = (
+    <div className="flex min-w-0 flex-wrap items-center gap-2">
+      <span className="text-[12px] font-medium whitespace-nowrap text-[#475569]">
+        Add Quote <span className="text-destructive">*</span>
+      </span>
+      <div className="w-[220px] max-w-full">
+        <ChargesLocalFileUpload
+          fileName={vendorQuote.fileName}
+          required={!disabled}
+          disabled={disabled || !onVendorQuoteChange}
+          onFileSelected={(file) => onVendorQuoteChange?.({ fileName: file.name, file })}
+        />
+      </div>
+    </div>
+  );
+
   return (
     <section className="overflow-hidden rounded-xl border border-border/80 bg-card shadow-sm">
       <div className="border-b border-border/70 px-4 py-3">
@@ -523,7 +617,7 @@ export function OvfOrderLinesSection({
         <p className="text-[11px] text-muted-foreground">
           {disabled
             ? "Customer Charges and Vendor Charges saved with this OVF."
-            : "Customer Charges and Vendor Charges — prefilled from the quote; use + Add row for extras."}
+            : "Customer Charges and Vendor Charges — prefilled from the quote; use + Add row for extras. One PO and one vendor quote cover all products."}
         </p>
       </div>
 
@@ -532,7 +626,7 @@ export function OvfOrderLinesSection({
           title="Customer Charges."
           totalLabel="Total Sale Value"
           totalValue={formatInrPrecise(totalSaleValue)}
-          footerLeft={
+          headerRight={
             !disabled ? (
               <Button
                 type="button"
@@ -543,12 +637,11 @@ export function OvfOrderLinesSection({
               >
                 <Plus className="size-3.5" /> Add row
               </Button>
-            ) : (
-              <span />
-            )
+            ) : null
           }
+          footerLeft={customerAttachmentControl}
         >
-          <table className="w-full min-w-[1240px] border-collapse text-left">
+          <table className="w-full min-w-[1080px] border-collapse text-left">
             <thead>
               <tr className="bg-[#eef2f6]">
                 <th className={thClass("min-w-[160px]")}>Product Name</th>
@@ -559,15 +652,12 @@ export function OvfOrderLinesSection({
                 <th className={thClass("min-w-[90px]")}>GST ({GST_PCT}%)</th>
                 <th className={thClass("min-w-[120px]")}>Total GST ({GST_PCT}%)</th>
                 <th className={thClass("min-w-[150px]")}>Total Amount with GST</th>
-                <th className={thClass("min-w-[120px]")}>
-                  Add PO <span className="text-destructive">*</span>
-                </th>
               </tr>
             </thead>
             <tbody>
               {customerRows.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="px-3 py-6 text-center text-[12px] text-muted-foreground">
+                  <td colSpan={8} className="px-3 py-6 text-center text-[12px] text-muted-foreground">
                     No customer charge rows. Click + Add row to create one.
                   </td>
                 </tr>
@@ -642,16 +732,6 @@ export function OvfOrderLinesSection({
                         onChange={(v) => updateCustomerRow(row.key, { total_with_gst: v })}
                       />
                     </td>
-                    <td className={tdClass()}>
-                      <ChargesLocalFileUpload
-                        fileName={row.add_po}
-                        required={!row.serverId}
-                        disabled={disabled}
-                        onFileSelected={(file) =>
-                          updateCustomerRow(row.key, { add_po: file.name, poFile: file })
-                        }
-                      />
-                    </td>
                   </tr>
                 ))
               )}
@@ -663,7 +743,7 @@ export function OvfOrderLinesSection({
           title="Vendor Charges."
           totalLabel="Total Purchase Value"
           totalValue={formatInrPrecise(totalPurchaseValue)}
-          footerLeft={
+          headerRight={
             !disabled ? (
               <Button
                 type="button"
@@ -674,12 +754,11 @@ export function OvfOrderLinesSection({
               >
                 <Plus className="size-3.5" /> Add row
               </Button>
-            ) : (
-              <span />
-            )
+            ) : null
           }
+          footerLeft={vendorAttachmentControl}
         >
-          <table className="w-full min-w-[1480px] border-collapse text-left">
+          <table className="w-full min-w-[1320px] border-collapse text-left">
             <thead>
               <tr className="bg-[#eef2f6]">
                 <th className={thClass("min-w-[160px]")}>Product Name</th>
@@ -693,15 +772,12 @@ export function OvfOrderLinesSection({
                 <th className={thClass("min-w-[140px]")}>Distributor Name</th>
                 <th className={thClass("min-w-[130px]")}>Contact Person</th>
                 <th className={thClass("min-w-[130px]")}>Contact Number.</th>
-                <th className={thClass("min-w-[120px]")}>
-                  Add Quote <span className="text-destructive">*</span>
-                </th>
               </tr>
             </thead>
             <tbody>
               {vendorRows.length === 0 ? (
                 <tr>
-                  <td colSpan={12} className="px-3 py-6 text-center text-[12px] text-muted-foreground">
+                  <td colSpan={11} className="px-3 py-6 text-center text-[12px] text-muted-foreground">
                     No vendor charge rows. Click + Add row to create one.
                   </td>
                 </tr>
@@ -779,13 +855,13 @@ export function OvfOrderLinesSection({
                     <td className={tdClass()}>
                       <select
                         disabled={disabled}
-                        value={row.vendor_name}
+                        value={selectedDistributor(row.vendor_name)}
                         onChange={(e) => updateVendorRow(row.key, { vendor_name: e.target.value })}
                         className={cn(
                           "flex h-9 w-full min-w-[140px] cursor-pointer rounded-[4px] border border-[#cfd7e3] bg-white px-2.5 text-[13px] shadow-none outline-none transition-colors duration-200",
                           "focus-visible:border-sky-400 focus-visible:ring-1 focus-visible:ring-sky-300",
                           disabled && "cursor-default bg-[#f8fafc] opacity-70",
-                          !row.vendor_name && "text-muted-foreground",
+                          !selectedDistributor(row.vendor_name) && "text-muted-foreground",
                         )}
                         aria-label="Distributor name"
                       >
@@ -811,16 +887,6 @@ export function OvfOrderLinesSection({
                         onChange={(v) => updateVendorRow(row.key, { contact_number: v })}
                       />
                     </td>
-                    <td className={tdClass()}>
-                      <ChargesLocalFileUpload
-                        fileName={row.add_quote}
-                        required={!row.serverId}
-                        disabled={disabled}
-                        onFileSelected={(file) =>
-                          updateVendorRow(row.key, { add_quote: file.name, quoteFile: file })
-                        }
-                      />
-                    </td>
                   </tr>
                 ))
               )}
@@ -838,6 +904,10 @@ export async function persistOvfOrderLinesAfterCreate(
   companyId: string | null | undefined,
   customerRows: CustomerChargeRow[],
   vendorRows: VendorChargeRow[],
+  attachments: {
+    customerPo: ChargeAttachment;
+    vendorQuote: ChargeAttachment;
+  },
   deps: {
     listOvfLines: (id: string) => Promise<OvfLine[]>;
     addOvfLine: (id: string, body: OvfLineFormInput) => Promise<OvfLine>;
@@ -856,70 +926,64 @@ export async function persistOvfOrderLinesAfterCreate(
   },
 ) {
   const existing = await deps.listOvfLines(ovfId);
-  const customerExisting = existing
+  const customerPool = existing
     .filter((line) => line.side === "customer_po")
     .sort((a, b) => Number(a.line_no) - Number(b.line_no));
-  const vendorExisting = existing
+  const vendorPool = existing
     .filter((line) => line.side === "vendor")
     .sort((a, b) => Number(a.line_no) - Number(b.line_no));
 
-  let customerIdx = 0;
   for (const row of customerRows) {
     if (!row.product_name.trim()) continue;
     const payload = customerLinePayload(row);
-    if (row.fromQuote && customerIdx < customerExisting.length) {
-      await deps.updateOvfLine(customerExisting[customerIdx].id, payload);
-      customerIdx += 1;
-      continue;
+    const match = takeMatchingLine(customerPool, row);
+    if (match) {
+      await deps.updateOvfLine(match.id, payload);
+    } else {
+      await deps.addOvfLine(ovfId, { side: "customer_po", ...payload });
     }
-    if (row.fromQuote) {
-      customerIdx += 1;
-      continue;
-    }
-    await deps.addOvfLine(ovfId, { side: "customer_po", ...payload });
   }
 
-  let vendorIdx = 0;
   for (const row of vendorRows) {
     if (!row.product_name.trim() && !row.vendor_name.trim()) continue;
     const payload = vendorLinePayload(row);
-    if (row.fromQuote && vendorIdx < vendorExisting.length) {
-      await deps.updateOvfLine(vendorExisting[vendorIdx].id, payload);
-      vendorIdx += 1;
-      continue;
+    const match = takeMatchingLine(vendorPool, {
+      serverId: row.serverId,
+      product_name: row.product_name,
+      vendor_name: row.vendor_name,
+    });
+    if (match) {
+      await deps.updateOvfLine(match.id, payload);
+    } else {
+      await deps.addOvfLine(ovfId, { side: "vendor", ...payload });
     }
-    if (row.fromQuote) {
-      vendorIdx += 1;
-      continue;
-    }
-    await deps.addOvfLine(ovfId, { side: "vendor", ...payload });
   }
 
-  for (const row of customerRows) {
-    if (!row.poFile) continue;
+  const poFile = attachments.customerPo.file;
+  if (poFile) {
     await deps.createAttachment({
       entity_type: "ovf",
       entity_id: ovfId,
       branch_id: branchId,
       company_id: companyId,
-      file_name: row.poFile.name,
+      file_name: poFile.name,
       category: "customer_po",
-      content_base64: await deps.fileToBase64(row.poFile),
-      content_type: row.poFile.type || "application/octet-stream",
+      content_base64: await deps.fileToBase64(poFile),
+      content_type: poFile.type || "application/octet-stream",
     });
   }
 
-  for (const row of vendorRows) {
-    if (!row.quoteFile) continue;
+  const quoteFile = attachments.vendorQuote.file;
+  if (quoteFile) {
     await deps.createAttachment({
       entity_type: "ovf",
       entity_id: ovfId,
       branch_id: branchId,
       company_id: companyId,
-      file_name: row.quoteFile.name,
+      file_name: quoteFile.name,
       category: "vendor_quote",
-      content_base64: await deps.fileToBase64(row.quoteFile),
-      content_type: row.quoteFile.type || "application/octet-stream",
+      content_base64: await deps.fileToBase64(quoteFile),
+      content_type: quoteFile.type || "application/octet-stream",
     });
   }
 }
@@ -930,6 +994,10 @@ export async function persistOvfOrderLinesOnUpdate(
   companyId: string | null | undefined,
   customerRows: CustomerChargeRow[],
   vendorRows: VendorChargeRow[],
+  attachments: {
+    customerPo: ChargeAttachment;
+    vendorQuote: ChargeAttachment;
+  },
   deps: {
     addOvfLine: (id: string, body: OvfLineFormInput) => Promise<OvfLine>;
     updateOvfLine: (lineId: string, body: OvfLineFormInput) => Promise<OvfLine>;
@@ -966,31 +1034,31 @@ export async function persistOvfOrderLinesOnUpdate(
     }
   }
 
-  for (const row of customerRows) {
-    if (!row.poFile) continue;
+  const poFile = attachments.customerPo.file;
+  if (poFile) {
     await deps.createAttachment({
       entity_type: "ovf",
       entity_id: ovfId,
       branch_id: branchId,
       company_id: companyId,
-      file_name: row.poFile.name,
+      file_name: poFile.name,
       category: "customer_po",
-      content_base64: await deps.fileToBase64(row.poFile),
-      content_type: row.poFile.type || "application/octet-stream",
+      content_base64: await deps.fileToBase64(poFile),
+      content_type: poFile.type || "application/octet-stream",
     });
   }
 
-  for (const row of vendorRows) {
-    if (!row.quoteFile) continue;
+  const quoteFile = attachments.vendorQuote.file;
+  if (quoteFile) {
     await deps.createAttachment({
       entity_type: "ovf",
       entity_id: ovfId,
       branch_id: branchId,
       company_id: companyId,
-      file_name: row.quoteFile.name,
+      file_name: quoteFile.name,
       category: "vendor_quote",
-      content_base64: await deps.fileToBase64(row.quoteFile),
-      content_type: row.quoteFile.type || "application/octet-stream",
+      content_base64: await deps.fileToBase64(quoteFile),
+      content_type: quoteFile.type || "application/octet-stream",
     });
   }
 }

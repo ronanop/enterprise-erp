@@ -33,11 +33,11 @@ export const PROJECTS_NAV_GROUPS: readonly ProjectsNavGroup[] = [
     items: [
       { title: "Dashboard", href: "/projects" },
       { title: "My Jobs", href: "/projects/my-jobs" },
-      { title: "Completed Jobs", href: "/projects/completed-jobs" },
       { title: "PO Queue", href: "/projects/po-queue" },
       { title: "Projects", href: "/projects/projects" },
       { title: "Tracker", href: "/projects/tracker" },
       { title: "All Sites", href: "/projects/site-installations" },
+      { title: "Completed Jobs", href: "/projects/completed-jobs" },
     ],
   },
 ] as const;

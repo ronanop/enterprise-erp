@@ -7,6 +7,8 @@ Product rules enforced here:
      lock the record.
 """
 
+from __future__ import annotations
+
 from datetime import date, datetime, timezone
 from decimal import Decimal
 from typing import Any, Sequence
@@ -189,8 +191,12 @@ class OvfService:
             stored_desc = (getattr(ln, "description", None) or "").strip()
             quote_desc = (getattr(ql, "description", None) if ql else None) or None
             desc = stored_desc or quote_desc or ln.product_name
-            line_gst = float(getattr(ql, "gst_pct", 0) or 0) if ql else 0.0
-            gst_pct = line_gst if line_gst > 0 else tax_pct
+            line_gst = float(getattr(ln, "gst_pct", 0) or 0)
+            if line_gst <= 0:
+                quote_gst = float(getattr(ql, "gst_pct", 0) or 0) if ql else 0.0
+                gst_pct = quote_gst if quote_gst > 0 else tax_pct
+            else:
+                gst_pct = line_gst
             qty = float(ln.qty)
             unit = float(ln.unit_price)
             total = float(ln.line_total) if ln.line_total is not None else qty * unit
@@ -631,6 +637,7 @@ class OvfService:
                     description=(quote_line.description or None),
                     qty=quote_line.qty,
                     unit_price=unit_price,
+                    gst_pct=Decimal(str(quote_line.gst_pct or 18)),
                     line_total=(quote_line.qty * unit_price).quantize(Decimal("0.0001")),
                 )
 
@@ -684,9 +691,16 @@ class OvfService:
         existing = self._lines.list_for_ovf(ctx, ovf_id)
         side = fields.get("side", "customer_po")
         fields.setdefault("line_no", len([ln for ln in existing if ln.side == side]) + 1)
-        fields["line_total"] = (Decimal(str(fields.get("qty", 1))) * Decimal(str(fields.get("unit_price", 0)))).quantize(
-            Decimal("0.0001")
-        )
+        qty = Decimal(str(fields.get("qty", 1)))
+        unit_price = Decimal(str(fields.get("unit_price", 0)))
+        if fields.get("line_total") is None:
+            fields["line_total"] = (qty * unit_price).quantize(Decimal("0.0001"))
+        else:
+            fields["line_total"] = Decimal(str(fields["line_total"])).quantize(Decimal("0.0001"))
+        if fields.get("gst_pct") is None:
+            fields["gst_pct"] = Decimal("18")
+        else:
+            fields["gst_pct"] = Decimal(str(fields["gst_pct"]))
         line = self._lines.create(ctx, company_id=ovf.company_id, branch_id=ovf.branch_id, ovf_id=ovf_id, **fields)
         self._recompute_margin(ctx, ovf_id)
         return line
@@ -699,7 +713,12 @@ class OvfService:
         sales_blueprint_engine.assert_not_locked(ovf)
         qty = Decimal(str(fields.get("qty", line.qty)))
         unit_price = Decimal(str(fields.get("unit_price", line.unit_price)))
-        fields["line_total"] = (qty * unit_price).quantize(Decimal("0.0001"))
+        if "line_total" in fields and fields["line_total"] is not None:
+            fields["line_total"] = Decimal(str(fields["line_total"])).quantize(Decimal("0.0001"))
+        else:
+            fields["line_total"] = (qty * unit_price).quantize(Decimal("0.0001"))
+        if "gst_pct" in fields and fields["gst_pct"] is not None:
+            fields["gst_pct"] = Decimal(str(fields["gst_pct"]))
         row = self._lines.update(ctx, line_id, **fields)
         if row is None:
             raise NotFoundException("OVF line not found")
@@ -726,14 +745,23 @@ class OvfService:
         self._repo.update(ctx, ovf_id, total_margin_amount=margin_amount, total_margin_pct=margin_pct)
 
     # -- blueprint / approval workflow ------------------------------------
-    def send_for_approval(self, ctx: TenantContext, ovf_id: UUID, *, team_role: str = "management", remarks: str | None = None) -> CrmOvf:
+    def send_for_approval(
+        self,
+        ctx: TenantContext,
+        ovf_id: UUID,
+        *,
+        team_role: str = "management",
+        remarks: str | None = None,
+        assigned_user_id: UUID | None = None,
+        assigned_user_ids: list[UUID] | None = None,
+    ) -> CrmOvf:
         ovf = self.get(ctx, ovf_id)
         sales_blueprint_engine.assert_not_locked(ovf)
         next_state = sales_blueprint_engine.transition("ovf", ovf.blueprint_state, "send_for_approval")
 
         from modules.crm.service.approval_task_service import ApprovalTaskService
 
-        ApprovalTaskService(self._db).create_task(
+        ApprovalTaskService(self._db).route_approval(
             ctx,
             title=f"Approve OVF {ovf.ovf_no}",
             entity_type="ovf",
@@ -743,6 +771,8 @@ class OvfService:
             company_id=ovf.company_id,
             branch_id=ovf.branch_id,
             remarks=remarks,
+            assigned_user_id=assigned_user_id,
+            assigned_user_ids=assigned_user_ids,
         )
         row = self._repo.update(ctx, ovf_id, blueprint_state=next_state, approval_status="pending", locked=True)
         self._log(ctx, ovf, ovf.blueprint_state, next_state, "send_for_approval", remarks)

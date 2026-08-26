@@ -41,15 +41,33 @@ class Settings(BaseSettings):
         default="postgresql+psycopg://erp-postgres:erp-postgres@172.16.200.26:5432/erp",
         alias="DATABASE_URL",
     )
+    # Local Docker fallbacks (used when VM primary is unreachable)
+    infra_fallback_enabled: bool = Field(default=True, alias="INFRA_FALLBACK_ENABLED")
+    database_url_fallback: str = Field(
+        default="postgresql+psycopg://erp:erp_dev_password@localhost:5433/erp",
+        alias="DATABASE_URL_FALLBACK",
+    )
 
     redis_url: str = Field(default="redis://172.16.200.26:6379/0", alias="REDIS_URL")
+    redis_url_fallback: str = Field(
+        default="redis://localhost:6379/0",
+        alias="REDIS_URL_FALLBACK",
+    )
     celery_broker_url: str = Field(
         default="amqp://erp:erp_dev_password@172.16.200.26:5672//",
         alias="CELERY_BROKER_URL",
     )
+    celery_broker_url_fallback: str = Field(
+        default="amqp://erp:erp_dev_password@localhost:5672//",
+        alias="CELERY_BROKER_URL_FALLBACK",
+    )
     celery_result_backend: str = Field(
         default="redis://172.16.200.26:6379/1",
         alias="CELERY_RESULT_BACKEND",
+    )
+    celery_result_backend_fallback: str = Field(
+        default="redis://localhost:6379/1",
+        alias="CELERY_RESULT_BACKEND_FALLBACK",
     )
 
     cors_origins: list[str] = Field(
@@ -75,6 +93,10 @@ class Settings(BaseSettings):
     )
 
     minio_endpoint: str = Field(default="172.16.200.26:9000", alias="MINIO_ENDPOINT")
+    minio_endpoint_fallback: str = Field(
+        default="localhost:9000",
+        alias="MINIO_ENDPOINT_FALLBACK",
+    )
     minio_root_user: str = Field(default="erp_minio", alias="MINIO_ROOT_USER")
     minio_root_password: str = Field(default="erp_minio_password", alias="MINIO_ROOT_PASSWORD")
     minio_bucket: str = Field(default="erp-documents", alias="MINIO_BUCKET")
@@ -83,6 +105,10 @@ class Settings(BaseSettings):
     opensearch_url: str = Field(
         default="http://172.16.200.26:9200",
         alias="OPENSEARCH_URL",
+    )
+    opensearch_url_fallback: str = Field(
+        default="http://localhost:9200",
+        alias="OPENSEARCH_URL_FALLBACK",
     )
 
     jwt_secret_key: str = Field(default="change-me-in-production", alias="JWT_SECRET_KEY")
@@ -242,7 +268,12 @@ class Settings(BaseSettings):
 
 @lru_cache
 def get_settings() -> Settings:
-    return Settings()
+    loaded = Settings()
+    # Prefer VM primary; switch to local Docker URLs when VM is unreachable.
+    from core.infra_resolve import apply_infra_fallback
+
+    apply_infra_fallback(loaded)
+    return loaded
 
 
 settings = get_settings()

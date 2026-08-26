@@ -37,7 +37,6 @@ type ActionConfig = {
   fields: FieldConfig[];
 };
 
-const REMARK_FIELD: FieldConfig = { key: "remarks", label: "Remarks", type: "textarea" };
 const REMARK_FIELD_ALT: FieldConfig = { key: "remark", label: "Remark", type: "textarea" };
 
 const SEND_APPROVAL_ACTIONS = new Set([
@@ -45,12 +44,16 @@ const SEND_APPROVAL_ACTIONS = new Set([
   "send_sow_approval",
   "send_po_approval",
   "send_for_approval",
+  "send_cloud_discount_approval",
 ]);
 
 const APPROVAL_DIALOG_FIELDS: FieldConfig[] = [
   { key: "assigned_user_id", label: "Approvers", type: "approver", required: true },
   { key: "remarks", label: "Remarks", type: "textarea", required: true },
 ];
+
+const APPROVAL_ADMIN_NOTE =
+  "A copy is also sent to tenant admins. Any selected approver or an admin can decide in My Jobs.";
 
 const ACTION_CONFIG: Record<string, ActionConfig> = {
   convert: {
@@ -75,9 +78,8 @@ const ACTION_CONFIG: Record<string, ActionConfig> = {
   },
   send_cloud_discount_approval: {
     label: "Send Cloud Discount for Approval",
-    fields: [REMARK_FIELD],
-    description:
-      "Routes MRR, ARR, customer discount, and profitability to Management via My Jobs.",
+    fields: APPROVAL_DIALOG_FIELDS,
+    description: `Routes MRR, ARR, customer discount, and profitability to Management via My Jobs. ${APPROVAL_ADMIN_NOTE}`,
   },
   skip_map_oem_quote: {
     label: "Skip MAP OEM Quote",
@@ -99,8 +101,8 @@ const ACTION_CONFIG: Record<string, ActionConfig> = {
   },
   send_boq_approval: {
     label: "Send BOQ for Approval",
-    fields: [REMARK_FIELD],
-    description: "Routes the attached BOQ or SOW to the Pre-sales team via My Jobs.",
+    fields: APPROVAL_DIALOG_FIELDS,
+    description: `Routes the attached BOQ to the Pre-sales team via My Jobs. ${APPROVAL_ADMIN_NOTE}`,
   },
   attach_sow: {
     label: "Attach SOW",
@@ -108,8 +110,8 @@ const ACTION_CONFIG: Record<string, ActionConfig> = {
   },
   send_sow_approval: {
     label: "Send SOW for Approval",
-    fields: [REMARK_FIELD],
-    description: "Routes the attached SOW to the Pre-sales team via My Jobs.",
+    fields: APPROVAL_DIALOG_FIELDS,
+    description: `Routes the attached SOW to the Pre-sales team via My Jobs. ${APPROVAL_ADMIN_NOTE}`,
   },
   skip_sow: { label: "Skip SOW", fields: [] },
   deal_reg: {
@@ -129,12 +131,13 @@ const ACTION_CONFIG: Record<string, ActionConfig> = {
   },
   send_po_approval: {
     label: "Send PO for Approval",
-    fields: [REMARK_FIELD],
-    description: "Routes to the Management team via My Jobs.",
+    fields: APPROVAL_DIALOG_FIELDS,
+    description: `Routes the customer PO to the Management team via My Jobs. ${APPROVAL_ADMIN_NOTE}`,
   },
   send_for_approval: {
     label: "Send for Approval",
-    fields: [REMARK_FIELD],
+    fields: APPROVAL_DIALOG_FIELDS,
+    description: `Routes this record for approval via My Jobs. ${APPROVAL_ADMIN_NOTE}`,
   },
   approve_internally: {
     label: "Approve Internally",
@@ -218,7 +221,9 @@ export function BlueprintActions({
   const [files, setFiles] = useState<File[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [approvalUsers, setApprovalUsers] = useState<{ id: string; label: string }[]>([]);
+  const [approvalUsers, setApprovalUsers] = useState<
+    { id: string; label: string; name: string; email: string }[]
+  >([]);
 
   useEffect(() => {
     let cancelled = false;
@@ -228,6 +233,8 @@ export function BlueprintActions({
         setApprovalUsers(
           rows.map((row) => ({
             id: row.id,
+            name: row.display_name,
+            email: row.email,
             label: `${row.display_name} (${row.email})`,
           })),
         );
@@ -252,9 +259,7 @@ export function BlueprintActions({
       return {
         ...base,
         fields: APPROVAL_DIALOG_FIELDS,
-        description:
-          base.description ??
-          "A copy is also sent to tenant admins. Any selected approver or an admin can decide in My Jobs.",
+        description: base.description ?? APPROVAL_ADMIN_NOTE,
       };
     }
     return base;
@@ -449,20 +454,26 @@ export function BlueprintActions({
         tone={activeConfig?.tone}
         confirmLabel={activeConfig?.label}
         busy={busy}
+        contentClassName={
+          activeAction && SEND_APPROVAL_ACTIONS.has(activeAction) ? "max-w-lg" : undefined
+        }
         onCancel={close}
         onConfirm={() => void confirm()}
       >
         {activeConfig && activeConfig.fields.length > 0 ? (
-          <div className="mt-3 space-y-3">
+          <div className="space-y-4">
             {activeConfig.fields.map((field) => (
               <FinanceField
                 key={field.key}
                 label={field.required ? `${field.label} *` : field.label}
+                className="space-y-2"
               >
                 {field.type === "textarea" ? (
                   <FinanceTextarea
                     value={values[field.key] ?? ""}
                     onChange={(e) => setValues((v) => ({ ...v, [field.key]: e.target.value }))}
+                    className="min-h-[88px] rounded-lg border-slate-200 bg-white text-[13px] shadow-none placeholder:text-slate-400 focus-visible:border-sky-400 focus-visible:ring-2 focus-visible:ring-sky-200/80"
+                    placeholder={`Add ${field.label.toLowerCase()}…`}
                   />
                 ) : field.type === "approver" ? (
                   <ApproverMultiSelect
@@ -477,7 +488,7 @@ export function BlueprintActions({
                         type="button"
                         variant="outline"
                         size="sm"
-                        className="cursor-pointer"
+                        className="h-9 cursor-pointer border-slate-200 bg-white transition-colors duration-200 hover:bg-slate-50"
                         onClick={() => fileInputRef.current?.click()}
                       >
                         <Paperclip className="size-3.5" />
@@ -518,14 +529,14 @@ export function BlueprintActions({
                           }
                         }}
                       />
-                      <span className="min-w-0 max-w-full truncate text-xs text-muted-foreground">
+                      <span className="min-w-0 max-w-full truncate text-xs text-slate-500">
                         {files.length > 1
                           ? `${files.length} files selected`
                           : file?.name ?? "No file selected"}
                       </span>
                     </div>
                     {files.length > 1 ? (
-                      <ul className="space-y-0.5 text-[11px] text-muted-foreground">
+                      <ul className="space-y-0.5 text-[11px] text-slate-500">
                         {files.map((f) => (
                           <li key={f.name} className="truncate">
                             {f.name}
@@ -539,13 +550,14 @@ export function BlueprintActions({
                     type={field.type}
                     value={values[field.key] ?? ""}
                     onChange={(e) => setValues((v) => ({ ...v, [field.key]: e.target.value }))}
+                    className="h-10 rounded-lg border-slate-200 bg-white text-sm shadow-none focus-visible:border-sky-400 focus-visible:ring-2 focus-visible:ring-sky-200/80"
                   />
                 )}
               </FinanceField>
             ))}
           </div>
         ) : null}
-        {error ? <p className="mt-2 text-xs text-destructive">{error}</p> : null}
+        {error ? <p className="mt-3 text-xs text-destructive">{error}</p> : null}
       </ConfirmDialog>
     </div>
   );

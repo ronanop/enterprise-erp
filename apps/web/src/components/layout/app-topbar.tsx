@@ -7,6 +7,7 @@ import { LogIn } from "lucide-react";
 
 import { CrmGlobalSearch } from "@/components/crm/crm-global-search";
 import { AppTopbarNotifications } from "@/components/layout/app-topbar-notifications";
+import { ProjectsGlobalSearch } from "@/components/projects/projects-global-search";
 import { isAuthenticated } from "@/lib/auth";
 
 function workspaceSubtitle(pathname: string, signedIn: boolean): string {
@@ -22,6 +23,7 @@ export function AppTopbar() {
   const pathname = usePathname();
   const [signedIn, setSignedIn] = useState(false);
   const isCrm = pathname === "/crm" || pathname.startsWith("/crm/");
+  const isProjects = pathname === "/projects" || pathname.startsWith("/projects/");
 
   useEffect(() => {
     setSignedIn(isAuthenticated());
@@ -36,7 +38,13 @@ export function AppTopbar() {
         </p>
       </div>
 
-      {isCrm ? <CrmGlobalSearch className="min-w-0 flex-1" /> : <div className="min-w-0 flex-1" />}
+      {isCrm ? (
+        <CrmGlobalSearch className="min-w-0 flex-1" />
+      ) : isProjects ? (
+        <ProjectsGlobalSearch className="min-w-0 flex-1" />
+      ) : (
+        <div className="min-w-0 flex-1" />
+      )}
 
       <div className="flex shrink-0 items-center gap-2">
         <AppTopbarNotifications />

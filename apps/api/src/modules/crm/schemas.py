@@ -1302,6 +1302,8 @@ class OvfLineCreate(BaseModel):
     contact_number: str | None = None
     qty: Decimal = Decimal("1")
     unit_price: Decimal = Decimal("0")
+    gst_pct: Decimal | None = None
+    line_total: Decimal | None = None
 
 
 class OvfLineUpdate(BaseModel):
@@ -1312,6 +1314,8 @@ class OvfLineUpdate(BaseModel):
     contact_number: str | None = None
     qty: Decimal | None = None
     unit_price: Decimal | None = None
+    gst_pct: Decimal | None = None
+    line_total: Decimal | None = None
     version: int | None = None
 
 
@@ -1327,12 +1331,15 @@ class OvfLineResponse(OrmModel):
     contact_number: str | None = None
     qty: Decimal
     unit_price: Decimal
+    gst_pct: Decimal = Decimal("18")
     line_total: Decimal
     version: int
 
 
 class OvfSendForApprovalRequest(BaseModel):
     team_role: str = "management"
+    assigned_user_id: UUID | None = None
+    assigned_user_ids: list[UUID] | None = None
     remarks: str | None = None
 
 

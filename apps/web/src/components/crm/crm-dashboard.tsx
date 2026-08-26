@@ -22,8 +22,6 @@ import {
 } from "@/components/crm/crm-dashboard-charts";
 import {
   CrmActivityTile,
-  CrmHeadlineBand,
-  CrmHeadlineStat,
   CrmIconBadge,
   CrmKpiCard,
   CrmListPanel,
@@ -214,35 +212,6 @@ export function CrmDashboard() {
           Some CRM endpoints returned errors. Showing available records.
         </div>
       ) : null}
-
-      <CrmHeadlineBand>
-        <div className="grid divide-y divide-white/10 sm:grid-cols-2 sm:divide-x sm:divide-y-0 lg:grid-cols-4">
-          <CrmHeadlineStat
-            label="Pipeline value"
-            value={formatInr(kpis.pipelineValue)}
-            sub={`${kpis.openOpps} open opportunities`}
-            loading={loading}
-          />
-          <CrmHeadlineStat
-            label="Won value"
-            value={formatInr(kpis.wonValue)}
-            sub={`${kpis.winRate}% win rate`}
-            loading={loading}
-          />
-          <CrmHeadlineStat
-            label="Open leads"
-            value={String(kpis.openLeads)}
-            sub={`${data?.leads.length ?? 0} total leads`}
-            loading={loading}
-          />
-          <CrmHeadlineStat
-            label="Active campaigns"
-            value={String(countByStatus(data?.campaigns ?? [], ["active"]))}
-            sub={`${data?.campaigns.length ?? 0} total campaigns`}
-            loading={loading}
-          />
-        </div>
-      </CrmHeadlineBand>
 
       <div className="grid gap-2.5 sm:grid-cols-2 xl:grid-cols-4">
         <CrmKpiCard

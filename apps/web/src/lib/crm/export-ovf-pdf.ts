@@ -30,6 +30,8 @@ export type OvfExportInput = {
   shippingContact: string;
   customerRows: CustomerChargeRow[];
   vendorRows: VendorChargeRow[];
+  customerPoFileName?: string | null;
+  vendorQuoteFileName?: string | null;
   createdBy?: string | null;
   modifiedBy?: string | null;
 };
@@ -304,7 +306,7 @@ export function buildOvfExportFilename(ovf: Ovf, quoteName?: string | null): str
 export function exportOvfPdf(input: OvfExportInput): void {
   const doc = new jsPDF({ unit: "mm", format: "a4", orientation: "portrait" });
   const pageRef: PageRef = { n: 1, landscape: false };
-  const { ovf, quote, opportunity, customerRows, vendorRows } = input;
+  const { ovf, quote, opportunity, customerRows, vendorRows, customerPoFileName, vendorQuoteFileName } = input;
 
   const saleTotal = customerRows.reduce((sum, row) => sum + (Number(row.total) || 0), 0);
   const purchaseTotal = vendorRows.reduce((sum, row) => sum + (Number(row.total) || 0), 0);
@@ -406,6 +408,13 @@ export function exportOvfPdf(input: OvfExportInput): void {
   // Charge tables on landscape pages so every column stays readable.
   y = addLandscapePage(doc, pageRef);
   y = sectionTitle(doc, "Customer Charges.", y);
+  if (customerPoFileName?.trim()) {
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(8);
+    doc.setTextColor(...LABEL);
+    doc.text(`PO attachment: ${pdfSafe(customerPoFileName)}`, MARGIN, y);
+    y += 5;
+  }
   autoTable(doc, {
     startY: y,
     margin: { left: MARGIN, right: MARGIN, top: 16, bottom: 16 },
@@ -418,7 +427,6 @@ export function exportOvfPdf(input: OvfExportInput): void {
         "GST %",
         "GST Amount",
         "Amount with GST",
-        "Add PO",
       ],
     ],
     body: customerRows.map((row) => [
@@ -429,20 +437,18 @@ export function exportOvfPdf(input: OvfExportInput): void {
       `${dash(row.gst_pct)}%`,
       formatMoney(row.total_gst, 0),
       formatMoney(row.total_with_gst, 0),
-      pdfSafe(row.add_po || "-"),
     ]),
     styles: tableBaseStyles(),
     headStyles: tableHeadStyles(),
     alternateRowStyles: { fillColor: ROW_ALT },
     columnStyles: {
-      0: { cellWidth: 62, halign: "left" },
-      1: { cellWidth: 18, halign: "right" },
-      2: { cellWidth: 34, halign: "right" },
-      3: { cellWidth: 28, halign: "right" },
-      4: { cellWidth: 20, halign: "center" },
-      5: { cellWidth: 30, halign: "right" },
-      6: { cellWidth: 36, halign: "right" },
-      7: { cellWidth: 28, halign: "left" },
+      0: { cellWidth: 78, halign: "left" },
+      1: { cellWidth: 20, halign: "right" },
+      2: { cellWidth: 38, halign: "right" },
+      3: { cellWidth: 32, halign: "right" },
+      4: { cellWidth: 22, halign: "center" },
+      5: { cellWidth: 34, halign: "right" },
+      6: { cellWidth: 40, halign: "right" },
     },
     didDrawPage: () => {
       // autoTable may add pages; keep page counter approximate via footer redraw
@@ -465,6 +471,13 @@ export function exportOvfPdf(input: OvfExportInput): void {
   }
 
   vendorY = sectionTitle(doc, "Vendor Charges.", vendorY);
+  if (vendorQuoteFileName?.trim()) {
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(8);
+    doc.setTextColor(...LABEL);
+    doc.text(`Quote attachment: ${pdfSafe(vendorQuoteFileName)}`, MARGIN, vendorY);
+    vendorY += 5;
+  }
   autoTable(doc, {
     startY: vendorY,
     margin: { left: MARGIN, right: MARGIN, top: 16, bottom: 16 },
@@ -479,7 +492,6 @@ export function exportOvfPdf(input: OvfExportInput): void {
         "Vendor Name",
         "Contact Person",
         "Contact No.",
-        "Add Quote",
       ],
     ],
     body: vendorRows.map((row) => [
@@ -492,22 +504,20 @@ export function exportOvfPdf(input: OvfExportInput): void {
       pdfSafe(row.vendor_name || "-"),
       pdfSafe(row.contact_person || "-"),
       pdfSafe(row.contact_number || "-"),
-      pdfSafe(row.add_quote || "-"),
     ]),
     styles: tableBaseStyles(),
     headStyles: tableHeadStyles(),
     alternateRowStyles: { fillColor: ROW_ALT },
     columnStyles: {
-      0: { cellWidth: 14, halign: "right" },
-      1: { cellWidth: 30, halign: "right" },
-      2: { cellWidth: 22, halign: "right" },
-      3: { cellWidth: 16, halign: "center" },
-      4: { cellWidth: 24, halign: "right" },
-      5: { cellWidth: 30, halign: "right" },
-      6: { cellWidth: 46, halign: "left" },
-      7: { cellWidth: 30, halign: "left" },
-      8: { cellWidth: 28, halign: "left" },
-      9: { cellWidth: 22, halign: "left" },
+      0: { cellWidth: 16, halign: "right" },
+      1: { cellWidth: 34, halign: "right" },
+      2: { cellWidth: 26, halign: "right" },
+      3: { cellWidth: 18, halign: "center" },
+      4: { cellWidth: 28, halign: "right" },
+      5: { cellWidth: 34, halign: "right" },
+      6: { cellWidth: 52, halign: "left" },
+      7: { cellWidth: 36, halign: "left" },
+      8: { cellWidth: 32, halign: "left" },
     },
     didDrawPage: () => drawFooter(doc, pageRef),
   });

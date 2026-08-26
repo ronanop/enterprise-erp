@@ -6,7 +6,7 @@ import { Briefcase, Check, X } from "lucide-react";
 
 import { CrmErrorBanner, CrmListPanel, CrmPage, CRM_TABLE_HEAD_ROW } from "@/components/crm/crm-ui";
 import { ConfirmDialog } from "@/components/finance/journals/confirm-dialog";
-import { FinanceSelect, FinanceTextarea } from "@/components/finance/journals/finance-form-field";
+import { FinanceField, FinanceSelect, FinanceTextarea } from "@/components/finance/journals/finance-form-field";
 import { CrmListToolbar } from "@/components/crm/sales/crm-list-toolbar";
 import { CrmSortableTh, sortRows, useTableSort } from "@/components/crm/sales/crm-table-sort";
 import { FinanceStatusBadge } from "@/components/finance/finance-status-badge";
@@ -321,16 +321,22 @@ export function MyJobsPage({
         tone={decision?.outcome === "rejected" ? "destructive" : "default"}
         confirmLabel={decision?.outcome === "approved" ? "Approve" : "Reject"}
         busy={deciding}
+        contentClassName="max-w-lg"
         onCancel={() => !deciding && setDecision(null)}
         onConfirm={() => void submitDecision()}
       >
-        <div className="mt-3 space-y-2">
-          <span className="text-[11px] font-medium tracking-wide text-muted-foreground uppercase">
-            Remark{decision?.outcome === "rejected" ? " *" : ""}
-          </span>
-          <FinanceTextarea value={remark} onChange={(e) => setRemark(e.target.value)} />
-          {decideError ? <p className="text-xs text-destructive">{decideError}</p> : null}
-        </div>
+        <FinanceField
+          label={decision?.outcome === "rejected" ? "Remark *" : "Remark"}
+          className="space-y-2"
+        >
+          <FinanceTextarea
+            value={remark}
+            onChange={(e) => setRemark(e.target.value)}
+            placeholder="Add a remark…"
+            className="min-h-[88px] rounded-lg border-slate-200 bg-white text-[13px] shadow-none placeholder:text-slate-400 focus-visible:border-sky-400 focus-visible:ring-2 focus-visible:ring-sky-200/80"
+          />
+        </FinanceField>
+        {decideError ? <p className="mt-3 text-xs text-destructive">{decideError}</p> : null}
       </ConfirmDialog>
     </CrmPage>
   );

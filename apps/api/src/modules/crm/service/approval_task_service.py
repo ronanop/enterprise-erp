@@ -76,7 +76,7 @@ class ApprovalTaskService:
             entity_id=entity_id,
         )
         # When viewing “Assigned to me”, also surface requests I sent so the
-        # requester can track open approvals even if they are not the assignee.
+        # requester can track open approvals — but not every Admin fan-out copy.
         if my_tasks_only and ctx.user_id is not None:
             sent = self._repo.list_tasks(
                 ctx,
@@ -89,6 +89,13 @@ class ApprovalTaskService:
             )
             by_id = {row.id: row for row in rows}
             for row in sent:
+                if row.assigned_user_id == ctx.user_id:
+                    by_id.setdefault(row.id, row)
+                    continue
+                # Skip Admin copies created for other recipients; keep primary tasks.
+                title = (row.title or "").strip()
+                if title.endswith("(Admin)"):
+                    continue
                 by_id.setdefault(row.id, row)
             rows = sorted(
                 by_id.values(),
@@ -158,7 +165,7 @@ class ApprovalTaskService:
         remarks: str | None = None,
         priority: str = "normal",
     ) -> CrmApprovalTask:
-        """Create My Jobs tasks for each selected approver and copies for tenant admins."""
+        """Create My Jobs tasks for selected approvers, CRM module admins, and ERP admins."""
         recipient_ids: list[UUID] = []
         seen: set[UUID] = set()
         for uid in assigned_user_ids or []:
@@ -193,6 +200,7 @@ class ApprovalTaskService:
         for admin_id in self._admin_recipient_ids(ctx):
             if admin_id in seen:
                 continue
+            seen.add(admin_id)
             self.create_task(
                 ctx,
                 title=f"{title} (Admin)",
@@ -203,6 +211,7 @@ class ApprovalTaskService:
                 company_id=company_id,
                 branch_id=branch_id,
                 assigned_user_id=admin_id,
+                assigned_role="admin_copy",
                 remarks=remarks,
                 priority=priority,
             )
@@ -210,21 +219,27 @@ class ApprovalTaskService:
         return primary
 
     def _admin_recipient_ids(self, ctx: TenantContext) -> list[UUID]:
+        """CRM module admins + ERP admins (by user_type) only.
+
+        Do not use TENANT_ADMIN / SUPER_ADMIN role codes here — those roles are
+        widely assigned and would fan out one task per employee.
+        """
         from sqlalchemy import select
 
+        from modules.foundation.domain.erp_modules import ADMIN_USER_TYPES
         from modules.foundation.models.security import SecUser
-        from security.rbac import RBACEngine
+        from modules.foundation.repository.user_module_repository import UserModuleRepository
 
-        engine = RBACEngine(self._db)
-        ids: set[UUID] = set(engine.list_user_ids_with_permission(ctx.tenant_id, "crm.my_jobs:decide"))
-        admin_types = ("super_admin", "tenant_admin", "company_admin")
-        stmt = select(SecUser.id).where(
+        modules = UserModuleRepository(self._db)
+        ids: set[UUID] = set(modules.list_admin_user_ids_for_module(ctx.tenant_id, "crm"))
+
+        erp_admin_stmt = select(SecUser.id).where(
             SecUser.tenant_id == ctx.tenant_id,
             SecUser.is_deleted.is_(False),
             SecUser.status == "active",
-            SecUser.user_type.in_(admin_types),
+            SecUser.user_type.in_(tuple(ADMIN_USER_TYPES)),
         )
-        ids.update(self._db.scalars(stmt).all())
+        ids.update(self._db.scalars(erp_admin_stmt).all())
         return list(ids)
 
     def list_approval_user_options(self, ctx: TenantContext) -> list[dict]:
