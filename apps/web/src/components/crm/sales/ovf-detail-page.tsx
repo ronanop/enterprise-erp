@@ -38,6 +38,7 @@ import {
   getOvfBlueprint,
   getQuote,
   getSalesLead,
+  listAttachments,
   listEmployeeOptions,
   listOvfLines,
   listQuoteLines,
@@ -86,17 +87,24 @@ export function OvfDetailPage({ ovfId }: { ovfId: string }) {
       setOvf(ovfRow);
       setBlueprint(bp);
 
-      const [quoteRow, oppRow, employeeRows, quoteLines] = await Promise.all([
+      const [quoteRow, oppRow, employeeRows, quoteLines, attachments] = await Promise.all([
         getQuote(ovfRow.quote_id).catch(() => null),
         getOpportunity(ovfRow.opportunity_id).catch(() => null),
         listEmployeeOptions().catch(() => [] as Option[]),
         listQuoteLines(ovfRow.quote_id).catch(() => []),
+        listAttachments("ovf", ovfId).catch(() => []),
       ]);
+      const poNames = attachments
+        .filter((row) => row.category === "customer_po")
+        .map((row) => row.file_name);
+      const quoteNames = attachments
+        .filter((row) => row.category === "vendor_quote")
+        .map((row) => row.file_name);
       setQuote(quoteRow);
       setOpportunity(oppRow);
       setEmployees(employeeRows);
-      setCustomerRows(customerRowsFromOvfLines(ovfLines, quoteLines));
-      setVendorRows(vendorRowsFromOvfLines(ovfLines, quoteLines));
+      setCustomerRows(customerRowsFromOvfLines(ovfLines, quoteLines, poNames));
+      setVendorRows(vendorRowsFromOvfLines(ovfLines, quoteLines, quoteNames));
       if (oppRow?.lead_id) {
         const lead = await getSalesLead(oppRow.lead_id).catch(() => null);
         setVendorNameOptions(parseLeadDistributorNames(lead?.distributor_name));

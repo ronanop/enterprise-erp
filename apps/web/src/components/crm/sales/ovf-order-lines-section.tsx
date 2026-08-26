@@ -7,7 +7,12 @@ import { ChevronDown, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
-import { formatInrPrecise, type OvfLine, type OvfLineFormInput, type QuoteLine } from "@/services/sales-crm-service";
+import {
+  formatInrPrecise,
+  type OvfLine,
+  type OvfLineFormInput,
+  type QuoteLine,
+} from "@/services/sales-crm-service";
 
 export const GST_PCT = 18;
 
@@ -112,8 +117,13 @@ function qtyAsInt(value: string | number | null | undefined): string {
   return Number.isFinite(n) ? String(n) : "";
 }
 
-function quoteDesc(quoteLine: QuoteLine | undefined): string {
-  return (quoteLine?.description ?? "").trim();
+function storedOrQuoteText(
+  stored: string | null | undefined,
+  quoteValue: string | null | undefined,
+): string {
+  const fromStore = (stored ?? "").trim();
+  if (fromStore) return fromStore;
+  return (quoteValue ?? "").trim();
 }
 
 function quoteByProductName(quoteLines: QuoteLine[]): Map<string, QuoteLine> {
@@ -144,72 +154,92 @@ export function vendorRowsFromQuoteLines(quoteLines: QuoteLine[]): VendorChargeR
 export function customerRowsFromOvfLines(
   lines: OvfLine[],
   quoteLines: QuoteLine[] = [],
+  poFileNames: string[] = [],
 ): CustomerChargeRow[] {
   const byName = quoteByProductName(quoteLines);
   const byNo = quoteByLineNo(quoteLines);
-  return lines
+  const sorted = [...lines]
     .filter((line) => line.side === "customer_po")
-    .map((line) => {
-      const qty = qtyAsInt(line.qty);
-      const unitPrice = moneyAsFixed(line.unit_price ?? 0);
-      const gstPct = String(GST_PCT);
-      const money = moneyFromQtyPrice(qty, unitPrice, gstPct);
-      const quoteLine =
-        byName.get((line.product_name || "").trim().toLowerCase()) ?? byNo.get(Number(line.line_no));
-      return {
-        key: line.id,
-        serverId: line.id,
-        fromQuote: false,
-        product_name: line.product_name,
-        description: quoteDesc(quoteLine),
-        qty,
-        unit_price: unitPrice,
-        total: money.total,
-        gst_pct: gstPct,
-        total_gst: money.total_gst,
-        total_with_gst: money.total_with_gst,
-        add_po: "",
-        poFile: null,
-      } satisfies CustomerChargeRow;
-    });
+    .sort((a, b) => Number(a.line_no) - Number(b.line_no));
+  return sorted.map((line, index) => {
+    const qty = qtyAsInt(line.qty);
+    const unitPrice = moneyAsFixed(line.unit_price ?? 0);
+    const gstPct = String(GST_PCT);
+    const money = moneyFromQtyPrice(qty, unitPrice, gstPct);
+    const quoteLine =
+      byName.get((line.product_name || "").trim().toLowerCase()) ?? byNo.get(Number(line.line_no));
+    return {
+      key: line.id,
+      serverId: line.id,
+      fromQuote: false,
+      product_name: line.product_name ?? "",
+      description: storedOrQuoteText(line.description, quoteLine?.description),
+      qty,
+      unit_price: unitPrice,
+      total: money.total,
+      gst_pct: gstPct,
+      total_gst: money.total_gst,
+      total_with_gst: money.total_with_gst,
+      add_po: poFileNames[index] ?? "",
+      poFile: null,
+    } satisfies CustomerChargeRow;
+  });
 }
 
 export function vendorRowsFromOvfLines(
   lines: OvfLine[],
   quoteLines: QuoteLine[] = [],
+  quoteFileNames: string[] = [],
 ): VendorChargeRow[] {
   const byNo = quoteByLineNo(quoteLines);
-  return lines
+  const sorted = [...lines]
     .filter((line) => line.side === "vendor")
-    .map((line) => {
-      const qty = qtyAsInt(line.qty);
-      const unitPrice = moneyAsFixed(line.unit_price ?? 0);
-      const gstPct = String(GST_PCT);
-      const money = moneyFromQtyPrice(qty, unitPrice, gstPct);
-      const quoteLine = byNo.get(Number(line.line_no));
-      return {
-        key: line.id,
-        serverId: line.id,
-        fromQuote: false,
-        product_name: quoteLine?.product_name ?? "",
-        description: quoteDesc(quoteLine),
-        qty,
-        unit_price: unitPrice,
-        total: money.total,
-        gst_pct: gstPct,
-        total_gst: money.total_gst,
-        total_with_gst: money.total_with_gst,
-        vendor_name: line.product_name,
-        contact_person: "",
-        contact_number: "",
-        add_quote: "",
-        quoteFile: null,
-      } satisfies VendorChargeRow;
-    });
+    .sort((a, b) => Number(a.line_no) - Number(b.line_no));
+  return sorted.map((line, index) => {
+    const qty = qtyAsInt(line.qty);
+    const unitPrice = moneyAsFixed(line.unit_price ?? 0);
+    const gstPct = String(GST_PCT);
+    const money = moneyFromQtyPrice(qty, unitPrice, gstPct);
+    const quoteLine = byNo.get(Number(line.line_no));
+    const storedDistributor = (line.distributor_name ?? "").trim();
+    const quoteProduct = (quoteLine?.product_name ?? "").trim();
+    const lineProduct = (line.product_name ?? "").trim();
+    // Legacy: distributor was written into product_name before distributor_name existed.
+    const legacyDistributor =
+      !storedDistributor &&
+        quoteProduct &&
+        lineProduct.toLowerCase() !== quoteProduct.toLowerCase()
+        ? lineProduct
+        : "";
+    const distributor = storedDistributor || legacyDistributor;
+    const productName = storedDistributor
+      ? lineProduct || quoteProduct
+      : legacyDistributor
+        ? quoteProduct
+        : lineProduct || quoteProduct;
+    return {
+      key: line.id,
+      serverId: line.id,
+      fromQuote: false,
+      product_name: productName,
+      description: storedOrQuoteText(line.description, quoteLine?.description),
+      qty,
+      unit_price: unitPrice,
+      total: money.total,
+      gst_pct: gstPct,
+      total_gst: money.total_gst,
+      total_with_gst: money.total_with_gst,
+      vendor_name: distributor,
+      contact_person: (line.contact_person ?? "").trim(),
+      contact_number: (line.contact_number ?? "").trim(),
+      add_quote: quoteFileNames[index] ?? "",
+      quoteFile: null,
+    } satisfies VendorChargeRow;
+  });
 }
 
 export function customerFromQuote(quoteLine: QuoteLine, ovfLine?: OvfLine): CustomerChargeRow {
-  const qty = qtyAsInt(quoteLine.qty);
+  const qty = qtyAsInt(ovfLine?.qty ?? quoteLine.qty);
   const unitPrice = moneyAsFixed(ovfLine?.unit_price ?? quoteLine.unit_sell ?? 0);
   const gstPct = String(quoteLine.gst_pct || GST_PCT);
   const money = moneyFromQtyPrice(qty, unitPrice, gstPct);
@@ -217,8 +247,8 @@ export function customerFromQuote(quoteLine: QuoteLine, ovfLine?: OvfLine): Cust
     key: ovfLine?.id ?? `quote-customer-${quoteLine.id}`,
     serverId: ovfLine?.id,
     fromQuote: true,
-    product_name: quoteLine.product_name,
-    description: quoteDesc(quoteLine),
+    product_name: storedOrQuoteText(ovfLine?.product_name, quoteLine.product_name),
+    description: storedOrQuoteText(ovfLine?.description, quoteLine.description),
     qty,
     unit_price: unitPrice,
     total: money.total,
@@ -231,7 +261,7 @@ export function customerFromQuote(quoteLine: QuoteLine, ovfLine?: OvfLine): Cust
 }
 
 export function vendorFromQuote(quoteLine: QuoteLine, ovfLine?: OvfLine): VendorChargeRow {
-  const qty = qtyAsInt(quoteLine.qty);
+  const qty = qtyAsInt(ovfLine?.qty ?? quoteLine.qty);
   const unitPrice = moneyAsFixed(ovfLine?.unit_price ?? quoteLine.unit_cost ?? 0);
   const gstPct = String(quoteLine.gst_pct || GST_PCT);
   const money = moneyFromQtyPrice(qty, unitPrice, gstPct);
@@ -239,19 +269,43 @@ export function vendorFromQuote(quoteLine: QuoteLine, ovfLine?: OvfLine): Vendor
     key: ovfLine?.id ?? `quote-vendor-${quoteLine.id}`,
     serverId: ovfLine?.id,
     fromQuote: true,
-    product_name: quoteLine.product_name,
-    description: quoteDesc(quoteLine),
+    product_name: storedOrQuoteText(ovfLine?.product_name, quoteLine.product_name),
+    description: storedOrQuoteText(ovfLine?.description, quoteLine.description),
     qty,
     unit_price: unitPrice,
     total: money.total,
     gst_pct: gstPct,
     total_gst: money.total_gst,
     total_with_gst: money.total_with_gst,
-    vendor_name: ovfLine?.product_name ?? "",
-    contact_person: "",
-    contact_number: "",
+    vendor_name: (ovfLine?.distributor_name ?? "").trim(),
+    contact_person: (ovfLine?.contact_person ?? "").trim(),
+    contact_number: (ovfLine?.contact_number ?? "").trim(),
     add_quote: "",
     quoteFile: null,
+  };
+}
+
+function customerLinePayload(row: CustomerChargeRow) {
+  return {
+    product_name: row.product_name.trim(),
+    description: row.description.trim() || null,
+    distributor_name: null,
+    contact_person: null,
+    contact_number: null,
+    qty: Math.round(Number(row.qty)) || 1,
+    unit_price: Number(moneyAsFixed(Number(row.unit_price) || 0)) || 0,
+  };
+}
+
+function vendorLinePayload(row: VendorChargeRow) {
+  return {
+    product_name: row.product_name.trim() || row.vendor_name.trim(),
+    description: row.description.trim() || null,
+    distributor_name: row.vendor_name.trim() || null,
+    contact_person: row.contact_person.trim() || null,
+    contact_number: row.contact_number.trim() || null,
+    qty: Math.round(Number(row.qty)) || 1,
+    unit_price: Number(moneyAsFixed(Number(row.unit_price) || 0)) || 0,
   };
 }
 
@@ -785,10 +839,9 @@ export async function persistOvfOrderLinesAfterCreate(
   customerRows: CustomerChargeRow[],
   vendorRows: VendorChargeRow[],
   deps: {
-    addOvfLine: (
-      id: string,
-      body: { side?: string; product_name: string; qty?: number; unit_price?: number },
-    ) => Promise<OvfLine>;
+    listOvfLines: (id: string) => Promise<OvfLine[]>;
+    addOvfLine: (id: string, body: OvfLineFormInput) => Promise<OvfLine>;
+    updateOvfLine: (lineId: string, body: OvfLineFormInput) => Promise<OvfLine>;
     createAttachment: (body: {
       entity_type: string;
       entity_id: string;
@@ -802,24 +855,44 @@ export async function persistOvfOrderLinesAfterCreate(
     fileToBase64: (file: File) => Promise<string>;
   },
 ) {
+  const existing = await deps.listOvfLines(ovfId);
+  const customerExisting = existing
+    .filter((line) => line.side === "customer_po")
+    .sort((a, b) => Number(a.line_no) - Number(b.line_no));
+  const vendorExisting = existing
+    .filter((line) => line.side === "vendor")
+    .sort((a, b) => Number(a.line_no) - Number(b.line_no));
+
+  let customerIdx = 0;
   for (const row of customerRows) {
-    if (row.fromQuote || !row.product_name.trim()) continue;
-    await deps.addOvfLine(ovfId, {
-      side: "customer_po",
-      product_name: row.product_name.trim(),
-      qty: Math.round(Number(row.qty)) || 1,
-      unit_price: Number(moneyAsFixed(Number(row.unit_price) || 0)) || 0,
-    });
+    if (!row.product_name.trim()) continue;
+    const payload = customerLinePayload(row);
+    if (row.fromQuote && customerIdx < customerExisting.length) {
+      await deps.updateOvfLine(customerExisting[customerIdx].id, payload);
+      customerIdx += 1;
+      continue;
+    }
+    if (row.fromQuote) {
+      customerIdx += 1;
+      continue;
+    }
+    await deps.addOvfLine(ovfId, { side: "customer_po", ...payload });
   }
 
+  let vendorIdx = 0;
   for (const row of vendorRows) {
-    if (row.fromQuote || !row.vendor_name.trim()) continue;
-    await deps.addOvfLine(ovfId, {
-      side: "vendor",
-      product_name: row.vendor_name.trim(),
-      qty: Math.round(Number(row.qty)) || 1,
-      unit_price: Number(moneyAsFixed(Number(row.unit_price) || 0)) || 0,
-    });
+    if (!row.product_name.trim() && !row.vendor_name.trim()) continue;
+    const payload = vendorLinePayload(row);
+    if (row.fromQuote && vendorIdx < vendorExisting.length) {
+      await deps.updateOvfLine(vendorExisting[vendorIdx].id, payload);
+      vendorIdx += 1;
+      continue;
+    }
+    if (row.fromQuote) {
+      vendorIdx += 1;
+      continue;
+    }
+    await deps.addOvfLine(ovfId, { side: "vendor", ...payload });
   }
 
   for (const row of customerRows) {
@@ -875,11 +948,7 @@ export async function persistOvfOrderLinesOnUpdate(
 ) {
   for (const row of customerRows) {
     if (!row.product_name.trim()) continue;
-    const payload = {
-      product_name: row.product_name.trim(),
-      qty: Math.round(Number(row.qty)) || 1,
-      unit_price: Number(moneyAsFixed(Number(row.unit_price) || 0)) || 0,
-    };
+    const payload = customerLinePayload(row);
     if (row.serverId) {
       await deps.updateOvfLine(row.serverId, payload);
     } else {
@@ -888,12 +957,8 @@ export async function persistOvfOrderLinesOnUpdate(
   }
 
   for (const row of vendorRows) {
-    if (!row.vendor_name.trim()) continue;
-    const payload = {
-      product_name: row.vendor_name.trim(),
-      qty: Math.round(Number(row.qty)) || 1,
-      unit_price: Number(moneyAsFixed(Number(row.unit_price) || 0)) || 0,
-    };
+    if (!row.product_name.trim() && !row.vendor_name.trim()) continue;
+    const payload = vendorLinePayload(row);
     if (row.serverId) {
       await deps.updateOvfLine(row.serverId, payload);
     } else {

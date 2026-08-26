@@ -1296,12 +1296,20 @@ class OvfResponse(OrmModel):
 class OvfLineCreate(BaseModel):
     side: str = "customer_po"
     product_name: str
+    description: str | None = None
+    distributor_name: str | None = None
+    contact_person: str | None = None
+    contact_number: str | None = None
     qty: Decimal = Decimal("1")
     unit_price: Decimal = Decimal("0")
 
 
 class OvfLineUpdate(BaseModel):
     product_name: str | None = None
+    description: str | None = None
+    distributor_name: str | None = None
+    contact_person: str | None = None
+    contact_number: str | None = None
     qty: Decimal | None = None
     unit_price: Decimal | None = None
     version: int | None = None
@@ -1313,6 +1321,10 @@ class OvfLineResponse(OrmModel):
     side: str
     line_no: int
     product_name: str
+    description: str | None = None
+    distributor_name: str | None = None
+    contact_person: str | None = None
+    contact_number: str | None = None
     qty: Decimal
     unit_price: Decimal
     line_total: Decimal

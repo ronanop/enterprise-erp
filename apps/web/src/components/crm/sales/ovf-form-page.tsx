@@ -46,6 +46,7 @@ import {
   getOvf,
   getQuote,
   getSalesLead,
+  listAttachments,
   listContacts,
   listEmployeeOptions,
   listOvfLines,
@@ -161,18 +162,25 @@ export function OvfFormPage({ quoteId, ovfId }: { quoteId?: string; ovfId?: stri
             409,
           );
         }
-        const [quoteRow, opportunityRow, ovfLines, quoteLines] = await Promise.all([
+        const [quoteRow, opportunityRow, ovfLines, quoteLines, attachments] = await Promise.all([
           getQuote(ovfRow.quote_id),
           getOpportunity(ovfRow.opportunity_id),
           listOvfLines(ovfId).catch(() => []),
           listQuoteLines(ovfRow.quote_id).catch(() => []),
+          listAttachments("ovf", ovfId).catch(() => []),
         ]);
+        const poNames = attachments
+          .filter((row) => row.category === "customer_po")
+          .map((row) => row.file_name);
+        const quoteNames = attachments
+          .filter((row) => row.category === "vendor_quote")
+          .map((row) => row.file_name);
         setOvf(ovfRow);
         setQuote(quoteRow);
         setOpportunity(opportunityRow);
         setVendorNameOptions(await distributorOptionsForOpportunity(opportunityRow));
-        setCustomerRows(customerRowsFromOvfLines(ovfLines, quoteLines));
-        setVendorRows(vendorRowsFromOvfLines(ovfLines, quoteLines));
+        setCustomerRows(customerRowsFromOvfLines(ovfLines, quoteLines, poNames));
+        setVendorRows(vendorRowsFromOvfLines(ovfLines, quoteLines, quoteNames));
         setForm({
           po_number: ovfRow.po_number ?? "",
           po_date: ovfRow.po_date ? String(ovfRow.po_date).slice(0, 10) : "",
@@ -396,7 +404,7 @@ export function OvfFormPage({ quoteId, ovfId }: { quoteId?: string; ovfId?: stri
         created.company_id ?? opportunity.company_account_id,
         customerRows,
         vendorRows,
-        { addOvfLine, createAttachment, fileToBase64 },
+        { listOvfLines, addOvfLine, updateOvfLine, createAttachment, fileToBase64 },
       );
       router.push(`/crm/ovf/${created.id}`);
     } catch (err) {

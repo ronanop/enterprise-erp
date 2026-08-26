@@ -1011,6 +1011,10 @@ export type OvfLine = {
   side: string;
   line_no: number;
   product_name: string;
+  description?: string | null;
+  distributor_name?: string | null;
+  contact_person?: string | null;
+  contact_number?: string | null;
   qty: number;
   unit_price: number;
   line_total: number;
@@ -1020,6 +1024,10 @@ export type OvfLine = {
 export type OvfLineFormInput = {
   side?: string;
   product_name: string;
+  description?: string | null;
+  distributor_name?: string | null;
+  contact_person?: string | null;
+  contact_number?: string | null;
   qty?: number;
   unit_price?: number;
 };

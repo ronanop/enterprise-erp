@@ -186,7 +186,9 @@ class OvfService:
         def charge_dto(ln: Any) -> dict[str, Any]:
             key = (ln.product_name or "").strip().lower()
             ql = quote_by_name.get(key)
-            desc = (getattr(ql, "description", None) if ql else None) or ln.product_name
+            stored_desc = (getattr(ln, "description", None) or "").strip()
+            quote_desc = (getattr(ql, "description", None) if ql else None) or None
+            desc = stored_desc or quote_desc or ln.product_name
             line_gst = float(getattr(ql, "gst_pct", 0) or 0) if ql else 0.0
             gst_pct = line_gst if line_gst > 0 else tax_pct
             qty = float(ln.qty)
@@ -198,6 +200,9 @@ class OvfService:
                 "line_no": ln.line_no,
                 "product_name": ln.product_name,
                 "description": desc,
+                "distributor_name": getattr(ln, "distributor_name", None),
+                "contact_person": getattr(ln, "contact_person", None),
+                "contact_number": getattr(ln, "contact_number", None),
                 "qty": qty,
                 "unit_price": unit,
                 "line_total": total,
@@ -623,6 +628,7 @@ class OvfService:
                     side=side,
                     line_no=quote_line.line_no,
                     product_name=quote_line.product_name,
+                    description=(quote_line.description or None),
                     qty=quote_line.qty,
                     unit_price=unit_price,
                     line_total=(quote_line.qty * unit_price).quantize(Decimal("0.0001")),
