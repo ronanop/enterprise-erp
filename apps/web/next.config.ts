@@ -20,6 +20,10 @@ const nextConfig: NextConfig = {
         destination: "/procurement/scm/from-stock?ovfId=:ovf_id",
       },
       {
+        source: "/procurement/scm/ovf/:ovf_id/item-plan",
+        destination: "/procurement/scm/item-plan?ovfId=:ovf_id",
+      },
+      {
         source: "/procurement/scm/ovf/:ovf_id",
         destination: "/procurement/scm/ovf-detail?ovfId=:ovf_id",
       },

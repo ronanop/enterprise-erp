@@ -186,6 +186,14 @@ def main() -> None:
         ALTER TABLE procurement.proc_order_receipt_batch_line
           ADD COLUMN IF NOT EXISTS billing_quantity NUMERIC(18, 4) NOT NULL DEFAULT 0
         """,
+        """
+        ALTER TABLE procurement.proc_order_line
+          ADD COLUMN IF NOT EXISTS last_receipt_delivery_challan_quantity NUMERIC(18, 4) NOT NULL DEFAULT 0
+        """,
+        """
+        ALTER TABLE procurement.proc_order_receipt_batch_line
+          ADD COLUMN IF NOT EXISTS delivery_challan_quantity NUMERIC(18, 4) NOT NULL DEFAULT 0
+        """,
     ]
     with engine.begin() as conn:
         for stmt in stmts:

@@ -83,14 +83,17 @@ export function ovfStockSourceKey(ovfId: string): string {
 
 export type OvfChallanShipSource = "inventory" | "po" | "combined";
 
+export type OvfShipDocumentKind = "billing" | "delivery_challan";
+
 export function ovfChallanHref(
   ovfId: string,
   source: OvfChallanShipSource,
   orderId?: string | null,
+  kind: OvfShipDocumentKind = "delivery_challan",
 ): string {
   const params = new URLSearchParams({
     ovfId,
-    kind: "delivery_challan",
+    kind,
     returnTo: `/procurement/scm/ovf/${ovfId}`,
   });
   if (source === "inventory") {
@@ -109,12 +112,55 @@ export function ovfStockChallanHref(ovfId: string): string {
   return ovfChallanHref(ovfId, "inventory");
 }
 
-export function ovfFromStockHref(ovfId: string): string {
-  return `/procurement/scm/ovf/${ovfId}/from-stock`;
+export function ovfFromStockHref(ovfId: string, fromItemPlan = false): string {
+  const base = `/procurement/scm/ovf/${ovfId}/from-stock`;
+  return fromItemPlan ? `${base}?from=item-plan` : base;
 }
 
-export function ovfCreatePoRemainderHref(ovfId: string): string {
-  return `/procurement/scm/ovf/${ovfId}/po?from=stock-remainder`;
+export function ovfItemPlanHref(ovfId: string): string {
+  return `/procurement/scm/ovf/${ovfId}/item-plan`;
+}
+
+export function ovfVendorPoGroups(
+  lines: ScmVendorLine[],
+): Array<{ key: string; distributorName: string; lines: ScmVendorLine[] }> {
+  const groups = new Map<string, { distributorName: string; lines: ScmVendorLine[] }>();
+  for (const line of lines) {
+    if (ovfLineIsInventoryFulfillment(line)) continue;
+    const name = (line.distributor_name || "").trim() || "Vendor";
+    const key = name.toLowerCase().replace(/\s+/g, " ");
+    const existing = groups.get(key);
+    if (existing) existing.lines.push(line);
+    else groups.set(key, { distributorName: name, lines: [line] });
+  }
+  return [...groups.entries()].map(([key, value]) => ({ key, ...value }));
+}
+
+export function ovfCreatePoHref(ovfId: string, distributorName?: string | null): string {
+  const params = new URLSearchParams();
+  const name = (distributorName || "").trim();
+  if (name) params.set("distributor", name);
+  const qs = params.toString();
+  return qs ? `/procurement/scm/ovf/${ovfId}/po?${qs}` : `/procurement/scm/ovf/${ovfId}/po`;
+}
+
+export function ovfCreatePoRemainderHref(ovfId: string, distributorName?: string | null): string {
+  const base = ovfCreatePoHref(ovfId, distributorName);
+  return `${base}${base.includes("?") ? "&" : "?"}from=stock-remainder`;
+}
+
+export function ovfPoSeedVendorLines(
+  lines: ScmVendorLine[],
+  distributorName?: string | null,
+): ScmVendorLine[] {
+  const groups = ovfVendorPoGroups(lines);
+  if (groups.length === 0) return [];
+  const needle = (distributorName || "").trim().toLowerCase().replace(/\s+/g, " ");
+  if (needle) {
+    const match = groups.find((group) => group.key === needle);
+    if (match) return match.lines;
+  }
+  return groups[0].lines;
 }
 
 /** Matches CRM/API `_is_in_stock_distributor` — inventory path, not a vendor PO. */

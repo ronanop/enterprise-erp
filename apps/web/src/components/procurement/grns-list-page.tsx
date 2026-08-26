@@ -4,7 +4,12 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { CircleDot, Eye, FileSpreadsheet, PackageCheck, RefreshCw } from "lucide-react";
 
+import {
+  DeliveryBillTakenBadge,
+  DeliveryBillTakenButton,
+} from "@/components/procurement/delivery-bill-taken-badge";
 import { FinanceKpiCard } from "@/components/finance/finance-kpi-card";
+import { DeliveryStatusBillDialog } from "@/components/procurement/delivery-status-bill-dialog";
 import { GrnDeliveryChallanMenu } from "@/components/procurement/grn-delivery-challan-menu";
 import {
   GrnReceiptHistoryDialog,
@@ -38,6 +43,10 @@ import {
   buildGrnExportRowsWithBatches,
   exportGrnsXlsx,
 } from "@/utils/grns-excel-export";
+import {
+  aggregatePoDcBillStatus,
+  pickChallanIdToBill,
+} from "@/utils/delivery-challan-bill";
 import { formatGrnStatusBadgeLabel, grnBadgeVariant } from "@/utils/grn-status-display";
 
 type GrnFilter = "all" | "partial" | "closed";
@@ -134,6 +143,7 @@ export function GrnsListPage() {
     vendorLabel: string;
     pdfContext: GrnReceiptPdfContext;
   } | null>(null);
+  const [billChallanId, setBillChallanId] = useState<string | null>(null);
 
   const load = useCallback(async (force = false) => {
     if (force) invalidateProcurementListCache();
@@ -210,7 +220,7 @@ export function GrnsListPage() {
     [rows],
   );
 
-  const tableColSpan = 10;
+  const tableColSpan = 12;
 
   async function onExport() {
     setError(null);
@@ -345,6 +355,7 @@ export function GrnsListPage() {
                 <th className="px-3 py-2 font-bold">Customer amt</th>
                 <th className="px-3 py-2 font-bold">Margin</th>
                 <th className="px-3 py-2 font-bold">GRN</th>
+                <th className="px-3 py-2 font-bold">Bill taken</th>
                 <th className="px-3 py-2 font-bold">Received</th>
                 <th className={procurementUi.th}>Challans</th>
                 <th className="px-3 py-2 text-center font-bold">GRN detail</th>
@@ -381,6 +392,16 @@ export function GrnsListPage() {
                   (customerAmt > 0 ? customerAmt - vendorAmt : 0);
                 const grnLabel = formatGrnStatusBadgeLabel(row.grn_status);
                 const orderHref = `/procurement/orders/${row.id}?tab=grn&from=grns`;
+                const billLabel = aggregatePoDcBillStatus(row.id);
+                const billChallan = pickChallanIdToBill(row.id);
+                const billStatus =
+                  billLabel === "—"
+                    ? "none"
+                    : billLabel === "Fully billed"
+                      ? "fully_billed"
+                      : billLabel === "Partially billed"
+                        ? "partially_billed"
+                        : "unbilled";
                 return (
                   <tr
                     key={row.id}
@@ -408,6 +429,17 @@ export function GrnsListPage() {
                       <Badge variant={grnBadgeVariant(row.grn_status)} className="uppercase">
                         {grnLabel}
                       </Badge>
+                    </td>
+                    <td className={procurementUi.td} onClick={(e) => e.stopPropagation()}>
+                      <div className="flex flex-wrap items-center gap-1">
+                        <DeliveryBillTakenBadge status={billStatus} />
+                        {billChallan ? (
+                          <DeliveryBillTakenButton
+                            status={billStatus}
+                            onClick={() => setBillChallanId(billChallan)}
+                          />
+                        ) : null}
+                      </div>
                     </td>
                     <td className="px-3 py-2 tabular-nums text-muted-foreground">
                       {receivedQty} / {orderedQty}
@@ -463,6 +495,13 @@ export function GrnsListPage() {
           onReversed={() => void load(true)}
         />
       ) : null}
+
+      <DeliveryStatusBillDialog
+        open={Boolean(billChallanId)}
+        challanId={billChallanId}
+        onClose={() => setBillChallanId(null)}
+        onSaved={() => setChallansByOrder(challansByOrderIdMap())}
+      />
     </div>
   );
 }

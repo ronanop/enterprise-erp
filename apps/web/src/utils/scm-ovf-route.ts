@@ -1,5 +1,5 @@
 const OVF_PATH_RE =
-  /\/procurement\/scm\/ovf\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})(?:\/(?:po|from-stock))?\/?$/i;
+  /\/procurement\/scm\/ovf\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})(?:\/(?:po|from-stock|item-plan))?\/?$/i;
 
 /** OVF id from rewrite query or from `/procurement/scm/ovf/{id}` in the browser URL. */
 export function resolveScmOvfIdFromUrl(

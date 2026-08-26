@@ -306,6 +306,34 @@ class OvfService:
                 )
             )
 
+        quote_rank = {
+            (ql.product_name or "").strip().lower(): i
+            for i, ql in enumerate(quote_lines)
+            if (ql.product_name or "").strip()
+        }
+
+        def _crm_line_sort_key(
+            dto: dict[str, Any],
+            *,
+            follow: dict[str, int] | None = None,
+        ) -> tuple[int, int, int]:
+            name = (dto.get("product_name") or "").strip().lower()
+            follow_pos = follow.get(name, 10_000) if follow is not None else 0
+            return (
+                follow_pos,
+                quote_rank.get(name, 10_000),
+                int(dto.get("line_no") or 0),
+            )
+
+        # Same sequence as CRM Order Lines (quote / customer charges, then extras).
+        customer_dtos.sort(key=lambda d: _crm_line_sort_key(d))
+        customer_rank = {
+            (c.get("product_name") or "").strip().lower(): i
+            for i, c in enumerate(customer_dtos)
+            if (c.get("product_name") or "").strip() and c["product_name"] != "—"
+        }
+        vendor_dtos.sort(key=lambda d: _crm_line_sort_key(d, follow=customer_rank))
+
         vendor_by_name = {(v["product_name"] or "").strip().lower(): v for v in vendor_dtos}
         margin_lines: list[dict[str, Any]] = []
         products_margin = 0.0

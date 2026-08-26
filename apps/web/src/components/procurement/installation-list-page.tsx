@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { RefreshCw, Wrench } from "lucide-react";
 
 import {
@@ -9,14 +9,17 @@ import {
   ProcurementPageHeader,
 } from "@/components/procurement/procurement-page-header";
 import { procurementUi } from "@/components/procurement/procurement-ui";
-import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { listDeliveryChallans } from "@/utils/delivery-challan-storage";
 import {
   deliveryStatusRowFromChallan,
   isDeliveredShipmentStatus,
+  shipmentStatusBadgeVariant,
 } from "@/utils/delivery-status-storage";
 import { installationDetailHref } from "@/utils/installation-routes";
+import { resolveInstallation } from "@/utils/installation-storage";
 
 type InstallationListRow = {
   challanId: string;
@@ -25,6 +28,8 @@ type InstallationListRow = {
   customerPoNumber: string;
   deliveredDate: string;
   challanOrInvoice: string;
+  deliveryStatus: string;
+  sharedToProject: boolean;
 };
 
 function loadInstallationRows(): InstallationListRow[] {
@@ -42,6 +47,7 @@ function loadInstallationRows(): InstallationListRow[] {
         challan.invoiceNumber?.trim() ||
         "";
       const challanNo = challan.challanNumber?.trim() || "";
+      const install = resolveInstallation(challan.id);
 
       return [
         {
@@ -55,6 +61,8 @@ function loadInstallationRows(): InstallationListRow[] {
           customerPoNumber: status.customerPoNumber || "—",
           deliveredDate: status.actualDeliveryDate || "—",
           challanOrInvoice: invoice || challanNo || "—",
+          deliveryStatus: status.shipmentStatus || "Delivered",
+          sharedToProject: install.sharedToProject,
         },
       ];
     } catch {
@@ -64,7 +72,6 @@ function loadInstallationRows(): InstallationListRow[] {
 }
 
 export function InstallationListPage() {
-  const router = useRouter();
   const [version, setVersion] = useState(0);
   const [query, setQuery] = useState("");
   const [rows, setRows] = useState<InstallationListRow[]>([]);
@@ -87,6 +94,8 @@ export function InstallationListPage() {
         row.customerPoNumber,
         row.deliveredDate,
         row.challanOrInvoice,
+        row.deliveryStatus,
+        row.sharedToProject ? "shared" : "pending",
       ]
         .join(" ")
         .toLowerCase()
@@ -112,6 +121,11 @@ export function InstallationListPage() {
         }
       />
 
+      <p className="text-sm text-muted-foreground">
+        Open a row, fill site installation details, then share to the Project module from the
+        detail page. Sharing is not done from this list.
+      </p>
+
       <ProcurementListSearch
         value={query}
         onChange={setQuery}
@@ -121,20 +135,22 @@ export function InstallationListPage() {
 
       <div className={procurementUi.tableShell}>
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[720px] text-sm">
+          <table className="w-full min-w-[820px] text-sm">
             <thead className="border-b border-border bg-muted/40 text-xs uppercase tracking-wide text-muted-foreground">
               <tr>
                 <th className="px-3 py-2 text-left font-medium">Company PO number</th>
                 <th className="px-3 py-2 text-left font-medium">Customer name</th>
                 <th className="px-3 py-2 text-left font-medium">Customer PO number</th>
                 <th className="px-3 py-2 text-left font-medium">Delivered date</th>
+                <th className="px-3 py-2 text-left font-medium">Status</th>
                 <th className="px-3 py-2 text-left font-medium">Challan / invoice number</th>
+                <th className="px-3 py-2 text-left font-medium">Actions</th>
               </tr>
             </thead>
             <tbody>
               {filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="px-3 py-10 text-center text-muted-foreground">
+                  <td colSpan={7} className="px-3 py-10 text-center text-muted-foreground">
                     <div className="mx-auto flex max-w-md flex-col items-center gap-2">
                       <Wrench className="size-5 text-muted-foreground/70" aria-hidden />
                       <p>
@@ -148,25 +164,41 @@ export function InstallationListPage() {
                 filtered.map((row) => (
                   <tr
                     key={row.challanId}
-                    role="link"
-                    tabIndex={0}
-                    className={cn(
-                      "cursor-pointer border-b border-border/70 transition-colors duration-200",
-                      "hover:bg-muted/40 focus-visible:bg-muted/40 focus-visible:outline-none",
-                    )}
-                    onClick={() => router.push(installationDetailHref(row.challanId))}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter" || e.key === " ") {
-                        e.preventDefault();
-                        router.push(installationDetailHref(row.challanId));
-                      }
-                    }}
+                    className="border-b border-border/70 transition-colors duration-200 hover:bg-muted/40"
                   >
                     <td className="px-3 py-2 font-medium tabular-nums">{row.companyPoNumber}</td>
                     <td className="px-3 py-2">{row.customerName}</td>
                     <td className="px-3 py-2 tabular-nums">{row.customerPoNumber}</td>
                     <td className="px-3 py-2 tabular-nums">{row.deliveredDate}</td>
+                    <td className="px-3 py-2">
+                      <div className="flex flex-wrap items-center gap-1">
+                        <Badge
+                          variant={shipmentStatusBadgeVariant(row.deliveryStatus)}
+                          className={procurementUi.statusBadge}
+                        >
+                          {row.deliveryStatus}
+                        </Badge>
+                        <Badge
+                          variant={row.sharedToProject ? "secondary" : "outline"}
+                          className={procurementUi.statusBadge}
+                        >
+                          {row.sharedToProject ? "Shared" : "Pending share"}
+                        </Badge>
+                      </div>
+                    </td>
                     <td className="px-3 py-2 tabular-nums">{row.challanOrInvoice}</td>
+                    <td className="px-3 py-2">
+                      <Link
+                        href={installationDetailHref(row.challanId)}
+                        className={cn(
+                          buttonVariants({ size: "sm", variant: "ghost" }),
+                          procurementUi.actionBtn,
+                          "cursor-pointer text-[#0369A1] hover:text-[#0369A1]",
+                        )}
+                      >
+                        Open
+                      </Link>
+                    </td>
                   </tr>
                 ))
               )}

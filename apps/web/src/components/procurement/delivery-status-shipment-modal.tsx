@@ -10,7 +10,7 @@ import {
 } from "@/components/procurement/delivery-status-form";
 import type { DeliveryChallanRecord } from "@/utils/delivery-challan-storage";
 import { formatChallanGrnSummary } from "@/utils/delivery-challan-storage";
-import { resolveDeliveryStatusForChallan } from "@/utils/delivery-status-storage";
+import { deliveryStatusUiMode, resolveDeliveryStatusForChallan } from "@/utils/delivery-status-storage";
 import { persistDeliveryStatusFromForm } from "@/utils/delivery-status-persist";
 
 type DeliveryStatusShipmentModalProps = {
@@ -27,6 +27,7 @@ export function DeliveryStatusShipmentModal({
   onSaved,
 }: DeliveryStatusShipmentModalProps) {
   const [form, setForm] = useState<DeliveryStatusFormValue | null>(null);
+  const [formPhase, setFormPhase] = useState<"initial" | "tracking">("initial");
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
@@ -38,6 +39,7 @@ export function DeliveryStatusShipmentModal({
     }
     const status = resolveDeliveryStatusForChallan(challan);
     setForm(deliveryStatusToFormValue(status));
+    setFormPhase(deliveryStatusUiMode(status));
   }, [open, challan]);
 
   async function onConfirm() {
@@ -84,7 +86,7 @@ export function DeliveryStatusShipmentModal({
       {form ? (
         <div className="mt-4">
           {error ? <p className="mb-3 text-sm text-destructive">{error}</p> : null}
-          <DeliveryStatusForm value={form} onChange={setForm} />
+          <DeliveryStatusForm mode={formPhase} value={form} onChange={setForm} />
         </div>
       ) : null}
     </ConfirmDialog>

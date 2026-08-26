@@ -6,6 +6,8 @@ import {
   deriveDeliveryStatusLabel,
   firstDeliveryStatusFormError,
   getDeliveryStatus,
+  isFailedShipmentStatus,
+  stampDeliveredDate,
   upsertDeliveryStatus,
   validateDeliveryStatusForm,
   type DeliveryStatusFormErrors,
@@ -26,9 +28,29 @@ export async function persistDeliveryStatusFromForm(
   }
 
   const existing = getDeliveryStatus(challan.id);
+  const failed = isFailedShipmentStatus(form.shipmentStatus);
+  const markingDelivered =
+    !failed &&
+    (form.shipmentStatus.trim() === "Delivered" ||
+      Boolean(form.actualDeliveryDate?.trim()));
+  const actualDeliveryDate = failed
+    ? ""
+    : markingDelivered
+      ? stampDeliveredDate(form.dispatchDate, form.actualDeliveryDate)
+      : form.actualDeliveryDate?.trim() || "";
+  const shipmentStatus = failed
+    ? "Failed delivery"
+    : markingDelivered
+      ? "Delivered"
+      : deriveDeliveryStatusLabel({
+          ...form,
+          actualDeliveryDate,
+          shipmentStatus: "",
+        });
   const normalized: DeliveryStatusFormValue = {
     ...form,
-    shipmentStatus: deriveDeliveryStatusLabel(form),
+    actualDeliveryDate,
+    shipmentStatus,
     trackingNumber: form.docketNumber ?? "",
     cachePoNumber:
       form.cachePoNumber?.trim() ||
@@ -41,7 +63,7 @@ export async function persistDeliveryStatusFromForm(
       form.courierProvider?.trim() || form.courierTransportDetails?.trim() || "",
     courierProvider: form.courierProvider?.trim() || "",
     // Preserve billing recorded later — delivery save must not wipe it.
-    billStatus: existing?.billStatus ?? form.billStatus ?? "pending_delivery",
+    billStatus: existing?.billStatus ?? form.billStatus ?? "unbilled",
     billedQuantity: existing?.billedQuantity ?? form.billedQuantity ?? "",
     billInvoiceNumber: existing?.billInvoiceNumber ?? form.billInvoiceNumber ?? "",
     billInvoiceDate: existing?.billInvoiceDate ?? form.billInvoiceDate ?? "",
@@ -50,20 +72,14 @@ export async function persistDeliveryStatusFromForm(
     billedAt: existing?.billedAt ?? form.billedAt ?? "",
   };
 
-  const delivered =
-    deriveDeliveryStatusLabel(normalized) === "Delivered" ||
-    Boolean(normalized.actualDeliveryDate?.trim());
+  const delivered = !failed && markingDelivered;
   let billStatus = normalized.billStatus;
-  if (delivered) {
-    if (
-      billStatus !== "unbilled" &&
-      billStatus !== "partially_billed" &&
-      billStatus !== "fully_billed"
-    ) {
-      billStatus = "unbilled";
-    }
-  } else {
-    billStatus = "pending_delivery";
+  if (
+    billStatus !== "unbilled" &&
+    billStatus !== "partially_billed" &&
+    billStatus !== "fully_billed"
+  ) {
+    billStatus = "unbilled";
   }
 
   upsertDeliveryStatus({

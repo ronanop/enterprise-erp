@@ -26,9 +26,7 @@ import {
 import {
   openStoredDeliveryFile,
   resolveDeliveryStatusForChallan,
-  getDeliveryStatus,
   upsertDeliveryChallanBilling,
-  upsertDeliveryStatus,
   type DeliveryStatusAttachment,
 } from "@/utils/delivery-status-storage";
 
@@ -138,15 +136,6 @@ export function DeliveryStatusBillDialog({
     setBusy(true);
     setError(null);
     try {
-      // Ensure a delivery-status row exists so billing can be recorded after delivery.
-      const existing = resolveDeliveryStatusForChallan(challan);
-      if (!getDeliveryStatus(challan.id)) {
-        upsertDeliveryStatus({
-          ...existing,
-          challanId: challan.id,
-          billStatus: "unbilled",
-        });
-      }
       const saved = upsertDeliveryChallanBilling({
         challanId: challan.id,
         billStatus: nextStatus,
@@ -183,8 +172,8 @@ export function DeliveryStatusBillDialog({
   return (
     <ConfirmDialog
       open={open}
-      title="Bill delivery challan"
-      description="Delivery is done. Record customer billing for this DC material — partial or full. Payment may still be pending."
+      title="Bill taken"
+      description="DC is delivery without a bill. When you receive the customer bill, record it here — even after delivery status or installation."
       confirmLabel={busy ? "Saving…" : "Save bill status"}
       cancelLabel="Cancel"
       busy={busy}

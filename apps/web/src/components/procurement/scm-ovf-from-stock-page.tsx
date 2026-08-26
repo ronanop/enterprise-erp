@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Package, RefreshCw } from "lucide-react";
 
 import { PageHeader } from "@/components/layout/page-header";
@@ -16,7 +16,7 @@ import {
   type ScmOvfPreview,
   type ScmStockAvailability,
 } from "@/services/procurement-service";
-import { findStockAvailability, ovfProductKey } from "@/utils/ovf-stock";
+import { findStockAvailability, ovfItemPlanHref, ovfProductKey } from "@/utils/ovf-stock";
 
 function demandLines(preview: ScmOvfPreview) {
   return (preview.customer_lines?.length ? preview.customer_lines : preview.vendor_lines) || [];
@@ -28,6 +28,10 @@ function unitQty(row: ProcurementInventoryRow): number {
 
 export function ScmOvfFromStockPage({ ovfId }: { ovfId: string }) {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const fromItemPlan = searchParams.get("from") === "item-plan";
+  const ovfBackHref = fromItemPlan ? ovfItemPlanHref(ovfId) : `/procurement/scm/ovf/${ovfId}`;
+  const ovfBackLabel = fromItemPlan ? "Item plan" : "OVF";
   const [preview, setPreview] = useState<ScmOvfPreview | null>(null);
   const [inventory, setInventory] = useState<ProcurementInventoryRow[]>([]);
   const [selectedByProduct, setSelectedByProduct] = useState<Record<string, string[]>>({});
@@ -133,7 +137,11 @@ export function ScmOvfFromStockPage({ ovfId }: { ovfId: string }) {
     try {
       await fulfillOvfFromStock(ovfId, lines);
       // Allocate only — DC / billing later when ready to ship (stock now, or after PO remainder).
-      router.replace(`/procurement/scm/ovf/${ovfId}?stockAllocated=1`);
+      router.replace(
+        fromItemPlan
+          ? `${ovfItemPlanHref(ovfId)}?stockAllocated=1`
+          : `/procurement/scm/ovf/${ovfId}?stockAllocated=1`,
+      );
     } catch (err) {
       setError(
         err instanceof ApiClientError
@@ -149,8 +157,8 @@ export function ScmOvfFromStockPage({ ovfId }: { ovfId: string }) {
     <div className="space-y-4">
       <PageHeader
         title={preview ? `Fulfill ${preview.ovf_no} from inventory` : "Fulfill from inventory"}
-        backHref={`/procurement/scm/ovf/${ovfId}`}
-        backLabel="OVF"
+        backHref={ovfBackHref}
+        backLabel={ovfBackLabel}
         actions={
           <div className="flex flex-wrap items-center gap-2">
             <Button

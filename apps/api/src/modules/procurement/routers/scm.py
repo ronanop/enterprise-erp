@@ -531,6 +531,7 @@ def update_line_receipt(
         serial_numbers=body.serial_numbers,
         billing=body.billing,
         billing_quantity=body.billing_quantity,
+        delivery_challan_quantity=body.delivery_challan_quantity,
     )
     db.commit()
     data = OrderService(db).get_order_response(ctx, order_id, enrich_commercial=True)

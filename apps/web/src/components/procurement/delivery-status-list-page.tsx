@@ -2,9 +2,10 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { FileSpreadsheet, Receipt, RefreshCw } from "lucide-react";
+import { FileSpreadsheet, MapPinned, Receipt, RefreshCw } from "lucide-react";
 
 import { DeliveryStatusBillDialog } from "@/components/procurement/delivery-status-bill-dialog";
+import { DeliveryStatusOutcomeDialog } from "@/components/procurement/delivery-status-outcome-dialog";
 import {
   ProcurementListSearch,
   ProcurementPageHeader,
@@ -20,15 +21,20 @@ import {
   formatDeliveryBillStatusLabel,
   resolveDeliveryBillStatus,
 } from "@/utils/delivery-challan-bill";
-import { getDeliveryChallan, listDeliveryChallans } from "@/utils/delivery-challan-storage";
+import {
+  getDeliveryChallan,
+  listDeliveryChallans,
+  type DeliveryChallanRecord,
+} from "@/utils/delivery-challan-storage";
 import {
   buildDeliveryStatusExportRows,
   exportDeliveryStatusXlsx,
 } from "@/utils/delivery-status-excel-export";
-import { consumeDeliveryStatusFlash } from "@/utils/delivery-status-flash";
+import { consumeDeliveryStatusFlash, setDeliveryStatusFlash } from "@/utils/delivery-status-flash";
 import { deliveryStatusUpdateHref } from "@/utils/delivery-status-routes";
 import {
   deliveryStatusRowFromChallan,
+  deliveryStatusUiMode,
   shipmentStatusBadgeVariant,
   type DeliveryStatusRow,
 } from "@/utils/delivery-status-storage";
@@ -37,7 +43,8 @@ type DeliveryStatusListRow = DeliveryStatusRow & {
   billStatusLabel: string;
   billStatusKey: ReturnType<typeof resolveDeliveryBillStatus>;
   poBillStatus: string;
-  canBill: boolean;
+  canUpdateOutcome: boolean;
+  canUpdateBill: boolean;
 };
 
 function loadDeliveryStatusRows(): DeliveryStatusListRow[] {
@@ -54,8 +61,8 @@ function loadDeliveryStatusRows(): DeliveryStatusListRow[] {
           billStatusLabel: formatDeliveryBillStatusLabel(billStatusKey),
           billStatusKey,
           poBillStatus: aggregatePoDcBillStatus(challan.orderId),
-          canBill:
-            billStatusKey === "unbilled" || billStatusKey === "partially_billed",
+          canUpdateOutcome: deliveryStatusUiMode(row) === "tracking",
+          canUpdateBill: billStatusKey === "fully_billed",
         },
       ];
     } catch {
@@ -71,6 +78,7 @@ export function DeliveryStatusListPage() {
   const [rows, setRows] = useState<DeliveryStatusListRow[]>([]);
   const [exportError, setExportError] = useState<string | null>(null);
   const [billChallanId, setBillChallanId] = useState<string | null>(null);
+  const [outcomeChallan, setOutcomeChallan] = useState<DeliveryChallanRecord | null>(null);
 
   const load = useCallback(() => {
     setVersion((v) => v + 1);
@@ -147,8 +155,8 @@ export function DeliveryStatusListPage() {
       />
 
       <p className="text-sm text-muted-foreground">
-        After delivery, the DC stays <span className="font-medium text-foreground">unbilled</span>{" "}
-        until you mark it billed (partial or full). PO bill status follows those DC bills.
+        After dispatch is saved, use <span className="font-medium text-foreground">Update status</span>{" "}
+        to mark Delivered or Failed. Update bill is available only for fully billed DCs.
       </p>
 
       {flash ? (
@@ -186,7 +194,7 @@ export function DeliveryStatusListPage() {
                 <th className={procurementUi.th}>GRN number</th>
                 <th className={procurementUi.th}>Invoice</th>
                 <th className={procurementUi.th}>Delivery status</th>
-                <th className={procurementUi.th}>DC bill status</th>
+                <th className={procurementUi.th}>Bill taken</th>
                 <th className={procurementUi.th}>PO bill status</th>
                 <th className={procurementUi.th}>Actions</th>
               </tr>
@@ -243,7 +251,37 @@ export function DeliveryStatusListPage() {
                       >
                         View
                       </Link>
-                      {row.canBill || row.billStatusKey === "fully_billed" ? (
+                      {row.canUpdateOutcome ? (
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="ghost"
+                          className={cn(
+                            procurementUi.actionBtn,
+                            "cursor-pointer text-[#0369A1] hover:text-[#0369A1]",
+                          )}
+                          onClick={() => {
+                            const challan = getDeliveryChallan(row.challanId);
+                            if (!challan) return;
+                            setOutcomeChallan(challan);
+                          }}
+                        >
+                          <MapPinned className="mr-1 size-3.5" />
+                          Update status
+                        </Button>
+                      ) : (
+                        <Link
+                          href={deliveryStatusUpdateHref(row.challanId)}
+                          className={cn(
+                            buttonVariants({ size: "sm", variant: "ghost" }),
+                            procurementUi.actionBtn,
+                            "text-[#0369A1] hover:text-[#0369A1]",
+                          )}
+                        >
+                          Set dispatch
+                        </Link>
+                      )}
+                      {row.canUpdateBill ? (
                         <Button
                           type="button"
                           size="sm"
@@ -258,7 +296,7 @@ export function DeliveryStatusListPage() {
                           }}
                         >
                           <Receipt className="mr-1 size-3.5" />
-                          {row.billStatusKey === "fully_billed" ? "Update bill" : "Bill"}
+                          Update bill
                         </Button>
                       ) : null}
                     </div>
@@ -275,6 +313,16 @@ export function DeliveryStatusListPage() {
         challanId={billChallanId}
         onClose={() => setBillChallanId(null)}
         onSaved={load}
+      />
+
+      <DeliveryStatusOutcomeDialog
+        open={Boolean(outcomeChallan)}
+        challan={outcomeChallan}
+        onClose={() => setOutcomeChallan(null)}
+        onSaved={(message) => {
+          setDeliveryStatusFlash({ variant: "success", message });
+          load();
+        }}
       />
     </div>
   );

@@ -204,6 +204,15 @@ export { normalizeRows };
 
 const SCM_API = "/procurement/scm";
 
+export type ScmLinkedPurchaseOrder = {
+  id: string;
+  vendor_id?: string | null;
+  vendor_name?: string | null;
+  document_number?: string | null;
+  company_po_number?: string | null;
+  status?: string | null;
+};
+
 export type ScmQueueItem = {
   ovf_id: string;
   ovf_no: string;
@@ -243,6 +252,9 @@ export type ScmQueueItem = {
   stock_fulfillment_status?: "none" | "partial" | "complete" | string;
   remaining_demand_qty?: number;
   stock_availability?: ScmStockAvailability[];
+  open_distributor_names?: string[];
+  purchase_orders?: ScmLinkedPurchaseOrder[];
+  item_plan?: ScmItemPlan;
 };
 
 export type ScmVendorLine = {
@@ -277,6 +289,25 @@ export type ScmStockAvailability = {
   on_hand_qty: number;
   allocated_qty: number;
   remaining_qty: number;
+};
+
+export type ScmItemPlanLine = {
+  product_name: string;
+  qty: number;
+  distributor_name?: string | null;
+  source: "inventory" | "purchase_order" | string;
+  on_hand_qty: number;
+  allocated_qty: number;
+  book_qty: number;
+  po_qty: number;
+  in_stock: boolean;
+  action: "book_stock" | "stock_short" | "create_po" | "no_vendor" | string;
+};
+
+export type ScmItemPlan = {
+  lines: ScmItemPlanLine[];
+  delivery: "together" | "separate" | string;
+  delivery_note: string;
 };
 
 export type ScmOvfStockAllocation = {
@@ -374,6 +405,8 @@ export type ScmOvfPreview = {
   purchase_order_id: string | null;
   purchase_order_number: string | null;
   can_create_po: boolean;
+  open_distributor_names?: string[];
+  purchase_orders?: ScmLinkedPurchaseOrder[];
   scm_on_hold?: boolean;
   scm_on_hold_at?: string | null;
   scm_hold_blocked?: boolean;
@@ -386,6 +419,7 @@ export type ScmOvfPreview = {
   remaining_demand_qty?: number;
   stock_availability?: ScmStockAvailability[];
   stock_allocations?: ScmOvfStockAllocation[];
+  item_plan?: ScmItemPlan;
 };
 
 export type ScmOvfHoldHistoryEntry = {
@@ -404,6 +438,7 @@ export type ScmVendorPoLine = {
   last_receipt_batch_id?: string | null;
   last_receipt_billing?: boolean;
   last_receipt_billing_quantity?: number;
+  last_receipt_delivery_challan_quantity?: number;
   unit_cost: number;
   rate_currency?: string | null;
   line_total: number;
@@ -488,6 +523,7 @@ export type ProcOrder = {
     last_receipt_serial_numbers?: string[] | null;
     last_receipt_billing?: boolean;
     last_receipt_billing_quantity?: number;
+    last_receipt_delivery_challan_quantity?: number;
     unit_cost: number;
     rate_currency?: string | null;
     line_total: number;
@@ -578,6 +614,7 @@ export async function createPoFromOvf(
     order_ref_cache?: string | null;
     finalize?: boolean;
     hold?: boolean;
+    distributor_name?: string | null;
     lines?: Array<{
       product_name: string;
       qty: number;
@@ -755,6 +792,7 @@ export type ScmReceiptBatchLine = {
   serial_numbers?: string[] | null;
   billing?: boolean;
   billing_quantity?: number;
+  delivery_challan_quantity?: number;
 };
 
 export type ScmReceiptBatch = {
@@ -1150,6 +1188,7 @@ export async function updateLineReceipt(
     serial_numbers?: string[] | null;
     billing?: boolean;
     billing_quantity?: number;
+    delivery_challan_quantity?: number;
   },
 ): Promise<ProcOrder> {
   const res = await apiClient<ProcOrder>(

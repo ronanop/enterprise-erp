@@ -32,16 +32,18 @@ import {
   scmHoldDayCountDisplay,
   scmHoldSinceDisplay,
 } from "@/utils/scm-ovf-hold";
-import { formatOvfDeliveryPeriodDisplay } from "@/utils/ovf-delivery-period";
 import { downloadScmOvfPdf } from "@/utils/scm-ovf-pdf";
 import {
   buildOvfFulfillmentRows,
   ovfChallanHref,
+  ovfCreatePoHref,
   ovfCreatePoRemainderHref,
   ovfFromStockHref,
+  ovfItemPlanHref,
   ovfHasInventoryShortfall,
   ovfRequiresInStockCreatePoApproval,
   type OvfChallanShipSource,
+  type OvfShipDocumentKind,
 } from "@/utils/ovf-stock";
 import { useProcurementApprovals } from "@/hooks/use-procurement-approvals";
 import { useProcurementRole } from "@/hooks/use-procurement-role";
@@ -58,6 +60,47 @@ import {
   type ScmOvfPreview,
   type ScmVendorLine,
 } from "@/services/procurement-service";
+
+function ovfLineNameKey(name: string | null | undefined): string {
+  return (name || "").trim().toLowerCase();
+}
+
+function customerLinesInCrmOrder(rows: ScmVendorLine[]): ScmVendorLine[] {
+  return [...rows].sort((a, b) => {
+    const an = Number(a.line_no) || 0;
+    const bn = Number(b.line_no) || 0;
+    if (an !== bn) return an - bn;
+    return String(a.line_id).localeCompare(String(b.line_id));
+  });
+}
+
+function vendorLinesInCrmOrder(
+  vendorRows: ScmVendorLine[],
+  customerRows: ScmVendorLine[],
+): ScmVendorLine[] {
+  const buckets = new Map<string, ScmVendorLine[]>();
+  for (const row of vendorRows) {
+    const key = ovfLineNameKey(row.product_name);
+    const list = buckets.get(key) ?? [];
+    list.push(row);
+    buckets.set(key, list);
+  }
+  const used = new Set<string>();
+  const ordered: ScmVendorLine[] = [];
+  for (const customer of customerLinesInCrmOrder(customerRows)) {
+    const key = ovfLineNameKey(customer.product_name);
+    const bucket = buckets.get(key);
+    const next = bucket?.shift();
+    if (next) {
+      used.add(next.line_id);
+      ordered.push(next);
+    }
+  }
+  for (const row of vendorRows) {
+    if (!used.has(row.line_id)) ordered.push(row);
+  }
+  return ordered;
+}
 
 function textOrDash(value: string | number | null | undefined): string {
   if (value === null || value === undefined) return "—";
@@ -205,8 +248,9 @@ function ChargeTable({
   rows: ScmVendorLine[];
   emptyLabel: string;
 }) {
+  const orderedRows = useMemo(() => customerLinesInCrmOrder(rows), [rows]);
   const totals = useMemo(() => {
-    return rows.reduce(
+    return orderedRows.reduce(
       (acc, row) => {
         acc.total += Number(row.line_total) || 0;
         acc.gst += Number(row.gst_amount) || 0;
@@ -215,7 +259,7 @@ function ChargeTable({
       },
       { total: 0, gst: 0, withGst: 0 },
     );
-  }, [rows]);
+  }, [orderedRows]);
 
   return (
     <div className="overflow-hidden rounded-md border border-border">
@@ -252,14 +296,14 @@ function ChargeTable({
             </tr>
           </thead>
           <tbody>
-            {rows.length === 0 ? (
+            {orderedRows.length === 0 ? (
               <tr>
                 <td colSpan={8} className="px-3 py-6 text-center text-muted-foreground">
                   {emptyLabel}
                 </td>
               </tr>
             ) : (
-              rows.map((row, index) => (
+              orderedRows.map((row, index) => (
                 <tr key={row.line_id} className="border-b border-border/70">
                   <td className="px-3 py-2 tabular-nums text-muted-foreground">{index + 1}</td>
                   <td className="px-3 py-2 font-medium">{textOrDash(row.product_name)}</td>
@@ -283,7 +327,7 @@ function ChargeTable({
               ))
             )}
           </tbody>
-          {rows.length > 0 ? (
+          {orderedRows.length > 0 ? (
             <tfoot className="border-t border-border bg-muted/30 text-sm font-semibold">
               <tr>
                 <td colSpan={5} className="px-3 py-2 text-right">
@@ -335,13 +379,19 @@ function VendorSourceBadge({
 
 function VendorPurchaseTable({
   rows,
+  customerRows,
   emptyLabel,
 }: {
   rows: ScmVendorLine[];
+  customerRows: ScmVendorLine[];
   emptyLabel: string;
 }) {
+  const orderedRows = useMemo(
+    () => vendorLinesInCrmOrder(rows, customerRows),
+    [rows, customerRows],
+  );
   const totals = useMemo(() => {
-    return rows.reduce(
+    return orderedRows.reduce(
       (acc, row) => {
         acc.total += Number(row.line_total) || 0;
         acc.gst += Number(row.gst_amount) || 0;
@@ -350,18 +400,12 @@ function VendorPurchaseTable({
       },
       { total: 0, gst: 0, withGst: 0 },
     );
-  }, [rows]);
+  }, [orderedRows]);
 
   return (
-    <div className="space-y-3">
-      <p className="text-xs text-muted-foreground">
-        Distributor comes from CRM Vendor Charges. <span className="font-medium text-foreground">IN STOCK</span>{" "}
-        → fulfill from inventory. To create a PO for IN STOCK lines instead (stock short or by choice),
-        request admin approval first. Any other distributor → create a purchase order.
-      </p>
-      <div className="overflow-hidden rounded-md border border-border">
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[980px] table-fixed text-sm">
+    <div className="overflow-hidden rounded-md border border-border">
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[980px] table-fixed text-sm">
             <colgroup>
               <col className="w-12" />
               <col className="min-w-[120px]" />
@@ -397,14 +441,14 @@ function VendorPurchaseTable({
               </tr>
             </thead>
             <tbody>
-              {rows.length === 0 ? (
+              {orderedRows.length === 0 ? (
                 <tr>
                   <td colSpan={10} className="px-3 py-6 text-center text-muted-foreground">
                     {emptyLabel}
                   </td>
                 </tr>
               ) : (
-                rows.map((row, index) => (
+                orderedRows.map((row, index) => (
                   <tr key={row.line_id} className="border-b border-border/70">
                     <td className="px-3 py-2 tabular-nums text-muted-foreground">{index + 1}</td>
                     <td className="px-3 py-2 font-medium">{textOrDash(row.product_name)}</td>
@@ -437,7 +481,7 @@ function VendorPurchaseTable({
                 ))
               )}
             </tbody>
-            {rows.length > 0 ? (
+            {orderedRows.length > 0 ? (
               <tfoot className="border-t border-border bg-muted/30 text-sm font-semibold">
                 <tr>
                   <td colSpan={7} className="px-3 py-2 text-right">
@@ -458,7 +502,6 @@ function VendorPurchaseTable({
           </table>
         </div>
       </div>
-    </div>
   );
 }
 
@@ -479,6 +522,7 @@ export function ScmOvfViewPage({ ovfId }: { ovfId: string }) {
   const [stockAllocatedBanner, setStockAllocatedBanner] = useState(false);
   const [shipDialogOpen, setShipDialogOpen] = useState(false);
   const [shipSource, setShipSource] = useState<OvfChallanShipSource>("inventory");
+  const [shipKind, setShipKind] = useState<OvfShipDocumentKind>("delivery_challan");
   const [holdDialogOpen, setHoldDialogOpen] = useState(false);
   const [unholdDialogOpen, setUnholdDialogOpen] = useState(false);
   const [unholdBusy, setUnholdBusy] = useState(false);
@@ -693,9 +737,29 @@ export function ScmOvfViewPage({ ovfId }: { ovfId: string }) {
   );
   const hasInventoryTaken = fulfillmentRows.some((row) => row.allocated_qty > 0);
   const canShipInventory = hasInventoryTaken;
-  const canShipPo = Boolean(preview?.purchase_order_id);
+  const linkedPos = preview?.purchase_orders?.length
+    ? preview.purchase_orders
+    : preview?.purchase_order_id
+      ? [
+          {
+            id: preview.purchase_order_id,
+            document_number: preview.purchase_order_number,
+            company_po_number: preview.company_po_number,
+            vendor_name: preview.vendor_name,
+            status: preview.purchase_order_status,
+          },
+        ]
+      : [];
+  const canShipPo = linkedPos.length > 0;
   const canShipCombined = canShipInventory && canShipPo;
   const canCreateDeliveryChallan = canShipInventory || canShipPo;
+  const createPoHref = preview
+    ? preview.open_distributor_names && preview.open_distributor_names.length > 0
+      ? ovfCreatePoHref(ovfId, preview.open_distributor_names[0])
+      : preview.stock_fulfillment_status === "partial"
+        ? ovfCreatePoRemainderHref(ovfId)
+        : ovfCreatePoHref(ovfId)
+    : ovfCreatePoHref(ovfId);
   const showActiveHold = Boolean(preview?.scm_on_hold || queueStatus === "hold");
   const holdHistory = useMemo(() => {
     if (!preview?.scm_hold_history?.length) return [];
@@ -711,6 +775,7 @@ export function ScmOvfViewPage({ ovfId }: { ovfId: string }) {
         ? "po"
         : "inventory";
     setShipSource(initial);
+    setShipKind("delivery_challan");
     setShipDialogOpen(true);
   }
 
@@ -722,7 +787,14 @@ export function ScmOvfViewPage({ ovfId }: { ovfId: string }) {
       (shipSource === "combined" && canShipCombined);
     if (!available) return;
     setShipDialogOpen(false);
-    router.push(ovfChallanHref(ovfId, shipSource, preview.purchase_order_id));
+    router.push(
+      ovfChallanHref(
+        ovfId,
+        shipSource,
+        preview.purchase_order_id || linkedPos[0]?.id,
+        shipKind,
+      ),
+    );
   }
 
   async function downloadPdf() {
@@ -772,6 +844,18 @@ export function ScmOvfViewPage({ ovfId }: { ovfId: string }) {
                 {pdfBusy ? "Preparing…" : "Download PDF"}
               </Button>
             ) : null}
+            {preview ? (
+              <Link
+                href={ovfItemPlanHref(ovfId)}
+                className={cn(
+                  buttonVariants({ size: "sm", variant: "outline" }),
+                  "cursor-pointer transition-colors duration-200",
+                )}
+              >
+                <Package className="mr-1.5 size-3.5" />
+                Item plan
+              </Link>
+            ) : null}
             {canUnholdOvf ? (
               <Button
                 type="button"
@@ -806,11 +890,7 @@ export function ScmOvfViewPage({ ovfId }: { ovfId: string }) {
             {preview?.can_create_po ? (
               <ScmCreatePoEntry
                 ovfId={ovfId}
-                href={
-                  preview.stock_fulfillment_status === "partial"
-                    ? ovfCreatePoRemainderHref(ovfId)
-                    : undefined
-                }
+                href={createPoHref}
                 scmOnHold={Boolean(preview.scm_on_hold) || queueStatus === "hold"}
                 scmOnHoldAt={preview.scm_on_hold_at}
                 className="cursor-pointer transition-colors duration-200"
@@ -821,17 +901,19 @@ export function ScmOvfViewPage({ ovfId }: { ovfId: string }) {
                 onRequestCreatePoApproval={requestCreatePoApproval}
                 requestBusy={requestPoBusy}
               />
-            ) : preview?.purchase_order_id ? (
+            ) : null}
+            {linkedPos.map((po) => (
               <Link
-                href={`/procurement/orders/${preview.purchase_order_id}`}
+                key={po.id}
+                href={`/procurement/orders/${po.id}`}
                 className={cn(
                   buttonVariants({ size: "sm", variant: "outline" }),
                   "cursor-pointer transition-colors duration-200",
                 )}
               >
-                Open purchase order
+                Open {po.company_po_number || po.document_number || "purchase order"}
               </Link>
-            ) : null}
+            ))}
             {canFulfillFromStock ? (
               <Link
                 href={ovfFromStockHref(ovfId)}
@@ -854,7 +936,7 @@ export function ScmOvfViewPage({ ovfId }: { ovfId: string }) {
                 onClick={openShipDialog}
               >
                 <Truck className="mr-1.5 size-3.5" />
-                Create delivery challan
+                Billing or DC
               </Button>
             ) : null}
           </div>
@@ -890,34 +972,40 @@ export function ScmOvfViewPage({ ovfId }: { ovfId: string }) {
       {preview ? (
         <>
           <SectionCard title="OVF overview" icon={ClipboardList}>
-            <dl className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-              <DetailItem label="Customer">
-                {textOrDash(preview.customer_name || preview.account_name)}
-              </DetailItem>
-              <DetailItem label="Project title">
-                {textOrDash(preview.project_title)}
-              </DetailItem>
-              <DetailItem label="OEM / Brand name">
-                {textOrDash(preview.oem_name)}
-              </DetailItem>
-              <DetailItem label="Customer pay terms">
-                {preview.customer_payment_days
-                  ? `Net ${preview.customer_payment_days} days`
-                  : "—"}
-              </DetailItem>
-              <DetailItem label="Vendor name">{vendorLabel}</DetailItem>
-              <DetailItem label="Vendor pay terms">
-                {preview.vendor_payment_days
-                  ? `Net ${preview.vendor_payment_days} days`
-                  : "—"}
-              </DetailItem>
-              <DetailItem label="Approved by / owner">{textOrDash(preview.ovf_approver)}</DetailItem>
-              <DetailItem label="Approval status">
-                <FinanceStatusBadge status={preview.approval_status || "pending"} />
-              </DetailItem>
-              <DetailItem label="Margin (total)">{moneyPrecise(preview.total_margin_amount)}</DetailItem>
-              <DetailItem label="Margin %">{pct(preview.total_margin_pct)}</DetailItem>
-            </dl>
+            <div className="space-y-3">
+              <dl className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                <DetailItem label="Customer">
+                  {textOrDash(preview.customer_name || preview.account_name)}
+                </DetailItem>
+                <DetailItem label="Customer pay terms">
+                  {preview.customer_payment_days
+                    ? `Net ${preview.customer_payment_days} days`
+                    : "—"}
+                </DetailItem>
+                <DetailItem label="Vendor name">{vendorLabel}</DetailItem>
+                <DetailItem label="Vendor pay terms">
+                  {preview.vendor_payment_days
+                    ? `Net ${preview.vendor_payment_days} days`
+                    : "—"}
+                </DetailItem>
+              </dl>
+              <dl className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                <DetailItem label="Project title">
+                  {textOrDash(preview.project_title)}
+                </DetailItem>
+                <DetailItem label="OEM / Brand name">
+                  {textOrDash(preview.oem_name)}
+                </DetailItem>
+                <DetailItem label="Approved by">{textOrDash(preview.ovf_approver)}</DetailItem>
+                <DetailItem label="Approval status">
+                  <FinanceStatusBadge status={preview.approval_status || "pending"} />
+                </DetailItem>
+              </dl>
+              <dl className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                <DetailItem label="Margin (total)">{moneyPrecise(preview.total_margin_amount)}</DetailItem>
+                <DetailItem label="Margin %">{pct(preview.total_margin_pct)}</DetailItem>
+              </dl>
+            </div>
             <dl
               className={cn(
                 "mt-3 grid gap-3 border-t border-border/60 pt-3 sm:grid-cols-2",
@@ -1005,9 +1093,6 @@ export function ScmOvfViewPage({ ovfId }: { ovfId: string }) {
                 <DetailItem label="Customer PO date">
                   {formatPoDate(preview.po_date)}
                 </DetailItem>
-                <DetailItem label="Delivery period">
-                  {formatOvfDeliveryPeriodDisplay(preview.delivery_period)}
-                </DetailItem>
               </dl>
               <div className="grid gap-3 sm:grid-cols-2">
                 <div className="rounded-md border border-border/70 bg-muted/20 p-3 space-y-3">
@@ -1043,6 +1128,7 @@ export function ScmOvfViewPage({ ovfId }: { ovfId: string }) {
           <SectionCard title="Vendor purchase" icon={Package}>
             <VendorPurchaseTable
               rows={preview.vendor_lines || []}
+              customerRows={preview.customer_lines || []}
               emptyLabel="No vendor purchase lines on this OVF."
             />
           </SectionCard>
@@ -1136,8 +1222,8 @@ export function ScmOvfViewPage({ ovfId }: { ovfId: string }) {
 
       <ConfirmDialog
         open={shipDialogOpen}
-        title="Create delivery challan"
-        description="Choose which items to include. You can ship inventory and PO lines separately or together."
+        title="Billing or delivery challan"
+        description="Choose Billing (invoice) or delivery challan, then which items to include. Inventory and PO lines can ship separately or together."
         confirmLabel="Continue"
         cancelLabel="Not now"
         contentClassName="max-w-lg"
@@ -1150,6 +1236,43 @@ export function ScmOvfViewPage({ ovfId }: { ovfId: string }) {
         onCancel={() => setShipDialogOpen(false)}
       >
         <div className="mt-3 space-y-2">
+          <p className="text-xs font-medium text-foreground">Document type</p>
+          {(
+            [
+              {
+                value: "billing" as const,
+                title: "Billing",
+                detail: "Invoice number and date — same path as GRN billing.",
+              },
+              {
+                value: "delivery_challan" as const,
+                title: "Delivery challan",
+                detail: "Deliver without taking a bill. Bill taken can be recorded later.",
+              },
+            ] as const
+          ).map((option) => (
+            <label
+              key={option.value}
+              className={cn(
+                "flex cursor-pointer items-start gap-3 rounded-md border px-3 py-2.5 transition-colors duration-200",
+                "border-border hover:bg-muted/40 has-[:checked]:border-sky-400 has-[:checked]:bg-sky-50/70",
+              )}
+            >
+              <input
+                type="radio"
+                name="ovf-ship-kind"
+                className="mt-0.5 cursor-pointer accent-sky-700"
+                value={option.value}
+                checked={shipKind === option.value}
+                onChange={() => setShipKind(option.value)}
+              />
+              <span className="min-w-0 space-y-0.5">
+                <span className="block text-sm font-medium text-foreground">{option.title}</span>
+                <span className="block text-xs text-muted-foreground">{option.detail}</span>
+              </span>
+            </label>
+          ))}
+          <p className="pt-2 text-xs font-medium text-foreground">Items to include</p>
           {(
             [
               {

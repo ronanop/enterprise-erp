@@ -78,6 +78,7 @@ import { receiptBatchKey } from "@/utils/delivery-challan-grn";
 import { addPendingGrnChallan } from "@/utils/grn-challan-pending";
 import {
   billingQuantityFromUnitKinds,
+  deliveryChallanQuantityFromUnitKinds,
   dispositionFromBillingQuantity,
   resizeUnitKinds,
 } from "@/components/procurement/receipt-line-serials";
@@ -519,6 +520,7 @@ export function OrderDetailPage({ orderId }: { orderId: string }) {
       serials: string[];
       billing: boolean;
       billingQuantity: number;
+      deliveryChallanQuantity: number;
     };
 
     const pending: PendingLine[] = [];
@@ -544,6 +546,10 @@ export function OrderDetailPage({ orderId }: { orderId: string }) {
         serials: serialSlotsForSave(slots),
         billing: row.billingQuantity > 0,
         billingQuantity: row.billingQuantity,
+        deliveryChallanQuantity: deliveryChallanQuantityFromUnitKinds(
+          resizeUnitKinds(row.unitKinds, Math.max(serialUnitCount(row.additional), 1)),
+          row.additional,
+        ),
       });
     }
 
@@ -582,6 +588,7 @@ export function OrderDetailPage({ orderId }: { orderId: string }) {
           serial_numbers: item.serials,
           billing: item.billingQuantity > 0,
           billing_quantity: item.billingQuantity,
+          delivery_challan_quantity: item.deliveryChallanQuantity,
         });
       }
       const refreshed = await loadOrderWithCommercial(latest.id);
@@ -681,7 +688,7 @@ export function OrderDetailPage({ orderId }: { orderId: string }) {
         (latestBatch?.grn_number || refreshed.current_grn_number || "").trim();
       const hasBilling = pending.some((row) => row.billingQuantity > 1e-9);
       const hasDeliveryChallan = pending.some(
-        (row) => row.additional - row.billingQuantity > 1e-9,
+        (row) => row.deliveryChallanQuantity > 1e-9,
       );
       function itemsSummaryForKind(kind: "billing" | "delivery_challan"): string {
         const parts = pending
@@ -689,7 +696,7 @@ export function OrderDetailPage({ orderId }: { orderId: string }) {
             const quantity =
               kind === "billing"
                 ? row.billingQuantity
-                : Math.max(0, row.additional - row.billingQuantity);
+                : row.deliveryChallanQuantity;
             return { label: row.productLabel, quantity };
           })
           .filter((row) => row.quantity > 1e-9);
@@ -778,7 +785,7 @@ export function OrderDetailPage({ orderId }: { orderId: string }) {
         lineNo: line.line_number,
         productLabel: label,
         additional,
-        disposition: "delivery_challan",
+        disposition: "stock",
         billingQuantity: 0,
         unitKinds: resizeUnitKinds(undefined, Math.max(serialUnitCount(additional), 1)),
       });
@@ -1605,6 +1612,10 @@ export function OrderDetailPage({ orderId }: { orderId: string }) {
                   unitKinds,
                   row.additional,
                 );
+                const deliveryChallanQuantity = deliveryChallanQuantityFromUnitKinds(
+                  unitKinds,
+                  row.additional,
+                );
                 return {
                   ...row,
                   unitKinds,
@@ -1612,6 +1623,7 @@ export function OrderDetailPage({ orderId }: { orderId: string }) {
                   disposition: dispositionFromBillingQuantity(
                     row.additional,
                     billingQuantity,
+                    deliveryChallanQuantity,
                   ),
                 };
               }),

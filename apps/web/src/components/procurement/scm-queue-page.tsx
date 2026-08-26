@@ -12,28 +12,22 @@ import {
   CircleCheckBig,
 } from "lucide-react";
 
-import { ScmCreatePoEntry } from "@/components/procurement/scm-create-po-entry";
 import { PageHeader } from "@/components/layout/page-header";
 import {
   ProcurementErrorBanner,
   ProcurementKpiCard,
   ProcurementListPanel,
   ProcurementPage,
-  procurementUi,
 } from "@/components/procurement/procurement-ui";
 import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import {
-  findLatestCreatePoInStockApprovalForOvf,
   latestPoApprovalByOrderId,
   PROCUREMENT_APPROVALS_EVENT,
-  submitCreatePoInStockApproval,
   type PoApprovalRequest,
-  type PoApprovalStatus,
 } from "@/lib/procurement-approvals";
-import { useProcurementRole } from "@/hooks/use-procurement-role";
 import { ApiClientError } from "@/services/api-client";
 import {
   formatInr,
@@ -45,15 +39,10 @@ import {
 import { resolveVendorDisplayName } from "@/utils/vendor-oem-match";
 import { textTokenMatch } from "@/utils/procurement-search";
 import { getUnseenScmOvfIds, markScmQueueSeen } from "@/utils/scm-queue-seen";
-import {
-  isInStockDistributor,
-  ovfCreatePoRemainderHref,
-  ovfFromStockHref,
-} from "@/utils/ovf-stock";
+import { ovfItemPlanHref } from "@/utils/ovf-stock";
 
 type QueueFilter = "all" | "open" | "close" | "hold";
 type OvfStatus = "open" | "close" | "hold" | "draft";
-type PoQueueStatus = "create_po" | "draft" | "approval_pending" | "rejected" | "issued" | "from_stock";
 
 function formatReceivedDate(value?: string | null): string {
   if (!value) return "—";
@@ -117,27 +106,18 @@ function deriveOvfStatus(
   return "close";
 }
 
-function derivePoStatus(
-  row: ScmQueueItem,
-  approvalsByOrder: Map<string, PoApprovalRequest>,
-): PoQueueStatus {
-  const status = (row.purchase_order_status || "").toLowerCase();
-  const approval = row.purchase_order_id
-    ? approvalsByOrder.get(row.purchase_order_id)
-    : undefined;
-  if (row.purchase_order_id && approval?.status === "pending") return "approval_pending";
-  if (row.purchase_order_id && approval?.status === "rejected" && status === "draft") {
-    return "rejected";
-  }
-  if (row.stock_fulfillment_status === "complete" && !row.can_create_po && !row.purchase_order_id) {
-    return "from_stock";
-  }
-  if (status === "draft" && row.purchase_order_id) return "draft";
-  if (!row.purchase_order_id || status === "cancelled" || status === "hold") {
-    return "create_po";
-  }
-  if (row.can_create_po && !row.purchase_order_id) return "create_po";
-  return "issued";
+function ItemPlanCell({ ovfId }: { ovfId: string }) {
+  return (
+    <Link
+      href={ovfItemPlanHref(ovfId)}
+      className={cn(
+        buttonVariants({ size: "sm", variant: "outline" }),
+        "cursor-pointer transition-colors duration-200",
+      )}
+    >
+      Open plan
+    </Link>
+  );
 }
 
 function payTermsLabel(days: number | null | undefined): string {
@@ -205,29 +185,12 @@ function OvfStatusBadge({ status }: { status: OvfStatus }) {
   );
 }
 
-function poStatusChipClass(status: PoQueueStatus): string {
-  if (status === "approval_pending") {
-    return "border-amber-200/80 bg-amber-50 text-amber-900 hover:bg-amber-100";
-  }
-  if (status === "rejected") {
-    return "border-red-200/80 bg-red-50 text-red-800 hover:bg-red-100";
-  }
-  if (status === "draft") {
-    return "border-sky-200/80 bg-sky-50 text-sky-900 hover:bg-sky-100";
-  }
-  if (status === "from_stock") {
-    return "border-emerald-200/80 bg-emerald-50 text-emerald-900 hover:bg-emerald-100";
-  }
-  return "border-emerald-200/80 bg-emerald-50 text-emerald-900 hover:bg-emerald-100";
-}
-
 export function ScmQueuePage() {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const filter = parseQueueFilter(searchParams.get("filter"));
 
-  const { isAdmin } = useProcurementRole();
   const cachedOnMount = peekScmQueueFromCache();
   const [rows, setRows] = useState<ScmQueueItem[]>(() => cachedOnMount ?? []);
   const [loading, setLoading] = useState(() => cachedOnMount === null);
@@ -238,10 +201,6 @@ export function ScmQueuePage() {
   const [approvalsByOrder, setApprovalsByOrder] = useState<Map<string, PoApprovalRequest>>(
     () => latestPoApprovalByOrderId(),
   );
-  const [createPoApprovalByOvf, setCreatePoApprovalByOvf] = useState<
-    Map<string, PoApprovalStatus>
-  >(() => new Map());
-  const [requestBusyOvfId, setRequestBusyOvfId] = useState<string | null>(null);
   const queueOvfIdsRef = useRef<string[]>([]);
 
   const setFilter = useCallback(
@@ -285,12 +244,6 @@ export function ScmQueuePage() {
   useEffect(() => {
     const syncApprovals = () => {
       setApprovalsByOrder(latestPoApprovalByOrderId());
-      const map = new Map<string, PoApprovalStatus>();
-      for (const row of rows) {
-        const approval = findLatestCreatePoInStockApprovalForOvf(row.ovf_id);
-        if (approval) map.set(row.ovf_id, approval.status);
-      }
-      setCreatePoApprovalByOvf(map);
     };
     syncApprovals();
     window.addEventListener(PROCUREMENT_APPROVALS_EVENT, syncApprovals);
@@ -299,7 +252,7 @@ export function ScmQueuePage() {
       window.removeEventListener(PROCUREMENT_APPROVALS_EVENT, syncApprovals);
       window.removeEventListener("storage", syncApprovals);
     };
-  }, [rows]);
+  }, []);
 
   useEffect(() => {
     if (loading) return;
@@ -321,7 +274,6 @@ export function ScmQueuePage() {
       rows.map((row) => ({
         ...row,
         ovf_status: deriveOvfStatus(row, approvalsByOrder),
-        po_status: derivePoStatus(row, approvalsByOrder),
       })),
     [rows, approvalsByOrder],
   );
@@ -457,7 +409,7 @@ export function ScmQueuePage() {
 
       <ProcurementListPanel id="procurement-list" className="scroll-mt-24">
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[1440px] text-left text-sm">
+          <table className="w-full min-w-[1360px] text-left text-sm">
             <thead className="border-b border-border bg-muted/40 text-xs font-bold uppercase tracking-wide text-muted-foreground">
               <tr>
                 <th className="px-3 py-2 font-bold">PO number</th>
@@ -477,7 +429,12 @@ export function ScmQueuePage() {
                 <th className="px-3 py-2 font-bold text-right">Margin %</th>
                 <th className="px-3 py-2 font-bold">OVF status</th>
                 <th className="px-3 py-2 font-bold">View OVF</th>
-                <th className="px-3 py-2 font-bold">PO status</th>
+                <th
+                  className="px-3 py-2 font-bold"
+                  title="IN STOCK lines book from inventory when on hand. Vendor-allocated lines create a PO. Mixed sources deliver separately."
+                >
+                  PO plan
+                </th>
               </tr>
             </thead>
             <tbody>
@@ -506,11 +463,6 @@ export function ScmQueuePage() {
               {filtered.map((row) => {
                 const isNew = newOvfIds.has(row.ovf_id);
                 const ovfStatus = row.ovf_status;
-                const poStatus = row.po_status;
-                const createPoHref =
-                  row.stock_fulfillment_status === "partial"
-                    ? ovfCreatePoRemainderHref(row.ovf_id)
-                    : `/procurement/scm/ovf/${row.ovf_id}/po`;
                 return (
                   <tr
                     key={row.ovf_id}
@@ -588,105 +540,8 @@ export function ScmQueuePage() {
                         View OVF
                       </Link>
                     </td>
-                    <td className="px-3 py-2">
-                      {poStatus === "create_po" ? (
-                        <ScmCreatePoEntry
-                          ovfId={row.ovf_id}
-                          href={createPoHref}
-                          scmOnHold={ovfStatus === "hold" && Boolean(row.scm_on_hold)}
-                          scmOnHoldAt={row.scm_on_hold_at}
-                          className="cursor-pointer transition-colors duration-200"
-                          requiresInStockApproval={isInStockDistributor(row.distributor_name)}
-                          createPoApprovalStatus={createPoApprovalByOvf.get(row.ovf_id) ?? null}
-                          canCreateWithoutApproval={isAdmin}
-                          requestBusy={requestBusyOvfId === row.ovf_id}
-                          onRequestCreatePoApproval={() => {
-                            setRequestBusyOvfId(row.ovf_id);
-                            try {
-                              submitCreatePoInStockApproval({
-                                ovfId: row.ovf_id,
-                                ovfNo: row.ovf_no,
-                                customerName: row.customer_name || row.account_name,
-                                vendorName: row.distributor_name || "IN STOCK",
-                                reason:
-                                  row.stock_fulfillment_status === "partial" ||
-                                  (Number(row.remaining_demand_qty) || 0) > 0
-                                    ? "stock_short"
-                                    : "user_choice",
-                              });
-                              setCreatePoApprovalByOvf((prev) => {
-                                const next = new Map(prev);
-                                next.set(row.ovf_id, "pending");
-                                return next;
-                              });
-                            } finally {
-                              setRequestBusyOvfId(null);
-                            }
-                          }}
-                        />
-                      ) : poStatus === "from_stock" ? (
-                        <Link
-                          href={ovfFromStockHref(row.ovf_id)}
-                          className={cn(
-                            "inline-flex cursor-pointer items-center rounded-md border px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide",
-                            "transition-colors duration-200",
-                            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1",
-                            poStatusChipClass("from_stock"),
-                          )}
-                        >
-                          From stock
-                        </Link>
-                      ) : poStatus === "draft" ? (
-                        <Link
-                          href={createPoHref}
-                          className={cn(
-                            "inline-flex cursor-pointer items-center rounded-md border px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide",
-                            "transition-colors duration-200",
-                            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1",
-                            poStatusChipClass("draft"),
-                          )}
-                        >
-                          Draft
-                        </Link>
-                      ) : poStatus === "approval_pending" && row.purchase_order_id ? (
-                        <Link
-                          href={`/procurement/orders/${row.purchase_order_id}?from=scm`}
-                          className={cn(
-                            "inline-flex cursor-pointer items-center rounded-md border px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide",
-                            "transition-colors duration-200",
-                            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1",
-                            poStatusChipClass("approval_pending"),
-                          )}
-                        >
-                          Approval pending
-                        </Link>
-                      ) : poStatus === "rejected" ? (
-                        <Link
-                          href={createPoHref}
-                          className={cn(
-                            "inline-flex cursor-pointer items-center rounded-md border px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide",
-                            "transition-colors duration-200",
-                            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1",
-                            poStatusChipClass("rejected"),
-                          )}
-                        >
-                          Rejected
-                        </Link>
-                      ) : row.purchase_order_id ? (
-                        <Link
-                          href={`/procurement/orders/${row.purchase_order_id}?from=scm`}
-                          className={cn(
-                            "inline-flex cursor-pointer items-center rounded-md border px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide",
-                            "transition-colors duration-200",
-                            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1",
-                            poStatusChipClass("issued"),
-                          )}
-                        >
-                          Approved
-                        </Link>
-                      ) : (
-                        <span className="text-xs text-muted-foreground">—</span>
-                      )}
+                    <td className="px-3 py-2 align-top">
+                      <ItemPlanCell ovfId={row.ovf_id} />
                     </td>
                   </tr>
                 );

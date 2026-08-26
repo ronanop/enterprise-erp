@@ -1,22 +1,15 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import {
-  Building2,
-  ClipboardList,
-  FolderInput,
-  MapPinned,
-  Package,
-  Save,
-} from "lucide-react";
+import { ClipboardList, FolderInput, MapPinned } from "lucide-react";
 
-import {
-  FinanceField,
-} from "@/components/finance/journals/finance-form-field";
+import { FinanceField } from "@/components/finance/journals/finance-form-field";
 import { DeliverySectionCard } from "@/components/procurement/delivery-section-card";
 import { ProcurementPageHeader } from "@/components/procurement/procurement-page-header";
+import { procurementUi } from "@/components/procurement/procurement-ui";
+import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
@@ -36,6 +29,8 @@ import { getDeliveryChallan } from "@/utils/delivery-challan-storage";
 import {
   deliveryStatusRowFromChallan,
   isDeliveredShipmentStatus,
+  isFailedShipmentStatus,
+  shipmentStatusBadgeVariant,
 } from "@/utils/delivery-status-storage";
 import { installationListHref } from "@/utils/installation-routes";
 import {
@@ -56,6 +51,7 @@ function textOrDash(value: string | number | null | undefined): string {
 
 type AutoFields = {
   deliveredDate: string;
+  shipmentStatus: string;
   oemName: string;
   companyPoNumber: string;
   shipToAddress: string;
@@ -83,13 +79,17 @@ export function InstallationDetailPage({ challanId }: { challanId: string }) {
     sharedToProject: boolean;
     projectHref: string | null;
   }>({ sharedToProject: false, projectHref: null });
-  const [saving, setSaving] = useState(false);
   const [sharing, setSharing] = useState(false);
+  const [hydrated, setHydrated] = useState(false);
+  const [crmProjectTitle, setCrmProjectTitle] = useState("");
+  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
+    setHydrated(false);
     setError(null);
     setBanner(null);
+    setCrmProjectTitle("");
     try {
       const challan = getDeliveryChallan(challanId);
       if (!challan) {
@@ -110,21 +110,8 @@ export function InstallationDetailPage({ challanId }: { challanId: string }) {
       }
 
       const install = resolveInstallation(challanId);
-      setManual({
-        projectName: install.projectName,
-        circleName: install.circleName,
-        site: install.site,
-        contactPerson: install.contactPerson,
-        contactNumber: install.contactNumber,
-        rackQuantity: install.rackQuantity,
-        serverType: install.serverType,
-      });
-      setShared({
-        sharedToProject: install.sharedToProject,
-        projectHref: install.projectHref,
-      });
-
       let oemName = "";
+      let crmProjectTitle = "";
       let customerPoDate = challan.poDate?.trim() || "";
       let branchId: string | null = null;
       const orderId = challan.orderId;
@@ -149,6 +136,7 @@ export function InstallationDetailPage({ challanId }: { challanId: string }) {
           if (ovfId) {
             const preview = await getScmOvfPreview(String(ovfId)).catch(() => null);
             oemName = preview?.oem_name?.trim() || "";
+            crmProjectTitle = preview?.project_title?.trim() || "";
             if (!customerPoDate && preview?.po_date) {
               customerPoDate = String(preview.po_date).slice(0, 10);
             }
@@ -158,8 +146,32 @@ export function InstallationDetailPage({ challanId }: { challanId: string }) {
         }
       }
 
+      const projectName = crmProjectTitle || install.projectName || "";
+      setManual({
+        projectName,
+        circleName: install.circleName,
+        site: install.site,
+        contactPerson: install.contactPerson,
+        contactNumber: install.contactNumber,
+        rackQuantity: install.rackQuantity,
+        serverType: install.serverType,
+      });
+      setShared({
+        sharedToProject: install.sharedToProject,
+        projectHref: install.projectHref,
+      });
+      setCrmProjectTitle(crmProjectTitle);
+
+      const shipmentStatus = isFailedShipmentStatus(status.shipmentStatus)
+        ? "Failed delivery"
+        : isDeliveredShipmentStatus(status.shipmentStatus) ||
+            Boolean(status.actualDeliveryDate?.trim())
+          ? "Delivered"
+          : status.shipmentStatus || "Delivered";
+
       setAuto({
         deliveredDate: status.actualDeliveryDate || "",
+        shipmentStatus,
         oemName,
         companyPoNumber:
           status.cachePoNumber ||
@@ -186,6 +198,7 @@ export function InstallationDetailPage({ challanId }: { challanId: string }) {
       });
     } finally {
       setLoading(false);
+      setHydrated(true);
     }
   }, [challanId]);
 
@@ -193,25 +206,29 @@ export function InstallationDetailPage({ challanId }: { challanId: string }) {
     void load();
   }, [load]);
 
+  useEffect(() => {
+    if (!hydrated || shared.sharedToProject) return;
+    if (saveTimer.current) clearTimeout(saveTimer.current);
+    saveTimer.current = setTimeout(() => {
+      try {
+        const existing = resolveInstallation(challanId);
+        upsertInstallation({
+          ...existing,
+          ...manual,
+        });
+      } catch {
+        // Ignore transient localStorage write failures while typing.
+      }
+    }, 350);
+    return () => {
+      if (saveTimer.current) clearTimeout(saveTimer.current);
+    };
+  }, [manual, challanId, hydrated, shared.sharedToProject]);
+
   function patchManual(partial: Partial<InstallationManualFields>) {
     setManual((prev) => ({ ...prev, ...partial }));
-  }
-
-  function saveDraft() {
-    setSaving(true);
-    setError(null);
-    setBanner(null);
-    try {
-      const existing = resolveInstallation(challanId);
-      upsertInstallation({
-        ...existing,
-        ...manual,
-      });
-      setBanner("Installation details saved.");
-    } catch {
-      setError("Could not save installation details.");
-    } finally {
-      setSaving(false);
+    if (Object.keys(fieldErrors).length > 0) {
+      setFieldErrors(validateInstallationManual({ ...manual, ...partial }));
     }
   }
 
@@ -303,6 +320,11 @@ export function InstallationDetailPage({ challanId }: { challanId: string }) {
     }
   }
 
+  const detailsComplete = useMemo(
+    () => Object.keys(validateInstallationManual(manual)).length === 0,
+    [manual],
+  );
+
   const autoItems = useMemo(() => {
     if (!auto) return [];
     return [
@@ -326,44 +348,17 @@ export function InstallationDetailPage({ challanId }: { challanId: string }) {
         backHref={installationListHref()}
         backLabel="Installation"
         actions={
-          <div className="flex flex-wrap gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="cursor-pointer transition-colors duration-200"
-              disabled={saving || sharing || !auto}
-              onClick={saveDraft}
+          shared.projectHref ? (
+            <Link
+              href={shared.projectHref}
+              className={cn(
+                buttonVariants({ size: "sm", variant: "outline" }),
+                "cursor-pointer transition-colors duration-200",
+              )}
             >
-              <Save className="mr-1.5 size-3.5" />
-              {saving ? "Saving…" : "Save"}
-            </Button>
-            <Button
-              type="button"
-              size="sm"
-              className="cursor-pointer transition-colors duration-200"
-              disabled={sharing || saving || !auto || shared.sharedToProject}
-              onClick={() => void shareToProject()}
-            >
-              <FolderInput className="mr-1.5 size-3.5" />
-              {sharing
-                ? "Sharing…"
-                : shared.sharedToProject
-                  ? "Already shared"
-                  : "Share to Project module"}
-            </Button>
-            {shared.projectHref ? (
-              <Link
-                href={shared.projectHref}
-                className={cn(
-                  buttonVariants({ size: "sm", variant: "outline" }),
-                  "cursor-pointer transition-colors duration-200",
-                )}
-              >
-                Open project
-              </Link>
-            ) : null}
-          </div>
+              Open project
+            </Link>
+          ) : null
         }
       />
 
@@ -389,15 +384,35 @@ export function InstallationDetailPage({ challanId }: { challanId: string }) {
           <DeliverySectionCard
             title="From delivery / PO / OVF"
             icon={ClipboardList}
-            subtitle="Read-only values pulled from the finalized delivery challan and linked purchase order."
+            subtitle="Read-only delivery and PO values. Status stays visible after delivery."
           >
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              <span className="text-[11px] font-bold uppercase tracking-wide text-muted-foreground">
+                Delivery status
+              </span>
+              <Badge
+                variant={shipmentStatusBadgeVariant(auto.shipmentStatus)}
+                className={procurementUi.statusBadge}
+              >
+                {auto.shipmentStatus}
+              </Badge>
+              {shared.sharedToProject ? (
+                <Badge variant="secondary" className={procurementUi.statusBadge}>
+                  Shared to project
+                </Badge>
+              ) : (
+                <Badge variant="outline" className={procurementUi.statusBadge}>
+                  Pending project share
+                </Badge>
+              )}
+            </div>
             <dl className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
               {autoItems.map((item) => (
                 <div key={item.label} className="min-w-0 space-y-1">
                   <dt className="text-[11px] font-bold uppercase tracking-wide text-muted-foreground">
                     {item.label}
                   </dt>
-                  <dd className="text-sm font-medium break-words whitespace-pre-wrap text-foreground">
+                  <dd className="text-sm font-normal break-words whitespace-pre-wrap text-muted-foreground">
                     {item.value}
                   </dd>
                 </div>
@@ -408,15 +423,25 @@ export function InstallationDetailPage({ challanId }: { challanId: string }) {
           <DeliverySectionCard
             title="Site installation details"
             icon={MapPinned}
-            subtitle="Fill these manually before sharing to Projects."
+            subtitle="Details save automatically as you type. Share to Projects when all required fields are complete."
           >
             <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-              <FinanceField label="Project name *" error={fieldErrors.projectName}>
+              <FinanceField
+                label="Project name *"
+                error={fieldErrors.projectName}
+                hint={
+                  crmProjectTitle
+                    ? "Auto-filled from CRM project title."
+                    : undefined
+                }
+              >
                 <Input
                   value={manual.projectName}
                   onChange={(e) => patchManual({ projectName: e.target.value })}
                   className="h-8"
-                  placeholder="Project name"
+                  placeholder={crmProjectTitle ? "From CRM" : "Project name"}
+                  disabled={shared.sharedToProject || Boolean(crmProjectTitle)}
+                  readOnly={Boolean(crmProjectTitle)}
                 />
               </FinanceField>
               <FinanceField label="Circle name *" error={fieldErrors.circleName}>
@@ -425,6 +450,7 @@ export function InstallationDetailPage({ challanId }: { challanId: string }) {
                   onChange={(e) => patchManual({ circleName: e.target.value })}
                   className="h-8"
                   placeholder="Circle"
+                  disabled={shared.sharedToProject}
                 />
               </FinanceField>
               <FinanceField label="Site *" error={fieldErrors.site}>
@@ -433,6 +459,7 @@ export function InstallationDetailPage({ challanId }: { challanId: string }) {
                   onChange={(e) => patchManual({ site: e.target.value })}
                   className="h-8"
                   placeholder="Site name / location"
+                  disabled={shared.sharedToProject}
                 />
               </FinanceField>
               <FinanceField label="Contact person *" error={fieldErrors.contactPerson}>
@@ -441,6 +468,7 @@ export function InstallationDetailPage({ challanId }: { challanId: string }) {
                   onChange={(e) => patchManual({ contactPerson: e.target.value })}
                   className="h-8"
                   placeholder="Name"
+                  disabled={shared.sharedToProject}
                 />
               </FinanceField>
               <FinanceField label="Contact number *" error={fieldErrors.contactNumber}>
@@ -449,6 +477,7 @@ export function InstallationDetailPage({ challanId }: { challanId: string }) {
                   onChange={(e) => patchManual({ contactNumber: e.target.value })}
                   className="h-8"
                   placeholder="Phone"
+                  disabled={shared.sharedToProject}
                 />
               </FinanceField>
               <FinanceField label="Rack quantity *" error={fieldErrors.rackQuantity}>
@@ -460,6 +489,7 @@ export function InstallationDetailPage({ challanId }: { challanId: string }) {
                   className="h-8"
                   inputMode="numeric"
                   placeholder="0"
+                  disabled={shared.sharedToProject}
                 />
               </FinanceField>
               <FinanceField
@@ -472,29 +502,33 @@ export function InstallationDetailPage({ challanId }: { challanId: string }) {
                   onChange={(e) => patchManual({ serverType: e.target.value })}
                   className="h-8"
                   placeholder="Server / hardware type"
+                  disabled={shared.sharedToProject}
                 />
               </FinanceField>
             </div>
-          </DeliverySectionCard>
-
-          <DeliverySectionCard title="Customer snapshot" icon={Building2}>
-            <dl className="mt-3 grid gap-3 sm:grid-cols-2">
-              <div>
-                <dt className="text-[11px] font-bold uppercase tracking-wide text-muted-foreground">
-                  Customer
-                </dt>
-                <dd className="text-sm font-medium">{textOrDash(auto.customerName)}</dd>
-              </div>
-              <div>
-                <dt className="text-[11px] font-bold uppercase tracking-wide text-muted-foreground">
-                  Quantity delivered
-                </dt>
-                <dd className="inline-flex items-center gap-1.5 text-sm font-medium">
-                  <Package className="size-3.5 text-muted-foreground" aria-hidden />
-                  {textOrDash(auto.quantity)}
-                </dd>
-              </div>
-            </dl>
+            <div className="mt-4 flex flex-wrap items-center justify-end gap-2 border-t border-border/60 pt-4">
+              <Button
+                type="button"
+                size="sm"
+                className="cursor-pointer transition-colors duration-200"
+                disabled={
+                  sharing || !auto || shared.sharedToProject || !detailsComplete
+                }
+                onClick={() => void shareToProject()}
+              >
+                <FolderInput className="mr-1.5 size-3.5" />
+                {sharing
+                  ? "Sharing…"
+                  : shared.sharedToProject
+                    ? "Already shared"
+                    : "Share to Project module"}
+              </Button>
+            </div>
+            {!detailsComplete && !shared.sharedToProject ? (
+              <p className="mt-2 text-xs text-muted-foreground">
+                Complete all required site fields before sharing to Projects.
+              </p>
+            ) : null}
           </DeliverySectionCard>
         </>
       ) : null}

@@ -282,6 +282,7 @@ class OrderLineResponse(BaseModel):
     last_receipt_serial_numbers: list[str] | None = None
     last_receipt_billing: bool = True
     last_receipt_billing_quantity: float = 0
+    last_receipt_delivery_challan_quantity: float = 0
     unit_cost: float
     rate_currency: str = "INR"
     tax_rate: float = 0
@@ -362,6 +363,34 @@ class ScmStockAvailability(BaseModel):
     remaining_qty: float = 0
 
 
+class ScmItemPlanLine(BaseModel):
+    product_name: str
+    qty: float = 0
+    distributor_name: str | None = None
+    source: str = "purchase_order"  # inventory | purchase_order
+    on_hand_qty: float = 0
+    allocated_qty: float = 0
+    book_qty: float = 0
+    po_qty: float = 0
+    in_stock: bool = False
+    action: str = "create_po"  # book_stock | stock_short | create_po | no_vendor
+
+
+class ScmItemPlan(BaseModel):
+    lines: list[ScmItemPlanLine] = Field(default_factory=list)
+    delivery: str = "together"  # together | separate
+    delivery_note: str = ""
+
+
+class ScmLinkedPurchaseOrder(BaseModel):
+    id: UUID
+    vendor_id: UUID | None = None
+    vendor_name: str | None = None
+    document_number: str | None = None
+    company_po_number: str | None = None
+    status: str | None = None
+
+
 class ScmQueueItemResponse(BaseModel):
     ovf_id: UUID
     ovf_no: str
@@ -395,9 +424,12 @@ class ScmQueueItemResponse(BaseModel):
     scm_on_hold: bool = False
     scm_on_hold_at: datetime | None = None
     can_create_po: bool = True
+    open_distributor_names: list[str] = Field(default_factory=list)
+    purchase_orders: list[ScmLinkedPurchaseOrder] = Field(default_factory=list)
     stock_fulfillment_status: str = "none"
     remaining_demand_qty: float = 0
     stock_availability: list[ScmStockAvailability] = Field(default_factory=list)
+    item_plan: ScmItemPlan = Field(default_factory=ScmItemPlan)
 
 
 class ScmNextCompanyPoResponse(BaseModel):
@@ -540,6 +572,8 @@ class ScmOvfPreviewResponse(BaseModel):
     purchase_order_id: UUID | None = None
     purchase_order_number: str | None = None
     can_create_po: bool = True
+    open_distributor_names: list[str] = Field(default_factory=list)
+    purchase_orders: list[ScmLinkedPurchaseOrder] = Field(default_factory=list)
     scm_on_hold: bool = False
     scm_on_hold_at: datetime | None = None
     scm_hold_blocked: bool = False
@@ -552,6 +586,7 @@ class ScmOvfPreviewResponse(BaseModel):
     remaining_demand_qty: float = 0
     stock_availability: list[ScmStockAvailability] = Field(default_factory=list)
     stock_allocations: list[ScmOvfStockAllocationRow] = Field(default_factory=list)
+    item_plan: ScmItemPlan = Field(default_factory=ScmItemPlan)
 
 
 class ScmCreatePoFromOvfLineRequest(BaseModel):
@@ -575,6 +610,8 @@ class ScmCreatePoFromOvfRequest(BaseModel):
     finalize: bool = False
     # Hold: create draft then cancel so SCM Queue shows Hold and Create PO stays available.
     hold: bool = False
+    # When set, purchase only this distributor's OVF vendor lines (IN STOCK excluded).
+    distributor_name: str | None = Field(default=None, max_length=255)
     # When set, these lines are purchased instead of raw OVF vendor_lines (qty/rate edits, removals).
     lines: list[ScmCreatePoFromOvfLineRequest] | None = None
 
@@ -613,6 +650,7 @@ class ScmLineReceiptUpdateRequest(BaseModel):
     serial_numbers: list[str] | None = None
     billing: bool = True
     billing_quantity: float | None = None
+    delivery_challan_quantity: float | None = None
 
 
 class ScmVendorPoLineResponse(BaseModel):
@@ -626,6 +664,7 @@ class ScmVendorPoLineResponse(BaseModel):
     last_receipt_serial_numbers: list[str] | None = None
     last_receipt_billing: bool = True
     last_receipt_billing_quantity: float = 0
+    last_receipt_delivery_challan_quantity: float = 0
     unit_cost: float
     rate_currency: str = "INR"
     line_total: float
@@ -666,6 +705,7 @@ class ScmReceiptBatchLineResponse(BaseModel):
     serial_numbers: list[str] | None = None
     billing: bool = True
     billing_quantity: float = 0
+    delivery_challan_quantity: float = 0
 
     @field_validator("serial_numbers", mode="before")
     @classmethod

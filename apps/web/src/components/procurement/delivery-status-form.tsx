@@ -21,6 +21,7 @@ import {
 } from "@/utils/delivery-courier-providers";
 import {
   deriveDeliveryStatusLabel,
+  isFailedShipmentStatus,
   openStoredDeliveryFile,
   type DeliveryStatusAttachment,
   SURFACE_MODE_OPTIONS,
@@ -39,9 +40,26 @@ type DeliveryStatusFormProps = {
 };
 
 function withDerivedStatus(value: DeliveryStatusFormValue): DeliveryStatusFormValue {
+  const explicit = (value.shipmentStatus || "").trim();
+  if (isFailedShipmentStatus(explicit)) {
+    return {
+      ...value,
+      shipmentStatus: "Failed delivery",
+      actualDeliveryDate: "",
+      requiresInstallation: false,
+      trackingNumber: value.docketNumber ?? "",
+    };
+  }
+  if (explicit === "Delivered") {
+    return {
+      ...value,
+      shipmentStatus: "Delivered",
+      trackingNumber: value.docketNumber ?? "",
+    };
+  }
   return {
     ...value,
-    shipmentStatus: deriveDeliveryStatusLabel(value),
+    shipmentStatus: deriveDeliveryStatusLabel({ ...value, shipmentStatus: "" }),
     trackingNumber: value.docketNumber ?? "",
   };
 }
@@ -54,8 +72,8 @@ export function DeliveryStatusForm({
   value,
   onChange,
   fieldErrors = {},
+  mode: _mode = "initial",
 }: DeliveryStatusFormProps) {
-  const actualDeliveryDate = safeText(value.actualDeliveryDate);
   const dispatchDate = safeText(value.dispatchDate);
   const expectedDeliveryDate = safeText(value.expectedDeliveryDate);
   const [customCouriers, setCustomCouriers] = useState(readCustomCourierProviders);
@@ -100,8 +118,8 @@ export function DeliveryStatusForm({
     <div className="space-y-4">
       <DeliverySectionCard title="Cache invoice" icon={FileText}>
         <p className="mb-3 text-xs text-muted-foreground">
-          Optional at delivery. DC means goods are delivered; bill this material later when
-          payment is due (partial or full).
+          Optional. DC is delivery without taking a bill. Record the customer bill later
+          (any time — even after delivery status or installation).
         </p>
         <div className="grid gap-3 sm:grid-cols-2">
           <FinanceField label="Cache invoice number" error={fieldErrors.cacheInvoiceNumber}>
@@ -151,70 +169,6 @@ export function DeliveryStatusForm({
 
         {value.deliveryMode === "hand" || value.deliveryMode === "courier" ? (
           <>
-            <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-3">
-              <FinanceField
-                label="Estimated delivery date"
-                error={fieldErrors.expectedDeliveryDate}
-              >
-                <Input
-                  type="date"
-                  value={expectedDeliveryDate}
-                  onChange={(e) => patch({ expectedDeliveryDate: e.target.value })}
-                  className="h-8"
-                />
-              </FinanceField>
-              <FinanceField
-                label={value.deliveryMode === "hand" ? "Dispatch date *" : "Dispatch date"}
-                error={fieldErrors.dispatchDate}
-              >
-                <Input
-                  type="date"
-                  value={dispatchDate}
-                  onChange={(e) => patch({ dispatchDate: e.target.value })}
-                  className="h-8"
-                />
-              </FinanceField>
-              <FinanceField
-                label="Delivered date"
-                error={fieldErrors.actualDeliveryDate}
-                hint={
-                  value.deliveryMode === "hand" && actualDeliveryDate.trim()
-                    ? "POD attachment is required when a delivered date is set."
-                    : undefined
-                }
-              >
-                <Input
-                  type="date"
-                  value={actualDeliveryDate}
-                  min={dispatchDate || undefined}
-                  onChange={(e) =>
-                    patch({
-                      actualDeliveryDate: e.target.value,
-                      ...(e.target.value.trim()
-                        ? {}
-                        : { requiresInstallation: false }),
-                    })
-                  }
-                  className="h-8"
-                />
-              </FinanceField>
-            </div>
-            {actualDeliveryDate.trim() ? (
-              <label className="mt-3 flex cursor-pointer items-start gap-2.5 rounded-md border border-border/80 bg-muted/20 px-3 py-2.5 text-sm transition-colors duration-200 hover:bg-muted/35">
-                <input
-                  type="checkbox"
-                  className="mt-0.5 size-4 cursor-pointer accent-slate-900"
-                  checked={Boolean(value.requiresInstallation)}
-                  onChange={(e) => patch({ requiresInstallation: e.target.checked })}
-                />
-                <span>
-                  <span className="font-medium text-foreground">Requires installation</span>
-                  <span className="mt-0.5 block text-xs text-muted-foreground">
-                    Send this delivered challan to Procurement → Installation for project handoff.
-                  </span>
-                </span>
-              </label>
-            ) : null}
             <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
               <FinanceField label="No. of boxes" error={fieldErrors.boxCount}>
                 <Input
@@ -284,21 +238,6 @@ export function DeliveryStatusForm({
                 <option value="software">Software</option>
               </FinanceSelect>
             </FinanceField>
-            {(value.itemType === "hardware" || value.itemType === "software") &&
-            actualDeliveryDate.trim() ? (
-              <FileField
-                label="POD attachment *"
-                error={fieldErrors.podDocument}
-                className="sm:col-span-2"
-              >
-                <FilePickRow
-                  file={value.podDocument}
-                  onPick={(files) => void onPickFile(files, "podDocument")}
-                  onClear={() => patch({ podDocument: null })}
-                  inputId="pod-document"
-                />
-              </FileField>
-            ) : null}
           </div>
         ) : null}
 
@@ -489,7 +428,7 @@ export function deliveryStatusToFormValue(
     boxCount: record.boxCount ?? "",
     surfaceMode: record.surfaceMode ?? "",
     remarks: record.remarks ?? "",
-    billStatus: record.billStatus ?? "pending_delivery",
+    billStatus: record.billStatus ?? "unbilled",
     billedQuantity: record.billedQuantity ?? "",
     billInvoiceNumber: record.billInvoiceNumber ?? "",
     billInvoiceDate: record.billInvoiceDate ?? "",

@@ -1,13 +1,13 @@
 /**
- * Post-delivery billing for delivery challans.
- * DC = goods delivered; payment / customer bill may come later (partial or full).
+ * Customer bill taken against a delivery challan.
+ * DC = goods delivered without taking a bill. Bill can be recorded any time after
+ * the DC exists (during tracking, after delivery status, or after installation).
  */
 
 import type { DeliveryChallanRecord } from "@/utils/delivery-challan-storage";
 import { listDeliveryChallans } from "@/utils/delivery-challan-storage";
 import {
   getDeliveryStatus,
-  isDeliveredShipmentStatus,
   type DeliveryBillStatus,
   type DeliveryStatusRecord,
 } from "@/utils/delivery-status-storage";
@@ -37,7 +37,7 @@ export function formatDeliveryBillStatusLabel(status: DeliveryBillStatus): strin
       return "Unbilled";
     case "pending_delivery":
     default:
-      return "Pending delivery";
+      return "Unbilled";
   }
 }
 
@@ -53,24 +53,16 @@ export function deliveryBillStatusBadgeVariant(
       return "secondary";
     case "pending_delivery":
     default:
-      return "outline";
+      return "secondary";
   }
 }
 
-/** Resolve bill status for a challan + its delivery status row. */
+/** Resolve bill taken for a DC. Shipment / installation state does not gate this. */
 export function resolveDeliveryBillStatus(
-  status: Pick<
-    DeliveryStatusRecord,
-    "shipmentStatus" | "actualDeliveryDate" | "billStatus" | "billedQuantity"
-  >,
+  status: Pick<DeliveryStatusRecord, "billStatus" | "billedQuantity"> | null | undefined,
   challanQty: number,
 ): DeliveryBillStatus {
-  const delivered =
-    isDeliveredShipmentStatus(status.shipmentStatus) ||
-    Boolean(String(status.actualDeliveryDate ?? "").trim());
-  if (!delivered) return "pending_delivery";
-
-  const explicit = status.billStatus;
+  const explicit = status?.billStatus;
   if (
     explicit === "unbilled" ||
     explicit === "partially_billed" ||
@@ -79,11 +71,26 @@ export function resolveDeliveryBillStatus(
     return explicit;
   }
 
-  const billed = Number(status.billedQuantity) || 0;
+  const billed = Number(status?.billedQuantity) || 0;
   if (billed <= 0) return "unbilled";
   if (challanQty > 0 && billed + 1e-9 >= challanQty) return "fully_billed";
-  if (billed > 0) return "partially_billed";
-  return "unbilled";
+  return "partially_billed";
+}
+
+/** Bill taken for a saved delivery challan (unbilled until recorded). */
+export function resolveChallanBillStatus(challan: DeliveryChallanRecord): DeliveryBillStatus {
+  const status = getDeliveryStatus(challan.id);
+  return resolveDeliveryBillStatus(status, challanDeliveredQuantity(challan));
+}
+
+/** First DC on the PO that is not fully billed, else the latest DC. */
+export function pickChallanIdToBill(orderId: string | null | undefined): string | null {
+  const id = (orderId || "").trim();
+  if (!id) return null;
+  const challans = listDeliveryChallans().filter((row) => row.orderId === id);
+  if (challans.length === 0) return null;
+  const open = challans.find((row) => resolveChallanBillStatus(row) !== "fully_billed");
+  return (open ?? challans[0]).id;
 }
 
 export function deriveBillStatusFromQuantities(
@@ -100,8 +107,8 @@ export function deriveBillStatusFromQuantities(
 export type PoDcBillStatus = "—" | "Unbilled" | "Partially billed" | "Fully billed";
 
 /**
- * Aggregate bill status across delivered DCs for a purchase order.
- * Used so PO bill status stays understandable after delivery.
+ * Aggregate bill taken across DCs for a purchase order.
+ * No DC yet → "—" (bill is only taken after a delivery challan exists).
  */
 export function aggregatePoDcBillStatus(orderId: string | null | undefined): PoDcBillStatus {
   const id = (orderId || "").trim();
@@ -110,23 +117,17 @@ export function aggregatePoDcBillStatus(orderId: string | null | undefined): PoD
   const challans = listDeliveryChallans().filter((c) => c.orderId === id);
   if (challans.length === 0) return "—";
 
-  let hasDelivered = false;
   let anyUnbilled = false;
   let anyPartial = false;
   let anyFull = false;
 
   for (const challan of challans) {
-    const status = getDeliveryStatus(challan.id);
-    if (!status) continue;
-    const bill = resolveDeliveryBillStatus(status, challanDeliveredQuantity(challan));
-    if (bill === "pending_delivery") continue;
-    hasDelivered = true;
-    if (bill === "unbilled") anyUnbilled = true;
+    const bill = resolveChallanBillStatus(challan);
     if (bill === "partially_billed") anyPartial = true;
-    if (bill === "fully_billed") anyFull = true;
+    else if (bill === "fully_billed") anyFull = true;
+    else anyUnbilled = true;
   }
 
-  if (!hasDelivered) return "—";
   if (anyPartial || (anyUnbilled && anyFull)) return "Partially billed";
   if (anyUnbilled) return "Unbilled";
   if (anyFull) return "Fully billed";

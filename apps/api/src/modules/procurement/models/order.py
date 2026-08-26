@@ -173,5 +173,8 @@ class ProcOrderLine(Base, *ProcTransactionMixin):
     last_receipt_billing_quantity: Mapped[float] = mapped_column(
         Numeric(18, 4), nullable=False, default=0
     )
+    last_receipt_delivery_challan_quantity: Mapped[float] = mapped_column(
+        Numeric(18, 4), nullable=False, default=0
+    )
 
     order_header: Mapped[ProcOrderHeader] = relationship(back_populates="lines")

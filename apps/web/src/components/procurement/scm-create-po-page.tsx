@@ -66,7 +66,12 @@ import {
   type PurchaseOrderPdfInput,
 } from "@/utils/purchase-order-pdf";
 import { matchVendorByDistributor } from "@/utils/vendor-oem-match";
-import { ovfProductKey, ovfRequiresInStockCreatePoApproval } from "@/utils/ovf-stock";
+import {
+  ovfPoSeedVendorLines,
+  ovfProductKey,
+  ovfRequiresInStockCreatePoApproval,
+  ovfVendorPoGroups,
+} from "@/utils/ovf-stock";
 
 function applyVendorAddressFields(
   entry: VendorAddressEntry | null | undefined,
@@ -603,6 +608,7 @@ export function ScmCreatePoPage({ ovfId }: { ovfId: string }) {
   const searchParams = useSearchParams();
   const { isAdmin } = useProcurementRole();
   const remainderFromStock = searchParams.get("from") === "stock-remainder";
+  const distributorParam = searchParams.get("distributor");
   const shippingMenuRef = useRef<HTMLDivElement>(null);
   const paymentTermsMenuRef = useRef<HTMLDivElement>(null);
   const [preview, setPreview] = useState<ScmOvfPreview | null>(null);
@@ -821,6 +827,11 @@ export function ScmCreatePoPage({ ovfId }: { ovfId: string }) {
       setPreview(ovf);
       setVendors(vendorRows);
 
+      const seedVendorLines = remainderFromStock
+        ? ovf.vendor_lines || []
+        : ovfPoSeedVendorLines(ovf.vendor_lines || [], distributorParam);
+      const selectedDistributor =
+        (distributorParam || seedVendorLines[0]?.distributor_name || ovf.distributor_name || "").trim();
       const defaultTax = normalizeTaxOption(ovf.tax_percentage, "18");
       const location =
         COMPANY_LOCATIONS.find((loc) => loc.id === "kailash-colony") ?? COMPANY_LOCATIONS[0];
@@ -829,7 +840,7 @@ export function ScmCreatePoPage({ ovfId }: { ovfId: string }) {
           Boolean(current.vendorId) && vendorRows.some((row) => row.id === current.vendorId);
         const matched = keepVendor
           ? null
-          : matchVendorByDistributor(vendorRows, ovf.distributor_name);
+          : matchVendorByDistributor(vendorRows, selectedDistributor);
         const matchedEntry = matched?.addressEntries?.[0];
         const addressFields = keepVendor
           ? {
@@ -852,8 +863,8 @@ export function ScmCreatePoPage({ ovfId }: { ovfId: string }) {
           lockedFromPo?.id || current.companyLocationId || location.id,
         );
         const seededLines =
-          ovf.vendor_lines.length > 0
-            ? ovf.vendor_lines.map((ln) =>
+          seedVendorLines.length > 0
+            ? seedVendorLines.map((ln) =>
                 normalizeTaxOption(
                   ln.gst_pct != null && Number.isFinite(Number(ln.gst_pct))
                     ? ln.gst_pct
@@ -865,7 +876,7 @@ export function ScmCreatePoPage({ ovfId }: { ovfId: string }) {
         const uniformSeed = seededLines.every((pct) => pct === seededLines[0])
           ? seededLines[0]
           : defaultTax;
-        const distributorHint = (ovf.distributor_name || ovf.vendor_name || "").trim();
+        const distributorHint = selectedDistributor || (ovf.distributor_name || ovf.vendor_name || "").trim();
         return {
           // Auto-select when distributor matches a vendor; otherwise leave blank for SCM.
           vendorId: keepVendor ? current.vendorId : matched?.id || "",
@@ -913,7 +924,7 @@ export function ScmCreatePoPage({ ovfId }: { ovfId: string }) {
       });
       setLines((current) => {
         if (current.length > 0) return current;
-        const vendorLines = ovf.vendor_lines || [];
+        const vendorLines = seedVendorLines;
         const mapped = vendorLines
           .map((ln) => {
             const avail = (ovf.stock_availability || []).find(
@@ -959,6 +970,15 @@ export function ScmCreatePoPage({ ovfId }: { ovfId: string }) {
             ? `Taken from inventory: ${taken.join(", ")}. Vendor lines below are remaining demand only.`
             : "Vendor quantities are remaining demand after stock allocation.",
         );
+      } else if (ovfVendorPoGroups(ovf.vendor_lines || []).length > 1 && selectedDistributor) {
+        const remaining = (ovf.open_distributor_names || []).filter(
+          (name) => name.trim().toLowerCase() !== selectedDistributor.toLowerCase(),
+        );
+        setBanner(
+          remaining.length > 0
+            ? `Creating PO for ${selectedDistributor}. Still open: ${remaining.join(", ")}. IN STOCK lines are not included.`
+            : `Creating PO for ${selectedDistributor}. IN STOCK lines are not included.`,
+        );
       } else if (!ovf.can_create_po && ovf.purchase_order_id) {
         setBanner(`PO ${ovf.purchase_order_number} already exists for this OVF.`);
       } else if (ovf.scm_on_hold && ovf.can_create_po) {
@@ -1001,7 +1021,7 @@ export function ScmCreatePoPage({ ovfId }: { ovfId: string }) {
     } finally {
       setLoading(false);
     }
-  }, [ovfId, remainderFromStock]);
+  }, [ovfId, remainderFromStock, distributorParam]);
 
   useEffect(() => {
     void load();
@@ -1523,6 +1543,7 @@ export function ScmCreatePoPage({ ovfId }: { ovfId: string }) {
         // A PO is always created as a draft. Only an administrator's
         // acceptance from the Approval workspace may issue it.
         finalize: false,
+        distributor_name: distributorParam || null,
         lines: poLines,
       });
       for (const document of scmDocuments) {

@@ -17,8 +17,10 @@ import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 
-export type GrnLineDisposition = "bill" | "delivery_challan" | "split";
-export type GrnUnitKind = "bill" | "delivery_challan";
+export type GrnLineDisposition = "bill" | "delivery_challan" | "stock" | "split";
+export type GrnUnitKind = "bill" | "delivery_challan" | "stock";
+
+const UNIT_KIND_ORDER: GrnUnitKind[] = ["stock", "bill", "delivery_challan"];
 
 export type ReceiptSerialTableLine = {
   lineId: string;
@@ -48,30 +50,50 @@ function formatQtyLabel(qty: number): string {
 export function dispositionFromBillingQuantity(
   receiveQty: number,
   billingQuantity: number,
+  deliveryChallanQuantity = 0,
 ): GrnLineDisposition {
   const bill = Math.max(0, Math.min(receiveQty, billingQuantity));
-  if (bill <= 1e-9) return "delivery_challan";
+  const dc = Math.max(0, Math.min(receiveQty - bill, deliveryChallanQuantity));
+  const stock = Math.max(0, receiveQty - bill - dc);
+  const parts = [bill > 1e-9, dc > 1e-9, stock > 1e-9].filter(Boolean).length;
+  if (parts > 1) return "split";
   if (bill >= receiveQty - 1e-9) return "bill";
-  return "split";
+  if (dc >= receiveQty - 1e-9) return "delivery_challan";
+  return "stock";
 }
 
 export function resizeUnitKinds(prev: GrnUnitKind[] | undefined, count: number): GrnUnitKind[] {
   if (count <= 0) return [];
   const next = (prev ?? []).slice(0, count);
-  while (next.length < count) next.push("delivery_challan");
+  while (next.length < count) next.push("stock");
   return next;
+}
+
+export function quantityFromUnitKinds(
+  kinds: GrnUnitKind[],
+  receiveQty: number,
+  kind: GrnUnitKind,
+): number {
+  const units = serialUnitCount(receiveQty);
+  if (units <= 0) {
+    return kinds[0] === kind ? receiveQty : 0;
+  }
+  const counted = kinds.filter((entry) => entry === kind).length;
+  return Math.min(receiveQty, counted);
 }
 
 export function billingQuantityFromUnitKinds(
   kinds: GrnUnitKind[],
   receiveQty: number,
 ): number {
-  const units = serialUnitCount(receiveQty);
-  if (units <= 0) {
-    return kinds[0] === "bill" ? receiveQty : 0;
-  }
-  const billed = kinds.filter((kind) => kind === "bill").length;
-  return Math.min(receiveQty, billed);
+  return quantityFromUnitKinds(kinds, receiveQty, "bill");
+}
+
+export function deliveryChallanQuantityFromUnitKinds(
+  kinds: GrnUnitKind[],
+  receiveQty: number,
+): number {
+  return quantityFromUnitKinds(kinds, receiveQty, "delivery_challan");
 }
 
 function UnitKindSlide({
@@ -87,58 +109,59 @@ function UnitKindSlide({
   unitIndex: number;
   onChange: (kind: GrnUnitKind) => void;
 }) {
-  const isBilling = kind === "bill";
+  const activeIndex = Math.max(0, UNIT_KIND_ORDER.indexOf(kind));
+  const thumbClass =
+    kind === "bill" ? "bg-sky-700" : kind === "delivery_challan" ? "bg-teal-700" : "bg-slate-700";
+  const frameClass =
+    kind === "bill"
+      ? "border-sky-300/80 bg-sky-50"
+      : kind === "delivery_challan"
+        ? "border-teal-300/80 bg-teal-50"
+        : "border-slate-300/80 bg-slate-50";
   return (
     <div
       role="group"
-      aria-label={`Billing or delivery challan for unit ${unitIndex + 1} of ${productLabel}`}
+      aria-label={`Stock, billing, or delivery challan for unit ${unitIndex + 1} of ${productLabel}`}
       className={cn(
-        "relative inline-flex h-8 w-[8.25rem] shrink-0 overflow-hidden rounded-lg border p-0.5",
+        "relative inline-flex h-8 w-[11.25rem] shrink-0 overflow-hidden rounded-lg border p-0.5",
         "transition-[border-color,background-color] duration-200 motion-reduce:transition-none",
-        isBilling
-          ? "border-sky-300/80 bg-sky-50"
-          : "border-teal-300/80 bg-teal-50",
+        frameClass,
         disabled && "opacity-50",
       )}
     >
       <span
         aria-hidden
         className={cn(
-          "pointer-events-none absolute inset-y-0.5 left-0.5 w-[calc(50%-2px)] rounded-md shadow-sm",
+          "pointer-events-none absolute inset-y-0.5 w-[calc(33.333%-2px)] rounded-md shadow-sm",
           "transition-[transform,background-color] duration-200 ease-out motion-reduce:transition-none",
-          isBilling ? "translate-x-0 bg-sky-700" : "translate-x-full bg-teal-700",
+          thumbClass,
         )}
+        style={{ transform: `translateX(${activeIndex * 100}%)` }}
       />
-      <button
-        type="button"
-        disabled={disabled}
-        aria-pressed={isBilling}
-        className={cn(
-          "relative z-10 h-full flex-1 cursor-pointer rounded-md text-[10px] font-semibold uppercase tracking-wide",
-          "transition-[color,opacity] duration-200 motion-reduce:transition-none",
-          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
-          "disabled:cursor-not-allowed",
-          isBilling ? "text-white" : "text-sky-900",
-        )}
-        onClick={() => onChange("bill")}
-      >
-        Billing
-      </button>
-      <button
-        type="button"
-        disabled={disabled}
-        aria-pressed={!isBilling}
-        className={cn(
-          "relative z-10 h-full flex-1 cursor-pointer rounded-md text-[10px] font-semibold uppercase tracking-wide",
-          "transition-[color,opacity] duration-200 motion-reduce:transition-none",
-          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
-          "disabled:cursor-not-allowed",
-          !isBilling ? "text-white" : "text-teal-900",
-        )}
-        onClick={() => onChange("delivery_challan")}
-      >
-        DC
-      </button>
+      {UNIT_KIND_ORDER.map((value) => {
+        const selected = kind === value;
+        const label = value === "bill" ? "Billing" : value === "delivery_challan" ? "DC" : "Stock";
+        const idleColor =
+          value === "bill" ? "text-sky-900" : value === "delivery_challan" ? "text-teal-900" : "text-slate-800";
+        return (
+          <button
+            key={value}
+            type="button"
+            disabled={disabled}
+            aria-pressed={selected}
+            className={cn(
+              "relative z-10 h-full flex-1 cursor-pointer rounded-md text-[10px] font-semibold uppercase tracking-wide",
+              "transition-[color,opacity] duration-200 motion-reduce:transition-none",
+              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
+              "disabled:cursor-not-allowed",
+              selected ? "text-white" : idleColor,
+            )}
+            onClick={() => onChange(value)}
+          >
+            {label}
+          </button>
+        );
+      })}
     </div>
   );
 }
@@ -194,7 +217,7 @@ export function ReceiptSerialsTable({
               <th className={procurementUi.th}>Product</th>
               <th className={cn(procurementUi.th, "w-20 text-right")}>Receiving</th>
               <th className={cn(procurementUi.th, "w-16 text-right")}>Unit</th>
-              <th className={cn(procurementUi.th, "w-[8rem] text-center")}>Billing / DC</th>
+              <th className={cn(procurementUi.th, "w-[11.5rem] text-center")}>Stock / Billing / DC</th>
               <th className={procurementUi.th}>Serial number</th>
               <th className={cn(procurementUi.th, "w-24 text-center")}>NA</th>
               <th className={cn(procurementUi.th, "w-[7.5rem] text-center")}>Import</th>
@@ -216,7 +239,7 @@ export function ReceiptSerialsTable({
                 const value = slots[index] ?? "";
                 const isNa = value.trim().toUpperCase() === RECEIPT_SERIAL_NA;
                 const fractionalOnly = unitCount <= 0;
-                const unitKind = kinds[index] ?? "delivery_challan";
+                const unitKind = kinds[index] ?? "stock";
                 return (
                   <tr key={`${line.lineId}-${index}`} className={procurementUi.tr}>
                     {index === 0 ? (
@@ -270,7 +293,11 @@ export function ReceiptSerialsTable({
                         />
                       ) : (
                         <span className="text-xs text-muted-foreground">
-                          {unitKind === "bill" ? "Billing" : "DC"}
+                          {unitKind === "bill"
+                            ? "Billing"
+                            : unitKind === "delivery_challan"
+                              ? "DC"
+                              : "Stock"}
                         </span>
                       )}
                     </td>

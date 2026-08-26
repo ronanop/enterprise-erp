@@ -21,6 +21,11 @@ import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { DeliverySectionCard } from "@/components/procurement/delivery-section-card";
+import { DeliveryStatusBillDialog } from "@/components/procurement/delivery-status-bill-dialog";
+import {
+  DeliveryBillTakenBadge,
+  DeliveryBillTakenButton,
+} from "@/components/procurement/delivery-bill-taken-badge";
 import { ApiClientError, formatApiError } from "@/services/api-client";
 import {
   getPurchaseOrder,
@@ -65,8 +70,10 @@ import {
   type DeliveryChallanMode,
   type GrnChallanKind,
 } from "@/utils/delivery-challan-storage";
+import { resolveChallanBillStatus } from "@/utils/delivery-challan-bill";
 import { patchPendingGrnChallan } from "@/utils/grn-challan-pending";
 import { deliveryStatusUpdateHref } from "@/utils/delivery-status-routes";
+import { ensureDeliveryStatusForChallan } from "@/utils/delivery-status-storage";
 import { ovfStockSourceKey } from "@/utils/ovf-stock";
 
 function todayIso(): string {
@@ -172,6 +179,8 @@ export function DeliveryChallanFormPage({ challanId, embedded }: DeliveryChallan
   const [grnBatches, setGrnBatches] = useState<ScmReceiptBatch[]>([]);
   const [banner, setBanner] = useState<string | null>(null);
   const [hasSaved, setHasSaved] = useState(!isNew);
+  const [billOpen, setBillOpen] = useState(false);
+  const [billTick, setBillTick] = useState(0);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [pdfBusy, setPdfBusy] = useState(false);
   const [prefillBusy, setPrefillBusy] = useState(Boolean(challanId || orderIdParam || isOvfShip));
@@ -443,7 +452,11 @@ export function DeliveryChallanFormPage({ challanId, embedded }: DeliveryChallan
           setOvfContext(ovf);
           skipAutoApplyLinesRef.current = true;
           linesLockedFromSaveRef.current = true;
-          setGrnKind("delivery_challan");
+          setGrnKind(
+            kindParam === "billing" || kindParam === "delivery_challan"
+              ? kindParam
+              : "delivery_challan",
+          );
           const customer = (ovf.customer_name || ovf.account_name || "").trim();
           setCustomerName(customer);
           setCustomerBillTo((ovf.billing_address || "").trim() || customer);
@@ -701,7 +714,20 @@ export function DeliveryChallanFormPage({ challanId, embedded }: DeliveryChallan
       }
     }
     setLoadError(null);
-    upsertDeliveryChallan(buildSavePayload());
+    const saved = upsertDeliveryChallan(buildSavePayload());
+    ensureDeliveryStatusForChallan(
+      saved,
+      grnKind === "billing" && invoiceNumber.trim()
+        ? {
+            billStatus: "fully_billed",
+            billInvoiceNumber: invoiceNumber.trim(),
+            billInvoiceDate: invoiceDate.trim(),
+            billedQuantity: String(
+              saved.lines.reduce((sum, line) => sum + (Number(line.quantitySent) || 0), 0),
+            ),
+          }
+        : { billStatus: "unbilled" },
+    );
     if (orderId && selectedGrnKeys[0]) {
       const gk = grnKind === "billing" || grnKind === "delivery_challan" ? grnKind : undefined;
       if (gk) {
@@ -766,9 +792,21 @@ export function DeliveryChallanFormPage({ challanId, embedded }: DeliveryChallan
     applyLinesFromSource(mode, selectedGrnKeys, effectiveGrnBatches);
   }
 
+  const savedChallan = hasSaved && recordId ? getDeliveryChallan(recordId) : null;
+  const billStatus = savedChallan ? resolveChallanBillStatus(savedChallan) : "none";
+  void billTick;
+
   const footerActions = (
     <div className="flex flex-wrap items-center justify-end gap-2">
-      {null}
+      {hasSaved ? (
+        <>
+          <DeliveryBillTakenBadge status={billStatus === "none" ? "unbilled" : billStatus} />
+          <DeliveryBillTakenButton
+            status={billStatus === "none" ? "unbilled" : billStatus}
+            onClick={() => setBillOpen(true)}
+          />
+        </>
+      ) : null}
       {!isLocked && !hasSaved ? (
         <Button
           type="button"
@@ -818,7 +856,15 @@ export function DeliveryChallanFormPage({ challanId, embedded }: DeliveryChallan
         <PageHeader
           backHref={backHref}
           backLabel={backLabel}
-          title={isLocked ? challanNumber || "Delivery challan" : isNew ? "Create delivery challan" : challanNumber || "Delivery challan"}
+          title={
+            isLocked
+              ? challanNumber || (grnKind === "billing" ? "Billing" : "Delivery challan")
+              : isNew
+                ? grnKind === "billing"
+                  ? "Create billing"
+                  : "Create delivery challan"
+                : challanNumber || (grnKind === "billing" ? "Billing" : "Delivery challan")
+          }
         />
       ) : null}
 
@@ -1173,6 +1219,13 @@ export function DeliveryChallanFormPage({ challanId, embedded }: DeliveryChallan
       </fieldset>
 
       <div className="border-t border-border/60 pt-4">{footerActions}</div>
+
+      <DeliveryStatusBillDialog
+        open={billOpen}
+        challanId={billOpen ? recordId : null}
+        onClose={() => setBillOpen(false)}
+        onSaved={() => setBillTick((n) => n + 1)}
+      />
     </div>
   );
 }
