@@ -6,8 +6,11 @@ import { useMemo, useState } from "react";
 import { ChevronLeft, ChevronRight, Search } from "lucide-react";
 
 import { navigation } from "@/config/navigation";
+import { filterNavigationGroups } from "@/lib/module-access";
+import { SidebarAccountSection } from "@/components/layout/sidebar-account-section";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { useAuthUser } from "@/hooks/use-auth-user";
 import { cn } from "@/lib/utils";
 import { env } from "@/utils/env";
 
@@ -26,11 +29,24 @@ export function AppSidebar() {
   const pathname = usePathname();
   const [collapsed, setCollapsed] = useState(false);
   const [query, setQuery] = useState("");
+  const { user, loading: userLoading, signedIn, moduleKeys } = useAuthUser();
+
+  const navGroups = useMemo(() => {
+    if (userLoading) {
+      return navigation
+        .map((group) => ({
+          ...group,
+          items: group.items.filter((item) => item.href === "/"),
+        }))
+        .filter((group) => group.items.length > 0);
+    }
+    return filterNavigationGroups(navigation, moduleKeys, user?.userType);
+  }, [moduleKeys, user?.userType, userLoading]);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (!q) return navigation;
-    return navigation
+    if (!q) return navGroups;
+    return navGroups
       .map((group) => ({
         ...group,
         items: group.items.filter(
@@ -40,7 +56,7 @@ export function AppSidebar() {
         ),
       }))
       .filter((group) => group.items.length > 0);
-  }, [query]);
+  }, [query, navGroups]);
 
   return (
     <aside
@@ -50,19 +66,25 @@ export function AppSidebar() {
         collapsed ? "w-[72px]" : "w-[260px]",
       )}
     >
-      <div className={cn("flex items-center gap-3 px-4 py-5", collapsed && "justify-center px-2")}>
-        <div className="flex size-9 items-center justify-center rounded-xl bg-sidebar-primary text-[11px] font-semibold tracking-wide text-sidebar-primary-foreground shadow-sm">
-          ERP
-        </div>
-        {!collapsed ? (
-          <div className="min-w-0" suppressHydrationWarning>
-            <p className="truncate text-sm font-medium tracking-tight text-sidebar-foreground">
-              {env.appName}
-            </p>
-            <p className="truncate text-[11px] text-sidebar-foreground/55">23 modules · live API</p>
+      {signedIn ? (
+        <SidebarAccountSection collapsed={collapsed} className="!px-4 !py-5" />
+      ) : (
+        <div className={cn("flex items-center gap-3 px-4 py-5", collapsed && "justify-center px-2")}>
+          <div className="flex size-9 items-center justify-center rounded-xl bg-sidebar-primary text-[11px] font-semibold tracking-wide text-sidebar-primary-foreground shadow-sm">
+            ERP
           </div>
-        ) : null}
-      </div>
+          {!collapsed ? (
+            <div className="min-w-0">
+              <p className="truncate text-sm font-medium tracking-tight text-sidebar-foreground">
+                {env.appName}
+              </p>
+              <p className="truncate text-[11px] text-sidebar-foreground/55">
+                {userLoading ? "Loading session…" : "23 modules · live API"}
+              </p>
+            </div>
+          ) : null}
+        </div>
+      )}
 
       {!collapsed ? (
         <div className="px-3 pb-3">
@@ -91,12 +113,14 @@ export function AppSidebar() {
               {group.items.map((item) => {
                 const active = isActivePath(pathname, item.href);
                 const Icon = item.icon;
+                const href = item.inApp ? item.href : standaloneHref(item.href);
                 return (
                   <li key={item.href}>
                     <Link
-                      href={standaloneHref(item.href)}
-                      target="_blank"
-                      rel="noopener noreferrer"
+                      href={href}
+                      {...(item.inApp
+                        ? {}
+                        : { target: "_blank", rel: "noopener noreferrer" })}
                       title={item.title}
                       className={cn(
                         "group relative flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-[13px] transition-colors",

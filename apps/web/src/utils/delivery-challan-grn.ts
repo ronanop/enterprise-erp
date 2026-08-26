@@ -200,7 +200,9 @@ export function mergeOvfStockAllocationsToChallanLines(
     return {
       id: crypto.randomUUID(),
       product,
-      itemName: serialText,
+      itemName: serialText
+        ? `From inventory · ${serialText}`
+        : "From inventory",
       quantitySent: String(qty),
       hsnSac: "",
       assetNo: serials.length === 1 ? serials[0] : "-",
@@ -208,6 +210,26 @@ export function mergeOvfStockAllocationsToChallanLines(
       shipTo: "",
     };
   });
+}
+
+/** Inventory allocations plus PO lines on one challan (same product may appear twice). */
+export function mergeInventoryAndPoChallanLines(
+  allocations: ScmOvfStockAllocation[] | null | undefined,
+  order: ProcOrder | null,
+  ovf: ScmOvfPreview | null,
+): DeliveryChallanLine[] {
+  const stock = mergeOvfStockAllocationsToChallanLines(allocations);
+  const po = order
+    ? fullPoChallanLines(order, "", ovf).map((ln) => ({
+        ...ln,
+        id: crypto.randomUUID(),
+        itemName: ln.itemName?.trim()
+          ? `From PO · ${ln.itemName}`
+          : "From PO",
+      }))
+    : [];
+  const merged = [...stock, ...po];
+  return merged.length > 0 ? merged : [];
 }
 
 export function mergeSelectedGrnChallanLines(

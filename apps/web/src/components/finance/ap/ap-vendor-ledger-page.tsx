@@ -114,7 +114,7 @@ export function ApVendorLedgerPage({ vendorId }: { vendorId: string }) {
 
       <div className="rounded-xl border border-border/80 bg-card shadow-sm">
         <div className="border-b border-border/70 px-3 py-2.5">
-          <h3 className="text-sm font-medium tracking-tight">Ledger Lines</h3>
+          <h3 className="text-base font-extrabold tracking-tight">Ledger Lines</h3>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full min-w-[960px] border-collapse text-sm">

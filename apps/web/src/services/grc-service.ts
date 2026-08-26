@@ -1,4 +1,60 @@
-import { ApiClientError, resourceService } from "@/services/api-client";
+import { ApiClientError, apiClient, resourceService } from "@/services/api-client";
+
+export type GrcOverviewApi = {
+  kpis: {
+    open_risks: number;
+    total_risks: number;
+    active_controls: number;
+    total_controls: number;
+    planned_audits: number;
+    total_audits: number;
+    open_capas: number;
+    total_capas: number;
+    total_policies: number;
+    total_frameworks: number;
+    total_requirements: number;
+    total_assessments: number;
+    total_incidents: number;
+  };
+  compliance_status_mix: {
+    compliant: number;
+    partially_compliant: number;
+    non_compliant: number;
+    unknown: number;
+  };
+  automated_signal_codes: string[];
+};
+
+export type ComplianceMonitorRefreshResult = {
+  company_id: string;
+  requirements_checked: number;
+  assessments_updated: number;
+  requirements_skipped: number;
+  results: Array<{
+    requirement_code: string;
+    assessment_id: string;
+    compliance_status: string;
+  }>;
+};
+
+export async function loadGrcOverviewApi(): Promise<GrcOverviewApi> {
+  const response = await apiClient<GrcOverviewApi>("/grc/overview", { method: "GET" });
+  if (!response.data) {
+    throw new ApiClientError("GRC overview returned no data", 502);
+  }
+  return response.data;
+}
+
+export async function refreshComplianceMonitor(): Promise<ComplianceMonitorRefreshResult> {
+  const response = await apiClient<ComplianceMonitorRefreshResult>(
+    "/grc/compliance-monitor/refresh",
+    { method: "POST", body: {} },
+  );
+  if (!response.data) {
+    throw new ApiClientError("Compliance refresh returned no data", 502);
+  }
+  return response.data;
+}
 
 export type GrcRow = Record<string, unknown>;
 

@@ -13,6 +13,10 @@ depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:
+    bind = op.get_bind()
+    inspector = sa.inspect(bind)
+    if "sec_user_module" in inspector.get_table_names(schema="foundation"):
+        return
     op.create_table(
         "sec_user_module",
         sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True, nullable=False),

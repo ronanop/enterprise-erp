@@ -65,6 +65,15 @@ from modules.project.schemas import (
     ResourcePlanCreate,
     ResourcePlanResponse,
     ResourcePlanUpdate,
+    SiteInstallationAdvanceRequest,
+    SiteInstallationBlueprintResponse,
+    SiteInstallationCreate,
+    SiteInstallationFollowUpRequest,
+    SiteInstallationFollowUpResponse,
+    SiteInstallationNoAnswerNotifyRequest,
+    SiteStageFollowUpItem,
+    SiteInstallationResponse,
+    SiteInstallationUpdate,
     TaskAssignmentCreate,
     TaskAssignmentResponse,
     TaskAssignmentUpdate,
@@ -93,6 +102,7 @@ from modules.project.service import (
     ResourceAllocationService,
     ResourcePlanningService,
     RiskService,
+    SiteInstallationService,
     StatusHistoryService,
     TaskAssignmentService,
     TaskDependencyService,
@@ -102,45 +112,67 @@ from modules.project.service import (
 )
 from shared.schemas import APIResponse
 
-projects_router = APIRouter(prefix="/projects", tags=["Project â€” Project"])
+projects_router = APIRouter(prefix="/projects", tags=["Project — Project"])
 
-project_phases_router = APIRouter(prefix="/project-phases", tags=["Project â€” ProjectPhase"])
+project_phases_router = APIRouter(prefix="/project-phases", tags=["Project — ProjectPhase"])
 
-project_milestones_router = APIRouter(prefix="/project-milestones", tags=["Project â€” ProjectMilestone"])
+project_milestones_router = APIRouter(
+    prefix="/project-milestones", tags=["Project — ProjectMilestone"]
+)
 
-project_tasks_router = APIRouter(prefix="/project-tasks", tags=["Project â€” ProjectTask"])
+project_tasks_router = APIRouter(prefix="/project-tasks", tags=["Project — ProjectTask"])
 
-task_dependencies_router = APIRouter(prefix="/task-dependencies", tags=["Project â€” TaskDependency"])
+task_dependencies_router = APIRouter(
+    prefix="/task-dependencies", tags=["Project — TaskDependency"]
+)
 
-task_assignments_router = APIRouter(prefix="/task-assignments", tags=["Project â€” TaskAssignment"])
+task_assignments_router = APIRouter(
+    prefix="/task-assignments", tags=["Project — TaskAssignment"]
+)
 
-timesheets_router = APIRouter(prefix="/timesheets", tags=["Project â€” Timesheet"])
+timesheets_router = APIRouter(prefix="/timesheets", tags=["Project — Timesheet"])
 
-timesheet_entries_router = APIRouter(prefix="/timesheet-entries", tags=["Project â€” TimesheetEntry"])
+timesheet_entries_router = APIRouter(
+    prefix="/timesheet-entries", tags=["Project — TimesheetEntry"]
+)
 
-resource_plans_router = APIRouter(prefix="/resource-plans", tags=["Project â€” ResourcePlan"])
+resource_plans_router = APIRouter(prefix="/resource-plans", tags=["Project — ResourcePlan"])
 
-resource_allocations_router = APIRouter(prefix="/resource-allocations", tags=["Project â€” ResourceAllocation"])
+resource_allocations_router = APIRouter(
+    prefix="/resource-allocations", tags=["Project — ResourceAllocation"]
+)
 
-project_budgets_router = APIRouter(prefix="/project-budgets", tags=["Project â€” ProjectBudget"])
+project_budgets_router = APIRouter(prefix="/project-budgets", tags=["Project — ProjectBudget"])
 
-project_costs_router = APIRouter(prefix="/project-costs", tags=["Project â€” ProjectCost"])
+project_costs_router = APIRouter(prefix="/project-costs", tags=["Project — ProjectCost"])
 
-project_issues_router = APIRouter(prefix="/project-issues", tags=["Project â€” ProjectIssue"])
+project_issues_router = APIRouter(prefix="/project-issues", tags=["Project — ProjectIssue"])
 
-project_risks_router = APIRouter(prefix="/project-risks", tags=["Project â€” ProjectRisk"])
+project_risks_router = APIRouter(prefix="/project-risks", tags=["Project — ProjectRisk"])
 
-change_requests_router = APIRouter(prefix="/change-requests", tags=["Project â€” ChangeRequest"])
+change_requests_router = APIRouter(prefix="/change-requests", tags=["Project — ChangeRequest"])
 
-project_documents_router = APIRouter(prefix="/project-documents", tags=["Project â€” ProjectDocument"])
+project_documents_router = APIRouter(
+    prefix="/project-documents", tags=["Project — ProjectDocument"]
+)
 
-project_comments_router = APIRouter(prefix="/project-comments", tags=["Project â€” ProjectComment"])
+project_comments_router = APIRouter(
+    prefix="/project-comments", tags=["Project — ProjectComment"]
+)
 
-project_status_history_router = APIRouter(prefix="/project-status-history", tags=["Project â€” ProjectStatusHistory"])
+project_status_history_router = APIRouter(
+    prefix="/project-status-history", tags=["Project — ProjectStatusHistory"]
+)
 
-project_notifications_router = APIRouter(prefix="/project-notifications", tags=["Project â€” ProjectNotification"])
+project_notifications_router = APIRouter(
+    prefix="/project-notifications", tags=["Project — ProjectNotification"]
+)
 
-reports_router = APIRouter(prefix="/reports", tags=["Project â€” ProjectReport"])
+reports_router = APIRouter(prefix="/reports", tags=["Project — ProjectReport"])
+
+site_installations_router = APIRouter(
+    prefix="/site-installations", tags=["Project — SiteInstallation"]
+)
 @projects_router.get("", response_model=APIResponse[list[ProjectResponse]])
 def list_projects(
     ctx: Annotated[TenantContext, Depends(require_permission("project.project:read"))],
@@ -165,7 +197,14 @@ def create_projects(
     ctx: Annotated[TenantContext, Depends(require_permission("project.project:create"))],
     db: Annotated[Session, Depends(get_db)],
 ):
-    return APIResponse(message="Created", data=ProjectService(db).create(ctx, branch_id=body.branch_id, **body.model_dump(exclude={'branch_id'}, exclude_none=True)))
+    payload = body.model_dump(exclude={"branch_id"}, exclude_none=True)
+    site = payload.pop("site_installation", None)
+    if site is not None:
+        payload["site_installation"] = site
+    return APIResponse(
+        message="Created",
+        data=ProjectService(db).create(ctx, branch_id=body.branch_id, **payload),
+    )
 
 @projects_router.patch("/{row_id}", response_model=APIResponse[ProjectResponse])
 def update_projects(
@@ -926,7 +965,7 @@ def get_reports(
 @reports_router.post("", response_model=APIResponse[ProjectReportResponse])
 def create_reports(
     body: ProjectReportCreate,
-    ctx: Annotated[TenantContext, Depends(require_permission("project.report:create"))],
+    ctx: Annotated[TenantContext, Depends(require_permission("project.report:export"))],
     db: Annotated[Session, Depends(get_db)],
 ):
     return APIResponse(message="Created", data=ProjectReportService(db).create(ctx, **body.model_dump(exclude_none=True)))
@@ -939,3 +978,172 @@ def update_reports(
     db: Annotated[Session, Depends(get_db)],
 ):
     return APIResponse(message="Updated", data=ProjectReportService(db).update(ctx, row_id, **extract_update_fields(body)))
+
+
+# ---------------------------------------------------------------------------
+# Site Installation workflow
+# ---------------------------------------------------------------------------
+
+
+@site_installations_router.get("", response_model=APIResponse[list[SiteInstallationResponse]])
+def list_site_installations(
+    ctx: Annotated[TenantContext, Depends(require_permission("project.project:read"))],
+    db: Annotated[Session, Depends(get_db)],
+    pagination: Annotated[PaginationParams, Depends(get_pagination)],
+    company_id: UUID | None = None,
+):
+    items = SiteInstallationService(db).list(ctx, company_id=company_id)
+    return APIResponse(message="OK", data=paginate(items, pagination))
+
+
+@site_installations_router.get(
+    "/by-project/{project_id}", response_model=APIResponse[SiteInstallationResponse]
+)
+def get_site_installation_by_project(
+    project_id: UUID,
+    ctx: Annotated[TenantContext, Depends(require_permission("project.project:read"))],
+    db: Annotated[Session, Depends(get_db)],
+):
+    return APIResponse(
+        message="OK",
+        data=SiteInstallationService(db).get_or_bootstrap(ctx, project_id),
+    )
+
+
+@site_installations_router.get(
+    "/by-project/{project_id}/blueprint",
+    response_model=APIResponse[SiteInstallationBlueprintResponse],
+)
+def get_site_installation_blueprint(
+    project_id: UUID,
+    ctx: Annotated[TenantContext, Depends(require_permission("project.project:read"))],
+    db: Annotated[Session, Depends(get_db)],
+):
+    return APIResponse(message="OK", data=SiteInstallationService(db).blueprint(ctx, project_id))
+
+
+@site_installations_router.post(
+    "/by-project/{project_id}/advance",
+    response_model=APIResponse[SiteInstallationResponse],
+)
+def advance_site_installation(
+    project_id: UUID,
+    body: SiteInstallationAdvanceRequest,
+    ctx: Annotated[TenantContext, Depends(require_permission("project.project:update"))],
+    db: Annotated[Session, Depends(get_db)],
+):
+    return APIResponse(
+        message="Advanced",
+        data=SiteInstallationService(db).advance(ctx, project_id, body.action),
+    )
+
+
+@site_installations_router.post(
+    "/by-project/{project_id}/follow-up",
+    response_model=APIResponse[SiteInstallationFollowUpResponse],
+)
+def follow_up_site_installation_stage(
+    project_id: UUID,
+    body: SiteInstallationFollowUpRequest,
+    ctx: Annotated[TenantContext, Depends(require_permission("project.project:update"))],
+    db: Annotated[Session, Depends(get_db)],
+):
+    return APIResponse(
+        message="Follow-up sent",
+        data=SiteInstallationService(db).follow_up_stage(
+            ctx, project_id, body.stage, body.note
+        ),
+    )
+
+
+@site_installations_router.post(
+    "/by-project/{project_id}/notify-no-answers",
+    response_model=APIResponse[SiteInstallationFollowUpResponse],
+)
+def notify_site_installation_no_answers(
+    project_id: UUID,
+    body: SiteInstallationNoAnswerNotifyRequest,
+    ctx: Annotated[TenantContext, Depends(require_permission("project.project:update"))],
+    db: Annotated[Session, Depends(get_db)],
+):
+    return APIResponse(
+        message="Admin notified",
+        data=SiteInstallationService(db).notify_no_answers(
+            ctx,
+            project_id,
+            body.stage,
+            [item.model_dump() for item in body.items],
+        ),
+    )
+
+
+@site_installations_router.get(
+    "/by-project/{project_id}/follow-ups",
+    response_model=APIResponse[list[SiteStageFollowUpItem]],
+)
+def list_site_installation_follow_ups(
+    project_id: UUID,
+    ctx: Annotated[TenantContext, Depends(require_permission("project.project:read"))],
+    db: Annotated[Session, Depends(get_db)],
+):
+    return APIResponse(
+        message="OK",
+        data=SiteInstallationService(db).list_follow_ups(ctx, project_id),
+    )
+
+
+@site_installations_router.patch(
+    "/by-project/{project_id}",
+    response_model=APIResponse[SiteInstallationResponse],
+)
+def update_site_installation_by_project(
+    project_id: UUID,
+    body: SiteInstallationUpdate,
+    ctx: Annotated[TenantContext, Depends(require_permission("project.project:update"))],
+    db: Annotated[Session, Depends(get_db)],
+):
+    return APIResponse(
+        message="Updated",
+        data=SiteInstallationService(db).update_by_project(
+            ctx, project_id, **extract_update_fields(body)
+        ),
+    )
+
+
+@site_installations_router.post("", response_model=APIResponse[SiteInstallationResponse])
+def create_site_installation(
+    body: SiteInstallationCreate,
+    ctx: Annotated[TenantContext, Depends(require_permission("project.project:create"))],
+    db: Annotated[Session, Depends(get_db)],
+):
+    payload = body.model_dump(exclude={"project_id"}, exclude_none=True)
+    return APIResponse(
+        message="Created",
+        data=SiteInstallationService(db).create_for_project(
+            ctx, body.project_id, **payload
+        ),
+    )
+
+
+@site_installations_router.get("/{row_id}", response_model=APIResponse[SiteInstallationResponse])
+def get_site_installation(
+    row_id: UUID,
+    ctx: Annotated[TenantContext, Depends(require_permission("project.project:read"))],
+    db: Annotated[Session, Depends(get_db)],
+):
+    return APIResponse(message="OK", data=SiteInstallationService(db).get(ctx, row_id))
+
+
+@site_installations_router.patch(
+    "/{row_id}", response_model=APIResponse[SiteInstallationResponse]
+)
+def update_site_installation(
+    row_id: UUID,
+    body: SiteInstallationUpdate,
+    ctx: Annotated[TenantContext, Depends(require_permission("project.project:update"))],
+    db: Annotated[Session, Depends(get_db)],
+):
+    return APIResponse(
+        message="Updated",
+        data=SiteInstallationService(db).update(ctx, row_id, **extract_update_fields(body)),
+    )

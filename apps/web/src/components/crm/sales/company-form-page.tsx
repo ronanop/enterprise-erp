@@ -1,11 +1,12 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, Building2, Copy, FileText, MapPin } from "lucide-react";
 
 import { CrmErrorBanner, CrmPage, CrmSection } from "@/components/crm/crm-ui";
+import { CrmSessionEmployeeField } from "@/components/crm/sales/crm-session-employee-field";
 import {
   FinanceField,
   FinanceSelect,
@@ -18,12 +19,18 @@ import {
 import { PageHeader } from "@/components/layout/page-header";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { useAuthUser } from "@/hooks/use-auth-user";
+import {
+  resolveSessionEmployeeId,
+  resolveSessionEmployeeLabel,
+} from "@/lib/crm/session-employee";
 import { ApiClientError } from "@/services/api-client";
 import {
   createCompany,
   getCompany,
   listBranchOptions,
-  listEmployeeOptions,
+  listCrmMemberOptions,
+  peekNextCompanyAccountNumber,
   updateCompany,
   type Company,
   type CompanyFormInput,
@@ -42,9 +49,6 @@ const INDUSTRIES = [
   "Others",
 ];
 const SOURCES = ["referral", "website", "cold_call", "partner", "event", "advertisement", "other"];
-const RATINGS = ["hot", "warm", "cold"];
-const ACCOUNT_TYPES = ["customer"] as const;
-const CONTACT_ROLES = ["User", "Decision Maker", "Influencer", "Technical Evaluator", "Procurement", "Finance"];
 
 const EMPTY_FORM: CompanyFormInput = {
   branch_id: "",
@@ -80,6 +84,7 @@ const EMPTY_FORM: CompanyFormInput = {
 export function CompanyFormPage({ companyId }: { companyId?: string }) {
   const router = useRouter();
   const isEdit = Boolean(companyId);
+  const { user } = useAuthUser();
   const [company, setCompany] = useState<Company | null>(null);
   const [form, setForm] = useState<CompanyFormInput>(EMPTY_FORM);
   const [otherSource, setOtherSource] = useState("");
@@ -89,6 +94,7 @@ export function CompanyFormPage({ companyId }: { companyId?: string }) {
   const [error, setError] = useState<string | null>(null);
   const [mandateOpen, setMandateOpen] = useState(false);
   const [mandateMessage, setMandateMessage] = useState("");
+  const [nextAccountNumber, setNextAccountNumber] = useState("");
 
   const backHref = isEdit && companyId ? `/crm/companies/${companyId}` : "/crm/companies";
   const backLabel = isEdit ? (company?.customer_name ?? "Company") : "Companies";
@@ -99,7 +105,7 @@ export function CompanyFormPage({ companyId }: { companyId?: string }) {
     try {
       const [branches, emps, companyRow] = await Promise.all([
         listBranchOptions(),
-        listEmployeeOptions(),
+        listCrmMemberOptions(),
         companyId ? getCompany(companyId) : Promise.resolve(null),
       ]);
       setEmployees(emps);
@@ -139,18 +145,30 @@ export function CompanyFormPage({ companyId }: { companyId?: string }) {
         setOtherSource(knownSource ? "" : companyRow.source);
       } else {
         setCompany(null);
+        const sessionOwnerId = resolveSessionEmployeeId(emps, user);
         setForm({
           ...EMPTY_FORM,
           branch_id: branches[0]?.id ?? "",
+          account_owner_id: sessionOwnerId,
         });
         setOtherSource("");
+        const nextNo = await peekNextCompanyAccountNumber().catch(() => "");
+        setNextAccountNumber(nextNo);
       }
     } catch (err) {
       setError(err instanceof ApiClientError ? err.message : "Failed to load company form");
     } finally {
       setLoading(false);
     }
-  }, [companyId]);
+  }, [companyId, user]);
+
+  const accountManagerLabel = useMemo(() => {
+    if (form.account_owner_id) {
+      const fromList = employees.find((e) => e.id === form.account_owner_id)?.label;
+      if (fromList) return fromList;
+    }
+    return resolveSessionEmployeeLabel(employees, user);
+  }, [employees, form.account_owner_id, user]);
 
   useEffect(() => {
     void load();
@@ -173,8 +191,7 @@ export function CompanyFormPage({ companyId }: { companyId?: string }) {
 
   async function save() {
     const missing: string[] = [];
-    if (!form.customer_name.trim()) missing.push("Customer Name");
-    if (!form.account_type) missing.push("Account Type");
+    if (!form.customer_name.trim()) missing.push("Company Name");
     if (!form.industry) missing.push("Industry");
     if (!form.source) missing.push("Source");
     if (form.source === "other" && !otherSource.trim()) missing.push("Other Source");
@@ -199,6 +216,7 @@ export function CompanyFormPage({ companyId }: { companyId?: string }) {
     try {
       const payload: CompanyFormInput = {
         ...form,
+        account_type: "customer",
         source: form.source === "other" ? otherSource.trim() : form.source,
         account_owner_id: form.account_owner_id || null,
         account_ownership_id: form.account_ownership_id || null,
@@ -237,158 +255,136 @@ export function CompanyFormPage({ companyId }: { companyId?: string }) {
       </Link>
 
       <PageHeader
-        title={isEdit ? `Edit ${company?.customer_name ?? "Company"}` : "New Company"}
+        title={isEdit ? `Edit ${company?.customer_name ?? "Company"}` : "Create Company"}
         description="Sales accounts are the entry point for the sales blueprint — leads can only be created from a company."
+        actions={
+          <>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="cursor-pointer"
+              onClick={() => router.push(backHref)}
+              disabled={saving}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              className="cursor-pointer"
+              onClick={() => void save()}
+              disabled={saving}
+            >
+              {saving ? "Saving…" : isEdit ? "Save changes" : "Save Company"}
+            </Button>
+          </>
+        }
       />
 
       {error ? <CrmErrorBanner>{error}</CrmErrorBanner> : null}
 
       <CrmSection title="Account Information" icon={Building2}>
-          <div className="grid gap-4 lg:grid-cols-2 lg:gap-x-10">
-            <div className="space-y-3">
-              <FinanceField label="Account Owner">
-                <FinanceSelect
-                  value={form.account_owner_id ?? ""}
-                  onChange={(e) => set("account_owner_id", e.target.value)}
-                >
-                  <option value="">Unassigned</option>
-                  {employees.map((employee) => (
-                    <option key={employee.id} value={employee.id}>
-                      {employee.label}
-                    </option>
-                  ))}
-                </FinanceSelect>
-              </FinanceField>
-              <FinanceField label="Customer Name *">
-                <Input value={form.customer_name} onChange={(e) => set("customer_name", e.target.value)} />
-              </FinanceField>
-              <FinanceField label="Account Number">
+        <div className="grid gap-4 lg:grid-cols-2 lg:gap-x-10">
+          <div className="space-y-3">
+            <CrmSessionEmployeeField
+              label="Account Manager Owner"
+              value={accountManagerLabel}
+            />
+            <FinanceField label="Company Name *">
+              <Input value={form.customer_name} onChange={(e) => set("customer_name", e.target.value)} />
+            </FinanceField>
+            <FinanceField label="Company ID">
+              <Input
+                value={
+                  isEdit
+                    ? (company?.account_number ?? "")
+                    : nextAccountNumber || "Assigning…"
+                }
+                disabled
+                aria-readonly="true"
+                className="font-mono text-sm"
+              />
+            </FinanceField>
+            <FinanceField label="Industry *">
+              <FinanceSelect value={form.industry} onChange={(e) => set("industry", e.target.value)}>
+                <option value="">None</option>
+                {INDUSTRIES.map((industry) => (
+                  <option key={industry} value={industry}>
+                    {industry}
+                  </option>
+                ))}
+              </FinanceSelect>
+            </FinanceField>
+            <FinanceField label="Other Industries">
+              <Input
+                value={form.other_industries ?? ""}
+                onChange={(e) => set("other_industries", e.target.value)}
+              />
+            </FinanceField>
+            <FinanceField label="Source *">
+              <FinanceSelect
+                value={form.source}
+                onChange={(e) => {
+                  const value = e.target.value;
+                  set("source", value);
+                  if (value !== "other") setOtherSource("");
+                }}
+              >
+                <option value="">None</option>
+                {SOURCES.map((source) => (
+                  <option key={source} value={source}>
+                    {source.replaceAll("_", " ")}
+                  </option>
+                ))}
+              </FinanceSelect>
+            </FinanceField>
+            {form.source === "other" ? (
+              <FinanceField label="Other Source *">
                 <Input
-                  value={company?.account_number ?? ""}
-                  disabled
-                  aria-readonly="true"
+                  value={otherSource}
+                  onChange={(e) => setOtherSource(e.target.value)}
+                  placeholder="Enter source"
                 />
               </FinanceField>
-              <FinanceField label="Account Type *">
-                <FinanceSelect
-                  value={form.account_type || "customer"}
-                  onChange={(e) => set("account_type", e.target.value)}
-                >
-                  {ACCOUNT_TYPES.map((type) => (
-                    <option key={type} value={type}>
-                      {type}
-                    </option>
-                  ))}
-                </FinanceSelect>
-              </FinanceField>
-              <FinanceField label="Industry *">
-                <FinanceSelect value={form.industry} onChange={(e) => set("industry", e.target.value)}>
-                  <option value="">None</option>
-                  {INDUSTRIES.map((industry) => (
-                    <option key={industry} value={industry}>
-                      {industry}
-                    </option>
-                  ))}
-                </FinanceSelect>
-              </FinanceField>
-              <FinanceField label="Other Industries">
-                <Input
-                  value={form.other_industries ?? ""}
-                  onChange={(e) => set("other_industries", e.target.value)}
-                />
-              </FinanceField>
-              <FinanceField label="Portal ID">
-                <Input value={form.portal_id ?? ""} onChange={(e) => set("portal_id", e.target.value)} />
-              </FinanceField>
-              <FinanceField label="Source *">
-                <FinanceSelect
-                  value={form.source}
-                  onChange={(e) => {
-                    const value = e.target.value;
-                    set("source", value);
-                    if (value !== "other") setOtherSource("");
-                  }}
-                >
-                  <option value="">None</option>
-                  {SOURCES.map((source) => (
-                    <option key={source} value={source}>
-                      {source.replaceAll("_", " ")}
-                    </option>
-                  ))}
-                </FinanceSelect>
-              </FinanceField>
-              {form.source === "other" ? (
-                <FinanceField label="Other Source *">
-                  <Input
-                    value={otherSource}
-                    onChange={(e) => setOtherSource(e.target.value)}
-                    placeholder="Enter source"
-                  />
-                </FinanceField>
-              ) : null}
-            </div>
-
-            <div className="space-y-3">
-              <FinanceField label="Rating">
-                <FinanceSelect value={form.rating ?? ""} onChange={(e) => set("rating", e.target.value)}>
-                  <option value="">None</option>
-                  {RATINGS.map((rating) => (
-                    <option key={rating} value={rating}>
-                      {rating}
-                    </option>
-                  ))}
-                </FinanceSelect>
-              </FinanceField>
-              <FinanceField label="First Name *">
-                <Input value={form.first_name ?? ""} onChange={(e) => set("first_name", e.target.value)} />
-              </FinanceField>
-              <FinanceField label="Last Name *">
-                <Input value={form.last_name ?? ""} onChange={(e) => set("last_name", e.target.value)} />
-              </FinanceField>
-              <FinanceField label="Customer Email *">
-                <Input
-                  type="email"
-                  value={form.customer_email ?? ""}
-                  onChange={(e) => set("customer_email", e.target.value)}
-                />
-              </FinanceField>
-              <FinanceField label="Phone *">
-                <Input value={form.phone ?? ""} onChange={(e) => set("phone", e.target.value)} />
-              </FinanceField>
-              <FinanceField label="Website">
-                <Input value={form.website ?? ""} onChange={(e) => set("website", e.target.value)} />
-              </FinanceField>
-              <FinanceField label="Account Ownership">
-                <FinanceSelect
-                  value={form.account_ownership_id ?? ""}
-                  onChange={(e) => set("account_ownership_id", e.target.value)}
-                >
-                  <option value="">None</option>
-                  {employees.map((employee) => (
-                    <option key={employee.id} value={employee.id}>
-                      {employee.label}
-                    </option>
-                  ))}
-                </FinanceSelect>
-              </FinanceField>
-              <FinanceField label="Customer ID">
-                <Input
-                  value={form.customer_id_ext ?? ""}
-                  onChange={(e) => set("customer_id_ext", e.target.value)}
-                />
-              </FinanceField>
-              <FinanceField label="Role">
-                <FinanceSelect value={form.role ?? ""} onChange={(e) => set("role", e.target.value)}>
-                  <option value="">None</option>
-                  {CONTACT_ROLES.map((role) => (
-                    <option key={role} value={role}>
-                      {role}
-                    </option>
-                  ))}
-                </FinanceSelect>
-              </FinanceField>
-            </div>
+            ) : null}
           </div>
+
+          <div className="space-y-3">
+            <FinanceField label="First Name *">
+              <Input value={form.first_name ?? ""} onChange={(e) => set("first_name", e.target.value)} />
+            </FinanceField>
+            <FinanceField label="Last Name *">
+              <Input value={form.last_name ?? ""} onChange={(e) => set("last_name", e.target.value)} />
+            </FinanceField>
+            <FinanceField label="Customer Email *">
+              <Input
+                type="email"
+                value={form.customer_email ?? ""}
+                onChange={(e) => set("customer_email", e.target.value)}
+              />
+            </FinanceField>
+            <FinanceField label="Phone *">
+              <Input value={form.phone ?? ""} onChange={(e) => set("phone", e.target.value)} />
+            </FinanceField>
+            <FinanceField label="Website">
+              <Input value={form.website ?? ""} onChange={(e) => set("website", e.target.value)} />
+            </FinanceField>
+            <FinanceField label="Assigned Ownership">
+              <FinanceSelect
+                value={form.account_ownership_id ?? ""}
+                onChange={(e) => set("account_ownership_id", e.target.value)}
+              >
+                <option value="">None</option>
+                {employees.map((employee) => (
+                  <option key={employee.id} value={employee.id}>
+                    {employee.label}
+                  </option>
+                ))}
+              </FinanceSelect>
+            </FinanceField>
+          </div>
+        </div>
       </CrmSection>
 
       <CrmSection
@@ -406,81 +402,66 @@ export function CompanyFormPage({ companyId }: { companyId?: string }) {
           </Button>
         }
       >
-          <div className="grid gap-x-10 gap-y-3 sm:grid-cols-2">
-            <FinanceField label="Billing Street *">
-              <Input value={form.billing_street} onChange={(e) => set("billing_street", e.target.value)} />
-            </FinanceField>
-            <FinanceField label="Shipping Street">
-              <Input
-                value={form.shipping_street ?? ""}
-                onChange={(e) => set("shipping_street", e.target.value)}
-              />
-            </FinanceField>
-            <FinanceField label="Billing City *">
-              <Input value={form.billing_city} onChange={(e) => set("billing_city", e.target.value)} />
-            </FinanceField>
-            <FinanceField label="Shipping City">
-              <Input
-                value={form.shipping_city ?? ""}
-                onChange={(e) => set("shipping_city", e.target.value)}
-              />
-            </FinanceField>
-            <FinanceField label="Billing State *">
-              <Input value={form.billing_state} onChange={(e) => set("billing_state", e.target.value)} />
-            </FinanceField>
-            <FinanceField label="Shipping State">
-              <Input
-                value={form.shipping_state ?? ""}
-                onChange={(e) => set("shipping_state", e.target.value)}
-              />
-            </FinanceField>
-            <FinanceField label="Billing Code *">
-              <Input value={form.billing_code} onChange={(e) => set("billing_code", e.target.value)} />
-            </FinanceField>
-            <FinanceField label="Shipping Code">
-              <Input
-                value={form.shipping_code ?? ""}
-                onChange={(e) => set("shipping_code", e.target.value)}
-              />
-            </FinanceField>
-            <FinanceField label="Billing Country *">
-              <Input
-                value={form.billing_country}
-                onChange={(e) => set("billing_country", e.target.value)}
-              />
-            </FinanceField>
-            <FinanceField label="Shipping Country">
-              <Input
-                value={form.shipping_country ?? ""}
-                onChange={(e) => set("shipping_country", e.target.value)}
-              />
-            </FinanceField>
-          </div>
+        <div className="grid gap-x-10 gap-y-3 sm:grid-cols-2">
+          <FinanceField label="Billing Street *">
+            <Input value={form.billing_street} onChange={(e) => set("billing_street", e.target.value)} />
+          </FinanceField>
+          <FinanceField label="Shipping Street">
+            <Input
+              value={form.shipping_street ?? ""}
+              onChange={(e) => set("shipping_street", e.target.value)}
+            />
+          </FinanceField>
+          <FinanceField label="Billing City *">
+            <Input value={form.billing_city} onChange={(e) => set("billing_city", e.target.value)} />
+          </FinanceField>
+          <FinanceField label="Shipping City">
+            <Input
+              value={form.shipping_city ?? ""}
+              onChange={(e) => set("shipping_city", e.target.value)}
+            />
+          </FinanceField>
+          <FinanceField label="Billing State *">
+            <Input value={form.billing_state} onChange={(e) => set("billing_state", e.target.value)} />
+          </FinanceField>
+          <FinanceField label="Shipping State">
+            <Input
+              value={form.shipping_state ?? ""}
+              onChange={(e) => set("shipping_state", e.target.value)}
+            />
+          </FinanceField>
+          <FinanceField label="Billing Code *">
+            <Input value={form.billing_code} onChange={(e) => set("billing_code", e.target.value)} />
+          </FinanceField>
+          <FinanceField label="Shipping Code">
+            <Input
+              value={form.shipping_code ?? ""}
+              onChange={(e) => set("shipping_code", e.target.value)}
+            />
+          </FinanceField>
+          <FinanceField label="Billing Country *">
+            <Input
+              value={form.billing_country}
+              onChange={(e) => set("billing_country", e.target.value)}
+            />
+          </FinanceField>
+          <FinanceField label="Shipping Country">
+            <Input
+              value={form.shipping_country ?? ""}
+              onChange={(e) => set("shipping_country", e.target.value)}
+            />
+          </FinanceField>
+        </div>
       </CrmSection>
 
       <CrmSection title="Description Information" icon={FileText}>
-          <FinanceField label="Description">
-            <FinanceTextarea
-              value={form.description ?? ""}
-              onChange={(e) => set("description", e.target.value)}
-            />
-          </FinanceField>
+        <FinanceField label="Description">
+          <FinanceTextarea
+            value={form.description ?? ""}
+            onChange={(e) => set("description", e.target.value)}
+          />
+        </FinanceField>
       </CrmSection>
-
-      <div className="flex justify-end gap-2">
-        <Button
-          type="button"
-          variant="outline"
-          className="cursor-pointer"
-          onClick={() => router.push(backHref)}
-          disabled={saving}
-        >
-          Cancel
-        </Button>
-        <Button type="button" className="cursor-pointer" onClick={() => void save()} disabled={saving}>
-          {saving ? "Saving…" : isEdit ? "Save changes" : "Create Company"}
-        </Button>
-      </div>
 
       <RequiredFieldsDialog
         open={mandateOpen}

@@ -130,8 +130,25 @@ def send_quote_for_approval(
     ctx: Annotated[TenantContext, Depends(require_permission("crm.quote:send_approval"))],
     db: Annotated[Session, Depends(get_db)],
 ):
-    return APIResponse(message="OK", data=QuoteService(db).send_for_approval(ctx, quote_id, **body.model_dump()))
+    payload = body.model_dump(exclude_none=True)
+    assigned = payload.get("assigned_user_id")
+    if assigned is None:
+        ids = payload.get("assigned_user_ids") or []
+        assigned = ids[0] if ids else None
+    if assigned is None:
+        from core.exceptions import ConflictException
 
+        raise ConflictException("Select at least one approver before sending for approval")
+    return APIResponse(
+        message="OK",
+        data=QuoteService(db).send_for_approval(
+            ctx,
+            quote_id,
+            team_role=payload.get("team_role") or "management",
+            assigned_user_id=assigned,
+            remarks=payload.get("remarks"),
+        ),
+    )
 
 @quotes_router.post("/{quote_id}/approve-internally", response_model=APIResponse[QuoteResponse])
 def approve_quote_internally(

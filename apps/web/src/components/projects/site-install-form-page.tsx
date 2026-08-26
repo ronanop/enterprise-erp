@@ -1,7 +1,7 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
-import { Server, Wrench } from "lucide-react";
+import { useCallback, useMemo, useRef, useState } from "react";
+import { ClipboardList, Server, Wrench } from "lucide-react";
 
 import {
   deliveryIncludesBios,
@@ -31,30 +31,45 @@ import {
   resolveStageOwnerDisplay,
   stageOwnerBannerSection,
 } from "@/components/projects/site-stage-assignments";
+import {
+  isProgressCompleteForAdvance,
+  stageClosingSections,
+} from "@/components/projects/site-stage-attachment";
 import { useSiteStageFormReadOnlyMeta } from "@/components/projects/site-stage-form-read-only-context";
+import { SiteStageExportButton } from "@/components/projects/site-stage-export-button";
 
 const EMPTY: FormValues = {
   ...INTAKE_SUMMARY_EMPTY,
   delivery_type: "server_os_rack",
   stage_assignee_label: "",
-  rack_server_stacking_done: "false",
+  rack_server_stacking_done: "",
   rack_server_stacking_date: "",
-  rack_server_power_on_done: "false",
+  rack_server_power_on_done: "",
   rack_server_power_on_date: "",
-  dac_ilo_cabling_done: "false",
+  dac_ilo_cabling_done: "",
   dac_ilo_cabling_date: "",
-  bios_configuration_done: "false",
+  bios_configuration_done: "",
   bios_configuration_date: "",
-  firmware_nw_config_done: "false",
-  firmware_nw_config_date: "",
-  lld_done: "false",
+  firmware_config_done: "",
+  firmware_config_date: "",
+  lld_done: "",
   lld_date: "",
-  os_installation_done: "false",
+  os_installation_done: "",
   os_installation_date: "",
-  mbss_done: "false",
+  vm_installation_done: "",
+  vm_installation_date: "",
+  nw_config_done: "",
+  nw_config_date: "",
+  tools_integration_done: "",
+  tools_integration_date: "",
+  mbss_done: "",
   mbss_date: "",
-  vascan_done: "false",
+  vascan_done: "",
   vascan_date: "",
+  installation_progress_status: "",
+  installation_attachment_name: "",
+  installation_remarks: "",
+  tile_details: "",
 };
 
 function asBool(v: string | undefined): boolean {
@@ -67,6 +82,7 @@ function dateOrEmpty(v: string | null | undefined): string {
 
 export function SiteInstallFormPage({ projectId }: { projectId: string }) {
   const stageFormMeta = useSiteStageFormReadOnlyMeta();
+  const loadedValuesRef = useRef<FormValues | null>(null);
   const [deliveryType, setDeliveryType] = useState("server_os_rack");
   const isRackOnly = deliveryIsRackOnly(deliveryType);
   const hasRack = deliveryIncludesRack(deliveryType);
@@ -82,37 +98,47 @@ export function SiteInstallFormPage({ projectId }: { projectId: string }) {
     setDeliveryType(site.delivery_type || "server_os_rack");
     const owner = resolveStageOwnerDisplay(site, "installation", lookups.employees);
 
-    return {
-      values: {
-        ...intakeSummaryValues({
-          project,
-          site,
-          branches: lookups.branches,
-          customers: lookups.customers,
-          employees: lookups.employees,
-        }),
-        stage_assignee_label: owner.stage_assignee_label,
-        delivery_type: site.delivery_type || "server_os_rack",
-        rack_server_stacking_done: site.rack_server_stacking_done ? "true" : "false",
-        rack_server_stacking_date: dateOrEmpty(site.rack_server_stacking_date),
-        rack_server_power_on_done: site.rack_server_power_on_done ? "true" : "false",
-        rack_server_power_on_date: dateOrEmpty(site.rack_server_power_on_date),
-        dac_ilo_cabling_done: site.dac_ilo_cabling_done ? "true" : "false",
-        dac_ilo_cabling_date: dateOrEmpty(site.dac_ilo_cabling_date),
-        bios_configuration_done: site.bios_configuration_done ? "true" : "false",
-        bios_configuration_date: dateOrEmpty(site.bios_configuration_date),
-        firmware_nw_config_done: site.firmware_nw_config_done ? "true" : "false",
-        firmware_nw_config_date: dateOrEmpty(site.firmware_nw_config_date),
-        lld_done: site.lld_done ? "true" : "false",
-        lld_date: dateOrEmpty(site.lld_date),
-        os_installation_done: site.os_installation_done ? "true" : "false",
-        os_installation_date: dateOrEmpty(site.os_installation_date),
-        mbss_done: site.mbss_done ? "true" : "false",
-        mbss_date: dateOrEmpty(site.mbss_date),
-        vascan_done: site.vascan_done ? "true" : "false",
-        vascan_date: dateOrEmpty(site.vascan_date),
-      } satisfies FormValues,
-    };
+    const values = {
+      ...intakeSummaryValues({
+        project,
+        site,
+        branches: lookups.branches,
+        customers: lookups.customers,
+        employees: lookups.employees,
+      }),
+      stage_assignee_label: owner.stage_assignee_label,
+      delivery_type: site.delivery_type || "server_os_rack",
+      rack_server_stacking_done: site.rack_server_stacking_done ? "true" : "",
+      rack_server_stacking_date: dateOrEmpty(site.rack_server_stacking_date),
+      rack_server_power_on_done: site.rack_server_power_on_done ? "true" : "",
+      rack_server_power_on_date: dateOrEmpty(site.rack_server_power_on_date),
+      dac_ilo_cabling_done: site.dac_ilo_cabling_done ? "true" : "",
+      dac_ilo_cabling_date: dateOrEmpty(site.dac_ilo_cabling_date),
+      bios_configuration_done: site.bios_configuration_done ? "true" : "",
+      bios_configuration_date: dateOrEmpty(site.bios_configuration_date),
+      firmware_config_done: site.firmware_config_done ? "true" : "",
+      firmware_config_date: dateOrEmpty(site.firmware_config_date),
+      lld_done: site.lld_done ? "true" : "",
+      lld_date: dateOrEmpty(site.lld_date),
+      os_installation_done: site.os_installation_done ? "true" : "",
+      os_installation_date: dateOrEmpty(site.os_installation_date),
+      vm_installation_done: site.vm_installation_done ? "true" : "",
+      vm_installation_date: dateOrEmpty(site.vm_installation_date),
+      nw_config_done: site.nw_config_done ? "true" : "",
+      nw_config_date: dateOrEmpty(site.nw_config_date),
+      tools_integration_done: site.tools_integration_done ? "true" : "",
+      tools_integration_date: dateOrEmpty(site.tools_integration_date),
+      mbss_done: site.mbss_done ? "true" : "",
+      mbss_date: dateOrEmpty(site.mbss_date),
+      vascan_done: site.vascan_done ? "true" : "",
+      vascan_date: dateOrEmpty(site.vascan_date),
+      installation_progress_status: site.installation_progress_status ?? "",
+      installation_attachment_name: site.installation_attachment_name ?? "",
+      installation_remarks: site.installation_remarks ?? "",
+      tile_details: site.tile_details ?? "",
+    } satisfies FormValues;
+    loadedValuesRef.current = values;
+    return { values };
   }, [projectId]);
 
   const onSave = useCallback(
@@ -140,28 +166,54 @@ export function SiteInstallFormPage({ projectId }: { projectId: string }) {
           includeBios && asBool(v.bios_configuration_done)
             ? orNull(v.bios_configuration_date)
             : null,
-        firmware_nw_config_done: includeBios ? asBool(v.firmware_nw_config_done) : false,
-        firmware_nw_config_date:
-          includeBios && asBool(v.firmware_nw_config_done)
-            ? orNull(v.firmware_nw_config_date)
+        firmware_config_done: includeBios ? asBool(v.firmware_config_done) : false,
+        firmware_config_date:
+          includeBios && asBool(v.firmware_config_done)
+            ? orNull(v.firmware_config_date)
             : null,
         lld_done: includeBios ? asBool(v.lld_done) : false,
         lld_date: includeBios && asBool(v.lld_done) ? orNull(v.lld_date) : null,
         os_installation_done: includeOs ? asBool(v.os_installation_done) : false,
         os_installation_date:
           includeOs && asBool(v.os_installation_done) ? orNull(v.os_installation_date) : null,
+        vm_installation_done: includeOs ? asBool(v.vm_installation_done) : false,
+        vm_installation_date:
+          includeOs && asBool(v.vm_installation_done) ? orNull(v.vm_installation_date) : null,
+        nw_config_done: includeOs ? asBool(v.nw_config_done) : false,
+        nw_config_date:
+          includeOs && asBool(v.nw_config_done) ? orNull(v.nw_config_date) : null,
+        tools_integration_done: includeOs ? asBool(v.tools_integration_done) : false,
+        tools_integration_date:
+          includeOs && asBool(v.tools_integration_done)
+            ? orNull(v.tools_integration_date)
+            : null,
         mbss_done: includeOs ? asBool(v.mbss_done) : false,
         mbss_date: includeOs && asBool(v.mbss_done) ? orNull(v.mbss_date) : null,
         vascan_done: includeOs ? asBool(v.vascan_done) : false,
         vascan_date: includeOs && asBool(v.vascan_done) ? orNull(v.vascan_date) : null,
+        installation_progress_status: orNull(v.installation_progress_status),
+        installation_attachment_name: orNull(v.installation_attachment_name),
+        installation_remarks: orNull(v.installation_remarks),
       });
+      loadedValuesRef.current = v;
 
-      let site = await getSiteInstallationByProject(projectId);
-      if (site.workflow_stage === "scm") {
-        site = await advanceSiteInstallation(projectId, "complete_scm");
-      }
-      if (site.workflow_stage === "installation" || site.workflow_stage === "configuration") {
-        await advanceSiteInstallation(projectId, "complete_installation");
+      if (isProgressCompleteForAdvance(v.installation_progress_status)) {
+        let site = await getSiteInstallationByProject(projectId);
+        if (site.workflow_stage === "scm") {
+          site = await advanceSiteInstallation(projectId, "complete_scm");
+        }
+        if (
+          site.workflow_stage === "onsite_delivery" ||
+          site.workflow_stage === "onsite"
+        ) {
+          site = await advanceSiteInstallation(projectId, "complete_onsite_delivery");
+        }
+        if (site.workflow_stage === "material_handover") {
+          site = await advanceSiteInstallation(projectId, "complete_material_handover");
+        }
+        if (site.workflow_stage === "installation" || site.workflow_stage === "configuration") {
+          await advanceSiteInstallation(projectId, "complete_installation");
+        }
       }
 
       return `/projects/my-jobs`;
@@ -190,7 +242,7 @@ export function SiteInstallFormPage({ projectId }: { projectId: string }) {
       {
         name: "rack_server_stacking_done",
         label: stackingLabel,
-        type: "checkbox",
+        type: "yesno",
         clearFieldsOnChange: ["rack_server_stacking_date"],
       },
       {
@@ -207,7 +259,7 @@ export function SiteInstallFormPage({ projectId }: { projectId: string }) {
         {
           name: "rack_server_power_on_done",
           label: hasRack ? "Rack + Server Power On" : "Server Power On",
-          type: "checkbox",
+          type: "yesno",
           clearFieldsOnChange: ["rack_server_power_on_date"],
         },
         {
@@ -220,7 +272,7 @@ export function SiteInstallFormPage({ projectId }: { projectId: string }) {
         {
           name: "dac_ilo_cabling_done",
           label: "DAC / ILO Cabling",
-          type: "checkbox",
+          type: "yesno",
           clearFieldsOnChange: ["dac_ilo_cabling_date"],
         },
         {
@@ -237,6 +289,19 @@ export function SiteInstallFormPage({ projectId }: { projectId: string }) {
       intakeSummarySection(),
       stageOwnerBannerSection(),
       {
+        title: "Survey reference",
+        subtitle: "Tile details captured during Survey (read-only).",
+        icon: ClipboardList,
+        fields: [
+          {
+            name: "tile_details",
+            label: "Tile Details",
+            type: "readonly",
+            full: true,
+          },
+        ],
+      },
+      {
         title: "Installation",
         subtitle: installSubtitle,
         icon: Server,
@@ -251,7 +316,7 @@ export function SiteInstallFormPage({ projectId }: { projectId: string }) {
           {
             name: "bios_configuration_done",
             label: "BIOS Configuration",
-            type: "checkbox",
+            type: "yesno",
             clearFieldsOnChange: ["bios_configuration_date"],
           },
           {
@@ -262,22 +327,22 @@ export function SiteInstallFormPage({ projectId }: { projectId: string }) {
             visibleWhen: (v) => v.bios_configuration_done === "true",
           },
           {
-            name: "firmware_nw_config_done",
-            label: "Firmware / N/W Configuration",
-            type: "checkbox",
-            clearFieldsOnChange: ["firmware_nw_config_date"],
+            name: "firmware_config_done",
+            label: "Firmware Configuration",
+            type: "yesno",
+            clearFieldsOnChange: ["firmware_config_date"],
           },
           {
-            name: "firmware_nw_config_date",
-            label: "Firmware / N/W Date",
+            name: "firmware_config_date",
+            label: "Firmware Configuration Date",
             type: "date",
             required: true,
-            visibleWhen: (v) => v.firmware_nw_config_done === "true",
+            visibleWhen: (v) => v.firmware_config_done === "true",
           },
           {
             name: "lld_done",
             label: "LLD Availability",
-            type: "checkbox",
+            type: "yesno",
             clearFieldsOnChange: ["lld_date"],
           },
           {
@@ -294,7 +359,7 @@ export function SiteInstallFormPage({ projectId }: { projectId: string }) {
           {
             name: "os_installation_done",
             label: "OS Installation",
-            type: "checkbox",
+            type: "yesno",
             clearFieldsOnChange: ["os_installation_date"],
           },
           {
@@ -305,9 +370,48 @@ export function SiteInstallFormPage({ projectId }: { projectId: string }) {
             visibleWhen: (v) => v.os_installation_done === "true",
           },
           {
+            name: "vm_installation_done",
+            label: "VM Installation",
+            type: "yesno",
+            clearFieldsOnChange: ["vm_installation_date"],
+          },
+          {
+            name: "vm_installation_date",
+            label: "VM Installation Date",
+            type: "date",
+            required: true,
+            visibleWhen: (v) => v.vm_installation_done === "true",
+          },
+          {
+            name: "nw_config_done",
+            label: "N/W Configuration",
+            type: "yesno",
+            clearFieldsOnChange: ["nw_config_date"],
+          },
+          {
+            name: "nw_config_date",
+            label: "N/W Configuration Date",
+            type: "date",
+            required: true,
+            visibleWhen: (v) => v.nw_config_done === "true",
+          },
+          {
+            name: "tools_integration_done",
+            label: "Tools Integration",
+            type: "yesno",
+            clearFieldsOnChange: ["tools_integration_date"],
+          },
+          {
+            name: "tools_integration_date",
+            label: "Tools Integration Date",
+            type: "date",
+            required: true,
+            visibleWhen: (v) => v.tools_integration_done === "true",
+          },
+          {
             name: "mbss_done",
             label: "MBSS",
-            type: "checkbox",
+            type: "yesno",
             clearFieldsOnChange: ["mbss_date"],
           },
           {
@@ -320,7 +424,7 @@ export function SiteInstallFormPage({ projectId }: { projectId: string }) {
           {
             name: "vascan_done",
             label: "VASCAN",
-            type: "checkbox",
+            type: "yesno",
             clearFieldsOnChange: ["vascan_date"],
           },
           {
@@ -335,12 +439,21 @@ export function SiteInstallFormPage({ projectId }: { projectId: string }) {
       sectionsOut.push({
         title: "Configuration",
         subtitle: showOs
-          ? "BIOS / Firmware / N/W · LLD · OS · MBSS · VASCAN"
-          : "BIOS / Firmware / N/W · LLD",
+          ? "BIOS · Firmware · LLD · OS · VM · N/W · Tools · MBSS · VASCAN"
+          : "BIOS · Firmware · LLD",
         icon: Wrench,
         fields: configFields,
       });
     }
+
+    sectionsOut.push(
+      ...stageClosingSections(
+        "installation_progress_status",
+        "installation_attachment_name",
+        "installation_remarks",
+        "Installation",
+      ),
+    );
 
     return sectionsOut;
   }, [hasRack, isRackOnly, showBios, showOs]);
@@ -350,8 +463,8 @@ export function SiteInstallFormPage({ projectId }: { projectId: string }) {
       title={isRackOnly ? "Installation" : "Installation & Configuration"}
       description={
         isRackOnly
-          ? "Step 5 — Confirm rack installation, then continue to Acceptance."
-          : "Step 5 — Installation and configuration in one step. Next: Acceptance."
+          ? "Step 6 — Confirm rack installation, then continue to Acceptance."
+          : "Step 6 — Installation and configuration in one step. Next: Acceptance."
       }
       backHref={
         stageFormMeta.readOnly
@@ -370,6 +483,11 @@ export function SiteInstallFormPage({ projectId }: { projectId: string }) {
       emptyValues={EMPTY}
       load={load}
       onSave={onSave}
+      headerActions={
+        stageFormMeta.readOnly ? (
+          <SiteStageExportButton projectId={projectId} stage="installation" />
+        ) : null
+      }
     />
   );
 }

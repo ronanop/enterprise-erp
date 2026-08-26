@@ -19,6 +19,16 @@ celery_app.conf.update(
     task_track_started=True,
     task_acks_late=True,
     worker_prefetch_multiplier=1,
+    beat_schedule={
+        "hr-attendance-auto-absent": {
+            "task": "hr.attendance_auto_absent",
+            "schedule": 3600.0,  # hourly; safe if idempotent per day
+        },
+        "hr-attendance-auto-lock": {
+            "task": "hr.attendance_auto_lock",
+            "schedule": 3600.0,
+        },
+    },
 )
 
 # Domain task modules registered in Sprint 1.
@@ -41,6 +51,7 @@ celery_app.autodiscover_tasks(
         "modules.service",
         "modules.helpdesk",
         "modules.document",
+        "modules.marketing",
         "modules.grc",
         "modules.analytics",
         "modules.integration",

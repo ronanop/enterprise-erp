@@ -60,7 +60,7 @@ function useHrData() {
   }, [load]);
 
   const authBlocked =
-    Boolean(data?.statusCodes.includes(401)) ||
+    Boolean(data?.statusCodes?.includes(401)) ||
     (!authenticated && Boolean(data?.errors.length));
 
   return { data, loading, load, authBlocked, authenticated };
@@ -912,7 +912,7 @@ export function PayrollHubInHr() {
   }, [load]);
 
   const authBlocked =
-    Boolean(data?.statusCodes.includes(401)) ||
+    Boolean(data?.statusCodes?.includes(401)) ||
     (!authenticated && Boolean(data?.errors.length));
 
   return (
@@ -976,7 +976,7 @@ export function RecruitmentHubInHr() {
   }, [load]);
 
   const authBlocked =
-    Boolean(data?.statusCodes.includes(401)) ||
+    Boolean(data?.statusCodes?.includes(401)) ||
     (!authenticated && Boolean(data?.errors.length));
 
   return (

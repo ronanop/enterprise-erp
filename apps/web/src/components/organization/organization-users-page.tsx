@@ -54,7 +54,8 @@ export function OrganizationUsersPage() {
         row.display_name.toLowerCase().includes(q) ||
         row.email.toLowerCase().includes(q) ||
         row.user_type.toLowerCase().includes(q) ||
-        (row.assigned_module_keys ?? []).some((k) => moduleTitle(k).toLowerCase().includes(q)),
+        (row.assigned_module_keys ?? []).some((k) => moduleTitle(k).toLowerCase().includes(q)) ||
+        (row.admin_module_keys ?? []).some((k) => moduleTitle(k).toLowerCase().includes(q)),
     );
   }, [rows, query]);
 
@@ -62,7 +63,7 @@ export function OrganizationUsersPage() {
     <div className="space-y-5">
       <PageHeader
         title="Organization users"
-        description="Assign ERP modules per user. Users only see assigned module hubs in the sidebar (admins see all)."
+        description="Assign module admins. Each admin gets that module’s full ERP panel and can add module users from a Users tab."
       />
 
       {error ? (
@@ -99,7 +100,7 @@ export function OrganizationUsersPage() {
               <tr className="border-b border-border/80 bg-muted/60 text-xs font-semibold tracking-wide text-foreground uppercase">
                 <th className="px-4 py-2.5">User</th>
                 <th className="px-4 py-2.5">Email</th>
-                <th className="px-4 py-2.5">Modules</th>
+                <th className="px-4 py-2.5">Module admins</th>
                 <th className="px-4 py-2.5">Status</th>
               </tr>
             </thead>
@@ -134,11 +135,14 @@ export function OrganizationUsersPage() {
                         userId={row.id}
                         userType={row.user_type}
                         assignedModuleKeys={row.assigned_module_keys ?? []}
+                        adminModuleKeys={row.admin_module_keys ?? []}
                         canEdit={canEditModules}
-                        onSaved={(assigned_module_keys) => {
+                        onSaved={(assigned_module_keys, admin_module_keys) => {
                           setRows((prev) =>
                             prev.map((r) =>
-                              r.id === row.id ? { ...r, assigned_module_keys } : r,
+                              r.id === row.id
+                                ? { ...r, assigned_module_keys, admin_module_keys }
+                                : r,
                             ),
                           );
                         }}

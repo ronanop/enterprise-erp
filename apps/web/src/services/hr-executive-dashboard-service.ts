@@ -965,7 +965,7 @@ export async function loadHrExecutiveDashboard(
     payroll = pay;
     partial = Boolean(overview.partial);
     authBlocked =
-      overview.statusCodes.includes(401) ||
+      overview.statusCodes?.includes(401) ||
       (!isAuthenticated() && overview.errors.length > 0);
   } catch (err) {
     partial = true;

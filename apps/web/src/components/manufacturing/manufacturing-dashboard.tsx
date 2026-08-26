@@ -124,7 +124,7 @@ export function ManufacturingDashboard() {
   }, [data]);
 
   const authBlocked =
-    Boolean(data?.statusCodes.includes(401)) ||
+    Boolean(data?.statusCodes?.includes(401)) ||
     (!authenticated && Boolean(data?.errors.length));
 
   return (
@@ -234,7 +234,7 @@ export function ManufacturingDashboard() {
 
       <section className="space-y-3">
         <div className="flex items-center justify-between gap-2">
-          <h2 className="text-sm font-medium tracking-tight">Workspace</h2>
+          <h2 className="text-base font-extrabold tracking-tight">Workspace</h2>
           <Badge variant="secondary">{manufacturingWorkspaceGroups.length} areas</Badge>
         </div>
         <div className="grid gap-3 lg:grid-cols-3">
@@ -251,7 +251,7 @@ export function ManufacturingDashboard() {
                     <Icon className="size-4" />
                   </span>
                   <div className="min-w-0">
-                    <h3 className="text-sm font-medium tracking-tight">{group.title}</h3>
+                    <h3 className="text-base font-extrabold tracking-tight">{group.title}</h3>
                     <p className="mt-0.5 text-[11px] leading-relaxed text-muted-foreground">
                       {group.description}
                     </p>
@@ -282,7 +282,7 @@ export function ManufacturingDashboard() {
         <div className="overflow-hidden rounded-xl border border-border/80 bg-card shadow-sm">
           <div className="flex items-center justify-between gap-2 border-b border-border/70 px-4 py-3">
             <div>
-              <h2 className="text-sm font-medium tracking-tight">Recent production orders</h2>
+              <h2 className="text-base font-extrabold tracking-tight">Recent production orders</h2>
               <p className="text-[11px] text-muted-foreground">Work order book</p>
             </div>
             <Link
@@ -348,7 +348,7 @@ export function ManufacturingDashboard() {
         <div className="overflow-hidden rounded-xl border border-border/80 bg-card shadow-sm">
           <div className="flex items-center justify-between gap-2 border-b border-border/70 px-4 py-3">
             <div>
-              <h2 className="text-sm font-medium tracking-tight">Scrap watch</h2>
+              <h2 className="text-base font-extrabold tracking-tight">Scrap watch</h2>
               <p className="text-[11px] text-muted-foreground">Highest scrap quantities</p>
             </div>
             <Link
@@ -390,7 +390,7 @@ export function ManufacturingDashboard() {
 
         <div className="rounded-xl border border-border/80 bg-card p-4 shadow-sm">
           <div className="mb-3">
-            <h2 className="text-sm font-medium tracking-tight">WIP cost mix</h2>
+            <h2 className="text-base font-extrabold tracking-tight">WIP cost mix</h2>
             <p className="text-[11px] text-muted-foreground">Material / labor / overhead</p>
           </div>
           {loading ? (

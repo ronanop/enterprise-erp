@@ -34,6 +34,7 @@ import {
 } from "@/services/procurement-service";
 import {
   fullPoChallanLines,
+  mergeInventoryAndPoChallanLines,
   mergeOvfStockAllocationsToChallanLines,
   mergeSelectedGrnChallanLines,
   receiptBatchKey,
@@ -120,7 +121,13 @@ export function DeliveryChallanFormPage({ challanId, embedded }: DeliveryChallan
   const grnKeyParam = searchParams.get("grnKey");
   const kindParam = searchParams.get("kind") as GrnChallanKind | null;
   const ovfIdParam = searchParams.get("ovfId");
-  const isOvfStock = searchParams.get("source") === "ovf_stock" && Boolean(ovfIdParam?.trim());
+  const ovfShipSource = searchParams.get("source");
+  const isOvfShip =
+    Boolean(ovfIdParam?.trim()) &&
+    (ovfShipSource === "ovf_stock" ||
+      ovfShipSource === "ovf_po" ||
+      ovfShipSource === "ovf_combined");
+  const isOvfStock = Boolean(ovfIdParam?.trim()) && ovfShipSource === "ovf_stock";
   const returnToParam = searchParams.get("returnTo");
   const returnTo = useMemo(() => safeProcurementReturnTo(returnToParam), [returnToParam]);
   const backHref = resolveChallanModuleExitHref(returnTo);
@@ -167,7 +174,7 @@ export function DeliveryChallanFormPage({ challanId, embedded }: DeliveryChallan
   const [hasSaved, setHasSaved] = useState(!isNew);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [pdfBusy, setPdfBusy] = useState(false);
-  const [prefillBusy, setPrefillBusy] = useState(Boolean(challanId || orderIdParam || isOvfStock));
+  const [prefillBusy, setPrefillBusy] = useState(Boolean(challanId || orderIdParam || isOvfShip));
   const skipAutoApplyLinesRef = useRef(Boolean(challanId));
   const linesLockedFromSaveRef = useRef(Boolean(challanId));
 
@@ -425,52 +432,105 @@ export function DeliveryChallanFormPage({ challanId, embedded }: DeliveryChallan
       return;
     }
 
-    if (!orderIdParam) {
-      if (isOvfStock && ovfIdParam) {
-        let cancelled = false;
-        setPrefillBusy(true);
-        setLoadError(null);
-        void (async () => {
-          try {
-            const ovf = await getScmOvfPreview(ovfIdParam);
-            if (cancelled) return;
-            setOvfContext(ovf);
+    if (isOvfShip && ovfIdParam) {
+      let cancelled = false;
+      setPrefillBusy(true);
+      setLoadError(null);
+      void (async () => {
+        try {
+          const ovf = await getScmOvfPreview(ovfIdParam);
+          if (cancelled) return;
+          setOvfContext(ovf);
+          skipAutoApplyLinesRef.current = true;
+          linesLockedFromSaveRef.current = true;
+          setGrnKind("delivery_challan");
+          const customer = (ovf.customer_name || ovf.account_name || "").trim();
+          setCustomerName(customer);
+          setCustomerBillTo((ovf.billing_address || "").trim() || customer);
+          setCustomerShipTo(
+            (ovf.shipping_address || "").trim() ||
+              (ovf.billing_address || "").trim() ||
+              customer,
+          );
+          setCustomerGstNo((ovf.customer_gst || "").trim());
+          const attn = [ovf.shipping_contact_person, ovf.billing_contact_person]
+            .map((value) => (value || "").trim())
+            .filter(Boolean)
+            .join(" / ");
+          setKindAttn(attn);
+          setPurchaseOrderNumber((ovf.po_number || "").trim());
+          setPoDate((ovf.po_date || "").slice(0, 10));
+          setVendorName((ovf.vendor_name || ovf.distributor_name || "").trim());
+          setRemarks("Not for Sale, Delivery Purpose Only");
+          const seed = (ovf.ovf_no || "OVF").replace(/\//g, "-").slice(-6);
+          setChallanNumber((current) => current || `CT/23-24/${seed}`);
+
+          const orderIdForShip = (orderIdParam || ovf.purchase_order_id || "").trim();
+          const needsOrder =
+            ovfShipSource === "ovf_po" || ovfShipSource === "ovf_combined";
+
+          if (ovfShipSource === "ovf_stock") {
             setOrderId(ovfIdParam);
             setItemsSourceMode("selected_grns");
             setSelectedGrnKeys([ovfStockSourceKey(ovfIdParam)]);
-            setGrnKind("delivery_challan");
-            skipAutoApplyLinesRef.current = true;
-            linesLockedFromSaveRef.current = true;
-            const customer = (ovf.customer_name || ovf.account_name || "").trim();
-            setCustomerName(customer);
-            setCustomerBillTo((ovf.billing_address || "").trim() || customer);
-            setCustomerShipTo((ovf.shipping_address || "").trim() || (ovf.billing_address || "").trim() || customer);
-            setCustomerGstNo((ovf.customer_gst || "").trim());
-            const attn = [ovf.shipping_contact_person, ovf.billing_contact_person]
-              .map((value) => (value || "").trim())
-              .filter(Boolean)
-              .join(" / ");
-            setKindAttn(attn);
-            setPurchaseOrderNumber((ovf.po_number || "").trim());
-            setPoDate((ovf.po_date || "").slice(0, 10));
-            setVendorName((ovf.vendor_name || ovf.oem_name || "").trim());
-            setRemarks("Not for Sale, Delivery Purpose Only");
-            const seed = (ovf.ovf_no || "OVF").replace(/\//g, "-").slice(-6);
-            setChallanNumber((current) => current || `CT/23-24/${seed}`);
             const allocLines = mergeOvfStockAllocationsToChallanLines(ovf.stock_allocations);
             setLines(allocLines.length > 0 ? allocLines : [emptyChallanLine()]);
-          } catch (err) {
-            if (!cancelled) {
-              setLoadError(formatApiError(err, "Failed to load OVF stock allocation for challan."));
-            }
-          } finally {
-            if (!cancelled) setPrefillBusy(false);
+            return;
           }
-        })();
-        return () => {
-          cancelled = true;
-        };
-      }
+
+          if (needsOrder && !orderIdForShip) {
+            setLoadError(
+              ovfShipSource === "ovf_po"
+                ? "Create a purchase order before shipping PO items."
+                : "Create a purchase order before combining inventory and PO items on one challan.",
+            );
+            setLines([emptyChallanLine()]);
+            return;
+          }
+
+          const { order, vendor, batches } = await loadOrderContext(orderIdForShip);
+          if (cancelled) return;
+          setOrderId(orderIdForShip);
+          setLoadedOrder(order);
+          setGrnBatches(batches);
+          if (vendor?.label) setVendorName(vendor.label);
+          const companyPo = order.company_po_number?.trim() || order.document_number || "";
+          if (companyPo) setPurchaseOrderNumber(companyPo);
+          if (order.document_date) setPoDate(String(order.document_date).slice(0, 10));
+
+          if (ovfShipSource === "ovf_po") {
+            setItemsSourceMode("full_po");
+            setSelectedGrnKeys([]);
+            const itemLines = fullPoChallanLines(order, "", ovf);
+            setLines(itemLines.length > 0 ? itemLines : [emptyChallanLine()]);
+            return;
+          }
+
+          // ovf_combined
+          setItemsSourceMode("selected_grns");
+          setSelectedGrnKeys([ovfStockSourceKey(ovfIdParam)]);
+          const combined = mergeInventoryAndPoChallanLines(
+            ovf.stock_allocations,
+            order,
+            ovf,
+          );
+          setLines(combined.length > 0 ? combined : [emptyChallanLine()]);
+        } catch (err) {
+          if (!cancelled) {
+            setLoadError(
+              formatApiError(err, "Failed to load OVF / purchase order for challan."),
+            );
+          }
+        } finally {
+          if (!cancelled) setPrefillBusy(false);
+        }
+      })();
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    if (!orderIdParam) {
       setPrefillBusy(false);
       return;
     }
@@ -547,7 +607,7 @@ export function DeliveryChallanFormPage({ challanId, embedded }: DeliveryChallan
     return () => {
       cancelled = true;
     };
-  }, [challanId, grnKeyParam, kindParam, orderIdParam, isOvfStock, ovfIdParam]);
+  }, [challanId, grnKeyParam, kindParam, orderIdParam, isOvfShip, ovfIdParam, ovfShipSource]);
 
   const setLineField = useCallback(
     (id: string, key: keyof Omit<DeliveryChallanLine, "id">, value: string) => {

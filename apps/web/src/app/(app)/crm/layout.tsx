@@ -3,8 +3,8 @@
 import type { ReactNode } from "react";
 import { Suspense } from "react";
 
-import { CrmRouteWarmup } from "@/components/crm/crm-route-warmup";
 import { CrmWorkspaceNav } from "@/components/crm/crm-workspace-nav";
+import { CrmApprovalInboxListener } from "@/components/crm/sales/crm-approval-inbox-listener";
 import { useStandaloneChrome } from "@/hooks/use-standalone-chrome";
 
 function CrmLayoutInner({ children }: { children: ReactNode }) {
@@ -12,9 +12,9 @@ function CrmLayoutInner({ children }: { children: ReactNode }) {
 
   return (
     <div className="grid min-w-0 max-w-full grid-cols-1 gap-5 overflow-x-clip">
-      <CrmRouteWarmup />
       {/* Horizontal strip only when CRM shares the main module sidebar. */}
       {!standalone ? <CrmWorkspaceNav /> : null}
+      <CrmApprovalInboxListener />
       <div className="min-w-0 max-w-full overflow-x-clip">{children}</div>
     </div>
   );

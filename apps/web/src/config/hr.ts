@@ -42,7 +42,7 @@ export const HR_MODULE_KEY = "hr";
 export const hrWorkspaceGroups: HrWorkspaceGroup[] = [
   {
     key: "workforce",
-    title: "Workforce",
+    title: "Employees",
     description: "Designations, employee profiles, and employment",
     icon: Users,
     resourceKeys: ["designations", "employee-profiles", "employment"],
@@ -83,18 +83,18 @@ export const hrPipelineStages: HrPipelineStage[] = [
   {
     key: "profiles",
     title: "Profiles",
-    href: "/hr/employee-profiles",
+    href: "/hr/workforce",
     resource: "employee-profiles",
   },
   { key: "employment", title: "Employment", href: "/hr/employment", resource: "employment" },
-  { key: "attendance", title: "Attendance", href: "/hr/attendance", resource: "attendance" },
+  { key: "attendance", title: "Attendance", href: "/hr/time", resource: "attendance" },
   {
     key: "leave",
     title: "Leave",
-    href: "/hr/leave-requests",
+    href: "/hr/leave",
     resource: "leave-requests",
   },
-  { key: "training", title: "Training", href: "/hr/training", resource: "training" },
+  { key: "training", title: "Training", href: "/hr/learning", resource: "training" },
 ];
 
 export function getHrResources(): ModuleResource[] {
@@ -111,25 +111,25 @@ export function resolveHrGroupResources(group: HrWorkspaceGroup): ModuleResource
 export const hrQuickLinks = [
   {
     title: "Profiles",
-    href: "/hr/employee-profiles",
-    description: "Employee master",
+    href: "/hr/workforce",
+    description: "Employee directory",
     icon: UserRound,
   },
   {
     title: "Attendance",
-    href: "/hr/attendance",
+    href: "/hr/time",
     description: "Daily attendance",
     icon: ClipboardList,
   },
   {
     title: "Leave",
-    href: "/hr/leave-requests",
+    href: "/hr/leave",
     description: "Leave requests",
     icon: CalendarDays,
   },
   {
     title: "Reviews",
-    href: "/hr/performance-reviews",
+    href: "/hr/talent",
     description: "Performance reviews",
     icon: BadgeCheck,
   },

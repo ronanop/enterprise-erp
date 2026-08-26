@@ -29,11 +29,21 @@ class EmployeeRepository(MasterScopedRepository):
             stmt = stmt.where(MasterEmployee.company_id == company_id)
         if branch_id:
             stmt = stmt.where(MasterEmployee.branch_id == branch_id)
+        stmt = stmt.where(~MasterEmployee.email.ilike("%@example.com"))
         return [self._to_entity(r) for r in self.db.scalars(stmt).all()]
 
     def get_by_id(self, ctx: TenantContext, employee_id: UUID) -> EmployeeEntity | None:
         stmt = select(MasterEmployee).where(
             MasterEmployee.id == employee_id,
+            MasterEmployee.tenant_id == ctx.tenant_id,
+            MasterEmployee.is_deleted.is_(False),
+        )
+        row = self.db.scalar(stmt)
+        return self._to_entity(row) if row else None
+
+    def get_by_user_id(self, ctx: TenantContext, user_id: UUID) -> EmployeeEntity | None:
+        stmt = select(MasterEmployee).where(
+            MasterEmployee.user_id == user_id,
             MasterEmployee.tenant_id == ctx.tenant_id,
             MasterEmployee.is_deleted.is_(False),
         )

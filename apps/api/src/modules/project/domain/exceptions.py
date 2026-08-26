@@ -82,3 +82,8 @@ class InvalidProjectNotificationState(ConflictException):
 class InvalidProjectReportState(ConflictException):
     def __init__(self, message: str = "Invalid projectreport state") -> None:
         super().__init__(message)
+
+
+class InvalidSiteInstallationState(ConflictException):
+    def __init__(self, message: str = "Invalid site installation workflow state") -> None:
+        super().__init__(message)

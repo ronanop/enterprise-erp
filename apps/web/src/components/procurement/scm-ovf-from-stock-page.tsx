@@ -1,14 +1,12 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Package, RefreshCw } from "lucide-react";
 
 import { PageHeader } from "@/components/layout/page-header";
-import { Button, buttonVariants } from "@/components/ui/button";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { cn } from "@/lib/utils";
 import { ApiClientError, formatApiError } from "@/services/api-client";
 import {
   fulfillOvfFromStock,
@@ -18,14 +16,7 @@ import {
   type ScmOvfPreview,
   type ScmStockAvailability,
 } from "@/services/procurement-service";
-import {
-  findStockAvailability,
-  ovfCreatePoRemainderHref,
-  ovfProductKey,
-  ovfStockChallanHref,
-  ovfStockSourceKey,
-} from "@/utils/ovf-stock";
-import { addPendingGrnChallan } from "@/utils/grn-challan-pending";
+import { findStockAvailability, ovfProductKey } from "@/utils/ovf-stock";
 
 function demandLines(preview: ScmOvfPreview) {
   return (preview.customer_lines?.length ? preview.customer_lines : preview.vendor_lines) || [];
@@ -79,7 +70,12 @@ export function ScmOvfFromStockPage({ ovfId }: { ovfId: string }) {
     return map;
   }, [inventory]);
 
-  function setUseQty(productName: string, remaining: number, units: ProcurementInventoryRow[], qty: number) {
+  function setUseQty(
+    productName: string,
+    remaining: number,
+    units: ProcurementInventoryRow[],
+    qty: number,
+  ) {
     const key = ovfProductKey(productName);
     const capped = Math.max(0, Math.min(qty, remaining));
     const picked: string[] = [];
@@ -135,22 +131,9 @@ export function ScmOvfFromStockPage({ ovfId }: { ovfId: string }) {
     setBusy(true);
     setError(null);
     try {
-      const result = await fulfillOvfFromStock(ovfId, lines);
-      const prefill = result.challan_prefill;
-      addPendingGrnChallan({
-        orderId: ovfId,
-        batchKey: prefill.source_key || ovfStockSourceKey(ovfId),
-        grnNumber: "OVF stock",
-        purchaseOrderNumber: prefill.po_number || preview.po_number || "",
-        vendorName: preview.vendor_name || preview.oem_name || "—",
-        customerName: prefill.customer_name || preview.customer_name || "",
-        itemsSummary: prefill.lines
-          .map((ln) => `${ln.product_name} × ${ln.quantity}`)
-          .join(", "),
-        kind: "delivery_challan",
-        source: "ovf_stock",
-      });
-      router.push(ovfStockChallanHref(ovfId));
+      await fulfillOvfFromStock(ovfId, lines);
+      // Allocate only — DC / billing later when ready to ship (stock now, or after PO remainder).
+      router.replace(`/procurement/scm/ovf/${ovfId}?stockAllocated=1`);
     } catch (err) {
       setError(
         err instanceof ApiClientError
@@ -181,17 +164,6 @@ export function ScmOvfFromStockPage({ ovfId }: { ovfId: string }) {
               <RefreshCw className="mr-1.5 size-3.5" />
               Refresh
             </Button>
-            {preview?.can_create_po ? (
-              <Link
-                href={ovfCreatePoRemainderHref(ovfId)}
-                className={cn(
-                  buttonVariants({ size: "sm", variant: "outline" }),
-                  "cursor-pointer transition-colors duration-200",
-                )}
-              >
-                Create PO for remainder
-              </Link>
-            ) : null}
             <Button
               type="button"
               size="sm"
@@ -206,6 +178,10 @@ export function ScmOvfFromStockPage({ ovfId }: { ovfId: string }) {
         }
       />
 
+      <p className="text-sm text-muted-foreground">
+        This only reserves stock against the OVF. It does not create a delivery challan — you choose
+        inventory, PO, or combined shipping on the OVF page afterward.
+      </p>
       {error ? (
         <div className="rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">
           {error}
@@ -221,19 +197,26 @@ export function ScmOvfFromStockPage({ ovfId }: { ovfId: string }) {
       {preview ? (
         <section className="space-y-3 rounded-lg border-2 border-foreground/20 bg-card p-4 shadow-sm">
           <h2 className="text-base font-semibold tracking-tight">Demand vs on-hand</h2>
-          <p className="text-xs text-muted-foreground">
-            Match is exact product name (trim + case-insensitive). Remaining quantity still uses Create PO.
-          </p>
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[960px] text-sm">
+            <table className="w-full min-w-[880px] table-fixed text-sm">
+              <colgroup>
+                <col className="w-[26%]" />
+                <col className="w-[12%]" />
+                <col className="w-[12%]" />
+                <col className="w-[28%]" />
+                <col className="w-[22%]" />
+              </colgroup>
               <thead className="border-b border-border bg-muted/40 text-xs uppercase tracking-wide text-muted-foreground">
                 <tr>
-                  <th className="px-3 py-2 text-left font-medium">Product</th>
-                  <th className="px-3 py-2 text-right font-medium">Required</th>
-                  <th className="px-3 py-2 text-right font-medium">On hand</th>
-                  <th className="px-3 py-2 text-right font-medium">Allocated</th>
-                  <th className="px-3 py-2 text-right font-medium">Remaining</th>
-                  <th className="px-3 py-2 text-right font-medium">Use from stock</th>
+                  <th className="px-4 py-3 pr-8 text-left font-medium">Item name</th>
+                  <th className="px-4 py-3 text-right font-medium">Quantity</th>
+                  <th className="px-4 py-3 pr-8 text-right font-medium">In stock</th>
+                  <th className="border-l border-border/50 px-5 py-3 pl-6 text-left font-medium">
+                    Serial number
+                  </th>
+                  <th className="border-l border-border/50 px-5 py-3 pl-6 text-right font-medium">
+                    Use from stock
+                  </th>
                 </tr>
               </thead>
               <tbody>
@@ -247,38 +230,44 @@ export function ScmOvfFromStockPage({ ovfId }: { ovfId: string }) {
                   const key = ovfProductKey(line.product_name);
                   const units = unitsByProduct.get(key) || [];
                   const selected = selectedByProduct[key] || [];
-                  const useQty = selected.reduce((sum, id) => {
-                    const row = units.find((unit) => unit.stock_unit_id === id);
-                    return sum + (row ? unitQty(row) : 0);
-                  }, 0);
+                  const selectedUnits = units.filter(
+                    (unit) => unit.stock_unit_id && selected.includes(unit.stock_unit_id),
+                  );
+                  const useQty = selectedUnits.reduce((sum, unit) => sum + unitQty(unit), 0);
                   const maxUse = Math.min(remaining, onHand);
                   return (
                     <tr key={line.line_id} className="border-b border-border/70 align-top">
-                      <td className="px-3 py-2">
+                      <td className="px-4 py-3 pr-8">
                         <p className="font-medium">{line.product_name}</p>
-                        <p className="text-xs text-muted-foreground">
-                          {(line.description || "").trim() || "Customer ship qty"}
-                        </p>
+                      </td>
+                      <td className="px-4 py-3 text-right tabular-nums">{line.qty}</td>
+                      <td className="px-4 py-3 pr-8 text-right tabular-nums">{onHand}</td>
+                      <td className="border-l border-border/50 px-5 py-3 pl-6">
                         {units.length > 0 ? (
-                          <ul className="mt-2 space-y-1">
+                          <ul className="space-y-2">
                             {units.map((unit) => {
                               const id = unit.stock_unit_id!;
                               const checked = selected.includes(id);
+                              const serial = (unit.serial_number || "—").trim() || "—";
                               return (
                                 <li key={id}>
-                                  <label className="flex cursor-pointer items-center gap-2 text-xs text-slate-600">
+                                  <label className="flex cursor-pointer items-center gap-2.5 text-sm text-slate-700 transition-colors duration-200 hover:text-foreground">
                                     <input
                                       type="checkbox"
-                                      className="cursor-pointer"
+                                      className="size-3.5 shrink-0 cursor-pointer accent-foreground"
                                       checked={checked}
                                       disabled={busy || remaining <= 0}
                                       onChange={() =>
                                         toggleUnit(line.product_name, remaining, id, unitQty(unit))
                                       }
                                     />
-                                    <span>
-                                      {(unit.serial_number || "—").trim()} · qty {unitQty(unit)}
-                                      {unit.grn_number ? ` · ${unit.grn_number}` : ""}
+                                    <span className="font-mono text-xs tabular-nums">
+                                      {serial}
+                                      {unitQty(unit) !== 1 ? (
+                                        <span className="ml-1.5 font-sans text-muted-foreground">
+                                          (qty {unitQty(unit)})
+                                        </span>
+                                      ) : null}
                                     </span>
                                   </label>
                                 </li>
@@ -286,33 +275,39 @@ export function ScmOvfFromStockPage({ ovfId }: { ovfId: string }) {
                             })}
                           </ul>
                         ) : (
-                          <p className="mt-2 text-xs text-muted-foreground">No matching stock units.</p>
+                          <p className="text-xs text-muted-foreground">No serials in stock</p>
                         )}
                       </td>
-                      <td className="px-3 py-2 text-right tabular-nums">{line.qty}</td>
-                      <td className="px-3 py-2 text-right tabular-nums">{onHand}</td>
-                      <td className="px-3 py-2 text-right tabular-nums">
-                        {stock?.allocated_qty ?? 0}
-                      </td>
-                      <td className="px-3 py-2 text-right tabular-nums">{remaining}</td>
-                      <td className="px-3 py-2 text-right">
-                        <Input
-                          type="number"
-                          min={0}
-                          max={maxUse}
-                          step="1"
-                          value={String(useQty)}
-                          disabled={busy || maxUse <= 0}
-                          className="ml-auto h-8 w-20 cursor-text text-right"
-                          onChange={(event) =>
-                            setUseQty(
-                              line.product_name,
-                              remaining,
-                              units,
-                              Number(event.target.value) || 0,
-                            )
-                          }
-                        />
+                      <td className="border-l border-border/50 px-5 py-3 pl-6 text-right">
+                        <div className="ml-auto flex max-w-[14rem] flex-col items-end gap-2">
+                          <Input
+                            type="number"
+                            min={0}
+                            max={maxUse}
+                            step="1"
+                            value={String(useQty)}
+                            disabled={busy || maxUse <= 0}
+                            className="h-8 w-20 cursor-text text-right"
+                            onChange={(event) =>
+                              setUseQty(
+                                line.product_name,
+                                remaining,
+                                units,
+                                Number(event.target.value) || 0,
+                              )
+                            }
+                          />
+                          {selectedUnits.length > 0 ? (
+                            <p className="w-full text-left text-[11px] leading-snug text-muted-foreground">
+                              Deducting:{" "}
+                              <span className="font-mono text-slate-700">
+                                {selectedUnits
+                                  .map((unit) => (unit.serial_number || "—").trim() || "—")
+                                  .join(", ")}
+                              </span>
+                            </p>
+                          ) : null}
+                        </div>
                       </td>
                     </tr>
                   );

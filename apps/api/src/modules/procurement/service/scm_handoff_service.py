@@ -381,10 +381,14 @@ class ScmHandoffService:
             customer_payment_days = 0
             vendor_name: str | None = None
             oem_name: str | None = None
+            distributor_name: str | None = None
+            project_title: str | None = None
             handoff: dict = {}
             try:
                 handoff = self._crm.get_handoff(ctx, ovf.id)
                 oem_name = (handoff.get("oem_name") or "").strip() or None
+                distributor_name = (handoff.get("distributor_name") or "").strip() or None
+                project_title = (handoff.get("project_title") or "").strip() or None
                 vendor_lines = handoff.get("vendor_lines") or []
                 customer_lines = handoff.get("customer_lines") or []
 
@@ -423,11 +427,11 @@ class ScmHandoffService:
                 except Exception:
                     vendor_name = None
             if not vendor_name:
-                # Suggested vendor from OVF OEM — shown before Create PO; replaced once PO exists.
-                vendor_name = self._master.match_vendor_name_by_oem(
+                # Suggested vendor from CRM distributor (distributor ≡ vendor; OEM is brand only).
+                vendor_name = self._master.match_vendor_name_by_distributor(
                     ctx,
                     company_id=ovf.company_id,
-                    oem_name=oem_name,
+                    distributor_name=distributor_name,
                     vendors=vendor_pool,
                 )
             is_cancelled = (
@@ -464,6 +468,8 @@ class ScmHandoffService:
                     "company_id": ovf.company_id,
                     "branch_id": ovf.branch_id,
                     "oem_name": oem_name,
+                    "distributor_name": distributor_name,
+                    "project_title": project_title,
                     "vendor_line_count": len(handoff.get("vendor_lines", [])),
                     "vendor_qty": vendor_qty,
                     "vendor_total": vendor_total,
@@ -601,10 +607,10 @@ class ScmHandoffService:
             except Exception:
                 vendor_name = None
         if not vendor_name:
-            vendor_name = self._master.match_vendor_name_by_oem(
+            vendor_name = self._master.match_vendor_name_by_distributor(
                 ctx,
                 company_id=handoff["company_id"],
-                oem_name=handoff.get("oem_name"),
+                distributor_name=handoff.get("distributor_name"),
             )
         handoff["vendor_name"] = vendor_name
         handoff["stock_fulfillment_status"] = stock["stock_fulfillment_status"]
@@ -1612,6 +1618,9 @@ class ScmHandoffService:
 
     @staticmethod
     def _attachment_summary(row) -> dict:
+        path = (getattr(row, "file_path", None) or "").strip()
+        source = (getattr(row, "source", None) or "upload").strip().lower() or "upload"
+        external_url = path if path.lower().startswith(("http://", "https://")) else None
         return {
             "id": row.id,
             "file_name": row.file_name,
@@ -1621,6 +1630,8 @@ class ScmHandoffService:
             "remarks": getattr(row, "remarks", None),
             "entity_type": row.entity_type,
             "entity_id": row.entity_id,
+            "source": source,
+            "external_url": external_url,
         }
 
     def list_ovf_attachments(self, ctx: TenantContext, ovf_id: UUID) -> list[dict]:
@@ -1676,6 +1687,7 @@ class ScmHandoffService:
     ):
         from modules.crm.service.attachment_service import AttachmentService
 
+        _ = remarks  # reserved for future metadata; CRM attachment model has no remarks column
         preview = self.get_ovf_preview(ctx, ovf_id)
         return AttachmentService(self._db).create(
             ctx,
@@ -1683,7 +1695,6 @@ class ScmHandoffService:
             entity_id=ovf_id,
             file_name=file_name,
             category=category or "other",
-            remarks=remarks,
             branch_id=branch_id,
             company_id=company_id or preview.get("company_id"),
             content_base64=content_base64,
@@ -1720,6 +1731,7 @@ class ScmHandoffService:
     ):
         from modules.crm.service.attachment_service import AttachmentService
 
+        _ = remarks  # reserved for future metadata; CRM attachment model has no remarks column
         order = self._order_service.get_order(ctx, order_id)
         return AttachmentService(self._db).create(
             ctx,
@@ -1727,7 +1739,6 @@ class ScmHandoffService:
             entity_id=order_id,
             file_name=file_name,
             category=category or "other",
-            remarks=remarks,
             branch_id=branch_id,
             company_id=company_id or order.company_id,
             content_base64=content_base64,
@@ -1753,10 +1764,16 @@ class ScmHandoffService:
     def resolve_commercial_attachment_file(
         self, ctx: TenantContext, attachment_id: UUID
     ) -> tuple:
+        """Return (path|None, file_name, content_type, external_url|None).
+
+        Uploaded files resolve under ``CRM_UPLOAD_ROOT`` (absolute path with
+        filename fallback). Link/cloud attachments return an external URL and
+        no local path.
+        """
         from pathlib import Path
 
+        from core.config import settings
         from modules.crm.models import CrmAttachment
-        from modules.crm.service.attachment_service import UPLOAD_ROOT
         from sqlalchemy import select
 
         # Load by tenant only — then authorize via OVF/PO ownership checks.
@@ -1792,14 +1809,22 @@ class ScmHandoffService:
             self.get_ovf_preview(ctx, linked_ovf_id)
         else:
             raise NotFoundException("Attachment not found")
-        path = Path(row.file_path)
+
+        stored = (row.file_path or "").strip()
+        source = (getattr(row, "source", None) or "upload").strip().lower()
+        if source != "upload" or stored.lower().startswith(("http://", "https://")):
+            if not stored.lower().startswith(("http://", "https://")):
+                raise NotFoundException("Attachment link is missing")
+            return None, row.file_name, row.content_type, stored
+
+        path = Path(stored)
         if not path.is_file():
-            candidate = UPLOAD_ROOT / path.name
+            candidate = settings.resolved_crm_upload_root / path.name
             if candidate.is_file():
                 path = candidate
             else:
                 raise NotFoundException("Attachment file is missing on disk")
-        return path, row.file_name, row.content_type
+        return path, row.file_name, row.content_type, None
 
     def get_receipt_batch(self, ctx: TenantContext, batch_id: UUID) -> ProcOrderReceiptBatch:
         cid = self._scope.resolve_company_id(ctx, None)
@@ -2910,7 +2935,7 @@ class ScmHandoffService:
                         "received_quantity": 1,
                         "billing_quantity": 0,
                         "unit_cost": 0,
-                        "description": None,
+                        "description": (getattr(row, "description", None) or None),
                         "stock_unit_id": None,
                         "import_line_id": row.id,
                     }
@@ -2943,6 +2968,7 @@ class ScmHandoffService:
         for raw in lines:
             product = str(raw.get("product_name") or "").strip()
             serial = str(raw.get("serial_number") or "").strip()
+            description = str(raw.get("description") or "").strip() or None
             if not product or not serial:
                 continue
             order_id = raw.get("order_id")
@@ -2956,6 +2982,7 @@ class ScmHandoffService:
                 order_id = None
             row = ProcInventoryImportLine(
                 product_name=product,
+                description=description[:255] if description else None,
                 serial_number=serial,
                 order_header_id=order_id,
                 company_po_number=po_number,

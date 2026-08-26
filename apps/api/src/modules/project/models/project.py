@@ -75,6 +75,12 @@ class PrjProject(Base, *PrjTransactionMixin):
     billing_type: Mapped[str | None] = mapped_column(String(30), nullable=True)
     crm_opportunity_id: Mapped[UUID | None] = mapped_column(PG_UUID(as_uuid=True), nullable=True)
     crm_customer_id: Mapped[UUID | None] = mapped_column(PG_UUID(as_uuid=True), nullable=True)
+    proc_order_id: Mapped[UUID | None] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("procurement.proc_order_header.id", ondelete="RESTRICT"),
+        nullable=True,
+        index=True,
+    )
     health_status: Mapped[str | None] = mapped_column(String(20), nullable=True)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     status: Mapped[str] = mapped_column(String(30), nullable=False, default="draft", index=True)

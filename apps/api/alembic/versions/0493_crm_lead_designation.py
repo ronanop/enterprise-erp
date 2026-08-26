@@ -10,12 +10,16 @@ depends_on = None
 
 
 def upgrade() -> None:
-    op.add_column(
-        "crm_lead",
-        sa.Column("designation", sa.String(length=100), nullable=True),
-        schema="crm",
+    # Table may already have this column when crm_lead was created from the ORM model.
+    op.execute(
+        sa.text(
+            """
+            ALTER TABLE crm.crm_lead
+            ADD COLUMN IF NOT EXISTS designation VARCHAR(100)
+            """
+        )
     )
 
 
 def downgrade() -> None:
-    op.drop_column("crm_lead", "designation", schema="crm")
+    op.execute(sa.text("ALTER TABLE crm.crm_lead DROP COLUMN IF EXISTS designation"))

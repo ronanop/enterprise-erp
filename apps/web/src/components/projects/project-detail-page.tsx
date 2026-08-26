@@ -23,6 +23,7 @@ import {
   SiteInstallationTrackingSummary,
   SiteInstallationWorkflow,
 } from "@/components/projects/site-installation-workflow";
+import { ProjectExcelExportButton } from "@/components/projects/site-stage-export-button";
 import { useProjectsLookups } from "@/components/projects/use-projects-lookups";
 import { useAuthUser } from "@/hooks/use-auth-user";
 import { Button } from "@/components/ui/button";
@@ -63,7 +64,7 @@ function buildIntakeDetailRows(
   const rows: Array<{ label: string; value: string }> = [];
 
   if (hasText(branchLabel)) {
-    rows.push({ label: "Branch", value: branchLabel! });
+    rows.push({ label: "Circle Name", value: branchLabel! });
   }
   if (site?.delivery_type) {
     rows.push({
@@ -74,7 +75,7 @@ function buildIntakeDetailRows(
   const customer = labelOrNull(project.customer_id, labels.customerName);
   if (customer) rows.push({ label: "Customer", value: customer });
   if (hasText(site?.site_name)) {
-    rows.push({ label: "Site", value: site!.site_name!.trim() });
+    rows.push({ label: "Site Name", value: site!.site_name!.trim() });
   }
   const pm = labelOrNull(project.project_manager_employee_id, labels.employeeName);
   if (pm) rows.push({ label: "Project Manager", value: pm });
@@ -86,12 +87,6 @@ function buildIntakeDetailRows(
     if (site.rfai_request_done) {
       if (hasText(site.rfai_number)) {
         rows.push({ label: "RFAI Number", value: site.rfai_number!.trim() });
-      }
-      if (hasText(site.power_requirements)) {
-        rows.push({
-          label: "Power Requirements",
-          value: site.power_requirements!.trim(),
-        });
       }
     }
   }
@@ -202,6 +197,7 @@ export function ProjectDetailPage({ projectId }: { projectId: string }) {
             <RefreshCw className={`size-3.5 ${loading ? "animate-spin" : ""}`} />
             Refresh
           </Button>
+          <ProjectExcelExportButton projectId={project.id} />
           {projectModuleAdmin ? (
             <Link
               href={`/projects/projects/${project.id}/edit`}

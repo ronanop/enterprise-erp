@@ -86,8 +86,10 @@ class LocationService:
         self._audit = AuditService(db)
         self._scope = OrgScopeValidator(db)
 
-    def list_locations(self, ctx: TenantContext, *, branch_id: UUID | None = None):
-        return self._repo.list_locations(ctx, branch_id=branch_id)
+    def list_locations(
+        self, ctx: TenantContext, *, branch_id: UUID | None = None, company_id: UUID | None = None
+    ):
+        return self._repo.list_locations(ctx, branch_id=branch_id, company_id=company_id)
 
     def create_location(self, ctx: TenantContext, **fields):
         self._scope.validate_branch_access(ctx, fields["branch_id"])
@@ -97,6 +99,19 @@ class LocationService:
             entity_name="org_location",
             entity_id=loc.id,
             operation="create",
+            performed_by=ctx.user_id,
+        )
+        return loc
+
+    def update_location(self, ctx: TenantContext, location_id: UUID, **fields):
+        loc = self._repo.update(ctx, location_id, **fields)
+        if loc is None:
+            raise NotFoundException("Location not found")
+        self._audit.log_entity_change(
+            tenant_id=ctx.tenant_id,
+            entity_name="org_location",
+            entity_id=loc.id,
+            operation="update",
             performed_by=ctx.user_id,
         )
         return loc

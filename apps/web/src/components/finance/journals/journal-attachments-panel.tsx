@@ -133,7 +133,7 @@ export function JournalAttachmentsPanel({
   return (
     <section className="rounded-xl border border-border/80 bg-card p-4 shadow-sm">
       <div className="flex items-center justify-between gap-2">
-        <h2 className="text-sm font-medium tracking-tight">Attachments</h2>
+        <h2 className="text-base font-extrabold tracking-tight">Attachments</h2>
         <span className="text-[10px] text-muted-foreground">Journal {journalId.slice(0, 8)}</span>
       </div>
 

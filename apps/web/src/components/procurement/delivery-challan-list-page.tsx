@@ -44,7 +44,7 @@ export function DeliveryChallanListPage() {
   return (
     <div className={procurementUi.page}>
       <ProcurementPageHeader
-        title="Delivery challan"
+        title="Delivery"
         actions={
           <div className="flex flex-wrap items-center gap-2">
             <Button

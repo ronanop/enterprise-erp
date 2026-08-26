@@ -2,18 +2,19 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { RefreshCw, ShieldCheck } from "lucide-react";
+import { Plus, ShieldCheck } from "lucide-react";
 
-import { CrmErrorBanner, CrmListPanel, CrmPage } from "@/components/crm/crm-ui";
+import { CrmErrorBanner, CrmListPanel, CrmPage, CRM_TABLE_HEAD_ROW } from "@/components/crm/crm-ui";
 import { CrmListToolbar } from "@/components/crm/sales/crm-list-toolbar";
 import { CrmSortableTh, sortRows, useTableSort } from "@/components/crm/sales/crm-table-sort";
 import { FinanceStatusBadge } from "@/components/finance/finance-status-badge";
 import { PageHeader } from "@/components/layout/page-header";
-import { Button } from "@/components/ui/button";
+import { buttonVariants } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import { ApiClientError } from "@/services/api-client";
 import {
   listCompanies,
-  listEmployeeOptions,
+  listCrmMemberOptions,
   type Company,
   type Option,
 } from "@/services/sales-crm-service";
@@ -47,7 +48,7 @@ export function KycAccountMappingPage({
     try {
       const [companies, employeeOptions] = await Promise.all([
         listCompanies(),
-        listEmployeeOptions().catch(() => [] as Option[]),
+        listCrmMemberOptions().catch(() => [] as Option[]),
       ]);
       setRows(
         companyAccountId
@@ -97,25 +98,27 @@ export function KycAccountMappingPage({
     [filtered, sortBy, sortDir, employees],
   );
 
+  const createKycHref = companyAccountId
+    ? `/crm/companies/${companyAccountId}/kyc/new`
+    : "/crm/kyc/new";
+
+  const actions = (
+    <Link
+      href={createKycHref}
+      className={cn(buttonVariants({ size: "sm" }), "cursor-pointer")}
+    >
+      <Plus className="size-3.5" aria-hidden="true" />
+      Create KYC
+    </Link>
+  );
+
   return (
     <CrmPage>
       {!embedded ? (
         <PageHeader
           title="KYC - Account Mapping"
           description="Company account KYC profile — ownership, source, industry, and external customer IDs."
-          actions={
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="cursor-pointer"
-              disabled={loading}
-              onClick={() => void load()}
-            >
-              <RefreshCw className={`size-3.5 ${loading ? "animate-spin" : ""}`} />
-              Refresh
-            </Button>
-          }
+          actions={actions}
         />
       ) : null}
 
@@ -127,21 +130,7 @@ export function KycAccountMappingPage({
           subtitle="KYC account profiles"
           icon={ShieldCheck}
           count={sorted.length}
-          actions={
-            embedded ? (
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="cursor-pointer"
-                disabled={loading}
-                onClick={() => void load()}
-              >
-                <RefreshCw className={`size-3.5 ${loading ? "animate-spin" : ""}`} />
-                Refresh
-              </Button>
-            ) : null
-          }
+          actions={embedded ? actions : null}
           search={{
             value: query,
             onChange: setQuery,
@@ -152,7 +141,7 @@ export function KycAccountMappingPage({
         <div className="erp-scroll overflow-x-auto">
           <table className="w-full min-w-[900px] text-left text-sm">
             <thead>
-              <tr className="border-b border-border/70 bg-muted/40 text-[11px] tracking-wide text-muted-foreground uppercase">
+              <tr className={CRM_TABLE_HEAD_ROW}>
                 <CrmSortableTh label="Customer" sortKey="customer_name" activeKey={sortBy} dir={sortDir} onSort={onSort} />
                 <CrmSortableTh label="Account No." sortKey="account_number" activeKey={sortBy} dir={sortDir} onSort={onSort} />
                 <CrmSortableTh label="Owner" sortKey="owner" activeKey={sortBy} dir={sortDir} onSort={onSort} />

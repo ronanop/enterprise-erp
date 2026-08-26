@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
+import { ModuleUsersNavTab } from "@/components/organization/module-users-nav-tab";
 import { cn } from "@/lib/utils";
 
 /** Primary GRC screens from FRD-20 screen inventory */
@@ -11,7 +12,7 @@ const GRC_NAV = [
   { title: "Policies", href: "/grc/policies" },
   { title: "Risks", href: "/grc/risk-registers" },
   { title: "Controls", href: "/grc/controls" },
-  { title: "Compliance", href: "/grc/compliance-assessments" },
+  { title: "Compliance", href: "/grc/compliance" },
   { title: "Audits", href: "/grc/audits" },
   { title: "CAPA", href: "/grc/corrective-actions" },
   { title: "Incidents", href: "/grc/incidents" },
@@ -27,7 +28,9 @@ export function GrcWorkspaceNav() {
           const active =
             item.href === "/grc"
               ? pathname === "/grc"
-              : pathname === item.href || pathname.startsWith(`${item.href}/`);
+              : item.href === "/grc/compliance"
+                ? pathname === "/grc/compliance" || pathname.startsWith("/grc/compliance-")
+                : pathname === item.href || pathname.startsWith(`${item.href}/`);
           return (
             <li key={item.href}>
               <Link
@@ -44,6 +47,7 @@ export function GrcWorkspaceNav() {
             </li>
           );
         })}
+        <ModuleUsersNavTab moduleKey="grc" />
       </ul>
     </nav>
   );

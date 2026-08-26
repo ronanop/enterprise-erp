@@ -12,9 +12,14 @@ export function downloadBlob(filename: string, blob: Blob) {
   URL.revokeObjectURL(url);
 }
 
+function neutralizeCsvFormula(value: string): string {
+  if (/^[=+\-@\t\r]/.test(value)) return `'${value}`;
+  return value;
+}
+
 function escapeCsvCell(value: unknown): string {
   if (value == null) return "";
-  const str = String(value);
+  const str = neutralizeCsvFormula(String(value));
   if (/[",\n\r]/.test(str)) return `"${str.replace(/"/g, '""')}"`;
   return str;
 }
@@ -35,6 +40,17 @@ export function downloadCsv(filename: string, rows: SpreadsheetRow[]) {
     filename,
     new Blob([`\uFEFF${csv}`], { type: "text/csv;charset=utf-8" }),
   );
+}
+
+/** Decode CSV uploads without silently converting legacy Windows text to mojibake. */
+export function decodeCsvBuffer(buffer: ArrayBuffer): string {
+  const bytes = new Uint8Array(buffer);
+  try {
+    return new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+  } catch {
+    // Excel on legacy Windows commonly writes CSV as Windows-1252.
+    return new TextDecoder("windows-1252").decode(bytes);
+  }
 }
 
 function rowsToSheetCells(rows: SpreadsheetRow[]) {
@@ -153,7 +169,7 @@ export async function parseSpreadsheetFile(
 
   if (name.endsWith(".csv") || file.type === "text/csv") {
     const buffer = await file.arrayBuffer();
-    const text = new TextDecoder("utf-8").decode(buffer);
+    const text = decodeCsvBuffer(buffer);
     return parseCsvText(text);
   }
 
@@ -163,4 +179,17 @@ export async function parseSpreadsheetFile(
   }
 
   throw new Error("Unsupported file type. Please upload a .csv or .xlsx file.");
+}
+
+export async function parseSpreadsheetMatrix(file: File): Promise<unknown[][]> {
+  const name = file.name.toLowerCase();
+  if (name.endsWith(".csv") || file.type === "text/csv") {
+    const buffer = await file.arrayBuffer();
+    const text = decodeCsvBuffer(buffer);
+    const objects = parseCsvText(text);
+    if (objects.length === 0) return [];
+    const headers = Object.keys(objects[0]);
+    return [headers, ...objects.map((row) => headers.map((h) => row[h] ?? ""))];
+  }
+  return readSheet(file);
 }

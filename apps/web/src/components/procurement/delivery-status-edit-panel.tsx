@@ -2,8 +2,9 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { FileText, Package } from "lucide-react";
+import { FileText, Package, Receipt } from "lucide-react";
 
+import { DeliveryStatusBillDialog } from "@/components/procurement/delivery-status-bill-dialog";
 import { ProcurementPageHeader } from "@/components/procurement/procurement-page-header";
 import { procurementUi } from "@/components/procurement/procurement-ui";
 import {
@@ -13,6 +14,7 @@ import {
 } from "@/components/procurement/delivery-status-form";
 import { DeliverySectionCard } from "@/components/procurement/delivery-section-card";
 import { FinanceField } from "@/components/finance/journals/finance-form-field";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
@@ -27,7 +29,18 @@ import {
   resolveChallanReceiptBatches,
   type DeliveryStatusGrnItemRow,
 } from "@/utils/delivery-challan-grn";
-import { formatChallanGrnSummary, getDeliveryChallan, type DeliveryChallanRecord } from "@/utils/delivery-challan-storage";
+import {
+  aggregatePoDcBillStatus,
+  challanDeliveredQuantity,
+  deliveryBillStatusBadgeVariant,
+  formatDeliveryBillStatusLabel,
+  resolveDeliveryBillStatus,
+} from "@/utils/delivery-challan-bill";
+import {
+  formatChallanGrnSummary,
+  getDeliveryChallan,
+  type DeliveryChallanRecord,
+} from "@/utils/delivery-challan-storage";
 import { persistDeliveryStatusFromForm } from "@/utils/delivery-status-persist";
 import { setDeliveryStatusFlash } from "@/utils/delivery-status-flash";
 import {
@@ -46,7 +59,9 @@ function ReadOnlyField({ label, value }: { label: string; value: string }) {
       <div className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
         {label}
       </div>
-      <div className="text-sm font-medium tabular-nums text-foreground">{(value ?? "").trim() || "—"}</div>
+      <div className="text-sm font-medium tabular-nums text-foreground">
+        {(value ?? "").trim() || "—"}
+      </div>
     </div>
   );
 }
@@ -59,6 +74,8 @@ export function DeliveryStatusEditPanel({ challanId }: DeliveryStatusEditPanelPr
   const [error, setError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<DeliveryStatusFormErrors>({});
   const [saving, setSaving] = useState(false);
+  const [billOpen, setBillOpen] = useState(false);
+  const [billTick, setBillTick] = useState(0);
 
   useEffect(() => {
     try {
@@ -72,7 +89,8 @@ export function DeliveryStatusEditPanel({ challanId }: DeliveryStatusEditPanelPr
       const seeded = deliveryStatusToFormValue(resolveDeliveryStatusForChallan(row));
       const fromChallan =
         String(row.purchaseOrderNumber ?? "").trim() &&
-        String(row.purchaseOrderNumber ?? "").trim() !== String(row.companyPoNumber ?? "").trim()
+        String(row.purchaseOrderNumber ?? "").trim() !==
+          String(row.companyPoNumber ?? "").trim()
           ? String(row.purchaseOrderNumber ?? "").trim()
           : "";
       if (!String(seeded.customerPoNumber ?? "").trim() && fromChallan) {
@@ -128,7 +146,7 @@ export function DeliveryStatusEditPanel({ challanId }: DeliveryStatusEditPanelPr
       setGrnItems([]);
       setError("Could not load this delivery status record.");
     }
-  }, [challanId]);
+  }, [challanId, billTick]);
 
   async function onSave() {
     if (!challan || !form || saving) return;
@@ -154,7 +172,7 @@ export function DeliveryStatusEditPanel({ challanId }: DeliveryStatusEditPanelPr
         variant: result.emailWarning ? "warning" : "success",
         message: result.emailWarning
           ? `Delivery status saved. Dispatch email failed: ${result.emailWarning}`
-          : "Delivery status saved.",
+          : "Delivery status saved. DC stays unbilled until you mark it billed.",
       });
       router.replace("/procurement/delivery-status");
     } catch {
@@ -183,12 +201,33 @@ export function DeliveryStatusEditPanel({ challanId }: DeliveryStatusEditPanelPr
     String(challan.companyPoNumber ?? "").trim() ||
     String(challan.purchaseOrderNumber ?? "").trim();
 
+  const status = resolveDeliveryStatusForChallan(challan);
+  const billKey = resolveDeliveryBillStatus(status, challanDeliveredQuantity(challan));
+  const canBill =
+    billKey === "unbilled" ||
+    billKey === "partially_billed" ||
+    billKey === "fully_billed";
+
   return (
     <div className={procurementUi.page}>
       <ProcurementPageHeader
         backHref="/procurement/delivery-status"
         backLabel="Delivery status"
         title="Delivery status"
+        actions={
+          canBill ? (
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className="cursor-pointer transition-colors duration-200"
+              onClick={() => setBillOpen(true)}
+            >
+              <Receipt className="mr-1.5 size-3.5" />
+              {billKey === "fully_billed" ? "Update bill" : "Bill DC"}
+            </Button>
+          ) : null
+        }
       />
 
       {error ? (
@@ -196,6 +235,45 @@ export function DeliveryStatusEditPanel({ challanId }: DeliveryStatusEditPanelPr
           {error}
         </div>
       ) : null}
+
+      <DeliverySectionCard title="Bill status" icon={Receipt}>
+        <div className="grid gap-3 sm:grid-cols-3">
+          <div className="space-y-1">
+            <div className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+              DC bill
+            </div>
+            <Badge
+              variant={deliveryBillStatusBadgeVariant(billKey)}
+              className={procurementUi.statusBadge}
+            >
+              {formatDeliveryBillStatusLabel(billKey)}
+            </Badge>
+          </div>
+          <div className="space-y-1">
+            <div className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+              PO bill
+            </div>
+            <div className="text-sm font-medium">
+              {aggregatePoDcBillStatus(challan.orderId)}
+            </div>
+          </div>
+          <div className="space-y-1">
+            <div className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+              Billed qty
+            </div>
+            <div className="text-sm font-medium tabular-nums">
+              {status.billedQuantity?.trim() || "—"}
+              {challanDeliveredQuantity(challan) > 0
+                ? ` / ${challanDeliveredQuantity(challan)}`
+                : ""}
+            </div>
+          </div>
+        </div>
+        <p className="mt-3 text-xs text-muted-foreground">
+          Delivery challan means goods are delivered. Bill this material later (partial or
+          full) when payment is due — that updates PO bill status.
+        </p>
+      </DeliverySectionCard>
 
       <DeliverySectionCard title="PO details" icon={FileText}>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -218,10 +296,7 @@ export function DeliveryStatusEditPanel({ challanId }: DeliveryStatusEditPanelPr
             </FinanceField>
           ) : null}
           {form ? (
-            <FinanceField
-              label="Customer PO number"
-              error={fieldErrors.customerPoNumber}
-            >
+            <FinanceField label="Customer PO number" error={fieldErrors.customerPoNumber}>
               <Input
                 value={form.customerPoNumber ?? ""}
                 onChange={(e) => {
@@ -272,6 +347,13 @@ export function DeliveryStatusEditPanel({ challanId }: DeliveryStatusEditPanelPr
           </div>
         </>
       ) : null}
+
+      <DeliveryStatusBillDialog
+        open={billOpen}
+        challanId={challan.id}
+        onClose={() => setBillOpen(false)}
+        onSaved={() => setBillTick((n) => n + 1)}
+      />
     </div>
   );
 }

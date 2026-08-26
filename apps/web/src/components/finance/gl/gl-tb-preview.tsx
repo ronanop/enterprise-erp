@@ -12,7 +12,7 @@ export function GlTrialBalancePreviewPanel({ preview, loading }: Props) {
   if (loading) {
     return (
       <div className="rounded-xl border border-border/80 bg-card p-3.5 shadow-sm">
-        <h3 className="text-sm font-medium tracking-tight">Trial Balance Preview</h3>
+        <h3 className="text-base font-extrabold tracking-tight">Trial Balance Preview</h3>
         <div className="mt-3 space-y-2">
           {Array.from({ length: 4 }).map((_, i) => (
             <div key={i} className="h-6 animate-pulse rounded bg-muted/70" />
@@ -25,7 +25,7 @@ export function GlTrialBalancePreviewPanel({ preview, loading }: Props) {
   if (!preview) {
     return (
       <div className="rounded-xl border border-border/80 bg-card p-3.5 shadow-sm">
-        <h3 className="text-sm font-medium tracking-tight">Trial Balance Preview</h3>
+        <h3 className="text-base font-extrabold tracking-tight">Trial Balance Preview</h3>
         <p className="mt-2 text-xs text-muted-foreground">
           Ledger summary preview (not the full Trial Balance report). Apply fiscal year or period filters to load.
         </p>
@@ -37,7 +37,7 @@ export function GlTrialBalancePreviewPanel({ preview, loading }: Props) {
     <div className="rounded-xl border border-border/80 bg-card p-3.5 shadow-sm">
       <div className="flex items-start justify-between gap-2">
         <div>
-          <h3 className="text-sm font-medium tracking-tight">Trial Balance Preview</h3>
+          <h3 className="text-base font-extrabold tracking-tight">Trial Balance Preview</h3>
           <p className="mt-1 text-xs text-muted-foreground">Opening · Debit · Credit · Closing — ledger summary only</p>
         </div>
         <span className={`rounded-md px-2 py-1 text-[11px] font-medium ${Math.abs(preview.difference) < 0.01 ? "bg-emerald-50 text-emerald-800" : "bg-amber-50 text-amber-900"}`}>

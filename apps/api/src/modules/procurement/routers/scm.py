@@ -4,8 +4,8 @@ from typing import Annotated
 from uuid import UUID
 
 from core.exceptions import AppException
-from fastapi import APIRouter, Depends, status
-from fastapi.responses import FileResponse
+from fastapi import APIRouter, Depends, Query, status
+from fastapi.responses import FileResponse, RedirectResponse
 from sqlalchemy.orm import Session
 
 from database.session import get_db
@@ -194,15 +194,19 @@ def download_scm_commercial_attachment(
     attachment_id: UUID,
     ctx: Annotated[TenantContext, Depends(require_permission("procurement.order:read"))],
     db: Annotated[Session, Depends(get_db)],
+    download: Annotated[bool, Query(description="Force download instead of inline view")] = False,
 ):
-    path, file_name, content_type = ScmHandoffService(db).resolve_commercial_attachment_file(
-        ctx, attachment_id
-    )
+    path, file_name, content_type, external_url = ScmHandoffService(
+        db
+    ).resolve_commercial_attachment_file(ctx, attachment_id)
+    if external_url:
+        return RedirectResponse(url=external_url, status_code=status.HTTP_302_FOUND)
+    assert path is not None
     return FileResponse(
         path=path,
         filename=file_name,
         media_type=content_type or "application/octet-stream",
-        content_disposition_type="inline",
+        content_disposition_type="attachment" if download else "inline",
     )
 
 

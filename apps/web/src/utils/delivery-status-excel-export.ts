@@ -1,5 +1,12 @@
 import * as XLSX from "xlsx";
 
+import {
+  aggregatePoDcBillStatus,
+  challanDeliveredQuantity,
+  formatDeliveryBillStatusLabel,
+  resolveDeliveryBillStatus,
+} from "@/utils/delivery-challan-bill";
+import { getDeliveryChallan } from "@/utils/delivery-challan-storage";
 import type { DeliveryStatusRow } from "@/utils/delivery-status-storage";
 
 const HEADERS = [
@@ -10,6 +17,9 @@ const HEADERS = [
   "Customer PO Number",
   "Cache Invoice Number",
   "Delivery Status",
+  "DC Bill Status",
+  "PO Bill Status",
+  "Billed Quantity",
   "Dispatch Mode",
   "Courier",
   "Docket Number",
@@ -59,29 +69,37 @@ function formatItemType(value: string): string {
 }
 
 export function buildDeliveryStatusExportRows(rows: DeliveryStatusRow[]): DeliveryStatusExportRow[] {
-  return rows.map((row, index) => ({
-    "S.No": index + 1,
-    "PO Number": row.purchaseOrderNumber || "",
-    "GRN Number": row.grnSummary || "",
-    "Customer Name": row.customerName || "",
-    "Customer PO Number": row.customerPoNumber || "",
-    "Cache Invoice Number": row.cacheInvoiceNumber || "",
-    "Delivery Status": row.shipmentStatus || "",
-    "Dispatch Mode": formatDispatchMode(row.deliveryMode),
-    Courier: row.courierProvider || row.courierTransportDetails || "",
-    "Docket Number": row.docketNumber || row.trackingNumber || "",
-    "Estimated Delivery Date": formatDate(row.expectedDeliveryDate),
-    "Dispatch Date": formatDate(row.dispatchDate),
-    "Delivered Date": formatDate(row.actualDeliveryDate),
-    "No. of Boxes": row.boxCount || "",
-    "Mode of Surface": row.surfaceMode || "",
-    "Delivery Person": row.deliveryBoyName || "",
-    "Item Type": formatItemType(row.itemType),
-    Vendor: row.vendorName || "",
-    "Challan Number": row.challanNumber || "",
-    Remarks: row.remarks || "",
-    "Last Updated": formatDate(row.updatedAt),
-  }));
+  return rows.map((row, index) => {
+    const challan = getDeliveryChallan(row.challanId);
+    const qty = challan ? challanDeliveredQuantity(challan) : 0;
+    const billKey = resolveDeliveryBillStatus(row, qty);
+    return {
+      "S.No": index + 1,
+      "PO Number": row.purchaseOrderNumber || "",
+      "GRN Number": row.grnSummary || "",
+      "Customer Name": row.customerName || "",
+      "Customer PO Number": row.customerPoNumber || "",
+      "Cache Invoice Number": row.billInvoiceNumber || row.cacheInvoiceNumber || "",
+      "Delivery Status": row.shipmentStatus || "",
+      "DC Bill Status": formatDeliveryBillStatusLabel(billKey),
+      "PO Bill Status": aggregatePoDcBillStatus(row.orderId),
+      "Billed Quantity": row.billedQuantity || "",
+      "Dispatch Mode": formatDispatchMode(row.deliveryMode),
+      Courier: row.courierProvider || row.courierTransportDetails || "",
+      "Docket Number": row.docketNumber || row.trackingNumber || "",
+      "Estimated Delivery Date": formatDate(row.expectedDeliveryDate),
+      "Dispatch Date": formatDate(row.dispatchDate),
+      "Delivered Date": formatDate(row.actualDeliveryDate),
+      "No. of Boxes": row.boxCount || "",
+      "Mode of Surface": row.surfaceMode || "",
+      "Delivery Person": row.deliveryBoyName || "",
+      "Item Type": formatItemType(row.itemType),
+      Vendor: row.vendorName || "",
+      "Challan Number": row.challanNumber || "",
+      Remarks: row.remarks || row.billRemarks || "",
+      "Last Updated": formatDate(row.updatedAt),
+    };
+  });
 }
 
 export function exportDeliveryStatusXlsx(filename: string, rows: DeliveryStatusExportRow[]) {

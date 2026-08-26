@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo } from "react";
+import { useCallback, useMemo, useRef } from "react";
 import { MapPin } from "lucide-react";
 
 import {
@@ -31,7 +31,12 @@ import {
   resolveStageOwnerDisplay,
   stageOwnerBannerSection,
 } from "@/components/projects/site-stage-assignments";
+import {
+  isProgressCompleteForAdvance,
+  stageClosingSections,
+} from "@/components/projects/site-stage-attachment";
 import { useSiteStageFormReadOnlyMeta } from "@/components/projects/site-stage-form-read-only-context";
+import { SiteStageExportButton } from "@/components/projects/site-stage-export-button";
 import {
   advanceSiteInstallation,
   getProject,
@@ -39,7 +44,9 @@ import {
   updateSiteInstallationByProject,
 } from "@/services/projects-portal-service";
 
-const EMPTY_LINES = serializeTypeQtyLines([{ type: "", quantity: "", date: "" }]);
+const EMPTY_LINES = serializeTypeQtyLines([
+  { type: "", otherLabel: "", quantity: "", date: "" },
+]);
 
 const EMPTY: FormValues = {
   ...INTAKE_SUMMARY_EMPTY,
@@ -51,13 +58,16 @@ const EMPTY: FormValues = {
   socket_lines: EMPTY_LINES,
   lugs: "false",
   lug_lines: EMPTY_LINES,
-  survey_completed: "false",
+  survey_completed: "",
   survey_completed_date: "",
-  space_available: "false",
+  space_available: "",
   space_available_date: "",
-  power_available: "false",
+  power_available: "",
   power_available_date: "",
   tile_details: "",
+  survey_progress_status: "",
+  survey_attachment_name: "",
+  survey_remarks: "",
 };
 
 function asBool(v: string | undefined): boolean {
@@ -74,6 +84,7 @@ function dateOrNull(v: string | undefined): string | null {
 
 export function SiteSurveyFormPage({ projectId }: { projectId: string }) {
   const stageFormMeta = useSiteStageFormReadOnlyMeta();
+  const loadedValuesRef = useRef<FormValues | null>(null);
   const load = useCallback(async () => {
     const [project, site, lookups] = await Promise.all([
       getProject(projectId),
@@ -82,34 +93,41 @@ export function SiteSurveyFormPage({ projectId }: { projectId: string }) {
     ]);
     const owner = resolveStageOwnerDisplay(site, "survey", lookups.employees);
 
-    return {
-      values: {
-        ...intakeSummaryValues({
-          project,
-          site,
-          branches: lookups.branches,
-          customers: lookups.customers,
-          employees: lookups.employees,
-        }),
-        delivery_type: site.delivery_type ?? "",
-        stage_assignee_label: owner.stage_assignee_label,
-        cable_length: site.cable_length ?? "",
-        cable_lines: serializeTypeQtyLines(linesFromMaterial(site.cable_lines)),
-        industrial_socket: site.industrial_socket ? "true" : "false",
-        socket_lines: serializeTypeQtyLines(
-          linesFromMaterial(site.industrial_socket_lines),
-        ),
-        lugs: site.lugs ? "true" : "false",
-        lug_lines: serializeTypeQtyLines(linesFromMaterial(site.lug_lines)),
-        survey_completed: site.survey_completed ? "true" : "false",
-        survey_completed_date: site.survey_completed_date ?? "",
-        space_available: site.space_available ? "true" : "false",
-        space_available_date: site.space_available_date ?? "",
-        power_available: site.power_available ? "true" : "false",
-        power_available_date: site.power_available_date ?? "",
-        tile_details: site.tile_details ?? "",
-      } satisfies FormValues,
-    };
+    const values = {
+      ...intakeSummaryValues({
+        project,
+        site,
+        branches: lookups.branches,
+        customers: lookups.customers,
+        employees: lookups.employees,
+      }),
+      delivery_type: site.delivery_type ?? "",
+      stage_assignee_label: owner.stage_assignee_label,
+      cable_length: site.cable_length ?? "",
+      cable_lines: serializeTypeQtyLines(
+        linesFromMaterial(site.cable_lines, CABLE_TYPES),
+      ),
+      industrial_socket: site.industrial_socket ? "true" : "false",
+      socket_lines: serializeTypeQtyLines(
+        linesFromMaterial(site.industrial_socket_lines, INDUSTRIAL_SOCKET_TYPES),
+      ),
+      lugs: site.lugs ? "true" : "false",
+      lug_lines: serializeTypeQtyLines(
+        linesFromMaterial(site.lug_lines, LUG_TYPES),
+      ),
+      survey_completed: site.survey_completed ? "true" : "",
+      survey_completed_date: site.survey_completed_date ?? "",
+      space_available: site.space_available ? "true" : "",
+      space_available_date: site.space_available_date ?? "",
+      power_available: site.power_available ? "true" : "",
+      power_available_date: site.power_available_date ?? "",
+      tile_details: site.tile_details ?? "",
+      survey_progress_status: site.survey_progress_status ?? "",
+      survey_attachment_name: site.survey_attachment_name ?? "",
+      survey_remarks: site.survey_remarks ?? "",
+    } satisfies FormValues;
+    loadedValuesRef.current = values;
+    return { values };
   }, [projectId]);
 
   const onSave = useCallback(
@@ -129,6 +147,9 @@ export function SiteSurveyFormPage({ projectId }: { projectId: string }) {
           ? dateOrNull(v.power_available_date)
           : null,
         tile_details: orNull(v.tile_details),
+        survey_progress_status: orNull(v.survey_progress_status),
+        survey_attachment_name: orNull(v.survey_attachment_name),
+        survey_remarks: orNull(v.survey_remarks),
       };
 
       if (rack) {
@@ -141,7 +162,6 @@ export function SiteSurveyFormPage({ projectId }: { projectId: string }) {
           ...readiness,
         });
       } else {
-        // Non-rack scopes skip cable / socket / lug capture.
         await updateSiteInstallationByProject(projectId, {
           cable_length: null,
           industrial_socket: false,
@@ -152,13 +172,16 @@ export function SiteSurveyFormPage({ projectId }: { projectId: string }) {
           ...readiness,
         });
       }
+      loadedValuesRef.current = v;
 
-      let site = await getSiteInstallationByProject(projectId);
-      if (site.workflow_stage === "assignment") {
-        site = await advanceSiteInstallation(projectId, "complete_assignment");
-      }
-      if (site.workflow_stage === "survey") {
-        await advanceSiteInstallation(projectId, "complete_survey");
+      if (isProgressCompleteForAdvance(v.survey_progress_status)) {
+        let site = await getSiteInstallationByProject(projectId);
+        if (site.workflow_stage === "assignment") {
+          site = await advanceSiteInstallation(projectId, "complete_assignment");
+        }
+        if (site.workflow_stage === "survey") {
+          await advanceSiteInstallation(projectId, "complete_survey");
+        }
       }
 
       return `/projects/my-jobs`;
@@ -219,7 +242,7 @@ export function SiteSurveyFormPage({ projectId }: { projectId: string }) {
           {
             name: "space_available",
             label: "Space Available",
-            type: "checkbox",
+            type: "yesno",
             required: true,
             clearFieldsOnChange: ["space_available_date"],
           },
@@ -233,7 +256,7 @@ export function SiteSurveyFormPage({ projectId }: { projectId: string }) {
           {
             name: "power_available",
             label: "Power Available",
-            type: "checkbox",
+            type: "yesno",
             required: true,
             clearFieldsOnChange: ["power_available_date"],
           },
@@ -247,7 +270,7 @@ export function SiteSurveyFormPage({ projectId }: { projectId: string }) {
           {
             name: "survey_completed",
             label: "Survey Completed",
-            type: "checkbox",
+            type: "yesno",
             required: true,
             clearFieldsOnChange: ["survey_completed_date"],
           },
@@ -260,6 +283,12 @@ export function SiteSurveyFormPage({ projectId }: { projectId: string }) {
           },
         ],
       },
+      ...stageClosingSections(
+        "survey_progress_status",
+        "survey_attachment_name",
+        "survey_remarks",
+        "Survey",
+      ),
     ],
     [],
   );
@@ -285,6 +314,11 @@ export function SiteSurveyFormPage({ projectId }: { projectId: string }) {
       emptyValues={EMPTY}
       load={load}
       onSave={onSave}
+      headerActions={
+        stageFormMeta.readOnly ? (
+          <SiteStageExportButton projectId={projectId} stage="survey" />
+        ) : null
+      }
     />
   );
 }

@@ -1,6 +1,7 @@
 """Project ORM models."""
 
 from modules.project.models.change_request import PrjChangeRequest
+from modules.project.models.customer_tracker import PrjCustomerTracker
 from modules.project.models.project import PrjProject
 from modules.project.models.project_budget import PrjProjectBudget
 from modules.project.models.project_comment import PrjProjectComment
@@ -16,6 +17,7 @@ from modules.project.models.project_status_history import PrjProjectStatusHistor
 from modules.project.models.project_task import PrjProjectTask
 from modules.project.models.resource_allocation import PrjResourceAllocation
 from modules.project.models.resource_plan import PrjResourcePlan
+from modules.project.models.site_installation import PrjSiteInstallation
 from modules.project.models.task_assignment import PrjTaskAssignment
 from modules.project.models.task_dependency import PrjTaskDependency
 from modules.project.models.timesheet import PrjTimesheet
@@ -37,9 +39,11 @@ __all__ = [
     "PrjProjectIssue",
     "PrjProjectRisk",
     "PrjChangeRequest",
+    "PrjCustomerTracker",
     "PrjProjectDocument",
     "PrjProjectComment",
     "PrjProjectStatusHistory",
     "PrjProjectNotification",
     "PrjProjectReport",
+    "PrjSiteInstallation",
 ]

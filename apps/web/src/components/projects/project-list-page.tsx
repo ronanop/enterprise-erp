@@ -5,7 +5,6 @@ import Link from "next/link";
 import { FolderKanban } from "lucide-react";
 
 import { FinanceStatusBadge } from "@/components/finance/finance-status-badge";
-import { HealthDot } from "@/components/projects/projects-badges";
 import { projectTypeLabel } from "@/components/projects/projects-domain";
 import {
   ProjectsRecordList,
@@ -15,7 +14,6 @@ import { useProjectsLookups } from "@/components/projects/use-projects-lookups";
 import { useAuthUser } from "@/hooks/use-auth-user";
 import {
   formatDate,
-  formatInr,
   listProjects,
   type Project,
 } from "@/services/projects-portal-service";
@@ -76,20 +74,6 @@ export function ProjectListPage() {
         cell: (r) => formatDate(r.planned_end_date),
       },
       {
-        key: "budget_amount",
-        label: "Budget",
-        align: "right",
-        sort: (r) => Number(r.budget_amount ?? 0),
-        className: "text-right tabular-nums text-foreground",
-        cell: (r) => (r.budget_amount == null ? "—" : formatInr(r.budget_amount)),
-      },
-      {
-        key: "health_status",
-        label: "Health",
-        sort: (r) => r.health_status,
-        cell: (r) => <HealthDot health={r.health_status} />,
-      },
-      {
         key: "created_at",
         label: "Date Created",
         sort: (r) => r.created_at,
@@ -117,11 +101,9 @@ export function ProjectListPage() {
       panelTitle="Portfolio"
       panelSubtitle={projectModuleAdmin ? "Project register" : "Assigned projects"}
       icon={FolderKanban}
-      newHref={projectModuleAdmin ? "/projects/projects/new" : undefined}
-      newLabel="New Project"
       searchPlaceholder="Search projects…"
       loadingMessage="Loading projects…"
-      emptyMessage="No projects yet. Create one to start the delivery lifecycle."
+      emptyMessage="No projects yet. Create one from the PO Queue to start delivery."
       errorMessage="Failed to load projects"
       minWidth={1200}
       columns={columns}

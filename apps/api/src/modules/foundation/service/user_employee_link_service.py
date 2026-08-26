@@ -137,6 +137,8 @@ class UserEmployeeLinkService:
             designation="Employee",
             date_of_joining=date.today(),
             user_id=user.id,
+            # SSO / platform user linking is not a recruitment hire path.
+            bypass_onboarding=True,
         )
         row = self._db.get(MasterEmployee, entity.id)
         if row is not None:

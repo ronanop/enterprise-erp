@@ -36,6 +36,8 @@ class CompanyResponse(BaseModel):
     status: str
     fiscal_year_start_month: int
     timezone: str
+    registration_number: str | None = None
+    tax_number: str | None = None
 
 
 class BranchCreateRequest(BaseModel):
@@ -47,6 +49,7 @@ class BranchCreateRequest(BaseModel):
     city: str | None = None
     state_code: str | None = None
     country_code: str | None = None
+    head_employee_id: UUID | None = None
 
 
 class BranchUpdateRequest(BaseModel):
@@ -55,6 +58,7 @@ class BranchUpdateRequest(BaseModel):
     status: str | None = None
     address_line1: str | None = None
     city: str | None = None
+    head_employee_id: UUID | None = None
 
 
 class BranchResponse(BaseModel):
@@ -65,6 +69,15 @@ class BranchResponse(BaseModel):
     branch_name: str
     branch_type: str
     status: str
+    address_line1: str | None = None
+    address_line2: str | None = None
+    city: str | None = None
+    state_code: str | None = None
+    postal_code: str | None = None
+    country_code: str | None = None
+    phone: str | None = None
+    email: str | None = None
+    head_employee_id: UUID | None = None
 
 
 class DepartmentCreateRequest(BaseModel):
@@ -73,12 +86,14 @@ class DepartmentCreateRequest(BaseModel):
     department_code: str
     department_name: str
     parent_department_id: UUID | None = None
+    head_employee_id: UUID | None = None
 
 
 class DepartmentUpdateRequest(BaseModel):
     department_name: str | None = None
     status: str | None = None
     parent_department_id: UUID | None = None
+    head_employee_id: UUID | None = None
 
 
 class BusinessUnitCreateRequest(BaseModel):
@@ -95,6 +110,18 @@ class LocationCreateRequest(BaseModel):
     location_code: str
     location_name: str
     location_type: str = "office"
+    latitude: float | None = None
+    longitude: float | None = None
+    geofence_radius_meters: int | None = None
+
+
+class LocationUpdateRequest(BaseModel):
+    location_name: str | None = None
+    location_type: str | None = None
+    latitude: float | None = None
+    longitude: float | None = None
+    geofence_radius_meters: int | None = None
+    status: str | None = None
 
 
 class CostCenterCreateRequest(BaseModel):

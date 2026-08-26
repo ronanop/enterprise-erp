@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Eye, Paperclip, Plus, Trash2, Upload } from "lucide-react";
+import { Eye, Download, Paperclip, Plus, Trash2, Upload } from "lucide-react";
 
 import { ConfirmDialog } from "@/components/finance/journals/confirm-dialog";
 import { Badge } from "@/components/ui/badge";
@@ -11,6 +11,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import { ApiClientError } from "@/services/api-client";
 import {
+  downloadScmCommercialAttachment,
   listScmOrderCommercialDocuments,
   listScmOvfAttachments,
   openScmCommercialAttachment,
@@ -86,6 +87,7 @@ export function ScmCommercialDocumentsPanel({
   const [pendingDocuments, setPendingDocuments] = useState<PendingDocument[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [openingId, setOpeningId] = useState<string | null>(null);
+  const [downloadingId, setDownloadingId] = useState<string | null>(null);
   const [attachDialogOpen, setAttachDialogOpen] = useState(false);
   const [otherDocName, setOtherDocName] = useState("");
   const [attachTarget, setAttachTarget] = useState<
@@ -248,11 +250,23 @@ export function ScmCommercialDocumentsPanel({
     setOpeningId(row.id);
     setError(null);
     try {
-      await openScmCommercialAttachment(row.id);
+      await openScmCommercialAttachment(row.id, row);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to open document");
     } finally {
       setOpeningId(null);
+    }
+  }
+
+  async function onDownload(row: ScmCommercialAttachment) {
+    setDownloadingId(row.id);
+    setError(null);
+    try {
+      await downloadScmCommercialAttachment(row.id, row.file_name, row);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to download document");
+    } finally {
+      setDownloadingId(null);
     }
   }
 
@@ -428,17 +442,30 @@ export function ScmCommercialDocumentsPanel({
                   <p className="mt-1 text-xs text-muted-foreground">{row.remarks}</p>
                 ) : null}
               </div>
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                className="h-8 cursor-pointer gap-1.5 transition-colors duration-200"
-                disabled={openingId === row.id}
-                onClick={() => void onOpen(row)}
-              >
-                <Eye className="size-3.5" />
-                {openingId === row.id ? "Opening…" : "View"}
-              </Button>
+              <div className="flex items-center gap-1.5">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="h-8 cursor-pointer gap-1.5 transition-colors duration-200"
+                  disabled={openingId === row.id || downloadingId === row.id}
+                  onClick={() => void onOpen(row)}
+                >
+                  <Eye className="size-3.5" />
+                  {openingId === row.id ? "Opening…" : "View"}
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  className="h-8 cursor-pointer gap-1.5 transition-colors duration-200"
+                  disabled={openingId === row.id || downloadingId === row.id}
+                  onClick={() => void onDownload(row)}
+                >
+                  <Download className="size-3.5" />
+                  {downloadingId === row.id ? "…" : "Download"}
+                </Button>
+              </div>
             </li>
           ))}
         </ul>

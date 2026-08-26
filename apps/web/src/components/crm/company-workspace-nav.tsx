@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { History, Plus } from "lucide-react";
 
+import { ContactFormDialog } from "@/components/crm/sales/contact-form-dialog";
 import { FollowupFormDialog } from "@/components/crm/sales/followup-form-dialog";
 import { MeetingFormDialog } from "@/components/crm/sales/meeting-form-dialog";
 import { OpportunityAttachmentsPanel } from "@/components/crm/sales/opportunity-attachments-panel";
@@ -12,11 +13,10 @@ import { OpportunityTimelinePanel } from "@/components/crm/sales/opportunity-tim
 import { TaskAssignmentFormDialog } from "@/components/crm/sales/task-assignment-form-dialog";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { cachedFetch, invalidateClientCache } from "@/lib/client-cache";
-import { setCrmOpportunityContext, setCrmSidebarFocus } from "@/lib/crm-sidebar-focus";
 import {
   getCompany,
   listAttachments,
+  listAttachmentsByCategory,
   listContacts,
   listFollowups,
   listMeetings,
@@ -31,8 +31,9 @@ import {
   type Opportunity,
   type SalesLead,
 } from "@/services/sales-crm-service";
+import { setCrmOpportunityContext, setCrmSidebarFocus } from "@/lib/crm-sidebar-focus";
 
-type QuickCreateKind = "task" | "followup" | "lead" | "meeting" | "attachment" | "kyc";
+type QuickCreateKind = "task" | "followup" | "lead" | "meeting" | "attachment" | "kyc" | "contact";
 
 type NavItem = {
   title: string;
@@ -66,13 +67,13 @@ export const COMPANY_WORKSPACE_NAV: readonly NavItem[] = [
   { title: "Quotes", segment: "quotes" },
   { title: "Purchase Order", segment: "purchase-orders" },
   { title: "OVF", segment: "ovf" },
-  { title: "Contacts", segment: "contacts", companyOnly: true },
+  { title: "Contacts", segment: "contacts", companyOnly: true, quickCreate: "contact" },
   { title: "Products", segment: "products" },
   { title: "Meetings", segment: "meetings", companyOnly: true, quickCreate: "meeting" },
   { title: "Customer Follow Ups", segment: "customer-followups", quickCreate: "followup" },
   { title: "KYC - Account Mapping", segment: "kyc-account-mapping", companyOnly: true, quickCreate: "kyc" },
-  { title: "OEM", segment: "oem" },
-  { title: "Distributor", segment: "distributors" },
+  { title: "OEM / Brand", segment: "oem" },
+  { title: "Distributor / Vendor", segment: "distributors" },
   { title: "BOQ", segment: "boq" },
   { title: "SOW", segment: "sow" },
   { title: "Entity", segment: "entities" },
@@ -87,8 +88,6 @@ const NAV_WIDTH = 220;
 
 type CountMap = Partial<Record<string, number>>;
 
-const NAV_COUNT_TTL_MS = 45_000;
-
 function countLeadField(
   leads: SalesLead[],
   pick: (lead: SalesLead) => string | null | undefined,
@@ -96,98 +95,87 @@ function countLeadField(
   return leads.filter((lead) => Boolean(pick(lead)?.trim())).length;
 }
 
-function flaggedOpportunityCount(
-  opportunities: Opportunity[],
+function scopedAttachmentCount(
+  files: Attachment[],
+  oppIds: Set<string>,
+  flaggedOpps: Opportunity[],
   flag: keyof Opportunity,
 ): number {
-  return opportunities.filter((opp) => Boolean(opp[flag])).length;
+  const fromFiles = files.filter(
+    (file) => file.entity_type === "opportunity" && oppIds.has(file.entity_id),
+  ).length;
+  if (fromFiles > 0) return fromFiles;
+  return flaggedOpps.filter((opp) => Boolean(opp[flag])).length;
 }
 
 async function loadCompanyNavCounts(
   companyAccountId: string,
   opportunityId?: string,
-  bypassCache = false,
 ): Promise<CountMap> {
-  const cacheKey = `crm:nav-counts:${companyAccountId}:${opportunityId ?? "company"}`;
-  if (bypassCache) {
-    invalidateClientCache(`crm:nav-counts:${companyAccountId}`);
-    invalidateClientCache(`crm:leads:${companyAccountId}`);
-    invalidateClientCache(`crm:opps:${companyAccountId}`);
-    invalidateClientCache(`crm:quotes:${companyAccountId}`);
-    invalidateClientCache(`crm:ovfs:${companyAccountId}`);
-    invalidateClientCache(`crm:followups:${companyAccountId}`);
-    invalidateClientCache(`crm:contacts:${companyAccountId}`);
-    invalidateClientCache(`crm:meetings:${companyAccountId}`);
-    invalidateClientCache("crm:products");
-  }
+  const [
+    leads,
+    opportunities,
+    quotes,
+    ovfs,
+    products,
+    followups,
+    contacts,
+    meetings,
+    oemQuotes,
+    purchaseOrders,
+    boqs,
+    sows,
+    tasks,
+    opportunityAttachments,
+  ] = await Promise.all([
+    listSalesLeads(companyAccountId).catch(() => [] as SalesLead[]),
+    listOpportunities({ company_account_id: companyAccountId }).catch(() => [] as Opportunity[]),
+    listQuotes({ company_account_id: companyAccountId }).catch(() => []),
+    listOvfs({ company_account_id: companyAccountId }).catch(() => []),
+    listProducts().catch(() => []),
+    listFollowups(companyAccountId).catch(() => []),
+    listContacts(companyAccountId).catch(() => []),
+    listMeetings(companyAccountId).catch(() => []),
+    listAttachmentsByCategory("oem_quote").catch(() => [] as Attachment[]),
+    listAttachmentsByCategory("customer_po").catch(() => [] as Attachment[]),
+    listAttachmentsByCategory("boq").catch(() => [] as Attachment[]),
+    listAttachmentsByCategory("sow").catch(() => [] as Attachment[]),
+    opportunityId
+      ? listTasks({ opportunity_id: opportunityId }).catch(() => [])
+      : Promise.resolve([]),
+    opportunityId
+      ? listAttachments("opportunity", opportunityId).catch(() => [] as Attachment[])
+      : Promise.resolve([] as Attachment[]),
+  ]);
 
-  return cachedFetch(cacheKey, NAV_COUNT_TTL_MS, async () => {
-    // Keep this lean: avoid tenant-wide attachment category scans (very slow).
-    // Document pane counts use opportunity attachment flags instead.
-    const [
-      leads,
+  const oppIds = new Set(opportunities.map((opp) => opp.id));
+
+  return {
+    leads: leads.length,
+    opportunities: opportunities.length,
+    "task-assignment": tasks.length,
+    attachments: opportunityAttachments.length,
+    quotes: quotes.length,
+    ovf: ovfs.length,
+    products: products.length,
+    "customer-followups": followups.length,
+    contacts: contacts.length,
+    meetings: meetings.length,
+    "kyc-account-mapping": 1,
+    "oem-quotes": scopedAttachmentCount(oemQuotes, oppIds, opportunities, "oem_quote_attached"),
+    "purchase-orders": scopedAttachmentCount(
+      purchaseOrders,
+      oppIds,
       opportunities,
-      quotes,
-      ovfs,
-      products,
-      followups,
-      contacts,
-      meetings,
-      tasks,
-      opportunityAttachments,
-    ] = await Promise.all([
-      cachedFetch(`crm:leads:${companyAccountId}`, NAV_COUNT_TTL_MS, () =>
-        listSalesLeads(companyAccountId),
-      ).catch(() => [] as SalesLead[]),
-      cachedFetch(`crm:opps:${companyAccountId}`, NAV_COUNT_TTL_MS, () =>
-        listOpportunities({ company_account_id: companyAccountId }),
-      ).catch(() => [] as Opportunity[]),
-      cachedFetch(`crm:quotes:${companyAccountId}`, NAV_COUNT_TTL_MS, () =>
-        listQuotes({ company_account_id: companyAccountId }),
-      ).catch(() => []),
-      cachedFetch(`crm:ovfs:${companyAccountId}`, NAV_COUNT_TTL_MS, () =>
-        listOvfs({ company_account_id: companyAccountId }),
-      ).catch(() => []),
-      cachedFetch("crm:products", NAV_COUNT_TTL_MS, () => listProducts()).catch(() => []),
-      cachedFetch(`crm:followups:${companyAccountId}`, NAV_COUNT_TTL_MS, () =>
-        listFollowups(companyAccountId),
-      ).catch(() => []),
-      cachedFetch(`crm:contacts:${companyAccountId}`, NAV_COUNT_TTL_MS, () =>
-        listContacts(companyAccountId),
-      ).catch(() => []),
-      cachedFetch(`crm:meetings:${companyAccountId}`, NAV_COUNT_TTL_MS, () =>
-        listMeetings(companyAccountId),
-      ).catch(() => []),
-      opportunityId
-        ? listTasks({ opportunity_id: opportunityId }).catch(() => [])
-        : Promise.resolve([]),
-      opportunityId
-        ? listAttachments("opportunity", opportunityId).catch(() => [] as Attachment[])
-        : Promise.resolve([] as Attachment[]),
-    ]);
-
-    return {
-      leads: leads.length,
-      opportunities: opportunities.length,
-      "task-assignment": tasks.length,
-      attachments: opportunityAttachments.length,
-      quotes: quotes.length,
-      ovf: ovfs.length,
-      products: products.length,
-      "customer-followups": followups.length,
-      contacts: contacts.length,
-      meetings: meetings.length,
-      "kyc-account-mapping": 1,
-      "oem-quotes": flaggedOpportunityCount(opportunities, "oem_quote_attached"),
-      "purchase-orders": flaggedOpportunityCount(opportunities, "customer_po_attached"),
-      boq: flaggedOpportunityCount(opportunities, "boq_attached"),
-      sow: flaggedOpportunityCount(opportunities, "sow_attached"),
-      oem: countLeadField(leads, (l) => l.oem_name),
-      distributors: countLeadField(leads, (l) => l.distributor_name),
-      entities: countLeadField(leads, (l) => l.entity_name),
-      "end-customers": countLeadField(leads, (l) => l.end_customer_name),
-    };
-  });
+      "customer_po_attached",
+    ),
+    boq: scopedAttachmentCount(boqs, oppIds, opportunities, "boq_attached"),
+    sow: scopedAttachmentCount(sows, oppIds, opportunities, "sow_attached"),
+    oem: countLeadField(leads, (l) => l.oem_name),
+    distributors: countLeadField(leads, (l) => l.distributor_name),
+    entities: countLeadField(leads, (l) => l.entity_name),
+    "end-customers": countLeadField(leads, (l) => l.end_customer_name),
+  };
 }
 
 /** Internal company/opportunity sidebar — fixed under the app topbar, full remaining height. */
@@ -197,7 +185,6 @@ export function CompanyWorkspaceNav({
   opportunityId,
   opportunity,
   company: companyProp,
-  refreshKey = 0,
 }: {
   companyAccountId: string;
   /** `company` includes Contacts / Meetings / KYC; `opportunity` hides those. */
@@ -207,8 +194,6 @@ export function CompanyWorkspaceNav({
   /** Prefill task/follow-up forms from the open opportunity page. */
   opportunity?: Opportunity | null;
   company?: Company | null;
-  /** Bump to force nav count reload (e.g. header Refresh). */
-  refreshKey?: number;
 }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -221,6 +206,7 @@ export function CompanyWorkspaceNav({
   const [attachmentsOpen, setAttachmentsOpen] = useState(false);
   const [followupOpen, setFollowupOpen] = useState(false);
   const [meetingOpen, setMeetingOpen] = useState(false);
+  const [contactOpen, setContactOpen] = useState(false);
   const [company, setCompany] = useState<Company | null>(companyProp ?? null);
   const items = COMPANY_WORKSPACE_NAV.filter((item) => {
     if (scope === "company") return !item.opportunityOnly;
@@ -243,7 +229,7 @@ export function CompanyWorkspaceNav({
   function canQuickCreate(kind: QuickCreateKind | undefined): boolean {
     if (!kind) return false;
     if (kind === "task" || kind === "attachment") return isOpportunityScope;
-    if (kind === "lead" || kind === "meeting" || kind === "kyc") return isCompanyScope;
+    if (kind === "lead" || kind === "meeting" || kind === "kyc" || kind === "contact") return isCompanyScope;
     // Company sidebar: no hover "+" — create from the follow-ups page / opportunity only.
     if (kind === "followup") return isOpportunityScope;
     return false;
@@ -285,7 +271,7 @@ export function CompanyWorkspaceNav({
       return;
     }
     let cancelled = false;
-    void cachedFetch(`crm:company:${companyAccountId}`, 30_000, () => getCompany(companyAccountId))
+    void getCompany(companyAccountId)
       .then((row) => {
         if (!cancelled) setCompany(row);
       })
@@ -299,15 +285,13 @@ export function CompanyWorkspaceNav({
 
   useEffect(() => {
     let cancelled = false;
-    const bypassCache = refreshKey > 0;
-    void loadCompanyNavCounts(companyAccountId, opportunityId, bypassCache).then((next) => {
+    void loadCompanyNavCounts(companyAccountId, opportunityId).then((next) => {
       if (!cancelled) setCounts(next);
     });
     return () => {
       cancelled = true;
     };
-    // Do not refetch on pathname or dialog open — saves fire explicit count reloads.
-  }, [companyAccountId, opportunityId, refreshKey]);
+  }, [companyAccountId, opportunityId, pathname, taskOpen, attachmentsOpen, followupOpen, meetingOpen, contactOpen]);
 
   function onQuickCreate(kind: QuickCreateKind) {
     if (kind === "task") {
@@ -326,8 +310,12 @@ export function CompanyWorkspaceNav({
       setMeetingOpen(true);
       return;
     }
+    if (kind === "contact") {
+      setContactOpen(true);
+      return;
+    }
     if (kind === "kyc") {
-      router.push("/crm/companies/new");
+      router.push(`${base}/kyc/new`);
       return;
     }
     if (kind === "lead") {
@@ -506,7 +494,7 @@ export function CompanyWorkspaceNav({
             onClose={() => setTaskOpen(false)}
             onSaved={() => {
               setTaskOpen(false);
-              void loadCompanyNavCounts(companyAccountId, opportunityId, true).then(setCounts);
+              void loadCompanyNavCounts(companyAccountId, opportunityId).then(setCounts);
             }}
           />
           <OpportunityAttachmentsPanel
@@ -515,7 +503,7 @@ export function CompanyWorkspaceNav({
             opportunity={opportunity ?? null}
             onClose={() => {
               setAttachmentsOpen(false);
-              void loadCompanyNavCounts(companyAccountId, opportunityId, true).then(setCounts);
+              void loadCompanyNavCounts(companyAccountId, opportunityId).then(setCounts);
             }}
           />
         </>
@@ -525,25 +513,37 @@ export function CompanyWorkspaceNav({
         <FollowupFormDialog
           open={followupOpen}
           companyAccount={company}
+          companyAccountId={companyAccountId}
           opportunityId={isOpportunityScope ? opportunityId : null}
           onClose={() => setFollowupOpen(false)}
           onSaved={() => {
             setFollowupOpen(false);
-            void loadCompanyNavCounts(companyAccountId, opportunityId, true).then(setCounts);
+            void loadCompanyNavCounts(companyAccountId, opportunityId).then(setCounts);
           }}
         />
       ) : null}
 
       {isCompanyScope ? (
-        <MeetingFormDialog
-          open={meetingOpen}
-          companyAccount={company}
-          onClose={() => setMeetingOpen(false)}
-          onSaved={() => {
-            setMeetingOpen(false);
-            void loadCompanyNavCounts(companyAccountId, opportunityId, true).then(setCounts);
-          }}
-        />
+        <>
+          <MeetingFormDialog
+            open={meetingOpen}
+            companyAccount={company}
+            onClose={() => setMeetingOpen(false)}
+            onSaved={() => {
+              setMeetingOpen(false);
+              void loadCompanyNavCounts(companyAccountId, opportunityId).then(setCounts);
+            }}
+          />
+          <ContactFormDialog
+            open={contactOpen}
+            companyAccount={company}
+            onClose={() => setContactOpen(false)}
+            onSaved={() => {
+              setContactOpen(false);
+              void loadCompanyNavCounts(companyAccountId, opportunityId).then(setCounts);
+            }}
+          />
+        </>
       ) : null}
     </>
   );

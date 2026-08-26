@@ -2,7 +2,7 @@
 
 from uuid import UUID, uuid4
 
-from sqlalchemy import BigInteger, CheckConstraint, String, Text
+from sqlalchemy import BigInteger, CheckConstraint, String
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -14,7 +14,7 @@ class CrmAttachment(Base, *CrmDetailMixin):
     __tablename__ = "crm_attachment"
     __table_args__ = (
         CheckConstraint(
-            "category IN ('boq','sow','oem_quote','customer_po','vendor_quote','vendor_invoice','other')",
+            "category IN ('boq','sow','oem_quote','customer_po','vendor_quote','vendor_invoice','contract','other')",
             name="ck_crm_attachment_category",
         ),
         CheckConstraint(
@@ -33,5 +33,4 @@ class CrmAttachment(Base, *CrmDetailMixin):
     size: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     uploaded_by: Mapped[UUID | None] = mapped_column(PG_UUID(as_uuid=True), nullable=True)
     category: Mapped[str] = mapped_column(String(30), nullable=False, default="other")
-    remarks: Mapped[str | None] = mapped_column(Text, nullable=True)
     source: Mapped[str] = mapped_column(String(30), nullable=False, default="upload")

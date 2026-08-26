@@ -1,15 +1,6 @@
-import * as XLSX from "xlsx";
-
+import { escapeHtml, openPrintDocument } from "@/lib/html";
+import { downloadCsv, downloadXlsx } from "@/lib/spreadsheet";
 import type { ArAgingBucket, ArEntry } from "@/services/ar-service";
-
-function downloadBlob(filename: string, blob: Blob) {
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = filename;
-  a.click();
-  URL.revokeObjectURL(url);
-}
 
 function invoiceRowsForExport(rows: ArEntry[]) {
   return rows.map((r) => ({
@@ -38,49 +29,38 @@ function agingRowsForExport(buckets: ArAgingBucket[]) {
 }
 
 export function exportArInvoicesCsv(rows: ArEntry[]) {
-  const data = invoiceRowsForExport(rows);
-  const ws = XLSX.utils.json_to_sheet(data);
-  const csv = XLSX.utils.sheet_to_csv(ws);
-  downloadBlob(
+  downloadCsv(
     `accounts-receivable-${new Date().toISOString().slice(0, 10)}.csv`,
-    new Blob([`\uFEFF${csv}`], { type: "text/csv;charset=utf-8" }),
+    invoiceRowsForExport(rows),
   );
 }
 
-export function exportArInvoicesXlsx(rows: ArEntry[]) {
-  const data = invoiceRowsForExport(rows);
-  const ws = XLSX.utils.json_to_sheet(data);
-  const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, "AR Invoices");
-  const buffer = XLSX.write(wb, { bookType: "xlsx", type: "array" });
-  downloadBlob(
+export async function exportArInvoicesXlsx(rows: ArEntry[]) {
+  await downloadXlsx(
     `accounts-receivable-${new Date().toISOString().slice(0, 10)}.xlsx`,
-    new Blob([buffer], {
-      type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-    }),
+    [{ name: "AR Invoices", rows: invoiceRowsForExport(rows) }],
   );
 }
 
 export function printArInvoicesTable(title: string, rows: ArEntry[]) {
-  const win = window.open("", "_blank", "noopener,noreferrer,width=1200,height=800");
-  if (!win) return;
+  const safeTitle = escapeHtml(title);
   const body = rows
     .map(
       (r) =>
         `<tr>
-          <td>${r.document_number}</td>
-          <td>${r.customer_name ?? r.customer_code ?? ""}</td>
-          <td>${r.document_date}</td>
-          <td>${r.due_date}</td>
-          <td>${r.status}</td>
-          <td>${r.currency_code}</td>
+          <td>${escapeHtml(r.document_number)}</td>
+          <td>${escapeHtml(r.customer_name ?? r.customer_code ?? "")}</td>
+          <td>${escapeHtml(r.document_date)}</td>
+          <td>${escapeHtml(r.due_date)}</td>
+          <td>${escapeHtml(r.status)}</td>
+          <td>${escapeHtml(r.currency_code)}</td>
           <td style="text-align:right">${Number(r.outstanding_amount ?? r.balance_amount).toFixed(2)}</td>
           <td style="text-align:right">${Number(r.paid_amount ?? 0).toFixed(2)}</td>
           <td style="text-align:right">${Number(r.balance_amount).toFixed(2)}</td>
         </tr>`,
     )
     .join("");
-  win.document.write(`<!doctype html><html><head><title>${title}</title>
+  openPrintDocument(`<!doctype html><html><head><title>${safeTitle}</title>
     <style>
       body{font-family:Inter,system-ui,sans-serif;font-size:12px;color:#0f172a;padding:24px}
       h1{font-size:16px;margin:0 0 12px}
@@ -88,53 +68,37 @@ export function printArInvoicesTable(title: string, rows: ArEntry[]) {
       th,td{border:1px solid #e2e8f0;padding:6px 8px;text-align:left}
       th{background:#f8fafc;font-size:11px;text-transform:uppercase}
     </style></head><body>
-    <h1>${title}</h1>
+    <h1>${safeTitle}</h1>
     <table><thead><tr>
       <th>Invoice No</th><th>Customer</th><th>Invoice Date</th><th>Due Date</th><th>Status</th><th>Currency</th><th>Outstanding</th><th>Paid</th><th>Balance</th>
     </tr></thead><tbody>${body}</tbody></table>
-    <script>window.onload=()=>{window.print();}</script>
     </body></html>`);
-  win.document.close();
 }
 
 export function exportArAgingCsv(buckets: ArAgingBucket[], asOf: string) {
-  const data = agingRowsForExport(buckets);
-  const ws = XLSX.utils.json_to_sheet(data);
-  const csv = XLSX.utils.sheet_to_csv(ws);
-  downloadBlob(
-    `ar-aging-${asOf}.csv`,
-    new Blob([`\uFEFF${csv}`], { type: "text/csv;charset=utf-8" }),
-  );
+  downloadCsv(`ar-aging-${asOf}.csv`, agingRowsForExport(buckets));
 }
 
-export function exportArAgingXlsx(buckets: ArAgingBucket[], asOf: string) {
-  const data = agingRowsForExport(buckets);
-  const ws = XLSX.utils.json_to_sheet(data);
-  const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, "AR Aging");
-  const buffer = XLSX.write(wb, { bookType: "xlsx", type: "array" });
-  downloadBlob(
-    `ar-aging-${asOf}.xlsx`,
-    new Blob([buffer], {
-      type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-    }),
-  );
+export async function exportArAgingXlsx(buckets: ArAgingBucket[], asOf: string) {
+  await downloadXlsx(`ar-aging-${asOf}.xlsx`, [
+    { name: "AR Aging", rows: agingRowsForExport(buckets) },
+  ]);
 }
 
 export function printArAgingTable(title: string, buckets: ArAgingBucket[]) {
-  const win = window.open("", "_blank", "noopener,noreferrer,width=800,height=600");
-  if (!win) return;
+  const safeTitle = escapeHtml(title);
   const body = buckets
     .map(
       (b) =>
         `<tr>
-          <td>${b.bucket}</td>
+          <td>${escapeHtml(b.bucket)}</td>
           <td style="text-align:right">${Number(b.amount).toFixed(2)}</td>
-          <td style="text-align:right">${b.count}</td>
+          <td style="text-align:right">${escapeHtml(b.count)}</td>
         </tr>`,
     )
     .join("");
-  win.document.write(`<!doctype html><html><head><title>${title}</title>
+  openPrintDocument(
+    `<!doctype html><html><head><title>${safeTitle}</title>
     <style>
       body{font-family:Inter,system-ui,sans-serif;font-size:12px;color:#0f172a;padding:24px}
       h1{font-size:16px;margin:0 0 12px}
@@ -142,11 +106,12 @@ export function printArAgingTable(title: string, buckets: ArAgingBucket[]) {
       th,td{border:1px solid #e2e8f0;padding:6px 8px;text-align:left}
       th{background:#f8fafc;font-size:11px;text-transform:uppercase}
     </style></head><body>
-    <h1>${title}</h1>
+    <h1>${safeTitle}</h1>
     <table><thead><tr>
       <th>Bucket</th><th>Amount</th><th>Count</th>
     </tr></thead><tbody>${body}</tbody></table>
-    <script>window.onload=()=>{window.print();}</script>
-    </body></html>`);
-  win.document.close();
+    </body></html>`,
+    800,
+    600,
+  );
 }

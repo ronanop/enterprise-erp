@@ -26,10 +26,14 @@ import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import {
+  findLatestCreatePoInStockApprovalForOvf,
   latestPoApprovalByOrderId,
   PROCUREMENT_APPROVALS_EVENT,
+  submitCreatePoInStockApproval,
   type PoApprovalRequest,
+  type PoApprovalStatus,
 } from "@/lib/procurement-approvals";
+import { useProcurementRole } from "@/hooks/use-procurement-role";
 import { ApiClientError } from "@/services/api-client";
 import {
   formatInr,
@@ -38,9 +42,14 @@ import {
   peekScmQueueFromCache,
   type ScmQueueItem,
 } from "@/services/procurement-service";
+import { resolveVendorDisplayName } from "@/utils/vendor-oem-match";
 import { textTokenMatch } from "@/utils/procurement-search";
 import { getUnseenScmOvfIds, markScmQueueSeen } from "@/utils/scm-queue-seen";
-import { ovfCreatePoRemainderHref, ovfFromStockHref } from "@/utils/ovf-stock";
+import {
+  isInStockDistributor,
+  ovfCreatePoRemainderHref,
+  ovfFromStockHref,
+} from "@/utils/ovf-stock";
 
 type QueueFilter = "all" | "open" | "close" | "hold";
 type OvfStatus = "open" | "close" | "hold" | "draft";
@@ -153,7 +162,7 @@ function scmQueueRowMatchesSearch(
 
   const poNumber = String(row.company_po_number ?? "").toLowerCase();
   const customerName = String(row.customer_name ?? "").toLowerCase();
-  const vendorName = String(row.vendor_name ?? row.oem_name ?? "").toLowerCase();
+  const vendorName = String(row.distributor_name ?? "").toLowerCase();
 
   return tokens.every((token) => {
     if (/^\d+$/.test(token)) {
@@ -218,6 +227,7 @@ export function ScmQueuePage() {
   const searchParams = useSearchParams();
   const filter = parseQueueFilter(searchParams.get("filter"));
 
+  const { isAdmin } = useProcurementRole();
   const cachedOnMount = peekScmQueueFromCache();
   const [rows, setRows] = useState<ScmQueueItem[]>(() => cachedOnMount ?? []);
   const [loading, setLoading] = useState(() => cachedOnMount === null);
@@ -228,6 +238,10 @@ export function ScmQueuePage() {
   const [approvalsByOrder, setApprovalsByOrder] = useState<Map<string, PoApprovalRequest>>(
     () => latestPoApprovalByOrderId(),
   );
+  const [createPoApprovalByOvf, setCreatePoApprovalByOvf] = useState<
+    Map<string, PoApprovalStatus>
+  >(() => new Map());
+  const [requestBusyOvfId, setRequestBusyOvfId] = useState<string | null>(null);
   const queueOvfIdsRef = useRef<string[]>([]);
 
   const setFilter = useCallback(
@@ -271,6 +285,12 @@ export function ScmQueuePage() {
   useEffect(() => {
     const syncApprovals = () => {
       setApprovalsByOrder(latestPoApprovalByOrderId());
+      const map = new Map<string, PoApprovalStatus>();
+      for (const row of rows) {
+        const approval = findLatestCreatePoInStockApprovalForOvf(row.ovf_id);
+        if (approval) map.set(row.ovf_id, approval.status);
+      }
+      setCreatePoApprovalByOvf(map);
     };
     syncApprovals();
     window.addEventListener(PROCUREMENT_APPROVALS_EVENT, syncApprovals);
@@ -279,7 +299,7 @@ export function ScmQueuePage() {
       window.removeEventListener(PROCUREMENT_APPROVALS_EVENT, syncApprovals);
       window.removeEventListener("storage", syncApprovals);
     };
-  }, []);
+  }, [rows]);
 
   useEffect(() => {
     if (loading) return;
@@ -517,7 +537,7 @@ export function ScmQueuePage() {
                       {payTermsLabel(row.customer_payment_days)}
                     </td>
                     <td className="px-3 py-2">
-                      {row.vendor_name?.trim() || row.oem_name?.trim() || "—"}
+                      {resolveVendorDisplayName(row)}
                     </td>
                     <td className="px-3 py-2 text-muted-foreground">
                       {payTermsLabel(row.vendor_payment_days)}
@@ -576,6 +596,33 @@ export function ScmQueuePage() {
                           scmOnHold={ovfStatus === "hold" && Boolean(row.scm_on_hold)}
                           scmOnHoldAt={row.scm_on_hold_at}
                           className="cursor-pointer transition-colors duration-200"
+                          requiresInStockApproval={isInStockDistributor(row.distributor_name)}
+                          createPoApprovalStatus={createPoApprovalByOvf.get(row.ovf_id) ?? null}
+                          canCreateWithoutApproval={isAdmin}
+                          requestBusy={requestBusyOvfId === row.ovf_id}
+                          onRequestCreatePoApproval={() => {
+                            setRequestBusyOvfId(row.ovf_id);
+                            try {
+                              submitCreatePoInStockApproval({
+                                ovfId: row.ovf_id,
+                                ovfNo: row.ovf_no,
+                                customerName: row.customer_name || row.account_name,
+                                vendorName: row.distributor_name || "IN STOCK",
+                                reason:
+                                  row.stock_fulfillment_status === "partial" ||
+                                  (Number(row.remaining_demand_qty) || 0) > 0
+                                    ? "stock_short"
+                                    : "user_choice",
+                              });
+                              setCreatePoApprovalByOvf((prev) => {
+                                const next = new Map(prev);
+                                next.set(row.ovf_id, "pending");
+                                return next;
+                              });
+                            } finally {
+                              setRequestBusyOvfId(null);
+                            }
+                          }}
                         />
                       ) : poStatus === "from_stock" ? (
                         <Link

@@ -74,12 +74,17 @@ export function pushPoApprovalDecisionNotification(input: {
   companyPoNumber?: string | null;
   documentNumber: string;
   decision: "accepted" | "rejected";
+  kind?: "finalize" | "create_po_in_stock";
 }): PoApprovalDecisionNotification {
   const poLabel = input.companyPoNumber?.trim() || input.documentNumber;
   const message =
-    input.decision === "accepted"
-      ? `Admin accepted ${poLabel}. The purchase order is issued.`
-      : `Admin rejected ${poLabel}. Edit and resubmit for approval if needed.`;
+    input.kind === "create_po_in_stock"
+      ? input.decision === "accepted"
+        ? `Admin approved Create PO for ${poLabel} (IN STOCK). You can create the purchase order now.`
+        : `Admin rejected Create PO for ${poLabel} (IN STOCK). Use inventory or request again if needed.`
+      : input.decision === "accepted"
+        ? `Admin accepted ${poLabel}. The purchase order is issued.`
+        : `Admin rejected ${poLabel}. Edit and resubmit for approval if needed.`;
   const row: PoApprovalDecisionNotification = {
     id: crypto.randomUUID(),
     approvalId: input.approvalId,

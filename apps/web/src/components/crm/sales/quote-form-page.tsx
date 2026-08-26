@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { ArrowLeft, Building2, FileText, ListOrdered, Paperclip, Plus, Scale, Trash2 } from "lucide-react";
 
 import { CrmErrorBanner, CrmIconBadge, CrmListPanel, CrmPage, CrmSection } from "@/components/crm/crm-ui";
+import { CrmSessionEmployeeField } from "@/components/crm/sales/crm-session-employee-field";
 import {
   FinanceField,
   FinanceSelect,
@@ -18,6 +19,8 @@ import {
 import { PageHeader } from "@/components/layout/page-header";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { useAuthUser } from "@/hooks/use-auth-user";
+import { resolveSessionEmployeeLabel } from "@/lib/crm/session-employee";
 import { ApiClientError } from "@/services/api-client";
 import {
   addQuoteLine,
@@ -33,7 +36,7 @@ import {
   getQuote,
   getSalesLead,
   listContacts,
-  listEmployeeOptions,
+  listCrmMemberOptions,
   listQuoteLines,
   updateQuote,
   updateQuoteLine,
@@ -129,10 +132,10 @@ export function QuoteFormPage({
 }) {
   const router = useRouter();
   const isEdit = Boolean(quoteId);
+  const { user } = useAuthUser();
   const [quote, setQuote] = useState<Quote | null>(null);
   const [opportunity, setOpportunity] = useState<Opportunity | null>(null);
   const [contacts, setContacts] = useState<Contact[]>([]);
-  const [employees, setEmployees] = useState<Option[]>([]);
   const [form, setForm] = useState<QuoteDraft>(EMPTY_FORM);
   const [lines, setLines] = useState<LineDraft[]>([]);
   const [initialLineIds, setInitialLineIds] = useState<string[]>([]);
@@ -161,12 +164,11 @@ export function QuoteFormPage({
           quoteRow.company_account_id
             ? listContacts(quoteRow.company_account_id).catch(() => [])
             : Promise.resolve([]),
-          listEmployeeOptions().catch(() => []),
+          listCrmMemberOptions().catch(() => []),
         ]);
         setQuote(quoteRow);
         setOpportunity(opportunityRow);
         setContacts(contactRows);
-        setEmployees(employeeRows);
         setForm({
           project_title: quoteRow.project_title ?? "",
           account_name: quoteRow.account_name ?? "",
@@ -190,19 +192,19 @@ export function QuoteFormPage({
         const mappedLines =
           lineRows.length > 0
             ? lineRows.map((line) => ({
-                key: line.id,
-                serverId: line.id,
-                product_name: line.product_name,
-                hsn_sac: line.hsn_sac ?? "",
-                description: line.description ?? "",
-                line_type: line.line_type || "hardware",
-                qty: String(line.qty ?? 1),
-                unit_cost: String(line.unit_cost ?? 0),
-                unit_sell: String(line.unit_cost ?? 0),
-                margin_pct: String(line.margin_pct ?? 0),
-                gst_pct: String(line.gst_pct ?? 0),
-                vendorFile: null,
-              }))
+              key: line.id,
+              serverId: line.id,
+              product_name: line.product_name,
+              hsn_sac: line.hsn_sac ?? "",
+              description: line.description ?? "",
+              line_type: line.line_type || "hardware",
+              qty: String(line.qty ?? 1),
+              unit_cost: String(line.unit_cost ?? 0),
+              unit_sell: String(line.unit_cost ?? 0),
+              margin_pct: String(line.margin_pct ?? 0),
+              gst_pct: String(line.gst_pct ?? 0),
+              vendorFile: null,
+            }))
             : [newLine()];
         setLines(mappedLines);
         setInitialLineIds(lineRows.map((line) => line.id));
@@ -224,7 +226,7 @@ export function QuoteFormPage({
         opportunityRow.company_account_id
           ? listContacts(opportunityRow.company_account_id).catch(() => [])
           : Promise.resolve([]),
-        listEmployeeOptions().catch(() => []),
+        listCrmMemberOptions().catch(() => []),
         getOpportunityBlueprint(opportunityId).catch(() => null),
       ]);
       if (
@@ -239,22 +241,22 @@ export function QuoteFormPage({
       }
       setOpportunity(opportunityRow);
       setContacts(contactRows);
-      setEmployees(employeeRows);
 
       const billingAddress = companyRow
         ? [
-            companyRow.billing_street,
-            companyRow.billing_city,
-            companyRow.billing_state,
-            companyRow.billing_code,
-            companyRow.billing_country,
-          ]
-            .filter(Boolean)
-            .join(", ")
+          companyRow.billing_street,
+          companyRow.billing_city,
+          companyRow.billing_state,
+          companyRow.billing_code,
+          companyRow.billing_country,
+        ]
+          .filter(Boolean)
+          .join(", ")
         : "";
       const primaryContact = contactRows.find((contact) => contact.is_primary) ?? contactRows[0];
       const ownerLabel =
-        employeeRows.find((employee) => employee.id === opportunityRow.owner_employee_id)?.label ??
+        resolveSessionEmployeeLabel(employeeRows, user) ||
+        employeeRows.find((employee) => employee.id === opportunityRow.owner_employee_id)?.label ||
         "";
       setForm({
         project_title: opportunityRow.project_title || opportunityRow.opportunity_name || "",
@@ -283,7 +285,7 @@ export function QuoteFormPage({
     } finally {
       setLoading(false);
     }
-  }, [isEdit, opportunityId, quoteId]);
+  }, [isEdit, opportunityId, quoteId, user]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => void load(), 0);
@@ -522,7 +524,7 @@ export function QuoteFormPage({
 
       <CrmSection title="Quote Information" icon={FileText} className="min-w-0 overflow-x-clip">
         <div className="grid min-w-0 gap-x-6 gap-y-3 md:grid-cols-2">
-          <FinanceField label="Customer's Project Title">
+          <FinanceField label="Project Title">
             <Input
               value={form.project_title}
               onChange={(event) => setField("project_title", event.target.value)}
@@ -557,19 +559,7 @@ export function QuoteFormPage({
               ))}
             </FinanceSelect>
           </FinanceField>
-          <FinanceField label="Quote Owner">
-            <FinanceSelect
-              value={form.owner_name}
-              onChange={(event) => setField("owner_name", event.target.value)}
-            >
-              <option value="">Select owner</option>
-              {employees.map((employee) => (
-                <option key={employee.id} value={employee.label}>
-                  {employee.label}
-                </option>
-              ))}
-            </FinanceSelect>
-          </FinanceField>
+          <CrmSessionEmployeeField label="Quote Owner" value={form.owner_name} />
           <FinanceField label="Service Type *">
             <FinanceSelect
               value={form.service_type}
@@ -598,17 +588,6 @@ export function QuoteFormPage({
           <FinanceField label="Version">
             <Input value={isEdit ? String(quote?.version ?? 1) : "1"} disabled />
           </FinanceField>
-          <FinanceField label="Approval Status">
-            <Input
-              value={
-                isEdit
-                  ? (quote?.approval_status ?? "").replaceAll("_", " ") || "-"
-                  : "Not required"
-              }
-              disabled
-              className="capitalize"
-            />
-          </FinanceField>
         </div>
       </CrmSection>
 
@@ -623,11 +602,12 @@ export function QuoteFormPage({
       </CrmSection>
 
       <CrmSection title="Additional Information" icon={FileText} className="min-w-0 overflow-x-clip">
-        <div className="min-w-0 space-y-3">
-          <FinanceField label="Sales Order ID"><Input value={opportunity?.sales_order_id ?? ""} disabled /></FinanceField>
-          <FinanceField label="Description"><FinanceTextarea value={form.description} onChange={(e) => setField("description", e.target.value)} /></FinanceField>
-          <FinanceField label="Reason For Discount"><FinanceTextarea value={form.reason_for_discount} onChange={(e) => setField("reason_for_discount", e.target.value)} /></FinanceField>
-        </div>
+        <FinanceField label="Remark">
+          <FinanceTextarea
+            value={form.description}
+            onChange={(e) => setField("description", e.target.value)}
+          />
+        </FinanceField>
       </CrmSection>
 
       <CrmSection title="Terms and Conditions" icon={Scale} className="min-w-0 overflow-x-clip">
@@ -680,7 +660,7 @@ export function QuoteFormPage({
         <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border/70 px-4 py-3">
           <div className="flex items-center gap-2.5">
             <CrmIconBadge icon={ListOrdered} />
-            <h2 className="text-sm font-medium">Quoted Items</h2>
+            <h2 className="text-base font-extrabold tracking-tight">Quoted Items</h2>
           </div>
           <Button
             type="button"

@@ -4,6 +4,8 @@ from fastapi import APIRouter
 
 from modules.hr.routers import (
     appraisals_router,
+    attendance_corrections_router,
+    attendance_rules_router,
     attendance_router,
     department_assignments_router,
     designation_assignments_router,
@@ -11,38 +13,74 @@ from modules.hr.routers import (
     employee_documents_router,
     employee_profiles_router,
     employment_router,
+    ess_inbox_router,
     goals_router,
+    grades_router,
     holiday_calendars_router,
+    job_levels_router,
+    kpis_router,
     leave_balances_router,
     leave_requests_router,
+    leave_adjustments_router,
     leave_types_router,
+    on_duty_router,
+    okrs_router,
+    ot_allotments_router,
+    compoff_requests_router,
+    biometric_devices_router,
+    shift_rotations_router,
+    shift_swaps_router,
     performance_reviews_router,
     reports_router,
+    roster_entries_router,
     separation_router,
     shift_assignments_router,
     shifts_router,
     training_attendance_router,
+    training_requests_router,
+    training_rooms_router,
     training_router,
+    weekly_off_policies_router,
+    management_groups_router,
 )
 
 hr_router = APIRouter(prefix="/hr")
 hr_router.include_router(designations_router)
+hr_router.include_router(job_levels_router)
+hr_router.include_router(grades_router)
 hr_router.include_router(employee_profiles_router)
 hr_router.include_router(employment_router)
 hr_router.include_router(department_assignments_router)
 hr_router.include_router(designation_assignments_router)
 hr_router.include_router(shifts_router)
 hr_router.include_router(shift_assignments_router)
+hr_router.include_router(roster_entries_router)
 hr_router.include_router(holiday_calendars_router)
 hr_router.include_router(leave_types_router)
 hr_router.include_router(leave_balances_router)
 hr_router.include_router(leave_requests_router)
+hr_router.include_router(leave_adjustments_router)
 hr_router.include_router(attendance_router)
+hr_router.include_router(attendance_corrections_router)
+hr_router.include_router(weekly_off_policies_router)
+hr_router.include_router(attendance_rules_router)
+hr_router.include_router(on_duty_router)
+hr_router.include_router(ot_allotments_router)
+hr_router.include_router(compoff_requests_router)
+hr_router.include_router(biometric_devices_router)
+hr_router.include_router(shift_rotations_router)
+hr_router.include_router(shift_swaps_router)
 hr_router.include_router(employee_documents_router)
 hr_router.include_router(performance_reviews_router)
 hr_router.include_router(goals_router)
+hr_router.include_router(kpis_router)
+hr_router.include_router(okrs_router)
 hr_router.include_router(appraisals_router)
 hr_router.include_router(training_router)
 hr_router.include_router(training_attendance_router)
+hr_router.include_router(training_rooms_router)
+hr_router.include_router(training_requests_router)
 hr_router.include_router(separation_router)
 hr_router.include_router(reports_router)
+hr_router.include_router(ess_inbox_router)
+hr_router.include_router(management_groups_router)

@@ -1,5 +1,5 @@
 import { clearTokens, getAccessToken, getRefreshToken, setTokens } from "@/lib/auth";
-import { env } from "@/utils/env";
+import { env, preferApiFallback, resolveApiUrl } from "@/utils/env";
 import type { ApiResponse, ErrorResponse, TokenData, UserProfile } from "@/types/api";
 
 export class ApiClientError extends Error {
@@ -13,7 +13,6 @@ export class ApiClientError extends Error {
   }
 }
 
-/** Surface API validation lines and non-ApiClientError messages in forms. */
 export function formatApiError(err: unknown, fallback: string): string {
   if (err instanceof ApiClientError) {
     if (err.errors.length > 0) {
@@ -33,97 +32,20 @@ type RequestOptions = Omit<RequestInit, "body"> & {
   query?: Record<string, string | number | boolean | null | undefined>;
   /** Internal: skip one refresh retry to avoid loops. */
   _retried?: boolean;
+  /** Internal: already tried API URL fallback. */
+  _urlFallbackTried?: boolean;
 };
 
-function buildUrl(path: string, query?: RequestOptions["query"]): string {
-  const normalizedPath = path.startsWith("/") ? path : `/${path}`;
-  const base = env.apiUrl.replace(/\/$/, "");
-  const url = `${base}${normalizedPath}`;
-  if (!query) return url;
+function buildUrl(path: string, query?: RequestOptions["query"], baseUrl?: string): string {
+  const base = `${baseUrl ?? env.apiUrl}${path}`;
+  if (!query) return base;
   const params = new URLSearchParams();
   for (const [key, value] of Object.entries(query)) {
     if (value === undefined || value === null || value === "") continue;
     params.set(key, String(value));
   }
   const qs = params.toString();
-  return qs ? `${url}?${qs}` : url;
-}
-
-function messageFromUnknownPayload(payload: unknown, fallback: string): string {
-  if (!payload || typeof payload !== "object") return fallback;
-  const record = payload as Record<string, unknown>;
-  if (record.success === false && typeof record.message === "string" && record.message.trim()) {
-    return record.message.trim();
-  }
-  if (typeof record.detail === "string" && record.detail.trim()) {
-    return record.detail.trim();
-  }
-  if (Array.isArray(record.detail)) {
-    const parts = record.detail
-      .map((item) => {
-        if (!item || typeof item !== "object") return "";
-        const row = item as Record<string, unknown>;
-        const msg = typeof row.msg === "string" ? row.msg : "";
-        const loc = Array.isArray(row.loc) ? row.loc.map(String).join(".") : "";
-        return loc && msg ? `${loc}: ${msg}` : msg || loc;
-      })
-      .filter(Boolean);
-    if (parts.length > 0) return parts.join("; ");
-  }
-  if (Array.isArray(record.errors) && record.errors.length > 0) {
-    return record.errors.map(String).join("; ");
-  }
-  return fallback;
-}
-
-async function parseJsonResponse<T>(
-  response: Response,
-): Promise<ApiResponse<T> | ErrorResponse> {
-  const text = await response.text();
-  if (!text.trim()) {
-    if (response.status === 401) {
-      return { success: false, message: "Session expired. Sign in again.", errors: [] };
-    }
-    throw new ApiClientError(
-      response.ok
-        ? "Empty API response"
-        : `API request failed (${response.status})`,
-      response.status,
-    );
-  }
-  try {
-    return JSON.parse(text) as ApiResponse<T> | ErrorResponse;
-  } catch {
-    const snippet = text.trimStart().slice(0, 80).toLowerCase();
-    if (snippet.startsWith("<!doctype") || snippet.startsWith("<html")) {
-      throw new ApiClientError(
-        "Received a web page instead of API data. Check NEXT_PUBLIC_API_URL is /api/v1 and the API is running.",
-        response.status,
-      );
-    }
-    try {
-      const partial = JSON.parse(text) as unknown;
-      const detail = messageFromUnknownPayload(partial, "");
-      if (detail) {
-        throw new ApiClientError(detail, response.status);
-      }
-    } catch (inner) {
-      if (inner instanceof ApiClientError) throw inner;
-    }
-    if (text.trim().toLowerCase() === "internal server error") {
-      throw new ApiClientError(
-        "Internal server error. Restart the ERP API (port 8000) and try again.",
-        response.status,
-      );
-    }
-    const preview = text.trim().replace(/\s+/g, " ").slice(0, 120);
-    throw new ApiClientError(
-      preview
-        ? `Invalid API response (${response.status}): ${preview}`
-        : `Invalid API response (${response.status})`,
-      response.status,
-    );
-  }
+  return qs ? `${base}?${qs}` : base;
 }
 
 let refreshInFlight: Promise<boolean> | null = null;
@@ -135,7 +57,8 @@ async function tryRefreshAccessToken(): Promise<boolean> {
   if (!refreshInFlight) {
     refreshInFlight = (async () => {
       try {
-        const response = await fetch(buildUrl("/auth/refresh"), {
+        const apiBase = await resolveApiUrl();
+        const response = await fetch(buildUrl("/auth/refresh", undefined, apiBase), {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
@@ -144,7 +67,7 @@ async function tryRefreshAccessToken(): Promise<boolean> {
           body: JSON.stringify({ refresh_token: refreshToken }),
           cache: "no-store",
         });
-        const payload = await parseJsonResponse<TokenData>(response);
+        const payload = (await response.json()) as ApiResponse<TokenData> | ErrorResponse;
         if (!response.ok || payload.success === false || !payload.data?.access_token) {
           return false;
         }
@@ -169,12 +92,13 @@ export async function apiClient<T>(
   path: string,
   options: RequestOptions = {},
 ): Promise<ApiResponse<T>> {
-  const { body, headers, auth = true, query, _retried, ...rest } = options;
+  const { body, headers, auth = true, query, _retried, _urlFallbackTried, ...rest } = options;
   const token = auth ? getAccessToken() : null;
+  const apiBase = await resolveApiUrl();
 
   let response: Response;
   try {
-    response = await fetch(buildUrl(path, query), {
+    response = await fetch(buildUrl(path, query, apiBase), {
       ...rest,
       headers: {
         "Content-Type": "application/json",
@@ -186,18 +110,28 @@ export async function apiClient<T>(
       cache: "no-store",
     });
   } catch {
+    if (!_urlFallbackTried && env.apiUrlFallback) {
+      preferApiFallback();
+      return apiClient<T>(path, { ...options, _urlFallbackTried: true });
+    }
     throw new ApiClientError(
-      "Cannot reach the ERP API. If Docker just restarted, wait a few seconds and refresh.",
+      "Cannot reach the API. Confirm the backend is running on port 8000.",
       0,
     );
   }
 
+  const rawBody = await response.text();
   let payload: ApiResponse<T> | ErrorResponse;
   try {
-    payload = await parseJsonResponse<T>(response);
-  } catch (err) {
-    if (err instanceof ApiClientError) throw err;
-    throw new ApiClientError("Invalid API response", response.status);
+    payload = JSON.parse(rawBody) as ApiResponse<T> | ErrorResponse;
+  } catch {
+    const looksLikeHtml = /^\s*</.test(rawBody);
+    throw new ApiClientError(
+      looksLikeHtml
+        ? "API returned HTML instead of JSON. Check NEXT_PUBLIC_API_URL points at the backend (port 8000)."
+        : "Invalid API response",
+      response.status,
+    );
   }
 
   if (
@@ -217,12 +151,8 @@ export async function apiClient<T>(
     if (auth && response.status === 401) {
       clearTokens();
     }
-    const fallbackMessage =
-      response.status === 404
-        ? "API route not found. Restart the ERP API on port 8000 after pulling or changing backend code."
-        : "API request failed";
     throw new ApiClientError(
-      messageFromUnknownPayload(errorPayload, errorPayload.message ?? fallbackMessage),
+      errorPayload.message ?? "API request failed",
       response.status,
       errorPayload.errors ?? [],
     );
@@ -259,16 +189,25 @@ export const authService = {
     }
   },
   microsoftConfig: () =>
-    apiClient<{ enabled: boolean }>("/auth/microsoft/config", { auth: false }).catch(() => ({
-      success: true as const,
-      message: "ok",
-      data: { enabled: false },
-    })),
-  microsoftLoginUrl: (returnTo = "/") => {
-    const base = env.apiUrl.replace(/\/$/, "");
-    const next = encodeURIComponent(returnTo.startsWith("/") ? returnTo : "/");
-    return `${base}/auth/microsoft/login?next=${next}`;
+    apiClient<{ enabled: boolean; authorization_path: string }>("/auth/microsoft/config", {
+      auth: false,
+    }),
+  microsoftLoginUrl: async (returnTo = "/organization") => {
+    const base = await resolveApiUrl();
+    const path = `/auth/microsoft/login?return_to=${encodeURIComponent(returnTo)}`;
+    return `${base}${path}`;
   },
+  exchangeMicrosoftCode: (code: string) =>
+    apiClient<TokenData>("/auth/microsoft/exchange", {
+      method: "POST",
+      auth: false,
+      body: { code },
+    }).then((res) => {
+      if (res.data?.access_token) {
+        setTokens(res.data.access_token, res.data.refresh_token);
+      }
+      return res;
+    }),
 };
 
 export type ListQuery = Record<string, string | number | boolean | null | undefined>;
@@ -301,3 +240,61 @@ export const resourceService = {
       body: body ?? {},
     }),
 };
+
+/** Download a binary/file endpoint (CSV/PDF export). */
+export async function downloadApiFile(
+  path: string,
+  query?: Record<string, string | number | boolean | null | undefined>,
+  fallbackName = "export.bin",
+  _retried = false,
+): Promise<void> {
+  const token = getAccessToken();
+  let response: Response;
+  try {
+    response = await fetch(buildUrl(path, query), {
+      method: "GET",
+      headers: {
+        Accept: "*/*",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      cache: "no-store",
+    });
+  } catch {
+    throw new ApiClientError(
+      "Cannot reach the API. Confirm the backend is running on port 8000.",
+      0,
+    );
+  }
+
+  if (response.status === 401 && !_retried) {
+    const refreshed = await tryRefreshAccessToken();
+    if (refreshed) {
+      return downloadApiFile(path, query, fallbackName, true);
+    }
+    clearTokens();
+    throw new ApiClientError("Session expired. Please sign in again.", 401);
+  }
+
+  if (!response.ok) {
+    let message = "Download failed";
+    try {
+      const payload = (await response.json()) as ErrorResponse;
+      message = payload.message ?? message;
+    } catch {
+      /* ignore */
+    }
+    throw new ApiClientError(message, response.status);
+  }
+  const blob = await response.blob();
+  const cd = response.headers.get("Content-Disposition") ?? "";
+  const match = /filename="?([^";]+)"?/i.exec(cd);
+  const filename = match?.[1] ?? fallbackName;
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}

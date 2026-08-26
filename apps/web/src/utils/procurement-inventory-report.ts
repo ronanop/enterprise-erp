@@ -24,6 +24,9 @@ export type ProcurementInventoryStockTableRow = {
   units: number;
 };
 
+/** How stock entered inventory — GRN/PO receipt vs Add stock / Excel import. */
+export type InventoryAddedBy = "po" | "manual" | "mixed";
+
 export type GrnStockByProductRow = {
   productKey: string;
   productName: string;
@@ -33,8 +36,31 @@ export type GrnStockByProductRow = {
   serialSummary: string;
   grnSummary: string;
   hasReversal: boolean;
+  /** Origin of stock units for this product group. */
+  addedBy: InventoryAddedBy;
   lines: ProcurementInventoryRow[];
 };
+
+export function inventoryRowAddedBy(row: ProcurementInventoryRow): "po" | "manual" {
+  return row.source === "import" ? "manual" : "po";
+}
+
+export function inventoryAddedByLabel(addedBy: InventoryAddedBy): string {
+  if (addedBy === "manual") return "Added manually";
+  if (addedBy === "mixed") return "PO + Manual";
+  return "Added by PO";
+}
+
+function resolveProductAddedBy(lines: ProcurementInventoryRow[]): InventoryAddedBy {
+  let hasPo = false;
+  let hasManual = false;
+  for (const row of lines) {
+    if (inventoryRowAddedBy(row) === "manual") hasManual = true;
+    else hasPo = true;
+    if (hasPo && hasManual) return "mixed";
+  }
+  return hasManual ? "manual" : "po";
+}
 
 export type ProcurementInventoryStockSummary = {
   totalUnits: number;
@@ -113,6 +139,7 @@ export function groupGrnStockByProduct(rows: ProcurementInventoryRow[]): GrnStoc
         serialSummary: formatSerialSummaryFromRows(lines),
         grnSummary: formatGrnSummaryFromRows(lines),
         hasReversal: lines.some((row) => row.source === "grn_reversal"),
+        addedBy: resolveProductAddedBy(lines),
         lines,
       };
     })
@@ -131,9 +158,9 @@ export function isGrnNonBilledStockRow(row: ProcurementInventoryRow): boolean {
   return row.source === "grn";
 }
 
-/** GRN units plus reversal ledger rows used for net available stock. */
+/** GRN units, imported / manual stock, plus reversal ledger rows for net available stock. */
 export function isInventoryLedgerRow(row: ProcurementInventoryRow): boolean {
-  return row.source === "grn" || row.source === "grn_reversal";
+  return row.source === "grn" || row.source === "grn_reversal" || row.source === "import";
 }
 
 function hasTrackedSerial(serial: string | null | undefined): boolean {

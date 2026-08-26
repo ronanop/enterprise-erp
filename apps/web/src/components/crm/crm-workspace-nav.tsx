@@ -1,12 +1,39 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname } from "next/navigation";
 import { useMemo, useState } from "react";
-import { ChevronLeft, ChevronRight, Handshake, Search } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
+import {
+  BriefcaseBusiness,
+  Building2,
+  CalendarDays,
+  ChevronLeft,
+  ChevronRight,
+  ClipboardList,
+  Factory,
+  FileSpreadsheet,
+  FileText,
+  Handshake,
+  Landmark,
+  LayoutDashboard,
+  ListTodo,
+  Package,
+  Receipt,
+  ScrollText,
+  ShieldCheck,
+  ShoppingCart,
+  Target,
+  Truck,
+  UserCog,
+  UserPlus,
+  Users,
+  UserRound,
+} from "lucide-react";
 
+import { SidebarAccountSection } from "@/components/layout/sidebar-account-section";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { ModuleUsersNavTab } from "@/components/organization/module-users-nav-tab";
 import {
   getCrmSidebarFocus,
   isCompanyDealWorkspacePath,
@@ -14,32 +41,39 @@ import {
   setCrmSidebarFocus,
   type CrmSidebarFocus,
 } from "@/lib/crm-sidebar-focus";
+import { canManageModuleUsers } from "@/lib/module-access";
 import { cn } from "@/lib/utils";
-import { prefetchCrmTab } from "@/services/sales-crm-service";
+import { useAuthUser } from "@/hooks/use-auth-user";
+
+type CrmNavItem = {
+  title: string;
+  href: string;
+  icon: LucideIcon;
+};
 
 /** Sales CRM (Zoho-replacement) teamspace navigation. */
-export const CRM_NAV = [
-  { title: "Dashboard", href: "/crm" },
-  { title: "My Jobs", href: "/crm/my-jobs" },
-  { title: "Company", href: "/crm/companies" },
-  { title: "Leads", href: "/crm/leads" },
-  { title: "Opportunities", href: "/crm/opportunities" },
-  { title: "OEM Quote", href: "/crm/oem-quotes" },
-  { title: "Quotes", href: "/crm/quotes" },
-  { title: "Purchase Order", href: "/crm/purchase-orders" },
-  { title: "OVF", href: "/crm/ovf" },
-  { title: "Contacts", href: "/crm/contacts" },
-  { title: "Products", href: "/crm/products" },
-  { title: "Meetings", href: "/crm/meetings" },
-  { title: "Customer Follow Ups", href: "/crm/customer-followups" },
-  { title: "KYC - Account Mapping", href: "/crm/kyc-account-mapping" },
-  { title: "OEM", href: "/crm/oem" },
-  { title: "Distributor", href: "/crm/distributors" },
-  { title: "BOQ", href: "/crm/boq" },
-  { title: "SOW", href: "/crm/sow" },
-  { title: "Entity", href: "/crm/entities" },
-  { title: "End Customer", href: "/crm/end-customers" },
-] as const;
+export const CRM_NAV: readonly CrmNavItem[] = [
+  { title: "Dashboard", href: "/crm", icon: LayoutDashboard },
+  { title: "My Jobs", href: "/crm/my-jobs", icon: ListTodo },
+  { title: "Company", href: "/crm/companies", icon: Building2 },
+  { title: "Leads", href: "/crm/leads", icon: UserPlus },
+  { title: "Opportunities", href: "/crm/opportunities", icon: Target },
+  { title: "OEM Quote", href: "/crm/oem-quotes", icon: FileSpreadsheet },
+  { title: "Quotes", href: "/crm/quotes", icon: FileText },
+  { title: "Purchase Order", href: "/crm/purchase-orders", icon: ShoppingCart },
+  { title: "OVF", href: "/crm/ovf", icon: Receipt },
+  { title: "Contacts", href: "/crm/contacts", icon: Users },
+  { title: "Products", href: "/crm/products", icon: Package },
+  { title: "Meetings", href: "/crm/meetings", icon: CalendarDays },
+  { title: "Customer Follow Ups", href: "/crm/customer-followups", icon: BriefcaseBusiness },
+  { title: "KYC - Account Mapping", href: "/crm/kyc-account-mapping", icon: ShieldCheck },
+  { title: "OEM / Brand", href: "/crm/oem", icon: Factory },
+  { title: "Distributor / Vendor", href: "/crm/distributors", icon: Truck },
+  { title: "BOQ", href: "/crm/boq", icon: ClipboardList },
+  { title: "SOW", href: "/crm/sow", icon: ScrollText },
+  { title: "Entity", href: "/crm/entities", icon: Landmark },
+  { title: "End Customer", href: "/crm/end-customers", icon: UserRound },
+];
 
 function focusForHref(href: string): CrmSidebarFocus | null {
   if (href === "/crm") return "dashboard";
@@ -90,7 +124,6 @@ function isCrmNavActive(pathname: string, href: string): boolean {
 /** Horizontal tab strip (used when CRM shares the main app sidebar). */
 export function CrmWorkspaceNav() {
   const pathname = usePathname();
-  const router = useRouter();
 
   return (
     <div className="grid min-w-0 max-w-full grid-cols-1">
@@ -101,31 +134,25 @@ export function CrmWorkspaceNav() {
         <ul className="flex w-max items-center gap-0.5 border-b border-border/70 pb-px">
           {CRM_NAV.map((item) => {
             const active = isCrmNavActive(pathname, item.href);
+            const Icon = item.icon;
             return (
               <li key={item.href} className="shrink-0">
                 <Link
                   href={item.href}
-                  prefetch
-                  onMouseEnter={() => {
-                    router.prefetch(item.href);
-                    prefetchCrmTab(item.href);
-                  }}
-                  onFocus={() => {
-                    router.prefetch(item.href);
-                    prefetchCrmTab(item.href);
-                  }}
                   className={cn(
-                    "relative inline-flex h-8 cursor-pointer items-center rounded-lg px-2.5 text-xs font-medium transition-[color,background-color] duration-200",
+                    "relative inline-flex h-8 cursor-pointer items-center gap-1.5 rounded-lg px-2.5 text-xs font-medium transition-[color,background-color] duration-200",
                     active
                       ? "bg-muted/60 font-semibold text-foreground after:absolute after:inset-x-2 after:bottom-0.5 after:h-0.5 after:rounded-full after:bg-primary"
                       : "text-muted-foreground hover:bg-muted/50 hover:text-foreground",
                   )}
                 >
+                  <Icon className="size-3.5 shrink-0" aria-hidden />
                   {item.title}
                 </Link>
               </li>
             );
           })}
+          <ModuleUsersNavTab moduleKey="crm" variant="pill" />
         </ul>
       </nav>
     </div>
@@ -135,15 +162,16 @@ export function CrmWorkspaceNav() {
 /** Left sidebar chrome for standalone CRM tabs (replaces AppSidebar). */
 export function CrmSidebar() {
   const pathname = usePathname();
-  const router = useRouter();
   const [collapsed, setCollapsed] = useState(false);
-  const [query, setQuery] = useState("");
+  const { signedIn, user, adminModuleKeys } = useAuthUser();
 
-  const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    if (!q) return CRM_NAV;
-    return CRM_NAV.filter((item) => item.title.toLowerCase().includes(q));
-  }, [query]);
+  const navItems = useMemo(() => {
+    const items: CrmNavItem[] = [...CRM_NAV];
+    if (canManageModuleUsers("crm", adminModuleKeys, user?.userType)) {
+      items.push({ title: "Users", href: "/crm/users", icon: UserCog });
+    }
+    return items;
+  }, [adminModuleKeys, user?.userType]);
 
   return (
     <aside
@@ -153,36 +181,37 @@ export function CrmSidebar() {
         collapsed ? "w-[72px]" : "w-[260px]",
       )}
     >
-      <div className={cn("flex items-center gap-3 px-4 py-5", collapsed && "justify-center px-2")}>
-        <div className="flex size-9 items-center justify-center rounded-xl bg-sidebar-primary text-sidebar-primary-foreground shadow-sm">
-          <Handshake className="size-4" aria-hidden />
-        </div>
-        {!collapsed ? (
-          <div className="min-w-0">
-            <p className="truncate text-sm font-medium tracking-tight text-sidebar-foreground">
-              Sales CRM
-            </p>
-            <p className="truncate text-[11px] text-sidebar-foreground/55">
-              {CRM_NAV.length} workspace panes
-            </p>
+      {signedIn ? (
+        <SidebarAccountSection collapsed={collapsed}>
+          <div className="flex items-center gap-2">
+            <Handshake className="size-3.5 shrink-0 text-sidebar-primary" aria-hidden />
+            <div className="min-w-0">
+              <p className="truncate text-xs font-medium text-sidebar-foreground">Sales CRM</p>
+              <p className="truncate text-[10px] text-sidebar-foreground/55">
+                {navItems.length} workspace panes
+              </p>
+            </div>
           </div>
-        ) : null}
-      </div>
-
-      {!collapsed ? (
-        <div className="px-3 pb-3">
-          <div className="relative">
-            <Search className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-sidebar-foreground/40" />
-            <Input
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search CRM…"
-              className="h-9 border-sidebar-border bg-white/5 pl-8 text-sidebar-foreground placeholder:text-sidebar-foreground/40 focus-visible:ring-sidebar-ring"
-              aria-label="Search CRM panes"
-            />
+        </SidebarAccountSection>
+      ) : (
+        <div className={cn("px-4 py-4", collapsed && "px-2")}>
+          <div className={cn("flex items-center gap-3", collapsed && "justify-center")}>
+            <div className="flex size-9 items-center justify-center rounded-xl bg-sidebar-primary text-sidebar-primary-foreground shadow-sm">
+              <Handshake className="size-4" aria-hidden />
+            </div>
+            {!collapsed ? (
+              <div className="min-w-0">
+                <p className="truncate text-sm font-medium tracking-tight text-sidebar-foreground">
+                  Sales CRM
+                </p>
+                <p className="truncate text-[11px] text-sidebar-foreground/55">
+                  {navItems.length} workspace panes
+                </p>
+              </div>
+            ) : null}
           </div>
         </div>
-      ) : null}
+      )}
 
       <nav aria-label="CRM workspace" className="erp-scroll flex-1 overflow-y-auto px-2.5 py-2">
         {!collapsed ? (
@@ -191,22 +220,14 @@ export function CrmSidebar() {
           </p>
         ) : null}
         <ul className="space-y-0.5">
-          {filtered.map((item) => {
+          {navItems.map((item) => {
             const active = isCrmNavActive(pathname, item.href);
+            const Icon = item.icon;
             return (
               <li key={item.href}>
                 <Link
                   href={item.href}
-                  prefetch
                   title={item.title}
-                  onMouseEnter={() => {
-                    router.prefetch(item.href);
-                    prefetchCrmTab(item.href);
-                  }}
-                  onFocus={() => {
-                    router.prefetch(item.href);
-                    prefetchCrmTab(item.href);
-                  }}
                   onClick={() => {
                     const focus = focusForHref(item.href);
                     if (focus) setCrmSidebarFocus(focus);
@@ -223,12 +244,19 @@ export function CrmSidebar() {
                   {active ? (
                     <span className="absolute inset-y-1.5 left-0 w-0.5 rounded-full bg-sidebar-primary" />
                   ) : null}
+                  <Icon
+                    className={cn(
+                      "size-4 shrink-0 transition-colors duration-200",
+                      active
+                        ? "text-sidebar-primary"
+                        : "text-sidebar-foreground/50 group-hover:text-sidebar-foreground/80",
+                    )}
+                    aria-hidden
+                  />
                   {!collapsed ? (
                     <span className="min-w-0 flex-1 truncate font-medium">{item.title}</span>
                   ) : (
-                    <span className="text-[10px] font-semibold tracking-wide">
-                      {item.title.slice(0, 2).toUpperCase()}
-                    </span>
+                    <span className="sr-only">{item.title}</span>
                   )}
                 </Link>
               </li>

@@ -123,7 +123,6 @@ export function ResourceAllocationFormPage({ allocationId }: { allocationId?: st
             step: "0.01",
             min: "0",
             max: "100",
-            hint: "Combined allocation for a resource across projects cannot exceed 100%.",
           },
           {
             name: "status",
@@ -138,7 +137,6 @@ export function ResourceAllocationFormPage({ allocationId }: { allocationId?: st
             label: "End Date",
             type: "date",
             required: true,
-            hint: "Must be on or after the start date.",
           },
         ],
       },

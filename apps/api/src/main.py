@@ -1,13 +1,10 @@
 """FastAPI application entry point."""
 
-from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import RedirectResponse
 
-from bootstrap.crm_ovf_schema import ensure_crm_ovf_scm_hold_columns
 from core.config import settings
 from core.constants import API_V1_PREFIX, APP_DESCRIPTION
 from core.exceptions import register_exception_handlers
@@ -17,9 +14,23 @@ from shared.router import api_v1_router
 
 
 @asynccontextmanager
-async def lifespan(_: FastAPI) -> AsyncIterator[None]:
+async def lifespan(application: FastAPI):
     setup_logging()
-    ensure_crm_ovf_scm_hold_columns()
+    from core.config import infra_resolve_report
+    from core.infra_health import log_infrastructure_connections
+    from core.infra_resolve import redact_url
+    from core.logging import get_logger
+
+    log = get_logger(__name__)
+    mode = "fallback" if infra_resolve_report.get("using_fallback") else "primary"
+    log.info(
+        "Infra mode=%s primary_reachable=%s switched=%s database=%s",
+        mode,
+        infra_resolve_report.get("primary_reachable"),
+        infra_resolve_report.get("switched"),
+        redact_url(settings.database_url),
+    )
+    log_infrastructure_connections()
     yield
 
 
@@ -32,23 +43,23 @@ def create_app() -> FastAPI:
         lifespan=lifespan,
     )
 
-    application.add_middleware(
-        CORSMiddleware,
-        allow_origins=settings.cors_origins,
-        allow_credentials=True,
-        allow_methods=["*"],
-        allow_headers=["*"],
-    )
     application.add_middleware(RequestContextMiddleware)
+
+    cors_kwargs: dict = {
+        "allow_origins": settings.cors_origins,
+        "allow_credentials": True,
+        "allow_methods": ["*"],
+        "allow_headers": ["*"],
+    }
+    if settings.cors_origin_regex:
+        cors_kwargs["allow_origin_regex"] = settings.cors_origin_regex
+    elif settings.is_development:
+        cors_kwargs["allow_origin_regex"] = r"https?://(localhost|127\.0\.0\.1)(:\d+)?"
+
+    application.add_middleware(CORSMiddleware, **cors_kwargs)
 
     register_exception_handlers(application)
     application.include_router(api_v1_router, prefix=API_V1_PREFIX)
-
-    web_origin = settings.cors_origins[0] if settings.cors_origins else "http://localhost:3000"
-
-    @application.get("/", include_in_schema=False)
-    async def redirect_root_to_web() -> RedirectResponse:
-        return RedirectResponse(url=web_origin, status_code=302)
 
     return application
 

@@ -1,0 +1,152 @@
+# App-only stack (API, workers, web) for remote / already-running infrastructure.
+#
+# Prefer the full local stack (one command):
+#
+#   docker compose --env-file .env up -d --build
+#
+# App-only (infra must already be reachable via DATABASE_URL / REDIS_URL / …):
+#
+#   docker compose -f docker-compose.app.yml --env-file .env up -d --build
+
+name: enterprise-erp
+
+x-api-environment: &api-environment
+  ENVIRONMENT: ${ENVIRONMENT:-development}
+  DEBUG: ${DEBUG:-false}
+  LOG_LEVEL: ${LOG_LEVEL:-INFO}
+  APP_TIMEZONE: ${APP_TIMEZONE:-Asia/Kolkata}
+  API_HOST: ${API_HOST:-0.0.0.0}
+  API_PORT: ${API_PORT:-8000}
+  INFRA_FALLBACK_ENABLED: ${INFRA_FALLBACK_ENABLED:-true}
+  DATABASE_URL: ${DATABASE_URL}
+  DATABASE_URL_FALLBACK: ${DATABASE_URL_FALLBACK:-}
+  REDIS_URL: ${REDIS_URL}
+  REDIS_URL_FALLBACK: ${REDIS_URL_FALLBACK:-}
+  CELERY_BROKER_URL: ${CELERY_BROKER_URL}
+  CELERY_BROKER_URL_FALLBACK: ${CELERY_BROKER_URL_FALLBACK:-}
+  CELERY_RESULT_BACKEND: ${CELERY_RESULT_BACKEND}
+  CELERY_RESULT_BACKEND_FALLBACK: ${CELERY_RESULT_BACKEND_FALLBACK:-}
+  CORS_ORIGINS: ${CORS_ORIGINS}
+  CORS_ORIGIN_REGEX: ${CORS_ORIGIN_REGEX:-}
+  CRM_UPLOAD_ROOT: ${CRM_UPLOAD_ROOT:-/app/var/crm-attachments}
+  JWT_SECRET_KEY: ${JWT_SECRET_KEY}
+  JWT_ACCESS_TOKEN_EXPIRE_MINUTES: ${JWT_ACCESS_TOKEN_EXPIRE_MINUTES:-480}
+  JWT_REFRESH_TOKEN_EXPIRE_DAYS: ${JWT_REFRESH_TOKEN_EXPIRE_DAYS:-7}
+  SESSION_TTL_SECONDS: ${SESSION_TTL_SECONDS:-86400}
+  EMAIL_DELIVERY_MODE: ${EMAIL_DELIVERY_MODE:-async}
+  MINIO_ENDPOINT: ${MINIO_ENDPOINT:-}
+  MINIO_ENDPOINT_FALLBACK: ${MINIO_ENDPOINT_FALLBACK:-}
+  MINIO_ROOT_USER: ${MINIO_ROOT_USER:-}
+  MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-}
+  MINIO_BUCKET: ${MINIO_BUCKET:-erp-documents}
+  MINIO_SECURE: ${MINIO_SECURE:-false}
+  OPENSEARCH_URL: ${OPENSEARCH_URL:-http://opensearch:9200}
+  OPENSEARCH_URL_FALLBACK: ${OPENSEARCH_URL_FALLBACK:-}
+  FRONTEND_URL: ${FRONTEND_URL:-http://localhost:3000}
+  MICROSOFT_TENANT_ID: ${MICROSOFT_TENANT_ID:-}
+  MICROSOFT_CLIENT_ID: ${MICROSOFT_CLIENT_ID:-}
+  MICROSOFT_CLIENT_SECRET: ${MICROSOFT_CLIENT_SECRET:-}
+  MICROSOFT_REDIRECT_URI: ${MICROSOFT_REDIRECT_URI:-}
+  MICROSOFT_USER_EMAIL_DOMAIN: ${MICROSOFT_USER_EMAIL_DOMAIN:-}
+  MICROSOFT_PLATFORM_ADMIN_EMAILS: ${MICROSOFT_PLATFORM_ADMIN_EMAILS:-}
+  AZURE_TENANT_ID: ${AZURE_TENANT_ID:-}
+  AZURE_CLIENT_ID: ${AZURE_CLIENT_ID:-}
+  AZURE_CLIENT_SECRET: ${AZURE_CLIENT_SECRET:-}
+  AZURE_FROM_EMAIL: ${AZURE_FROM_EMAIL:-}
+
+services:
+  api:
+    build:
+      context: ./apps/api
+      dockerfile: Dockerfile
+    image: enterprise-erp-api:local
+    restart: unless-stopped
+    environment:
+      <<: *api-environment
+      RUN_MIGRATIONS: ${RUN_MIGRATIONS:-true}
+    volumes:
+      - crm_uploads:/app/var/crm-attachments
+    ports:
+      - "${API_PUBLISH_PORT:-8000}:8000"
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "curl -sf http://127.0.0.1:$${API_PORT:-8000}/api/v1/health || exit 1",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 8
+      start_period: 120s
+    networks: [erp]
+
+  celery-worker:
+    image: enterprise-erp-api:local
+    pull_policy: never
+    restart: unless-stopped
+    entrypoint: ["/entrypoint.sh"]
+    command: ["worker"]
+    environment:
+      <<: *api-environment
+      RUN_MIGRATIONS: "false"
+    volumes:
+      - crm_uploads:/app/var/crm-attachments
+    depends_on:
+      api:
+        condition: service_healthy
+    networks: [erp]
+
+  celery-beat:
+    image: enterprise-erp-api:local
+    pull_policy: never
+    restart: unless-stopped
+    entrypoint: ["/entrypoint.sh"]
+    command: ["beat"]
+    environment:
+      <<: *api-environment
+      RUN_MIGRATIONS: "false"
+    depends_on:
+      celery-worker:
+        condition: service_started
+    networks: [erp]
+
+  web:
+    build:
+      context: ./apps/web
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8000/api/v1}
+        NEXT_PUBLIC_APP_NAME: ${NEXT_PUBLIC_APP_NAME:-Enterprise ERP}
+        NEXT_PUBLIC_DEMO_EMAIL: ${NEXT_PUBLIC_DEMO_EMAIL:-}
+        NEXT_PUBLIC_DEMO_PASSWORD: ${NEXT_PUBLIC_DEMO_PASSWORD:-}
+    restart: unless-stopped
+    ports:
+      - "${WEB_PUBLISH_PORT:-3000}:3000"
+    depends_on:
+      api:
+        condition: service_healthy
+    networks: [erp]
+
+  employee-app:
+    build:
+      context: ./apps/employee-app
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8000/api/v1}
+        NEXT_PUBLIC_APP_NAME: ${NEXT_PUBLIC_EMPLOYEE_APP_NAME:-Employee App}
+        NEXT_PUBLIC_USE_MOCK: ${NEXT_PUBLIC_USE_MOCK:-false}
+    restart: unless-stopped
+    ports:
+      - "${EMPLOYEE_PUBLISH_PORT:-3001}:3001"
+    depends_on:
+      api:
+        condition: service_healthy
+    networks: [erp]
+
+networks:
+  erp:
+    name: enterprise-erp_erp
+    external: true
+
+volumes:
+  crm_uploads:

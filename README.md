@@ -49,15 +49,29 @@ enterprise-erp-platform/
 cp .env.example .env
 ```
 
-### 2. Infrastructure (Docker)
+### 2. Full stack (Docker — one command)
 
 ```bash
-docker compose up -d
+docker compose --env-file .env up -d --build
 ```
 
-Services: PostgreSQL, Redis, RabbitMQ, MinIO, OpenSearch
+Starts local Postgres (host **:5433**), Redis, RabbitMQ, MinIO, OpenSearch, API, Celery, Web, and Employee app under project **enterprise-erp**.
 
-### 3. Backend API
+`.env` prefers **VM infra** (`172.16.200.26`). With `INFRA_FALLBACK_ENABLED=true`, the API TCP-probes VM Postgres/Redis at startup and automatically switches to `*_FALLBACK` local URLs when the VM is unreachable. The web app similarly prefers `NEXT_PUBLIC_API_URL` and falls back to `NEXT_PUBLIC_API_URL_FALLBACK`.
+
+- App: http://localhost:3000  
+- API health: http://localhost:8000/api/v1/health  
+- API docs: http://localhost:8000/docs  
+
+Stop everything:
+
+```bash
+docker compose --env-file .env down
+```
+
+App-only against remote infra: `docker compose -f docker-compose.app.yml --env-file .env up -d --build`
+
+### 3. Backend API (local without Docker)
 
 ```bash
 cd apps/api
@@ -65,13 +79,13 @@ python -m venv .venv
 .venv\Scripts\activate        # Windows
 pip install -e ".[dev]"
 alembic upgrade head
-uvicorn main:app --reload --host 0.0.0.0 --port 8000 --app-dir src
+uvicorn main:app --reload --reload-dir src --host 0.0.0.0 --port 8000 --app-dir src
 ```
 
 API: http://localhost:8000/api/v1/health  
 Docs: http://localhost:8000/docs
 
-### 4. Frontend
+### 4. Frontend (local without Docker)
 
 ```bash
 cd apps/web

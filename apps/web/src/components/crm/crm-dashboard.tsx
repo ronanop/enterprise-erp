@@ -9,7 +9,6 @@ import {
   Handshake,
   LayoutGrid,
   PieChart,
-  RefreshCw,
   Target,
   TrendingUp,
   UserPlus,
@@ -32,11 +31,11 @@ import {
   CrmSection,
   CrmViewAllLink,
   CrmWarnBanner,
+  CRM_TABLE_HEAD_ROW,
 } from "@/components/crm/crm-ui";
 import { FinanceStatusBadge } from "@/components/finance/finance-status-badge";
 import { PageHeader } from "@/components/layout/page-header";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { crmPipelineStages } from "@/config/crm";
 import { isAuthenticated } from "@/lib/auth";
 import { cn } from "@/lib/utils";
@@ -81,35 +80,10 @@ export function CrmDashboard() {
   const [loading, setLoading] = useState(true);
   const authenticated = typeof window !== "undefined" ? isAuthenticated() : false;
 
-  const load = useCallback(async (force = false) => {
+  const load = useCallback(async () => {
     setLoading(true);
     try {
-      setData(await loadCrmOverview(force));
-    } catch {
-      setData((prev) =>
-        prev ?? {
-          leadSources: [],
-          leads: [],
-          leadAssignments: [],
-          leadActivities: [],
-          pipelines: [],
-          opportunities: [],
-          opportunityStages: [],
-          campaigns: [],
-          interactions: [],
-          tasks: [],
-          followups: [],
-          meetings: [],
-          callLogs: [],
-          emailLogs: [],
-          visitLogs: [],
-          feedback: [],
-          satisfaction: [],
-          errors: ["Failed to load CRM dashboard"],
-          statusCodes: [],
-          partial: true,
-        },
-      );
+      setData(await loadCrmOverview());
     } finally {
       setLoading(false);
     }
@@ -199,7 +173,7 @@ export function CrmDashboard() {
   }, [openOpps]);
 
   const authBlocked =
-    Boolean(data?.statusCodes.includes(401)) ||
+    Boolean(data?.statusCodes?.includes(401)) ||
     (!authenticated && Boolean(data?.errors.length));
 
   return (
@@ -209,17 +183,6 @@ export function CrmDashboard() {
         description="Pipeline health, deal mix, and revenue outlook across leads and opportunities."
         actions={
           <div className="flex flex-wrap items-center gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="cursor-pointer"
-              onClick={() => void load(true)}
-              disabled={loading}
-            >
-              <RefreshCw className={`size-3.5 ${loading ? "animate-spin" : ""}`} />
-              Refresh
-            </Button>
             <Link
               href="/crm/leads"
               className="inline-flex h-8 cursor-pointer items-center gap-1.5 rounded-lg bg-primary px-3 text-sm font-medium text-primary-foreground shadow-sm transition-opacity duration-200 hover:opacity-90"
@@ -248,9 +211,7 @@ export function CrmDashboard() {
 
       {data?.partial && !authBlocked ? (
         <div className="rounded-xl border border-border/80 bg-muted/40 px-4 py-2.5 text-xs text-muted-foreground">
-          Some CRM endpoints returned errors
-          {data.errors.length > 0 ? `: ${data.errors.slice(0, 2).join("; ")}` : ""}. Showing
-          available records.
+          Some CRM endpoints returned errors. Showing available records.
         </div>
       ) : null}
 
@@ -392,7 +353,7 @@ export function CrmDashboard() {
             <div className="flex items-center gap-2.5">
               <CrmIconBadge icon={UserPlus} />
               <div>
-                <h2 className="text-sm font-medium tracking-tight">Recent leads</h2>
+                <h2 className="text-base font-extrabold tracking-tight">Recent leads</h2>
                 <p className="text-[11px] text-muted-foreground">Latest prospect activity</p>
               </div>
             </div>
@@ -401,7 +362,7 @@ export function CrmDashboard() {
           <div className="erp-scroll overflow-x-auto">
             <table className="w-full min-w-110 text-left text-sm">
               <thead>
-                <tr className="border-b border-border/70 bg-muted/40 text-[11px] tracking-wide text-muted-foreground uppercase">
+                <tr className={CRM_TABLE_HEAD_ROW}>
                   <th className="px-4 py-2.5 font-medium">Lead</th>
                   <th className="px-4 py-2.5 font-medium">Contact</th>
                   <th className="px-4 py-2.5 font-medium">Status</th>
@@ -470,7 +431,7 @@ export function CrmDashboard() {
             <div className="flex items-center gap-2.5">
               <CrmIconBadge icon={Handshake} />
               <div>
-                <h2 className="text-sm font-medium tracking-tight">Top opportunities</h2>
+                <h2 className="text-base font-extrabold tracking-tight">Top opportunities</h2>
                 <p className="text-[11px] text-muted-foreground">Highest expected revenue</p>
               </div>
             </div>

@@ -226,6 +226,10 @@ export type ScmQueueItem = {
   customer_payment_days?: number;
   vendor_name: string | null;
   oem_name: string | null;
+  /** CRM distributor (= procurement vendor). OEM is brand only. */
+  distributor_name?: string | null;
+  /** CRM lead project title. */
+  project_title?: string | null;
   /** When the OVF/PO arrived in the SCM queue (shared to SCM). */
   received_at?: string | null;
   delivery_period?: string | null;
@@ -252,6 +256,10 @@ export type ScmVendorLine = {
   gst_pct?: number;
   gst_amount?: number;
   total_with_gst?: number;
+  /** CRM Vendor Charges distributor selection. */
+  distributor_name?: string | null;
+  /** inventory when distributor is IN STOCK; otherwise purchase_order. */
+  fulfillment_source?: "inventory" | "purchase_order" | string | null;
 };
 
 export type ScmMarginLine = {
@@ -328,10 +336,17 @@ export type ScmOvfPreview = {
   quote_name: string | null;
   account_name: string | null;
   owner_name: string | null;
+  /** CRM lead project title (auto from Sales). */
+  project_title?: string | null;
   oem_name: string | null;
   oem_contact_person: string | null;
   oem_contact_email: string | null;
   oem_contact_number: string | null;
+  /** CRM distributor (= procurement vendor). OEM above is brand only. */
+  distributor_name?: string | null;
+  distributor_contact_person?: string | null;
+  distributor_contact?: string | null;
+  distributor_contact_email?: string | null;
   blueprint_state: string;
   approval_status: string | null;
   freight: number;
@@ -709,12 +724,18 @@ export async function clearProcurementInventoryStock(): Promise<{ removed: numbe
 }
 
 export async function importProcurementInventory(
-  lines: Array<{ product_name: string; serial_number: string; order_id?: string | null }>,
+  lines: Array<{
+    product_name: string;
+    serial_number: string;
+    description?: string | null;
+    order_id?: string | null;
+  }>,
 ): Promise<{ imported: number }> {
   const body = {
     lines: lines.map((line) => ({
       product_name: line.product_name,
       serial_number: line.serial_number,
+      description: line.description?.trim() || null,
       order_id: line.order_id || null,
     })),
   };
@@ -859,7 +880,89 @@ export type ScmCommercialAttachment = {
   remarks: string | null;
   entity_type: string;
   entity_id: string;
+  source?: string;
+  external_url?: string | null;
 };
+
+async function fetchScmCommercialAttachmentBlob(
+  attachmentId: string,
+  options?: { download?: boolean },
+): Promise<{ blob: Blob; fileName: string | null }> {
+  const download = options?.download ?? false;
+  const token = getAccessToken();
+  const qs = download ? "?download=true" : "";
+  const response = await fetch(
+    `${env.apiUrl}${SCM_API}/commercial-attachments/${attachmentId}/content${qs}`,
+    {
+      headers: {
+        Accept: "*/*",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      cache: "no-store",
+      redirect: "follow",
+    },
+  );
+  if (!response.ok) {
+    throw new Error(`Failed to ${download ? "download" : "open"} attachment (${response.status})`);
+  }
+  const headerType = response.headers.get("content-type") || "";
+  const raw = await response.blob();
+  const blob =
+    raw.type && raw.type !== "application/octet-stream"
+      ? raw
+      : new Blob([raw], { type: headerType || raw.type || "application/octet-stream" });
+  const disposition = response.headers.get("content-disposition") || "";
+  const match = /filename\*?=(?:UTF-8''|")?([^\";]+)/i.exec(disposition);
+  const fileName = match ? decodeURIComponent(match[1].replace(/"/g, "")) : null;
+  return { blob, fileName };
+}
+
+/** Open CRM/OVF/PO commercial attachment inline (PDF/images) or via external URL. */
+export async function openScmCommercialAttachment(
+  attachmentId: string,
+  attachment?: Pick<ScmCommercialAttachment, "source" | "external_url" | "file_name">,
+): Promise<void> {
+  const external = attachment?.external_url?.trim();
+  const source = (attachment?.source || "upload").toLowerCase();
+  if (external && (source !== "upload" || /^https?:\/\//i.test(external))) {
+    window.open(external, "_blank", "noopener,noreferrer");
+    return;
+  }
+
+  const { blob } = await fetchScmCommercialAttachmentBlob(attachmentId, { download: false });
+  const url = URL.createObjectURL(blob);
+  window.open(url, "_blank", "noopener,noreferrer");
+  window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+}
+
+/** Download commercial attachment with original file name. */
+export async function downloadScmCommercialAttachment(
+  attachmentId: string,
+  fileName: string,
+  attachment?: Pick<ScmCommercialAttachment, "source" | "external_url">,
+): Promise<void> {
+  const external = attachment?.external_url?.trim();
+  const source = (attachment?.source || "upload").toLowerCase();
+  if (external && (source !== "upload" || /^https?:\/\//i.test(external))) {
+    const a = document.createElement("a");
+    a.href = external;
+    a.download = fileName;
+    a.target = "_blank";
+    a.rel = "noopener noreferrer";
+    a.click();
+    return;
+  }
+
+  const { blob, fileName: headerName } = await fetchScmCommercialAttachmentBlob(attachmentId, {
+    download: true,
+  });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = headerName || fileName || "download";
+  a.click();
+  URL.revokeObjectURL(url);
+}
 
 export async function listScmOvfAttachments(ovfId: string): Promise<ScmCommercialAttachment[]> {
   const res = await apiClient<ScmCommercialAttachment[]>(
@@ -925,27 +1028,6 @@ export async function uploadScmPoAttachment(
   return unwrapData(res);
 }
 
-export async function openScmCommercialAttachment(attachmentId: string): Promise<void> {
-  const token = getAccessToken();
-  const response = await fetch(
-    `${env.apiUrl}${SCM_API}/commercial-attachments/${attachmentId}/content`,
-    {
-      headers: {
-        Accept: "*/*",
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      },
-      cache: "no-store",
-    },
-  );
-  if (!response.ok) {
-    throw new Error(`Failed to open attachment (${response.status})`);
-  }
-  const blob = await response.blob();
-  const url = URL.createObjectURL(blob);
-  window.open(url, "_blank", "noopener,noreferrer");
-  window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
-}
-
 /** OVF + PO commercial pack used when sending a PO for admin approval. */
 export async function collectPoApprovalDocuments(input: {
   orderId: string;
@@ -958,6 +1040,8 @@ export async function collectPoApprovalDocuments(input: {
     remarks: string | null;
     entityType: string;
     source: "ovf" | "po";
+    attachmentSource?: string;
+    externalUrl?: string | null;
   }>
 > {
   const docs = await listScmOrderCommercialDocuments(input.orderId).catch(async () => {
@@ -976,6 +1060,8 @@ export async function collectPoApprovalDocuments(input: {
     remarks: row.remarks || null,
     entityType: row.entity_type,
     source: row.entity_type === "purchase_order" ? ("po" as const) : ("ovf" as const),
+    attachmentSource: row.source || "upload",
+    externalUrl: row.external_url || null,
   }));
 }
 

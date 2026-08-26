@@ -3,14 +3,56 @@
 from typing import Any
 from uuid import UUID
 
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from modules.crm.models.company import CrmCompany
+from modules.crm.models.lead import CrmLead
 from modules.crm.repository.company_repository import CompanyRepository
 from modules.crm.repository.opportunity_repository import OpportunityRepository
 from modules.crm.repository.ovf_repository import OvfRepository
 from modules.foundation.domain.value_objects import TenantContext
 from modules.procurement.adapters.crm_adapter import ProcurementCrmAdapter
+
+# First two digits of GSTIN → Indian state (entity billing state on CRM lead).
+_GSTIN_STATE_BY_PREFIX: dict[str, str] = {
+    "01": "Jammu and Kashmir",
+    "02": "Himachal Pradesh",
+    "03": "Punjab",
+    "04": "Chandigarh",
+    "05": "Uttarakhand",
+    "06": "Haryana",
+    "07": "Delhi",
+    "08": "Rajasthan",
+    "09": "Uttar Pradesh",
+    "10": "Bihar",
+    "11": "Sikkim",
+    "12": "Arunachal Pradesh",
+    "13": "Nagaland",
+    "14": "Manipur",
+    "15": "Mizoram",
+    "16": "Tripura",
+    "17": "Meghalaya",
+    "18": "Assam",
+    "19": "West Bengal",
+    "20": "Jharkhand",
+    "21": "Odisha",
+    "22": "Chhattisgarh",
+    "23": "Madhya Pradesh",
+    "24": "Gujarat",
+    "27": "Maharashtra",
+    "29": "Karnataka",
+    "32": "Kerala",
+    "33": "Tamil Nadu",
+    "34": "Puducherry",
+    "36": "Telangana",
+    "37": "Andhra Pradesh",
+}
+
+
+def _state_from_entity_gst(gstin: str | None) -> str | None:
+    prefix = (gstin or "").strip()[:2]
+    return _GSTIN_STATE_BY_PREFIX.get(prefix)
 
 
 def _format_address(
@@ -79,6 +121,16 @@ class ProjectCrmAdapter:
             return account
         return self._companies.get(ctx, company_account_id, branch_scoped=True)
 
+    def _load_lead(self, lead_id: UUID | None) -> CrmLead | None:
+        if lead_id is None:
+            return None
+        return self._db.scalar(
+            select(CrmLead).where(
+                CrmLead.id == lead_id,
+                CrmLead.is_deleted.is_(False),
+            )
+        )
+
     def resolve_ovf_project_context(
         self, ctx: TenantContext, ovf_id: UUID
     ) -> dict[str, Any]:
@@ -125,6 +177,15 @@ class ProjectCrmAdapter:
         if customer_id is None and opp is not None:
             customer_id = opp.customer_id
 
+        circle_name: str | None = None
+        entity_state: str | None = None
+        lead = self._load_lead(opp.lead_id if opp is not None else None)
+        if lead is not None:
+            circle_name = (lead.entity_name or "").strip() or None
+            entity_state = _state_from_entity_gst(lead.entity_gst) or (
+                (lead.state or "").strip() or None
+            )
+
         return {
             "customer_name": customer_name,
             "customer_id": customer_id,
@@ -132,4 +193,7 @@ class ProjectCrmAdapter:
             "opportunity_id": opportunity_id,
             "customer_po_number": handoff.get("po_number"),
             "company_account_id": company_account_id,
+            "circle_name": circle_name,
+            "entity_state": entity_state,
+            "lead_id": lead.id if lead is not None else None,
         }

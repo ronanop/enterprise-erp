@@ -2,6 +2,7 @@ import type {
   ProcurementInventoryRow,
   ScmVendorPo,
 } from "@/services/procurement-service";
+import { aggregatePoDcBillStatus } from "@/utils/delivery-challan-bill";
 import { formatGrnStatusBadgeLabel } from "@/utils/grn-status-display";
 import { countGrnDocumentsForPo } from "@/utils/procurement-pipeline-metrics";
 import { isGrnNonBilledStockRow, nonBilledStockQuantity } from "@/utils/procurement-inventory-report";
@@ -24,6 +25,8 @@ export type PoGrnBillingRow = {
   qtyUnbilled: number;
   receiptPct: number;
   billedPct: number;
+  /** Aggregated DC post-delivery bill status (Unbilled / Partial / Full). */
+  dcBillStatus: string;
 };
 
 function roundQty(value: number): number {
@@ -152,6 +155,7 @@ export function buildPoGrnBillingRows(
       qtyUnbilled: roundQty(Math.max(0, qtyReceived - qtyBilled)),
       receiptPct,
       billedPct,
+      dcBillStatus: aggregatePoDcBillStatus(po.id),
     });
   }
 
@@ -165,6 +169,7 @@ export function poGrnBillingExportRows(rows: PoGrnBillingRow[]): Record<string, 
     Vendor: row.vendor,
     "PO status": row.poStatus,
     "GRN status": row.grnStatus,
+    "DC bill status": row.dcBillStatus,
     "GRN documents": row.grnDocuments,
     "GRN numbers": row.grnNumbers.join(", "),
     Ordered: row.qtyOrdered,

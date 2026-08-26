@@ -1,9 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Package, Plus, RefreshCw } from "lucide-react";
+import { Package, Plus } from "lucide-react";
 
-import { CrmErrorBanner, CrmInfoBanner, CrmListPanel, CrmPage } from "@/components/crm/crm-ui";
+import { CrmErrorBanner, CrmInfoBanner, CrmListPanel, CrmPage, CRM_TABLE_HEAD_ROW } from "@/components/crm/crm-ui";
 import { FinanceField, FinanceSelect } from "@/components/finance/journals/finance-form-field";
 import {
   RequiredFieldsDialog,
@@ -123,15 +123,9 @@ export function ProductsListPage({
   );
 
   const actions = (
-    <div className="flex shrink-0 flex-nowrap items-center gap-2">
-      <Button type="button" variant="outline" size="sm" className="cursor-pointer" onClick={() => void load()} disabled={loading}>
-        <RefreshCw className={`size-3.5 ${loading ? "animate-spin" : ""}`} />
-        Refresh
-      </Button>
-      <Button type="button" size="sm" className="cursor-pointer" onClick={openCreate}>
-        <Plus className="size-3.5" /> New Product
-      </Button>
-    </div>
+    <Button type="button" size="sm" className="cursor-pointer" onClick={openCreate}>
+      <Plus className="size-3.5" /> New Product
+    </Button>
   );
 
   return (
@@ -167,7 +161,7 @@ export function ProductsListPage({
         <div className="erp-scroll overflow-x-auto">
           <table className="w-full min-w-[760px] text-left text-sm">
             <thead>
-              <tr className="border-b border-border/70 bg-muted/40 text-[11px] tracking-wide text-muted-foreground uppercase">
+              <tr className={CRM_TABLE_HEAD_ROW}>
                 <CrmSortableTh label="Product Code" sortKey="product_code" activeKey={sortBy} dir={sortDir} onSort={onSort} />
                 <CrmSortableTh label="Name" sortKey="product_name" activeKey={sortBy} dir={sortDir} onSort={onSort} />
                 <CrmSortableTh label="Type" sortKey="product_type" activeKey={sortBy} dir={sortDir} onSort={onSort} />
@@ -224,7 +218,7 @@ export function ProductsListPage({
             className="w-full max-w-lg rounded-xl border border-border/80 bg-card p-5 shadow-lg"
             onClick={(e) => e.stopPropagation()}
           >
-            <h2 className="text-sm font-medium tracking-tight">New Product</h2>
+            <h2 className="text-base font-extrabold tracking-tight">New Product</h2>
 
             {formError ? (
               <div className="mt-3 rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-xs text-destructive">

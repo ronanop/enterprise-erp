@@ -28,10 +28,7 @@ class SessionStore:
         self._client.setex(key, self._ttl, json.dumps(payload))
 
     def get_session(self, session_id: UUID) -> dict[str, Any] | None:
-        try:
-            raw = cast(str | None, self._client.get(f"session:{session_id}"))
-        except redis.RedisError:
-            return None
+        raw = cast(str | None, self._client.get(f"session:{session_id}"))
         if raw is None:
             return None
         return json.loads(raw)
@@ -45,10 +42,7 @@ class SessionStore:
         self._client.setex(key, ttl, json.dumps(list(permissions)))
 
     def get_permissions(self, user_id: UUID) -> set[str] | None:
-        try:
-            raw = cast(str | None, self._client.get(f"permissions:{user_id}"))
-        except redis.RedisError:
-            return None
+        raw = cast(str | None, self._client.get(f"permissions:{user_id}"))
         if raw is None:
             return None
         return set(json.loads(raw))
@@ -75,3 +69,29 @@ class SessionStore:
         if count == 1:
             self._client.expire(key, settings.login_rate_window_seconds)
         return count
+
+    def set_oauth_state(
+        self, state: str, payload: dict[str, Any], *, ttl_seconds: int = 600
+    ) -> None:
+        self._client.setex(f"oauth:state:{state}", ttl_seconds, json.dumps(payload))
+
+    def pop_oauth_state(self, state: str) -> dict[str, Any] | None:
+        key = f"oauth:state:{state}"
+        raw = cast(str | None, self._client.get(key))
+        if raw is None:
+            return None
+        self._client.delete(key)
+        return json.loads(raw)
+
+    def set_oauth_exchange(
+        self, exchange_code: str, payload: dict[str, Any], *, ttl_seconds: int = 120
+    ) -> None:
+        self._client.setex(f"oauth:exchange:{exchange_code}", ttl_seconds, json.dumps(payload))
+
+    def pop_oauth_exchange(self, exchange_code: str) -> dict[str, Any] | None:
+        key = f"oauth:exchange:{exchange_code}"
+        raw = cast(str | None, self._client.get(key))
+        if raw is None:
+            return None
+        self._client.delete(key)
+        return json.loads(raw)

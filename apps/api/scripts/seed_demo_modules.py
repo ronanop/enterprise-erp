@@ -1961,7 +1961,20 @@ def seed_procurement(db, tenant_id, company_id, branch_id, admin_id, vendor, emp
             "updated_by": admin_id,
         },
     )
-    # Intentionally no seed ProcOrderHeader (PO-0001) — real POs come from SCM OVF → Create PO.
+    po = ensure(
+        db,
+        ProcOrderHeader,
+        {"tenant_id": tenant_id, "company_id": company_id, "document_number": "PO-0001"},
+        {
+            "branch_id": branch_id,
+            "document_date": date.today(),
+            "vendor_id": vendor.id,
+            "currency_code": "INR",
+            "status": "draft",
+            "created_by": admin_id,
+            "updated_by": admin_id,
+        },
+    )
 
     # --- New Procurement resources ---
     safe(
@@ -1984,7 +1997,67 @@ def seed_procurement(db, tenant_id, company_id, branch_id, admin_id, vendor, emp
             },
         ),
     )
-    # DEMO GRN / invoice / return previously depended on seed PO-0001 — skipped.
+    safe(
+        db,
+        "procurement.grns",
+        lambda: ensure(
+            db,
+            ProcGrnHeader,
+            {"tenant_id": tenant_id, "company_id": company_id, "document_number": "DEMO-PROC-GRN-0001"},
+            {
+                "branch_id": branch_id,
+                "document_date": date.today(),
+                "order_header_id": po.id,
+                "vendor_id": vendor.id,
+                "warehouse_reference": uuid4(),
+                "status": "received",
+                "created_by": admin_id,
+                "updated_by": admin_id,
+            },
+        ),
+    )
+    invoice = safe(
+        db,
+        "procurement.invoices",
+        lambda: ensure(
+            db,
+            ProcInvoiceHeader,
+            {"tenant_id": tenant_id, "company_id": company_id, "document_number": "DEMO-PROC-INV-0001"},
+            {
+                "branch_id": branch_id,
+                "document_date": date.today(),
+                "due_date": date.today() + timedelta(days=30),
+                "vendor_id": vendor.id,
+                "vendor_invoice_number": "VINV-DEMO-0001",
+                "order_header_id": po.id,
+                "currency_code": "INR",
+                "status": "posted",
+                "created_by": admin_id,
+                "updated_by": admin_id,
+            },
+        ),
+    )
+    if invoice:
+        safe(
+            db,
+            "procurement.returns",
+            lambda: ensure(
+                db,
+                ProcReturnHeader,
+                {"tenant_id": tenant_id, "company_id": company_id, "document_number": "DEMO-PROC-RET-0001"},
+                {
+                    "branch_id": branch_id,
+                    "document_date": date.today(),
+                    "vendor_id": vendor.id,
+                    "invoice_header_id": invoice.id,
+                    "order_header_id": po.id,
+                    "currency_code": "INR",
+                    "status": "requested",
+                    "created_by": admin_id,
+                    "updated_by": admin_id,
+                },
+            ),
+        )
     safe(
         db,
         "procurement.contracts",
@@ -2027,7 +2100,7 @@ def seed_procurement(db, tenant_id, company_id, branch_id, admin_id, vendor, emp
             },
         ),
     )
-    return rfq
+    return rfq, po
 
 
 def seed_inventory(db, tenant_id, company_id, branch_id, admin_id, warehouse, product, uom, warehouse2):
@@ -6164,6 +6237,11 @@ def main() -> None:
 
         print("Seeding organization…")
         dept, _bu, loc, cc, _pc = seed_org(db, tenant.id, company.id, branch.id, admin.id)
+        from scripts.platform_admin_employee import ensure_platform_admin_employee
+
+        ensure_platform_admin_employee(
+            db, tenant=tenant, company=company, branch=branch, admin=admin
+        )
         print("Seeding master data…")
         (
             uom,

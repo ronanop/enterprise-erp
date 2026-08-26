@@ -6,11 +6,9 @@ from collections.abc import Awaitable, Callable
 
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
-from starlette.responses import JSONResponse, Response
+from starlette.responses import Response
 
-from core.exceptions import AppException
 from core.logging import get_logger
-from shared.schemas import ErrorResponse
 
 logger = get_logger(__name__)
 
@@ -29,35 +27,30 @@ class RequestContextMiddleware(BaseHTTPMiddleware):
 
         try:
             response = await call_next(request)
-        except AppException as exc:
-            logger.warning(
-                "application error",
-                extra={
-                    "request_id": request_id,
-                    "method": request.method,
-                    "path": request.url.path,
-                    "status_code": exc.status_code,
-                    "message": exc.message,
-                },
-            )
-            return JSONResponse(
-                status_code=exc.status_code,
-                content=ErrorResponse(message=exc.message).model_dump(),
-            )
         except Exception:
+            origin = request.headers.get("origin")
+            headers: dict[str, str] = {"X-Request-ID": request_id}
+            if origin:
+                headers["Access-Control-Allow-Origin"] = origin
+                headers["Access-Control-Allow-Credentials"] = "true"
+                headers["Vary"] = "Origin"
+            duration_ms = (time.perf_counter() - start) * 1000
             logger.exception(
-                "unhandled request error",
+                "request failed",
                 extra={
                     "request_id": request_id,
                     "method": request.method,
                     "path": request.url.path,
+                    "status_code": 500,
+                    "duration_ms": round(duration_ms, 2),
                 },
             )
-            return JSONResponse(
+            return Response(
+                content=b'{"success":false,"message":"Internal server error","errors":[]}',
                 status_code=500,
-                content=ErrorResponse(message="Internal server error").model_dump(),
+                media_type="application/json",
+                headers=headers,
             )
-
         duration_ms = (time.perf_counter() - start) * 1000
 
         logger.info(

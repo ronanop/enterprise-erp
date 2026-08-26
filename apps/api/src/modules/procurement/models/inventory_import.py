@@ -16,6 +16,7 @@ class ProcInventoryImportLine(Base, *ProcTransactionMixin):
 
     id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True, default=uuid4)
     product_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    description: Mapped[str | None] = mapped_column(String(255), nullable=True)
     serial_number: Mapped[str] = mapped_column(String(120), nullable=False)
     order_header_id: Mapped[UUID | None] = mapped_column(
         PG_UUID(as_uuid=True),

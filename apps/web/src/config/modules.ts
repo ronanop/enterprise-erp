@@ -21,6 +21,7 @@ export type ErpModule = {
   icon:
     | "dashboard"
     | "shield"
+    | "mail"
     | "building"
     | "boxes"
     | "wallet"
@@ -38,6 +39,7 @@ export type ErpModule = {
     | "service"
     | "helpdesk"
     | "document"
+    | "marketing"
     | "grc"
     | "analytics"
     | "integration"
@@ -84,6 +86,48 @@ export const erpModules: ErpModule[] = [
       },
       { key: "audit", title: "Audit", description: "Audit logs and events", apiPath: "/audit/logs" },
       { key: "settings", title: "Settings", description: "System settings", apiPath: "/settings" },
+    ],
+  },
+  {
+    key: "email",
+    title: "Email",
+    description: "Graph-powered email notifications, templates, and delivery logs.",
+    href: "/email",
+    group: "foundation",
+    icon: "mail",
+    resources: [
+      {
+        key: "overview",
+        title: "Overview",
+        description: "Provider status and delivery KPIs",
+        apiPath: "/notifications/email/overview",
+        listable: false,
+      },
+      {
+        key: "compose",
+        title: "Compose",
+        description: "Send an email via Microsoft Graph",
+        apiPath: "/notifications/email/send",
+        listable: false,
+      },
+      {
+        key: "templates",
+        title: "Templates",
+        description: "Email notification templates",
+        apiPath: "/notifications/templates",
+      },
+      {
+        key: "deliveries",
+        title: "Deliveries",
+        description: "Email delivery attempts and status",
+        apiPath: "/notifications/deliveries",
+      },
+      {
+        key: "events",
+        title: "Events",
+        description: "Notification events queue",
+        apiPath: "/notifications/events",
+      },
     ],
   },
   {
@@ -363,6 +407,12 @@ export const erpModules: ErpModule[] = [
         title: "Delivery Status",
         description: "Shipment and delivery tracking",
         apiPath: "/procurement/delivery-status",
+      },
+      {
+        key: "installation",
+        title: "Installation",
+        description: "Delivered items requiring installation and project handoff",
+        apiPath: "/procurement/installation",
       },
       {
         key: "invoices",
@@ -1562,6 +1612,95 @@ export const erpModules: ErpModule[] = [
     ],
   },
   {
+    key: "marketing",
+    title: "Marketing & Social",
+    description:
+      "Marketing operations — campaigns, tasks, AI studio, Microsoft 365, workload analytics, and publishing.",
+    href: "/marketing",
+    group: "operations",
+    icon: "marketing",
+    resources: [
+      {
+        key: "campaigns",
+        title: "Campaigns",
+        description: "Marketing campaigns",
+        apiPath: "/marketing/campaigns",
+      },
+      {
+        key: "content-requests",
+        title: "Content Requests",
+        description: "AI generation requests",
+        apiPath: "/marketing/content-requests",
+      },
+      {
+        key: "content",
+        title: "Generated Content",
+        description: "Drafts and scored content",
+        apiPath: "/marketing/content",
+      },
+      {
+        key: "research",
+        title: "Research",
+        description: "Topic research reports",
+        apiPath: "/marketing/research",
+      },
+      {
+        key: "trends",
+        title: "Trends",
+        description: "Trend discovery",
+        apiPath: "/marketing/trends",
+      },
+      {
+        key: "brand-voices",
+        title: "Brand Voice",
+        description: "Brand voice profiles",
+        apiPath: "/marketing/brand-voices",
+      },
+      {
+        key: "platforms",
+        title: "Platforms",
+        description: "Channel catalog",
+        apiPath: "/marketing/platforms",
+      },
+      {
+        key: "social-accounts",
+        title: "Social Accounts",
+        description: "Connected social accounts",
+        apiPath: "/marketing/social-accounts",
+      },
+      {
+        key: "calendar",
+        title: "Calendar",
+        description: "Publishing calendar",
+        apiPath: "/marketing/calendar",
+      },
+      {
+        key: "competitors",
+        title: "Competitors",
+        description: "Competitor watchlist",
+        apiPath: "/marketing/competitors",
+      },
+      {
+        key: "publish-jobs",
+        title: "Publish Jobs",
+        description: "Outbound publish queue",
+        apiPath: "/marketing/publish-jobs",
+      },
+      {
+        key: "pillars",
+        title: "Content Pillars",
+        description: "Strategic content themes",
+        apiPath: "/marketing/pillars",
+      },
+      {
+        key: "tasks",
+        title: "Tasks",
+        description: "Nested campaign tasks",
+        apiPath: "/marketing/tasks",
+      },
+    ],
+  },
+  {
     key: "grc",
     title: "GRC",
     description:
@@ -1581,6 +1720,12 @@ export const erpModules: ErpModule[] = [
         title: "Policy Versions",
         description: "Policy version history",
         apiPath: "/grc/policy-versions",
+      },
+      {
+        key: "policy-acknowledgements",
+        title: "Policy Acknowledgements",
+        description: "Employee policy acknowledgements",
+        apiPath: "/grc/policy-acknowledgements",
       },
       {
         key: "controls",
@@ -1623,6 +1768,12 @@ export const erpModules: ErpModule[] = [
         title: "Compliance Frameworks",
         description: "Standards & frameworks",
         apiPath: "/grc/compliance-frameworks",
+      },
+      {
+        key: "compliance-requirements",
+        title: "Compliance Requirements",
+        description: "Regulatory obligations catalog",
+        apiPath: "/grc/compliance-requirements",
       },
       {
         key: "compliance-assessments",

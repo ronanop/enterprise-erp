@@ -2,13 +2,12 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { FileStack, RefreshCw } from "lucide-react";
+import { FileStack } from "lucide-react";
 
-import { CrmErrorBanner, CrmInfoBanner, CrmListPanel, CrmPage } from "@/components/crm/crm-ui";
+import { CrmErrorBanner, CrmInfoBanner, CrmListPanel, CrmPage, CRM_TABLE_HEAD_ROW } from "@/components/crm/crm-ui";
 import { CrmListToolbar } from "@/components/crm/sales/crm-list-toolbar";
 import { CrmSortableTh, sortRows, useTableSort } from "@/components/crm/sales/crm-table-sort";
 import { PageHeader } from "@/components/layout/page-header";
-import { Button } from "@/components/ui/button";
 import { ApiClientError } from "@/services/api-client";
 import {
   listAttachmentsByCategory,
@@ -89,9 +88,9 @@ export function DocumentRegistryListPage({
       const oppIds = new Set(scopedOpps.map((opp) => opp.id));
       const scopedFiles = companyAccountId
         ? files.filter(
-            (file) =>
-              file.entity_type === "opportunity" && oppIds.has(file.entity_id),
-          )
+          (file) =>
+            file.entity_type === "opportunity" && oppIds.has(file.entity_id),
+        )
         : files;
       setAttachments(scopedFiles);
       setOpportunities(scopedOpps);
@@ -168,19 +167,6 @@ export function DocumentRegistryListPage({
         <PageHeader
           title={meta.title}
           description={meta.description}
-          actions={
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="cursor-pointer"
-              disabled={loading}
-              onClick={() => void load()}
-            >
-              <RefreshCw className={`size-3.5 ${loading ? "animate-spin" : ""}`} />
-              Refresh
-            </Button>
-          }
         />
       ) : null}
 
@@ -199,21 +185,6 @@ export function DocumentRegistryListPage({
           subtitle={meta.subtitle}
           icon={FileStack}
           count={sorted.length}
-          actions={
-            embedded ? (
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="cursor-pointer"
-                disabled={loading}
-                onClick={() => void load()}
-              >
-                <RefreshCw className={`size-3.5 ${loading ? "animate-spin" : ""}`} />
-                Refresh
-              </Button>
-            ) : null
-          }
           search={{
             value: query,
             onChange: setQuery,
@@ -224,7 +195,7 @@ export function DocumentRegistryListPage({
         <div className="erp-scroll overflow-x-auto">
           <table className="w-full min-w-[720px] text-left text-sm">
             <thead>
-              <tr className="border-b border-border/70 bg-muted/40 text-[11px] tracking-wide text-muted-foreground uppercase">
+              <tr className={CRM_TABLE_HEAD_ROW}>
                 <CrmSortableTh label="Document" sortKey="document" activeKey={sortBy} dir={sortDir} onSort={onSort} />
                 <CrmSortableTh label="Opportunity" sortKey="opportunity" activeKey={sortBy} dir={sortDir} onSort={onSort} />
                 <CrmSortableTh label="Stage" sortKey="stage" activeKey={sortBy} dir={sortDir} onSort={onSort} />

@@ -5,10 +5,14 @@ from enum import Enum
 
 class EmployeeStatus(str, Enum):
     DRAFT = "draft"
+    ONBOARDING = "onboarding"
     ACTIVE = "active"
+    PROBATION = "probation"
     ON_LEAVE = "on_leave"
+    NOTICE_PERIOD = "notice_period"
     RESIGNED = "resigned"
     TERMINATED = "terminated"
+    EX_EMPLOYEE = "ex_employee"
 
 
 class CustomerType(str, Enum):

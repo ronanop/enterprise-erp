@@ -25,6 +25,7 @@ export interface TokenData {
   token_type?: string;
   expires_in?: number;
   mfa_required?: boolean;
+  redirect_to?: string;
 }
 
 export interface UserProfile {
@@ -33,6 +34,7 @@ export interface UserProfile {
   full_name?: string;
   display_name?: string;
   tenant_id?: string;
+  employee_id?: string | null;
   permissions?: string[];
   [key: string]: unknown;
 }

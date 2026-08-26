@@ -6,32 +6,10 @@
  * All calls go through the shared `apiClient` / `resourceService` — the UI
  * never talks to the database directly (DG-01).
  */
-import { cachedFetch, invalidateClientCache } from "@/lib/client-cache";
 import { ApiClientError, apiClient, resourceService } from "@/services/api-client";
 import { getAccessToken } from "@/lib/auth";
-import { env } from "@/utils/env";
 import { loadCrmOverview } from "@/services/crm-service";
-
-const TTL = {
-  reference: 120_000,
-  catalog: 60_000,
-  entity: 30_000,
-  list: 30_000,
-} as const;
-
-function listCacheKey(api: string, params?: Record<string, string | undefined>): string {
-  if (!params) return `crm:list:${api}`;
-  const parts = Object.entries(params)
-    .filter(([, value]) => value)
-    .sort(([a], [b]) => a.localeCompare(b))
-    .map(([key, value]) => `${key}=${value}`);
-  return `crm:list:${api}:${parts.join("&") || "all"}`;
-}
-
-/** Bust cached CRM reads after writes (pass `crm:` to clear all). */
-export function invalidateCrmCache(prefix = "crm:"): void {
-  invalidateClientCache(prefix);
-}
+import { env } from "@/utils/env";
 
 function asArray<T>(data: T[] | T | null | undefined): T[] {
   if (Array.isArray(data)) return data;
@@ -108,12 +86,15 @@ export type BlueprintActionPayload = {
   content_base64?: string;
   content_type?: string;
   team_role?: string;
+  assigned_user_id?: string;
+  assigned_user_ids?: string[];
   remarks?: string;
   remark?: string;
   reason?: string;
   deal_reg_number?: string;
   valid_until?: string;
   deal_won_amount?: number;
+  onboarding_date?: string;
 };
 
 // ---------------------------------------------------------------------------
@@ -159,6 +140,7 @@ export type Company = {
   locked: boolean;
   version: number;
   created_at?: string | null;
+  updated_at?: string | null;
 };
 
 export type CompanyFormInput = {
@@ -193,40 +175,78 @@ export type CompanyFormInput = {
 };
 
 export async function listCompanies(): Promise<Company[]> {
-  return cachedFetch("crm:list:companies", TTL.list, async () => {
-    const res = await resourceService.list<Company>(CRM_COMPANIES_API);
-    return asArray(res.data);
-  });
+  const res = await resourceService.list<Company>(CRM_COMPANIES_API);
+  return asArray(res.data);
+}
+
+export async function peekNextCompanyAccountNumber(): Promise<string> {
+  const res = await resourceService.get<{ account_number: string }>(
+    CRM_COMPANIES_API,
+    "next-account-number",
+  );
+  return unwrap(res).account_number;
 }
 
 export async function getCompany(id: string): Promise<Company> {
-  return cachedFetch(`crm:company:${id}`, TTL.entity, async () =>
-    unwrap(await resourceService.get<Company>(CRM_COMPANIES_API, id)),
-  );
+  return unwrap(await resourceService.get<Company>(CRM_COMPANIES_API, id));
 }
 
 export async function createCompany(body: CompanyFormInput): Promise<Company> {
-  const row = unwrap(await resourceService.create<Company>(CRM_COMPANIES_API, body));
-  invalidateCrmCache("crm:list:companies");
-  return row;
+  return unwrap(await resourceService.create<Company>(CRM_COMPANIES_API, body));
 }
 
 export async function updateCompany(id: string, body: Partial<CompanyFormInput>): Promise<Company> {
-  const row = unwrap(await resourceService.update<Company>(CRM_COMPANIES_API, id, body));
-  invalidateCrmCache(`crm:company:${id}`);
-  invalidateCrmCache("crm:list:companies");
-  return row;
+  return unwrap(await resourceService.update<Company>(CRM_COMPANIES_API, id, body));
+}
+
+export async function deleteCompany(id: string): Promise<void> {
+  await resourceService.delete(CRM_COMPANIES_API, id);
+}
+
+export function companyToFormInput(company: Company, customerName?: string): CompanyFormInput {
+  const name = customerName ?? company.customer_name;
+  return {
+    branch_id: company.branch_id,
+    customer_name: name,
+    account_owner_id: company.account_owner_id,
+    account_type: company.account_type ?? "customer",
+    industry: company.industry,
+    other_industries: company.other_industries,
+    portal_id: company.portal_id,
+    source: company.source,
+    rating: company.rating,
+    first_name: company.first_name?.trim() || name,
+    last_name: company.last_name?.trim() || "—",
+    customer_email: company.customer_email?.trim() || "noreply@example.com",
+    phone: company.phone?.trim() || "—",
+    website: company.website,
+    account_ownership_id: company.account_ownership_id,
+    customer_id_ext: company.customer_id_ext,
+    role: company.role ?? "User",
+    billing_street: company.billing_street,
+    billing_city: company.billing_city,
+    billing_state: company.billing_state,
+    billing_code: company.billing_code,
+    billing_country: company.billing_country,
+    shipping_street: company.shipping_street,
+    shipping_city: company.shipping_city,
+    shipping_state: company.shipping_state,
+    shipping_code: company.shipping_code,
+    shipping_country: company.shipping_country,
+    description: company.description,
+  };
 }
 
 export type LeadCreateFromCompanyInput = {
   branch_id: string;
   first_name?: string | null;
   last_name?: string | null;
+  designation?: string | null;
   salutation?: string | null;
   mobile?: string | null;
   email?: string | null;
   lead_source_id: string;
-  owner_employee_id: string;
+  owner_employee_id?: string | null;
   assign_to_id?: string | null;
   assigned_date?: string | null;
   expected_amount?: number | null;
@@ -251,7 +271,7 @@ export type LeadCreateFromCompanyInput = {
   state?: string | null;
   zip?: string | null;
   country?: string | null;
-  oem_name?: string | null;
+  oem_name: string;
   oem_contact_person?: string | null;
   oem_contact_number?: string | null;
   oem_contact_email?: string | null;
@@ -319,16 +339,10 @@ export type ContactFormInput = {
 };
 
 export async function listContacts(companyAccountId?: string): Promise<Contact[]> {
-  return cachedFetch(
-    listCacheKey(CRM_CONTACTS_API, { company_account_id: companyAccountId }),
-    TTL.list,
-    async () => {
-      const res = await resourceService.list<Contact>(CRM_CONTACTS_API, {
-        company_account_id: companyAccountId,
-      });
-      return asArray(res.data);
-    },
-  );
+  const res = await resourceService.list<Contact>(CRM_CONTACTS_API, {
+    company_account_id: companyAccountId,
+  });
+  return asArray(res.data);
 }
 
 export async function createContact(body: ContactFormInput): Promise<Contact> {
@@ -367,10 +381,8 @@ export type ProductFormInput = {
 };
 
 export async function listProducts(): Promise<Product[]> {
-  return cachedFetch("crm:catalog:products", TTL.catalog, async () => {
-    const res = await resourceService.list<Product>(CRM_PRODUCTS_API);
-    return asArray(res.data);
-  });
+  const res = await resourceService.list<Product>(CRM_PRODUCTS_API);
+  return asArray(res.data);
 }
 
 export async function createProduct(body: ProductFormInput): Promise<Product> {
@@ -409,22 +421,44 @@ export type OemFormInput = {
 };
 
 export async function listOems(): Promise<Oem[]> {
-  return cachedFetch("crm:catalog:oems", TTL.catalog, async () => {
-    const res = await resourceService.list<Oem>(CRM_OEMS_API);
-    return asArray(res.data);
-  });
+  const res = await resourceService.list<Oem>(CRM_OEMS_API);
+  return asArray(res.data);
 }
 
 export async function createOem(body: OemFormInput): Promise<Oem> {
-  const row = unwrap(await resourceService.create<Oem>(CRM_OEMS_API, body));
-  invalidateCrmCache("crm:catalog:oems");
-  return row;
+  return unwrap(await resourceService.create<Oem>(CRM_OEMS_API, body));
 }
 
 export async function updateOem(id: string, body: Partial<OemFormInput>): Promise<Oem> {
-  const row = unwrap(await resourceService.update<Oem>(CRM_OEMS_API, id, body));
-  invalidateCrmCache("crm:catalog:oems");
-  return row;
+  return unwrap(await resourceService.update<Oem>(CRM_OEMS_API, id, body));
+}
+
+// ---------------------------------------------------------------------------
+// Selling entities (billing entity master for leads)
+// ---------------------------------------------------------------------------
+
+export const CRM_SELLING_ENTITIES_API = "/crm/selling-entities";
+
+export type SellingEntity = {
+  id: string;
+  company_id: string;
+  entity_code: string;
+  entity_name: string;
+  entity_email: string | null;
+  entity_contact: string | null;
+  entity_gst: string | null;
+  entity_address: string | null;
+  status: string;
+  version: number;
+};
+
+export async function listSellingEntities(): Promise<SellingEntity[]> {
+  const res = await resourceService.list<SellingEntity>(CRM_SELLING_ENTITIES_API);
+  return asArray(res.data);
+}
+
+export async function getSellingEntity(id: string): Promise<SellingEntity> {
+  return unwrap(await resourceService.get<SellingEntity>(CRM_SELLING_ENTITIES_API, id));
 }
 
 // ---------------------------------------------------------------------------
@@ -440,9 +474,11 @@ export type SalesLead = {
   lead_code: string;
   first_name: string;
   last_name: string | null;
+  designation?: string | null;
   salutation?: string | null;
   mobile: string;
   email: string | null;
+  lead_source_id: string;
   status: string;
   blueprint_state: string;
   locked: boolean;
@@ -496,34 +532,24 @@ export type SalesLead = {
 };
 
 export async function listSalesLeads(companyAccountId?: string): Promise<SalesLead[]> {
-  return cachedFetch(
-    listCacheKey(CRM_LEADS_API, { company_account_id: companyAccountId }),
-    TTL.list,
-    async () => {
-      const res = await resourceService.list<SalesLead>(CRM_LEADS_API, {
-        company_account_id: companyAccountId,
-        page_size: 200,
-      });
-      return asArray(res.data).filter(
-        (row) =>
-          Boolean(row.company_account_id) &&
-          row.blueprint_state !== "converted" &&
-          !row.converted_opportunity_id,
-      );
-    },
+  const res = await resourceService.list<SalesLead>(CRM_LEADS_API, {
+    company_account_id: companyAccountId,
+    page_size: 200,
+  });
+  return asArray(res.data).filter(
+    (row) =>
+      Boolean(row.company_account_id) &&
+      row.blueprint_state !== "converted" &&
+      !row.converted_opportunity_id,
   );
 }
 
 export async function getSalesLead(id: string): Promise<SalesLead> {
-  return cachedFetch(`crm:lead:${id}`, TTL.entity, async () =>
-    unwrap(await resourceService.get<SalesLead>(CRM_LEADS_API, id)),
-  );
+  return unwrap(await resourceService.get<SalesLead>(CRM_LEADS_API, id));
 }
 
 export async function getLeadBlueprint(id: string): Promise<BlueprintState> {
-  return cachedFetch(`crm:lead:${id}:blueprint`, TTL.entity, async () =>
-    unwrap(await apiClient<BlueprintState>(`${CRM_LEADS_API}/${id}/blueprint`)),
-  );
+  return unwrap(await apiClient<BlueprintState>(`${CRM_LEADS_API}/${id}/blueprint`));
 }
 
 export async function markLeadLost(id: string, reason?: string): Promise<SalesLead> {
@@ -533,23 +559,19 @@ export async function markLeadLost(id: string, reason?: string): Promise<SalesLe
 }
 
 export type LeadConvertInput = {
-  pipeline_id: string;
-  opportunity_name: string;
-  expected_revenue?: number;
+  pipeline_id?: string | null;
+  opportunity_name?: string | null;
+  expected_revenue?: number | null;
   existing_customer_id?: string | null;
   create_customer?: boolean;
   remark?: string | null;
 };
 
-export async function convertLead(id: string, body: LeadConvertInput): Promise<Opportunity> {
-  const opp = unwrap(
+/** Converts using lead defaults when body fields are omitted. */
+export async function convertLead(id: string, body: LeadConvertInput = {}): Promise<Opportunity> {
+  return unwrap(
     await apiClient<Opportunity>(`${CRM_LEADS_API}/${id}/convert`, { method: "POST", body }),
   );
-  invalidateCrmCache(`crm:lead:${id}`);
-  invalidateCrmCache("crm:list:/crm/leads");
-  invalidateCrmCache("crm:list:/crm/opportunities");
-  invalidateCrmCache("crm:nav-counts:");
-  return opp;
 }
 
 // ---------------------------------------------------------------------------
@@ -580,42 +602,72 @@ export type Opportunity = {
   locked?: boolean;
   boq_attached?: boolean;
   sow_attached?: boolean;
+  boq_approved?: boolean;
+  sow_approved?: boolean;
   oem_quote_attached?: boolean;
   customer_po_attached?: boolean;
   customer_po_approved?: boolean;
+  cloud_blueprint_variant?: string | null;
+  product_type?: string | null;
+  cloud_sub_product?: string | null;
+  customer_mrr?: number | null;
+  customer_arr?: number | null;
+  customer_discount_percent?: number | null;
+  distributor_discount_percent?: number | null;
+  profitability_percent?: number | null;
+  distributor_discount_locked?: boolean;
+  assessment_type?: string | null;
+  migration_credit_phase1?: number | null;
+  migration_credit_phase2?: number | null;
+  migration_credit_phase3?: number | null;
+  contract_attached?: boolean;
+  onboarding_done?: boolean;
+  onboarding_date?: string | null;
   version: number;
   created_at?: string | null;
+  notes?: string | null;
 };
 
 export async function listOpportunities(params?: {
   company_account_id?: string;
 }): Promise<Opportunity[]> {
-  return cachedFetch(
-    listCacheKey(CRM_OPPORTUNITIES_API, {
-      company_account_id: params?.company_account_id,
-    }),
-    TTL.list,
-    async () => {
-      const res = await resourceService.list<Opportunity>(CRM_OPPORTUNITIES_API, params);
-      const rows = asArray(res.data);
-      if (params?.company_account_id) {
-        return rows.filter((row) => row.company_account_id === params.company_account_id);
-      }
-      return rows;
-    },
-  );
+  const res = await resourceService.list<Opportunity>(CRM_OPPORTUNITIES_API, params);
+  const rows = asArray(res.data);
+  if (params?.company_account_id) {
+    return rows.filter((row) => row.company_account_id === params.company_account_id);
+  }
+  return rows;
 }
 
 export async function getOpportunity(id: string): Promise<Opportunity> {
-  return cachedFetch(`crm:opportunity:${id}`, TTL.entity, async () =>
-    unwrap(await resourceService.get<Opportunity>(CRM_OPPORTUNITIES_API, id)),
+  return unwrap(await resourceService.get<Opportunity>(CRM_OPPORTUNITIES_API, id));
+}
+
+export type OpportunityUpdateInput = {
+  version: number;
+  opportunity_name?: string;
+  current_stage?: string;
+  expected_revenue?: number;
+  probability_percent?: number;
+  expected_close_date?: string | null;
+  customer_mrr?: number | null;
+  customer_arr?: number | null;
+  customer_discount_percent?: number | null;
+  distributor_discount_percent?: number | null;
+  assessment_type?: string | null;
+  migration_credit_phase1?: number | null;
+  migration_credit_phase2?: number | null;
+  migration_credit_phase3?: number | null;
+};
+
+export async function updateOpportunity(id: string, body: OpportunityUpdateInput): Promise<Opportunity> {
+  return unwrap(
+    await apiClient<Opportunity>(`${CRM_OPPORTUNITIES_API}/${id}`, { method: "PATCH", body }),
   );
 }
 
 export async function getOpportunityBlueprint(id: string): Promise<BlueprintState> {
-  return cachedFetch(`crm:opportunity:${id}:blueprint`, TTL.entity, async () =>
-    unwrap(await apiClient<BlueprintState>(`${CRM_OPPORTUNITIES_API}/${id}/blueprint`)),
-  );
+  return unwrap(await apiClient<BlueprintState>(`${CRM_OPPORTUNITIES_API}/${id}/blueprint`));
 }
 
 export type OpportunityTimelineEvent = {
@@ -779,27 +831,16 @@ export async function listQuotes(params?: {
   opportunity_id?: string;
   company_account_id?: string;
 }): Promise<Quote[]> {
-  return cachedFetch(
-    listCacheKey(CRM_QUOTES_API, {
-      opportunity_id: params?.opportunity_id,
-      company_account_id: params?.company_account_id,
-    }),
-    TTL.list,
-    async () => {
-      const res = await resourceService.list<Quote>(CRM_QUOTES_API, params);
-      const rows = asArray(res.data);
-      if (params?.company_account_id) {
-        return rows.filter((row) => row.company_account_id === params.company_account_id);
-      }
-      return rows;
-    },
-  );
+  const res = await resourceService.list<Quote>(CRM_QUOTES_API, params);
+  const rows = asArray(res.data);
+  if (params?.company_account_id) {
+    return rows.filter((row) => row.company_account_id === params.company_account_id);
+  }
+  return rows;
 }
 
 export async function getQuote(id: string): Promise<Quote> {
-  return cachedFetch(`crm:quote:${id}`, TTL.entity, async () =>
-    unwrap(await resourceService.get<Quote>(CRM_QUOTES_API, id)),
-  );
+  return unwrap(await resourceService.get<Quote>(CRM_QUOTES_API, id));
 }
 
 export async function createQuote(body: QuoteFormInput): Promise<Quote> {
@@ -844,7 +885,12 @@ export async function getQuoteBlueprint(quoteId: string): Promise<BlueprintState
 
 export async function sendQuoteForApproval(
   quoteId: string,
-  body: { team_role?: string; remarks?: string | null },
+  body: {
+    team_role?: string;
+    assigned_user_id: string;
+    assigned_user_ids?: string[];
+    remarks?: string | null;
+  },
 ): Promise<Quote> {
   return unwrap(
     await apiClient<Quote>(`${CRM_QUOTES_API}/${quoteId}/send-for-approval`, {
@@ -894,7 +940,7 @@ export type Ovf = {
   opportunity_id: string;
   company_account_id: string | null;
   po_number: string | null;
-  po_date?: string | null;
+  po_date: string | null;
   delivery_period: string | null;
   customer_name: string | null;
   quote_name: string | null;
@@ -926,13 +972,13 @@ export type Ovf = {
   total_margin_amount: number;
   version: number;
   created_at?: string | null;
+  updated_at?: string | null;
 };
 
 export type OvfFormInput = {
   quote_id: string;
   branch_id: string;
   po_number?: string | null;
-  po_date?: string | null;
   delivery_period?: string | null;
   customer_name?: string | null;
   quote_name?: string | null;
@@ -965,6 +1011,7 @@ export type OvfLine = {
   side: string;
   line_no: number;
   product_name: string;
+  distributor_name?: string | null;
   qty: number;
   unit_price: number;
   line_total: number;
@@ -974,6 +1021,7 @@ export type OvfLine = {
 export type OvfLineFormInput = {
   side?: string;
   product_name: string;
+  distributor_name?: string | null;
   qty?: number;
   unit_price?: number;
 };
@@ -982,27 +1030,16 @@ export async function listOvfs(params?: {
   opportunity_id?: string;
   company_account_id?: string;
 }): Promise<Ovf[]> {
-  return cachedFetch(
-    listCacheKey(CRM_OVF_API, {
-      opportunity_id: params?.opportunity_id,
-      company_account_id: params?.company_account_id,
-    }),
-    TTL.list,
-    async () => {
-      const res = await resourceService.list<Ovf>(CRM_OVF_API, params);
-      const rows = asArray(res.data);
-      if (params?.company_account_id) {
-        return rows.filter((row) => row.company_account_id === params.company_account_id);
-      }
-      return rows;
-    },
-  );
+  const res = await resourceService.list<Ovf>(CRM_OVF_API, params);
+  const rows = asArray(res.data);
+  if (params?.company_account_id) {
+    return rows.filter((row) => row.company_account_id === params.company_account_id);
+  }
+  return rows;
 }
 
 export async function getOvf(id: string): Promise<Ovf> {
-  return cachedFetch(`crm:ovf:${id}`, TTL.entity, async () =>
-    unwrap(await resourceService.get<Ovf>(CRM_OVF_API, id)),
-  );
+  return unwrap(await resourceService.get<Ovf>(CRM_OVF_API, id));
 }
 
 export async function createOvf(body: OvfFormInput): Promise<Ovf> {
@@ -1010,9 +1047,7 @@ export async function createOvf(body: OvfFormInput): Promise<Ovf> {
 }
 
 export async function updateOvf(id: string, body: Partial<OvfFormInput>): Promise<Ovf> {
-  const ovf = unwrap(await resourceService.update<Ovf>(CRM_OVF_API, id, body));
-  invalidateClientCache("erp.procurement.");
-  return ovf;
+  return unwrap(await resourceService.update<Ovf>(CRM_OVF_API, id, body));
 }
 
 export async function listOvfLines(ovfId: string): Promise<OvfLine[]> {
@@ -1046,11 +1081,7 @@ export async function sendOvfForApproval(
 }
 
 export async function shareOvfToScm(id: string): Promise<Ovf> {
-  const ovf = unwrap(
-    await apiClient<Ovf>(`${CRM_OVF_API}/${id}/share-to-scm`, { method: "POST", body: {} }),
-  );
-  invalidateClientCache("erp.procurement.");
-  return ovf;
+  return unwrap(await apiClient<Ovf>(`${CRM_OVF_API}/${id}/share-to-scm`, { method: "POST", body: {} }));
 }
 
 export async function markOvfDealWon(id: string, dealWonAmount: number): Promise<Ovf> {
@@ -1077,6 +1108,30 @@ export async function applyOvfAction(
 // ---------------------------------------------------------------------------
 
 export const CRM_MY_JOBS_API = "/crm/my-jobs";
+
+export type CrmApprovalUser = {
+  id: string;
+  display_name: string;
+  email: string;
+};
+
+export async function listCrmApprovalUsers(): Promise<CrmApprovalUser[]> {
+  const res = await apiClient<CrmApprovalUser[]>(`${CRM_MY_JOBS_API}/approval-users`);
+  return asArray(res.data);
+}
+
+export type CrmApprovalInboxItem = {
+  id: string;
+  event_type: string;
+  status: string;
+  created_at: string | null;
+  payload_json: Record<string, unknown> | null;
+};
+
+export async function listCrmApprovalInbox(): Promise<CrmApprovalInboxItem[]> {
+  const res = await apiClient<CrmApprovalInboxItem[]>(`${CRM_MY_JOBS_API}/inbox`);
+  return asArray(res.data);
+}
 
 export type ApprovalTask = {
   id: string;
@@ -1196,6 +1251,10 @@ export async function createAttachment(body: AttachmentFormInput): Promise<Attac
   return unwrap(await resourceService.create<Attachment>(CRM_ATTACHMENTS_API, body));
 }
 
+export async function deleteAttachment(attachmentId: string): Promise<void> {
+  await unwrap(await resourceService.delete(CRM_ATTACHMENTS_API, attachmentId));
+}
+
 /** Open an attachment: external links/cloud URLs open directly; uploads stream via API. */
 export async function openAttachmentInNewTab(attachment: Attachment | string): Promise<void> {
   if (typeof attachment !== "string") {
@@ -1225,6 +1284,46 @@ export async function openAttachmentInNewTab(attachment: Attachment | string): P
   // returns `null` even when the new tab opened successfully.
   window.open(url, "_blank", "noopener,noreferrer");
   window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+}
+
+/** Download attachment bytes with the original file name. */
+export async function downloadAttachment(
+  attachmentId: string,
+  fileName: string,
+  attachment?: Pick<Attachment, "source" | "file_path">,
+): Promise<void> {
+  if (attachment) {
+    const source = attachment.source ?? "upload";
+    const path = attachment.file_path?.trim() ?? "";
+    if (source !== "upload" || /^https?:\/\//i.test(path)) {
+      const a = document.createElement("a");
+      a.href = path;
+      a.download = fileName;
+      a.target = "_blank";
+      a.rel = "noopener noreferrer";
+      a.click();
+      return;
+    }
+  }
+
+  const token = getAccessToken();
+  const response = await fetch(`${env.apiUrl}${CRM_ATTACHMENTS_API}/${attachmentId}/content`, {
+    headers: {
+      Accept: "*/*",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    cache: "no-store",
+  });
+  if (!response.ok) {
+    throw new Error(`Failed to download attachment (${response.status})`);
+  }
+  const blob = await response.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = fileName || "download";
+  a.click();
+  URL.revokeObjectURL(url);
 }
 
 // ---------------------------------------------------------------------------
@@ -1289,16 +1388,10 @@ export type MeetingFormInput = {
 };
 
 export async function listMeetings(companyAccountId?: string): Promise<CrmMeeting[]> {
-  return cachedFetch(
-    listCacheKey(CRM_MEETINGS_API, { company_account_id: companyAccountId }),
-    TTL.list,
-    async () => {
-      const res = await resourceService.list<CrmMeeting>(CRM_MEETINGS_API, {
-        company_account_id: companyAccountId,
-      });
-      return asArray(res.data);
-    },
-  );
+  const res = await resourceService.list<CrmMeeting>(CRM_MEETINGS_API, {
+    company_account_id: companyAccountId,
+  });
+  return asArray(res.data);
 }
 
 export async function createMeeting(body: MeetingFormInput): Promise<CrmMeeting> {
@@ -1343,16 +1436,10 @@ export type FollowupFormInput = {
 };
 
 export async function listFollowups(companyAccountId?: string): Promise<CrmFollowup[]> {
-  return cachedFetch(
-    listCacheKey(CRM_FOLLOWUPS_API, { company_account_id: companyAccountId }),
-    TTL.list,
-    async () => {
-      const res = await resourceService.list<CrmFollowup>(CRM_FOLLOWUPS_API, {
-        company_account_id: companyAccountId,
-      });
-      return asArray(res.data);
-    },
-  );
+  const res = await resourceService.list<CrmFollowup>(CRM_FOLLOWUPS_API, {
+    company_account_id: companyAccountId,
+  });
+  return asArray(res.data);
 }
 
 export async function createFollowup(body: FollowupFormInput): Promise<CrmFollowup> {
@@ -1426,49 +1513,101 @@ export async function createTask(body: TaskFormInput): Promise<CrmTask> {
 export type Option = { id: string; label: string; email?: string };
 
 export async function listLeadSourceOptions(): Promise<Option[]> {
-  return cachedFetch("crm:ref:lead-sources", TTL.reference, async () => {
-    const res = await resourceService.list("/crm/lead-sources");
-    const rows = asArray(res.data as Record<string, unknown>[] | Record<string, unknown> | null);
-    return rows.map((r) => ({
-      id: String(r.id),
-      label: String(r.source_name ?? r.source_code ?? r.id),
-    }));
-  });
+  const res = await resourceService.list("/crm/lead-sources");
+  const rows = asArray(res.data as Record<string, unknown>[] | Record<string, unknown> | null);
+  return rows.map((r) => ({
+    id: String(r.id),
+    label: String(r.source_name ?? r.source_code ?? r.id),
+  }));
 }
 
 export async function listPipelineOptions(): Promise<Option[]> {
-  return cachedFetch("crm:ref:pipelines", TTL.reference, async () => {
-    const res = await resourceService.list("/crm/pipelines");
-    const rows = asArray(res.data as Record<string, unknown>[] | Record<string, unknown> | null);
-    return rows.map((r) => ({
-      id: String(r.id),
-      label: String(r.pipeline_name ?? r.pipeline_code ?? r.id),
-    }));
-  });
+  const res = await resourceService.list("/crm/pipelines");
+  const rows = asArray(res.data as Record<string, unknown>[] | Record<string, unknown> | null);
+  return rows.map((r) => ({
+    id: String(r.id),
+    label: String(r.pipeline_name ?? r.pipeline_code ?? r.id),
+  }));
 }
 
 export async function listBranchOptions(): Promise<Option[]> {
-  return cachedFetch("crm:ref:branches", TTL.reference, async () => {
-    const res = await resourceService.list("/branches");
-    const rows = asArray(res.data as Record<string, unknown>[] | Record<string, unknown> | null);
-    return rows.map((r) => ({
-      id: String(r.id),
-      label: String(r.branch_name ?? r.name ?? r.id),
-    }));
-  });
+  const res = await resourceService.list("/branches");
+  const rows = asArray(res.data as Record<string, unknown>[] | Record<string, unknown> | null);
+  return rows.map((r) => ({
+    id: String(r.id),
+    label: String(r.branch_name ?? r.name ?? r.id),
+  }));
 }
 
 export async function listEmployeeOptions(): Promise<Option[]> {
-  return cachedFetch("crm:ref:employees", TTL.reference, async () => {
-    const res = await resourceService.list("/employees");
-    const rows = asArray(res.data as Record<string, unknown>[] | Record<string, unknown> | null);
-    return rows.map((r) => ({
-      id: String(r.id),
-      label: `${[r.first_name, r.last_name].filter(Boolean).join(" ")}${r.employee_code ? ` (${r.employee_code})` : ""
-        }`.trim(),
-      email: r.email ? String(r.email) : undefined,
-    }));
+  const res = await resourceService.list("/employees");
+  const rows = asArray(res.data as Record<string, unknown>[] | Record<string, unknown> | null);
+  return rows.map((r) => ({
+    id: String(r.id),
+    label: `${[r.first_name, r.last_name].filter(Boolean).join(" ")}${r.employee_code ? ` (${r.employee_code})` : ""
+      }`.trim(),
+    email: r.email ? String(r.email) : undefined,
+  }));
+}
+
+/** CRM module–assigned users with linked employee records (for owner/assignee pickers). */
+export async function listCrmMemberOptions(): Promise<Option[]> {
+  const res = await resourceService.list("/crm/members");
+  const rows = asArray(res.data as Record<string, unknown>[] | Record<string, unknown> | null);
+  return rows.map((r) => ({
+    id: String(r.id),
+    label: String(r.label ?? r.id),
+    email: r.email ? String(r.email) : undefined,
+  }));
+}
+
+// ---------------------------------------------------------------------------
+// KYC records
+// ---------------------------------------------------------------------------
+
+const CRM_KYC_API = "/crm/kyc-records";
+
+export type CrmKycRecord = {
+  id: string;
+  kyc_code: string;
+  company_account_id: string;
+  owner_employee_id: string;
+  quote_id?: string | null;
+  form_data: Record<string, unknown>;
+  status: string;
+  company_id: string;
+  branch_id: string;
+  version: number;
+};
+
+export type KycRecordFormInput = {
+  branch_id: string;
+  company_account_id: string;
+  owner_employee_id: string;
+  quote_id?: string | null;
+  form_data: Record<string, unknown>;
+};
+
+export async function listKycRecords(companyAccountId?: string): Promise<CrmKycRecord[]> {
+  const res = await resourceService.list<CrmKycRecord>(CRM_KYC_API, {
+    company_account_id: companyAccountId,
   });
+  return asArray(res.data);
+}
+
+export async function getKycRecord(kycId: string): Promise<CrmKycRecord> {
+  return unwrap(await resourceService.get<CrmKycRecord>(CRM_KYC_API, kycId));
+}
+
+export async function createKycRecord(body: KycRecordFormInput): Promise<CrmKycRecord> {
+  return unwrap(await resourceService.create<CrmKycRecord>(CRM_KYC_API, body));
+}
+
+export async function updateKycRecord(
+  kycId: string,
+  body: Partial<KycRecordFormInput>,
+): Promise<CrmKycRecord> {
+  return unwrap(await resourceService.update<CrmKycRecord>(CRM_KYC_API, kycId, body));
 }
 
 function prefetchQuiet(promise: Promise<unknown>): void {

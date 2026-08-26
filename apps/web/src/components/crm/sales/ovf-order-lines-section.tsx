@@ -16,6 +16,7 @@ export type CustomerChargeRow = {
   serverId?: string;
   fromQuote?: boolean;
   product_name: string;
+  description: string;
   qty: string;
   unit_price: string;
   total: string;
@@ -30,6 +31,8 @@ export type VendorChargeRow = {
   key: string;
   serverId?: string;
   fromQuote?: boolean;
+  product_name: string;
+  description: string;
   qty: string;
   unit_price: string;
   total: string;
@@ -52,6 +55,7 @@ export function emptyCustomerRow(): CustomerChargeRow {
     key: newKey(),
     fromQuote: false,
     product_name: "",
+    description: "",
     qty: "",
     unit_price: "",
     total: "",
@@ -67,6 +71,8 @@ export function emptyVendorRow(): VendorChargeRow {
   return {
     key: newKey(),
     fromQuote: false,
+    product_name: "",
+    description: "",
     qty: "",
     unit_price: "",
     total: "",
@@ -106,6 +112,51 @@ function qtyAsInt(value: string | number | null | undefined): string {
   return Number.isFinite(n) ? String(n) : "";
 }
 
+function quoteDesc(quoteLine: QuoteLine | undefined): string {
+  return (quoteLine?.description ?? "").trim();
+}
+
+function sameName(a: string | null | undefined, b: string | null | undefined): boolean {
+  return (a || "").trim().toLowerCase() === (b || "").trim().toLowerCase();
+}
+
+/** Legacy fallback: distributor was once overwritten into product_name. */
+function distributorFromStoredName(
+  stored: string | null | undefined,
+  productName: string | null | undefined,
+  knownProductNames: ReadonlySet<string>,
+): string {
+  const value = (stored || "").trim();
+  if (!value) return "";
+  if (sameName(value, productName)) return "";
+  if (knownProductNames.has(value.toLowerCase())) return "";
+  return value;
+}
+
+function quoteByProductName(quoteLines: QuoteLine[]): Map<string, QuoteLine> {
+  const map = new Map<string, QuoteLine>();
+  for (const line of quoteLines) {
+    const key = (line.product_name || "").trim().toLowerCase();
+    if (key && !map.has(key)) map.set(key, line);
+  }
+  return map;
+}
+
+function quoteByLineNo(quoteLines: QuoteLine[]): Map<number, QuoteLine> {
+  const map = new Map<number, QuoteLine>();
+  // Only index by line_no when values are unique (legacy data often repeats 1).
+  const counts = new Map<number, number>();
+  for (const line of quoteLines) {
+    const no = Number(line.line_no);
+    counts.set(no, (counts.get(no) || 0) + 1);
+  }
+  for (const line of quoteLines) {
+    const no = Number(line.line_no);
+    if ((counts.get(no) || 0) === 1) map.set(no, line);
+  }
+  return map;
+}
+
 export function customerRowsFromQuoteLines(quoteLines: QuoteLine[]): CustomerChargeRow[] {
   return quoteLines.map((quoteLine) => customerFromQuote(quoteLine));
 }
@@ -114,7 +165,12 @@ export function vendorRowsFromQuoteLines(quoteLines: QuoteLine[]): VendorChargeR
   return quoteLines.map((quoteLine) => vendorFromQuote(quoteLine));
 }
 
-export function customerRowsFromOvfLines(lines: OvfLine[]): CustomerChargeRow[] {
+export function customerRowsFromOvfLines(
+  lines: OvfLine[],
+  quoteLines: QuoteLine[] = [],
+): CustomerChargeRow[] {
+  const byName = quoteByProductName(quoteLines);
+  const byNo = quoteByLineNo(quoteLines);
   return lines
     .filter((line) => line.side === "customer_po")
     .map((line) => {
@@ -122,11 +178,14 @@ export function customerRowsFromOvfLines(lines: OvfLine[]): CustomerChargeRow[] 
       const unitPrice = moneyAsFixed(line.unit_price ?? 0);
       const gstPct = String(GST_PCT);
       const money = moneyFromQtyPrice(qty, unitPrice, gstPct);
+      const quoteLine =
+        byName.get((line.product_name || "").trim().toLowerCase()) ?? byNo.get(Number(line.line_no));
       return {
         key: line.id,
         serverId: line.id,
         fromQuote: false,
         product_name: line.product_name,
+        description: quoteDesc(quoteLine),
         qty,
         unit_price: unitPrice,
         total: money.total,
@@ -139,31 +198,64 @@ export function customerRowsFromOvfLines(lines: OvfLine[]): CustomerChargeRow[] 
     });
 }
 
-export function vendorRowsFromOvfLines(lines: OvfLine[]): VendorChargeRow[] {
-  return lines
-    .filter((line) => line.side === "vendor")
-    .map((line) => {
-      const qty = qtyAsInt(line.qty);
-      const unitPrice = moneyAsFixed(line.unit_price ?? 0);
-      const gstPct = String(GST_PCT);
-      const money = moneyFromQtyPrice(qty, unitPrice, gstPct);
-      return {
-        key: line.id,
-        serverId: line.id,
-        fromQuote: false,
-        qty,
-        unit_price: unitPrice,
-        total: money.total,
-        gst_pct: gstPct,
-        total_gst: money.total_gst,
-        total_with_gst: money.total_with_gst,
-        vendor_name: line.product_name,
-        contact_person: "",
-        contact_number: "",
-        add_quote: "",
-        quoteFile: null,
-      } satisfies VendorChargeRow;
-    });
+export function vendorRowsFromOvfLines(
+  lines: OvfLine[],
+  quoteLines: QuoteLine[] = [],
+): VendorChargeRow[] {
+  const byName = quoteByProductName(quoteLines);
+  const byNo = quoteByLineNo(quoteLines);
+  const customerProducts = lines
+    .filter((line) => line.side === "customer_po")
+    .map((line) => (line.product_name || "").trim())
+    .filter(Boolean);
+  const knownProductNames = new Set(
+    [
+      ...quoteLines.map((line) => (line.product_name || "").trim().toLowerCase()),
+      ...customerProducts.map((name) => name.toLowerCase()),
+    ].filter(Boolean),
+  );
+  const vendorLines = lines.filter((line) => line.side === "vendor");
+
+  return vendorLines.map((line, index) => {
+    const qty = qtyAsInt(line.qty);
+    const unitPrice = moneyAsFixed(line.unit_price ?? 0);
+    const gstPct = String(GST_PCT);
+    const money = moneyFromQtyPrice(qty, unitPrice, gstPct);
+    const storedProduct = (line.product_name || "").trim();
+    const storedDistributor = (line.distributor_name || "").trim();
+    const storedIsProduct = knownProductNames.has(storedProduct.toLowerCase());
+    const quoteLine =
+      byName.get(storedProduct.toLowerCase()) ??
+      byNo.get(Number(line.line_no)) ??
+      quoteLines[index];
+    const productName =
+      (storedIsProduct ? storedProduct : "") ||
+      quoteLine?.product_name ||
+      customerProducts[index] ||
+      storedProduct ||
+      "";
+    const vendorName =
+      storedDistributor ||
+      distributorFromStoredName(storedProduct, productName, knownProductNames);
+    return {
+      key: line.id,
+      serverId: line.id,
+      fromQuote: false,
+      product_name: productName,
+      description: quoteDesc(quoteLine ?? byName.get(productName.toLowerCase())),
+      qty,
+      unit_price: unitPrice,
+      total: money.total,
+      gst_pct: gstPct,
+      total_gst: money.total_gst,
+      total_with_gst: money.total_with_gst,
+      vendor_name: vendorName,
+      contact_person: "",
+      contact_number: "",
+      add_quote: "",
+      quoteFile: null,
+    } satisfies VendorChargeRow;
+  });
 }
 
 export function customerFromQuote(quoteLine: QuoteLine, ovfLine?: OvfLine): CustomerChargeRow {
@@ -176,6 +268,7 @@ export function customerFromQuote(quoteLine: QuoteLine, ovfLine?: OvfLine): Cust
     serverId: ovfLine?.id,
     fromQuote: true,
     product_name: quoteLine.product_name,
+    description: quoteDesc(quoteLine),
     qty,
     unit_price: unitPrice,
     total: money.total,
@@ -192,17 +285,24 @@ export function vendorFromQuote(quoteLine: QuoteLine, ovfLine?: OvfLine): Vendor
   const unitPrice = moneyAsFixed(ovfLine?.unit_price ?? quoteLine.unit_cost ?? 0);
   const gstPct = String(quoteLine.gst_pct || GST_PCT);
   const money = moneyFromQtyPrice(qty, unitPrice, gstPct);
+  const productName = quoteLine.product_name;
+  const known = new Set([productName.trim().toLowerCase()].filter(Boolean));
+  const storedDistributor = (ovfLine?.distributor_name || "").trim();
   return {
     key: ovfLine?.id ?? `quote-vendor-${quoteLine.id}`,
     serverId: ovfLine?.id,
     fromQuote: true,
+    product_name: productName,
+    description: quoteDesc(quoteLine),
     qty,
     unit_price: unitPrice,
     total: money.total,
     gst_pct: gstPct,
     total_gst: money.total_gst,
     total_with_gst: money.total_with_gst,
-    vendor_name: ovfLine?.product_name ?? "",
+    vendor_name:
+      storedDistributor ||
+      distributorFromStoredName(ovfLine?.product_name, productName, known),
     contact_person: "",
     contact_number: "",
     add_quote: "",
@@ -355,8 +455,9 @@ type OvfOrderLinesSectionProps = {
   vendorRows: VendorChargeRow[];
   onCustomerRowsChange?: (rows: CustomerChargeRow[]) => void;
   onVendorRowsChange?: (rows: VendorChargeRow[]) => void;
+  /** Distributor names selected on the lead — options for Distributor Name. */
+  vendorNameOptions?: readonly string[];
   disabled?: boolean;
-  onValidationError?: (message: string) => void;
 };
 
 export function OvfOrderLinesSection({
@@ -364,11 +465,22 @@ export function OvfOrderLinesSection({
   vendorRows,
   onCustomerRowsChange,
   onVendorRowsChange,
+  vendorNameOptions = [],
   disabled = false,
-  onValidationError,
 }: OvfOrderLinesSectionProps) {
   const totalSaleValue = sumLineTotals(customerRows);
   const totalPurchaseValue = sumLineTotals(vendorRows);
+  const productNameKeys = new Set(
+    vendorRows.map((row) => row.product_name.trim().toLowerCase()).filter(Boolean),
+  );
+  const vendorOptions = Array.from(
+    new Set([
+      ...vendorNameOptions.map((name) => name.trim()).filter(Boolean),
+      ...vendorRows
+        .map((row) => row.vendor_name.trim())
+        .filter((name) => name && !productNameKeys.has(name.toLowerCase())),
+    ]),
+  );
 
   function updateCustomerRow(key: string, patch: Partial<CustomerChargeRow>, recalc = false) {
     if (disabled || !onCustomerRowsChange) return;
@@ -402,299 +514,327 @@ export function OvfOrderLinesSection({
 
   function onAddCustomerRow() {
     if (disabled || !onCustomerRowsChange) return;
-    const message = validateChargeAttachments(customerRows, []);
-    if (message) {
-      onValidationError?.(message);
-      return;
-    }
     onCustomerRowsChange([...customerRows, emptyCustomerRow()]);
   }
 
   function onAddVendorRow() {
     if (disabled || !onVendorRowsChange) return;
-    const message = validateChargeAttachments([], vendorRows);
-    if (message) {
-      onValidationError?.(message);
-      return;
-    }
     onVendorRowsChange([...vendorRows, emptyVendorRow()]);
   }
 
   return (
-      <section className="overflow-hidden rounded-xl border border-border/80 bg-card shadow-sm">
-        <div className="border-b border-border/70 px-4 py-3">
-          <h2 className="text-sm font-medium tracking-tight">Order Lines</h2>
-          <p className="text-[11px] text-muted-foreground">
-            {disabled
-              ? "Customer Charges and Vendor Charges saved with this OVF."
-              : "Customer Charges and Vendor Charges — prefilled from the quote; use + Add row for extras."}
-          </p>
-        </div>
+    <section className="overflow-hidden rounded-xl border border-border/80 bg-card shadow-sm">
+      <div className="border-b border-border/70 px-4 py-3">
+        <h2 className="text-base font-extrabold tracking-tight">Order Lines</h2>
+        <p className="text-[11px] text-muted-foreground">
+          {disabled
+            ? "Customer Charges and Vendor Charges saved with this OVF."
+            : "Customer Charges and Vendor Charges — prefilled from the quote; use + Add row for extras."}
+        </p>
+      </div>
 
-        <div className="space-y-10 px-4 py-5">
-          <ChargesTableShell
-            title="Customer Charges."
-            totalLabel="Total Sale Value"
-            totalValue={formatInrPrecise(totalSaleValue)}
-            footerLeft={
-              !disabled ? (
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="h-8 cursor-pointer border-sky-400 px-3 text-sky-700 transition-colors duration-200 hover:bg-sky-50 hover:text-sky-800"
-                  onClick={() => onAddCustomerRow()}
-                >
-                  <Plus className="size-3.5" /> Add row
-                </Button>
-              ) : (
-                <span />
-              )
-            }
-          >
-            <table className="w-full min-w-[1100px] border-collapse text-left">
-              <thead>
-                <tr className="bg-[#eef2f6]">
-                  <th className={thClass("min-w-[160px]")}>Product Name</th>
-                  <th className={thClass("min-w-[88px]")}>Quantity</th>
-                  <th className={thClass("min-w-[130px]")}>Unit Product Amt (₹)</th>
-                  <th className={thClass("min-w-[110px]")}>Total.</th>
-                  <th className={thClass("min-w-[90px]")}>GST ({GST_PCT}%)</th>
-                  <th className={thClass("min-w-[120px]")}>Total GST ({GST_PCT}%)</th>
-                  <th className={thClass("min-w-[150px]")}>Total Amount with GST</th>
-                  <th className={thClass("min-w-[120px]")}>
-                    Add PO <span className="text-destructive">*</span>
-                  </th>
+      <div className="space-y-10 px-4 py-5">
+        <ChargesTableShell
+          title="Customer Charges."
+          totalLabel="Total Sale Value"
+          totalValue={formatInrPrecise(totalSaleValue)}
+          footerLeft={
+            !disabled ? (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-8 cursor-pointer border-sky-400 px-3 text-sky-700 transition-colors duration-200 hover:bg-sky-50 hover:text-sky-800"
+                onClick={() => onAddCustomerRow()}
+              >
+                <Plus className="size-3.5" /> Add row
+              </Button>
+            ) : (
+              <span />
+            )
+          }
+        >
+          <table className="w-full min-w-[1240px] border-collapse text-left">
+            <thead>
+              <tr className="bg-[#eef2f6]">
+                <th className={thClass("min-w-[160px]")}>Product Name</th>
+                <th className={thClass("min-w-[200px]")}>Description</th>
+                <th className={thClass("min-w-[88px]")}>Quantity</th>
+                <th className={thClass("min-w-[130px]")}>Unit Product Amt (₹)</th>
+                <th className={thClass("min-w-[110px]")}>Total.</th>
+                <th className={thClass("min-w-[90px]")}>GST ({GST_PCT}%)</th>
+                <th className={thClass("min-w-[120px]")}>Total GST ({GST_PCT}%)</th>
+                <th className={thClass("min-w-[150px]")}>Total Amount with GST</th>
+                <th className={thClass("min-w-[120px]")}>
+                  Add PO <span className="text-destructive">*</span>
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {customerRows.length === 0 ? (
+                <tr>
+                  <td colSpan={9} className="px-3 py-6 text-center text-[12px] text-muted-foreground">
+                    No customer charge rows. Click + Add row to create one.
+                  </td>
                 </tr>
-              </thead>
-              <tbody>
-                {customerRows.length === 0 ? (
-                  <tr>
-                    <td colSpan={8} className="px-3 py-6 text-center text-[12px] text-muted-foreground">
-                      No customer charge rows. Click + Add row to create one.
+              ) : (
+                customerRows.map((row) => (
+                  <tr key={row.key} className="border-t border-[#e8edf3]">
+                    <td className={tdClass()}>
+                      <ChargesField
+                        readOnly={disabled || Boolean(row.fromQuote)}
+                        value={row.product_name}
+                        onChange={(v) => updateCustomerRow(row.key, { product_name: v })}
+                      />
+                    </td>
+                    <td className={tdClass()}>
+                      <ChargesField
+                        readOnly={disabled || Boolean(row.fromQuote)}
+                        value={row.description}
+                        onChange={(v) => updateCustomerRow(row.key, { description: v })}
+                      />
+                    </td>
+                    <td className={tdClass()}>
+                      <ChargesField
+                        readOnly={disabled || Boolean(row.fromQuote)}
+                        type="number"
+                        value={row.qty}
+                        className="text-right tabular-nums"
+                        onChange={(v) => updateCustomerRow(row.key, { qty: v }, true)}
+                      />
+                    </td>
+                    <td className={tdClass()}>
+                      <ChargesField
+                        readOnly={disabled || Boolean(row.fromQuote)}
+                        type="number"
+                        value={row.unit_price}
+                        className="text-right tabular-nums"
+                        onChange={(v) => updateCustomerRow(row.key, { unit_price: v }, true)}
+                      />
+                    </td>
+                    <td className={tdClass()}>
+                      <ChargesField
+                        readOnly={disabled}
+                        type="number"
+                        value={row.total}
+                        className="text-right tabular-nums"
+                        onChange={(v) => updateCustomerRow(row.key, { total: v })}
+                      />
+                    </td>
+                    <td className={tdClass()}>
+                      <ChargesField
+                        readOnly={disabled}
+                        type="number"
+                        value={row.gst_pct}
+                        className="text-right tabular-nums"
+                        onChange={(v) => updateCustomerRow(row.key, { gst_pct: v }, true)}
+                      />
+                    </td>
+                    <td className={tdClass()}>
+                      <ChargesField
+                        readOnly={disabled}
+                        type="number"
+                        value={row.total_gst}
+                        className="text-right tabular-nums"
+                        onChange={(v) => updateCustomerRow(row.key, { total_gst: v })}
+                      />
+                    </td>
+                    <td className={tdClass()}>
+                      <ChargesField
+                        readOnly={disabled}
+                        type="number"
+                        value={row.total_with_gst}
+                        className="text-right tabular-nums"
+                        onChange={(v) => updateCustomerRow(row.key, { total_with_gst: v })}
+                      />
+                    </td>
+                    <td className={tdClass()}>
+                      <ChargesLocalFileUpload
+                        fileName={row.add_po}
+                        required={!row.serverId}
+                        disabled={disabled}
+                        onFileSelected={(file) =>
+                          updateCustomerRow(row.key, { add_po: file.name, poFile: file })
+                        }
+                      />
                     </td>
                   </tr>
-                ) : (
-                  customerRows.map((row) => (
-                    <tr key={row.key} className="border-t border-[#e8edf3]">
-                      <td className={tdClass()}>
-                        <ChargesField
-                          readOnly={disabled || Boolean(row.fromQuote)}
-                          value={row.product_name}
-                          onChange={(v) => updateCustomerRow(row.key, { product_name: v })}
-                        />
-                      </td>
-                      <td className={tdClass()}>
-                        <ChargesField
-                          readOnly={disabled || Boolean(row.fromQuote)}
-                          type="number"
-                          value={row.qty}
-                          className="text-right tabular-nums"
-                          onChange={(v) => updateCustomerRow(row.key, { qty: v }, true)}
-                        />
-                      </td>
-                      <td className={tdClass()}>
-                        <ChargesField
-                          readOnly={disabled || Boolean(row.fromQuote)}
-                          type="number"
-                          value={row.unit_price}
-                          className="text-right tabular-nums"
-                          onChange={(v) => updateCustomerRow(row.key, { unit_price: v }, true)}
-                        />
-                      </td>
-                      <td className={tdClass()}>
-                        <ChargesField
-                          readOnly={disabled}
-                          type="number"
-                          value={row.total}
-                          className="text-right tabular-nums"
-                          onChange={(v) => updateCustomerRow(row.key, { total: v })}
-                        />
-                      </td>
-                      <td className={tdClass()}>
-                        <ChargesField
-                          readOnly={disabled}
-                          type="number"
-                          value={row.gst_pct}
-                          className="text-right tabular-nums"
-                          onChange={(v) => updateCustomerRow(row.key, { gst_pct: v }, true)}
-                        />
-                      </td>
-                      <td className={tdClass()}>
-                        <ChargesField
-                          readOnly={disabled}
-                          type="number"
-                          value={row.total_gst}
-                          className="text-right tabular-nums"
-                          onChange={(v) => updateCustomerRow(row.key, { total_gst: v })}
-                        />
-                      </td>
-                      <td className={tdClass()}>
-                        <ChargesField
-                          readOnly={disabled}
-                          type="number"
-                          value={row.total_with_gst}
-                          className="text-right tabular-nums"
-                          onChange={(v) => updateCustomerRow(row.key, { total_with_gst: v })}
-                        />
-                      </td>
-                      <td className={tdClass()}>
-                        <ChargesLocalFileUpload
-                          fileName={row.add_po}
-                          required={!row.serverId}
-                          disabled={disabled}
-                          onFileSelected={(file) =>
-                            updateCustomerRow(row.key, { add_po: file.name, poFile: file })
-                          }
-                        />
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </ChargesTableShell>
+                ))
+              )}
+            </tbody>
+          </table>
+        </ChargesTableShell>
 
-          <ChargesTableShell
-            title="Vendor Charges."
-            totalLabel="Total Purchase Value"
-            totalValue={formatInrPrecise(totalPurchaseValue)}
-            footerLeft={
-              !disabled ? (
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="h-8 cursor-pointer border-sky-400 px-3 text-sky-700 transition-colors duration-200 hover:bg-sky-50 hover:text-sky-800"
-                  onClick={() => onAddVendorRow()}
-                >
-                  <Plus className="size-3.5" /> Add row
-                </Button>
-              ) : (
-                <span />
-              )
-            }
-          >
-            <table className="w-full min-w-[1280px] border-collapse text-left">
-              <thead>
-                <tr className="bg-[#eef2f6]">
-                  <th className={thClass("min-w-[88px]")}>Quantity.</th>
-                  <th className={thClass("min-w-[130px]")}>Unit Purchase (₹)</th>
-                  <th className={thClass("min-w-[110px]")}>Total</th>
-                  <th className={thClass("min-w-[90px]")}>GST ({GST_PCT}%)</th>
-                  <th className={thClass("min-w-[140px]")}>Total Amount in GST</th>
-                  <th className={thClass("min-w-[150px]")}>Total Amount with GST</th>
-                  <th className={thClass("min-w-[140px]")}>Vendor Name</th>
-                  <th className={thClass("min-w-[130px]")}>Contact Person</th>
-                  <th className={thClass("min-w-[130px]")}>Contact Number.</th>
-                  <th className={thClass("min-w-[120px]")}>
-                    Add Quote <span className="text-destructive">*</span>
-                  </th>
+        <ChargesTableShell
+          title="Vendor Charges."
+          totalLabel="Total Purchase Value"
+          totalValue={formatInrPrecise(totalPurchaseValue)}
+          footerLeft={
+            !disabled ? (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-8 cursor-pointer border-sky-400 px-3 text-sky-700 transition-colors duration-200 hover:bg-sky-50 hover:text-sky-800"
+                onClick={() => onAddVendorRow()}
+              >
+                <Plus className="size-3.5" /> Add row
+              </Button>
+            ) : (
+              <span />
+            )
+          }
+        >
+          <table className="w-full min-w-[1480px] border-collapse text-left">
+            <thead>
+              <tr className="bg-[#eef2f6]">
+                <th className={thClass("min-w-[160px]")}>Product Name</th>
+                <th className={thClass("min-w-[200px]")}>Description</th>
+                <th className={thClass("min-w-[88px]")}>Quantity.</th>
+                <th className={thClass("min-w-[130px]")}>Unit Purchase (₹)</th>
+                <th className={thClass("min-w-[110px]")}>Total</th>
+                <th className={thClass("min-w-[90px]")}>GST ({GST_PCT}%)</th>
+                <th className={thClass("min-w-[140px]")}>Total Amount in GST</th>
+                <th className={thClass("min-w-[150px]")}>Total Amount with GST</th>
+                <th className={thClass("min-w-[140px]")}>Distributor Name</th>
+                <th className={thClass("min-w-[130px]")}>Contact Person</th>
+                <th className={thClass("min-w-[130px]")}>Contact Number.</th>
+                <th className={thClass("min-w-[120px]")}>
+                  Add Quote <span className="text-destructive">*</span>
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {vendorRows.length === 0 ? (
+                <tr>
+                  <td colSpan={12} className="px-3 py-6 text-center text-[12px] text-muted-foreground">
+                    No vendor charge rows. Click + Add row to create one.
+                  </td>
                 </tr>
-              </thead>
-              <tbody>
-                {vendorRows.length === 0 ? (
-                  <tr>
-                    <td colSpan={10} className="px-3 py-6 text-center text-[12px] text-muted-foreground">
-                      No vendor charge rows. Click + Add row to create one.
+              ) : (
+                vendorRows.map((row) => (
+                  <tr key={row.key} className="border-t border-[#e8edf3]">
+                    <td className={tdClass()}>
+                      <ChargesField
+                        readOnly={disabled || Boolean(row.fromQuote)}
+                        value={row.product_name}
+                        onChange={(v) => updateVendorRow(row.key, { product_name: v })}
+                      />
+                    </td>
+                    <td className={tdClass()}>
+                      <ChargesField
+                        readOnly={disabled || Boolean(row.fromQuote)}
+                        value={row.description}
+                        onChange={(v) => updateVendorRow(row.key, { description: v })}
+                      />
+                    </td>
+                    <td className={tdClass()}>
+                      <ChargesField
+                        readOnly={disabled || Boolean(row.fromQuote)}
+                        type="number"
+                        value={row.qty}
+                        className="text-right tabular-nums"
+                        onChange={(v) => updateVendorRow(row.key, { qty: v }, true)}
+                      />
+                    </td>
+                    <td className={tdClass()}>
+                      <ChargesField
+                        readOnly={disabled || Boolean(row.fromQuote)}
+                        type="number"
+                        value={row.unit_price}
+                        className="text-right tabular-nums"
+                        onChange={(v) => updateVendorRow(row.key, { unit_price: v }, true)}
+                      />
+                    </td>
+                    <td className={tdClass()}>
+                      <ChargesField
+                        readOnly={disabled}
+                        type="number"
+                        value={row.total}
+                        className="text-right tabular-nums"
+                        onChange={(v) => updateVendorRow(row.key, { total: v })}
+                      />
+                    </td>
+                    <td className={tdClass()}>
+                      <ChargesField
+                        readOnly={disabled}
+                        type="number"
+                        value={row.gst_pct}
+                        className="text-right tabular-nums"
+                        onChange={(v) => updateVendorRow(row.key, { gst_pct: v }, true)}
+                      />
+                    </td>
+                    <td className={tdClass()}>
+                      <ChargesField
+                        readOnly={disabled}
+                        type="number"
+                        value={row.total_gst}
+                        className="text-right tabular-nums"
+                        onChange={(v) => updateVendorRow(row.key, { total_gst: v })}
+                      />
+                    </td>
+                    <td className={tdClass()}>
+                      <ChargesField
+                        readOnly={disabled}
+                        type="number"
+                        value={row.total_with_gst}
+                        className="text-right tabular-nums"
+                        onChange={(v) => updateVendorRow(row.key, { total_with_gst: v })}
+                      />
+                    </td>
+                    <td className={tdClass()}>
+                      <select
+                        disabled={disabled}
+                        value={row.vendor_name}
+                        onChange={(e) => updateVendorRow(row.key, { vendor_name: e.target.value })}
+                        className={cn(
+                          "flex h-9 w-full min-w-[140px] cursor-pointer rounded-[4px] border border-[#cfd7e3] bg-white px-2.5 text-[13px] shadow-none outline-none transition-colors duration-200",
+                          "focus-visible:border-sky-400 focus-visible:ring-1 focus-visible:ring-sky-300",
+                          disabled && "cursor-default bg-[#f8fafc] opacity-70",
+                          !row.vendor_name && "text-muted-foreground",
+                        )}
+                        aria-label="Distributor name"
+                      >
+                        <option value="">{vendorOptions.length ? "Select distributor…" : "No distributors on lead"}</option>
+                        {vendorOptions.map((name) => (
+                          <option key={name} value={name}>
+                            {name}
+                          </option>
+                        ))}
+                      </select>
+                    </td>
+                    <td className={tdClass()}>
+                      <ChargesField
+                        readOnly={disabled}
+                        value={row.contact_person}
+                        onChange={(v) => updateVendorRow(row.key, { contact_person: v })}
+                      />
+                    </td>
+                    <td className={tdClass()}>
+                      <ChargesField
+                        readOnly={disabled}
+                        value={row.contact_number}
+                        onChange={(v) => updateVendorRow(row.key, { contact_number: v })}
+                      />
+                    </td>
+                    <td className={tdClass()}>
+                      <ChargesLocalFileUpload
+                        fileName={row.add_quote}
+                        required={!row.serverId}
+                        disabled={disabled}
+                        onFileSelected={(file) =>
+                          updateVendorRow(row.key, { add_quote: file.name, quoteFile: file })
+                        }
+                      />
                     </td>
                   </tr>
-                ) : (
-                  vendorRows.map((row) => (
-                    <tr key={row.key} className="border-t border-[#e8edf3]">
-                      <td className={tdClass()}>
-                        <ChargesField
-                          readOnly={disabled || Boolean(row.fromQuote)}
-                          type="number"
-                          value={row.qty}
-                          className="text-right tabular-nums"
-                          onChange={(v) => updateVendorRow(row.key, { qty: v }, true)}
-                        />
-                      </td>
-                      <td className={tdClass()}>
-                        <ChargesField
-                          readOnly={disabled || Boolean(row.fromQuote)}
-                          type="number"
-                          value={row.unit_price}
-                          className="text-right tabular-nums"
-                          onChange={(v) => updateVendorRow(row.key, { unit_price: v }, true)}
-                        />
-                      </td>
-                      <td className={tdClass()}>
-                        <ChargesField
-                          readOnly={disabled}
-                          type="number"
-                          value={row.total}
-                          className="text-right tabular-nums"
-                          onChange={(v) => updateVendorRow(row.key, { total: v })}
-                        />
-                      </td>
-                      <td className={tdClass()}>
-                        <ChargesField
-                          readOnly={disabled}
-                          type="number"
-                          value={row.gst_pct}
-                          className="text-right tabular-nums"
-                          onChange={(v) => updateVendorRow(row.key, { gst_pct: v }, true)}
-                        />
-                      </td>
-                      <td className={tdClass()}>
-                        <ChargesField
-                          readOnly={disabled}
-                          type="number"
-                          value={row.total_gst}
-                          className="text-right tabular-nums"
-                          onChange={(v) => updateVendorRow(row.key, { total_gst: v })}
-                        />
-                      </td>
-                      <td className={tdClass()}>
-                        <ChargesField
-                          readOnly={disabled}
-                          type="number"
-                          value={row.total_with_gst}
-                          className="text-right tabular-nums"
-                          onChange={(v) => updateVendorRow(row.key, { total_with_gst: v })}
-                        />
-                      </td>
-                      <td className={tdClass()}>
-                        <ChargesField
-                          readOnly={disabled}
-                          value={row.vendor_name}
-                          onChange={(v) => updateVendorRow(row.key, { vendor_name: v })}
-                        />
-                      </td>
-                      <td className={tdClass()}>
-                        <ChargesField
-                          readOnly={disabled}
-                          value={row.contact_person}
-                          onChange={(v) => updateVendorRow(row.key, { contact_person: v })}
-                        />
-                      </td>
-                      <td className={tdClass()}>
-                        <ChargesField
-                          readOnly={disabled}
-                          value={row.contact_number}
-                          onChange={(v) => updateVendorRow(row.key, { contact_number: v })}
-                        />
-                      </td>
-                      <td className={tdClass()}>
-                        <ChargesLocalFileUpload
-                          fileName={row.add_quote}
-                          required={!row.serverId}
-                          disabled={disabled}
-                          onFileSelected={(file) =>
-                            updateVendorRow(row.key, { add_quote: file.name, quoteFile: file })
-                          }
-                        />
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </ChargesTableShell>
-        </div>
-      </section>
+                ))
+              )}
+            </tbody>
+          </table>
+        </ChargesTableShell>
+      </div>
+    </section>
   );
 }
 
@@ -707,8 +847,16 @@ export async function persistOvfOrderLinesAfterCreate(
   deps: {
     addOvfLine: (
       id: string,
-      body: { side?: string; product_name: string; qty?: number; unit_price?: number },
+      body: {
+        side?: string;
+        product_name: string;
+        distributor_name?: string | null;
+        qty?: number;
+        unit_price?: number;
+      },
     ) => Promise<OvfLine>;
+    updateOvfLine: (lineId: string, body: OvfLineFormInput) => Promise<OvfLine>;
+    listOvfLines: (id: string) => Promise<OvfLine[]>;
     createAttachment: (body: {
       entity_type: string;
       entity_id: string;
@@ -722,6 +870,9 @@ export async function persistOvfOrderLinesAfterCreate(
     fileToBase64: (file: File) => Promise<string>;
   },
 ) {
+  const existing = await deps.listOvfLines(ovfId);
+  const vendorExisting = existing.filter((line) => line.side === "vendor");
+
   for (const row of customerRows) {
     if (row.fromQuote || !row.product_name.trim()) continue;
     await deps.addOvfLine(ovfId, {
@@ -732,13 +883,37 @@ export async function persistOvfOrderLinesAfterCreate(
     });
   }
 
-  for (const row of vendorRows) {
-    if (row.fromQuote || !row.vendor_name.trim()) continue;
+  for (let index = 0; index < vendorRows.length; index += 1) {
+    const row = vendorRows[index];
+    const distributor = row.vendor_name.trim();
+    const product = row.product_name.trim();
+    const qty = Math.round(Number(row.qty)) || 1;
+    const unitPrice = Number(moneyAsFixed(Number(row.unit_price) || 0)) || 0;
+    // Persist distributor onto seeded vendor lines; keep product_name as the product.
+    if (distributor && !sameName(distributor, product)) {
+      const serverLine =
+        (row.serverId
+          ? vendorExisting.find((line) => line.id === row.serverId)
+          : undefined) ??
+        vendorExisting.find((line) => sameName(line.product_name, product)) ??
+        vendorExisting[index];
+      if (serverLine) {
+        await deps.updateOvfLine(serverLine.id, {
+          product_name: product || serverLine.product_name,
+          distributor_name: distributor,
+          qty,
+          unit_price: unitPrice,
+        });
+        continue;
+      }
+    }
+    if (row.fromQuote || !product) continue;
     await deps.addOvfLine(ovfId, {
       side: "vendor",
-      product_name: row.vendor_name.trim(),
-      qty: Math.round(Number(row.qty)) || 1,
-      unit_price: Number(moneyAsFixed(Number(row.unit_price) || 0)) || 0,
+      product_name: product,
+      distributor_name: distributor || null,
+      qty,
+      unit_price: unitPrice,
     });
   }
 
@@ -808,9 +983,12 @@ export async function persistOvfOrderLinesOnUpdate(
   }
 
   for (const row of vendorRows) {
-    if (!row.vendor_name.trim()) continue;
+    const distributor = row.vendor_name.trim();
+    const product = row.product_name.trim();
+    if (!product && !distributor) continue;
     const payload = {
-      product_name: row.vendor_name.trim(),
+      product_name: product || distributor,
+      distributor_name: distributor && !sameName(distributor, product) ? distributor : null,
       qty: Math.round(Number(row.qty)) || 1,
       unit_price: Number(moneyAsFixed(Number(row.unit_price) || 0)) || 0,
     };

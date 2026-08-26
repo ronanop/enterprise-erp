@@ -18,13 +18,11 @@ export function setTokens(accessToken: string, refreshToken?: string) {
   if (refreshToken) {
     window.localStorage.setItem(REFRESH_TOKEN_KEY, refreshToken);
   }
-  window.dispatchEvent(new Event("erp-auth-change"));
 }
 
 export function clearTokens() {
   window.localStorage.removeItem(ACCESS_TOKEN_KEY);
   window.localStorage.removeItem(REFRESH_TOKEN_KEY);
-  window.dispatchEvent(new Event("erp-auth-change"));
 }
 
 export function isAuthenticated(): boolean {

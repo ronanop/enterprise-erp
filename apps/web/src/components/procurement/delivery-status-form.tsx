@@ -99,17 +99,21 @@ export function DeliveryStatusForm({
   return (
     <div className="space-y-4">
       <DeliverySectionCard title="Cache invoice" icon={FileText}>
+        <p className="mb-3 text-xs text-muted-foreground">
+          Optional at delivery. DC means goods are delivered; bill this material later when
+          payment is due (partial or full).
+        </p>
         <div className="grid gap-3 sm:grid-cols-2">
-          <FinanceField label="Cache invoice number *" error={fieldErrors.cacheInvoiceNumber}>
+          <FinanceField label="Cache invoice number" error={fieldErrors.cacheInvoiceNumber}>
             <Input
               value={safeText(value.cacheInvoiceNumber)}
               onChange={(e) => patch({ cacheInvoiceNumber: e.target.value })}
               className="h-8"
-              placeholder="Invoice no."
+              placeholder="Invoice no. (optional)"
             />
           </FinanceField>
           <FileField
-            label="Cache invoice document *"
+            label="Cache invoice document"
             error={fieldErrors.cacheInvoiceDocument}
           >
             <FilePickRow
@@ -183,11 +187,34 @@ export function DeliveryStatusForm({
                   type="date"
                   value={actualDeliveryDate}
                   min={dispatchDate || undefined}
-                  onChange={(e) => patch({ actualDeliveryDate: e.target.value })}
+                  onChange={(e) =>
+                    patch({
+                      actualDeliveryDate: e.target.value,
+                      ...(e.target.value.trim()
+                        ? {}
+                        : { requiresInstallation: false }),
+                    })
+                  }
                   className="h-8"
                 />
               </FinanceField>
             </div>
+            {actualDeliveryDate.trim() ? (
+              <label className="mt-3 flex cursor-pointer items-start gap-2.5 rounded-md border border-border/80 bg-muted/20 px-3 py-2.5 text-sm transition-colors duration-200 hover:bg-muted/35">
+                <input
+                  type="checkbox"
+                  className="mt-0.5 size-4 cursor-pointer accent-slate-900"
+                  checked={Boolean(value.requiresInstallation)}
+                  onChange={(e) => patch({ requiresInstallation: e.target.checked })}
+                />
+                <span>
+                  <span className="font-medium text-foreground">Requires installation</span>
+                  <span className="mt-0.5 block text-xs text-muted-foreground">
+                    Send this delivered challan to Procurement → Installation for project handoff.
+                  </span>
+                </span>
+              </label>
+            ) : null}
             <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
               <FinanceField label="No. of boxes" error={fieldErrors.boxCount}>
                 <Input
@@ -462,5 +489,13 @@ export function deliveryStatusToFormValue(
     boxCount: record.boxCount ?? "",
     surfaceMode: record.surfaceMode ?? "",
     remarks: record.remarks ?? "",
+    billStatus: record.billStatus ?? "pending_delivery",
+    billedQuantity: record.billedQuantity ?? "",
+    billInvoiceNumber: record.billInvoiceNumber ?? "",
+    billInvoiceDate: record.billInvoiceDate ?? "",
+    billDocument: record.billDocument ?? null,
+    billRemarks: record.billRemarks ?? "",
+    billedAt: record.billedAt ?? "",
+    requiresInstallation: Boolean(record.requiresInstallation),
   };
 }

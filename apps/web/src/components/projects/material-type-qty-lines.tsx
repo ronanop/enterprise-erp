@@ -5,27 +5,60 @@ import { Plus, Trash2 } from "lucide-react";
 import { FinanceSelect } from "@/components/finance/journals/finance-form-field";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { MATERIAL_TYPE_OTHERS } from "@/components/projects/projects-domain";
 import type { MaterialLine } from "@/services/projects-portal-service";
 
 export type TypeQtyLineDraft = {
   type: string;
+  /** Custom name when type is Others. */
+  otherLabel: string;
   quantity: string;
+  /** SCM delivery — "true" | "false" | "" (Yes shows date). */
+  delivered: string;
   date: string;
 };
 
 export function emptyTypeQtyLine(): TypeQtyLineDraft {
-  return { type: "", quantity: "", date: "" };
+  return { type: "", otherLabel: "", quantity: "", delivered: "", date: "" };
+}
+
+export function isOthersMaterialType(type: string | null | undefined): boolean {
+  return (type ?? "").trim() === MATERIAL_TYPE_OTHERS;
+}
+
+function knownOptionValues(
+  options?: Array<{ value: string }> | null,
+): Set<string> {
+  return new Set(
+    (options ?? [])
+      .map((o) => o.value.trim())
+      .filter((v) => v && v !== MATERIAL_TYPE_OTHERS),
+  );
+}
+
+/** Resolved display/storage type for a draft row (Others → custom name). */
+export function resolvedMaterialType(line: TypeQtyLineDraft): string {
+  if (isOthersMaterialType(line.type)) return line.otherLabel.trim();
+  return line.type.trim();
 }
 
 export function linesFromMaterial(
   lines: MaterialLine[] | null | undefined,
+  options?: Array<{ value: string }> | null,
 ): TypeQtyLineDraft[] {
   if (!Array.isArray(lines) || lines.length === 0) return [emptyTypeQtyLine()];
-  return lines.map((line) => ({
-    type: line.type ?? "",
-    quantity: line.quantity != null ? String(line.quantity) : "",
-    date: line.date ?? "",
-  }));
+  const known = knownOptionValues(options);
+  return lines.map((line) => {
+    const rawType = (line.type ?? "").trim();
+    const isKnown = Boolean(rawType) && known.has(rawType);
+    return {
+      type: !rawType ? "" : isKnown ? rawType : MATERIAL_TYPE_OTHERS,
+      otherLabel: !rawType || isKnown ? "" : rawType,
+      quantity: line.quantity != null ? String(line.quantity) : "",
+      delivered: line.date ? "true" : "false",
+      date: line.date ?? "",
+    };
+  });
 }
 
 export function serializeTypeQtyLines(lines: TypeQtyLineDraft[]): string {
@@ -42,10 +75,12 @@ export function parseTypeQtyLines(raw: string | undefined): TypeQtyLineDraft[] {
       const row = item as Record<string, unknown>;
       return {
         type: typeof row.type === "string" ? row.type : "",
+        otherLabel: typeof row.otherLabel === "string" ? row.otherLabel : "",
         quantity:
           row.quantity == null || row.quantity === ""
             ? ""
             : String(row.quantity),
+        delivered: typeof row.delivered === "string" ? row.delivered : "",
         date: typeof row.date === "string" ? row.date : "",
       };
     });
@@ -57,10 +92,12 @@ export function parseTypeQtyLines(raw: string | undefined): TypeQtyLineDraft[] {
 export function typeQtyLinesToMaterial(lines: TypeQtyLineDraft[]): MaterialLine[] {
   const out: MaterialLine[] = [];
   for (const line of lines) {
-    const type = line.type.trim();
+    const type = resolvedMaterialType(line);
+    if (!type || type === MATERIAL_TYPE_OTHERS) continue;
     const n = Number(line.quantity);
-    const date = line.date.trim();
-    if (!type || !Number.isFinite(n) || n < 1) continue;
+    const date =
+      line.delivered === "true" ? line.date.trim() : "";
+    if (!Number.isFinite(n) || n < 1) continue;
     out.push({
       type,
       quantity: Math.trunc(n),
@@ -77,12 +114,21 @@ export function hasValidTypeQtyLines(
 ): boolean {
   const requireDate = opts?.requireDate ?? false;
   return parseTypeQtyLines(raw).some((line) => {
+    const type = resolvedMaterialType(line);
     const n = Number(line.quantity);
+    const needsDate =
+      requireDate && line.delivered !== "false";
+    const dateOk = !needsDate
+      ? true
+      : line.delivered === "true"
+        ? Boolean(line.date.trim())
+        : Boolean(line.date.trim());
     return (
-      Boolean(line.type.trim()) &&
+      Boolean(type) &&
+      type !== MATERIAL_TYPE_OTHERS &&
       Number.isFinite(n) &&
       n >= 1 &&
-      (!requireDate || Boolean(line.date.trim()))
+      dateOk
     );
   });
 }
@@ -108,7 +154,7 @@ export function TypeQtyLinesEditor({
 }) {
   const parsed = parseTypeQtyLines(value);
   const lines = datesOnly
-    ? parsed.filter((line) => Boolean(line.type.trim()))
+    ? parsed.filter((line) => Boolean(resolvedMaterialType(line)))
     : parsed;
   const displayLines =
     datesOnly && lines.length === 0
@@ -126,12 +172,20 @@ export function TypeQtyLinesEditor({
       displayLines.map((line, i) => {
         if (i !== index) return line;
         if (datesOnly) {
-          return { ...line, date: patch.date !== undefined ? patch.date : line.date };
+          const next = { ...line, ...patch };
+          if (patch.delivered !== undefined && patch.delivered !== "true") {
+            next.date = "";
+          }
+          if (patch.date !== undefined) {
+            next.date = patch.date;
+          }
+          return next;
         }
         const next = { ...line, ...patch };
         if (patch.type !== undefined && patch.type !== line.type) {
           next.quantity = "";
           next.date = "";
+          next.otherLabel = "";
         }
         return next;
       }),
@@ -149,8 +203,17 @@ export function TypeQtyLinesEditor({
     commit([...displayLines, emptyTypeQtyLine()]);
   }
 
-  const usedTypes = new Set(displayLines.map((l) => l.type.trim()).filter(Boolean));
+  /** Preset types may be used once; Others can appear on multiple rows. */
+  const usedPresetTypes = new Set(
+    displayLines
+      .map((l) => l.type.trim())
+      .filter((t) => t && t !== MATERIAL_TYPE_OTHERS),
+  );
   const typeLocked = datesOnly || Boolean(disabled);
+  const hasOthersOption = options.some((o) => o.value === MATERIAL_TYPE_OTHERS);
+  const presetCount = options.filter((o) => o.value !== MATERIAL_TYPE_OTHERS).length;
+  const canAddMore =
+    hasOthersOption || usedPresetTypes.size < presetCount;
 
   if (datesOnly && displayLines.length === 0) {
     return (
@@ -164,16 +227,25 @@ export function TypeQtyLinesEditor({
     <div className="space-y-1.5">
       {displayLines.map((line, index) => {
         const available = options.filter(
-          (o) => o.value === line.type || !usedTypes.has(o.value),
+          (o) =>
+            o.value === MATERIAL_TYPE_OTHERS ||
+            o.value === line.type ||
+            !usedPresetTypes.has(o.value),
         );
         const typeLabel =
           options.find((o) => o.value === line.type)?.label ?? line.type;
+        const displayTypeLabel = isOthersMaterialType(line.type)
+          ? line.otherLabel.trim() || "Others"
+          : typeLabel;
+        const showQty = Boolean(line.type.trim());
+        const showOtherLabel = isOthersMaterialType(line.type);
+
         return (
           <div key={index} className="flex flex-wrap items-center gap-2">
             {datesOnly ? (
               <Input
                 className="h-8 min-w-0 flex-1 basis-40"
-                value={typeLabel}
+                value={displayTypeLabel}
                 disabled
                 aria-readonly="true"
               />
@@ -192,7 +264,16 @@ export function TypeQtyLinesEditor({
                 ))}
               </FinanceSelect>
             )}
-            {line.type.trim() ? (
+            {showOtherLabel && !datesOnly ? (
+              <Input
+                value={line.otherLabel}
+                disabled={typeLocked}
+                placeholder="Other item"
+                className="h-8 min-w-0 flex-1 basis-36"
+                onChange={(e) => updateRow(index, { otherLabel: e.target.value })}
+              />
+            ) : null}
+            {showQty ? (
               <>
                 <Input
                   type="number"
@@ -203,7 +284,41 @@ export function TypeQtyLinesEditor({
                   className="h-8 w-20 shrink-0"
                   onChange={(e) => updateRow(index, { quantity: e.target.value })}
                 />
-                {showDate ? (
+                {datesOnly ? (
+                  <div
+                    className={`flex flex-wrap items-center gap-3 text-sm text-foreground ${disabled ? "pointer-events-none" : ""}`}
+                  >
+                    <label className="flex cursor-pointer items-center gap-1.5">
+                      <input
+                        type="checkbox"
+                        className="size-4 cursor-pointer rounded border border-input accent-[var(--color-accent,#0369A1)]"
+                        checked={line.delivered === "true"}
+                        disabled={disabled}
+                        onChange={() =>
+                          updateRow(index, {
+                            delivered: line.delivered === "true" ? "false" : "true",
+                          })
+                        }
+                      />
+                      <span>Yes</span>
+                    </label>
+                    <label className="flex cursor-pointer items-center gap-1.5">
+                      <input
+                        type="checkbox"
+                        className="size-4 cursor-pointer rounded border border-input accent-[var(--color-accent,#0369A1)]"
+                        checked={line.delivered === "false"}
+                        disabled={disabled}
+                        onChange={() =>
+                          updateRow(index, {
+                            delivered: line.delivered === "false" ? "" : "false",
+                          })
+                        }
+                      />
+                      <span>No</span>
+                    </label>
+                  </div>
+                ) : null}
+                {showDate && (!datesOnly || line.delivered === "true") ? (
                   <Input
                     type="date"
                     value={line.date}
@@ -236,7 +351,7 @@ export function TypeQtyLinesEditor({
           variant="outline"
           size="sm"
           className="h-7 cursor-pointer gap-1.5 px-2 text-xs transition-colors duration-200"
-          disabled={disabled || usedTypes.size >= options.length}
+          disabled={disabled || !canAddMore}
           onClick={addRow}
         >
           <Plus className="size-3" />

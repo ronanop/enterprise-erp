@@ -26,5 +26,35 @@ class RBACEngine:
         )
         return {row[0] for row in rows}
 
+    def list_user_ids_with_permission(self, tenant_id: UUID, permission_code: str) -> list[UUID]:
+        rows = (
+            self._db.query(SecUserRole.user_id)
+            .join(SecRolePermission, SecRolePermission.role_id == SecUserRole.role_id)
+            .join(SecPermission, SecPermission.id == SecRolePermission.permission_id)
+            .filter(
+                SecUserRole.tenant_id == tenant_id,
+                SecPermission.permission_code == permission_code,
+                SecPermission.is_active.is_(True),
+            )
+            .distinct()
+            .all()
+        )
+        return [row[0] for row in rows]
+
+    def list_user_ids_with_crm_access(self, tenant_id: UUID) -> list[UUID]:
+        rows = (
+            self._db.query(SecUserRole.user_id)
+            .join(SecRolePermission, SecRolePermission.role_id == SecUserRole.role_id)
+            .join(SecPermission, SecPermission.id == SecRolePermission.permission_id)
+            .filter(
+                SecUserRole.tenant_id == tenant_id,
+                SecPermission.permission_code.like("crm.%"),
+                SecPermission.is_active.is_(True),
+            )
+            .distinct()
+            .all()
+        )
+        return [row[0] for row in rows]
+
     def has_permission(self, user_id: UUID, tenant_id: UUID, permission_code: str) -> bool:
         return permission_code in self.get_user_permission_codes(user_id, tenant_id)

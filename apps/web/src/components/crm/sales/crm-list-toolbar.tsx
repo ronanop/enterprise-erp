@@ -3,8 +3,9 @@
 import type { LucideIcon } from "lucide-react";
 import type { ReactNode } from "react";
 
-import { CrmCountBadge, CrmIconBadge } from "@/components/crm/crm-ui";
+import { CRM_SECTION_TITLE, CrmCountBadge, CrmIconBadge } from "@/components/crm/crm-ui";
 import { Input } from "@/components/ui/input";
+import { cn } from "@/lib/utils";
 
 /** Dense single-row toolbar for CRM list cards (icon + title + actions + search). */
 export function CrmListToolbar({
@@ -32,7 +33,7 @@ export function CrmListToolbar({
         {icon ? <CrmIconBadge icon={icon} /> : null}
         <div className="min-w-0">
           <div className="flex min-w-0 flex-wrap items-center gap-2">
-            <h2 className="truncate text-sm font-medium tracking-tight">{title}</h2>
+            <h2 className={cn(CRM_SECTION_TITLE, "truncate")}>{title}</h2>
             {typeof count === "number" ? <CrmCountBadge count={count} /> : null}
           </div>
           {subtitle ? <p className="text-[11px] text-muted-foreground">{subtitle}</p> : null}

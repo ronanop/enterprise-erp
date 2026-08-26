@@ -1,5 +1,5 @@
-import * as XLSX from "xlsx";
-
+import { escapeHtml, openPrintDocument } from "@/lib/html";
+import { downloadCsv, downloadXlsx } from "@/lib/spreadsheet";
 import { formatInrPrecise } from "@/services/finance-service";
 
 export type ExportColumn<T> = {
@@ -8,15 +8,6 @@ export type ExportColumn<T> = {
   align?: "left" | "right";
   format?: (value: unknown, row: T) => string;
 };
-
-function downloadBlob(filename: string, blob: Blob) {
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = filename;
-  a.click();
-  URL.revokeObjectURL(url);
-}
 
 function cellValue<T extends Record<string, unknown>>(
   row: T,
@@ -36,8 +27,7 @@ function rowsForExport<T extends Record<string, unknown>>(
   return rows.map((row) => {
     const out: Record<string, string | number> = {};
     for (const col of columns) {
-      const val = cellValue(row, col);
-      out[col.label] = val;
+      out[col.label] = cellValue(row, col);
     }
     return out;
   });
@@ -48,32 +38,18 @@ export function exportTabularCsv<T extends Record<string, unknown>>(
   rows: T[],
   columns: ExportColumn<T>[],
 ) {
-  const data = rowsForExport(rows, columns);
-  const ws = XLSX.utils.json_to_sheet(data);
-  const csv = XLSX.utils.sheet_to_csv(ws);
-  downloadBlob(
-    filename,
-    new Blob([`\uFEFF${csv}`], { type: "text/csv;charset=utf-8" }),
-  );
+  downloadCsv(filename, rowsForExport(rows, columns));
 }
 
-export function exportTabularXlsx<T extends Record<string, unknown>>(
+export async function exportTabularXlsx<T extends Record<string, unknown>>(
   filename: string,
   sheetName: string,
   rows: T[],
   columns: ExportColumn<T>[],
 ) {
-  const data = rowsForExport(rows, columns);
-  const ws = XLSX.utils.json_to_sheet(data);
-  const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, sheetName.slice(0, 31));
-  const buffer = XLSX.write(wb, { bookType: "xlsx", type: "array" });
-  downloadBlob(
-    filename,
-    new Blob([buffer], {
-      type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-    }),
-  );
+  await downloadXlsx(filename, [
+    { name: sheetName, rows: rowsForExport(rows, columns) },
+  ]);
 }
 
 export function printTabularTable<T extends Record<string, unknown>>(
@@ -82,13 +58,10 @@ export function printTabularTable<T extends Record<string, unknown>>(
   columns: ExportColumn<T>[],
   subtitle?: string,
 ) {
-  const win = window.open("", "_blank", "noopener,noreferrer,width=1200,height=800");
-  if (!win) return;
-
   const head = columns
     .map(
       (c) =>
-        `<th style="text-align:${c.align === "right" ? "right" : "left"}">${c.label}</th>`,
+        `<th style="text-align:${c.align === "right" ? "right" : "left"}">${escapeHtml(c.label)}</th>`,
     )
     .join("");
 
@@ -98,14 +71,16 @@ export function printTabularTable<T extends Record<string, unknown>>(
         .map((col) => {
           const val = cellValue(row, col);
           const align = col.align === "right" ? "text-align:right" : "";
-          return `<td style="${align}">${val}</td>`;
+          return `<td style="${align}">${escapeHtml(val)}</td>`;
         })
         .join("");
       return `<tr>${cells}</tr>`;
     })
     .join("");
 
-  win.document.write(`<!doctype html><html><head><title>${title}</title>
+  const safeTitle = escapeHtml(title);
+  const subtitleHtml = subtitle ? `<p class="sub">${escapeHtml(subtitle)}</p>` : "";
+  openPrintDocument(`<!doctype html><html><head><title>${safeTitle}</title>
     <style>
       body{font-family:Inter,system-ui,sans-serif;font-size:12px;color:#0f172a;padding:24px}
       h1{font-size:16px;margin:0 0 4px}
@@ -114,12 +89,10 @@ export function printTabularTable<T extends Record<string, unknown>>(
       th,td{border:1px solid #e2e8f0;padding:6px 8px;text-align:left}
       th{background:#f8fafc;font-size:11px;text-transform:uppercase}
     </style></head><body>
-    <h1>${title}</h1>
-    ${subtitle ? `<p class="sub">${subtitle}</p>` : ""}
+    <h1>${safeTitle}</h1>
+    ${subtitleHtml}
     <table><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table>
-    <script>window.onload=()=>{window.print();}</script>
     </body></html>`);
-  win.document.close();
 }
 
 export function exportAmount(value: unknown): string {
@@ -143,9 +116,9 @@ export function exportRawAmount(value: unknown): number {
 }
 
 export function printHtmlReport(title: string, htmlBody: string, subtitle?: string) {
-  const win = window.open("", "_blank", "noopener,noreferrer,width=1200,height=800");
-  if (!win) return;
-  win.document.write(`<!doctype html><html><head><title>${title}</title>
+  const safeTitle = escapeHtml(title);
+  const subtitleHtml = subtitle ? `<p class="sub">${escapeHtml(subtitle)}</p>` : "";
+  openPrintDocument(`<!doctype html><html><head><title>${safeTitle}</title>
     <style>
       body{font-family:Inter,system-ui,sans-serif;font-size:12px;color:#0f172a;padding:24px}
       h1{font-size:16px;margin:0 0 4px}
@@ -157,10 +130,8 @@ export function printHtmlReport(title: string, htmlBody: string, subtitle?: stri
       .total{font-weight:600}
       .right{text-align:right}
     </style></head><body>
-    <h1>${title}</h1>
-    ${subtitle ? `<p class="sub">${subtitle}</p>` : ""}
+    <h1>${safeTitle}</h1>
+    ${subtitleHtml}
     ${htmlBody}
-    <script>window.onload=()=>{window.print();}</script>
     </body></html>`);
-  win.document.close();
 }

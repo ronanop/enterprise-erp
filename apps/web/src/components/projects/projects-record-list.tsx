@@ -28,6 +28,8 @@ export type RecordColumn<T> = {
   label: string;
   cell: (row: T) => ReactNode;
   sort: (row: T) => SortValue;
+  /** When false, render a plain header (no sort control). Default true. */
+  sortable?: boolean;
   /** Extra classes for the body cell. */
   className?: string;
   align?: "left" | "right";
@@ -105,7 +107,10 @@ export function ProjectsRecordList<T extends { id: string }>({
 
   const accessors = useMemo(() => {
     const map: Record<string, (row: T) => SortValue> = {};
-    for (const col of columns) map[col.key] = col.sort;
+    for (const col of columns) {
+      if (col.sortable === false) continue;
+      map[col.key] = col.sort;
+    }
     return map;
   }, [columns]);
 
@@ -166,17 +171,33 @@ export function ProjectsRecordList<T extends { id: string }>({
           <table className="w-full text-left text-sm" style={{ minWidth: `${minWidth}px` }}>
             <thead>
               <tr className="border-b border-border/70 bg-muted/40 text-[11px] tracking-wide text-muted-foreground uppercase">
-                {columns.map((col) => (
-                  <ProjectsSortableTh
-                    key={col.key}
-                    label={col.label}
-                    sortKey={col.key}
-                    activeKey={sortBy}
-                    dir={sortDir}
-                    onSort={onSort}
-                    align={col.align}
-                  />
-                ))}
+                {columns.map((col) =>
+                  col.sortable === false ? (
+                    <th
+                      key={col.key}
+                      className={cn(
+                        "px-4 py-2.5",
+                        col.align === "right" && "text-right",
+                      )}
+                    >
+                      {col.label ? (
+                        <span className="text-xs font-extrabold tracking-wide text-foreground uppercase sm:text-[13px]">
+                          {col.label}
+                        </span>
+                      ) : null}
+                    </th>
+                  ) : (
+                    <ProjectsSortableTh
+                      key={col.key}
+                      label={col.label}
+                      sortKey={col.key}
+                      activeKey={sortBy}
+                      dir={sortDir}
+                      onSort={onSort}
+                      align={col.align}
+                    />
+                  ),
+                )}
               </tr>
             </thead>
             <tbody>

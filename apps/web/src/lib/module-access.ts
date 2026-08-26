@@ -19,14 +19,15 @@ export function moduleKeyForHref(href: string): string | null {
 }
 
 export function canAccessHref(href: string, moduleKeys: string[], userType?: string): boolean {
+  const keys = moduleKeys ?? [];
   if (href === "/") return true;
   if (href === "/organization/users") {
-    return isModuleAdmin(userType) || moduleKeys.includes("foundation");
+    return isModuleAdmin(userType) || keys.includes("foundation");
   }
   const key = moduleKeyForHref(href);
   if (!key) return true;
   if (isModuleAdmin(userType)) return true;
-  return moduleKeys.includes(key);
+  return keys.includes(key);
 }
 
 export function filterNavigationGroups(
@@ -48,5 +49,20 @@ export function moduleTitle(key: string): string {
 
 export function canManageUserModules(permissions: string[], userType?: string): boolean {
   if (isModuleAdmin(userType)) return true;
-  return permissions.includes("foundation.user:update");
+  return (permissions ?? []).includes("foundation.user:update");
+}
+
+/** Organization Users is reserved for ERP-wide module-admin assignment. */
+export function moduleUsersHref(moduleKey: string): string {
+  if (moduleKey === "organization") return "/organization/module-users";
+  return `/${moduleKey}/users`;
+}
+
+export function canManageModuleUsers(
+  moduleKey: string,
+  adminModuleKeys: string[] | undefined,
+  userType?: string,
+): boolean {
+  if (isModuleAdmin(userType)) return true;
+  return (adminModuleKeys ?? []).includes(moduleKey);
 }

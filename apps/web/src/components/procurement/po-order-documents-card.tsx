@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Eye, Paperclip, Plus, Upload } from "lucide-react";
+import { Eye, Download, Paperclip, Plus, Upload } from "lucide-react";
 
 import { ConfirmDialog } from "@/components/finance/journals/confirm-dialog";
 import { Badge } from "@/components/ui/badge";
@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { ApiClientError } from "@/services/api-client";
 import {
+  downloadScmCommercialAttachment,
   listScmOrderCommercialDocuments,
   openScmCommercialAttachment,
   openReceiptBatchAttachment,
@@ -56,6 +57,7 @@ type UnifiedDocument = {
   source: string;
   entityType: string;
   open: () => Promise<void>;
+  download?: () => Promise<void>;
 };
 
 function isOvfEntity(entityType: string): boolean {
@@ -67,11 +69,13 @@ function DocumentList({
   rows,
   emptyLabel,
   openingId,
+  downloadingId,
 }: {
   loading: boolean;
   rows: UnifiedDocument[];
   emptyLabel: string;
   openingId: string | null;
+  downloadingId: string | null;
 }) {
   if (loading) {
     return <p className="text-xs text-muted-foreground">Loading documents…</p>;
@@ -93,17 +97,32 @@ function DocumentList({
               <Badge variant="outline">{categoryLabel(row.category)}</Badge>
             </div>
           </div>
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            className="h-8 cursor-pointer gap-1.5 transition-colors duration-200"
-            disabled={openingId != null}
-            onClick={() => void row.open()}
-          >
-            <Eye className="size-3.5" />
-            View
-          </Button>
+          <div className="flex items-center gap-1.5">
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className="h-8 cursor-pointer gap-1.5 transition-colors duration-200"
+              disabled={openingId != null || downloadingId != null}
+              onClick={() => void row.open()}
+            >
+              <Eye className="size-3.5" />
+              View
+            </Button>
+            {row.download ? (
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                className="h-8 cursor-pointer gap-1.5 transition-colors duration-200"
+                disabled={openingId != null || downloadingId != null}
+                onClick={() => void row.download?.()}
+              >
+                <Download className="size-3.5" />
+                Download
+              </Button>
+            ) : null}
+          </div>
         </li>
       ))}
     </ul>
@@ -132,6 +151,7 @@ export function PoOrderDocumentsCard({
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
   const [openingId, setOpeningId] = useState<string | null>(null);
+  const [downloadingId, setDownloadingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [attachDialogOpen, setAttachDialogOpen] = useState(false);
   const [attachTarget, setAttachTarget] = useState<
@@ -181,10 +201,24 @@ export function PoOrderDocumentsCard({
       entityType: row.entity_type,
       open: async () => {
         setOpeningId(row.id);
+        setError(null);
         try {
-          await openScmCommercialAttachment(row.id);
+          await openScmCommercialAttachment(row.id, row);
+        } catch (err) {
+          setError(err instanceof Error ? err.message : "Failed to open document");
         } finally {
           setOpeningId(null);
+        }
+      },
+      download: async () => {
+        setDownloadingId(row.id);
+        setError(null);
+        try {
+          await downloadScmCommercialAttachment(row.id, row.file_name, row);
+        } catch (err) {
+          setError(err instanceof Error ? err.message : "Failed to download document");
+        } finally {
+          setDownloadingId(null);
         }
       },
     }));
@@ -196,8 +230,11 @@ export function PoOrderDocumentsCard({
       entityType: "receipt_batch",
       open: async () => {
         setOpeningId(row.id);
+        setError(null);
         try {
           await openReceiptBatchAttachment(row.id);
+        } catch (err) {
+          setError(err instanceof Error ? err.message : "Failed to open document");
         } finally {
           setOpeningId(null);
         }
@@ -298,6 +335,7 @@ export function PoOrderDocumentsCard({
           rows={ovfDocuments}
           emptyLabel="No OVF documents attached."
           openingId={openingId}
+          downloadingId={downloadingId}
         />
       </section>
 
@@ -334,6 +372,7 @@ export function PoOrderDocumentsCard({
           rows={scmDocuments}
           emptyLabel="No SCM documents attached yet."
           openingId={openingId}
+          downloadingId={downloadingId}
         />
       </section>
 

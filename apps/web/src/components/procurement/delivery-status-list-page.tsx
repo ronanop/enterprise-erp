@@ -2,8 +2,9 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { FileSpreadsheet, RefreshCw } from "lucide-react";
+import { FileSpreadsheet, Receipt, RefreshCw } from "lucide-react";
 
+import { DeliveryStatusBillDialog } from "@/components/procurement/delivery-status-bill-dialog";
 import {
   ProcurementListSearch,
   ProcurementPageHeader,
@@ -12,7 +13,14 @@ import { procurementUi } from "@/components/procurement/procurement-ui";
 import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { listDeliveryChallans } from "@/utils/delivery-challan-storage";
+import {
+  aggregatePoDcBillStatus,
+  challanDeliveredQuantity,
+  deliveryBillStatusBadgeVariant,
+  formatDeliveryBillStatusLabel,
+  resolveDeliveryBillStatus,
+} from "@/utils/delivery-challan-bill";
+import { getDeliveryChallan, listDeliveryChallans } from "@/utils/delivery-challan-storage";
 import {
   buildDeliveryStatusExportRows,
   exportDeliveryStatusXlsx,
@@ -25,10 +33,31 @@ import {
   type DeliveryStatusRow,
 } from "@/utils/delivery-status-storage";
 
-function loadDeliveryStatusRows(): DeliveryStatusRow[] {
+type DeliveryStatusListRow = DeliveryStatusRow & {
+  billStatusLabel: string;
+  billStatusKey: ReturnType<typeof resolveDeliveryBillStatus>;
+  poBillStatus: string;
+  canBill: boolean;
+};
+
+function loadDeliveryStatusRows(): DeliveryStatusListRow[] {
   return listDeliveryChallans().flatMap((challan) => {
     try {
-      return [deliveryStatusRowFromChallan(challan)];
+      const row = deliveryStatusRowFromChallan(challan);
+      const billStatusKey = resolveDeliveryBillStatus(
+        row,
+        challanDeliveredQuantity(challan),
+      );
+      return [
+        {
+          ...row,
+          billStatusLabel: formatDeliveryBillStatusLabel(billStatusKey),
+          billStatusKey,
+          poBillStatus: aggregatePoDcBillStatus(challan.orderId),
+          canBill:
+            billStatusKey === "unbilled" || billStatusKey === "partially_billed",
+        },
+      ];
     } catch {
       return [];
     }
@@ -39,8 +68,9 @@ export function DeliveryStatusListPage() {
   const [version, setVersion] = useState(0);
   const [query, setQuery] = useState("");
   const [flash, setFlash] = useState<ReturnType<typeof consumeDeliveryStatusFlash>>(null);
-  const [rows, setRows] = useState<DeliveryStatusRow[]>([]);
+  const [rows, setRows] = useState<DeliveryStatusListRow[]>([]);
   const [exportError, setExportError] = useState<string | null>(null);
+  const [billChallanId, setBillChallanId] = useState<string | null>(null);
 
   const load = useCallback(() => {
     setVersion((v) => v + 1);
@@ -60,7 +90,10 @@ export function DeliveryStatusListPage() {
         row.customerPoNumber,
         row.grnSummary,
         row.cacheInvoiceNumber,
+        row.billInvoiceNumber,
         row.shipmentStatus,
+        row.billStatusLabel,
+        row.poBillStatus,
         row.docketNumber,
         row.deliveryBoyName,
       ]
@@ -113,6 +146,11 @@ export function DeliveryStatusListPage() {
         }
       />
 
+      <p className="text-sm text-muted-foreground">
+        After delivery, the DC stays <span className="font-medium text-foreground">unbilled</span>{" "}
+        until you mark it billed (partial or full). PO bill status follows those DC bills.
+      </p>
+
       {flash ? (
         <div
           className={cn(
@@ -135,26 +173,28 @@ export function DeliveryStatusListPage() {
       <ProcurementListSearch
         value={query}
         onChange={setQuery}
-        placeholder="Search PO, GRN, or invoice…"
+        placeholder="Search PO, GRN, invoice, or bill status…"
         aria-label="Search delivery status"
       />
 
       <div className={procurementUi.tableShell}>
         <div className={procurementUi.tableScroll}>
-          <table className={cn(procurementUi.table, "min-w-[720px]")}>
+          <table className={cn(procurementUi.table, "min-w-[980px]")}>
             <thead className={procurementUi.thead}>
               <tr>
                 <th className={procurementUi.th}>PO number</th>
                 <th className={procurementUi.th}>GRN number</th>
-                <th className={procurementUi.th}>Cache invoice number</th>
+                <th className={procurementUi.th}>Invoice</th>
                 <th className={procurementUi.th}>Delivery status</th>
-                <th className={procurementUi.th}>View</th>
+                <th className={procurementUi.th}>DC bill status</th>
+                <th className={procurementUi.th}>PO bill status</th>
+                <th className={procurementUi.th}>Actions</th>
               </tr>
             </thead>
             <tbody>
               {filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className={procurementUi.empty}>
+                  <td colSpan={7} className={procurementUi.empty}>
                     {rows.length === 0
                       ? "No GRNs to track yet."
                       : "No rows match your search."}
@@ -170,7 +210,7 @@ export function DeliveryStatusListPage() {
                     {row.grnSummary || "—"}
                   </td>
                   <td className={cn(procurementUi.tdNumeric)}>
-                    {String(row.cacheInvoiceNumber ?? "").trim() || "—"}
+                    {String(row.billInvoiceNumber || row.cacheInvoiceNumber || "").trim() || "—"}
                   </td>
                   <td className={procurementUi.td}>
                     <Badge
@@ -181,16 +221,47 @@ export function DeliveryStatusListPage() {
                     </Badge>
                   </td>
                   <td className={procurementUi.td}>
-                    <Link
-                      href={deliveryStatusUpdateHref(row.challanId)}
-                      className={cn(
-                        buttonVariants({ size: "sm", variant: "ghost" }),
-                        procurementUi.actionBtn,
-                        "text-[#0369A1] hover:text-[#0369A1]",
-                      )}
+                    <Badge
+                      variant={deliveryBillStatusBadgeVariant(row.billStatusKey)}
+                      className={procurementUi.statusBadge}
                     >
-                      View
-                    </Link>
+                      {row.billStatusLabel}
+                    </Badge>
+                  </td>
+                  <td className={cn(procurementUi.td, "text-muted-foreground")}>
+                    {row.poBillStatus}
+                  </td>
+                  <td className={procurementUi.td}>
+                    <div className="flex flex-wrap items-center gap-1">
+                      <Link
+                        href={deliveryStatusUpdateHref(row.challanId)}
+                        className={cn(
+                          buttonVariants({ size: "sm", variant: "ghost" }),
+                          procurementUi.actionBtn,
+                          "text-[#0369A1] hover:text-[#0369A1]",
+                        )}
+                      >
+                        View
+                      </Link>
+                      {row.canBill || row.billStatusKey === "fully_billed" ? (
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="ghost"
+                          className={cn(
+                            procurementUi.actionBtn,
+                            "cursor-pointer text-[#0369A1] hover:text-[#0369A1]",
+                          )}
+                          onClick={() => {
+                            if (!getDeliveryChallan(row.challanId)) return;
+                            setBillChallanId(row.challanId);
+                          }}
+                        >
+                          <Receipt className="mr-1 size-3.5" />
+                          {row.billStatusKey === "fully_billed" ? "Update bill" : "Bill"}
+                        </Button>
+                      ) : null}
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -198,6 +269,13 @@ export function DeliveryStatusListPage() {
           </table>
         </div>
       </div>
+
+      <DeliveryStatusBillDialog
+        open={Boolean(billChallanId)}
+        challanId={billChallanId}
+        onClose={() => setBillChallanId(null)}
+        onSaved={load}
+      />
     </div>
   );
 }

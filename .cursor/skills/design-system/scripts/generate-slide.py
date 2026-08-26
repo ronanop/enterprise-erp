@@ -752,8 +752,14 @@ def main():
         print(f"Demo deck generated: {output_path}")
 
     elif args.json:
-        with open(args.json, 'r') as f:
-            data = json.load(f)
+        try:
+            with open(args.json, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+        except (OSError, json.JSONDecodeError) as exc:
+            parser.error(f"Could not read JSON deck: {exc}")
+
+        if not isinstance(data, dict):
+            parser.error("JSON deck must be an object with optional slides and title")
 
         html = generate_deck(data.get('slides', []), data.get('title', 'Presentation'))
 

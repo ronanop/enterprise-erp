@@ -3,11 +3,13 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
-import { ArrowLeft, ChevronLeft, ChevronRight, Search } from "lucide-react";
+import { ArrowLeft, ChevronLeft, ChevronRight, Search, UserCog } from "lucide-react";
 
 import { hrNavGroups } from "@/config/hr-nav";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { useAuthUser } from "@/hooks/use-auth-user";
+import { canManageModuleUsers } from "@/lib/module-access";
 import { cn } from "@/lib/utils";
 
 function navHrefMatches(pathname: string, href: string): boolean {
@@ -31,10 +33,32 @@ export function HrSidebar() {
   const router = useRouter();
   const [collapsed, setCollapsed] = useState(false);
   const [query, setQuery] = useState("");
+  const { user, adminModuleKeys } = useAuthUser();
+  const showUsers = canManageModuleUsers("hr", adminModuleKeys, user?.userType);
+
+  const groups = useMemo(() => {
+    if (!showUsers) return hrNavGroups;
+    return hrNavGroups.map((group, index) =>
+      index === 0
+        ? {
+          ...group,
+          items: [
+            ...group.items,
+            {
+              title: "Users",
+              href: "/hr/users",
+              icon: UserCog,
+              description: "Assign Entra users to HRMS",
+            },
+          ],
+        }
+        : group,
+    );
+  }, [showUsers]);
 
   const allNavHrefs = useMemo(
-    () => hrNavGroups.flatMap((group) => group.items.map((item) => item.href)),
-    [],
+    () => groups.flatMap((group) => group.items.map((item) => item.href)),
+    [groups],
   );
 
   const activeHref = useMemo(
@@ -44,8 +68,8 @@ export function HrSidebar() {
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (!q) return hrNavGroups;
-    return hrNavGroups
+    if (!q) return groups;
+    return groups
       .map((group) => ({
         ...group,
         items: group.items.filter(
@@ -55,7 +79,7 @@ export function HrSidebar() {
         ),
       }))
       .filter((g) => g.items.length > 0);
-  }, [query]);
+  }, [groups, query]);
 
   return (
     <aside

@@ -4,13 +4,24 @@ import type { ReactNode } from "react";
 
 import { cn } from "@/lib/utils";
 
+function FieldLabelText({ label }: { label: string }) {
+  const trimmed = label.trimEnd();
+  const required = trimmed.endsWith("*");
+  const text = required ? trimmed.slice(0, -1).trimEnd() : trimmed;
+  return (
+    <>
+      {text}
+      {required ? <span className="ml-0.5 text-destructive">*</span> : null}
+    </>
+  );
+}
+
 export function FinanceField({
   label,
   htmlFor,
   error,
   hint,
   className,
-  labelClassName,
   children,
 }: {
   label: string;
@@ -18,22 +29,16 @@ export function FinanceField({
   error?: string;
   hint?: string;
   className?: string;
-  labelClassName?: string;
   children: ReactNode;
 }) {
   return (
-    <label className={cn("block space-y-1", className)} htmlFor={htmlFor}>
-      <span
-        className={cn(
-          "text-[11px] font-medium tracking-wide text-muted-foreground uppercase",
-          labelClassName,
-        )}
-      >
-        {label}
+    <label className={cn("block min-w-0 space-y-1.5", className)} htmlFor={htmlFor}>
+      <span className="block text-[11px] font-medium tracking-wide text-muted-foreground uppercase break-words">
+        <FieldLabelText label={label} />
       </span>
-      {children}
+      <div className="min-w-0">{children}</div>
       {hint && !error ? (
-        <span className="block text-[10px] text-muted-foreground">{hint}</span>
+        <span className="block text-[11px] leading-snug text-muted-foreground">{hint}</span>
       ) : null}
       {error ? <span className="block text-[11px] text-destructive">{error}</span> : null}
     </label>

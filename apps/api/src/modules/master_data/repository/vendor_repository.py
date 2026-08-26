@@ -24,9 +24,7 @@ class VendorRepository(MasterScopedRepository):
         branch_scoped: bool = True,
     ) -> list[VendorEntity]:
         stmt = select(MasterVendor)
-        stmt = self.apply_master_filter(
-            stmt, MasterVendor, ctx, branch_scoped=branch_scoped
-        )
+        stmt = self.apply_master_filter(stmt, MasterVendor, ctx, branch_scoped=branch_scoped)
         if company_id:
             stmt = stmt.where(MasterVendor.company_id == company_id)
         if branch_id:

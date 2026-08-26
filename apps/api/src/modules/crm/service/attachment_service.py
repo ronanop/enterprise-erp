@@ -13,16 +13,19 @@ from uuid import UUID
 
 from sqlalchemy.orm import Session
 
+from core.config import settings
 from core.exceptions import NotFoundException
 from modules.crm.repository.attachment_repository import AttachmentRepository
 from modules.crm.service.crm_scope_validator import CrmScopeValidator
 from modules.foundation.domain.value_objects import TenantContext
 
-UPLOAD_ROOT = Path(__file__).resolve().parents[4] / "var" / "crm-attachments"
+def _upload_root() -> Path:
+    return settings.resolved_crm_upload_root
 
 
 class AttachmentService:
     def __init__(self, db: Session) -> None:
+        self._db = db
         self._repo = AttachmentRepository(db)
         self._scope = CrmScopeValidator(db)
 
@@ -51,12 +54,27 @@ class AttachmentService:
         path = Path(row.file_path)
         if not path.is_file():
             # Fallback: file may have been stored relative to the upload root.
-            candidate = UPLOAD_ROOT / path.name
+            candidate = _upload_root() / path.name
             if candidate.is_file():
                 path = candidate
             else:
                 raise NotFoundException("Attachment file is missing on disk")
         return path, row.file_name, row.content_type
+
+    def remove_entity_attachments_by_category(
+        self,
+        ctx: TenantContext,
+        entity_type: str,
+        entity_id: UUID,
+        category: str,
+    ) -> int:
+        removed = 0
+        for row in self.list_for_entity(ctx, entity_type, entity_id):
+            if row.category != category:
+                continue
+            self.delete(ctx, row.id)
+            removed += 1
+        return removed
 
     def create(
         self,
@@ -66,7 +84,6 @@ class AttachmentService:
         entity_id: UUID,
         file_name: str,
         category: str = "other",
-        remarks: str | None = None,
         source: str = "upload",
         branch_id: UUID,
         company_id: UUID | None = None,
@@ -79,10 +96,11 @@ class AttachmentService:
         stored_path = file_path
 
         if content_base64:
-            UPLOAD_ROOT.mkdir(parents=True, exist_ok=True)
+            upload_root = _upload_root()
+            upload_root.mkdir(parents=True, exist_ok=True)
             raw = base64.b64decode(content_base64)
             size = len(raw)
-            dest = UPLOAD_ROOT / f"{uuid.uuid4()}_{file_name}"
+            dest = upload_root / f"{uuid.uuid4()}_{file_name}"
             dest.write_bytes(raw)
             stored_path = str(dest)
             source = "upload"
@@ -90,7 +108,7 @@ class AttachmentService:
         if not stored_path:
             raise NotFoundException("Either file_path or content_base64 must be provided")
 
-        return self._repo.create(
+        row = self._repo.create(
             ctx,
             company_id=cid,
             branch_id=branch_id,
@@ -101,7 +119,32 @@ class AttachmentService:
             content_type=content_type,
             size=size,
             category=category,
-            remarks=remarks.strip() if remarks else None,
             source=source,
             uploaded_by=ctx.user_id,
+        )
+        if entity_type == "opportunity":
+            self._sync_opportunity_attachment_flags(ctx, entity_id)
+        return row
+
+    def delete(self, ctx: TenantContext, row_id: UUID) -> None:
+        row = self.get(ctx, row_id)
+        entity_type = row.entity_type
+        entity_id = row.entity_id
+        if not self._repo.delete(ctx, row_id):
+            raise NotFoundException("Attachment not found")
+        if entity_type == "opportunity":
+            self._sync_opportunity_attachment_flags(ctx, entity_id)
+
+    def _sync_opportunity_attachment_flags(self, ctx: TenantContext, opportunity_id: UUID) -> None:
+        from modules.crm.repository.opportunity_repository import OpportunityRepository
+
+        rows = self._repo.list_for_entity(ctx, "opportunity", opportunity_id)
+        categories = {r.category for r in rows}
+        OpportunityRepository(self._db).update(
+            ctx,
+            opportunity_id,
+            boq_attached="boq" in categories,
+            sow_attached="sow" in categories,
+            oem_quote_attached="oem_quote" in categories,
+            customer_po_attached="customer_po" in categories,
         )

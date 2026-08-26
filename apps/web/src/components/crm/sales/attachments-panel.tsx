@@ -97,7 +97,7 @@ export function AttachmentsPanel({
 
   return (
     <section className="rounded-xl border border-border/80 bg-card p-4 shadow-sm">
-      <h2 className="flex items-center gap-2 text-sm font-medium tracking-tight">
+      <h2 className="flex items-center gap-2 text-base font-extrabold tracking-tight">
         <Paperclip className="size-3.5" /> {title}
       </h2>
 

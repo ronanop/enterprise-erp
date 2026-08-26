@@ -34,7 +34,14 @@ export default function LoginPage() {
     void authService
       .microsoftConfig()
       .then((res) => setMicrosoftEnabled(Boolean(res.data?.enabled)))
-      .catch(() => setMicrosoftEnabled(false));
+      .catch((err: unknown) => {
+        setMicrosoftEnabled(false);
+        const msg =
+          err instanceof Error && err.message.trim()
+            ? err.message
+            : "Cannot reach the API to check Microsoft sign-in.";
+        setError((prev) => prev ?? msg);
+      });
   }, []);
 
   const returnTo = searchParams.get("next")?.startsWith("/")
@@ -76,7 +83,9 @@ export default function LoginPage() {
               className="h-11 w-full cursor-pointer gap-2 font-medium transition-colors duration-200"
               disabled={microsoftEnabled === null}
               onClick={() => {
-                window.location.href = authService.microsoftLoginUrl(returnTo);
+                void (async () => {
+                  window.location.href = await authService.microsoftLoginUrl(returnTo);
+                })();
               }}
             >
               <MicrosoftIcon className="size-4" />

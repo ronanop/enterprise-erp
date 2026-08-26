@@ -1,18 +1,34 @@
 """Pydantic schemas for master data APIs."""
 
 from datetime import date, datetime
-from typing import Any
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
+
+
+class AddressContactJson(BaseModel):
+    """Primary contact nested under vendor/customer address_json."""
+
+    first_name: str | None = None
+    last_name: str | None = None
 
 
 class AddressJson(BaseModel):
-    line1: str
-    city: str
-    country_code: str = Field(max_length=3)
+    """Billing/shipping address payload.
+
+    Defaults keep list/get responses working when legacy rows stored `{}`.
+    Extra keys (billing/shipping/addresses) are preserved so vendor forms
+    can round-trip contact and multi-address payloads.
+    """
+
+    model_config = ConfigDict(extra="allow")
+
+    line1: str = "TBD"
+    city: str = "TBD"
+    country_code: str = Field(default="IN", max_length=3)
     state: str | None = None
     postal_code: str | None = None
+    contact: AddressContactJson | None = None
 
 
 class SubmitApprovalRequest(BaseModel):
@@ -46,6 +62,7 @@ class EmployeeCreateRequest(BaseModel):
     reporting_manager_id: UUID | None = None
     date_of_leaving: date | None = None
     user_id: UUID | None = None
+    bypass_onboarding: bool = False
 
 
 class EmployeeUpdateRequest(BaseModel):
@@ -145,8 +162,7 @@ class VendorCreateRequest(BaseModel):
     email: str | None = None
     mobile: str | None = None
     payment_terms: str | None = None
-    # Flexible JSON so SCM can store one or many free-text addresses.
-    address_json: dict[str, Any] | None = None
+    address_json: AddressJson | None = None
 
 
 class VendorUpdateRequest(BaseModel):
@@ -158,7 +174,7 @@ class VendorUpdateRequest(BaseModel):
     email: str | None = None
     mobile: str | None = None
     payment_terms: str | None = None
-    address_json: dict[str, Any] | None = None
+    address_json: AddressJson | None = None
     status: str | None = None
 
 
@@ -177,7 +193,7 @@ class VendorResponse(BaseModel):
     email: str | None = None
     mobile: str | None = None
     payment_terms: str | None = None
-    address_json: dict[str, Any] | None = None
+    address_json: AddressJson | None = None
 
 
 class ProductCreateRequest(BaseModel):

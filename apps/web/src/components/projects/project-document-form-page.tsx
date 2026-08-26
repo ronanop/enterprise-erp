@@ -144,7 +144,6 @@ export function ProjectDocumentFormPage({
             type: "text",
             full: true,
             placeholder: "s3://bucket/path/to/file.pdf",
-            hint: "Location of the stored file. Superseded versions stay linked for audit.",
           },
         ],
       },

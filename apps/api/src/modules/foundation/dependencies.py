@@ -47,19 +47,36 @@ def get_tenant_context(
         store.touch_session(session_id)
     company_id = UUID(cached["company_id"]) if cached.get("company_id") else None
     branch_id = UUID(cached["branch_id"]) if cached.get("branch_id") else None
-    if not company_id:
-        from modules.organization.repository.org_scope_repository import OrgScopeRepository
+    user_id = UUID(payload["sub"])
+    tenant_id = UUID(payload["tenant_id"])
+    user_type = str(payload["user_type"])
+    user_row = db.get(SecUser, user_id)
+    if user_row is not None and user_row.user_type:
+        user_type = user_row.user_type
 
-        default_scope = OrgScopeRepository(db).get_default_scope(
-            UUID(payload["sub"]), UUID(payload["tenant_id"])
+    if not company_id:
+        from modules.foundation.service.org_context_service import OrgContextService
+
+        org_ctx = OrgContextService(db)
+        resolved_company, resolved_branch = org_ctx.resolve_company_and_branch(
+            user_id=user_id,
+            tenant_id=tenant_id,
+            user_type=user_type,
         )
-        if default_scope:
-            company_id = default_scope.company_id
-            branch_id = default_scope.branch_id
+        if resolved_company:
+            company_id = resolved_company
+            branch_id = resolved_branch
+            cached = {
+                **cached,
+                "company_id": str(company_id),
+                "branch_id": str(branch_id) if branch_id else None,
+            }
+            store.set_session(session_id, cached)
+
     return TenantContext(
-        tenant_id=UUID(payload["tenant_id"]),
-        user_id=UUID(payload["sub"]),
-        user_type=str(payload["user_type"]),
+        tenant_id=tenant_id,
+        user_id=user_id,
+        user_type=user_type,
         session_id=session_id,
         company_id=company_id,
         branch_id=branch_id,
@@ -89,6 +106,8 @@ def require_permission(permission_code: str) -> Callable:
         db: Annotated[Session, Depends(get_db)],
     ) -> TenantContext:
         rbac = RBACService(db)
+        if ctx.user_type in {"super_admin", "tenant_admin"}:
+            return ctx
         if not rbac.has_permission(ctx.user_id, ctx.tenant_id, permission_code):
             raise ForbiddenException(f"Missing permission: {permission_code}")
         return ctx

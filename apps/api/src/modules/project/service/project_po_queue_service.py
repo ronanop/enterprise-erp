@@ -97,6 +97,8 @@ class ProjectPoQueueService:
         site_name: str | None = None
         opportunity_id: UUID | None = None
         customer_po_number = order.customer_po_number
+        circle_name: str | None = None
+        entity_state: str | None = None
 
         ovf_id = (
             order.source_document_id
@@ -110,6 +112,8 @@ class ProjectPoQueueService:
                 customer_id = crm_ctx.get("customer_id")
                 site_name = crm_ctx.get("site_name")
                 opportunity_id = crm_ctx.get("opportunity_id")
+                circle_name = crm_ctx.get("circle_name")
+                entity_state = crm_ctx.get("entity_state")
                 if not customer_po_number:
                     customer_po_number = crm_ctx.get("customer_po_number")
             except Exception:
@@ -145,6 +149,8 @@ class ProjectPoQueueService:
             description=description,
             ovf_id=ovf_id,
             crm_opportunity_id=opportunity_id,
+            circle_name=circle_name,
+            entity_state=entity_state,
         )
 
     def ensure_linkable(

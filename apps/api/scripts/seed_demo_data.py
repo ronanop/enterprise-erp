@@ -28,7 +28,47 @@ from modules.foundation.service.user_service import UserService  # noqa: E402
 from modules.master_data.models.party import MasterCustomer, MasterVendor  # noqa: E402
 from modules.organization.models.branch import OrgBranch  # noqa: E402
 from modules.organization.models.company import OrgCompany  # noqa: E402
+from modules.organization.models.hierarchy import OrgLocation  # noqa: E402
 from security.password import PasswordHasher  # noqa: E402
+
+# Real Cache org structure (companies → branches → work locations).
+CACHE_ORG_ROWS: list[dict[str, str]] = [
+    {
+        "company_code": "CACHEDIG",
+        "company_name": "Cache Digitech",
+        "legal_name": "Cache Digitech",
+        "branch_code": "MUM",
+        "branch_name": "Mumbai Branch",
+        "location_code": "LOC-MUM",
+        "location_name": "Mumbai, Maharashtra",
+        "city": "Mumbai",
+        "state_code": "MH",
+    },
+    {
+        "company_code": "CACHEDIG",
+        "company_name": "Cache Digitech",
+        "legal_name": "Cache Digitech",
+        "branch_code": "SUL",
+        "branch_name": "Sultanpur Branch",
+        "location_code": "LOC-SUL",
+        "location_name": "Sultanpur, New Delhi",
+        "city": "New Delhi",
+        "state_code": "DL",
+        "address_line1": "Sultanpur",
+    },
+    {
+        "company_code": "CACHETECH",
+        "company_name": "Cache Technologies & Infotech",
+        "legal_name": "Cache Technologies & Infotech",
+        "branch_code": "GK",
+        "branch_name": "Greater Kailash Branch",
+        "location_code": "LOC-GK",
+        "location_name": "Greater Kailash, New Delhi",
+        "city": "New Delhi",
+        "state_code": "DL",
+        "address_line1": "Greater Kailash",
+    },
+]
 
 DEMO_PASSWORD = "Secure1!"
 
@@ -67,20 +107,11 @@ DEMO_USERS = [
         "role_code": "SUPER_ADMIN",
     },
     {
-        "email": "tenant.admin@example.com",
-        "display_name": "Tenant Admin",
-        "user_type": "tenant_admin",
-        "role_code": "TENANT_ADMIN",
+        "email": "techbank@cachedigitech.com",
+        "display_name": "TechBank",
+        "user_type": "super_admin",
+        "role_code": "SUPER_ADMIN",
     },
-    *[
-        {
-            "email": f"{module_key}.user@example.com",
-            "display_name": display_name,
-            "user_type": "employee",
-            "role_code": "TENANT_ADMIN",
-        }
-        for module_key, display_name in MODULE_DEMO_USERS
-    ],
 ]
 
 
@@ -223,8 +254,8 @@ def seed_organization(db, tenant: SecTenant, admin: SecUser) -> tuple[OrgCompany
             id=uuid4(),
             tenant_id=tenant.id,
             company_code="DEMOCO",
-            company_name="Demo Industries Pvt Ltd",
-            legal_name="Demo Industries Private Limited",
+            company_name="Cache Digitech",
+            legal_name="Cache Digitech",
             country_code="IN",
             currency_code="INR",
             registration_number="CIN-DEMO-001",
@@ -237,6 +268,11 @@ def seed_organization(db, tenant: SecTenant, admin: SecUser) -> tuple[OrgCompany
         )
         db.add(company)
         db.flush()
+    else:
+        company.company_name = "Cache Digitech"
+        company.legal_name = "Cache Digitech"
+        company.status = "active"
+        company.updated_by = admin.id
 
     branch = db.scalar(
         select(OrgBranch).where(
@@ -292,6 +328,160 @@ def seed_organization(db, tenant: SecTenant, admin: SecUser) -> tuple[OrgCompany
             )
 
     return company, branch
+
+
+def seed_demo_operating_branches(
+    db, tenant: SecTenant, admin: SecUser, company: OrgCompany
+) -> list[OrgBranch]:
+    """Seed Mumbai / Sultanpur / Greater Kailash under the default demo company.
+
+    Branches list is scoped to the active org company (DEMOCO), so these names
+    must exist there to appear in HR Setup → Branches without switching company.
+    """
+    specs = [
+        {
+            "branch_code": "MUM",
+            "branch_name": "Mumbai Branch",
+            "city": "Mumbai",
+            "state_code": "MH",
+            "address_line1": "Mumbai, Maharashtra",
+            "location_code": "LOC-MUM",
+            "location_name": "Mumbai, Maharashtra",
+        },
+        {
+            "branch_code": "SUL",
+            "branch_name": "Sultanpur Branch",
+            "city": "New Delhi",
+            "state_code": "DL",
+            "address_line1": "Sultanpur",
+            "location_code": "LOC-SUL",
+            "location_name": "Sultanpur, New Delhi",
+        },
+        {
+            "branch_code": "GK",
+            "branch_name": "Greater Kailash Branch",
+            "city": "New Delhi",
+            "state_code": "DL",
+            "address_line1": "Greater Kailash",
+            "location_code": "LOC-GK",
+            "location_name": "Greater Kailash, New Delhi",
+        },
+    ]
+    out: list[OrgBranch] = []
+    for spec in specs:
+        branch = db.scalar(
+            select(OrgBranch).where(
+                OrgBranch.company_id == company.id,
+                OrgBranch.branch_code == spec["branch_code"],
+                OrgBranch.is_deleted.is_(False),
+            )
+        )
+        if not branch:
+            branch = OrgBranch(
+                id=uuid4(),
+                tenant_id=tenant.id,
+                company_id=company.id,
+                branch_code=spec["branch_code"],
+                branch_name=spec["branch_name"],
+                branch_type="regional",
+                address_line1=spec["address_line1"],
+                city=spec["city"],
+                state_code=spec["state_code"],
+                country_code="IN",
+                status="active",
+                created_by=admin.id,
+                updated_by=admin.id,
+            )
+            db.add(branch)
+            db.flush()
+        else:
+            branch.branch_name = spec["branch_name"]
+            branch.city = spec["city"]
+            branch.state_code = spec["state_code"]
+            branch.address_line1 = spec["address_line1"]
+            branch.status = "active"
+
+        location = db.scalar(
+            select(OrgLocation).where(
+                OrgLocation.branch_id == branch.id,
+                OrgLocation.location_code == spec["location_code"],
+                OrgLocation.is_deleted.is_(False),
+            )
+        )
+        if not location:
+            db.add(
+                OrgLocation(
+                    id=uuid4(),
+                    tenant_id=tenant.id,
+                    company_id=company.id,
+                    branch_id=branch.id,
+                    location_code=spec["location_code"],
+                    location_name=spec["location_name"],
+                    location_type="office",
+                    address_line1=spec["address_line1"],
+                    city=spec["city"],
+                    state_code=spec["state_code"],
+                    country_code="IN",
+                    status="active",
+                    created_by=admin.id,
+                    updated_by=admin.id,
+                )
+            )
+            db.flush()
+        else:
+            location.location_name = spec["location_name"]
+            location.city = spec["city"]
+            location.state_code = spec["state_code"]
+            location.status = "active"
+
+        out.append(branch)
+    return out
+
+
+# Extra Cache companies (older seed). DEMOCO is now "Cache Digitech" with
+# Mumbai / Sultanpur / Greater Kailash branches + work locations — keep that as SoT.
+DUPLICATE_CACHE_COMPANY_CODES = ("CACHEDIG", "CACHETECH")
+
+
+def soft_delete_duplicate_cache_org(db, tenant: SecTenant, admin: SecUser) -> int:
+    """Remove duplicate Cache Digitech / Cache Technologies trees that double work locations."""
+    companies = db.scalars(
+        select(OrgCompany).where(
+            OrgCompany.tenant_id == tenant.id,
+            OrgCompany.company_code.in_(DUPLICATE_CACHE_COMPANY_CODES),
+            OrgCompany.is_deleted.is_(False),
+        )
+    ).all()
+    removed = 0
+    for company in companies:
+        for loc in db.scalars(
+            select(OrgLocation).where(
+                OrgLocation.company_id == company.id,
+                OrgLocation.is_deleted.is_(False),
+            )
+        ).all():
+            loc.is_deleted = True
+            loc.updated_by = admin.id
+            removed += 1
+        for br in db.scalars(
+            select(OrgBranch).where(
+                OrgBranch.company_id == company.id,
+                OrgBranch.is_deleted.is_(False),
+            )
+        ).all():
+            br.is_deleted = True
+            br.updated_by = admin.id
+            removed += 1
+        company.is_deleted = True
+        company.updated_by = admin.id
+        removed += 1
+    return removed
+
+
+def seed_cache_org(db, tenant: SecTenant, admin: SecUser) -> list[tuple[OrgCompany, OrgBranch, OrgLocation]]:
+    """Legacy no-op — Cache Digitech operating units live on DEMOCO now."""
+    soft_delete_duplicate_cache_org(db, tenant, admin)
+    return []
 
 
 def seed_master_data(
@@ -390,6 +580,11 @@ def main() -> None:
         users = seed_users(db, tenant)
         admin = users["admin@example.com"]
         company, branch = seed_organization(db, tenant, admin)
+        from scripts.platform_admin_employee import ensure_platform_admin_employee
+
+        ensure_platform_admin_employee(db, tenant=tenant, company=company, branch=branch, admin=admin)
+        demo_branches = seed_demo_operating_branches(db, tenant, admin, company)
+        cache_rows = seed_cache_org(db, tenant, admin)
         seed_master_data(db, tenant, company, branch, admin)
         db.commit()
 
@@ -419,6 +614,13 @@ def main() -> None:
         print(f"Tenant code : {tenant.tenant_code}")
         print(f"Company     : {company.company_code} / {company.company_name}")
         print(f"Branch      : {branch.branch_code} / {branch.branch_name}")
+        print("Demo branches:")
+        for b in demo_branches:
+            print(f"  - Branch: {b.branch_name} → work location city {b.city}")
+        if cache_rows:
+            print("Cache org   :")
+            for c, b, loc in cache_rows:
+                print(f"  - {c.company_name} | {b.branch_name} | {loc.location_name}")
         print(f"Password    : {DEMO_PASSWORD}")
         print(f"Module users: {len(MODULE_DEMO_USERS)}  (email = {{moduleKey}}.user@example.com)")
         print("-" * 60)

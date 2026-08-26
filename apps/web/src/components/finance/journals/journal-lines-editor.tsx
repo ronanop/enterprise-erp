@@ -194,7 +194,7 @@ export function JournalLinesEditor({
       ) : null}
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border/70 px-4 py-3">
         <div>
-          <h2 className="text-sm font-medium tracking-tight">Journal lines</h2>
+          <h2 className="text-base font-extrabold tracking-tight">Journal lines</h2>
           <p
             className={cn(
               "text-[11px] font-mono",

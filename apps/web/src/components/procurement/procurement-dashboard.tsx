@@ -168,7 +168,7 @@ export function ProcurementDashboard() {
   );
 
   const authBlocked =
-    Boolean(data?.statusCodes.includes(401)) ||
+    Boolean(data?.statusCodes?.includes(401)) ||
     (!authenticated && Boolean(data?.errors.length));
 
   return (

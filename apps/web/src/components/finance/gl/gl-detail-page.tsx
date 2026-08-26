@@ -167,7 +167,7 @@ export function GlDetailPage({ entryId }: { entryId: string }) {
       </div>
 
       <div className="rounded-xl border border-border/80 bg-card p-4 shadow-sm">
-        <h3 className="text-sm font-medium tracking-tight">Voucher / Journal</h3>
+        <h3 className="text-base font-extrabold tracking-tight">Voucher / Journal</h3>
         <dl className="mt-3 grid gap-2 text-sm sm:grid-cols-2">
           <div><dt className="text-[11px] text-muted-foreground uppercase">Voucher</dt><dd className="font-mono">{entry.entry_number}</dd></div>
           <div>
@@ -197,7 +197,7 @@ export function GlDetailPage({ entryId }: { entryId: string }) {
       {journal?.lines && journal.lines.length > 0 ? (
         <div className="rounded-xl border border-border/80 bg-card shadow-sm">
           <div className="border-b border-border/70 px-3 py-2.5">
-            <h3 className="text-sm font-medium tracking-tight">Journal Lines</h3>
+            <h3 className="text-base font-extrabold tracking-tight">Journal Lines</h3>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full min-w-[720px] text-sm">
@@ -231,7 +231,7 @@ export function GlDetailPage({ entryId }: { entryId: string }) {
       ) : null}
 
       <div className="rounded-xl border border-border/80 bg-card p-3.5 shadow-sm">
-        <h3 className="mb-2 text-sm font-medium tracking-tight">Audit Timeline</h3>
+        <h3 className="mb-2 text-base font-extrabold tracking-tight">Audit Timeline</h3>
         <JournalAuditTimeline events={auditEvents} resolveUser={resolve} />
       </div>
 

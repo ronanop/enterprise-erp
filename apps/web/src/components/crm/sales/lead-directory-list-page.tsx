@@ -2,13 +2,12 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { BookUser, RefreshCw } from "lucide-react";
+import { BookUser } from "lucide-react";
 
-import { CrmErrorBanner, CrmListPanel, CrmPage } from "@/components/crm/crm-ui";
+import { CrmErrorBanner, CrmListPanel, CrmPage, CRM_TABLE_HEAD_ROW } from "@/components/crm/crm-ui";
 import { CrmListToolbar } from "@/components/crm/sales/crm-list-toolbar";
 import { CrmSortableTh, sortRows, useTableSort } from "@/components/crm/sales/crm-table-sort";
 import { PageHeader } from "@/components/layout/page-header";
-import { Button } from "@/components/ui/button";
 import { ApiClientError } from "@/services/api-client";
 import {
   fullName,
@@ -47,22 +46,22 @@ const META: Record<
   }
 > = {
   oem: {
-    title: "OEM",
-    description: "OEM partner master. Add new OEMs from the lead form (New OEM).",
-    subtitle: "OEM partners",
+    title: "OEM / Brand",
+    description: "Brand / manufacturer master (not the procurement vendor). Add new OEMs from the lead form.",
+    subtitle: "OEM / brand partners",
     primary: (l) => l.oem_name,
     secondary: (l) => l.oem_contact_person || l.oem_contact_email || l.oem_contact_number,
-    columns: ["OEM", "Contact"],
+    columns: ["OEM / Brand", "Contact"],
     dedupeByPrimary: true,
   },
   distributor: {
-    title: "Distributor",
-    description: "Distributor details captured on sales leads.",
-    subtitle: "Distributors from leads",
+    title: "Distributor / Vendor",
+    description: "Same party as Vendor in Procurement. Captured on sales leads and used for POs.",
+    subtitle: "Distributors (= vendors) from leads",
     primary: (l) => l.distributor_name,
     secondary: (l) =>
       l.distributor_contact_person || l.distributor_contact_email || l.distributor_contact,
-    columns: ["Distributor", "Contact"],
+    columns: ["Distributor / Vendor", "Contact"],
     dedupeByPrimary: true,
   },
   entity: {
@@ -236,19 +235,6 @@ export function LeadDirectoryListPage({
         <PageHeader
           title={meta.title}
           description={meta.description}
-          actions={
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="cursor-pointer"
-              disabled={loading}
-              onClick={() => void load()}
-            >
-              <RefreshCw className={`size-3.5 ${loading ? "animate-spin" : ""}`} />
-              Refresh
-            </Button>
-          }
         />
       ) : null}
 
@@ -260,21 +246,6 @@ export function LeadDirectoryListPage({
           subtitle={meta.subtitle}
           icon={BookUser}
           count={sorted.length}
-          actions={
-            embedded ? (
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="cursor-pointer"
-                disabled={loading}
-                onClick={() => void load()}
-              >
-                <RefreshCw className={`size-3.5 ${loading ? "animate-spin" : ""}`} />
-                Refresh
-              </Button>
-            ) : null
-          }
           search={{
             value: query,
             onChange: setQuery,
@@ -285,7 +256,7 @@ export function LeadDirectoryListPage({
         <div className="erp-scroll overflow-x-auto">
           <table className="w-full min-w-180 text-left text-sm">
             <thead>
-              <tr className="border-b border-border/70 bg-muted/40 text-[11px] tracking-wide text-muted-foreground uppercase">
+              <tr className={CRM_TABLE_HEAD_ROW}>
                 <CrmSortableTh label={meta.columns[0]} sortKey="primary" activeKey={sortBy} dir={sortDir} onSort={onSort} />
                 <CrmSortableTh label={meta.columns[1]} sortKey="secondary" activeKey={sortBy} dir={sortDir} onSort={onSort} />
                 <CrmSortableTh

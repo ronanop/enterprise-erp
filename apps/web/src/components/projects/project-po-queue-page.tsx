@@ -4,7 +4,6 @@ import { useCallback, useMemo, useState } from "react";
 import Link from "next/link";
 import { FileDown, FolderPlus, ShoppingCart } from "lucide-react";
 
-import { FinanceStatusBadge } from "@/components/finance/finance-status-badge";
 import {
   ProjectsRecordList,
   type RecordColumn,
@@ -15,7 +14,6 @@ import { cn } from "@/lib/utils";
 import { ApiClientError } from "@/services/api-client";
 import {
   formatDate,
-  formatInr,
   listProjectPoQueue,
   type ProjectPoQueueItem,
 } from "@/services/projects-portal-service";
@@ -117,28 +115,14 @@ export function ProjectPoQueuePage() {
         cell: (r) => r.customer_name || "—",
       },
       {
-        key: "customer_po_number",
-        label: "Customer PO",
-        sort: (r) => r.customer_po_number || "",
-        className: "font-mono text-xs text-muted-foreground",
-        cell: (r) => r.customer_po_number || "—",
-      },
-      {
-        key: "customer_total",
-        label: "Sell Value",
-        sort: (r) => r.customer_total,
-        align: "right",
-        cell: (r) => formatInr(r.customer_total || r.total_amount),
-      },
-      {
-        key: "status",
-        label: "Status",
-        sort: (r) => r.status,
-        cell: (r) => <FinanceStatusBadge status={r.status} />,
+        key: "created_at",
+        label: "Date Created",
+        sort: (r) => r.document_date,
+        cell: (r) => formatDate(r.document_date),
       },
       {
         key: "actions",
-        label: "",
+        label: "Action",
         sort: () => "",
         align: "right",
         cell: (r) => (

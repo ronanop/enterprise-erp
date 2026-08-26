@@ -210,7 +210,7 @@ export function OpportunityTimelinePanel({
             </p>
             <h2
               id="opportunity-timeline-title"
-              className="truncate text-sm font-medium tracking-tight text-foreground"
+              className="truncate text-base font-extrabold tracking-tight text-foreground"
             >
               Opportunity timeline
             </h2>

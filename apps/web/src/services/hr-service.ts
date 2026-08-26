@@ -2,6 +2,12 @@ import { ApiClientError, resourceService } from "@/services/api-client";
 
 export type HrRow = Record<string, unknown>;
 
+export type HrOption = { id: string; label: string };
+
+function asArray(data: unknown): HrRow[] {
+  return normalizeRows(data);
+}
+
 export type HrOverview = {
   designations: HrRow[];
   profiles: HrRow[];
@@ -18,6 +24,7 @@ export type HrOverview = {
   goals: HrRow[];
   appraisals: HrRow[];
   training: HrRow[];
+  trainingAttendance: HrRow[];
   separation: HrRow[];
   errors: string[];
   statusCodes: number[];
@@ -41,9 +48,10 @@ function normalizeRows(data: unknown): HrRow[] {
 
 async function safeList(
   apiPath: string,
+  query?: Record<string, string | number | boolean | null | undefined>,
 ): Promise<{ rows: HrRow[]; error?: string; status?: number }> {
   try {
-    const response = await resourceService.list(apiPath);
+    const response = await resourceService.list(apiPath, { page_size: 200, page: 1, ...query });
     return { rows: normalizeRows(response.data) };
   } catch (err) {
     if (err instanceof ApiClientError) {
@@ -51,6 +59,23 @@ async function safeList(
     }
     return { rows: [], error: `Failed to load ${apiPath}`, status: 500 };
   }
+}
+
+async function safeListAll(apiPath: string): Promise<{ rows: HrRow[]; error?: string; status?: number }> {
+  const all: HrRow[] = [];
+  let page = 1;
+  let lastStatus: number | undefined;
+  while (page <= 20) {
+    const chunk = await safeList(apiPath, { page, page_size: 200 });
+    if (chunk.error && chunk.rows.length === 0) {
+      return { rows: all, error: chunk.error, status: chunk.status };
+    }
+    lastStatus = chunk.status;
+    all.push(...chunk.rows);
+    if (chunk.rows.length < 200) break;
+    page += 1;
+  }
+  return { rows: all, status: lastStatus };
 }
 
 export function formatQty(value: number): string {
@@ -120,6 +145,7 @@ export async function loadHrOverview(): Promise<HrOverview> {
     goals,
     appraisals,
     training,
+    trainingAttendance,
     separation,
   ] = await Promise.all([
     safeList("/hr/designations"),
@@ -131,12 +157,13 @@ export async function loadHrOverview(): Promise<HrOverview> {
     safeList("/hr/leave-types"),
     safeList("/hr/leave-balances"),
     safeList("/hr/leave-requests"),
-    safeList("/hr/attendance"),
+    safeListAll("/hr/attendance"),
     safeList("/hr/employee-documents"),
     safeList("/hr/performance-reviews"),
     safeList("/hr/goals"),
     safeList("/hr/appraisals"),
     safeList("/hr/training"),
+    safeListAll("/hr/training-attendance"),
     safeList("/hr/separation"),
   ]);
 
@@ -156,6 +183,7 @@ export async function loadHrOverview(): Promise<HrOverview> {
     goals,
     appraisals,
     training,
+    trainingAttendance,
     separation,
   ];
   const errors = results.map((r) => r.error).filter((e): e is string => Boolean(e));
@@ -179,9 +207,102 @@ export async function loadHrOverview(): Promise<HrOverview> {
     goals: goals.rows,
     appraisals: appraisals.rows,
     training: training.rows,
+    trainingAttendance: trainingAttendance.rows,
     separation: separation.rows,
     errors,
     statusCodes,
     partial: errors.length > 0,
   };
+}
+
+export async function listHrBranchOptions(): Promise<HrOption[]> {
+  try {
+    const res = await resourceService.list("/branches");
+    return asArray(res.data).map((r) => ({
+      id: String(r.id),
+      label: String(r.branch_name ?? r.name ?? r.branch_code ?? r.id),
+    }));
+  } catch {
+    return [];
+  }
+}
+
+export async function listHrEmployeeOptions(): Promise<HrOption[]> {
+  try {
+    const res = await resourceService.list("/employees");
+    return asArray(res.data).map((r) => ({
+      id: String(r.id),
+      label:
+        `${[r.first_name, r.last_name].filter(Boolean).join(" ")}${
+          r.employee_code ? ` (${r.employee_code})` : ""
+        }`.trim() || String(r.id),
+    }));
+  } catch {
+    return [];
+  }
+}
+
+export async function listLeaveTypeOptions(): Promise<HrOption[]> {
+  try {
+    const res = await resourceService.list("/hr/leave-types");
+    return asArray(res.data).map((r) => ({
+      id: String(r.id),
+      label: String(r.leave_type_name ?? r.leave_type_code ?? r.name ?? r.id),
+    }));
+  } catch {
+    return [];
+  }
+}
+
+export async function listShiftOptions(): Promise<HrOption[]> {
+  try {
+    const res = await resourceService.list("/hr/shifts");
+    return asArray(res.data).map((r) => ({
+      id: String(r.id),
+      label: String(r.shift_name ?? r.shift_code ?? r.name ?? r.id),
+    }));
+  } catch {
+    return [];
+  }
+}
+
+export async function createLeaveRequest(body: {
+  branch_id: string;
+  employee_id: string;
+  leave_type_id: string;
+  start_date: string;
+  end_date: string;
+  days_count: number;
+  reason?: string;
+}) {
+  return resourceService.create("/hr/leave-requests", body);
+}
+
+export async function createAttendance(body: {
+  branch_id: string;
+  employee_id: string;
+  attendance_date: string;
+  attendance_status: string;
+  source?: string;
+  shift_id?: string | null;
+  notes?: string;
+  total_hours?: number | null;
+}) {
+  return resourceService.create("/hr/attendance", {
+    ...body,
+    source: body.source ?? "manual",
+  });
+}
+
+export async function createDesignation(body: {
+  branch_id?: string | null;
+  designation_code: string;
+  designation_name: string;
+  job_level?: string;
+  status?: string;
+}) {
+  return resourceService.create("/hr/designations", {
+    ...body,
+    status: body.status ?? "active",
+  });
 }

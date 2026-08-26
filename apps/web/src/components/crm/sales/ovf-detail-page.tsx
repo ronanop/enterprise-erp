@@ -14,8 +14,8 @@ import {
   CrmSection,
 } from "@/components/crm/crm-ui";
 import { ApprovalBanner } from "@/components/crm/sales/approval-banner";
+import { CrmEntityRejectionAlert } from "@/components/crm/sales/crm-approval-inbox-listener";
 import { BlueprintActions, BlueprintStateBadge } from "@/components/crm/sales/blueprint-actions";
-import { DealTimeline } from "@/components/crm/sales/deal-timeline";
 import {
   OvfOrderLinesSection,
   customerRowsFromOvfLines,
@@ -27,6 +27,7 @@ import { FinanceStatusBadge } from "@/components/finance/finance-status-badge";
 import { PageHeader } from "@/components/layout/page-header";
 import { Button } from "@/components/ui/button";
 import { ApiClientError } from "@/services/api-client";
+import { parseLeadDistributorNames } from "@/lib/crm/lead-distributor-options";
 import {
   applyOvfAction,
   formatInr,
@@ -36,8 +37,10 @@ import {
   getOvf,
   getOvfBlueprint,
   getQuote,
+  getSalesLead,
   listEmployeeOptions,
   listOvfLines,
+  listQuoteLines,
   markOvfDealWon,
   sendOvfForApproval,
   shareOvfToScm,
@@ -65,6 +68,7 @@ export function OvfDetailPage({ ovfId }: { ovfId: string }) {
   const [employees, setEmployees] = useState<Option[]>([]);
   const [customerRows, setCustomerRows] = useState<CustomerChargeRow[]>([]);
   const [vendorRows, setVendorRows] = useState<VendorChargeRow[]>([]);
+  const [vendorNameOptions, setVendorNameOptions] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [banner, setBanner] = useState<{ text: string; tone: "success" | "error" } | null>(null);
@@ -81,17 +85,24 @@ export function OvfDetailPage({ ovfId }: { ovfId: string }) {
       ]);
       setOvf(ovfRow);
       setBlueprint(bp);
-      setCustomerRows(customerRowsFromOvfLines(ovfLines));
-      setVendorRows(vendorRowsFromOvfLines(ovfLines));
 
-      const [quoteRow, oppRow, employeeRows] = await Promise.all([
+      const [quoteRow, oppRow, employeeRows, quoteLines] = await Promise.all([
         getQuote(ovfRow.quote_id).catch(() => null),
         getOpportunity(ovfRow.opportunity_id).catch(() => null),
         listEmployeeOptions().catch(() => [] as Option[]),
+        listQuoteLines(ovfRow.quote_id).catch(() => []),
       ]);
       setQuote(quoteRow);
       setOpportunity(oppRow);
       setEmployees(employeeRows);
+      setCustomerRows(customerRowsFromOvfLines(ovfLines, quoteLines));
+      setVendorRows(vendorRowsFromOvfLines(ovfLines, quoteLines));
+      if (oppRow?.lead_id) {
+        const lead = await getSalesLead(oppRow.lead_id).catch(() => null);
+        setVendorNameOptions(parseLeadDistributorNames(lead?.distributor_name));
+      } else {
+        setVendorNameOptions([]);
+      }
 
       const accountId = ovfRow.company_account_id ?? oppRow?.company_account_id ?? null;
       setCompany(accountId ? await getCompany(accountId).catch(() => null) : null);
@@ -199,21 +210,11 @@ export function OvfDetailPage({ ovfId }: { ovfId: string }) {
   );
   const shippingCountry = textOrDash(
     ovf.shipping_country ||
-      quote?.shipping_country ||
-      company?.shipping_country ||
-      company?.billing_country,
+    quote?.shipping_country ||
+    company?.shipping_country ||
+    company?.billing_country,
   );
   const shippingContact = textOrDash(ovf.shipping_contact_person || quote?.entity_contact);
-  const timelineLinks = {
-    ...(opportunity?.company_account_id
-      ? { company: `/crm/companies/${opportunity.company_account_id}` }
-      : {}),
-    ...(opportunity?.lead_id ? { lead: `/crm/leads/${opportunity.lead_id}` } : {}),
-    opportunity: `/crm/opportunities/${ovf.opportunity_id}`,
-    quote: `/crm/quotes/${ovf.quote_id}`,
-    ovf: `/crm/ovf/${ovf.id}`,
-    ...(ovf.deal_won ? { won: `/crm/ovf/${ovf.id}` } : {}),
-  };
 
   return (
     <CrmPage>
@@ -229,20 +230,8 @@ export function OvfDetailPage({ ovfId }: { ovfId: string }) {
         </Button>
       </div>
 
-      <DealTimeline
-        current={ovf.deal_won ? "won" : "ovf"}
-        links={timelineLinks}
-        nextStep={
-          ovf.deal_won
-            ? undefined
-            : {
-                label: "Complete OVF",
-                description:
-                  "Use the blueprint actions on this screen through Share to SCM and Deal Won.",
-              }
-        }
-      />
-      <ApprovalBanner locked={blueprint.locked} approvalStatus={ovf.approval_status} label="This OVF" />
+      <CrmEntityRejectionAlert entityType="ovf" entityId={ovf.id} />
+      <ApprovalBanner locked={blueprint.locked} approvalStatus={blueprint.state} label="This OVF" />
 
       {ovf.deal_won ? (
         <div className="flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-2.5 text-sm text-emerald-950">
@@ -401,7 +390,12 @@ export function OvfDetailPage({ ovfId }: { ovfId: string }) {
         </CrmDetailGrid>
       </CrmSection>
 
-      <OvfOrderLinesSection customerRows={customerRows} vendorRows={vendorRows} disabled />
+      <OvfOrderLinesSection
+        customerRows={customerRows}
+        vendorRows={vendorRows}
+        vendorNameOptions={vendorNameOptions}
+        disabled
+      />
     </CrmPage>
   );
 }

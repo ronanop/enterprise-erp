@@ -5,6 +5,7 @@ import { runDeliveryReminderSweep } from "@/utils/delivery-status-reminders";
 import {
   deriveDeliveryStatusLabel,
   firstDeliveryStatusFormError,
+  getDeliveryStatus,
   upsertDeliveryStatus,
   validateDeliveryStatusForm,
   type DeliveryStatusFormErrors,
@@ -24,6 +25,7 @@ export async function persistDeliveryStatusFromForm(
     return { ok: false, message, fieldErrors: errors };
   }
 
+  const existing = getDeliveryStatus(challan.id);
   const normalized: DeliveryStatusFormValue = {
     ...form,
     shipmentStatus: deriveDeliveryStatusLabel(form),
@@ -38,11 +40,37 @@ export async function persistDeliveryStatusFromForm(
     courierTransportDetails:
       form.courierProvider?.trim() || form.courierTransportDetails?.trim() || "",
     courierProvider: form.courierProvider?.trim() || "",
+    // Preserve billing recorded later — delivery save must not wipe it.
+    billStatus: existing?.billStatus ?? form.billStatus ?? "pending_delivery",
+    billedQuantity: existing?.billedQuantity ?? form.billedQuantity ?? "",
+    billInvoiceNumber: existing?.billInvoiceNumber ?? form.billInvoiceNumber ?? "",
+    billInvoiceDate: existing?.billInvoiceDate ?? form.billInvoiceDate ?? "",
+    billDocument: existing?.billDocument ?? form.billDocument ?? null,
+    billRemarks: existing?.billRemarks ?? form.billRemarks ?? "",
+    billedAt: existing?.billedAt ?? form.billedAt ?? "",
   };
+
+  const delivered =
+    deriveDeliveryStatusLabel(normalized) === "Delivered" ||
+    Boolean(normalized.actualDeliveryDate?.trim());
+  let billStatus = normalized.billStatus;
+  if (delivered) {
+    if (
+      billStatus !== "unbilled" &&
+      billStatus !== "partially_billed" &&
+      billStatus !== "fully_billed"
+    ) {
+      billStatus = "unbilled";
+    }
+  } else {
+    billStatus = "pending_delivery";
+  }
 
   upsertDeliveryStatus({
     challanId: challan.id,
     ...normalized,
+    billStatus,
+    requiresInstallation: delivered ? Boolean(normalized.requiresInstallation) : false,
   });
   runDeliveryReminderSweep();
 

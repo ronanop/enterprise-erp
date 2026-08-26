@@ -7,8 +7,8 @@
 ---
 
 **Project:** Enterprise ERP Platform
-**Generated:** 2026-08-13 22:19:24
-**Category:** Timer & Pomodoro
+**Generated:** 2026-08-21 11:30:11
+**Category:** Social Media App
 
 ---
 
@@ -18,24 +18,30 @@
 
 | Role | Hex | CSS Variable |
 |------|-----|--------------|
-| Primary | `#D97706` | `--color-primary` |
+| Primary | `#E11D48` | `--color-primary` |
 | On Primary | `#FFFFFF` | `--color-on-primary` |
-| Secondary | `#F59E0B` | `--color-secondary` |
-| Accent/CTA | `#16A34A` | `--color-accent` |
-| Background | `#FFFBEB` | `--color-background` |
-| Foreground | `#0F172A` | `--color-foreground` |
-| Muted | `#FCF6F0` | `--color-muted` |
-| Border | `#FAEEE1` | `--color-border` |
+| Secondary | `#FB7185` | `--color-secondary` |
+| Accent/CTA | `#2563EB` | `--color-accent` |
+| Background | `#FFF1F2` | `--color-background` |
+| Foreground | `#881337` | `--color-foreground` |
+| Muted | `#F0ECF2` | `--color-muted` |
+| Border | `#FECDD3` | `--color-border` |
 | Destructive | `#DC2626` | `--color-destructive` |
-| Ring | `#D97706` | `--color-ring` |
+| Ring | `#E11D48` | `--color-ring` |
 
-**Color Notes:** Funding progress amber + goal green + urgency
+**Color Notes:** Vibrant rose + engagement blue
 
 ### Typography
 
-- **Heading Font:** Inter
+- **Heading Font:** Calistoga
 - **Body Font:** Inter
-- **Mood:** Professional + Clean hierarchy
+- **Mood:** saas, boutique, electric, warm, editorial, bold, premium, fintech, business, dual font, human warmth
+- **Google Fonts:** [Calistoga + Inter](https://fonts.googleapis.com/css2?family=Calistoga:ital@0;1&family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap)
+
+**CSS Import:**
+```css
+@import url('https://fonts.googleapis.com/css2?family=Calistoga:ital@0;1&family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+```
 
 ### Spacing Variables
 
@@ -67,7 +73,7 @@
 ```css
 /* Primary Button */
 .btn-primary {
-  background: #16A34A;
+  background: #2563EB;
   color: white;
   padding: 12px 24px;
   border-radius: 8px;
@@ -84,8 +90,8 @@
 /* Secondary Button */
 .btn-secondary {
   background: transparent;
-  color: #D97706;
-  border: 2px solid #D97706;
+  color: #E11D48;
+  border: 2px solid #E11D48;
   padding: 12px 24px;
   border-radius: 8px;
   font-weight: 600;
@@ -98,7 +104,7 @@
 
 ```css
 .card {
-  background: #FFFBEB;
+  background: #FFF1F2;
   border-radius: 12px;
   padding: 24px;
   box-shadow: var(--shadow-md);
@@ -124,9 +130,9 @@
 }
 
 .input:focus {
-  border-color: #D97706;
+  border-color: #E11D48;
   outline: none;
-  box-shadow: 0 0 0 3px #D9770620;
+  box-shadow: 0 0 0 3px #E11D4820;
 }
 ```
 
@@ -152,27 +158,28 @@
 
 ## Style Guidelines
 
-**Style:** Exaggerated Minimalism
+**Style:** Vibrant & Block-based
 
-**Keywords:** Bold minimalism, oversized typography, high contrast, negative space, loud minimal, statement design
+**Keywords:** Bold, energetic, playful, block layout, geometric shapes, high color contrast, duotone, modern, energetic
 
-**Best For:** Fashion, architecture, portfolios, agency landing pages, luxury brands, editorial
+**Best For:** Startups, creative agencies, gaming, social media, youth-focused, entertainment, consumer
 
-**Key Effects:** font-size: clamp(3rem 10vw 12rem), font-weight: 900, letter-spacing: -0.05em, massive whitespace
+**Key Effects:** Large sections (48px+ gaps), animated patterns, bold hover (color shift), scroll-snap, large type (32px+), 200-300ms
 
 ### Page Pattern
 
-**Pattern Name:** Interactive 3D Configurator
+**Pattern Name:** Newsletter / Content First
 
-- **Conversion Strategy:** Increases ownership feeling. 360 view reduces return rates. Direct add-to-cart.
-- **CTA Placement:** Inside Configurator UI + Sticky Bottom Bar
-- **Section Order:** 1. Hero (Configurator), 2. Feature Highlight (synced), 3. Price/Specs, 4. Purchase
+- **Conversion Strategy:** Single field form (Email only). Show 'Join X, 000 readers'. Read sample link.
+- **CTA Placement:** Hero inline form + Sticky header form
+- **Section Order:** 1. Hero (Value Prop + Form), 2. Recent Issues/Archives, 3. Social Proof (Subscriber count), 4. About Author
 
 ---
 
 ## Anti-Patterns (Do NOT Use)
 
-- ❌ Excessive decoration
+- ❌ Heavy skeuomorphism
+- ❌ Accessibility ignored
 
 ### Additional Forbidden Patterns
 

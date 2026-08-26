@@ -12,10 +12,17 @@ export function parseAuthMe(data: unknown): {
   user: AuthSessionUser | null;
   permissions: string[];
   moduleKeys: string[];
+  adminModuleKeys: string[];
   projectModuleAdmin: boolean;
 } {
   if (!data || typeof data !== "object") {
-    return { user: null, permissions: [], moduleKeys: [], projectModuleAdmin: false };
+    return {
+      user: null,
+      permissions: [],
+      moduleKeys: [],
+      adminModuleKeys: [],
+      projectModuleAdmin: false,
+    };
   }
   const record = data as Record<string, unknown>;
 
@@ -26,6 +33,11 @@ export function parseAuthMe(data: unknown): {
     ? (record.module_keys as string[])
     : Array.isArray(record.moduleKeys)
       ? (record.moduleKeys as string[])
+      : [];
+  const adminModuleKeys = Array.isArray(record.admin_module_keys)
+    ? (record.admin_module_keys as string[])
+    : Array.isArray(record.adminModuleKeys)
+      ? (record.adminModuleKeys as string[])
       : [];
   const projectModuleAdmin = Boolean(record.project_module_admin);
 
@@ -41,6 +53,7 @@ export function parseAuthMe(data: unknown): {
       },
       permissions,
       moduleKeys,
+      adminModuleKeys,
       projectModuleAdmin,
     };
   }
@@ -56,11 +69,18 @@ export function parseAuthMe(data: unknown): {
       },
       permissions,
       moduleKeys,
+      adminModuleKeys,
       projectModuleAdmin,
     };
   }
 
-  return { user: null, permissions: [], moduleKeys: [], projectModuleAdmin: false };
+  return {
+    user: null,
+    permissions: [],
+    moduleKeys: [],
+    adminModuleKeys: [],
+    projectModuleAdmin: false,
+  };
 }
 
 export function userInitials(displayName: string): string {

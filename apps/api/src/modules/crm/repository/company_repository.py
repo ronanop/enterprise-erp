@@ -14,9 +14,9 @@ class CompanyRepository(CrmScopedRepository):
     def __init__(self, db: Session) -> None:
         super().__init__(db)
 
-    def get(self, ctx: TenantContext, row_id: UUID) -> CrmCompany | None:
+    def get(self, ctx: TenantContext, row_id: UUID, *, branch_scoped: bool = True) -> CrmCompany | None:
         stmt = select(CrmCompany).where(CrmCompany.id == row_id, CrmCompany.is_deleted.is_(False))
-        stmt = self.apply_crm_filter(stmt, CrmCompany, ctx, branch_scoped=True)
+        stmt = self.apply_crm_filter(stmt, CrmCompany, ctx, branch_scoped=branch_scoped)
         return self.db.scalar(stmt)
 
     def list_companies(self, ctx: TenantContext, company_id: UUID):
@@ -52,3 +52,15 @@ class CompanyRepository(CrmScopedRepository):
         row.version = int(row.version or 1) + 1
         self.db.flush()
         return row
+
+    def soft_delete(self, ctx: TenantContext, row_id: UUID) -> bool:
+        row = self.get(ctx, row_id)
+        if row is None:
+            return False
+        row.is_deleted = True
+        row.deleted_at = utcnow()
+        row.deleted_by = ctx.user_id
+        row.updated_at = utcnow()
+        row.updated_by = ctx.user_id
+        self.db.flush()
+        return True

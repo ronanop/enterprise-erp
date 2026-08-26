@@ -122,7 +122,7 @@ export function InventoryDashboard() {
   }, [data]);
 
   const authBlocked =
-    Boolean(data?.statusCodes.includes(401)) ||
+    Boolean(data?.statusCodes?.includes(401)) ||
     (!authenticated && Boolean(data?.errors.length));
 
   return (
@@ -268,7 +268,7 @@ export function InventoryDashboard() {
 
       <section className="space-y-3">
         <div className="flex items-center justify-between gap-2">
-          <h2 className="text-sm font-medium tracking-tight">Workspace</h2>
+          <h2 className="text-base font-extrabold tracking-tight">Workspace</h2>
           <Badge variant="secondary">{inventoryWorkspaceGroups.length} areas</Badge>
         </div>
         <div className="grid gap-3 lg:grid-cols-2 xl:grid-cols-4">
@@ -285,7 +285,7 @@ export function InventoryDashboard() {
                     <Icon className="size-4" />
                   </span>
                   <div className="min-w-0">
-                    <h3 className="text-sm font-medium tracking-tight">{group.title}</h3>
+                    <h3 className="text-base font-extrabold tracking-tight">{group.title}</h3>
                     <p className="mt-0.5 text-[11px] leading-relaxed text-muted-foreground">
                       {group.description}
                     </p>
@@ -332,7 +332,7 @@ export function InventoryDashboard() {
         <div className="overflow-hidden rounded-xl border border-border/80 bg-card shadow-sm">
           <div className="flex items-center justify-between gap-2 border-b border-border/70 px-4 py-3">
             <div>
-              <h2 className="text-sm font-medium tracking-tight">Low stock watch</h2>
+              <h2 className="text-base font-extrabold tracking-tight">Low stock watch</h2>
               <p className="text-[11px] text-muted-foreground">At or below reorder point</p>
             </div>
             <Link
@@ -405,7 +405,7 @@ function DocTable({
     <div className="overflow-hidden rounded-xl border border-border/80 bg-card shadow-sm">
       <div className="flex items-center justify-between gap-2 border-b border-border/70 px-4 py-3">
         <div>
-          <h2 className="text-sm font-medium tracking-tight">{title}</h2>
+          <h2 className="text-base font-extrabold tracking-tight">{title}</h2>
           <p className="text-[11px] text-muted-foreground">{subtitle}</p>
         </div>
         <Link

@@ -138,7 +138,7 @@ class OvfService:
 
     def list_display_meta_by_ids(
         self, ctx: TenantContext, ovf_ids: Sequence[UUID]
-    ) -> dict[UUID, dict[str, str | date | int | None]]:
+    ) -> dict[UUID, dict[str, str | date | None]]:
         """Lightweight OVF fields for Procurement list enrichment (no ORM leak)."""
         rows = self._repo.list_by_ids(ctx, list(ovf_ids))
         return {
@@ -146,7 +146,6 @@ class OvfService:
                 "po_number": row.po_number,
                 "customer_name": row.customer_name,
                 "po_date": self._resolve_customer_po_display_date(ctx, row),
-                "customer_payment_days": int(row.customer_payment_days or 0),
             }
             for row in rows
         }
@@ -183,11 +182,46 @@ class OvfService:
             tax_pct = 18.0
 
         oem = self._resolve_oem_context(ctx, ovf.opportunity_id)
+        project_title = self._resolve_project_title(ctx, ovf.opportunity_id, quote)
+        lead_distributor_keys = {
+            self._norm_party(p)
+            for p in (oem.get("distributor_name") or "").replace(";", ",").split(",")
+            if p.strip()
+        }
+        quote_by_no = {
+            int(ql.line_no): ql
+            for ql in quote_lines
+            if getattr(ql, "line_no", None) is not None
+        }
 
-        def charge_dto(ln: Any) -> dict[str, Any]:
-            key = (ln.product_name or "").strip().lower()
-            ql = quote_by_name.get(key)
-            desc = (getattr(ql, "description", None) if ql else None) or ln.product_name
+        def _quote_for_product(product_hint: str | None, line_no: int | None = None) -> Any:
+            hint = (product_hint or "").strip().lower()
+            if hint and hint in quote_by_name:
+                return quote_by_name[hint]
+            if line_no is not None and len(quote_by_no) == len(quote_lines):
+                # Only trust line_no when quote lines have unique numbers.
+                return quote_by_no.get(int(line_no))
+            return None
+
+        def charge_dto(
+            ln: Any,
+            *,
+            product_name: str | None = None,
+            description: str | None = None,
+            distributor_name: str | None = None,
+            fulfillment_source: str | None = None,
+        ) -> dict[str, Any]:
+            # Product name always comes from CRM Customer Charges (or explicit override),
+            # never from a non-unique quote line_no collision.
+            resolved_product = (
+                (product_name if product_name is not None else None)
+                or (ln.product_name or "")
+            ).strip()
+            ql = _quote_for_product(resolved_product, int(ln.line_no))
+            if description is not None:
+                desc = (description or "").strip() or None
+            else:
+                desc = (getattr(ql, "description", None) or "").strip() or None
             line_gst = float(getattr(ql, "gst_pct", 0) or 0) if ql else 0.0
             gst_pct = line_gst if line_gst > 0 else tax_pct
             qty = float(ln.qty)
@@ -197,7 +231,7 @@ class OvfService:
             return {
                 "line_id": ln.id,
                 "line_no": ln.line_no,
-                "product_name": ln.product_name,
+                "product_name": resolved_product or "—",
                 "description": desc,
                 "qty": qty,
                 "unit_price": unit,
@@ -205,21 +239,82 @@ class OvfService:
                 "gst_pct": gst_pct,
                 "gst_amount": round(gst_amount, 4),
                 "total_with_gst": round(total + gst_amount, 4),
+                "distributor_name": distributor_name,
+                "fulfillment_source": fulfillment_source,
             }
 
+        # Customer Charges Product Name is stored on customer_po OVF lines.
         customer_dtos = [charge_dto(ln) for ln in customer_lines]
-        vendor_dtos = [charge_dto(ln) for ln in vendor_lines]
+        customer_by_name = {
+            self._norm_party(c["product_name"]): c
+            for c in customer_dtos
+            if (c.get("product_name") or "").strip() and c["product_name"] != "—"
+        }
 
-        vendor_by_no = {int(v["line_no"]): v for v in vendor_dtos}
+        vendor_dtos: list[dict[str, Any]] = []
+        for idx, ln in enumerate(vendor_lines):
+            raw_product = (ln.product_name or "").strip()
+            raw_distributor = (getattr(ln, "distributor_name", None) or "").strip()
+            raw_key = self._norm_party(raw_product)
+            cust_match = customer_by_name.get(raw_key) if raw_key else None
+
+            # Prefer dedicated distributor_name column (CRM Vendor Charges).
+            distributor_name: str | None = raw_distributor or None
+            if distributor_name and (
+                self._norm_party(distributor_name) in customer_by_name
+                or self._norm_party(distributor_name) == raw_key
+            ):
+                # Mis-stored product label in distributor column — ignore.
+                distributor_name = None
+
+            if not distributor_name and raw_product:
+                # Legacy: distributor was overwritten into product_name.
+                if not cust_match and (
+                    self._is_in_stock_distributor(raw_product)
+                    or raw_key in lead_distributor_keys
+                ):
+                    distributor_name = raw_product
+
+            if cust_match:
+                product_name = cust_match["product_name"]
+            elif distributor_name and raw_product and raw_key not in {
+                self._norm_party(distributor_name)
+            }:
+                # product_name still holds the real product.
+                product_name = raw_product
+            else:
+                paired = customer_dtos[idx] if idx < len(customer_dtos) else None
+                product_name = (
+                    ((paired or {}).get("product_name") or "").strip()
+                    or (raw_product if not distributor_name else "")
+                    or "—"
+                )
+
+            ql = _quote_for_product(product_name if product_name != "—" else None)
+            fulfillment_source = (
+                "inventory"
+                if self._is_in_stock_distributor(distributor_name)
+                else "purchase_order"
+            )
+            vendor_dtos.append(
+                charge_dto(
+                    ln,
+                    product_name=product_name or "—",
+                    description=(getattr(ql, "description", None) or "").strip() or None,
+                    distributor_name=distributor_name,
+                    fulfillment_source=fulfillment_source,
+                )
+            )
+
         vendor_by_name = {(v["product_name"] or "").strip().lower(): v for v in vendor_dtos}
         margin_lines: list[dict[str, Any]] = []
         products_margin = 0.0
         customer_sell_total = 0.0
-        for cust in customer_dtos:
-            # OVF line_no is not globally unique across sides, so use product name first
-            # to avoid mismatching asus↔macbook.
+        for idx, cust in enumerate(customer_dtos):
             cust_key = (cust["product_name"] or "").strip().lower()
-            vend = vendor_by_name.get(cust_key) or vendor_by_no.get(int(cust["line_no"]))
+            vend = vendor_by_name.get(cust_key) or (
+                vendor_dtos[idx] if idx < len(vendor_dtos) else None
+            )
             cust_total = float(cust["line_total"])
             vend_total = float(vend["line_total"]) if vend else 0.0
             margin_amt = cust_total - vend_total
@@ -266,10 +361,16 @@ class OvfService:
             "quote_name": ovf.quote_name,
             "account_name": ovf.account_name,
             "owner_name": ovf.owner_name,
+            "project_title": project_title,
             "oem_name": oem.get("oem_name"),
             "oem_contact_person": oem.get("oem_contact_person"),
             "oem_contact_email": oem.get("oem_contact_email"),
             "oem_contact_number": oem.get("oem_contact_number"),
+            # CRM lead Distributor field only — never matched master/PO vendor.
+            "distributor_name": oem.get("distributor_name"),
+            "distributor_contact_person": oem.get("distributor_contact_person"),
+            "distributor_contact": oem.get("distributor_contact"),
+            "distributor_contact_email": oem.get("distributor_contact_email"),
             "blueprint_state": ovf.blueprint_state,
             "approval_status": ovf.approval_status,
             "scm_on_hold": bool(getattr(ovf, "scm_on_hold", False)),
@@ -375,16 +476,43 @@ class OvfService:
             "description": "; ".join(desc_parts) if desc_parts else None,
             "customer_po_number": ovf.po_number,
             "customer_po_date": self._resolve_customer_po_display_date(ctx, ovf),
-            "customer_payment_days": int(ovf.customer_payment_days or 0),
         }
 
+    def _resolve_project_title(
+        self,
+        ctx: TenantContext,
+        opportunity_id: UUID,
+        quote: CrmQuote | None = None,
+    ) -> str | None:
+        """CRM Project Title for SCM — prefer lead, then opportunity, then quote."""
+        opp = self._opportunities.get(ctx, opportunity_id)
+        if opp is not None and opp.lead_id is not None:
+            lead = self._leads.get(ctx, opp.lead_id)
+            if lead is not None:
+                title = (getattr(lead, "project_title", None) or "").strip()
+                if title:
+                    return title
+        if opp is not None:
+            title = (getattr(opp, "project_title", None) or "").strip()
+            if title:
+                return title
+        if quote is not None:
+            title = (getattr(quote, "project_title", None) or "").strip()
+            if title:
+                return title
+        return None
+
     def _resolve_oem_context(self, ctx: TenantContext, opportunity_id: UUID) -> dict[str, str | None]:
-        """OEM + contact from the originating lead (for SCM vendor context)."""
+        """OEM (brand) + distributor (vendor) from the originating lead for SCM."""
         empty = {
             "oem_name": None,
             "oem_contact_person": None,
             "oem_contact_email": None,
             "oem_contact_number": None,
+            "distributor_name": None,
+            "distributor_contact_person": None,
+            "distributor_contact": None,
+            "distributor_contact_email": None,
         }
         opp = self._opportunities.get(ctx, opportunity_id)
         if opp is None or opp.lead_id is None:
@@ -392,16 +520,28 @@ class OvfService:
         lead = self._leads.get(ctx, opp.lead_id)
         if lead is None:
             return empty
-        name = (lead.oem_name or "").strip() or None
         return {
-            "oem_name": name,
+            "oem_name": (lead.oem_name or "").strip() or None,
             "oem_contact_person": (lead.oem_contact_person or "").strip() or None,
             "oem_contact_email": (lead.oem_contact_email or "").strip() or None,
             "oem_contact_number": (lead.oem_contact_number or "").strip() or None,
+            "distributor_name": (lead.distributor_name or "").strip() or None,
+            "distributor_contact_person": (lead.distributor_contact_person or "").strip() or None,
+            "distributor_contact": (lead.distributor_contact or "").strip() or None,
+            "distributor_contact_email": (lead.distributor_contact_email or "").strip() or None,
         }
 
+    @staticmethod
+    def _norm_party(value: str | None) -> str:
+        return " ".join((value or "").strip().lower().split())
+
+    @classmethod
+    def _is_in_stock_distributor(cls, value: str | None) -> bool:
+        key = cls._norm_party(value)
+        return key in {"in stock", "instock", "inventory", "from inventory", "from stock"}
+
     def _resolve_oem_name(self, ctx: TenantContext, opportunity_id: UUID) -> str | None:
-        """OEM is captured on the lead; surface it for SCM vendor matching."""
+        """OEM/brand name from the lead (not used as procurement vendor)."""
         return self._resolve_oem_context(ctx, opportunity_id).get("oem_name")
 
     def _get_quote(self, ctx: TenantContext, quote_id: UUID) -> CrmQuote:

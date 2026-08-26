@@ -1,100 +1,96 @@
-import type { ReactNode } from "react";
+"use client";
 
-/** Wrap a category label into multiple lines for Recharts Y-axis ticks. */
-export function wrapChartAxisLabel(
-  label: string,
-  maxCharsPerLine = 18,
-  maxLines = 3,
-): string[] {
-  const text = label.trim();
+import type { SVGProps } from "react";
+
+type WrappedYAxisTickProps = SVGProps<SVGTextElement> & {
+  x?: number | string;
+  y?: number | string;
+  payload?: { value?: string | number };
+  /** Soft wrap length per line (by characters). */
+  maxCharsPerLine?: number;
+  /** Maximum number of lines before truncating with an ellipsis. */
+  maxLines?: number;
+};
+
+function wrapLabel(raw: string, maxCharsPerLine: number, maxLines: number): string[] {
+  const text = raw.trim();
   if (!text) return [""];
-  if (text.length <= maxCharsPerLine) return [text];
 
-  const words = text.split(/\s+/).filter(Boolean);
+  const words = text.split(/\s+/);
   const lines: string[] = [];
   let current = "";
 
-  const pushHardBroken = (token: string) => {
-    let rest = token;
-    while (rest.length > maxCharsPerLine && lines.length < maxLines - 1) {
-      lines.push(rest.slice(0, maxCharsPerLine));
-      rest = rest.slice(maxCharsPerLine);
-    }
-    current = rest;
-  };
-
-  for (const word of words) {
-    if (lines.length >= maxLines) break;
-    const next = current ? `${current} ${word}` : word;
-    if (next.length <= maxCharsPerLine) {
-      current = next;
-      continue;
-    }
+  const pushCurrent = () => {
     if (current) {
       lines.push(current);
       current = "";
     }
-    if (lines.length >= maxLines) break;
+  };
+
+  for (const word of words) {
     if (word.length > maxCharsPerLine) {
-      pushHardBroken(word);
+      pushCurrent();
+      let rest = word;
+      while (rest.length > maxCharsPerLine) {
+        lines.push(rest.slice(0, maxCharsPerLine));
+        rest = rest.slice(maxCharsPerLine);
+        if (lines.length >= maxLines) break;
+      }
+      current = rest;
+      if (lines.length >= maxLines) break;
+      continue;
+    }
+
+    const next = current ? `${current} ${word}` : word;
+    if (next.length <= maxCharsPerLine) {
+      current = next;
     } else {
+      pushCurrent();
       current = word;
     }
-  }
 
-  if (current && lines.length < maxLines) {
-    lines.push(current);
-  } else if (current && lines.length > 0) {
-    const last = lines[lines.length - 1];
-    lines[lines.length - 1] =
-      last.length >= maxCharsPerLine
-        ? `${last.slice(0, maxCharsPerLine - 1)}…`
-        : `${last}…`;
+    if (lines.length >= maxLines) break;
   }
+  pushCurrent();
 
-  return lines.length > 0 ? lines : [text.slice(0, maxCharsPerLine)];
+  if (lines.length <= maxLines) return lines.length ? lines : [""];
+
+  const clipped = lines.slice(0, maxLines);
+  const last = clipped[maxLines - 1] ?? "";
+  clipped[maxLines - 1] =
+    last.length >= maxCharsPerLine
+      ? `${last.slice(0, Math.max(1, maxCharsPerLine - 1))}…`
+      : `${last}…`;
+  return clipped;
 }
 
-type WrappedYAxisTickProps = {
-  x?: number;
-  y?: number;
-  payload?: { value?: string | number };
-  maxCharsPerLine?: number;
-  maxLines?: number;
-  fill?: string;
-  fontSize?: number;
-  fontWeight?: number | string;
-};
-
-/** Multi-line end-anchored tick for vertical bar chart category axis. */
+/** Multi-line Y-axis tick for vertical Recharts bar charts with long category names. */
 export function WrappedYAxisTick({
   x = 0,
   y = 0,
   payload,
-  maxCharsPerLine = 18,
+  maxCharsPerLine = 16,
   maxLines = 3,
-  fill = "#334155",
-  fontSize = 11,
-  fontWeight = 500,
-}: WrappedYAxisTickProps): ReactNode {
-  const lines = wrapChartAxisLabel(String(payload?.value ?? ""), maxCharsPerLine, maxLines);
-  const mid = (lines.length - 1) / 2;
+}: WrappedYAxisTickProps) {
+  const value = payload?.value == null ? "" : String(payload.value);
+  const lines = wrapLabel(value, maxCharsPerLine, maxLines);
+  const lineHeight = 11;
+  const offsetY = -((lines.length - 1) * lineHeight) / 2;
+
   return (
-    <g transform={`translate(${x},${y})`}>
+    <text
+      x={x}
+      y={y}
+      fill="#64748B"
+      fontSize={10}
+      textAnchor="end"
+      dominantBaseline="middle"
+    >
       {lines.map((line, index) => (
-        <text
-          key={`${line}-${index}`}
-          x={0}
-          y={0}
-          dy={`${(index - mid) * 1.15}em`}
-          textAnchor="end"
-          fill={fill}
-          fontSize={fontSize}
-          fontWeight={fontWeight}
-        >
+        <tspan key={`${line}-${index}`} x={x} dy={index === 0 ? offsetY : lineHeight}>
           {line}
-        </text>
+        </tspan>
       ))}
-    </g>
+    </text>
   );
 }

@@ -1,10 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Boxes, IndianRupee, Package, RefreshCw, Upload } from "lucide-react";
+import { Boxes, IndianRupee, Package, Plus, RefreshCw, Upload } from "lucide-react";
 
 import { FinanceKpiCard } from "@/components/finance/finance-kpi-card";
 import { ProcurementInventoryCharts } from "@/components/procurement/procurement-inventory-charts";
+import { ProcurementInventoryAddStockDialog } from "@/components/procurement/procurement-inventory-add-stock-dialog";
 import {
   ProcurementInventoryImportDialog,
   INVENTORY_WITHOUT_PO,
@@ -33,6 +34,7 @@ import {
 import {
   buildProcurementInventoryStockSummary,
   groupGrnStockByProduct,
+  inventoryAddedByLabel,
   isInventoryLedgerRow,
 } from "@/utils/procurement-inventory-report";
 import { InventoryProductDetailDialog } from "@/components/procurement/inventory-product-detail-dialog";
@@ -50,6 +52,9 @@ export function ProcurementInventoryListPage() {
   const [importOpen, setImportOpen] = useState(false);
   const [importBusy, setImportBusy] = useState(false);
   const [importError, setImportError] = useState<string | null>(null);
+  const [addOpen, setAddOpen] = useState(false);
+  const [addBusy, setAddBusy] = useState(false);
+  const [addError, setAddError] = useState<string | null>(null);
   const [purchaseOrders, setPurchaseOrders] = useState<ProcOrder[]>([]);
   const [detailProductKey, setDetailProductKey] = useState<string | null>(null);
   const [detailError, setDetailError] = useState<string | null>(null);
@@ -147,12 +152,46 @@ export function ProcurementInventoryListPage() {
     }
   }
 
+  async function onConfirmAddStock(
+    lines: Array<{
+      product_name: string;
+      description: string | null;
+      serial_number: string;
+      order_id: string | null;
+    }>,
+  ) {
+    setAddBusy(true);
+    setAddError(null);
+    try {
+      await importProcurementInventory(lines);
+      setAddOpen(false);
+      await load(true);
+    } catch (err) {
+      setAddError(formatApiError(err, "Failed to add stock"));
+    } finally {
+      setAddBusy(false);
+    }
+  }
+
   return (
     <div className={procurementUi.page}>
       <ProcurementPageHeader
         title="Inventory"
         actions={
           <div className="flex flex-wrap gap-2">
+            <Button
+              type="button"
+              size="sm"
+              className="cursor-pointer transition-colors duration-200"
+              disabled={loading}
+              onClick={() => {
+                setAddError(null);
+                setAddOpen(true);
+              }}
+            >
+              <Plus className="mr-1.5 size-3.5" />
+              Add stock
+            </Button>
             <Button
               type="button"
               variant="outline"
@@ -239,11 +278,11 @@ export function ProcurementInventoryListPage() {
           <ProcurementInventoryCharts summary={stockSummary} />
 
           <div className={procurementUi.sectionCard}>
-            <p className={procurementUi.sectionTitle}>GRN stock by product</p>
+            <p className={procurementUi.sectionTitle}>Stock by product</p>
             {grnStockRows.length === 0 ? (
               <p className="text-sm text-muted-foreground">
-                No GRN stock on hand. Units appear here when you receive on a GRN but do not bill
-                the full quantity on the vendor invoice.
+                No stock on hand. Add stock manually, import Excel, or receive on a GRN without
+                billing the full vendor-invoice quantity.
               </p>
             ) : (
               <div className={procurementUi.tableShell}>
@@ -268,16 +307,37 @@ export function ProcurementInventoryListPage() {
                       {grnStockByProduct.map((line) => (
                         <tr key={line.productKey} className={procurementUi.tr}>
                           <td className={cn(procurementUi.td, "px-4")}>
-                            <button
-                              type="button"
-                              className="cursor-pointer text-left font-medium text-foreground transition-colors duration-200 hover:text-[#0369A1] hover:underline"
-                              onClick={() => {
-                                setDetailError(null);
-                                setDetailProductKey(line.productKey);
-                              }}
-                            >
-                              {line.productName}
-                            </button>
+                            <div className="flex min-w-0 flex-wrap items-center gap-2">
+                              <span
+                                className={cn(
+                                  "inline-flex shrink-0 rounded border px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide",
+                                  line.addedBy === "po"
+                                    ? "border-sky-200 bg-sky-50 text-sky-800"
+                                    : line.addedBy === "manual"
+                                      ? "border-border/80 bg-muted/60 text-muted-foreground"
+                                      : "border-amber-200 bg-amber-50 text-amber-900",
+                                )}
+                                title={
+                                  line.addedBy === "po"
+                                    ? "Received via purchase order / GRN"
+                                    : line.addedBy === "manual"
+                                      ? "Added via Add stock or Excel import"
+                                      : "Includes both PO/GRN and manual stock"
+                                }
+                              >
+                                {inventoryAddedByLabel(line.addedBy)}
+                              </span>
+                              <button
+                                type="button"
+                                className="cursor-pointer text-left font-medium text-foreground transition-colors duration-200 hover:text-[#0369A1] hover:underline"
+                                onClick={() => {
+                                  setDetailError(null);
+                                  setDetailProductKey(line.productKey);
+                                }}
+                              >
+                                {line.productName}
+                              </button>
+                            </div>
                           </td>
                           <td
                             className={cn(
@@ -346,6 +406,16 @@ export function ProcurementInventoryListPage() {
         onClose={() => setDetailProductKey(null)}
         onRefresh={() => void load(true)}
         onError={setDetailError}
+      />
+
+      <ProcurementInventoryAddStockDialog
+        open={addOpen}
+        busy={addBusy}
+        error={addError}
+        onClose={() => {
+          if (!addBusy) setAddOpen(false);
+        }}
+        onConfirm={(lines) => void onConfirmAddStock(lines)}
       />
 
       <ProcurementInventoryImportDialog

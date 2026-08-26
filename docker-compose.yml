@@ -1,21 +1,88 @@
+# Enterprise ERP — full local stack (infra + API + web)
+#
+# One command (from repo root):
+#
+#   docker compose --env-file .env up -d --build
+#
+# Stop:
+#
+#   docker compose --env-file .env down
+#
+# App-only against remote infra: see docker-compose.app.yml
+
+name: enterprise-erp
+
+x-api-environment: &api-environment
+  ENVIRONMENT: ${ENVIRONMENT:-development}
+  DEBUG: ${DEBUG:-false}
+  LOG_LEVEL: ${LOG_LEVEL:-INFO}
+  APP_TIMEZONE: ${APP_TIMEZONE:-Asia/Kolkata}
+  API_HOST: ${API_HOST:-0.0.0.0}
+  API_PORT: ${API_PORT:-8000}
+  INFRA_FALLBACK_ENABLED: ${INFRA_FALLBACK_ENABLED:-true}
+  DATABASE_URL: ${DATABASE_URL}
+  DATABASE_URL_FALLBACK: ${DATABASE_URL_FALLBACK:-}
+  REDIS_URL: ${REDIS_URL}
+  REDIS_URL_FALLBACK: ${REDIS_URL_FALLBACK:-}
+  CELERY_BROKER_URL: ${CELERY_BROKER_URL}
+  CELERY_BROKER_URL_FALLBACK: ${CELERY_BROKER_URL_FALLBACK:-}
+  CELERY_RESULT_BACKEND: ${CELERY_RESULT_BACKEND}
+  CELERY_RESULT_BACKEND_FALLBACK: ${CELERY_RESULT_BACKEND_FALLBACK:-}
+  CORS_ORIGINS: ${CORS_ORIGINS}
+  CORS_ORIGIN_REGEX: ${CORS_ORIGIN_REGEX:-}
+  CRM_UPLOAD_ROOT: ${CRM_UPLOAD_ROOT:-/app/var/crm-attachments}
+  JWT_SECRET_KEY: ${JWT_SECRET_KEY}
+  JWT_ACCESS_TOKEN_EXPIRE_MINUTES: ${JWT_ACCESS_TOKEN_EXPIRE_MINUTES:-480}
+  JWT_REFRESH_TOKEN_EXPIRE_DAYS: ${JWT_REFRESH_TOKEN_EXPIRE_DAYS:-7}
+  SESSION_TTL_SECONDS: ${SESSION_TTL_SECONDS:-86400}
+  EMAIL_DELIVERY_MODE: ${EMAIL_DELIVERY_MODE:-async}
+  MINIO_ENDPOINT: ${MINIO_ENDPOINT:-}
+  MINIO_ENDPOINT_FALLBACK: ${MINIO_ENDPOINT_FALLBACK:-}
+  MINIO_ROOT_USER: ${MINIO_ROOT_USER:-}
+  MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-}
+  MINIO_BUCKET: ${MINIO_BUCKET:-erp-documents}
+  MINIO_SECURE: ${MINIO_SECURE:-false}
+  OPENSEARCH_URL: ${OPENSEARCH_URL:-http://opensearch:9200}
+  OPENSEARCH_URL_FALLBACK: ${OPENSEARCH_URL_FALLBACK:-}
+  FRONTEND_URL: ${FRONTEND_URL:-http://localhost:3000}
+  MICROSOFT_TENANT_ID: ${MICROSOFT_TENANT_ID:-}
+  MICROSOFT_CLIENT_ID: ${MICROSOFT_CLIENT_ID:-}
+  MICROSOFT_CLIENT_SECRET: ${MICROSOFT_CLIENT_SECRET:-}
+  MICROSOFT_REDIRECT_URI: ${MICROSOFT_REDIRECT_URI:-}
+  MICROSOFT_USER_EMAIL_DOMAIN: ${MICROSOFT_USER_EMAIL_DOMAIN:-}
+  MICROSOFT_PLATFORM_ADMIN_EMAILS: ${MICROSOFT_PLATFORM_ADMIN_EMAILS:-}
+  AZURE_TENANT_ID: ${AZURE_TENANT_ID:-}
+  AZURE_CLIENT_ID: ${AZURE_CLIENT_ID:-}
+  AZURE_CLIENT_SECRET: ${AZURE_CLIENT_SECRET:-}
+  AZURE_FROM_EMAIL: ${AZURE_FROM_EMAIL:-}
+
 services:
+  # ── Infrastructure (local fallback when VM is unreachable) ──────
   postgres:
     image: postgres:16-alpine
     container_name: erp-postgres
     restart: unless-stopped
     environment:
-      POSTGRES_USER: ${POSTGRES_USER:-erp}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-erp_dev_password}
-      POSTGRES_DB: ${POSTGRES_DB:-erp}
+      # Local fallback credentials (match DATABASE_URL_FALLBACK). Existing
+      # volumes keep the user created on first init.
+      POSTGRES_USER: ${LOCAL_POSTGRES_USER:-erp}
+      POSTGRES_PASSWORD: ${LOCAL_POSTGRES_PASSWORD:-erp_dev_password}
+      POSTGRES_DB: ${LOCAL_POSTGRES_DB:-erp}
     ports:
-      - "${POSTGRES_PORT:-5433}:5432"
+      - "${POSTGRES_PUBLISH_PORT:-5433}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-erp} -d ${POSTGRES_DB:-erp}"]
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U ${LOCAL_POSTGRES_USER:-erp} -d ${LOCAL_POSTGRES_DB:-erp}",
+        ]
       interval: 10s
       timeout: 5s
-      retries: 5
+      retries: 10
+      start_period: 10s
+    networks: [erp]
 
   redis:
     image: redis:7-alpine
@@ -29,7 +96,9 @@ services:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
       timeout: 5s
-      retries: 5
+      retries: 10
+      start_period: 5s
+    networks: [erp]
 
   rabbitmq:
     image: rabbitmq:3-management-alpine
@@ -38,6 +107,8 @@ services:
     environment:
       RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-erp}
       RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-erp_dev_password}
+      # Cap memory so local Docker Desktop stays responsive
+      RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS: "-rabbit vm_memory_high_watermark 0.4"
     ports:
       - "${RABBITMQ_PORT:-5672}:5672"
       - "15672:15672"
@@ -45,9 +116,11 @@ services:
       - rabbitmq_data:/var/lib/rabbitmq
     healthcheck:
       test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 30s
+    networks: [erp]
 
   minio:
     image: minio/minio:latest
@@ -63,10 +136,12 @@ services:
     volumes:
       - minio_data:/data
     healthcheck:
-      test: ["CMD", "mc", "ready", "local"]
+      test: ["CMD", "curl", "-sf", "http://localhost:9000/minio/health/live"]
       interval: 10s
       timeout: 5s
-      retries: 5
+      retries: 10
+      start_period: 15s
+    networks: [erp]
 
   opensearch:
     image: opensearchproject/opensearch:2
@@ -84,7 +159,121 @@ services:
       test: ["CMD-SHELL", "curl -sf http://localhost:9200/_cluster/health || exit 1"]
       interval: 15s
       timeout: 10s
-      retries: 5
+      retries: 10
+      start_period: 40s
+    networks: [erp]
+
+  # ── Application ─────────────────────────────────────────────────
+  api:
+    build:
+      context: ./apps/api
+      dockerfile: Dockerfile
+    image: enterprise-erp-api:local
+    restart: unless-stopped
+    environment:
+      <<: *api-environment
+      RUN_MIGRATIONS: ${RUN_MIGRATIONS:-true}
+    volumes:
+      - crm_uploads:/app/var/crm-attachments
+    ports:
+      - "${API_PUBLISH_PORT:-8000}:8000"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      opensearch:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "curl -sf http://127.0.0.1:$${API_PORT:-8000}/api/v1/health || exit 1",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 8
+      start_period: 120s
+    networks: [erp]
+
+  celery-worker:
+    image: enterprise-erp-api:local
+    pull_policy: never
+    restart: unless-stopped
+    entrypoint: ["/entrypoint.sh"]
+    command: ["worker"]
+    environment:
+      <<: *api-environment
+      RUN_MIGRATIONS: "false"
+    volumes:
+      - crm_uploads:/app/var/crm-attachments
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      api:
+        condition: service_healthy
+    networks: [erp]
+
+  celery-beat:
+    image: enterprise-erp-api:local
+    pull_policy: never
+    restart: unless-stopped
+    entrypoint: ["/entrypoint.sh"]
+    command: ["beat"]
+    environment:
+      <<: *api-environment
+      RUN_MIGRATIONS: "false"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      celery-worker:
+        condition: service_started
+    networks: [erp]
+
+  web:
+    build:
+      context: ./apps/web
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8000/api/v1}
+        NEXT_PUBLIC_API_URL_FALLBACK: ${NEXT_PUBLIC_API_URL_FALLBACK:-}
+        NEXT_PUBLIC_APP_NAME: ${NEXT_PUBLIC_APP_NAME:-Enterprise ERP}
+        NEXT_PUBLIC_DEMO_EMAIL: ${NEXT_PUBLIC_DEMO_EMAIL:-}
+        NEXT_PUBLIC_DEMO_PASSWORD: ${NEXT_PUBLIC_DEMO_PASSWORD:-}
+    restart: unless-stopped
+    ports:
+      - "${WEB_PUBLISH_PORT:-3000}:3000"
+    depends_on:
+      api:
+        condition: service_healthy
+    networks: [erp]
+
+  employee-app:
+    build:
+      context: ./apps/employee-app
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8000/api/v1}
+        NEXT_PUBLIC_APP_NAME: ${NEXT_PUBLIC_EMPLOYEE_APP_NAME:-Employee App}
+        NEXT_PUBLIC_USE_MOCK: ${NEXT_PUBLIC_USE_MOCK:-false}
+    restart: unless-stopped
+    ports:
+      - "${EMPLOYEE_PUBLISH_PORT:-3001}:3001"
+    depends_on:
+      api:
+        condition: service_healthy
+    networks: [erp]
+
+networks:
+  erp:
+    name: enterprise-erp_erp
+    driver: bridge
 
 volumes:
   postgres_data:
@@ -92,3 +281,4 @@ volumes:
   rabbitmq_data:
   minio_data:
   opensearch_data:
+  crm_uploads:

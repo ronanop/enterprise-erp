@@ -115,14 +115,12 @@ export function TimesheetFormPage({ timesheetId }: { timesheetId?: string }) {
             label: "Period End",
             type: "date",
             required: true,
-            hint: "Must be on or after the period start.",
           },
           {
             name: "total_hours",
             label: "Total Hours",
             type: "number",
             step: "0.01",
-            hint: "Rolled up from time entries; override only if needed.",
           },
           {
             name: "status",

@@ -384,6 +384,8 @@ class ScmQueueItemResponse(BaseModel):
     customer_payment_days: int = 0
     vendor_name: str | None = None
     oem_name: str | None = None
+    distributor_name: str | None = None
+    project_title: str | None = None
     received_at: datetime | None = None
     delivery_period: str | None = None
     expected_delivery_date: date | None = None
@@ -414,6 +416,9 @@ class ScmVendorLinePreview(BaseModel):
     gst_pct: float = 0
     gst_amount: float = 0
     total_with_gst: float = 0
+    # CRM Vendor Charges "Distributor Name" (IN STOCK ⇒ inventory; else create PO).
+    distributor_name: str | None = None
+    fulfillment_source: str | None = None  # inventory | purchase_order
 
 
 class ScmMarginLinePreview(BaseModel):
@@ -499,10 +504,15 @@ class ScmOvfPreviewResponse(BaseModel):
     quote_name: str | None = None
     account_name: str | None = None
     owner_name: str | None = None
+    project_title: str | None = None
     oem_name: str | None = None
     oem_contact_person: str | None = None
     oem_contact_email: str | None = None
     oem_contact_number: str | None = None
+    distributor_name: str | None = None
+    distributor_contact_person: str | None = None
+    distributor_contact: str | None = None
+    distributor_contact_email: str | None = None
     blueprint_state: str
     approval_status: str | None = None
     freight: float = 0
@@ -696,6 +706,7 @@ class ScmProcurementInventoryRowResponse(BaseModel):
 class ScmInventoryImportLineRequest(BaseModel):
     product_name: str
     serial_number: str
+    description: str | None = None
     order_id: UUID | None = None
 
 
@@ -729,6 +740,8 @@ class ScmCommercialAttachmentSummary(BaseModel):
     remarks: str | None = None
     entity_type: str
     entity_id: UUID
+    source: str = "upload"
+    external_url: str | None = None
 
 
 class ScmCommercialAttachmentCreate(BaseModel):

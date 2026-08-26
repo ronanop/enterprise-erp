@@ -146,7 +146,7 @@ export function InventoryReports() {
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border/70 px-4 py-3">
           <div>
             <div className="flex flex-wrap items-center gap-2">
-              <h2 className="text-sm font-medium tracking-tight">
+              <h2 className="text-base font-extrabold tracking-tight">
                 {reportName ?? active.title}
               </h2>
               <Badge variant="secondary">{rows.length} lines</Badge>

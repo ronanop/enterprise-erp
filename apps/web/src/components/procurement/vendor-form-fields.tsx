@@ -59,9 +59,11 @@ export type VendorFormDraft = {
 export function emptyVendorFormAddressBlock(
   partial?: Partial<VendorFormAddressBlock>,
 ): VendorFormAddressBlock {
+  const billing = emptyPostalAddress(partial?.billing);
+  const shipping = emptyPostalAddress(partial?.shipping ?? partial?.billing);
   return {
-    billing: emptyPostalAddress(partial?.billing),
-    shipping: emptyPostalAddress(partial?.shipping),
+    billing,
+    shipping,
     gstNumber: partial?.gstNumber || "",
     sourceOfSupply: partial?.sourceOfSupply || "",
     destinationOfSupply: partial?.destinationOfSupply || "",
@@ -121,19 +123,21 @@ export function vendorFormFromOption(row: {
     row.addressEntries?.filter((e) => e.address || e.billing || e.gstNumber) || [];
   const addressBlocks =
     entries.length > 0
-      ? entries.map((entry, index) =>
-          emptyVendorFormAddressBlock({
-            billing:
-              entry.billing ||
-              emptyPostalAddress({
-                street: entry.address || row.addresses?.[index] || "",
-              }),
-            shipping: entry.shipping || emptyPostalAddress(),
+      ? entries.map((entry, index) => {
+          const vendorAddress =
+            entry.billing ||
+            entry.shipping ||
+            emptyPostalAddress({
+              street: entry.address || row.addresses?.[index] || "",
+            });
+          return emptyVendorFormAddressBlock({
+            billing: vendorAddress,
+            shipping: emptyPostalAddress(vendorAddress),
             gstNumber: entry.gstNumber || (index === 0 ? row.taxNumber || "" : ""),
             sourceOfSupply: entry.sourceOfSupply || "",
             destinationOfSupply: entry.destinationOfSupply || "",
-          }),
-        )
+          });
+        })
       : [
           emptyVendorFormAddressBlock({
             billing: emptyPostalAddress({
@@ -158,15 +162,15 @@ export function buildVendorAddressEntriesFromForm(
   draft: VendorFormDraft,
 ): VendorAddressEntry[] {
   return draft.addresses.map((block) => {
-    const billing = emptyPostalAddress(block.billing);
-    const shipping = emptyPostalAddress(block.shipping);
+    const vendorAddress = emptyPostalAddress(block.billing);
     return {
-      address: composePostalAddress(billing) || composePostalAddress(shipping),
+      address: composePostalAddress(vendorAddress),
       gstNumber: block.gstNumber.trim(),
       sourceOfSupply: block.sourceOfSupply.trim(),
       destinationOfSupply: block.destinationOfSupply.trim(),
-      billing,
-      shipping,
+      billing: vendorAddress,
+      // Vendors use one address for billing and shipping.
+      shipping: emptyPostalAddress(vendorAddress),
     };
   });
 }
@@ -188,25 +192,15 @@ function validateAddressBlock(
   index: number,
 ): string | null {
   const label = index === 0 ? "Primary address" : `Address ${index + 1}`;
-  const billing = block.billing;
+  const vendorAddress = block.billing;
   if (
-    !billing.country.trim() ||
-    !billing.street.trim() ||
-    !billing.city.trim() ||
-    !billing.state.trim() ||
-    !billing.pincode.trim()
+    !vendorAddress.country.trim() ||
+    !vendorAddress.street.trim() ||
+    !vendorAddress.city.trim() ||
+    !vendorAddress.state.trim() ||
+    !vendorAddress.pincode.trim()
   ) {
-    return `${label}: billing requires country, street, city, state, and pincode.`;
-  }
-  const shipping = block.shipping;
-  if (
-    !shipping.country.trim() ||
-    !shipping.street.trim() ||
-    !shipping.city.trim() ||
-    !shipping.state.trim() ||
-    !shipping.pincode.trim()
-  ) {
-    return `${label}: shipping requires country, street, city, state, and pincode.`;
+    return `${label}: vendor address requires country, street, city, state, and pincode.`;
   }
   if (!block.gstNumber.trim()) return `${label}: GST number is required.`;
   if (!block.sourceOfSupply.trim()) return `${label}: source of supply is required.`;
@@ -353,33 +347,16 @@ function VendorAddressBlockFields({
       </div>
 
       <PostalAddressFields
-        title="Billing address *"
+        title="Vendor address *"
         value={block.billing}
-        onChange={(billing) => onChange({ ...block, billing })}
-        disabled={disabled}
-      />
-      <PostalAddressFields
-        title="Shipping address *"
-        value={block.shipping}
-        onChange={(shipping) => onChange({ ...block, shipping })}
-        disabled={disabled}
-        headerAction={
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="h-7 cursor-pointer px-2 text-xs transition-colors duration-200"
-            disabled={disabled}
-            onClick={() =>
-              onChange({
-                ...block,
-                shipping: emptyPostalAddress(block.billing),
-              })
-            }
-          >
-            Copy billing address
-          </Button>
+        onChange={(vendorAddress) =>
+          onChange({
+            ...block,
+            billing: vendorAddress,
+            shipping: emptyPostalAddress(vendorAddress),
+          })
         }
+        disabled={disabled}
       />
 
       <div className="space-y-3 rounded-md border border-border bg-muted/20 p-3.5">

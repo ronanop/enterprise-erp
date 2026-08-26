@@ -1,6 +1,11 @@
-import LoginPageClient from "./login-page-client";
+﻿import { Suspense } from "react";
 
-/** Server page — avoids ClientPageRoot injecting Promise params/searchParams. */
-export default function LoginPage() {
-  return <LoginPageClient />;
+import LoginPage from "./login-page";
+
+export default function Page() {
+  return (
+    <Suspense fallback={null}>
+      <LoginPage />
+    </Suspense>
+  );
 }

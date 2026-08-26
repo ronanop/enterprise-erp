@@ -1,17 +1,16 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { ArrowLeft, Pencil, Plus, RefreshCw } from "lucide-react";
+import { ArrowLeft, Pencil } from "lucide-react";
 
 import { CrmErrorBanner, CrmPage } from "@/components/crm/crm-ui";
 import { ApprovalBanner } from "@/components/crm/sales/approval-banner";
+import { CompanyAccountActionsMenu } from "@/components/crm/sales/company-account-actions-menu";
 import { CompanyWorkspaceNav } from "@/components/crm/company-workspace-nav";
-import { DealTimeline, type DealStage } from "@/components/crm/sales/deal-timeline";
 import { PageHeader } from "@/components/layout/page-header";
-import { Button } from "@/components/ui/button";
 import {
   getCrmOpportunityContext,
   getCrmSidebarFocus,
@@ -19,86 +18,42 @@ import {
   setCrmOpportunityContext,
   setCrmSidebarFocus,
 } from "@/lib/crm-sidebar-focus";
-import { cachedFetch, invalidateClientCache } from "@/lib/client-cache";
 import { ApiClientError } from "@/services/api-client";
-import {
-  getCompany,
-  listSalesLeads,
-  type Company,
-  type SalesLead,
-} from "@/services/sales-crm-service";
+import { getCompany, type Company } from "@/services/sales-crm-service";
 
 export function CompanyWorkspaceShell({
   companyAccountId,
   children,
   onCompanyChange,
-  onLeadsChange,
-  refreshKey: refreshKeyProp,
-  onRefresh,
 }: {
   companyAccountId: string;
   children: ReactNode;
   onCompanyChange?: (company: Company | null) => void;
-  onLeadsChange?: (leads: SalesLead[]) => void;
-  /** Controlled refresh counter from parent (keeps overview panels in sync). */
-  refreshKey?: number;
-  onRefresh?: () => void;
 }) {
   const pathname = usePathname();
   const [company, setCompany] = useState<Company | null>(null);
-  const [leads, setLeads] = useState<SalesLead[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [internalRefreshKey, setInternalRefreshKey] = useState(0);
-  const refreshKey = refreshKeyProp ?? internalRefreshKey;
-  const triggerRefresh =
-    onRefresh ??
-    (() => {
-      setInternalRefreshKey((value) => value + 1);
-    });
-  const companyRef = useRef<Company | null>(null);
-  companyRef.current = company;
-  const onCompanyChangeRef = useRef(onCompanyChange);
-  onCompanyChangeRef.current = onCompanyChange;
-  const onLeadsChangeRef = useRef(onLeadsChange);
-  onLeadsChangeRef.current = onLeadsChange;
   const [fromOpportunityId, setFromOpportunityId] = useState<string | null>(() => {
     if (typeof window === "undefined") return null;
     return getCrmSidebarFocus() === "opportunities" ? getCrmOpportunityContext() : null;
   });
 
   const load = useCallback(async () => {
-    const soft = Boolean(companyRef.current);
-    if (!soft) setLoading(true);
+    setLoading(true);
     setError(null);
     try {
-      if (refreshKey > 0) {
-        invalidateClientCache(`crm:company:${companyAccountId}`);
-        invalidateClientCache(`crm:leads:${companyAccountId}`);
-        invalidateClientCache(`crm:nav-counts:${companyAccountId}`);
-        invalidateClientCache(`crm:meetings:${companyAccountId}`);
-        invalidateClientCache(`crm:followups:${companyAccountId}`);
-        invalidateClientCache(`crm:employees`);
-      }
-      const [companyRow, leadRows] = await Promise.all([
-        cachedFetch(`crm:company:${companyAccountId}`, 30_000, () => getCompany(companyAccountId)),
-        cachedFetch(`crm:leads:${companyAccountId}`, 30_000, () =>
-          listSalesLeads(companyAccountId),
-        ).catch(() => [] as SalesLead[]),
-      ]);
+      const companyRow = await getCompany(companyAccountId);
       setCompany(companyRow);
-      setLeads(leadRows);
-      onCompanyChangeRef.current?.(companyRow);
-      onLeadsChangeRef.current?.(leadRows);
+      onCompanyChange?.(companyRow);
     } catch (err) {
       setCompany(null);
-      onCompanyChangeRef.current?.(null);
-      onLeadsChangeRef.current?.([]);
+      onCompanyChange?.(null);
       setError(err instanceof ApiClientError ? err.message : "Failed to load company");
     } finally {
       setLoading(false);
     }
-  }, [companyAccountId, refreshKey]);
+  }, [companyAccountId, onCompanyChange]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => void load(), 0);
@@ -153,39 +108,6 @@ export function CompanyWorkspaceShell({
     );
   }
 
-  const activeLead = leads.find((lead) => lead.blueprint_state === "open") ?? leads[0];
-  const timelineStage: DealStage = activeLead?.converted_opportunity_id
-    ? "opportunity"
-    : activeLead
-      ? "lead"
-      : "company";
-  const timelineLinks = {
-    company: `/crm/companies/${company.id}`,
-    ...(activeLead ? { lead: `/crm/leads/${activeLead.id}` } : {}),
-    ...(activeLead?.converted_opportunity_id
-      ? { opportunity: `/crm/opportunities/${activeLead.converted_opportunity_id}` }
-      : {}),
-  };
-  const nextStep = activeLead?.converted_opportunity_id
-    ? {
-        label: "Continue Opportunity",
-        description: "Resume BOQ, OEM, Quote, Customer PO, and OVF actions.",
-        href: `/crm/opportunities/${activeLead.converted_opportunity_id}`,
-      }
-    : activeLead
-      ? {
-          label: "Continue Lead",
-          description: "Review this lead and convert it to an opportunity when qualified.",
-          href: `/crm/leads/${activeLead.id}`,
-        }
-      : company.status === "active"
-        ? {
-            label: "Create Lead",
-            description: "Start the sales blueprint from this company account.",
-            href: `/crm/companies/${company.id}/leads/new`,
-          }
-        : undefined;
-
   return (
     <div className="flex min-w-0 items-start gap-0">
       {hideWorkspaceNav ? null : (
@@ -193,7 +115,6 @@ export function CompanyWorkspaceShell({
           companyAccountId={company.id}
           scope={backToOpportunity ? "opportunity" : "company"}
           opportunityId={fromOpportunityId ?? undefined}
-          refreshKey={refreshKey}
         />
       )}
 
@@ -215,8 +136,7 @@ export function CompanyWorkspaceShell({
             </Link>
 
             {hideWorkspaceNav ? null : (
-              <div className="mt-3 space-y-3">
-                <DealTimeline current={timelineStage} links={timelineLinks} nextStep={nextStep} />
+              <div className="mt-3">
                 <ApprovalBanner locked={company.locked} label="This company account" />
               </div>
             )}
@@ -232,39 +152,13 @@ export function CompanyWorkspaceShell({
                 actions={
                   hideWorkspaceNav ? undefined : (
                     <div className="flex flex-wrap items-center gap-2">
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        className="cursor-pointer"
-                        onClick={() => triggerRefresh()}
-                      >
-                        <RefreshCw className="size-3.5" /> Refresh
-                      </Button>
                       <Link
                         href={`/crm/companies/${company.id}/edit`}
                         className="inline-flex h-7 cursor-pointer items-center gap-1.5 rounded-lg border border-border bg-background px-2.5 text-[0.8rem] font-medium text-foreground shadow-sm transition-colors duration-200 hover:bg-muted/60"
                       >
                         <Pencil className="size-3.5" /> Edit
                       </Link>
-                      {company.status !== "active" ? (
-                        <Button
-                          type="button"
-                          size="sm"
-                          className="cursor-pointer"
-                          disabled
-                          title="Company account must be active to create a lead"
-                        >
-                          <Plus className="size-3.5" /> Create Lead
-                        </Button>
-                      ) : (
-                        <Link
-                          href={`/crm/companies/${company.id}/leads/new`}
-                          className="inline-flex h-7 cursor-pointer items-center gap-1.5 rounded-lg bg-primary px-2.5 text-[0.8rem] font-medium text-primary-foreground shadow-sm transition-opacity duration-200 hover:opacity-90"
-                        >
-                          <Plus className="size-3.5" /> Create Lead
-                        </Link>
-                      )}
+                      <CompanyAccountActionsMenu company={company} />
                     </div>
                   )
                 }

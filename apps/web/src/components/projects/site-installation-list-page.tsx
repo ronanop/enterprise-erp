@@ -28,10 +28,10 @@ const STAGE_META: Record<
     empty: "No sites in Intake. Create a project to start the delivery workflow.",
   },
   assignment: {
-    title: "Assign stage owners",
+    title: "Assign Survey owner",
     description:
-      "Project assignee picks owners for Survey, SCM, Installation & Configuration, and Acceptance.",
-    empty: "No sites waiting for stage assignment.",
+      "Assign the Survey owner after project create. Later stage owners are set from Project Tracking after each step completes.",
+    empty: "No sites waiting for Survey assignment.",
   },
   survey: {
     title: "Survey",
@@ -40,8 +40,18 @@ const STAGE_META: Record<
   },
   scm: {
     title: "SCM / Logistics",
-    description: "Material movement — MO request, IM material, and WH / on-site delivery dates.",
+    description: "Material movement — quantities and warehouse delivery dates.",
     empty: "No sites in SCM / Logistics.",
+  },
+  onsite_delivery: {
+    title: "Onsite Delivery",
+    description: "MO request and server / rack / PDU on-site delivery.",
+    empty: "No sites in Onsite Delivery.",
+  },
+  material_handover: {
+    title: "Material Handover",
+    description: "IM material, power-on material, and WH → site handover.",
+    empty: "No sites in Material Handover.",
   },
   installation: {
     title: "Installation & Configuration",
@@ -71,13 +81,18 @@ export function SiteInstallationListPage({ stage }: { stage?: string }) {
     : {
       title: "All Sites",
       description:
-        "Site installation register across Intake → Assign → Survey → SCM → Installation & Configuration → Acceptance.",
+        "Site installation register across Intake → Survey → SCM → Onsite Delivery → Material Handover → Installation → Acceptance.",
       empty: "No site installations yet. Create a project to seed the workflow.",
     };
 
   const load = useCallback(async () => {
     const rows = await listSiteInstallations();
     if (!stage) return rows;
+    if (stage === "onsite_delivery") {
+      return rows.filter(
+        (r) => r.workflow_stage === "onsite_delivery" || r.workflow_stage === "onsite",
+      );
+    }
     return rows.filter((r) => r.workflow_stage === stage);
   }, [stage]);
 
@@ -157,8 +172,6 @@ export function SiteInstallationListPage({ stage }: { stage?: string }) {
       panelTitle="Site installations"
       panelSubtitle={stage ? siteWorkflowStageLabel(stage) : "All stages"}
       icon={Cable}
-      newHref="/projects/projects/new"
-      newLabel="New Project"
       searchPlaceholder="Search sites, RFAI, circle…"
       loadingMessage="Loading site installations…"
       emptyMessage={meta.empty}

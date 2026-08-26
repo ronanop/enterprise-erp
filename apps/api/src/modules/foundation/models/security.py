@@ -54,6 +54,26 @@ class SecUser(Base, AuditMixin, SoftDeleteMixin, TenantMixin, VersionMixin):
     sessions: Mapped[list["SecSession"]] = relationship(back_populates="user")
     refresh_tokens: Mapped[list["SecRefreshToken"]] = relationship(back_populates="user")
     org_scopes: Mapped[list["SecUserOrgScope"]] = relationship(back_populates="user")
+    user_modules: Mapped[list["SecUserModule"]] = relationship(back_populates="user")
+
+
+class SecUserModule(Base, TenantMixin):
+    __tablename__ = "sec_user_module"
+    __table_args__ = (
+        UniqueConstraint("user_id", "module_key", name="uk_sec_user_module"),
+        {"schema": "foundation"},
+    )
+
+    id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True, default=uuid4)
+    user_id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("foundation.sec_user.id"), nullable=False
+    )
+    module_key: Mapped[str] = mapped_column(String(50), nullable=False)
+    role: Mapped[str] = mapped_column(String(20), nullable=False, default="member")
+    assigned_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    assigned_by: Mapped[UUID | None] = mapped_column(PG_UUID(as_uuid=True), nullable=True)
+
+    user: Mapped["SecUser"] = relationship(back_populates="user_modules")
 
 
 class SecRole(Base, AuditMixin, SoftDeleteMixin, TenantMixin, VersionMixin):

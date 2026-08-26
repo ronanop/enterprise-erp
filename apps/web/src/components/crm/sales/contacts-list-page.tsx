@@ -1,9 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Plus, RefreshCw, Users } from "lucide-react";
+import { Plus, Users } from "lucide-react";
 
-import { CrmErrorBanner, CrmListPanel, CrmPage } from "@/components/crm/crm-ui";
+import { CrmErrorBanner, CrmListPanel, CrmPage, CRM_TABLE_HEAD_ROW } from "@/components/crm/crm-ui";
 import { FinanceField, FinanceSelect } from "@/components/finance/journals/finance-form-field";
 import {
   RequiredFieldsDialog,
@@ -96,10 +96,10 @@ export function ContactsListPage({
     setForm(
       scoped
         ? {
-            ...EMPTY,
-            company_account_id: scoped.id,
-            branch_id: scoped.branch_id,
-          }
+          ...EMPTY,
+          company_account_id: scoped.id,
+          branch_id: scoped.branch_id,
+        }
         : EMPTY,
     );
     setFormError(null);
@@ -169,15 +169,9 @@ export function ContactsListPage({
   );
 
   const actions = (
-    <div className="flex shrink-0 flex-nowrap items-center gap-2">
-      <Button type="button" variant="outline" size="sm" className="cursor-pointer" onClick={() => void load()} disabled={loading}>
-        <RefreshCw className={`size-3.5 ${loading ? "animate-spin" : ""}`} />
-        Refresh
-      </Button>
-      <Button type="button" size="sm" className="cursor-pointer" onClick={openCreate}>
-        <Plus className="size-3.5" /> New Contact
-      </Button>
-    </div>
+    <Button type="button" size="sm" className="cursor-pointer" onClick={openCreate}>
+      <Plus className="size-3.5" /> New Contact
+    </Button>
   );
 
   return (
@@ -209,7 +203,7 @@ export function ContactsListPage({
         <div className="erp-scroll overflow-x-auto">
           <table className="w-full min-w-[860px] text-left text-sm">
             <thead>
-              <tr className="border-b border-border/70 bg-muted/40 text-[11px] tracking-wide text-muted-foreground uppercase">
+              <tr className={CRM_TABLE_HEAD_ROW}>
                 <CrmSortableTh label="Name" sortKey="name" activeKey={sortBy} dir={sortDir} onSort={onSort} />
                 <CrmSortableTh label="Company" sortKey="company" activeKey={sortBy} dir={sortDir} onSort={onSort} />
                 <CrmSortableTh label="Title" sortKey="title" activeKey={sortBy} dir={sortDir} onSort={onSort} />
@@ -265,7 +259,7 @@ export function ContactsListPage({
             className="w-full max-w-lg rounded-xl border border-border/80 bg-card p-5 shadow-lg"
             onClick={(e) => e.stopPropagation()}
           >
-            <h2 className="text-sm font-medium tracking-tight">New Contact</h2>
+            <h2 className="text-base font-extrabold tracking-tight">New Contact</h2>
 
             {formError ? (
               <div className="mt-3 rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-xs text-destructive">
@@ -301,7 +295,7 @@ export function ContactsListPage({
                   <Input value={form.last_name ?? ""} onChange={(e) => setForm((f) => ({ ...f, last_name: e.target.value }))} />
                 </FinanceField>
               </div>
-              <FinanceField label="Title">
+              <FinanceField label="Designation">
                 <Input value={form.title ?? ""} onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))} />
               </FinanceField>
               <div className="grid grid-cols-2 gap-2">

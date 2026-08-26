@@ -15,19 +15,21 @@ type Props = {
   userId: string;
   userType: string;
   assignedModuleKeys: string[];
+  adminModuleKeys: string[];
   canEdit: boolean;
-  onSaved: (assignedModuleKeys: string[]) => void;
+  onSaved: (assignedModuleKeys: string[], adminModuleKeys: string[]) => void;
 };
 
 export function UserModulesCell({
   userId,
   userType,
   assignedModuleKeys,
+  adminModuleKeys,
   canEdit,
   onSaved,
 }: Props) {
   const [open, setOpen] = useState(false);
-  const [draft, setDraft] = useState<string[]>(assignedModuleKeys);
+  const [draft, setDraft] = useState<string[]>(adminModuleKeys);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
@@ -38,8 +40,8 @@ export function UserModulesCell({
   useEffect(() => setMounted(true), []);
 
   useEffect(() => {
-    setDraft(assignedModuleKeys);
-  }, [assignedModuleKeys]);
+    setDraft(adminModuleKeys);
+  }, [adminModuleKeys]);
 
   const updatePosition = useCallback(() => {
     const trigger = triggerRef.current;
@@ -98,15 +100,16 @@ export function UserModulesCell({
     );
   }
 
-  const visible = assignedModuleKeys.slice(0, 3);
-  const extra = assignedModuleKeys.length - visible.length;
+  const memberOnlyKeys = assignedModuleKeys.filter((key) => !adminModuleKeys.includes(key));
+  const visible = adminModuleKeys.slice(0, 3);
+  const extra = adminModuleKeys.length - visible.length;
 
   async function save() {
     setSaving(true);
     setError(null);
     try {
       const updated = await updateUserModules(userId, draft);
-      onSaved(updated.assigned_module_keys);
+      onSaved(updated.assigned_module_keys, updated.admin_module_keys ?? []);
       setOpen(false);
     } catch {
       setError("Could not save modules");
@@ -117,7 +120,7 @@ export function UserModulesCell({
 
   return (
     <div className="flex flex-wrap items-center gap-1.5">
-      {assignedModuleKeys.length === 0 ? (
+      {adminModuleKeys.length === 0 && memberOnlyKeys.length === 0 ? (
         <span className="text-xs text-muted-foreground">None</span>
       ) : (
         <>
@@ -131,6 +134,11 @@ export function UserModulesCell({
               +{extra}
             </Badge>
           ) : null}
+          {memberOnlyKeys.length > 0 ? (
+            <span className="text-[11px] text-muted-foreground">
+              +{memberOnlyKeys.length} member
+            </span>
+          ) : null}
         </>
       )}
       {canEdit ? (
@@ -140,9 +148,9 @@ export function UserModulesCell({
           size="icon-xs"
           variant="ghost"
           className="size-7 cursor-pointer"
-          aria-label="Assign modules"
+          aria-label="Assign module admins"
           onClick={() => {
-            setDraft(assignedModuleKeys);
+            setDraft(adminModuleKeys);
             setError(null);
             setOpen((v) => !v);
           }}
@@ -162,9 +170,9 @@ export function UserModulesCell({
               visibility: coords ? "visible" : "hidden",
             }}
           >
-            <p className="text-xs font-semibold text-foreground">ERP modules</p>
+            <p className="text-xs font-semibold text-foreground">Module admins</p>
             <p className="mt-0.5 text-[11px] text-muted-foreground">
-              User can open only selected module hubs in the sidebar.
+              Selected people get the same module panel as ERP admin, plus a Users tab to assign module users.
             </p>
             <div className="erp-scroll mt-3 max-h-[240px] space-y-1 overflow-y-auto pr-1">
               {erpModules.map((mod) => {

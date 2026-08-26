@@ -49,6 +49,9 @@ from modules.grc.schemas import (
     IncidentCreate,
     IncidentResponse,
     IncidentUpdate,
+    ComplianceMonitorRefreshRequest,
+    ComplianceMonitorRefreshResponse,
+    GrcOverviewResponse,
     NotificationCreate,
     NotificationResponse,
     NotificationUpdate,
@@ -77,6 +80,8 @@ from modules.grc.schemas import (
     RiskTreatmentResponse,
     RiskTreatmentUpdate,
 )
+from modules.grc.service.compliance_monitor_service import ComplianceMonitorService
+from modules.grc.service.grc_overview_service import GrcOverviewService
 from modules.grc.service import (
     AuditFindingService,
     AuditPlanService,
@@ -100,6 +105,36 @@ from modules.grc.service import (
     RiskTreatmentService,
 )
 from shared.schemas import APIResponse
+
+overview_router = APIRouter(prefix="/overview", tags=["GRC — Overview"])
+
+
+@overview_router.get("", response_model=APIResponse[GrcOverviewResponse])
+def get_grc_overview(
+    ctx: Annotated[TenantContext, Depends(require_permission("grc.compliance_framework:read"))],
+    db: Annotated[Session, Depends(get_db)],
+    company_id: UUID | None = None,
+):
+    data = GrcOverviewService(db).get_overview(ctx, company_id=company_id)
+    return APIResponse(message="OK", data=data)
+
+
+compliance_monitor_router = APIRouter(prefix="/compliance-monitor", tags=["GRC — Compliance Monitor"])
+
+
+@compliance_monitor_router.post("/refresh", response_model=APIResponse[ComplianceMonitorRefreshResponse])
+def refresh_compliance_monitor(
+    body: ComplianceMonitorRefreshRequest,
+    ctx: Annotated[TenantContext, Depends(require_permission("grc.compliance_assessment:update"))],
+    db: Annotated[Session, Depends(get_db)],
+):
+    result = ComplianceMonitorService(db).refresh_company(
+        ctx,
+        company_id=body.company_id,
+        branch_id=body.branch_id,
+    )
+    db.commit()
+    return APIResponse(message="Refreshed", data=result)
 
 policies_router = APIRouter(prefix="/policies", tags=["GRC — Policy"])
 
@@ -262,7 +297,12 @@ def create_controls(
     ctx: Annotated[TenantContext, Depends(require_permission("grc.control:create"))],
     db: Annotated[Session, Depends(get_db)],
 ):
-    return APIResponse(message="Created", data=ControlService(db).create(ctx, **body.model_dump(exclude_none=True)))
+    payload = body.model_dump(exclude_none=True)
+    branch_id = payload.pop("branch_id", None)
+    return APIResponse(
+        message="Created",
+        data=ControlService(db).create(ctx, branch_id=branch_id, **payload),
+    )
 
 @controls_router.patch("/{row_id}", response_model=APIResponse[ControlResponse])
 def update_controls(

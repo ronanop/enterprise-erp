@@ -33,6 +33,7 @@ import { PageHeader } from "@/components/layout/page-header";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ApiClientError } from "@/services/api-client";
+import { parseLeadDistributorNames } from "@/lib/crm/lead-distributor-options";
 import {
   addOvfLine,
   createAttachment,
@@ -44,6 +45,7 @@ import {
   getOpportunityBlueprint,
   getOvf,
   getQuote,
+  getSalesLead,
   listContacts,
   listEmployeeOptions,
   listOvfLines,
@@ -91,12 +93,23 @@ const SUB_SEGMENTS = ["Compute", "Storage", "Licensing", "Implementation", "Supp
 const NUMBER_NO_SPIN =
   "[appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none";
 
+async function distributorOptionsForOpportunity(opportunityRow: Opportunity): Promise<string[]> {
+  if (!opportunityRow.lead_id) return [];
+  try {
+    const lead = await getSalesLead(opportunityRow.lead_id);
+    return parseLeadDistributorNames(lead.distributor_name);
+  } catch {
+    return [];
+  }
+}
+
 export function OvfFormPage({ quoteId, ovfId }: { quoteId?: string; ovfId?: string }) {
   const router = useRouter();
   const isEdit = Boolean(ovfId);
   const [ovf, setOvf] = useState<Ovf | null>(null);
   const [quote, setQuote] = useState<Quote | null>(null);
   const [opportunity, setOpportunity] = useState<Opportunity | null>(null);
+  const [vendorNameOptions, setVendorNameOptions] = useState<string[]>([]);
   const [form, setForm] = useState<OvfDraft>({
     po_number: "",
     po_date: "",
@@ -148,16 +161,18 @@ export function OvfFormPage({ quoteId, ovfId }: { quoteId?: string; ovfId?: stri
             409,
           );
         }
-        const [quoteRow, opportunityRow, ovfLines] = await Promise.all([
+        const [quoteRow, opportunityRow, ovfLines, quoteLines] = await Promise.all([
           getQuote(ovfRow.quote_id),
           getOpportunity(ovfRow.opportunity_id),
           listOvfLines(ovfId).catch(() => []),
+          listQuoteLines(ovfRow.quote_id).catch(() => []),
         ]);
         setOvf(ovfRow);
         setQuote(quoteRow);
         setOpportunity(opportunityRow);
-        setCustomerRows(customerRowsFromOvfLines(ovfLines));
-        setVendorRows(vendorRowsFromOvfLines(ovfLines));
+        setVendorNameOptions(await distributorOptionsForOpportunity(opportunityRow));
+        setCustomerRows(customerRowsFromOvfLines(ovfLines, quoteLines));
+        setVendorRows(vendorRowsFromOvfLines(ovfLines, quoteLines));
         setForm({
           po_number: ovfRow.po_number ?? "",
           po_date: ovfRow.po_date ? String(ovfRow.po_date).slice(0, 10) : "",
@@ -235,24 +250,25 @@ export function OvfFormPage({ quoteId, ovfId }: { quoteId?: string; ovfId?: stri
       const contactName = selectedContact ? fullName(selectedContact) : "";
       const billingAddress = companyRow
         ? [
-            companyRow.billing_street,
-            companyRow.billing_city,
-            companyRow.billing_code,
-          ]
-            .filter(Boolean)
-            .join(", ")
+          companyRow.billing_street,
+          companyRow.billing_city,
+          companyRow.billing_code,
+        ]
+          .filter(Boolean)
+          .join(", ")
         : "";
       const shippingAddress = companyRow
         ? [
-            companyRow.shipping_street,
-            companyRow.shipping_city,
-            companyRow.shipping_code,
-          ]
-            .filter(Boolean)
-            .join(", ")
+          companyRow.shipping_street,
+          companyRow.shipping_city,
+          companyRow.shipping_code,
+        ]
+          .filter(Boolean)
+          .join(", ")
         : "";
       setQuote(quoteRow);
       setOpportunity(opportunityRow);
+      setVendorNameOptions(await distributorOptionsForOpportunity(opportunityRow));
       setCustomerRows(customerRowsFromQuoteLines(quoteLines));
       setVendorRows(vendorRowsFromQuoteLines(quoteLines));
       setForm((current) => ({
@@ -380,7 +396,7 @@ export function OvfFormPage({ quoteId, ovfId }: { quoteId?: string; ovfId?: stri
         created.company_id ?? opportunity.company_account_id,
         customerRows,
         vendorRows,
-        { addOvfLine, createAttachment, fileToBase64 },
+        { addOvfLine, updateOvfLine, listOvfLines, createAttachment, fileToBase64 },
       );
       router.push(`/crm/ovf/${created.id}`);
     } catch (err) {
@@ -473,8 +489,8 @@ export function OvfFormPage({ quoteId, ovfId }: { quoteId?: string; ovfId?: stri
         vendorRows={vendorRows}
         onCustomerRowsChange={setCustomerRows}
         onVendorRowsChange={setVendorRows}
+        vendorNameOptions={vendorNameOptions}
         disabled={saving}
-        onValidationError={setError}
       />
 
       <CrmSection title="Charges and Details" icon={IndianRupee}>

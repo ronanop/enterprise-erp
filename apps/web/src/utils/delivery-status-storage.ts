@@ -30,6 +30,18 @@ export type DeliveryStatusAttachment = {
   contentType: string;
 };
 
+/**
+ * Billing of delivered DC material (payment may lag delivery).
+ * - pending_delivery: not delivered yet
+ * - unbilled: delivered, customer bill / payment not done
+ * - partially_billed / fully_billed: billed later against this DC
+ */
+export type DeliveryBillStatus =
+  | "pending_delivery"
+  | "unbilled"
+  | "partially_billed"
+  | "fully_billed";
+
 export type DeliveryStatusRecord = {
   challanId: string;
   shipmentStatus: string;
@@ -55,6 +67,17 @@ export type DeliveryStatusRecord = {
   boxCount: string;
   surfaceMode: string;
   remarks: string;
+  /** Post-delivery customer bill status for this DC. */
+  billStatus: DeliveryBillStatus;
+  /** Qty billed so far against this challan (may be partial). */
+  billedQuantity: string;
+  billInvoiceNumber: string;
+  billInvoiceDate: string;
+  billDocument: DeliveryStatusAttachment | null;
+  billRemarks: string;
+  billedAt: string;
+  /** When delivered and true, this DC appears under Procurement → Installation. */
+  requiresInstallation: boolean;
   updatedAt: string;
 };
 
@@ -130,9 +153,19 @@ export function deriveDeliveryStatusLabel(
   return "Pending";
 }
 
+function normalizeBillStatus(value: unknown): DeliveryBillStatus {
+  const raw = asText(value).trim().toLowerCase();
+  if (raw === "unbilled" || raw === "partially_billed" || raw === "fully_billed") {
+    return raw;
+  }
+  if (raw === "pending_delivery") return "pending_delivery";
+  return "pending_delivery";
+}
+
 function normalize(raw: Partial<DeliveryStatusRecord> & { challanId: string }): DeliveryStatusRecord {
   const cacheInvoiceDocument = normalizeAttachment(raw.cacheInvoiceDocument);
   const podDocument = normalizeAttachment(raw.podDocument);
+  const billDocument = normalizeAttachment(raw.billDocument);
   const deliveryMode = normalizeMode(raw.deliveryMode);
   const itemType = normalizeItemType(raw.itemType);
   const actualDeliveryDate = raw.actualDeliveryDate ?? "";
@@ -161,11 +194,36 @@ function normalize(raw: Partial<DeliveryStatusRecord> & { challanId: string }): 
     boxCount: raw.boxCount ?? "",
     surfaceMode: normalizeSurfaceMode(raw.surfaceMode),
     remarks: raw.remarks ?? "",
+    billStatus: normalizeBillStatus(raw.billStatus),
+    billedQuantity: asText(raw.billedQuantity).trim(),
+    billInvoiceNumber: asText(raw.billInvoiceNumber).trim() || asText(raw.cacheInvoiceNumber).trim(),
+    billInvoiceDate: asText(raw.billInvoiceDate).trim(),
+    billDocument: billDocument ?? cacheInvoiceDocument,
+    billRemarks: asText(raw.billRemarks).trim(),
+    billedAt: asText(raw.billedAt).trim(),
+    requiresInstallation: Boolean(raw.requiresInstallation),
     updatedAt: raw.updatedAt ?? "",
   };
+  const shipmentStatus = deriveDeliveryStatusLabel(base);
+  const delivered =
+    isDeliveredShipmentStatus(shipmentStatus) || Boolean(asText(actualDeliveryDate).trim());
+  let billStatus = base.billStatus;
+  if (delivered && billStatus === "pending_delivery") {
+    // Delivered DC stays unbilled until payment / bill is recorded later.
+    billStatus = Number(base.billedQuantity) > 0 ? "partially_billed" : "unbilled";
+    if (
+      Number(base.billedQuantity) > 0 &&
+      asText(base.billInvoiceNumber).trim() &&
+      !asText(raw.billStatus).trim()
+    ) {
+      // Legacy rows that already had an invoice: treat as fully billed if qty unknown.
+      billStatus = "fully_billed";
+    }
+  }
   return {
     ...base,
-    shipmentStatus: deriveDeliveryStatusLabel(base),
+    shipmentStatus,
+    billStatus,
   };
 }
 
@@ -220,6 +278,36 @@ export function upsertDeliveryStatus(
   return next;
 }
 
+/** Record partial or full billing against a delivered delivery challan. */
+export function upsertDeliveryChallanBilling(input: {
+  challanId: string;
+  billStatus: "unbilled" | "partially_billed" | "fully_billed";
+  billedQuantity: string;
+  billInvoiceNumber?: string;
+  billInvoiceDate?: string;
+  billDocument?: DeliveryStatusAttachment | null;
+  billRemarks?: string;
+}): DeliveryStatusRecord | null {
+  const existing = getDeliveryStatus(input.challanId);
+  if (!existing) return null;
+  const invoice = asText(input.billInvoiceNumber).trim();
+  return upsertDeliveryStatus({
+    ...existing,
+    billStatus: input.billStatus,
+    billedQuantity: asText(input.billedQuantity).trim(),
+    billInvoiceNumber: invoice,
+    billInvoiceDate: asText(input.billInvoiceDate).trim(),
+    billDocument: input.billDocument === undefined ? existing.billDocument : input.billDocument,
+    billRemarks: asText(input.billRemarks).trim(),
+    billedAt: new Date().toISOString(),
+    cacheInvoiceNumber: invoice || existing.cacheInvoiceNumber,
+    cacheInvoiceDocument:
+      input.billDocument === undefined
+        ? existing.cacheInvoiceDocument
+        : input.billDocument || existing.cacheInvoiceDocument,
+  });
+}
+
 export function defaultStatusFromChallan(challan: DeliveryChallanRecord): DeliveryStatusRecord {
   const transport = [challan.transportDetails, challan.driverVehicleDetails]
     .map((s) => asText(s).trim())
@@ -253,6 +341,14 @@ export function defaultStatusFromChallan(challan: DeliveryChallanRecord): Delive
     boxCount: "",
     surfaceMode: "",
     remarks: "",
+    billStatus: "pending_delivery",
+    billedQuantity: "",
+    billInvoiceNumber: "",
+    billInvoiceDate: "",
+    billDocument: null,
+    billRemarks: "",
+    billedAt: "",
+    requiresInstallation: false,
     updatedAt: "",
   });
 }
@@ -329,12 +425,7 @@ export function validateDeliveryStatusForm(
   value: Omit<DeliveryStatusRecord, "challanId" | "updatedAt">,
 ): DeliveryStatusFormErrors {
   const errors: DeliveryStatusFormErrors = {};
-  if (!asText(value.cacheInvoiceNumber).trim()) {
-    errors.cacheInvoiceNumber = "Cache invoice number is required.";
-  }
-  if (!value.cacheInvoiceDocument?.fileName) {
-    errors.cacheInvoiceDocument = "Upload the Cache invoice document.";
-  }
+  // Cache invoice is optional at delivery — bill DC material later after payment.
   if (value.deliveryMode !== "hand" && value.deliveryMode !== "courier") {
     errors.deliveryMode = "Select By hand or Courier.";
   }

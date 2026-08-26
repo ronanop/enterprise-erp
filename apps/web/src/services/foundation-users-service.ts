@@ -11,6 +11,7 @@ export type FoundationUser = {
   mfa_enabled: boolean;
   role_ids: string[];
   assigned_module_keys: string[];
+  admin_module_keys: string[];
 };
 
 export async function listFoundationUsers(): Promise<FoundationUser[]> {

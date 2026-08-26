@@ -1,7 +1,7 @@
 "use client";
 
 import type { LucideIcon } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
@@ -70,14 +70,14 @@ export type FieldSpec = {
   | "readonly"
   | "checkbox"
   | "yesno"
-  | "type_qty_lines";
+  | "type_qty_lines"
+  | "file";
   required?: boolean;
   /** Fixed choices (domain enums). */
   options?: { value: string; label: string }[];
   /** Choices resolved from the lookups map returned by `load`. */
   optionsKey?: string;
   placeholder?: string;
-  hint?: string;
   step?: string;
   min?: string;
   max?: string;
@@ -99,6 +99,8 @@ export type FieldSpec = {
   visibleWhen?: (values: FormValues) => boolean;
   /** Clear these fields when this yesno/select/checkbox value changes. */
   clearFieldsOnChange?: string[];
+  /** When the select value changes, merge extra fields (e.g. entity → state). */
+  fillFieldsOnChange?: (value: string, lookups: Lookups) => Record<string, string>;
 };
 
 export type FormSection = {
@@ -114,14 +116,14 @@ type FieldBlock =
   | { kind: "single"; field: FieldSpec }
   | { kind: "pair"; checkbox: FieldSpec; date: FieldSpec };
 
-/** Pair checkbox + following date when the date is cleared by / tied to that checkbox. */
+/** Pair checkbox/yesno + following date when the date is cleared by / tied to that field. */
 function groupFieldBlocks(fields: FieldSpec[]): FieldBlock[] {
   const blocks: FieldBlock[] = [];
   for (let i = 0; i < fields.length; i++) {
     const field = fields[i];
     const next = fields[i + 1];
     const clearsDate =
-      field.type === "checkbox" &&
+      (field.type === "checkbox" || field.type === "yesno") &&
       next?.type === "date" &&
       (field.clearFieldsOnChange ?? []).includes(next.name);
     if (clearsDate && next) {
@@ -150,6 +152,7 @@ export function ProjectsRecordForm({
   onSave,
   readOnly = false,
   readOnlyBanner,
+  headerActions,
 }: {
   title: string;
   description?: string;
@@ -168,6 +171,7 @@ export function ProjectsRecordForm({
   /** When true, fields are disabled and save is hidden (stage owner view). */
   readOnly?: boolean;
   readOnlyBanner?: string;
+  headerActions?: ReactNode;
 }) {
   const router = useRouter();
   const [values, setValues] = useState<FormValues>(emptyValues);
@@ -213,10 +217,15 @@ export function ProjectsRecordForm({
     setFormReadOnlyBanner(readOnlyBanner ?? "");
   }, [readOnly, readOnlyBanner]);
 
-  function set(name: string, value: string, clearFields?: string[]) {
+  function set(
+    name: string,
+    value: string,
+    clearFields?: string[],
+    fillFields?: Record<string, string>,
+  ) {
     if (formReadOnly) return;
     setValues((v) => {
-      const next = { ...v, [name]: value };
+      const next = { ...v, ...fillFields, [name]: value };
       for (const key of clearFields ?? []) {
         next[key] = "";
       }
@@ -242,7 +251,10 @@ export function ProjectsRecordForm({
 
   function fieldSpanClass(field: FieldSpec, columns?: 2 | 3): string | undefined {
     const spanFull =
-      field.full || field.type === "type_qty_lines" || field.type === "textarea";
+      field.full ||
+      field.type === "type_qty_lines" ||
+      field.type === "textarea" ||
+      field.type === "file";
     if (!spanFull) return undefined;
     return columns === 3 ? "sm:col-span-2 xl:col-span-3" : "sm:col-span-2";
   }
@@ -315,6 +327,45 @@ export function ProjectsRecordForm({
         />
       );
     }
+    if (field.type === "file") {
+      const current = (values[field.name] ?? "").trim();
+      const inputId = `file-${field.name}`;
+      return (
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
+          {!formReadOnly ? (
+            <>
+              <Input
+                id={inputId}
+                className="sr-only"
+                type="file"
+                tabIndex={-1}
+                aria-hidden="true"
+                accept={field.placeholder || undefined}
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  set(field.name, file?.name ?? "");
+                }}
+              />
+              <label
+                htmlFor={inputId}
+                className="inline-flex h-10 w-fit shrink-0 cursor-pointer items-center justify-center gap-2 rounded-md border border-primary/40 bg-primary px-4 text-sm font-medium text-primary-foreground shadow-sm transition-colors duration-200 hover:bg-primary/90 focus-within:outline-none focus-within:ring-2 focus-within:ring-ring/40"
+              >
+                Choose file
+              </label>
+            </>
+          ) : null}
+          <p
+            className={cn(
+              "min-w-0 truncate text-sm",
+              current ? "font-medium text-foreground" : "text-muted-foreground",
+            )}
+            title={current || undefined}
+          >
+            {current || "No file chosen"}
+          </p>
+        </div>
+      );
+    }
     if (field.type === "yesno") {
       return (
         <div
@@ -329,7 +380,13 @@ export function ProjectsRecordForm({
               className="size-4 cursor-pointer rounded border border-input accent-[var(--color-accent,#0369A1)]"
               checked={values[field.name] === "true"}
               disabled={formReadOnly}
-              onChange={() => set(field.name, "true", field.clearFieldsOnChange)}
+              onChange={() =>
+                set(
+                  field.name,
+                  values[field.name] === "true" ? "" : "true",
+                  field.clearFieldsOnChange,
+                )
+              }
             />
             <span>Yes</span>
           </label>
@@ -339,7 +396,13 @@ export function ProjectsRecordForm({
               className="size-4 cursor-pointer rounded border border-input accent-[var(--color-accent,#0369A1)]"
               checked={values[field.name] === "false"}
               disabled={formReadOnly}
-              onChange={() => set(field.name, "false", field.clearFieldsOnChange)}
+              onChange={() =>
+                set(
+                  field.name,
+                  values[field.name] === "false" ? "" : "false",
+                  field.clearFieldsOnChange,
+                )
+              }
             />
             <span>No</span>
           </label>
@@ -391,7 +454,6 @@ export function ProjectsRecordForm({
       <FinanceField
         key={field.name}
         label={isFieldRequired(field) ? `${field.label} *` : field.label}
-        hint={field.hint}
         className={cn("min-w-0", className)}
       >
         {renderFieldControl(field)}
@@ -420,7 +482,8 @@ export function ProjectsRecordForm({
       openCustomerDialog(field.name);
       return;
     }
-    set(field.name, value, field.clearFieldsOnChange);
+    const filled = field.fillFieldsOnChange?.(value, lookups) ?? {};
+    set(field.name, value, field.clearFieldsOnChange, filled);
   }
 
   async function saveCustomerDialog() {
@@ -431,7 +494,7 @@ export function ProjectsRecordForm({
     }
     const branchId = (values.branch_id ?? "").trim();
     if (!branchId) {
-      setCustomerDialogError("Select a Branch on the form before creating a customer.");
+      setCustomerDialogError("Select an office branch context before creating a customer.");
       return;
     }
 
@@ -527,12 +590,13 @@ export function ProjectsRecordForm({
         {backLabel}
       </Link>
 
-      <PageHeader title={title} description={description} />
+      <PageHeader title={title} description={description} actions={headerActions} />
 
       {error ? <ProjectsErrorBanner>{error}</ProjectsErrorBanner> : null}
 
       <div
         className={cn(
+          "space-y-5",
           formReadOnly &&
           "[&_input:disabled]:pointer-events-none [&_input:disabled]:cursor-default [&_input:disabled]:opacity-100 [&_input:disabled]:text-foreground [&_select:disabled]:pointer-events-none [&_select:disabled]:cursor-default [&_select:disabled]:opacity-100 [&_select:disabled]:text-foreground [&_textarea:disabled]:pointer-events-none [&_textarea:disabled]:cursor-default [&_textarea:disabled]:opacity-100 [&_textarea:disabled]:text-foreground",
         )}

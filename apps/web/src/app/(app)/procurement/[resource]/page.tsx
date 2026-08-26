@@ -4,6 +4,7 @@ import { ResourceListView } from "@/components/module/resource-list-view";
 import { DeliveryChallanListPage } from "@/components/procurement/delivery-challan-list-page";
 import { DeliveryStatusPage } from "@/components/procurement/delivery-status-page";
 import { GrnsListPage } from "@/components/procurement/grns-list-page";
+import { InstallationPage } from "@/components/procurement/installation-page";
 import { OrdersListPage } from "@/components/procurement/orders-list-page";
 import { ProcurementApprovalsPage } from "@/components/procurement/procurement-approvals-page";
 import {
@@ -27,6 +28,7 @@ export default async function ProcurementResourcePage({ params }: PageProps) {
   if (resourceKey === "grns") return <GrnsListPage />;
   if (resourceKey === "delivery-challan") return <DeliveryChallanListPage />;
   if (resourceKey === "delivery-status") return <DeliveryStatusPage />;
+  if (resourceKey === "installation") return <InstallationPage />;
   if (resourceKey === "vendors") return <VendorsListPage />;
   if (resourceKey === "inventory") return <ProcurementInventoryListPage />;
   if (resourceKey === "approval" || resourceKey === "approvals") return <ProcurementApprovalsPage />;

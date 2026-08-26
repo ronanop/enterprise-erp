@@ -116,7 +116,6 @@ export function ProjectPhaseFormPage({
             label: "Planned End Date",
             type: "date",
             required: true,
-            hint: "Must be on or after the planned start date.",
           },
         ],
       },

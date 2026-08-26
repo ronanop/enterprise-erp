@@ -126,7 +126,7 @@ export function GrcDashboard() {
   }, [data]);
 
   const authBlocked =
-    Boolean(data?.statusCodes.includes(401)) ||
+    Boolean(data?.statusCodes?.includes(401)) ||
     (!authenticated && Boolean(data?.errors.length));
 
   return (
@@ -238,7 +238,7 @@ export function GrcDashboard() {
 
       <section className="space-y-3">
         <div className="flex items-center justify-between gap-2">
-          <h2 className="text-sm font-medium tracking-tight">Workspace</h2>
+          <h2 className="text-base font-extrabold tracking-tight">Workspace</h2>
           <Badge variant="secondary">{grcWorkspaceGroups.length} areas</Badge>
         </div>
         <div className="grid gap-3 lg:grid-cols-3">
@@ -255,7 +255,7 @@ export function GrcDashboard() {
                     <Icon className="size-4" />
                   </span>
                   <div className="min-w-0">
-                    <h3 className="text-sm font-medium tracking-tight">{group.title}</h3>
+                    <h3 className="text-base font-extrabold tracking-tight">{group.title}</h3>
                     <p className="mt-0.5 text-[11px] leading-relaxed text-muted-foreground">
                       {group.description}
                     </p>
@@ -286,7 +286,7 @@ export function GrcDashboard() {
         <div className="overflow-hidden rounded-xl border border-border/80 bg-card shadow-sm">
           <div className="flex items-center justify-between gap-2 border-b border-border/70 px-4 py-3">
             <div>
-              <h2 className="text-sm font-medium tracking-tight">Recent risks</h2>
+              <h2 className="text-base font-extrabold tracking-tight">Recent risks</h2>
               <p className="text-[11px] text-muted-foreground">Risk register</p>
             </div>
             <Link
@@ -355,7 +355,7 @@ export function GrcDashboard() {
         <div className="overflow-hidden rounded-xl border border-border/80 bg-card shadow-sm">
           <div className="flex items-center justify-between gap-2 border-b border-border/70 px-4 py-3">
             <div>
-              <h2 className="text-sm font-medium tracking-tight">CAPA watch</h2>
+              <h2 className="text-base font-extrabold tracking-tight">CAPA watch</h2>
               <p className="text-[11px] text-muted-foreground">Corrective actions</p>
             </div>
             <Link
@@ -397,7 +397,7 @@ export function GrcDashboard() {
 
         <div className="rounded-xl border border-border/80 bg-card p-4 shadow-sm">
           <div className="mb-3">
-            <h2 className="text-sm font-medium tracking-tight">Risk level mix</h2>
+            <h2 className="text-base font-extrabold tracking-tight">Risk level mix</h2>
             <p className="text-[11px] text-muted-foreground">Inherent severity</p>
           </div>
           {loading ? (

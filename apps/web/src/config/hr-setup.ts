@@ -250,10 +250,11 @@ export function getSetupTab(sectionId: string, tabId: string | null | undefined)
 
 export function nextCode(prefix: string, existing: string[]): string {
   let max = 0;
-  const re = new RegExp(`^${prefix}-(\\d+)$`, "i");
+  const needle = `${prefix}-`;
   for (const code of existing) {
-    const m = code.match(re);
-    if (m) max = Math.max(max, Number(m[1]));
+    if (!code.toUpperCase().startsWith(needle.toUpperCase())) continue;
+    const digits = code.slice(needle.length);
+    if (/^\d+$/.test(digits)) max = Math.max(max, Number(digits));
   }
   return `${prefix}-${String(max + 1).padStart(3, "0")}`;
 }

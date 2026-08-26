@@ -27,6 +27,25 @@ class ProjectRepository(PrjScopedRepository):
         stmt = self.apply_prj_filter(stmt, PrjProject, ctx, branch_scoped=True)
         return list(self.db.scalars(stmt).all())
 
+    def list_linked_proc_order_ids(self, ctx: TenantContext, company_id: UUID) -> set[UUID]:
+        stmt = select(PrjProject.proc_order_id).where(
+            PrjProject.company_id == company_id,
+            PrjProject.is_deleted.is_(False),
+            PrjProject.proc_order_id.is_not(None),
+        )
+        stmt = self.apply_prj_filter(stmt, PrjProject, ctx, branch_scoped=True)
+        return {row for row in self.db.scalars(stmt).all() if row is not None}
+
+    def get_by_proc_order_id(
+        self, ctx: TenantContext, proc_order_id: UUID
+    ) -> PrjProject | None:
+        stmt = select(PrjProject).where(
+            PrjProject.proc_order_id == proc_order_id,
+            PrjProject.is_deleted.is_(False),
+        )
+        stmt = self.apply_prj_filter(stmt, PrjProject, ctx, branch_scoped=True)
+        return self.db.scalar(stmt)
+
     def create(self, ctx: TenantContext, **fields) -> PrjProject:
         row = PrjProject(
             id=uuid4(),

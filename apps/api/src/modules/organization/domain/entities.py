@@ -71,6 +71,10 @@ class LocationEntity:
     location_type: str
     status: str
     version: int = 1
+    branch_name: str | None = None
+    latitude: float | None = None
+    longitude: float | None = None
+    geofence_radius_meters: int | None = None
 
 
 @dataclass

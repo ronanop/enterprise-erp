@@ -172,7 +172,7 @@ export function ReportsHubPage() {
               <section key={category} className="space-y-3">
                 <div className="flex items-center gap-2">
                   <CatIcon className="size-4 text-muted-foreground" />
-                  <h2 className="text-sm font-medium tracking-tight">
+                  <h2 className="text-base font-extrabold tracking-tight">
                     {CATEGORY_LABELS[category] ?? category}
                   </h2>
                 </div>
@@ -193,7 +193,7 @@ export function ReportsHubPage() {
                             <Icon className="size-4" />
                           </span>
                         </div>
-                        <h3 className="mt-3 text-sm font-medium tracking-tight group-hover:text-primary">
+                        <h3 className="mt-3 text-base font-extrabold tracking-tight group-hover:text-primary">
                           {item.title}
                         </h3>
                         <p className="mt-1 text-xs leading-relaxed text-muted-foreground">{item.description}</p>

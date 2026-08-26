@@ -129,6 +129,8 @@ class CrmOvfLine(Base, *CrmTransactionMixin):
     side: Mapped[str] = mapped_column(String(20), nullable=False, default="customer_po")
     line_no: Mapped[int] = mapped_column(SmallInteger, nullable=False, default=1)
     product_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    # Vendor Charges "Distributor Name" (IN STOCK, Redington, …). Customer lines leave null.
+    distributor_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
     qty: Mapped[Decimal] = mapped_column(Numeric(18, 4), nullable=False, default=1)
     unit_price: Mapped[Decimal] = mapped_column(Numeric(18, 4), nullable=False, default=0)
     line_total: Mapped[Decimal] = mapped_column(Numeric(18, 4), nullable=False, default=0)

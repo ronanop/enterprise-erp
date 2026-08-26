@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, type ReactNode } from "react";
+import type { ReactNode } from "react";
 
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -16,7 +16,6 @@ type ConfirmDialogProps = {
   confirmDisabled?: boolean;
   /** Extra classes for the dialog panel (e.g. wider forms: max-w-2xl). */
   contentClassName?: string;
-  overlayClassName?: string;
   onConfirm: () => void;
   onCancel: () => void;
   children?: ReactNode;
@@ -32,37 +31,19 @@ export function ConfirmDialog({
   busy,
   confirmDisabled,
   contentClassName,
-  overlayClassName,
   onConfirm,
   onCancel,
   children,
 }: ConfirmDialogProps) {
-  const openedAtRef = useRef(0);
-
-  useEffect(() => {
-    if (!open) return;
-    openedAtRef.current = Date.now();
-  }, [open]);
-
   if (!open) return null;
 
   const compact = !description && !children;
 
-  function handleOverlayClick() {
-    // Native <select> option clicks fire a leftover document click after onChange.
-    // Ignore that first click so the dialog stays open.
-    if (Date.now() - openedAtRef.current < 400) return;
-    onCancel();
-  }
-
   return (
     <div
-      className={cn(
-        "fixed inset-0 z-[80] flex items-center justify-center bg-foreground/40 p-4",
-        overlayClassName,
-      )}
+      className="fixed inset-0 z-50 flex items-center justify-center bg-foreground/40 p-4"
       role="presentation"
-      onClick={handleOverlayClick}
+      onClick={onCancel}
     >
       <div
         role="dialog"
@@ -85,7 +66,7 @@ export function ConfirmDialog({
             {title}
           </h2>
         ) : (
-          <h2 id="confirm-dialog-title" className="shrink-0 text-sm font-medium tracking-tight">
+          <h2 id="confirm-dialog-title" className="shrink-0 text-base font-extrabold tracking-tight">
             {title}
           </h2>
         )}

@@ -6,6 +6,7 @@ import {
   PROCUREMENT_APPROVALS_EVENT,
   readPoApprovals,
   setPoApprovalStatus,
+  submitCreatePoInStockApproval,
   submitPoFinalizeApproval,
   type PoApprovalRequest,
   type PoApprovalStatus,
@@ -43,6 +44,15 @@ export function useProcurementApprovals() {
     [refresh],
   );
 
+  const submitCreatePoInStockRequest = useCallback(
+    (input: Parameters<typeof submitCreatePoInStockApproval>[0]) => {
+      const row = submitCreatePoInStockApproval(input);
+      refresh();
+      return row;
+    },
+    [refresh],
+  );
+
   const decide = useCallback(
     (id: string, status: Exclude<PoApprovalStatus, "pending">) => {
       const row = setPoApprovalStatus(id, status);
@@ -53,6 +63,7 @@ export function useProcurementApprovals() {
           companyPoNumber: row.companyPoNumber,
           documentNumber: row.documentNumber,
           decision: status,
+          kind: row.kind,
         });
       }
       refresh();
@@ -61,5 +72,13 @@ export function useProcurementApprovals() {
     [refresh],
   );
 
-  return { rows, pending, pendingCount: pending.length, submitFinalizeRequest, decide, refresh };
+  return {
+    rows,
+    pending,
+    pendingCount: pending.length,
+    submitFinalizeRequest,
+    submitCreatePoInStockRequest,
+    decide,
+    refresh,
+  };
 }

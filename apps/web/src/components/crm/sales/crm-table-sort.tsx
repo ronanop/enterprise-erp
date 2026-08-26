@@ -41,9 +41,8 @@ export function CrmSortableTh<T extends string>({
       <button
         type="button"
         className={cn(
-          "inline-flex cursor-pointer items-center gap-1 font-medium tracking-wide uppercase transition-colors duration-200 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
+          "inline-flex cursor-pointer items-center gap-1 text-xs font-extrabold tracking-wide text-foreground uppercase transition-colors duration-200 hover:text-foreground/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 sm:text-[13px]",
           align === "right" && "ml-auto flex-row-reverse",
-          active ? "text-foreground" : "text-muted-foreground",
         )}
         onClick={() => onSort(sortKey)}
         aria-sort={active ? (dir === "asc" ? "ascending" : "descending") : "none"}
@@ -93,7 +92,9 @@ export function sortRows<T, K extends string>(
   sortDir: SortDir,
   accessors: Record<K, (row: T) => SortValue>,
 ): T[] {
-  const getValue = accessors[sortBy];
+  const getValue = Object.prototype.hasOwnProperty.call(accessors, sortBy)
+    ? accessors[sortBy]
+    : undefined;
   if (!getValue) return rows;
   return [...rows].sort((a, b) => compareSortValues(getValue(a), getValue(b), sortDir));
 }

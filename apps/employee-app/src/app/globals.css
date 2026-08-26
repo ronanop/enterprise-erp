@@ -18,6 +18,7 @@
     opacity: 0;
     transform: translateY(8px);
   }
+
   to {
     opacity: 1;
     transform: translateY(0);
@@ -25,11 +26,13 @@
 }
 
 @keyframes pulse-soft {
+
   0%,
   100% {
     opacity: 1;
     transform: scale(1);
   }
+
   50% {
     opacity: 0.85;
     transform: scale(0.98);
@@ -37,13 +40,20 @@
 }
 
 @keyframes success-glow {
+
   0%,
   100% {
     box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.35);
   }
+
   50% {
     box-shadow: 0 0 40px 12px rgba(16, 185, 129, 0.25);
   }
+}
+
+html {
+  /* Match main ERP ~90% UI density without CSS zoom layout gaps */
+  font-size: 90%;
 }
 
 body {
@@ -63,6 +73,7 @@ body {
 .no-scrollbar::-webkit-scrollbar {
   display: none;
 }
+
 .no-scrollbar {
   -ms-overflow-style: none;
   scrollbar-width: none;
@@ -70,20 +81,24 @@ body {
 
 /* Splash / onboarding motion (Stitch cinematic splash) */
 @keyframes splash-float {
+
   0%,
   100% {
     transform: translateY(0);
   }
+
   50% {
     transform: translateY(-14px);
   }
 }
 
 @keyframes splash-blob {
+
   0%,
   100% {
     transform: translate(0, 0) scale(1);
   }
+
   50% {
     transform: translate(12px, -18px) scale(1.06);
   }
@@ -95,11 +110,13 @@ body {
     opacity: 0.55;
     box-shadow: 0 0 0 0 rgba(37, 99, 235, 0.45);
   }
+
   70% {
     transform: scale(1);
     opacity: 1;
     box-shadow: 0 0 0 10px rgba(37, 99, 235, 0);
   }
+
   100% {
     transform: scale(0.95);
     opacity: 0.55;

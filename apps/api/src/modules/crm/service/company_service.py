@@ -13,7 +13,7 @@ from uuid import UUID
 
 from sqlalchemy.orm import Session
 
-from core.exceptions import ConflictException, NotFoundException
+from core.exceptions import AppException, ConflictException, NotFoundException
 from modules.crm.domain.enums import CrmEntityType, LeadStatus
 from modules.crm.models import CrmCompany
 from modules.crm.repository.company_repository import CompanyRepository
@@ -41,6 +41,10 @@ class CompanyService:
             raise NotFoundException("Company account not found")
         return row
 
+    def peek_next_account_number(self, ctx: TenantContext, company_id: UUID | None = None) -> str:
+        cid = self._scope.resolve_company_id(ctx, company_id)
+        return self._numbers.generate(CrmEntityType.COMPANY, cid, CrmCompany, "account_number")
+
     def create(self, ctx: TenantContext, *, branch_id: UUID, company_id: UUID | None = None, **fields) -> CrmCompany:
         cid = self._scope.resolve_company_id(ctx, company_id)
         self._scope.validate_branch_access(ctx, branch_id)
@@ -64,6 +68,20 @@ class CompanyService:
         if row is None:
             raise NotFoundException("Company account not found")
         return row
+
+    def delete(self, ctx: TenantContext, row_id: UUID) -> None:
+        existing = self.get(ctx, row_id)
+        if existing.locked:
+            raise ConflictException("Company account is locked pending approval")
+        if not self._repo.soft_delete(ctx, row_id):
+            raise NotFoundException("Company account not found")
+        self._audit.log_entity_change(
+            tenant_id=ctx.tenant_id,
+            entity_name="crm_company",
+            entity_id=row_id,
+            operation="delete",
+            performed_by=ctx.user_id,
+        )
 
     def create_lead(self, ctx: TenantContext, company_account_id: UUID, *, branch_id: UUID, **lead_fields):
         """The ONLY supported path to create a sales-process lead (rule #1)."""
@@ -107,6 +125,11 @@ class CompanyService:
         lead_fields["status"] = LeadStatus.NEW.value
         lead_fields["company_account_id"] = company_account_id
         lead_fields["blueprint_state"] = "open"
+
+        oem_name = (lead_fields.get("oem_name") or "").strip()
+        if not oem_name:
+            raise AppException("OEM name is required")
+        lead_fields["oem_name"] = oem_name
 
         return LeadService(self._db).create(
             ctx,
