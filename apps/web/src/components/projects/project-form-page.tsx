@@ -25,6 +25,11 @@ import {
   updateSiteInstallationByProject,
   type ProjectFormInput,
 } from "@/services/projects-portal-service";
+import { markInstallationSharedToProject } from "@/utils/installation-storage";
+import {
+  getProjectPoQueueHandoff,
+  removeProjectPoQueueHandoff,
+} from "@/utils/project-po-queue-handoff";
 
 const EMPTY_CREATE: FormValues = {
   branch_id: "",
@@ -34,6 +39,7 @@ const EMPTY_CREATE: FormValues = {
   customer_label: "",
   delivery_type: "server_os_rack",
   site_name: "",
+  project_name: "",
   project_manager_employee_id: "",
   rfai_request_done: "",
   rfai_number: "",
@@ -50,17 +56,25 @@ export function ProjectFormPage({ projectId }: { projectId?: string }) {
   const isEdit = Boolean(projectId);
   const searchParams = useSearchParams();
   const poId = searchParams.get("po_id");
+  const fromInstallation = searchParams.get("from_installation") === "1";
 
   const load = useCallback(async (): Promise<{ values?: FormValues; lookups?: Lookups }> => {
+    const handoff =
+      !projectId && poId && fromInstallation ? getProjectPoQueueHandoff(poId) : null;
     const [branches, team, customers, record, prefill] = await Promise.all([
       listBranchOptions().catch(() => []),
       listProjectManagementTeamOptions().catch(() => []),
       listCustomerOptions().catch(() => []),
       projectId ? getProject(projectId) : Promise.resolve(null),
-      !projectId && poId ? getProjectPoPrefill(poId).catch(() => null) : Promise.resolve(null),
+      !projectId && poId
+        ? getProjectPoPrefill(poId, {
+            installationHandoff: fromInstallation || Boolean(handoff),
+          }).catch(() => null)
+        : Promise.resolve(null),
     ]);
     const resolvedCustomerLabel =
       prefill?.customer_name?.trim() ||
+      handoff?.customerName?.trim() ||
       (prefill?.customer_id
         ? customers.find((c) => c.id === prefill.customer_id)?.label
         : undefined) ||
@@ -98,41 +112,67 @@ export function ProjectFormPage({ projectId }: { projectId?: string }) {
 
     return {
       values: {
-        branch_id: prefill?.branch_id || branches[0]?.id || "",
-        // Circle shows the lead entity state (GST / address), falling back to entity name.
+        branch_id: prefill?.branch_id || handoff?.branchId || branches[0]?.id || "",
         circle:
+          handoff?.circleName?.trim() ||
           prefill?.entity_state?.trim() ||
           prefill?.circle_name?.trim() ||
           "",
-        company_po_number: prefill?.company_po_number?.trim() || "",
+        company_po_number:
+          handoff?.companyPoNumber?.trim() || prefill?.company_po_number?.trim() || "",
         customer_id: prefill?.customer_id || "",
         customer_label: resolvedCustomerLabel,
-        site_name: prefill?.site_name || "",
+        site_name: handoff?.siteName?.trim() || prefill?.site_name || "",
+        project_name: handoff?.projectName?.trim() || "",
         project_manager_employee_id: team[0]?.id ?? "",
         rfai_request_done: "false",
       },
       lookups,
     };
-  }, [projectId, poId]);
+  }, [projectId, poId, fromInstallation]);
 
   const onSave = useCallback(
     async (v: FormValues) => {
       if (!isEdit) {
         const siteName = v.site_name.trim();
         const rfaiYes = v.rfai_request_done === "true";
+        const handoff = poId && fromInstallation ? getProjectPoQueueHandoff(poId) : null;
+        const useInstallationHandoff = fromInstallation || Boolean(handoff);
+        const projectName =
+          v.project_name?.trim() ||
+          handoff?.projectName?.trim() ||
+          siteName ||
+          "Site Installation Request";
+        const rackQty = Number(handoff?.rackQuantity);
         const saved = await createProject({
           branch_id: v.branch_id,
+          project_name: projectName,
           customer_id: orNull(v.customer_id),
           project_manager_employee_id: v.project_manager_employee_id || undefined,
           proc_order_id: poId || undefined,
+          description: handoff?.remarks || undefined,
+          installation_handoff: useInstallationHandoff || undefined,
           site_installation: {
             delivery_type: v.delivery_type || "server_os_rack",
             site_name: orNull(siteName),
             circle: orNull(v.circle),
+            requestor_name: handoff?.contactPerson?.trim() || null,
+            remarks: handoff?.remarks || null,
             rfai_request_done: rfaiYes,
             rfai_number: rfaiYes ? orNull(v.rfai_number) : null,
           },
         });
+        if (handoff && Number.isFinite(rackQty) && rackQty > 0) {
+          try {
+            await updateSiteInstallationByProject(saved.id, {
+              rack_qty: rackQty,
+              requestor_name: handoff.contactPerson.trim() || null,
+              remarks: handoff.remarks || null,
+            });
+          } catch {
+            // Project exists; rack qty can be edited later.
+          }
+        }
         // Intake was captured on create — move to Survey so admin assigns Survey from Project Tracking.
         if (siteName) {
           try {
@@ -140,6 +180,13 @@ export function ProjectFormPage({ projectId }: { projectId?: string }) {
           } catch {
             // Stay on intake if gates fail; admin can still assign Survey from tracking.
           }
+        }
+        if (poId && useInstallationHandoff) {
+          removeProjectPoQueueHandoff(poId);
+          if (handoff?.challanId) {
+            markInstallationSharedToProject(handoff.challanId, saved.id);
+          }
+          return "/projects/projects";
         }
         return `/projects/projects/${saved.id}`;
       }
@@ -166,7 +213,7 @@ export function ProjectFormPage({ projectId }: { projectId?: string }) {
 
       return `/projects/projects/${projectId}`;
     },
-    [isEdit, projectId, poId],
+    [isEdit, projectId, poId, fromInstallation],
   );
 
   const sections = useMemo<FormSection[]>(() => {
@@ -177,6 +224,18 @@ export function ProjectFormPage({ projectId }: { projectId?: string }) {
             name: "project_code",
             label: "Project Code",
             type: "readonly" as const,
+          },
+        ]
+        : []),
+      ...(!isEdit && fromInstallation
+        ? [
+          {
+            name: "project_name",
+            label: "Project Name",
+            type: "text" as const,
+            required: true as const,
+            placeholder: "Project name…",
+            full: true as const,
           },
         ]
         : []),
@@ -208,8 +267,10 @@ export function ProjectFormPage({ projectId }: { projectId?: string }) {
           {
             name: "site_name",
             label: "Site Name",
-            type: "readonly" as const,
+            type: fromInstallation ? ("text" as const) : ("readonly" as const),
+            required: fromInstallation ? (true as const) : undefined,
             full: true as const,
+            placeholder: fromInstallation ? "Site name…" : undefined,
           },
         ]
         : [
@@ -262,14 +323,16 @@ export function ProjectFormPage({ projectId }: { projectId?: string }) {
         title: "Intake / Site request",
         subtitle: isEdit
           ? "Same intake fields as create — Circle, Delivery Type, Customer, Site, PM, and RFAI are editable."
-          : poId
-            ? "Step 1 — Customer, site and circle prefilled from the CRM lead via SCM PO / OVF."
-            : "Step 1 — Customer → Site → Project Manager → RFAI",
+          : fromInstallation
+            ? "Step 1 — Prefill from Installation share. After create the project appears on Projects."
+            : poId
+              ? "Step 1 — Customer, site and circle prefilled from the CRM lead via SCM PO / OVF."
+              : "Step 1 — Customer → Site → Project Manager → RFAI",
         icon: MapPin,
         fields: intakeFields,
       },
     ];
-  }, [isEdit, poId]);
+  }, [isEdit, poId, fromInstallation]);
 
   return (
     <ProjectsRecordForm
@@ -277,11 +340,13 @@ export function ProjectFormPage({ projectId }: { projectId?: string }) {
       description={
         isEdit
           ? "Update intake / site request fields. Schedule is managed from the project timeline."
-          : poId
-            ? "Step 1 — Intake / Site request prefilled from the SCM purchase order. After create you continue to Assign Survey owner."
-            : "Step 1 — Intake / Site request. After create you continue to Assign Survey owner."
+          : fromInstallation
+            ? "Create the project from the Installation-shared PO. You will land on the Projects list after save."
+            : poId
+              ? "Step 1 — Intake / Site request prefilled from the SCM purchase order. After create you continue to Assign Survey owner."
+              : "Step 1 — Intake / Site request. After create you continue to Assign Survey owner."
       }
-      backHref={poId ? "/projects/purchase-orders" : "/projects/projects"}
+      backHref={poId ? "/projects/po-queue" : "/projects/projects"}
       backLabel={poId ? "Back to PO queue" : "Back to projects"}
       submitLabel={isEdit ? "Save changes" : "Create project"}
       sections={sections}

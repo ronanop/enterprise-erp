@@ -1,9 +1,13 @@
-"""Purchase order queue — finalized SCM POs for project creation."""
+"""Purchase order queue — finalized POs for project creation.
+
+SCM fulfillment POs are excluded from the queue; Installation handoff uses
+prefill with installation_handoff=true.
+"""
 
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
 from modules.foundation.dependencies import require_permission
@@ -37,6 +41,18 @@ def get_project_po_prefill(
     order_id: UUID,
     ctx: Annotated[TenantContext, Depends(require_permission("project.project:read"))],
     db: Annotated[Session, Depends(get_db)],
+    installation_handoff: Annotated[
+        bool,
+        Query(
+            description=(
+                "True when prefilling from Procurement → Installation → Share to Project"
+            )
+        ),
+    ] = False,
 ):
-    data = ProjectPoQueueService(db).get_prefill(ctx, order_id)
+    data = ProjectPoQueueService(db).get_prefill(
+        ctx,
+        order_id,
+        installation_handoff=installation_handoff,
+    )
     return APIResponse(message="OK", data=data)

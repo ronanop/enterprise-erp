@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { ClipboardList, Package, RefreshCw, ShoppingCart, Truck } from "lucide-react";
 
 import { PageHeader } from "@/components/layout/page-header";
+import { ScmOvfBookFromStockDialog } from "@/components/procurement/scm-ovf-book-from-stock-dialog";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { formatApiError } from "@/services/api-client";
@@ -16,7 +17,6 @@ import {
 import {
   ovfChallanHref,
   ovfCreatePoHref,
-  ovfFromStockHref,
   ovfProductKey,
   type OvfChallanShipSource,
   type OvfShipDocumentKind,
@@ -32,21 +32,6 @@ function deliveryStorageKey(ovfId: string): string {
   return `ovf-item-plan-delivery:${ovfId}`;
 }
 
-function BookFromInventoryButton({ ovfId }: { ovfId: string }) {
-  return (
-    <Link
-      href={ovfFromStockHref(ovfId, true)}
-      className={cn(
-        buttonVariants({ size: "sm", variant: "outline" }),
-        "cursor-pointer transition-colors duration-200",
-      )}
-    >
-      <Package className="mr-1.5 size-3.5" />
-      Book from inventory
-    </Link>
-  );
-}
-
 export function ScmOvfItemPlanPage({ ovfId }: { ovfId: string }) {
   const router = useRouter();
   const [preview, setPreview] = useState<ScmOvfPreview | null>(null);
@@ -54,6 +39,8 @@ export function ScmOvfItemPlanPage({ ovfId }: { ovfId: string }) {
   const [error, setError] = useState<string | null>(null);
   const [delivery, setDelivery] = useState<"together" | "separate">("together");
   const [shipKind, setShipKind] = useState<OvfShipDocumentKind>("delivery_challan");
+  const [bookProductName, setBookProductName] = useState<string | null>(null);
+  const [bookOpen, setBookOpen] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -113,6 +100,11 @@ export function ScmOvfItemPlanPage({ ovfId }: { ovfId: string }) {
       preview?.purchase_order_id || linkedPos[0]?.id,
       shipKind,
     );
+  }
+
+  function openBookDialog(productName: string) {
+    setBookProductName(productName);
+    setBookOpen(true);
   }
 
   return (
@@ -212,7 +204,18 @@ export function ScmOvfItemPlanPage({ ovfId }: { ovfId: string }) {
                                 {allocated > 0 ? (
                                   <span className="text-xs font-medium text-emerald-800">Stock booked</span>
                                 ) : null}
-                                {canBookInventory ? <BookFromInventoryButton ovfId={ovfId} /> : null}
+                                {canBookInventory ? (
+                                  <Button
+                                    type="button"
+                                    size="sm"
+                                    variant="outline"
+                                    className="cursor-pointer transition-colors duration-200"
+                                    onClick={() => openBookDialog(line.product_name)}
+                                  >
+                                    <Package className="mr-1.5 size-3.5" />
+                                    Book from inventory
+                                  </Button>
+                                ) : null}
                                 {allocated <= 0 && !canBookInventory ? (
                                   <span className="text-xs text-muted-foreground">—</span>
                                 ) : null}
@@ -370,6 +373,19 @@ export function ScmOvfItemPlanPage({ ovfId }: { ovfId: string }) {
           ) : null}
         </>
       ) : null}
+
+      <ScmOvfBookFromStockDialog
+        open={bookOpen}
+        ovfId={ovfId}
+        productName={bookProductName}
+        onClose={() => {
+          setBookOpen(false);
+          setBookProductName(null);
+        }}
+        onBooked={() => {
+          void load();
+        }}
+      />
     </div>
   );
 }

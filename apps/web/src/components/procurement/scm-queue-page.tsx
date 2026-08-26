@@ -40,9 +40,14 @@ import { resolveVendorDisplayName } from "@/utils/vendor-oem-match";
 import { textTokenMatch } from "@/utils/procurement-search";
 import { getUnseenScmOvfIds, markScmQueueSeen } from "@/utils/scm-queue-seen";
 import { ovfItemPlanHref } from "@/utils/ovf-stock";
+import {
+  deriveScmOvfQueueStatus,
+  pendingFinalizeOrderIds,
+  type ScmOvfQueueStatus,
+} from "@/utils/scm-queue-ovf-status";
 
 type QueueFilter = "all" | "open" | "close" | "hold";
-type OvfStatus = "open" | "close" | "hold" | "draft";
+type OvfStatus = ScmOvfQueueStatus;
 
 function formatReceivedDate(value?: string | null): string {
   if (!value) return "—";
@@ -76,34 +81,6 @@ function parseQueueFilter(value: string | null): QueueFilter {
   if (value === "awaiting" || value === "with_po") return "open";
   if (value === "closed") return "close";
   return "all";
-}
-
-/**
- * OVF status for SCM queue:
- * - Open   = no vendor PO yet, or draft PO not yet sent for approval
- * - Draft  = draft vendor PO created from OVF (not finalized)
- * - Close  = PO finalized, or forwarded to admin for approval
- * - Hold   = SCM parked the OVF without a live PO (or cancelled PO)
- */
-function deriveOvfStatus(
-  row: ScmQueueItem,
-  approvalsByOrder: Map<string, PoApprovalRequest>,
-): OvfStatus {
-  const status = (row.purchase_order_status || "").toLowerCase();
-  const approval = row.purchase_order_id
-    ? approvalsByOrder.get(row.purchase_order_id)
-    : undefined;
-  if (row.purchase_order_id && approval?.status === "pending" && status === "draft") {
-    return "close";
-  }
-  if (status === "draft" && row.purchase_order_id && !row.can_create_po) {
-    return "draft";
-  }
-  if (row.scm_on_hold || status === "hold" || status === "cancelled") return "hold";
-  if (row.stock_fulfillment_status === "complete" && !row.can_create_po) return "close";
-  if (!row.purchase_order_id || row.can_create_po) return "open";
-  if (status === "submitted" || status === "") return "open";
-  return "close";
 }
 
 function ItemPlanCell({ ovfId }: { ovfId: string }) {
@@ -269,14 +246,13 @@ export function ScmQueuePage() {
     };
   }, []);
 
-  const enriched = useMemo(
-    () =>
-      rows.map((row) => ({
-        ...row,
-        ovf_status: deriveOvfStatus(row, approvalsByOrder),
-      })),
-    [rows, approvalsByOrder],
-  );
+  const enriched = useMemo(() => {
+    const pendingIds = pendingFinalizeOrderIds(approvalsByOrder);
+    return rows.map((row) => ({
+      ...row,
+      ovf_status: deriveScmOvfQueueStatus(row, pendingIds),
+    }));
+  }, [rows, approvalsByOrder]);
 
   const kpis = useMemo(() => {
     const open = enriched.filter(

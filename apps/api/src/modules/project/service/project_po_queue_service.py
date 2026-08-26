@@ -1,4 +1,9 @@
-"""PO queue for Project Management — finalized SCM POs without a linked project."""
+"""PO queue for Project Management — manual POs without a linked project.
+
+SCM fulfillment POs (CRM/OVF and inventory-initiated) never appear here and are
+not creatable from this queue. They enter Projects only after Procurement →
+Installation → Share to Project. GRN / receipt status must not hand them off.
+"""
 
 from decimal import Decimal
 from uuid import UUID
@@ -18,6 +23,17 @@ from modules.project.service.project_scope_validator import ProjectScopeValidato
 _ELIGIBLE_PO_STATUSES = frozenset(
     {"sent", "partially_received", "received", "closed", "approved", "submitted"}
 )
+
+
+def _is_scm_fulfillment_order(order) -> bool:
+    """POs that follow SCM → GRN → DC → Installation → Share to Projects."""
+    source_module = (getattr(order, "source_module", None) or "").strip().lower()
+    source_type = (getattr(order, "source_document_type", None) or "").strip().lower()
+    if source_module == "crm" and source_type == "ovf":
+        return True
+    if source_module == "procurement" and source_type == "inventory_initiated":
+        return True
+    return False
 
 
 class ProjectPoQueueService:
@@ -49,11 +65,9 @@ class ProjectPoQueueService:
                 continue
             if order.status not in _ELIGIBLE_PO_STATUSES:
                 continue
-            ovf_id = (
-                order.source_document_id
-                if order.source_module == "crm" and order.source_document_type == "ovf"
-                else None
-            )
+            # GRN / finalize must never enqueue SCM fulfillment POs.
+            if _is_scm_fulfillment_order(order):
+                continue
             out.append(
                 ProjectPoQueueItem(
                     order_id=order.id,
@@ -66,7 +80,7 @@ class ProjectPoQueueService:
                     total_amount=float(order.total_amount or 0),
                     customer_total=float(order.customer_total or 0),
                     status=order.status,
-                    ovf_id=ovf_id,
+                    ovf_id=None,
                     branch_id=order.branch_id,
                     company_id=order.company_id,
                 )
@@ -81,13 +95,20 @@ class ProjectPoQueueService:
         return out
 
     def get_prefill(
-        self, ctx: TenantContext, order_id: UUID
+        self,
+        ctx: TenantContext,
+        order_id: UUID,
+        *,
+        installation_handoff: bool = False,
     ) -> ProjectPoPrefillResponse:
         self._module_admin.ensure_admin(ctx)
         order = self._procurement.get_order_response(
             ctx, order_id, enrich_commercial=True
         )
-        self._ensure_eligible(order.status, order.company_po_number)
+        self._ensure_eligible(
+            order,
+            installation_handoff=installation_handoff,
+        )
         existing = self._repo.get_by_proc_order_id(ctx, order.id)
         if existing is not None:
             raise AppException("A project already exists for this purchase order")
@@ -102,7 +123,9 @@ class ProjectPoQueueService:
 
         ovf_id = (
             order.source_document_id
-            if order.source_module == "crm" and order.source_document_type == "ovf"
+            if (getattr(order, "source_module", None) or "").strip().lower() == "crm"
+            and (getattr(order, "source_document_type", None) or "").strip().lower()
+            == "ovf"
             else None
         )
         if ovf_id is not None:
@@ -157,6 +180,8 @@ class ProjectPoQueueService:
         self,
         ctx: TenantContext,
         order_id: UUID,
+        *,
+        installation_handoff: bool = False,
     ) -> None:
         """Validate PO can be linked when creating a project."""
         self._module_admin.ensure_admin(ctx)
@@ -164,17 +189,24 @@ class ProjectPoQueueService:
             order = self._procurement.get_order_response(ctx, order_id)
         except NotFoundException as exc:
             raise AppException("Purchase order not found") from exc
-        self._ensure_eligible(order.status, order.company_po_number)
+        self._ensure_eligible(order, installation_handoff=installation_handoff)
         existing = self._repo.get_by_proc_order_id(ctx, order.id)
         if existing is not None:
             raise AppException("A project already exists for this purchase order")
 
     @staticmethod
-    def _ensure_eligible(status: str, company_po_number: str | None) -> None:
+    def _ensure_eligible(order, *, installation_handoff: bool = False) -> None:
+        status = getattr(order, "status", "") or ""
+        company_po_number = getattr(order, "company_po_number", None)
         if status in {"draft", "cancelled"}:
             raise AppException("Purchase order is not finalized for project creation")
         if not company_po_number:
             raise AppException("Purchase order does not have a company PO number yet")
+        if _is_scm_fulfillment_order(order) and not installation_handoff:
+            raise AppException(
+                "This purchase order enters Projects only after Procurement → "
+                "Installation → Share to Project module (not after GRN)"
+            )
 
     def _match_customer_id(
         self,

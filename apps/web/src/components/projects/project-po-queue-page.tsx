@@ -22,8 +22,15 @@ import {
   listVendorOptions,
 } from "@/services/procurement-service";
 import { downloadOrderPdf } from "@/utils/purchase-order-pdf";
+import {
+  listProjectPoQueueHandoffs,
+  removeProjectPoQueueHandoff,
+} from "@/utils/project-po-queue-handoff";
 
-type PoQueueRow = ProjectPoQueueItem & { id: string };
+type PoQueueRow = ProjectPoQueueItem & {
+  id: string;
+  fromInstallation?: boolean;
+};
 
 function matchesPo(row: PoQueueRow, query: string): boolean {
   const q = query.trim().toLowerCase();
@@ -39,6 +46,28 @@ function matchesPo(row: PoQueueRow, query: string): boolean {
     .join(" ")
     .toLowerCase();
   return haystack.includes(q);
+}
+
+function handoffToQueueRow(
+  handoff: ReturnType<typeof listProjectPoQueueHandoffs>[number],
+): PoQueueRow {
+  return {
+    id: handoff.orderId,
+    order_id: handoff.orderId,
+    company_po_number: handoff.companyPoNumber,
+    document_number: handoff.documentNumber,
+    document_date: handoff.documentDate,
+    customer_name: handoff.customerName,
+    customer_po_number: handoff.customerPoNumber,
+    vendor_id: handoff.vendorId,
+    total_amount: handoff.totalAmount,
+    customer_total: handoff.customerTotal,
+    status: handoff.status,
+    ovf_id: handoff.ovfId,
+    branch_id: handoff.branchId,
+    company_id: handoff.companyId,
+    fromInstallation: true,
+  };
 }
 
 export function ProjectPoQueuePage() {
@@ -58,7 +87,52 @@ export function ProjectPoQueuePage() {
       vendorMap[vendor.id] = { label: vendor.label, address: vendor.address };
     }
     setVendors(vendorMap);
-    return queue.map((row) => ({ ...row, id: row.order_id }));
+
+    const manualRows: PoQueueRow[] = queue
+      .filter((row) => !row.ovf_id)
+      .map((row) => ({ ...row, id: row.order_id, fromInstallation: false }));
+
+    const linkedIds = new Set(manualRows.map((row) => row.order_id));
+    const handoffs = listProjectPoQueueHandoffs();
+    const installationRows: PoQueueRow[] = [];
+
+    for (const handoff of handoffs) {
+      if (linkedIds.has(handoff.orderId)) {
+        removeProjectPoQueueHandoff(handoff.orderId);
+        continue;
+      }
+      try {
+        // Drop handoffs that already have a project (create would fail).
+        const order = await getPurchaseOrder(handoff.orderId).catch(() => null);
+        if (!order) {
+          installationRows.push(handoffToQueueRow(handoff));
+          continue;
+        }
+        installationRows.push(
+          handoffToQueueRow({
+            ...handoff,
+            companyPoNumber: order.company_po_number || handoff.companyPoNumber,
+            documentNumber: order.document_number || handoff.documentNumber,
+            documentDate: order.document_date || handoff.documentDate,
+            customerName: order.customer_name || handoff.customerName,
+            customerPoNumber: order.customer_po_number || handoff.customerPoNumber,
+            vendorId: order.vendor_id || handoff.vendorId,
+            totalAmount: Number(order.total_amount || handoff.totalAmount),
+            customerTotal: Number(order.customer_total || handoff.customerTotal),
+            status: order.status || handoff.status,
+            ovfId: order.source_document_id || handoff.ovfId,
+            branchId: order.branch_id || handoff.branchId,
+            companyId: order.company_id || handoff.companyId,
+          }),
+        );
+        linkedIds.add(handoff.orderId);
+      } catch {
+        installationRows.push(handoffToQueueRow(handoff));
+        linkedIds.add(handoff.orderId);
+      }
+    }
+
+    return [...installationRows, ...manualRows];
   }, []);
 
   const onDownloadPdf = useCallback(
@@ -127,7 +201,11 @@ export function ProjectPoQueuePage() {
         align: "right",
         cell: (r) => (
           <Link
-            href={`/projects/projects/new?po_id=${r.order_id}`}
+            href={
+              r.fromInstallation
+                ? `/projects/projects/new?po_id=${r.order_id}&from_installation=1`
+                : `/projects/projects/new?po_id=${r.order_id}`
+            }
             className={cn(buttonVariants({ size: "sm", variant: "outline" }), "h-8 cursor-pointer")}
           >
             <FolderPlus className="mr-1.5 size-3.5" aria-hidden />
@@ -144,12 +222,12 @@ export function ProjectPoQueuePage() {
       {error ? <ProjectsErrorBanner>{error}</ProjectsErrorBanner> : null}
       <ProjectsRecordList
         title="PO Queue"
-        description="Finalized SCM purchase orders ready for site installation project creation. Click a PO number to download the PDF, then create a project to start the delivery pipeline."
+        description="Create projects from purchase orders. SCM / OVF POs appear here only after Procurement → Installation → Share to Project."
         panelTitle="Awaiting project"
-        panelSubtitle="Purchase orders from SCM without a linked project"
+        panelSubtitle="Shared installation POs and manual POs without a linked project"
         icon={ShoppingCart}
         searchPlaceholder="Search PO, customer, status…"
-        emptyMessage="No finalized purchase orders awaiting project creation."
+        emptyMessage="No purchase orders awaiting project creation. Share from Installation when ready."
         loadingMessage="Loading purchase orders…"
         errorMessage="Failed to load purchase orders"
         minWidth={960}

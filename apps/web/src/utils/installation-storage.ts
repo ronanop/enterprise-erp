@@ -129,6 +129,18 @@ export function markInstallationSharedToProject(
   });
 }
 
+/** Shared to Projects PO Queue (project not created yet). */
+export function markInstallationSharedToPoQueue(challanId: string): InstallationRecord {
+  const existing = resolveInstallation(challanId);
+  return upsertInstallation({
+    ...existing,
+    sharedToProject: true,
+    projectId: null,
+    projectHref: "/projects/po-queue",
+    sharedAt: new Date().toISOString(),
+  });
+}
+
 export function validateInstallationManual(
   fields: InstallationManualFields,
 ): Partial<Record<keyof InstallationManualFields, string>> {

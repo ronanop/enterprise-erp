@@ -201,6 +201,8 @@ def create_projects(
     site = payload.pop("site_installation", None)
     if site is not None:
         payload["site_installation"] = site
+    # Keep False explicitly so OVF POs cannot bypass via omit-then-default.
+    payload["installation_handoff"] = bool(body.installation_handoff)
     return APIResponse(
         message="Created",
         data=ProjectService(db).create(ctx, branch_id=body.branch_id, **payload),

@@ -434,7 +434,7 @@ class ScmHandoffService:
             grouped[key]["line_count"] += 1
 
         unused = list(orders)
-        for group in grouped.values():
+        for key, group in grouped.items():
             needle = " ".join(str(group["distributor_name"] or "").strip().lower().split())
             match_idx = None
             for idx, order in enumerate(unused):
@@ -444,13 +444,21 @@ class ScmHandoffService:
                 if needle and name and (needle == name or needle in name or name in needle):
                     match_idx = idx
                     break
-                if needle == "__unassigned__" or not needle:
+                if key == "__unassigned__" or needle in {"", "vendor", "unassigned"}:
                     match_idx = idx
                     break
             if match_idx is not None:
                 order = unused.pop(match_idx)
                 group["has_po"] = True
                 group["purchase_order_id"] = order.id
+        # Any leftover POs cover remaining unmatched distributor groups so a
+        # created PO cannot leave the OVF stuck Open due to name mismatch.
+        for group in grouped.values():
+            if group.get("has_po") or not unused:
+                continue
+            order = unused.pop(0)
+            group["has_po"] = True
+            group["purchase_order_id"] = order.id
         return list(grouped.values())
 
     def _open_distributor_names(self, groups: list[dict]) -> list[str]:
@@ -911,10 +919,9 @@ class ScmHandoffService:
                 )
             for uid in ids:
                 unit = unit_by_id[uid]
-                if self._product_key(unit.product_name) != key:
-                    raise ConflictException(
-                        f"Stock unit product '{unit.product_name}' does not match '{product_name}'."
-                    )
+                # Allow mapping inventory units whose stored product name differs from the
+                # OVF demand name (spelling / alias mismatches). Qty still counts against
+                # the OVF demand line named in the request.
                 qty_by_product[key] += float(getattr(unit, "quantity", None) or 1)
             if qty_by_product[key] - remaining_by_product[key] > 1e-6:
                 raise ConflictException(
@@ -922,12 +929,19 @@ class ScmHandoffService:
                 )
 
         created: list[ProcOvfStockAllocation] = []
+        # Map each unit to the OVF demand product it was booked against.
+        demand_name_by_unit: dict[UUID, str] = {}
+        for product_name, _key, ids in line_specs:
+            for uid in ids:
+                demand_name_by_unit[uid] = product_name
+
         for uid in requested_ids:
             unit = unit_by_id[uid]
+            demand_name = demand_name_by_unit.get(uid) or unit.product_name
             row = ProcOvfStockAllocation(
                 ovf_id=ovf_id,
                 stock_unit_id=unit.id,
-                product_name=unit.product_name,
+                product_name=demand_name,
                 quantity=float(getattr(unit, "quantity", None) or 1),
                 serial_number=unit.serial_number or "—",
                 tenant_id=ctx.tenant_id,

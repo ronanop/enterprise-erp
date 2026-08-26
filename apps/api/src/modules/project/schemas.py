@@ -56,6 +56,8 @@ class ProjectCreate(BaseModel):
     description: str | None = None
     status: str | None = None
     site_installation: SiteInstallationNestedCreate | None = None
+    # True only from Procurement → Installation → Share to Project (OVF POs).
+    installation_handoff: bool = False
 
 class ProjectUpdate(BaseModel):
     project_name: str | None = Field(default=None, min_length=1, max_length=255)

@@ -103,7 +103,7 @@ export function ProjectListPage() {
       icon={FolderKanban}
       searchPlaceholder="Search projects…"
       loadingMessage="Loading projects…"
-      emptyMessage="No projects yet. Create one from the PO Queue to start delivery."
+      emptyMessage="No projects yet. For SCM / OVF deliveries, share from Procurement → Installation. Manual POs can use the PO Queue."
       errorMessage="Failed to load projects"
       minWidth={1200}
       columns={columns}
