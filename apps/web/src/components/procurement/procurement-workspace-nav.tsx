@@ -21,6 +21,7 @@ import {
   ShoppingCart,
   Truck,
   UserCog,
+  Wrench,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -43,6 +44,7 @@ export const PROCUREMENT_NAV = [
   { title: "GRNs", href: "/procurement/grns", icon: PackageCheck },
   { title: "Delivery Challan", href: "/procurement/delivery-challan", icon: Truck },
   { title: "Delivery Status", href: "/procurement/delivery-status", icon: MapPinned },
+  { title: "Installation", href: "/procurement/installation", icon: Wrench },
   { title: "Vendors", href: "/procurement/vendors", icon: Building2 },
   { title: "Inventory", href: "/procurement/inventory", icon: Boxes },
   { title: "Approval", href: "/procurement/approval", icon: BadgeCheck },

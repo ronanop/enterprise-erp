@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation";
 import { ConfirmDialog } from "@/components/finance/journals/confirm-dialog";
 import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import type { PoApprovalStatus } from "@/lib/procurement-approvals";
 import { scmHoldCreatePoNotice, scmHoldDayCountDisplay, scmHoldSinceDisplay } from "@/utils/scm-ovf-hold";
 
 type ScmCreatePoEntryProps = {
@@ -17,6 +18,14 @@ type ScmCreatePoEntryProps = {
   className?: string;
   label?: string;
   icon?: ReactNode;
+  /** When true, Create PO needs admin approval (all lines IN STOCK). */
+  requiresInStockApproval?: boolean;
+  /** Latest create-PO approval status for this OVF (user path). */
+  createPoApprovalStatus?: PoApprovalStatus | null;
+  /** Admin / already-approved users skip the request step. */
+  canCreateWithoutApproval?: boolean;
+  onRequestCreatePoApproval?: () => void;
+  requestBusy?: boolean;
 };
 
 export function ScmCreatePoEntry({
@@ -27,6 +36,11 @@ export function ScmCreatePoEntry({
   className,
   label = "Create PO",
   icon,
+  requiresInStockApproval = false,
+  createPoApprovalStatus = null,
+  canCreateWithoutApproval = false,
+  onRequestCreatePoApproval,
+  requestBusy = false,
 }: ScmCreatePoEntryProps) {
   const router = useRouter();
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -38,6 +52,43 @@ export function ScmCreatePoEntry({
       {label}
     </>
   );
+
+  const needsApprovalGate =
+    requiresInStockApproval && !canCreateWithoutApproval && createPoApprovalStatus !== "accepted";
+
+  if (needsApprovalGate) {
+    if (createPoApprovalStatus === "pending") {
+      return (
+        <Link
+          href="/procurement/approvals"
+          className={cn(
+            buttonVariants({ size: "sm", variant: "outline" }),
+            "cursor-pointer border-amber-300 bg-amber-50 text-amber-900 transition-colors duration-200 hover:bg-amber-100",
+            className,
+          )}
+          title="Waiting for admin to approve Create PO for this IN STOCK OVF"
+        >
+          Awaiting Create PO approval
+        </Link>
+      );
+    }
+
+    return (
+      <button
+        type="button"
+        className={cn(buttonVariants({ size: "sm", variant: "outline" }), className)}
+        disabled={requestBusy || !onRequestCreatePoApproval}
+        onClick={() => onRequestCreatePoApproval?.()}
+        title="IN STOCK lines normally use inventory. Request admin approval to create a PO instead."
+      >
+        {requestBusy
+          ? "Requesting…"
+          : createPoApprovalStatus === "rejected"
+            ? "Re-request Create PO"
+            : "Request Create PO"}
+      </button>
+    );
+  }
 
   if (!scmOnHold) {
     return (

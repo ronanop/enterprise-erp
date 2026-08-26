@@ -7,12 +7,19 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { FilePlus2, FileText, RefreshCw, Truck } from "lucide-react";
 
+import {
+  DeliveryBillTakenBadge,
+  DeliveryBillTakenButton,
+} from "@/components/procurement/delivery-bill-taken-badge";
+import { DeliveryStatusBillDialog } from "@/components/procurement/delivery-status-bill-dialog";
 import { ProcurementPageHeader } from "@/components/procurement/procurement-page-header";
 import { procurementUi } from "@/components/procurement/procurement-ui";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import type { GrnChallanKind } from "@/utils/delivery-challan-storage";
+import { getDeliveryChallan } from "@/utils/delivery-challan-storage";
 import { Badge } from "@/components/ui/badge";
+import { resolveChallanBillStatus } from "@/utils/delivery-challan-bill";
 import {
   listAllGrnChallansByKind,
   pendingGrnChallanHref,
@@ -27,6 +34,8 @@ export function DeliveryChallanListPage() {
   const [tab, setTab] = useState<QueueTab>("delivery_challan");
   const [pendingBilling, setPendingBilling] = useState<PendingGrnChallan[]>([]);
   const [pendingDc, setPendingDc] = useState<PendingGrnChallan[]>([]);
+  const [billChallanId, setBillChallanId] = useState<string | null>(null);
+  const [billTick, setBillTick] = useState(0);
 
   const load = useCallback(() => {
     setPendingBilling(listAllGrnChallansByKind("billing"));
@@ -44,7 +53,7 @@ export function DeliveryChallanListPage() {
   return (
     <div className={procurementUi.page}>
       <ProcurementPageHeader
-        title="Delivery challan"
+        title="Delivery"
         actions={
           <div className="flex flex-wrap items-center gap-2">
             <Button
@@ -112,16 +121,33 @@ export function DeliveryChallanListPage() {
         </Button>
       </div>
 
+      <p className="text-sm text-muted-foreground">
+        Delivery challan = item delivered without taking a bill. Show and update{" "}
+        <span className="font-medium text-foreground">bill taken</span> on saved DCs at any time.
+      </p>
+
       <PendingGrnQueueCard
         label={tab === "billing" ? "Billing GRNs" : "Delivery challan GRNs"}
         rows={pendingForTab}
         isBilling={tab === "billing"}
         actionLabel="View"
+        billTick={billTick}
+        onBill={(challanId) => setBillChallanId(challanId)}
         emptyLabel={
           tab === "billing"
             ? "No billing GRNs waiting."
             : "No delivery challan GRNs waiting."
         }
+      />
+
+      <DeliveryStatusBillDialog
+        open={Boolean(billChallanId)}
+        challanId={billChallanId}
+        onClose={() => setBillChallanId(null)}
+        onSaved={() => {
+          load();
+          setBillTick((n) => n + 1);
+        }}
       />
     </div>
   );
@@ -138,19 +164,23 @@ function PendingGrnQueueCard({
   isBilling,
   actionLabel,
   emptyLabel,
+  billTick,
+  onBill,
 }: {
   label: string;
   rows: PendingGrnChallan[];
   isBilling: boolean;
   actionLabel: string;
   emptyLabel: string;
+  billTick: number;
+  onBill: (challanId: string) => void;
 }) {
   const router = useRouter();
 
   return (
     <div className={procurementUi.tableShell} aria-label={label}>
       <div className={procurementUi.tableScroll}>
-        <table className={cn(procurementUi.table, "min-w-[1060px]")}>
+        <table className={cn(procurementUi.table, "min-w-[1180px]")}>
           <thead className={procurementUi.thead}>
             <tr>
               <th className={procurementUi.th}>{isBilling ? "Invoice number" : "Challan number"}</th>
@@ -161,13 +191,14 @@ function PendingGrnQueueCard({
               <th className={procurementUi.th}>Vendor name</th>
               <th className={procurementUi.th}>Customer name</th>
               <th className={procurementUi.th}>Status</th>
+              <th className={procurementUi.th}>Bill taken</th>
               <th className={procurementUi.th}>View</th>
             </tr>
           </thead>
-          <tbody>
+          <tbody key={billTick}>
             {rows.length === 0 ? (
               <tr>
-                <td colSpan={9} className={procurementUi.empty}>
+                <td colSpan={10} className={procurementUi.empty}>
                   {emptyLabel}
                 </td>
               </tr>
@@ -177,6 +208,11 @@ function PendingGrnQueueCard({
                 const href = isSaved && row.savedRecordId
                   ? `/procurement/delivery-challan/${row.savedRecordId}`
                   : pendingGrnChallanHref(row);
+                const savedChallan =
+                  isSaved && row.savedRecordId ? getDeliveryChallan(row.savedRecordId) : null;
+                const billStatus = savedChallan
+                  ? resolveChallanBillStatus(savedChallan)
+                  : "none";
                 return (
                 <tr
                   key={row.id}
@@ -219,6 +255,17 @@ function PendingGrnQueueCard({
                       </Badge>
                     )}
                   </td>
+                  <td className={procurementUi.td} onClick={(e) => e.stopPropagation()}>
+                    <div className="flex flex-wrap items-center gap-1">
+                      <DeliveryBillTakenBadge status={billStatus} />
+                      {savedChallan ? (
+                        <DeliveryBillTakenButton
+                          status={billStatus}
+                          onClick={() => onBill(savedChallan.id)}
+                        />
+                      ) : null}
+                    </div>
+                  </td>
                   <td className={procurementUi.td}>
                     <div className={procurementUi.rowActions}>
                       <Link
@@ -230,7 +277,7 @@ function PendingGrnQueueCard({
                           "text-[#0369A1] hover:text-[#0369A1]",
                         )}
                       >
-                        View
+                        {actionLabel}
                       </Link>
                     </div>
                   </td>

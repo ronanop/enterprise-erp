@@ -19,6 +19,7 @@ import {
   type DeliveryChallanRecord,
   type GrnChallanKind,
 } from "@/utils/delivery-challan-storage";
+import { ensureDeliveryStatusForChallan } from "@/utils/delivery-status-storage";
 import { ovfProductKey } from "@/utils/ovf-stock";
 
 export type ChallanItemsSourceMode = "full_po" | "selected_grns";
@@ -200,7 +201,9 @@ export function mergeOvfStockAllocationsToChallanLines(
     return {
       id: crypto.randomUUID(),
       product,
-      itemName: serialText,
+      itemName: serialText
+        ? `From inventory · ${serialText}`
+        : "From inventory",
       quantitySent: String(qty),
       hsnSac: "",
       assetNo: serials.length === 1 ? serials[0] : "-",
@@ -208,6 +211,26 @@ export function mergeOvfStockAllocationsToChallanLines(
       shipTo: "",
     };
   });
+}
+
+/** Inventory allocations plus PO lines on one challan (same product may appear twice). */
+export function mergeInventoryAndPoChallanLines(
+  allocations: ScmOvfStockAllocation[] | null | undefined,
+  order: ProcOrder | null,
+  ovf: ScmOvfPreview | null,
+): DeliveryChallanLine[] {
+  const stock = mergeOvfStockAllocationsToChallanLines(allocations);
+  const po = order
+    ? fullPoChallanLines(order, "", ovf).map((ln) => ({
+        ...ln,
+        id: crypto.randomUUID(),
+        itemName: ln.itemName?.trim()
+          ? `From PO · ${ln.itemName}`
+          : "From PO",
+      }))
+    : [];
+  const merged = [...stock, ...po];
+  return merged.length > 0 ? merged : [];
 }
 
 export function mergeSelectedGrnChallanLines(
@@ -232,11 +255,7 @@ export function mergeSelectedGrnChallanLines(
       if (grnKind === "billing") {
         qty = billQty > 0 ? billQty : ln.billing ? receiveQty : 0;
       } else if (grnKind === "delivery_challan") {
-        // Unbilled remainder goes to delivery challan / stock.
-        qty =
-          billQty > 0 || ln.billing === true
-            ? Math.max(0, Math.round((receiveQty - billQty) * 1e6) / 1e6)
-            : receiveQty;
+        qty = Number(ln.delivery_challan_quantity) || 0;
       }
       if (qty <= 0) continue;
       const key = ln.order_line_id;
@@ -351,7 +370,7 @@ export async function createDeliveryChallanForLatestGrn(input: {
     .slice(-12);
   const today = new Date().toISOString().slice(0, 10);
 
-  return upsertDeliveryChallan({
+  const saved = upsertDeliveryChallan({
     id: crypto.randomUUID(),
     orderId: order.id,
     challanNumber: `CT/${poSeed}/${String(seq).padStart(3, "0")}`,
@@ -389,6 +408,8 @@ export async function createDeliveryChallanForLatestGrn(input: {
     senderSignature: "",
     receiverSignature: "",
   });
+  ensureDeliveryStatusForChallan(saved, { billStatus: "unbilled" });
+  return saved;
 }
 
 export type DeliveryStatusGrnItemRow = {

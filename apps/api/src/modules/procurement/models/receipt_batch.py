@@ -73,5 +73,6 @@ class ProcOrderReceiptBatchLine(Base, *ProcTransactionMixin):
     serial_numbers: Mapped[list | None] = mapped_column(JSONB, nullable=True)
     billing: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     billing_quantity: Mapped[float] = mapped_column(Numeric(18, 4), nullable=False, default=0)
+    delivery_challan_quantity: Mapped[float] = mapped_column(Numeric(18, 4), nullable=False, default=0)
 
     receipt_batch: Mapped[ProcOrderReceiptBatch] = relationship(back_populates="lines")

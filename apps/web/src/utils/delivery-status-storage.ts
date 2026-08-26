@@ -1,5 +1,5 @@
 import type { DeliveryChallanRecord } from "@/utils/delivery-challan-storage";
-import { formatChallanGrnSummary } from "@/utils/delivery-challan-storage";
+import { formatChallanGrnSummary, getDeliveryChallan } from "@/utils/delivery-challan-storage";
 
 export const SHIPMENT_STATUS_OPTIONS = [
   "Pending",
@@ -30,6 +30,18 @@ export type DeliveryStatusAttachment = {
   contentType: string;
 };
 
+/**
+ * Customer bill taken against a DC (independent of shipment / installation).
+ * - unbilled: DC exists, bill not taken yet
+ * - partially_billed / fully_billed: bill received and recorded
+ * - pending_delivery: legacy; treated as unbilled
+ */
+export type DeliveryBillStatus =
+  | "pending_delivery"
+  | "unbilled"
+  | "partially_billed"
+  | "fully_billed";
+
 export type DeliveryStatusRecord = {
   challanId: string;
   shipmentStatus: string;
@@ -55,6 +67,17 @@ export type DeliveryStatusRecord = {
   boxCount: string;
   surfaceMode: string;
   remarks: string;
+  /** Customer bill taken for this DC (any time after DC exists). */
+  billStatus: DeliveryBillStatus;
+  /** Qty billed so far against this challan (may be partial). */
+  billedQuantity: string;
+  billInvoiceNumber: string;
+  billInvoiceDate: string;
+  billDocument: DeliveryStatusAttachment | null;
+  billRemarks: string;
+  billedAt: string;
+  /** When delivered and true, this DC appears under Procurement → Installation. */
+  requiresInstallation: boolean;
   updatedAt: string;
 };
 
@@ -110,29 +133,70 @@ function normalizeSurfaceMode(value: string | undefined): string {
   return raw;
 }
 
+export function localIsoDate(date = new Date()): string {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+export function isFailedShipmentStatus(status: string): boolean {
+  const raw = asText(status).trim().toLowerCase();
+  return raw === "failed delivery" || raw === "failed";
+}
+
+/** First visit after DC create = dispatch setup. Later visits = Delivered / Failed. */
+export function deliveryStatusUiMode(
+  record: Pick<DeliveryStatusRecord, "deliveryMode">,
+): "initial" | "tracking" {
+  return record.deliveryMode === "hand" || record.deliveryMode === "courier"
+    ? "tracking"
+    : "initial";
+}
+
+export function stampDeliveredDate(
+  dispatchDate: string,
+  existingDate?: string | null,
+): string {
+  const existing = asText(existingDate).trim();
+  if (existing) return existing;
+  const today = localIsoDate();
+  const dispatch = asText(dispatchDate).trim();
+  if (dispatch && today < dispatch) return dispatch;
+  return today;
+}
+
 export function deriveDeliveryStatusLabel(
   value: Pick<
     DeliveryStatusRecord,
     "actualDeliveryDate" | "deliveryMode" | "itemType" | "podDocument" | "shipmentStatus"
   >,
 ): string {
+  const explicit = asText(value.shipmentStatus).trim();
+  if (isFailedShipmentStatus(explicit) || explicit === "Returned") {
+    return explicit === "Returned" ? "Returned" : "Failed delivery";
+  }
   const deliveredDate = asText(value.actualDeliveryDate).trim();
-  if (deliveredDate) {
-    if (value.deliveryMode === "hand" && !value.podDocument) {
-      return "By hand";
-    }
+  if (explicit === "Delivered" || deliveredDate) {
     return "Delivered";
   }
   if (value.deliveryMode === "courier") return "Courier";
   if (value.deliveryMode === "hand") return "By hand";
-  const legacy = (value.shipmentStatus || "").trim();
+  const legacy = explicit;
   if (legacy && legacy !== "Pending dispatch") return legacy;
   return "Pending";
+}
+
+function normalizeBillStatus(value: unknown): DeliveryBillStatus {
+  const raw = asText(value).trim().toLowerCase();
+  if (raw === "partially_billed" || raw === "fully_billed") return raw;
+  return "unbilled";
 }
 
 function normalize(raw: Partial<DeliveryStatusRecord> & { challanId: string }): DeliveryStatusRecord {
   const cacheInvoiceDocument = normalizeAttachment(raw.cacheInvoiceDocument);
   const podDocument = normalizeAttachment(raw.podDocument);
+  const billDocument = normalizeAttachment(raw.billDocument);
   const deliveryMode = normalizeMode(raw.deliveryMode);
   const itemType = normalizeItemType(raw.itemType);
   const actualDeliveryDate = raw.actualDeliveryDate ?? "";
@@ -161,11 +225,25 @@ function normalize(raw: Partial<DeliveryStatusRecord> & { challanId: string }): 
     boxCount: raw.boxCount ?? "",
     surfaceMode: normalizeSurfaceMode(raw.surfaceMode),
     remarks: raw.remarks ?? "",
+    billStatus: normalizeBillStatus(raw.billStatus),
+    billedQuantity: asText(raw.billedQuantity).trim(),
+    billInvoiceNumber: asText(raw.billInvoiceNumber).trim() || asText(raw.cacheInvoiceNumber).trim(),
+    billInvoiceDate: asText(raw.billInvoiceDate).trim(),
+    billDocument: billDocument ?? cacheInvoiceDocument,
+    billRemarks: asText(raw.billRemarks).trim(),
+    billedAt: asText(raw.billedAt).trim(),
+    requiresInstallation: Boolean(raw.requiresInstallation),
     updatedAt: raw.updatedAt ?? "",
   };
+  const shipmentStatus = deriveDeliveryStatusLabel(base);
+  let billStatus = base.billStatus;
+  if (Number(base.billedQuantity) > 0 && billStatus === "unbilled") {
+    billStatus = "partially_billed";
+  }
   return {
     ...base,
-    shipmentStatus: deriveDeliveryStatusLabel(base),
+    shipmentStatus,
+    billStatus,
   };
 }
 
@@ -220,6 +298,37 @@ export function upsertDeliveryStatus(
   return next;
 }
 
+/** Record partial or full billing against a delivery challan (any time after DC exists). */
+export function upsertDeliveryChallanBilling(input: {
+  challanId: string;
+  billStatus: "unbilled" | "partially_billed" | "fully_billed";
+  billedQuantity: string;
+  billInvoiceNumber?: string;
+  billInvoiceDate?: string;
+  billDocument?: DeliveryStatusAttachment | null;
+  billRemarks?: string;
+}): DeliveryStatusRecord | null {
+  const challan = getDeliveryChallan(input.challanId);
+  if (!challan) return null;
+  const existing = getDeliveryStatus(input.challanId) ?? defaultStatusFromChallan(challan);
+  const invoice = asText(input.billInvoiceNumber).trim();
+  return upsertDeliveryStatus({
+    ...existing,
+    billStatus: input.billStatus,
+    billedQuantity: asText(input.billedQuantity).trim(),
+    billInvoiceNumber: invoice,
+    billInvoiceDate: asText(input.billInvoiceDate).trim(),
+    billDocument: input.billDocument === undefined ? existing.billDocument : input.billDocument,
+    billRemarks: asText(input.billRemarks).trim(),
+    billedAt: new Date().toISOString(),
+    cacheInvoiceNumber: invoice || existing.cacheInvoiceNumber,
+    cacheInvoiceDocument:
+      input.billDocument === undefined
+        ? existing.cacheInvoiceDocument
+        : input.billDocument || existing.cacheInvoiceDocument,
+  });
+}
+
 export function defaultStatusFromChallan(challan: DeliveryChallanRecord): DeliveryStatusRecord {
   const transport = [challan.transportDetails, challan.driverVehicleDetails]
     .map((s) => asText(s).trim())
@@ -253,6 +362,14 @@ export function defaultStatusFromChallan(challan: DeliveryChallanRecord): Delive
     boxCount: "",
     surfaceMode: "",
     remarks: "",
+    billStatus: "unbilled",
+    billedQuantity: "",
+    billInvoiceNumber: "",
+    billInvoiceDate: "",
+    billDocument: null,
+    billRemarks: "",
+    billedAt: "",
+    requiresInstallation: false,
     updatedAt: "",
   });
 }
@@ -261,6 +378,22 @@ export function resolveDeliveryStatusForChallan(
   challan: DeliveryChallanRecord,
 ): DeliveryStatusRecord {
   return getDeliveryStatus(challan.id) ?? defaultStatusFromChallan(challan);
+}
+
+/** Persist an unbilled delivery-status row when a DC is first saved. */
+export function ensureDeliveryStatusForChallan(
+  challan: DeliveryChallanRecord,
+  patch?: Partial<Pick<DeliveryStatusRecord, "billStatus" | "billInvoiceNumber" | "billInvoiceDate" | "billedQuantity">>,
+): DeliveryStatusRecord {
+  const existing = getDeliveryStatus(challan.id);
+  const base = existing ?? defaultStatusFromChallan(challan);
+  if (existing && !patch) return existing;
+  return upsertDeliveryStatus({
+    ...base,
+    ...patch,
+    challanId: challan.id,
+    billStatus: patch?.billStatus ?? base.billStatus ?? "unbilled",
+  });
 }
 
 function customerPoFromChallan(challan: DeliveryChallanRecord): string {
@@ -329,12 +462,7 @@ export function validateDeliveryStatusForm(
   value: Omit<DeliveryStatusRecord, "challanId" | "updatedAt">,
 ): DeliveryStatusFormErrors {
   const errors: DeliveryStatusFormErrors = {};
-  if (!asText(value.cacheInvoiceNumber).trim()) {
-    errors.cacheInvoiceNumber = "Cache invoice number is required.";
-  }
-  if (!value.cacheInvoiceDocument?.fileName) {
-    errors.cacheInvoiceDocument = "Upload the Cache invoice document.";
-  }
+  // Cache invoice is optional at delivery — bill DC material later after payment.
   if (value.deliveryMode !== "hand" && value.deliveryMode !== "courier") {
     errors.deliveryMode = "Select By hand or Courier.";
   }
@@ -349,12 +477,15 @@ export function validateDeliveryStatusForm(
     if (value.itemType !== "hardware" && value.itemType !== "software") {
       errors.itemType = "Select hardware or software.";
     }
+    const markingDelivered =
+      asText(value.shipmentStatus).trim() === "Delivered" ||
+      Boolean(asText(value.actualDeliveryDate).trim());
     if (
-      asText(value.actualDeliveryDate).trim() &&
+      markingDelivered &&
       (value.itemType === "hardware" || value.itemType === "software") &&
       !value.podDocument?.fileName
     ) {
-      errors.podDocument = "POD attachment is required when a delivery date is set.";
+      errors.podDocument = "POD attachment is required when marking delivered.";
     }
   }
 

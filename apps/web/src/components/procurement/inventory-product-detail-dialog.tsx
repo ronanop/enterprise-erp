@@ -10,6 +10,8 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { formatInr } from "@/services/procurement-service";
 import {
+  inventoryAddedByLabel,
+  inventoryRowAddedBy,
   inventoryRowStableKey,
   nonBilledStockQuantity,
   type GrnStockByProductRow,
@@ -83,9 +85,26 @@ export function InventoryProductDetailDialog({
       >
         <div className="flex shrink-0 items-start justify-between gap-3 border-b border-border/60 px-5 py-4">
           <div className="min-w-0">
-            <h2 id="inventory-product-detail-title" className="text-base font-semibold tracking-tight">
-              {product.productName}
-            </h2>
+            <div className="flex min-w-0 flex-wrap items-center gap-2">
+              <span
+                className={cn(
+                  "inline-flex shrink-0 rounded border px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide",
+                  product.addedBy === "po"
+                    ? "border-sky-200 bg-sky-50 text-sky-800"
+                    : product.addedBy === "manual"
+                      ? "border-border/80 bg-muted/60 text-muted-foreground"
+                      : "border-amber-200 bg-amber-50 text-amber-900",
+                )}
+              >
+                {inventoryAddedByLabel(product.addedBy)}
+              </span>
+              <h2
+                id="inventory-product-detail-title"
+                className="text-base font-semibold tracking-tight"
+              >
+                {product.productName}
+              </h2>
+            </div>
             <p className="mt-1 text-xs text-muted-foreground">
               {product.stockQty.toLocaleString("en-IN")} unit{product.stockQty === 1 ? "" : "s"} on
               hand · avg {formatInr(product.avgUnitCost)}
@@ -112,6 +131,7 @@ export function InventoryProductDetailDialog({
               <table className={cn(procurementUi.table, "min-w-[520px]")}>
                 <thead className={procurementUi.thead}>
                   <tr>
+                    <th className={cn(procurementUi.th, "px-3")}>Added by</th>
                     <th className={cn(procurementUi.th, "px-3")}>Company PO</th>
                     <th className={cn(procurementUi.th, "px-3")}>GRN</th>
                     <th className={cn(procurementUi.th, "px-3")}>Serial</th>
@@ -120,8 +140,22 @@ export function InventoryProductDetailDialog({
                   </tr>
                 </thead>
                 <tbody>
-                  {unitRows.map((row, index) => (
+                  {unitRows.map((row, index) => {
+                    const addedBy = inventoryRowAddedBy(row);
+                    return (
                     <tr key={inventoryRowStableKey(row, index)} className={procurementUi.tr}>
+                      <td className={cn(procurementUi.td, "px-3")}>
+                        <span
+                          className={cn(
+                            "inline-flex rounded border px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide",
+                            addedBy === "po"
+                              ? "border-sky-200 bg-sky-50 text-sky-800"
+                              : "border-border/80 bg-muted/60 text-muted-foreground",
+                          )}
+                        >
+                          {inventoryAddedByLabel(addedBy)}
+                        </span>
+                      </td>
                       <td className={cn(procurementUi.td, "px-3 font-mono text-xs tabular-nums")}>
                         {row.company_po_number?.trim() || "—"}
                       </td>
@@ -157,7 +191,8 @@ export function InventoryProductDetailDialog({
                         {formatInr(Number(row.unit_cost) || 0)}
                       </td>
                     </tr>
-                  ))}
+                    );
+                  })}
                 </tbody>
               </table>
             </div>

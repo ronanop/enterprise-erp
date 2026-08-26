@@ -96,6 +96,7 @@ class ScmHandoffService:
         self._inventory_adjustment_table_ready: bool | None = None
         self._ovf_stock_allocation_table_ready: bool | None = None
         self._batch_line_billing_quantity_ready: bool | None = None
+        self._batch_line_delivery_challan_qty_ready: bool | None = None
         self._crm = ProcurementCrmAdapter(db)
         self._master = ProcurementMasterDataAdapter(db)
         self._orders = OrderRepository(db)
@@ -162,6 +163,19 @@ class ScmHandoffService:
             }
             self._batch_line_billing_quantity_ready = "billing_quantity" in cols
         return self._batch_line_billing_quantity_ready
+
+    def _receipt_batch_line_has_delivery_challan_quantity(self) -> bool:
+        if self._batch_line_delivery_challan_qty_ready is None:
+            bind = self._db.get_bind()
+            cols = {
+                c["name"]
+                for c in inspect(bind).get_columns(
+                    "proc_order_receipt_batch_line",
+                    schema="procurement",
+                )
+            }
+            self._batch_line_delivery_challan_qty_ready = "delivery_challan_quantity" in cols
+        return self._batch_line_delivery_challan_qty_ready
 
     def _ovf_stock_allocation_table_exists(self) -> bool:
         if self._ovf_stock_allocation_table_ready is None:
@@ -278,6 +292,208 @@ class ScmHandoffService:
             "has_demand": bool(demand),
         }
 
+    _IN_STOCK_KEYS = frozenset({"in stock", "instock", "inventory", "from inventory", "from stock"})
+
+    @classmethod
+    def _is_in_stock_line(cls, ln: dict) -> bool:
+        source = str(ln.get("fulfillment_source") or "").strip().lower()
+        if source == "inventory":
+            return True
+        if source == "purchase_order":
+            return False
+        key = " ".join(str(ln.get("distributor_name") or "").strip().lower().split())
+        return key in cls._IN_STOCK_KEYS
+
+    @classmethod
+    def _item_plan(cls, vendor_lines: list, stock_availability: list | None = None) -> dict:
+        """Per-line stock vs vendor PO plan, plus together/separate delivery."""
+        avail_by = {
+            cls._product_key(row.get("product_name")): row
+            for row in (stock_availability or [])
+            if cls._product_key(row.get("product_name"))
+        }
+        lines: list[dict] = []
+        has_stock = False
+        has_po = False
+        vendor_keys: set[str] = set()
+        for ln in vendor_lines or []:
+            name = (ln.get("product_name") or "").strip() or "—"
+            qty = float(ln.get("qty") or 0)
+            dist = (ln.get("distributor_name") or "").strip() or None
+            avail = avail_by.get(cls._product_key(name)) or {}
+            on_hand = float(avail.get("on_hand_qty") or 0)
+            allocated = float(avail.get("allocated_qty") or 0)
+            is_stock = cls._is_in_stock_line(ln)
+            if is_stock:
+                has_stock = True
+                book_qty = min(qty, max(on_hand, allocated))
+                po_qty = max(0.0, round(qty - book_qty, 4))
+                in_stock = book_qty + 1e-9 >= qty
+                action = "book_stock" if in_stock else "stock_short"
+                source = "inventory"
+            else:
+                has_po = True
+                book_qty = 0.0
+                po_qty = qty
+                in_stock = False
+                action = "create_po" if dist else "no_vendor"
+                source = "purchase_order"
+                if dist:
+                    vendor_keys.add(" ".join(dist.lower().split()))
+            lines.append(
+                {
+                    "product_name": name,
+                    "qty": qty,
+                    "distributor_name": dist,
+                    "source": source,
+                    "on_hand_qty": on_hand,
+                    "allocated_qty": allocated,
+                    "book_qty": book_qty,
+                    "po_qty": po_qty,
+                    "in_stock": in_stock,
+                    "action": action,
+                }
+            )
+        if has_stock and has_po:
+            delivery = "separate"
+            if len(vendor_keys) > 1:
+                note = "Separate — stock and vendors"
+            else:
+                note = "Separate — stock and vendor"
+        elif has_po and len(vendor_keys) > 1:
+            delivery = "separate"
+            note = "Separate — by vendor"
+        elif has_stock and not has_po:
+            delivery = "together"
+            note = "Together — from stock"
+        elif has_po:
+            delivery = "together"
+            note = "Together — vendor PO"
+        else:
+            delivery = "together"
+            note = ""
+        return {"lines": lines, "delivery": delivery, "delivery_note": note}
+
+    @classmethod
+    def _distributor_group_key(cls, ln: dict) -> str:
+        return " ".join(str(ln.get("distributor_name") or "").strip().lower().split())
+
+    def _active_orders_for_ovf(self, ctx: TenantContext, ovf_id: UUID) -> list:
+        rows = self._orders.list_by_source(
+            ctx,
+            source_module=self.SOURCE_MODULE,
+            source_document_type=self.SOURCE_DOC_TYPE,
+            source_document_id=ovf_id,
+        )
+        return [row for row in rows if row.status != OrderStatus.CANCELLED.value]
+
+    def _vendor_display_name(self, ctx: TenantContext, vendor_id) -> str | None:
+        try:
+            vendor = self._master.get_vendor(ctx, vendor_id)
+        except Exception:
+            return None
+        return (
+            getattr(vendor, "vendor_name", None)
+            or getattr(vendor, "name", None)
+            or getattr(vendor, "display_name", None)
+        )
+
+    def _serialize_linked_pos(self, ctx: TenantContext, orders: list) -> list[dict]:
+        out: list[dict] = []
+        for order in orders:
+            out.append(
+                {
+                    "id": order.id,
+                    "vendor_id": order.vendor_id,
+                    "vendor_name": self._vendor_display_name(ctx, order.vendor_id),
+                    "document_number": order.document_number,
+                    "company_po_number": order.company_po_number,
+                    "status": order.status,
+                }
+            )
+        return out
+
+    def _ovf_po_groups(
+        self,
+        ctx: TenantContext,
+        vendor_lines: list,
+        orders: list,
+    ) -> list[dict]:
+        grouped: dict[str, dict] = {}
+        for ln in vendor_lines or []:
+            if self._is_in_stock_line(ln):
+                continue
+            key = self._distributor_group_key(ln) or "__unassigned__"
+            if key not in grouped:
+                grouped[key] = {
+                    "distributor_name": (ln.get("distributor_name") or "").strip() or "Vendor",
+                    "line_count": 0,
+                    "has_po": False,
+                    "purchase_order_id": None,
+                }
+            grouped[key]["line_count"] += 1
+
+        unused = list(orders)
+        for group in grouped.values():
+            needle = " ".join(str(group["distributor_name"] or "").strip().lower().split())
+            match_idx = None
+            for idx, order in enumerate(unused):
+                name = " ".join(
+                    str(self._vendor_display_name(ctx, order.vendor_id) or "").strip().lower().split()
+                )
+                if needle and name and (needle == name or needle in name or name in needle):
+                    match_idx = idx
+                    break
+                if needle == "__unassigned__" or not needle:
+                    match_idx = idx
+                    break
+            if match_idx is not None:
+                order = unused.pop(match_idx)
+                group["has_po"] = True
+                group["purchase_order_id"] = order.id
+        return list(grouped.values())
+
+    def _open_distributor_names(self, groups: list[dict]) -> list[str]:
+        return [
+            str(g.get("distributor_name") or "").strip()
+            for g in groups
+            if not g.get("has_po") and str(g.get("distributor_name") or "").strip()
+        ]
+
+    def _vendor_lines_for_po(
+        self,
+        handoff: dict,
+        *,
+        distributor_name: str | None,
+        lines: list[dict] | None,
+    ) -> list[dict]:
+        if lines is not None:
+            return [
+                {
+                    "product_name": str(ln.get("product_name") or "").strip(),
+                    "qty": float(ln.get("qty") or 0),
+                    "unit_price": float(ln.get("unit_price") or 0),
+                    "rate_currency": str(ln.get("rate_currency") or "INR")
+                    .strip()
+                    .upper()
+                    or "INR",
+                    "tax_rate": float(ln.get("tax_rate") or 0),
+                }
+                for ln in lines
+                if str(ln.get("product_name") or "").strip()
+            ]
+        vendor_lines = [
+            ln
+            for ln in (handoff.get("vendor_lines") or [])
+            if not self._is_in_stock_line(ln)
+        ]
+        needle = " ".join((distributor_name or "").strip().lower().split())
+        if needle:
+            vendor_lines = [
+                ln for ln in vendor_lines if self._distributor_group_key(ln) == needle
+            ]
+        return vendor_lines
+
     def _serialize_allocations(self, rows: list[ProcOvfStockAllocation]) -> list[dict]:
         return [
             {
@@ -366,12 +582,8 @@ class ScmHandoffService:
         on_hand = self._on_hand_qty_by_product(ctx, cid)
         alloc_map = self._allocations_by_ovf(ctx, [ovf.id for ovf in ovfs])
         for ovf in ovfs:
-            existing = self._orders.find_by_source(
-                ctx,
-                source_module=self.SOURCE_MODULE,
-                source_document_type=self.SOURCE_DOC_TYPE,
-                source_document_id=ovf.id,
-            )
+            existing_orders = self._active_orders_for_ovf(ctx, ovf.id)
+            existing = existing_orders[0] if existing_orders else None
             vendor_total = 0.0
             vendor_qty = 0.0
             customer_total = 0.0
@@ -381,10 +593,14 @@ class ScmHandoffService:
             customer_payment_days = 0
             vendor_name: str | None = None
             oem_name: str | None = None
+            distributor_name: str | None = None
+            project_title: str | None = None
             handoff: dict = {}
             try:
                 handoff = self._crm.get_handoff(ctx, ovf.id)
                 oem_name = (handoff.get("oem_name") or "").strip() or None
+                distributor_name = (handoff.get("distributor_name") or "").strip() or None
+                project_title = (handoff.get("project_title") or "").strip() or None
                 vendor_lines = handoff.get("vendor_lines") or []
                 customer_lines = handoff.get("customer_lines") or []
 
@@ -423,11 +639,11 @@ class ScmHandoffService:
                 except Exception:
                     vendor_name = None
             if not vendor_name:
-                # Suggested vendor from OVF OEM — shown before Create PO; replaced once PO exists.
-                vendor_name = self._master.match_vendor_name_by_oem(
+                # Suggested vendor from CRM distributor (distributor ≡ vendor; OEM is brand only).
+                vendor_name = self._master.match_vendor_name_by_distributor(
                     ctx,
                     company_id=ovf.company_id,
-                    oem_name=oem_name,
+                    distributor_name=distributor_name,
                     vendors=vendor_pool,
                 )
             is_cancelled = (
@@ -441,9 +657,12 @@ class ScmHandoffService:
                 allocations=alloc_map.get(ovf.id, []),
             )
             remaining_demand = float(stock["remaining_demand_qty"] or 0)
-            can_create = (existing is None or is_cancelled) and (
-                not stock["has_demand"] or remaining_demand > 1e-9
+            po_groups = self._ovf_po_groups(ctx, handoff.get("vendor_lines") or [], existing_orders)
+            open_distributors = self._open_distributor_names(po_groups)
+            has_draft = any(
+                order.status == OrderStatus.DRAFT.value for order in existing_orders
             )
+            can_create = bool(open_distributors) or has_draft
             items.append(
                 {
                     "ovf_id": ovf.id,
@@ -464,6 +683,8 @@ class ScmHandoffService:
                     "company_id": ovf.company_id,
                     "branch_id": ovf.branch_id,
                     "oem_name": oem_name,
+                    "distributor_name": distributor_name,
+                    "project_title": project_title,
                     "vendor_line_count": len(handoff.get("vendor_lines", [])),
                     "vendor_qty": vendor_qty,
                     "vendor_total": vendor_total,
@@ -497,9 +718,15 @@ class ScmHandoffService:
                     "scm_on_hold": scm_on_hold,
                     "scm_on_hold_at": resolve_scm_hold_started_at(ovf),
                     "can_create_po": can_create,
+                    "open_distributor_names": open_distributors,
+                    "purchase_orders": self._serialize_linked_pos(ctx, existing_orders),
                     "stock_fulfillment_status": stock["stock_fulfillment_status"],
                     "remaining_demand_qty": remaining_demand,
                     "stock_availability": stock["stock_availability"],
+                    "item_plan": self._item_plan(
+                        handoff.get("vendor_lines") or [],
+                        stock["stock_availability"],
+                    ),
                 }
             )
         def _queue_received_sort_key(row: dict) -> str:
@@ -554,15 +781,9 @@ class ScmHandoffService:
 
     def get_ovf_preview(self, ctx: TenantContext, ovf_id: UUID) -> dict:
         handoff = self._crm.get_handoff(ctx, ovf_id)
-        existing = self._orders.find_by_source(
-            ctx,
-            source_module=self.SOURCE_MODULE,
-            source_document_type=self.SOURCE_DOC_TYPE,
-            source_document_id=ovf_id,
-        )
-        is_cancelled = (
-            existing is not None and existing.status == OrderStatus.CANCELLED.value
-        )
+        existing_orders = self._active_orders_for_ovf(ctx, ovf_id)
+        existing = existing_orders[0] if existing_orders else None
+        is_cancelled = False
         company_id = handoff["company_id"]
         allocations = self._allocations_by_ovf(ctx, [ovf_id]).get(ovf_id, [])
         stock = self._stock_snapshot(
@@ -572,17 +793,14 @@ class ScmHandoffService:
             allocations=allocations,
         )
         remaining_demand = float(stock["remaining_demand_qty"] or 0)
-        handoff["purchase_order_id"] = None if is_cancelled else (existing.id if existing else None)
+        po_groups = self._ovf_po_groups(ctx, handoff.get("vendor_lines") or [], existing_orders)
+        open_distributors = self._open_distributor_names(po_groups)
+        handoff["purchase_order_id"] = existing.id if existing else None
         handoff["purchase_order_number"] = (
             None if is_cancelled else (existing.document_number if existing else None)
         )
-        handoff["can_create_po"] = (
-            (
-                existing is None
-                or is_cancelled
-                or (existing is not None and existing.status == OrderStatus.DRAFT.value)
-            )
-            and (not stock["has_demand"] or remaining_demand > 1e-9)
+        handoff["can_create_po"] = bool(open_distributors) or (
+            existing is not None and existing.status == OrderStatus.DRAFT.value
         )
         handoff["purchase_order_status"] = _queue_po_status(existing)
         handoff["scm_on_hold"] = bool(handoff.get("scm_on_hold")) or is_cancelled
@@ -601,16 +819,22 @@ class ScmHandoffService:
             except Exception:
                 vendor_name = None
         if not vendor_name:
-            vendor_name = self._master.match_vendor_name_by_oem(
+            vendor_name = self._master.match_vendor_name_by_distributor(
                 ctx,
                 company_id=handoff["company_id"],
-                oem_name=handoff.get("oem_name"),
+                distributor_name=handoff.get("distributor_name"),
             )
         handoff["vendor_name"] = vendor_name
         handoff["stock_fulfillment_status"] = stock["stock_fulfillment_status"]
         handoff["remaining_demand_qty"] = remaining_demand
         handoff["stock_availability"] = stock["stock_availability"]
         handoff["stock_allocations"] = self._serialize_allocations(allocations)
+        handoff["open_distributor_names"] = open_distributors
+        handoff["purchase_orders"] = self._serialize_linked_pos(ctx, existing_orders)
+        handoff["item_plan"] = self._item_plan(
+            handoff.get("vendor_lines") or [],
+            stock["stock_availability"],
+        )
         return handoff
 
     def fulfill_ovf_from_stock(
@@ -1010,6 +1234,7 @@ class ScmHandoffService:
         finalize: bool = False,
         hold: bool = False,
         lines: list[dict] | None = None,
+        distributor_name: str | None = None,
     ) -> ProcOrderHeader:
         if finalize and hold:
             raise ConflictException("Cannot finalize and hold a purchase order at the same time")
@@ -1018,17 +1243,25 @@ class ScmHandoffService:
                 "PO finalization requires approval. Create the PO as a draft and have an administrator issue it from Approval."
             )
         handoff = self._crm.get_handoff(ctx, ovf_id)
-        existing = self._orders.find_by_source(
+        linked = self._orders.list_by_source(
             ctx,
             source_module=self.SOURCE_MODULE,
             source_document_type=self.SOURCE_DOC_TYPE,
             source_document_id=ovf_id,
         )
+        existing = next(
+            (
+                row
+                for row in linked
+                if row.vendor_id == vendor_id and row.status != OrderStatus.CANCELLED.value
+            ),
+            None,
+        )
         order_ref = (order_ref_cache or "").strip() or None
         if existing is not None and existing.status != OrderStatus.CANCELLED.value:
             if existing.status != OrderStatus.DRAFT.value:
                 raise ConflictException(
-                    f"Vendor PO already exists for this OVF ({existing.document_number})"
+                    f"Vendor PO already exists for this distributor ({existing.document_number})"
                 )
             # Re-edit draft (e.g. after approval reject) — keep company PO number.
             code = normalize_entity_code(entity_code)
@@ -1057,20 +1290,9 @@ class ScmHandoffService:
             order = updated
 
             if lines is not None:
-                vendor_lines = [
-                    {
-                        "product_name": str(ln.get("product_name") or "").strip(),
-                        "qty": float(ln.get("qty") or 0),
-                        "unit_price": float(ln.get("unit_price") or 0),
-                        "rate_currency": str(ln.get("rate_currency") or "INR")
-                        .strip()
-                        .upper()
-                        or "INR",
-                        "tax_rate": float(ln.get("tax_rate") or 0),
-                    }
-                    for ln in lines
-                    if str(ln.get("product_name") or "").strip()
-                ]
+                vendor_lines = self._vendor_lines_for_po(
+                    handoff, distributor_name=distributor_name, lines=lines
+                )
                 if not vendor_lines:
                     raise ConflictException("OVF has no vendor-side lines to purchase")
                 line_payloads = self._order_line_payloads(
@@ -1121,22 +1343,13 @@ class ScmHandoffService:
         # Creating a PO releases any SCM Hold on the OVF.
         self._crm.set_scm_on_hold(ctx, ovf_id, on_hold=False)
 
-        if lines:
-            vendor_lines = [
-                {
-                    "product_name": str(ln.get("product_name") or "").strip(),
-                    "qty": float(ln.get("qty") or 0),
-                    "unit_price": float(ln.get("unit_price") or 0),
-                    "rate_currency": str(ln.get("rate_currency") or "INR").strip().upper() or "INR",
-                    "tax_rate": float(ln.get("tax_rate") or 0),
-                }
-                for ln in lines
-                if str(ln.get("product_name") or "").strip()
-            ]
-        else:
-            vendor_lines = handoff.get("vendor_lines") or []
+        vendor_lines = self._vendor_lines_for_po(
+            handoff, distributor_name=distributor_name, lines=lines
+        )
         if not vendor_lines:
-            raise ConflictException("OVF has no vendor-side lines to purchase")
+            raise ConflictException(
+                "This OVF has no vendor lines to purchase (IN STOCK items do not create a PO)"
+            )
 
         code = normalize_entity_code(entity_code)
         self._master.get_vendor(ctx, vendor_id)
@@ -1328,6 +1541,9 @@ class ScmHandoffService:
                             "last_receipt_billing_quantity": float(
                                 getattr(ln, "last_receipt_billing_quantity", 0) or 0
                             ),
+                            "last_receipt_delivery_challan_quantity": float(
+                                getattr(ln, "last_receipt_delivery_challan_quantity", 0) or 0
+                            ),
                             "unit_cost": float(ln.unit_cost),
                             "rate_currency": getattr(ln, "rate_currency", None) or "INR",
                             "line_total": float(ln.line_total),
@@ -1355,6 +1571,7 @@ class ScmHandoffService:
         serial_numbers: list[str] | None = None,
         billing: bool = True,
         billing_quantity: float | None = None,
+        delivery_challan_quantity: float | None = None,
     ) -> ProcOrderHeader:
         order = self._order_service.get_order(ctx, order_id)
         if order.status in {
@@ -1429,11 +1646,17 @@ class ScmHandoffService:
                 bill_qty = float(billing_quantity)
             else:
                 bill_qty = float(delta) if billing else 0.0
+            if delivery_challan_quantity is not None:
+                dc_qty = float(delivery_challan_quantity)
+            else:
+                dc_qty = 0.0
             if bill_qty < 0:
                 raise ConflictException("billing_quantity cannot be negative")
-            if bill_qty > float(delta):
+            if dc_qty < 0:
+                raise ConflictException("delivery_challan_quantity cannot be negative")
+            if bill_qty + dc_qty > float(delta) + 1e-9:
                 raise ConflictException(
-                    f"billing_quantity cannot exceed units received ({float(delta)})"
+                    f"billing_quantity + delivery_challan_quantity cannot exceed units received ({float(delta)})"
                 )
             line_billing = bill_qty > 0
 
@@ -1469,6 +1692,8 @@ class ScmHandoffService:
                 line.last_receipt_billing = line_billing
             if hasattr(line, "last_receipt_billing_quantity"):
                 line.last_receipt_billing_quantity = float(bill_qty)
+            if hasattr(line, "last_receipt_delivery_challan_quantity"):
+                line.last_receipt_delivery_challan_quantity = float(dc_qty)
             if self._receipt_batch_tables_exist():
                 if not starting_new_batch and self._db.get(ProcOrderReceiptBatch, batch_id) is None:
                     starting_new_batch = True
@@ -1484,6 +1709,7 @@ class ScmHandoffService:
                     serial_numbers=normalized_serials or None,
                     billing=line_billing,
                     billing_quantity=bill_qty,
+                    delivery_challan_quantity=dc_qty,
                 )
         else:
             line.last_receipt_qty = 0
@@ -1495,6 +1721,8 @@ class ScmHandoffService:
                 line.last_receipt_billing = True
             if hasattr(line, "last_receipt_billing_quantity"):
                 line.last_receipt_billing_quantity = 0.0
+            if hasattr(line, "last_receipt_delivery_challan_quantity"):
+                line.last_receipt_delivery_challan_quantity = 0.0
 
         active = [ln for ln in order.lines if not ln.is_deleted]
         header_status, received_amount = order_receipt_status(active)
@@ -1537,6 +1765,7 @@ class ScmHandoffService:
         serial_numbers: list[str] | None = None,
         billing: bool = True,
         billing_quantity: float = 0,
+        delivery_challan_quantity: float = 0,
     ) -> None:
         if starting_new_batch:
             header = ProcOrderReceiptBatch(
@@ -1577,6 +1806,8 @@ class ScmHandoffService:
                 created_by=ctx.user_id,
                 updated_by=ctx.user_id,
             )
+            if self._receipt_batch_line_has_delivery_challan_quantity():
+                batch_line.delivery_challan_quantity = float(delivery_challan_quantity)
             self._db.add(batch_line)
         else:
             batch_line.quantity = float(batch_line.quantity or 0) + qty
@@ -1587,6 +1818,10 @@ class ScmHandoffService:
                 billing_quantity
             )
             batch_line.billing = batch_line.billing_quantity > 0
+            if self._receipt_batch_line_has_delivery_challan_quantity():
+                batch_line.delivery_challan_quantity = float(
+                    getattr(batch_line, "delivery_challan_quantity", 0) or 0
+                ) + float(delivery_challan_quantity)
             batch_line.updated_by = ctx.user_id
             batch_line.updated_at = receipt_at
 
@@ -1603,6 +1838,7 @@ class ScmHandoffService:
             receipt_at=receipt_at,
             receive_qty=qty,
             billing_quantity=billing_quantity,
+            delivery_challan_quantity=delivery_challan_quantity,
             serial_numbers=serial_numbers,
         )
 
@@ -1612,6 +1848,9 @@ class ScmHandoffService:
 
     @staticmethod
     def _attachment_summary(row) -> dict:
+        path = (getattr(row, "file_path", None) or "").strip()
+        source = (getattr(row, "source", None) or "upload").strip().lower() or "upload"
+        external_url = path if path.lower().startswith(("http://", "https://")) else None
         return {
             "id": row.id,
             "file_name": row.file_name,
@@ -1621,6 +1860,8 @@ class ScmHandoffService:
             "remarks": getattr(row, "remarks", None),
             "entity_type": row.entity_type,
             "entity_id": row.entity_id,
+            "source": source,
+            "external_url": external_url,
         }
 
     def list_ovf_attachments(self, ctx: TenantContext, ovf_id: UUID) -> list[dict]:
@@ -1676,6 +1917,7 @@ class ScmHandoffService:
     ):
         from modules.crm.service.attachment_service import AttachmentService
 
+        _ = remarks  # reserved for future metadata; CRM attachment model has no remarks column
         preview = self.get_ovf_preview(ctx, ovf_id)
         return AttachmentService(self._db).create(
             ctx,
@@ -1683,7 +1925,6 @@ class ScmHandoffService:
             entity_id=ovf_id,
             file_name=file_name,
             category=category or "other",
-            remarks=remarks,
             branch_id=branch_id,
             company_id=company_id or preview.get("company_id"),
             content_base64=content_base64,
@@ -1720,6 +1961,7 @@ class ScmHandoffService:
     ):
         from modules.crm.service.attachment_service import AttachmentService
 
+        _ = remarks  # reserved for future metadata; CRM attachment model has no remarks column
         order = self._order_service.get_order(ctx, order_id)
         return AttachmentService(self._db).create(
             ctx,
@@ -1727,7 +1969,6 @@ class ScmHandoffService:
             entity_id=order_id,
             file_name=file_name,
             category=category or "other",
-            remarks=remarks,
             branch_id=branch_id,
             company_id=company_id or order.company_id,
             content_base64=content_base64,
@@ -1753,10 +1994,16 @@ class ScmHandoffService:
     def resolve_commercial_attachment_file(
         self, ctx: TenantContext, attachment_id: UUID
     ) -> tuple:
+        """Return (path|None, file_name, content_type, external_url|None).
+
+        Uploaded files resolve under ``CRM_UPLOAD_ROOT`` (absolute path with
+        filename fallback). Link/cloud attachments return an external URL and
+        no local path.
+        """
         from pathlib import Path
 
+        from core.config import settings
         from modules.crm.models import CrmAttachment
-        from modules.crm.service.attachment_service import UPLOAD_ROOT
         from sqlalchemy import select
 
         # Load by tenant only — then authorize via OVF/PO ownership checks.
@@ -1792,14 +2039,22 @@ class ScmHandoffService:
             self.get_ovf_preview(ctx, linked_ovf_id)
         else:
             raise NotFoundException("Attachment not found")
-        path = Path(row.file_path)
+
+        stored = (row.file_path or "").strip()
+        source = (getattr(row, "source", None) or "upload").strip().lower()
+        if source != "upload" or stored.lower().startswith(("http://", "https://")):
+            if not stored.lower().startswith(("http://", "https://")):
+                raise NotFoundException("Attachment link is missing")
+            return None, row.file_name, row.content_type, stored
+
+        path = Path(stored)
         if not path.is_file():
-            candidate = UPLOAD_ROOT / path.name
+            candidate = settings.resolved_crm_upload_root / path.name
             if candidate.is_file():
                 path = candidate
             else:
                 raise NotFoundException("Attachment file is missing on disk")
-        return path, row.file_name, row.content_type
+        return path, row.file_name, row.content_type, None
 
     def get_receipt_batch(self, ctx: TenantContext, batch_id: UUID) -> ProcOrderReceiptBatch:
         cid = self._scope.resolve_company_id(ctx, None)
@@ -2083,6 +2338,9 @@ class ScmHandoffService:
                             "billing_quantity": float(
                                 getattr(ln, "last_receipt_billing_quantity", 0) or 0
                             ),
+                            "delivery_challan_quantity": float(
+                                getattr(ln, "last_receipt_delivery_challan_quantity", 0) or 0
+                            ),
                         }
                     )
             row_batch_id = batch_id if s == seq else None
@@ -2275,6 +2533,8 @@ class ScmHandoffService:
                     ol.last_receipt_billing = True
                 if hasattr(ol, "last_receipt_billing_quantity"):
                     ol.last_receipt_billing_quantity = 0.0
+                if hasattr(ol, "last_receipt_delivery_challan_quantity"):
+                    ol.last_receipt_delivery_challan_quantity = 0.0
             else:
                 bl, batch = pair
                 ol.last_receipt_qty = float(bl.quantity or 0)
@@ -2287,6 +2547,10 @@ class ScmHandoffService:
                 if hasattr(ol, "last_receipt_billing_quantity"):
                     ol.last_receipt_billing_quantity = float(
                         getattr(bl, "billing_quantity", 0) or 0
+                    )
+                if hasattr(ol, "last_receipt_delivery_challan_quantity"):
+                    ol.last_receipt_delivery_challan_quantity = float(
+                        getattr(bl, "delivery_challan_quantity", 0) or 0
                     )
             ol.updated_by = ctx.user_id
             ol.updated_at = now
@@ -2363,29 +2627,49 @@ class ScmHandoffService:
                     "serial_numbers": list(bl.serial_numbers or []) or None,
                     "billing": bool(getattr(bl, "billing", True)),
                     "billing_quantity": float(getattr(bl, "billing_quantity", 0) or 0),
+                    "delivery_challan_quantity": float(
+                        getattr(bl, "delivery_challan_quantity", 0) or 0
+                    ),
                 }
             )
         rows.sort(key=lambda r: r["line_number"])
         return rows
 
     @staticmethod
+    def _clamp_receipt_split(
+        receive: float,
+        billing_quantity: float,
+        delivery_challan_quantity: float = 0,
+    ) -> tuple[float, float, float]:
+        qty = max(0.0, float(receive or 0))
+        bill = max(0.0, float(billing_quantity or 0))
+        dc = max(0.0, float(delivery_challan_quantity or 0))
+        if bill > qty:
+            bill = qty
+        if bill + dc > qty:
+            dc = max(0.0, qty - bill)
+        stock = round(qty - bill - dc, 6)
+        return bill, dc, stock
+
+    @staticmethod
     def _inventory_stock_lots_from_batch_line(
         batch_line: ProcOrderReceiptBatchLine,
     ) -> list[tuple[int, str, float]]:
-        """Unbilled lots (whole + optional fractional) available in procurement stock."""
+        """Warehouse leftover after billed and DC units (bill, then DC, then stock)."""
         qty = float(batch_line.quantity or 0)
         if qty <= 0:
             return []
-        bill_qty = float(getattr(batch_line, "billing_quantity", 0) or 0)
-        bill_qty = max(0.0, min(bill_qty, qty))
-        unbilled = round(qty - bill_qty, 6)
-        if unbilled <= 1e-9:
+        bill, dc, stock = ScmHandoffService._clamp_receipt_split(
+            qty,
+            float(getattr(batch_line, "billing_quantity", 0) or 0),
+            float(getattr(batch_line, "delivery_challan_quantity", 0) or 0),
+        )
+        if stock <= 1e-9:
             return []
         serials = [str(s).strip() for s in (batch_line.serial_numbers or []) if str(s).strip()]
-        whole = int(unbilled)
-        frac = round(unbilled - whole, 6)
-        receive_whole = int(qty)
-        start = max(0, receive_whole - whole)
+        whole = int(stock)
+        frac = round(stock - whole, 6)
+        start = int(bill) + int(dc)
         lots: list[tuple[int, str, float]] = []
         for i in range(whole):
             global_index = start + i
@@ -2408,16 +2692,18 @@ class ScmHandoffService:
         receive_qty: float,
         billing_quantity: float,
         serial_numbers: list[str] | None,
+        delivery_challan_quantity: float = 0,
     ) -> None:
         if not self._inventory_stock_table_exists():
             return
         receive = float(receive_qty or 0)
-        bill = max(0.0, min(float(billing_quantity or 0), receive))
-        unbilled = round(receive - bill, 6)
-        if unbilled <= 1e-9:
+        _bill, _dc, stock = self._clamp_receipt_split(
+            receive, billing_quantity, delivery_challan_quantity
+        )
+        if stock <= 1e-9:
             return
-        whole = int(unbilled)
-        frac = round(unbilled - whole, 6)
+        whole = int(stock)
+        frac = round(stock - whole, 6)
         row_count = whole + (1 if frac > 1e-9 else 0)
         if row_count <= 0:
             return
@@ -2425,8 +2711,7 @@ class ScmHandoffService:
         serials = [str(s).strip() for s in (serial_numbers or []) if str(s).strip()]
         grn_label = (grn_number or "").strip() or "—"
         product = (line.product_name or "").strip() or "Unnamed product"
-        receive_whole = int(receive)
-        start_serial = max(0, receive_whole - whole)
+        start_serial = int(_bill) + int(_dc)
         qty_rec = float(line.quantity_received or 0)
         has_qty = self._inventory_stock_has_quantity()
 
@@ -2747,6 +3032,8 @@ class ScmHandoffService:
                 ]
                 if self._receipt_batch_line_has_billing_quantity():
                     batch_line_load.append(ProcOrderReceiptBatchLine.billing_quantity)
+                if self._receipt_batch_line_has_delivery_challan_quantity():
+                    batch_line_load.append(ProcOrderReceiptBatchLine.delivery_challan_quantity)
                 all_batch_lines = (
                     self._db.query(ProcOrderReceiptBatchLine)
                     .options(load_only(*batch_line_load))
@@ -2910,7 +3197,7 @@ class ScmHandoffService:
                         "received_quantity": 1,
                         "billing_quantity": 0,
                         "unit_cost": 0,
-                        "description": None,
+                        "description": (getattr(row, "description", None) or None),
                         "stock_unit_id": None,
                         "import_line_id": row.id,
                     }
@@ -2943,6 +3230,7 @@ class ScmHandoffService:
         for raw in lines:
             product = str(raw.get("product_name") or "").strip()
             serial = str(raw.get("serial_number") or "").strip()
+            description = str(raw.get("description") or "").strip() or None
             if not product or not serial:
                 continue
             order_id = raw.get("order_id")
@@ -2956,6 +3244,7 @@ class ScmHandoffService:
                 order_id = None
             row = ProcInventoryImportLine(
                 product_name=product,
+                description=description[:255] if description else None,
                 serial_number=serial,
                 order_header_id=order_id,
                 company_po_number=po_number,

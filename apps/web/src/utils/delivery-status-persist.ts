@@ -5,6 +5,9 @@ import { runDeliveryReminderSweep } from "@/utils/delivery-status-reminders";
 import {
   deriveDeliveryStatusLabel,
   firstDeliveryStatusFormError,
+  getDeliveryStatus,
+  isFailedShipmentStatus,
+  stampDeliveredDate,
   upsertDeliveryStatus,
   validateDeliveryStatusForm,
   type DeliveryStatusFormErrors,
@@ -24,9 +27,30 @@ export async function persistDeliveryStatusFromForm(
     return { ok: false, message, fieldErrors: errors };
   }
 
+  const existing = getDeliveryStatus(challan.id);
+  const failed = isFailedShipmentStatus(form.shipmentStatus);
+  const markingDelivered =
+    !failed &&
+    (form.shipmentStatus.trim() === "Delivered" ||
+      Boolean(form.actualDeliveryDate?.trim()));
+  const actualDeliveryDate = failed
+    ? ""
+    : markingDelivered
+      ? stampDeliveredDate(form.dispatchDate, form.actualDeliveryDate)
+      : form.actualDeliveryDate?.trim() || "";
+  const shipmentStatus = failed
+    ? "Failed delivery"
+    : markingDelivered
+      ? "Delivered"
+      : deriveDeliveryStatusLabel({
+          ...form,
+          actualDeliveryDate,
+          shipmentStatus: "",
+        });
   const normalized: DeliveryStatusFormValue = {
     ...form,
-    shipmentStatus: deriveDeliveryStatusLabel(form),
+    actualDeliveryDate,
+    shipmentStatus,
     trackingNumber: form.docketNumber ?? "",
     cachePoNumber:
       form.cachePoNumber?.trim() ||
@@ -38,11 +62,31 @@ export async function persistDeliveryStatusFromForm(
     courierTransportDetails:
       form.courierProvider?.trim() || form.courierTransportDetails?.trim() || "",
     courierProvider: form.courierProvider?.trim() || "",
+    // Preserve billing recorded later — delivery save must not wipe it.
+    billStatus: existing?.billStatus ?? form.billStatus ?? "unbilled",
+    billedQuantity: existing?.billedQuantity ?? form.billedQuantity ?? "",
+    billInvoiceNumber: existing?.billInvoiceNumber ?? form.billInvoiceNumber ?? "",
+    billInvoiceDate: existing?.billInvoiceDate ?? form.billInvoiceDate ?? "",
+    billDocument: existing?.billDocument ?? form.billDocument ?? null,
+    billRemarks: existing?.billRemarks ?? form.billRemarks ?? "",
+    billedAt: existing?.billedAt ?? form.billedAt ?? "",
   };
+
+  const delivered = !failed && markingDelivered;
+  let billStatus = normalized.billStatus;
+  if (
+    billStatus !== "unbilled" &&
+    billStatus !== "partially_billed" &&
+    billStatus !== "fully_billed"
+  ) {
+    billStatus = "unbilled";
+  }
 
   upsertDeliveryStatus({
     challanId: challan.id,
     ...normalized,
+    billStatus,
+    requiresInstallation: delivered ? Boolean(normalized.requiresInstallation) : false,
   });
   runDeliveryReminderSweep();
 

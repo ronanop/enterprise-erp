@@ -1,4 +1,4 @@
-import { jsPDF } from "jspdf";
+import { GState, jsPDF } from "jspdf";
 
 import { loadCacheLogo } from "@/utils/load-cache-logo";
 import {
@@ -8,6 +8,7 @@ import {
   formatPoDate,
 } from "@/utils/purchase-order-amount-words";
 import { computeDeliveryChallanTaxSummary } from "@/utils/delivery-challan-totals";
+import { resolveChallanRecordCustomerPo } from "@/utils/delivery-challan-prefill";
 import type {
   DeliveryChallanLine,
   DeliveryChallanMode,
@@ -77,11 +78,28 @@ function drawChallanTotalsSection(
   tableW: number,
   valueColW: number,
   rows: Array<{ label: string; rateLabel: string; amount: string; emphasis?: boolean }>,
-  options?: { attachBelowItems?: boolean },
+  options?: {
+    attachBelowItems?: boolean;
+    amountInWords?: string;
+    igstRemarks?: string;
+  },
 ): number {
-  const rowH = 6.5;
+  const baseRowH = 6.5;
   const splitX = tableX + tableW - valueColW;
-  const blockH = rowH * rows.length;
+  const noteMaxW = Math.max(40, splitX - tableX - 42);
+
+  const rowMeta = rows.map((row) => {
+    let leftNote = "";
+    if (row.label === "IGST" && options?.igstRemarks) {
+      leftNote = options.igstRemarks;
+    } else if (row.label === "Grand Total" && options?.amountInWords) {
+      leftNote = options.amountInWords;
+    }
+    const noteLines = leftNote ? wrap(doc, leftNote, noteMaxW) : [];
+    const rowH = Math.max(baseRowH, noteLines.length > 0 ? 3.2 + noteLines.length * 3.2 : baseRowH);
+    return { row, leftNote, noteLines, rowH };
+  });
+  const blockH = rowMeta.reduce((sum, r) => sum + r.rowH, 0);
 
   if (options?.attachBelowItems) {
     strokeRectNoTop(doc, tableX, y, tableW, blockH);
@@ -93,31 +111,45 @@ function drawChallanTotalsSection(
   doc.setLineWidth(0.25);
   doc.line(splitX, y, splitX, y + blockH);
 
-  rows.forEach((row, index) => {
-    const rowTop = y + index * rowH;
+  let rowTop = y;
+  rowMeta.forEach((meta, index) => {
+    const { row, noteLines, rowH } = meta;
     if (index > 0) {
       doc.setLineWidth(0.2);
       doc.line(tableX, rowTop, tableX + tableW, rowTop);
     }
-    const textY = rowTop + rowH * 0.62;
+    const textY = rowTop + Math.min(4.2, rowH * 0.55);
     const label = row.rateLabel ? `${row.label} (${row.rateLabel})` : row.label;
+
+    if (noteLines.length > 0) {
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(6.5);
+      let ny = rowTop + 3.5;
+      for (const line of noteLines) {
+        doc.text(line, tableX + 2, ny);
+        ny += 3.2;
+      }
+    }
+
     doc.setFont("helvetica", row.emphasis ? "bold" : "normal");
     doc.setFontSize(7);
     doc.text(label, splitX - 2, textY, { align: "right" });
     doc.text(row.amount, tableX + tableW - 2, textY, { align: "right" });
+    rowTop += rowH;
   });
 
   return y + blockH;
 }
 
 const ITEM_COL_WEIGHTS = {
-  sr: 10,
-  desc: 62,
-  hsn: 18,
-  asset: 16,
-  qty: 14,
-  rate: 20,
-  value: 22,
+  sr: 9,
+  product: 28,
+  desc: 42,
+  hsn: 16,
+  asset: 14,
+  qty: 12,
+  rate: 18,
+  value: 20,
 } as const;
 
 type ItemColumnWidths = Record<keyof typeof ITEM_COL_WEIGHTS, number>;
@@ -223,7 +255,7 @@ function drawDigitalSignatoryBlock(
   doc.text("Authorised Signatory", centerX, y + h - 4, { align: "center" });
 }
 
-function drawFooterSection(doc: jsPDF, input: DeliveryChallanPdfInput, startY: number, grandTotal: number, igstAmount: number) {
+function drawFooterSection(doc: jsPDF, input: DeliveryChallanPdfInput, startY: number) {
   const margin = 10;
   const pageW = doc.internal.pageSize.getWidth();
   const pageH = doc.internal.pageSize.getHeight();
@@ -235,24 +267,11 @@ function drawFooterSection(doc: jsPDF, input: DeliveryChallanPdfInput, startY: n
     y = margin;
   }
 
-  const wordsH = 8;
-  strokeRect(doc, margin, y, contentW, wordsH);
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(7);
-  doc.text(`Amount in Words: ${challanAmountInWords(grandTotal)}`, margin + 2, y + 5);
-  y += wordsH + 2;
-
-  if (igstAmount > 0) {
-    const remH = 7;
-    strokeRect(doc, margin, y, contentW, remH);
-    doc.text(`Remarks: IGST value for ${Math.round(igstAmount)}`, margin + 2, y + 4.5);
-    y += remH + 2;
-  }
-
   const termsLines = wrap(doc, CHALLAN_TERMS_LINE, contentW - 4);
   const termsH = Math.max(10, 4 + termsLines.length * 3.2);
   strokeRect(doc, margin, y, contentW, termsH);
   let tY = y + 4;
+  doc.setFont("helvetica", "normal");
   doc.setFontSize(6.5);
   termsLines.forEach((line) => {
     doc.text(line, margin + 2, tY);
@@ -285,12 +304,12 @@ function drawFooterSection(doc: jsPDF, input: DeliveryChallanPdfInput, startY: n
   );
 }
 
-const GRID_LABEL_FRAC = 0.22;
-const GRID_VALUE_FRAC = 0.28;
+const GRID_LABEL_W_FRAC = 0.2;
+const GRID_HALF_VALUE_FRAC = 0.3;
 
 function gridColumnWidths(contentW: number): [number, number, number, number] {
-  const lw = contentW * GRID_LABEL_FRAC;
-  const vw = contentW * GRID_VALUE_FRAC;
+  const lw = contentW * GRID_LABEL_W_FRAC;
+  const vw = contentW * GRID_HALF_VALUE_FRAC;
   return [lw, vw, lw, vw];
 }
 
@@ -300,13 +319,38 @@ function textBlockHeight(doc: jsPDF, text: string, maxWidth: number, fontSize: n
   return Math.max(1, lines.length) * 3.2;
 }
 
-function measureFourColumnRowHeight(
+function formatCustomerDetailsBlock(input: DeliveryChallanPdfInput): string {
+  const lines: string[] = [];
+  const name = dash(input.customerName);
+  if (name !== "—") lines.push(name);
+
+  const billTo = (input.customerBillTo || "").trim();
+  if (billTo) lines.push(`Bill To: ${billTo}`);
+
+  const shipTo = (input.customerShipTo || "").trim();
+  if (shipTo && shipTo !== billTo) lines.push(`Ship To: ${shipTo}`);
+  else if (shipTo && shipTo === billTo) lines.push(`Ship To: Same as Bill To`);
+
+  const gst = (input.customerGstNo || "").trim();
+  if (gst) lines.push(`GST No: ${gst}`);
+
+  const attn = (input.kindAttn || "").trim();
+  if (attn) lines.push(`Kind Attn: ${attn}`);
+
+  return lines.length > 0 ? lines.join("\n") : "—";
+}
+
+type HeaderGridRow =
+  | { kind: "dual"; left: { label: string; value: string }; right: { label: string; value: string } }
+  | { kind: "span"; label: string; value: string };
+
+function measureDualRowHeight(
   doc: jsPDF,
   left: { label: string; value: string },
   right: { label: string; value: string },
   gridCols: [number, number, number, number],
 ): number {
-  const padTop = 3.5;
+  const padTop = 3.2;
   const padBottom = 2;
   const leftH = Math.max(
     textBlockHeight(doc, left.label, gridCols[0], 7),
@@ -316,10 +360,24 @@ function measureFourColumnRowHeight(
     textBlockHeight(doc, right.label, gridCols[2], 7),
     textBlockHeight(doc, right.value, gridCols[3], 7.5),
   );
-  return Math.max(12, padTop + Math.max(leftH, rightH) + padBottom);
+  return Math.max(9, padTop + Math.max(leftH, rightH) + padBottom);
 }
 
-function drawFourColumnField(
+function measureSpanRowHeight(
+  doc: jsPDF,
+  label: string,
+  value: string,
+  labelW: number,
+  valueW: number,
+): number {
+  const padTop = 3.2;
+  const padBottom = 2.5;
+  const labelH = textBlockHeight(doc, label, labelW, 7);
+  const valueH = textBlockHeight(doc, value, valueW, 7.5);
+  return Math.max(12, padTop + Math.max(labelH, valueH) + padBottom);
+}
+
+function drawLabeledValue(
   doc: jsPDF,
   x: number,
   y: number,
@@ -331,7 +389,7 @@ function drawFourColumnField(
   doc.setFont("helvetica", "bold");
   doc.setFontSize(7);
   const labelLines = wrap(doc, label, labelW - 3);
-  let ly = y + 3.5;
+  let ly = y + 3.2;
   for (const line of labelLines.slice(0, 3)) {
     doc.text(line, x + 1.5, ly);
     ly += 3.2;
@@ -340,53 +398,117 @@ function drawFourColumnField(
   doc.setFont("helvetica", "normal");
   doc.setFontSize(7.5);
   const valueLines = wrap(doc, value, valueW - 3);
-  let vy = y + 3.5;
+  let vy = y + 3.2;
   for (const line of valueLines) {
     doc.text(line, x + labelW + 1.5, vy);
     vy += 3.2;
   }
 }
 
-function drawFourColumnRow(
+function drawHeaderGrid(
   doc: jsPDF,
   margin: number,
-  y: number,
+  startY: number,
   contentW: number,
-  rowH: number,
-  left: { label: string; value: string },
-  right: { label: string; value: string },
-  gridCols: [number, number, number, number],
-) {
-  const x2 = margin + gridCols[0];
-  const x3 = margin + gridCols[0] + gridCols[1];
-  const x4 = margin + gridCols[0] + gridCols[1] + gridCols[2];
+  rows: HeaderGridRow[],
+): number {
+  const gridCols = gridColumnWidths(contentW);
+  const spanLabelW = gridCols[0];
+  const spanValueW = contentW - spanLabelW;
+  const midX = margin + gridCols[0] + gridCols[1];
 
-  drawFourColumnField(doc, margin, y, gridCols[0], gridCols[1], left.label, left.value);
-  drawFourColumnField(doc, x3, y, gridCols[2], gridCols[3], right.label, right.value);
+  const rowHeights = rows.map((row) => {
+    if (row.kind === "dual") {
+      return measureDualRowHeight(doc, row.left, row.right, gridCols);
+    }
+    return measureSpanRowHeight(doc, row.label, row.value, spanLabelW, spanValueW);
+  });
+  const gridH = rowHeights.reduce((sum, h) => sum + h, 0);
 
-  doc.setDrawColor(0);
-  doc.setLineWidth(0.25);
-  doc.line(x2, y, x2, y + rowH);
-  doc.line(x3, y, x3, y + rowH);
-  doc.line(x4, y, x4, y + rowH);
-  doc.line(margin, y + rowH, margin + contentW, y + rowH);
+  strokeRect(doc, margin, startY, contentW, gridH);
+
+  let y = startY;
+  for (let i = 0; i < rows.length; i += 1) {
+    const row = rows[i];
+    const rowH = rowHeights[i];
+
+    doc.setDrawColor(0);
+    doc.setLineWidth(0.25);
+
+    if (row.kind === "dual") {
+      drawLabeledValue(doc, margin, y, gridCols[0], gridCols[1], row.left.label, row.left.value);
+      drawLabeledValue(doc, midX, y, gridCols[2], gridCols[3], row.right.label, row.right.value);
+      doc.line(margin + gridCols[0], y, margin + gridCols[0], y + rowH);
+      doc.line(midX, y, midX, y + rowH);
+      doc.line(midX + gridCols[2], y, midX + gridCols[2], y + rowH);
+    } else {
+      drawLabeledValue(doc, margin, y, spanLabelW, spanValueW, row.label, row.value);
+      doc.line(margin + spanLabelW, y, margin + spanLabelW, y + rowH);
+    }
+
+    if (i < rows.length - 1) {
+      doc.line(margin, y + rowH, margin + contentW, y + rowH);
+    }
+    y += rowH;
+  }
+
+  return startY + gridH;
 }
 
 export async function downloadDeliveryChallanPdf(
   input: DeliveryChallanPdfInput,
   fileName?: string,
+  options?: { watermark?: boolean },
 ): Promise<void> {
   const doc = await renderDeliveryChallanPdf(input);
+  if (options?.watermark) {
+    applyDraftWatermark(doc);
+  }
   const safeName = (input.challanNumber || "delivery-challan").replace(/[/\\?%*:|"<>]/g, "-");
-  doc.save(fileName || `Delivery-Challan-${safeName}.pdf`);
+  const base = fileName || `Delivery-Challan-${safeName}.pdf`;
+  doc.save(options?.watermark ? base.replace(/\.pdf$/i, "-draft.pdf") : base);
 }
 
-export async function openDeliveryChallanPdfPreview(input: DeliveryChallanPdfInput): Promise<void> {
+export async function openDeliveryChallanPdfPreview(
+  input: DeliveryChallanPdfInput,
+  options?: { watermark?: boolean },
+): Promise<void> {
   const doc = await renderDeliveryChallanPdf(input);
+  if (options?.watermark) {
+    applyDraftWatermark(doc);
+  }
   const blob = doc.output("blob");
   const url = URL.createObjectURL(blob);
   window.open(url, "_blank", "noopener,noreferrer");
   window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+}
+
+/** Diagonal DRAFT mark — used for unsaved challan previews. */
+function applyDraftWatermark(doc: jsPDF) {
+  const pageCount = doc.getNumberOfPages();
+  const pageW = doc.internal.pageSize.getWidth();
+  const pageH = doc.internal.pageSize.getHeight();
+  const soft = new GState({ opacity: 0.14 });
+  const solid = new GState({ opacity: 1 });
+
+  for (let page = 1; page <= pageCount; page += 1) {
+    doc.setPage(page);
+    doc.setGState(soft);
+    doc.setTextColor(185, 28, 28);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(62);
+    doc.text("DRAFT", pageW / 2, pageH / 2 - 6, {
+      align: "center",
+      angle: 32,
+    });
+    doc.setFontSize(16);
+    doc.text("NOT FINALIZED", pageW / 2, pageH / 2 + 18, {
+      align: "center",
+      angle: 32,
+    });
+    doc.setGState(solid);
+    doc.setTextColor(0, 0, 0);
+  }
 }
 
 async function renderDeliveryChallanPdf(input: DeliveryChallanPdfInput): Promise<jsPDF> {
@@ -404,89 +526,75 @@ async function renderDeliveryChallanPdf(input: DeliveryChallanPdfInput): Promise
     doc.addImage(logo.dataUrl, "JPEG", margin, y, logoW, logoH);
   }
 
-  const centerX = pageW / 2;
+  const rightX = pageW - margin;
+  const entityTitle = (input.entityName || "Cache Technologies").trim();
   doc.setFont("helvetica", "bold");
   doc.setFontSize(11);
-  doc.text(input.entityName || "Cache Technologies", centerX, y + 4, { align: "center" });
+  doc.text(entityTitle, rightX, y + 4, { align: "right" });
 
   doc.setFont("helvetica", "normal");
   doc.setFontSize(7);
-  const headerLines = wrap(doc, input.entityAddressBlock, contentW * 0.55);
+  const addressOnly = (input.entityAddressBlock || "")
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .filter((line, index) => {
+      if (index !== 0) return true;
+      return line.toLowerCase() !== entityTitle.toLowerCase();
+    })
+    .join("\n");
+  const headerLines = wrap(doc, addressOnly, contentW * 0.5);
   let hy = y + 8;
   headerLines.slice(0, 4).forEach((line) => {
-    doc.text(line, centerX, hy, { align: "center" });
+    doc.text(line, rightX, hy, { align: "right" });
     hy += 3;
   });
 
-  const gstLines = wrap(doc, input.entityGstBlock, contentW * 0.7);
+  const gstLines = wrap(doc, input.entityGstBlock, contentW * 0.55);
   gstLines.slice(0, 5).forEach((line) => {
-    doc.text(line, centerX, hy, { align: "center" });
+    doc.text(line, rightX, hy, { align: "right" });
     hy += 2.8;
   });
 
   y = Math.max(y + logoH + 2, hy + 2);
 
+  const centerX = pageW / 2;
   doc.setFont("helvetica", "bold");
   doc.setFontSize(12);
   doc.text("DELIVERY CHALLAN", centerX, y, { align: "center" });
   doc.setFontSize(7);
-  doc.text(input.copyLabel || "ORIGINAL FOR CONSIGNEE", pageW - margin, y, { align: "right" });
+  doc.text(input.copyLabel || "ORIGINAL FOR CONSIGNEE", rightX, y, { align: "right" });
   y += 5;
 
-  const gridRows: Array<
-    [{ label: string; value: string }, { label: string; value: string }]
-  > = [
-    [
-      { label: "Challan No", value: input.challanNumber },
-      { label: "Challan Date", value: formatPoDate(input.challanDate) },
-    ],
-    [
-      { label: "Customer Name", value: input.customerName },
-      { label: "Kind Attn", value: input.kindAttn },
-    ],
-    [
-      { label: "Customer Address (Bill To)", value: input.customerBillTo },
-      { label: "Customer Address (Ship To)", value: input.customerShipTo },
-    ],
-    [
-      { label: "GST No", value: input.customerGstNo },
-      { label: "Remarks", value: input.remarks },
-    ],
-    [
-      { label: "PO No.", value: input.poNumber },
-      { label: "PO Date", value: formatPoDate(input.poDate) },
-    ],
-    [
-      { label: "Mode of Delivery", value: formatDeliveryModeLabel(input.deliveryMode) },
-      { label: "Delivered By", value: input.deliveredBy },
-    ],
+  const headerRows: HeaderGridRow[] = [
+    {
+      kind: "dual",
+      left: { label: "Challan No", value: input.challanNumber },
+      right: { label: "Challan Date", value: formatPoDate(input.challanDate) },
+    },
+    {
+      kind: "span",
+      label: "Customer Details",
+      value: formatCustomerDetailsBlock(input),
+    },
+    {
+      kind: "dual",
+      left: { label: "Customer PO No.", value: input.poNumber },
+      right: { label: "Customer PO Date", value: formatPoDate(input.poDate) },
+    },
+    {
+      kind: "span",
+      label: "Remarks",
+      value: dash(input.remarks),
+    },
+    {
+      kind: "dual",
+      left: { label: "Mode of Delivery", value: formatDeliveryModeLabel(input.deliveryMode) },
+      right: { label: "Delivered By", value: input.deliveredBy },
+    },
   ];
 
-  const gridCols = gridColumnWidths(contentW);
-  const rowHeights = gridRows.map(([left, right]) =>
-    measureFourColumnRowHeight(doc, left, right, gridCols),
-  );
-  const gridH = rowHeights.reduce((sum, h) => sum + h, 0);
-
-  strokeRect(doc, margin, y, contentW, gridH);
-  doc.line(margin + gridCols[0], y, margin + gridCols[0], y + gridH);
-  doc.line(margin + gridCols[0] + gridCols[1], y, margin + gridCols[0] + gridCols[1], y + gridH);
-  doc.line(
-    margin + gridCols[0] + gridCols[1] + gridCols[2],
-    y,
-    margin + gridCols[0] + gridCols[1] + gridCols[2],
-    y + gridH,
-  );
-
-  let gridY = y;
-  for (let i = 0; i < gridRows.length; i += 1) {
-    const [left, right] = gridRows[i];
-    const rowH = rowHeights[i];
-    drawFourColumnRow(doc, margin, gridY, contentW, rowH, left, right, gridCols);
-    gridY += rowH;
-  }
-
-  y += gridH + 3;
+  y = drawHeaderGrid(doc, margin, y, contentW, headerRows) + 3;
 
   const itemCols = scaleItemColumns(contentW);
   const tableW = contentW;
@@ -502,6 +610,7 @@ async function renderDeliveryChallanPdf(input: DeliveryChallanPdfInput): Promise
   let cx = tableX;
   const headers = [
     ["Sr. No.", itemCols.sr],
+    ["Product", itemCols.product],
     ["Description", itemCols.desc],
     ["HSN/SAC Code", itemCols.hsn],
     ["Asset No", itemCols.asset],
@@ -515,7 +624,7 @@ async function renderDeliveryChallanPdf(input: DeliveryChallanPdfInput): Promise
   }
   y += headerRowH;
 
-  const itemRows = input.lines.filter((ln) => ln.itemName.trim());
+  const itemRows = input.lines.filter((ln) => ln.itemName.trim() || ln.product.trim());
 
   for (let i = 0; i < itemRows.length; i += 1) {
     const ln = itemRows[i];
@@ -523,12 +632,13 @@ async function renderDeliveryChallanPdf(input: DeliveryChallanPdfInput): Promise
     const rate = Number(ln.rate) || 0;
     const value = qty * rate;
 
-    const descParts = [ln.itemName.trim()];
+    const productLines = wrap(doc, (ln.product || "").trim() || "—", itemCols.product - 2);
+    const descParts = [(ln.itemName || "").trim() || "—"];
     if (ln.shipTo.trim()) {
       descParts.push(`Ship To: ${ln.shipTo.trim()}`);
     }
     const descLines = wrap(doc, descParts.join("\n"), itemCols.desc - 2);
-    const rowH = Math.max(12, 4 + descLines.length * 3.2);
+    const rowH = Math.max(12, 4 + Math.max(productLines.length, descLines.length) * 3.2);
 
     if (y + rowH > 250) {
       doc.addPage();
@@ -543,6 +653,12 @@ async function renderDeliveryChallanPdf(input: DeliveryChallanPdfInput): Promise
     const textY = y + Math.min(5, rowH * 0.4);
     doc.text(String(i + 1), cx + itemCols.sr / 2, textY, { align: "center" });
     cx += itemCols.sr;
+    let py = y + 4;
+    productLines.forEach((line) => {
+      doc.text(line, cx + 1, py);
+      py += 3.2;
+    });
+    cx += itemCols.product;
     let dy = y + 4;
     descLines.forEach((line) => {
       doc.text(line, cx + 1, dy);
@@ -578,11 +694,16 @@ async function renderDeliveryChallanPdf(input: DeliveryChallanPdfInput): Promise
     tableW,
     itemCols.value,
     taxSummary.rows,
-    { attachBelowItems: itemRows.length > 0 },
+    {
+      attachBelowItems: itemRows.length > 0,
+      amountInWords: `Amount in Words: ${challanAmountInWords(grandTotal)}`,
+      igstRemarks:
+        igstAmount > 0 ? `Remarks: IGST value for ${Math.round(igstAmount)}` : undefined,
+    },
   );
   y += 4;
 
-  drawFooterSection(doc, input, y, grandTotal, igstAmount);
+  drawFooterSection(doc, input, y);
 
   return doc;
 }
@@ -670,4 +791,12 @@ export function buildDeliveryChallanPdfInputFromRecord(
     deliveryMode: record.deliveryMode,
     lines: record.lines,
   });
+}
+
+/** PDF input with customer PO resolved from order/OVF when the record still has company PO. */
+export async function buildDeliveryChallanPdfInputFromRecordResolved(
+  record: DeliveryChallanRecord,
+): Promise<DeliveryChallanPdfInput> {
+  const resolved = await resolveChallanRecordCustomerPo(record);
+  return buildDeliveryChallanPdfInputFromRecord(resolved);
 }

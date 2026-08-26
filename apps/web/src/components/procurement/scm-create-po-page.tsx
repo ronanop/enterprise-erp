@@ -34,10 +34,11 @@ import {
   ScmCommercialDocumentsPanel,
   type PendingScmCommercialDocument,
 } from "@/components/procurement/scm-commercial-documents-panel";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
-import { submitPoFinalizeApproval } from "@/lib/procurement-approvals";
+import { submitPoFinalizeApproval, hasAcceptedCreatePoInStockApproval } from "@/lib/procurement-approvals";
+import { useProcurementRole } from "@/hooks/use-procurement-role";
 import { scmHoldCreatePoNotice } from "@/utils/scm-ovf-hold";
 import { ApiClientError } from "@/services/api-client";
 import {
@@ -64,8 +65,13 @@ import {
   previewPurchaseOrderPdf,
   type PurchaseOrderPdfInput,
 } from "@/utils/purchase-order-pdf";
-import { matchVendorByOem } from "@/utils/vendor-oem-match";
-import { ovfProductKey } from "@/utils/ovf-stock";
+import { matchVendorByDistributor } from "@/utils/vendor-oem-match";
+import {
+  ovfPoSeedVendorLines,
+  ovfProductKey,
+  ovfRequiresInStockCreatePoApproval,
+  ovfVendorPoGroups,
+} from "@/utils/ovf-stock";
 
 function applyVendorAddressFields(
   entry: VendorAddressEntry | null | undefined,
@@ -119,12 +125,21 @@ function formatPostalAddressLines(address: VendorPostalAddress): string[] {
     .filter(Boolean);
 }
 
-function sortVendorsForOem(vendors: VendorOption[], oemName: string): VendorOption[] {
-  const oem = oemName.trim().toLowerCase();
-  if (!oem) return vendors;
+function sortVendorsForDistributor(
+  vendors: VendorOption[],
+  distributorName: string,
+): VendorOption[] {
+  const parties = distributorName
+    .replace(/;/g, ",")
+    .split(",")
+    .map((part) => part.trim().toLowerCase())
+    .filter(Boolean);
+  if (parties.length === 0) return vendors;
   return [...vendors].sort((a, b) => {
-    const aMatch = a.label.trim().toLowerCase() === oem ? 0 : 1;
-    const bMatch = b.label.trim().toLowerCase() === oem ? 0 : 1;
+    const aKey = a.label.trim().toLowerCase();
+    const bKey = b.label.trim().toLowerCase();
+    const aMatch = parties.includes(aKey) ? 0 : 1;
+    const bMatch = parties.includes(bKey) ? 0 : 1;
     if (aMatch !== bMatch) return aMatch - bMatch;
     return a.label.localeCompare(b.label, undefined, { sensitivity: "base" });
   });
@@ -591,7 +606,9 @@ function ItemDetailsTextarea({
 export function ScmCreatePoPage({ ovfId }: { ovfId: string }) {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const { isAdmin } = useProcurementRole();
   const remainderFromStock = searchParams.get("from") === "stock-remainder";
+  const distributorParam = searchParams.get("distributor");
   const shippingMenuRef = useRef<HTMLDivElement>(null);
   const paymentTermsMenuRef = useRef<HTMLDivElement>(null);
   const [preview, setPreview] = useState<ScmOvfPreview | null>(null);
@@ -622,7 +639,9 @@ export function ScmCreatePoPage({ ovfId }: { ovfId: string }) {
   const [usdConvertError, setUsdConvertError] = useState<string | null>(null);
   const actionErrorRef = useRef<HTMLDivElement>(null);
 
-  const oemName = (preview?.oem_name || "").trim();
+  const distributorName = (preview?.distributor_name || "").trim();
+  const vendorHintName =
+    (preview?.vendor_name || "").trim() || distributorName || "";
   const scmHoldBanner = useMemo(() => {
     if (!preview?.scm_on_hold || !preview.can_create_po) return null;
     return scmHoldCreatePoNotice(preview.scm_on_hold_at);
@@ -653,15 +672,16 @@ export function ScmCreatePoPage({ ovfId }: { ovfId: string }) {
   ]);
   const selectedVendorAddressEntry = useMemo(() => {
     if (!selectedVendor) return null;
+    const entries = selectedVendor.addressEntries ?? [];
     return (
-      selectedVendor.addressEntries.find((entry) => entry.address === form.vendorAddress) ||
-      selectedVendor.addressEntries[0] ||
+      entries.find((entry) => entry.address === form.vendorAddress) ||
+      entries[0] ||
       null
     );
   }, [selectedVendor, form.vendorAddress]);
   const vendorsForSelect = useMemo(
-    () => sortVendorsForOem(vendors, oemName),
-    [vendors, oemName],
+    () => sortVendorsForDistributor(vendors, distributorName),
+    [vendors, distributorName],
   );
 
   const inventoryTakenRows = useMemo(() => {
@@ -807,14 +827,20 @@ export function ScmCreatePoPage({ ovfId }: { ovfId: string }) {
       setPreview(ovf);
       setVendors(vendorRows);
 
+      const seedVendorLines = remainderFromStock
+        ? ovf.vendor_lines || []
+        : ovfPoSeedVendorLines(ovf.vendor_lines || [], distributorParam);
+      const selectedDistributor =
+        (distributorParam || seedVendorLines[0]?.distributor_name || ovf.distributor_name || "").trim();
       const defaultTax = normalizeTaxOption(ovf.tax_percentage, "18");
       const location =
         COMPANY_LOCATIONS.find((loc) => loc.id === "kailash-colony") ?? COMPANY_LOCATIONS[0];
       setForm((current) => {
         const keepVendor =
           Boolean(current.vendorId) && vendorRows.some((row) => row.id === current.vendorId);
-        const oem = (ovf.oem_name || "").trim();
-        const matched = keepVendor ? null : matchVendorByOem(vendorRows, ovf.oem_name);
+        const matched = keepVendor
+          ? null
+          : matchVendorByDistributor(vendorRows, selectedDistributor);
         const matchedEntry = matched?.addressEntries?.[0];
         const addressFields = keepVendor
           ? {
@@ -837,8 +863,8 @@ export function ScmCreatePoPage({ ovfId }: { ovfId: string }) {
           lockedFromPo?.id || current.companyLocationId || location.id,
         );
         const seededLines =
-          ovf.vendor_lines.length > 0
-            ? ovf.vendor_lines.map((ln) =>
+          seedVendorLines.length > 0
+            ? seedVendorLines.map((ln) =>
                 normalizeTaxOption(
                   ln.gst_pct != null && Number.isFinite(Number(ln.gst_pct))
                     ? ln.gst_pct
@@ -850,10 +876,13 @@ export function ScmCreatePoPage({ ovfId }: { ovfId: string }) {
         const uniformSeed = seededLines.every((pct) => pct === seededLines[0])
           ? seededLines[0]
           : defaultTax;
+        const distributorHint = selectedDistributor || (ovf.distributor_name || ovf.vendor_name || "").trim();
         return {
-          // Auto-select when OEM matches a vendor; otherwise leave blank for SCM.
+          // Auto-select when distributor matches a vendor; otherwise leave blank for SCM.
           vendorId: keepVendor ? current.vendorId : matched?.id || "",
-          vendorName: keepVendor ? current.vendorName : matched?.label || oem,
+          vendorName: keepVendor
+            ? current.vendorName
+            : matched?.label || distributorHint,
           ...addressFields,
           destinationOfSupply: selectedLocation.gstState,
           companyLocationId: selectedLocation.id,
@@ -895,7 +924,7 @@ export function ScmCreatePoPage({ ovfId }: { ovfId: string }) {
       });
       setLines((current) => {
         if (current.length > 0) return current;
-        const vendorLines = ovf.vendor_lines || [];
+        const vendorLines = seedVendorLines;
         const mapped = vendorLines
           .map((ln) => {
             const avail = (ovf.stock_availability || []).find(
@@ -941,6 +970,15 @@ export function ScmCreatePoPage({ ovfId }: { ovfId: string }) {
             ? `Taken from inventory: ${taken.join(", ")}. Vendor lines below are remaining demand only.`
             : "Vendor quantities are remaining demand after stock allocation.",
         );
+      } else if (ovfVendorPoGroups(ovf.vendor_lines || []).length > 1 && selectedDistributor) {
+        const remaining = (ovf.open_distributor_names || []).filter(
+          (name) => name.trim().toLowerCase() !== selectedDistributor.toLowerCase(),
+        );
+        setBanner(
+          remaining.length > 0
+            ? `Creating PO for ${selectedDistributor}. Still open: ${remaining.join(", ")}. IN STOCK lines are not included.`
+            : `Creating PO for ${selectedDistributor}. IN STOCK lines are not included.`,
+        );
       } else if (!ovf.can_create_po && ovf.purchase_order_id) {
         setBanner(`PO ${ovf.purchase_order_number} already exists for this OVF.`);
       } else if (ovf.scm_on_hold && ovf.can_create_po) {
@@ -983,7 +1021,7 @@ export function ScmCreatePoPage({ ovfId }: { ovfId: string }) {
     } finally {
       setLoading(false);
     }
-  }, [ovfId, remainderFromStock]);
+  }, [ovfId, remainderFromStock, distributorParam]);
 
   useEffect(() => {
     void load();
@@ -1106,7 +1144,7 @@ export function ScmCreatePoPage({ ovfId }: { ovfId: string }) {
     setForm((current) => ({
       ...current,
       vendorId,
-      vendorName: vendor?.label || oemName || "",
+      vendorName: vendor?.label || vendorHintName || "",
       ...applyVendorAddressFields(entry, vendor?.taxNumber || ""),
       destinationOfSupply: entityState,
     }));
@@ -1135,7 +1173,7 @@ export function ScmCreatePoPage({ ovfId }: { ovfId: string }) {
     setVendorDialogError(null);
     setVendorDraft(
       emptyVendorFormDraft({
-        vendorName: oemName || form.vendorName || "",
+        vendorName: vendorHintName || form.vendorName || "",
         gstNumber: form.vendorGstNumber || "",
         sourceOfSupply: form.sourceOfSupply || "",
         destinationOfSupply: form.destinationOfSupply || "",
@@ -1505,6 +1543,7 @@ export function ScmCreatePoPage({ ovfId }: { ovfId: string }) {
         // A PO is always created as a draft. Only an administrator's
         // acceptance from the Approval workspace may issue it.
         finalize: false,
+        distributor_name: distributorParam || null,
         lines: poLines,
       });
       for (const document of scmDocuments) {
@@ -1538,7 +1577,8 @@ export function ScmCreatePoPage({ ovfId }: { ovfId: string }) {
           vendorName:
             form.vendorName ||
             selectedVendor?.label ||
-            preview?.oem_name ||
+            preview?.vendor_name ||
+            preview?.distributor_name ||
             null,
           ovfId,
           documents,
@@ -1625,7 +1665,7 @@ export function ScmCreatePoPage({ ovfId }: { ovfId: string }) {
         },
         supplier: {
           name:
-            (form.vendorName || selectedVendor?.label || oemName || "").trim() ||
+            (form.vendorName || selectedVendor?.label || vendorHintName || "").trim() ||
             "—",
           address: (form.vendorAddress || "").trim() || "—",
         },
@@ -1665,6 +1705,54 @@ export function ScmCreatePoPage({ ovfId }: { ovfId: string }) {
     Boolean(preview?.purchase_order_id) &&
     preview?.can_create_po &&
     (preview?.purchase_order_status || "").toLowerCase() === "draft";
+  const blockedForInStockApproval = Boolean(
+    preview &&
+      !editingDraft &&
+      ovfRequiresInStockCreatePoApproval(preview) &&
+      !isAdmin &&
+      !hasAcceptedCreatePoInStockApproval(ovfId),
+  );
+
+  if (!loading && blockedForInStockApproval) {
+    return (
+      <div className="space-y-4">
+        <PageHeader
+          backHref={`/procurement/scm/ovf/${ovfId}`}
+          backLabel="OVF"
+          title="Create purchase order"
+          titleClassName="text-3xl font-semibold tracking-tight sm:text-4xl"
+          centerTitle
+        />
+        <div className="rounded-md border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-950">
+          <p className="font-medium">Admin approval required</p>
+          <p className="mt-1 text-amber-900/90">
+            All lines on this OVF are <span className="font-semibold">IN STOCK</span>. Request Create
+            PO from the OVF page; after an admin approves, you can create the purchase order here.
+          </p>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <Link
+              href={`/procurement/scm/ovf/${ovfId}`}
+              className={cn(
+                buttonVariants({ size: "sm" }),
+                "cursor-pointer transition-colors duration-200",
+              )}
+            >
+              Back to OVF
+            </Link>
+            <Link
+              href="/procurement/approvals"
+              className={cn(
+                buttonVariants({ size: "sm", variant: "outline" }),
+                "cursor-pointer transition-colors duration-200",
+              )}
+            >
+              View approvals
+            </Link>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-4">
@@ -2723,7 +2811,7 @@ export function ScmCreatePoPage({ ovfId }: { ovfId: string }) {
             onChange={setVendorDraft}
             disabled={vendorDialogBusy}
             showVendorType={false}
-            vendorNamePlaceholder={oemName || "Vendor name"}
+            vendorNamePlaceholder={vendorHintName || "Distributor / vendor name"}
           />
         </div>
       </ConfirmDialog>

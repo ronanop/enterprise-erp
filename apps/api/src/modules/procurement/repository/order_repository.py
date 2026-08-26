@@ -34,14 +34,14 @@ class OrderRepository(ProcScopedRepository):
         stmt = self.apply_proc_filter(stmt, ProcOrderHeader, ctx, branch_scoped=True)
         return list(self.db.scalars(stmt.order_by(ProcOrderHeader.document_date.desc())).all())
 
-    def find_by_source(
+    def list_by_source(
         self,
         ctx: TenantContext,
         *,
         source_module: str,
         source_document_type: str,
         source_document_id: UUID,
-    ) -> ProcOrderHeader | None:
+    ) -> list[ProcOrderHeader]:
         stmt = (
             select(ProcOrderHeader)
             .options(selectinload(ProcOrderHeader.lines))
@@ -54,7 +54,22 @@ class OrderRepository(ProcScopedRepository):
             )
             .order_by(ProcOrderHeader.created_at.desc())
         )
-        rows = list(self.db.scalars(stmt).all())
+        return list(self.db.scalars(stmt).all())
+
+    def find_by_source(
+        self,
+        ctx: TenantContext,
+        *,
+        source_module: str,
+        source_document_type: str,
+        source_document_id: UUID,
+    ) -> ProcOrderHeader | None:
+        rows = self.list_by_source(
+            ctx,
+            source_module=source_module,
+            source_document_type=source_document_type,
+            source_document_id=source_document_id,
+        )
         if not rows:
             return None
         # Prefer an active PO; cancelled ones remain only if nothing else exists (Hold).

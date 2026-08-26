@@ -2,30 +2,35 @@
 
 import { useCallback, useEffect, useState } from "react";
 
-const STORAGE_KEY = "erp.procurement.role";
+import {
+  PROCUREMENT_ROLE_EVENT,
+  readProcurementRole,
+  toggleProcurementRole,
+  writeProcurementRole,
+  type ProcurementRole,
+} from "@/lib/procurement-role";
 
-export type ProcurementWorkspaceRole = "admin" | "user";
-
-function readRole(): ProcurementWorkspaceRole {
-  if (typeof window === "undefined") return "user";
-  return window.localStorage.getItem(STORAGE_KEY) === "admin" ? "admin" : "user";
-}
-
-/** Demo toggle between SCM user and admin workspace. */
 export function useProcurementRole() {
-  const [role, setRole] = useState<ProcurementWorkspaceRole>("user");
+  const [role, setRole] = useState<ProcurementRole>("user");
+  const [ready, setReady] = useState(false);
 
   useEffect(() => {
-    setRole(readRole());
+    const sync = () => setRole(readProcurementRole());
+    sync();
+    setReady(true);
+    window.addEventListener(PROCUREMENT_ROLE_EVENT, sync);
+    window.addEventListener("storage", sync);
+    return () => {
+      window.removeEventListener(PROCUREMENT_ROLE_EVENT, sync);
+      window.removeEventListener("storage", sync);
+    };
   }, []);
 
-  const switchRole = useCallback(() => {
-    setRole((current) => {
-      const next: ProcurementWorkspaceRole = current === "admin" ? "user" : "admin";
-      window.localStorage.setItem(STORAGE_KEY, next);
-      return next;
-    });
+  const setProcurementRole = useCallback((next: ProcurementRole) => {
+    writeProcurementRole(next);
   }, []);
 
-  return { role, isAdmin: role === "admin", switchRole };
+  const switchRole = useCallback(() => toggleProcurementRole(), []);
+
+  return { role, ready, isAdmin: role === "admin", setProcurementRole, switchRole };
 }

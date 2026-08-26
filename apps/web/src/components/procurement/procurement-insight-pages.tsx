@@ -429,12 +429,13 @@ export function ProcurementReportsPage() {
 
         <div className={procurementUi.tableShell}>
           <div className={procurementUi.tableScroll}>
-            <table className={cn(procurementUi.table, "min-w-[1080px]")}>
+            <table className={cn(procurementUi.table, "min-w-[1180px]")}>
               <thead className={procurementUi.thead}>
                 <tr>
                   <th className={cn(procurementUi.th, "px-3")}>Company PO</th>
                   <th className={cn(procurementUi.th, "px-3")}>Vendor</th>
                   <th className={cn(procurementUi.th, "px-3")}>GRN status</th>
+                  <th className={cn(procurementUi.th, "px-3")}>DC bill status</th>
                   <th className={cn(procurementUi.th, "px-3 text-right")}>GRNs</th>
                   <th className={cn(procurementUi.th, "px-3 text-right")}>Ordered</th>
                   <th className={cn(procurementUi.th, "px-3 text-right")}>Received</th>
@@ -446,13 +447,13 @@ export function ProcurementReportsPage() {
               <tbody>
                 {loading ? (
                   <tr>
-                    <td colSpan={9} className={procurementUi.empty}>
+                    <td colSpan={10} className={procurementUi.empty}>
                       Loading PO status…
                     </td>
                   </tr>
                 ) : filteredPoStatusRows.length === 0 ? (
                   <tr>
-                    <td colSpan={9} className={procurementUi.empty}>
+                    <td colSpan={10} className={procurementUi.empty}>
                       No issued purchase orders match this filter.
                     </td>
                   </tr>
@@ -473,6 +474,7 @@ export function ProcurementReportsPage() {
                           {row.grnStatus}
                         </Badge>
                       </td>
+                      <td className={cn(procurementUi.td, "px-3")}>{row.dcBillStatus}</td>
                       <td
                         className={cn(
                           procurementUi.tdNumeric,

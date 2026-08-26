@@ -282,6 +282,7 @@ class OrderLineResponse(BaseModel):
     last_receipt_serial_numbers: list[str] | None = None
     last_receipt_billing: bool = True
     last_receipt_billing_quantity: float = 0
+    last_receipt_delivery_challan_quantity: float = 0
     unit_cost: float
     rate_currency: str = "INR"
     tax_rate: float = 0
@@ -362,6 +363,34 @@ class ScmStockAvailability(BaseModel):
     remaining_qty: float = 0
 
 
+class ScmItemPlanLine(BaseModel):
+    product_name: str
+    qty: float = 0
+    distributor_name: str | None = None
+    source: str = "purchase_order"  # inventory | purchase_order
+    on_hand_qty: float = 0
+    allocated_qty: float = 0
+    book_qty: float = 0
+    po_qty: float = 0
+    in_stock: bool = False
+    action: str = "create_po"  # book_stock | stock_short | create_po | no_vendor
+
+
+class ScmItemPlan(BaseModel):
+    lines: list[ScmItemPlanLine] = Field(default_factory=list)
+    delivery: str = "together"  # together | separate
+    delivery_note: str = ""
+
+
+class ScmLinkedPurchaseOrder(BaseModel):
+    id: UUID
+    vendor_id: UUID | None = None
+    vendor_name: str | None = None
+    document_number: str | None = None
+    company_po_number: str | None = None
+    status: str | None = None
+
+
 class ScmQueueItemResponse(BaseModel):
     ovf_id: UUID
     ovf_no: str
@@ -384,6 +413,8 @@ class ScmQueueItemResponse(BaseModel):
     customer_payment_days: int = 0
     vendor_name: str | None = None
     oem_name: str | None = None
+    distributor_name: str | None = None
+    project_title: str | None = None
     received_at: datetime | None = None
     delivery_period: str | None = None
     expected_delivery_date: date | None = None
@@ -393,9 +424,12 @@ class ScmQueueItemResponse(BaseModel):
     scm_on_hold: bool = False
     scm_on_hold_at: datetime | None = None
     can_create_po: bool = True
+    open_distributor_names: list[str] = Field(default_factory=list)
+    purchase_orders: list[ScmLinkedPurchaseOrder] = Field(default_factory=list)
     stock_fulfillment_status: str = "none"
     remaining_demand_qty: float = 0
     stock_availability: list[ScmStockAvailability] = Field(default_factory=list)
+    item_plan: ScmItemPlan = Field(default_factory=ScmItemPlan)
 
 
 class ScmNextCompanyPoResponse(BaseModel):
@@ -414,6 +448,9 @@ class ScmVendorLinePreview(BaseModel):
     gst_pct: float = 0
     gst_amount: float = 0
     total_with_gst: float = 0
+    # CRM Vendor Charges "Distributor Name" (IN STOCK ⇒ inventory; else create PO).
+    distributor_name: str | None = None
+    fulfillment_source: str | None = None  # inventory | purchase_order
 
 
 class ScmMarginLinePreview(BaseModel):
@@ -499,10 +536,15 @@ class ScmOvfPreviewResponse(BaseModel):
     quote_name: str | None = None
     account_name: str | None = None
     owner_name: str | None = None
+    project_title: str | None = None
     oem_name: str | None = None
     oem_contact_person: str | None = None
     oem_contact_email: str | None = None
     oem_contact_number: str | None = None
+    distributor_name: str | None = None
+    distributor_contact_person: str | None = None
+    distributor_contact: str | None = None
+    distributor_contact_email: str | None = None
     blueprint_state: str
     approval_status: str | None = None
     freight: float = 0
@@ -530,6 +572,8 @@ class ScmOvfPreviewResponse(BaseModel):
     purchase_order_id: UUID | None = None
     purchase_order_number: str | None = None
     can_create_po: bool = True
+    open_distributor_names: list[str] = Field(default_factory=list)
+    purchase_orders: list[ScmLinkedPurchaseOrder] = Field(default_factory=list)
     scm_on_hold: bool = False
     scm_on_hold_at: datetime | None = None
     scm_hold_blocked: bool = False
@@ -542,6 +586,7 @@ class ScmOvfPreviewResponse(BaseModel):
     remaining_demand_qty: float = 0
     stock_availability: list[ScmStockAvailability] = Field(default_factory=list)
     stock_allocations: list[ScmOvfStockAllocationRow] = Field(default_factory=list)
+    item_plan: ScmItemPlan = Field(default_factory=ScmItemPlan)
 
 
 class ScmCreatePoFromOvfLineRequest(BaseModel):
@@ -565,6 +610,8 @@ class ScmCreatePoFromOvfRequest(BaseModel):
     finalize: bool = False
     # Hold: create draft then cancel so SCM Queue shows Hold and Create PO stays available.
     hold: bool = False
+    # When set, purchase only this distributor's OVF vendor lines (IN STOCK excluded).
+    distributor_name: str | None = Field(default=None, max_length=255)
     # When set, these lines are purchased instead of raw OVF vendor_lines (qty/rate edits, removals).
     lines: list[ScmCreatePoFromOvfLineRequest] | None = None
 
@@ -603,6 +650,7 @@ class ScmLineReceiptUpdateRequest(BaseModel):
     serial_numbers: list[str] | None = None
     billing: bool = True
     billing_quantity: float | None = None
+    delivery_challan_quantity: float | None = None
 
 
 class ScmVendorPoLineResponse(BaseModel):
@@ -616,6 +664,7 @@ class ScmVendorPoLineResponse(BaseModel):
     last_receipt_serial_numbers: list[str] | None = None
     last_receipt_billing: bool = True
     last_receipt_billing_quantity: float = 0
+    last_receipt_delivery_challan_quantity: float = 0
     unit_cost: float
     rate_currency: str = "INR"
     line_total: float
@@ -656,6 +705,7 @@ class ScmReceiptBatchLineResponse(BaseModel):
     serial_numbers: list[str] | None = None
     billing: bool = True
     billing_quantity: float = 0
+    delivery_challan_quantity: float = 0
 
     @field_validator("serial_numbers", mode="before")
     @classmethod
@@ -696,6 +746,7 @@ class ScmProcurementInventoryRowResponse(BaseModel):
 class ScmInventoryImportLineRequest(BaseModel):
     product_name: str
     serial_number: str
+    description: str | None = None
     order_id: UUID | None = None
 
 
@@ -729,6 +780,8 @@ class ScmCommercialAttachmentSummary(BaseModel):
     remarks: str | None = None
     entity_type: str
     entity_id: UUID
+    source: str = "upload"
+    external_url: str | None = None
 
 
 class ScmCommercialAttachmentCreate(BaseModel):

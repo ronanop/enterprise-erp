@@ -17,6 +17,7 @@ import { useProcurementApprovals } from "@/hooks/use-procurement-approvals";
 import { useProcurementRole } from "@/hooks/use-procurement-role";
 import {
   enrichPoApprovals,
+  isOvfCreatePoApprovalOrderKey,
   readPoApprovals,
   setPoApprovalDocuments,
   type PoApprovalDocument,
@@ -52,6 +53,28 @@ function statusTone(status: PoApprovalRequest["status"]): string {
   return "border-amber-200/80 bg-amber-50 text-amber-900";
 }
 
+function approvalKindLabel(row: PoApprovalRequest): string {
+  return row.kind === "create_po_in_stock" ? "Create PO (IN STOCK)" : "Finalize PO";
+}
+
+function approvalPrimaryHref(row: PoApprovalRequest): string {
+  if (row.kind === "create_po_in_stock" && row.ovfId) {
+    return `/procurement/scm/ovf/${row.ovfId}`;
+  }
+  if (isOvfCreatePoApprovalOrderKey(row.orderId)) {
+    const ovfId = row.ovfId || row.orderId.slice(4);
+    return `/procurement/scm/ovf/${ovfId}`;
+  }
+  return `/procurement/orders/${row.orderId}`;
+}
+
+function approvalPrimaryLabel(row: PoApprovalRequest): string {
+  if (row.kind === "create_po_in_stock") {
+    return row.ovfNo || row.documentNumber || "OVF";
+  }
+  return row.companyPoNumber || row.documentNumber;
+}
+
 function ApprovalDocuments({
   documents,
   onOpenError,
@@ -67,16 +90,20 @@ function ApprovalDocuments({
     <ul className="space-y-1">
       {documents.map((doc) => (
         <li key={doc.id} className="flex items-start gap-1.5">
-          <Paperclip className="size-3 shrink-0 text-muted-foreground" aria-hidden />
-          <div className="min-w-0">
+          <Paperclip className="mt-0.5 size-3 shrink-0 text-muted-foreground" aria-hidden />
+          <div className="min-w-0 flex-1">
             <button
               type="button"
-              className="min-w-0 cursor-pointer truncate text-left text-xs font-medium text-sky-800 transition-colors duration-200 hover:underline"
+              className="min-w-0 max-w-full cursor-pointer truncate text-left text-xs font-medium text-sky-800 transition-colors duration-200 hover:underline"
               disabled={openingId === doc.id}
               title={`${doc.source === "po" ? "PO" : "OVF"} · ${doc.category}`}
               onClick={() => {
                 setOpeningId(doc.id);
-                void openScmCommercialAttachment(doc.id)
+                void openScmCommercialAttachment(doc.id, {
+                  source: doc.attachmentSource || "upload",
+                  external_url: doc.externalUrl || null,
+                  file_name: doc.fileName,
+                })
                   .catch((err) =>
                     onOpenError(err instanceof Error ? err.message : "Failed to open document"),
                   )
@@ -92,10 +119,44 @@ function ApprovalDocuments({
           <span className="shrink-0 text-[10px] uppercase tracking-wide text-muted-foreground">
             {doc.source === "po" ? "PO" : "OVF"}
           </span>
-          <Eye className="size-3 shrink-0 text-muted-foreground" aria-hidden />
+          <Eye className="mt-0.5 size-3 shrink-0 text-muted-foreground" aria-hidden />
         </li>
       ))}
     </ul>
+  );
+}
+
+function DocumentsInsideToggle({
+  documents,
+  onOpenError,
+}: {
+  documents: PoApprovalDocument[];
+  onOpenError: (message: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const count = documents.length;
+  return (
+    <div className="mt-1.5 space-y-1.5">
+      <button
+        type="button"
+        className={cn(
+          "inline-flex cursor-pointer items-center gap-1 rounded-md border px-2 py-0.5 text-[11px] font-medium transition-colors duration-200",
+          open
+            ? "border-sky-300 bg-sky-50 text-sky-900"
+            : "border-border bg-background text-muted-foreground hover:bg-muted/50 hover:text-foreground",
+        )}
+        aria-expanded={open}
+        onClick={() => setOpen((current) => !current)}
+      >
+        <Paperclip className="size-3" aria-hidden />
+        {count === 0 ? "No documents" : `${count} document${count === 1 ? "" : "s"}`}
+      </button>
+      {open ? (
+        <div className="rounded-md border border-border/70 bg-muted/20 px-2.5 py-2">
+          <ApprovalDocuments documents={documents} onOpenError={onOpenError} />
+        </div>
+      ) : null}
+    </div>
   );
 }
 
@@ -173,10 +234,19 @@ export function ProcurementApprovalsPage() {
     setBusyId(row.id);
     setError(null);
     try {
-      await finalizeScmOrder(row.orderId);
+      if (row.kind === "finalize") {
+        await finalizeScmOrder(row.orderId);
+      }
       decide(row.id, "accepted");
     } catch (err) {
-      setError(formatApiError(err, "Failed to accept finalize request"));
+      setError(
+        formatApiError(
+          err,
+          row.kind === "create_po_in_stock"
+            ? "Failed to approve Create PO request"
+            : "Failed to accept finalize request",
+        ),
+      );
     } finally {
       setBusyId(null);
     }
@@ -198,8 +268,8 @@ export function ProcurementApprovalsPage() {
         title="Approval"
         description={
           isAdmin
-            ? "Accept to issue the PO automatically, or reject so the requester can edit and resubmit. Do not finalize from the PO page."
-            : "Track finalize requests you sent. You get a notification when an admin accepts or rejects."
+            ? "Approve Create PO for IN STOCK OVFs, or accept finalize to issue a draft PO. Reject so the requester can edit and resubmit."
+            : "Track Create PO (IN STOCK) and finalize requests you sent. You get a notification when an admin decides."
         }
         actions={
           <div className="flex flex-wrap items-center gap-2">
@@ -275,18 +345,18 @@ export function ProcurementApprovalsPage() {
         {visible.length === 0 ? (
           <div className="px-4 py-10 text-center text-sm text-muted-foreground">
             {isAdmin
-              ? "No PO finalize requests match this filter."
-              : "No approval requests yet. Finalize a PO as a user to send one."}
+              ? "No approval requests match this filter."
+              : "No approval requests yet. Request Create PO on an IN STOCK OVF, or finalize a draft PO."}
           </div>
         ) : (
           <div className={procurementUi.tableScroll}>
-            <table className={cn(procurementUi.table, "min-w-[1100px]")}>
+            <table className={cn(procurementUi.table, "min-w-[880px]")}>
               <thead className={procurementUi.thead}>
                 <tr>
-                  <th className="px-3 py-2 font-medium">PO</th>
+                  <th className="px-3 py-2 font-medium">Request</th>
+                  <th className="px-3 py-2 font-medium">Type</th>
                   <th className="px-3 py-2 font-medium">Customer</th>
                   <th className="px-3 py-2 font-medium">Vendor</th>
-                  <th className="px-3 py-2 font-medium">Documents</th>
                   <th className="px-3 py-2 font-medium">Requested</th>
                   <th className="px-3 py-2 font-medium">Status</th>
                   <th className="px-3 py-2 font-medium text-right">Action</th>
@@ -295,25 +365,33 @@ export function ProcurementApprovalsPage() {
               <tbody>
                 {visible.map((row) => (
                   <tr key={row.id} className="border-t border-border/60">
-                    <td className="px-3 py-2.5">
+                    <td className="px-3 py-2.5 align-top">
                       <Link
-                        href={`/procurement/orders/${row.orderId}`}
+                        href={approvalPrimaryHref(row)}
                         className="cursor-pointer font-semibold text-foreground transition-colors duration-200 hover:text-sky-800"
                       >
-                        {row.companyPoNumber || row.documentNumber}
+                        {approvalPrimaryLabel(row)}
                       </Link>
+                      {row.kind === "create_po_in_stock" && row.reason ? (
+                        <p className="mt-1 text-[11px] text-muted-foreground">
+                          {row.reason === "stock_short"
+                            ? "Reason: stock short / already used"
+                            : "Reason: create PO instead of inventory"}
+                        </p>
+                      ) : null}
+                      <DocumentsInsideToggle
+                        documents={row.documents}
+                        onOpenError={(message) => setError(message)}
+                      />
+                    </td>
+                    <td className="px-3 py-2.5 text-xs font-medium text-muted-foreground">
+                      {approvalKindLabel(row)}
                     </td>
                     <td className="px-3 py-2.5 text-sm text-foreground">
                       {row.customerName || "—"}
                     </td>
                     <td className="px-3 py-2.5 text-sm text-foreground">
                       {row.vendorName || "—"}
-                    </td>
-                    <td className="px-3 py-2.5 align-top">
-                      <ApprovalDocuments
-                        documents={row.documents}
-                        onOpenError={(message) => setError(message)}
-                      />
                     </td>
                     <td className="px-3 py-2.5 text-sm text-muted-foreground">
                       {formatWhen(row.createdAt)}
@@ -331,10 +409,10 @@ export function ProcurementApprovalsPage() {
                     <td className="px-3 py-2.5 text-right">
                       <div className="inline-flex flex-wrap items-center justify-end gap-1.5">
                         <Link
-                          href={`/procurement/orders/${row.orderId}`}
+                          href={approvalPrimaryHref(row)}
                           className="cursor-pointer rounded-md border border-border px-2 py-1 text-[11px] font-medium text-muted-foreground transition-colors duration-200 hover:bg-muted/50 hover:text-foreground"
                         >
-                          Open PO
+                          {row.kind === "create_po_in_stock" ? "Open OVF" : "Open PO"}
                         </Link>
                         {isAdmin && row.status === "pending" ? (
                           <>
@@ -354,7 +432,9 @@ export function ProcurementApprovalsPage() {
                               ) : (
                                 <Check className="size-3" aria-hidden />
                               )}
-                              Accept finalize
+                              {row.kind === "create_po_in_stock"
+                                ? "Approve Create PO"
+                                : "Accept finalize"}
                             </button>
                             <button
                               type="button"

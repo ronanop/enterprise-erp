@@ -4,45 +4,70 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 
 import {
   PROCUREMENT_APPROVALS_EVENT,
-  listPendingPoApprovals,
   readPoApprovals,
   setPoApprovalStatus,
+  submitCreatePoInStockApproval,
+  submitPoFinalizeApproval,
   type PoApprovalRequest,
   type PoApprovalStatus,
 } from "@/lib/procurement-approvals";
+import { pushPoApprovalDecisionNotification } from "@/lib/procurement-approval-notifications";
 
-/** Local-storage PO finalize approvals for the procurement workspace. */
 export function useProcurementApprovals() {
-  const [tick, setTick] = useState(0);
+  const [rows, setRows] = useState<PoApprovalRequest[]>([]);
 
   const refresh = useCallback(() => {
-    setTick((n) => n + 1);
+    setRows(readPoApprovals());
   }, []);
 
   useEffect(() => {
-    const onChange = () => refresh();
-    window.addEventListener(PROCUREMENT_APPROVALS_EVENT, onChange);
-    window.addEventListener("storage", onChange);
+    refresh();
+    window.addEventListener(PROCUREMENT_APPROVALS_EVENT, refresh);
+    window.addEventListener("storage", refresh);
     return () => {
-      window.removeEventListener(PROCUREMENT_APPROVALS_EVENT, onChange);
-      window.removeEventListener("storage", onChange);
+      window.removeEventListener(PROCUREMENT_APPROVALS_EVENT, refresh);
+      window.removeEventListener("storage", refresh);
     };
   }, [refresh]);
 
-  const rows = useMemo(() => {
-    void tick;
-    return readPoApprovals();
-  }, [tick]);
+  const pending = useMemo(
+    () => rows.filter((row) => row.status === "pending"),
+    [rows],
+  );
 
-  const pending = useMemo(() => {
-    void tick;
-    return listPendingPoApprovals();
-  }, [tick]);
+  const submitFinalizeRequest = useCallback(
+    (input: Parameters<typeof submitPoFinalizeApproval>[0]) => {
+      const row = submitPoFinalizeApproval(input);
+      refresh();
+      return row;
+    },
+    [refresh],
+  );
+
+  const submitCreatePoInStockRequest = useCallback(
+    (input: Parameters<typeof submitCreatePoInStockApproval>[0]) => {
+      const row = submitCreatePoInStockApproval(input);
+      refresh();
+      return row;
+    },
+    [refresh],
+  );
 
   const decide = useCallback(
     (id: string, status: Exclude<PoApprovalStatus, "pending">) => {
-      setPoApprovalStatus(id, status);
+      const row = setPoApprovalStatus(id, status);
+      if (row) {
+        pushPoApprovalDecisionNotification({
+          approvalId: row.id,
+          orderId: row.orderId,
+          companyPoNumber: row.companyPoNumber,
+          documentNumber: row.documentNumber,
+          decision: status,
+          kind: row.kind,
+        });
+      }
       refresh();
+      return row;
     },
     [refresh],
   );
@@ -51,9 +76,9 @@ export function useProcurementApprovals() {
     rows,
     pending,
     pendingCount: pending.length,
+    submitFinalizeRequest,
+    submitCreatePoInStockRequest,
     decide,
     refresh,
   };
 }
-
-export type { PoApprovalRequest };

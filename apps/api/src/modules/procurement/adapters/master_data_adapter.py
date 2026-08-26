@@ -49,39 +49,49 @@ class ProcurementMasterDataAdapter:
         )
 
     @staticmethod
-    def score_vendor_label_for_oem(label: str, oem: str) -> int:
-        """Rank OEM→vendor name match. Higher is better (exact > first-word > token/prefix)."""
+    def score_vendor_label_for_party(label: str, party: str) -> int:
+        """Rank party→vendor name match. Higher is better (exact > first-word > token/prefix)."""
         key = label.strip().lower()
-        if not key or not oem:
+        if not key or not party:
             return 0
-        if key == oem:
+        if key == party:
             return 4
         words = key.split()
         first = words[0] if words else ""
-        if first == oem:
+        if first == party:
             return 3
-        oem_tokens = {t for t in oem.split() if t}
-        if first and first in oem_tokens:
+        party_tokens = {t for t in party.split() if t}
+        if first and first in party_tokens:
             return 2
-        if key.startswith(f"{oem} ") or key.startswith(oem):
+        if key.startswith(f"{party} ") or key.startswith(party):
             return 1
-        if any(t == first or key.startswith(f"{t} ") or key.startswith(t) for t in oem_tokens):
+        if any(t == first or key.startswith(f"{t} ") or key.startswith(t) for t in party_tokens):
             return 1
         return 0
 
-    def match_vendor_name_by_oem(
+    @classmethod
+    def score_vendor_label_for_oem(cls, label: str, oem: str) -> int:
+        """Deprecated alias — OEM is brand, not vendor. Prefer distributor matching."""
+        return cls.score_vendor_label_for_party(label, oem)
+
+    def match_vendor_name_by_distributor(
         self,
         ctx: TenantContext,
         *,
         company_id: UUID,
-        oem_name: str | None,
+        distributor_name: str | None,
         vendors: list | None = None,
     ) -> str | None:
-        """Match OEM to vendor when OEM equals / starts vendor name (e.g. pacific → Pacific Parts)."""
-        oem = (oem_name or "").strip().lower()
-        if not oem:
+        """Match CRM distributor name(s) to master vendor (distributor ≡ procurement vendor).
+
+        OEM/brand names must not be used here. Supports comma-separated multi-select values.
+        """
+        raw = (distributor_name or "").strip()
+        if not raw:
             return None
-        # Branch-unscoped: queue must suggest vendors even when user/OVF branch differs.
+        parties = [p.strip().lower() for p in raw.replace(";", ",").split(",") if p.strip()]
+        if not parties:
+            return None
         pool = vendors
         if pool is None:
             pool = self.list_vendors(ctx, company_id=company_id, branch_scoped=False)
@@ -95,12 +105,33 @@ class ProcurementMasterDataAdapter:
                 or getattr(vendor, "display_name", None)
                 or ""
             ).strip()
-            score = self.score_vendor_label_for_oem(label, oem)
+            score = max(
+                (self.score_vendor_label_for_party(label, party) for party in parties),
+                default=0,
+            )
             if score <= 0:
                 continue
             if best is None or score > best[0] or (score == best[0] and len(label) < len(best[1])):
                 best = (score, label)
         return best[1] if best else None
+
+    def match_vendor_name_by_oem(
+        self,
+        ctx: TenantContext,
+        *,
+        company_id: UUID,
+        oem_name: str | None = None,
+        distributor_name: str | None = None,
+        vendors: list | None = None,
+        **_kwargs: object,
+    ) -> str | None:
+        """Prefer distributor→vendor. OEM alone is never matched (OEM = brand, not vendor)."""
+        return self.match_vendor_name_by_distributor(
+            ctx,
+            company_id=company_id,
+            distributor_name=distributor_name,
+            vendors=vendors,
+        )
 
     def resolve_default_uom_id(self, ctx: TenantContext, company_id: UUID) -> UUID:
         uoms = self._uoms.list_uoms(ctx, company_id=company_id)

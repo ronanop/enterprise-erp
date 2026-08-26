@@ -94,7 +94,12 @@ class OvfLineRepository(CrmScopedRepository):
         stmt = select(CrmOvfLine).where(
             CrmOvfLine.ovf_id == ovf_id,
             CrmOvfLine.is_deleted.is_(False),
-        ).order_by(CrmOvfLine.side, CrmOvfLine.line_no)
+        ).order_by(
+            CrmOvfLine.side,
+            CrmOvfLine.line_no,
+            CrmOvfLine.created_at,
+            CrmOvfLine.id,
+        )
         stmt = self.apply_crm_filter(stmt, CrmOvfLine, ctx, branch_scoped=True)
         return list(self.db.scalars(stmt).all())
 

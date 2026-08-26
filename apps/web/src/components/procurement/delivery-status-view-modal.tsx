@@ -15,6 +15,7 @@ import {
 import { Button } from "@/components/ui/button";
 import type { DeliveryChallanRecord } from "@/utils/delivery-challan-storage";
 import {
+  deliveryStatusUiMode,
   resolveDeliveryStatusForChallan,
   validateDeliveryStatusForm,
   type DeliveryStatusFormErrors,
@@ -36,6 +37,7 @@ export function DeliveryStatusViewModal({
   onSaved,
 }: DeliveryStatusViewModalProps) {
   const [form, setForm] = useState<DeliveryStatusFormValue | null>(null);
+  const [formPhase, setFormPhase] = useState<"initial" | "tracking">("initial");
   const [fieldErrors, setFieldErrors] = useState<DeliveryStatusFormErrors>({});
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -49,6 +51,7 @@ export function DeliveryStatusViewModal({
     }
     const status = resolveDeliveryStatusForChallan(challan);
     setForm(deliveryStatusToFormValue(status));
+    setFormPhase(deliveryStatusUiMode(status));
   }, [open, challan]);
 
   async function onConfirm() {
@@ -94,6 +97,7 @@ export function DeliveryStatusViewModal({
 
         {form ? (
           <DeliveryStatusForm
+            mode={formPhase}
             value={form}
             onChange={(next) => {
               setForm(next);
