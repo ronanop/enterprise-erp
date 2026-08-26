@@ -22,6 +22,7 @@ export type ErpModule = {
     | "dashboard"
     | "shield"
     | "mail"
+    | "voice"
     | "building"
     | "boxes"
     | "wallet"
@@ -127,6 +128,37 @@ export const erpModules: ErpModule[] = [
         title: "Events",
         description: "Notification events queue",
         apiPath: "/notifications/events",
+      },
+    ],
+  },
+  {
+    key: "voice-agent",
+    title: "Voice assistant",
+    description: "ElevenLabs conversational AI — voice and chat with ERP client tools.",
+    href: "/voice-agent",
+    group: "foundation",
+    icon: "voice",
+    resources: [
+      {
+        key: "signed-url",
+        title: "Signed URL",
+        description: "Private agent WebSocket authorization",
+        apiPath: "/voice-agent/signed-url",
+        listable: false,
+      },
+      {
+        key: "agent-leads",
+        title: "Agent leads API",
+        description: "Stub lead lookup for server tools",
+        apiPath: "/leads",
+        listable: false,
+      },
+      {
+        key: "agent-orders",
+        title: "Agent orders API",
+        description: "Stub order lookup for server tools",
+        apiPath: "/orders",
+        listable: false,
       },
     ],
   },

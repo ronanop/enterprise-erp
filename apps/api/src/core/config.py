@@ -3,7 +3,7 @@
 from functools import lru_cache
 from pathlib import Path
 
-from pydantic import Field, field_validator
+from pydantic import AliasChoices, Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # Resolve .env from apps/api regardless of uvicorn cwd (local: apps/api; Docker: /app)
@@ -141,6 +141,20 @@ class Settings(BaseSettings):
         default=False,
         alias="PROJECT_STAGE_EMAIL_NOTIFICATIONS_ENABLED",
     )
+
+    # ElevenLabs Conversational AI (voice agent — server-side only)
+    xi_api_key: str = Field(
+        default="",
+        validation_alias=AliasChoices("XI_API_KEY", "ELEVENLABS_API_KEY"),
+    )
+    elevenlabs_agent_id: str = Field(default="", alias="ELEVENLABS_AGENT_ID")
+
+    # MCP server (ElevenLabs agent tool discovery)
+    mcp_server_base_url: str = Field(
+        default="http://127.0.0.1:8000",
+        alias="MCP_SERVER_BASE_URL",
+    )
+    mcp_auth_token: str = Field(default="", alias="MCP_AUTH_TOKEN")
 
     frontend_url: str = Field(default="http://localhost:3000", alias="FRONTEND_URL")
 

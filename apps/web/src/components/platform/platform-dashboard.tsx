@@ -78,6 +78,7 @@ const MODULE_ICONS: Record<string, LucideIcon> = {
   portal: LayoutDashboard,
   integration: GitBranch,
   email: Megaphone,
+  "voice-agent": Activity,
   helpdesk: Headphones,
   foundation: Shield,
   organization: Building2,

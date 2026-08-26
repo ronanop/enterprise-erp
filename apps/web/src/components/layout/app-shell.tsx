@@ -4,6 +4,7 @@ import type { ReactNode } from "react";
 import { usePathname } from "next/navigation";
 
 import { CrmSidebar } from "@/components/crm/crm-workspace-nav";
+import { ElevenLabsConvaiWidget } from "@/components/elevenlabs/convai-widget";
 import { HrSidebar } from "@/components/hr/hr-sidebar";
 import { AppSidebar } from "@/components/layout/app-sidebar";
 import { AppTopbar } from "@/components/layout/app-topbar";
@@ -55,6 +56,7 @@ export function AppShell({ children }: AppShellProps) {
           </footer>
         ) : null}
       </div>
+      <ElevenLabsConvaiWidget />
     </div>
   );
 }

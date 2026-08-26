@@ -2,6 +2,7 @@
 
 from fastapi import APIRouter
 
+from modules.agent_read.router import agent_read_router
 from modules.analytics.router import analytics_router
 from modules.asset.router import asset_router
 from modules.crm.router import crm_router
@@ -27,6 +28,7 @@ from modules.quality.router import quality_router
 from modules.recruitment.router import recruitment_router
 from modules.sales.router import sales_router
 from modules.service.router import service_router
+from modules.voice_agent.router import voice_agent_router
 from shared.health import router as health_router
 
 api_v1_router = APIRouter()
@@ -58,3 +60,5 @@ api_v1_router.include_router(analytics_router)
 api_v1_router.include_router(integration_router)
 api_v1_router.include_router(ecommerce_router)
 api_v1_router.include_router(portal_router)
+api_v1_router.include_router(voice_agent_router)
+api_v1_router.include_router(agent_read_router)
