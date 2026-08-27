@@ -68,14 +68,24 @@ describe("inventory-register-groups", () => {
     expect(screen.getByTestId("inventory-expandable-dc-signature").textContent).toBe("Signed");
     expect(screen.getByTestId("inventory-expandable-accessories").textContent).toContain("CHG-12345");
     expect(screen.getByTestId("inventory-expandable-earlier-used").textContent).toBe("Amit Kumar");
-    expect(screen.getByTestId("inventory-expandable-operational-status").textContent).toContain(
-      "Assigned",
+    expect(screen.getByText("IT Information")).toBeTruthy();
+    expect(screen.getByText("Location")).toBeTruthy();
+    expect(screen.getByText("Delivery Challan")).toBeTruthy();
+    expect(screen.queryByText("Operational Status")).toBeNull();
+  });
+
+  it("renders Create DC Challan only when a callback is provided", () => {
+    const { rerender } = render(
+      <InventoryRegisterGroups model={inventoryRowToRegisterGroups(baseRow())} />,
     );
-    expect(screen.getByTestId("inventory-expandable-lifecycle-status").textContent).toContain(
-      "Active",
+    expect(screen.queryByRole("button", { name: "Create DC Challan" })).toBeNull();
+    rerender(
+      <InventoryRegisterGroups
+        model={inventoryRowToRegisterGroups(baseRow())}
+        onCreateDcChallan={() => undefined}
+      />,
     );
-    expect(screen.getByText("Operational Status")).toBeTruthy();
-    expect(screen.getByText("Lifecycle Status")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Create DC Challan" })).toBeTruthy();
   });
 
   it("shows empty accessories copy", () => {
@@ -85,6 +95,51 @@ describe("inventory-register-groups", () => {
     expect(screen.getByTestId("inventory-expandable-accessories").textContent).toContain(
       "No accessories assigned",
     );
+  });
+
+  it("shows empty DC state when no standalone challan is linked", () => {
+    render(
+      <InventoryRegisterGroups
+        model={inventoryRowToRegisterGroups(baseRow())}
+        dcChallan={null}
+        onCreateDcChallan={() => undefined}
+      />,
+    );
+    expect(screen.getByText("No delivery challan for this asset.")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Create DC Challan" })).toBeTruthy();
+  });
+
+  it("shows linked DC number, status badge, and View", () => {
+    render(
+      <InventoryRegisterGroups
+        model={inventoryRowToRegisterGroups(baseRow())}
+        dcChallan={{
+          id: "dc-9",
+          dc_number: "DC-2026-000099",
+          asset_id: "a1",
+          status: "SIGNED",
+          company_id: "c1",
+          branch_id: "b1",
+          version: 1,
+          signed_at: "2026-08-25T12:00:00Z",
+          scm_issued_document: {
+            doc_kind: "SCM_ISSUED",
+            original_filename: "issued.pdf",
+            has_stored_file: true,
+          },
+          signed_document: {
+            doc_kind: "SIGNED",
+            original_filename: "signed.pdf",
+            has_stored_file: true,
+          },
+        }}
+        onViewDcDocument={() => undefined}
+      />,
+    );
+    expect(screen.getByTestId("inventory-linked-dc-challan")).toBeTruthy();
+    expect(screen.getByText("DC-2026-000099")).toBeTruthy();
+    expect(screen.getByText("issued.pdf")).toBeTruthy();
+    expect(screen.getAllByRole("button", { name: "View" }).length).toBe(2);
   });
 });
 
@@ -273,5 +328,7 @@ describe("mapAssetToInventoryRow — 4E sources", () => {
     expect(row.employeeId).toBe("—");
     expect(row.issueDate).toBe("—");
     expect(row.expandable.phoneNumber).toBe("—");
+    expect(row.activeAssignmentId).toBeNull();
+    expect(row.assignmentAllocationType).toBeNull();
   });
 });

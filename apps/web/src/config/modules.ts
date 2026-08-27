@@ -1231,6 +1231,12 @@ export const erpModules: ErpModule[] = [
         apiPath: "/assets/asset-assignments",
       },
       {
+        key: "asset-dc-challans",
+        title: "DC Challan",
+        description: "Delivery challan tracking for employee issues",
+        apiPath: "/assets/asset-dc-challans",
+      },
+      {
         key: "asset-transfers",
         title: "Transfers",
         description: "Asset transfer documents",

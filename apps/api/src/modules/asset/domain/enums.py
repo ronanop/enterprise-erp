@@ -162,6 +162,18 @@ class AssetAssignmentStatus(str, Enum):
     CANCELLED = "cancelled"
 
 
+class AssignmentEmployeeSource(str, Enum):
+    """How an employee allocation identifies the recipient (same allocation_type)."""
+
+    MASTER_DATA = "MASTER_DATA"
+    MANUAL_ENTRY = "MANUAL_ENTRY"
+
+
+ASSIGNMENT_EMPLOYEE_SOURCE_VALUES: frozenset[str] = frozenset(
+    s.value for s in AssignmentEmployeeSource
+)
+
+
 class AssignmentDeliveryReferenceStatus(str, Enum):
     """Delivery reference lifecycle on assignment (CR-004 Phase 5A-1)."""
 
@@ -186,6 +198,68 @@ class AssignmentDeliveryChallanSignatureStatus(str, Enum):
 ASSIGNMENT_DELIVERY_CHALLAN_SIGNATURE_STATUS_VALUES: frozenset[str] = frozenset(
     s.value for s in AssignmentDeliveryChallanSignatureStatus
 )
+
+
+class DcChallanStatus(str, Enum):
+    """Standalone DC challan workflow (IT ↔ SCM paperwork)."""
+
+    PENDING = "PENDING"
+    SENT_TO_SCM = "SENT_TO_SCM"
+    DOCUMENT_RECEIVED = "DOCUMENT_RECEIVED"
+    SIGNED = "SIGNED"
+    RECEIVED = "RECEIVED"
+    CANCELLED = "CANCELLED"
+
+
+DC_CHALLAN_STATUS_VALUES: frozenset[str] = frozenset(s.value for s in DcChallanStatus)
+
+# Assignment cancel/return auto-cancel these (SIGNED is unfinished filing).
+DC_CHALLAN_ASSIGNMENT_AUTO_CANCEL_STATUSES: frozenset[str] = frozenset(
+    {
+        DcChallanStatus.PENDING.value,
+        DcChallanStatus.SENT_TO_SCM.value,
+        DcChallanStatus.DOCUMENT_RECEIVED.value,
+        DcChallanStatus.SIGNED.value,
+    }
+)
+
+# Ops RETIRED/PENDING_DISPOSAL/DISPOSED: leave SIGNED/RECEIVED as historical handover.
+DC_CHALLAN_OPS_AUTO_CANCEL_STATUSES: frozenset[str] = frozenset(
+    {
+        DcChallanStatus.PENDING.value,
+        DcChallanStatus.SENT_TO_SCM.value,
+        DcChallanStatus.DOCUMENT_RECEIVED.value,
+    }
+)
+
+
+class DcChallanDocKind(str, Enum):
+    SCM_ISSUED = "SCM_ISSUED"
+    SIGNED = "SIGNED"
+
+
+class DcChallanDocSource(str, Enum):
+    SCM_CALLBACK = "SCM_CALLBACK"
+    MANUAL_UPLOAD = "MANUAL_UPLOAD"
+
+
+DC_CHALLAN_DOC_KIND_VALUES: frozenset[str] = frozenset(s.value for s in DcChallanDocKind)
+DC_CHALLAN_DOC_SOURCE_VALUES: frozenset[str] = frozenset(s.value for s in DcChallanDocSource)
+
+DOC_KIND_PATH_ALIASES: dict[str, str] = {
+    "scm-issued": DcChallanDocKind.SCM_ISSUED.value,
+    "scm_issued": DcChallanDocKind.SCM_ISSUED.value,
+    "SCM_ISSUED": DcChallanDocKind.SCM_ISSUED.value,
+    "signed": DcChallanDocKind.SIGNED.value,
+    "SIGNED": DcChallanDocKind.SIGNED.value,
+}
+
+
+def normalize_dc_doc_kind(value: str) -> str:
+    mapped = DOC_KIND_PATH_ALIASES.get(value) or DOC_KIND_PATH_ALIASES.get(value.strip())
+    if mapped:
+        return mapped
+    raise ValueError(value)
 
 
 class AssetTransferStatus(str, Enum):
@@ -390,6 +464,7 @@ class AstEntityType(str, Enum):
     REVALUATION = "revaluation"
     AUDIT = "audit"
     REPORT = "report"
+    DC_CHALLAN = "dc_challan"
 
 
 CODE_PREFIXES: dict[AstEntityType, tuple[str, int, bool]] = {
@@ -403,4 +478,5 @@ CODE_PREFIXES: dict[AstEntityType, tuple[str, int, bool]] = {
     AstEntityType.REVALUATION: ("AREV-", 6, True),
     AstEntityType.AUDIT: ("AAUD-", 6, True),
     AstEntityType.REPORT: ("ARPT-", 6, True),
+    AstEntityType.DC_CHALLAN: ("DC-", 6, True),
 }

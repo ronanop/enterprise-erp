@@ -124,6 +124,16 @@ class AssignmentValidationError(AppException):
         super().__init__(message, status_code=422)
 
 
+class InvalidDcChallanState(ConflictException):
+    def __init__(self, message: str = "Invalid DC challan state") -> None:
+        super().__init__(message)
+
+
+class DcChallanValidationError(AppException):
+    def __init__(self, message: str) -> None:
+        super().__init__(message, status_code=422)
+
+
 class MaintenanceValidationError(AppException):
     def __init__(self, message: str) -> None:
         super().__init__(message, status_code=422)

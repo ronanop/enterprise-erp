@@ -1,14 +1,28 @@
+"use client";
+
+import Link from "next/link";
+import { Eye } from "lucide-react";
+
 /**
- * Shared IT Admin register field groups for Inventory expandable / Detail consistency.
+ * Shared IT Admin register field groups for inventory detail drawer.
  * Presentational only — values come from InventoryRowViewModel / register-parity.
  */
 
-import type { ReactNode } from "react";
-
 import type { InventoryAccessoryLine, InventoryRowViewModel } from "@/components/assets/inventory.mapper";
+import { Button } from "@/components/ui/button";
+import {
+  DrawerEmptyLine,
+  DrawerKvField,
+  DrawerKvGrid,
+  DrawerSectionCard,
+} from "@/components/assets/inventory/interaction/drawer-sections/drawer-section";
 import { StatusBadge } from "@/components/assets/shared";
-import { isOperationalStatus } from "@/components/assets/shared/asset-status";
-import { cn } from "@/lib/utils";
+import { buildDcChallanDetailHref } from "@/components/assets/navigation/dc-challan-navigation";
+import {
+  resolveScmIssuedDocument,
+  resolveSignedDocument,
+} from "@/components/assets/dc-challan/dc-challan-document";
+import type { DcChallanDocument, DcChallanRow } from "@/services/assets-service";
 
 export type InventoryRegisterGroupModel = {
   assignee: string;
@@ -54,148 +68,267 @@ export function inventoryRowToRegisterGroups(row: InventoryRowViewModel): Invent
   };
 }
 
-function GroupHeading({ id, children }: { id: string; children: ReactNode }) {
+function ConfigurationValue({ text }: { text: string }) {
+  if (!text || text === "—") return <>{text || "—"}</>;
+  const parts = text
+    .split(";")
+    .map((part) => part.trim())
+    .filter(Boolean);
+  if (parts.length <= 1) return <>{text}</>;
   return (
-    <p
-      id={id}
-      className="sm:col-span-2 lg:col-span-3 text-[11px] font-medium uppercase tracking-wide text-muted-foreground"
-    >
-      {children}
-    </p>
-  );
-}
-
-function Field({
-  label,
-  value,
-  testId,
-  mono,
-  pre,
-  className,
-}: {
-  label: string;
-  value: ReactNode;
-  testId?: string;
-  mono?: boolean;
-  pre?: boolean;
-  className?: string;
-}) {
-  return (
-    <div className={className}>
-      <dt className="font-medium text-foreground">{label}</dt>
-      <dd
-        data-testid={testId}
-        className={cn(mono && "font-mono text-xs", pre && "whitespace-pre-wrap")}
-      >
-        {value}
-      </dd>
-    </div>
+    <ul className="space-y-1 font-normal">
+      {parts.map((part) => (
+        <li key={part}>{part}</li>
+      ))}
+    </ul>
   );
 }
 
 export type InventoryRegisterGroupsProps = {
   model: InventoryRegisterGroupModel;
   className?: string;
-  /** denser grid for expandable rows */
+  /** @deprecated Expandable-row density is removed; kept for call-site compatibility. */
   compact?: boolean;
+  onCreateDcChallan?: () => void;
+  dcChallan?: DcChallanRow | null;
+  dcChallanLoading?: boolean;
+  onViewDcDocument?: (kind: "scm-issued" | "signed", document: DcChallanDocument) => void;
 };
 
 export function InventoryRegisterGroups({
   model,
   className,
-  compact = true,
+  onCreateDcChallan,
+  dcChallan,
+  dcChallanLoading,
+  onViewDcDocument,
 }: InventoryRegisterGroupsProps) {
   return (
-    <dl
-      className={cn(
-        "grid gap-2 text-xs text-muted-foreground",
-        compact ? "sm:grid-cols-2 lg:grid-cols-3" : "sm:grid-cols-2",
-        className,
-      )}
-      data-testid="inventory-expandable-register"
-    >
-      <GroupHeading id="reg-assignment">Assignment</GroupHeading>
-      <Field label="Assignee" value={model.assignee} testId="inventory-expandable-assignee" />
-      <Field label="Employee ID" value={model.employeeId} testId="inventory-expandable-employee-id" mono />
-      <Field label="Phone" value={model.phone} testId="inventory-expandable-phone" />
-      <Field label="Issued Date" value={model.issuedDate} testId="inventory-expandable-issued" />
-      <Field label="Earlier Used By" value={model.earlierUsedBy} testId="inventory-expandable-earlier-used" />
+    <div className={className} data-testid="inventory-expandable-register">
+      <div className="space-y-6">
+        <DrawerSectionCard title="Assignment" headingId="reg-assignment">
+          <DrawerKvGrid>
+            <DrawerKvField label="Employee Name" value={model.assignee} testId="inventory-expandable-assignee" />
+            <DrawerKvField
+              label="Employee ID"
+              value={model.employeeId}
+              testId="inventory-expandable-employee-id"
+              mono
+            />
+            <DrawerKvField label="Phone" value={model.phone} testId="inventory-expandable-phone" />
+            <DrawerKvField label="Issued Date" value={model.issuedDate} testId="inventory-expandable-issued" />
+            <DrawerKvField
+              label="Earlier Used By"
+              value={model.earlierUsedBy}
+              testId="inventory-expandable-earlier-used"
+              span
+            />
+          </DrawerKvGrid>
+        </DrawerSectionCard>
 
-      <GroupHeading id="reg-status">Status</GroupHeading>
-      <Field
-        label="Operational Status"
-        testId="inventory-expandable-operational-status"
-        value={
-          isOperationalStatus(model.operationalStatus) ? (
-            <StatusBadge kind="operational" status={model.operationalStatus} />
+        <DrawerSectionCard title="IT Information" headingId="reg-it">
+          <DrawerKvGrid>
+            <DrawerKvField label="Make" value={model.make} testId="inventory-expandable-make" />
+            <DrawerKvField label="Model" value={model.model} testId="inventory-expandable-model" />
+            <DrawerKvField
+              label="Configuration"
+              value={<ConfigurationValue text={model.configuration} />}
+              testId="inventory-expandable-configuration"
+              span
+            />
+          </DrawerKvGrid>
+        </DrawerSectionCard>
+
+        <DrawerSectionCard title="Location" headingId="reg-location">
+          <DrawerKvGrid>
+            <DrawerKvField label="Branch" value={model.branch} testId="inventory-expandable-branch" />
+            <DrawerKvField
+              label="Current Location"
+              value={model.location}
+              testId="inventory-expandable-location"
+            />
+          </DrawerKvGrid>
+        </DrawerSectionCard>
+
+        <DrawerSectionCard title="Accessories" headingId="reg-accessories">
+          <div data-testid="inventory-expandable-accessories">
+            {model.accessories.length === 0 ? (
+              <DrawerEmptyLine>No accessories assigned</DrawerEmptyLine>
+            ) : (
+              <ul className="list-none space-y-2 p-0">
+                {model.accessories.map((line, idx) => (
+                  <li
+                    key={`${line.typeLabel}-${idx}`}
+                    className="flex min-w-0 flex-wrap gap-x-4 gap-y-1 text-sm"
+                  >
+                    <span className="min-w-24 font-medium text-foreground">{line.typeLabel}</span>
+                    {line.componentName ? (
+                      <span className="text-muted-foreground">{line.componentName}</span>
+                    ) : null}
+                    <span className="text-muted-foreground">
+                      S/N: <span className="font-mono text-xs text-foreground">{line.serialDisplay}</span>
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </DrawerSectionCard>
+
+        <DrawerSectionCard title="Delivery Challan" headingId="reg-dc">
+          {dcChallanLoading ? (
+            <DrawerEmptyLine>Loading delivery challan…</DrawerEmptyLine>
+          ) : dcChallan ? (
+            <InventoryLinkedDcChallan
+              challan={dcChallan}
+              onViewDcDocument={onViewDcDocument}
+            />
+          ) : dcChallan === null ? (
+            <div className="space-y-3">
+              <DrawerEmptyLine>No delivery challan for this asset.</DrawerEmptyLine>
+              {onCreateDcChallan ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="cursor-pointer transition-colors duration-200"
+                  onClick={onCreateDcChallan}
+                >
+                  Create DC Challan
+                </Button>
+              ) : null}
+            </div>
           ) : (
-            model.operationalStatus
-          )
-        }
-      />
-      <Field
-        label="Lifecycle Status"
-        testId="inventory-expandable-lifecycle-status"
-        value={<StatusBadge kind="lifecycle" status={model.lifecycleStatus} />}
-      />
-
-      <GroupHeading id="reg-it">IT Information</GroupHeading>
-      <Field label="Make" value={model.make} testId="inventory-expandable-make" />
-      <Field label="Model" value={model.model} testId="inventory-expandable-model" />
-      <Field
-        label="Configuration"
-        value={model.configuration}
-        testId="inventory-expandable-configuration"
-        className="sm:col-span-2 lg:col-span-1"
-      />
-
-      <GroupHeading id="reg-location">Location</GroupHeading>
-      <Field label="Branch" value={model.branch} testId="inventory-expandable-branch" />
-      <Field label="Current Location" value={model.location} testId="inventory-expandable-location" />
-
-      <GroupHeading id="reg-accessories">Accessories</GroupHeading>
-      <div className="sm:col-span-2 lg:col-span-3">
-        <dd data-testid="inventory-expandable-accessories">
-          {model.accessories.length === 0 ? (
-            "No accessories assigned"
-          ) : (
-            <ul className="mt-0 list-none space-y-1 p-0">
-              {model.accessories.map((line, idx) => (
-                <li key={`${line.typeLabel}-${idx}`} className="flex flex-wrap gap-x-4 gap-y-0.5">
-                  <span className="min-w-24 font-medium text-foreground">{line.typeLabel}</span>
-                  {line.componentName ? (
-                    <span className="text-muted-foreground">{line.componentName}</span>
-                  ) : null}
-                  <span>
-                    S/N: <span className="font-mono text-xs">{line.serialDisplay}</span>
-                  </span>
-                </li>
-              ))}
-            </ul>
+            <>
+              <DrawerKvGrid>
+                <DrawerKvField label="DC Number" value={model.dcNumber} testId="inventory-expandable-dc-number" />
+                <DrawerKvField label="Status" value={model.dcStatus} testId="inventory-expandable-dc-status" />
+                <DrawerKvField
+                  label="Signature"
+                  value={model.dcSignature}
+                  testId="inventory-expandable-dc-signature"
+                />
+              </DrawerKvGrid>
+              {onCreateDcChallan ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="cursor-pointer transition-colors duration-200"
+                  onClick={onCreateDcChallan}
+                >
+                  Create DC Challan
+                </Button>
+              ) : null}
+            </>
           )}
-        </dd>
+        </DrawerSectionCard>
+
+        <DrawerSectionCard title="Remarks" headingId="reg-remarks">
+          <DrawerKvGrid>
+            <DrawerKvField
+              label="Assignment Remarks"
+              value={model.assignmentRemarks}
+              testId="inventory-expandable-assignment-remarks"
+              pre
+              span
+            />
+            <DrawerKvField
+              label="Return Remarks"
+              value={model.returnRemarks}
+              testId="inventory-expandable-return-remarks"
+              pre
+              span
+            />
+          </DrawerKvGrid>
+        </DrawerSectionCard>
       </div>
-
-      <GroupHeading id="reg-dc">Delivery Challan</GroupHeading>
-      <Field label="DC Number" value={model.dcNumber} testId="inventory-expandable-dc-number" />
-      <Field label="Status" value={model.dcStatus} testId="inventory-expandable-dc-status" />
-      <Field label="Signature" value={model.dcSignature} testId="inventory-expandable-dc-signature" />
-
-      <GroupHeading id="reg-remarks">Remarks</GroupHeading>
-      <Field
-        label="Assignment Remarks"
-        value={model.assignmentRemarks}
-        testId="inventory-expandable-assignment-remarks"
-        pre
-        className="sm:col-span-2 lg:col-span-3"
-      />
-      <Field
-        label="Return Remarks"
-        value={model.returnRemarks}
-        testId="inventory-expandable-return-remarks"
-        pre
-        className="sm:col-span-2 lg:col-span-3"
-      />
-    </dl>
+    </div>
   );
 }
+
+function formatDcWhen(value?: string | null): string {
+  if (!value) return "—";
+  return value.replace("T", " ").slice(0, 16);
+}
+
+function InventoryLinkedDcChallan({
+  challan,
+  onViewDcDocument,
+}: {
+  challan: DcChallanRow;
+  onViewDcDocument?: (kind: "scm-issued" | "signed", document: DcChallanDocument) => void;
+}) {
+  const scm = resolveScmIssuedDocument(challan);
+  const signed = resolveSignedDocument(challan);
+  const signedLabel = challan.signed_at || challan.status === "SIGNED" || challan.status === "RECEIVED"
+    ? `Signed${challan.signed_at ? ` · ${formatDcWhen(challan.signed_at)}` : ""}`
+    : "Not signed";
+  const receivedLabel = challan.received_at || challan.status === "RECEIVED"
+    ? `Received${challan.received_at ? ` · ${formatDcWhen(challan.received_at)}` : ""}`
+    : "Not received";
+
+  return (
+    <div className="space-y-3" data-testid="inventory-linked-dc-challan">
+      <DrawerKvGrid>
+        <DrawerKvField
+          label="DC Number"
+          testId="inventory-expandable-dc-number"
+          value={
+            <Link
+              href={buildDcChallanDetailHref(challan.id)}
+              className="cursor-pointer font-mono text-xs text-sky-800 underline-offset-2 transition-colors duration-200 hover:underline"
+            >
+              {challan.dc_number}
+            </Link>
+          }
+        />
+        <DrawerKvField
+          label="Status"
+          testId="inventory-expandable-dc-status"
+          value={<StatusBadge kind="dcChallan" status={challan.status} />}
+        />
+        <DrawerKvField label="Signed" value={signedLabel} testId="inventory-expandable-dc-signed" />
+        <DrawerKvField label="Received" value={receivedLabel} testId="inventory-expandable-dc-received" />
+      </DrawerKvGrid>
+      <ul className="space-y-2">
+        <InventoryDcDocumentRow
+          label="SCM challan document"
+          document={scm}
+          onView={scm && onViewDcDocument ? () => onViewDcDocument("scm-issued", scm) : undefined}
+        />
+        <InventoryDcDocumentRow
+          label="Signed document"
+          document={signed}
+          onView={signed && onViewDcDocument ? () => onViewDcDocument("signed", signed) : undefined}
+        />
+      </ul>
+    </div>
+  );
+}
+
+function InventoryDcDocumentRow({
+  label,
+  document,
+  onView,
+}: {
+  label: string;
+  document: DcChallanDocument | null;
+  onView?: () => void;
+}) {
+  return (
+    <li className="flex min-w-0 flex-wrap items-center justify-between gap-2 text-sm">
+      <div className="min-w-0">
+        <p className="text-xs font-medium text-muted-foreground">{label}</p>
+        <p className="truncate">{document?.original_filename || document?.external_url || "Not attached"}</p>
+      </div>
+      {document && onView ? (
+        <Button type="button" variant="outline" size="sm" className="cursor-pointer" onClick={onView}>
+          <Eye className="size-3.5" />
+          View
+        </Button>
+      ) : null}
+    </li>
+  );
+}
+

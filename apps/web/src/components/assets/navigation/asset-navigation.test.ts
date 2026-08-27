@@ -59,6 +59,14 @@ describe("createAssetNavigation", () => {
 
     nav.openHistory("a1");
     expect(push).toHaveBeenCalledWith(expect.stringContaining("tab=activity"));
+
+    nav.openDcChallan("a1");
+    expect(push).toHaveBeenCalledWith("/assets/asset-dc-challans?assetId=a1");
+
+    nav.openDcChallan("a1", "asn-1");
+    expect(push).toHaveBeenCalledWith(
+      "/assets/asset-dc-challans?assetId=a1&assignmentId=asn-1",
+    );
   });
 });
 

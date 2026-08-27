@@ -38,6 +38,7 @@ from modules.asset.models.asset_revaluation import AstAssetRevaluation
 from modules.asset.models.asset_service_history import AstAssetServiceHistory
 from modules.asset.models.asset_transfer import AstAssetTransfer
 from modules.asset.models.assignment_component import AstAssignmentComponent
+from modules.asset.models.dc_challan import AstDcChallan
 from modules.foundation.models.workflow import WfAction, WfDefinition, WfInstance, WfStep
 from modules.foundation.service.workflow_service import WorkflowService
 
@@ -111,6 +112,7 @@ def wf_db() -> Generator[Session, None, None]:
         AstAssetCategory.__table__,
         AstAssetTransfer.__table__,
         AstAssetAssignment.__table__,
+        AstDcChallan.__table__,
         AstAssignmentComponent.__table__,
         AstAssetMaintenance.__table__,
         AstAssetServiceHistory.__table__,

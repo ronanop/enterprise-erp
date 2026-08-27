@@ -1,6 +1,12 @@
 import type { AssetDetailDrawerAssignment } from "@/components/assets/inventory/interaction/inventory-interaction.types";
-import { EmptyState } from "@/components/assets/shared";
 import { cn } from "@/lib/utils";
+
+import {
+  DrawerEmptyLine,
+  DrawerKvField,
+  DrawerKvGrid,
+  DrawerSectionCard,
+} from "./drawer-section";
 
 export type AssignmentSectionProps = {
   assignment?: AssetDetailDrawerAssignment | null;
@@ -11,77 +17,69 @@ export function AssignmentSection({ assignment, className }: AssignmentSectionPr
   const empty = !assignment || isAssignmentEmpty(assignment);
 
   return (
-    <section aria-labelledby="drawer-assignment-heading" className={cn("space-y-3", className)}>
-      <h3 id="drawer-assignment-heading" className="text-sm font-medium tracking-tight text-foreground">
-        Assignment
-      </h3>
+    <DrawerSectionCard
+      title="Assignment"
+      headingId="drawer-assignment-heading"
+      className={cn(className)}
+    >
       {empty ? (
-        <EmptyState
-          variant="no-queue"
-          compact
-          title="No active assignment"
-          description="Assignment details will appear when an asset is issued."
-        />
+        <DrawerEmptyLine>No active assignment</DrawerEmptyLine>
       ) : (
-        <dl className="grid gap-3 sm:grid-cols-2">
-          <div>
-            <dt className="text-xs font-medium text-muted-foreground">Employee</dt>
-            <dd className="mt-0.5 text-sm" data-testid="drawer-assignment-employee">
-              {assignment!.employee}
-            </dd>
-          </div>
-          <div>
-            <dt className="text-xs font-medium text-muted-foreground">Issue date</dt>
-            <dd className="mt-0.5 text-sm" data-testid="drawer-assignment-issue-date">
-              {assignment!.issueDate}
-            </dd>
-          </div>
-          <div className="sm:col-span-2">
-            <dt className="text-xs font-medium text-muted-foreground">Department</dt>
-            <dd className="mt-0.5 text-sm">{assignment!.department}</dd>
-          </div>
-          <div className="sm:col-span-2">
-            <dt className="text-xs font-medium text-muted-foreground">Delivery Challan</dt>
-            <dd className="mt-0.5 text-sm" data-testid="drawer-delivery-challan">
-              {assignment!.deliveryChallanSummary ??
-                `${assignment!.deliveryReferenceNumber ?? "—"} · ${
-                  assignment!.deliveryReferenceStatus ?? "—"
-                }`}
-            </dd>
-          </div>
-          <div>
-            <dt className="text-xs font-medium text-muted-foreground">Delivery reference</dt>
-            <dd className="mt-0.5 text-sm" data-testid="drawer-delivery-reference">
-              {assignment!.deliveryReferenceNumber ?? "—"}
-            </dd>
-          </div>
-          <div>
-            <dt className="text-xs font-medium text-muted-foreground">Delivery status</dt>
-            <dd className="mt-0.5 text-sm" data-testid="drawer-delivery-status">
-              {assignment!.deliveryReferenceStatus ?? "—"}
-            </dd>
-          </div>
-          <div>
-            <dt className="text-xs font-medium text-muted-foreground">Signature</dt>
-            <dd className="mt-0.5 text-sm" data-testid="drawer-delivery-signature">
-              {assignment!.deliverySignature ?? "Not Signed"}
-            </dd>
-          </div>
-          <div className="sm:col-span-2">
-            <dt className="text-xs font-medium text-muted-foreground">Assignment remarks</dt>
-            <dd className="mt-0.5 whitespace-pre-wrap text-sm" data-testid="drawer-assignment-remarks">
-              {assignment!.assignmentRemarks ?? "—"}
-            </dd>
-          </div>
-          <div className="sm:col-span-2">
-            <dt className="text-xs font-medium text-muted-foreground">Return remarks</dt>
-            <dd className="mt-0.5 whitespace-pre-wrap text-sm" data-testid="drawer-return-remarks">
-              {assignment!.returnRemarks ?? "—"}
-            </dd>
-          </div>
-        </dl>
+        <DrawerKvGrid>
+          <DrawerKvField
+            label="Employee"
+            value={assignment!.employee}
+            testId="drawer-assignment-employee"
+          />
+          <DrawerKvField
+            label="Issue date"
+            value={assignment!.issueDate}
+            testId="drawer-assignment-issue-date"
+          />
+          <DrawerKvField label="Department" value={assignment!.department} span />
+          <DrawerKvField
+            label="Delivery Challan"
+            value={
+              assignment!.deliveryChallanSummary ??
+              `${assignment!.deliveryReferenceNumber ?? "—"} · ${
+                assignment!.deliveryReferenceStatus ?? "—"
+              }`
+            }
+            testId="drawer-delivery-challan"
+            span
+          />
+          <DrawerKvField
+            label="Delivery reference"
+            value={assignment!.deliveryReferenceNumber ?? "—"}
+            testId="drawer-delivery-reference"
+          />
+          <DrawerKvField
+            label="Delivery status"
+            value={assignment!.deliveryReferenceStatus ?? "—"}
+            testId="drawer-delivery-status"
+          />
+          <DrawerKvField
+            label="Signature"
+            value={assignment!.deliverySignature ?? "Not Signed"}
+            testId="drawer-delivery-signature"
+          />
+          <DrawerKvField
+            label="Assignment remarks"
+            value={assignment!.assignmentRemarks ?? "—"}
+            testId="drawer-assignment-remarks"
+            pre
+            span
+          />
+          <DrawerKvField
+            label="Return remarks"
+            value={assignment!.returnRemarks ?? "—"}
+            testId="drawer-return-remarks"
+            pre
+            span
+          />
+        </DrawerKvGrid>
       )}
-    </section>
+    </DrawerSectionCard>
   );
 }
 

@@ -10,6 +10,7 @@ import type { InventoryMenuActionId } from "@/components/assets/inventory/intera
 import type { InventoryQuickLinkId } from "@/components/assets/inventory/interaction/inventory-interaction.types";
 import type { AssetDetailDrawerData } from "@/components/assets/inventory/interaction/inventory-interaction.types";
 import { dispatchInventoryQuickLink } from "@/components/assets/navigation/asset-navigation";
+import { isEmployeeAllocation } from "@/components/assets/navigation/dc-challan-navigation";
 import {
   buildInventoryActionPermissions,
   buildInventoryQuickLinkPermissions,
@@ -40,7 +41,9 @@ import {
   indexActiveAssignments,
   mapAssetsToInventoryRows,
   type InventoryAccessoryLine,
+  type InventoryLookupContext,
 } from "@/components/assets/inventory.mapper";
+import type { InventorySearchSuggestion } from "@/components/assets/inventory/inventory-search-typeahead";
 import type { InventoryPresetId } from "@/components/assets/inventory.types";
 import { PRESET_OPERATIONAL_STATUS } from "@/components/assets/inventory.types";
 import {
@@ -200,7 +203,6 @@ export function AssetInventoryContainer() {
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [expandedRowIds, setExpandedRowIds] = useState<Set<string>>(new Set());
   const [reloadToken, setReloadToken] = useState(0);
   const [exporting, setExporting] = useState(false);
   const [exportError, setExportError] = useState<string | null>(null);
@@ -263,6 +265,8 @@ export function AssetInventoryContainer() {
     [locations],
   );
 
+  const lookupRef = useRef<InventoryLookupContext | null>(null);
+
   const load = useCallback(async () => {
     setLoading(true);
     setErrorMessage(null);
@@ -293,6 +297,17 @@ export function AssetInventoryContainer() {
         employeeLabels,
         employeeLookup,
       });
+      lookupRef.current = {
+        branchLabels,
+        departmentLabels,
+        categoryLabels,
+        locationLabels,
+        assignmentsByAssetId,
+        assignmentHistoryByAssetId,
+        accessoriesByAssetId,
+        employeeLabels,
+        employeeLookup,
+      };
 
       setRows(mapped);
       setTotal(assetList.total);
@@ -327,7 +342,6 @@ export function AssetInventoryContainer() {
     setDrawerOpen(false);
     setDrawerRow(null);
     setDrawerData(null);
-    setExpandedRowIds(new Set());
   }, []);
 
   const closeDrawer = useCallback(() => {
@@ -376,13 +390,12 @@ export function AssetInventoryContainer() {
     setPage(1);
   }, [appliedFilters, quickSearch]);
 
-  const onToggleExpand = useCallback((rowId: string) => {
-    setExpandedRowIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(rowId)) next.delete(rowId);
-      else next.add(rowId);
-      return next;
-    });
+  const onDismissFilter = useCallback((key: keyof InventoryFilterValues) => {
+    const emptyValue = EMPTY_INVENTORY_FILTERS[key];
+    setAppliedFilters((prev) => ({ ...prev, [key]: emptyValue }));
+    setDraftFilters((prev) => ({ ...prev, [key]: emptyValue }));
+    if (key === "search") setQuickSearch("");
+    setPage(1);
   }, []);
 
   const onViewRow = useCallback((row: InventoryRowViewModel) => {
@@ -390,6 +403,28 @@ export function AssetInventoryContainer() {
     setDrawerData(mapInventoryRowToDrawerData(row));
     setDrawerOpen(true);
   }, []);
+
+  const onSelectSearchSuggestion = useCallback(
+    (suggestion: InventorySearchSuggestion) => {
+      const existing = rows.find((row) => row.id === suggestion.id);
+      if (existing) {
+        onViewRow(existing);
+        return;
+      }
+      const ctx = lookupRef.current ?? {
+        branchLabels,
+        departmentLabels,
+        categoryLabels,
+        locationLabels: {},
+        assignmentsByAssetId: new Map(),
+        employeeLabels,
+        employeeLookup,
+      };
+      const mapped = mapAssetsToInventoryRows([suggestion.raw], ctx);
+      if (mapped[0]) onViewRow(mapped[0]);
+    },
+    [branchLabels, categoryLabels, departmentLabels, employeeLabels, employeeLookup, onViewRow, rows],
+  );
 
   const onMenuAction = useCallback(
     (action: InventoryMenuActionId, row: InventoryRowViewModel) => {
@@ -533,6 +568,8 @@ export function AssetInventoryContainer() {
         onDraftFiltersChange={(patch) => setDraftFilters((f) => ({ ...f, ...patch }))}
         onApplyFilters={onApplyFilters}
         onResetFilters={onResetFilters}
+        onDismissFilter={onDismissFilter}
+        onSelectSearchSuggestion={onSelectSearchSuggestion}
         categories={categories.map((c) => ({ value: c.id, label: c.category_name }))}
         departments={departments.map((d) => ({ value: d.id, label: d.label }))}
         locations={locationOptions}
@@ -544,8 +581,6 @@ export function AssetInventoryContainer() {
         loading={loading}
         errorMessage={errorMessage}
         onRetry={() => setReloadToken((t) => t + 1)}
-        expandedRowIds={expandedRowIds}
-        onToggleExpand={onToggleExpand}
         actionPermissions={actionPermissions}
         onViewRow={onViewRow}
         onMenuAction={onMenuAction}
@@ -555,6 +590,14 @@ export function AssetInventoryContainer() {
         drawerRow={drawerRow}
         drawerQuickLinkEnabled={quickLinkPermissions}
         onDrawerQuickLink={onDrawerQuickLink}
+        onCreateDcChallan={(row) =>
+          navigation.openDcChallan(
+            row.id,
+            isEmployeeAllocation(row.assignmentAllocationType)
+              ? (row.activeAssignmentId ?? undefined)
+              : undefined,
+          )
+        }
         exportBusy={exporting}
         exportError={exportError}
         exportSuccess={exportSuccess}

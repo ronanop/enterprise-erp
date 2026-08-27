@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import {
   CheckCircle2,
   Eye,
+  FileText,
   Loader2,
   Plus,
   RefreshCw,
@@ -43,7 +44,13 @@ import {
   buildAssignmentWizardHref,
   buildReturnWizardHref,
 } from "@/components/assets/navigation/assignment-navigation";
+import {
+  buildDcChallanHref,
+  canLaunchDcFromAssignment,
+  isOpenDcChallanStatus,
+} from "@/components/assets/navigation/dc-challan-navigation";
 import { formatDeliveryChallanSummary } from "@/components/assets/inventory/register-parity";
+import { dcChallanService } from "@/services/assets-service";
 
 type AssetRow = {
   id: string;
@@ -92,7 +99,6 @@ type AssignmentFormState = {
   employee_id: string;
   department_id: string;
   project_id: string;
-  expected_return_at: string;
 };
 
 const STATUS_OPTIONS = ["", "draft", "submitted", "approved", "active", "returned", "cancelled"] as const;
@@ -105,7 +111,6 @@ const EMPTY_FORM: AssignmentFormState = {
   employee_id: "",
   department_id: "",
   project_id: "",
-  expected_return_at: "",
 };
 
 function parseListItems<T>(data: unknown): T[] {
@@ -156,6 +161,7 @@ export function AssetAssignmentWorkspace() {
   const [error, setError] = useState<string | null>(null);
   const [workflowComments, setWorkflowComments] = useState("");
   const [form, setForm] = useState<AssignmentFormState>(EMPTY_FORM);
+  const [hasOpenDc, setHasOpenDc] = useState(false);
 
   const employeeMap = useMemo(() => new Map(employees.map((e) => [e.id, e])), [employees]);
   const departmentMap = useMemo(() => new Map(departments.map((d) => [d.id, d])), [departments]);
@@ -286,7 +292,6 @@ export function AssetAssignmentWorkspace() {
       allocation_type: preset?.allocation_type ?? "employee",
       department_id: preset?.department_id ?? "",
       project_id: preset?.project_id ?? "",
-      expected_return_at: preset?.expected_return_at ?? "",
     });
     setModalMode("create");
   }
@@ -307,6 +312,26 @@ export function AssetAssignmentWorkspace() {
     setModalMode("view");
   }
 
+  useEffect(() => {
+    if (!modalRow || modalMode !== "view" || !canLaunchDcFromAssignment(modalRow)) {
+      setHasOpenDc(false);
+      return;
+    }
+    let cancelled = false;
+    void dcChallanService
+      .search({ assignment_id: modalRow.id, page: 1, page_size: 10 })
+      .then((res) => {
+        if (cancelled) return;
+        setHasOpenDc((res.items ?? []).some((row) => isOpenDcChallanStatus(row.status)));
+      })
+      .catch(() => {
+        if (!cancelled) setHasOpenDc(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [modalRow, modalMode]);
+
   function openEdit(row: AssignmentRow) {
     if (row.status !== "draft") {
       setError("Only draft assignments can be edited.");
@@ -321,7 +346,6 @@ export function AssetAssignmentWorkspace() {
       employee_id: row.employee_id ?? "",
       department_id: row.department_id ?? "",
       project_id: row.project_id ?? "",
-      expected_return_at: row.expected_return_at?.slice(0, 10) ?? "",
     });
     setModalMode("edit");
   }
@@ -382,7 +406,6 @@ export function AssetAssignmentWorkspace() {
         department_id:
           form.allocation_type === "department" ? form.department_id || undefined : undefined,
         project_id: form.allocation_type === "project" ? form.project_id || undefined : undefined,
-        expected_return_at: form.expected_return_at || undefined,
       });
       closeModal();
       await load();
@@ -411,7 +434,6 @@ export function AssetAssignmentWorkspace() {
         employee_id: form.allocation_type === "employee" ? form.employee_id || null : null,
         department_id: form.allocation_type === "department" ? form.department_id || null : null,
         project_id: form.allocation_type === "project" ? form.project_id || null : null,
-        expected_return_at: form.expected_return_at || null,
         version: modalRow.version,
       });
       closeModal();
@@ -676,6 +698,27 @@ export function AssetAssignmentWorkspace() {
                             >
                               <Eye className="size-4" />
                             </button>
+                            {canLaunchDcFromAssignment(row) ? (
+                              <button
+                                type="button"
+                                title="Create DC Challan"
+                                aria-label={`Create DC Challan for ${row.document_number}`}
+                                className={cn(
+                                  buttonVariants({ variant: "ghost", size: "icon" }),
+                                  "cursor-pointer",
+                                )}
+                                onClick={() =>
+                                  router.push(
+                                    buildDcChallanHref({
+                                      assetId: row.asset_id,
+                                      assignmentId: row.id,
+                                    }),
+                                  )
+                                }
+                              >
+                                <FileText className="size-4" />
+                              </button>
+                            ) : null}
                             <button
                               type="button"
                               title="Edit"
@@ -786,10 +829,6 @@ export function AssetAssignmentWorkspace() {
                     <dd className="capitalize">{modalRow.allocation_type}</dd>
                   </div>
                   <div>
-                    <dt className="text-xs text-muted-foreground">Expected return</dt>
-                    <dd>{modalRow.expected_return_at?.slice(0, 10) ?? "—"}</dd>
-                  </div>
-                  <div>
                     <dt className="text-xs text-muted-foreground">Allocated</dt>
                     <dd>{modalRow.allocated_at?.slice(0, 10) ?? "—"}</dd>
                   </div>
@@ -852,6 +891,24 @@ export function AssetAssignmentWorkspace() {
                   >
                     Cancel draft
                   </Button>
+                  {canLaunchDcFromAssignment(modalRow) && !hasOpenDc ? (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="cursor-pointer transition-colors duration-200"
+                      onClick={() =>
+                        router.push(
+                          buildDcChallanHref({
+                            assetId: modalRow.asset_id,
+                            assignmentId: modalRow.id,
+                          }),
+                        )
+                      }
+                    >
+                      Create DC Challan
+                    </Button>
+                  ) : null}
                   <Button
                     type="button"
                     size="sm"
@@ -1100,16 +1157,6 @@ function AssignmentFormFields({
           </Select>
         </div>
       ) : null}
-
-      <div className="space-y-2">
-        <Label htmlFor="asn-return">Expected return</Label>
-        <Input
-          id="asn-return"
-          type="date"
-          value={form.expected_return_at}
-          onChange={(e) => onChange((s) => ({ ...s, expected_return_at: e.target.value }))}
-        />
-      </div>
     </div>
   );
 }

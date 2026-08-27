@@ -11,7 +11,7 @@
 ### Layout Overrides
 
 - **Structure:** App shell + assets workspace (page header → KPI strip → lifecycle funnel → workspace groups → activity panels)
-- **Max Width:** Full workspace (`max-w-none` under AppShell for `/assets`); module nav is an icon-rail (~56px) that overlays labels on hover/`focus-within`
+- **Max Width:** Full workspace (`max-w-none` under AppShell for `/assets`); standalone module nav is a docked full-height sidebar (`72px` collapsed / `260px` expanded) that **pushes** content — never an overlay rail
 - **Operations layout:** Ready to Move + Pending Disposal in 2 columns; Recent Assignments full-width below
 - **Grid:** 12-col for KPIs; horizontal funnel; dense tables for register / maintenance / depreciation / disposal
 - **Do not** use event/conference heroes, oversized display type, or dark themes
@@ -31,14 +31,15 @@
 - Keep MASTER light shell
 - Pipeline stages: sky → teal → emerald → amber → slate with conversion % as text
 - Status: active/approved/posted/completed/returned green · draft/scheduled/in_progress/calculated amber · disposed/written_off/failed/void/expired red
+- DC challan: pending slate · sent_to_scm sky · document_received amber · signed teal · received emerald · cancelled zinc
 - Asset status mix: cool progressive tones
 - No purple gradients; no green marketing backgrounds
 
 ### Component Overrides
 
 - KPI strip: active assets, open maintenance, pending depreciation, open disposals
-- Secondary nav (current scope): Assets · Configuration · Operations · Lifecycle (Disposal) · Extended (Components, Documents, QR, Reports)
-- Icon-rail: ~64px collapsed / ~256px overlay on hover; icons ~18px; row height 40px
+- Secondary nav (current scope): Assets · Configuration · Operations (Assignment, **DC Challan**, Transfers, Maintenance) · Lifecycle (Disposal) · Extended (Components, Documents, QR, Reports)
+- Module sidebar: docked, opaque, `bg-sidebar`; collapse toggle (not hover overlay); icons ~16px; row height ~40px
 - Lifecycle funnel: Category → Asset → Assignment → Maintenance → Depreciation → Disposal
 - Prefer Lucide; sticky headers; `overflow-x-auto` on wide tables
 

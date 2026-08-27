@@ -2,6 +2,8 @@ import type { InventoryQuickLinkId } from "@/components/assets/inventory/interac
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
+import { DrawerEmptyLine, DrawerSectionCard } from "./drawer-section";
+
 const QUICK_LINK_LABELS: Record<InventoryQuickLinkId, string> = {
   portal: "Portal",
   discovery: "Discovery",
@@ -26,14 +28,13 @@ export function QuickLinksSection({
   const visible = LINK_ORDER.filter((id) => enabledLinks[id] !== false);
 
   return (
-    <section aria-labelledby="drawer-quick-links-heading" className={cn("space-y-3", className)}>
-      <h3 id="drawer-quick-links-heading" className="text-sm font-medium tracking-tight text-foreground">
-        Quick links
-      </h3>
+    <DrawerSectionCard
+      title="Quick links"
+      headingId="drawer-quick-links-heading"
+      className={cn(className)}
+    >
       {visible.length === 0 ? (
-        <p className="text-sm text-muted-foreground" role="status">
-          No quick links available for your role.
-        </p>
+        <DrawerEmptyLine>No quick links available for your role.</DrawerEmptyLine>
       ) : (
         <div className="flex flex-wrap gap-2">
           {visible.map((id) => (
@@ -42,7 +43,7 @@ export function QuickLinksSection({
               type="button"
               variant="outline"
               size="sm"
-              className="cursor-pointer"
+              className="cursor-pointer transition-colors duration-200"
               disabled={!onQuickLinkPress}
               onClick={() => onQuickLinkPress?.(id)}
             >
@@ -51,6 +52,6 @@ export function QuickLinksSection({
           ))}
         </div>
       )}
-    </section>
+    </DrawerSectionCard>
   );
 }

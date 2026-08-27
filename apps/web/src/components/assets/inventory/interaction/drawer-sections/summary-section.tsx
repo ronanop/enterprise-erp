@@ -2,7 +2,12 @@ import type { ReactNode } from "react";
 
 import { StatusBadge } from "@/components/assets/shared";
 import { isOperationalStatus } from "@/components/assets/shared/asset-status";
-import { cn } from "@/lib/utils";
+
+import {
+  DrawerKvField,
+  DrawerKvGrid,
+  DrawerSectionCard,
+} from "./drawer-section";
 
 export type SummarySectionProps = {
   assetTag: string;
@@ -14,47 +19,46 @@ export type SummarySectionProps = {
   className?: string;
 };
 
-function Field({ label, children }: { label: string; children: ReactNode }) {
+function StatusField({
+  label,
+  children,
+}: {
+  label: string;
+  children: ReactNode;
+}) {
   return (
-    <div>
+    <div className="min-w-0">
       <dt className="text-xs font-medium text-muted-foreground">{label}</dt>
-      <dd className="mt-0.5 text-sm text-foreground">{children}</dd>
+      <dd className="mt-1 flex flex-wrap items-center gap-3">{children}</dd>
     </div>
   );
 }
 
 export function SummarySection({
-  assetTag,
-  laptopName,
-  currentHolder,
   branch,
   operationalStatus,
   lifecycleStatus,
   className,
 }: SummarySectionProps) {
   return (
-    <section aria-labelledby="drawer-summary-heading" className={cn("space-y-3", className)}>
-      <h3 id="drawer-summary-heading" className="text-sm font-medium tracking-tight text-foreground">
-        Asset summary
-      </h3>
-      <dl className="grid gap-3 sm:grid-cols-2">
-        <Field label="Asset tag">
-          <span className="font-mono text-xs">{assetTag}</span>
-        </Field>
-        <Field label="Laptop name">{laptopName}</Field>
-        <Field label="Current holder">{currentHolder}</Field>
-        <Field label="Branch">{branch}</Field>
-        <Field label="Operational Status">
-          {isOperationalStatus(operationalStatus) ? (
-            <StatusBadge kind="operational" status={operationalStatus} />
-          ) : (
-            operationalStatus
-          )}
-        </Field>
-        <Field label="Lifecycle Status">
-          <StatusBadge kind="lifecycle" status={lifecycleStatus} />
-        </Field>
-      </dl>
-    </section>
+    <DrawerSectionCard title="Overview" headingId="drawer-overview-heading" className={className}>
+      <DrawerKvGrid>
+        <DrawerKvField label="Branch" value={branch} />
+        <StatusField label="Operational Status">
+          <span data-testid="inventory-expandable-operational-status">
+            {isOperationalStatus(operationalStatus) ? (
+              <StatusBadge kind="operational" status={operationalStatus} />
+            ) : (
+              operationalStatus
+            )}
+          </span>
+        </StatusField>
+        <StatusField label="Lifecycle Status">
+          <span data-testid="inventory-expandable-lifecycle-status">
+            <StatusBadge kind="lifecycle" status={lifecycleStatus} />
+          </span>
+        </StatusField>
+      </DrawerKvGrid>
+    </DrawerSectionCard>
   );
 }

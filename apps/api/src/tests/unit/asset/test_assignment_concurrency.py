@@ -57,6 +57,7 @@ def test_repository_rejects_stale_version() -> None:
         asset_id=uuid4(),
         allocation_type="employee",
         employee_id=uuid4(),
+        employee_source="MASTER_DATA",
         status="draft",
         is_deleted=False,
         version=3,

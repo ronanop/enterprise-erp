@@ -90,6 +90,11 @@ ASSET_PERMISSIONS: list[tuple[str, str, str, str]] = [
     ("asset.incoming:receive", "asset.incoming", "receive", "asset"),
     ("asset.incoming_qc:read", "asset.incoming_qc", "read", "asset"),
     ("asset.incoming_qc:inspect", "asset.incoming_qc", "inspect", "asset"),
+    ("asset.dc_challan:read", "asset.dc_challan", "read", "asset"),
+    ("asset.dc_challan:create", "asset.dc_challan", "create", "asset"),
+    ("asset.dc_challan:update", "asset.dc_challan", "update", "asset"),
+    ("asset.dc_challan:send", "asset.dc_challan", "send", "asset"),
+    ("asset.dc_challan:receive", "asset.dc_challan", "receive", "asset"),
 ]
 
 _ALL = [p[0] for p in ASSET_PERMISSIONS]

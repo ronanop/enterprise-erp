@@ -1,13 +1,12 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
-import { WizardFooter } from "@/components/assets/assignment-wizard/wizard-footer";
-import { WizardShell } from "@/components/assets/assignment-wizard/wizard-shell";
-import { WizardProgressBar, WizardStepper } from "@/components/assets/assignment-wizard/wizard-stepper";
+import { IssueFormFooter } from "@/components/assets/assignment-wizard/issue-form-footer";
+import { IssueFormSection, IssueFormShell } from "@/components/assets/assignment-wizard/issue-form-shell";
 import { AssignmentReviewStep } from "@/components/assets/assignment-wizard/steps/assignment-review-step";
 import { AssetStep } from "@/components/assets/assignment-wizard/steps/asset-step";
-import { DeliveryStep } from "@/components/assets/assignment-wizard/steps/delivery-step";
+import { DeliveryStep, type UnlinkedDcChallanOption } from "@/components/assets/assignment-wizard/steps/delivery-step";
 import { EmployeeStep } from "@/components/assets/assignment-wizard/steps/employee-step";
 import { IssuedItemsStep } from "@/components/assets/assignment-wizard/steps/issued-items-step";
 import type {
@@ -16,11 +15,11 @@ import type {
   WizardSelectOption,
 } from "@/components/assets/assignment-wizard/assignment-wizard-mapper";
 import {
-  ASSIGNMENT_WIZARD_STEPS,
+  ASSIGNMENT_FORM_SECTIONS,
   EMPTY_ASSIGNMENT_WIZARD_STATE,
   type AssignmentWizardState,
 } from "@/components/assets/assignment-wizard/wizard-types";
-import { validateAssignmentStep } from "@/components/assets/assignment-wizard/wizard-validation";
+import { listMissingAssignmentFields } from "@/components/assets/assignment-wizard/wizard-validation";
 
 export type AssignmentWizardProps = {
   loading?: boolean;
@@ -34,10 +33,11 @@ export type AssignmentWizardProps = {
   onSaveDraft?: (state: AssignmentWizardState) => void;
   onFinish?: (state: AssignmentWizardState) => void;
   onAssetChange?: (assetId: string) => void;
-  /** Last-step primary action label (container may pass Submit). */
+  /** Primary action label (container may pass Submit). */
   finishLabel?: string;
   unavailableAssetMessage?: string | null;
   onClearUnavailableAsset?: () => void;
+  unlinkedDcChallans?: UnlinkedDcChallanOption[];
 };
 
 export function AssignmentWizard({
@@ -52,17 +52,15 @@ export function AssignmentWizard({
   onSaveDraft,
   onFinish,
   onAssetChange,
-  finishLabel = "Save draft",
+  finishLabel = "Submit",
   unavailableAssetMessage,
   onClearUnavailableAsset,
+  unlinkedDcChallans,
 }: AssignmentWizardProps) {
-  const [step, setStep] = useState(0);
-  const [maxVisited, setMaxVisited] = useState(0);
   const [state, setState] = useState<AssignmentWizardState>({
     ...EMPTY_ASSIGNMENT_WIZARD_STATE,
     ...initialState,
   });
-  const [stepError, setStepError] = useState<string | null>(null);
 
   useEffect(() => {
     if (initialState) {
@@ -79,87 +77,51 @@ export function AssignmentWizard({
         }
         return next;
       });
-      setStepError(null);
     },
     [onAssetChange],
   );
 
-  const goTo = useCallback((index: number) => {
-    if (index < 0 || index >= ASSIGNMENT_WIZARD_STEPS.length) return;
-    setStep(index);
-    setMaxVisited((m) => Math.max(m, index));
-    setStepError(null);
-  }, []);
-
-  const tryNext = useCallback(() => {
-    const err = validateAssignmentStep(step, state);
-    if (err) {
-      setStepError(err);
-      return;
-    }
-    goTo(step + 1);
-  }, [goTo, state, step]);
-
-  const tryFinish = useCallback(() => {
-    for (let i = 0; i < ASSIGNMENT_WIZARD_STEPS.length - 1; i += 1) {
-      const err = validateAssignmentStep(i, state);
-      if (err) {
-        setStepError(err);
-        goTo(i);
-        return;
-      }
-    }
-    onFinish?.(state);
-  }, [goTo, onFinish, state]);
-
+  const missing = useMemo(() => listMissingAssignmentFields(state), [state]);
+  const fieldErrors = useMemo(
+    () => Object.fromEntries(missing.map((item) => [item.id, `${item.label} is required.`])),
+    [missing],
+  );
   const busy = Boolean(loading || saving);
-  const stepMeta = ASSIGNMENT_WIZARD_STEPS[step];
   const assetOptionsForReview: WizardSelectOption[] =
     assets?.map((a) => ({ id: a.id, label: `${a.code} — ${a.label}` })) ?? [];
 
   return (
-    <WizardShell
+    <IssueFormShell
       title="Issue asset"
-      stepTitle={stepMeta?.label ?? ""}
       branchLabel={branchLabel}
       loading={loading}
-      progress={
-        <div className="lg:hidden">
-          <WizardProgressBar currentIndex={step} totalSteps={ASSIGNMENT_WIZARD_STEPS.length} />
-        </div>
-      }
-      sidebar={
-        <WizardStepper
-          steps={ASSIGNMENT_WIZARD_STEPS}
-          currentIndex={step}
-          maxVisitedIndex={maxVisited}
-          onStepClick={goTo}
-          orientation="vertical"
-        />
-      }
+      sections={ASSIGNMENT_FORM_SECTIONS}
       footer={
-        <WizardFooter
-          isFirst={step === 0}
-          isLast={step === ASSIGNMENT_WIZARD_STEPS.length - 1}
+        <IssueFormFooter
           loading={busy}
+          submitDisabled={missing.length > 0}
+          missingLabels={missing.map((item) => item.label)}
           finishLabel={finishLabel}
-          onBack={() => goTo(step - 1)}
-          onNext={tryNext}
           onCancel={() => onCancel?.()}
           onSaveDraft={() => onSaveDraft?.(state)}
-          onFinish={tryFinish}
+          onFinish={() => onFinish?.(state)}
         />
       }
     >
-      {stepError ? (
-        <p className="rounded-md border border-destructive/40 bg-destructive/5 px-3 py-2 text-sm text-destructive" role="alert">
-          {stepError}
-        </p>
-      ) : null}
-      {step === 0 ? (
-        <EmployeeStep state={state} onChange={patch} showAdvancedAllocation employees={employees} />
-      ) : null}
-      {step === 1 ? (
+      <IssueFormSection
+        id="allocation"
+        title="Allocation & Employee"
+        description="Who receives this asset. Directory employees or a manual entry for staff deployed elsewhere."
+      >
+        <EmployeeStep
+          state={state}
+          onChange={patch}
+          showAdvancedAllocation
+          employees={employees}
+          fieldErrors={fieldErrors}
+        />
+      </IssueFormSection>
+      <IssueFormSection id="asset" title="Asset" description="Choose a Ready to Move asset at this branch.">
         <AssetStep
           state={state}
           onChange={patch}
@@ -167,17 +129,29 @@ export function AssignmentWizard({
           unavailableAssetMessage={unavailableAssetMessage}
           onClearUnavailableAsset={onClearUnavailableAsset}
         />
-      ) : null}
-      {step === 2 ? <IssuedItemsStep state={state} onChange={patch} items={issuedItems} /> : null}
-      {step === 3 ? <DeliveryStep state={state} onChange={patch} /> : null}
-      {step === 4 ? (
+      </IssueFormSection>
+      <IssueFormSection
+        id="issued-items"
+        title="Issued Items"
+        description="Optional accessories issued with the asset."
+      >
+        <IssuedItemsStep state={state} onChange={patch} items={issuedItems} />
+      </IssueFormSection>
+      <IssueFormSection
+        id="delivery"
+        title="Delivery (DC paperwork)"
+        description="Most issues do not need a delivery challan at handover."
+      >
+        <DeliveryStep state={state} onChange={patch} unlinkedChallans={unlinkedDcChallans} />
+      </IssueFormSection>
+      <IssueFormSection id="review" title="Review & Submit" description="Confirm details, then submit or save a draft.">
         <AssignmentReviewStep
           state={state}
           employees={employees}
           assets={assetOptionsForReview}
           issuedItems={issuedItems}
         />
-      ) : null}
-    </WizardShell>
+      </IssueFormSection>
+    </IssueFormShell>
   );
 }

@@ -3,13 +3,17 @@ export type WizardStepMeta = {
   label: string;
 };
 
-export const ASSIGNMENT_WIZARD_STEPS: WizardStepMeta[] = [
-  { id: "employee", label: "Employee" },
+/** Section anchors for the single-page Issue Asset form (not a gated wizard). */
+export const ASSIGNMENT_FORM_SECTIONS: WizardStepMeta[] = [
+  { id: "allocation", label: "Allocation & Employee" },
   { id: "asset", label: "Asset" },
-  { id: "issued-items", label: "Issued items" },
-  { id: "delivery", label: "Delivery" },
-  { id: "review", label: "Review" },
+  { id: "issued-items", label: "Issued Items" },
+  { id: "delivery", label: "Delivery (DC paperwork)" },
+  { id: "review", label: "Review & Submit" },
 ];
+
+/** @deprecated Use ASSIGNMENT_FORM_SECTIONS. Kept for Return wizard stepper tests. */
+export const ASSIGNMENT_WIZARD_STEPS: WizardStepMeta[] = ASSIGNMENT_FORM_SECTIONS;
 
 export const RETURN_WIZARD_STEPS: WizardStepMeta[] = [
   { id: "summary", label: "Asset summary" },
@@ -35,12 +39,20 @@ export type ComponentReturnLineState = {
   returnRemarks: string;
 };
 
+export type DcChallanWizardMode = "later" | "create_now" | "link_existing";
+
+export type EmployeeSource = "MASTER_DATA" | "MANUAL_ENTRY";
+
 export type AssignmentWizardState = {
   allocationType: string;
+  employeeSource: EmployeeSource;
   employeeId: string;
+  manualEmployeeName: string;
+  manualEmployeePhone: string;
+  manualEmployeeEmail: string;
+  manualEmployeeDeployedTo: string;
   departmentId: string;
   projectId: string;
-  expectedReturnAt: string;
   assetId: string;
   branchId: string;
   draftId: string;
@@ -50,6 +62,8 @@ export type AssignmentWizardState = {
   deliveryReferenceNumber: string;
   deliveryChallanSignatureStatus: DeliveryChallanSignatureStatus;
   assignmentRemarks: string;
+  dcChallanMode: DcChallanWizardMode;
+  dcChallanId: string;
 };
 
 export type ReturnWizardState = {
@@ -61,10 +75,14 @@ export type ReturnWizardState = {
 
 export const EMPTY_ASSIGNMENT_WIZARD_STATE: AssignmentWizardState = {
   allocationType: "employee",
+  employeeSource: "MASTER_DATA",
   employeeId: "",
+  manualEmployeeName: "",
+  manualEmployeePhone: "",
+  manualEmployeeEmail: "",
+  manualEmployeeDeployedTo: "",
   departmentId: "",
   projectId: "",
-  expectedReturnAt: "",
   assetId: "",
   branchId: "",
   draftId: "",
@@ -74,6 +92,8 @@ export const EMPTY_ASSIGNMENT_WIZARD_STATE: AssignmentWizardState = {
   deliveryReferenceNumber: "",
   deliveryChallanSignatureStatus: "not_signed",
   assignmentRemarks: "",
+  dcChallanMode: "later",
+  dcChallanId: "",
 };
 
 export const EMPTY_RETURN_WIZARD_STATE: ReturnWizardState = {

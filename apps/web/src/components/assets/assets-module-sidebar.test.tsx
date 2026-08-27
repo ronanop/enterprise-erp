@@ -1,10 +1,11 @@
 /** @vitest-environment jsdom */
 
 import { cleanup, render, screen, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { AssetsModuleSidebar } from "@/components/assets/assets-module-sidebar";
-import { assetManagementNav } from "@/config/assets";
+import { assetManagementNav, isAssetNavActive } from "@/config/assets";
 
 vi.mock("next/navigation", () => ({
   usePathname: () => "/assets/assets",
@@ -47,15 +48,23 @@ describe("AssetsModuleSidebar", () => {
     );
   });
 
-  it("renders mobile full-label nav and desktop icon rail", () => {
+  it("renders a docked sidebar that does not overlay on hover", () => {
     render(<AssetsModuleSidebar />);
-    expect(screen.getByTestId("assets-module-sidebar-mobile")).toBeInTheDocument();
-    expect(screen.getByTestId("assets-module-sidebar-rail")).toBeInTheDocument();
-    const railNav = screen.getByTestId("assets-module-sidebar-rail-nav");
-    expect(railNav.className).toMatch(/w-16/);
-    expect(railNav.className).toMatch(/hover:w-64/);
-    expect(railNav.className).toMatch(/focus-within:w-64/);
-    expect(railNav.className).toMatch(/motion-reduce:transition-none/);
+    const sidebar = screen.getByTestId("assets-module-sidebar");
+    expect(sidebar.className).toMatch(/w-\[260px\]/);
+    expect(sidebar.className).not.toMatch(/hover:w-64/);
+    expect(sidebar.className).toMatch(/h-dvh/);
+    expect(screen.getByTestId("assets-module-sidebar-nav")).toBeInTheDocument();
+    expect(screen.queryByTestId("assets-module-sidebar-mobile")).not.toBeInTheDocument();
+  });
+
+  it("collapses in-flow without covering content", async () => {
+    const user = userEvent.setup();
+    render(<AssetsModuleSidebar />);
+    const sidebar = screen.getByTestId("assets-module-sidebar");
+    await user.click(screen.getByTestId("assets-module-sidebar-collapse"));
+    expect(sidebar.className).toMatch(/w-\[72px\]/);
+    expect(sidebar.className).not.toMatch(/w-\[260px\]/);
   });
 
   it("locks nav to the approved current-scope sections and order", () => {
@@ -76,6 +85,7 @@ describe("AssetsModuleSidebar", () => {
     ]);
     expect(assetManagementNav[2]?.items.map((i) => i.title)).toEqual([
       "Asset Assignment",
+      "DC Challan",
       "Transfers",
       "Maintenance",
     ]);
@@ -90,40 +100,46 @@ describe("AssetsModuleSidebar", () => {
 
   it("hides future modules from the rail", () => {
     render(<AssetsModuleSidebar />);
-    const rail = screen.getByTestId("assets-module-sidebar-rail-nav");
+    const nav = screen.getByTestId("assets-module-sidebar-nav");
     for (const title of HIDDEN_TITLES) {
-      expect(within(rail).queryByRole("link", { name: title })).not.toBeInTheDocument();
+      expect(within(nav).queryByRole("link", { name: title })).not.toBeInTheDocument();
     }
   });
 
   it("keeps only Locations (no Asset Locations duplicate)", () => {
     render(<AssetsModuleSidebar />);
-    const rail = screen.getByTestId("assets-module-sidebar-rail-nav");
-    expect(within(rail).getByRole("link", { name: "Locations" })).toHaveAttribute(
+    const nav = screen.getByTestId("assets-module-sidebar-nav");
+    expect(within(nav).getByRole("link", { name: "Locations" })).toHaveAttribute(
       "href",
       "/assets/locations",
     );
-    expect(within(rail).queryByRole("link", { name: "Asset Locations" })).not.toBeInTheDocument();
+    expect(within(nav).queryByRole("link", { name: "Asset Locations" })).not.toBeInTheDocument();
   });
 
   it("labels retained links and marks active All Assets", () => {
     render(<AssetsModuleSidebar />);
-    const rail = screen.getByTestId("assets-module-sidebar-rail-nav");
-    expect(within(rail).getByRole("link", { name: "Dashboard" })).toHaveAttribute(
+    const nav = screen.getByTestId("assets-module-sidebar-nav");
+    expect(within(nav).getByRole("link", { name: "Dashboard" })).toHaveAttribute(
       "href",
       "/assets",
     );
-    expect(within(rail).getByRole("link", { name: "All Assets" })).toHaveAttribute(
+    expect(within(nav).getByRole("link", { name: "All Assets" })).toHaveAttribute(
       "aria-current",
       "page",
     );
-    expect(within(rail).getByRole("link", { name: "Disposal" })).toHaveAttribute(
+    expect(within(nav).getByRole("link", { name: "Disposal" })).toHaveAttribute(
       "href",
       "/assets/asset-disposals",
     );
-    expect(within(rail).getByRole("link", { name: "Components" })).toHaveAttribute(
+    expect(within(nav).getByRole("link", { name: "Components" })).toHaveAttribute(
       "href",
       "/assets/asset-components",
     );
+  });
+
+  it("does not treat Add Asset as All Assets", () => {
+    expect(isAssetNavActive("/assets/assets/new", "/assets/assets", "prefix")).toBe(false);
+    expect(isAssetNavActive("/assets/assets/new", "/assets/assets/new", "exact")).toBe(true);
+    expect(isAssetNavActive("/assets/assets", "/assets/assets", "prefix")).toBe(true);
   });
 });

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { X } from "lucide-react";
 
 import type {
@@ -16,9 +16,15 @@ import { AssetDetailDrawerSkeleton } from "@/components/assets/inventory/interac
 import { QuickLinksSection } from "@/components/assets/inventory/interaction/drawer-sections/quick-links-section";
 import { SummarySection } from "@/components/assets/inventory/interaction/drawer-sections/summary-section";
 import { InventoryRegisterGroups } from "@/components/assets/inventory/inventory-register-groups";
-import { EmptyState } from "@/components/assets/shared";
+import {
+  DcChallanDocumentPreviewModal,
+  type DcChallanDocumentPreviewState,
+} from "@/components/assets/dc-challan/dc-challan-document-preview-modal";
+import { isOpenDcChallanStatus } from "@/components/assets/navigation/dc-challan-navigation";
+import { EmptyState, StatusBadge } from "@/components/assets/shared";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import type { DcChallanRow } from "@/services/assets-service";
 
 export type AssetDetailDrawerProps = {
   open: boolean;
@@ -28,6 +34,9 @@ export type AssetDetailDrawerProps = {
   data?: AssetDetailDrawerData | null;
   quickLinkEnabled?: Partial<Record<InventoryQuickLinkId, boolean>>;
   onQuickLink?: (link: InventoryQuickLinkId, asset: InventoryAssetRef) => void;
+  onCreateDcChallan?: () => void;
+  dcChallan?: DcChallanRow | null;
+  dcChallanLoading?: boolean;
   className?: string;
 };
 
@@ -39,10 +48,19 @@ export function AssetDetailDrawer({
   data,
   quickLinkEnabled,
   onQuickLink,
+  onCreateDcChallan,
+  dcChallan = undefined,
+  dcChallanLoading = false,
   className,
 }: AssetDetailDrawerProps) {
+  const [preview, setPreview] = useState<DcChallanDocumentPreviewState | null>(null);
+  const showCreateDc = Boolean(onCreateDcChallan) && !isOpenDcChallanStatus(dcChallan?.status);
+
   useEffect(() => {
-    if (!open) return;
+    if (!open) {
+      setPreview(null);
+      return;
+    }
     function onKey(e: KeyboardEvent) {
       if (e.key === "Escape") onOpenChange(false);
     }
@@ -56,7 +74,7 @@ export function AssetDetailDrawer({
     <div className="fixed inset-0 z-50 flex justify-end" data-testid="asset-detail-drawer">
       <button
         type="button"
-        className="absolute inset-0 cursor-pointer bg-black/40"
+        className="absolute inset-0 cursor-pointer bg-black/40 motion-reduce:transition-none"
         aria-label="Close drawer overlay"
         onClick={() => onOpenChange(false)}
       />
@@ -65,17 +83,34 @@ export function AssetDetailDrawer({
         aria-modal="true"
         aria-labelledby="asset-detail-drawer-title"
         className={cn(
-          "relative flex h-full w-full max-w-md flex-col border-l border-border bg-card shadow-xl",
+          "relative flex h-full w-full flex-col border-l border-border bg-card shadow-lg sm:w-[420px] lg:w-[480px]",
           className,
         )}
       >
-        <header className="flex items-start justify-between gap-2 border-b border-border/60 px-4 py-4">
+        <header className="sticky top-0 z-10 flex items-start justify-between gap-3 border-b border-border/60 bg-card px-4 py-4">
           <div className="min-w-0">
             <h2 id="asset-detail-drawer-title" className="truncate text-lg font-medium tracking-tight">
               {loading ? "Loading…" : (data?.laptopName ?? "Asset details")}
             </h2>
             {!loading && data ? (
-              <p className="font-mono text-xs text-muted-foreground">{data.assetTag}</p>
+              <>
+                <p className="font-mono text-xs text-muted-foreground">{data.assetTag}</p>
+                <div className="mt-3 flex flex-wrap items-center gap-3">
+                  <StatusBadge kind="operational" status={data.operationalStatus} />
+                  <StatusBadge kind="lifecycle" status={data.lifecycleStatus} />
+                  {showCreateDc ? (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="cursor-pointer transition-colors duration-200"
+                      onClick={onCreateDcChallan}
+                    >
+                      Create DC Challan
+                    </Button>
+                  ) : null}
+                </div>
+              </>
             ) : null}
           </div>
           <Button
@@ -90,7 +125,7 @@ export function AssetDetailDrawer({
           </Button>
         </header>
 
-        <div className="flex-1 overflow-y-auto px-4 py-4">
+        <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
           {loading ? (
             <AssetDetailDrawerSkeleton />
           ) : !data ? (
@@ -100,7 +135,7 @@ export function AssetDetailDrawer({
               description="Choose an asset from the inventory list to preview details."
             />
           ) : (
-            <div className="space-y-6">
+            <div className="space-y-6 pb-4">
               <SummarySection
                 assetTag={data.assetTag}
                 laptopName={data.laptopName}
@@ -110,7 +145,18 @@ export function AssetDetailDrawer({
                 lifecycleStatus={data.lifecycleStatus}
               />
               {data.registerGroups ? (
-                <InventoryRegisterGroups model={data.registerGroups} compact={false} />
+                <InventoryRegisterGroups
+                  model={data.registerGroups}
+                  compact={false}
+                  onCreateDcChallan={showCreateDc ? onCreateDcChallan : undefined}
+                  dcChallan={dcChallan}
+                  dcChallanLoading={dcChallanLoading}
+                  onViewDcDocument={
+                    dcChallan
+                      ? (kind, document) => setPreview({ row: dcChallan, kind, document })
+                      : undefined
+                  }
+                />
               ) : (
                 <>
                   <AssignmentSection assignment={data.assignment} />
@@ -131,6 +177,7 @@ export function AssetDetailDrawer({
           )}
         </div>
       </aside>
+      <DcChallanDocumentPreviewModal open={preview} onOpenChange={setPreview} />
     </div>
   );
 }

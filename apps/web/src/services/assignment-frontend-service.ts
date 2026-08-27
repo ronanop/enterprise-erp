@@ -37,6 +37,11 @@ export type AssignmentDraft = {
   branch_id?: string;
   allocation_type?: string;
   employee_id?: string | null;
+  employee_source?: string | null;
+  manual_employee_name?: string | null;
+  manual_employee_phone?: string | null;
+  manual_employee_email?: string | null;
+  manual_employee_deployed_to?: string | null;
   department_id?: string | null;
   project_id?: string | null;
   expected_return_at?: string | null;
@@ -56,6 +61,11 @@ export type AssignmentResponse = {
   asset_id: string;
   allocation_type: string;
   employee_id?: string | null;
+  employee_source?: string | null;
+  manual_employee_name?: string | null;
+  manual_employee_phone?: string | null;
+  manual_employee_email?: string | null;
+  manual_employee_deployed_to?: string | null;
   department_id?: string | null;
   project_id?: string | null;
   allocated_at?: string | null;

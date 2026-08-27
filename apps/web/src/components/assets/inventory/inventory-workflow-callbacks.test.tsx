@@ -133,10 +133,6 @@ describe("Container callbacks — Issue success path", () => {
       />,
     );
     await waitFor(() => screen.getByRole("button", { name: /Save draft/i }));
-    await user.click(screen.getByRole("button", { name: /^Next$/i }));
-    await user.click(screen.getByRole("button", { name: /^Next$/i }));
-    await user.click(screen.getByRole("button", { name: /^Next$/i }));
-    await user.click(screen.getByRole("button", { name: /^Next$/i }));
     await user.click(screen.getByRole("button", { name: /^Submit$/i }));
     await waitFor(() => expect(onSuccess).toHaveBeenCalledWith("new-1"));
     expect(peekInventoryStale()).toBe(true);

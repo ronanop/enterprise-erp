@@ -10,6 +10,36 @@ from sqlalchemy.orm import Mapped, mapped_column
 from database.base import Base
 from modules.asset.models.mixins import AstTransactionMixin
 
+# Portable CHECK (PostgreSQL + SQLite): employee allocation is directory XOR manual.
+CK_AST_ASSET_ASSIGNMENT_EMPLOYEE_IDENTITY = (
+    "("
+    "("
+    "allocation_type = 'employee' "
+    "AND employee_source = 'MASTER_DATA' "
+    "AND employee_id IS NOT NULL "
+    "AND manual_employee_name IS NULL "
+    "AND manual_employee_phone IS NULL "
+    "AND manual_employee_email IS NULL "
+    "AND manual_employee_deployed_to IS NULL"
+    ") OR ("
+    "allocation_type = 'employee' "
+    "AND employee_source = 'MANUAL_ENTRY' "
+    "AND employee_id IS NULL "
+    "AND manual_employee_name IS NOT NULL AND trim(manual_employee_name) <> '' "
+    "AND manual_employee_phone IS NOT NULL AND trim(manual_employee_phone) <> '' "
+    "AND manual_employee_deployed_to IS NOT NULL AND trim(manual_employee_deployed_to) <> ''"
+    ") OR ("
+    "allocation_type <> 'employee' "
+    "AND employee_id IS NULL "
+    "AND employee_source IS NULL "
+    "AND manual_employee_name IS NULL "
+    "AND manual_employee_phone IS NULL "
+    "AND manual_employee_email IS NULL "
+    "AND manual_employee_deployed_to IS NULL"
+    ")"
+    ")"
+)
+
 
 class AstAssetAssignment(Base, *AstTransactionMixin):
     __tablename__ = "ast_asset_assignment"
@@ -31,6 +61,14 @@ class AstAssetAssignment(Base, *AstTransactionMixin):
             "delivery_challan_signature_status IN ('not_signed','signed')",
             name="ck_ast_asset_assignment_dc_signature_status",
         ),
+        CheckConstraint(
+            "employee_source IS NULL OR employee_source IN ('MASTER_DATA','MANUAL_ENTRY')",
+            name="ck_ast_asset_assignment_employee_source",
+        ),
+        CheckConstraint(
+            CK_AST_ASSET_ASSIGNMENT_EMPLOYEE_IDENTITY,
+            name="ck_ast_asset_assignment_employee_identity",
+        ),
         {"schema": "asset"},
     )
 
@@ -49,6 +87,11 @@ class AstAssetAssignment(Base, *AstTransactionMixin):
         nullable=True,
         index=True,
     )
+    employee_source: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    manual_employee_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    manual_employee_phone: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    manual_employee_email: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    manual_employee_deployed_to: Mapped[str | None] = mapped_column(String(255), nullable=True)
     department_id: Mapped[UUID | None] = mapped_column(
         PG_UUID(as_uuid=True),
         ForeignKey("organization.org_department.id", ondelete="RESTRICT"),

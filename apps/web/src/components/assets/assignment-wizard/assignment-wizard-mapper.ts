@@ -33,6 +33,11 @@ export type AssignmentApiRow = {
   asset_id: string;
   allocation_type: string;
   employee_id?: string | null;
+  employee_source?: string | null;
+  manual_employee_name?: string | null;
+  manual_employee_phone?: string | null;
+  manual_employee_email?: string | null;
+  manual_employee_deployed_to?: string | null;
   department_id?: string | null;
   project_id?: string | null;
   expected_return_at?: string | null;
@@ -110,10 +115,14 @@ export function assignmentRowToWizardState(
 
   return {
     allocationType: row.allocation_type,
+    employeeSource: row.employee_source === "MANUAL_ENTRY" ? "MANUAL_ENTRY" : "MASTER_DATA",
     employeeId: row.employee_id ?? "",
+    manualEmployeeName: row.manual_employee_name ?? "",
+    manualEmployeePhone: row.manual_employee_phone ?? "",
+    manualEmployeeEmail: row.manual_employee_email ?? "",
+    manualEmployeeDeployedTo: row.manual_employee_deployed_to ?? "",
     departmentId: row.department_id ?? "",
     projectId: row.project_id ?? "",
-    expectedReturnAt: row.expected_return_at?.slice(0, 10) ?? "",
     assetId: row.asset_id,
     branchId: row.branch_id,
     draftId: row.id,
@@ -127,6 +136,8 @@ export function assignmentRowToWizardState(
       (row.delivery_challan_signature_status as AssignmentWizardState["deliveryChallanSignatureStatus"]) ||
       "not_signed",
     assignmentRemarks,
+    dcChallanMode: "later",
+    dcChallanId: "",
   };
 }
 
@@ -151,14 +162,23 @@ export function wizardStateToCreateBody(
     asset_id: state.assetId,
     branch_id: state.branchId,
     allocation_type: state.allocationType,
-    expected_return_at: state.expectedReturnAt || undefined,
     delivery_reference_number: state.deliveryReferenceNumber.trim() || undefined,
     delivery_reference_status: state.deliveryReferenceStatus,
     delivery_challan_signature_status: state.deliveryChallanSignatureStatus,
     assignment_remarks: buildAssignmentRemarks(state, issuedItems) || undefined,
     component_ids: state.issuedItemIds,
   };
-  if (state.allocationType === "employee") body.employee_id = state.employeeId || undefined;
+  if (state.allocationType === "employee") {
+    body.employee_source = state.employeeSource;
+    if (state.employeeSource === "MANUAL_ENTRY") {
+      body.manual_employee_name = state.manualEmployeeName.trim() || undefined;
+      body.manual_employee_phone = state.manualEmployeePhone.trim() || undefined;
+      body.manual_employee_email = state.manualEmployeeEmail.trim() || undefined;
+      body.manual_employee_deployed_to = state.manualEmployeeDeployedTo.trim() || undefined;
+    } else {
+      body.employee_id = state.employeeId || undefined;
+    }
+  }
   if (state.allocationType === "department") body.department_id = state.departmentId || undefined;
   if (state.allocationType === "project") body.project_id = state.projectId || undefined;
   return body;
@@ -168,8 +188,26 @@ export function wizardStateToUpdateBody(
   state: AssignmentWizardState,
   issuedItems: WizardIssuedItemOption[],
 ): Record<string, unknown> {
+  const body = wizardStateToCreateBody(state, issuedItems);
+  if (state.allocationType === "employee" && state.employeeSource === "MANUAL_ENTRY") {
+    body.employee_id = null;
+  }
+  if (state.allocationType === "employee" && state.employeeSource === "MASTER_DATA") {
+    body.manual_employee_name = null;
+    body.manual_employee_phone = null;
+    body.manual_employee_email = null;
+    body.manual_employee_deployed_to = null;
+  }
+  if (state.allocationType !== "employee") {
+    body.employee_id = null;
+    body.employee_source = null;
+    body.manual_employee_name = null;
+    body.manual_employee_phone = null;
+    body.manual_employee_email = null;
+    body.manual_employee_deployed_to = null;
+  }
   return {
-    ...wizardStateToCreateBody(state, issuedItems),
+    ...body,
     version: state.version,
   };
 }

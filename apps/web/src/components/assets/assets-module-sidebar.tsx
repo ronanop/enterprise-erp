@@ -2,177 +2,145 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useMemo, useState } from "react";
+import { ChevronLeft, ChevronRight, Package, Search } from "lucide-react";
 
-import { assetManagementNav } from "@/config/assets";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { assetManagementNav, isAssetNavActive } from "@/config/assets";
 import { cn } from "@/lib/utils";
 
-function isActive(
-  pathname: string,
-  href: string,
-  match: "exact" | "prefix" = "prefix",
-): boolean {
-  if (href === "/assets") {
-    return pathname === "/assets";
-  }
-  if (match === "exact") {
-    return pathname === href;
-  }
-  if (pathname === href) return true;
-  if (href === "/assets/assets" && pathname.startsWith("/assets/assets/new")) {
-    return false;
-  }
-  return pathname.startsWith(`${href}/`);
-}
-
+/**
+ * Docked Asset Management sidebar for standalone module tabs.
+ * Replaces AppSidebar — in-flow, opaque, collapse via toggle (never overlays content).
+ */
 export function AssetsModuleSidebar() {
   const pathname = usePathname();
+  const [collapsed, setCollapsed] = useState(false);
+  const [query, setQuery] = useState("");
+
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return assetManagementNav;
+    return assetManagementNav
+      .map((group) => ({
+        ...group,
+        items: group.items.filter((item) => item.title.toLowerCase().includes(q)),
+      }))
+      .filter((group) => group.items.length > 0);
+  }, [query]);
 
   return (
     <aside
       aria-label="Asset Management"
       data-testid="assets-module-sidebar"
-      className="w-full shrink-0 lg:sticky lg:top-4 lg:w-16 lg:self-start"
+      data-erp-primary-sidebar
+      className={cn(
+        "sticky top-0 z-20 flex h-dvh shrink-0 flex-col border-r border-sidebar-border bg-sidebar text-sidebar-foreground",
+        "transition-[width] duration-200 motion-reduce:transition-none",
+        collapsed ? "w-[72px]" : "w-[260px]",
+      )}
     >
-      {/* Mobile / small screens: full labels */}
-      <nav
-        className={cn(
-          "rounded-xl border border-border/60 bg-card p-2.5 shadow-sm",
-          "lg:hidden",
-        )}
-        data-testid="assets-module-sidebar-mobile"
-      >
-        <SidebarNav pathname={pathname} mode="mobile" />
-      </nav>
-
-      {/* Desktop: icon rail overlays labels on hover / focus-within (no content push) */}
-      <div className="relative hidden lg:block" data-testid="assets-module-sidebar-rail">
-        <div className="pointer-events-none invisible w-16 p-2" aria-hidden>
-          <SidebarNav pathname={pathname} mode="rail" forceCollapsed />
+      <div className={cn("flex items-center gap-3 px-4 py-5", collapsed && "justify-center px-2")}>
+        <div className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-sidebar-primary text-sidebar-primary-foreground shadow-sm">
+          <Package className="size-4" aria-hidden />
         </div>
-        <nav
-          className={cn(
-            "group/rail absolute top-0 left-0 z-20 overflow-hidden rounded-xl border border-border/60 bg-card",
-            "w-16 hover:w-64 focus-within:w-64",
-            "max-h-[calc(100dvh-5.5rem)] overflow-y-auto overscroll-contain",
-            "shadow-sm hover:shadow-lg focus-within:shadow-lg",
-            "transition-[width,box-shadow] duration-200 ease-out",
-            "motion-reduce:transition-none",
-          )}
-          data-testid="assets-module-sidebar-rail-nav"
-        >
-          <div className="p-2">
-            <SidebarNav pathname={pathname} mode="rail" />
+        {!collapsed ? (
+          <div className="min-w-0">
+            <p className="truncate text-sm font-medium tracking-tight text-sidebar-foreground">
+              Asset Management
+            </p>
+            <p className="truncate text-[11px] text-sidebar-foreground/55">Inventory · operations</p>
           </div>
-        </nav>
+        ) : null}
       </div>
-    </aside>
-  );
-}
 
-function SidebarNav({
-  pathname,
-  mode,
-  forceCollapsed = false,
-}: {
-  pathname: string;
-  mode: "mobile" | "rail";
-  forceCollapsed?: boolean;
-}) {
-  const rail = mode === "rail";
-  const expandLabel = rail && !forceCollapsed;
+      {!collapsed ? (
+        <div className="px-3 pb-3">
+          <div className="relative">
+            <Search className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-sidebar-foreground/40" />
+            <Input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search Assets…"
+              className="h-9 border-sidebar-border bg-white/5 pl-8 text-sidebar-foreground placeholder:text-sidebar-foreground/40 focus-visible:ring-sidebar-ring"
+              aria-label="Search Asset Management panes"
+            />
+          </div>
+        </div>
+      ) : null}
 
-  return (
-    <div className="space-y-4">
-      {assetManagementNav.map((group, gi) => (
-        <div key={gi}>
-          {group.title ? (
-            rail ? (
-              <>
-                {expandLabel ? (
-                  <p
-                    className={cn(
-                      "mb-1.5 overflow-hidden px-2.5 text-[11px] font-semibold tracking-[0.14em] text-muted-foreground uppercase",
-                      "max-w-0 opacity-0 whitespace-nowrap",
-                      "group-hover/rail:max-w-[14rem] group-hover/rail:opacity-100",
-                      "group-focus-within/rail:max-w-[14rem] group-focus-within/rail:opacity-100",
-                      "transition-[max-width,opacity] duration-200 ease-out motion-reduce:transition-none",
-                    )}
-                  >
-                    {group.title}
-                  </p>
-                ) : null}
-                <div
-                  className={cn(
-                    "mx-auto mb-1.5 h-px w-6 bg-border",
-                    expandLabel && "group-hover/rail:hidden group-focus-within/rail:hidden",
-                  )}
-                  aria-hidden
-                />
-              </>
-            ) : (
-              <p className="mb-1.5 px-2.5 text-[11px] font-semibold tracking-[0.14em] text-muted-foreground uppercase">
+      <nav
+        aria-label="Asset Management"
+        className="erp-scroll min-h-0 flex-1 overflow-y-auto px-2.5 py-2"
+        data-testid="assets-module-sidebar-nav"
+      >
+        {filtered.map((group, gi) => (
+          <div key={group.title ?? gi} className="mb-3">
+            {group.title && !collapsed ? (
+              <p className="mb-2 px-2.5 text-[10px] font-medium tracking-[0.14em] text-sidebar-foreground/40 uppercase">
                 {group.title}
               </p>
-            )
-          ) : null}
-          <ul className="space-y-0.5">
-            {group.items.map((item) => {
-              const active = isActive(pathname, item.href, item.match ?? "prefix");
-              const Icon = item.icon;
-              return (
-                <li key={item.href}>
-                  <Link
-                    href={item.href}
-                    title={item.title}
-                    aria-label={item.title}
-                    aria-current={active ? "page" : undefined}
-                    tabIndex={forceCollapsed ? -1 : undefined}
-                    className={cn(
-                      "flex cursor-pointer items-center rounded-lg text-sm font-medium",
-                      "transition-colors duration-200",
-                      rail
-                        ? cn(
-                            "h-10 justify-center gap-0 px-0",
-                            expandLabel &&
-                              "group-hover/rail:justify-start group-hover/rail:gap-3 group-hover/rail:px-2.5 group-focus-within/rail:justify-start group-focus-within/rail:gap-3 group-focus-within/rail:px-2.5",
-                          )
-                        : "h-10 gap-3 px-2.5",
-                      active
-                        ? "bg-primary/10 text-foreground shadow-[inset_0_0_0_1px] shadow-primary/15"
-                        : "text-muted-foreground hover:bg-muted/70 hover:text-foreground",
-                    )}
-                  >
-                    <Icon
+            ) : null}
+            {group.title && collapsed ? (
+              <div className="mx-auto mb-1.5 h-px w-6 bg-sidebar-border" aria-hidden />
+            ) : null}
+            <ul className="space-y-0.5">
+              {group.items.map((item) => {
+                const active = isAssetNavActive(pathname, item.href, item.match ?? "prefix");
+                const Icon = item.icon;
+                return (
+                  <li key={item.href}>
+                    <Link
+                      href={item.href}
+                      title={collapsed ? item.title : undefined}
+                      aria-label={item.title}
+                      aria-current={active ? "page" : undefined}
                       className={cn(
-                        "size-[18px] shrink-0",
-                        active ? "text-primary opacity-100" : "opacity-90",
+                        "group relative flex cursor-pointer items-center rounded-lg text-[13px] font-medium",
+                        "transition-colors duration-200 motion-reduce:transition-none",
+                        collapsed ? "h-10 justify-center px-0" : "gap-2.5 px-2.5 py-2",
+                        active
+                          ? "bg-sidebar-accent text-sidebar-accent-foreground shadow-sm"
+                          : "text-sidebar-foreground/70 hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground",
                       )}
-                      aria-hidden
-                    />
-                    {rail ? (
-                      expandLabel ? (
-                        <span
-                          className={cn(
-                            "truncate overflow-hidden whitespace-nowrap",
-                            "max-w-0 opacity-0",
-                            "group-hover/rail:max-w-[13rem] group-hover/rail:opacity-100",
-                            "group-focus-within/rail:max-w-[13rem] group-focus-within/rail:opacity-100",
-                            "transition-[max-width,opacity] duration-200 ease-out motion-reduce:transition-none",
-                          )}
-                        >
-                          {item.title}
-                        </span>
-                      ) : null
-                    ) : (
-                      <span className="truncate">{item.title}</span>
-                    )}
-                  </Link>
-                </li>
-              );
-            })}
-          </ul>
-        </div>
-      ))}
-    </div>
+                    >
+                      {active ? (
+                        <span className="absolute inset-y-1.5 left-0 w-0.5 rounded-full bg-sidebar-primary" />
+                      ) : null}
+                      <Icon
+                        className={cn(
+                          "size-4 shrink-0",
+                          active
+                            ? "text-sidebar-primary"
+                            : "text-sidebar-foreground/50 group-hover:text-sidebar-foreground/80",
+                        )}
+                        aria-hidden
+                      />
+                      {!collapsed ? <span className="min-w-0 flex-1 truncate">{item.title}</span> : null}
+                    </Link>
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+        ))}
+      </nav>
+
+      <div className="border-t border-sidebar-border p-2.5">
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          className="w-full cursor-pointer justify-center text-sidebar-foreground/70 transition-colors duration-200 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+          onClick={() => setCollapsed((v) => !v)}
+          aria-label={collapsed ? "Expand Asset Management sidebar" : "Collapse Asset Management sidebar"}
+          data-testid="assets-module-sidebar-collapse"
+        >
+          {collapsed ? <ChevronRight className="size-4" /> : <ChevronLeft className="size-4" />}
+          {!collapsed ? <span className="ml-1.5 text-xs">Collapse</span> : null}
+        </Button>
+      </div>
+    </aside>
   );
 }

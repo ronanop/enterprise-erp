@@ -1,4 +1,4 @@
-import { ApiClientError, apiClient, resourceService } from "@/services/api-client";
+import { ApiClientError, apiClient, apiGetBlob, apiUpload, resourceService } from "@/services/api-client";
 
 export type AssetsRow = Record<string, unknown>;
 
@@ -1771,6 +1771,8 @@ export const assetOperationsService = {
     branch_id?: string;
     status?: string;
     q?: string;
+    asset_id?: string;
+    allocation_type?: string;
   } = {}): Promise<AssetPaginatedListResult> {
     const query: Record<string, string | number> = {
       page: params.page ?? 1,
@@ -1780,6 +1782,8 @@ export const assetOperationsService = {
     if (params.branch_id) query.branch_id = params.branch_id;
     if (params.status) query.status = params.status;
     if (params.q) query.q = params.q;
+    if (params.asset_id) query.asset_id = params.asset_id;
+    if (params.allocation_type) query.allocation_type = params.allocation_type;
     const res = await resourceService.list<AssetPaginatedListResult>(
       "/assets/asset-assignments",
       query,
@@ -2282,5 +2286,239 @@ export const assetRegistrationQueueService = {
       { method: "GET", query },
     );
     return res.data as IncomingRegistrationPrefill;
+  },
+};
+
+const DC_CHALLAN_PATH = "/assets/asset-dc-challans";
+
+export type DcChallanDocument = {
+  id?: string | null;
+  doc_kind: string;
+  original_filename?: string | null;
+  content_type?: string | null;
+  file_size_bytes?: number | null;
+  checksum_sha256?: string | null;
+  source?: string | null;
+  uploaded_by_user_id?: string | null;
+  uploaded_at?: string | null;
+  external_url?: string | null;
+  is_legacy?: boolean;
+  has_stored_file?: boolean;
+};
+
+export type DcChallanRow = {
+  id: string;
+  dc_number: string;
+  asset_id: string;
+  assignment_id?: string | null;
+  employee_id?: string | null;
+  status: string;
+  company_id: string;
+  branch_id: string;
+  employee_code?: string | null;
+  employee_name?: string | null;
+  employee_phone?: string | null;
+  employee_email?: string | null;
+  deployed_to?: string | null;
+  asset_name?: string | null;
+  asset_tag?: string | null;
+  make?: string | null;
+  model?: string | null;
+  serial_number?: string | null;
+  purchase_cost?: string | number | null;
+  sent_to_scm_at?: string | null;
+  scm_reference_number?: string | null;
+  scm_document_url?: string | null;
+  scm_document_uploaded_at?: string | null;
+  signed_document_url?: string | null;
+  signed_document_uploaded_at?: string | null;
+  signed_at?: string | null;
+  received_at?: string | null;
+  remarks?: string | null;
+  version: number;
+  created_at?: string | null;
+  updated_at?: string | null;
+  scm_issued_document?: DcChallanDocument | null;
+  signed_document?: DcChallanDocument | null;
+};
+
+export type DcChallanListResult = {
+  items: DcChallanRow[];
+  total: number;
+  page: number;
+  page_size: number;
+  upload_limits?: DcChallanUploadLimits;
+};
+
+export type DcChallanUploadLimits = {
+  max_upload_mb: number;
+  allowed_content_types: string[];
+};
+
+export type DcChallanSummary = {
+  pending: number;
+  sent_to_scm: number;
+  document_received: number;
+  signed: number;
+  received: number;
+  cancelled: number;
+  upload_limits?: DcChallanUploadLimits;
+};
+
+export type DcChallanBulkSendResult = {
+  results: Array<{ id: string; ok: boolean; reason?: string | null }>;
+  sent_count: number;
+  skipped_count: number;
+};
+
+function parseDcChallanList(data: unknown): DcChallanListResult {
+  if (data && typeof data === "object" && "items" in data) {
+    const payload = data as DcChallanListResult;
+    return {
+      items: Array.isArray(payload.items) ? payload.items : [],
+      total: payload.total ?? 0,
+      page: payload.page ?? 1,
+      page_size: payload.page_size ?? 25,
+      upload_limits: payload.upload_limits,
+    };
+  }
+  return { items: [], total: 0, page: 1, page_size: 25 };
+}
+
+export const dcChallanService = {
+  async summary(params?: { company_id?: string }): Promise<DcChallanSummary> {
+    const res = await apiClient<DcChallanSummary>(`${DC_CHALLAN_PATH}/summary`, {
+      method: "GET",
+      query: { company_id: params?.company_id },
+    });
+    if (!res.data) {
+      throw new ApiClientError("DC challan summary returned no data", 500);
+    }
+    return res.data;
+  },
+
+  async search(params: {
+    page?: number;
+    page_size?: number;
+    status?: string;
+    asset_id?: string;
+    assignment_id?: string;
+    unlinked?: boolean;
+    q?: string;
+    created_from?: string;
+    created_to?: string;
+  } = {}): Promise<DcChallanListResult> {
+    const query: Record<string, string | number | boolean | undefined> = {
+      page: params.page,
+      page_size: params.page_size,
+      status: params.status,
+      asset_id: params.asset_id,
+      assignment_id: params.assignment_id,
+      q: params.q,
+      created_from: params.created_from,
+      created_to: params.created_to,
+    };
+    if (params.unlinked) query.unlinked = true;
+    const res = await resourceService.list<DcChallanListResult>(DC_CHALLAN_PATH, query);
+    return parseDcChallanList(res.data);
+  },
+
+  async get(id: string): Promise<DcChallanRow> {
+    const res = await resourceService.get<DcChallanRow>(DC_CHALLAN_PATH, id);
+    return res.data as DcChallanRow;
+  },
+
+  async create(body: {
+    asset_id: string;
+    assignment_id?: string;
+    employee_id?: string;
+    employee_phone?: string;
+    remarks?: string;
+  }): Promise<DcChallanRow> {
+    const res = await resourceService.create<DcChallanRow>(DC_CHALLAN_PATH, body);
+    return res.data as DcChallanRow;
+  },
+
+  async update(id: string, body: Partial<DcChallanRow>): Promise<DcChallanRow> {
+    const res = await resourceService.update<DcChallanRow>(DC_CHALLAN_PATH, id, body);
+    return res.data as DcChallanRow;
+  },
+
+  async sendToScm(id: string): Promise<DcChallanRow> {
+    const res = await resourceService.action<DcChallanRow>(DC_CHALLAN_PATH, id, "send-to-scm");
+    return res.data as DcChallanRow;
+  },
+
+  async bulkSendToScm(ids: string[]): Promise<DcChallanBulkSendResult> {
+    const res = await apiClient<DcChallanBulkSendResult>(`${DC_CHALLAN_PATH}/bulk-send-to-scm`, {
+      method: "POST",
+      body: { ids },
+    });
+    if (!res.data) {
+      throw new ApiClientError("Bulk send returned no data", 500);
+    }
+    return res.data;
+  },
+
+  async linkAssignment(id: string, assignmentId: string): Promise<DcChallanRow> {
+    const res = await resourceService.action<DcChallanRow>(DC_CHALLAN_PATH, id, "link-assignment", {
+      assignment_id: assignmentId,
+    });
+    return res.data as DcChallanRow;
+  },
+
+  async attachScmDocument(
+    id: string,
+    body: { document_url: string; scm_reference_number?: string },
+  ): Promise<DcChallanRow> {
+    const res = await resourceService.action<DcChallanRow>(
+      DC_CHALLAN_PATH,
+      id,
+      "attach-scm-document",
+      body,
+    );
+    return res.data as DcChallanRow;
+  },
+
+  async markSigned(id: string, signedDocumentUrl?: string): Promise<DcChallanRow> {
+    const res = await resourceService.action<DcChallanRow>(DC_CHALLAN_PATH, id, "mark-signed", {
+      signed_document_url: signedDocumentUrl,
+    });
+    return res.data as DcChallanRow;
+  },
+
+  async markReceived(id: string): Promise<DcChallanRow> {
+    const res = await resourceService.action<DcChallanRow>(DC_CHALLAN_PATH, id, "mark-received");
+    return res.data as DcChallanRow;
+  },
+
+  async cancel(id: string): Promise<DcChallanRow> {
+    const res = await resourceService.action<DcChallanRow>(DC_CHALLAN_PATH, id, "cancel");
+    return res.data as DcChallanRow;
+  },
+
+  async uploadScmIssued(id: string, file: File, scmReferenceNumber?: string): Promise<DcChallanRow> {
+    const form = new FormData();
+    form.append("file", file);
+    if (scmReferenceNumber) form.append("scm_reference_number", scmReferenceNumber);
+    const res = await apiUpload<DcChallanRow>(`${DC_CHALLAN_PATH}/${id}/documents/scm-issued`, form);
+    return res.data as DcChallanRow;
+  },
+
+  async uploadSigned(id: string, file: File): Promise<DcChallanRow> {
+    const form = new FormData();
+    form.append("file", file);
+    const res = await apiUpload<DcChallanRow>(`${DC_CHALLAN_PATH}/${id}/documents/signed`, form);
+    return res.data as DcChallanRow;
+  },
+
+  async getDocumentBlob(
+    id: string,
+    docKind: "scm-issued" | "signed",
+    disposition: "inline" | "attachment" = "inline",
+  ) {
+    return apiGetBlob(`${DC_CHALLAN_PATH}/${id}/documents/${docKind}/content`, {
+      disposition,
+    });
   },
 };

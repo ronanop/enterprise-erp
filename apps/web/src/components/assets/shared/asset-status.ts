@@ -18,6 +18,87 @@ export const OPERATIONAL_STATUS_LABELS: Record<OperationalStatusValue, string> =
   DISPOSED: "Disposed",
 };
 
+/**
+ * Distinct badge/pill colors for operational + lifecycle states.
+ * Reuse everywhere in Asset Management — do not invent per-screen palettes.
+ */
+export const statusColorMap = {
+  operational: {
+    READY_TO_MOVE:
+      "border-sky-200 bg-sky-50 text-sky-900 dark:border-sky-800 dark:bg-sky-950/50 dark:text-sky-200",
+    ASSIGNED:
+      "border-emerald-200 bg-emerald-50 text-emerald-900 dark:border-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-200",
+    RETIRED:
+      "border-rose-200 bg-rose-50 text-rose-900 dark:border-rose-800 dark:bg-rose-950/40 dark:text-rose-200",
+    PENDING_DISPOSAL:
+      "border-amber-200 bg-amber-50 text-amber-950 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200",
+    DISPOSED:
+      "border-zinc-400 bg-zinc-200 text-zinc-800 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-200",
+  } satisfies Record<OperationalStatusValue, string>,
+  lifecycle: {
+    active:
+      "border-emerald-200 bg-emerald-50 text-emerald-900 dark:border-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-200",
+    draft:
+      "border-slate-200 bg-slate-100 text-slate-800 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200",
+    submitted:
+      "border-sky-200 bg-sky-50 text-sky-900 dark:border-sky-800 dark:bg-sky-950/50 dark:text-sky-200",
+    approved:
+      "border-sky-200 bg-sky-50 text-sky-900 dark:border-sky-800 dark:bg-sky-950/50 dark:text-sky-200",
+    in_maintenance:
+      "border-amber-200 bg-amber-50 text-amber-950 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200",
+    transferred:
+      "border-slate-200 bg-slate-50 text-slate-800 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200",
+    disposed:
+      "border-rose-200 bg-rose-50 text-rose-900 dark:border-rose-800 dark:bg-rose-950/40 dark:text-rose-200",
+    written_off:
+      "border-rose-200 bg-rose-50 text-rose-900 dark:border-rose-800 dark:bg-rose-950/40 dark:text-rose-200",
+    cancelled:
+      "border-zinc-300 bg-zinc-100 text-zinc-700 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-300",
+  } satisfies Record<string, string>,
+  dcChallan: {
+    PENDING:
+      "border-slate-200 bg-slate-100 text-slate-800 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200",
+    SENT_TO_SCM:
+      "border-sky-200 bg-sky-50 text-sky-900 dark:border-sky-800 dark:bg-sky-950/50 dark:text-sky-200",
+    DOCUMENT_RECEIVED:
+      "border-amber-200 bg-amber-50 text-amber-950 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200",
+    SIGNED:
+      "border-teal-200 bg-teal-50 text-teal-900 dark:border-teal-800 dark:bg-teal-950/40 dark:text-teal-200",
+    RECEIVED:
+      "border-emerald-200 bg-emerald-50 text-emerald-900 dark:border-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-200",
+    CANCELLED:
+      "border-zinc-300 bg-zinc-100 text-zinc-700 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-300",
+  } satisfies Record<string, string>,
+} as const;
+
+export const DC_CHALLAN_STATUS_VALUES = [
+  "PENDING",
+  "SENT_TO_SCM",
+  "DOCUMENT_RECEIVED",
+  "SIGNED",
+  "RECEIVED",
+  "CANCELLED",
+] as const;
+
+export type DcChallanStatusValue = (typeof DC_CHALLAN_STATUS_VALUES)[number];
+
+export const DC_CHALLAN_STATUS_LABELS: Record<DcChallanStatusValue, string> = {
+  PENDING: "Pending",
+  SENT_TO_SCM: "Sent to SCM",
+  DOCUMENT_RECEIVED: "Document received",
+  SIGNED: "Signed",
+  RECEIVED: "Received",
+  CANCELLED: "Cancelled",
+};
+
+export function isDcChallanStatus(value: string): value is DcChallanStatusValue {
+  return (DC_CHALLAN_STATUS_VALUES as readonly string[]).includes(value);
+}
+
+export const OPERATIONAL_STATUS_BADGE_CLASS = statusColorMap.operational;
+export const LIFECYCLE_STATUS_BADGE_CLASS = statusColorMap.lifecycle;
+export const DC_CHALLAN_STATUS_BADGE_CLASS = statusColorMap.dcChallan;
+
 export function isOperationalStatus(value: string): value is OperationalStatusValue {
   return (OPERATIONAL_STATUS_VALUES as readonly string[]).includes(value);
 }

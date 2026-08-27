@@ -62,6 +62,26 @@ class Settings(BaseSettings):
         default=False,
         alias="ASSET_WORKFLOW_GOVERNANCE_ENABLED",
     )
+    asset_dc_challan_scm_api_key: str = Field(
+        default="",
+        alias="ASSET_DC_CHALLAN_SCM_API_KEY",
+    )
+    asset_storage_backend: str = Field(
+        default="local",
+        alias="ASSET_STORAGE_BACKEND",
+    )
+    asset_storage_path: str = Field(
+        default="./var/asset-storage",
+        alias="ASSET_STORAGE_PATH",
+    )
+    asset_dc_challan_max_upload_mb: int = Field(
+        default=10,
+        alias="ASSET_DC_CHALLAN_MAX_UPLOAD_MB",
+    )
+    asset_dc_challan_scm_allowed_hosts: str = Field(
+        default="",
+        alias="ASSET_DC_CHALLAN_SCM_ALLOWED_HOSTS",
+    )
 
     @field_validator("cors_origins", mode="before")
     @classmethod
@@ -73,6 +93,10 @@ class Settings(BaseSettings):
     @property
     def is_development(self) -> bool:
         return self.environment.lower() == "development"
+
+    @property
+    def is_production(self) -> bool:
+        return self.environment.lower() in {"production", "prod"}
 
 
 @lru_cache

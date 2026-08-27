@@ -26,6 +26,7 @@ import {
 } from "@/components/assets/assignment-wizard/wizard-types";
 import { isAuthenticated } from "@/lib/auth";
 import { listEmployeeOptions } from "@/lib/org-options";
+import { dcChallanService } from "@/services/assets-service";
 import {
   assignmentFrontendService,
   type AssignmentDraft,
@@ -107,6 +108,9 @@ export function AssignmentWizardContainer({
   const [issuedItems, setIssuedItems] = useState<WizardIssuedItemOption[]>([]);
   const [branchLabel, setBranchLabel] = useState("—");
   const [unavailableAssetMessage, setUnavailableAssetMessage] = useState<string | null>(null);
+  const [unlinkedDcChallans, setUnlinkedDcChallans] = useState<
+    Array<{ id: string; dcNumber: string; employeeName?: string | null }>
+  >([]);
 
   const loadAll = useCallback(async () => {
     if (!isAuthenticated()) {
@@ -206,6 +210,33 @@ export function AssignmentWizardContainer({
     [assets, service],
   );
 
+  useEffect(() => {
+    const assetId = wizardState.assetId;
+    if (!assetId || wizardState.allocationType !== "employee") {
+      setUnlinkedDcChallans([]);
+      return;
+    }
+    let cancelled = false;
+    void dcChallanService
+      .search({ asset_id: assetId, unlinked: true, page_size: 50, status: "PENDING" })
+      .then((result) => {
+        if (cancelled) return;
+        setUnlinkedDcChallans(
+          result.items.map((row) => ({
+            id: row.id,
+            dcNumber: row.dc_number,
+            employeeName: row.employee_name,
+          })),
+        );
+      })
+      .catch(() => {
+        if (!cancelled) setUnlinkedDcChallans([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [wizardState.assetId, wizardState.allocationType]);
+
   const persistDraft = useCallback(
     async (state: AssignmentWizardState): Promise<AssignmentResponse> => {
       const body = (
@@ -218,11 +249,32 @@ export function AssignmentWizardContainer({
         ? await service.updateDraft(state.draftId, body)
         : await service.createDraft(body);
 
+      let dcChallanId = state.dcChallanId;
+      if (state.allocationType === "employee") {
+        try {
+          if (state.dcChallanMode === "create_now" && !dcChallanId && state.assetId) {
+            const created = await dcChallanService.create({
+              asset_id: state.assetId,
+              assignment_id: row.id,
+              employee_id: state.employeeId || undefined,
+            });
+            dcChallanId = created.id;
+          } else if (state.dcChallanMode === "link_existing" && dcChallanId) {
+            await dcChallanService.linkAssignment(dcChallanId, row.id);
+          }
+        } catch (dcErr) {
+          setActionError(
+            service.formatError(dcErr, "Assignment saved, but DC challan could not be created or linked."),
+          );
+        }
+      }
+
       setWizardState({
         ...state,
         draftId: row.id,
         version: row.version,
         branchId: state.branchId || row.branch_id,
+        dcChallanId,
       });
       return row;
     },
@@ -301,6 +353,7 @@ export function AssignmentWizardContainer({
         onSaveDraft={(state) => void handleSaveDraft(state)}
         onFinish={(state) => void handleSubmitAndActivate(state)}
         onAssetChange={handleAssetChange}
+        unlinkedDcChallans={unlinkedDcChallans}
       />
     </div>
   );

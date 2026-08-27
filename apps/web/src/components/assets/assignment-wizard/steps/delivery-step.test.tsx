@@ -38,4 +38,41 @@ describe("DeliveryStep", () => {
     expect(onChange).toHaveBeenCalled();
     expect(onChange.mock.calls.some((c) => c[0].deliveryReferenceNumber === "X")).toBe(true);
   });
+
+  it("shows three DC modes for employee allocation", () => {
+    render(
+      <DeliveryStep state={EMPTY_ASSIGNMENT_WIZARD_STATE} onChange={vi.fn()} />,
+    );
+    expect(screen.getByRole("button", { name: /Create DC now/i })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /Link existing/i })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /Handle later/i })).toBeTruthy();
+    expect(
+      screen.getByText(/Most assets don't need a DC at handover/i),
+    ).toBeTruthy();
+    expect(
+      screen.getByText(/needs the DC before or right at handover/i),
+    ).toBeTruthy();
+    expect(screen.getByText(/already prepared in advance/i)).toBeTruthy();
+    expect(screen.getByText(/created separately from Operations/i)).toBeTruthy();
+  });
+
+  it("keeps Handle later as the default selected mode", () => {
+    render(
+      <DeliveryStep state={EMPTY_ASSIGNMENT_WIZARD_STATE} onChange={vi.fn()} />,
+    );
+    const later = screen.getByRole("button", { name: /Handle later/i });
+    expect(later.getAttribute("class")).toMatch(/bg-primary|default/);
+  });
+
+  it("hides Create DC modes for warehouse allocation", () => {
+    render(
+      <DeliveryStep
+        state={{ ...EMPTY_ASSIGNMENT_WIZARD_STATE, allocationType: "warehouse" }}
+        onChange={vi.fn()}
+      />,
+    );
+    expect(screen.queryByRole("button", { name: /Create DC now/i })).toBeNull();
+    expect(screen.getByText(/employee-only/i)).toBeTruthy();
+    expect(screen.getByLabelText(/DC Number/i)).toBeTruthy();
+  });
 });

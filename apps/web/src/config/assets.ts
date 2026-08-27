@@ -21,6 +21,7 @@ import {
   Plus,
   QrCode,
   Scale,
+  ScrollText,
   Tags,
   Trash2,
   UserCheck,
@@ -43,6 +44,24 @@ export type AssetManagementNavGroup = {
   title?: string;
   items: AssetManagementNavItem[];
 };
+
+export function isAssetNavActive(
+  pathname: string,
+  href: string,
+  match: "exact" | "prefix" = "prefix",
+): boolean {
+  if (href === "/assets") {
+    return pathname === "/assets";
+  }
+  if (match === "exact") {
+    return pathname === href;
+  }
+  if (pathname === href) return true;
+  if (href === "/assets/assets" && pathname.startsWith("/assets/assets/new")) {
+    return false;
+  }
+  return pathname.startsWith(`${href}/`);
+}
 
 /**
  * Locked CURRENT-scope sidebar — do not add future modules without product approval.
@@ -88,6 +107,7 @@ export const assetManagementNav: AssetManagementNavGroup[] = [
     title: "Operations",
     items: [
       { title: "Asset Assignment", href: "/assets/asset-assignments", icon: UserCheck },
+      { title: "DC Challan", href: "/assets/asset-dc-challans", icon: ScrollText },
       { title: "Transfers", href: "/assets/asset-transfers", icon: ArrowLeftRight },
       { title: "Maintenance", href: "/assets/asset-maintenances", icon: Wrench },
     ],
@@ -131,9 +151,9 @@ export const assetsWorkspaceGroups: AssetsWorkspaceGroup[] = [
   {
     key: "operations",
     title: "Operations",
-    description: "Assignment, transfers, and maintenance",
+    description: "Assignment, DC challans, transfers, and maintenance",
     icon: Wrench,
-    resourceKeys: ["asset-assignments", "asset-transfers", "asset-maintenances"],
+    resourceKeys: ["asset-assignments", "asset-dc-challans", "asset-transfers", "asset-maintenances"],
   },
   {
     key: "lifecycle",

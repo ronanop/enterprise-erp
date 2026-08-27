@@ -77,6 +77,10 @@ export type InventoryRowViewModel = {
   location: string;
   expandable: InventoryExpandableFields;
   assignmentHistory: AssignmentHistoryEntryView[];
+  /** Active assignment id when present (deep-link Case 1). */
+  activeAssignmentId?: string | null;
+  /** Active assignment allocation_type — DC create is employee-only this phase. */
+  assignmentAllocationType?: string | null;
 };
 
 export function resolveOperationalStatusForQuery(
@@ -254,6 +258,10 @@ export function mapAssetToInventoryRow(
     location: ctx.locationLabels[id] ?? "—",
     expandable,
     assignmentHistory: mapAssignmentHistoryEntries(history, employeeLookup),
+    activeAssignmentId: assignment?.id ? String(assignment.id) : null,
+    assignmentAllocationType: assignment?.allocation_type
+      ? String(assignment.allocation_type)
+      : null,
   };
 }
 

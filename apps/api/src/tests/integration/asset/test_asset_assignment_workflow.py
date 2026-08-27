@@ -72,6 +72,7 @@ def _insert_draft_assignment(db, ids, asset_id, *, employee_id=None) -> AstAsset
         asset_id=asset_id,
         allocation_type="employee",
         employee_id=emp,
+        employee_source="MASTER_DATA",
         status="draft",
         delivery_reference_status="pending",
         delivery_reference_number="DC-TEST",

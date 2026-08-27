@@ -127,6 +127,7 @@ describe("mapAssetToInventoryRow", () => {
               employee_id: "emp-1",
               allocated_at: "2026-08-01T10:00:00.000Z",
               status: "active",
+              allocation_type: "employee",
             },
           ],
         ]),
@@ -151,6 +152,8 @@ describe("mapAssetToInventoryRow", () => {
     expect(row.employeeId).toBe("EMP-001");
     expect(row.currentHolder).toContain("Asha");
     expect(row.expandable.phoneNumber).toBe("9000000001");
+    expect(row.activeAssignmentId).toBe("asn-1");
+    expect(row.assignmentAllocationType).toBe("employee");
   });
 
   it("prefers persisted make/model/configuration and asset location", () => {

@@ -3,6 +3,7 @@ import {
   buildReturnWizardHref,
   assignmentNavigationPaths,
 } from "@/components/assets/navigation/assignment-navigation";
+import { buildDcChallanHref } from "@/components/assets/navigation/dc-challan-navigation";
 import type {
   InventoryMenuActionId,
   InventoryQuickLinkId,
@@ -28,6 +29,8 @@ export const assetNavigationPaths = {
       : "/assets/asset-disposals",
   history: (assetId: string) =>
     `/assets/assets/${encodeURIComponent(assetId)}?tab=activity`,
+  dcChallan: (assetId: string, assignmentId?: string) =>
+    buildDcChallanHref({ assetId, assignmentId }),
 } as const;
 
 export type AssetNavigateFn = (href: string) => void;
@@ -44,6 +47,7 @@ export type AssetNavigation = {
   openMaintenance: (assetId: string) => void;
   openDisposal: (assetId?: string) => void;
   openHistory: (assetId: string) => void;
+  openDcChallan: (assetId: string, assignmentId?: string) => void;
 };
 
 export function createAssetNavigation(push: AssetNavigateFn): AssetNavigation {
@@ -59,6 +63,8 @@ export function createAssetNavigation(push: AssetNavigateFn): AssetNavigation {
     openMaintenance: (assetId) => push(assetNavigationPaths.maintenance(assetId)),
     openDisposal: (assetId) => push(assetNavigationPaths.disposal(assetId)),
     openHistory: (assetId) => push(assetNavigationPaths.history(assetId)),
+    openDcChallan: (assetId, assignmentId) =>
+      push(assetNavigationPaths.dcChallan(assetId, assignmentId)),
   };
 }
 

@@ -575,7 +575,7 @@ describe("AdditionalInfoSection earlier used by", () => {
       />,
     );
     expect(screen.getByTestId("drawer-earlier-used-by")).toHaveTextContent("Priya");
-    expect(screen.getByText("Register fields")).toBeInTheDocument();
+    expect(screen.getByText("Remarks")).toBeInTheDocument();
   });
 
   it("defaults to dashes", () => {
@@ -650,6 +650,6 @@ describe("AssetDetailDrawer register parity rendering", () => {
         }}
       />,
     );
-    expect(container.querySelector(".sm\\:grid-cols-2")).toBeTruthy();
+    expect(container.querySelector("[data-testid='drawer-kv-grid']")).toBeTruthy();
   });
 });

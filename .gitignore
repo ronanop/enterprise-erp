@@ -52,3 +52,7 @@ logs/
 alembic/versions/*.pyc
 
 .pgdata/
+
+# Asset-module local file storage (never commit uploaded blobs)
+var/asset-storage/
+**/var/asset-storage/

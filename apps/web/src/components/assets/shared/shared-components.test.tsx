@@ -120,6 +120,17 @@ describe("StatusBadge", () => {
     render(<StatusBadge kind="lifecycle" status="active" />);
     expect(screen.getByText("Active")).toBeInTheDocument();
   });
+
+  it("uses distinct operational colors from statusColorMap", () => {
+    const { container } = render(<StatusBadge kind="operational" status="ASSIGNED" />);
+    expect(container.firstChild).toHaveClass("border-emerald-200");
+  });
+
+  it("renders DC challan status from statusColorMap", () => {
+    const { container } = render(<StatusBadge kind="dcChallan" status="SENT_TO_SCM" />);
+    expect(container).toHaveTextContent("Sent to SCM");
+    expect(container.firstChild).toHaveClass("border-sky-200");
+  });
 });
 
 describe("BranchSelector", () => {
@@ -149,7 +160,7 @@ describe("BranchSelector", () => {
 });
 
 describe("InventoryFilterBar", () => {
-  it("renders search and apply", () => {
+  it("renders advanced fields and apply", () => {
     render(
       <InventoryFilterBar
         values={EMPTY_INVENTORY_FILTERS}
@@ -158,7 +169,9 @@ describe("InventoryFilterBar", () => {
         onReset={vi.fn()}
       />,
     );
-    expect(screen.getByLabelText("Search")).toBeInTheDocument();
+    expect(screen.getByText("Lifecycle status")).toBeInTheDocument();
+    expect(screen.queryByLabelText("Search")).not.toBeInTheDocument();
+    expect(screen.queryByText("Operational status")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Apply" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Reset" })).toBeInTheDocument();
   });

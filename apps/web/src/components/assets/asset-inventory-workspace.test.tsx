@@ -5,6 +5,17 @@ import { cleanup, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+vi.mock("@/services/assets-service", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/services/assets-service")>();
+  return {
+    ...actual,
+    dcChallanService: {
+      ...actual.dcChallanService,
+      search: vi.fn().mockResolvedValue({ items: [], total: 0, page: 1, page_size: 25 }),
+    },
+  };
+});
+
 import { AssetInventoryWorkspace } from "@/components/assets/asset-inventory-workspace";
 import { EMPTY_INVENTORY_FILTERS } from "@/components/assets/shared";
 import { BRANCH_ALL_VALUE } from "@/components/assets/shared";
@@ -62,8 +73,6 @@ function renderWorkspace(overrides: Partial<ComponentProps<typeof AssetInventory
       pageSize={25}
       onPageChange={vi.fn()}
       loading={false}
-      expandedRowIds={new Set()}
-      onToggleExpand={vi.fn()}
       {...overrides}
     />,
   );
@@ -138,12 +147,9 @@ describe("AssetInventoryWorkspace", () => {
     expect(onPresetChange).toHaveBeenCalledWith("disposed");
   });
 
-  it("expands row details", async () => {
-    const user = userEvent.setup();
-    const onToggleExpand = vi.fn();
-    renderWorkspace({ onToggleExpand });
-    await user.click(screen.getByRole("button", { name: "Expand row" }));
-    expect(onToggleExpand).toHaveBeenCalledWith("1");
+  it("does not render an inline row-expand control", () => {
+    renderWorkspace();
+    expect(screen.queryByRole("button", { name: "Expand row" })).not.toBeInTheDocument();
   });
 
   it("renders mobile cards container", () => {
@@ -161,12 +167,31 @@ describe("AssetInventoryWorkspace", () => {
     expect(screen.getByRole("button", { name: "Previous" })).toBeDisabled();
   });
 
-  it("submits quick search", async () => {
+  it("submits search from the typeahead on Enter", async () => {
     const user = userEvent.setup();
     const onQuickSearchSubmit = vi.fn();
     renderWorkspace({ onQuickSearchSubmit, quickSearch: "tag" });
-    await user.click(screen.getByRole("button", { name: "Search" }));
+    await user.type(screen.getByRole("combobox", { name: "Search assets" }), "{Enter}");
     expect(onQuickSearchSubmit).toHaveBeenCalled();
+  });
+
+  it("opens advanced filters in a popover without operational status", async () => {
+    const user = userEvent.setup();
+    renderWorkspace();
+    expect(screen.queryByText("Operational status")).not.toBeInTheDocument();
+    await user.click(screen.getByTestId("inventory-filters-trigger"));
+    expect(screen.getByTestId("inventory-filters-panel")).toBeInTheDocument();
+    expect(screen.getByText("Lifecycle status")).toBeInTheDocument();
+    expect(screen.queryByText("Operational status")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Apply" })).toBeInTheDocument();
+  });
+
+  it("shows dismissible chips for applied advanced filters", () => {
+    renderWorkspace({
+      appliedFilters: { ...EMPTY_INVENTORY_FILTERS, branchId: "b1" },
+      onDismissFilter: vi.fn(),
+    });
+    expect(screen.getByTestId("inventory-active-filter-chips")).toHaveTextContent("Branch: Noida");
   });
 
   it("renders export toolbar when handlers provided", async () => {

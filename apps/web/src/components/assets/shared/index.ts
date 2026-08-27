@@ -11,6 +11,9 @@ export {
   InventoryFilterBar,
   InventoryFilterBar as FilterBar,
   EMPTY_INVENTORY_FILTERS,
+  DEFAULT_LIFECYCLE_OPTIONS,
+  DEFAULT_ASSET_TYPE_OPTIONS,
+  countAdvancedInventoryFilters,
   type InventoryFilterBarProps,
   type InventoryFilterValues,
   type InventoryFilterOption,
@@ -26,6 +29,11 @@ export {
 export {
   OPERATIONAL_STATUS_VALUES,
   OPERATIONAL_STATUS_LABELS,
+  OPERATIONAL_STATUS_BADGE_CLASS,
+  LIFECYCLE_STATUS_BADGE_CLASS,
+  DC_CHALLAN_STATUS_BADGE_CLASS,
+  DC_CHALLAN_STATUS_LABELS,
+  statusColorMap,
   isOperationalStatus,
   type OperationalStatusValue,
 } from "./asset-status";

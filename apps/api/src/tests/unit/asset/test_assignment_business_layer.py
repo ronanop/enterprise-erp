@@ -338,6 +338,7 @@ def test_complete_return_delegates_to_update() -> None:
         asset_id=uuid4(),
         allocation_type="employee",
         employee_id=uuid4(),
+        employee_source="MASTER_DATA",
         status="active",
         delivery_reference_status="issued",
         is_deleted=False,

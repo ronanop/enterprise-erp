@@ -2,6 +2,7 @@
 
 from fastapi import APIRouter
 
+from modules.asset.routers.dc_challan import dc_challan_router
 from modules.asset.routers import (
     asset_assignments_router,
     asset_audits_router,
@@ -34,6 +35,7 @@ asset_router.include_router(incoming_assets_router)
 asset_router.include_router(registration_queue_router)
 asset_router.include_router(asset_components_router)
 asset_router.include_router(asset_assignments_router)
+asset_router.include_router(dc_challan_router)
 asset_router.include_router(asset_transfers_router)
 asset_router.include_router(asset_locations_router)
 asset_router.include_router(asset_warranties_router)

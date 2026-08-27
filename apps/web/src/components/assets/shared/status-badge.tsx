@@ -2,45 +2,17 @@ import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 
 import {
+  DC_CHALLAN_STATUS_BADGE_CLASS,
+  DC_CHALLAN_STATUS_LABELS,
   formatLifecycleStatusLabel,
+  isDcChallanStatus,
   isOperationalStatus,
+  LIFECYCLE_STATUS_BADGE_CLASS,
+  OPERATIONAL_STATUS_BADGE_CLASS,
   OPERATIONAL_STATUS_LABELS,
-  type OperationalStatusValue,
 } from "./asset-status";
 
-export type StatusBadgeKind = "operational" | "lifecycle";
-
-const OPERATIONAL_BADGE_CLASS: Record<OperationalStatusValue, string> = {
-  READY_TO_MOVE:
-    "border-sky-200 bg-sky-50 text-sky-900 dark:border-sky-900 dark:bg-sky-950/50 dark:text-sky-200",
-  ASSIGNED:
-    "border-blue-200 bg-blue-50 text-blue-900 dark:border-blue-900 dark:bg-blue-950/50 dark:text-blue-200",
-  RETIRED:
-    "border-slate-200 bg-slate-100 text-slate-800 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200",
-  PENDING_DISPOSAL:
-    "border-amber-200 bg-amber-50 text-amber-950 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200",
-  DISPOSED:
-    "border-border bg-muted text-muted-foreground dark:bg-muted/40",
-};
-
-const LIFECYCLE_VARIANT: Record<
-  string,
-  "default" | "secondary" | "outline" | "success" | "warning" | "destructive"
-> = {
-  active: "success",
-  draft: "secondary",
-  submitted: "outline",
-  approved: "outline",
-  in_maintenance: "warning",
-  transferred: "outline",
-  disposed: "destructive",
-  written_off: "destructive",
-  cancelled: "secondary",
-};
-
-function formatLifecycleLabel(status: string): string {
-  return formatLifecycleStatusLabel(status);
-}
+export type StatusBadgeKind = "operational" | "lifecycle" | "dcChallan";
 
 export type StatusBadgeProps = {
   kind: StatusBadgeKind;
@@ -53,7 +25,7 @@ export function StatusBadge({ kind, status, className }: StatusBadgeProps) {
     return (
       <Badge
         variant="outline"
-        className={cn("font-medium", OPERATIONAL_BADGE_CLASS[status], className)}
+        className={cn("shrink-0 font-medium", OPERATIONAL_STATUS_BADGE_CLASS[status], className)}
       >
         {OPERATIONAL_STATUS_LABELS[status]}
       </Badge>
@@ -62,16 +34,42 @@ export function StatusBadge({ kind, status, className }: StatusBadgeProps) {
 
   if (kind === "operational") {
     return (
-      <Badge variant="outline" className={cn("font-medium", className)}>
+      <Badge variant="outline" className={cn("shrink-0 font-medium", className)}>
         {status}
       </Badge>
     );
   }
 
-  const variant = LIFECYCLE_VARIANT[status] ?? "outline";
+  if (kind === "dcChallan") {
+    if (isDcChallanStatus(status)) {
+      return (
+        <Badge
+          variant="outline"
+          className={cn("shrink-0 font-medium", DC_CHALLAN_STATUS_BADGE_CLASS[status], className)}
+        >
+          {DC_CHALLAN_STATUS_LABELS[status]}
+        </Badge>
+      );
+    }
+    return (
+      <Badge variant="outline" className={cn("shrink-0 font-medium", className)}>
+        {status}
+      </Badge>
+    );
+  }
+
+  const lifeKey = status.trim().toLowerCase();
+  const lifeClass =
+    lifeKey in LIFECYCLE_STATUS_BADGE_CLASS
+      ? LIFECYCLE_STATUS_BADGE_CLASS[lifeKey as keyof typeof LIFECYCLE_STATUS_BADGE_CLASS]
+      : undefined;
+
   return (
-    <Badge variant={variant} className={cn("font-medium", className)}>
-      {formatLifecycleLabel(status)}
+    <Badge
+      variant="outline"
+      className={cn("shrink-0 font-medium", lifeClass, className)}
+    >
+      {formatLifecycleStatusLabel(status)}
     </Badge>
   );
 }

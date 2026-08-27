@@ -19,6 +19,24 @@ function labelFor(id: string, options: WizardSelectOption[]) {
   return options.find((o) => o.id === id)?.label ?? "—";
 }
 
+function employeeSummary(state: AssignmentWizardState, employees: WizardSelectOption[]) {
+  if (state.allocationType !== "employee") {
+    return state.allocationType;
+  }
+  if (state.employeeSource === "MANUAL_ENTRY") {
+    const name = state.manualEmployeeName.trim() || "—";
+    const deployed = state.manualEmployeeDeployedTo.trim();
+    return deployed ? `${name} (deployed to ${deployed})` : `${name} (manual entry)`;
+  }
+  return labelFor(state.employeeId, employees);
+}
+
+function dcModeLabel(mode: AssignmentWizardState["dcChallanMode"]) {
+  if (mode === "create_now") return "Create DC now";
+  if (mode === "link_existing") return "Link existing";
+  return "Handle later";
+}
+
 export function AssignmentReviewStep({
   state,
   employees = MOCK_EMPLOYEES,
@@ -32,7 +50,7 @@ export function AssignmentReviewStep({
       <dl className="grid gap-3 text-sm sm:grid-cols-2">
         <div>
           <dt className="text-xs text-muted-foreground">Employee</dt>
-          <dd>{labelFor(state.employeeId, employees)}</dd>
+          <dd>{employeeSummary(state, employees)}</dd>
         </div>
         <div>
           <dt className="text-xs text-muted-foreground">Asset</dt>
@@ -41,6 +59,10 @@ export function AssignmentReviewStep({
         <div>
           <dt className="text-xs text-muted-foreground">Issued items</dt>
           <dd>{issuedLabels.length ? issuedLabels.join(", ") : "—"}</dd>
+        </div>
+        <div>
+          <dt className="text-xs text-muted-foreground">DC paperwork</dt>
+          <dd>{dcModeLabel(state.dcChallanMode)}</dd>
         </div>
         <div>
           <dt className="text-xs text-muted-foreground">DC Status</dt>
@@ -56,17 +78,13 @@ export function AssignmentReviewStep({
             {state.deliveryChallanSignatureStatus.replaceAll("_", " ")}
           </dd>
         </div>
-        <div>
-          <dt className="text-xs text-muted-foreground">Expected return</dt>
-          <dd>{state.expectedReturnAt || "—"}</dd>
-        </div>
         <div className="sm:col-span-2">
           <dt className="text-xs text-muted-foreground">Remarks</dt>
           <dd>{state.assignmentRemarks || "—"}</dd>
         </div>
       </dl>
       <p className="rounded-md border border-border/70 bg-muted/20 px-3 py-2 text-xs text-muted-foreground">
-        Confirm to save the assignment draft. Use Submit from the assignment list when ready for approval.
+        Submit issues the assignment. Save draft at any time — completeness is not required to save.
       </p>
     </div>
   );

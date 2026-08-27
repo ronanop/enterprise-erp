@@ -6,7 +6,10 @@ from sqlalchemy.orm import Session
 
 from core.exceptions import NotFoundException
 from modules.asset.adapters.master_data_port import AssetMasterDataAdapter
-from modules.asset.domain.assignment_enrichment import validate_draft_enrichment_fields, validate_return_remarks
+from modules.asset.domain.assignment_enrichment import (
+    validate_draft_enrichment_fields,
+    validate_return_remarks,
+)
 from modules.asset.domain.enums import AssetAssignmentStatus, AstEntityType
 from modules.asset.domain.exceptions import (
     AssignmentValidationError,
@@ -21,11 +24,11 @@ from modules.asset.repository.asset_assignment_repository import (
 )
 from modules.asset.repository.asset_repository import AssetRepository
 from modules.asset.repository.base import utcnow
-from modules.asset.schemas import AssignmentComponentResponse, AssetAssignmentResponse
+from modules.asset.schemas import AssetAssignmentResponse, AssignmentComponentResponse
 from modules.asset.service.asset_operational_status_service import AssetOperationalStatusService
 from modules.asset.service.asset_scope_validator import AssetScopeValidator
 from modules.asset.service.assignment_component_service import AssignmentComponentService
-from modules.asset.service.assignment_validator import AssignmentValidator
+from modules.asset.service.assignment_validator import ALLOCATION_IDENTITY_KEYS, AssignmentValidator
 from modules.asset.service.document_number_service import DocumentNumberService
 from modules.asset.service.engines import AssetAssignmentEngine
 from modules.asset.service.governance_service import AssetGovernanceService
@@ -56,6 +59,7 @@ def _json_safe_component_returns_for_audit(
 
 class AssignmentService:
     def __init__(self, db: Session) -> None:
+        self._db = db
         self._repo = AssetAssignmentRepository(db)
         self._assets = AssetRepository(db)
         self._scope = AssetScopeValidator(db)
@@ -121,7 +125,9 @@ class AssignmentService:
         cid = self._scope.resolve_company_id(ctx, company_id)
         self._scope.validate_branch_access(ctx, branch_id)
         component_ids = fields.pop("component_ids", None)
+        fields.pop("expected_return_at", None)
         enrichment = self._validator.validate_create_fields(ctx, company_id=cid, fields=fields)
+        identity = self._validator.allocation_identity_payload(fields)
 
         asset = self._assets.get(ctx, fields["asset_id"])
         if asset is None:
@@ -146,11 +152,8 @@ class AssignmentService:
             document_number=doc,
             asset_id=asset.id,
             allocation_type=fields["allocation_type"],
-            employee_id=fields.get("employee_id"),
-            department_id=fields.get("department_id"),
-            project_id=fields.get("project_id"),
-            expected_return_at=fields.get("expected_return_at"),
             status=AssetAssignmentStatus.DRAFT.value,
+            **identity,
             **{k: v for k, v in enrichment.items() if k != "return_remarks"},
         )
         if component_ids is not None:
@@ -175,7 +178,32 @@ class AssignmentService:
     def update(self, ctx: TenantContext, row_id: UUID, **fields):
         row = self.get(ctx, row_id)
         component_ids = fields.pop("component_ids", None)
+        fields.pop("expected_return_at", None)
         self._validator.validate_update_fields(ctx, row, fields)
+        if ALLOCATION_IDENTITY_KEYS.intersection(fields):
+            merged = {
+                "allocation_type": fields.get("allocation_type", row.allocation_type),
+                "employee_id": fields.get("employee_id", row.employee_id),
+                "employee_source": fields.get(
+                    "employee_source", getattr(row, "employee_source", None)
+                ),
+                "manual_employee_name": fields.get(
+                    "manual_employee_name", getattr(row, "manual_employee_name", None)
+                ),
+                "manual_employee_phone": fields.get(
+                    "manual_employee_phone", getattr(row, "manual_employee_phone", None)
+                ),
+                "manual_employee_email": fields.get(
+                    "manual_employee_email", getattr(row, "manual_employee_email", None)
+                ),
+                "manual_employee_deployed_to": fields.get(
+                    "manual_employee_deployed_to",
+                    getattr(row, "manual_employee_deployed_to", None),
+                ),
+                "department_id": fields.get("department_id", row.department_id),
+                "project_id": fields.get("project_id", row.project_id),
+            }
+            fields = {**fields, **self._validator.allocation_identity_payload(merged)}
         enrichment_keys = {
             "delivery_reference_number",
             "delivery_reference_status",
@@ -289,6 +317,11 @@ class AssignmentService:
             comments=comments,
             recipient_user_id=row.created_by,
         )
+        self._auto_cancel_assignment_dcs(
+            ctx,
+            row,
+            remark=self._dc_auto_cancel_remark(row, "cancelled"),
+        )
         return self.get(ctx, row_id)
 
     def cancel_draft(self, ctx: TenantContext, row_id: UUID):
@@ -305,9 +338,16 @@ class AssignmentService:
             operation="cancel",
             performed_by=ctx.user_id,
         )
+        self._auto_cancel_assignment_dcs(
+            ctx,
+            row,
+            remark=self._dc_auto_cancel_remark(row, "cancelled"),
+        )
         return updated
 
     def reopen(self, ctx: TenantContext, row_id: UUID):
+        # Reopening an assignment must not revive a cancelled DC challan.
+        # IT creates/links a new row once the old DC is CANCELLED (unique index).
         row = self.get(ctx, row_id)
         self._engine.reopen(row, workflow_status=row.workflow_status)
         updated = self._repo.update(
@@ -407,7 +447,25 @@ class AssignmentService:
                 ),
             },
         )
+        self._auto_cancel_assignment_dcs(
+            ctx,
+            row,
+            remark=self._dc_auto_cancel_remark(row, "returned"),
+        )
         return updated
+
+    def _dc_auto_cancel_remark(self, assignment: AstAssetAssignment, action: str) -> str:
+        doc = getattr(assignment, "document_number", None) or assignment.id
+        return f"Auto-cancelled because assignment {doc} was {action}."
+
+    def _auto_cancel_assignment_dcs(
+        self, ctx: TenantContext, assignment: AstAssetAssignment, *, remark: str
+    ) -> None:
+        from modules.asset.service.dc_challan_service import DcChallanService
+
+        DcChallanService(self._db).auto_cancel_for_assignment(
+            ctx, assignment.id, remark=remark
+        )
 
     def _legacy_approve(self, ctx: TenantContext, row_id: UUID, row: AstAssetAssignment):
         """Non-production path when ASSET_WORKFLOW_GOVERNANCE_ENABLED=false."""

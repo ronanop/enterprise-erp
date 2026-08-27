@@ -9,13 +9,18 @@ from uuid import UUID
 
 from sqlalchemy.orm import Session
 
-from modules.asset.domain.enums import AssetOperationalStatus
+from modules.asset.domain.enums import (
+    DC_CHALLAN_OPS_AUTO_CANCEL_STATUSES,
+    AssetOperationalStatus,
+)
 from modules.asset.domain.operational_status_exceptions import (
     AssetNotFoundForOperationalStatus,
     OperationalStatusConflict,
 )
 from modules.asset.repository.asset_repository import AssetRepository
-from modules.asset.service.engines.asset_operational_status_engine import AssetOperationalStatusEngine
+from modules.asset.service.engines.asset_operational_status_engine import (
+    AssetOperationalStatusEngine,
+)
 from modules.asset.service.operational_status_audit import log_operational_status_change
 from modules.asset.service.operational_status_validator import OperationalStatusValidator
 from modules.foundation.domain.value_objects import TenantContext
@@ -205,6 +210,20 @@ class AssetOperationalStatusService:
             source_entity=source_entity,
             source_entity_id=source_entity_id,
         )
+        ops_cancel = {
+            AssetOperationalStatus.RETIRED.value,
+            AssetOperationalStatus.PENDING_DISPOSAL.value,
+            AssetOperationalStatus.DISPOSED.value,
+        }
+        if target in ops_cancel:
+            from modules.asset.service.dc_challan_service import DcChallanService
+
+            DcChallanService(self._db).auto_cancel_open_for_asset(
+                ctx,
+                asset_id,
+                remark=f"Auto-cancelled because asset operational status became {target}.",
+                statuses=DC_CHALLAN_OPS_AUTO_CANCEL_STATUSES,
+            )
         return target
 
     @staticmethod

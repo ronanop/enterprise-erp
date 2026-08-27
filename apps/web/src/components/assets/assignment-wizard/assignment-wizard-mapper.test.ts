@@ -60,6 +60,7 @@ describe("assignmentRowToWizardState", () => {
     expect(state.draftId).toBe("row-1");
     expect(state.version).toBe(2);
     expect(state.employeeId).toBe("emp-1");
+    expect(state.employeeSource).toBe("MASTER_DATA");
     expect(state.issuedItemIds).toEqual(["c1", "c2"]);
     expect(state.assignmentRemarks).toBe("Note here");
     expect(state.deliveryReferenceNumber).toBe("DR-9");
@@ -109,7 +110,9 @@ describe("wizardStateToCreateBody", () => {
     );
     expect(body.asset_id).toBe("a1");
     expect(body.employee_id).toBe("e1");
+    expect(body.employee_source).toBe("MASTER_DATA");
     expect(body.department_id).toBeUndefined();
+    expect(body.expected_return_at).toBeUndefined();
     expect(body.delivery_challan_signature_status).toBe("signed");
     expect(body.delivery_reference_number).toBe("DC-1");
   });
@@ -128,6 +131,28 @@ describe("wizardStateToCreateBody", () => {
     );
     expect(body.department_id).toBe("d1");
     expect(body.employee_id).toBeUndefined();
+  });
+
+  it("maps manual employee entry and omits expected return", () => {
+    const body = wizardStateToCreateBody(
+      {
+        ...EMPTY_ASSIGNMENT_WIZARD_STATE,
+        assetId: "a1",
+        branchId: "b1",
+        employeeSource: "MANUAL_ENTRY",
+        manualEmployeeName: "Riya Shah",
+        manualEmployeePhone: "9876543210",
+        manualEmployeeDeployedTo: "Airtel — Gurugram office",
+        deliveryReferenceStatus: "pending",
+      },
+      [],
+    );
+    expect(body.employee_source).toBe("MANUAL_ENTRY");
+    expect(body.employee_id).toBeUndefined();
+    expect(body.manual_employee_name).toBe("Riya Shah");
+    expect(body.manual_employee_phone).toBe("9876543210");
+    expect(body.manual_employee_deployed_to).toBe("Airtel — Gurugram office");
+    expect(body.expected_return_at).toBeUndefined();
   });
 });
 

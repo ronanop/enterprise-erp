@@ -3,6 +3,7 @@
 import type { ReactNode } from "react";
 import { usePathname } from "next/navigation";
 
+import { AssetsModuleSidebar } from "@/components/assets/assets-module-sidebar";
 import { CrmSidebar } from "@/components/crm/crm-workspace-nav";
 import { AppSidebar } from "@/components/layout/app-sidebar";
 import { AppTopbar } from "@/components/layout/app-topbar";
@@ -26,6 +27,7 @@ export function AppShell({ children }: AppShellProps) {
       {!standalone ? <AppSidebar /> : null}
       {standalone && isCrm ? <CrmSidebar /> : null}
       {standalone && isProjects ? <ProjectsSidebar /> : null}
+      {standalone && isAssets ? <AssetsModuleSidebar /> : null}
       <div className="flex min-w-0 flex-1 flex-col overflow-x-clip">
         <AppTopbar />
         <main

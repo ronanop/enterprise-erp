@@ -1,12 +1,26 @@
-import type { ReactNode } from "react";
+"use client";
 
-import { AssetsModuleSidebar } from "@/components/assets/assets-module-sidebar";
+import type { ReactNode } from "react";
+import { Suspense } from "react";
+
+import { AssetsWorkspaceNav } from "@/components/assets/assets-workspace-nav";
+import { useStandaloneChrome } from "@/hooks/use-standalone-chrome";
+
+function AssetsLayoutInner({ children }: { children: ReactNode }) {
+  const standalone = useStandaloneChrome();
+
+  return (
+    <div className="grid min-w-0 max-w-full grid-cols-1 gap-5 overflow-x-clip">
+      {!standalone ? <AssetsWorkspaceNav /> : null}
+      <div className="min-w-0 max-w-full overflow-x-clip">{children}</div>
+    </div>
+  );
+}
 
 export default function AssetsLayout({ children }: { children: ReactNode }) {
   return (
-    <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:gap-4">
-      <AssetsModuleSidebar />
-      <div className="min-w-0 flex-1">{children}</div>
-    </div>
+    <Suspense fallback={<div className="min-w-0 max-w-full overflow-x-clip">{children}</div>}>
+      <AssetsLayoutInner>{children}</AssetsLayoutInner>
+    </Suspense>
   );
 }

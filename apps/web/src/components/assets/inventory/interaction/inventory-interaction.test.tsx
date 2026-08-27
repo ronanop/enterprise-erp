@@ -12,6 +12,19 @@ import { QuickLinksSection } from "@/components/assets/inventory/interaction/dra
 import { SummarySection } from "@/components/assets/inventory/interaction/drawer-sections/summary-section";
 import { mapInventoryRowToDrawerData } from "@/components/assets/inventory/interaction/inventory-drawer.mapper";
 
+const blobMock = vi.fn();
+
+vi.mock("@/services/assets-service", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/services/assets-service")>();
+  return {
+    ...actual,
+    dcChallanService: {
+      ...actual.dcChallanService,
+      getDocumentBlob: (...args: unknown[]) => blobMock(...args),
+    },
+  };
+});
+
 const drawerData = {
   assetTag: "AST-1",
   laptopName: "ThinkPad",
@@ -51,7 +64,10 @@ const drawerData = {
   },
 };
 
-afterEach(() => cleanup());
+afterEach(() => {
+  cleanup();
+  blobMock.mockReset();
+});
 
 const testAsset = { id: "asset-1", assetTag: "AST-1" };
 
@@ -145,7 +161,7 @@ describe("AssetDetailDrawer", () => {
   it("renders all sections with data", () => {
     render(<AssetDetailDrawer open onOpenChange={vi.fn()} data={drawerData} />);
     expect(screen.getByRole("dialog")).toBeInTheDocument();
-    expect(screen.getByText("Asset summary")).toBeInTheDocument();
+    expect(screen.getByText("Overview")).toBeInTheDocument();
     expect(screen.getByText("Assignment")).toBeInTheDocument();
     expect(screen.getByText("IT Information")).toBeInTheDocument();
     expect(screen.getByText("Location")).toBeInTheDocument();
@@ -154,6 +170,70 @@ describe("AssetDetailDrawer", () => {
     expect(screen.getByText("Quick links")).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "ThinkPad" })).toBeInTheDocument();
     expect(screen.getByTestId("inventory-expandable-assignee").textContent).toBe("Asha Nair");
+  });
+
+  it("renders Create DC Challan in the drawer header when eligible", () => {
+    render(
+      <AssetDetailDrawer
+        open
+        onOpenChange={vi.fn()}
+        data={drawerData}
+        onCreateDcChallan={vi.fn()}
+      />,
+    );
+    expect(screen.getAllByRole("button", { name: "Create DC Challan" }).length).toBeGreaterThan(0);
+  });
+
+  it("shows a quiet empty DC state when no challan is linked", () => {
+    render(
+      <AssetDetailDrawer
+        open
+        onOpenChange={vi.fn()}
+        data={drawerData}
+        dcChallan={null}
+        onCreateDcChallan={vi.fn()}
+      />,
+    );
+    expect(screen.getByText("No delivery challan for this asset.")).toBeInTheDocument();
+  });
+
+  it("opens the shared document preview from View", async () => {
+    blobMock.mockResolvedValue({
+      kind: "file",
+      blob: new Blob(["%PDF"], { type: "application/pdf" }),
+      contentType: "application/pdf",
+      filename: "issued.pdf",
+    });
+    URL.createObjectURL = vi.fn(() => "blob:inventory-dc");
+    URL.revokeObjectURL = vi.fn();
+    const user = userEvent.setup();
+    render(
+      <AssetDetailDrawer
+        open
+        onOpenChange={vi.fn()}
+        data={drawerData}
+        dcChallan={{
+          id: "dc-9",
+          dc_number: "DC-2026-000099",
+          asset_id: "a1",
+          status: "SIGNED",
+          company_id: "c1",
+          branch_id: "b1",
+          version: 1,
+          scm_issued_document: {
+            doc_kind: "SCM_ISSUED",
+            original_filename: "issued.pdf",
+            content_type: "application/pdf",
+            has_stored_file: true,
+          },
+        }}
+      />,
+    );
+    await user.click(screen.getAllByRole("button", { name: "View" })[0]!);
+    const modal = await screen.findByTestId("dc-document-preview-modal");
+    expect(modal).toBeInTheDocument();
+    expect(modal).toHaveTextContent("DC-2026-000099");
+    expect(modal).toHaveTextContent("issued.pdf");
   });
 
   it("closes via close button", async () => {

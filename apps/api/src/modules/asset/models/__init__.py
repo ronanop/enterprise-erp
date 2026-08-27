@@ -21,6 +21,8 @@ from modules.asset.models.asset_revaluation import AstAssetRevaluation
 from modules.asset.models.asset_service_history import AstAssetServiceHistory
 from modules.asset.models.asset_transfer import AstAssetTransfer
 from modules.asset.models.asset_warranty import AstAssetWarranty
+from modules.asset.models.dc_challan import AstDcChallan
+from modules.asset.models.dc_challan_document import AstDcChallanDocument
 from modules.asset.models.incoming_asset import (
     AstIncomingArrivalEvent,
     AstIncomingAssetLine,
@@ -54,4 +56,6 @@ __all__ = [
     "AstIncomingAssetUnit",
     "AstIncomingArrivalEvent",
     "AstIncomingQcEvent",
+    "AstDcChallan",
+    "AstDcChallanDocument",
 ]

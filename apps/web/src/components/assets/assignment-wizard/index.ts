@@ -32,8 +32,10 @@ export {
   type AssignmentPageContainerProps,
   type ReturnPageContainerProps,
 } from "./assignment-wizard-page-props";
+export { IssueFormFooter, type IssueFormFooterProps } from "./issue-form-footer";
+export { IssueFormSection, IssueFormShell, type IssueFormShellProps } from "./issue-form-shell";
 export { WizardFooter, type WizardFooterProps } from "./wizard-footer";
 export { WizardShell, type WizardShellProps } from "./wizard-shell";
 export { WizardProgressBar, WizardStepper, type WizardStepperProps } from "./wizard-stepper";
 export * from "./wizard-types";
-export { validateAssignmentStep, validateReturnStep } from "./wizard-validation";
+export { listMissingAssignmentFields, validateAssignmentStep, validateReturnStep } from "./wizard-validation";

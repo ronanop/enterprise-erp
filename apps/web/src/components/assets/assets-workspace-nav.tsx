@@ -3,48 +3,42 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
+import { assetManagementNav, isAssetNavActive } from "@/config/assets";
 import { cn } from "@/lib/utils";
 
-/** Primary asset screens — aligned with locked sidebar (`config/assets.ts`). */
-const ASSETS_NAV = [
-  { title: "Overview", href: "/assets" },
-  { title: "Assets", href: "/assets/assets" },
-  { title: "Assignments", href: "/assets/asset-assignments" },
-  { title: "Transfers", href: "/assets/asset-transfers" },
-  { title: "Maintenance", href: "/assets/asset-maintenances" },
-  { title: "Depreciation", href: "/assets/asset-depreciations" },
-  { title: "Disposals", href: "/assets/asset-disposals" },
-  { title: "Audits", href: "/assets/asset-audits" },
-] as const;
-
+/** Horizontal strip when Assets shares the main app sidebar (non-standalone). */
 export function AssetsWorkspaceNav() {
   const pathname = usePathname();
+  const items = assetManagementNav.flatMap((group) => group.items);
 
   return (
-    <nav aria-label="Assets workspace" className="erp-scroll -mx-1 overflow-x-auto px-1">
-      <ul className="flex min-w-max items-center gap-0.5 border-b border-border/70 pb-px">
-        {ASSETS_NAV.map((item) => {
-          const active =
-            item.href === "/assets"
-              ? pathname === "/assets"
-              : pathname === item.href || pathname.startsWith(`${item.href}/`);
-          return (
-            <li key={item.href}>
-              <Link
-                href={item.href}
-                className={cn(
-                  "inline-flex h-8 cursor-pointer items-center rounded-t-md px-2.5 text-xs font-medium transition-colors duration-200",
-                  active
-                    ? "border-b-2 border-primary text-foreground"
-                    : "text-muted-foreground hover:bg-muted/50 hover:text-foreground",
-                )}
-              >
-                {item.title}
-              </Link>
-            </li>
-          );
-        })}
-      </ul>
-    </nav>
+    <div className="grid min-w-0 max-w-full grid-cols-1">
+      <nav
+        aria-label="Assets workspace"
+        className="erp-scroll min-w-0 overflow-x-auto overscroll-x-contain"
+        data-testid="assets-workspace-nav"
+      >
+        <ul className="flex w-max items-center gap-0.5 border-b border-border/70 pb-px">
+          {items.map((item) => {
+            const active = isAssetNavActive(pathname, item.href, item.match ?? "prefix");
+            return (
+              <li key={item.href} className="shrink-0">
+                <Link
+                  href={item.href}
+                  className={cn(
+                    "relative inline-flex h-8 cursor-pointer items-center rounded-lg px-2.5 text-xs font-medium transition-[color,background-color] duration-200",
+                    active
+                      ? "bg-muted/60 font-semibold text-foreground after:absolute after:inset-x-2 after:bottom-0.5 after:h-0.5 after:rounded-full after:bg-primary"
+                      : "text-muted-foreground hover:bg-muted/50 hover:text-foreground",
+                  )}
+                >
+                  {item.title}
+                </Link>
+              </li>
+            );
+          })}
+        </ul>
+      </nav>
+    </div>
   );
 }

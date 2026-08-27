@@ -14,7 +14,7 @@ import {
   RETURN_WIZARD_STEPS,
   EMPTY_ASSIGNMENT_WIZARD_STATE,
 } from "@/components/assets/assignment-wizard";
-import { validateAssignmentStep, validateReturnStep } from "@/components/assets/assignment-wizard/wizard-validation";
+import { validateAssignmentStep, validateReturnStep, listMissingAssignmentFields } from "@/components/assets/assignment-wizard/wizard-validation";
 import { AssetStep } from "@/components/assets/assignment-wizard/steps/asset-step";
 import { IssuedItemsStep } from "@/components/assets/assignment-wizard/steps/issued-items-step";
 import { ReturnConditionStep } from "@/components/assets/assignment-wizard/steps/return-condition-step";
@@ -80,6 +80,22 @@ describe("WizardShell", () => {
     );
     expect(screen.getByText(/Branch:/)).toBeInTheDocument();
     expect(screen.getByText("HQ")).toBeInTheDocument();
+  });
+});
+
+describe("listMissingAssignmentFields", () => {
+  it("lists employee and asset when empty", () => {
+    const missing = listMissingAssignmentFields(EMPTY_ASSIGNMENT_WIZARD_STATE);
+    expect(missing.map((m) => m.label)).toEqual(["Employee", "Asset"]);
+  });
+
+  it("requires manual name phone and deployed-to", () => {
+    const missing = listMissingAssignmentFields({
+      ...EMPTY_ASSIGNMENT_WIZARD_STATE,
+      employeeSource: "MANUAL_ENTRY",
+      assetId: "a1",
+    });
+    expect(missing.map((m) => m.id)).toEqual(["name", "phone", "deployed-to"]);
   });
 });
 
@@ -156,7 +172,7 @@ describe("WizardStepper", () => {
         onStepClick={onStepClick}
       />,
     );
-    await user.click(screen.getByRole("button", { name: /Employee/i }));
+    await user.click(screen.getByRole("button", { name: /Allocation & Employee/i }));
     expect(onStepClick).toHaveBeenCalledWith(0);
   });
 });
@@ -218,33 +234,25 @@ describe("WizardFooter", () => {
 });
 
 describe("AssignmentWizard", () => {
-  it("renders issue asset title and first step", () => {
+  it("renders issue asset title and all sections without step gating", () => {
     render(<AssignmentWizard onCancel={vi.fn()} />);
     expect(screen.getByRole("heading", { name: /Issue asset/i })).toBeInTheDocument();
-    expect(screen.getByLabelText(/Employee/i)).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /Allocation & Employee/i })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /^Asset$/i })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /Issued Items/i })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /Delivery \(DC paperwork\)/i })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /Review & Submit/i })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^Next$/i })).not.toBeInTheDocument();
   });
 
-  it("blocks next without employee", async () => {
-    const user = userEvent.setup();
+  it("disables submit and lists missing fields", () => {
     render(<AssignmentWizard onCancel={vi.fn()} />);
-    await user.click(screen.getByRole("button", { name: /Next/i }));
-    expect(screen.getByRole("alert")).toHaveTextContent(/employee/i);
-    expect(screen.getByLabelText(/Employee/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^Submit$/i })).toBeDisabled();
+    expect(screen.getByTestId("issue-missing-summary")).toHaveTextContent(/Employee/i);
+    expect(screen.getByTestId("issue-missing-summary")).toHaveTextContent(/Asset/i);
   });
 
-  it("advances to asset step when employee preset", async () => {
-    const user = userEvent.setup();
-    render(
-      <AssignmentWizard
-        onCancel={vi.fn()}
-        initialState={{ employeeId: "emp-1" }}
-      />,
-    );
-    await user.click(screen.getByRole("button", { name: /Next/i }));
-    expect(screen.getByText(/Showing demo assets/i)).toBeInTheDocument();
-  });
-
-  it("reaches review step and calls onFinish", async () => {
+  it("enables submit when required fields are present and calls onFinish", async () => {
     const user = userEvent.setup();
     const onFinish = vi.fn();
     render(
@@ -258,16 +266,12 @@ describe("AssignmentWizard", () => {
         }}
       />,
     );
-    await user.click(screen.getByRole("button", { name: /Next/i }));
-    await user.click(screen.getByRole("button", { name: /Next/i }));
-    await user.click(screen.getByRole("button", { name: /Next/i }));
-    await user.click(screen.getByRole("button", { name: /Next/i }));
-    expect(screen.getByText(/save the assignment draft/i)).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: /Save draft/i }));
+    expect(screen.getByRole("button", { name: /^Submit$/i })).toBeEnabled();
+    await user.click(screen.getByRole("button", { name: /^Submit$/i }));
     expect(onFinish).toHaveBeenCalled();
   });
 
-  it("calls onSaveDraft from footer", async () => {
+  it("calls onSaveDraft from footer without requiring completeness", async () => {
     const user = userEvent.setup();
     const onSaveDraft = vi.fn();
     render(<AssignmentWizard onCancel={vi.fn()} onSaveDraft={onSaveDraft} />);
@@ -419,11 +423,11 @@ describe("RETURN_WIZARD_STEPS", () => {
 describe("ASSIGNMENT_WIZARD_STEPS", () => {
   it("matches freeze labels", () => {
     expect(ASSIGNMENT_WIZARD_STEPS.map((s) => s.label)).toEqual([
-      "Employee",
+      "Allocation & Employee",
       "Asset",
-      "Issued items",
-      "Delivery",
-      "Review",
+      "Issued Items",
+      "Delivery (DC paperwork)",
+      "Review & Submit",
     ]);
   });
 });
@@ -454,8 +458,8 @@ describe("WizardFooter back", () => {
 });
 
 describe("responsive layout", () => {
-  it("renders mobile progress bar in assignment wizard", () => {
+  it("does not render a step progress bar on the issue form", () => {
     const { container } = render(<AssignmentWizard onCancel={vi.fn()} />);
-    expect(container.querySelector('[role="progressbar"]')).toBeTruthy();
+    expect(container.querySelector('[role="progressbar"]')).toBeNull();
   });
 });

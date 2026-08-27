@@ -1,7 +1,6 @@
 "use client";
 
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -12,7 +11,6 @@ import {
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 
-import { OPERATIONAL_STATUS_LABELS, OPERATIONAL_STATUS_VALUES } from "./asset-status";
 import { BRANCH_ALL_VALUE, type BranchOption } from "./branch-selector";
 
 export type InventoryFilterOption = { value: string; label: string };
@@ -42,6 +40,22 @@ export const EMPTY_INVENTORY_FILTERS: InventoryFilterValues = {
   assignmentState: "",
 };
 
+export const DEFAULT_LIFECYCLE_OPTIONS: InventoryFilterOption[] = [
+  { value: "", label: "All lifecycle" },
+  { value: "draft", label: "Draft" },
+  { value: "active", label: "Active" },
+  { value: "in_maintenance", label: "In maintenance" },
+  { value: "disposed", label: "Disposed" },
+];
+
+export const DEFAULT_ASSET_TYPE_OPTIONS: InventoryFilterOption[] = [
+  { value: "", label: "All types" },
+  { value: "fixed", label: "Fixed" },
+  { value: "consumable", label: "Consumable" },
+  { value: "digital", label: "Digital" },
+  { value: "leased", label: "Leased" },
+];
+
 export type InventoryFilterBarProps = {
   values: InventoryFilterValues;
   onChange: (patch: Partial<InventoryFilterValues>) => void;
@@ -56,21 +70,17 @@ export type InventoryFilterBarProps = {
   className?: string;
 };
 
-const DEFAULT_LIFECYCLE: InventoryFilterOption[] = [
-  { value: "", label: "All lifecycle" },
-  { value: "draft", label: "Draft" },
-  { value: "active", label: "Active" },
-  { value: "in_maintenance", label: "In maintenance" },
-  { value: "disposed", label: "Disposed" },
-];
-
-const DEFAULT_ASSET_TYPES: InventoryFilterOption[] = [
-  { value: "", label: "All types" },
-  { value: "fixed", label: "Fixed" },
-  { value: "consumable", label: "Consumable" },
-  { value: "digital", label: "Digital" },
-  { value: "leased", label: "Leased" },
-];
+export function countAdvancedInventoryFilters(filters: InventoryFilterValues): number {
+  let count = 0;
+  if (filters.lifecycleStatus) count += 1;
+  if (filters.categoryId) count += 1;
+  if (filters.departmentId) count += 1;
+  if (filters.assetType) count += 1;
+  if (filters.assignmentState) count += 1;
+  if (filters.branchId && filters.branchId !== BRANCH_ALL_VALUE) count += 1;
+  if (filters.locationId && filters.locationId !== BRANCH_ALL_VALUE) count += 1;
+  return count;
+}
 
 export function InventoryFilterBar({
   values,
@@ -80,56 +90,19 @@ export function InventoryFilterBar({
   branches = [],
   categories = [],
   departments = [],
-  assetTypes = DEFAULT_ASSET_TYPES,
+  assetTypes = DEFAULT_ASSET_TYPE_OPTIONS,
   locations = [],
-  lifecycleOptions = DEFAULT_LIFECYCLE,
+  lifecycleOptions = DEFAULT_LIFECYCLE_OPTIONS,
   className,
 }: InventoryFilterBarProps) {
   return (
-    <div
-      className={cn(
-        "rounded-xl border border-border/80 bg-card p-4 shadow-sm",
-        className,
-      )}
-    >
-      <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-4">
-        <div className="space-y-1.5 lg:col-span-2">
-          <Label htmlFor="inventory-search">Search</Label>
-          <Input
-            id="inventory-search"
-            placeholder="Asset tag, name, serial, make, model, employee…"
-            value={values.search}
-            onChange={(e) => onChange({ search: e.target.value })}
-          />
-        </div>
-        <div className="space-y-1.5">
-          <Label>Operational status</Label>
-          <Select
-            value={values.operationalStatus || "__all"}
-            onValueChange={(v) =>
-              onChange({ operationalStatus: v === "__all" ? "" : v })
-            }
-          >
-            <SelectTrigger className="w-full cursor-pointer">
-              <SelectValue placeholder="All operational" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="__all">All operational</SelectItem>
-              {OPERATIONAL_STATUS_VALUES.map((s) => (
-                <SelectItem key={s} value={s}>
-                  {OPERATIONAL_STATUS_LABELS[s]}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
+    <div className={cn("space-y-4", className)} data-testid="inventory-filter-form">
+      <div className="grid gap-3 sm:grid-cols-2">
         <div className="space-y-1.5">
           <Label>Lifecycle status</Label>
           <Select
             value={values.lifecycleStatus || "__all"}
-            onValueChange={(v) =>
-              onChange({ lifecycleStatus: v === "__all" ? "" : v })
-            }
+            onValueChange={(v) => onChange({ lifecycleStatus: v === "__all" ? "" : v })}
           >
             <SelectTrigger className="w-full cursor-pointer">
               <SelectValue placeholder="Lifecycle" />
@@ -145,10 +118,7 @@ export function InventoryFilterBar({
         </div>
         <div className="space-y-1.5">
           <Label>Branch</Label>
-          <Select
-            value={values.branchId || BRANCH_ALL_VALUE}
-            onValueChange={(v) => onChange({ branchId: v })}
-          >
+          <Select value={values.branchId || BRANCH_ALL_VALUE} onValueChange={(v) => onChange({ branchId: v })}>
             <SelectTrigger className="w-full cursor-pointer">
               <SelectValue placeholder="Branch" />
             </SelectTrigger>
@@ -222,9 +192,7 @@ export function InventoryFilterBar({
           <Label>Assignment</Label>
           <Select
             value={values.assignmentState || "__all"}
-            onValueChange={(v) =>
-              onChange({ assignmentState: v === "__all" ? "" : v })
-            }
+            onValueChange={(v) => onChange({ assignmentState: v === "__all" ? "" : v })}
           >
             <SelectTrigger className="w-full cursor-pointer">
               <SelectValue placeholder="Assignment" />
@@ -236,7 +204,7 @@ export function InventoryFilterBar({
             </SelectContent>
           </Select>
         </div>
-        <div className="space-y-1.5">
+        <div className="space-y-1.5 sm:col-span-2">
           <Label>Location</Label>
           <Select
             value={values.locationId || BRANCH_ALL_VALUE}
@@ -256,16 +224,16 @@ export function InventoryFilterBar({
           </Select>
         </div>
       </div>
-      <div className="mt-4 flex flex-wrap justify-end gap-2">
-        <Button
-          type="button"
-          variant="outline"
-          className="cursor-pointer"
-          onClick={onReset}
-        >
+      <div className="flex flex-wrap justify-end gap-2">
+        <Button type="button" variant="outline" className="cursor-pointer" onClick={onReset}>
           Reset
         </Button>
-        <Button type="button" className="cursor-pointer" onClick={onApply}>
+        <Button
+          type="button"
+          className="cursor-pointer"
+          data-inventory-filter-apply="true"
+          onClick={onApply}
+        >
           Apply
         </Button>
       </div>

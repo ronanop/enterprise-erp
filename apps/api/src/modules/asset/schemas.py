@@ -1,7 +1,7 @@
 """Asset Pydantic schemas."""
 
-from decimal import Decimal
 from datetime import date, datetime
+from decimal import Decimal
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
@@ -453,6 +453,11 @@ class AssetAssignmentCreate(BaseModel):
     asset_id: UUID
     allocation_type: str
     employee_id: UUID | None = None
+    employee_source: str | None = None
+    manual_employee_name: str | None = Field(default=None, max_length=255)
+    manual_employee_phone: str | None = Field(default=None, max_length=30)
+    manual_employee_email: str | None = Field(default=None, max_length=255)
+    manual_employee_deployed_to: str | None = Field(default=None, max_length=255)
     department_id: UUID | None = None
     project_id: UUID | None = None
     expected_return_at: date | None = None
@@ -466,6 +471,11 @@ class AssetAssignmentCreate(BaseModel):
 class AssetAssignmentUpdate(BaseModel):
     allocation_type: str | None = None
     employee_id: UUID | None = None
+    employee_source: str | None = None
+    manual_employee_name: str | None = Field(default=None, max_length=255)
+    manual_employee_phone: str | None = Field(default=None, max_length=30)
+    manual_employee_email: str | None = Field(default=None, max_length=255)
+    manual_employee_deployed_to: str | None = Field(default=None, max_length=255)
     department_id: UUID | None = None
     project_id: UUID | None = None
     expected_return_at: date | None = None
@@ -490,6 +500,11 @@ class AssetAssignmentResponse(OrmModel):
     asset_id: UUID
     allocation_type: str
     employee_id: UUID | None
+    employee_source: str | None = None
+    manual_employee_name: str | None = None
+    manual_employee_phone: str | None = None
+    manual_employee_email: str | None = None
+    manual_employee_deployed_to: str | None = None
     department_id: UUID | None
     project_id: UUID | None
     allocated_at: datetime | None
@@ -1605,3 +1620,146 @@ class RegistrationExcelConfirmResult(BaseModel):
     activation_complete: int
     activation_incomplete: int
     items: list[RegistrationExcelConfirmItem]
+
+
+# --- DC Challan (standalone IT ↔ SCM paperwork) ---
+
+
+class DcChallanDocumentResponse(BaseModel):
+    id: UUID | None = None
+    doc_kind: str
+    original_filename: str | None = None
+    content_type: str | None = None
+    file_size_bytes: int | None = None
+    checksum_sha256: str | None = None
+    source: str | None = None
+    uploaded_by_user_id: UUID | None = None
+    uploaded_at: datetime | None = None
+    external_url: str | None = None
+    is_legacy: bool = False
+    has_stored_file: bool = False
+
+
+class DcChallanLegacyContentResponse(BaseModel):
+    is_legacy: bool = True
+    external_url: str
+    doc_kind: str
+
+
+class DcChallanCreate(BaseModel):
+    company_id: UUID | None = None
+    asset_id: UUID
+    assignment_id: UUID | None = None
+    employee_id: UUID | None = None
+    employee_code: str | None = None
+    employee_name: str | None = None
+    employee_phone: str | None = None
+    employee_email: str | None = None
+    remarks: str | None = None
+
+
+class DcChallanUpdate(BaseModel):
+    employee_code: str | None = None
+    employee_name: str | None = None
+    employee_phone: str | None = None
+    employee_email: str | None = None
+    asset_name: str | None = None
+    asset_tag: str | None = None
+    make: str | None = None
+    model: str | None = None
+    serial_number: str | None = None
+    purchase_cost: Decimal | None = None
+    remarks: str | None = None
+
+
+class DcChallanUploadLimits(BaseModel):
+    max_upload_mb: int = 10
+    allowed_content_types: list[str] = ["application/pdf", "image/jpeg", "image/png"]
+
+
+class DcChallanResponse(OrmModel):
+    id: UUID
+    dc_number: str
+    asset_id: UUID
+    assignment_id: UUID | None = None
+    employee_id: UUID | None = None
+    status: str
+    company_id: UUID
+    branch_id: UUID
+    employee_code: str | None = None
+    employee_name: str | None = None
+    employee_phone: str | None = None
+    employee_email: str | None = None
+    deployed_to: str | None = None
+    asset_name: str | None = None
+    asset_tag: str | None = None
+    make: str | None = None
+    model: str | None = None
+    serial_number: str | None = None
+    purchase_cost: Decimal | None = None
+    sent_to_scm_at: datetime | None = None
+    scm_reference_number: str | None = None
+    scm_document_url: str | None = None
+    scm_document_uploaded_at: datetime | None = None
+    signed_document_url: str | None = None
+    signed_document_uploaded_at: datetime | None = None
+    signed_at: datetime | None = None
+    received_at: datetime | None = None
+    remarks: str | None = None
+    version: int
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+    scm_issued_document: DcChallanDocumentResponse | None = None
+    signed_document: DcChallanDocumentResponse | None = None
+
+
+class DcChallanListResult(BaseModel):
+    items: list[DcChallanResponse]
+    total: int
+    page: int
+    page_size: int
+    upload_limits: DcChallanUploadLimits = Field(default_factory=DcChallanUploadLimits)
+
+
+class DcChallanSummaryResponse(BaseModel):
+    pending: int = 0
+    sent_to_scm: int = 0
+    document_received: int = 0
+    signed: int = 0
+    received: int = 0
+    cancelled: int = 0
+    upload_limits: DcChallanUploadLimits = Field(default_factory=DcChallanUploadLimits)
+
+
+class DcChallanLinkAssignmentRequest(BaseModel):
+    assignment_id: UUID
+
+
+class DcChallanAttachDocumentRequest(BaseModel):
+    document_url: str
+    scm_reference_number: str | None = None
+
+
+class DcChallanMarkSignedRequest(BaseModel):
+    signed_document_url: str | None = None
+
+
+class DcChallanScmCallbackRequest(BaseModel):
+    document_url: str
+    scm_reference_number: str | None = None
+
+
+class DcChallanBulkSendRequest(BaseModel):
+    ids: list[UUID] = Field(min_length=1)
+
+
+class DcChallanBulkSendItem(BaseModel):
+    id: UUID
+    ok: bool
+    reason: str | None = None
+
+
+class DcChallanBulkSendResult(BaseModel):
+    results: list[DcChallanBulkSendItem]
+    sent_count: int
+    skipped_count: int
