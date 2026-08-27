@@ -8,6 +8,15 @@ from modules.project.domain.exceptions import (
 )
 
 
+_TERMINAL_STATUSES = frozenset(
+    {
+        ProjectStatus.COMPLETED.value,
+        ProjectStatus.CLOSED.value,
+        ProjectStatus.CANCELLED.value,
+    }
+)
+
+
 class ProjectEngine:
     def submit(self, row) -> None:
         if row.status != ProjectStatus.DRAFT.value:
@@ -32,6 +41,12 @@ class ProjectEngine:
     def complete(self, row) -> None:
         if row.status != ProjectStatus.IN_PROGRESS.value:
             raise InvalidProjectState("Only in-progress projects can be completed")
+        row.status = ProjectStatus.COMPLETED.value
+
+    def mark_completed(self, row) -> None:
+        """Admin shortcut — mark project completed from any active lifecycle state."""
+        if row.status in _TERMINAL_STATUSES:
+            raise InvalidProjectState("Project is already completed or closed")
         row.status = ProjectStatus.COMPLETED.value
 
     def close(self, row) -> None:

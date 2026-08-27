@@ -117,8 +117,8 @@ export function ProjectPoQueuePage() {
       {
         key: "created_at",
         label: "Date Created",
-        sort: (r) => r.document_date,
-        cell: (r) => formatDate(r.document_date),
+        sort: (r) => r.created_at || r.document_date || "",
+        cell: (r) => formatDate(r.created_at || r.document_date),
       },
       {
         key: "actions",
@@ -154,7 +154,7 @@ export function ProjectPoQueuePage() {
         errorMessage="Failed to load purchase orders"
         minWidth={960}
         columns={columns}
-        defaultSortKey="document_date"
+        defaultSortKey="created_at"
         defaultSortDir="desc"
         load={load}
         matches={matchesPo}

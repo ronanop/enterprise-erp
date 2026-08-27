@@ -11,7 +11,7 @@ import {
 
 import { FinanceStatusBadge } from "@/components/finance/finance-status-badge";
 import { PageHeader } from "@/components/layout/page-header";
-import { projectTypeLabel, siteDeliveryTypeLabel } from "@/components/projects/projects-domain";
+import { projectTypeLabel } from "@/components/projects/projects-domain";
 import {
   ProjectsDetailGrid,
   ProjectsDetailItem,
@@ -19,6 +19,7 @@ import {
   ProjectsPage,
   ProjectsSection,
 } from "@/components/projects/projects-ui";
+import { intakeAdminDetailRows } from "@/components/projects/site-intake-summary";
 import {
   SiteInstallationTrackingSummary,
   SiteInstallationWorkflow,
@@ -29,76 +30,26 @@ import { useAuthUser } from "@/hooks/use-auth-user";
 import { Button } from "@/components/ui/button";
 import { ApiClientError } from "@/services/api-client";
 import {
-  approveProject,
-  closeProject,
+  completeProject,
   formatDate,
   getProject,
   getSiteInstallationByProject,
   listBranchOptions,
-  submitProject,
   type Project,
   type SiteInstallation,
 } from "@/services/projects-portal-service";
+import { getPurchaseOrder } from "@/services/procurement-service";
 
 const LOOKUPS = ["employees", "customers"] as const;
 
-function hasText(value: string | null | undefined): boolean {
-  return Boolean(value?.trim());
-}
-
-function labelOrNull(
-  id: string | null | undefined,
-  resolve: (id: string | null | undefined) => string,
-): string | null {
-  if (!id) return null;
-  const label = resolve(id);
-  return label && label !== "—" ? label : null;
-}
-
-function buildIntakeDetailRows(
-  project: Project,
-  site: SiteInstallation | null,
-  branchLabel: string | null,
-  labels: ReturnType<typeof useProjectsLookups>["labels"],
-): Array<{ label: string; value: string }> {
-  const rows: Array<{ label: string; value: string }> = [];
-
-  if (hasText(branchLabel)) {
-    rows.push({ label: "Circle Name", value: branchLabel! });
-  }
-  if (site?.delivery_type) {
-    rows.push({
-      label: "Delivery Type",
-      value: siteDeliveryTypeLabel(site.delivery_type),
-    });
-  }
-  const customer = labelOrNull(project.customer_id, labels.customerName);
-  if (customer) rows.push({ label: "Customer", value: customer });
-  if (hasText(site?.site_name)) {
-    rows.push({ label: "Site Name", value: site!.site_name!.trim() });
-  }
-  const pm = labelOrNull(project.project_manager_employee_id, labels.employeeName);
-  if (pm) rows.push({ label: "Project Manager", value: pm });
-  if (site) {
-    rows.push({
-      label: "RFAI Request",
-      value: site.rfai_request_done ? "Yes" : "No",
-    });
-    if (site.rfai_request_done) {
-      if (hasText(site.rfai_number)) {
-        rows.push({ label: "RFAI Number", value: site.rfai_number!.trim() });
-      }
-    }
-  }
-
-  return rows;
-}
+const TERMINAL_PROJECT_STATUSES = new Set(["completed", "closed", "cancelled"]);
 
 export function ProjectDetailPage({ projectId }: { projectId: string }) {
   const { projectModuleAdmin } = useAuthUser();
   const [project, setProject] = useState<Project | null>(null);
   const [site, setSite] = useState<SiteInstallation | null>(null);
   const [branchLabel, setBranchLabel] = useState<string | null>(null);
+  const [companyPoNumber, setCompanyPoNumber] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -117,6 +68,16 @@ export function ProjectDetailPage({ projectId }: { projectId: string }) {
       setProject(row);
       setSite(siteRow);
       setBranchLabel(branches.find((b) => b.id === row.branch_id)?.label ?? null);
+      if (row.proc_order_id) {
+        try {
+          const order = await getPurchaseOrder(row.proc_order_id);
+          setCompanyPoNumber(order.company_po_number || order.document_number || null);
+        } catch {
+          setCompanyPoNumber(null);
+        }
+      } else {
+        setCompanyPoNumber(null);
+      }
     } catch (err) {
       setProject(null);
       setError(err instanceof ApiClientError ? err.message : "Failed to load project");
@@ -129,18 +90,17 @@ export function ProjectDetailPage({ projectId }: { projectId: string }) {
     void load();
   }, [load]);
 
-  async function runAction(action: "submit" | "approve" | "close") {
+  async function runMarkCompleted() {
     setBusy(true);
     setError(null);
     try {
-      const fn =
-        action === "submit" ? submitProject : action === "approve" ? approveProject : closeProject;
-      setProject(await fn(projectId));
+      setProject(await completeProject(projectId));
+      await load();
     } catch (err) {
       setError(
         err instanceof ApiClientError
           ? `${err.message}${err.errors.length ? `: ${err.errors.join(", ")}` : ""}`
-          : `Failed to ${action} project`,
+          : "Failed to mark project as completed",
       );
     } finally {
       setBusy(false);
@@ -170,11 +130,16 @@ export function ProjectDetailPage({ projectId }: { projectId: string }) {
     );
   }
 
-  const canSubmit = project.status === "draft";
-  const canApprove = project.status === "submitted";
-  const canClose = ["approved", "in_progress", "completed"].includes(project.status);
+  const canMarkCompleted = !TERMINAL_PROJECT_STATUSES.has(project.status);
 
-  const intakeDetailRows = buildIntakeDetailRows(project, site, branchLabel, labels);
+  const intakeDetailRows = intakeAdminDetailRows({
+    project,
+    site,
+    branchLabel,
+    customerName: labels.customerName,
+    employeeName: labels.employeeName,
+    companyPoNumber,
+  });
 
   return (
     <ProjectsPage>
@@ -219,38 +184,15 @@ export function ProjectDetailPage({ projectId }: { projectId: string }) {
           projectModuleAdmin ? (
             <div className="flex flex-wrap items-center gap-2">
               <FinanceStatusBadge status={project.status} />
-              {canSubmit ? (
+              {canMarkCompleted ? (
                 <Button
                   type="button"
                   size="sm"
                   className="cursor-pointer"
                   disabled={busy}
-                  onClick={() => void runAction("submit")}
+                  onClick={() => void runMarkCompleted()}
                 >
-                  Submit for approval
-                </Button>
-              ) : null}
-              {canApprove ? (
-                <Button
-                  type="button"
-                  size="sm"
-                  className="cursor-pointer"
-                  disabled={busy}
-                  onClick={() => void runAction("approve")}
-                >
-                  Approve
-                </Button>
-              ) : null}
-              {canClose ? (
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="cursor-pointer"
-                  disabled={busy}
-                  onClick={() => void runAction("close")}
-                >
-                  Close
+                  Mark as completed
                 </Button>
               ) : null}
             </div>

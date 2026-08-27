@@ -3,6 +3,8 @@
  * with manual site fields and share-to-project state (localStorage).
  */
 
+import { listDeliveryChallansByOrderId } from "@/utils/delivery-challan-storage";
+
 export type InstallationManualFields = {
   projectName: string;
   circleName: string;
@@ -10,6 +12,7 @@ export type InstallationManualFields = {
   contactPerson: string;
   contactNumber: string;
   rackQuantity: string;
+  serverQuantity: string;
   serverType: string;
 };
 
@@ -20,6 +23,15 @@ export type InstallationRecord = InstallationManualFields & {
   projectHref: string | null;
   sharedAt: string | null;
   updatedAt: string;
+};
+
+export type ScmInstallationPrefill = {
+  projectName: string;
+  rackQuantity: string;
+  serverQuantity: string;
+  serverType: string;
+  circleName: string;
+  site: string;
 };
 
 const STORAGE_KEY = "erp.procurement.installation";
@@ -38,6 +50,7 @@ function normalize(raw: Partial<InstallationRecord> & { challanId: string }): In
     contactPerson: asText(raw.contactPerson).trim(),
     contactNumber: asText(raw.contactNumber).trim(),
     rackQuantity: asText(raw.rackQuantity).trim(),
+    serverQuantity: asText(raw.serverQuantity).trim(),
     serverType: asText(raw.serverType).trim(),
     sharedToProject: Boolean(raw.sharedToProject),
     projectId: asText(raw.projectId).trim() || null,
@@ -55,13 +68,13 @@ function readAll(): InstallationRecord[] {
     const parsed = JSON.parse(raw) as InstallationRecord[];
     return Array.isArray(parsed)
       ? parsed.flatMap((row) => {
-          try {
-            if (!row?.challanId) return [];
-            return [normalize(row)];
-          } catch {
-            return [];
-          }
-        })
+        try {
+          if (!row?.challanId) return [];
+          return [normalize(row)];
+        } catch {
+          return [];
+        }
+      })
       : [];
   } catch {
     return [];
@@ -80,12 +93,61 @@ export function emptyInstallationManual(): InstallationManualFields {
     contactPerson: "",
     contactNumber: "",
     rackQuantity: "",
+    serverQuantity: "",
     serverType: "",
   };
 }
 
+export function listInstallations(): InstallationRecord[] {
+  return readAll().sort((a, b) => (b.updatedAt || "").localeCompare(a.updatedAt || ""));
+}
+
 export function getInstallation(challanId: string): InstallationRecord | null {
   return readAll().find((row) => row.challanId === challanId) ?? null;
+}
+
+/** Latest SCM installation draft linked to a procurement order (via delivery challan). */
+export function findInstallationForOrderId(orderId: string): InstallationRecord | null {
+  const id = orderId.trim();
+  if (!id) return null;
+  try {
+    const challans = listDeliveryChallansByOrderId(id);
+    for (const challan of challans) {
+      const row = getInstallation(challan.id);
+      if (row) return row;
+    }
+  } catch {
+    return null;
+  }
+  return null;
+}
+
+/** Prefill values for Projects intake from SCM Installation (local) for a PO. */
+export function resolveScmInstallationPrefillForOrder(
+  orderId: string,
+): ScmInstallationPrefill | null {
+  try {
+    const row = findInstallationForOrderId(orderId);
+    if (!row) return null;
+    const hasAny =
+      row.projectName ||
+      row.rackQuantity ||
+      row.serverQuantity ||
+      row.serverType ||
+      row.circleName ||
+      row.site;
+    if (!hasAny) return null;
+    return {
+      projectName: row.projectName,
+      rackQuantity: row.rackQuantity,
+      serverQuantity: row.serverQuantity,
+      serverType: row.serverType,
+      circleName: row.circleName,
+      site: row.site,
+    };
+  } catch {
+    return null;
+  }
 }
 
 export function resolveInstallation(challanId: string): InstallationRecord {
@@ -139,6 +201,7 @@ export function validateInstallationManual(
   if (!fields.contactPerson.trim()) errors.contactPerson = "Contact person is required.";
   if (!fields.contactNumber.trim()) errors.contactNumber = "Contact number is required.";
   if (!fields.rackQuantity.trim()) errors.rackQuantity = "Rack quantity is required.";
+  if (!fields.serverQuantity.trim()) errors.serverQuantity = "Server quantity is required.";
   if (!fields.serverType.trim()) errors.serverType = "Server type is required.";
   return errors;
 }

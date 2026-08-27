@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { MapPin } from "lucide-react";
 
@@ -25,6 +25,30 @@ import {
   updateSiteInstallationByProject,
   type ProjectFormInput,
 } from "@/services/projects-portal-service";
+import { getPurchaseOrder, getScmOvfPreview } from "@/services/procurement-service";
+import { challanDeliveredQuantity } from "@/utils/delivery-challan-bill";
+import { listDeliveryChallansByOrderId } from "@/utils/delivery-challan-storage";
+import { resolveScmInstallationPrefillForOrder } from "@/utils/installation-storage";
+
+function digitsOnly(value: string | number | null | undefined): string {
+  if (value == null) return "";
+  return String(value).replace(/[^\d]/g, "");
+}
+
+function intOrNull(value: string): number | null {
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  const n = Number(trimmed);
+  return Number.isFinite(n) ? n : null;
+}
+
+/** Older SCM shares stored type/qty only in remarks text. */
+function valueFromRemarks(remarks: string | null | undefined, label: string): string {
+  if (!remarks?.trim()) return "";
+  const escaped = label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const match = remarks.match(new RegExp(`${escaped}:\\s*(.+)`, "i"));
+  return match?.[1]?.trim().split(/\r?\n/)[0]?.trim() || "";
+}
 
 const EMPTY_CREATE: FormValues = {
   branch_id: "",
@@ -33,6 +57,10 @@ const EMPTY_CREATE: FormValues = {
   customer_id: "",
   customer_label: "",
   delivery_type: "server_os_rack",
+  project_name: "",
+  rack_qty: "",
+  server_qty: "",
+  server_type: "",
   site_name: "",
   project_manager_employee_id: "",
   rfai_request_done: "",
@@ -42,7 +70,6 @@ const EMPTY_CREATE: FormValues = {
 const EMPTY_EDIT: FormValues = {
   ...EMPTY_CREATE,
   project_code: "",
-  project_name: "",
   status: "draft",
 };
 
@@ -50,6 +77,7 @@ export function ProjectFormPage({ projectId }: { projectId?: string }) {
   const isEdit = Boolean(projectId);
   const searchParams = useSearchParams();
   const poId = searchParams.get("po_id");
+  const [linkedPoId, setLinkedPoId] = useState<string | null>(poId);
 
   const load = useCallback(async (): Promise<{ values?: FormValues; lookups?: Lookups }> => {
     const [branches, team, customers, record, prefill] = await Promise.all([
@@ -78,16 +106,38 @@ export function ProjectFormPage({ projectId }: { projectId?: string }) {
       const customerLabel =
         customers.find((c) => c.id === record.customer_id)?.label ?? "";
 
+      setLinkedPoId(record.proc_order_id);
+      let companyPoNumber = "";
+      if (record.proc_order_id) {
+        try {
+          const order = await getPurchaseOrder(record.proc_order_id);
+          companyPoNumber = order.company_po_number || order.document_number || "";
+        } catch {
+          companyPoNumber = "";
+        }
+      }
+
       const values: FormValues = {
         project_code: record.project_code,
         project_name: record.project_name,
         status: record.status,
         branch_id: record.branch_id,
         circle: site?.circle ?? "",
-        company_po_number: "",
+        company_po_number: companyPoNumber,
         customer_id: record.customer_id ?? "",
         customer_label: customerLabel,
         delivery_type: site?.delivery_type || "server_os_rack",
+        // Prefill from SCM Installation → Projects share (rack/server qty + server type).
+        rack_qty:
+          digitsOnly(site?.rack_qty) ||
+          digitsOnly(valueFromRemarks(site?.remarks, "Rack quantity")),
+        server_qty:
+          digitsOnly(site?.server_qty) ||
+          digitsOnly(valueFromRemarks(site?.remarks, "Server quantity")),
+        server_type:
+          site?.application?.trim() ||
+          valueFromRemarks(site?.remarks, "Server type") ||
+          "",
         site_name: site?.site_name ?? "",
         project_manager_employee_id: record.project_manager_employee_id,
         rfai_request_done: site?.rfai_request_done ? "true" : "false",
@@ -96,18 +146,81 @@ export function ProjectFormPage({ projectId }: { projectId?: string }) {
       return { values, lookups };
     }
 
+    setLinkedPoId(poId);
+
+    // Create-from-PO: pull title/qty/type from SCM Installation + CRM OVF.
+    let scmInstall: ReturnType<typeof resolveScmInstallationPrefillForOrder> = null;
+    let ovfProjectTitle = "";
+    let ovfOemName = "";
+    let receivedQtyDigits = "";
+
+    try {
+      scmInstall = poId ? resolveScmInstallationPrefillForOrder(poId) : null;
+    } catch {
+      scmInstall = null;
+    }
+
+    if (poId) {
+      try {
+        const [order, ovfPreview] = await Promise.all([
+          getPurchaseOrder(poId).catch(() => null),
+          prefill?.ovf_id
+            ? getScmOvfPreview(String(prefill.ovf_id)).catch(() => null)
+            : Promise.resolve(null),
+        ]);
+        ovfProjectTitle = (ovfPreview?.project_title || "").trim();
+        ovfOemName = (ovfPreview?.oem_name || "").trim();
+
+        const fromOrder = (order?.lines || []).reduce((sum, ln) => {
+          const qty = Number(ln.quantity_received) || 0;
+          return sum + (Number.isFinite(qty) ? Math.max(0, qty) : 0);
+        }, 0);
+        if (fromOrder > 0) {
+          receivedQtyDigits = digitsOnly(fromOrder);
+        } else {
+          const challans = listDeliveryChallansByOrderId(poId);
+          const fromChallan = challans.reduce((sum, challan) => {
+            try {
+              return sum + challanDeliveredQuantity(challan);
+            } catch {
+              return sum;
+            }
+          }, 0);
+          if (fromChallan > 0) receivedQtyDigits = digitsOnly(fromChallan);
+        }
+      } catch {
+        // Prefill enrichment is best-effort — base PO prefill still loads.
+      }
+    }
+
+    const projectTitle =
+      scmInstall?.projectName?.trim() ||
+      prefill?.project_title?.trim() ||
+      ovfProjectTitle ||
+      "";
+    const rackQty = digitsOnly(scmInstall?.rackQuantity);
+    const serverQty =
+      digitsOnly(scmInstall?.serverQuantity) || receivedQtyDigits;
+    const serverType =
+      scmInstall?.serverType?.trim() || ovfOemName || "";
+
     return {
       values: {
         branch_id: prefill?.branch_id || branches[0]?.id || "",
         // Circle shows the lead entity state (GST / address), falling back to entity name.
         circle:
+          scmInstall?.circleName?.trim() ||
           prefill?.entity_state?.trim() ||
           prefill?.circle_name?.trim() ||
           "",
         company_po_number: prefill?.company_po_number?.trim() || "",
         customer_id: prefill?.customer_id || "",
         customer_label: resolvedCustomerLabel,
-        site_name: prefill?.site_name || "",
+        project_name: projectTitle,
+        rack_qty: rackQty,
+        server_qty: serverQty,
+        server_type: serverType,
+        site_name: scmInstall?.site?.trim() || prefill?.site_name || "",
         project_manager_employee_id: team[0]?.id ?? "",
         rfai_request_done: "false",
       },
@@ -119,9 +232,11 @@ export function ProjectFormPage({ projectId }: { projectId?: string }) {
     async (v: FormValues) => {
       if (!isEdit) {
         const siteName = v.site_name.trim();
+        const projectTitle = v.project_name.trim();
         const rfaiYes = v.rfai_request_done === "true";
         const saved = await createProject({
           branch_id: v.branch_id,
+          project_name: projectTitle || undefined,
           customer_id: orNull(v.customer_id),
           project_manager_employee_id: v.project_manager_employee_id || undefined,
           proc_order_id: poId || undefined,
@@ -129,6 +244,9 @@ export function ProjectFormPage({ projectId }: { projectId?: string }) {
             delivery_type: v.delivery_type || "server_os_rack",
             site_name: orNull(siteName),
             circle: orNull(v.circle),
+            application: orNull(v.server_type),
+            server_qty: intOrNull(v.server_qty),
+            rack_qty: intOrNull(v.rack_qty),
             rfai_request_done: rfaiYes,
             rfai_number: rfaiYes ? orNull(v.rfai_number) : null,
           },
@@ -161,6 +279,9 @@ export function ProjectFormPage({ projectId }: { projectId?: string }) {
           rfai_request_done: rfaiYes,
           rfai_number: rfaiYes ? orNull(v.rfai_number) : null,
           circle: orNull(v.circle),
+          application: orNull(v.server_type),
+          server_qty: intOrNull(v.server_qty),
+          rack_qty: intOrNull(v.rack_qty),
         }),
       ]);
 
@@ -170,6 +291,8 @@ export function ProjectFormPage({ projectId }: { projectId?: string }) {
   );
 
   const sections = useMemo<FormSection[]>(() => {
+    const showPoReadonlyIntake = Boolean(poId) || Boolean(linkedPoId);
+
     const intakeFields: FormSection["fields"] = [
       ...(isEdit
         ? [
@@ -180,6 +303,13 @@ export function ProjectFormPage({ projectId }: { projectId?: string }) {
           },
         ]
         : []),
+      {
+        name: "project_name",
+        label: "Project Title",
+        type: "text" as const,
+        required: true,
+        placeholder: "Project title",
+      },
       {
         name: "circle",
         label: "Circle",
@@ -193,7 +323,25 @@ export function ProjectFormPage({ projectId }: { projectId?: string }) {
         required: true,
         options: SITE_DELIVERY_TYPES,
       },
-      ...(!isEdit && poId
+      {
+        name: "rack_qty",
+        label: "Rack Quantity",
+        type: "text" as const,
+        placeholder: "0",
+      },
+      {
+        name: "server_qty",
+        label: "Server Quantity",
+        type: "text" as const,
+        placeholder: "0",
+      },
+      {
+        name: "server_type",
+        label: "Server Type",
+        type: "text" as const,
+        placeholder: "Server / hardware type",
+      },
+      ...(showPoReadonlyIntake
         ? [
           {
             name: "company_po_number",
@@ -257,31 +405,36 @@ export function ProjectFormPage({ projectId }: { projectId?: string }) {
       },
     ];
 
+    const poIntakeSubtitle =
+      "Step 1 — Prefills from CRM (title) and SCM Installation / GRN quantities when available.";
+
     return [
       {
         title: "Intake / Site request",
-        subtitle: isEdit
-          ? "Same intake fields as create — Circle, Delivery Type, Customer, Site, PM, and RFAI are editable."
-          : poId
-            ? "Step 1 — Customer, site and circle prefilled from the CRM lead via SCM PO / OVF."
-            : "Step 1 — Customer → Site → Project Manager → RFAI",
+        subtitle: showPoReadonlyIntake
+          ? poIntakeSubtitle
+          : isEdit
+            ? "Step 1 — Customer → Site → Project Manager → RFAI."
+            : "Step 1 — Customer → Site → Project Manager → RFAI. Project title / rack / server fields prefill from SCM Installation when available.",
         icon: MapPin,
         fields: intakeFields,
       },
     ];
-  }, [isEdit, poId]);
+  }, [isEdit, poId, linkedPoId]);
 
   return (
     <ProjectsRecordForm
       title={isEdit ? "Edit Project" : "New Project"}
       description={
         isEdit
-          ? "Update intake / site request fields. Schedule is managed from the project timeline."
+          ? linkedPoId || poId
+            ? "Step 1 — Intake / Site request prefilled from the SCM purchase order."
+            : "Step 1 — Intake / Site request. Schedule is managed from the project timeline."
           : poId
             ? "Step 1 — Intake / Site request prefilled from the SCM purchase order. After create you continue to Assign Survey owner."
             : "Step 1 — Intake / Site request. After create you continue to Assign Survey owner."
       }
-      backHref={poId ? "/projects/purchase-orders" : "/projects/projects"}
+      backHref={poId ? "/projects/po-queue" : "/projects/projects"}
       backLabel={poId ? "Back to PO queue" : "Back to projects"}
       submitLabel={isEdit ? "Save changes" : "Create project"}
       sections={sections}

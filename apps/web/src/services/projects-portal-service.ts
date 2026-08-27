@@ -184,6 +184,8 @@ export type SiteInstallationNestedInput = {
   fabric_partner?: string | null;
   application?: string | null;
   remarks?: string | null;
+  server_qty?: number | null;
+  rack_qty?: number | null;
 };
 
 export async function listProjects(): Promise<Project[]> {
@@ -214,6 +216,10 @@ export async function approveProject(id: string): Promise<Project> {
   return unwrap(await resourceService.action<Project>(PROJECTS_API, id, "approve"));
 }
 
+export async function completeProject(id: string): Promise<Project> {
+  return unwrap(await resourceService.action<Project>(PROJECTS_API, id, "complete"));
+}
+
 export async function closeProject(id: string): Promise<Project> {
   return unwrap(await resourceService.action<Project>(PROJECTS_API, id, "close"));
 }
@@ -238,6 +244,7 @@ export type ProjectPoQueueItem = {
   ovf_id: string | null;
   branch_id: string;
   company_id: string;
+  created_at: string | null;
 };
 
 export type ProjectPoPrefill = {
@@ -256,6 +263,8 @@ export type ProjectPoPrefill = {
   crm_opportunity_id: string | null;
   circle_name: string | null;
   entity_state: string | null;
+  /** CRM lead / opportunity project title (for Projects intake). */
+  project_title?: string | null;
 };
 
 export async function listProjectPoQueue(): Promise<ProjectPoQueueItem[]> {

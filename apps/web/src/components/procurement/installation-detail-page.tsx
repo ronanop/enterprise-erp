@@ -147,6 +147,8 @@ export function InstallationDetailPage({ challanId }: { challanId: string }) {
       }
 
       const projectName = crmProjectTitle || install.projectName || "";
+      const deliveredQty = challanDeliveredQuantity(challan);
+      const deliveredQtyDigits = String(deliveredQty ?? "").replace(/[^\d]/g, "");
       setManual({
         projectName,
         circleName: install.circleName,
@@ -154,6 +156,7 @@ export function InstallationDetailPage({ challanId }: { challanId: string }) {
         contactPerson: install.contactPerson,
         contactNumber: install.contactNumber,
         rackQuantity: install.rackQuantity,
+        serverQuantity: install.serverQuantity || deliveredQtyDigits,
         serverType: install.serverType,
       });
       setShared({
@@ -263,9 +266,11 @@ export function InstallationDetailPage({ challanId }: { challanId: string }) {
       }
 
       const rackQty = Number(manual.rackQuantity);
+      const serverQty = Number(manual.serverQuantity);
       const remarks = [
         `Contact: ${manual.contactPerson} (${manual.contactNumber})`,
         `Server type: ${manual.serverType}`,
+        `Server quantity: ${manual.serverQuantity}`,
         `Rack quantity: ${manual.rackQuantity}`,
         auto.oemName ? `OEM: ${auto.oemName}` : null,
         auto.deliveredDate ? `Delivered: ${auto.deliveredDate}` : null,
@@ -284,6 +289,9 @@ export function InstallationDetailPage({ challanId }: { challanId: string }) {
           site_name: manual.site.trim(),
           circle: manual.circleName.trim(),
           requestor_name: manual.contactPerson.trim(),
+          application: manual.serverType.trim(),
+          server_qty: Number.isFinite(serverQty) ? serverQty : null,
+          rack_qty: Number.isFinite(rackQty) ? rackQty : null,
           remarks,
         },
       });
@@ -294,7 +302,9 @@ export function InstallationDetailPage({ challanId }: { challanId: string }) {
           site_name: manual.site.trim(),
           circle: manual.circleName.trim(),
           requestor_name: manual.contactPerson.trim(),
+          application: manual.serverType.trim(),
           remarks,
+          server_qty: Number.isFinite(serverQty) ? serverQty : null,
           rack_qty: Number.isFinite(rackQty) ? rackQty : null,
         });
         if (manual.site.trim()) {
@@ -485,6 +495,18 @@ export function InstallationDetailPage({ challanId }: { challanId: string }) {
                   value={manual.rackQuantity}
                   onChange={(e) =>
                     patchManual({ rackQuantity: e.target.value.replace(/[^\d]/g, "") })
+                  }
+                  className="h-8"
+                  inputMode="numeric"
+                  placeholder="0"
+                  disabled={shared.sharedToProject}
+                />
+              </FinanceField>
+              <FinanceField label="Server quantity *" error={fieldErrors.serverQuantity}>
+                <Input
+                  value={manual.serverQuantity}
+                  onChange={(e) =>
+                    patchManual({ serverQuantity: e.target.value.replace(/[^\d]/g, "") })
                   }
                   className="h-8"
                   inputMode="numeric"

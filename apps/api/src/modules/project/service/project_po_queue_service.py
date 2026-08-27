@@ -69,10 +69,12 @@ class ProjectPoQueueService:
                     ovf_id=ovf_id,
                     branch_id=order.branch_id,
                     company_id=order.company_id,
+                    created_at=order.created_at,
                 )
             )
         out.sort(
             key=lambda row: (
+                row.created_at.isoformat() if row.created_at else "",
                 row.document_date.isoformat(),
                 row.company_po_number or "",
             ),
@@ -99,6 +101,7 @@ class ProjectPoQueueService:
         customer_po_number = order.customer_po_number
         circle_name: str | None = None
         entity_state: str | None = None
+        project_title: str | None = None
 
         ovf_id = (
             order.source_document_id
@@ -114,6 +117,7 @@ class ProjectPoQueueService:
                 opportunity_id = crm_ctx.get("opportunity_id")
                 circle_name = crm_ctx.get("circle_name")
                 entity_state = crm_ctx.get("entity_state")
+                project_title = crm_ctx.get("project_title")
                 if not customer_po_number:
                     customer_po_number = crm_ctx.get("customer_po_number")
             except Exception:
@@ -151,6 +155,7 @@ class ProjectPoQueueService:
             crm_opportunity_id=opportunity_id,
             circle_name=circle_name,
             entity_state=entity_state,
+            project_title=project_title,
         )
 
     def ensure_linkable(

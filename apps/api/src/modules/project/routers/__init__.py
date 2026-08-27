@@ -231,6 +231,14 @@ def approve_projects(
 ):
     return APIResponse(message="Approve", data=ProjectService(db).approve(ctx, row_id))
 
+@projects_router.post("/{row_id}/complete", response_model=APIResponse[ProjectResponse])
+def complete_projects(
+    row_id: UUID,
+    ctx: Annotated[TenantContext, Depends(require_permission("project.project:update"))],
+    db: Annotated[Session, Depends(get_db)],
+):
+    return APIResponse(message="Completed", data=ProjectService(db).complete(ctx, row_id))
+
 @projects_router.post("/{row_id}/close", response_model=APIResponse[ProjectResponse])
 def close_projects(
     row_id: UUID,

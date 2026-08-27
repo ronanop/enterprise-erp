@@ -55,12 +55,7 @@ function pct(value: number): string {
 }
 
 function vendorLabelFromPreview(preview: ScmOvfPreview): string {
-  const oem = preview.oem_name?.trim() || "";
-  const vendor = preview.vendor_name?.trim() || "";
-  if (vendor && oem && vendor.toLowerCase() !== oem.toLowerCase()) {
-    return `${vendor} (${oem})`;
-  }
-  return vendor || oem || "—";
+  return preview.distributor_name?.trim() || "—";
 }
 
 function computeMarginSummary(preview: ScmOvfPreview) {
@@ -299,12 +294,16 @@ export async function downloadScmOvfPdf(
       value: dash(preview.customer_name || preview.account_name),
     },
     {
+      label: "Project title",
+      value: dash(preview.project_title),
+    },
+    {
       label: "Customer pay",
       value: preview.customer_payment_days
         ? `Net ${preview.customer_payment_days} days`
         : "—",
     },
-    { label: "Vendor", value: vendorLabel },
+    { label: "Vendor name", value: vendorLabel },
     {
       label: "Vendor pay",
       value: preview.vendor_payment_days ? `Net ${preview.vendor_payment_days} days` : "—",

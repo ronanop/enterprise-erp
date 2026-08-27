@@ -6,6 +6,7 @@ PROJECT_PERMISSIONS: list[tuple[str, str, str, str]] = [
     ("project.project:update", "project.project", "update", "project"),
     ("project.project:submit", "project.project", "submit", "project"),
     ("project.project:approve", "project.project", "approve", "project"),
+    ("project.project:complete", "project.project", "complete", "project"),
     ("project.project:close", "project.project", "close", "project"),
     ("project.phase:read", "project.phase", "read", "project"),
     ("project.phase:create", "project.phase", "create", "project"),
@@ -90,6 +91,7 @@ PROJECT_MANAGER_PERMISSIONS = list(
         + [
             "project.project:submit",
             "project.project:approve",
+            "project.project:complete",
             "project.project:close",
             "project.task:approve",
             "project.timesheet:approve",

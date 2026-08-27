@@ -9,9 +9,10 @@ from core.exceptions import AppException, NotFoundException
 from modules.foundation.domain.value_objects import TenantContext
 from modules.foundation.service.audit_service import AuditService
 from modules.project.adapters.master_data_port import ProjectMasterDataAdapter
-from modules.project.domain.enums import PrjEntityType
+from modules.project.domain.enums import PrjEntityType, SiteInstallationStatus, SiteWorkflowStage
 from modules.project.models import PrjProject
 from modules.project.repository.project_repository import ProjectRepository
+from modules.project.repository.site_installation_repository import SiteInstallationRepository
 from modules.project.service.document_number_service import DocumentNumberService
 from modules.project.service.engines import ProjectEngine
 from modules.project.service.project_assignment_scope import ProjectAssignmentScope
@@ -166,6 +167,32 @@ class ProjectService:
         row = self.get(ctx, row_id)
         self._engine.approve(row)
         return self._repo.update(ctx, row_id, status=row.status)
+
+    def complete(self, ctx: TenantContext, row_id: UUID):
+        """Mark project (and linked site workflow) completed."""
+        self._module_admin.ensure_admin(ctx)
+        row = self.get(ctx, row_id)
+        self._engine.mark_completed(row)
+        updates: dict = {"status": row.status}
+        today = date.today()
+        if not row.actual_start_date:
+            updates["actual_start_date"] = today
+        if not row.actual_end_date:
+            updates["actual_end_date"] = today
+        project = self._repo.update(ctx, row_id, **updates)
+        if project is None:
+            raise NotFoundException("ProjectService not found")
+
+        site_repo = SiteInstallationRepository(self._db)
+        site = site_repo.get_by_project(ctx, row_id)
+        if site is not None and site.status != SiteInstallationStatus.COMPLETED.value:
+            site_repo.update(
+                ctx,
+                site.id,
+                workflow_stage=SiteWorkflowStage.COMPLETED.value,
+                status=SiteInstallationStatus.COMPLETED.value,
+            )
+        return project
 
     def close(self, ctx: TenantContext, row_id: UUID):
         self._module_admin.ensure_admin(ctx)

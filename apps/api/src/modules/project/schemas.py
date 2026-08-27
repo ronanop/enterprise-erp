@@ -23,7 +23,10 @@ class SiteInstallationNestedCreate(BaseModel):
     rfai_request_done: bool = False
     rfai_number: str | None = Field(default=None, max_length=100)
     fabric_partner: str | None = Field(default=None, max_length=255)
+    # Used to carry SCM installation "server type" into Projects intake.
     application: str | None = Field(default=None, max_length=255)
+    server_qty: int | None = Field(default=None, ge=0)
+    rack_qty: int | None = Field(default=None, ge=0)
     remarks: str | None = None
 
 
@@ -122,6 +125,7 @@ class ProjectPoQueueItem(BaseModel):
     ovf_id: UUID | None = None
     branch_id: UUID
     company_id: UUID
+    created_at: datetime | None = None
 
 
 class ProjectPoPrefillResponse(BaseModel):
@@ -142,6 +146,7 @@ class ProjectPoPrefillResponse(BaseModel):
     crm_opportunity_id: UUID | None = None
     circle_name: str | None = None
     entity_state: str | None = None
+    project_title: str | None = None
 
 
 class ProjectPhaseCreate(BaseModel):

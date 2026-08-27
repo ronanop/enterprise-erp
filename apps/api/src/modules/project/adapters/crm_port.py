@@ -186,6 +186,12 @@ class ProjectCrmAdapter:
                 (lead.state or "").strip() or None
             )
 
+        project_title: str | None = None
+        if lead is not None:
+            project_title = (getattr(lead, "project_title", None) or "").strip() or None
+        if not project_title and opp is not None:
+            project_title = (getattr(opp, "project_title", None) or "").strip() or None
+
         return {
             "customer_name": customer_name,
             "customer_id": customer_id,
@@ -196,4 +202,5 @@ class ProjectCrmAdapter:
             "circle_name": circle_name,
             "entity_state": entity_state,
             "lead_id": lead.id if lead is not None else None,
+            "project_title": project_title,
         }
