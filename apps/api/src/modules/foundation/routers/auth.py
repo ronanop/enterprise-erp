@@ -3,12 +3,13 @@
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Request
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from database.session import get_db
 from modules.foundation.dependencies import get_client_ip, get_current_user, get_tenant_context
 from modules.foundation.domain.value_objects import TenantContext
-from modules.foundation.models.security import SecUser
+from modules.foundation.models.security import SecRole, SecUser, SecUserRole
 from modules.foundation.schemas import (
     EssCaptchaChallengeResponse,
     EssLoginRequest,
@@ -126,6 +127,17 @@ def me(
 ) -> APIResponse[dict]:
     rbac = RBACService(db)
     permissions = sorted(rbac.get_user_permissions(ctx.user_id, ctx.tenant_id))
+    role_codes = list(
+        db.scalars(
+            select(SecRole.role_code)
+            .join(SecUserRole, SecUserRole.role_id == SecRole.id)
+            .where(
+                SecUserRole.user_id == user.id,
+                SecRole.tenant_id == ctx.tenant_id,
+                SecRole.is_deleted.is_(False),
+            )
+        ).all()
+    )
     data = {
         "user": UserResponse(
             id=user.id,
@@ -137,5 +149,7 @@ def me(
             mfa_enabled=user.mfa_enabled,
         ),
         "permissions": permissions,
+        "user_type": user.user_type,
+        "role_codes": role_codes,
     }
     return APIResponse(message="Current user", data=data)

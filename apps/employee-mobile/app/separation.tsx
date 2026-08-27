@@ -105,8 +105,17 @@ export default function SeparationScreen() {
               {r.separation_type} · LWD{" "}
               {formatDisplayDateDDMMYYYY(r.requested_last_working_date)}
             </Text>
+            {r.notice_status ? (
+              <Text style={styles.meta}>Notice: {r.notice_status.replace(/_/g, " ")}</Text>
+            ) : null}
             {r.fnf_status ? (
               <Text style={styles.meta}>FnF: {r.fnf_status}</Text>
+            ) : null}
+            {r.fnf_status === "pending" &&
+            (r.notice_status === "served" ||
+              r.notice_status === "direct_exit" ||
+              r.notice_status === "not_served") ? (
+              <Text style={styles.meta}>FNF is pending</Text>
             ) : null}
           </Card>
         ))

@@ -8,6 +8,8 @@
 
 import { idbGetJson, idbSetJson } from "@/lib/client-idb-json-store";
 
+export type OnboardingPolicyScope = "all" | "entity";
+
 export type OnboardingPolicyDoc = {
   id: string;
   code: string;
@@ -17,6 +19,10 @@ export type OnboardingPolicyDoc = {
   fileName?: string;
   fileDataUrl?: string;
   mimeType?: string;
+  /** `all` = every entity; `entity` = only the selected legal entity. */
+  scope: OnboardingPolicyScope;
+  entityId?: string;
+  entityName?: string;
   sortOrder: number;
   status: "active" | "inactive";
   updatedAt: string;
@@ -40,6 +46,7 @@ const DEFAULT_POLICIES: OnboardingPolicyDoc[] = [
     title: "Employee Handbook",
     body:
       "Welcome to the organization. This handbook outlines workplace expectations, leave entitlements, attendance rules, and HR contacts. Please read carefully before accepting.",
+    scope: "all",
     sortOrder: 1,
     status: "active",
     updatedAt: new Date(0).toISOString(),
@@ -50,6 +57,7 @@ const DEFAULT_POLICIES: OnboardingPolicyDoc[] = [
     title: "NDA",
     body:
       "You agree not to disclose confidential company information, customer data, or trade secrets during and after employment.",
+    scope: "all",
     sortOrder: 2,
     status: "active",
     updatedAt: new Date(0).toISOString(),
@@ -60,6 +68,7 @@ const DEFAULT_POLICIES: OnboardingPolicyDoc[] = [
     title: "IT Policy",
     body:
       "Use company devices and accounts responsibly. Do not share passwords. Report security incidents promptly. Personal software installs require IT approval.",
+    scope: "all",
     sortOrder: 3,
     status: "active",
     updatedAt: new Date(0).toISOString(),
@@ -70,6 +79,7 @@ const DEFAULT_POLICIES: OnboardingPolicyDoc[] = [
     title: "Code of Conduct",
     body:
       "Treat colleagues with respect. Zero tolerance for harassment or discrimination. Follow conflict-of-interest and gift policies.",
+    scope: "all",
     sortOrder: 4,
     status: "active",
     updatedAt: new Date(0).toISOString(),
@@ -80,6 +90,7 @@ const DEFAULT_POLICIES: OnboardingPolicyDoc[] = [
     title: "Privacy Policy",
     body:
       "We process personal data for employment, payroll, and compliance. Data is retained per statutory requirements and shared only with authorized processors.",
+    scope: "all",
     sortOrder: 5,
     status: "active",
     updatedAt: new Date(0).toISOString(),
@@ -91,6 +102,9 @@ let loadPromise: Promise<OnboardingPolicyDoc[]> | null = null;
 let persistQueue: Promise<void> = Promise.resolve();
 
 function normalizePolicy(p: Partial<OnboardingPolicyDoc>): OnboardingPolicyDoc {
+  const entityId = p.entityId ? String(p.entityId) : undefined;
+  const scope: OnboardingPolicyScope =
+    p.scope === "entity" || (p.scope !== "all" && Boolean(entityId)) ? "entity" : "all";
   return {
     id: String(p.id ?? ""),
     code: String(p.code ?? ""),
@@ -99,6 +113,9 @@ function normalizePolicy(p: Partial<OnboardingPolicyDoc>): OnboardingPolicyDoc {
     fileName: p.fileName ? String(p.fileName) : undefined,
     fileDataUrl: p.fileDataUrl ? String(p.fileDataUrl) : undefined,
     mimeType: p.mimeType ? String(p.mimeType) : undefined,
+    scope,
+    entityId: scope === "entity" ? entityId : undefined,
+    entityName: scope === "entity" && p.entityName ? String(p.entityName) : undefined,
     sortOrder: Number(p.sortOrder ?? 0),
     status: p.status === "inactive" ? "inactive" : "active",
     updatedAt: String(p.updatedAt ?? new Date().toISOString()),
@@ -217,6 +234,9 @@ export async function saveOnboardingPolicy(
     fileName: input.fileName || undefined,
     fileDataUrl: input.fileDataUrl || undefined,
     mimeType: input.mimeType || undefined,
+    scope: input.scope === "entity" ? "entity" : "all",
+    entityId: input.scope === "entity" ? input.entityId || undefined : undefined,
+    entityName: input.scope === "entity" ? input.entityName || undefined : undefined,
     updatedAt: new Date().toISOString(),
   };
   const idx = all.findIndex((p) => p.id === next.id);
@@ -233,16 +253,32 @@ export async function deleteOnboardingPolicy(id: string): Promise<void> {
   await queuePersist(cache);
 }
 
+export function policyAppliesToEntity(
+  policy: OnboardingPolicyDoc,
+  entityId?: string | null,
+): boolean {
+  if (policy.scope !== "entity" || !policy.entityId) return true;
+  if (!entityId) return false;
+  return policy.entityId === entityId;
+}
+
+export function policyEntityLabel(policy: OnboardingPolicyDoc): string {
+  if (policy.scope !== "entity" || !policy.entityId) return "All entities";
+  return policy.entityName?.trim() || "Entity";
+}
+
 /** Shape used by the candidate portal (compatible with legacy POLICY_DOCS). */
-export function listActivePoliciesForPortal(): PortalPolicyDoc[] {
-  return listOnboardingPolicies(false).map((p) => ({
-    id: p.id,
-    label: p.title,
-    body: p.body,
-    fileName: p.fileName,
-    fileDataUrl: p.fileDataUrl,
-    mimeType: p.mimeType,
-  }));
+export function listActivePoliciesForPortal(entityId?: string | null): PortalPolicyDoc[] {
+  return listOnboardingPolicies(false)
+    .filter((p) => policyAppliesToEntity(p, entityId))
+    .map((p) => ({
+      id: p.id,
+      label: p.title,
+      body: p.body,
+      fileName: p.fileName,
+      fileDataUrl: p.fileDataUrl,
+      mimeType: p.mimeType,
+    }));
 }
 
 if (typeof window !== "undefined") {

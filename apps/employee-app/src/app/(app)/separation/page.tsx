@@ -103,8 +103,15 @@ export default function SeparationPage() {
               </div>
               <p className="text-xs text-[#434655]">
                 {r.separation_type} · LWD {r.requested_last_working_date}
+                {r.notice_status ? ` · ${r.notice_status.replace(/_/g, " ")}` : ""}
                 {r.fnf_status ? ` · FNF ${r.fnf_status}` : ""}
               </p>
+              {r.fnf_status === "pending" &&
+              (r.notice_status === "served" ||
+                r.notice_status === "direct_exit" ||
+                r.notice_status === "not_served") ? (
+                <p className="text-xs font-medium text-[#b45309]">FNF is pending</p>
+              ) : null}
             </li>
           ))}
         </ul>

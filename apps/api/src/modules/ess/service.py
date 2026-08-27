@@ -14,8 +14,8 @@ from sqlalchemy.orm import Session
 from core.config import get_settings
 from core.exceptions import AppException, ConflictException, ForbiddenException, NotFoundException
 from modules.ess.employee_document_storage import (
-    guess_media_type,
-    resolve_document_path,
+    DocumentDownload,
+    load_document_download,
     save_employee_document_bytes,
 )
 from modules.ess.schemas import (
@@ -1065,14 +1065,10 @@ class EssService:
 
     def resolve_document_download(
         self, ctx: TenantContext, document_id: UUID
-    ) -> tuple[str, str, str]:
-        """Return (filesystem_path, media_type, download_filename)."""
+    ) -> DocumentDownload:
+        """Return a filesystem path or MinIO bytes payload for download."""
         doc = self.get_document(ctx, document_id)
-        path = resolve_document_path(doc.storage_uri)
-        download_name = doc.document_name
-        if path.suffix and not download_name.lower().endswith(path.suffix.lower()):
-            download_name = f"{download_name}{path.suffix}"
-        return str(path), guess_media_type(path.name), download_name
+        return load_document_download(doc.storage_uri, doc.document_name)
 
     def list_holidays(self, ctx: TenantContext) -> list[EssHolidayCalendarResponse]:
         emp = self.resolve_employee(ctx)
@@ -1750,6 +1746,9 @@ class EssService:
                 requested_last_working_date=row.requested_last_working_date,
                 status=row.status,
                 fnf_status=getattr(row, "fnf_status", None),
+                notice_status=getattr(row, "notice_status", None),
+                expected_exit_date=getattr(row, "expected_exit_date", None),
+                notice_period_days=getattr(row, "notice_period_days", None),
             )
             for row in rows
             if row.employee_id == emp.id
@@ -1764,9 +1763,13 @@ class EssService:
             branch_id=emp.branch_id,
             employee_id=emp.id,
             company_id=emp.company_id,
-            separation_type=body.separation_type,
+            separation_type=body.separation_type or "resignation",
             requested_last_working_date=body.requested_last_working_date,
             reason=body.reason,
+            resignation_date=body.resignation_date or date.today(),
+            notice_period_days=body.notice_period_days,
+            initiated_by="employee",
+            serve_notice=True,
         )
         return EssSeparationItem(
             id=row.id,
@@ -1775,6 +1778,9 @@ class EssService:
             requested_last_working_date=row.requested_last_working_date,
             status=row.status,
             fnf_status=getattr(row, "fnf_status", None),
+            notice_status=getattr(row, "notice_status", None),
+            expected_exit_date=getattr(row, "expected_exit_date", None),
+            notice_period_days=getattr(row, "notice_period_days", None),
         )
 
     def _profile_orm(self, ctx: TenantContext, emp: EmployeeEntity):

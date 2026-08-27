@@ -63,6 +63,7 @@ HR_PERMISSIONS: list[tuple[str, str, str, str]] = [
     ("hr.employee_asset:read", "hr.employee_asset", "read", "hr"),
     ("hr.employee_asset:assign", "hr.employee_asset", "assign", "hr"),
     ("hr.employee_asset:return", "hr.employee_asset", "return", "hr"),
+    ("hr.superadmin:manage", "hr.superadmin", "manage", "hr"),
 ]
 
 HR_EMPLOYEE_PERMISSIONS = [
@@ -140,12 +141,39 @@ HR_EXECUTIVE_PERMISSIONS = list(
     )
 )
 
-HR_ADMIN_PERMISSIONS = [p[0] for p in HR_PERMISSIONS]
+HR_SUPERADMIN_PERMISSION = "hr.superadmin:manage"
+
+HR_ADMIN_PERMISSIONS = [p[0] for p in HR_PERMISSIONS if p[0] != HR_SUPERADMIN_PERMISSION]
+
+
+def _hr_admin_workspace_permissions() -> list[str]:
+    from modules.organization.permissions import ORGANIZATION_PERMISSIONS
+    from modules.payroll.permissions import PAYROLL_PERMISSIONS
+    from modules.recruitment.permissions import RECRUITMENT_PERMISSIONS
+
+    return list(
+        dict.fromkeys(
+            HR_ADMIN_PERMISSIONS
+            + [
+                "master.employee:read",
+                "master.employee:create",
+                "master.employee:update",
+                "master.employee:delete",
+            ]
+            + [p[0] for p in PAYROLL_PERMISSIONS]
+            + [p[0] for p in RECRUITMENT_PERMISSIONS]
+            + [p[0] for p in ORGANIZATION_PERMISSIONS if p[2] != "delete"]
+        )
+    )
+
+
+# Full HRMS sidebar access for assigned HR Admins (never includes superadmin panel).
+HR_ADMIN_WORKSPACE_PERMISSIONS = _hr_admin_workspace_permissions()
 
 # Named role packs (checklist Phase 13.2) — codes used by seed/resync migrations
 HR_ROLE_PACKS: list[tuple[str, str, list[str]]] = [
     ("HR_EMPLOYEE", "Employee", HR_EMPLOYEE_PERMISSIONS),
     ("HR_MANAGER", "Manager", HR_MANAGER_PERMISSIONS),
     ("HR_EXECUTIVE", "HR Executive", HR_EXECUTIVE_PERMISSIONS),
-    ("HR_ADMIN", "HR Admin", HR_ADMIN_PERMISSIONS),
+    ("HR_ADMIN", "HR Admin", HR_ADMIN_WORKSPACE_PERMISSIONS),
 ]

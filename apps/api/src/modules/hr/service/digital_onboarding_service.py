@@ -42,6 +42,33 @@ class DigitalOnboardingService:
         ).all()
         return [self._to_case(r, include_pii=False) for r in rows]
 
+    def clear_all_cases(self, ctx: TenantContext) -> dict:
+        """Soft-delete every onboarding case for the tenant and free unique codes/tokens."""
+        stamp = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S")
+        rows = list(
+            self._db.scalars(
+                select(HrDigitalOnboarding).where(
+                    HrDigitalOnboarding.tenant_id == ctx.tenant_id,
+                    HrDigitalOnboarding.is_deleted.is_(False),
+                )
+            ).all()
+        )
+        deleted = 0
+        now = datetime.now(timezone.utc)
+        for i, row in enumerate(rows):
+            row.is_deleted = True
+            row.deleted_at = now
+            row.deleted_by = ctx.user_id
+            base = (row.case_code or "ONB")[:12]
+            row.case_code = f"{base}-DEL-{stamp}-{i}"[:40]
+            row.invitation_token = f"del-{uuid4().hex}"[:64]
+            deleted += 1
+        self._db.flush()
+        return {
+            "deleted": deleted,
+            "message": f"Cleared {deleted} onboarding case(s).",
+        }
+
     def get_case(self, ctx: TenantContext, case_id: str, *, include_pii: bool = False) -> dict:
         try:
             uid = UUID(str(case_id))
@@ -252,14 +279,47 @@ class DigitalOnboardingService:
         if not clean:
             raise NotFoundException("Onboarding link not found")
         row = self._db.scalar(
-            select(HrDigitalOnboarding).where(
-                HrDigitalOnboarding.invitation_token == clean,
-                HrDigitalOnboarding.is_deleted.is_(False),
-            )
+            select(HrDigitalOnboarding).where(HrDigitalOnboarding.invitation_token == clean)
         )
         if row is None:
+            # List-clear rewrites the DB token column; the original stays in case_json.
+            for candidate in self._db.scalars(select(HrDigitalOnboarding)).all():
+                inv = (candidate.case_json or {}).get("invitation") or {}
+                if str(inv.get("token") or "").strip() == clean:
+                    row = candidate
+                    break
+        if row is None:
             raise NotFoundException("Onboarding link not found")
+        if row.is_deleted:
+            self._restore_cleared_case(row, clean)
         return row
+
+    def _restore_cleared_case(self, row: HrDigitalOnboarding, token: str) -> None:
+        """Reactivate a case that was removed from the HR list so the invitation still works."""
+        payload = dict(row.case_json or {})
+        inv = dict(payload.get("invitation") or {})
+        original_token = str(inv.get("token") or token).strip() or token
+        original_code = str(payload.get("caseCode") or payload.get("case_code") or row.case_code)
+        if "-DEL-" in original_code:
+            original_code = original_code.split("-DEL-")[0]
+        clash = self._db.scalar(
+            select(HrDigitalOnboarding.id).where(
+                HrDigitalOnboarding.tenant_id == row.tenant_id,
+                HrDigitalOnboarding.case_code == original_code,
+                HrDigitalOnboarding.is_deleted.is_(False),
+                HrDigitalOnboarding.id != row.id,
+            )
+        )
+        row.is_deleted = False
+        row.deleted_at = None
+        row.deleted_by = None
+        row.invitation_token = original_token
+        if clash is None and original_code:
+            row.case_code = original_code[:40]
+        payload["invitation"] = {**inv, "token": original_token}
+        payload["caseCode"] = row.case_code
+        row.case_json = payload
+        self._db.flush()
 
     def _assert_not_expired(self, row: HrDigitalOnboarding) -> None:
         if row.invitation_expires_at and row.invitation_expires_at < datetime.now(timezone.utc):

@@ -17,6 +17,13 @@ from shared.router import api_v1_router
 @asynccontextmanager
 async def lifespan(_: FastAPI) -> AsyncIterator[None]:
     setup_logging()
+    from core.object_storage import ensure_bucket, is_enabled
+
+    if is_enabled():
+        try:
+            ensure_bucket()
+        except Exception:
+            pass
     yield
 
 

@@ -266,6 +266,10 @@ export type OnboardingCase = {
   managementGroupId?: string;
   managementGroupName?: string;
   employeeId?: string;
+  /** How HR will set the employee code when completing onboarding. */
+  employeeIdMode?: "auto" | "manual";
+  /** Intended employee code when `employeeIdMode` is manual (before completion). */
+  assignedEmployeeCode?: string;
   buddy?: string;
   hrOwner: string;
   status: OnboardingCaseStatus;
@@ -388,4 +392,6 @@ export type StartOnboardingInput = {
   trainingDurationDays?: string;
   hrOwner?: string;
   invitationExpiryDays: number;
+  employeeIdMode?: "auto" | "manual";
+  assignedEmployeeCode?: string;
 };

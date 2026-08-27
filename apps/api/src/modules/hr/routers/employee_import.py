@@ -6,9 +6,10 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
 from shared.schemas import APIResponse
-from modules.foundation.dependencies import require_any_permission
+from modules.foundation.dependencies import require_any_permission, require_permission
 from modules.foundation.domain.value_objects import TenantContext
 from modules.hr.dependencies import get_db
+from modules.hr.permissions import HR_SUPERADMIN_PERMISSION
 from modules.hr.schemas import EmployeeImportRequest, EmployeeImportResponse, EmployeeClearResponse
 from modules.hr.service.employee_import_service import EmployeeImportService
 
@@ -37,13 +38,10 @@ def bulk_import_employees(
 
 @employee_import_router.post("/clear-all", response_model=APIResponse[EmployeeClearResponse])
 def clear_all_employees(
-    ctx: Annotated[
-        TenantContext,
-        Depends(require_any_permission("master.employee:delete", "master.employee:update")),
-    ],
+    ctx: Annotated[TenantContext, Depends(require_permission(HR_SUPERADMIN_PERMISSION))],
     db: Annotated[Session, Depends(get_db)],
 ):
-    """Soft-delete all employees in scope and free codes so Excel can be re-imported."""
+    """Soft-delete all employees in scope. Superadmin only — HR Admin cannot clear the directory."""
     data = EmployeeImportService(db).clear_all_employees(ctx)
     db.commit()
     return APIResponse(

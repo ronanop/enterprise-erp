@@ -714,6 +714,7 @@ export const essService = {
             requested_last_working_date: body.requested_last_working_date,
             status: "draft",
             fnf_status: "pending",
+            notice_status: "pending",
           } satisfies EssSeparationItem,
         }))
       : apiClient<EssSeparationItem>("/ess/separation", { method: "POST", body }),

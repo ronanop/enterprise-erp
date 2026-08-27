@@ -20,11 +20,23 @@ export function HrStatusBadge({ status }: { status: string }) {
     s.includes("approved") ||
     s.includes("accepted") ||
     s.includes("present") ||
-    s.includes("paid")
+    s.includes("paid") ||
+    s === "served"
       ? "border-transparent bg-hrms-mint text-hrms-success"
-      : s.includes("pending") || s.includes("draft") || s.includes("submitted") || s.includes("open") || s.includes("onboarding")
+      : s.includes("pending") ||
+          s.includes("draft") ||
+          s.includes("submitted") ||
+          s.includes("open") ||
+          s.includes("onboarding") ||
+          s.includes("notice") ||
+          s.includes("serving")
         ? "border-transparent bg-hrms-peach text-hrms-warning"
-        : s.includes("absent") || s.includes("reject") || s.includes("cancel") || s.includes("lost")
+        : s.includes("absent") ||
+            s.includes("reject") ||
+            s.includes("cancel") ||
+            s.includes("lost") ||
+            s.includes("not served") ||
+            s.includes("direct")
           ? "border-transparent bg-hrms-pink text-hrms-danger"
           : "border-transparent bg-hrms-blue text-hrms-info";
   return (

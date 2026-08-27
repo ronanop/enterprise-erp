@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 
+import { EmployeeIdModeFields } from "@/components/hr/onboarding/employee-id-mode-fields";
 import { MasterSelect } from "@/components/hr/shared/employee-select";
 import {
   SetupDrawer,
@@ -18,6 +19,7 @@ import {
 import { validateEmail, validateMobile } from "@/lib/employee-validators";
 import { EMPLOYMENT_TYPE_OPTIONS, employmentDurationKind } from "@/config/hr-master-options";
 import { listEmploymentTypeOptions, listEntityOptions, loadSetupOrgLookups } from "@/services/hr-setup-service";
+import { previewNextEmployeeCode } from "@/services/employee-management-service";
 import type { StartOnboardingInput } from "@/types/onboarding-management";
 
 type Props = {
@@ -44,6 +46,9 @@ export function StartOnboardingDrawer({ open, onClose, onSubmit }: Props) {
   const [candidateName, setCandidateName] = useState("");
   const [candidateEmail, setCandidateEmail] = useState("");
   const [candidatePhone, setCandidatePhone] = useState("");
+  const [employeeIdMode, setEmployeeIdMode] = useState<"auto" | "manual">("auto");
+  const [assignedEmployeeCode, setAssignedEmployeeCode] = useState("");
+  const [nextAutoCode, setNextAutoCode] = useState("");
   const [saving, setSaving] = useState(false);
   const [errors, setErrors] = useState<string[]>([]);
   const [masters, setMasters] = useState<{
@@ -86,6 +91,7 @@ export function StartOnboardingDrawer({ open, onClose, onSubmit }: Props) {
       });
       setEmploymentTypes(types);
       setEntities(entityOpts);
+      setNextAutoCode(previewNextEmployeeCode());
       setBranch((prev) => prev || branches[0]?.label || "Head Office");
       setEntityId((prev) => prev || entityOpts[0]?.value || "");
       if (!m.designations.length) {
@@ -139,6 +145,9 @@ export function StartOnboardingDrawer({ open, onClose, onSubmit }: Props) {
     if (!Number.isFinite(days) || days < 1 || days > 90) {
       next.push("Invitation expiry must be between 1 and 90 days");
     }
+    if (employeeIdMode === "manual" && !assignedEmployeeCode.trim()) {
+      next.push("Enter a manual employee ID or switch to auto-generate");
+    }
 
     return next;
   }
@@ -176,6 +185,9 @@ export function StartOnboardingDrawer({ open, onClose, onSubmit }: Props) {
         trainingDurationDays:
           employmentDurationKind(employmentType) === "training" ? trainingDurationDays.trim() : "",
         invitationExpiryDays: Number(expiryDays) || 14,
+        employeeIdMode,
+        assignedEmployeeCode:
+          employeeIdMode === "manual" ? assignedEmployeeCode.trim().toUpperCase() : undefined,
       });
       onClose();
       setCandidateName("");
@@ -185,6 +197,8 @@ export function StartOnboardingDrawer({ open, onClose, onSubmit }: Props) {
       setDesignation("");
       setDepartment("");
       setEntityId(entities[0]?.value || "");
+      setEmployeeIdMode("auto");
+      setAssignedEmployeeCode("");
       setErrors([]);
     } finally {
       setSaving(false);
@@ -271,6 +285,14 @@ export function StartOnboardingDrawer({ open, onClose, onSubmit }: Props) {
             </SetupSelect>
           </SetupField>
         </div>
+
+        <EmployeeIdModeFields
+          mode={employeeIdMode}
+          manualCode={assignedEmployeeCode}
+          nextAutoCode={nextAutoCode}
+          onModeChange={setEmployeeIdMode}
+          onManualCodeChange={setAssignedEmployeeCode}
+        />
 
         <div className="grid gap-3 sm:grid-cols-2">
           <SetupField label="Employment type">

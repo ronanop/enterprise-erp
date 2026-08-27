@@ -11,6 +11,7 @@ export const GENDER_OPTIONS: MasterOption[] = [
 export const MARITAL_STATUS_OPTIONS: MasterOption[] = [
   { value: "unmarried", label: "Unmarried" },
   { value: "married", label: "Married" },
+  { value: "divorced", label: "Divorced" },
 ];
 
 export const RELATIONSHIP_OPTIONS: MasterOption[] = [

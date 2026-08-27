@@ -38,5 +38,7 @@ export function useUserPermissions() {
     [user],
   );
 
-  return { user, loading, can };
+  const isHrmsSuperAdmin = Boolean(user?.permissions?.includes("hr.superadmin:manage"));
+
+  return { user, loading, can, isHrmsSuperAdmin };
 }

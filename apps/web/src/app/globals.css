@@ -187,11 +187,22 @@
   --sidebar-ring: #9B5BB8;
   --hrms-card-shadow: 0 1px 2px rgb(10 10 10 / 0.04), 0 8px 24px rgb(10 10 10 / 0.04);
   background-color: var(--background);
-  background-image: radial-gradient(
-    900px 280px at 12% -8%,
-    color-mix(in srgb, #9B5BB8 7%, transparent),
-    transparent 70%
-  );
+  background-image:
+    radial-gradient(
+      1100px 380px at 12% -12%,
+      color-mix(in srgb, #9B5BB8 14%, transparent),
+      transparent 72%
+    ),
+    radial-gradient(
+      820px 300px at 92% -8%,
+      color-mix(in srgb, #C4A5E0 16%, transparent),
+      transparent 68%
+    ),
+    radial-gradient(
+      700px 240px at 70% 108%,
+      color-mix(in srgb, #9B5BB8 8%, transparent),
+      transparent 70%
+    );
   color: var(--foreground);
 }
 
@@ -225,11 +236,17 @@
   --sidebar-ring: #9B5BB8;
   --hrms-card-shadow: 0 1px 2px rgb(0 0 0 / 0.4), 0 10px 28px rgb(0 0 0 / 0.35);
   background-color: var(--background);
-  background-image: radial-gradient(
-    900px 280px at 12% -8%,
-    color-mix(in srgb, #9B5BB8 12%, transparent),
-    transparent 70%
-  );
+  background-image:
+    radial-gradient(
+      900px 320px at 8% -10%,
+      color-mix(in srgb, #9B5BB8 16%, transparent),
+      transparent 72%
+    ),
+    radial-gradient(
+      720px 280px at 96% -6%,
+      color-mix(in srgb, #FF2057 10%, transparent),
+      transparent 68%
+    );
 }
 
 .hrms-theme ::selection {

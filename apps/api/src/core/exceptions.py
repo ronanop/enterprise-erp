@@ -77,8 +77,8 @@ def register_exception_handlers(app: FastAPI) -> None:
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             content=ErrorResponse(
                 message=(
-                    "Database is unavailable. Start Docker Postgres "
-                    "(docker compose up -d) and ensure port 5433 is healthy."
+                    "Database is unavailable. Check DATABASE_URL and that "
+                    "PostgreSQL is reachable on the configured host."
                 ),
                 errors=[str(exc.orig) if exc.orig else str(exc)],
             ).model_dump(),

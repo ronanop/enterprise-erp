@@ -1322,6 +1322,7 @@ export const mockApi = {
       requested_last_working_date: body.requested_last_working_date,
       status: "draft",
       fnf_status: "pending",
+      notice_status: "pending",
     };
     mockSeparations = [row, ...mockSeparations];
     return delay(ok(row, "Resignation request created"));

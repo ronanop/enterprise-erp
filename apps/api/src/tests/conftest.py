@@ -1,9 +1,13 @@
 """Shared pytest fixtures."""
 
-import pytest
-from fastapi.testclient import TestClient
+import os
 
-from main import create_app
+os.environ["STORAGE_BACKEND"] = "local"
+
+import pytest  # noqa: E402
+from fastapi.testclient import TestClient  # noqa: E402
+
+from main import create_app  # noqa: E402
 
 
 @pytest.fixture

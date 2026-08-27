@@ -241,7 +241,7 @@ export function OnboardingManagementPage() {
       // Always re-stamp when signature image exists (removes legacy "Digitally signed" text).
       if (sigUrl && sigUrl.startsWith("data:image/")) {
         try {
-          const policies = listActivePoliciesForPortal();
+          const policies = listActivePoliciesForPortal(c.entityId);
           if (policies.length) {
             const stamped = await stampPoliciesWithSignature({
               policies,
@@ -376,10 +376,15 @@ export function OnboardingManagementPage() {
   }
 
   async function handleStart(input: StartOnboardingInput) {
-    const created = await startOnboarding(input);
-    toast(`Onboarding ${created.caseCode} created`);
-    await load();
-    setInviteCase(created);
+    try {
+      const created = await startOnboarding(input);
+      toast(`Onboarding ${created.caseCode} created`);
+      await load();
+      setInviteCase(created);
+    } catch (e) {
+      toast(e instanceof Error ? e.message : "Could not start onboarding", "error");
+      throw e;
+    }
   }
 
   async function handleSend(caseId: string, channel: InvitationChannel, expiryDays: number) {
@@ -531,7 +536,7 @@ export function OnboardingManagementPage() {
                   value={filters.status}
                   onChange={(status) => setFilters((f) => ({ ...f, status }))}
                   options={[
-                    { value: "all", label: "All Status" },
+                    { value: "all", label: "Active" },
                     ...Object.entries(ONBOARDING_STATUS_LABELS)
                       .filter(([k]) => k !== "overdue")
                       .map(([k, v]) => ({ value: k, label: v })),
@@ -1254,10 +1259,12 @@ export function OnboardingManagementPage() {
             }
           })();
         }}
-        onComplete={(caseId, managementGroup) =>
+        onComplete={(caseId, managementGroup, employeeCode) =>
           completeOnboarding(caseId, {
             managementGroupId: managementGroup?.id,
             managementGroupName: managementGroup?.group_name,
+            employeeCode,
+            employeeIdMode: employeeCode ? "manual" : "auto",
           })
             .then(async (completed) => {
               if (!completed) return;

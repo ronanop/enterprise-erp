@@ -221,6 +221,22 @@ def main() -> None:
             ensure_role(db, tenant.id, "TENANT_ADMIN", "Tenant Admin"),
         ]
         granted = grant_all_to_roles(db, tenant.id, role_ids, list(perm_map.values()))
+        from modules.hr.permissions import HR_SUPERADMIN_PERMISSION
+
+        tenant_admin_id = role_ids[1]
+        db.execute(
+            text(
+                """
+                DELETE FROM foundation.sec_role_permission
+                WHERE role_id = :rid
+                  AND permission_id = (
+                    SELECT id FROM foundation.sec_permission
+                    WHERE permission_code = :code
+                  )
+                """
+            ),
+            {"rid": tenant_admin_id, "code": HR_SUPERADMIN_PERMISSION},
+        )
         db.commit()
 
         invalidate_user_caches(db, tenant.id)

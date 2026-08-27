@@ -34,5 +34,15 @@ export interface UserProfile {
   display_name?: string;
   tenant_id?: string;
   permissions?: string[];
+  user_type?: string;
+  role_codes?: string[];
+  user?: {
+    id?: string;
+    email?: string;
+    display_name?: string;
+    user_type?: string;
+  };
   [key: string]: unknown;
 }
+
+export const HR_SUPERADMIN_PERMISSION = "hr.superadmin:manage";

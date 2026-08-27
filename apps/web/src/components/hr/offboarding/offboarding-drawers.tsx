@@ -29,7 +29,10 @@ export function NewResignationDrawer({
   const [branchId, setBranchId] = useState("");
   const [employeeId, setEmployeeId] = useState("");
   const [separationType, setSeparationType] = useState<SeparationType>("resignation");
+  const [resignationDate, setResignationDate] = useState("");
   const [lwd, setLwd] = useState("");
+  const [noticeDays, setNoticeDays] = useState("30");
+  const [serveNotice, setServeNotice] = useState(true);
   const [reason, setReason] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -43,9 +46,15 @@ export function NewResignationDrawer({
       if (!branchId && b[0]) setBranchId(b[0].id);
       if (!employeeId && e[0]) setEmployeeId(e[0].id);
     });
+    const today = new Date();
+    setResignationDate(today.toISOString().slice(0, 10));
     const d = new Date();
     d.setDate(d.getDate() + 30);
     setLwd(d.toISOString().slice(0, 10));
+    setNoticeDays("30");
+    setServeNotice(true);
+    setSeparationType("resignation");
+    setReason("");
   }, [open, branchId]);
 
   async function submit() {
@@ -62,6 +71,10 @@ export function NewResignationDrawer({
         separationType,
         requestedLastWorkingDate: lwd,
         reason: reason.trim() || undefined,
+        resignationDate: resignationDate || undefined,
+        noticePeriodDays: serveNotice && noticeDays ? Number(noticeDays) : null,
+        expectedExitDate: lwd || undefined,
+        serveNotice,
       });
       onCreated();
       onClose();
@@ -76,8 +89,8 @@ export function NewResignationDrawer({
     <SetupDrawer
       open={open}
       onClose={onClose}
-      title="New Resignation / Exit"
-      description="Start an offboarding case. HR will run approvals, clearance, exit interview, and FNF."
+      title="New Exit / Resignation"
+      description="Start an offboarding case. Approvals stay Manager → IT → Accounts → HR. Notice or direct exit runs in parallel, then FNF."
       footer={
         <>
           <Button
@@ -129,7 +142,12 @@ export function NewResignationDrawer({
         <SetupField label="Exit type" required>
           <SetupSelect
             value={separationType}
-            onChange={(e) => setSeparationType(e.target.value as SeparationType)}
+            onChange={(e) => {
+              const next = e.target.value as SeparationType;
+              setSeparationType(next);
+              const needsNotice = next === "resignation" || next === "retirement";
+              setServeNotice(needsNotice);
+            }}
           >
             {Object.entries(SEPARATION_TYPE_LABELS).map(([k, v]) => (
               <option key={k} value={k}>
@@ -138,10 +156,78 @@ export function NewResignationDrawer({
             ))}
           </SetupSelect>
         </SetupField>
-        <SetupField label="Requested last working day" required>
+        <SetupField label="Resignation / exit date" required>
+          <SetupInput
+            type="date"
+            value={resignationDate}
+            onChange={(e) => {
+              setResignationDate(e.target.value);
+              if (serveNotice && noticeDays) {
+                const days = Number(noticeDays);
+                if (e.target.value && Number.isFinite(days) && days >= 0) {
+                  const d = new Date(`${e.target.value}T00:00:00`);
+                  d.setDate(d.getDate() + days);
+                  setLwd(d.toISOString().slice(0, 10));
+                }
+              } else if (!serveNotice && e.target.value) {
+                setLwd(e.target.value);
+              }
+            }}
+          />
+        </SetupField>
+        <SetupField
+          label="Serve notice"
+          hint={
+            serveNotice
+              ? "Employee will be On Notice until the expected exit date."
+              : "Direct exit — notice period is not required."
+          }
+        >
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              className="size-4 cursor-pointer accent-primary"
+              checked={serveNotice}
+              onChange={(e) => {
+                const next = e.target.checked;
+                setServeNotice(next);
+                if (!next && resignationDate) {
+                  setLwd(resignationDate);
+                } else if (next && resignationDate && noticeDays) {
+                  const days = Number(noticeDays);
+                  if (Number.isFinite(days) && days >= 0) {
+                    const d = new Date(`${resignationDate}T00:00:00`);
+                    d.setDate(d.getDate() + days);
+                    setLwd(d.toISOString().slice(0, 10));
+                  }
+                }
+              }}
+            />
+            Employee will serve notice (On Notice)
+          </label>
+        </SetupField>
+        {serveNotice ? (
+          <SetupField label="Notice period (days)" required>
+            <SetupInput
+              type="number"
+              min={0}
+              value={noticeDays}
+              onChange={(e) => {
+                setNoticeDays(e.target.value);
+                const days = Number(e.target.value);
+                if (resignationDate && Number.isFinite(days) && days >= 0) {
+                  const d = new Date(`${resignationDate}T00:00:00`);
+                  d.setDate(d.getDate() + days);
+                  setLwd(d.toISOString().slice(0, 10));
+                }
+              }}
+            />
+          </SetupField>
+        ) : null}
+        <SetupField label="Expected exit date" required>
           <SetupInput type="date" value={lwd} onChange={(e) => setLwd(e.target.value)} />
         </SetupField>
-        <SetupField label="Reason" hint="Optional — shown to approvers">
+        <SetupField label="Reason for exit" hint="Shown to approvers">
           <SetupTextarea value={reason} onChange={(e) => setReason(e.target.value)} rows={3} />
         </SetupField>
       </div>

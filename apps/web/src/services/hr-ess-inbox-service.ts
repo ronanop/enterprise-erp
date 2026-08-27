@@ -28,7 +28,7 @@ export const INBOX_CATEGORY_LABELS: Record<HrEssInboxCategory, string> = {
   compoff: "Comp Off (OT)",
   attendance_correction: "Attendance",
   ot_allotment: "OT / Overday",
-  on_duty: "On duty",
+  on_duty: "On tour / On duty",
 };
 
 export async function loadHrEssInbox(opts?: { includeCompoff?: boolean }): Promise<HrEssInboxItem[]> {

@@ -5,10 +5,11 @@ import { usePathname, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useMemo, useState } from "react";
 import { ChevronDown, ChevronLeft, ChevronRight, Moon, Search, Sun } from "lucide-react";
 
-import { flattenHrNavHrefs, hrNavGroups, type HrNavItem } from "@/config/hr-nav";
+import { flattenHrNavHrefs, hrNavGroups, type HrNavGroup, type HrNavItem } from "@/config/hr-nav";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useHrmsColorMode } from "@/hooks/use-hrms-color-mode";
+import { useUserPermissions } from "@/hooks/use-user-permissions";
 import { cn } from "@/lib/utils";
 
 function navHrefMatches(pathname: string, search: string, href: string): boolean {
@@ -53,14 +54,16 @@ function NavLinkRow({
   activeHref,
   collapsed,
   nested,
+  forceActive,
 }: {
   item: HrNavItem;
   activeHref: string | null;
   collapsed: boolean;
   nested?: boolean;
+  forceActive?: boolean;
 }) {
   const Icon = item.icon;
-  const active = item.href === activeHref;
+  const active = Boolean(forceActive) || item.href === activeHref;
   return (
     <Link
       href={item.href}
@@ -88,6 +91,13 @@ function NavLinkRow({
   );
 }
 
+function visibleNavGroups(isHrmsSuperAdmin: boolean): HrNavGroup[] {
+  return hrNavGroups.map((group) => ({
+    ...group,
+    items: group.items.filter((item) => isHrmsSuperAdmin || !item.superAdminOnly),
+  }));
+}
+
 function SidebarNavBody({
   collapsed,
   query,
@@ -98,8 +108,10 @@ function SidebarNavBody({
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const search = searchParams.toString();
+  const { isHrmsSuperAdmin } = useUserPermissions();
+  const groups = useMemo(() => visibleNavGroups(isHrmsSuperAdmin), [isHrmsSuperAdmin]);
 
-  const allNavHrefs = useMemo(() => flattenHrNavHrefs(), []);
+  const allNavHrefs = useMemo(() => flattenHrNavHrefs(groups), [groups]);
   const activeHref = useMemo(
     () => resolveActiveHref(pathname, search, allNavHrefs),
     [pathname, search, allNavHrefs],
@@ -107,8 +119,8 @@ function SidebarNavBody({
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (!q) return hrNavGroups;
-    return hrNavGroups
+    if (!q) return groups;
+    return groups
       .map((group) => ({
         ...group,
         items: group.items
@@ -120,13 +132,12 @@ function SidebarNavBody({
           }),
       }))
       .filter((g) => g.items.length > 0);
-  }, [query]);
+  }, [query, groups]);
 
   const [openMenus, setOpenMenus] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
-    // Auto-expand parent when a child is active
-    for (const g of hrNavGroups) {
+    for (const g of groups) {
       for (const item of g.items) {
         if (!item.children?.length) continue;
         const childActive = item.children.some((c) =>
@@ -138,7 +149,7 @@ function SidebarNavBody({
         }
       }
     }
-  }, [pathname, search]);
+  }, [pathname, search, groups]);
 
   return (
     <nav className="erp-scroll flex-1 space-y-1 overflow-y-auto bg-[#0A0A0A] px-2 pb-3">
@@ -154,20 +165,17 @@ function SidebarNavBody({
               const hasChildren = Boolean(item.children?.length) && !collapsed;
               const expanded = openMenus[item.href] ?? false;
               const childActive = (item.children ?? []).some((c) => c.href === activeHref);
-              const parentActive = item.href === activeHref || childActive;
+              const parentExactActive = item.href === activeHref;
 
               if (!hasChildren) {
                 return (
                   <li key={item.href}>
-                    <NavLinkRow item={item} activeHref={activeHref} collapsed={collapsed} />
-                  </li>
-                );
-              }
-
-              if (collapsed) {
-                return (
-                  <li key={item.href}>
-                    <NavLinkRow item={item} activeHref={activeHref} collapsed={collapsed} />
+                    <NavLinkRow
+                      item={item}
+                      activeHref={activeHref}
+                      collapsed={collapsed}
+                      forceActive={collapsed && childActive}
+                    />
                   </li>
                 );
               }
@@ -179,7 +187,7 @@ function SidebarNavBody({
                     type="button"
                     className={cn(
                       "group relative flex w-full cursor-pointer items-center gap-2.5 rounded-xl px-2.5 py-2 text-left text-sm transition-all duration-200",
-                      parentActive
+                      parentExactActive
                         ? "bg-[#9B5BB8] text-white"
                         : "text-[#AEB6C3] hover:bg-[#2A2A2A] hover:text-white",
                     )}
@@ -191,7 +199,7 @@ function SidebarNavBody({
                     <Icon
                       className={cn(
                         "size-4 shrink-0",
-                        parentActive
+                        parentExactActive
                           ? "text-white"
                           : "text-white group-hover:text-white",
                       )}
@@ -200,7 +208,7 @@ function SidebarNavBody({
                     <ChevronDown
                       className={cn(
                         "size-3.5 shrink-0 transition-transform duration-200",
-                        parentActive ? "text-white/80" : "text-[#AEB6C3]",
+                        parentExactActive ? "text-white/80" : "text-[#AEB6C3]",
                         expanded && "rotate-180",
                       )}
                     />

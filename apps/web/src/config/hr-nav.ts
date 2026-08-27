@@ -19,6 +19,7 @@ import {
   Package,
   Plane,
   Settings2,
+  Shield,
   ShoppingBag,
   UserMinus,
   UserPlus,
@@ -34,6 +35,8 @@ export type HrNavItem = {
   description?: string;
   /** Nested links (e.g. Org Setup sections) */
   children?: HrNavItem[];
+  /** Superadmin Panel — hidden from HR Admins */
+  superAdminOnly?: boolean;
 };
 
 export type HrNavGroup = {
@@ -117,7 +120,7 @@ export const hrNavGroups: HrNavGroup[] = [
         title: "EDoc",
         href: "/hr/edoc",
         icon: FileStack,
-        description: "Employee docs, document types & onboarding policies",
+        description: "Employee document vault, types & onboarding policies",
       },
       {
         title: "Org Setup",
@@ -188,6 +191,13 @@ export const hrNavGroups: HrNavGroup[] = [
         href: "/hr/separation",
         icon: UserMinus,
         description: "Resignation, clearance, exit interview & FNF",
+      },
+      {
+        title: "Superadmin Panel",
+        href: "/hr/superadmin",
+        icon: Shield,
+        description: "Assign HR Admins — visible only to HRMS Superadmin",
+        superAdminOnly: true,
       },
     ],
   },

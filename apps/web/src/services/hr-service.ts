@@ -156,7 +156,7 @@ export async function loadHrOverview(): Promise<HrOverview> {
     safeList("/hr/holiday-calendars"),
     safeList("/hr/leave-types"),
     safeList("/hr/leave-balances"),
-    safeList("/hr/leave-requests"),
+    safeListAll("/hr/leave-requests"),
     safeListAll("/hr/attendance"),
     safeList("/hr/employee-documents"),
     safeList("/hr/performance-reviews"),

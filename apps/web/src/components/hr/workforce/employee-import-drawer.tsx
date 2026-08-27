@@ -6,6 +6,7 @@ import { Download, Trash2, Upload } from "lucide-react";
 import { SetupDrawer, SetupField } from "@/components/hr/setup/setup-drawer";
 import { Button } from "@/components/ui/button";
 import { toast } from "@/components/hr/setup/setup-toast";
+import { useUserPermissions } from "@/hooks/use-user-permissions";
 import {
   EMPLOYEE_IMPORT_SAMPLE_CSV,
   IMPORT_FIELD_OPTIONS,
@@ -50,6 +51,7 @@ export function EmployeeImportDrawer({
   const [busy, setBusy] = useState(false);
   const [clearing, setClearing] = useState(false);
   const [resultSummary, setResultSummary] = useState<string | null>(null);
+  const { isHrmsSuperAdmin } = useUserPermissions();
 
   const previewRows = useMemo(() => {
     if (headerIdx < 0 || !matrix.length) return [];
@@ -172,7 +174,11 @@ export function EmployeeImportDrawer({
     <SetupDrawer
       open={open}
       title="Import Employees"
-      description="Map Excel columns to employee fields, then import. Clear all first if you want a fresh import."
+      description={
+        isHrmsSuperAdmin
+          ? "Map Excel columns to employee fields, then import. Clear all first if you want a fresh import."
+          : "Map Excel columns to employee fields, then import."
+      }
       wide
       onClose={onClose}
       footer={
@@ -206,17 +212,19 @@ export function EmployeeImportDrawer({
             <Download className="size-3.5" />
             Download sample CSV
           </Button>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="cursor-pointer text-destructive hover:bg-destructive/10"
-            disabled={clearing}
-            onClick={() => void runClearAll()}
-          >
-            <Trash2 className="size-3.5" />
-            {clearing ? "Clearing…" : "Clear all employees"}
-          </Button>
+          {isHrmsSuperAdmin ? (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="cursor-pointer text-destructive hover:bg-destructive/10"
+              disabled={clearing}
+              onClick={() => void runClearAll()}
+            >
+              <Trash2 className="size-3.5" />
+              {clearing ? "Clearing…" : "Clear all employees"}
+            </Button>
+          ) : null}
         </div>
 
         <SetupField label="Upload file" hint="CSV or Excel — then map each column below">

@@ -1,22 +1,23 @@
 /**
  * HRMS executive dashboard — real API data only (no mock / localStorage metrics).
- * Joins Master Employee + Org Department + HR + Recruitment + Payroll list APIs.
+ * Joins the live Employee directory with HR attendance, leave, and recruitment APIs.
+ * Payroll is intentionally excluded from this surface.
  */
 
 import { isAuthenticated } from "@/lib/auth";
 import {
   asNumber,
   asStatus,
-  countByAttendanceStatus,
   countByStatus,
   employeeDisplayName,
   loadHrOverview,
   type HrOverview,
   type HrRow,
 } from "@/services/hr-service";
-import { ApiClientError, resourceService } from "@/services/api-client";
-import { loadPayrollOverview } from "@/services/payroll-service";
+import { ApiClientError } from "@/services/api-client";
 import { loadRecruitmentOverview } from "@/services/recruitment-service";
+import { loadEmployeeDirectory } from "@/services/employee-management-service";
+import type { EmployeeRecord } from "@/types/employee-management";
 import {
   inboxItemHref,
   loadHrEssInbox,
@@ -36,6 +37,7 @@ import type {
   QuickReport,
 } from "@/types/hr-executive-dashboard";
 import { DASHBOARD_ROLE_LABELS } from "@/types/hr-executive-dashboard";
+import { parseHolidaysJson } from "@/types/holiday-calendar";
 
 const ROLE_KEY = "erp_hr_dashboard_role_v1";
 
@@ -76,12 +78,6 @@ type MasterEmployee = HrRow & {
   date_of_joining?: string;
   designation?: string;
   status?: string;
-};
-
-type Department = HrRow & {
-  id?: string;
-  department_name?: string;
-  department_code?: string;
 };
 
 function readRole(): string {
@@ -142,14 +138,28 @@ export function greetingForHour(date = new Date()): string {
 
 function isoDate(value: unknown): string | null {
   if (typeof value !== "string" || !value) return null;
+  const ymd = value.slice(0, 10);
+  if (/^\d{4}-\d{2}-\d{2}$/.test(ymd)) return ymd;
   const d = new Date(value);
-  return Number.isNaN(d.getTime()) ? null : d.toISOString().slice(0, 10);
+  if (Number.isNaN(d.getTime())) return null;
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
 function parseDate(value: unknown): Date | null {
   if (typeof value !== "string" || !value) return null;
   const d = new Date(value);
   return Number.isNaN(d.getTime()) ? null : d;
+}
+
+function startOfDay(d: Date): Date {
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate());
+}
+
+/** Parse YYYY-MM-DD as a local calendar date (avoids UTC-midnight shift). */
+function parseLocalYmd(value: string): Date | null {
+  const m = value.slice(0, 10).match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (m) return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+  return parseDate(value);
 }
 
 function ageYears(dob: unknown, today = new Date()): number | null {
@@ -181,17 +191,34 @@ function lastNMonthKeys(n = 6): string[] {
 }
 
 function todayIso(): string {
-  return new Date().toISOString().slice(0, 10);
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
-async function safeRows(apiPath: string): Promise<HrRow[]> {
-  try {
-    const res = await resourceService.list(apiPath, { page_size: 200, page: 1 });
-    const data = res.data;
-    return Array.isArray(data) ? (data as HrRow[]) : [];
-  } catch {
-    return [];
+function monthKeyOfValue(value: unknown): string | null {
+  const ymd = isoDate(value);
+  if (ymd) return ymd.slice(0, 7);
+  const d = parseLocalYmd(String(value ?? ""));
+  return d ? monthKey(d) : null;
+}
+
+/** Map an attendance row to the same buckets used on the Attendance register. */
+function attendanceBucket(
+  row: HrRow,
+): "present" | "absent" | "leave" | "halfDay" | "late" | "other" {
+  const st = asStatus(row.attendance_status);
+  const notes = String(row.notes ?? "").toLowerCase();
+  if (st === "half_day") return "halfDay";
+  if (st === "late" || /late arrival/.test(notes)) return "late";
+  if (
+    ["on_leave", "leave", "paid_leave", "unpaid_leave", "pl", "sl", "cl"].includes(st) ||
+    (st === "absent" && notes.includes("leave"))
+  ) {
+    return "leave";
   }
+  if (st === "absent") return "absent";
+  if (["present", "work_from_home", "wfh", "on_duty"].includes(st)) return "present";
+  return "other";
 }
 
 function employeeNameFromMaster(
@@ -206,78 +233,58 @@ function employeeNameFromMaster(
   return fallbackRow ? employeeDisplayName(fallbackRow) : "Employee";
 }
 
-function buildJoinedPeople(
-  overview: HrOverview,
-  employees: MasterEmployee[],
-  departments: Department[],
-  branches: Array<{ id: string; city?: string; branch_name?: string }> = [],
-) {
-  const empById = new Map(employees.map((e) => [String(e.id), e]));
-  const deptById = new Map(departments.map((d) => [String(d.id), d]));
-  const branchById = new Map(branches.map((b) => [String(b.id), b]));
-  const profileByEmp = new Map(
-    overview.profiles.map((p) => [String(p.employee_id ?? p.id), p]),
-  );
+type DashboardPerson = {
+  emp: MasterEmployee;
+  departmentName: string;
+  locationName: string;
+  gender: string;
+  dob: unknown;
+  doj: unknown;
+  status: string;
+};
 
-  // Prefer work_location_text; fall back to branch city (Delhi / Mumbai / …).
-  const locationByEmp = new Map<string, string>();
-  for (const e of overview.employment) {
-    const eid = String(e.employee_id ?? "");
-    if (!eid) continue;
-    const loc = String(e.work_location_text ?? "").trim();
-    if (loc) {
-      if (!locationByEmp.has(eid)) locationByEmp.set(eid, normalizeLocationCity(loc));
-      continue;
-    }
-    const branch = branchById.get(String(e.branch_id ?? ""));
-    const fromBranch = normalizeLocationCity(
-      String(branch?.city ?? branch?.branch_name ?? ""),
-    );
-    if (!locationByEmp.has(eid)) locationByEmp.set(eid, fromBranch);
-  }
-
-  const people = employees.map((emp) => {
-    const profile = profileByEmp.get(String(emp.id));
-    const dept = deptById.get(String(emp.department_id ?? ""));
-    return {
-      emp,
-      profile,
-      departmentName: String(
-        dept?.department_name ?? dept?.department_code ?? emp.designation ?? "Unassigned",
-      ),
-      locationName: String(locationByEmp.get(String(emp.id)) ?? "Unassigned"),
-      gender: String(profile?.gender ?? "unspecified").toLowerCase(),
-      dob: profile?.date_of_birth,
-      doj: emp.date_of_joining,
-      status: String(emp.status ?? profile?.status ?? "active").toLowerCase(),
-    };
-  });
-
-  // Include HR profiles not yet mirrored in master list (edge case).
-  for (const profile of overview.profiles) {
-    const eid = String(profile.employee_id ?? "");
-    if (eid && !empById.has(eid)) {
-      people.push({
-        emp: { id: eid },
-        profile,
-        departmentName: "Unassigned",
-        locationName: String(locationByEmp.get(eid) ?? "Unassigned"),
-        gender: String(profile.gender ?? "unspecified").toLowerCase(),
-        dob: profile.date_of_birth,
-        doj: undefined,
-        status: String(profile.status ?? "active").toLowerCase(),
-      });
-    }
-  }
-
-  return { people, empById, deptById };
+/** Same employee universe as the Employees module — no demo/local seed rows. */
+function peopleFromDirectory(records: EmployeeRecord[]): {
+  people: DashboardPerson[];
+  empById: Map<string, MasterEmployee>;
+} {
+  const people: DashboardPerson[] = records
+    .filter((r) => !r.isDeleted)
+    .map((r) => {
+      const parts = r.displayName.trim().split(/\s+/).filter(Boolean);
+      const emp: MasterEmployee = {
+        id: r.id,
+        first_name: parts[0] ?? "",
+        last_name: parts.slice(1).join(" "),
+        employee_code: r.employeeCode,
+        date_of_joining: r.joiningDate,
+        designation: r.designationName,
+        status: r.lifecycleStatus,
+        department_id: r.departmentId,
+      };
+      const locRaw =
+        r.locationName ||
+        r.extension?.employment?.location ||
+        r.branchName ||
+        "";
+      return {
+        emp,
+        departmentName: (r.departmentName || r.extension?.employment?.departmentName || "").trim() || "Unassigned",
+        locationName: normalizeLocationCity(locRaw) || "Unassigned",
+        gender: String(r.gender || r.extension?.personal?.gender || "unspecified").toLowerCase(),
+        dob: r.extension?.personal?.dateOfBirth || undefined,
+        doj: r.joiningDate || r.extension?.employment?.joiningDate || undefined,
+        status: String(r.lifecycleStatus || "active").toLowerCase(),
+      };
+    });
+  const empById = new Map(people.map((p) => [String(p.emp.id), p.emp]));
+  return { people, empById };
 }
 
 function buildStats(
   overview: HrOverview,
-  people: ReturnType<typeof buildJoinedPeople>["people"],
+  people: DashboardPerson[],
   recruitment: Awaited<ReturnType<typeof loadRecruitmentOverview>> | null,
-  payroll: Awaited<ReturnType<typeof loadPayrollOverview>> | null,
   onboardingInProcess = 0,
 ): HrDashboardStats {
   const today = todayIso();
@@ -288,26 +295,27 @@ function buildStats(
   const todayAttendance = overview.attendance.filter(
     (r) => isoDate(r.attendance_date) === today,
   );
-  const presentToday = countByAttendanceStatus(todayAttendance, [
-    "present",
-    "work_from_home",
-    "half_day",
-  ]);
-  const absentToday = countByAttendanceStatus(todayAttendance, ["absent"]);
-  const onDutyToday = countByAttendanceStatus(todayAttendance, ["on_duty"]);
-  const lateArrivals = todayAttendance.filter((r) => {
-    const checkIn = parseDate(r.check_in_at);
-    if (!checkIn) return false;
-    return checkIn.getUTCHours() > 9 || (checkIn.getUTCHours() === 9 && checkIn.getUTCMinutes() > 15);
-  }).length;
+  const bucketsToday = todayAttendance.map((r) => attendanceBucket(r));
+  const presentToday = bucketsToday.filter((b) =>
+    b === "present" || b === "late" || b === "halfDay",
+  ).length;
+  const absentToday = bucketsToday.filter((b) => b === "absent").length;
+  const onDutyToday = todayAttendance.filter((r) => asStatus(r.attendance_status) === "on_duty").length;
+  const lateArrivals = bucketsToday.filter((b) => b === "late").length;
 
-  const onLeave = overview.leaveRequests.filter((r) => {
-    if (asStatus(r.status) !== "approved") return false;
+  const onLeaveIds = new Set<string>();
+  for (const r of overview.leaveRequests) {
+    if (asStatus(r.status) !== "approved") continue;
     const start = isoDate(r.start_date);
-    const end = isoDate(r.end_date);
-    if (!start || !end) return false;
-    return start <= today && today <= end;
-  }).length;
+    const end = isoDate(r.end_date) ?? start;
+    if (!start || !end) continue;
+    if (start <= today && today <= end) onLeaveIds.add(String(r.employee_id ?? ""));
+  }
+  for (const r of todayAttendance) {
+    if (attendanceBucket(r) === "leave") onLeaveIds.add(String(r.employee_id ?? ""));
+  }
+  onLeaveIds.delete("");
+  const onLeave = onLeaveIds.size;
 
   const pendingLeave = countByStatus(overview.leaveRequests, [
     "draft",
@@ -353,10 +361,6 @@ function buildStats(
     return diff >= 0 && diff <= 30;
   }).length;
 
-  const payrollProcessed = (payroll?.runs ?? []).filter((r) =>
-    ["approved", "paid", "locked", "posted"].includes(asStatus(r.status)),
-  ).length;
-
   return {
     totalEmployees: people.length,
     activeEmployees: activeEmployees || people.length,
@@ -369,7 +373,7 @@ function buildStats(
     openPositions,
     candidatesInPipeline,
     pendingApprovals: pendingLeave,
-    payrollProcessed,
+    payrollProcessed: 0,
     upcomingBirthdays,
     upcomingAnniversaries,
     onProbation,
@@ -378,19 +382,37 @@ function buildStats(
   };
 }
 
+function classifyLeaveBucket(code: string, name: string): "casual" | "sick" | "earned" | "unpaid" {
+  const blob = `${code} ${name}`.toLowerCase();
+  if (blob.includes("sick") || /\bsl\b/.test(blob)) return "sick";
+  if (blob.includes("unpaid") || blob.includes("lwp") || blob.includes("without pay")) return "unpaid";
+  if (
+    blob.includes("earned") ||
+    blob.includes("privilege") ||
+    blob.includes("annual") ||
+    /\b(el|pl)\b/.test(blob)
+  ) {
+    return "earned";
+  }
+  return "casual";
+}
+
 function buildCharts(
   overview: HrOverview,
-  people: ReturnType<typeof buildJoinedPeople>["people"],
+  people: DashboardPerson[],
   recruitment: Awaited<ReturnType<typeof loadRecruitmentOverview>> | null,
+  onboardingCases: Array<{ status?: string; candidateName?: string; progressPct?: number }> = [],
 ): HrDashboardCharts {
   const months = lastNMonthKeys(6);
 
   const employeeGrowth: NamedCount[] = months.map((key) => {
     const [y, m] = key.split("-").map(Number);
     const cutoff = new Date(y, m, 0); // end of month
+    const currentKey = monthKey(new Date());
     const value = people.filter((p) => {
-      const doj = parseDate(p.doj);
-      return !doj || doj <= cutoff;
+      const doj = typeof p.doj === "string" ? parseLocalYmd(p.doj) : parseDate(p.doj);
+      if (!doj) return key === currentKey;
+      return doj <= cutoff;
     }).length;
     return { label: monthLabel(key), value };
   });
@@ -441,69 +463,109 @@ function buildCharts(
   }));
 
   const apps = recruitment?.applications ?? [];
-  const stageOf = (row: HrRow) =>
-    asStatus(row.status) || asStatus(row.current_stage_code);
+  const stageRank = (row: HrRow): number => {
+    const raw = `${asStatus(row.current_stage_code)} ${asStatus(row.status)} ${asStatus(row.stage)}`;
+    if (raw.includes("reject") || raw.includes("withdraw")) return -1;
+    if (raw.includes("hire")) return 5;
+    if (raw.includes("offer") || raw.includes("select")) return 4;
+    if (raw.includes("interview")) return 3;
+    if (raw.includes("screen")) return 2;
+    if (raw.includes("applied") || raw.includes("apply") || raw.includes("new")) return 1;
+    return 1;
+  };
   const hiringFunnel: NamedCount[] = [
-    {
-      label: "Applied",
-      value: apps.filter((a) =>
-        ["applied", "screening", "interview", "selected", "offer", "hired"].includes(stageOf(a)),
-      ).length,
-    },
-    {
-      label: "Screen",
-      value: apps.filter((a) =>
-        ["screening", "interview", "selected", "offer", "hired"].includes(stageOf(a)),
-      ).length,
-    },
-    {
-      label: "Interview",
-      value: apps.filter((a) =>
-        ["interview", "selected", "offer", "hired"].includes(stageOf(a)),
-      ).length,
-    },
-    {
-      label: "Offer",
-      value: apps.filter((a) => ["offer", "hired"].includes(stageOf(a))).length,
-    },
-    {
-      label: "Hired",
-      value: apps.filter((a) => stageOf(a) === "hired").length,
-    },
+    { label: "Applied", value: apps.filter((a) => stageRank(a) >= 1).length },
+    { label: "Screening", value: apps.filter((a) => stageRank(a) >= 2).length },
+    { label: "Interview", value: apps.filter((a) => stageRank(a) >= 3).length },
+    { label: "Offer", value: apps.filter((a) => stageRank(a) >= 4).length },
+    { label: "Hired", value: apps.filter((a) => stageRank(a) >= 5).length },
   ];
 
-  const attendanceTrend: NamedCount[] = months.map((key) => {
-    const rows = overview.attendance.filter((r) => {
-      const d = parseDate(r.attendance_date);
-      return d != null && monthKey(d) === key;
-    });
-    const present = rows.filter((r) =>
-      ["present", "work_from_home", "half_day"].includes(asStatus(r.attendance_status)),
-    ).length;
-    return { label: monthLabel(key), value: present };
-  });
-
-  const leaveTrend: NamedCount[] = months.map((key) => {
-    const value = overview.leaveRequests.filter((r) => {
-      if (!["approved", "submitted"].includes(asStatus(r.status))) return false;
-      const d = parseDate(r.start_date);
-      return d != null && monthKey(d) === key;
+  const attendanceStacked = months.map((key) => {
+    const rows = overview.attendance.filter((r) => monthKeyOfValue(r.attendance_date) === key);
+    let present = 0;
+    let absent = 0;
+    let halfDay = 0;
+    let late = 0;
+    let leaveFromAtt = 0;
+    for (const r of rows) {
+      const b = attendanceBucket(r);
+      if (b === "present") present += 1;
+      else if (b === "absent") absent += 1;
+      else if (b === "halfDay") halfDay += 1;
+      else if (b === "late") late += 1;
+      else if (b === "leave") leaveFromAtt += 1;
+    }
+    const leaveFromRequests = overview.leaveRequests.filter((r) => {
+      if (asStatus(r.status) !== "approved") return false;
+      return monthKeyOfValue(r.start_date) === key;
     }).length;
-    return { label: monthLabel(key), value };
+    return {
+      label: monthLabel(key),
+      present,
+      absent,
+      leave: rows.length > 0 ? leaveFromAtt : leaveFromRequests,
+      halfDay,
+      late,
+    };
   });
 
-  const payrollCostTrend: NamedCount[] = months.map((key) => {
-    const [y, m] = key.split("-").map(Number);
-    const cutoff = new Date(y, m, 0);
-    const monthlyCtc = overview.employment
-      .filter((e) => ["active", "confirmed", "probation"].includes(asStatus(e.status)))
-      .filter((e) => {
-        const doj = parseDate(e.date_of_joining);
-        return !doj || doj <= cutoff;
-      })
-      .reduce((sum, e) => sum + asNumber(e.ctc_amount) / 12, 0);
-    return { label: monthLabel(key), value: Math.round(monthlyCtc) };
+  const attendanceTrend: NamedCount[] = attendanceStacked.map((row) => ({
+    label: row.label,
+    value: row.present,
+  }));
+
+  const leaveTypeById = new Map(
+    overview.leaveTypes.map((t) => [
+      String(t.id),
+      {
+        code: String(t.leave_type_code ?? t.code ?? ""),
+        name: String(t.leave_type_name ?? t.name ?? ""),
+      },
+    ]),
+  );
+
+  const leaveTrendByType = months.map((key) => {
+    const point = {
+      label: monthLabel(key),
+      casual: 0,
+      sick: 0,
+      earned: 0,
+      unpaid: 0,
+    };
+    for (const r of overview.leaveRequests) {
+      if (!["approved", "submitted"].includes(asStatus(r.status))) continue;
+      const d = monthKeyOfValue(r.start_date);
+      if (d !== key) continue;
+      const lt = leaveTypeById.get(String(r.leave_type_id ?? ""));
+      const bucket = classifyLeaveBucket(lt?.code ?? "", lt?.name ?? "");
+      point[bucket] += 1;
+    }
+    return point;
   });
+
+  const leaveTrend: NamedCount[] = leaveTrendByType.map((row) => ({
+    label: row.label,
+    value: row.casual + row.sick + row.earned + row.unpaid,
+  }));
+
+  const onboardingStatusOrder: { status: string; label: string }[] = [
+    { status: "ready_to_join", label: "Ready to Join" },
+    { status: "joined", label: "Joined" },
+    { status: "pending_join", label: "Pending Join" },
+  ];
+  const onboardingByStatus = new Map<string, number>();
+  for (const row of onboardingCases) {
+    const st = String(row.status ?? "").toLowerCase();
+    if (!st || st === "cancelled") continue;
+    const bucket =
+      st === "joined" ? "joined" : st === "ready_to_join" ? "ready_to_join" : "pending_join";
+    onboardingByStatus.set(bucket, (onboardingByStatus.get(bucket) ?? 0) + 1);
+  }
+  const onboardingProgress: NamedCount[] = onboardingStatusOrder.map((s) => ({
+    label: s.label,
+    value: onboardingByStatus.get(s.status) ?? 0,
+  }));
 
   const separations = overview.separation.filter((r) =>
     ["completed", "approved"].includes(asStatus(r.status)),
@@ -566,8 +628,10 @@ function buildCharts(
     ageDistribution,
     hiringFunnel,
     attendanceTrend,
+    attendanceStacked,
     leaveTrend,
-    payrollCostTrend,
+    leaveTrendByType,
+    onboardingProgress,
     attritionTrend,
     performanceDistribution,
     trainingCompletion,
@@ -576,7 +640,7 @@ function buildCharts(
 
 function buildCalendar(
   overview: HrOverview,
-  people: ReturnType<typeof buildJoinedPeople>["people"],
+  people: DashboardPerson[],
   empById: Map<string, MasterEmployee>,
   recruitment: Awaited<ReturnType<typeof loadRecruitmentOverview>> | null,
 ): CalendarEvent[] {
@@ -587,12 +651,12 @@ function buildCalendar(
     const dob = parseDate(p.dob);
     if (dob) {
       const next = new Date(now.getFullYear(), dob.getMonth(), dob.getDate());
-      if (next < now) next.setFullYear(now.getFullYear() + 1);
-      const diff = (next.getTime() - now.getTime()) / 86_400_000;
+      if (next < startOfDay(now)) next.setFullYear(now.getFullYear() + 1);
+      const diff = (next.getTime() - startOfDay(now).getTime()) / 86_400_000;
       if (diff >= 0 && diff <= 14) {
         events.push({
           id: `bday-${String(p.emp.id)}`,
-          title: `${employeeNameFromMaster(p.emp)} — Birthday`,
+          title: employeeNameFromMaster(p.emp),
           type: "birthday",
           at: next.toISOString(),
           meta: p.departmentName,
@@ -602,13 +666,13 @@ function buildCalendar(
     const doj = parseDate(p.doj);
     if (doj) {
       const next = new Date(now.getFullYear(), doj.getMonth(), doj.getDate());
-      if (next < now) next.setFullYear(now.getFullYear() + 1);
-      const years = now.getFullYear() - doj.getFullYear();
-      const diff = (next.getTime() - now.getTime()) / 86_400_000;
+      if (next < startOfDay(now)) next.setFullYear(now.getFullYear() + 1);
+      const years = next.getFullYear() - doj.getFullYear();
+      const diff = (next.getTime() - startOfDay(now).getTime()) / 86_400_000;
       if (years > 0 && diff >= 0 && diff <= 14) {
         events.push({
           id: `ann-${String(p.emp.id)}`,
-          title: `${employeeNameFromMaster(p.emp)} — ${years} Year Anniversary`,
+          title: employeeNameFromMaster(p.emp),
           type: "anniversary",
           at: next.toISOString(),
           meta: p.departmentName,
@@ -631,15 +695,26 @@ function buildCalendar(
     });
   }
 
+  const today = startOfDay(now);
   for (const cal of overview.holidayCalendars) {
-    const holidays = Array.isArray(cal.holidays_json) ? cal.holidays_json : [];
-    for (const h of holidays as { date?: string; name?: string }[]) {
-      if (!h?.date) continue;
+    if (asStatus(cal.status) === "archived") continue;
+    const holidays = parseHolidaysJson(cal.holidays_json);
+    for (const h of holidays) {
+      const base = parseLocalYmd(h.date);
+      if (!base) continue;
+      const yearly = h.repeat === "every_year" || h.frequency === "yearly";
+      let at = startOfDay(base);
+      if (yearly) {
+        at = new Date(now.getFullYear(), base.getMonth(), base.getDate());
+        if (at < today) at.setFullYear(now.getFullYear() + 1);
+      } else if (at < today) {
+        continue;
+      }
       events.push({
-        id: `hol-${h.date}-${h.name ?? "h"}`,
-        title: h.name || "Holiday",
+        id: `hol-${h.id || h.date}-${cal.id ?? "cal"}`,
+        title: h.title || h.name || "Holiday",
         type: "holiday",
-        at: new Date(h.date).toISOString(),
+        at: at.toISOString(),
         meta: String(cal.calendar_name ?? "Holiday calendar"),
       });
     }
@@ -657,9 +732,10 @@ function buildCalendar(
     });
   }
 
-  return events
-    .sort((a, b) => new Date(a.at).getTime() - new Date(b.at).getTime())
-    .slice(0, 16);
+  const sorted = events.sort((a, b) => new Date(a.at).getTime() - new Date(b.at).getTime());
+  const holidays = sorted.filter((e) => e.type === "holiday");
+  const others = sorted.filter((e) => e.type !== "holiday").slice(0, 24);
+  return [...others, ...holidays];
 }
 
 function buildTrainingItems(overview: HrOverview): DashboardTrainingItem[] {
@@ -807,17 +883,6 @@ function buildActivities(
     });
   }
 
-  for (const row of overview.employment.slice(0, 5)) {
-    const emp = empById.get(String(row.employee_id));
-    items.push({
-      id: `act-emp-${String(row.id)}`,
-      action: "Employment Record",
-      detail: `${employeeNameFromMaster(emp, row)} · ${String(row.employment_type)} · ${String(row.status)}`,
-      actor: "HR Ops",
-      at: String(row.updated_at ?? row.created_at ?? new Date().toISOString()),
-    });
-  }
-
   return items
     .sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime())
     .slice(0, 20);
@@ -927,12 +992,6 @@ function buildReports(): QuickReport[] {
       description: "Funnel and open roles",
       href: "/hr/recruitment",
     },
-    {
-      id: "payroll",
-      title: "Payroll Report",
-      description: "Structures, runs, payslips",
-      href: "/hr/payroll",
-    },
   ];
 }
 
@@ -984,7 +1043,7 @@ export function filterDashboardByRole(
       calendar: data.calendar.filter((c) =>
         ["leave", "holiday", "birthday"].includes(c.type),
       ),
-      reports: data.reports.filter((r) => ["attendance", "leave", "payroll"].includes(r.id)),
+      reports: data.reports.filter((r) => ["attendance", "leave"].includes(r.id)),
     };
   }
 
@@ -1026,14 +1085,12 @@ export function filterDashboardByRole(
       upcomingBirthdays: 0,
       upcomingAnniversaries: 0,
     },
-    approvals: data.approvals.filter((a) => ["payroll", "expense"].includes(a.category)),
-    calendar: data.calendar.filter((c) => ["payroll", "holiday"].includes(c.type)),
-    notifications: data.notifications.filter((n) =>
-      ["payroll_due", "policy"].includes(n.kind),
-    ),
-    reports: data.reports.filter((r) => ["payroll", "employee"].includes(r.id)),
+    approvals: data.approvals.filter((a) => a.category === "expense"),
+    calendar: data.calendar.filter((c) => c.type === "holiday"),
+    notifications: data.notifications.filter((n) => n.kind === "policy"),
+    reports: data.reports.filter((r) => r.id === "employee"),
     activities: data.activities.filter((a) =>
-      /payroll|salary|employment/i.test(a.action + a.detail),
+      /employment/i.test(a.action + a.detail),
     ),
   };
 }
@@ -1043,48 +1100,45 @@ export async function loadHrExecutiveDashboard(
 ): Promise<HrExecutiveDashboard> {
   const role = roleOverride ?? getDashboardRole();
   let overview: HrOverview | null = null;
-  let employees: MasterEmployee[] = [];
-  let departments: Department[] = [];
-  let branches: Array<{ id: string; city?: string; branch_name?: string }> = [];
+  let directoryRecords: EmployeeRecord[] = [];
   let recruitment: Awaited<ReturnType<typeof loadRecruitmentOverview>> | null = null;
-  let payroll: Awaited<ReturnType<typeof loadPayrollOverview>> | null = null;
   let essInbox: HrEssInboxItem[] = [];
   let onboardingInProcess = 0;
+  let onboardingCases: Array<{
+    status?: string;
+    candidateName?: string;
+    progressPct?: number;
+  }> = [];
   let partial = false;
   let authBlocked = false;
 
   try {
-    const [ov, empRows, deptRows, branchRows, rec, pay, inbox, onboardingDir] = await Promise.all([
+    const [ov, directory, rec, inbox, onboardingDir] = await Promise.all([
       loadHrOverview(),
-      safeRows("/employees"),
-      safeRows("/departments"),
-      safeRows("/branches"),
+      loadEmployeeDirectory().catch(() => ({ records: [] as EmployeeRecord[], errors: ["employees"] })),
       loadRecruitmentOverview().catch(() => null),
-      loadPayrollOverview().catch(() => null),
       loadHrEssInbox({ includeCompoff: true }).catch(() => [] as HrEssInboxItem[]),
       import("@/services/onboarding-management-service")
         .then((m) => m.loadOnboardingDirectory())
         .catch(() => null),
     ]);
     overview = ov;
-    employees = empRows as MasterEmployee[];
-    departments = deptRows as Department[];
-    branches = (branchRows as Array<Record<string, unknown>>).map((b) => ({
-      id: String(b.id),
-      city: b.city != null ? String(b.city) : undefined,
-      branch_name: b.branch_name != null ? String(b.branch_name) : undefined,
-    }));
+    directoryRecords = directory.records ?? [];
     recruitment = rec;
-    payroll = pay;
     essInbox = inbox;
     if (onboardingDir?.cases) {
+      onboardingCases = onboardingDir.cases.map((c) => ({
+        status: c.status,
+        candidateName: c.candidateName,
+        progressPct: c.progressPct,
+      }));
       onboardingInProcess = onboardingDir.cases.filter((c) => {
         const st = String(c.status ?? "").toLowerCase();
         if (["joined", "cancelled"].includes(st)) return false;
         return Boolean(c.invitation?.sentAt) || ["invitation_sent", "in_progress", "submitted", "hr_review"].includes(st);
       }).length;
     }
-    partial = Boolean(overview.partial);
+    partial = Boolean(overview.partial) || Boolean(directory.errors?.length);
     authBlocked =
       overview.statusCodes.includes(401) ||
       (!isAuthenticated() && overview.errors.length > 0);
@@ -1116,8 +1170,8 @@ export async function loadHrExecutiveDashboard(
     };
   }
 
-  const { people, empById } = buildJoinedPeople(overview, employees, departments, branches);
-  const stats = buildStats(overview, people, recruitment, payroll, onboardingInProcess);
+  const { people, empById } = peopleFromDirectory(directoryRecords);
+  const stats = buildStats(overview, people, recruitment, onboardingInProcess);
   const approvals = [
     ...buildApprovals(overview, empById, recruitment),
     ...buildRequestsFromInbox(essInbox),
@@ -1126,7 +1180,7 @@ export async function loadHrExecutiveDashboard(
     role,
     displayName: greetingName(role),
     stats,
-    charts: buildCharts(overview, people, recruitment),
+    charts: buildCharts(overview, people, recruitment, onboardingCases),
     calendar: buildCalendar(overview, people, empById, recruitment),
     trainingItems: buildTrainingItems(overview),
     approvals,

@@ -1466,6 +1466,11 @@ class SeparationCreate(BaseModel):
     requested_last_working_date: date
     reason: str | None = None
     clearance_json: dict | None = None
+    resignation_date: date | None = None
+    notice_period_days: int | None = None
+    expected_exit_date: date | None = None
+    serve_notice: bool | None = None
+    initiated_by: str | None = None
 
 
 class SeparationApproveRequest(BaseModel):
@@ -1483,6 +1488,25 @@ class SeparationSubmitRequest(BaseModel):
 
 class SeparationCompleteRequest(BaseModel):
     approved_last_working_date: date | None = None
+
+
+class SeparationStartNoticeRequest(BaseModel):
+    notice_period_days: int | None = None
+    notice_start_date: date | None = None
+
+
+class SeparationDirectExitRequest(BaseModel):
+    remarks: str | None = None
+    last_working_date: date | None = None
+
+
+class SeparationConfirmLwdRequest(BaseModel):
+    last_working_date: date | None = None
+    remarks: str | None = None
+
+
+class SeparationWaiveFnfRequest(BaseModel):
+    reason: str | None = None
 
 
 class SeparationChecklistUpdate(BaseModel):
@@ -1541,6 +1565,13 @@ class SeparationResponse(OrmModel):
     separation_type: str
     requested_last_working_date: date
     approved_last_working_date: date | None
+    resignation_date: date | None = None
+    notice_period_days: int | None = None
+    notice_start_date: date | None = None
+    expected_exit_date: date | None = None
+    notice_status: str = "pending"
+    initiated_by: str = "hr"
+    reason: str | None = None
     status: str
     fnf_status: str = "pending"
     fnf_payroll_run_id: UUID | None = None
@@ -1647,3 +1678,36 @@ class EmployeeImportResponse(BaseModel):
 class EmployeeClearResponse(BaseModel):
     deleted: int
     message: str = ""
+
+
+class HrAdminAssignRequest(BaseModel):
+    employee_id: UUID
+
+
+class HrAdminRecord(BaseModel):
+    employee_id: UUID
+    employee_code: str
+    display_name: str
+    email: str
+    designation: str
+    user_id: UUID
+    login_created: bool = False
+    temporary_password: str | None = None
+
+
+class HrAdminPasswordResponse(BaseModel):
+    employee_id: UUID
+    display_name: str
+    email: str
+    temporary_password: str
+
+
+class HrActivityLogRecord(BaseModel):
+    id: UUID
+    occurred_at: datetime
+    kind: str
+    action: str
+    entity_name: str | None = None
+    actor_name: str | None = None
+    actor_email: str | None = None
+    summary: str = ""

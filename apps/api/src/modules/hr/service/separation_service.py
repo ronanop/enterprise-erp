@@ -1,20 +1,21 @@
 """Separation service — completes via Master Data identity sync; FNF via payroll."""
 
 import copy
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from uuid import UUID, uuid4
 
+from sqlalchemy import select
 from sqlalchemy.orm import Session
-from core.exceptions import NotFoundException
+from core.exceptions import AppException, NotFoundException
 from modules.foundation.domain.value_objects import TenantContext
 from modules.foundation.service.audit_service import AuditService
 from modules.hr.adapters.master_data_port import HrMasterDataAdapter
-from modules.hr.domain.enums import HrEntityType
-from modules.hr.domain.exceptions import InvalidSeparationState
-from modules.hr.models import HrSeparation
+from modules.hr.domain.enums import HrEntityType, NoticeStatus
+from modules.hr.domain.exceptions import InvalidEmploymentState, InvalidSeparationState
+from modules.hr.models import HrEmployment, HrSeparation
 from modules.hr.repository.separation_repository import SeparationRepository
 from modules.hr.service.document_number_service import DocumentNumberService
-from modules.hr.service.engines import SeparationEngine
+from modules.hr.service.engines import EmploymentEngine, SeparationEngine
 from modules.hr.service.hr_scope_validator import HrScopeValidator
 
 DEFAULT_CHECKLIST = [
@@ -31,6 +32,23 @@ _STAGE_CHECKLIST_KEY = {
     "accounts": "finance",
     "hr": "hr",
 }
+
+NOTICE_TYPES = {"resignation", "retirement"}
+EXITED_NOTICE = {
+    NoticeStatus.SERVED.value,
+    NoticeStatus.NOT_SERVED.value,
+    NoticeStatus.DIRECT_EXIT.value,
+}
+
+
+def default_notice_status(separation_type: str, serve_notice: bool | None) -> str:
+    if serve_notice is True:
+        return NoticeStatus.PENDING.value
+    if serve_notice is False:
+        return NoticeStatus.NOT_APPLICABLE.value
+    if (separation_type or "").lower() in NOTICE_TYPES:
+        return NoticeStatus.PENDING.value
+    return NoticeStatus.NOT_APPLICABLE.value
 
 
 def default_clearance() -> dict:
@@ -117,6 +135,26 @@ class SeparationService:
         clearance = fields.pop("clearance_json", None) or default_clearance()
         if "checklist" not in clearance:
             clearance = {**default_clearance(), **clearance}
+        serve_notice = fields.pop("serve_notice", None)
+        sep_type = str(fields.get("separation_type") or "resignation")
+        employment = self._find_employment(ctx, cid, employee_id)
+        notice_days = fields.get("notice_period_days")
+        if notice_days is None and employment is not None:
+            notice_days = employment.notice_period_days
+        resignation_date = fields.get("resignation_date") or date.today()
+        requested = fields.get("requested_last_working_date")
+        expected = fields.get("expected_exit_date")
+        if expected is None and requested is not None:
+            expected = requested
+        elif expected is None and notice_days:
+            expected = resignation_date + timedelta(days=int(notice_days))
+        initiated_by = fields.get("initiated_by") or "hr"
+        notice_status = default_notice_status(sep_type, serve_notice)
+        fields["resignation_date"] = resignation_date
+        fields["notice_period_days"] = notice_days
+        fields["expected_exit_date"] = expected
+        fields["initiated_by"] = initiated_by
+        fields["notice_status"] = notice_status
         return self._repo.create(
             ctx,
             company_id=cid,
@@ -305,7 +343,310 @@ class SeparationService:
                 )
         except Exception:
             pass
+        if stage_key == "manager" and (updated.notice_status or "") == NoticeStatus.PENDING.value:
+            try:
+                updated = self.start_notice(ctx, row_id)
+            except InvalidSeparationState:
+                pass
+        if stage_key == "hr":
+            self._notify_fnf_after_hr(ctx, updated)
         return updated
+
+    def start_notice(
+        self,
+        ctx: TenantContext,
+        row_id: UUID,
+        *,
+        notice_period_days: int | None = None,
+        notice_start_date: date | None = None,
+    ):
+        row = self.get(ctx, row_id)
+        if row.status in {"draft", "cancelled", "completed"}:
+            raise InvalidSeparationState("Submit the exit request before starting notice")
+        if row.notice_status in EXITED_NOTICE:
+            raise InvalidSeparationState(f"Cannot start notice when status is {row.notice_status}")
+        days = notice_period_days if notice_period_days is not None else row.notice_period_days
+        if days is None:
+            emp = self._find_employment(ctx, row.company_id, row.employee_id)
+            days = emp.notice_period_days if emp is not None else 30
+        start = notice_start_date or date.today()
+        expected = row.expected_exit_date or row.requested_last_working_date or (
+            start + timedelta(days=int(days or 0))
+        )
+        self._sync_employment_notice(ctx, row)
+        updated = self._repo.update(
+            ctx,
+            row_id,
+            notice_status=NoticeStatus.ON_NOTICE.value,
+            notice_period_days=int(days or 0),
+            notice_start_date=start,
+            expected_exit_date=expected,
+        )
+        self._audit.log_entity_change(
+            tenant_id=ctx.tenant_id,
+            entity_name="hr_separation",
+            entity_id=row_id,
+            operation="start_notice",
+            performed_by=ctx.user_id,
+            new_value={"notice_start_date": str(start), "expected_exit_date": str(expected)},
+        )
+        try:
+            from modules.hr.service.hr_notify import notify_employee, notify_users_with_permission
+
+            doc = row.document_number
+            lwd = expected.isoformat() if expected else ""
+            notify_employee(
+                self._db,
+                tenant_id=ctx.tenant_id,
+                employee_id=row.employee_id,
+                template_code="hr.exit_on_notice",
+                template_name="On Notice",
+                event_type="hr.exit_on_notice",
+                title="You are On Notice",
+                body=(
+                    f"Offboarding {doc}: you are serving notice until {lwd}. "
+                    "Manager, IT, Accounts, and HR approvals continue in parallel."
+                ),
+                kind="separation",
+                extra={
+                    "separation_id": str(row.id),
+                    "document_number": doc,
+                    "href": "/hr/separation",
+                },
+            )
+            notify_users_with_permission(
+                self._db,
+                tenant_id=ctx.tenant_id,
+                permission_code="hr.separation:read",
+                template_code="hr.exit_on_notice_hr",
+                template_name="Employee On Notice",
+                event_type="hr.exit_on_notice",
+                title=f"On Notice — {doc}",
+                body=f"Employee is On Notice until {lwd}. Complete remaining exit approvals.",
+                kind="separation",
+                extra={"separation_id": str(row.id), "document_number": doc, "href": "/hr/separation"},
+                exclude_user_ids={ctx.user_id} if ctx.user_id else None,
+            )
+        except Exception:
+            pass
+        return updated
+
+    def mark_direct_exit(
+        self,
+        ctx: TenantContext,
+        row_id: UUID,
+        *,
+        remarks: str | None = None,
+        last_working_date: date | None = None,
+    ):
+        row = self.get(ctx, row_id)
+        if row.status in {"cancelled", "completed"}:
+            raise InvalidSeparationState("Cannot mark direct exit on this case")
+        if row.notice_status == NoticeStatus.SERVED.value:
+            raise InvalidSeparationState("Notice already served")
+        lwd = last_working_date or date.today()
+        from_on_notice = row.notice_status == NoticeStatus.ON_NOTICE.value
+        notice_status = (
+            NoticeStatus.NOT_SERVED.value if from_on_notice else NoticeStatus.DIRECT_EXIT.value
+        )
+        self._sync_employment_separated(ctx, row)
+        updated = self._repo.update(
+            ctx,
+            row_id,
+            notice_status=notice_status,
+            approved_last_working_date=lwd,
+            expected_exit_date=lwd,
+        )
+        self._audit.log_entity_change(
+            tenant_id=ctx.tenant_id,
+            entity_name="hr_separation",
+            entity_id=row_id,
+            operation="direct_exit",
+            performed_by=ctx.user_id,
+            new_value={"notice_status": notice_status, "last_working_date": str(lwd), "remarks": remarks},
+        )
+        try:
+            from modules.hr.service.hr_notify import notify_employee
+
+            doc = row.document_number
+            notify_employee(
+                self._db,
+                tenant_id=ctx.tenant_id,
+                employee_id=row.employee_id,
+                template_code="hr.exit_direct",
+                template_name="Direct Exit",
+                event_type="hr.exit_direct",
+                title="Marked as directly exited",
+                body=(
+                    f"Offboarding {doc} was marked as a direct exit"
+                    + (" without serving remaining notice." if from_on_notice else " (notice not served).")
+                    + " Full & final settlement will follow."
+                ),
+                kind="separation",
+                extra={"separation_id": str(row.id), "document_number": doc, "href": "/hr/separation"},
+            )
+        except Exception:
+            pass
+        self._notify_fnf_pending(ctx, updated)
+        return updated
+
+    def confirm_last_working_day(
+        self,
+        ctx: TenantContext,
+        row_id: UUID,
+        *,
+        last_working_date: date | None = None,
+        remarks: str | None = None,
+    ):
+        row = self.get(ctx, row_id)
+        if row.notice_status != NoticeStatus.ON_NOTICE.value:
+            raise InvalidSeparationState("Confirm last working day only while On Notice")
+        lwd = last_working_date or row.expected_exit_date or row.requested_last_working_date or date.today()
+        self._sync_employment_separated(ctx, row)
+        updated = self._repo.update(
+            ctx,
+            row_id,
+            notice_status=NoticeStatus.SERVED.value,
+            approved_last_working_date=lwd,
+        )
+        self._audit.log_entity_change(
+            tenant_id=ctx.tenant_id,
+            entity_name="hr_separation",
+            entity_id=row_id,
+            operation="confirm_lwd",
+            performed_by=ctx.user_id,
+            new_value={"last_working_date": str(lwd), "remarks": remarks},
+        )
+        self._notify_fnf_pending(ctx, updated)
+        return updated
+
+    def _find_employment(self, ctx: TenantContext, company_id: UUID, employee_id: UUID):
+        stmt = select(HrEmployment).where(
+            HrEmployment.company_id == company_id,
+            HrEmployment.employee_id == employee_id,
+            HrEmployment.is_deleted.is_(False),
+        )
+        rows = list(self._db.scalars(stmt).all())
+        if not rows:
+            return None
+        rank = {s: i for i, s in enumerate(
+            (
+                *EmploymentEngine.ACTIVE_SET,
+                "separated",
+            )
+        )}
+        rows.sort(key=lambda r: rank.get(r.status, 99))
+        return rows[0]
+
+    def _sync_employment_notice(self, ctx: TenantContext, row: HrSeparation) -> None:
+        from modules.hr.service.employment_service import EmploymentService
+
+        emp = self._find_employment(ctx, row.company_id, row.employee_id)
+        if emp is None:
+            return
+        try:
+            EmploymentService(self._db).start_notice(ctx, emp.id)
+        except (InvalidEmploymentState, Exception):
+            try:
+                self._master.update_employee_status(ctx, row.employee_id, "notice_period")
+            except Exception:
+                pass
+
+    def _sync_employment_separated(self, ctx: TenantContext, row: HrSeparation) -> None:
+        from modules.hr.service.employment_service import EmploymentService
+
+        emp = self._find_employment(ctx, row.company_id, row.employee_id)
+        if emp is not None:
+            try:
+                EmploymentService(self._db).mark_separated(ctx, emp.id)
+            except (InvalidEmploymentState, Exception):
+                pass
+        status = "terminated" if row.separation_type in {"termination", "death"} else "resigned"
+        try:
+            self._master.update_employee_status(ctx, row.employee_id, status)
+        except Exception:
+            pass
+
+    def _notify_fnf_after_hr(self, ctx: TenantContext, row: HrSeparation) -> None:
+        if row.fnf_status in {"settled", "waived"}:
+            return
+        if (row.notice_status or "") in EXITED_NOTICE:
+            self._notify_fnf_pending(ctx, row)
+            return
+        if (row.notice_status or "") == NoticeStatus.ON_NOTICE.value:
+            try:
+                from modules.hr.service.hr_notify import notify_employee, notify_users_with_permission
+
+                lwd = (row.expected_exit_date or row.requested_last_working_date)
+                lwd_s = lwd.isoformat() if lwd else "last working day"
+                notify_employee(
+                    self._db,
+                    tenant_id=ctx.tenant_id,
+                    employee_id=row.employee_id,
+                    template_code="hr.fnf_scheduled",
+                    template_name="FNF After Notice",
+                    event_type="hr.fnf_scheduled",
+                    title="FNF will be due after notice",
+                    body=(
+                        f"HR approved offboarding {row.document_number}. "
+                        f"Full & final settlement will be pending from {lwd_s}."
+                    ),
+                    kind="separation",
+                    extra={"separation_id": str(row.id), "document_number": row.document_number},
+                )
+                notify_users_with_permission(
+                    self._db,
+                    tenant_id=ctx.tenant_id,
+                    permission_code="hr.separation:complete",
+                    template_code="hr.fnf_scheduled_hr",
+                    template_name="FNF After Notice",
+                    event_type="hr.fnf_scheduled",
+                    title=f"FNF scheduled — {row.document_number}",
+                    body=f"Employee is On Notice. Prepare FNF after {lwd_s}.",
+                    kind="separation",
+                    extra={"separation_id": str(row.id), "href": "/hr/separation"},
+                    exclude_user_ids={ctx.user_id} if ctx.user_id else None,
+                )
+            except Exception:
+                pass
+
+    def _notify_fnf_pending(self, ctx: TenantContext, row: HrSeparation) -> None:
+        if row.fnf_status in {"settled", "waived"}:
+            return
+        try:
+            from modules.hr.service.hr_notify import notify_employee, notify_users_with_permission
+
+            doc = row.document_number
+            notify_employee(
+                self._db,
+                tenant_id=ctx.tenant_id,
+                employee_id=row.employee_id,
+                template_code="hr.fnf_pending",
+                template_name="FNF Pending",
+                event_type="hr.fnf_pending",
+                title="Full & final settlement is pending",
+                body=(
+                    f"FNF for offboarding {doc} is pending. "
+                    "HR will prepare and settle your full & final after clearance."
+                ),
+                kind="separation",
+                extra={"separation_id": str(row.id), "document_number": doc, "href": "/ess/inbox"},
+            )
+            notify_users_with_permission(
+                self._db,
+                tenant_id=ctx.tenant_id,
+                permission_code="hr.separation:complete",
+                template_code="hr.fnf_pending_hr",
+                template_name="FNF Pending",
+                event_type="hr.fnf_pending",
+                title=f"FNF pending — {doc}",
+                body="Employee has exited. Prepare and settle full & final.",
+                kind="separation",
+                extra={"separation_id": str(row.id), "document_number": doc, "href": "/hr/separation"},
+                exclude_user_ids={ctx.user_id} if ctx.user_id else None,
+            )
+        except Exception:
+            pass
 
     def _ensure_clearance(self, row: HrSeparation) -> dict:
         clearance = dict(row.clearance_json or {})

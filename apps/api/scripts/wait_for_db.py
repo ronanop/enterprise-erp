@@ -41,8 +41,7 @@ def main() -> None:
             time.sleep(args.interval)
 
     print(
-        "Database not reachable. Start Docker Postgres:\n"
-        "  cd cache_erp_hrms_payroll && docker compose up -d postgres\n"
+        "Database not reachable. Check DATABASE_URL / Postgres on the configured host.\n"
         f"DATABASE_URL={settings.database_url}\n"
         f"Last error: {last_err}",
         file=sys.stderr,

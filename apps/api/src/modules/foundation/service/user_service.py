@@ -108,6 +108,25 @@ class UserService:
             new_value={"role_id": str(role_id)},
         )
 
+    def revoke_role(
+        self,
+        *,
+        tenant_id: UUID,
+        user_id: UUID,
+        role_id: UUID,
+        revoked_by: UUID | None,
+    ) -> None:
+        if self._repo.revoke_role(user_id=user_id, role_id=role_id):
+            self._rbac.invalidate_user(user_id)
+            self._audit.log_entity_change(
+                tenant_id=tenant_id,
+                entity_name="sec_user_role",
+                entity_id=user_id,
+                operation="delete",
+                performed_by=revoked_by,
+                new_value={"role_id": str(role_id)},
+            )
+
     def revoke_all_sessions(
         self, tenant_id: UUID, user_id: UUID, revoked_by: UUID | None = None
     ) -> None:

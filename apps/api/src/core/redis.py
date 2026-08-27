@@ -18,6 +18,13 @@ def get_redis() -> redis.Redis:
     return _redis_client
 
 
+def check_redis_connection() -> bool:
+    try:
+        return bool(get_redis().ping())
+    except Exception:
+        return False
+
+
 class SessionStore:
     def __init__(self, client: redis.Redis | None = None) -> None:
         self._client = client or get_redis()

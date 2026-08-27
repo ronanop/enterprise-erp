@@ -96,7 +96,7 @@ export type AttendanceCorrection = {
   workflowStage: "employee" | "manager" | "hr" | "approved" | "rejected";
   createdBy: string;
   createdAt: string;
-  portion?: "full_day" | "first_half" | "second_half";
+  portion?: "full_day" | "first_half" | "second_half" | "absent" | "work_from_home";
 };
 
 export type AttendanceAuditEntry = {

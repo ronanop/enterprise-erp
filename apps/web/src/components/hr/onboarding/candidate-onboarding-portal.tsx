@@ -164,9 +164,11 @@ function validateStep(
         "DOC-SLIPS",
         "DOC-CERT",
         "DOC-REL",
+        "DOC-RLV",
         "DOC-PGDIP",
         "doc-type-any-cert",
         "doc-type-relieving",
+        "doc-type-relieving-letter",
         "doc-type-slips",
         "doc-type-pg-diploma",
         "salary_slips",
@@ -225,7 +227,7 @@ const DOC_SECTION_META: {
   {
     id: "previous_employment",
     title: "Employment Documents",
-    hint: "Resume, offer & appointment letters & last 3 month salary slip (multi-file, up to 3 each)",
+    hint: "Resume, offer & appointment letters, relieving letters & last 3 month salary slip (multi-file, up to 3 each)",
   },
   {
     id: "other",
@@ -233,6 +235,10 @@ const DOC_SECTION_META: {
     hint: "Optional — upload any additional certificates (multiple files allowed)",
   },
 ];
+
+function matchesDocTypeCode(typeCode: string | undefined, code: string): boolean {
+  return typeCode === code || Boolean(typeCode?.startsWith(`${code}-`));
+}
 
 function asDocumentKind(kind: string): DocumentKind {
   const known: DocumentKind[] = [
@@ -305,35 +311,45 @@ export function CandidateOnboardingPortal({ token }: { token: string }) {
     setLoading(true);
     setError(null);
     void (async () => {
-      const c = await getCaseByTokenAsync(token);
-      if (cancelled) return;
-      if (!c) {
-        setError("This onboarding link is invalid or has been removed.");
-        setLoading(false);
-        return;
-      }
-      if (c.invitation && new Date(c.invitation.expiresAt).getTime() < Date.now()) {
-        setError("This onboarding link has expired. Please contact HR for a new invitation.");
+      try {
+        const c = await getCaseByTokenAsync(token);
+        if (cancelled) return;
+        if (!c) {
+          setError("This onboarding link is invalid or has been removed.");
+          setLoading(false);
+          return;
+        }
+        if (c.invitation && new Date(c.invitation.expiresAt).getTime() < Date.now()) {
+          setError("This onboarding link has expired. Please contact HR for a new invitation.");
+          setCaseRow(c);
+          setLoading(false);
+          return;
+        }
+        const hasRejected = c.portal.documents.some((d) => d.verifyStatus === "rejected");
+        if (c.status === "joined") {
+          setDone(true);
+        } else if (hasRejected) {
+          setDone(false);
+        } else if (c.portal.submittedAt) {
+          setDone(true);
+        }
         setCaseRow(c);
+        const nextPortal = {
+          ...c.portal,
+          educationMarks: c.portal.educationMarks ?? emptyEducationMarks(),
+          ...(hasRejected ? { currentStep: "documents" as const } : {}),
+        };
+        setPortal(nextPortal);
         setLoading(false);
-        return;
+      } catch (e) {
+        if (cancelled) return;
+        setError(
+          e instanceof ApiClientError
+            ? e.message
+            : "Could not load this onboarding link. Please try again.",
+        );
+        setLoading(false);
       }
-      const hasRejected = c.portal.documents.some((d) => d.verifyStatus === "rejected");
-      if (c.status === "joined") {
-        setDone(true);
-      } else if (hasRejected) {
-        setDone(false);
-      } else if (c.portal.submittedAt) {
-        setDone(true);
-      }
-      setCaseRow(c);
-      const nextPortal = {
-        ...c.portal,
-        educationMarks: c.portal.educationMarks ?? emptyEducationMarks(),
-        ...(hasRejected ? { currentStep: "documents" as const } : {}),
-      };
-      setPortal(nextPortal);
-      setLoading(false);
     })();
     return () => {
       cancelled = true;
@@ -342,10 +358,13 @@ export function CandidateOnboardingPortal({ token }: { token: string }) {
 
   useEffect(() => {
     void listPortalDocumentTypes().then(setDocTypes);
-    void ensureOnboardingPoliciesLoaded().then(() => {
-      setPolicyDocs(listActivePoliciesForPortal());
-    });
   }, []);
+
+  useEffect(() => {
+    void ensureOnboardingPoliciesLoaded().then(() => {
+      setPolicyDocs(listActivePoliciesForPortal(caseRow?.entityId));
+    });
+  }, [caseRow?.entityId]);
 
   useEffect(() => {
     if (!portal || portal.currentStep !== "documents") return;
@@ -633,35 +652,6 @@ export function CandidateOnboardingPortal({ token }: { token: string }) {
         return;
       }
       const ok = await upsertDocument(asDocumentKind(docType.kind), file, docType.code, undefined, {
-        append: true,
-      });
-      if (!ok) return;
-    }
-  }
-
-  async function onPickCappedFiles(input: {
-    label: string;
-    kind: DocumentKind;
-    typeCode: string;
-    files: FileList | null;
-    existingCount: number;
-    maxFiles: number;
-  }) {
-    if (!input.files?.length) return;
-    const incoming = Array.from(input.files);
-    if (input.existingCount + incoming.length > input.maxFiles) {
-      setStepError(
-        `You can upload up to ${input.maxFiles} files for ${input.label}. Remove one to add another.`,
-      );
-      return;
-    }
-    setStepError(null);
-    for (const file of incoming) {
-      if (file.size > MAX_DOCUMENT_BYTES) {
-        setStepError(`${file.name} must be under 2 MB.`);
-        return;
-      }
-      const ok = await upsertDocument(input.kind, file, input.typeCode, undefined, {
         append: true,
       });
       if (!ok) return;
@@ -1217,7 +1207,21 @@ export function CandidateOnboardingPortal({ token }: { token: string }) {
         ) : null}
 
         {step.id === "bank" ? (
-          <div className="grid gap-3 sm:grid-cols-2">
+          <div className="space-y-4">
+            <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-3 text-xs leading-relaxed text-amber-950">
+              <p className="font-semibold text-amber-950">Salary Account — Important Information</p>
+              <ul className="mt-2 list-disc space-y-1 pl-4">
+                <li>
+                  Salary will be credited to an <strong>ICICI Bank salary account</strong>. Existing
+                  ICICI account holders may provide their account details.
+                </li>
+                <li>
+                  If you do not have an ICICI account, the company will facilitate opening one after
+                  onboarding. An alternative account may be provided temporarily.
+                </li>
+              </ul>
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2">
             <SetupField label="Bank name" required>
               <SetupInput
                 placeholder="e.g. HDFC Bank"
@@ -1284,6 +1288,7 @@ export function CandidateOnboardingPortal({ token }: { token: string }) {
                 }
               />
             </SetupField>
+            </div>
           </div>
         ) : null}
 
@@ -1355,19 +1360,8 @@ export function CandidateOnboardingPortal({ token }: { token: string }) {
             ) : (
               <>
                 {DOC_SECTION_META.map((section) => {
-                  const types = docTypes.filter(
-                    (t) =>
-                      t.section === section.id &&
-                      t.code !== "DOC-SLIPS" &&
-                      t.code !== "DOC-REL",
-                  );
-                  const showRelieving =
-                    section.id === "previous_employment" &&
-                    docTypes.some((t) => t.code === "DOC-REL" || t.kind === "relieving_letter");
-                  const showSlips =
-                    section.id === "previous_employment" &&
-                    docTypes.some((t) => t.code === "DOC-SLIPS");
-                  if (!types.length && !showSlips && !showRelieving) return null;
+                  const types = docTypes.filter((t) => t.section === section.id);
+                  if (!types.length) return null;
                   return (
                     <section
                       key={section.id}
@@ -1387,11 +1381,20 @@ export function CandidateOnboardingPortal({ token }: { token: string }) {
                       <div className="space-y-3">
                         {types.map((t) => {
                           if (t.multiple) {
-                            const files = portal.documents.filter(
-                              (d) =>
-                                d.typeCode === t.code || d.typeCode?.startsWith(`${t.code}-`),
-                            );
+                            const files = portal.documents.filter((d) => {
+                              if (matchesDocTypeCode(d.typeCode, t.code)) return true;
+                              if (t.code === "DOC-REL" && !d.typeCode && d.kind === "relieving_letter") {
+                                return true;
+                              }
+                              if (t.code === "DOC-SLIPS" && !d.typeCode && d.kind === "salary_slips") {
+                                return true;
+                              }
+                              return false;
+                            });
                             const sectionRejected = files.some((d) => d.verifyStatus === "rejected");
+                            const maxHint = t.maxFiles
+                              ? `select up to ${t.maxFiles} files`
+                              : "select multiple files";
                             return (
                               <div
                                 key={t.id}
@@ -1410,11 +1413,17 @@ export function CandidateOnboardingPortal({ token }: { token: string }) {
                                     sectionRejected
                                       ? "Rejected — choose a new file to replace"
                                       : t.maxSizeMb
-                                        ? `Select multiple files · max ${t.maxSizeMb} MB each`
-                                        : "Select multiple files from this device"
+                                        ? `${maxHint} · max ${t.maxSizeMb} MB each`
+                                        : maxHint
                                   }
+                                  maxFiles={t.maxFiles}
                                   emphasized={sectionRejected}
-                                  onFiles={(list) => void onPickFiles(t, list)}
+                                  onFiles={(list) =>
+                                    void onPickFiles(t, list, {
+                                      maxFiles: t.maxFiles,
+                                      existingCount: files.length,
+                                    })
+                                  }
                                   onRemove={(id) => void removeDocument(id)}
                                 />
                               </div>
@@ -1428,11 +1437,7 @@ export function CandidateOnboardingPortal({ token }: { token: string }) {
                               id={rejected ? `doc-rejected-${t.code}` : undefined}
                             >
                               <FilePickField
-                                label={
-                                  t.code === "DOC-CHEQUE"
-                                    ? "Cancelled Cheque / Passbook"
-                                    : t.name
-                                }
+                                label={t.name}
                                 required={t.mandatory}
                                 accept={t.accept || ".pdf,image/*"}
                                 fileName={doc?.fileName}
@@ -1449,92 +1454,6 @@ export function CandidateOnboardingPortal({ token }: { token: string }) {
                             </div>
                           );
                         })}
-                        {showRelieving ? (
-                          <MultiFilePickField
-                            label="Previous / Latest 3 Offer & Appointment Letters"
-                            accept=".pdf,image/*,.jpg,.jpeg,.png"
-                            files={portal.documents
-                              .filter(
-                                (d) =>
-                                  d.kind === "relieving_letter" ||
-                                  d.typeCode === "DOC-REL" ||
-                                  d.typeCode?.startsWith("DOC-REL-"),
-                              )
-                              .map((d) => ({
-                                id: d.id,
-                                name: d.fileName,
-                                verifyStatus: d.verifyStatus,
-                              }))}
-                            hint="Optional — select up to 3 files (previous / latest). PDF, JPG, or PNG · max 2 MB each"
-                            maxFiles={3}
-                            emphasized={portal.documents.some(
-                              (d) =>
-                                d.verifyStatus === "rejected" &&
-                                (d.kind === "relieving_letter" ||
-                                  d.typeCode === "DOC-REL" ||
-                                  d.typeCode?.startsWith("DOC-REL-")),
-                            )}
-                            onFiles={(list) =>
-                              void onPickCappedFiles({
-                                label: "Previous / Latest 3 Offer & Appointment Letters",
-                                kind: "relieving_letter",
-                                typeCode: "DOC-REL",
-                                files: list,
-                                existingCount: portal.documents.filter(
-                                  (d) =>
-                                    d.kind === "relieving_letter" ||
-                                    d.typeCode === "DOC-REL" ||
-                                    d.typeCode?.startsWith("DOC-REL-"),
-                                ).length,
-                                maxFiles: 3,
-                              })
-                            }
-                            onRemove={(id) => void removeDocument(id)}
-                          />
-                        ) : null}
-                        {showSlips ? (
-                          <MultiFilePickField
-                            label="Last 3 Month Salary Slip"
-                            accept=".pdf,image/*,.jpg,.jpeg,.png"
-                            files={portal.documents
-                              .filter(
-                                (d) =>
-                                  d.kind === "salary_slips" ||
-                                  d.typeCode === "DOC-SLIPS" ||
-                                  d.typeCode?.startsWith("DOC-SLIPS-"),
-                              )
-                              .map((d) => ({
-                                id: d.id,
-                                name: d.fileName,
-                                verifyStatus: d.verifyStatus,
-                              }))}
-                            hint="Optional — select up to 3 files (last 3 months). PDF, JPG, or PNG · max 2 MB each"
-                            maxFiles={3}
-                            emphasized={portal.documents.some(
-                              (d) =>
-                                d.verifyStatus === "rejected" &&
-                                (d.kind === "salary_slips" ||
-                                  d.typeCode === "DOC-SLIPS" ||
-                                  d.typeCode?.startsWith("DOC-SLIPS-")),
-                            )}
-                            onFiles={(list) =>
-                              void onPickCappedFiles({
-                                label: "Last 3 Month Salary Slip",
-                                kind: "salary_slips",
-                                typeCode: "DOC-SLIPS",
-                                files: list,
-                                existingCount: portal.documents.filter(
-                                  (d) =>
-                                    d.kind === "salary_slips" ||
-                                    d.typeCode === "DOC-SLIPS" ||
-                                    d.typeCode?.startsWith("DOC-SLIPS-"),
-                                ).length,
-                                maxFiles: 3,
-                              })
-                            }
-                            onRemove={(id) => void removeDocument(id)}
-                          />
-                        ) : null}
                       </div>
                     </section>
                   );
@@ -1717,10 +1636,18 @@ export function CandidateOnboardingPortal({ token }: { token: string }) {
                 portal.documents
                   .filter(
                     (d) =>
-                      d.typeCode === "DOC-REL" ||
-                      d.typeCode?.startsWith("DOC-REL-") ||
-                      d.kind === "relieving_letter",
+                      matchesDocTypeCode(d.typeCode, "DOC-REL") ||
+                      (!d.typeCode && d.kind === "relieving_letter"),
                   )
+                  .map((d) => d.fileName)
+                  .join(", ") || "—"
+              }
+            />
+            <ReviewRow
+              label="Relieving Letters"
+              value={
+                portal.documents
+                  .filter((d) => matchesDocTypeCode(d.typeCode, "DOC-RLV"))
                   .map((d) => d.fileName)
                   .join(", ") || "—"
               }

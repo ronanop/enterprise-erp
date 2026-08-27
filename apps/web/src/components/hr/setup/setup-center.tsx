@@ -816,6 +816,12 @@ const TAB_CONFIG: Partial<Record<HrSetupTabId, TabConfig>> = {
         label: "Mandatory",
         render: (r) => (r.mandatory ? "Yes" : "No"),
       },
+      {
+        key: "max_files",
+        label: "Max files",
+        render: (r) =>
+          r.max_files != null && r.max_files !== "" ? String(r.max_files) : r.multiple ? "Many" : "1",
+      },
       { key: "status", label: "Status" },
     ],
     fields: [
@@ -846,8 +852,10 @@ const TAB_CONFIG: Partial<Record<HrSetupTabId, TabConfig>> = {
       },
       { key: "mandatory", label: "Mandatory", type: "checkbox" },
       { key: "expiry_required", label: "Expiry Required", type: "checkbox" },
+      { key: "multiple", label: "Allow multiple files", type: "checkbox" },
       { key: "formats", label: "Allowed Formats", placeholder: "PDF,JPG" },
       { key: "max_size_mb", label: "Max Size (MB)", type: "number" },
+      { key: "max_files", label: "Max files", type: "number", placeholder: "1" },
       STATUS_FIELD,
     ],
   },

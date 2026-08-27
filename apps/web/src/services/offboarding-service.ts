@@ -109,6 +109,15 @@ export function mapOffboardingRow(
     approvedLwd: row.approved_last_working_date
       ? String(row.approved_last_working_date)
       : null,
+    resignationDate: row.resignation_date ? String(row.resignation_date) : null,
+    noticePeriodDays:
+      row.notice_period_days != null && row.notice_period_days !== ""
+        ? Number(row.notice_period_days)
+        : null,
+    noticeStartDate: row.notice_start_date ? String(row.notice_start_date) : null,
+    expectedExitDate: row.expected_exit_date ? String(row.expected_exit_date) : null,
+    noticeStatus: String(row.notice_status ?? "pending"),
+    initiatedBy: String(row.initiated_by ?? "hr"),
     status: String(row.status ?? "draft"),
     fnfStatus: String(row.fnf_status ?? "pending"),
     fnfPayrollRunId: row.fnf_payroll_run_id ? String(row.fnf_payroll_run_id) : null,
@@ -155,6 +164,10 @@ export async function createOffboardingCase(input: {
   separationType: SeparationType;
   requestedLastWorkingDate: string;
   reason?: string;
+  resignationDate?: string;
+  noticePeriodDays?: number | null;
+  expectedExitDate?: string;
+  serveNotice?: boolean;
 }): Promise<OffboardingCase> {
   const res = await resourceService.create<HrRow>("/hr/separation", {
     branch_id: input.branchId,
@@ -162,6 +175,11 @@ export async function createOffboardingCase(input: {
     separation_type: input.separationType,
     requested_last_working_date: input.requestedLastWorkingDate,
     reason: input.reason ?? null,
+    resignation_date: input.resignationDate ?? null,
+    notice_period_days: input.noticePeriodDays ?? null,
+    expected_exit_date: input.expectedExitDate ?? null,
+    serve_notice: input.serveNotice ?? null,
+    initiated_by: "hr",
   });
   const employees = await listHrEmployeeOptions();
   const nameMap = new Map<string, string>();
@@ -183,6 +201,16 @@ export function patchOffboardingCaseFromRow(c: OffboardingCase, row: HrRow): Off
     fnfPayrollRunId: row.fnf_payroll_run_id
       ? String(row.fnf_payroll_run_id)
       : c.fnfPayrollRunId,
+    noticeStatus: row.notice_status != null ? String(row.notice_status) : c.noticeStatus,
+    noticeStartDate: row.notice_start_date ? String(row.notice_start_date) : c.noticeStartDate,
+    expectedExitDate: row.expected_exit_date ? String(row.expected_exit_date) : c.expectedExitDate,
+    noticePeriodDays:
+      row.notice_period_days != null && row.notice_period_days !== ""
+        ? Number(row.notice_period_days)
+        : c.noticePeriodDays,
+    approvedLwd: row.approved_last_working_date
+      ? String(row.approved_last_working_date)
+      : c.approvedLwd,
     checklist,
     exitInterview,
     documents,

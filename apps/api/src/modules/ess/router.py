@@ -1,11 +1,13 @@
 """ESS REST routes — employee-scoped self-service (auth only, no admin RBAC)."""
 
 from datetime import date
+from io import BytesIO
 from typing import Annotated
+from urllib.parse import quote
 from uuid import UUID
 
 from fastapi import APIRouter, Body, Depends, Query
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, StreamingResponse
 from sqlalchemy.orm import Session
 
 from modules.ess.dependencies import get_db, get_tenant_context
@@ -472,8 +474,21 @@ def download_document(
     ctx: Annotated[TenantContext, Depends(get_tenant_context)],
     db: Annotated[Session, Depends(get_db)],
 ):
-    path, media_type, filename = EssService(db).resolve_document_download(ctx, document_id)
-    return FileResponse(path, media_type=media_type, filename=filename)
+    download = EssService(db).resolve_document_download(ctx, document_id)
+    headers = {
+        "Content-Disposition": f'attachment; filename="{quote(download.filename)}"'
+    }
+    if download.path:
+        return FileResponse(
+            download.path,
+            media_type=download.media_type,
+            filename=download.filename,
+        )
+    return StreamingResponse(
+        BytesIO(download.content or b""),
+        media_type=download.media_type,
+        headers=headers,
+    )
 
 
 @ess_router.get("/holidays", response_model=APIResponse[list[EssHolidayCalendarResponse]])

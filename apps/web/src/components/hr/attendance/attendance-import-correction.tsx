@@ -3,10 +3,9 @@
 import { useEffect, useMemo, useState } from "react";
 import { Download } from "lucide-react";
 
-import { SetupDrawer, SetupField, SetupInput, SetupTextarea } from "@/components/hr/setup/setup-drawer";
+import { SetupDrawer, SetupField, SetupInput, SetupSelect, SetupTextarea } from "@/components/hr/setup/setup-drawer";
 import { toast } from "@/components/hr/setup/setup-toast";
 import { Button } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
 import {
   extractDataMatrix,
   matrixToCsv,
@@ -17,6 +16,7 @@ import {
   downloadTextFile,
   importAttendanceCsv,
   type AttendanceDirectory,
+  type RegularizeKind,
 } from "@/services/attendance-management-service";
 import type { AttendanceRecord } from "@/types/attendance-management";
 
@@ -142,12 +142,11 @@ export function AttendanceImportDrawer({
   );
 }
 
-type RegularizePortion = "full_day" | "first_half" | "second_half";
-
-const PORTION_OPTIONS: { value: RegularizePortion; label: string; hint: string }[] = [
-  { value: "full_day", label: "Mark full day", hint: "Count as full-day present" },
-  { value: "first_half", label: "Half day — 1st half", hint: "Count as half-day present (morning)" },
-  { value: "second_half", label: "Half day — 2nd half", hint: "Count as half-day present (afternoon)" },
+const REGULARIZE_STATUSES: { value: RegularizeKind; label: string }[] = [
+  { value: "full_day", label: "Full day" },
+  { value: "half_day", label: "Half day" },
+  { value: "absent", label: "Absent" },
+  { value: "work_from_home", label: "Work from home" },
 ];
 
 export function AttendanceCorrectionDrawer({
@@ -161,7 +160,8 @@ export function AttendanceCorrectionDrawer({
   record: AttendanceRecord | null;
   onSaved: () => void;
 }) {
-  const [portion, setPortion] = useState<RegularizePortion>("full_day");
+  const [kind, setKind] = useState<RegularizeKind>("full_day");
+  const [halfPortion, setHalfPortion] = useState<"first_half" | "second_half">("first_half");
   const [reason, setReason] = useState("");
   const [fileName, setFileName] = useState("");
   const [busy, setBusy] = useState(false);
@@ -175,7 +175,8 @@ export function AttendanceCorrectionDrawer({
 
   useEffect(() => {
     if (!open || !record) return;
-    setPortion("full_day");
+    setKind("full_day");
+    setHalfPortion("first_half");
     setReason("");
     setFileName("");
     setBusy(false);
@@ -185,7 +186,7 @@ export function AttendanceCorrectionDrawer({
     <SetupDrawer
       open={open}
       title="Regularize Attendance"
-      description="Mark full or half day present without changing recorded punch times"
+      description="Regularize as full day, half day (1st or 2nd), absent, or work from home. Punch times stay as recorded."
       onClose={onClose}
       footer={
         <>
@@ -205,7 +206,8 @@ export function AttendanceCorrectionDrawer({
               setBusy(true);
               void applyAttendanceCorrection({
                 record,
-                portion,
+                kind,
+                halfPortion: kind === "half_day" ? halfPortion : undefined,
                 reason: reason.trim(),
                 attachmentName: fileName,
               })
@@ -234,29 +236,29 @@ export function AttendanceCorrectionDrawer({
           <SetupField label="Recorded punches">
             <SetupInput value={punchSummary} readOnly />
           </SetupField>
-          <SetupField label="Mark as" required>
-            <div className="space-y-2">
-              {PORTION_OPTIONS.map((opt) => {
-                const active = portion === opt.value;
-                return (
-                  <button
-                    key={opt.value}
-                    type="button"
-                    onClick={() => setPortion(opt.value)}
-                    className={cn(
-                      "flex w-full cursor-pointer flex-col rounded-xl border px-3 py-2.5 text-left transition-all",
-                      active
-                        ? "border-primary/50 bg-primary/5 ring-1 ring-primary/20"
-                        : "border-border hover:border-primary/30",
-                    )}
-                  >
-                    <span className="text-sm font-medium text-foreground">{opt.label}</span>
-                    <span className="text-[11px] text-muted-foreground">{opt.hint}</span>
-                  </button>
-                );
-              })}
-            </div>
+          <SetupField label="Attendance status" required>
+            <SetupSelect
+              value={kind}
+              onChange={(e) => setKind(e.target.value as RegularizeKind)}
+            >
+              {REGULARIZE_STATUSES.map((opt) => (
+                <option key={opt.value} value={opt.value}>
+                  {opt.label}
+                </option>
+              ))}
+            </SetupSelect>
           </SetupField>
+          {kind === "half_day" ? (
+            <SetupField label="Half" required>
+              <SetupSelect
+                value={halfPortion}
+                onChange={(e) => setHalfPortion(e.target.value as "first_half" | "second_half")}
+              >
+                <option value="first_half">First half</option>
+                <option value="second_half">Second half</option>
+              </SetupSelect>
+            </SetupField>
+          ) : null}
           <SetupField label="Reason" required>
             <SetupTextarea value={reason} onChange={(e) => setReason(e.target.value)} />
           </SetupField>
@@ -269,7 +271,7 @@ export function AttendanceCorrectionDrawer({
           </SetupField>
           <ol className="list-decimal pl-4 text-[10px] text-muted-foreground">
             <li>Actual check-in / check-out times are not changed</li>
-            <li>Day is marked present (full) or half-day present for payroll / reports</li>
+            <li>Day is marked full day, half day (1st/2nd), absent, or work from home</li>
             <li>Regularization is audit-logged on the attendance record</li>
           </ol>
         </div>

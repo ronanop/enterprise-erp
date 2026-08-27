@@ -1,6 +1,14 @@
 /** HR offboarding (exit) — view models mapped from /hr/separation API */
 
-export type SeparationType = "resignation" | "termination" | "retirement";
+export type SeparationType = "resignation" | "termination" | "retirement" | "death" | "other";
+
+export type NoticeStatus =
+  | "pending"
+  | "on_notice"
+  | "served"
+  | "not_served"
+  | "direct_exit"
+  | "not_applicable";
 
 export type ClearanceChecklistItem = {
   key: string;
@@ -43,6 +51,12 @@ export type OffboardingCase = {
   separationType: SeparationType | string;
   requestedLwd: string;
   approvedLwd: string | null;
+  resignationDate: string | null;
+  noticePeriodDays: number | null;
+  noticeStartDate: string | null;
+  expectedExitDate: string | null;
+  noticeStatus: NoticeStatus | string;
+  initiatedBy: string;
   status: string;
   fnfStatus: string;
   fnfPayrollRunId: string | null;
@@ -58,6 +72,17 @@ export const SEPARATION_TYPE_LABELS: Record<string, string> = {
   resignation: "Resignation",
   termination: "Termination",
   retirement: "Retirement",
+  death: "Death",
+  other: "Other",
+};
+
+export const NOTICE_STATUS_LABELS: Record<string, string> = {
+  pending: "Notice pending",
+  on_notice: "On Notice",
+  served: "Notice served",
+  not_served: "Notice not served",
+  direct_exit: "Directly exited",
+  not_applicable: "No notice",
 };
 
 /** Primary approval + settlement strip */
@@ -114,4 +139,27 @@ export function postHrStepIndex(c: OffboardingCase): number {
   if (hasInterview && hasDocs) return 2;
   if (hasInterview) return 1;
   return 0;
+}
+
+export function isOnNotice(c: OffboardingCase): boolean {
+  return c.noticeStatus === "on_notice" && !["completed", "cancelled"].includes(c.status.toLowerCase());
+}
+
+export function isDirectExit(c: OffboardingCase): boolean {
+  return ["direct_exit", "not_served"].includes(c.noticeStatus);
+}
+
+export function isFnfPendingWork(c: OffboardingCase): boolean {
+  if (["cancelled", "completed"].includes(c.status.toLowerCase())) return false;
+  if (["settled", "waived"].includes(c.fnfStatus.toLowerCase())) return false;
+  return isDirectExit(c) || c.noticeStatus === "served";
+}
+
+export function noticeServedLabel(c: OffboardingCase): string {
+  const n = c.noticeStatus;
+  if (n === "served") return "Served";
+  if (n === "not_served" || n === "direct_exit") return "Not served";
+  if (n === "on_notice") return "Serving";
+  if (n === "not_applicable") return "N/A";
+  return "Pending";
 }

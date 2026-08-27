@@ -83,6 +83,33 @@ def list_digital_onboarding(
     return APIResponse(message="OK", data=DigitalOnboardingService(db).list_cases(ctx))
 
 
+class DigitalOnboardingClearResponse(BaseModel):
+    deleted: int
+    message: str
+
+
+@digital_onboarding_router.post("/clear-all", response_model=APIResponse[DigitalOnboardingClearResponse])
+def clear_all_digital_onboarding(
+    ctx: Annotated[
+        TenantContext,
+        Depends(
+            require_any_permission(
+                "hr.employment:update",
+                "hr.employee_profile:update",
+                "recruitment.onboarding:update",
+            )
+        ),
+    ],
+    db: Annotated[Session, Depends(get_db)],
+):
+    data = DigitalOnboardingService(db).clear_all_cases(ctx)
+    db.commit()
+    return APIResponse(
+        message=data.get("message") or "Onboarding list cleared",
+        data=DigitalOnboardingClearResponse.model_validate(data),
+    )
+
+
 @digital_onboarding_router.post("", response_model=APIResponse[dict])
 def upsert_digital_onboarding(
     body: DigitalOnboardingUpsertRequest,

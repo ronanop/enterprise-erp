@@ -747,19 +747,44 @@ export async function importAttendanceCsv(
   return { created, skipped, errors: errors.slice(0, 10) };
 }
 
+export type RegularizeKind = "full_day" | "half_day" | "absent" | "work_from_home";
+export type RegularizePortion = "full_day" | "first_half" | "second_half" | "absent" | "work_from_home";
+
+function resolveRegularizeChoice(
+  kind: RegularizeKind,
+  halfPortion: "first_half" | "second_half",
+): { status: AttendanceStatusCode; portion: RegularizePortion; label: string } {
+  if (kind === "full_day") {
+    return { status: "present", portion: "full_day", label: "full day" };
+  }
+  if (kind === "half_day") {
+    return {
+      status: "half_day",
+      portion: halfPortion,
+      label: halfPortion === "first_half" ? "half day — 1st half" : "half day — 2nd half",
+    };
+  }
+  if (kind === "absent") {
+    return { status: "absent", portion: "absent", label: "absent" };
+  }
+  return { status: "work_from_home", portion: "work_from_home", label: "work from home" };
+}
+
 export async function applyAttendanceCorrection(input: {
   record: AttendanceRecord;
-  portion: "full_day" | "first_half" | "second_half";
+  kind: RegularizeKind;
+  halfPortion?: "first_half" | "second_half";
   reason: string;
   attachmentName: string;
 }): Promise<void> {
-  const { record, portion, reason, attachmentName } = input;
-  const nextStatus: AttendanceStatusCode = portion === "full_day" ? "present" : "half_day";
-  const portionLabel =
-    portion === "full_day" ? "full day" : portion === "first_half" ? "1st half" : "2nd half";
+  const { record, kind, reason, attachmentName } = input;
+  const { status: nextStatus, portion, label: portionLabel } = resolveRegularizeChoice(
+    kind,
+    input.halfPortion ?? "first_half",
+  );
   const noteTag = `regularized:${portion}`;
   const baseNotes = (record.notes || "")
-    .replace(/\s*·?\s*regularized:(full_day|first_half|second_half)/g, "")
+    .replace(/\s*·?\s*regularized:(full_day|first_half|second_half|absent|work_from_home)/g, "")
     .replace(/\s*·?\s*Corrected:[^·]*/g, "")
     .trim();
   const notes = [baseNotes, noteTag, reason].filter(Boolean).join(" · ");

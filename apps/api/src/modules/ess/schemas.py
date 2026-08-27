@@ -334,12 +334,17 @@ class EssSeparationItem(BaseModel):
     requested_last_working_date: date
     status: str
     fnf_status: str | None = None
+    notice_status: str | None = None
+    expected_exit_date: date | None = None
+    notice_period_days: int | None = None
 
 
 class EssSeparationCreate(BaseModel):
     separation_type: str = "resignation"
     requested_last_working_date: date
     reason: str | None = None
+    resignation_date: date | None = None
+    notice_period_days: int | None = None
 
 
 class EssAttendanceCorrectionCreate(BaseModel):

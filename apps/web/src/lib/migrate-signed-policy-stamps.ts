@@ -33,15 +33,11 @@ export async function migrateSignedPolicyStampFormat(
         if (current === SIGNED_POLICY_STAMP_FORMAT) return;
 
         await ensureOnboardingPoliciesLoaded();
-        const policies = listActivePoliciesForPortal();
-        if (!policies.length) {
-          await idbSetJson(FORMAT_KEY, SIGNED_POLICY_STAMP_FORMAT);
-          return;
-        }
-
         for (const c of cases) {
           const sigUrl = c.portal?.policies?.signatureDataUrl;
           if (!sigUrl || !sigUrl.startsWith("data:image/")) continue;
+          const policies = listActivePoliciesForPortal(c.entityId);
+          if (!policies.length) continue;
           try {
             const stamped = await stampPoliciesWithSignature({
               policies,

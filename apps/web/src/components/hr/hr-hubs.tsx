@@ -581,7 +581,7 @@ export function ReportsHub() {
         label: "Open reviews",
         value: countOpenDocs(data?.reviews ?? [], ["closed", "cancelled"]),
       },
-      { label: "Exits", value: data?.separation.length ?? 0 },
+      { label: "EX-Employee", value: data?.separation.length ?? 0 },
       { label: "Training programs", value: data?.training.length ?? 0 },
       { label: "Shift assignments", value: data?.shiftAssignments.length ?? 0 },
     ];

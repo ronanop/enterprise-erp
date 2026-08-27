@@ -48,17 +48,22 @@ const BUCKET_CATEGORIES: Record<RequestBucket, HrEssInboxCategory[]> = {
 
 const CARDS: { id: RequestBucket; label: string; icon: LucideIcon }[] = [
   { id: "attendance", label: "Attendance", icon: CalendarDays },
-  { id: "on_tour", label: "On Tour", icon: Briefcase },
+  { id: "on_tour", label: "On Tour / On Duty", icon: Briefcase },
   { id: "leaves", label: "Leaves", icon: CreditCard },
   { id: "others", label: "Others", icon: Folder },
 ];
 
 const TABLE_TITLES: Record<RequestBucket, string> = {
   attendance: "Attendance Requests",
-  on_tour: "On Tour Requests",
+  on_tour: "On Tour / On Duty Requests",
   leaves: "Leave Requests",
   others: "Other Requests",
 };
+
+function isOnTourItem(item: HrEssInboxItem): boolean {
+  const hay = `${item.title} ${item.detail}`.toLowerCase();
+  return /\b(tour|travel|visit|outstation|client\s*visit|official\s*tour)\b/.test(hay);
+}
 
 function bucketOf(category: HrEssInboxCategory): RequestBucket {
   if (category === "attendance_correction") return "attendance";
@@ -127,6 +132,17 @@ export function HrEssInboxPage() {
       counts[bucketOf(item.category)] += 1;
     }
     return counts;
+  }, [items]);
+
+  const tourDutySplit = useMemo(() => {
+    let tour = 0;
+    let duty = 0;
+    for (const item of items) {
+      if (bucketOf(item.category) !== "on_tour") continue;
+      if (isOnTourItem(item)) tour += 1;
+      else duty += 1;
+    }
+    return { tour, duty, label: `${tour}/${duty}` };
   }, [items]);
 
   useEffect(() => {
@@ -239,8 +255,13 @@ export function HrEssInboxPage() {
                       <Icon className="size-3.5 shrink-0 text-muted-foreground" />
                     </div>
                     <p className="mt-1.5 text-xl font-semibold tabular-nums text-foreground">
-                      {count.toLocaleString("en-IN")}
+                      {card.id === "on_tour"
+                        ? tourDutySplit.label
+                        : count.toLocaleString("en-IN")}
                     </p>
+                    {card.id === "on_tour" ? (
+                      <p className="mt-0.5 text-[10px] text-muted-foreground">on tour / on duty</p>
+                    ) : null}
                   </button>
                 );
               })}

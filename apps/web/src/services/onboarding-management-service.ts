@@ -83,6 +83,11 @@ function normalizeApiCase(raw: Record<string, unknown>): OnboardingCase | null {
     managementGroupName:
       raw.managementGroupName != null ? String(raw.managementGroupName) : undefined,
     employeeId: raw.employeeId != null ? String(raw.employeeId) : undefined,
+    employeeIdMode: raw.employeeIdMode === "manual" ? "manual" : raw.employeeIdMode === "auto" ? "auto" : undefined,
+    assignedEmployeeCode:
+      raw.assignedEmployeeCode != null && String(raw.assignedEmployeeCode).trim()
+        ? String(raw.assignedEmployeeCode).trim().toUpperCase()
+        : undefined,
     buddy: raw.buddy != null ? String(raw.buddy) : undefined,
     hrOwner: String(raw.hrOwner ?? "HR User"),
     status: String(raw.status ?? "draft") as OnboardingCaseStatus,
@@ -102,7 +107,10 @@ function normalizeApiCase(raw: Record<string, unknown>): OnboardingCase | null {
   });
 }
 
-async function syncCaseToApi(caseRow: OnboardingCase): Promise<OnboardingCase> {
+async function syncCaseToApi(
+  caseRow: OnboardingCase,
+  opts?: { required?: boolean },
+): Promise<OnboardingCase> {
   try {
     const res = await apiClient<Record<string, unknown>>("/hr/digital-onboarding", {
       method: "POST",
@@ -113,8 +121,15 @@ async function syncCaseToApi(caseRow: OnboardingCase): Promise<OnboardingCase> {
       upsertCaseLocal(normalized);
       return normalized;
     }
-  } catch {
-    /* keep local copy if API unavailable */
+    if (opts?.required) {
+      throw new Error("Could not save the onboarding invitation on the server.");
+    }
+  } catch (e) {
+    if (opts?.required) {
+      throw e instanceof Error
+        ? e
+        : new Error("Could not save the onboarding invitation on the server.");
+    }
   }
   return caseRow;
 }
@@ -447,6 +462,13 @@ export function filterOnboardingCases(
   return cases.filter((c) => {
     if (statsBucket && !matchesOnboardingStatBucket(c, statsBucket, today)) return false;
     if (filters.status !== "all" && c.status !== filters.status) return false;
+    if (
+      filters.status === "all" &&
+      !statsBucket &&
+      (c.status === "joined" || c.status === "cancelled")
+    ) {
+      return false;
+    }
     if (filters.department !== "all" && c.department !== filters.department) return false;
     if (filters.overdueOnly && c.status !== "overdue") return false;
     if (filters.joiningFrom && c.joiningDate < filters.joiningFrom) return false;
@@ -460,6 +482,7 @@ export function filterOnboardingCases(
       c.department,
       c.designation,
       c.employeeId,
+      c.assignedEmployeeCode,
     ]
       .join(" ")
       .toLowerCase();
@@ -500,6 +523,11 @@ export async function startOnboarding(input: StartOnboardingInput): Promise<Onbo
       employmentDurationKind(input.employmentType) === "training"
         ? input.trainingDurationDays || ""
         : "",
+    employeeIdMode: input.employeeIdMode === "manual" ? "manual" : "auto",
+    assignedEmployeeCode:
+      input.employeeIdMode === "manual"
+        ? (input.assignedEmployeeCode || "").trim().toUpperCase() || undefined
+        : undefined,
     buddy: undefined,
     hrOwner: input.hrOwner || actor(),
     status: "draft",
@@ -526,7 +554,7 @@ export async function startOnboarding(input: StartOnboardingInput): Promise<Onbo
     actor: actor(),
   });
 
-  const synced = await syncCaseToApi(saved);
+  const synced = await syncCaseToApi(saved, { required: true });
   return synced;
 }
 
@@ -601,6 +629,7 @@ export async function getCaseByTokenAsync(token: string): Promise<OnboardingCase
     }
   } catch (e) {
     if (e instanceof ApiClientError && e.status === 404) return null;
+    if (e instanceof ApiClientError && (e.status === 0 || e.status >= 500)) throw e;
     /* fall through to local */
   }
   return getCaseByToken(token);
@@ -880,6 +909,8 @@ export type OnboardingAssignmentInput = {
   trainingDurationDays?: string;
   shift?: string;
   leavePolicy?: string;
+  employeeIdMode?: "auto" | "manual";
+  employeeCode?: string;
 };
 
 /** HR updates assignment fields on Overview (after doc review / before complete). */
@@ -929,6 +960,11 @@ export async function updateOnboardingAssignment(
     trainingDurationDays: trainingDays,
     shift: input.shift?.trim() ?? c.shift,
     leavePolicy: input.leavePolicy?.trim() ?? c.leavePolicy,
+    employeeIdMode: input.employeeIdMode ?? c.employeeIdMode ?? "auto",
+    assignedEmployeeCode:
+      (input.employeeIdMode ?? c.employeeIdMode ?? "auto") === "manual"
+        ? (input.employeeCode || "").trim().toUpperCase() || c.assignedEmployeeCode
+        : undefined,
   });
   if (!next) return null;
   appendOnboardingAudit({
@@ -982,11 +1018,29 @@ export async function approveCandidateReview(caseId: string): Promise<Onboarding
   return syncCaseToApi(next);
 }
 
+function resolveOnboardingEmployeeCode(
+  c: OnboardingCase,
+  opts?: { employeeCode?: string; employeeIdMode?: "auto" | "manual" },
+): string {
+  const explicit = (opts?.employeeCode || "").trim().toUpperCase();
+  if (explicit) return explicit;
+  const mode = opts?.employeeIdMode ?? c.employeeIdMode ?? "auto";
+  if (mode === "manual") {
+    const assigned = (c.assignedEmployeeCode || "").trim().toUpperCase();
+    if (!assigned) {
+      throw new Error("Enter a manual employee ID before completing onboarding.");
+    }
+    return assigned;
+  }
+  return previewNextEmployeeCode().trim().toUpperCase();
+}
+
 /** Create employee profile after HR approval. Activates immediately if joining date has passed. */
 export async function completeOnboarding(
   caseId: string,
   opts?: {
     employeeCode?: string;
+    employeeIdMode?: "auto" | "manual";
     shiftId?: string;
     managementGroupId?: string;
     managementGroupName?: string;
@@ -1005,6 +1059,8 @@ export async function completeOnboarding(
         status: localCase.status,
         checklist: localCase.checklist,
         employeeId: localCase.employeeId,
+        employeeIdMode: localCase.employeeIdMode ?? full.employeeIdMode,
+        assignedEmployeeCode: localCase.assignedEmployeeCode ?? full.assignedEmployeeCode,
       }
     : localCase;
 
@@ -1016,7 +1072,7 @@ export async function completeOnboarding(
   }
 
   const activateNow = isJoiningDateReached(c.joiningDate);
-  const employeeCode = (opts?.employeeCode || previewNextEmployeeCode()).trim().toUpperCase();
+  const employeeCode = resolveOnboardingEmployeeCode(c, opts);
 
   const apiOnboardingId = (c as OnboardingCase & { apiOnboardingId?: string }).apiOnboardingId;
   let employmentId =
@@ -1033,6 +1089,7 @@ export async function completeOnboarding(
           {
             designation: c.designation || "Employee",
             management_group_id: opts?.managementGroupId || null,
+            employee_code: employeeCode,
           },
         );
         employeeUuid = String(res.data?.employee_id ?? employeeUuid);

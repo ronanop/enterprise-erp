@@ -3,7 +3,7 @@
 from datetime import date
 from uuid import UUID, uuid4
 
-from sqlalchemy import CheckConstraint, Date, ForeignKey, String, Text, UniqueConstraint
+from sqlalchemy import CheckConstraint, Date, ForeignKey, SmallInteger, String, Text, UniqueConstraint
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column
@@ -17,7 +17,7 @@ class HrSeparation(Base, *HrTransactionMixin):
     __table_args__ = (
         UniqueConstraint("company_id", "document_number", name="uk_hr_sep_company_doc"),
         CheckConstraint(
-            "separation_type IN ('resignation','termination','retirement')",
+            "separation_type IN ('resignation','termination','retirement','death','other')",
             name="ck_hr_sep_type",
         ),
         CheckConstraint(
@@ -30,6 +30,16 @@ class HrSeparation(Base, *HrTransactionMixin):
         CheckConstraint(
             "fnf_status IN ('pending','prepared','calculated','settled','waived')",
             name="ck_hr_sep_fnf_status",
+        ),
+        CheckConstraint(
+            "notice_status IN ("
+            "'pending','on_notice','served','not_served','direct_exit','not_applicable'"
+            ")",
+            name="ck_hr_sep_notice_status",
+        ),
+        CheckConstraint(
+            "initiated_by IN ('employee','hr')",
+            name="ck_hr_sep_initiated_by",
         ),
         {"schema": "hr"},
     )
@@ -45,6 +55,16 @@ class HrSeparation(Base, *HrTransactionMixin):
     separation_type: Mapped[str] = mapped_column(String(30), nullable=False)
     requested_last_working_date: Mapped[date] = mapped_column(Date, nullable=False)
     approved_last_working_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    resignation_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    notice_period_days: Mapped[int | None] = mapped_column(SmallInteger, nullable=True)
+    notice_start_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    expected_exit_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    notice_status: Mapped[str] = mapped_column(
+        String(30), nullable=False, default="pending", server_default="pending", index=True
+    )
+    initiated_by: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="hr", server_default="hr"
+    )
     reason: Mapped[str | None] = mapped_column(Text, nullable=True)
     status: Mapped[str] = mapped_column(String(30), nullable=False, default="draft", index=True)
     workflow_status: Mapped[str | None] = mapped_column(String(30), nullable=True)

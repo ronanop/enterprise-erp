@@ -394,4 +394,7 @@ export type EssSeparationItem = {
   requested_last_working_date: string;
   status: string;
   fnf_status: string | null;
+  notice_status?: string | null;
+  expected_exit_date?: string | null;
+  notice_period_days?: number | null;
 };

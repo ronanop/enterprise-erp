@@ -129,6 +129,7 @@ export const DEFAULT_DOCUMENT_TYPES: SetupRow[] = [
     expiry_required: false,
     formats: "PDF,JPG,PNG,DOC,DOCX",
     max_size_mb: 2,
+    multiple: true,
     status: "active",
   },
   {
@@ -147,12 +148,28 @@ export const DEFAULT_DOCUMENT_TYPES: SetupRow[] = [
     id: "doc-type-relieving",
     code: "DOC-REL",
     name: "Previous / Latest 3 Offer & Appointment Letters",
+    kind: "appointment_letter",
+    section: "previous_employment",
+    mandatory: false,
+    expiry_required: false,
+    formats: "PDF,JPG,PNG",
+    max_size_mb: 2,
+    max_files: 3,
+    multiple: true,
+    status: "active",
+  },
+  {
+    id: "doc-type-relieving-letter",
+    code: "DOC-RLV",
+    name: "Previous / Latest 3 Relieving Letter",
     kind: "relieving_letter",
     section: "previous_employment",
     mandatory: false,
     expiry_required: false,
     formats: "PDF,JPG,PNG",
     max_size_mb: 2,
+    max_files: 3,
+    multiple: true,
     status: "active",
   },
   {
@@ -165,6 +182,8 @@ export const DEFAULT_DOCUMENT_TYPES: SetupRow[] = [
     expiry_required: false,
     formats: "PDF,JPG,PNG",
     max_size_mb: 2,
+    max_files: 3,
+    multiple: true,
     status: "active",
   },
 ];
@@ -269,6 +288,8 @@ export type PortalDocumentType = {
   maxSizeMb: number | null;
   /** When true, candidate may upload several files for this type. */
   multiple?: boolean;
+  /** Cap for multi-file types (e.g. last 3 salary slips). */
+  maxFiles?: number;
 };
 
 /** Map setup "PDF,JPG" → HTML accept string. */
@@ -372,6 +393,7 @@ export async function listPortalDocumentTypes(): Promise<PortalDocumentType[]> {
     "education",
     "resume",
     "cancelled_cheque",
+    "appointment_letter",
     "relieving_letter",
     "salary_slips",
     "other",
@@ -390,10 +412,11 @@ export async function listPortalDocumentTypes(): Promise<PortalDocumentType[]> {
       }
       if (/education\s*certificates?/i.test(name)) return false;
       // Collapse duplicate relieving / slip / cheque rows from old local setup into one portal type
-      if (kind === "relieving_letter" && code !== "DOC-REL") return false;
+      if (kind === "relieving_letter" && code !== "DOC-RLV") return false;
+      if (kind === "appointment_letter" && code !== "DOC-REL") return false;
       if (kind === "salary_slips" && code !== "DOC-SLIPS") return false;
       if (kind === "cancelled_cheque" && code !== "DOC-CHEQUE") return false;
-      if (/previous\s*relieving/i.test(name)) return false;
+      if (/previous\s*relieving/i.test(name) && code !== "DOC-RLV") return false;
       if (/^cancelled\s*cheque$/i.test(name) && code !== "DOC-CHEQUE") return false;
       if (code === "DOC-CERT") return true;
       if (kind === "other") return false;
@@ -408,8 +431,10 @@ export async function listPortalDocumentTypes(): Promise<PortalDocumentType[]> {
           : code === "DOC-CHEQUE"
             ? "cancelled_cheque"
             : code === "DOC-REL"
-              ? "relieving_letter"
-              : code === "DOC-SLIPS"
+              ? "appointment_letter"
+              : code === "DOC-RLV"
+                ? "relieving_letter"
+                : code === "DOC-SLIPS"
                 ? "salary_slips"
                 : normalizeDocKind(r.kind, code, name);
       const section =
@@ -432,12 +457,14 @@ export async function listPortalDocumentTypes(): Promise<PortalDocumentType[]> {
                   ? "Post Graduate / Diploma"
                   : code === "DOC-REL"
                     ? "Previous / Latest 3 Offer & Appointment Letters"
-                    : code === "DOC-SLIPS"
+                    : code === "DOC-RLV"
+                      ? "Previous / Latest 3 Relieving Letter"
+                      : code === "DOC-SLIPS"
                       ? "Last 3 Month Salary Slip"
                       : name,
         kind,
         section,
-        mandatory: ["DOC-CERT", "DOC-REL", "DOC-SLIPS", "DOC-PGDIP"].includes(code)
+        mandatory: ["DOC-CERT", "DOC-REL", "DOC-RLV", "DOC-SLIPS", "DOC-PGDIP"].includes(code)
           ? false
           : code === "DOC-CHEQUE"
             ? true
@@ -447,7 +474,13 @@ export async function listPortalDocumentTypes(): Promise<PortalDocumentType[]> {
           r.max_size_mb == null || r.max_size_mb === ""
             ? null
             : Number(r.max_size_mb),
-        multiple: code === "DOC-CERT",
+        multiple: Boolean(r.multiple) || ["DOC-CERT", "DOC-REL", "DOC-RLV", "DOC-SLIPS"].includes(code),
+        maxFiles:
+          r.max_files == null || r.max_files === ""
+            ? ["DOC-REL", "DOC-RLV", "DOC-SLIPS"].includes(code)
+              ? 3
+              : undefined
+            : Number(r.max_files),
       };
     })
     .sort((a, b) => {
@@ -467,6 +500,7 @@ export async function listPortalDocumentTypes(): Promise<PortalDocumentType[]> {
         "DOC-CHEQUE",
         "DOC-RESUME",
         "DOC-REL",
+        "DOC-RLV",
         "DOC-SLIPS",
         "DOC-CERT",
       ];
@@ -498,8 +532,17 @@ function ensureLocal(tabId: HrSetupTabId): SetupRow[] {
     return store[tabId] ?? [];
   }
 
-  // Merge any newly added default rows (by code) without wiping user edits.
   const existing = store[tabId] ?? [];
+  if (tabId === "document-types") {
+    const { rows, changed } = syncDocumentTypeCatalog(existing, defaults);
+    if (changed) {
+      store[tabId] = rows;
+      writeLocal(store);
+    }
+    return store[tabId] ?? rows;
+  }
+
+  // Merge any newly added default rows (by code) without wiping user edits.
   const codes = new Set(existing.map((r) => String(r.code ?? "")));
   const missing = defaults.filter((d) => d.code && !codes.has(String(d.code)));
   if (missing.length) {
@@ -507,6 +550,49 @@ function ensureLocal(tabId: HrSetupTabId): SetupRow[] {
     writeLocal(store);
   }
   return store[tabId] ?? [];
+}
+
+const DOCUMENT_TYPE_SYNC_KEYS = [
+  "name",
+  "kind",
+  "section",
+  "mandatory",
+  "expiry_required",
+  "formats",
+  "max_size_mb",
+  "max_files",
+  "multiple",
+] as const;
+
+function syncDocumentTypeCatalog(
+  existing: SetupRow[],
+  defaults: SetupRow[],
+): { rows: SetupRow[]; changed: boolean } {
+  const defByCode = new Map(defaults.map((d) => [String(d.code ?? ""), d]));
+  let changed = false;
+  const rows = existing.map((row) => {
+    const def = defByCode.get(String(row.code ?? ""));
+    if (!def) return row;
+    let rowChanged = false;
+    const next: SetupRow = { ...row };
+    for (const key of DOCUMENT_TYPE_SYNC_KEYS) {
+      if (def[key] !== undefined && row[key] !== def[key]) {
+        next[key] = def[key];
+        rowChanged = true;
+      }
+    }
+    if (!rowChanged) return row;
+    changed = true;
+    return { ...next, updated_at: new Date().toISOString() };
+  });
+  const codes = new Set(rows.map((r) => String(r.code ?? "")));
+  for (const def of defaults) {
+    if (def.code && !codes.has(String(def.code))) {
+      rows.push(def);
+      changed = true;
+    }
+  }
+  return { rows, changed };
 }
 
 /** Coerce checkbox/number form strings into typed local values. */

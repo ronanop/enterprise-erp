@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Eye, FileText, Pencil, Plus, Trash2, X } from "lucide-react";
 
 import { DocumentPreviewContent } from "@/components/hr/shared/document-preview-content";
@@ -14,15 +14,19 @@ import {
 import { toast } from "@/components/hr/setup/setup-toast";
 import { Button } from "@/components/ui/button";
 import { readFileAsDataUrl } from "@/services/employee-management-service";
+import { listEntityOptions, type SetupMasterOption } from "@/services/hr-setup-service";
 import {
   deleteOnboardingPolicy,
   ensureOnboardingPoliciesLoaded,
   listOnboardingPolicies,
+  policyEntityLabel,
   saveOnboardingPolicy,
   type OnboardingPolicyDoc,
+  type OnboardingPolicyScope,
 } from "@/services/onboarding-policies-service";
 
 const MAX_POLICY_FILE_MB = 5;
+const FILTER_ALL = "all";
 
 export function OnboardingPoliciesPanel() {
   const [rows, setRows] = useState<OnboardingPolicyDoc[]>([]);
@@ -36,7 +40,11 @@ export function OnboardingPoliciesPanel() {
   const [mimeType, setMimeType] = useState("");
   const [sortOrder, setSortOrder] = useState("1");
   const [status, setStatus] = useState<"active" | "inactive">("active");
+  const [scope, setScope] = useState<OnboardingPolicyScope>("all");
+  const [entityId, setEntityId] = useState("");
   const [uploading, setUploading] = useState(false);
+  const [entities, setEntities] = useState<SetupMasterOption[]>([]);
+  const [entityFilter, setEntityFilter] = useState(FILTER_ALL);
 
   const reload = useCallback(() => {
     setRows(listOnboardingPolicies(true));
@@ -44,7 +52,15 @@ export function OnboardingPoliciesPanel() {
 
   useEffect(() => {
     void ensureOnboardingPoliciesLoaded().then(reload);
+    void listEntityOptions()
+      .then(setEntities)
+      .catch(() => setEntities([]));
   }, [reload]);
+
+  const visibleRows = useMemo(() => {
+    if (entityFilter === FILTER_ALL) return rows;
+    return rows.filter((r) => r.scope === "entity" && r.entityId === entityFilter);
+  }, [rows, entityFilter]);
 
   function resetForm(row?: OnboardingPolicyDoc | null) {
     setTitle(row?.title ?? "");
@@ -54,6 +70,8 @@ export function OnboardingPoliciesPanel() {
     setMimeType(row?.mimeType ?? "");
     setSortOrder(String(row?.sortOrder ?? (rows.length || 0) + 1));
     setStatus(row?.status ?? "active");
+    setScope(row?.scope === "entity" && row.entityId ? "entity" : "all");
+    setEntityId(row?.entityId ?? "");
   }
 
   function openCreate() {
@@ -61,6 +79,12 @@ export function OnboardingPoliciesPanel() {
     setMode("create");
     resetForm(null);
     setSortOrder(String((rows.length || 0) + 1));
+    setScope("entity");
+    if (entityFilter !== FILTER_ALL) {
+      setEntityId(entityFilter);
+    } else {
+      setEntityId(entities[0]?.value ?? "");
+    }
     setOpen(true);
   }
 
@@ -122,6 +146,11 @@ export function OnboardingPoliciesPanel() {
       return;
     }
     const id = editing?.id ?? crypto.randomUUID().replace(/-/g, "").slice(0, 12);
+    if (!entityId) {
+      toast("Select an entity for this policy", "error");
+      return;
+    }
+    const entity = entities.find((e) => e.value === entityId);
     try {
       await saveOnboardingPolicy({
         id,
@@ -131,6 +160,9 @@ export function OnboardingPoliciesPanel() {
         fileName: fileDataUrl ? fileName : undefined,
         fileDataUrl: fileDataUrl || undefined,
         mimeType: fileDataUrl ? mimeType || "application/pdf" : undefined,
+        scope: "entity",
+        entityId,
+        entityName: entity?.label || editing?.entityName,
         sortOrder: Number(sortOrder) || 0,
         status,
       });
@@ -159,16 +191,25 @@ export function OnboardingPoliciesPanel() {
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <div>
-          <h2 className="text-sm font-semibold">Onboarding Policies</h2>
-          <p className="text-xs text-muted-foreground">
-            Content shown on the candidate portal Policies step — written text and/or PDF upload.
-          </p>
+        <h2 className="text-sm font-semibold">Onboarding Policies</h2>
+        <div className="flex flex-nowrap items-center gap-2">
+          <Button size="sm" className="cursor-pointer shrink-0" onClick={openCreate}>
+            <Plus className="size-3.5" />
+            Add policy
+          </Button>
+          <SetupSelect
+            value={entityFilter}
+            onChange={(e) => setEntityFilter(e.target.value)}
+            className="h-8 min-w-[11rem] text-xs"
+          >
+            <option value={FILTER_ALL}>All policies</option>
+            {entities.map((ent) => (
+              <option key={ent.value} value={ent.value}>
+                {ent.label}
+              </option>
+            ))}
+          </SetupSelect>
         </div>
-        <Button size="sm" className="cursor-pointer" onClick={openCreate}>
-          <Plus className="size-3.5" />
-          Add policy
-        </Button>
       </div>
 
       <div className="overflow-hidden rounded-xl border border-border/70 bg-card shadow-sm">
@@ -177,20 +218,21 @@ export function OnboardingPoliciesPanel() {
             <tr>
               <th className="px-3 py-2">Order</th>
               <th className="px-3 py-2">Title</th>
+              <th className="px-3 py-2">Entity</th>
               <th className="px-3 py-2">Status</th>
               <th className="px-3 py-2">Updated</th>
               <th className="px-3 py-2 text-right">Actions</th>
             </tr>
           </thead>
           <tbody>
-            {rows.length === 0 ? (
+            {visibleRows.length === 0 ? (
               <tr>
-                <td colSpan={5} className="px-3 py-8 text-center text-xs text-muted-foreground">
-                  No policies yet. Add handbook, NDA, IT policy, etc.
+                <td colSpan={6} className="px-3 py-8 text-center text-xs text-muted-foreground">
+                  No policies for this filter. Add a policy for an entity.
                 </td>
               </tr>
             ) : (
-              rows.map((row) => (
+              visibleRows.map((row) => (
                 <tr key={row.id} className="border-b border-border/40 last:border-0">
                   <td className="px-3 py-2 font-mono text-xs tabular-nums">{row.sortOrder}</td>
                   <td className="px-3 py-2">
@@ -201,6 +243,7 @@ export function OnboardingPoliciesPanel() {
                         : row.body || "—"}
                     </p>
                   </td>
+                  <td className="px-3 py-2 text-xs">{policyEntityLabel(row)}</td>
                   <td className="px-3 py-2 text-xs capitalize">{row.status}</td>
                   <td className="px-3 py-2 text-xs text-muted-foreground">
                     {row.updatedAt.slice(0, 10)}
@@ -252,7 +295,7 @@ export function OnboardingPoliciesPanel() {
         description={
           mode === "view"
             ? "Preview of policy content shown on the onboarding portal."
-            : "Provide written content, upload a PDF, or both — at least one is required."
+            : "Provide written content, upload a PDF, or both — at least one is required. Select the entity this policy belongs to."
         }
         footer={
           mode === "view" ? (
@@ -283,6 +326,23 @@ export function OnboardingPoliciesPanel() {
         }
       >
         <div className="space-y-3">
+          <SetupField label="Entity" required hint="Synced from Org Setup → Entities.">
+            <SetupSelect
+              value={entityId}
+              disabled={mode === "view"}
+              onChange={(e) => {
+                setScope("entity");
+                setEntityId(e.target.value);
+              }}
+            >
+              <option value="">Select entity…</option>
+              {entities.map((ent) => (
+                <option key={ent.value} value={ent.value}>
+                  {ent.label}
+                </option>
+              ))}
+            </SetupSelect>
+          </SetupField>
           <SetupField label="Title" required>
             <SetupInput
               value={title}

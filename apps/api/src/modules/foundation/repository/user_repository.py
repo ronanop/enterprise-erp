@@ -129,6 +129,14 @@ class UserRepository(TenantScopedRepository):
         role_id: UUID,
         assigned_by: UUID | None,
     ) -> None:
+        existing = self.db.scalar(
+            select(SecUserRole).where(
+                SecUserRole.user_id == user_id,
+                SecUserRole.role_id == role_id,
+            )
+        )
+        if existing:
+            return
         link = SecUserRole(
             id=uuid4(),
             tenant_id=tenant_id,
@@ -139,6 +147,19 @@ class UserRepository(TenantScopedRepository):
         )
         self.db.add(link)
         self.db.flush()
+
+    def revoke_role(self, *, user_id: UUID, role_id: UUID) -> bool:
+        row = self.db.scalar(
+            select(SecUserRole).where(
+                SecUserRole.user_id == user_id,
+                SecUserRole.role_id == role_id,
+            )
+        )
+        if row is None:
+            return False
+        self.db.delete(row)
+        self.db.flush()
+        return True
 
     @staticmethod
     def _to_entity(row: SecUser) -> UserEntity:

@@ -10,7 +10,7 @@ class Settings(BaseSettings):
     """Runtime configuration loaded from environment variables."""
 
     model_config = SettingsConfigDict(
-        env_file=(".env", "../../.env"),
+        env_file=(".env", "../.env", "../../.env"),
         env_file_encoding="utf-8",
         extra="ignore",
     )
@@ -38,6 +38,14 @@ class Settings(BaseSettings):
         default="redis://localhost:6379/1",
         alias="CELERY_RESULT_BACKEND",
     )
+
+    minio_endpoint: str = Field(default="localhost:9000", alias="MINIO_ENDPOINT")
+    minio_root_user: str = Field(default="erp_minio", alias="MINIO_ROOT_USER")
+    minio_root_password: str = Field(default="erp_minio_password", alias="MINIO_ROOT_PASSWORD")
+    minio_bucket: str = Field(default="erp-documents", alias="MINIO_BUCKET")
+    minio_secure: bool = Field(default=False, alias="MINIO_SECURE")
+    storage_backend: str = Field(default="local", alias="STORAGE_BACKEND")
+    opensearch_url: str = Field(default="http://localhost:9200", alias="OPENSEARCH_URL")
 
     cors_origins: list[str] = Field(
         default=[

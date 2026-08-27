@@ -1,9 +1,8 @@
 """CRM attachment metadata service.
 
 Accepts either a ``file_path`` (already-stored reference) or inline
-``content_base64`` which is decoded and written to the local uploads
-directory — this keeps the demo self-contained without requiring a full
-multipart/object-storage pipeline.
+``content_base64`` which is decoded and written to MinIO (module prefix ``crm/``)
+when ``STORAGE_BACKEND=minio``, otherwise to the local uploads directory.
 """
 
 import base64
@@ -13,6 +12,7 @@ from uuid import UUID
 
 from sqlalchemy.orm import Session
 
+from core import object_storage
 from core.exceptions import NotFoundException
 from modules.crm.repository.attachment_repository import AttachmentRepository
 from modules.crm.service.crm_scope_validator import CrmScopeValidator
@@ -54,12 +54,17 @@ class AttachmentService:
         stored_path = file_path
 
         if content_base64:
-            UPLOAD_ROOT.mkdir(parents=True, exist_ok=True)
             raw = base64.b64decode(content_base64)
             size = len(raw)
-            dest = UPLOAD_ROOT / f"{uuid.uuid4()}_{file_name}"
-            dest.write_bytes(raw)
-            stored_path = str(dest)
+            stored_name = f"{uuid.uuid4()}_{file_name}"
+            if object_storage.is_enabled():
+                key = object_storage.module_key("crm", "attachments", str(cid), stored_name)
+                stored_path = object_storage.put_bytes(key, raw, content_type)
+            else:
+                UPLOAD_ROOT.mkdir(parents=True, exist_ok=True)
+                dest = UPLOAD_ROOT / stored_name
+                dest.write_bytes(raw)
+                stored_path = str(dest)
 
         if not stored_path:
             raise NotFoundException("Either file_path or content_base64 must be provided")

@@ -13,11 +13,13 @@ import {
   UserCheck,
 } from "lucide-react";
 
+import { EmployeeIdModeFields } from "@/components/hr/onboarding/employee-id-mode-fields";
 import {
   OnboardingDocumentPreviewDialog,
   OnboardingDocumentRow,
 } from "@/components/hr/onboarding/onboarding-document-preview";
 import { MasterSelect } from "@/components/hr/shared/employee-select";
+import { toast } from "@/components/hr/setup/setup-toast";
 import { HrStatusBadge, HrUnderlineTabs, type HrTabItem } from "@/components/hr/hr-primitives";
 import {
   SetupDrawer,
@@ -29,6 +31,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { EMPLOYMENT_TYPE_OPTIONS, employmentDurationKind, formatEmploymentTypeLabel } from "@/config/hr-master-options";
 import { getInvitationUrl, type OnboardingAssignmentInput } from "@/services/onboarding-management-service";
+import { previewNextEmployeeCode } from "@/services/employee-management-service";
 import {
   loadHrMasterDirectory,
   type HrMasterOption,
@@ -66,7 +69,11 @@ type Props = {
   ) => void;
   onSaveAssignment: (caseId: string, input: OnboardingAssignmentInput) => Promise<void>;
   onApprove: (caseId: string) => void;
-  onComplete: (caseId: string, managementGroup?: ManagementGroup) => void | Promise<void>;
+  onComplete: (
+    caseId: string,
+    managementGroup?: ManagementGroup,
+    employeeCode?: string,
+  ) => void | Promise<void>;
   onActivate: (caseId: string, managementGroup?: ManagementGroup) => void | Promise<void>;
   onInvite: (caseRow: OnboardingCase) => void;
 };
@@ -83,6 +90,8 @@ type AssignmentForm = {
   employmentType: string;
   probationPeriodDays: string;
   trainingDurationDays: string;
+  employeeIdMode: "auto" | "manual";
+  assignedEmployeeCode: string;
 };
 
 function formFromCase(c: OnboardingCase): AssignmentForm {
@@ -98,6 +107,8 @@ function formFromCase(c: OnboardingCase): AssignmentForm {
     employmentType: c.employmentType || "permanent",
     probationPeriodDays: c.probationPeriodDays || "",
     trainingDurationDays: c.trainingDurationDays || "",
+    employeeIdMode: c.employeeIdMode === "manual" ? "manual" : "auto",
+    assignedEmployeeCode: c.assignedEmployeeCode || "",
   };
 }
 
@@ -138,6 +149,7 @@ export function CaseDetailDrawer({
   });
   const [employmentTypes, setEmploymentTypes] = useState(EMPLOYMENT_TYPE_OPTIONS);
   const [entities, setEntities] = useState<{ value: string; label: string }[]>([]);
+  const [nextAutoCode, setNextAutoCode] = useState("");
 
   useEffect(() => {
     if (!open) setActionBusy(null);
@@ -179,6 +191,7 @@ export function CaseDetailDrawer({
       });
       setEmploymentTypes(types);
       setEntities(entityOpts);
+      setNextAutoCode(previewNextEmployeeCode());
     });
   }, [open]);
 
@@ -232,10 +245,18 @@ export function CaseDetailDrawer({
   const assignmentEditable = !["joined", "cancelled"].includes(caseRow.status);
 
   async function runComplete() {
-    if (actionBusy) return;
+    if (actionBusy || !form) return;
+    if (form.employeeIdMode === "manual" && !form.assignedEmployeeCode.trim()) {
+      toast("Enter an employee ID or switch to auto-generate.", "error");
+      return;
+    }
     setActionBusy("complete");
     try {
-      await onComplete(caseRow.id, selectedManagementGroup);
+      await onComplete(
+        caseRow.id,
+        selectedManagementGroup,
+        form.employeeIdMode === "manual" ? form.assignedEmployeeCode.trim().toUpperCase() : undefined,
+      );
     } finally {
       setActionBusy(null);
     }
@@ -276,6 +297,8 @@ export function CaseDetailDrawer({
         employmentType: form.employmentType,
         probationPeriodDays: form.probationPeriodDays,
         trainingDurationDays: form.trainingDurationDays,
+        employeeIdMode: form.employeeIdMode,
+        employeeCode: form.assignedEmployeeCode,
       });
     } finally {
       setSavingAssignment(false);
@@ -390,12 +413,24 @@ export function CaseDetailDrawer({
                 status={resolveOnboardingDisplayStatus(caseRow.status, caseRow.joiningDate)}
               />
             </div>
-            <p className="text-[11px] text-muted-foreground">
-              Employee ID:{" "}
-              <span className="font-medium text-foreground">
-                {caseRow.employeeId || "Assigned after completion"}
-              </span>
-            </p>
+            {assignmentEditable && form && !hasOnboardingEmployeeRecord(caseRow) ? (
+              <div className="min-w-[16rem]">
+                <EmployeeIdModeFields
+                  mode={form.employeeIdMode}
+                  manualCode={form.assignedEmployeeCode}
+                  nextAutoCode={nextAutoCode}
+                  onModeChange={(employeeIdMode) => patchForm({ employeeIdMode })}
+                  onManualCodeChange={(assignedEmployeeCode) => patchForm({ assignedEmployeeCode })}
+                />
+              </div>
+            ) : (
+              <p className="text-[11px] text-muted-foreground">
+                Employee ID:{" "}
+                <span className="font-medium text-foreground">
+                  {caseRow.employeeId || caseRow.assignedEmployeeCode || "Assigned after completion"}
+                </span>
+              </p>
+            )}
           </div>
 
           {assignmentEditable ? (

@@ -5621,7 +5621,7 @@ def seed_ecommerce(db, tenant_id, company_id, admin_id, product, employees, cust
         {"tenant_id": tenant_id, "company_id": company_id, "store_code": "WEB"},
         {
             "store_number": "ST-0001",
-            "store_name": "Demo Industries Online Store",
+            "store_name": "Cache Digitech Online Store",
             "store_type": "b2c",
             "owner_employee_id": employees[2].id,
             "status": "active",
@@ -5634,7 +5634,7 @@ def seed_ecommerce(db, tenant_id, company_id, admin_id, product, employees, cust
         db,
         EcStore,
         {"tenant_id": tenant_id, "company_id": company_id, "store_code": "WEB"},
-        {"store_name": "Demo Industries Online Store"},
+        {"store_name": "Cache Digitech Online Store"},
     )
     channel = ensure(
         db,

@@ -19,6 +19,23 @@ export const DASHBOARD_ROLE_LABELS: Record<DashboardRole, string> = {
 
 export type NamedCount = { label: string; value: number };
 
+export type StackedAttendancePoint = {
+  label: string;
+  present: number;
+  absent: number;
+  leave: number;
+  halfDay: number;
+  late: number;
+};
+
+export type LeaveTrendPoint = {
+  label: string;
+  casual: number;
+  sick: number;
+  earned: number;
+  unpaid: number;
+};
+
 export type HrDashboardStats = {
   totalEmployees: number;
   activeEmployees: number;
@@ -48,8 +65,10 @@ export type HrDashboardCharts = {
   ageDistribution: NamedCount[];
   hiringFunnel: NamedCount[];
   attendanceTrend: NamedCount[];
+  attendanceStacked: StackedAttendancePoint[];
   leaveTrend: NamedCount[];
-  payrollCostTrend: NamedCount[];
+  leaveTrendByType: LeaveTrendPoint[];
+  onboardingProgress: NamedCount[];
   attritionTrend: NamedCount[];
   performanceDistribution: NamedCount[];
   trainingCompletion: NamedCount[];
@@ -62,6 +81,7 @@ export type CalendarEventType =
   | "leave"
   | "holiday"
   | "meeting"
+  | "joining"
   | "payroll";
 
 export type CalendarEvent = {

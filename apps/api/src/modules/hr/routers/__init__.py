@@ -106,6 +106,10 @@ from modules.hr.schemas import (
     SeparationApproveRequest,
     SeparationSubmitRequest,
     SeparationCompleteRequest,
+    SeparationConfirmLwdRequest,
+    SeparationDirectExitRequest,
+    SeparationStartNoticeRequest,
+    SeparationWaiveFnfRequest,
     SeparationChecklistUpdate,
     SeparationCreate,
     SeparationDocumentUploadRequest,
@@ -1959,6 +1963,45 @@ def complete_separation(
     return APIResponse(message="OK", data=SeparationService(db).complete(ctx, row_id, **body.model_dump()))
 
 
+@separation_router.post("/{row_id}/start-notice", response_model=APIResponse[SeparationResponse])
+def start_separation_notice(
+    row_id: UUID,
+    ctx: Annotated[TenantContext, Depends(require_permission("hr.separation:approve"))],
+    db: Annotated[Session, Depends(get_db)],
+    body: SeparationStartNoticeRequest = SeparationStartNoticeRequest(),
+):
+    return APIResponse(
+        message="On notice",
+        data=SeparationService(db).start_notice(ctx, row_id, **body.model_dump()),
+    )
+
+
+@separation_router.post("/{row_id}/direct-exit", response_model=APIResponse[SeparationResponse])
+def direct_exit_separation(
+    row_id: UUID,
+    ctx: Annotated[TenantContext, Depends(require_permission("hr.separation:approve"))],
+    db: Annotated[Session, Depends(get_db)],
+    body: SeparationDirectExitRequest = SeparationDirectExitRequest(),
+):
+    return APIResponse(
+        message="Marked directly exited",
+        data=SeparationService(db).mark_direct_exit(ctx, row_id, **body.model_dump()),
+    )
+
+
+@separation_router.post("/{row_id}/confirm-lwd", response_model=APIResponse[SeparationResponse])
+def confirm_separation_lwd(
+    row_id: UUID,
+    ctx: Annotated[TenantContext, Depends(require_permission("hr.separation:approve"))],
+    db: Annotated[Session, Depends(get_db)],
+    body: SeparationConfirmLwdRequest = SeparationConfirmLwdRequest(),
+):
+    return APIResponse(
+        message="Last working day confirmed",
+        data=SeparationService(db).confirm_last_working_day(ctx, row_id, **body.model_dump()),
+    )
+
+
 @separation_router.post("/{row_id}/fnf/prepare", response_model=APIResponse[SeparationResponse])
 def prepare_separation_fnf(
     row_id: UUID,
@@ -1975,6 +2018,19 @@ def settle_separation_fnf(
     db: Annotated[Session, Depends(get_db)],
 ):
     return APIResponse(message="FNF settled", data=SeparationService(db).settle_fnf(ctx, row_id))
+
+
+@separation_router.post("/{row_id}/fnf/waive", response_model=APIResponse[SeparationResponse])
+def waive_separation_fnf(
+    row_id: UUID,
+    ctx: Annotated[TenantContext, Depends(require_permission("hr.separation:complete"))],
+    db: Annotated[Session, Depends(get_db)],
+    body: SeparationWaiveFnfRequest = SeparationWaiveFnfRequest(),
+):
+    return APIResponse(
+        message="FNF waived",
+        data=SeparationService(db).waive_fnf(ctx, row_id, **body.model_dump()),
+    )
 
 
 @separation_router.post("/{row_id}/checklist", response_model=APIResponse[SeparationResponse])

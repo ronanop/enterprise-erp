@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Check, ClipboardList, FileText, GitBranch, MessageSquare, Plus, Upload, Wallet } from "lucide-react";
+import { Check, ClipboardList, Clock, FileText, GitBranch, MessageSquare, Plus, Upload, Wallet } from "lucide-react";
 
 import {
   ExitDocumentDrawer,
@@ -33,17 +33,24 @@ import {
 } from "@/services/offboarding-service";
 import type { OffboardingCase, WorkflowApprovalEntry } from "@/types/offboarding";
 import {
+  NOTICE_STATUS_LABELS,
   POST_HR_STEPS,
   SEPARATION_TYPE_LABELS,
   WORKFLOW_STEPS,
+  isDirectExit,
+  isFnfPendingWork,
+  isOnNotice,
+  noticeServedLabel,
   postHrStepIndex,
   workflowStepIndex,
 } from "@/types/offboarding";
 
-type TabId = "resignations" | "workflow" | "clearance" | "exit_interview" | "documents" | "fnf";
+type TabId = "resignations" | "on_notice" | "workflow" | "clearance" | "exit_interview" | "documents" | "fnf";
+type KpiFilter = "all" | "on_notice" | "direct_exit" | "fnf_pending";
 
 const TABS: HrTabItem[] = [
-  { id: "resignations", label: "Resignations", icon: FileText },
+  { id: "resignations", label: "EX-Employee", icon: FileText },
+  { id: "on_notice", label: "On Notice", icon: Clock },
   { id: "workflow", label: "Exit Workflow", icon: GitBranch },
   { id: "clearance", label: "Clearance", icon: ClipboardList },
   { id: "exit_interview", label: "Exit Interview", icon: MessageSquare },
@@ -295,10 +302,11 @@ function OffboardingCaseHeader({ c }: { c: OffboardingCase }) {
           <span className="mx-1.5 text-border">|</span>
           {SEPARATION_TYPE_LABELS[c.separationType] ?? c.separationType}
           <span className="mx-1.5 text-border">|</span>
-          LWD {c.approvedLwd || c.requestedLwd || "—"}
+          LWD {c.approvedLwd || c.expectedExitDate || c.requestedLwd || "—"}
         </p>
       </div>
       <div className="flex shrink-0 flex-wrap gap-1.5">
+        <HrStatusBadge status={NOTICE_STATUS_LABELS[c.noticeStatus] ?? c.noticeStatus} />
         <HrStatusBadge status={c.status} />
         <HrStatusBadge status={c.fnfStatus} />
       </div>
@@ -343,6 +351,7 @@ export function OffboardingManagementPage() {
   const [newOpen, setNewOpen] = useState(false);
   const [interviewOpen, setInterviewOpen] = useState(false);
   const [documentOpen, setDocumentOpen] = useState(false);
+  const [kpiFilter, setKpiFilter] = useState<KpiFilter>("all");
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -419,8 +428,56 @@ export function OffboardingManagementPage() {
     }
   }
 
-  const openCount = cases.filter((c) => !["completed", "cancelled"].includes(c.status.toLowerCase())).length;
-  const resignationCount = cases.filter((c) => c.separationType === "resignation").length;
+  const onNoticeCount = cases.filter(isOnNotice).length;
+  const directExitCount = cases.filter(isDirectExit).length;
+  const fnfPendingCount = cases.filter(isFnfPendingWork).length;
+  const exEmployeeSplit = `${directExitCount}/${onNoticeCount}`;
+
+  const tabs: HrTabItem[] = useMemo(
+    () =>
+      TABS.map((t) =>
+        t.id === "resignations"
+          ? { ...t, badge: exEmployeeSplit }
+          : t.id === "on_notice"
+            ? { ...t, badge: onNoticeCount }
+            : t,
+      ),
+    [exEmployeeSplit, onNoticeCount],
+  );
+
+  const visibleCases = useMemo(() => {
+    if (kpiFilter === "on_notice") return cases.filter(isOnNotice);
+    if (kpiFilter === "direct_exit") return cases.filter(isDirectExit);
+    if (kpiFilter === "fnf_pending") return cases.filter(isFnfPendingWork);
+    return cases;
+  }, [cases, kpiFilter]);
+
+  function onKpiClick(key: string) {
+    const next = key as KpiFilter;
+    if (next === "on_notice") {
+      if (tab === "on_notice") {
+        setTab("resignations");
+        setKpiFilter("all");
+        return;
+      }
+      setKpiFilter("on_notice");
+      setTab("on_notice");
+      return;
+    }
+    if (kpiFilter === next && tab === "resignations") {
+      setKpiFilter("all");
+      return;
+    }
+    setKpiFilter(next);
+    setTab("resignations");
+  }
+
+  const kpiActiveKey =
+    tab === "on_notice" || kpiFilter === "on_notice"
+      ? "on_notice"
+      : kpiFilter === "direct_exit" || kpiFilter === "fnf_pending"
+        ? kpiFilter
+        : undefined;
 
   return (
     <div className="space-y-4 pb-2">
@@ -435,7 +492,7 @@ export function OffboardingManagementPage() {
               onClick={() => setNewOpen(true)}
             >
               <Plus className="size-3.5" />
-              New resignation
+              New exit
             </Button>
           </HrToolbar>
         }
@@ -443,34 +500,35 @@ export function OffboardingManagementPage() {
       {authBlocked ? <HrAuthBanner /> : null}
       {loading && cases.length === 0 ? <HrLoadingBlock /> : null}
 
-      {tab === "resignations" ? (
+      {tab === "resignations" || tab === "on_notice" ? (
         <HrKpiGrid
+          activeKey={kpiActiveKey}
+          onItemClick={onKpiClick}
           items={[
-            { label: "Open Cases", value: openCount },
-            { label: "Resignations", value: resignationCount },
+            { key: "on_notice", label: "On Notice", value: onNoticeCount },
             {
-              label: "Pending Clearance",
-              value: cases.filter(
-                (c) =>
-                  c.checklist.some((i) => !i.done) &&
-                  !["completed", "cancelled"].includes(c.status.toLowerCase()),
-              ).length,
+              key: "direct_exit",
+              label: "EX-Employee",
+              value: exEmployeeSplit,
+              hint: "exits / on notice",
             },
-            {
-              label: "FNF pending",
-              value: cases.filter(
-                (c) =>
-                  ["hr_approved", "manager_approved"].includes(c.status.toLowerCase()) &&
-                  !["settled", "waived"].includes(c.fnfStatus.toLowerCase()),
-              ).length,
-            },
+            { key: "fnf_pending", label: "FNF pending", value: fnfPendingCount },
           ]}
         />
       ) : null}
 
-      <HrUnderlineTabs tabs={TABS} value={tab} onChange={(id) => setTab(id as TabId)} />
+      <HrUnderlineTabs
+        tabs={tabs}
+        value={tab}
+        onChange={(id) => {
+          const next = id as TabId;
+          setTab(next);
+          if (next === "resignations") setKpiFilter("all");
+          if (next === "on_notice") setKpiFilter("on_notice");
+        }}
+      />
 
-      {tab !== "resignations" && cases.length > 0 ? (
+      {tab !== "resignations" && tab !== "on_notice" && cases.length > 0 ? (
         <div className="rounded-xl border border-border/70 bg-card px-4 py-3 shadow-sm">
           <OffboardingCasePicker
             cases={cases}
@@ -482,34 +540,62 @@ export function OffboardingManagementPage() {
 
       {tab === "resignations" ? (
         <section className="space-y-3">
-          {cases.length === 0 ? (
+          {visibleCases.length === 0 ? (
             <HrEmptyState
-              title="No offboarding cases"
-              description="Create a resignation or exit request to start the workflow."
+              title={
+                kpiFilter === "direct_exit"
+                  ? "No direct exits"
+                  : kpiFilter === "fnf_pending"
+                    ? "No FNF pending"
+                    : kpiFilter === "on_notice"
+                      ? "No employees On Notice"
+                      : "No offboarding cases"
+              }
+              description={
+                kpiFilter === "all"
+                  ? "Create a resignation or exit request to start Manager → IT → Accounts → HR, with On Notice or direct exit."
+                  : "Click the card again to show all exits."
+              }
               action={
-                <Button size="sm" className="cursor-pointer" onClick={() => setNewOpen(true)}>
-                  New resignation
-                </Button>
+                kpiFilter === "all" ? (
+                  <Button size="sm" className="cursor-pointer" onClick={() => setNewOpen(true)}>
+                    New exit
+                  </Button>
+                ) : (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="cursor-pointer"
+                    onClick={() => setKpiFilter("all")}
+                  >
+                    Show all exits
+                  </Button>
+                )
               }
             />
           ) : (
             <div className="overflow-x-auto rounded-xl border border-border/70 bg-card shadow-sm">
               <p className="border-b border-border/60 px-3 py-2 text-[11px] text-muted-foreground">
-                Click a row to open that case. Status opens exit workflow; FNF opens settlement.
+                {kpiFilter === "direct_exit"
+                  ? "Direct exits — notice was skipped. Click the Direct exits card again to show all."
+                  : kpiFilter === "fnf_pending"
+                    ? "Cases where FNF is still pending after exit. Click the FNF pending card again to show all."
+                    : "On Notice is a live employment state, not just an open case. Direct exits skip notice. Click a summary card to filter."}
               </p>
-              <table className="w-full min-w-[880px] text-left text-sm">
+              <table className="w-full min-w-[1080px] text-left text-sm">
                 <thead className="border-b bg-muted/40 text-[11px] uppercase text-muted-foreground">
                   <tr>
                     <th className="px-3 py-2 font-medium">Document</th>
                     <th className="px-3 py-2 font-medium">Employee</th>
                     <th className="px-3 py-2 font-medium">Type</th>
-                    <th className="px-3 py-2 font-medium">Last working day</th>
+                    <th className="px-3 py-2 font-medium">Notice</th>
+                    <th className="px-3 py-2 font-medium">Expected exit</th>
                     <th className="px-3 py-2 font-medium">Status</th>
                     <th className="px-3 py-2 font-medium">FNF</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {cases.map((c) => (
+                  {visibleCases.map((c) => (
                     <tr
                       key={c.id}
                       role="button"
@@ -535,8 +621,11 @@ export function OffboardingManagementPage() {
                       <td className="px-3 py-2 text-xs capitalize">
                         {SEPARATION_TYPE_LABELS[c.separationType] ?? c.separationType}
                       </td>
+                      <td className="px-3 py-2">
+                        <HrStatusBadge status={NOTICE_STATUS_LABELS[c.noticeStatus] ?? c.noticeStatus} />
+                      </td>
                       <td className="px-3 py-2 text-xs tabular-nums">
-                        {c.approvedLwd || c.requestedLwd || "—"}
+                        {c.expectedExitDate || c.approvedLwd || c.requestedLwd || "—"}
                       </td>
                       <td className="px-3 py-2">
                         <button
@@ -571,13 +660,88 @@ export function OffboardingManagementPage() {
         </section>
       ) : null}
 
-      {!selected && tab !== "resignations" ? (
+      {tab === "on_notice" ? (
+        <section className="space-y-3">
+          {cases.filter(isOnNotice).length === 0 ? (
+            <HrEmptyState
+              title="No employees On Notice"
+              description="After manager approval, resignations that serve notice appear here until last working day."
+            />
+          ) : (
+            <div className="overflow-x-auto rounded-xl border border-border/70 bg-card shadow-sm">
+              <p className="border-b border-border/60 px-3 py-2 text-[11px] text-muted-foreground">
+                Employees currently serving notice. Approvals (Manager → IT → Accounts → HR) can continue while they remain On Notice.
+              </p>
+              <table className="w-full min-w-[1080px] text-left text-sm">
+                <thead className="border-b bg-muted/40 text-[11px] uppercase text-muted-foreground">
+                  <tr>
+                    <th className="px-3 py-2 font-medium">Employee</th>
+                    <th className="px-3 py-2 font-medium">Exit type</th>
+                    <th className="px-3 py-2 font-medium">Notice start</th>
+                    <th className="px-3 py-2 font-medium">Notice period</th>
+                    <th className="px-3 py-2 font-medium">Expected exit</th>
+                    <th className="px-3 py-2 font-medium">Notice</th>
+                    <th className="px-3 py-2 font-medium">Status</th>
+                    <th className="px-3 py-2 font-medium">FNF</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {cases.filter(isOnNotice).map((c) => (
+                    <tr
+                      key={c.id}
+                      role="button"
+                      tabIndex={0}
+                      className={cn(
+                        "cursor-pointer border-b border-border/50 transition-colors duration-200 hover:bg-muted/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
+                        selectedId === c.id && "bg-muted/40",
+                      )}
+                      onClick={() => openCase(c, "workflow")}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault();
+                          openCase(c, "workflow");
+                        }
+                      }}
+                    >
+                      <td className="px-3 py-2">
+                        <p className="font-medium">{c.employeeName}</p>
+                        <p className="font-mono text-[10px] text-muted-foreground">
+                          {c.employeeCode} · {c.documentNumber}
+                        </p>
+                      </td>
+                      <td className="px-3 py-2 text-xs">
+                        {SEPARATION_TYPE_LABELS[c.separationType] ?? c.separationType}
+                      </td>
+                      <td className="px-3 py-2 text-xs tabular-nums">{c.noticeStartDate || "—"}</td>
+                      <td className="px-3 py-2 text-xs tabular-nums">
+                        {c.noticePeriodDays != null ? `${c.noticePeriodDays} days` : "—"}
+                      </td>
+                      <td className="px-3 py-2 text-xs tabular-nums">
+                        {c.expectedExitDate || c.requestedLwd || "—"}
+                      </td>
+                      <td className="px-3 py-2 text-xs">{noticeServedLabel(c)}</td>
+                      <td className="px-3 py-2">
+                        <HrStatusBadge status={c.status} />
+                      </td>
+                      <td className="px-3 py-2">
+                        <HrStatusBadge status={c.fnfStatus} />
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
+      ) : null}
+
+      {!selected && tab !== "resignations" && tab !== "on_notice" ? (
         <HrEmptyState
           title="Select a Case"
-          description="Choose an offboarding case from Resignations to manage workflow, clearance, interview, and FNF."
+          description="Choose an offboarding case from EX-Employee or On Notice to manage workflow, clearance, interview, and FNF."
           action={
             <Button size="sm" variant="outline" className="cursor-pointer" onClick={() => setTab("resignations")}>
-              View resignations
+              View EX-Employee
             </Button>
           }
         />
@@ -587,8 +751,64 @@ export function OffboardingManagementPage() {
         <section className="h-fit w-full space-y-3 rounded-xl border border-border/70 bg-card p-4 shadow-sm">
           <OffboardingCaseHeader c={selected} />
           <WorkflowStrip c={selected} />
+          {isOnNotice(selected) ? (
+            <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-950">
+              This employee is <strong>On Notice</strong> until{" "}
+              {selected.expectedExitDate || selected.requestedLwd || "the expected exit date"}.
+              Manager → IT → Accounts → HR can continue while they serve notice.
+            </p>
+          ) : null}
+          {isFnfPendingWork(selected) && !["settled", "waived"].includes(selected.fnfStatus.toLowerCase()) ? (
+            <p className="rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-xs text-sky-950">
+              <strong>FNF is pending.</strong> Prepare and settle full & final after clearance and exit interview.
+            </p>
+          ) : null}
           <ApprovalHistory entries={selected.approvals ?? []} />
           <div className="space-y-2">
+            {["pending", "not_applicable"].includes(selected.noticeStatus) &&
+            !["draft", "cancelled", "completed"].includes(selected.status) ? (
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="cursor-pointer"
+                  disabled={acting}
+                  onClick={() => void act("start-notice", {}, "Employee is On Notice")}
+                >
+                  Start notice period
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="cursor-pointer"
+                  disabled={acting}
+                  onClick={() => void act("direct-exit", {}, "Marked directly exited")}
+                >
+                  Mark directly exited
+                </Button>
+              </div>
+            ) : null}
+            {selected.noticeStatus === "on_notice" ? (
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  size="sm"
+                  className="cursor-pointer"
+                  disabled={acting}
+                  onClick={() => void act("confirm-lwd", {}, "Notice served — last working day confirmed")}
+                >
+                  Confirm last working day (notice served)
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="cursor-pointer"
+                  disabled={acting}
+                  onClick={() => void act("direct-exit", {}, "Left without serving notice")}
+                >
+                  Left without serving notice
+                </Button>
+              </div>
+            ) : null}
             {selected.status === "draft" ? (
               <WorkflowActionPanel
                 title="Submit exit request"
@@ -883,11 +1103,19 @@ export function OffboardingManagementPage() {
         <section className="space-y-3 rounded-xl border border-border/70 bg-card p-4 shadow-sm">
           <OffboardingCaseHeader c={selected} />
           <h3 className="text-sm font-semibold">FNF Settlement</h3>
+          {isFnfPendingWork(selected) && !["settled", "waived"].includes(selected.fnfStatus.toLowerCase()) ? (
+            <p className="rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-xs text-sky-950">
+              FNF is pending for {selected.employeeName}. Payroll and HR have been notified.
+            </p>
+          ) : null}
           <div className="rounded-lg border border-border/60 bg-muted/20 px-3 py-2 text-xs text-muted-foreground space-y-1.5">
             <p className="font-medium text-foreground">How FNF works</p>
             <ol className="list-decimal space-y-1 pl-4">
               <li>
-                Complete approvals: Manager → IT → Accounts → <strong>HR</strong>.
+                Complete approvals: Manager → IT → Accounts → <strong>HR</strong> (in parallel with On Notice).
+              </li>
+              <li>
+                Confirm last working day (notice served) or mark a <strong>direct exit</strong>. FNF pending is notified then.
               </li>
               <li>
                 Record <strong>Exit Interview</strong>, then upload exit <strong>Documents</strong>.
@@ -897,7 +1125,7 @@ export function OffboardingManagementPage() {
                 encashment and gratuity.
               </li>
               <li>
-                <strong>Settle FNF</strong>, then <strong>Complete exit</strong> to close employment.
+                <strong>Settle FNF</strong> (or waive), then <strong>Complete exit</strong>.
               </li>
             </ol>
           </div>
@@ -935,6 +1163,18 @@ export function OffboardingManagementPage() {
                 onClick={() => void act("fnf/settle", {}, "FNF marked settled")}
               >
                 Mark FNF settled
+              </Button>
+            ) : null}
+            {selected.status.toLowerCase() === "hr_approved" &&
+            !["settled", "waived"].includes(selected.fnfStatus.toLowerCase()) ? (
+              <Button
+                size="sm"
+                variant="outline"
+                className="cursor-pointer"
+                disabled={acting}
+                onClick={() => void act("fnf/waive", { reason: "Waived by HR" }, "FNF waived")}
+              >
+                Waive FNF
               </Button>
             ) : null}
           </div>
