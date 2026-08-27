@@ -11,6 +11,7 @@ import { SidebarAccountSection } from "@/components/layout/sidebar-account-secti
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useAuthUser } from "@/hooks/use-auth-user";
+import { isCrmStandalonePath } from "@/hooks/use-standalone-chrome";
 import { cn } from "@/lib/utils";
 import { env } from "@/utils/env";
 
@@ -19,8 +20,9 @@ function isActivePath(pathname: string, href: string) {
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
-/** Open module pages in a content-only tab (no app sidebar). */
+/** Open module pages in a content-only tab (no app sidebar). CRM is always standalone. */
 function standaloneHref(href: string) {
+  if (isCrmStandalonePath(href)) return href;
   const joiner = href.includes("?") ? "&" : "?";
   return `${href}${joiner}standalone=1`;
 }
