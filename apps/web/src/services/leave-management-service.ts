@@ -516,7 +516,7 @@ export function validateLeaveApplication(
   if (weekendOrHoliday.length) {
     messages.push({
       tone: "info",
-      text: `${weekendOrHoliday.length} weekend/holiday day(s) excluded from leave count.`,
+      text: `${weekendOrHoliday.length} weekend/holiday day(s) excluded from leave count. With Sandwich Rule on, unauthorized absence on both sides of an off (no approved leave) marks those days as LOP.`,
     });
   }
 

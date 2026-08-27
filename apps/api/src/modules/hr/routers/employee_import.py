@@ -9,7 +9,7 @@ from shared.schemas import APIResponse
 from modules.foundation.dependencies import require_any_permission
 from modules.foundation.domain.value_objects import TenantContext
 from modules.hr.dependencies import get_db
-from modules.hr.schemas import EmployeeImportRequest, EmployeeImportResponse
+from modules.hr.schemas import EmployeeImportRequest, EmployeeImportResponse, EmployeeClearResponse
 from modules.hr.service.employee_import_service import EmployeeImportService
 
 employee_import_router = APIRouter(prefix="/employees", tags=["HR - Employee Import"])
@@ -33,3 +33,20 @@ def bulk_import_employees(
     rows = [r.model_dump() for r in body.rows]
     data = EmployeeImportService(db).import_rows(ctx, rows)
     return APIResponse(message="Import completed", data=EmployeeImportResponse.model_validate(data))
+
+
+@employee_import_router.post("/clear-all", response_model=APIResponse[EmployeeClearResponse])
+def clear_all_employees(
+    ctx: Annotated[
+        TenantContext,
+        Depends(require_any_permission("master.employee:delete", "master.employee:update")),
+    ],
+    db: Annotated[Session, Depends(get_db)],
+):
+    """Soft-delete all employees in scope and free codes so Excel can be re-imported."""
+    data = EmployeeImportService(db).clear_all_employees(ctx)
+    db.commit()
+    return APIResponse(
+        message=data.get("message") or "Employees cleared",
+        data=EmployeeClearResponse.model_validate(data),
+    )

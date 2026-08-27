@@ -58,7 +58,7 @@ export function findUniquenessConflicts(
   const others = records.filter((r) => r.id !== excludeId);
   const email = check.officialEmail.trim().toLowerCase();
   if (email && others.some((r) => r.officialEmail.toLowerCase() === email)) {
-    errors.push("Official email is already in use");
+    errors.push("cache email id is already in use");
   }
   if (check.employeeCode && others.some((r) => r.employeeCode === check.employeeCode)) {
     errors.push("Employee ID is already in use");

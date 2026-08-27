@@ -70,6 +70,7 @@ import {
   LIFECYCLE_STATUS_OPTIONS,
   MARITAL_STATUS_OPTIONS,
   RELATIONSHIP_OPTIONS,
+  employmentDurationKind,
 } from "@/config/hr-master-options";
 import type {
   BankDetails,
@@ -231,13 +232,13 @@ function validatePersonalEdit(p: PersonalInfo): string | null {
   if (!p.lastName.trim()) return "Last name is required";
   if (!p.gender.trim()) return "Gender is required";
   if (!p.maritalStatus.trim()) return "Marital status is required";
-  if (!p.mobile.trim()) return "Mobile is required";
-  if (!p.officialEmail.trim()) return "Official email is required";
-  if (!p.personalEmail.trim()) return "Personal email is required";
+  if (!p.mobile.trim()) return "Emp. Contact No. is required";
+  if (!p.officialEmail.trim()) return "cache email id is required";
+  if (!p.personalEmail.trim()) return "Email id is required";
   if (!p.currentAddress.line1.trim()) return "Current address is required";
   if (!p.permanentAddress.line1.trim()) return "Permanent address is required";
-  if (!p.emergency.name.trim()) return "Emergency contact name is required";
-  if (!p.emergency.phone.trim()) return "Emergency contact phone is required";
+  if (!p.emergency.name.trim()) return "Family Member Name is required";
+  if (!p.emergency.phone.trim()) return "Contact No. is required";
   if (!p.profilePhotoDataUrl) return "Profile photo is required";
   return null;
 }
@@ -567,8 +568,8 @@ export function EmployeeProfilePage({ employeeId }: { employeeId: string }) {
           <Info label="Joined" value={record.joiningDate || "—"} />
           <Info label="Employment type" value={formatEmploymentTypeLabel(record.employmentType)} />
           <Info label="Status" value={<HrStatusBadge status={record.lifecycleStatus} />} />
-          <Info label="Email" value={record.officialEmail} />
-          <Info label="Phone" value={maskPhone(record.mobile) || "—"} />
+          <Info label="cache email id" value={record.officialEmail} />
+          <Info label="Emp. Contact No." value={maskPhone(record.mobile) || "—"} />
         </div>
       </div>
 
@@ -589,10 +590,18 @@ export function EmployeeProfilePage({ employeeId }: { employeeId: string }) {
             <Info label="Job level" value={record.extension.employment.jobLevel || "—"} />
             <Info label="Shift" value={record.extension.employment.shiftName || "—"} />
             <Info label="Location" value={record.locationName || record.extension.employment.location || "—"} />
-            <Info
-              label="Probation days"
-              value={record.extension.employment.probationPeriodDays || "—"}
-            />
+            {employmentDurationKind(record.employmentType) === "probation" ? (
+              <Info
+                label="Probation days"
+                value={record.extension.employment.probationPeriodDays || "—"}
+              />
+            ) : null}
+            {employmentDurationKind(record.employmentType) === "training" ? (
+              <Info
+                label="Training duration (days)"
+                value={record.extension.employment.trainingDurationDays || "—"}
+              />
+            ) : null}
             <Info
               label="Confirmation"
               value={record.extension.employment.confirmationDate || "—"}
@@ -969,19 +978,19 @@ function EmployeeEditForm({
           </SetupField>
           <Field label="Blood group" value={p.bloodGroup} onChange={(bloodGroup) => patchPersonal({ bloodGroup })} />
           <Field label="Nationality" value={p.nationality} onChange={(nationality) => patchPersonal({ nationality })} />
-          <Field label="Official email" required type="email" value={p.officialEmail} onChange={(officialEmail) => patchPersonal({ officialEmail })} />
-          <Field label="Personal email" required type="email" value={p.personalEmail} onChange={(personalEmail) => patchPersonal({ personalEmail })} />
-          <Field label="Mobile" required value={p.mobile} onChange={(mobile) => patchPersonal({ mobile })} />
+          <Field label="cache email id" required type="email" value={p.officialEmail} onChange={(officialEmail) => patchPersonal({ officialEmail })} />
+          <Field label="Email id" required type="email" value={p.personalEmail} onChange={(personalEmail) => patchPersonal({ personalEmail })} />
+          <Field label="Emp. Contact No." required value={p.mobile} onChange={(mobile) => patchPersonal({ mobile })} />
         </EmsFormGrid>
         <SectionHeading title="Current address" />
         <AddressFields required value={p.currentAddress} onChange={(currentAddress) => patchPersonal({ currentAddress })} />
         <SectionHeading title="Permanent address" />
         <AddressFields required value={p.permanentAddress} onChange={(permanentAddress) => patchPersonal({ permanentAddress })} />
-        <SectionHeading title="Emergency contact" />
+        <SectionHeading title="Family / emergency contact" />
         <EmsFormGrid>
-          <Field label="Name" required value={p.emergency.name} onChange={(name) => patchPersonal({ emergency: { ...p.emergency, name } })} />
-          <Field label="Phone" required value={p.emergency.phone} onChange={(phone) => patchPersonal({ emergency: { ...p.emergency, phone } })} />
-          <SetupField label="Relationship">
+          <Field label="Family Member Name" required value={p.emergency.name} onChange={(name) => patchPersonal({ emergency: { ...p.emergency, name } })} />
+          <Field label="Contact No." required value={p.emergency.phone} onChange={(phone) => patchPersonal({ emergency: { ...p.emergency, phone } })} />
+          <SetupField label="Relation">
             <SetupSelect value={p.emergency.relationship} onChange={(e) => patchPersonal({ emergency: { ...p.emergency, relationship: e.target.value } })}>
               <option value="">Select relationship</option>
               {RELATIONSHIP_OPTIONS.map((option) => (
@@ -989,6 +998,11 @@ function EmployeeEditForm({
               ))}
             </SetupSelect>
           </SetupField>
+          <Field
+            label="Fathers name"
+            value={p.fatherName || ""}
+            onChange={(fatherName) => patchPersonal({ fatherName })}
+          />
         </EmsFormGrid>
       </div>
     );
@@ -1193,13 +1207,29 @@ function EmploymentForm({
         <SetupField label="Department head"><SetupInput readOnly value={e.departmentHeadName || "—"} /></SetupField>
         <Field label="Grade" value={e.grade} onChange={(grade) => update({ grade })} />
         <Field label="Job level" value={e.jobLevel} onChange={(jobLevel) => update({ jobLevel })} />
-        <Field label="Probation days" value={e.probationPeriodDays} onChange={(probationPeriodDays) => update({ probationPeriodDays })} />
-        <Field label="Confirmation date" type="date" value={e.confirmationDate} onChange={(confirmationDate) => update({ confirmationDate })} />
         <SetupField label="Employment type" required>
-          <SetupSelect value={e.employmentType} onChange={(event) => update({ employmentType: event.target.value })}>
+          <SetupSelect
+            value={e.employmentType}
+            onChange={(event) => {
+              const next = event.target.value;
+              const kind = employmentDurationKind(next);
+              update({
+                employmentType: next,
+                probationPeriodDays: kind === "probation" ? e.probationPeriodDays : "",
+                trainingDurationDays: kind === "training" ? e.trainingDurationDays : "",
+              });
+            }}
+          >
             {EMPLOYMENT_TYPE_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
           </SetupSelect>
         </SetupField>
+        {employmentDurationKind(e.employmentType) === "probation" ? (
+          <Field label="Probation period (days)" value={e.probationPeriodDays} onChange={(probationPeriodDays) => update({ probationPeriodDays })} />
+        ) : null}
+        {employmentDurationKind(e.employmentType) === "training" ? (
+          <Field label="Training duration (days)" value={e.trainingDurationDays} onChange={(trainingDurationDays) => update({ trainingDurationDays })} />
+        ) : null}
+        <Field label="Confirmation date" type="date" value={e.confirmationDate} onChange={(confirmationDate) => update({ confirmationDate })} />
         <SetupField label="Status" required>
           <SetupSelect value={e.lifecycleStatus} onChange={(event) => update({ lifecycleStatus: event.target.value as typeof e.lifecycleStatus })}>
             {LIFECYCLE_STATUS_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
@@ -1846,11 +1876,11 @@ function OverviewTab({
           <OverviewCard title="Contact">
             <div className="grid grid-cols-1 gap-x-4 gap-y-3 sm:grid-cols-2">
               <OverviewField
-                label="Official email"
+                label="cache email id"
                 value={p.officialEmail || record.officialEmail}
               />
-              <OverviewField label="Personal email" value={maskEmail(p.personalEmail) || undefined} hideIfEmpty />
-              <OverviewField label="Mobile" value={maskPhone(p.mobile || record.mobile) || undefined} />
+              <OverviewField label="Email id" value={maskEmail(p.personalEmail) || undefined} hideIfEmpty />
+              <OverviewField label="Emp. Contact No." value={maskPhone(p.mobile || record.mobile) || undefined} />
             </div>
           </OverviewCard>
         </div>
@@ -1878,14 +1908,15 @@ function OverviewTab({
             </div>
           </OverviewCard>
 
-          <OverviewCard title="Emergency contact">
+          <OverviewCard title="Family / emergency contact">
             <div className="grid grid-cols-1 gap-x-4 gap-y-3 sm:grid-cols-2">
-              <OverviewField label="Name" value={p.emergency.name} />
+              <OverviewField label="Family Member Name" value={p.emergency.name} />
               <OverviewField
-                label="Relationship"
+                label="Relation"
                 value={formatRelationshipLabel(p.emergency.relationship)}
               />
-              <OverviewField label="Phone" value={maskPhone(p.emergency.phone) || undefined} />
+              <OverviewField label="Contact No." value={maskPhone(p.emergency.phone) || undefined} />
+              <OverviewField label="Fathers name" value={p.fatherName || undefined} hideIfEmpty />
             </div>
           </OverviewCard>
         </div>

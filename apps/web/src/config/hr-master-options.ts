@@ -16,21 +16,21 @@ export const MARITAL_STATUS_OPTIONS: MasterOption[] = [
 export const RELATIONSHIP_OPTIONS: MasterOption[] = [
   { value: "mother", label: "Mother" },
   { value: "father", label: "Father" },
-  { value: "brother", label: "Brother" },
-  { value: "sister", label: "Sister" },
+  { value: "siblings", label: "Siblings" },
   { value: "spouse", label: "Spouse" },
 ];
 
 export const EMPLOYMENT_TYPE_OPTIONS: MasterOption[] = [
   { value: "permanent", label: "Permanent" },
-  { value: "contract", label: "Contract" },
-  { value: "trainee_intern", label: "Trainee (Intern)" },
+  { value: "intern", label: "Intern" },
+  { value: "trainee", label: "Trainee" },
+  { value: "contract", label: "Contractual" },
 ];
 
 /** Includes legacy values so filters still match existing records. */
 export const EMPLOYMENT_TYPE_FILTER_OPTIONS: MasterOption[] = [
   ...EMPLOYMENT_TYPE_OPTIONS,
-  { value: "intern", label: "Trainee (Intern)" },
+  { value: "trainee_intern", label: "Trainee (Intern)" },
   { value: "consultant", label: "Consultant (legacy)" },
 ];
 
@@ -45,9 +45,11 @@ export const LIFECYCLE_STATUS_OPTIONS: MasterOption[] = [
 
 const EMPLOYMENT_TYPE_LABELS: Record<string, string> = {
   permanent: "Permanent",
-  contract: "Contract",
+  contract: "Contractual",
+  contractual: "Contractual",
+  intern: "Intern",
+  trainee: "Trainee",
   trainee_intern: "Trainee (Intern)",
-  intern: "Trainee (Intern)",
   consultant: "Consultant",
   full_time: "Full Time",
   part_time: "Part Time",
@@ -61,9 +63,11 @@ const MARITAL_STATUS_LABELS: Record<string, string> = {
   widowed: "Widowed",
 };
 
-const RELATIONSHIP_LABELS: Record<string, string> = Object.fromEntries(
-  RELATIONSHIP_OPTIONS.map((o) => [o.value, o.label]),
-);
+const RELATIONSHIP_LABELS: Record<string, string> = {
+  ...Object.fromEntries(RELATIONSHIP_OPTIONS.map((o) => [o.value, o.label])),
+  brother: "Siblings",
+  sister: "Siblings",
+};
 
 export function formatEmploymentTypeLabel(value: string | null | undefined): string {
   if (!value) return "—";
@@ -83,6 +87,19 @@ export function formatRelationshipLabel(value: string | null | undefined): strin
 
 export function normalizeEmploymentType(value: string | null | undefined): string {
   if (!value) return "permanent";
-  if (value === "intern") return "trainee_intern";
-  return value;
+  const v = value.toLowerCase().replace(/[\s-]+/g, "_");
+  if (v === "trainee_intern") return "intern";
+  if (v === "contractual") return "contract";
+  return v;
+}
+
+/** Which duration field to collect for an employment type. */
+export function employmentDurationKind(
+  type: string | null | undefined,
+): "probation" | "training" | "none" {
+  const v = normalizeEmploymentType(type);
+  if (v.includes("contract") || v === "consultant") return "none";
+  if (v.includes("intern") || v.includes("trainee")) return "training";
+  if (v === "permanent" || v === "full_time" || v === "fulltime") return "probation";
+  return "none";
 }

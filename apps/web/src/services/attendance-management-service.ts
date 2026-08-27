@@ -167,7 +167,12 @@ export async function submitCorrection(
         : {};
     const bid = branchId || orgCtx.branchId;
     if (bid && uuidRe.test(payload.employeeId)) {
-      const field = payload.field === "check_out" ? "check_out" : "check_in";
+      const field =
+        payload.field === "check_out"
+          ? "check_out"
+          : payload.field === "attendance_status"
+            ? "attendance_status"
+            : "check_in";
       const res = await resourceService.create<Record<string, unknown>>("/hr/attendance-corrections", {
         branch_id: bid,
         employee_id: payload.employeeId,
@@ -177,7 +182,7 @@ export async function submitCorrection(
         old_value: payload.oldTime || null,
         new_value: payload.newTime || "",
         reason: payload.reason || null,
-        status: "submitted",
+        status: field === "attendance_status" ? "approved" : "submitted",
       });
       const apiId = String(res.data?.id ?? "");
       if (apiId) item.id = apiId;
@@ -744,39 +749,49 @@ export async function importAttendanceCsv(
 
 export async function applyAttendanceCorrection(input: {
   record: AttendanceRecord;
-  field: "check_in" | "check_out";
-  newTime: string;
+  portion: "full_day" | "first_half" | "second_half";
   reason: string;
   attachmentName: string;
 }): Promise<void> {
-  const { record, field, newTime, reason, attachmentName } = input;
-  const timePart = newTime.length === 5 ? `${newTime}:00` : newTime;
-  const iso = `${record.attendanceDate}T${timePart}`;
-  const nextIn = field === "check_in" ? iso : record.checkIn;
-  const nextOut = field === "check_out" ? iso : record.checkOut;
-  const working = diffHours(nextIn, nextOut, record.breakTime);
+  const { record, portion, reason, attachmentName } = input;
+  const nextStatus: AttendanceStatusCode = portion === "full_day" ? "present" : "half_day";
+  const portionLabel =
+    portion === "full_day" ? "full day" : portion === "first_half" ? "1st half" : "2nd half";
+  const noteTag = `regularized:${portion}`;
+  const baseNotes = (record.notes || "")
+    .replace(/\s*·?\s*regularized:(full_day|first_half|second_half)/g, "")
+    .replace(/\s*·?\s*Corrected:[^·]*/g, "")
+    .trim();
+  const notes = [baseNotes, noteTag, reason].filter(Boolean).join(" · ");
 
   await resourceService.update("/hr/attendance", record.id, {
     version: record.version,
-    check_in_at: nextIn || null,
-    check_out_at: nextOut || null,
-    total_hours: working > 0 ? working : null,
-    notes: `${record.notes ? `${record.notes} · ` : ""}Corrected: ${reason}`,
+    attendance_status: mapToApiStatus(nextStatus),
+    notes,
   });
 
   await submitCorrection({
     attendanceId: record.id,
     employeeId: record.employeeId,
     date: record.attendanceDate,
-    field,
-    oldTime: field === "check_in" ? record.checkIn : record.checkOut,
-    newTime,
-    reason,
+    field: "attendance_status",
+    oldTime: record.status,
+    newTime: nextStatus,
+    reason: `${portionLabel}: ${reason}`,
     attachmentName,
+    portion,
   });
 
   saveExtension(record.id, {
     ...record.extension,
-    approvalStatus: "pending",
+    displayStatus: nextStatus,
+    approvalStatus: "approved",
+  });
+
+  appendAttendanceAudit({
+    attendanceId: record.id,
+    action: "regularized",
+    detail: `${record.status} → ${nextStatus} (${portionLabel}); punches unchanged`,
+    actor: actorLabel(),
   });
 }

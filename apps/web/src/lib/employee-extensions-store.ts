@@ -80,6 +80,17 @@ export function setEmployeeExtension(employeeId: string, ext: EmployeeExtension)
     });
 }
 
+/** Wipe all local employee extension overlays (after clear-all / re-import). */
+export async function clearAllEmployeeExtensions(): Promise<void> {
+  cache = {};
+  clearLocalStorageExtensions();
+  try {
+    await idbSetJson(EMPLOYEE_EXTENSIONS_STORAGE_KEY, {});
+  } catch {
+    /* ignore */
+  }
+}
+
 if (typeof window !== "undefined") {
   void ensureEmployeeExtensionsLoaded();
 }

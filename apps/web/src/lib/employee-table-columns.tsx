@@ -65,6 +65,8 @@ export function renderEmployeeCell(key: EmployeeTableColumnKey, row: EmployeeRec
       return genderLabel(row);
     case "email":
       return dash(row.officialEmail || row.extension.personal.officialEmail);
+    case "personalEmail":
+      return dash(row.extension.personal.personalEmail);
     case "phone":
       return dash(row.mobile || row.extension.personal.mobile);
     case "grade":
@@ -105,4 +107,11 @@ export const EXACT_CASE_HEADER_COLUMNS = new Set<EmployeeTableColumnKey>([
   "designation",
   "department",
   "reportingManager",
+  "phone",
+  "personalEmail",
+  "email",
+  "gender",
+  "dob",
+  "joiningDate",
+  "status",
 ]);

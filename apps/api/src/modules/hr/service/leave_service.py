@@ -69,13 +69,14 @@ def _count_leave_days(
     end: date,
     non_working: set[date],
     *,
-    sandwich: bool,
+    sandwich: bool = False,
 ) -> Decimal:
-    """Sandwich on → inclusive calendar span (weekends/holidays count).
-    Sandwich off → working days only (exclude weekends + published holidays).
+    """Leave requests always count working days (exclude weekends + published holidays).
+
+    ``sandwich`` is ignored here. Sandwich is an attendance LOP rule: weekly offs
+    between unauthorized absences become LOP unless those days have approved leave.
     """
-    if sandwich:
-        return Decimal((end - start).days + 1)
+    del sandwich
     count = 0
     cur = start
     while cur <= end:
@@ -636,8 +637,7 @@ class LeaveRequestService:
         if end_date < start_date:
             raise AppException("end_date must be on or after start_date")
         non_working = self._load_non_working_dates(ctx, company_id, start_date, end_date)
-        sandwich = bool(getattr(leave_type, "sandwich_rule_enabled", False))
-        return _count_leave_days(start_date, end_date, non_working, sandwich=sandwich)
+        return _count_leave_days(start_date, end_date, non_working)
 
     def _find_open_balance(self, ctx: TenantContext, company_id: UUID, employee_id: UUID, leave_type_id: UUID, year: int):
         for bal in self._balances.list_rows(ctx, company_id):
@@ -649,6 +649,54 @@ class LeaveRequestService:
             ):
                 return bal
         return None
+
+    def _company_sandwich_enabled(self, ctx: TenantContext, company_id: UUID) -> bool:
+        for leave_type in self._types.list_rows(ctx, company_id):
+            if str(getattr(leave_type, "status", "")).lower() != "active":
+                continue
+            if bool(getattr(leave_type, "sandwich_rule_enabled", False)):
+                return True
+        return False
+
+    def _refresh_attendance_sandwich(
+        self,
+        ctx: TenantContext,
+        *,
+        company_id: UUID,
+        employee_id: UUID,
+        branch_id: UUID | None,
+        around_start: date,
+        around_end: date,
+    ) -> None:
+        """Re-evaluate sandwich LOP after leave approval (approved leave → sandwich off)."""
+        if not self._company_sandwich_enabled(ctx, company_id):
+            return
+        from modules.hr.service.sandwich_attendance_service import apply_sandwich_for_employee
+
+        window_start = around_start - timedelta(days=10)
+        window_end = around_end + timedelta(days=10)
+        non_working = self._load_non_working_dates(ctx, company_id, window_start, window_end)
+        holiday_dates: set[date] = set()
+        years = {window_start.year, window_end.year}
+        for cal in self._holidays.list_rows(ctx, company_id):
+            if cal.status != HolidayCalendarStatus.PUBLISHED.value:
+                continue
+            if cal.calendar_year not in years:
+                continue
+            if cal.holidays_json:
+                holiday_dates |= _holiday_dates_from_json(cal.holidays_json)
+        apply_sandwich_for_employee(
+            self._db,
+            tenant_id=ctx.tenant_id,
+            company_id=company_id,
+            branch_id=branch_id,
+            employee_id=employee_id,
+            window_start=window_start,
+            window_end=window_end,
+            as_of=date.today(),
+            is_non_working=lambda d: d in non_working,
+            holiday_dates=holiday_dates,
+        )
 
     def _validate_cycle_for_request(
         self,
@@ -867,6 +915,17 @@ class LeaveRequestService:
                 body=f"Your leave request {row.document_number} has been approved.",
                 kind="leave",
                 cc_reporting_manager=False,
+            )
+        except Exception:
+            pass
+        try:
+            self._refresh_attendance_sandwich(
+                ctx,
+                company_id=row.company_id,
+                employee_id=row.employee_id,
+                branch_id=row.branch_id,
+                around_start=row.start_date,
+                around_end=row.end_date,
             )
         except Exception:
             pass

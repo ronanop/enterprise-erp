@@ -44,12 +44,12 @@ export type DocumentKind =
   | "signature"
   | "other";
 
-export type DocumentVerifyStatus = "pending" | "verified" | "rejected";
+export type DocumentVerifyStatus = "pending" | "verified" | "rejected" | "accepted";
 
 export const PORTAL_STEPS: { id: PortalStepId; label: string; description: string }[] = [
   { id: "personal", label: "Personal Details", description: "Identity and contact" },
   { id: "government_ids", label: "Government IDs", description: "Aadhaar, PAN, and more" },
-  { id: "bank", label: "Bank Details", description: "Salary account" },
+  { id: "bank", label: "Bank Details", description: "Salary account (required)" },
   { id: "emergency", label: "Emergency Contact", description: "Primary contact" },
   { id: "documents", label: "Upload Documents", description: "Marksheets, resume, bank & employment proofs" },
   { id: "policies", label: "Policies", description: "Agree and upload signature" },
@@ -177,13 +177,26 @@ export type OnboardingDocument = {
   mimeType?: string;
 };
 
+export type SignedPolicyDocument = {
+  policyId: string;
+  title: string;
+  fileName: string;
+  fileDataUrl: string;
+  mimeType: string;
+  signedAt: string;
+};
+
 export type PolicyAcceptance = {
   agreed: boolean;
   signature: string;
   signatureFileName?: string;
   signatureDataUrl?: string;
+  /** MIME of uploaded signature (for stamping). */
+  signatureMimeType?: string;
   acceptedAt?: string;
   policies: string[];
+  /** Policy PDFs stamped with candidate signature at submit. */
+  signedDocuments?: SignedPolicyDocument[];
 };
 
 export type EducationMarks = {
@@ -246,8 +259,10 @@ export type OnboardingCase = {
   shift: string;
   leavePolicy: string;
   employmentType: string;
-  /** Probation length in days (applied on activate). Default 90. */
+  /** Probation length in days (permanent). Applied on activate. */
   probationPeriodDays?: string;
+  /** Training duration in days (intern / trainee). */
+  trainingDurationDays?: string;
   managementGroupId?: string;
   managementGroupName?: string;
   employeeId?: string;
@@ -369,6 +384,8 @@ export type StartOnboardingInput = {
   reportingManager: string;
   branch: string;
   employmentType: string;
+  probationPeriodDays?: string;
+  trainingDurationDays?: string;
   hrOwner?: string;
   invitationExpiryDays: number;
 };

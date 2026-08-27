@@ -96,6 +96,30 @@ export const DEFAULT_DOCUMENT_TYPES: SetupRow[] = [
     status: "active",
   },
   {
+    id: "doc-type-grad",
+    code: "DOC-GRAD",
+    name: "Graduation",
+    kind: "education",
+    section: "education",
+    mandatory: true,
+    expiry_required: false,
+    formats: "PDF,JPG,PNG",
+    max_size_mb: 2,
+    status: "active",
+  },
+  {
+    id: "doc-type-pg-diploma",
+    code: "DOC-PGDIP",
+    name: "Post Graduate / Diploma",
+    kind: "education",
+    section: "education",
+    mandatory: false,
+    expiry_required: false,
+    formats: "PDF,JPG,PNG",
+    max_size_mb: 2,
+    status: "active",
+  },
+  {
     id: "doc-type-any-cert",
     code: "DOC-CERT",
     name: "Any Certificates",
@@ -113,7 +137,7 @@ export const DEFAULT_DOCUMENT_TYPES: SetupRow[] = [
     name: "Cancelled Cheque / Passbook",
     kind: "cancelled_cheque",
     section: "identity",
-    mandatory: false,
+    mandatory: true,
     expiry_required: false,
     formats: "PDF,JPG,PNG",
     max_size_mb: 2,
@@ -122,7 +146,7 @@ export const DEFAULT_DOCUMENT_TYPES: SetupRow[] = [
   {
     id: "doc-type-relieving",
     code: "DOC-REL",
-    name: "Relieving Letter",
+    name: "Previous / Latest 3 Offer & Appointment Letters",
     kind: "relieving_letter",
     section: "previous_employment",
     mandatory: false,
@@ -134,7 +158,7 @@ export const DEFAULT_DOCUMENT_TYPES: SetupRow[] = [
   {
     id: "doc-type-slips",
     code: "DOC-SLIPS",
-    name: "Salary / Payslip",
+    name: "Last 3 Month Salary Slip",
     kind: "salary_slips",
     section: "previous_employment",
     mandatory: false,
@@ -175,15 +199,22 @@ const DEFAULT_EMPLOYMENT_TYPES: SetupRow[] = [
   {
     id: "et-contract",
     code: "ET-002",
-    name: "Contract",
+    name: "Contractual",
     value: "contract",
     status: "active",
   },
   {
-    id: "et-trainee",
+    id: "et-intern",
     code: "ET-003",
-    name: "Trainee (Intern)",
-    value: "trainee_intern",
+    name: "Intern",
+    value: "intern",
+    status: "active",
+  },
+  {
+    id: "et-trainee",
+    code: "ET-004",
+    name: "Trainee",
+    value: "trainee",
     status: "active",
   },
 ];
@@ -328,15 +359,13 @@ export async function listPortalDocumentTypes(): Promise<PortalDocumentType[]> {
     if (!code) continue;
     byCode.set(code, def);
   }
-  byCode.delete("DOC-GRAD");
 
-  // Drop legacy appointment / signature / graduation from the portal list
+  // Drop legacy appointment / signature / duplicate education rows from the portal list
   const legacyDrop = new Set([
     "DOC-APPT",
     "DOC-SIGN",
     "DOC-PREV-EMP",
     "DOC-EXP",
-    "DOC-GRAD",
   ]);
 
   const allowedKinds = new Set([
@@ -355,8 +384,10 @@ export async function listPortalDocumentTypes(): Promise<PortalDocumentType[]> {
       const kind = normalizeDocKind(r.kind, code, name);
       if (kind === "signature" || kind === "photo") return false;
       if (legacyDrop.has(code)) return false;
-      // Remove outdated education extras still sitting in local setup
-      if (/graduation\s*(degree|marksheet)/i.test(name)) return false;
+      // Keep canonical graduation / PG slots; drop leftover duplicate education rows
+      if (kind === "education" && !["DOC-10TH", "DOC-12TH", "DOC-GRAD", "DOC-PGDIP"].includes(code)) {
+        return false;
+      }
       if (/education\s*certificates?/i.test(name)) return false;
       // Collapse duplicate relieving / slip / cheque rows from old local setup into one portal type
       if (kind === "relieving_letter" && code !== "DOC-REL") return false;
@@ -395,16 +426,22 @@ export async function listPortalDocumentTypes(): Promise<PortalDocumentType[]> {
             ? "Any Certificates"
             : code === "DOC-CHEQUE"
               ? "Cancelled Cheque / Passbook"
-              : code === "DOC-REL"
-                ? "Relieving Letter"
-                : code === "DOC-SLIPS"
-                  ? "Salary / Payslip"
-                  : name,
+              : code === "DOC-GRAD"
+                ? "Graduation"
+                : code === "DOC-PGDIP"
+                  ? "Post Graduate / Diploma"
+                  : code === "DOC-REL"
+                    ? "Previous / Latest 3 Offer & Appointment Letters"
+                    : code === "DOC-SLIPS"
+                      ? "Last 3 Month Salary Slip"
+                      : name,
         kind,
         section,
-        mandatory: ["DOC-CERT", "DOC-CHEQUE", "DOC-REL", "DOC-SLIPS"].includes(code)
+        mandatory: ["DOC-CERT", "DOC-REL", "DOC-SLIPS", "DOC-PGDIP"].includes(code)
           ? false
-          : Boolean(r.mandatory),
+          : code === "DOC-CHEQUE"
+            ? true
+            : Boolean(r.mandatory),
         accept: formatsToAccept(r.formats),
         maxSizeMb:
           r.max_size_mb == null || r.max_size_mb === ""
@@ -422,7 +459,17 @@ export async function listPortalDocumentTypes(): Promise<PortalDocumentType[]> {
       ];
       const sectionDiff = order.indexOf(a.section) - order.indexOf(b.section);
       if (sectionDiff !== 0) return sectionDiff;
-      const codeOrder = ["DOC-10TH", "DOC-12TH", "DOC-CHEQUE", "DOC-RESUME", "DOC-REL", "DOC-SLIPS", "DOC-CERT"];
+      const codeOrder = [
+        "DOC-10TH",
+        "DOC-12TH",
+        "DOC-GRAD",
+        "DOC-PGDIP",
+        "DOC-CHEQUE",
+        "DOC-RESUME",
+        "DOC-REL",
+        "DOC-SLIPS",
+        "DOC-CERT",
+      ];
       return (
         (codeOrder.indexOf(a.code) === -1 ? 99 : codeOrder.indexOf(a.code)) -
           (codeOrder.indexOf(b.code) === -1 ? 99 : codeOrder.indexOf(b.code)) ||
@@ -480,8 +527,23 @@ export function coerceLocalForm(
 }
 
 export async function listSetupApi(apiPath: string): Promise<SetupRow[]> {
-  const res = await resourceService.list(apiPath);
+  const res = await resourceService.list(apiPath, { page_size: 200, page: 1 });
   return normalizeRows(res.data).map((r) => ({ ...r, __source: "api" }));
+}
+
+async function listAllNormalized(apiPath: string): Promise<SetupRow[]> {
+  const all: SetupRow[] = [];
+  for (let page = 1; page <= 20; page += 1) {
+    try {
+      const res = await resourceService.list(apiPath, { page_size: 200, page });
+      const chunk = normalizeRows(res.data);
+      all.push(...chunk);
+      if (chunk.length < 200) break;
+    } catch {
+      break;
+    }
+  }
+  return all;
 }
 
 /** Shared org lookups for setup forms (company / branch / department dropdowns). */
@@ -492,19 +554,13 @@ export async function loadSetupOrgLookups(): Promise<{
   employees: { value: string; label: string }[];
   shifts: { value: string; label: string }[];
 }> {
-  const [companies, branches, departments, employees, shifts] = await Promise.all([
-    resourceService.list("/companies").catch(() => ({ data: [] })),
-    resourceService.list("/branches").catch(() => ({ data: [] })),
-    resourceService.list("/departments").catch(() => ({ data: [] })),
-    resourceService.list("/employees").catch(() => ({ data: [] })),
-    resourceService.list("/hr/shifts").catch(() => ({ data: [] })),
+  const [companyRows, branchRows, deptRows, employeeRows, shiftRows] = await Promise.all([
+    listAllNormalized("/companies"),
+    listAllNormalized("/branches"),
+    listAllNormalized("/departments"),
+    listAllNormalized("/employees"),
+    listAllNormalized("/hr/shifts"),
   ]);
-
-  const companyRows = normalizeRows(companies.data);
-  const branchRows = normalizeRows(branches.data);
-  const deptRows = normalizeRows(departments.data);
-  const employeeRows = normalizeRows(employees.data);
-  const shiftRows = normalizeRows(shifts.data);
 
   return {
     companies: companyRows.map((r) => ({
@@ -719,8 +775,9 @@ export async function listEmploymentTypeOptions(): Promise<SetupMasterOption[]> 
   if (!active.length) {
     return [
       { value: "permanent", label: "Permanent" },
-      { value: "contract", label: "Contract" },
-      { value: "trainee_intern", label: "Trainee (Intern)" },
+      { value: "intern", label: "Intern" },
+      { value: "trainee", label: "Trainee" },
+      { value: "contract", label: "Contractual" },
     ];
   }
   return active.map((r) => ({

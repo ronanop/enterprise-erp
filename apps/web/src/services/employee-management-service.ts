@@ -33,6 +33,10 @@ import {
   emptySalary,
 } from "@/types/employee-management";
 import { profilePhotoFromExtension } from "@/lib/onboarding-to-employee";
+import {
+  excelEntityCell,
+  excelOrganisationCell,
+} from "@/lib/employee-table-columns";
 
 const LOCAL_EMP_KEY = "erp_hr_local_employees_v1";
 
@@ -115,7 +119,7 @@ function writeJson(key: string, value: unknown): void {
 function defaultExtension(partial?: Partial<EmployeeExtension>): EmployeeExtension {
   return {
     personal: partial?.personal ?? emptyPersonal(),
-    employment: partial?.employment ?? emptyEmployment(),
+    employment: { ...emptyEmployment(), ...(partial?.employment ?? {}) },
     governmentIds: partial?.governmentIds ?? emptyGovernmentIds(),
     bank: partial?.bank ?? emptyBank(),
     companyBank: partial?.companyBank ?? emptyBank(),
@@ -729,12 +733,25 @@ async function fetchEmployeeDirectoryUncached(): Promise<EmployeeDirectoryResult
     };
   }
 
-  // Backfill manager + photo from onboarding cases for employees created before mapping fixes
+  // Backfill contact / email / gender / DOB / manager / photo from onboarding portal
   const onboardingCases = readJson<
     {
       employeeId?: string;
+      candidateEmail?: string;
+      candidatePhone?: string;
+      candidateName?: string;
       reportingManager?: string;
       portal?: {
+        personal?: {
+          phone?: string;
+          email?: string;
+          personalEmail?: string;
+          gender?: string;
+          dob?: string;
+          firstName?: string;
+          lastName?: string;
+          middleName?: string;
+        };
         documents?: { kind?: string; typeCode?: string; fileDataUrl?: string }[];
       };
     }[]
@@ -749,11 +766,46 @@ async function fetchEmployeeDirectoryUncached(): Promise<EmployeeDirectoryResult
     const caseRow = caseByEmpCode.get(row.employeeCode.toUpperCase());
     if (!caseRow) continue;
 
+    const portalPersonal = caseRow.portal?.personal;
+    const phoneFromPortal = pickStr(
+      portalPersonal?.phone,
+      caseRow.candidatePhone,
+    );
+    const personalEmailFromPortal = pickStr(
+      portalPersonal?.personalEmail,
+      portalPersonal?.email,
+      caseRow.candidateEmail,
+    );
+    const officialEmailFromPortal = pickStr(
+      caseRow.candidateEmail,
+      portalPersonal?.email,
+    );
+    const genderFromPortal = pickStr(portalPersonal?.gender).toLowerCase();
+    const dobFromPortal = toDateInput(portalPersonal?.dob);
+
     const needsManager =
       !(row.reportingManagerName || "").trim() || row.reportingManagerName === "—";
     const needsPhoto = !row.profilePhotoDataUrl;
+    const needsPhone = !pickStr(row.mobile, row.extension.personal.mobile);
+    const needsOfficialEmail = !pickStr(
+      row.officialEmail,
+      row.extension.personal.officialEmail,
+    );
+    const needsPersonalEmail = !pickStr(row.extension.personal.personalEmail);
+    const needsGender = !pickStr(row.gender, row.extension.personal.gender);
+    const needsDob = !pickStr(row.extension.personal.dateOfBirth);
 
-    if (!needsManager && !needsPhoto) continue;
+    if (
+      !needsManager &&
+      !needsPhoto &&
+      !needsPhone &&
+      !needsOfficialEmail &&
+      !needsPersonalEmail &&
+      !needsGender &&
+      !needsDob
+    ) {
+      continue;
+    }
 
     const photoDoc = (caseRow.portal?.documents || []).find(
       (d) => d.kind === "photo" || d.typeCode === "DOC-PHOTO",
@@ -765,6 +817,30 @@ async function fetchEmployeeDirectoryUncached(): Promise<EmployeeDirectoryResult
       ...row.extension,
       personal: {
         ...row.extension.personal,
+        firstName: pickStr(
+          row.extension.personal.firstName,
+          portalPersonal?.firstName,
+        ),
+        middleName: pickStr(
+          row.extension.personal.middleName,
+          portalPersonal?.middleName,
+        ),
+        lastName: pickStr(row.extension.personal.lastName, portalPersonal?.lastName),
+        mobile: needsPhone
+          ? phoneFromPortal || row.extension.personal.mobile
+          : row.extension.personal.mobile,
+        officialEmail: needsOfficialEmail
+          ? officialEmailFromPortal || row.extension.personal.officialEmail
+          : row.extension.personal.officialEmail,
+        personalEmail: needsPersonalEmail
+          ? personalEmailFromPortal || row.extension.personal.personalEmail
+          : row.extension.personal.personalEmail,
+        gender: needsGender
+          ? genderFromPortal || row.extension.personal.gender
+          : row.extension.personal.gender,
+        dateOfBirth: needsDob
+          ? dobFromPortal || row.extension.personal.dateOfBirth
+          : row.extension.personal.dateOfBirth,
         profilePhotoDataUrl:
           row.extension.personal.profilePhotoDataUrl || photoUrl || undefined,
       },
@@ -792,12 +868,19 @@ async function fetchEmployeeDirectoryUncached(): Promise<EmployeeDirectoryResult
               })),
     });
 
-    if (needsManager || needsPhoto) {
-      saveExtension(row.id, nextExt);
+    saveExtension(row.id, nextExt);
+    if (row.employeeCode && row.employeeCode !== row.id) {
+      saveExtension(row.employeeCode, nextExt);
     }
 
     records[i] = {
       ...row,
+      mobile: needsPhone && phoneFromPortal ? phoneFromPortal : row.mobile,
+      officialEmail:
+        needsOfficialEmail && officialEmailFromPortal
+          ? officialEmailFromPortal
+          : row.officialEmail,
+      gender: needsGender && genderFromPortal ? genderFromPortal : row.gender,
       reportingManagerName: needsManager && mgr ? mgr : row.reportingManagerName || "—",
       profilePhotoDataUrl:
         row.profilePhotoDataUrl || profilePhotoFromExtension(nextExt) || photoUrl,
@@ -1013,13 +1096,17 @@ export async function applyOnboardingPortalToEmployee(
 ): Promise<void> {
   await ensureEmployeeExtensionsLoaded();
   const existing = loadExtensions()[employeeId];
+  const codeKey = (draft.employment.employeeCode || "").trim();
+  const existingByCode =
+    codeKey && codeKey !== employeeId ? loadExtensions()[codeKey] : undefined;
+  const base = existing || existingByCode;
   const ext = defaultExtension({
-    ...existing,
+    ...base,
     personal: draft.personal,
     employment: draft.employment,
     governmentIds: draft.governmentIds,
     bank: draft.bank,
-    companyBank: existing?.companyBank ?? draft.companyBank ?? emptyBank(),
+    companyBank: base?.companyBank ?? draft.companyBank ?? emptyBank(),
     salary: draft.salary,
     documents: (draft.documents ?? []).map((d) => ({
       ...d,
@@ -1027,7 +1114,7 @@ export async function applyOnboardingPortalToEmployee(
     })),
     education: draft.education,
     previousEmployment: draft.previousEmployment,
-    createdBy: existing?.createdBy ?? "Onboarding",
+    createdBy: base?.createdBy ?? "Onboarding",
     updatedBy: "Onboarding",
     updatedAt: nowIso(),
   });
@@ -1037,12 +1124,18 @@ export async function applyOnboardingPortalToEmployee(
     if (fromDoc) ext.personal.profilePhotoDataUrl = fromDoc;
   }
   saveExtension(employeeId, ext);
+  // Also key by Emp Code so directory lookup still finds portal data after activate.
+  if (codeKey && codeKey !== employeeId) {
+    saveExtension(codeKey, ext);
+  }
   invalidateEmployeeDirectoryCache();
 
   // Keep local employee mirror in sync (directory may serve this row as-is)
   try {
     const locals = readJson<EmployeeRecord[]>(LOCAL_EMP_KEY, []);
-    const idx = locals.findIndex((e) => e.id === employeeId || e.employeeCode === draft.employment.employeeCode);
+    const idx = locals.findIndex(
+      (e) => e.id === employeeId || e.employeeCode === draft.employment.employeeCode,
+    );
     if (idx >= 0) {
       const prev = locals[idx]!;
       locals[idx] = {
@@ -1054,6 +1147,7 @@ export async function applyOnboardingPortalToEmployee(
             .trim() || prev.displayName,
         officialEmail: draft.personal.officialEmail || prev.officialEmail,
         mobile: draft.personal.mobile || prev.mobile,
+        gender: draft.personal.gender || prev.gender,
         departmentName: draft.employment.departmentName || prev.departmentName,
         designationName: draft.employment.designationName || prev.designationName,
         branchName: draft.employment.branchName || prev.branchName,
@@ -1072,6 +1166,86 @@ export async function applyOnboardingPortalToEmployee(
     }
   } catch {
     /* ignore */
+  }
+
+  // Best-effort: push contact / gender / DOB to API master + profile when we have a UUID.
+  const looksLikeUuid =
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(employeeId);
+  if (looksLikeUuid) {
+    try {
+      const masterRes = await resourceService.get<HrRow>("/employees", employeeId).catch(() => null);
+      const master = masterRes?.data;
+      if (master?.id) {
+        await resourceService
+          .update("/employees", employeeId, {
+            version: Number(master.version ?? 1),
+            first_name: draft.personal.firstName || master.first_name,
+            last_name: draft.personal.lastName || master.last_name,
+            middle_name: draft.personal.middleName || master.middle_name || null,
+            email:
+              draft.personal.officialEmail ||
+              draft.personal.personalEmail ||
+              master.email,
+            mobile: draft.personal.mobile || master.mobile,
+            gender: draft.personal.gender || master.gender || null,
+          })
+          .catch(() => undefined);
+      }
+
+      const profiles = await listAllPages("/hr/employee-profiles").catch(() => ({
+        data: [] as HrRow[],
+      }));
+      const profile = (Array.isArray(profiles.data) ? profiles.data : []).find(
+        (p) => String(p.employee_id) === employeeId,
+      );
+      if (profile?.id) {
+        await resourceService
+          .update("/hr/employee-profiles", String(profile.id), {
+            version: Number(profile.version ?? 1),
+            date_of_birth: draft.personal.dateOfBirth || profile.date_of_birth || null,
+            gender: draft.personal.gender || profile.gender || null,
+            marital_status: draft.personal.maritalStatus || profile.marital_status || null,
+            nationality: draft.personal.nationality || profile.nationality || null,
+            blood_group: draft.personal.bloodGroup || profile.blood_group || null,
+            emergency_contact_name:
+              draft.personal.emergency.name || profile.emergency_contact_name || null,
+            emergency_contact_mobile:
+              draft.personal.emergency.phone || profile.emergency_contact_mobile || null,
+            personal_email:
+              draft.personal.personalEmail || profile.personal_email || null,
+            permanent_address_json:
+              addressToJson(draft.personal.permanentAddress) ||
+              profile.permanent_address_json ||
+              null,
+            current_address_json:
+              addressToJson(draft.personal.currentAddress) ||
+              profile.current_address_json ||
+              null,
+          })
+          .catch(() => undefined);
+      } else if (draft.employment.branchId) {
+        await apiClient("/hr/employee-profiles", {
+          method: "POST",
+          body: {
+            branch_id: draft.employment.branchId,
+            employee_id: employeeId,
+            date_of_birth: draft.personal.dateOfBirth || null,
+            gender: draft.personal.gender || null,
+            marital_status: draft.personal.maritalStatus || null,
+            nationality: draft.personal.nationality || null,
+            blood_group: draft.personal.bloodGroup || null,
+            emergency_contact_name: draft.personal.emergency.name || null,
+            emergency_contact_mobile: draft.personal.emergency.phone || null,
+            personal_email: draft.personal.personalEmail || null,
+            permanent_address_json: addressToJson(draft.personal.permanentAddress),
+            current_address_json: addressToJson(draft.personal.currentAddress),
+            status: draft.employment.lifecycleStatus || "active",
+          },
+        }).catch(() => undefined);
+      }
+    } catch {
+      /* local extension remains source of truth for directory */
+    }
   }
 
   appendActivity({
@@ -1432,7 +1606,9 @@ export async function bulkUpdateEmployees(
 
 export function exportEmployeesCsv(records: EmployeeRecord[]): string {
   const headers = [
-    "Emp Code",
+    "SNo",
+    "Status",
+    "EMPLOYEE ID",
     "NAME",
     "Entity",
     "Organisation",
@@ -1440,27 +1616,35 @@ export function exportEmployeesCsv(records: EmployeeRecord[]): string {
     "Designation",
     "Department",
     "Reporting Manager",
-    "Email",
-    "Mobile",
-    "Employment Type",
-    "Joining Date",
-    "Status",
+    "DOJ",
+    "Emp. Contact No.",
+    "Email id",
+    "cache email id",
+    "Gender",
+    "DOB",
   ];
-  const lines = records.map((r) =>
+  const lines = records.map((r, i) =>
     [
+      String(i + 1),
+      r.lifecycleStatus,
       r.employeeCode,
       r.displayName,
-      r.extension.employment.entityName || "",
-      r.companyName || r.branchName,
-      r.locationName,
-      r.designationName,
-      r.departmentName,
-      r.reportingManagerName,
-      r.officialEmail,
-      r.mobile,
-      r.employmentType,
-      r.joiningDate,
-      r.lifecycleStatus,
+      excelEntityCell(r),
+      excelOrganisationCell(r),
+      r.locationName && r.locationName !== "—"
+        ? r.locationName
+        : r.extension.employment.location || "",
+      r.designationName || r.extension.employment.designationName || "",
+      r.departmentName || r.extension.employment.departmentName || "",
+      r.reportingManagerName && r.reportingManagerName !== "—"
+        ? r.reportingManagerName
+        : r.extension.employment.reportingManagerName || "",
+      r.joiningDate || r.extension.employment.joiningDate || "",
+      r.mobile || r.extension.personal.mobile || "",
+      r.extension.personal.personalEmail || "",
+      r.officialEmail || r.extension.personal.officialEmail || "",
+      r.gender || r.extension.personal.gender || "",
+      r.extension.personal.dateOfBirth || "",
     ]
       .map((c) => `"${String(c).replace(/"/g, '""')}"`)
       .join(","),

@@ -44,6 +44,17 @@ export function CompanyContextBadge() {
             setCompanyName(match.company_name);
             setStoredOrgContext({ companyId: match.id, companyName: match.company_name });
           }
+        } else if (stored?.companyId) {
+          // Server lost Redis company scope — re-apply stored company so Org Setup works
+          try {
+            await contextService.switchContext({
+              company_id: stored.companyId,
+              branch_id: stored.branchId ?? null,
+            });
+            setCompanyName(stored.companyName);
+          } catch {
+            if (stored.companyName) setCompanyName(stored.companyName);
+          }
         } else if (stored?.companyName) {
           setCompanyName(stored.companyName);
         }

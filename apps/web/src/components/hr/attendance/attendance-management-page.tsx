@@ -349,11 +349,15 @@ export function AttendanceManagementPage() {
                       ))}
                     </SetupSelect>
                   </SetupField>
-                  <SetupField label="From">
-                    <Input type="date" value={filters.dateFrom} onChange={(e) => setFilters((f) => ({ ...f, dateFrom: e.target.value }))} />
-                  </SetupField>
-                  <SetupField label="To">
-                    <Input type="date" value={filters.dateTo} onChange={(e) => setFilters((f) => ({ ...f, dateTo: e.target.value }))} />
+                  <SetupField label="Date">
+                    <Input
+                      type="date"
+                      value={filters.dateFrom}
+                      onChange={(e) => {
+                        const date = e.target.value;
+                        setFilters((f) => ({ ...f, dateFrom: date, dateTo: date }));
+                      }}
+                    />
                   </SetupField>
                   <SetupField label="Location">
                     <Input value={filters.location} onChange={(e) => setFilters((f) => ({ ...f, location: e.target.value }))} placeholder="e.g. HQ" />

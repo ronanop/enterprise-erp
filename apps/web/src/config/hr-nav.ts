@@ -41,7 +41,7 @@ export type HrNavGroup = {
   items: HrNavItem[];
 };
 
-/** Flat order: Dashboard → hire → time → talent → pay, then utilities. */
+/** Flat order: Dashboard → hire → employees → time → talent → pay → utilities → offboarding. */
 export const hrNavGroups: HrNavGroup[] = [
   {
     label: "",
@@ -65,23 +65,24 @@ export const hrNavGroups: HrNavGroup[] = [
         description: "Pre-joining portal & activation",
       },
       {
+        title: "Employees",
+        href: "/hr/workforce",
+        icon: Users,
+        description: "Employee directory",
+      },
+      {
         title: "Attendance",
         href: "/hr/time",
         icon: ClipboardCheck,
         description: "Attendance register & calendar",
       },
-      {
-        title: "Shifts & Roster",
-        href: "/hr/roster",
-        icon: ClipboardList,
-        description: "Shifts, roster & rotations",
-      },
-      {
-        title: "Leave",
-        href: "/hr/leave",
-        icon: CalendarDays,
-        description: "Leave requests & approvals",
-      },
+      // Hidden for now — restore to show Leave in the sidebar
+      // {
+      //   title: "Leave",
+      //   href: "/hr/leave",
+      //   icon: CalendarDays,
+      //   description: "Leave requests & approvals",
+      // },
       {
         title: "Biometric Devices",
         href: "/hr/time/biometric-devices",
@@ -101,22 +102,10 @@ export const hrNavGroups: HrNavGroup[] = [
         description: "Programs and completion",
       },
       {
-        title: "Offboarding",
-        href: "/hr/separation",
-        icon: UserMinus,
-        description: "Resignation, clearance, exit interview & FNF",
-      },
-      {
         title: "Payroll",
         href: "/hr/payroll",
         icon: Wallet,
         description: "Structures, runs, payslips & compliance",
-      },
-      {
-        title: "Employees",
-        href: "/hr/workforce",
-        icon: Users,
-        description: "Employee directory",
       },
       {
         title: "Employee Requests",
@@ -134,7 +123,7 @@ export const hrNavGroups: HrNavGroup[] = [
         title: "Org Setup",
         href: "/hr/setup",
         icon: Settings2,
-        description: "Organisation, employment & leave configuration",
+        description: "Organisation, employment, leave & roster configuration",
         children: [
           {
             title: "Organisation",
@@ -153,6 +142,12 @@ export const hrNavGroups: HrNavGroup[] = [
             href: "/hr/setup?section=leave",
             icon: CalendarDays,
             description: "Leave types, holidays, attendance policy",
+          },
+          {
+            title: "Shifts & Roster",
+            href: "/hr/roster",
+            icon: ClipboardList,
+            description: "Shifts, roster & rotations",
           },
         ],
       },
@@ -187,6 +182,12 @@ export const hrNavGroups: HrNavGroup[] = [
             description: "ID card, visiting card, t-shirts, gifts",
           },
         ],
+      },
+      {
+        title: "Offboarding",
+        href: "/hr/separation",
+        icon: UserMinus,
+        description: "Resignation, clearance, exit interview & FNF",
       },
     ],
   },

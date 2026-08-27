@@ -7,6 +7,7 @@ import type {
   ExitInterviewData,
   OffboardingCase,
   SeparationType,
+  WorkflowApprovalEntry,
 } from "@/types/offboarding";
 
 const DEFAULT_CHECKLIST: ClearanceChecklistItem[] = [
@@ -27,6 +28,7 @@ function parseClearance(raw: unknown): {
   checklist: ClearanceChecklistItem[];
   exitInterview: ExitInterviewData | null;
   documents: ExitDocument[];
+  approvals: WorkflowApprovalEntry[];
   fnfMeta: Record<string, unknown> | null;
 } {
   const c = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
@@ -65,8 +67,21 @@ function parseClearance(raw: unknown): {
       uploadedAt: o.uploaded_at != null ? String(o.uploaded_at) : null,
     };
   });
+  const approvalsRaw = Array.isArray(c.approvals) ? c.approvals : [];
+  const approvals: WorkflowApprovalEntry[] = approvalsRaw.map((item) => {
+    const o = item as Record<string, unknown>;
+    return {
+      id: String(o.id ?? ""),
+      stage: String(o.stage ?? ""),
+      remarks: o.remarks != null ? String(o.remarks) : null,
+      fileName: o.file_name != null ? String(o.file_name) : null,
+      fileDataUrl: o.file_data_url != null ? String(o.file_data_url) : null,
+      at: o.at != null ? String(o.at) : null,
+      by: o.by != null ? String(o.by) : null,
+    };
+  });
   const fnfMeta = (c.fnf as Record<string, unknown>) ?? null;
-  return { checklist, exitInterview, documents, fnfMeta };
+  return { checklist, exitInterview, documents, approvals, fnfMeta };
 }
 
 function parseEmployeeLabel(label: string): { name: string; code: string } {
@@ -80,7 +95,7 @@ export function mapOffboardingRow(
   employeeNames: Map<string, string>,
   employeeCodes: Map<string, string>,
 ): OffboardingCase {
-  const { checklist, exitInterview, documents, fnfMeta } = parseClearance(row.clearance_json);
+  const { checklist, exitInterview, documents, approvals, fnfMeta } = parseClearance(row.clearance_json);
   const employeeId = String(row.employee_id ?? "");
   const fallbackCode = employeeId ? employeeId.slice(0, 8) : "—";
   return {
@@ -101,6 +116,7 @@ export function mapOffboardingRow(
     checklist,
     exitInterview,
     documents,
+    approvals,
     fnfMeta,
   };
 }
@@ -159,7 +175,7 @@ export async function createOffboardingCase(input: {
 }
 
 export function patchOffboardingCaseFromRow(c: OffboardingCase, row: HrRow): OffboardingCase {
-  const { checklist, exitInterview, documents, fnfMeta } = parseClearance(row.clearance_json);
+  const { checklist, exitInterview, documents, approvals, fnfMeta } = parseClearance(row.clearance_json);
   return {
     ...c,
     status: String(row.status ?? c.status),
@@ -170,6 +186,7 @@ export function patchOffboardingCaseFromRow(c: OffboardingCase, row: HrRow): Off
     checklist,
     exitInterview,
     documents,
+    approvals,
     fnfMeta,
   };
 }

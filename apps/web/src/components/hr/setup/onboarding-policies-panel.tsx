@@ -1,8 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Eye, Pencil, Plus, Trash2 } from "lucide-react";
+import { Eye, FileText, Pencil, Plus, Trash2, X } from "lucide-react";
 
+import { DocumentPreviewContent } from "@/components/hr/shared/document-preview-content";
 import {
   SetupDrawer,
   SetupField,
@@ -12,12 +13,16 @@ import {
 } from "@/components/hr/setup/setup-drawer";
 import { toast } from "@/components/hr/setup/setup-toast";
 import { Button } from "@/components/ui/button";
+import { readFileAsDataUrl } from "@/services/employee-management-service";
 import {
   deleteOnboardingPolicy,
+  ensureOnboardingPoliciesLoaded,
   listOnboardingPolicies,
   saveOnboardingPolicy,
   type OnboardingPolicyDoc,
 } from "@/services/onboarding-policies-service";
+
+const MAX_POLICY_FILE_MB = 5;
 
 export function OnboardingPoliciesPanel() {
   const [rows, setRows] = useState<OnboardingPolicyDoc[]>([]);
@@ -26,75 +31,129 @@ export function OnboardingPoliciesPanel() {
   const [editing, setEditing] = useState<OnboardingPolicyDoc | null>(null);
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
+  const [fileName, setFileName] = useState("");
+  const [fileDataUrl, setFileDataUrl] = useState("");
+  const [mimeType, setMimeType] = useState("");
   const [sortOrder, setSortOrder] = useState("1");
   const [status, setStatus] = useState<"active" | "inactive">("active");
+  const [uploading, setUploading] = useState(false);
 
   const reload = useCallback(() => {
     setRows(listOnboardingPolicies(true));
   }, []);
 
   useEffect(() => {
-    reload();
+    void ensureOnboardingPoliciesLoaded().then(reload);
   }, [reload]);
+
+  function resetForm(row?: OnboardingPolicyDoc | null) {
+    setTitle(row?.title ?? "");
+    setBody(row?.body ?? "");
+    setFileName(row?.fileName ?? "");
+    setFileDataUrl(row?.fileDataUrl ?? "");
+    setMimeType(row?.mimeType ?? "");
+    setSortOrder(String(row?.sortOrder ?? (rows.length || 0) + 1));
+    setStatus(row?.status ?? "active");
+  }
 
   function openCreate() {
     setEditing(null);
     setMode("create");
-    setTitle("");
-    setBody("");
+    resetForm(null);
     setSortOrder(String((rows.length || 0) + 1));
-    setStatus("active");
     setOpen(true);
   }
 
   function openView(row: OnboardingPolicyDoc) {
     setEditing(row);
     setMode("view");
-    setTitle(row.title);
-    setBody(row.body);
-    setSortOrder(String(row.sortOrder));
-    setStatus(row.status);
+    resetForm(row);
     setOpen(true);
   }
 
   function openEdit(row: OnboardingPolicyDoc) {
     setEditing(row);
     setMode("edit");
-    setTitle(row.title);
-    setBody(row.body);
-    setSortOrder(String(row.sortOrder));
-    setStatus(row.status);
+    resetForm(row);
     setOpen(true);
   }
 
-  function save() {
+  async function onPickPdf(file: File | undefined) {
+    if (!file) return;
+    if (file.size > MAX_POLICY_FILE_MB * 1024 * 1024) {
+      toast(`File must be under ${MAX_POLICY_FILE_MB} MB`, "error");
+      return;
+    }
+    const okType =
+      file.type === "application/pdf" ||
+      file.name.toLowerCase().endsWith(".pdf") ||
+      file.type.startsWith("image/");
+    if (!okType) {
+      toast("Upload a PDF (or image) for the policy document", "error");
+      return;
+    }
+    setUploading(true);
+    try {
+      const dataUrl = await readFileAsDataUrl(file);
+      setFileName(file.name);
+      setFileDataUrl(dataUrl);
+      setMimeType(file.type || "application/pdf");
+      toast("Policy file attached", "success");
+    } catch {
+      toast("Could not read file", "error");
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  function clearFile() {
+    setFileName("");
+    setFileDataUrl("");
+    setMimeType("");
+  }
+
+  async function save() {
     if (!title.trim()) {
       toast("Title is required", "error");
       return;
     }
-    if (!body.trim()) {
-      toast("Policy content is required", "error");
+    if (!body.trim() && !fileDataUrl) {
+      toast("Add written policy content or upload a PDF", "error");
       return;
     }
     const id = editing?.id ?? crypto.randomUUID().replace(/-/g, "").slice(0, 12);
-    saveOnboardingPolicy({
-      id,
-      code: editing?.code ?? `POL-${id.slice(0, 6).toUpperCase()}`,
-      title: title.trim(),
-      body: body.trim(),
-      sortOrder: Number(sortOrder) || 0,
-      status,
-    });
-    toast(editing && mode === "edit" ? "Policy updated" : "Policy added", "success");
-    setOpen(false);
-    reload();
+    try {
+      await saveOnboardingPolicy({
+        id,
+        code: editing?.code ?? `POL-${id.slice(0, 6).toUpperCase()}`,
+        title: title.trim(),
+        body: body.trim(),
+        fileName: fileDataUrl ? fileName : undefined,
+        fileDataUrl: fileDataUrl || undefined,
+        mimeType: fileDataUrl ? mimeType || "application/pdf" : undefined,
+        sortOrder: Number(sortOrder) || 0,
+        status,
+      });
+      toast(editing && mode === "edit" ? "Policy updated" : "Policy added", "success");
+      setOpen(false);
+      reload();
+    } catch {
+      toast(
+        "Could not save policy (storage full). Try a smaller PDF or clear browser site data.",
+        "error",
+      );
+    }
   }
 
-  function remove(row: OnboardingPolicyDoc) {
+  async function remove(row: OnboardingPolicyDoc) {
     if (!window.confirm(`Delete “${row.title}”? Candidates will no longer see it.`)) return;
-    deleteOnboardingPolicy(row.id);
-    toast("Policy deleted", "success");
-    reload();
+    try {
+      await deleteOnboardingPolicy(row.id);
+      toast("Policy deleted", "success");
+      reload();
+    } catch {
+      toast("Could not delete policy", "error");
+    }
   }
 
   return (
@@ -103,7 +162,7 @@ export function OnboardingPoliciesPanel() {
         <div>
           <h2 className="text-sm font-semibold">Onboarding Policies</h2>
           <p className="text-xs text-muted-foreground">
-            Content shown on the candidate portal Policies step (agree + signature).
+            Content shown on the candidate portal Policies step — written text and/or PDF upload.
           </p>
         </div>
         <Button size="sm" className="cursor-pointer" onClick={openCreate}>
@@ -136,7 +195,11 @@ export function OnboardingPoliciesPanel() {
                   <td className="px-3 py-2 font-mono text-xs tabular-nums">{row.sortOrder}</td>
                   <td className="px-3 py-2">
                     <p className="font-medium">{row.title}</p>
-                    <p className="line-clamp-1 text-[11px] text-muted-foreground">{row.body}</p>
+                    <p className="line-clamp-1 text-[11px] text-muted-foreground">
+                      {row.fileName
+                        ? `PDF: ${row.fileName}${row.body ? " · + written content" : ""}`
+                        : row.body || "—"}
+                    </p>
                   </td>
                   <td className="px-3 py-2 text-xs capitalize">{row.status}</td>
                   <td className="px-3 py-2 text-xs text-muted-foreground">
@@ -188,8 +251,8 @@ export function OnboardingPoliciesPanel() {
         }
         description={
           mode === "view"
-            ? "Read-only preview of policy content shown on the onboarding portal."
-            : "This text is shown when the candidate opens the policy on the onboarding portal."
+            ? "Preview of policy content shown on the onboarding portal."
+            : "Provide written content, upload a PDF, or both — at least one is required."
         }
         footer={
           mode === "view" ? (
@@ -212,7 +275,7 @@ export function OnboardingPoliciesPanel() {
               <Button variant="outline" size="sm" className="cursor-pointer" onClick={() => setOpen(false)}>
                 Cancel
               </Button>
-              <Button size="sm" className="cursor-pointer" onClick={save}>
+              <Button size="sm" className="cursor-pointer" disabled={uploading} onClick={save}>
                 Save
               </Button>
             </>
@@ -245,13 +308,69 @@ export function OnboardingPoliciesPanel() {
               <option value="inactive">Inactive</option>
             </SetupSelect>
           </SetupField>
-          <SetupField label="Policy content" required hint="Shown in the portal policy viewer">
+
+          <SetupField
+            label="Policy PDF"
+            hint={`Optional upload · PDF preferred · max ${MAX_POLICY_FILE_MB} MB. Candidates open this when they click View.`}
+          >
+            {mode === "view" ? (
+              fileDataUrl ? (
+                <div className="space-y-2">
+                  <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <FileText className="size-3.5" />
+                    {fileName || "Attached file"}
+                  </p>
+                  <DocumentPreviewContent
+                    fileName={fileName || "policy.pdf"}
+                    dataUrl={fileDataUrl}
+                    mimeType={mimeType || "application/pdf"}
+                    frameClassName="max-h-[40vh]"
+                    viewOnly
+                  />
+                </div>
+              ) : (
+                <p className="text-xs text-muted-foreground">No PDF uploaded</p>
+              )
+            ) : (
+              <div className="space-y-2">
+                <input
+                  type="file"
+                  accept=".pdf,application/pdf,image/*"
+                  className="block w-full cursor-pointer text-xs file:mr-2 file:cursor-pointer file:rounded-md file:border-0 file:bg-muted file:px-2 file:py-1"
+                  disabled={uploading}
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    void onPickPdf(file);
+                    e.target.value = "";
+                  }}
+                />
+                {fileName ? (
+                  <div className="flex items-center justify-between gap-2 rounded-lg border border-border/70 bg-muted/20 px-2.5 py-2 text-xs">
+                    <span className="min-w-0 truncate font-medium">{fileName}</span>
+                    <button
+                      type="button"
+                      className="inline-flex cursor-pointer items-center gap-1 text-muted-foreground hover:text-destructive"
+                      onClick={clearFile}
+                    >
+                      <X className="size-3.5" />
+                      Remove
+                    </button>
+                  </div>
+                ) : null}
+              </div>
+            )}
+          </SetupField>
+
+          <SetupField
+            label="Policy content (written)"
+            hint="Optional written text shown in the portal (use with or without a PDF)"
+          >
             {mode === "view" ? (
               <div className="max-h-80 overflow-y-auto rounded-lg border border-border/70 bg-muted/20 p-3 text-sm whitespace-pre-wrap">
                 {body || "—"}
               </div>
             ) : (
-              <SetupTextarea value={body} onChange={(e) => setBody(e.target.value)} rows={12} />
+              <SetupTextarea value={body} onChange={(e) => setBody(e.target.value)} rows={10} />
             )}
           </SetupField>
         </div>

@@ -20,6 +20,7 @@ import {
   SetupSelect,
   SetupTextarea,
 } from "@/components/hr/setup/setup-drawer";
+import { DocumentPreviewContent } from "@/components/hr/shared/document-preview-content";
 import { toast } from "@/components/hr/setup/setup-toast";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -838,21 +839,13 @@ export function EdocOtherDocumentsPanel() {
                 Close
               </button>
             </div>
-            {previewFile.mimeType.startsWith("image/") ||
-            previewFile.dataUrl.startsWith("data:image") ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={previewFile.dataUrl}
-                alt={previewFile.fileName}
-                className="max-h-[70vh] w-auto max-w-full rounded-md"
-              />
-            ) : (
-              <iframe
-                title={previewFile.fileName}
-                src={previewFile.dataUrl}
-                className="h-[70vh] w-full rounded-md border border-border"
-              />
-            )}
+            <DocumentPreviewContent
+              fileName={previewFile.fileName}
+              dataUrl={previewFile.dataUrl}
+              mimeType={previewFile.mimeType}
+              frameClassName="max-h-[70vh]"
+              viewOnly
+            />
           </div>
         </div>
       ) : null}

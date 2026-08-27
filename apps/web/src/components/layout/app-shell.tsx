@@ -32,8 +32,8 @@ export function AppShell({ children }: AppShellProps) {
       {hrMode ? <HrSidebar /> : <AppSidebar />}
       <div className="flex min-h-0 min-w-0 flex-1 flex-col">
         <AppTopbar />
-        <main className="erp-scroll flex min-h-0 flex-1 flex-col overflow-y-auto px-4 py-4 sm:px-6 lg:px-8">
-          <div className="mx-auto flex min-h-full w-full max-w-[1400px] flex-1 flex-col animate-in fade-in-0 duration-300">
+        <main className="erp-scroll min-h-0 flex-1 overflow-y-auto px-4 py-4 sm:px-6 lg:px-8">
+          <div className="mx-auto w-full max-w-[1400px] animate-in fade-in-0 duration-300">
             {children}
           </div>
         </main>

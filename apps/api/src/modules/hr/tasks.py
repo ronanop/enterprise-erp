@@ -187,6 +187,16 @@ def attendance_auto_absent() -> dict:
             db.add(row)
             existing[key] = row
 
+        from modules.hr.service.sandwich_attendance_service import apply_sandwich_after_auto_absent
+
+        sandwich_stats = apply_sandwich_after_auto_absent(
+            db,
+            yesterday,
+            employments,
+            holidays_by_company,
+            policy_by_company,
+        )
+
         db.commit()
         return {
             "status": "ok",
@@ -196,6 +206,7 @@ def attendance_auto_absent() -> dict:
             "holiday_created": created_holiday,
             "miss_punch_marked": miss_punch,
             "skipped_on_leave": skipped_leave,
+            **sandwich_stats,
         }
     except Exception as exc:
         db.rollback()

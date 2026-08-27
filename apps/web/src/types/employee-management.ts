@@ -122,6 +122,8 @@ export type PersonalInfo = {
   alternateMobile: string;
   officialEmail: string;
   personalEmail: string;
+  /** Optional — often collected on Excel import sheets. */
+  fatherName?: string;
   currentAddress: AddressBlock;
   permanentAddress: AddressBlock;
   emergency: EmergencyContact;
@@ -154,6 +156,7 @@ export type EmploymentInfo = {
   leavePolicyId: string;
   leavePolicyName: string;
   probationPeriodDays: string;
+  trainingDurationDays: string;
   confirmationDate: string;
   lifecycleStatus: EmployeeLifecycleStatus;
 };
@@ -273,6 +276,7 @@ export function emptyPersonal(): PersonalInfo {
     alternateMobile: "",
     officialEmail: "",
     personalEmail: "",
+    fatherName: "",
     currentAddress: { ...EMPTY_ADDRESS },
     permanentAddress: { ...EMPTY_ADDRESS },
     emergency: { name: "", phone: "", relationship: "" },
@@ -307,6 +311,7 @@ export function emptyEmployment(code = ""): EmploymentInfo {
     leavePolicyId: "",
     leavePolicyName: "",
     probationPeriodDays: "90",
+    trainingDurationDays: "",
     confirmationDate: "",
     lifecycleStatus: "active",
   };

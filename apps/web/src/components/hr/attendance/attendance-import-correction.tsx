@@ -3,9 +3,10 @@
 import { useEffect, useMemo, useState } from "react";
 import { Download } from "lucide-react";
 
-import { SetupDrawer, SetupField, SetupInput, SetupSelect, SetupTextarea } from "@/components/hr/setup/setup-drawer";
+import { SetupDrawer, SetupField, SetupInput, SetupTextarea } from "@/components/hr/setup/setup-drawer";
 import { toast } from "@/components/hr/setup/setup-toast";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import {
   extractDataMatrix,
   matrixToCsv,
@@ -141,6 +142,14 @@ export function AttendanceImportDrawer({
   );
 }
 
+type RegularizePortion = "full_day" | "first_half" | "second_half";
+
+const PORTION_OPTIONS: { value: RegularizePortion; label: string; hint: string }[] = [
+  { value: "full_day", label: "Mark full day", hint: "Count as full-day present" },
+  { value: "first_half", label: "Half day — 1st half", hint: "Count as half-day present (morning)" },
+  { value: "second_half", label: "Half day — 2nd half", hint: "Count as half-day present (afternoon)" },
+];
+
 export function AttendanceCorrectionDrawer({
   open,
   onClose,
@@ -152,36 +161,31 @@ export function AttendanceCorrectionDrawer({
   record: AttendanceRecord | null;
   onSaved: () => void;
 }) {
-  const [field, setField] = useState<"check_in" | "check_out">("check_in");
-  const [newTime, setNewTime] = useState("");
+  const [portion, setPortion] = useState<RegularizePortion>("full_day");
   const [reason, setReason] = useState("");
   const [fileName, setFileName] = useState("");
   const [busy, setBusy] = useState(false);
 
-  const oldTime = useMemo(() => {
+  const punchSummary = useMemo(() => {
     if (!record) return "";
-    const iso = field === "check_in" ? record.checkIn : record.checkOut;
-    return formatPunchTimeForDisplay(iso);
-  }, [record, field]);
+    const inn = formatPunchTimeForDisplay(record.checkIn) || "—";
+    const out = formatPunchTimeForDisplay(record.checkOut) || "—";
+    return `In ${inn} · Out ${out}`;
+  }, [record]);
 
   useEffect(() => {
     if (!open || !record) return;
-    setField("check_in");
-    setNewTime("");
+    setPortion("full_day");
     setReason("");
     setFileName("");
     setBusy(false);
   }, [open, record]);
 
-  useEffect(() => {
-    setNewTime("");
-  }, [field]);
-
   return (
     <SetupDrawer
       open={open}
-      title="Attendance Correction"
-      description="Updates punch time and logs a correction request"
+      title="Regularize Attendance"
+      description="Mark full or half day present without changing recorded punch times"
       onClose={onClose}
       footer={
         <>
@@ -194,28 +198,27 @@ export function AttendanceCorrectionDrawer({
             className="cursor-pointer"
             disabled={busy}
             onClick={() => {
-              if (!record || !newTime || !reason) {
-                toast("Correct time and reason required", "error");
+              if (!record || !reason.trim()) {
+                toast("Reason is required", "error");
                 return;
               }
               setBusy(true);
               void applyAttendanceCorrection({
                 record,
-                field,
-                newTime,
-                reason,
+                portion,
+                reason: reason.trim(),
                 attachmentName: fileName,
               })
                 .then(() => {
-                  toast("Correction applied and logged", "success");
+                  toast("Attendance regularized", "success");
                   onSaved();
                   onClose();
                 })
-                .catch((e) => toast(e instanceof Error ? e.message : "Correction failed", "error"))
+                .catch((e) => toast(e instanceof Error ? e.message : "Regularization failed", "error"))
                 .finally(() => setBusy(false));
             }}
           >
-            {busy ? "Saving…" : "Submit correction"}
+            {busy ? "Saving…" : "Apply regularization"}
           </Button>
         </>
       }
@@ -225,17 +228,34 @@ export function AttendanceCorrectionDrawer({
           <p className="text-xs text-muted-foreground">
             {record.extension.employeeName} · {record.attendanceDate}
           </p>
-          <SetupField label="Field">
-            <SetupSelect value={field} onChange={(e) => setField(e.target.value as "check_in" | "check_out")}>
-              <option value="check_in">Check in</option>
-              <option value="check_out">Check out</option>
-            </SetupSelect>
+          <SetupField label="Date">
+            <SetupInput type="date" value={record.attendanceDate} readOnly />
           </SetupField>
-          <SetupField label="Old time">
-            <SetupInput value={oldTime} readOnly />
+          <SetupField label="Recorded punches">
+            <SetupInput value={punchSummary} readOnly />
           </SetupField>
-          <SetupField label="Correct time" required>
-            <SetupInput type="time" value={newTime} onChange={(e) => setNewTime(e.target.value)} />
+          <SetupField label="Mark as" required>
+            <div className="space-y-2">
+              {PORTION_OPTIONS.map((opt) => {
+                const active = portion === opt.value;
+                return (
+                  <button
+                    key={opt.value}
+                    type="button"
+                    onClick={() => setPortion(opt.value)}
+                    className={cn(
+                      "flex w-full cursor-pointer flex-col rounded-xl border px-3 py-2.5 text-left transition-all",
+                      active
+                        ? "border-primary/50 bg-primary/5 ring-1 ring-primary/20"
+                        : "border-border hover:border-primary/30",
+                    )}
+                  >
+                    <span className="text-sm font-medium text-foreground">{opt.label}</span>
+                    <span className="text-[11px] text-muted-foreground">{opt.hint}</span>
+                  </button>
+                );
+              })}
+            </div>
           </SetupField>
           <SetupField label="Reason" required>
             <SetupTextarea value={reason} onChange={(e) => setReason(e.target.value)} />
@@ -248,9 +268,9 @@ export function AttendanceCorrectionDrawer({
             />
           </SetupField>
           <ol className="list-decimal pl-4 text-[10px] text-muted-foreground">
-            <li>Punch time is updated immediately</li>
-            <li>Correction request is audit-logged</li>
-            <li>Status moves to pending approval review</li>
+            <li>Actual check-in / check-out times are not changed</li>
+            <li>Day is marked present (full) or half-day present for payroll / reports</li>
+            <li>Regularization is audit-logged on the attendance record</li>
           </ol>
         </div>
       ) : null}

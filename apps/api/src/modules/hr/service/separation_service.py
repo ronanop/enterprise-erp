@@ -38,7 +38,55 @@ def default_clearance() -> dict:
         "checklist": [dict(item) for item in DEFAULT_CHECKLIST],
         "exit_interview": None,
         "documents": [],
+        "approvals": [],
     }
+
+
+def _append_approval_artifact(
+    clearance: dict,
+    *,
+    stage: str,
+    remarks: str | None,
+    file_name: str | None,
+    file_data_url: str | None,
+    user_id: object | None,
+) -> dict:
+    """Record remarks / attachment for submit or an approval stage."""
+    note = (remarks or "").strip() or None
+    fname = (file_name or "").strip() or None
+    fdata = (file_data_url or "").strip() or None
+    if not note and not fname and not fdata:
+        return clearance
+
+    approvals = list(clearance.get("approvals") or [])
+    entry = {
+        "id": str(uuid4()),
+        "stage": stage,
+        "remarks": note,
+        "file_name": fname,
+        "file_data_url": fdata,
+        "at": datetime.now(timezone.utc).isoformat(),
+        "by": str(user_id) if user_id else None,
+    }
+    approvals.append(entry)
+    clearance["approvals"] = approvals
+
+    if fname or fdata:
+        docs = list(clearance.get("documents") or [])
+        docs.append(
+            {
+                "id": str(uuid4()),
+                "name": fname or f"{stage} approval attachment",
+                "doc_type": f"approval_{stage}",
+                "notes": note,
+                "file_name": fname,
+                "file_data_url": fdata,
+                "uploaded_at": entry["at"],
+                "uploaded_by": entry["by"],
+            }
+        )
+        clearance["documents"] = docs
+    return clearance
 
 
 class SeparationService:
@@ -79,10 +127,27 @@ class SeparationService:
             **fields,
         )
 
-    def submit(self, ctx: TenantContext, row_id: UUID):
+    def submit(
+        self,
+        ctx: TenantContext,
+        row_id: UUID,
+        *,
+        remarks: str | None = None,
+        file_name: str | None = None,
+        file_data_url: str | None = None,
+    ):
         row = self.get(ctx, row_id)
         self._engine.submit(row)
-        updated = self._repo.update(ctx, row_id, status=row.status)
+        clearance = self._clearance_for_update(row)
+        clearance = _append_approval_artifact(
+            clearance,
+            stage="submitted",
+            remarks=remarks,
+            file_name=file_name,
+            file_data_url=file_data_url,
+            user_id=ctx.user_id,
+        )
+        updated = self._repo.update(ctx, row_id, status=row.status, clearance_json=clearance)
         try:
             from modules.hr.service.hr_notify import notify_employee
 
@@ -103,7 +168,16 @@ class SeparationService:
             pass
         return updated
 
-    def approve(self, ctx: TenantContext, row_id: UUID, *, stage: str = "manager"):
+    def approve(
+        self,
+        ctx: TenantContext,
+        row_id: UUID,
+        *,
+        stage: str = "manager",
+        remarks: str | None = None,
+        file_name: str | None = None,
+        file_data_url: str | None = None,
+    ):
         row = self.get(ctx, row_id)
         stage_key = (stage or "manager").strip().lower()
         if stage_key == "manager":
@@ -123,18 +197,31 @@ class SeparationService:
             )
 
         update_kwargs: dict = {"status": row.status}
+        clearance = self._clearance_for_update(row)
         checklist_key = _STAGE_CHECKLIST_KEY.get(stage_key)
         if checklist_key:
-            clearance = self._clearance_for_update(row)
             new_checklist: list[dict] = []
             for item in clearance.get("checklist") or []:
                 entry = dict(item)
                 if str(entry.get("key")) == checklist_key:
                     entry["done"] = True
-                    entry["notes"] = entry.get("notes") or f"Auto-cleared on {stage_key} approval"
+                    entry["notes"] = (
+                        (remarks or "").strip()
+                        or entry.get("notes")
+                        or f"Auto-cleared on {stage_key} approval"
+                    )
                 new_checklist.append(entry)
             clearance["checklist"] = new_checklist
-            update_kwargs["clearance_json"] = clearance
+
+        clearance = _append_approval_artifact(
+            clearance,
+            stage=stage_key,
+            remarks=remarks,
+            file_name=file_name,
+            file_data_url=file_data_url,
+            user_id=ctx.user_id,
+        )
+        update_kwargs["clearance_json"] = clearance
 
         updated = self._repo.update(ctx, row_id, **update_kwargs)
         try:
@@ -228,6 +315,8 @@ class SeparationService:
                 clearance["exit_interview"] = None
         if not isinstance(clearance.get("documents"), list):
             clearance["documents"] = []
+        if not isinstance(clearance.get("approvals"), list):
+            clearance["approvals"] = []
         return clearance
 
     def _clearance_for_update(self, row: HrSeparation) -> dict:

@@ -1470,6 +1470,15 @@ class SeparationCreate(BaseModel):
 
 class SeparationApproveRequest(BaseModel):
     stage: str = "manager"
+    remarks: str | None = None
+    file_name: str | None = None
+    file_data_url: str | None = None
+
+
+class SeparationSubmitRequest(BaseModel):
+    remarks: str | None = None
+    file_name: str | None = None
+    file_data_url: str | None = None
 
 
 class SeparationCompleteRequest(BaseModel):
@@ -1633,3 +1642,8 @@ class EmployeeImportResponse(BaseModel):
     warnings: list[str] = []
     errors: list[str] = []
     results: list[EmployeeImportResultRow] = []
+
+
+class EmployeeClearResponse(BaseModel):
+    deleted: int
+    message: str = ""

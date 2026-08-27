@@ -13,6 +13,7 @@ import {
 
 import { EdocDocumentTypesPanel } from "@/components/hr/edoc/edoc-document-types-panel";
 import { EdocOtherDocumentsPanel } from "@/components/hr/edoc/edoc-other-documents-panel";
+import { DocumentPreviewContent } from "@/components/hr/shared/document-preview-content";
 import { OnboardingPoliciesPanel } from "@/components/hr/setup/onboarding-policies-panel";
 import { PageHeader } from "@/components/layout/page-header";
 import { HrLoadingBlock, HrUnderlineTabs, type HrTabItem } from "@/components/hr/hr-primitives";
@@ -20,7 +21,13 @@ import { SetupToastHost, toast } from "@/components/hr/setup/setup-toast";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { loadOnboardingDirectory } from "@/services/onboarding-management-service";
-import { listOnboardingPolicies } from "@/services/onboarding-policies-service";
+import { listOnboardingPolicies, ensureOnboardingPoliciesLoaded, listActivePoliciesForPortal } from "@/services/onboarding-policies-service";
+import {
+  ensureSignedPolicyDocsLoaded,
+  getSignedPolicyDocsForCase,
+  saveSignedPolicyDocsForCase,
+} from "@/lib/onboarding-signed-docs-store";
+import { stampPoliciesWithSignature } from "@/lib/stamp-policy-signatures";
 import { loadEmployeeDirectory } from "@/services/employee-management-service";
 import { loadOffboardingCases } from "@/services/offboarding-service";
 import type { OnboardingCase, OnboardingDocument } from "@/types/onboarding-management";
@@ -98,6 +105,7 @@ type EmployeeDocBundle = {
   signature?: string;
   signatureFileName?: string;
   signatureDataUrl?: string;
+  signedPolicyDocs?: OnboardingDocument[];
   caseCode?: string;
   offboardingDocs: ExitDocument[];
   offboardingCaseCode?: string;
@@ -212,7 +220,9 @@ export function EdocManagementPage() {
   const [query, setQuery] = useState("");
   const [bundles, setBundles] = useState<EmployeeDocBundle[]>([]);
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
-  const [policyCatalog, setPolicyCatalog] = useState(listOnboardingPolicies(true));
+  const [policyCatalog, setPolicyCatalog] = useState<
+    ReturnType<typeof listOnboardingPolicies>
+  >([]);
   const [previewDoc, setPreviewDoc] = useState<OnboardingDocument | null>(null);
 
   const load = useCallback(async () => {
@@ -222,6 +232,8 @@ export function EdocManagementPage() {
         loadOnboardingDirectory().catch(() => ({ cases: [] as OnboardingCase[] })),
         loadEmployeeDirectory().catch(() => ({ records: [] as EmployeeRecord[] })),
         loadOffboardingCases().catch(() => [] as Awaited<ReturnType<typeof loadOffboardingCases>>),
+        ensureOnboardingPoliciesLoaded().catch(() => []),
+        ensureSignedPolicyDocsLoaded().catch(() => ({})),
       ]);
       setPolicyCatalog(listOnboardingPolicies(true));
       const employees = empDir.records ?? [];
@@ -246,6 +258,7 @@ export function EdocManagementPage() {
           employeeId: emp.id,
           documents: docsFromEmployee(emp),
           policiesAccepted: [],
+          signedPolicyDocs: [],
           offboardingDocs: [],
         };
         byEmpId.set(emp.id, bundle);
@@ -264,6 +277,41 @@ export function EdocManagementPage() {
         const signature = c.portal?.policies?.signature;
         const signatureFileName = c.portal?.policies?.signatureFileName;
         const signatureDataUrl = c.portal?.policies?.signatureDataUrl;
+        const fromCase = c.portal?.policies?.signedDocuments ?? [];
+        let fromIdb = await getSignedPolicyDocsForCase(c.id);
+        // Re-stamp whenever a signature image exists so legacy "Digitally signed"
+        // labels are replaced with signature-only PDFs.
+        if (signatureDataUrl && signatureDataUrl.startsWith("data:image/")) {
+          try {
+            const policies = listActivePoliciesForPortal();
+            if (policies.length) {
+              const stamped = await stampPoliciesWithSignature({
+                policies,
+                signatureDataUrl,
+                signatureMimeType: c.portal?.policies?.signatureMimeType,
+                candidateName: c.candidateName,
+              });
+              await saveSignedPolicyDocsForCase(c.id, stamped);
+              fromIdb = stamped;
+            }
+          } catch (err) {
+            console.warn("Could not refresh signed policy PDFs", err);
+          }
+        }
+        const signedSource = fromIdb.length
+          ? fromIdb
+          : fromCase.filter((s) => Boolean(s.fileDataUrl));
+        const signedPolicyDocs: OnboardingDocument[] = signedSource.map((s) => ({
+          id: `signed-policy-${c.id}-${s.policyId}`,
+          kind: "other" as const,
+          typeCode: `SIGNED-POLICY-${s.policyId}`,
+          fileName: s.fileName,
+          uploadedAt: s.signedAt,
+          verifyStatus: "accepted" as const,
+          notes: s.title,
+          fileDataUrl: s.fileDataUrl,
+          mimeType: s.mimeType || "application/pdf",
+        }));
 
         if (existing) {
           const seen = new Set(existing.documents.map((d) => d.id));
@@ -275,6 +323,7 @@ export function EdocManagementPage() {
           if (signature) existing.signature = signature;
           if (signatureFileName) existing.signatureFileName = signatureFileName;
           if (signatureDataUrl) existing.signatureDataUrl = signatureDataUrl;
+          if (signedPolicyDocs.length) existing.signedPolicyDocs = signedPolicyDocs;
           existing.caseCode = c.caseCode;
         } else {
           const bundle: EmployeeDocBundle = {
@@ -290,6 +339,7 @@ export function EdocManagementPage() {
             signature,
             signatureFileName,
             signatureDataUrl,
+            signedPolicyDocs,
             caseCode: c.caseCode,
             offboardingDocs: [],
           };
@@ -401,16 +451,18 @@ export function EdocManagementPage() {
                       className={cn(
                         "w-full cursor-pointer rounded-lg px-2.5 py-2 text-left transition-colors",
                         selectedKey === b.key
-                          ? "bg-primary/10 text-foreground"
-                          : "hover:bg-muted/50",
+                          ? "bg-primary/15 text-foreground ring-1 ring-primary/30"
+                          : "text-foreground hover:bg-muted/60",
                       )}
                       onClick={() => setSelectedKey(b.key)}
                     >
-                      <p className="truncate text-sm font-medium">{b.name}</p>
+                      <p className="truncate text-sm font-medium text-inherit">{b.name}</p>
                       <p className="truncate text-[10px] text-muted-foreground">
                         {b.code}
                         {b.documents.length ? ` · ${b.documents.length} docs` : ""}
-                        {b.policiesAccepted.length ? ` · ${b.policiesAccepted.length} policies` : ""}
+                        {(b.signedPolicyDocs?.length || b.policiesAccepted.length)
+                          ? ` · ${b.signedPolicyDocs?.length || b.policiesAccepted.length} policies`
+                          : ""}
                         {b.offboardingDocs.length ? ` · exit` : ""}
                       </p>
                     </button>
@@ -484,26 +536,55 @@ export function EdocManagementPage() {
                 <DocSectionCard
                   key={`${selected.key}-policies`}
                   title="Policies accepted"
-                  hint="Policies agreed and signed during onboarding"
-                  count={selected.policiesAccepted.length}
-                  defaultOpen={false}
+                  hint="Signed policy PDFs — signature on every page (bottom-right)"
+                  count={
+                    selected.signedPolicyDocs?.length
+                      ? selected.signedPolicyDocs.length
+                      : selected.policiesAccepted.length
+                  }
+                  defaultOpen={Boolean(selected.signedPolicyDocs?.length || selected.policiesAccepted.length)}
                 >
-                  {selected.policiesAccepted.length === 0 ? (
+                  {selected.policiesAccepted.length === 0 &&
+                  !(selected.signedPolicyDocs?.length) ? (
                     <p className="text-xs text-muted-foreground">
                       No policy acceptance recorded for this person.
                     </p>
-                  ) : (
+                  ) : selected.signedPolicyDocs?.length ? (
                     <ul className="space-y-1.5">
-                      {selected.policiesAccepted.map((id) => (
-                        <li
-                          key={id}
-                          className="flex items-start gap-2 rounded-lg border border-border/60 px-3 py-2 text-sm"
-                        >
-                          <CheckCircle2 className="mt-0.5 size-3.5 shrink-0 text-emerald-600" />
-                          <span>{policyTitle(id)}</span>
-                        </li>
+                      {selected.signedPolicyDocs.map((d) => (
+                        <DocRow
+                          key={d.id}
+                          fileName={d.notes || d.fileName}
+                          meta={[
+                            "Signed · every page",
+                            d.uploadedAt ? String(d.uploadedAt).slice(0, 10) : "",
+                            "accepted",
+                          ]
+                            .filter(Boolean)
+                            .join(" · ")}
+                          previewable={Boolean(d.fileDataUrl)}
+                          onView={() => setPreviewDoc(d)}
+                        />
                       ))}
                     </ul>
+                  ) : (
+                    <>
+                      <ul className="space-y-1.5">
+                        {selected.policiesAccepted.map((id) => (
+                          <li
+                            key={id}
+                            className="flex items-start gap-2 rounded-lg border border-border/60 px-3 py-2 text-sm"
+                          >
+                            <CheckCircle2 className="mt-0.5 size-3.5 shrink-0 text-emerald-600" />
+                            <span>{policyTitle(id)}</span>
+                          </li>
+                        ))}
+                      </ul>
+                      <p className="mt-2 text-[10px] text-amber-700">
+                        Agreed only — no stamped PDFs yet. Candidate must submit with an uploaded
+                        signature image (PNG/JPG ≤ 100 KB) so HR can open signed copies here.
+                      </p>
+                    </>
                   )}
                   {selected.policiesAcceptedAt ? (
                     <p className="mt-2 text-[10px] text-muted-foreground">
@@ -513,7 +594,10 @@ export function EdocManagementPage() {
                   {selected.signature || selected.signatureFileName || selected.signatureDataUrl ? (
                     <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
                       <span>
-                        Signature: {selected.signatureFileName || selected.signature || "Uploaded"}
+                        Signature:{" "}
+                        {selected.signatureFileName ||
+                          (selected.signatureDataUrl ? "Uploaded image" : selected.signature) ||
+                          "Uploaded"}
                       </span>
                       {selected.signatureDataUrl ? (
                         <button
@@ -591,21 +675,15 @@ export function EdocManagementPage() {
                 Close
               </button>
             </div>
-            {previewDoc.mimeType?.startsWith("image/") ||
-            previewDoc.fileDataUrl.startsWith("data:image") ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={previewDoc.fileDataUrl}
-                alt={previewDoc.fileName}
-                className="max-h-[70vh] w-auto max-w-full rounded-md"
+            {previewDoc.fileDataUrl ? (
+              <DocumentPreviewContent
+                fileName={previewDoc.fileName}
+                dataUrl={previewDoc.fileDataUrl}
+                mimeType={previewDoc.mimeType}
+                frameClassName="max-h-[70vh]"
+                viewOnly
               />
-            ) : (
-              <iframe
-                title={previewDoc.fileName}
-                src={previewDoc.fileDataUrl}
-                className="h-[70vh] w-full rounded-md border border-border"
-              />
-            )}
+            ) : null}
           </div>
         </div>
       ) : null}

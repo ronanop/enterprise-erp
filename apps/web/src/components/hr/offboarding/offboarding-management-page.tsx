@@ -19,6 +19,7 @@ import {
   type HrTabItem,
 } from "@/components/hr/hr-primitives";
 import { toast, SetupToastHost } from "@/components/hr/setup/setup-toast";
+import { SetupField, SetupTextarea } from "@/components/hr/setup/setup-drawer";
 import { PageHeader } from "@/components/layout/page-header";
 import { Button } from "@/components/ui/button";
 import { SetupSelect } from "@/components/hr/setup/setup-drawer";
@@ -30,7 +31,7 @@ import {
   offboardingAction,
   patchOffboardingCaseFromRow,
 } from "@/services/offboarding-service";
-import type { OffboardingCase } from "@/types/offboarding";
+import type { OffboardingCase, WorkflowApprovalEntry } from "@/types/offboarding";
 import {
   POST_HR_STEPS,
   SEPARATION_TYPE_LABELS,
@@ -49,6 +50,171 @@ const TABS: HrTabItem[] = [
   { id: "documents", label: "Documents", icon: Upload },
   { id: "fnf", label: "FNF Settlement", icon: Wallet },
 ];
+
+const STAGE_LABELS: Record<string, string> = {
+  submitted: "Submitted",
+  manager: "Manager Approved",
+  it: "IT Approved",
+  accounts: "Accounts Approved",
+  hr: "HR Approved",
+};
+
+const MAX_APPROVAL_FILE_BYTES = 2 * 1024 * 1024;
+
+function readFileAsDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result ?? ""));
+    reader.onerror = () => reject(new Error("Could not read file"));
+    reader.readAsDataURL(file);
+  });
+}
+
+function WorkflowActionPanel({
+  title,
+  hint,
+  confirmLabel,
+  acting,
+  onConfirm,
+}: {
+  title: string;
+  hint: string;
+  confirmLabel: string;
+  acting: boolean;
+  onConfirm: (payload: {
+    remarks: string;
+    file_name: string | null;
+    file_data_url: string | null;
+  }) => Promise<void>;
+}) {
+  const [remarks, setRemarks] = useState("");
+  const [fileName, setFileName] = useState<string | null>(null);
+  const [fileDataUrl, setFileDataUrl] = useState<string | null>(null);
+  const [fileError, setFileError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setRemarks("");
+    setFileName(null);
+    setFileDataUrl(null);
+    setFileError(null);
+  }, [title]);
+
+  async function onFile(file: File | null) {
+    setFileError(null);
+    if (!file) {
+      setFileName(null);
+      setFileDataUrl(null);
+      return;
+    }
+    if (file.size > MAX_APPROVAL_FILE_BYTES) {
+      setFileError("File must be 2 MB or smaller.");
+      setFileName(null);
+      setFileDataUrl(null);
+      return;
+    }
+    try {
+      const dataUrl = await readFileAsDataUrl(file);
+      setFileName(file.name);
+      setFileDataUrl(dataUrl);
+    } catch {
+      setFileError("Could not read file.");
+      setFileName(null);
+      setFileDataUrl(null);
+    }
+  }
+
+  return (
+    <div className="space-y-2.5 rounded-lg border border-border/70 bg-muted/20 p-3">
+      <div>
+        <p className="text-sm font-semibold text-foreground">{title}</p>
+        <p className="mt-0.5 text-[11px] text-muted-foreground">{hint}</p>
+      </div>
+      <SetupField label="Remarks" hint="Optional — visible on this approval step">
+        <SetupTextarea
+          rows={2}
+          className="min-h-[56px]"
+          value={remarks}
+          placeholder="Add remarks for this step…"
+          onChange={(e) => setRemarks(e.target.value)}
+        />
+      </SetupField>
+      <SetupField label="Attachment" hint="Optional — PDF, image, or office file (max 2 MB)">
+        <label className="flex cursor-pointer items-center gap-1.5 rounded-lg border border-dashed border-border px-3 py-2 text-xs text-muted-foreground hover:bg-muted/40">
+          <Upload className="size-3.5 shrink-0" />
+          <span className="truncate font-medium text-foreground">{fileName || "Choose file"}</span>
+          <input
+            type="file"
+            className="sr-only"
+            accept=".pdf,.png,.jpg,.jpeg,.doc,.docx,.xls,.xlsx,image/*,application/pdf"
+            onChange={(e) => void onFile(e.target.files?.[0] ?? null)}
+          />
+        </label>
+        {fileError ? <p className="mt-1 text-[11px] text-destructive">{fileError}</p> : null}
+      </SetupField>
+      <Button
+        size="sm"
+        className="cursor-pointer"
+        disabled={acting || Boolean(fileError)}
+        onClick={() =>
+          void onConfirm({
+            remarks: remarks.trim(),
+            file_name: fileName,
+            file_data_url: fileDataUrl,
+          })
+        }
+      >
+        {acting ? "Working…" : confirmLabel}
+      </Button>
+    </div>
+  );
+}
+
+function ApprovalHistory({ entries }: { entries: WorkflowApprovalEntry[] }) {
+  if (!entries.length) return null;
+  return (
+    <div className="space-y-2 rounded-lg border border-border/60 bg-card p-3">
+      <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+        Approval remarks &amp; files
+      </p>
+      <ul className="space-y-2">
+        {entries.map((e) => (
+          <li
+            key={e.id || `${e.stage}-${e.at}`}
+            className="rounded-md border border-border/50 bg-muted/20 px-2.5 py-2 text-xs"
+          >
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <span className="font-medium text-foreground">
+                {STAGE_LABELS[e.stage] || e.stage}
+              </span>
+              {e.at ? (
+                <span className="text-[10px] text-muted-foreground">
+                  {e.at.slice(0, 19).replace("T", " ")}
+                </span>
+              ) : null}
+            </div>
+            {e.remarks ? <p className="mt-1 text-muted-foreground">{e.remarks}</p> : null}
+            {e.fileName ? (
+              <p className="mt-1 inline-flex items-center gap-1 text-[11px] text-foreground">
+                <FileText className="size-3" />
+                {e.fileDataUrl ? (
+                  <a
+                    href={e.fileDataUrl}
+                    download={e.fileName}
+                    className="underline-offset-2 hover:underline"
+                  >
+                    {e.fileName}
+                  </a>
+                ) : (
+                  e.fileName
+                )}
+              </p>
+            ) : null}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
 
 function WorkflowStrip({ c }: { c: OffboardingCase }) {
   const active = workflowStepIndex(c.status, c.fnfStatus);
@@ -71,7 +237,10 @@ function WorkflowStrip({ c }: { c: OffboardingCase }) {
                       : "border-border bg-muted/40 text-muted-foreground",
                 )}
               >
-                {done ? <Check className="size-3" /> : null}
+                {done ? <Check className="size-3 shrink-0" /> : null}
+                {!done && current ? (
+                  <span className="size-1.5 shrink-0 rounded-full bg-primary" aria-hidden />
+                ) : null}
                 {step.label}
               </span>
               {i < WORKFLOW_STEPS.length - 1 ? (
@@ -150,7 +319,7 @@ function OffboardingCasePicker({
     <div className="flex flex-col gap-1.5 sm:flex-row sm:items-center sm:gap-3">
       <span className="text-xs font-medium text-muted-foreground shrink-0">Employee / case</span>
       <SetupSelect
-        className="min-w-[min(100%,20rem)] flex-1"
+        className="w-full min-w-0 sm:min-w-[min(100%,20rem)] sm:flex-1"
         value={selectedId ?? ""}
         onChange={(e) => onSelect(e.target.value)}
       >
@@ -254,7 +423,7 @@ export function OffboardingManagementPage() {
   const resignationCount = cases.filter((c) => c.separationType === "resignation").length;
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-4 pb-2">
       <SetupToastHost />
       <PageHeader
         title="Offboarding"
@@ -274,28 +443,30 @@ export function OffboardingManagementPage() {
       {authBlocked ? <HrAuthBanner /> : null}
       {loading && cases.length === 0 ? <HrLoadingBlock /> : null}
 
-      <HrKpiGrid
-        items={[
-          { label: "Open Cases", value: openCount },
-          { label: "Resignations", value: resignationCount },
-          {
-            label: "Pending Clearance",
-            value: cases.filter(
-              (c) =>
-                c.checklist.some((i) => !i.done) &&
-                !["completed", "cancelled"].includes(c.status.toLowerCase()),
-            ).length,
-          },
-          {
-            label: "FNF pending",
-            value: cases.filter(
-              (c) =>
-                ["hr_approved", "manager_approved"].includes(c.status.toLowerCase()) &&
-                !["settled", "waived"].includes(c.fnfStatus.toLowerCase()),
-            ).length,
-          },
-        ]}
-      />
+      {tab === "resignations" ? (
+        <HrKpiGrid
+          items={[
+            { label: "Open Cases", value: openCount },
+            { label: "Resignations", value: resignationCount },
+            {
+              label: "Pending Clearance",
+              value: cases.filter(
+                (c) =>
+                  c.checklist.some((i) => !i.done) &&
+                  !["completed", "cancelled"].includes(c.status.toLowerCase()),
+              ).length,
+            },
+            {
+              label: "FNF pending",
+              value: cases.filter(
+                (c) =>
+                  ["hr_approved", "manager_approved"].includes(c.status.toLowerCase()) &&
+                  !["settled", "waived"].includes(c.fnfStatus.toLowerCase()),
+              ).length,
+            },
+          ]}
+        />
+      ) : null}
 
       <HrUnderlineTabs tabs={TABS} value={tab} onChange={(id) => setTab(id as TabId)} />
 
@@ -413,63 +584,109 @@ export function OffboardingManagementPage() {
       ) : null}
 
       {selected && tab === "workflow" ? (
-        <section className="space-y-4 rounded-xl border border-border/70 bg-card p-4 shadow-sm">
+        <section className="h-fit w-full space-y-3 rounded-xl border border-border/70 bg-card p-4 shadow-sm">
           <OffboardingCaseHeader c={selected} />
           <WorkflowStrip c={selected} />
-          <div className="flex flex-wrap gap-2">
+          <ApprovalHistory entries={selected.approvals ?? []} />
+          <div className="space-y-2">
             {selected.status === "draft" ? (
-              <Button
-                size="sm"
-                className="cursor-pointer"
-                disabled={acting}
-                onClick={() => void act("submit", {}, "Submitted for approval")}
-              >
-                Submit
-              </Button>
+              <WorkflowActionPanel
+                title="Submit exit request"
+                hint="Add optional remarks and a supporting file before sending for manager approval."
+                confirmLabel="Submit"
+                acting={acting}
+                onConfirm={async (payload) => {
+                  await act(
+                    "submit",
+                    {
+                      remarks: payload.remarks || null,
+                      file_name: payload.file_name,
+                      file_data_url: payload.file_data_url,
+                    },
+                    "Submitted for approval",
+                  );
+                }}
+              />
             ) : null}
             {selected.status === "submitted" ? (
-              <Button
-                size="sm"
-                variant="outline"
-                className="cursor-pointer"
-                disabled={acting}
-                onClick={() => void act("approve", { stage: "manager" }, "Manager approved")}
-              >
-                Manager approve
-              </Button>
+              <WorkflowActionPanel
+                title="Manager approve"
+                hint="HR can move this to Manager Approved with remarks and an attachment."
+                confirmLabel="Manager approve"
+                acting={acting}
+                onConfirm={async (payload) => {
+                  await act(
+                    "approve",
+                    {
+                      stage: "manager",
+                      remarks: payload.remarks || null,
+                      file_name: payload.file_name,
+                      file_data_url: payload.file_data_url,
+                    },
+                    "Manager approved",
+                  );
+                }}
+              />
             ) : null}
             {selected.status === "manager_approved" ? (
-              <Button
-                size="sm"
-                variant="outline"
-                className="cursor-pointer"
-                disabled={acting}
-                onClick={() => void act("approve", { stage: "it" }, "IT approved")}
-              >
-                IT approve
-              </Button>
+              <WorkflowActionPanel
+                title="IT approve"
+                hint="Add IT clearance remarks and any supporting file."
+                confirmLabel="IT approve"
+                acting={acting}
+                onConfirm={async (payload) => {
+                  await act(
+                    "approve",
+                    {
+                      stage: "it",
+                      remarks: payload.remarks || null,
+                      file_name: payload.file_name,
+                      file_data_url: payload.file_data_url,
+                    },
+                    "IT approved",
+                  );
+                }}
+              />
             ) : null}
             {selected.status === "it_approved" ? (
-              <Button
-                size="sm"
-                variant="outline"
-                className="cursor-pointer"
-                disabled={acting}
-                onClick={() => void act("approve", { stage: "accounts" }, "Accounts approved")}
-              >
-                Accounts approve
-              </Button>
+              <WorkflowActionPanel
+                title="Accounts approve"
+                hint="Add accounts clearance remarks and any supporting file."
+                confirmLabel="Accounts approve"
+                acting={acting}
+                onConfirm={async (payload) => {
+                  await act(
+                    "approve",
+                    {
+                      stage: "accounts",
+                      remarks: payload.remarks || null,
+                      file_name: payload.file_name,
+                      file_data_url: payload.file_data_url,
+                    },
+                    "Accounts approved",
+                  );
+                }}
+              />
             ) : null}
             {selected.status === "accounts_approved" ? (
-              <Button
-                size="sm"
-                variant="outline"
-                className="cursor-pointer"
-                disabled={acting}
-                onClick={() => void act("approve", { stage: "hr" }, "HR approved")}
-              >
-                HR approve
-              </Button>
+              <WorkflowActionPanel
+                title="HR approve"
+                hint="Add HR approval remarks and any supporting file."
+                confirmLabel="HR approve"
+                acting={acting}
+                onConfirm={async (payload) => {
+                  await act(
+                    "approve",
+                    {
+                      stage: "hr",
+                      remarks: payload.remarks || null,
+                      file_name: payload.file_name,
+                      file_data_url: payload.file_data_url,
+                    },
+                    "HR approved",
+                  );
+                }}
+              />
             ) : null}
             {selected.status === "hr_approved" && !selected.exitInterview ? (
               <Button

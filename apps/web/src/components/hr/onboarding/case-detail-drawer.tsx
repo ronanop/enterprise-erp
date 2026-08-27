@@ -27,7 +27,7 @@ import {
   SetupTextarea,
 } from "@/components/hr/setup/setup-drawer";
 import { Button } from "@/components/ui/button";
-import { EMPLOYMENT_TYPE_OPTIONS, formatEmploymentTypeLabel } from "@/config/hr-master-options";
+import { EMPLOYMENT_TYPE_OPTIONS, employmentDurationKind, formatEmploymentTypeLabel } from "@/config/hr-master-options";
 import { getInvitationUrl, type OnboardingAssignmentInput } from "@/services/onboarding-management-service";
 import {
   loadHrMasterDirectory,
@@ -82,6 +82,7 @@ type AssignmentForm = {
   branchId: string;
   employmentType: string;
   probationPeriodDays: string;
+  trainingDurationDays: string;
 };
 
 function formFromCase(c: OnboardingCase): AssignmentForm {
@@ -95,7 +96,8 @@ function formFromCase(c: OnboardingCase): AssignmentForm {
     branch: c.branch || "",
     branchId: c.branchId || "",
     employmentType: c.employmentType || "permanent",
-    probationPeriodDays: c.probationPeriodDays || "90",
+    probationPeriodDays: c.probationPeriodDays || "",
+    trainingDurationDays: c.trainingDurationDays || "",
   };
 }
 
@@ -164,11 +166,16 @@ export function CaseDetailDrawer({
         label: b.label,
         companyId: b.companyId,
       }));
+      const byId = new Map<string, HrMasterOption>();
+      for (const b of [...orgBranches, ...m.branches]) {
+        if (b.id && !byId.has(b.id)) byId.set(b.id, b);
+      }
+      const branches = [...byId.values()];
       setMasters({
         departments: m.departments,
         designations: m.designations,
         managers: m.managers,
-        branches: orgBranches.length ? orgBranches : m.branches,
+        branches,
       });
       setEmploymentTypes(types);
       setEntities(entityOpts);
@@ -268,6 +275,7 @@ export function CaseDetailDrawer({
         branchId: form.branchId || undefined,
         employmentType: form.employmentType,
         probationPeriodDays: form.probationPeriodDays,
+        trainingDurationDays: form.trainingDurationDays,
       });
     } finally {
       setSavingAssignment(false);
@@ -393,7 +401,7 @@ export function CaseDetailDrawer({
           {assignmentEditable ? (
             <p className="rounded-lg border border-border/60 bg-muted/30 px-3 py-2 text-[11px] text-muted-foreground">
               After verifying documents, assign department, designation, reporting manager,
-              employment type, and probation here. Save, then Approve submission.
+              employment type, and duration here. Save, then Approve submission.
             </p>
           ) : null}
 
@@ -427,7 +435,15 @@ export function CaseDetailDrawer({
                 <SetupField label="Employment type" required>
                   <SetupSelect
                     value={form.employmentType}
-                    onChange={(e) => patchForm({ employmentType: e.target.value })}
+                    onChange={(e) => {
+                      const next = e.target.value;
+                      const kind = employmentDurationKind(next);
+                      patchForm({
+                        employmentType: next,
+                        probationPeriodDays: kind === "probation" ? form.probationPeriodDays : "",
+                        trainingDurationDays: kind === "training" ? form.trainingDurationDays : "",
+                      });
+                    }}
                   >
                     {employmentTypes.map((t) => (
                       <option key={t.value} value={t.value}>
@@ -436,18 +452,38 @@ export function CaseDetailDrawer({
                     ))}
                   </SetupSelect>
                 </SetupField>
-                <SetupField
-                  label="Probation period (days)"
-                  hint="Applied when the employee is activated (0 = no probation)"
-                >
-                  <SetupInput
-                    type="number"
-                    min={0}
-                    max={730}
-                    value={form.probationPeriodDays}
-                    onChange={(e) => patchForm({ probationPeriodDays: e.target.value })}
-                  />
-                </SetupField>
+                {employmentDurationKind(form.employmentType) === "probation" ? (
+                  <SetupField
+                    label="Probation period (days)"
+                    required
+                    hint="Applied when the employee is activated"
+                  >
+                    <SetupInput
+                      type="number"
+                      min={1}
+                      max={730}
+                      placeholder="e.g. 90"
+                      value={form.probationPeriodDays}
+                      onChange={(e) => patchForm({ probationPeriodDays: e.target.value })}
+                    />
+                  </SetupField>
+                ) : null}
+                {employmentDurationKind(form.employmentType) === "training" ? (
+                  <SetupField
+                    label="Training duration (days)"
+                    required
+                    hint="Intern / trainee duration"
+                  >
+                    <SetupInput
+                      type="number"
+                      min={1}
+                      max={730}
+                      placeholder="e.g. 90"
+                      value={form.trainingDurationDays}
+                      onChange={(e) => patchForm({ trainingDurationDays: e.target.value })}
+                    />
+                  </SetupField>
+                ) : null}
                 <MasterSelect
                   label="Department"
                   required
@@ -509,10 +545,26 @@ export function CaseDetailDrawer({
                   label="Employment type"
                   value={formatEmploymentTypeLabel(caseRow.employmentType)}
                 />
-                <Info
-                  label="Probation"
-                  value={`${caseRow.probationPeriodDays || "90"} days`}
-                />
+                {employmentDurationKind(caseRow.employmentType) === "probation" ? (
+                  <Info
+                    label="Probation"
+                    value={
+                      caseRow.probationPeriodDays
+                        ? `${caseRow.probationPeriodDays} days`
+                        : "—"
+                    }
+                  />
+                ) : null}
+                {employmentDurationKind(caseRow.employmentType) === "training" ? (
+                  <Info
+                    label="Training duration"
+                    value={
+                      caseRow.trainingDurationDays
+                        ? `${caseRow.trainingDurationDays} days`
+                        : "—"
+                    }
+                  />
+                ) : null}
                 <Info label="Department" value={caseRow.department || "—"} />
                 <Info label="Designation" value={caseRow.designation || "—"} />
                 <Info label="Reporting manager" value={caseRow.reportingManager || "—"} />
@@ -671,7 +723,7 @@ export function CaseDetailDrawer({
       {tab === "docs" ? (
         <div className="space-y-2">
           <p className="text-[11px] text-muted-foreground">
-            Click the file name or View to open a preview (PDF and images).
+            Click the file name or View to open a preview (PDF, images, Word, Excel, text).
           </p>
           {caseRow.portal.documents.length === 0 ? (
             <p className="text-xs text-muted-foreground">No documents uploaded yet.</p>

@@ -237,6 +237,7 @@ export function HrSidebar() {
 
   return (
     <aside
+      data-slot="app-sidebar"
       className={cn(
         "sticky top-0 z-20 flex h-dvh shrink-0 flex-col border-r border-[#222222] bg-[#0A0A0A] text-white transition-[width] duration-200",
         collapsed ? "w-[72px]" : "w-[260px]",
@@ -271,7 +272,9 @@ export function HrSidebar() {
       ) : null}
 
       <Suspense fallback={<div className="flex-1 bg-[#0A0A0A]" />}>
-        <SidebarNavBody collapsed={collapsed} query={query} />
+        <div className="flex min-h-0 flex-1 flex-col bg-[#0A0A0A]">
+          <SidebarNavBody collapsed={collapsed} query={query} />
+        </div>
       </Suspense>
 
       <div className="space-y-1 border-t border-[#222222] bg-[#0A0A0A] p-2.5">

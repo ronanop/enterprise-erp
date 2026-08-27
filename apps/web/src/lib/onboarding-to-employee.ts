@@ -18,6 +18,7 @@ import {
   emptyPersonal,
   emptySalary,
 } from "@/types/employee-management";
+import { employmentDurationKind } from "@/config/hr-master-options";
 import { previewNextEmployeeCode } from "@/services/employee-management-service";
 import {
   maskAadhaar,
@@ -51,8 +52,11 @@ export function portalToWizardDraft(
   personal.nationality = p.personal.nationality || "Indian";
   personal.bloodGroup = p.personal.bloodGroup || "";
   personal.mobile = p.personal.phone || caseRow.candidatePhone || "";
-  personal.officialEmail = caseRow.candidateEmail || p.personal.email || "";
-  personal.personalEmail = p.personal.personalEmail || p.personal.email || "";
+  // Email id = personal; Cache email = company/official (candidate invite email often fills both).
+  personal.personalEmail =
+    p.personal.personalEmail || p.personal.email || caseRow.candidateEmail || "";
+  personal.officialEmail =
+    caseRow.candidateEmail || p.personal.email || p.personal.personalEmail || "";
   personal.currentAddress = {
     ...personal.currentAddress,
     line1: p.personal.address || "",
@@ -111,7 +115,14 @@ export function portalToWizardDraft(
   employment.managementGroupId = caseRow.managementGroupId || "";
   employment.managementGroupName = caseRow.managementGroupName || "";
   employment.reportingManagerName = caseRow.reportingManager || "";
-  employment.probationPeriodDays = caseRow.probationPeriodDays || "90";
+  employment.probationPeriodDays =
+    employmentDurationKind(caseRow.employmentType) === "probation"
+      ? caseRow.probationPeriodDays || ""
+      : "0";
+  employment.trainingDurationDays =
+    employmentDurationKind(caseRow.employmentType) === "training"
+      ? caseRow.trainingDurationDays || ""
+      : "";
   employment.lifecycleStatus = lifecycleStatus;
 
   const documents: EmployeeDocumentItem[] = (p.documents || []).map((d) => ({

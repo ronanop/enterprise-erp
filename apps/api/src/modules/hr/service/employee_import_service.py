@@ -141,6 +141,36 @@ class EmployeeImportService:
         self._desig_asg = DesignationAssignmentService(db)
         self._employment = EmploymentService(db)
 
+    def clear_all_employees(self, ctx: TenantContext) -> dict:
+        """Soft-delete employees and liberate unique codes/emails for re-import."""
+        from datetime import datetime, timezone
+
+        stamp = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S")
+        stmt = select(MasterEmployee).where(
+            MasterEmployee.tenant_id == ctx.tenant_id,
+            MasterEmployee.is_deleted.is_(False),
+        )
+        if ctx.company_id and ctx.user_type not in {"super_admin", "tenant_admin"}:
+            stmt = stmt.where(MasterEmployee.company_id == ctx.company_id)
+
+        rows = list(self._db.scalars(stmt).all())
+        deleted = 0
+        for i, row in enumerate(rows):
+            row.is_deleted = True
+            row.deleted_at = datetime.now(timezone.utc)
+            row.deleted_by = ctx.user_id
+            # Free unique (company_id, employee_code) and (company_id, email)
+            freed_code = f"{row.employee_code}-DEL-{stamp}-{i}"
+            row.employee_code = freed_code[:50]
+            row.email = f"deleted-{row.id.hex[:12]}-{stamp}@cleared.local"[:255]
+            deleted += 1
+
+        self._db.flush()
+        return {
+            "deleted": deleted,
+            "message": f"Soft-deleted {deleted} employee(s). Codes freed for re-import.",
+        }
+
     def import_rows(self, ctx: TenantContext, rows: list[dict]) -> dict:
         # Make sure Digitech + Technologies companies (and HQ branches) are active
         self._ensure_entity_companies(ctx)

@@ -53,6 +53,7 @@ import {
   LIFECYCLE_STATUS_OPTIONS,
   MARITAL_STATUS_OPTIONS,
   RELATIONSHIP_OPTIONS,
+  employmentDurationKind,
 } from "@/config/hr-master-options";
 
 const STEPS = [
@@ -522,7 +523,7 @@ export function EmployeeWizardPage() {
                   onChange={(e) => patchPersonal({ nationality: e.target.value })}
                 />
               </SetupField>
-              <SetupField label="Mobile" required>
+              <SetupField label="Emp. Contact No." required>
                 <SetupInput
                   placeholder="10-digit mobile"
                   inputMode="numeric"
@@ -538,15 +539,15 @@ export function EmployeeWizardPage() {
                   onChange={(e) => patchPersonal({ alternateMobile: e.target.value })}
                 />
               </SetupField>
-              <SetupField label="Official email" required>
+              <SetupField label="cache email id" required>
                 <SetupInput
                   type="email"
-                  placeholder="name@company.com"
+                  placeholder="name@cache.com"
                   value={draft.personal.officialEmail}
                   onChange={(e) => patchPersonal({ officialEmail: e.target.value })}
                 />
               </SetupField>
-              <SetupField label="Personal email">
+              <SetupField label="Email id">
                 <SetupInput
                   type="email"
                   placeholder="name@gmail.com"
@@ -614,14 +615,14 @@ export function EmployeeWizardPage() {
               />
             </SetupField>
             <EmsFormGrid>
-              <SetupField label="Emergency contact name">
+              <SetupField label="Family Member Name">
                 <SetupInput
                   placeholder="Full name"
                   value={draft.personal.emergency.name}
                   onChange={(e) => patchPersonal({ emergency: { ...draft.personal.emergency, name: e.target.value } })}
                 />
               </SetupField>
-              <SetupField label="Emergency phone">
+              <SetupField label="Contact No.">
                 <SetupInput
                   placeholder="10-digit mobile"
                   inputMode="numeric"
@@ -629,7 +630,7 @@ export function EmployeeWizardPage() {
                   onChange={(e) => patchPersonal({ emergency: { ...draft.personal.emergency, phone: e.target.value } })}
                 />
               </SetupField>
-              <SetupField label="Relationship">
+              <SetupField label="Relation">
                 <SetupSelect
                   value={draft.personal.emergency.relationship}
                   onChange={(e) => patchPersonal({ emergency: { ...draft.personal.emergency, relationship: e.target.value } })}
@@ -639,6 +640,13 @@ export function EmployeeWizardPage() {
                     <option key={r.value} value={r.value}>{r.label}</option>
                   ))}
                 </SetupSelect>
+              </SetupField>
+              <SetupField label="Fathers name">
+                <SetupInput
+                  placeholder="Father's full name"
+                  value={draft.personal.fatherName || ""}
+                  onChange={(e) => patchPersonal({ fatherName: e.target.value })}
+                />
               </SetupField>
             </EmsFormGrid>
           </div>
@@ -847,7 +855,18 @@ export function EmployeeWizardPage() {
                 </SetupSelect>
               </SetupField>
               <SetupField label="Employment type">
-                <SetupSelect value={draft.employment.employmentType} onChange={(e) => patchEmployment({ employmentType: e.target.value })}>
+                <SetupSelect
+                  value={draft.employment.employmentType}
+                  onChange={(e) => {
+                    const next = e.target.value;
+                    const kind = employmentDurationKind(next);
+                    patchEmployment({
+                      employmentType: next,
+                      probationPeriodDays: kind === "probation" ? draft.employment.probationPeriodDays : "",
+                      trainingDurationDays: kind === "training" ? draft.employment.trainingDurationDays : "",
+                    });
+                  }}
+                >
                   {EMPLOYMENT_TYPE_OPTIONS.map((t) => (
                     <option key={t.value} value={t.value}>{t.label}</option>
                   ))}
@@ -901,14 +920,26 @@ export function EmployeeWizardPage() {
                   ))}
                 </SetupSelect>
               </SetupField>
-              <SetupField label="Probation (days)">
-                <SetupInput
-                  placeholder="e.g. 90"
-                  inputMode="numeric"
-                  value={draft.employment.probationPeriodDays}
-                  onChange={(e) => patchEmployment({ probationPeriodDays: e.target.value })}
-                />
-              </SetupField>
+              {employmentDurationKind(draft.employment.employmentType) === "probation" ? (
+                <SetupField label="Probation period (days)">
+                  <SetupInput
+                    placeholder="e.g. 90"
+                    inputMode="numeric"
+                    value={draft.employment.probationPeriodDays}
+                    onChange={(e) => patchEmployment({ probationPeriodDays: e.target.value })}
+                  />
+                </SetupField>
+              ) : null}
+              {employmentDurationKind(draft.employment.employmentType) === "training" ? (
+                <SetupField label="Training duration (days)">
+                  <SetupInput
+                    placeholder="e.g. 90"
+                    inputMode="numeric"
+                    value={draft.employment.trainingDurationDays}
+                    onChange={(e) => patchEmployment({ trainingDurationDays: e.target.value })}
+                  />
+                </SetupField>
+              ) : null}
               <SetupField label="Confirmation date">
                 <SetupInput type="date" value={draft.employment.confirmationDate} onChange={(e) => patchEmployment({ confirmationDate: e.target.value })} />
               </SetupField>

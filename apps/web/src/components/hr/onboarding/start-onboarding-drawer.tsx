@@ -16,7 +16,7 @@ import {
   type HrMasterOption,
 } from "@/services/hr-master-connector";
 import { validateEmail, validateMobile } from "@/lib/employee-validators";
-import { EMPLOYMENT_TYPE_OPTIONS } from "@/config/hr-master-options";
+import { EMPLOYMENT_TYPE_OPTIONS, employmentDurationKind } from "@/config/hr-master-options";
 import { listEmploymentTypeOptions, listEntityOptions, loadSetupOrgLookups } from "@/services/hr-setup-service";
 import type { StartOnboardingInput } from "@/types/onboarding-management";
 
@@ -38,6 +38,8 @@ export function StartOnboardingDrawer({ open, onClose, onSubmit }: Props) {
   const [reportingManager, setReportingManager] = useState("");
   const [branch, setBranch] = useState("");
   const [employmentType, setEmploymentType] = useState("permanent");
+  const [probationPeriodDays, setProbationPeriodDays] = useState("");
+  const [trainingDurationDays, setTrainingDurationDays] = useState("");
   const [expiryDays, setExpiryDays] = useState("14");
   const [candidateName, setCandidateName] = useState("");
   const [candidateEmail, setCandidateEmail] = useState("");
@@ -71,15 +73,20 @@ export function StartOnboardingDrawer({ open, onClose, onSubmit }: Props) {
         label: b.label,
         companyId: b.companyId,
       }));
+      const byId = new Map<string, HrMasterOption>();
+      for (const b of [...orgBranches, ...m.branches]) {
+        if (b.id && !byId.has(b.id)) byId.set(b.id, b);
+      }
+      const branches = [...byId.values()];
       setMasters({
         departments: m.departments,
         designations: m.designations,
         managers: m.managers,
-        branches: orgBranches.length ? orgBranches : m.branches,
+        branches,
       });
       setEmploymentTypes(types);
       setEntities(entityOpts);
-      setBranch((prev) => prev || orgBranches[0]?.label || m.branches[0]?.label || "Head Office");
+      setBranch((prev) => prev || branches[0]?.label || "Head Office");
       setEntityId((prev) => prev || entityOpts[0]?.value || "");
       if (!m.designations.length) {
         toast("No designations found — add them in HR Setup → Designations", "error");
@@ -87,7 +94,7 @@ export function StartOnboardingDrawer({ open, onClose, onSubmit }: Props) {
       if (!entityOpts.length) {
         toast("No legal entities found — add them in HR Setup → Legal Entities", "error");
       }
-      if (!orgBranches.length && !m.branches.length) {
+      if (!branches.length) {
         toast("No branches found — add them in Org Setup → Branches", "error");
       }
     });
@@ -113,6 +120,20 @@ export function StartOnboardingDrawer({ open, onClose, onSubmit }: Props) {
 
     if (!designation) next.push("Designation is required");
     if (!department && !masters.departments[0]) next.push("Department is required");
+
+    const durationKind = employmentDurationKind(employmentType);
+    if (durationKind === "probation") {
+      const days = Number(probationPeriodDays);
+      if (!probationPeriodDays.trim() || !Number.isFinite(days) || days < 1 || days > 730) {
+        next.push("Probation period (days) is required");
+      }
+    }
+    if (durationKind === "training") {
+      const days = Number(trainingDurationDays);
+      if (!trainingDurationDays.trim() || !Number.isFinite(days) || days < 1 || days > 730) {
+        next.push("Training duration (days) is required");
+      }
+    }
 
     const days = Number(expiryDays);
     if (!Number.isFinite(days) || days < 1 || days > 90) {
@@ -150,6 +171,10 @@ export function StartOnboardingDrawer({ open, onClose, onSubmit }: Props) {
         reportingManager,
         branch: branch || masters.branches[0]?.label || "Head Office",
         employmentType,
+        probationPeriodDays:
+          employmentDurationKind(employmentType) === "probation" ? probationPeriodDays.trim() : "0",
+        trainingDurationDays:
+          employmentDurationKind(employmentType) === "training" ? trainingDurationDays.trim() : "",
         invitationExpiryDays: Number(expiryDays) || 14,
       });
       onClose();
@@ -207,12 +232,12 @@ export function StartOnboardingDrawer({ open, onClose, onSubmit }: Props) {
         </SetupField>
 
         <div className="grid gap-3 sm:grid-cols-2">
-          <SetupField label="Email" required>
+          <SetupField label="Personal mail" required hint="Candidate personal email (not company email)">
             <SetupInput
               type="email"
               value={candidateEmail}
               onChange={(e) => setCandidateEmail(e.target.value)}
-              placeholder="name@example.com"
+              placeholder="name@gmail.com"
             />
           </SetupField>
           <SetupField label="Phone" required hint="10-digit Indian mobile">
@@ -251,7 +276,12 @@ export function StartOnboardingDrawer({ open, onClose, onSubmit }: Props) {
           <SetupField label="Employment type">
             <SetupSelect
               value={employmentType}
-              onChange={(e) => setEmploymentType(e.target.value)}
+              onChange={(e) => {
+                const next = e.target.value;
+                setEmploymentType(next);
+                if (employmentDurationKind(next) !== "probation") setProbationPeriodDays("");
+                if (employmentDurationKind(next) !== "training") setTrainingDurationDays("");
+              }}
             >
               {employmentTypes.map((t) => (
                 <option key={t.value} value={t.value}>
@@ -260,6 +290,38 @@ export function StartOnboardingDrawer({ open, onClose, onSubmit }: Props) {
               ))}
             </SetupSelect>
           </SetupField>
+          {employmentDurationKind(employmentType) === "probation" ? (
+            <SetupField
+              label="Probation period (days)"
+              required
+              hint="Enter the probation length in days"
+            >
+              <SetupInput
+                type="number"
+                min={1}
+                max={730}
+                placeholder="e.g. 90"
+                value={probationPeriodDays}
+                onChange={(e) => setProbationPeriodDays(e.target.value)}
+              />
+            </SetupField>
+          ) : null}
+          {employmentDurationKind(employmentType) === "training" ? (
+            <SetupField
+              label="Training duration (days)"
+              required
+              hint="Enter the intern/trainee duration in days"
+            >
+              <SetupInput
+                type="number"
+                min={1}
+                max={730}
+                placeholder="e.g. 90"
+                value={trainingDurationDays}
+                onChange={(e) => setTrainingDurationDays(e.target.value)}
+              />
+            </SetupField>
+          ) : null}
         </div>
 
         <div className="grid gap-3 sm:grid-cols-2">

@@ -237,22 +237,22 @@
   color: var(--foreground);
 }
 
-.hrms-theme aside {
+.hrms-theme aside[data-slot="app-sidebar"] {
   background-color: #0A0A0A;
   background-image: none;
   color: #ffffff;
   border-color: #222222;
 }
 
-.hrms-theme aside .erp-scroll {
+.hrms-theme aside[data-slot="app-sidebar"] .erp-scroll {
   scrollbar-color: #2a2a2a #0a0a0a;
 }
 
-.hrms-theme aside .erp-scroll::-webkit-scrollbar-track {
+.hrms-theme aside[data-slot="app-sidebar"] .erp-scroll::-webkit-scrollbar-track {
   background: #0a0a0a;
 }
 
-.hrms-theme aside .erp-scroll::-webkit-scrollbar-thumb {
+.hrms-theme aside[data-slot="app-sidebar"] .erp-scroll::-webkit-scrollbar-thumb {
   background: #2a2a2a;
 }
 
@@ -399,5 +399,27 @@
   }
   .erp-scroll::-webkit-scrollbar-thumb:hover {
     background: oklch(0.5 0.04 220);
+  }
+}
+
+/* Confidential policy / document previews — blank print output */
+@media print {
+  body.confidential-print-blocked * {
+    visibility: hidden !important;
+  }
+  body.confidential-print-blocked::after {
+    content: "Printing confidential documents is not allowed.";
+    visibility: visible !important;
+    position: fixed;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: system-ui, sans-serif;
+    font-size: 16px;
+    color: #000;
+  }
+  .confidential-no-print {
+    display: none !important;
   }
 }

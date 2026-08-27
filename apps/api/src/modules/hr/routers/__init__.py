@@ -104,6 +104,7 @@ from modules.hr.schemas import (
     RosterEntryResponse,
     RosterEntryUpdate,
     SeparationApproveRequest,
+    SeparationSubmitRequest,
     SeparationCompleteRequest,
     SeparationChecklistUpdate,
     SeparationCreate,
@@ -1933,8 +1934,9 @@ def submit_separation(
     row_id: UUID,
     ctx: Annotated[TenantContext, Depends(require_permission("hr.separation:submit"))],
     db: Annotated[Session, Depends(get_db)],
+    body: SeparationSubmitRequest = SeparationSubmitRequest(),
 ):
-    return APIResponse(message="OK", data=SeparationService(db).submit(ctx, row_id))
+    return APIResponse(message="OK", data=SeparationService(db).submit(ctx, row_id, **body.model_dump()))
 
 
 @separation_router.post("/{row_id}/approve", response_model=APIResponse[SeparationResponse])

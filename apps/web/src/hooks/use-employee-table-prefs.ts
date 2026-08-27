@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 
-const STORAGE_KEY = "erp.hr.workforce.tablePrefs.v1";
+const STORAGE_KEY = "erp.hr.workforce.tablePrefs.v3";
 
 export type EmployeeTableColumnKey =
   | "employeeCode"
@@ -17,6 +17,7 @@ export type EmployeeTableColumnKey =
   | "employmentType"
   | "gender"
   | "email"
+  | "personalEmail"
   | "phone"
   | "grade"
   | "jobLevel"
@@ -34,7 +35,7 @@ export type EmployeeTablePrefs = {
   visibleColumns: EmployeeTableColumnKey[];
 };
 
-/** Columns shown by default (matches original workforce grid). */
+/** Columns shown by default (aligned with workforce Excel fields). */
 export const DEFAULT_EMPLOYEE_TABLE_COLUMNS: EmployeeTableColumnKey[] = [
   "employeeCode",
   "name",
@@ -44,8 +45,11 @@ export const DEFAULT_EMPLOYEE_TABLE_COLUMNS: EmployeeTableColumnKey[] = [
   "designation",
   "department",
   "reportingManager",
-  "employmentType",
   "joiningDate",
+  "personalEmail",
+  "email",
+  "gender",
+  "dob",
   "status",
 ];
 
@@ -56,8 +60,8 @@ export const REQUIRED_EMPLOYEE_TABLE_COLUMNS: EmployeeTableColumnKey[] = [
 ];
 
 export const EMPLOYEE_TABLE_COLUMN_LABELS: Record<EmployeeTableColumnKey, string> = {
-  employeeCode: "Emp Code",
-  name: "Name",
+  employeeCode: "EMPLOYEE ID",
+  name: "NAME",
   entity: "Entity",
   organisation: "Organisation",
   branch: "Branch",
@@ -67,17 +71,18 @@ export const EMPLOYEE_TABLE_COLUMN_LABELS: Record<EmployeeTableColumnKey, string
   reportingManager: "Reporting Manager",
   employmentType: "Type",
   gender: "Gender",
-  email: "Official Email",
-  phone: "Phone",
+  email: "cache email id",
+  personalEmail: "Email id",
+  phone: "Emp. Contact No.",
   grade: "Grade",
   jobLevel: "Job Level",
   shift: "Shift",
   legalEntity: "Legal Entity",
   managementGroup: "Management Group",
   leavePolicy: "Leave Policy",
-  dob: "Date of Birth",
+  dob: "DOB",
   maritalStatus: "Marital Status",
-  joiningDate: "Joined",
+  joiningDate: "DOJ",
   confirmationDate: "Confirmation",
   status: "Status",
 };

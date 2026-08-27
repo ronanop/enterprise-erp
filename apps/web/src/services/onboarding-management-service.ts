@@ -10,7 +10,13 @@ import { applyOnboardingPortalToEmployee } from "@/services/employee-management-
 import { loadRecruitmentOverview, type RecruitmentRow } from "@/services/recruitment-service";
 import { portalToWizardDraft } from "@/lib/onboarding-to-employee";
 import { isJoiningDateReached } from "@/lib/onboarding-workflow";
+import { employmentDurationKind } from "@/config/hr-master-options";
 import { previewNextEmployeeCode } from "@/services/employee-management-service";
+import {
+  saveSignedPolicyDocsForCase,
+  stripSignedDocPayloads,
+} from "@/lib/onboarding-signed-docs-store";
+import { migrateSignedPolicyStampFormat } from "@/lib/migrate-signed-policy-stamps";
 import {
   DEFAULT_MANAGER_CHECKLIST,
   POST_JOIN_HR_CHECKLIST,
@@ -66,7 +72,13 @@ function normalizeApiCase(raw: Record<string, unknown>): OnboardingCase | null {
         ? String(raw.probationPeriodDays)
         : raw.probation_period_days != null
           ? String(raw.probation_period_days)
-          : "90",
+          : "",
+    trainingDurationDays:
+      raw.trainingDurationDays != null
+        ? String(raw.trainingDurationDays)
+        : raw.training_duration_days != null
+          ? String(raw.training_duration_days)
+          : "",
     managementGroupId: raw.managementGroupId != null ? String(raw.managementGroupId) : undefined,
     managementGroupName:
       raw.managementGroupName != null ? String(raw.managementGroupName) : undefined,
@@ -346,6 +358,8 @@ export async function loadOnboardingDirectory(): Promise<OnboardingDirectory> {
   const refreshedApi = apiCases.length ? await fetchCasesFromApi() : apiCases;
   const cases = mergeCasesById(refreshedApi, localCases);
   saveCases(cases);
+  // Re-stamp stored signed PDFs without legacy "Digitally signed" label.
+  await migrateSignedPolicyStampFormat(cases).catch(() => undefined);
   const departments = Array.from(
     new Set(cases.map((c) => c.department).filter((d) => d && d !== "—")),
   ).sort();
@@ -478,7 +492,14 @@ export async function startOnboarding(input: StartOnboardingInput): Promise<Onbo
     shift: "",
     leavePolicy: "",
     employmentType: input.employmentType,
-    probationPeriodDays: "90",
+    probationPeriodDays:
+      employmentDurationKind(input.employmentType) === "probation"
+        ? input.probationPeriodDays || ""
+        : "0",
+    trainingDurationDays:
+      employmentDurationKind(input.employmentType) === "training"
+        ? input.trainingDurationDays || ""
+        : "",
     buddy: undefined,
     hrOwner: input.hrOwner || actor(),
     status: "draft",
@@ -659,8 +680,30 @@ export async function savePortalProgress(
 }
 
 export async function submitPortal(token: string, portal: PortalPayload): Promise<OnboardingCase | null> {
+  const all = loadCases();
+  const idx = all.findIndex((x) => x.invitation?.token === token);
+  const caseId = idx >= 0 ? all[idx].id : null;
+
+  let portalForStorage = portal;
+  const signedFull = portal.policies?.signedDocuments?.filter((d) => d.fileDataUrl) ?? [];
+  if (caseId && signedFull.length) {
+    try {
+      await saveSignedPolicyDocsForCase(caseId, signedFull);
+      portalForStorage = {
+        ...portal,
+        policies: {
+          ...portal.policies,
+          // Keep metadata in the case; payloads live in IndexedDB.
+          signedDocuments: stripSignedDocPayloads(signedFull),
+        },
+      };
+    } catch (err) {
+      console.error("Failed to persist signed policy PDFs", err);
+    }
+  }
+
   const submitted: PortalPayload = {
-    ...portal,
+    ...portalForStorage,
     submittedAt: nowIso(),
   };
   try {
@@ -681,8 +724,6 @@ export async function submitPortal(token: string, portal: PortalPayload): Promis
     if (e instanceof ApiClientError && e.status === 400) throw e;
   }
 
-  const all = loadCases();
-  const idx = all.findIndex((x) => x.invitation?.token === token);
   if (idx < 0) return null;
   const c = all[idx];
   const next = upsertCase({ ...c, portal: submitted, status: "hr_review" });
@@ -796,19 +837,9 @@ export async function verifyDocument(
   return syncCaseToApi(next);
 }
 
-/** Open the candidate's mail client with a re-upload link (no server mailer). */
-export function openDocumentReuploadMailto(caseRow: OnboardingCase): void {
-  if (typeof window === "undefined") return;
-  const token = caseRow.invitation?.token;
-  if (!token || !caseRow.candidateEmail?.trim()) return;
-  const url = getInvitationUrl(token);
-  const rejected = caseRow.portal.documents.filter((d) => d.verifyStatus === "rejected");
-  const names = rejected.map((d) => d.fileName).filter(Boolean).join(", ") || "document(s)";
-  const subject = encodeURIComponent("Action required: re-upload onboarding document");
-  const body = encodeURIComponent(
-    `Hi ${caseRow.candidateName},\n\nHR has rejected the following onboarding document(s): ${names}.\n\nPlease open this secure link, replace the rejected file(s) under Upload Documents, and submit again:\n\n${url}\n\nThank you.`,
-  );
-  window.open(`mailto:${caseRow.candidateEmail}?subject=${subject}&body=${body}`, "_blank");
+/** Prefer copy + invitation drawer — mailto opens Outlook and often fails mid-update. */
+export function openDocumentReuploadMailto(_caseRow: OnboardingCase): void {
+  // Intentionally no-op: reject flow copies the portal link and opens InvitationDrawer.
 }
 
 export async function copyInvitationLink(caseRow: OnboardingCase): Promise<boolean> {
@@ -846,6 +877,7 @@ export type OnboardingAssignmentInput = {
   branchId?: string;
   employmentType: string;
   probationPeriodDays: string;
+  trainingDurationDays?: string;
   shift?: string;
   leavePolicy?: string;
 };
@@ -860,10 +892,23 @@ export async function updateOnboardingAssignment(
   if (["joined", "cancelled"].includes(c.status)) {
     throw new Error("Cannot change assignment after the employee is joined or the case is cancelled.");
   }
-  const days = Number(input.probationPeriodDays);
-  if (!Number.isFinite(days) || days < 0 || days > 730) {
-    throw new Error("Probation period must be between 0 and 730 days.");
+  const kind = employmentDurationKind(input.employmentType);
+  let probationDays = "0";
+  let trainingDays = "";
+  if (kind === "probation") {
+    const days = Number(input.probationPeriodDays);
+    if (!Number.isFinite(days) || days < 1 || days > 730) {
+      throw new Error("Probation period must be between 1 and 730 days.");
+    }
+    probationDays = String(Math.round(days));
+  } else if (kind === "training") {
+    const days = Number(input.trainingDurationDays);
+    if (!Number.isFinite(days) || days < 1 || days > 730) {
+      throw new Error("Training duration must be between 1 and 730 days.");
+    }
+    trainingDays = String(Math.round(days));
   }
+
   if (!input.joiningDate.trim()) throw new Error("Joining date is required.");
   if (!input.designation.trim()) throw new Error("Designation is required.");
   if (!input.department.trim()) throw new Error("Department is required.");
@@ -880,7 +925,8 @@ export async function updateOnboardingAssignment(
     branch: input.branch.trim(),
     branchId: input.branchId?.trim() || undefined,
     employmentType: input.employmentType.trim(),
-    probationPeriodDays: String(Math.round(days)),
+    probationPeriodDays: probationDays,
+    trainingDurationDays: trainingDays,
     shift: input.shift?.trim() ?? c.shift,
     leavePolicy: input.leavePolicy?.trim() ?? c.leavePolicy,
   });
@@ -888,7 +934,13 @@ export async function updateOnboardingAssignment(
   appendOnboardingAudit({
     caseId,
     action: "update_assignment",
-    detail: `Assignment updated · ${next.designation} · ${next.department} · ${next.employmentType} · probation ${next.probationPeriodDays}d`,
+    detail: `Assignment updated · ${next.designation} · ${next.department} · ${next.employmentType}${
+      kind === "probation"
+        ? ` · probation ${next.probationPeriodDays}d`
+        : kind === "training"
+          ? ` · training ${next.trainingDurationDays}d`
+          : ""
+    }`,
     actor: actor(),
   });
   return syncCaseToApi(next);
@@ -992,15 +1044,19 @@ export async function completeOnboarding(
           employee_code: employeeCode,
           shift_id: opts?.shiftId || null,
           management_group_id: opts?.managementGroupId || null,
-          start_probation: (Number(c.probationPeriodDays) || 90) > 0,
-          probation_days: Number(c.probationPeriodDays) || 90,
+          start_probation: employmentDurationKind(c.employmentType) === "probation" && (Number(c.probationPeriodDays) || 0) > 0,
+          probation_days:
+            employmentDurationKind(c.employmentType) === "probation" ? Number(c.probationPeriodDays) || 0 : 0,
           mark_payroll_eligible: true,
         });
       }
 
       // Import portal personal / IDs / bank / photo onto the employee record
       if (employeeUuid) {
-        const lifecycle = activateNow ? "probation" : "onboarding";
+        const startProbation =
+          employmentDurationKind(c.employmentType) === "probation" &&
+          (Number(c.probationPeriodDays) || 0) > 0;
+        const lifecycle = activateNow ? (startProbation ? "probation" : "active") : "onboarding";
         await applyOnboardingPortalToEmployee(
           employeeUuid,
           portalToWizardDraft(
@@ -1164,15 +1220,46 @@ export async function activateOnboardingEmployee(
         employee_code: employeeCode,
         shift_id: opts?.shiftId || null,
         management_group_id: opts?.managementGroupId || c.managementGroupId || null,
-        start_probation: (Number(c.probationPeriodDays) || 90) > 0,
-        probation_days: Number(c.probationPeriodDays) || 90,
+        start_probation:
+          employmentDurationKind(c.employmentType) === "probation" &&
+          (Number(c.probationPeriodDays) || 0) > 0,
+        probation_days:
+          employmentDurationKind(c.employmentType) === "probation"
+            ? Number(c.probationPeriodDays) || 0
+            : 0,
         mark_payroll_eligible: true,
       });
 
-      updateLocalEmployeeLifecycle(employeeCode, "probation");
+      const startProbation =
+        employmentDurationKind(c.employmentType) === "probation" &&
+        (Number(c.probationPeriodDays) || 0) > 0;
+      updateLocalEmployeeLifecycle(employeeCode, startProbation ? "probation" : "active");
       // Also update extension keyed by prior UUID if HR store used it
       if (c.employeeId && c.employeeId !== employeeCode) {
-        updateLocalEmployeeLifecycle(c.employeeId, "probation");
+        updateLocalEmployeeLifecycle(c.employeeId, startProbation ? "probation" : "active");
+      }
+
+      // Re-import portal contact / email / gender / DOB onto the employee record
+      try {
+        const full = (await fetchPortalFullCase(caseId).catch(() => null)) ?? c;
+        const draft = portalToWizardDraft(
+          {
+            ...full,
+            managementGroupId: opts?.managementGroupId || c.managementGroupId,
+            managementGroupName: opts?.managementGroupName || c.managementGroupName,
+          },
+          employeeCode,
+          startProbation ? "probation" : "active",
+        );
+        const apiUuid =
+          (c as OnboardingCase & { apiEmployeeId?: string }).apiEmployeeId ||
+          (c.employeeId && c.employeeId !== employeeCode ? c.employeeId : "");
+        if (apiUuid) {
+          await applyOnboardingPortalToEmployee(apiUuid, draft);
+        }
+        await applyOnboardingPortalToEmployee(employeeCode, draft);
+      } catch {
+        /* activation still succeeds even if portal re-import fails */
       }
 
       const next = upsertCase({
@@ -1204,6 +1291,25 @@ export async function activateOnboardingEmployee(
   }
 
   updateLocalEmployeeLifecycle(c.employeeId, "probation");
+
+  try {
+    const full = (await fetchPortalFullCase(caseId).catch(() => null)) ?? c;
+    const draft = portalToWizardDraft(
+      {
+        ...full,
+        managementGroupId: opts?.managementGroupId || c.managementGroupId,
+        managementGroupName: opts?.managementGroupName || c.managementGroupName,
+      },
+      employeeCode,
+      "probation",
+    );
+    if (c.employeeId && c.employeeId !== employeeCode) {
+      await applyOnboardingPortalToEmployee(c.employeeId, draft);
+    }
+    await applyOnboardingPortalToEmployee(employeeCode, draft);
+  } catch {
+    /* ignore */
+  }
 
   const next = upsertCase({
     ...c,

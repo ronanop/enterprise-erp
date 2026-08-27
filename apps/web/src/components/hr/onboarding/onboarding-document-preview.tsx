@@ -4,12 +4,8 @@ import { useEffect } from "react";
 import { Eye, X } from "lucide-react";
 
 import { HrStatusBadge } from "@/components/hr/hr-primitives";
+import { DocumentPreviewContent } from "@/components/hr/shared/document-preview-content";
 import { Button } from "@/components/ui/button";
-import {
-  canPreviewOnboardingDocument,
-  documentMimeType,
-  downloadOnboardingDocument,
-} from "@/lib/onboarding-document";
 import type { OnboardingDocument } from "@/types/onboarding-management";
 
 type PreviewDialogProps = {
@@ -29,11 +25,6 @@ export function OnboardingDocumentPreviewDialog({ doc, subtitle, onClose }: Prev
   }, [doc, onClose]);
 
   if (!doc) return null;
-
-  const mime = documentMimeType(doc);
-  const canPreview = canPreviewOnboardingDocument(doc);
-  const isImage = mime.startsWith("image/");
-  const isPdf = mime === "application/pdf";
 
   return (
     <div
@@ -72,38 +63,17 @@ export function OnboardingDocumentPreviewDialog({ doc, subtitle, onClose }: Prev
               Preview is not available for this upload. Ask the candidate to upload the file again
               from the portal so HR can view it.
             </p>
-          ) : canPreview && isImage ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={doc.fileDataUrl}
-              alt={doc.fileName}
-              className="mx-auto max-h-[65vh] w-auto max-w-full rounded-md border border-border/60 object-contain"
-            />
-          ) : canPreview && isPdf ? (
-            <iframe
-              title={doc.fileName}
-              src={doc.fileDataUrl}
-              className="h-[65vh] w-full rounded-md border border-border/60 bg-white"
-            />
           ) : (
-            <p className="text-sm text-muted-foreground">
-              This file type cannot be previewed in the browser. Use Download to open it locally.
-            </p>
+            <DocumentPreviewContent
+              fileName={doc.fileName}
+              dataUrl={doc.fileDataUrl}
+              mimeType={doc.mimeType}
+              viewOnly
+            />
           )}
         </div>
 
         <div className="flex flex-wrap justify-end gap-2 border-t border-border/70 px-4 py-3">
-          {doc.fileDataUrl ? (
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              className="cursor-pointer"
-              onClick={() => downloadOnboardingDocument(doc)}
-            >
-              Download
-            </Button>
-          ) : null}
           <Button type="button" size="sm" className="cursor-pointer" onClick={onClose}>
             Close
           </Button>

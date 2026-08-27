@@ -1,15 +1,34 @@
 /**
- * Onboarding policy documents — editable in Org Setup, consumed by candidate portal.
+ * Onboarding policy documents — editable in Org Setup / eDoc, consumed by candidate portal.
+ * Each policy can have written content and/or an uploaded PDF/file.
+ *
+ * Large PDFs are stored in IndexedDB (localStorage quota is ~5 MB and cannot hold
+ * multiple base64 policy files).
  */
+
+import { idbGetJson, idbSetJson } from "@/lib/client-idb-json-store";
 
 export type OnboardingPolicyDoc = {
   id: string;
   code: string;
   title: string;
   body: string;
+  /** Optional uploaded policy PDF (or other document) shown in portal View. */
+  fileName?: string;
+  fileDataUrl?: string;
+  mimeType?: string;
   sortOrder: number;
   status: "active" | "inactive";
   updatedAt: string;
+};
+
+export type PortalPolicyDoc = {
+  id: string;
+  label: string;
+  body: string;
+  fileName?: string;
+  fileDataUrl?: string;
+  mimeType?: string;
 };
 
 const STORAGE_KEY = "erp_onboarding_policies_v1";
@@ -67,72 +86,165 @@ const DEFAULT_POLICIES: OnboardingPolicyDoc[] = [
   },
 ];
 
-function readAll(): OnboardingPolicyDoc[] {
-  if (typeof window === "undefined") return DEFAULT_POLICIES;
+let cache: OnboardingPolicyDoc[] | null = null;
+let loadPromise: Promise<OnboardingPolicyDoc[]> | null = null;
+let persistQueue: Promise<void> = Promise.resolve();
+
+function normalizePolicy(p: Partial<OnboardingPolicyDoc>): OnboardingPolicyDoc {
+  return {
+    id: String(p.id ?? ""),
+    code: String(p.code ?? ""),
+    title: String(p.title ?? ""),
+    body: String(p.body ?? ""),
+    fileName: p.fileName ? String(p.fileName) : undefined,
+    fileDataUrl: p.fileDataUrl ? String(p.fileDataUrl) : undefined,
+    mimeType: p.mimeType ? String(p.mimeType) : undefined,
+    sortOrder: Number(p.sortOrder ?? 0),
+    status: p.status === "inactive" ? "inactive" : "active",
+    updatedAt: String(p.updatedAt ?? new Date().toISOString()),
+  };
+}
+
+function sortPolicies(rows: OnboardingPolicyDoc[]): OnboardingPolicyDoc[] {
+  return [...rows].sort(
+    (a, b) => a.sortOrder - b.sortOrder || a.title.localeCompare(b.title),
+  );
+}
+
+function readLocalStorageFallback(): OnboardingPolicyDoc[] | null {
+  if (typeof window === "undefined") return null;
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(DEFAULT_POLICIES));
-      return DEFAULT_POLICIES.map((p) => ({ ...p }));
-    }
+    if (!raw) return null;
     const parsed = JSON.parse(raw) as OnboardingPolicyDoc[];
-    if (!Array.isArray(parsed) || !parsed.length) return DEFAULT_POLICIES.map((p) => ({ ...p }));
-    return parsed
-      .map((p) => ({
-        id: String(p.id),
-        code: String(p.code ?? ""),
-        title: String(p.title ?? ""),
-        body: String(p.body ?? ""),
-        sortOrder: Number(p.sortOrder ?? 0),
-        status: p.status === "inactive" ? "inactive" : "active",
-        updatedAt: String(p.updatedAt ?? new Date().toISOString()),
-      }))
-      .sort((a, b) => a.sortOrder - b.sortOrder || a.title.localeCompare(b.title));
+    if (!Array.isArray(parsed) || !parsed.length) return null;
+    return sortPolicies(parsed.map((p) => normalizePolicy(p)));
   } catch {
-    return DEFAULT_POLICIES.map((p) => ({ ...p }));
+    return null;
   }
 }
 
-function writeAll(rows: OnboardingPolicyDoc[]) {
-  if (typeof window === "undefined") return;
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(rows));
+function clearLocalStoragePolicies(): void {
+  try {
+    localStorage.removeItem(STORAGE_KEY);
+  } catch {
+    /* ignore */
+  }
+}
+
+async function loadFromStorage(): Promise<OnboardingPolicyDoc[]> {
+  try {
+    const fromIdb = await idbGetJson<OnboardingPolicyDoc[]>(STORAGE_KEY);
+    if (Array.isArray(fromIdb) && fromIdb.length) {
+      cache = sortPolicies(fromIdb.map((p) => normalizePolicy(p)));
+      clearLocalStoragePolicies();
+      return cache;
+    }
+  } catch {
+    /* fall through */
+  }
+
+  const fromLs = readLocalStorageFallback();
+  if (fromLs) {
+    cache = fromLs;
+    try {
+      await idbSetJson(STORAGE_KEY, fromLs);
+      clearLocalStoragePolicies();
+    } catch {
+      /* keep LS if IDB fails — may already be over quota */
+    }
+    return cache;
+  }
+
+  cache = DEFAULT_POLICIES.map((p) => ({ ...p }));
+  try {
+    await idbSetJson(STORAGE_KEY, cache);
+  } catch {
+    /* ignore */
+  }
+  clearLocalStoragePolicies();
+  return cache;
+}
+
+/** Warm cache (safe to call multiple times). */
+export function ensureOnboardingPoliciesLoaded(): Promise<OnboardingPolicyDoc[]> {
+  if (cache) return Promise.resolve(cache);
+  if (!loadPromise) loadPromise = loadFromStorage();
+  return loadPromise;
+}
+
+function getAllSync(): OnboardingPolicyDoc[] {
+  if (cache) return cache;
+  const fromLs = readLocalStorageFallback();
+  if (fromLs) {
+    cache = fromLs;
+    return cache;
+  }
+  return DEFAULT_POLICIES.map((p) => ({ ...p }));
+}
+
+function queuePersist(rows: OnboardingPolicyDoc[]): Promise<void> {
+  persistQueue = persistQueue
+    .then(async () => {
+      await idbSetJson(STORAGE_KEY, rows);
+      clearLocalStoragePolicies();
+    })
+    .catch((err) => {
+      console.error("Failed to persist onboarding policies to IndexedDB", err);
+      throw err;
+    });
+  return persistQueue;
 }
 
 export function listOnboardingPolicies(includeInactive = true): OnboardingPolicyDoc[] {
-  const all = readAll();
-  return includeInactive ? all : all.filter((p) => p.status === "active");
+  const all = getAllSync();
+  return includeInactive ? all.map((p) => ({ ...p })) : all.filter((p) => p.status === "active");
 }
 
 export function getOnboardingPolicy(id: string): OnboardingPolicyDoc | null {
-  return readAll().find((p) => p.id === id) ?? null;
+  return getAllSync().find((p) => p.id === id) ?? null;
 }
 
-export function saveOnboardingPolicy(
+export async function saveOnboardingPolicy(
   input: Omit<OnboardingPolicyDoc, "updatedAt"> & { updatedAt?: string },
-): OnboardingPolicyDoc {
-  const all = readAll();
+): Promise<OnboardingPolicyDoc> {
+  await ensureOnboardingPoliciesLoaded();
+  const all = [...(cache ?? getAllSync())];
   const next: OnboardingPolicyDoc = {
     ...input,
     title: input.title.trim() || "Untitled policy",
-    body: input.body.trim(),
+    body: (input.body ?? "").trim(),
+    fileName: input.fileName || undefined,
+    fileDataUrl: input.fileDataUrl || undefined,
+    mimeType: input.mimeType || undefined,
     updatedAt: new Date().toISOString(),
   };
   const idx = all.findIndex((p) => p.id === next.id);
   if (idx >= 0) all[idx] = next;
   else all.push(next);
-  writeAll(all);
+  cache = sortPolicies(all);
+  await queuePersist(cache);
   return next;
 }
 
-export function deleteOnboardingPolicy(id: string): void {
-  writeAll(readAll().filter((p) => p.id !== id));
+export async function deleteOnboardingPolicy(id: string): Promise<void> {
+  await ensureOnboardingPoliciesLoaded();
+  cache = sortPolicies((cache ?? getAllSync()).filter((p) => p.id !== id));
+  await queuePersist(cache);
 }
 
 /** Shape used by the candidate portal (compatible with legacy POLICY_DOCS). */
-export function listActivePoliciesForPortal(): { id: string; label: string; body: string }[] {
+export function listActivePoliciesForPortal(): PortalPolicyDoc[] {
   return listOnboardingPolicies(false).map((p) => ({
     id: p.id,
     label: p.title,
     body: p.body,
+    fileName: p.fileName,
+    fileDataUrl: p.fileDataUrl,
+    mimeType: p.mimeType,
   }));
+}
+
+if (typeof window !== "undefined") {
+  void ensureOnboardingPoliciesLoaded();
 }

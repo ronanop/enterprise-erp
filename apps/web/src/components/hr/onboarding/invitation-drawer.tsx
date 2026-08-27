@@ -29,6 +29,8 @@ export function InvitationDrawer({ open, caseRow, onClose, onSend }: Props) {
 
   const token = caseRow.invitation?.token ?? "";
   const url = token ? getInvitationUrl(token) : "Save case first";
+  const rejectedDocs = caseRow.portal.documents.filter((d) => d.verifyStatus === "rejected");
+  const isReupload = rejectedDocs.length > 0;
 
   function copy() {
     void navigator.clipboard.writeText(url);
@@ -40,8 +42,12 @@ export function InvitationDrawer({ open, caseRow, onClose, onSend }: Props) {
     <SetupDrawer
       open={open}
       onClose={onClose}
-      title="Onboarding Invitation"
-      description={`Secure link for ${caseRow.candidateName}`}
+      title={isReupload ? "Notify candidate — re-upload" : "Onboarding Invitation"}
+      description={
+        isReupload
+          ? `Portal reopened for ${caseRow.candidateName}. Copy the link and share it (email/SMS/WhatsApp).`
+          : `Secure link for ${caseRow.candidateName}`
+      }
       footer={
         <>
           <Button type="button" variant="outline" className="cursor-pointer" onClick={onClose}>
@@ -66,6 +72,12 @@ export function InvitationDrawer({ open, caseRow, onClose, onSend }: Props) {
           <p className="mt-1 text-muted-foreground">
             {caseRow.candidateEmail || "No email"} · Join {caseRow.joiningDate || "—"}
           </p>
+          {isReupload ? (
+            <p className="mt-2 text-amber-800">
+              Rejected: {rejectedDocs.map((d) => d.fileName).filter(Boolean).join(", ") || "document(s)"}
+              . Candidate must open the link and re-upload under Documents.
+            </p>
+          ) : null}
           {caseRow.invitation?.sentAt ? (
             <p className="mt-2 text-amber-800">
               Last sent {new Date(caseRow.invitation.sentAt).toLocaleString()} via{" "}

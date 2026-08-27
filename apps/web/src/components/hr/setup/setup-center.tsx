@@ -922,7 +922,7 @@ const TAB_CONFIG: Partial<Record<HrSetupTabId, TabConfig>> = {
         key: "sandwich_rule_enabled",
         label: "Sandwich Rule",
         type: "checkbox",
-        hint: "Count weekly offs between leave days",
+        hint: "Approved leave around a weekly off/holiday: sandwich off. Unauthorized absence (no approved leave, even if balance remains): weekly off/holiday becomes LOP.",
       },
       {
         key: "leave_cycle_start_day",

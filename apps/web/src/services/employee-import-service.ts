@@ -62,8 +62,15 @@ function baseExtension(): EmployeeExtension {
   };
 }
 
+function truthyEsi(raw: string | undefined): boolean {
+  const v = (raw || "").trim().toLowerCase();
+  if (!v) return false;
+  if (["no", "n", "false", "0", "-", "na", "n/a"].includes(v)) return false;
+  return true;
+}
+
 /**
- * Persist Excel Entity / Base Location / Reporting Manager onto local extensions
+ * Persist Excel Entity / contact / email / family fields onto local extensions
  * so the employee list shows sheet values even before every FK resolves.
  */
 export function syncImportedExcelFieldsToExtensions(
@@ -86,13 +93,39 @@ export function syncImportedExcelFieldsToExtensions(
     const managerRaw = String(excel.reporting_manager || "").trim();
     const managerName = isBlankManager(managerRaw) ? "" : managerRaw;
     const entityName = entityDisplayName(excel.entity, res.company);
+    const cacheEmail = String(excel.email || "").trim();
+    const personalEmail = String(excel.personal_email || "").trim();
+    const mobile = String(excel.mobile || "").trim();
+    const gender = String(excel.gender || "").trim();
+    const dob = String(excel.dob || "").trim();
+    const joining = String(excel.joining_date || "").trim();
+    const fatherName = String(excel.father_name || "").trim();
+    const esiRaw = String(excel.esi || "").trim();
 
     setEmployeeExtension(res.employee_id, {
       ...prev,
+      personal: {
+        ...emptyPersonal(),
+        ...prev.personal,
+        mobile: mobile || prev.personal.mobile,
+        officialEmail: cacheEmail || prev.personal.officialEmail,
+        personalEmail: personalEmail || prev.personal.personalEmail,
+        gender: gender || prev.personal.gender,
+        dateOfBirth: dob || prev.personal.dateOfBirth,
+        fatherName: fatherName || prev.personal.fatherName || "",
+        emergency: {
+          name: String(excel.emergency_name || prev.personal.emergency.name || "").trim(),
+          phone: String(excel.emergency_phone || prev.personal.emergency.phone || "").trim(),
+          relationship: String(
+            excel.emergency_relationship || prev.personal.emergency.relationship || "",
+          ).trim(),
+        },
+      },
       employment: {
         ...emptyEmployment(code),
         ...prev.employment,
         employeeCode: code,
+        joiningDate: joining || prev.employment.joiningDate,
         entityName: entityName || prev.employment.entityName,
         entityId: /technolog/i.test(entityName)
           ? "technology"
@@ -106,10 +139,40 @@ export function syncImportedExcelFieldsToExtensions(
         departmentName: String(excel.department || prev.employment.departmentName || "").trim(),
         reportingManagerName: managerName || prev.employment.reportingManagerName || "",
       },
+      governmentIds: {
+        ...emptyGovernmentIds(),
+        ...prev.governmentIds,
+        esic:
+          esiRaw && !["yes", "y", "true", "1", "no", "n", "false", "0"].includes(esiRaw.toLowerCase())
+            ? esiRaw
+            : prev.governmentIds.esic,
+      },
+      salary: {
+        ...emptySalary(),
+        ...prev.salary,
+        esi: esiRaw ? truthyEsi(esiRaw) : prev.salary.esi,
+      },
       updatedBy: "Import",
       updatedAt: new Date().toISOString(),
     });
   }
+}
+
+/** API only accepts master fields; cache email → email, Emp contact → mobile. */
+function toApiImportRows(rows: NormalizedEmployeeImportRow[]) {
+  return rows.map((r) => ({
+    employee_code: r.employee_code,
+    name: r.name,
+    entity: r.entity,
+    organisation: r.organisation,
+    base_location: r.base_location,
+    designation: r.designation,
+    department: r.department,
+    reporting_manager: r.reporting_manager,
+    email: (r.email || r.personal_email || "").trim() || undefined,
+    mobile: r.mobile,
+    joining_date: r.joining_date,
+  }));
 }
 
 export async function bulkImportEmployees(
@@ -117,9 +180,18 @@ export async function bulkImportEmployees(
 ): Promise<EmployeeImportResponse> {
   const res = await apiClient<EmployeeImportResponse>("/hr/employees/bulk-import", {
     method: "POST",
-    body: { rows },
+    body: { rows: toApiImportRows(rows) },
   });
   if (!res.data) throw new Error("Import returned no data");
   syncImportedExcelFieldsToExtensions(rows, res.data.results || []);
+  return res.data;
+}
+
+export async function clearAllEmployees(): Promise<{ deleted: number; message: string }> {
+  const res = await apiClient<{ deleted: number; message: string }>("/hr/employees/clear-all", {
+    method: "POST",
+    body: {},
+  });
+  if (!res.data) throw new Error("Clear returned no data");
   return res.data;
 }

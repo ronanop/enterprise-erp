@@ -24,6 +24,16 @@ export type ExitDocument = {
   uploadedAt: string | null;
 };
 
+export type WorkflowApprovalEntry = {
+  id: string;
+  stage: string;
+  remarks: string | null;
+  fileName: string | null;
+  fileDataUrl: string | null;
+  at: string | null;
+  by: string | null;
+};
+
 export type OffboardingCase = {
   id: string;
   documentNumber: string;
@@ -40,6 +50,7 @@ export type OffboardingCase = {
   checklist: ClearanceChecklistItem[];
   exitInterview: ExitInterviewData | null;
   documents: ExitDocument[];
+  approvals: WorkflowApprovalEntry[];
   fnfMeta: Record<string, unknown> | null;
 };
 
@@ -68,18 +79,26 @@ export const POST_HR_STEPS = [
   { key: "docs_done", label: "Documents" },
 ] as const;
 
+/**
+ * Index of the *current pending* pipeline step (highlighted).
+ * Completed stages are those before this index (green check).
+ * e.g. manager_approved → Manager is done, IT is current.
+ */
 export function workflowStepIndex(status: string, fnfStatus: string): number {
   const s = status.toLowerCase();
   const f = fnfStatus.toLowerCase();
-  if (s === "completed") return 6;
+  // Past the last step → all checks green, none highlighted as pending
+  if (s === "completed") return WORKFLOW_STEPS.length;
   if (s === "hr_approved") {
-    if (f === "settled" || f === "waived" || f === "calculated" || f === "prepared") return 5;
-    return 4;
+    // HR done → FNF is current until settled/waived, then Completed is current
+    if (f === "settled" || f === "waived") return 6;
+    return 5;
   }
-  if (s === "accounts_approved") return 3;
-  if (s === "it_approved") return 2;
-  if (s === "manager_approved") return 1;
-  if (s === "submitted" || s === "draft") return 0;
+  if (s === "accounts_approved") return 4; // → HR
+  if (s === "it_approved") return 3; // → Accounts
+  if (s === "manager_approved") return 2; // → IT
+  if (s === "submitted") return 1; // → Manager
+  if (s === "draft") return 0; // → Submit
   return 0;
 }
 

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import date
+from datetime import date, timedelta
 from decimal import Decimal
 from uuid import UUID
 
@@ -14,9 +14,11 @@ from modules.hr.domain.enums import HolidayCalendarStatus
 from modules.hr.repository.employment_repository import EmploymentRepository
 from modules.hr.repository.holiday_calendar_repository import HolidayCalendarRepository
 from modules.hr.repository.management_group_repository import ManagementGroupRepository
+from modules.hr.repository.leave_type_repository import LeaveTypeRepository
 from modules.hr.repository.roster_entry_repository import RosterEntryRepository
 from modules.hr.repository.shift_assignment_repository import ShiftAssignmentRepository
 from modules.hr.repository.weekly_off_policy_repository import WeeklyOffPolicyRepository
+from modules.hr.domain.sandwich_rules import sandwich_lop_dates
 from modules.hr.service.engines.calendar_rules import holiday_dates_from_json, is_weekly_off_day
 from modules.payroll.domain.enums import PayrollPeriodDayDenominator
 from modules.payroll.domain.payroll_day_ledger import (
@@ -58,6 +60,7 @@ class _PeriodCalendarCache:
     company_weekly_off: object | None = None
     holidays_by_calendar: dict[UUID, set[date]] = field(default_factory=dict)
     company_holiday_dates: set[date] = field(default_factory=set)
+    sandwich_enabled: bool = False
 
 
 class PayrollPeriodDayService:
@@ -68,6 +71,7 @@ class PayrollPeriodDayService:
         self._shift_assign = ShiftAssignmentRepository(db)
         self._mgmt = ManagementGroupRepository(db)
         self._weekly_off = WeeklyOffPolicyRepository(db)
+        self._leave_types = LeaveTypeRepository(db)
         self._holiday_cal = HolidayCalendarRepository(db)
         self._policy = PayrollPolicyService(db)
 
@@ -91,6 +95,11 @@ class PayrollPeriodDayService:
             period_end=period_end,
             denominator=denominator,
             attendance_rules=rules,
+        )
+        cache.sandwich_enabled = any(
+            bool(getattr(lt, "sandwich_rule_enabled", False))
+            and str(getattr(lt, "status", "")).lower() == "active"
+            for lt in self._leave_types.list_rows(ctx, company_id)
         )
 
         for emp in self._employment.list_rows(ctx, company_id):
@@ -224,6 +233,7 @@ class PayrollPeriodDayService:
         paid_leave_days: Decimal | None = None,
         unpaid_leave_days: Decimal | None = None,
         lop_days: Decimal | None = None,
+        sandwich_lop_days: Decimal | None = None,
     ) -> dict:
         start, end = cache.period_start, cache.period_end
         holidays = self._holiday_set(cache, employee_id)
@@ -237,6 +247,7 @@ class PayrollPeriodDayService:
             "paid_leave": 0,
             "unpaid_leave": 0,
             "lop": 0,
+            "sandwich_lop": 0,
             "other_attendance": 0,
         }
         leave_by_date = leave_by_date or {}
@@ -288,6 +299,8 @@ class PayrollPeriodDayService:
             counts["unpaid_leave"] = float(unpaid_leave_days)
         if lop_days is not None:
             counts["lop"] = float(lop_days)
+        if sandwich_lop_days is not None:
+            counts["sandwich_lop"] = float(sandwich_lop_days)
         return {
             "period_start": start.isoformat(),
             "period_end": end.isoformat(),
@@ -350,6 +363,43 @@ class PayrollPeriodDayService:
             paid_attendance_statuses=paid_statuses,
         )
 
+        sandwich_lop = Decimal("0")
+        if cache.sandwich_enabled:
+            pad = timedelta(days=10)
+            pad_start, pad_end = start - pad, end + pad
+            att_padded: dict[date, str] = {}
+            for row in attendance_facts:
+                if row.get("employee_id") != employee_id:
+                    continue
+                ad = row.get("attendance_date")
+                if ad is None or ad < pad_start or ad > pad_end:
+                    continue
+                att_padded[ad] = (row.get("attendance_status") or "").lower()
+            approved_leave_dates: set[date] = set()
+            for leave in leave_facts:
+                if leave.get("employee_id") != employee_id:
+                    continue
+                ls, le = leave.get("start_date"), leave.get("end_date")
+                if ls is None or le is None:
+                    continue
+                if le < pad_start or ls > pad_end:
+                    continue
+                clip_start = max(ls, pad_start)
+                clip_end = min(le, pad_end)
+                for d in iter_dates_inclusive(clip_start, clip_end):
+                    approved_leave_dates.add(d)
+            holidays = self._holiday_set(cache, employee_id)
+            sandwich_dates = sandwich_lop_dates(
+                pad_start,
+                pad_end,
+                is_non_working=lambda d: d in holidays or self._is_week_off(cache, employee_id, d),
+                attendance_status_by_date=att_padded,
+                approved_leave_dates=approved_leave_dates,
+                as_of=end,
+            )
+            sandwich_lop = Decimal(sum(1 for d in sandwich_dates if start <= d <= end))
+            lop_days += sandwich_lop
+
         day_summary = self.build_day_summary(
             cache,
             employee_id,
@@ -358,6 +408,7 @@ class PayrollPeriodDayService:
             paid_leave_days=paid_leave_days,
             unpaid_leave_days=unpaid_leave_days,
             lop_days=lop_days,
+            sandwich_lop_days=sandwich_lop,
         )
 
         has_signals = bool(emp_attendance) or bool(leave_by_date)

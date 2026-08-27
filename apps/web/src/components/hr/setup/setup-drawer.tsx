@@ -172,7 +172,7 @@ export function SetupTextarea(props: React.ComponentProps<"textarea">) {
     <textarea
       {...props}
       className={cn(
-        "flex min-h-[72px] w-full rounded-lg border border-input bg-transparent px-2.5 py-2 text-sm outline-none",
+        "block min-h-[72px] w-full resize-y rounded-lg border border-input bg-transparent px-2.5 py-2 text-sm outline-none",
         "focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50",
         props.className,
       )}
