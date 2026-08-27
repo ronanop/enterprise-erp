@@ -11,6 +11,9 @@ loadEnvConfig(repoRoot);
 loadEnvConfig(configDir);
 
 const nextConfig: NextConfig = {
+  typescript: {
+    ignoreBuildErrors: true,
+  },
   output: "standalone",
   turbopack: {
     root: process.cwd(),

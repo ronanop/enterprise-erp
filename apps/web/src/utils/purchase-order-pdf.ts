@@ -150,6 +150,34 @@ export function buildDefaultPoTaxes(params: {
   return [{ label: `IGST (${pct}%)`, amountInr: (taxable * pct) / 100 }];
 }
 
+/** Build GST lines from mixed taxable buckets (different line tax rates). */
+export function buildPoTaxesFromBuckets(params: {
+  buckets: Array<{ taxableAmount: number; taxPct: number }>;
+  sourceOfSupply?: string;
+  destinationOfSupply?: string;
+}): Array<{ label: string; amountInr: number }> {
+  const byPct = new Map<number, number>();
+  for (const bucket of params.buckets) {
+    const taxPct = Number(bucket.taxPct);
+    const taxableAmount = Math.max(0, Number(bucket.taxableAmount) || 0);
+    if (!Number.isFinite(taxPct) || taxPct <= 0 || taxableAmount <= 0) continue;
+    byPct.set(taxPct, (byPct.get(taxPct) || 0) + taxableAmount);
+  }
+
+  const merged = new Map<string, number>();
+  for (const [taxPct, taxableAmount] of byPct) {
+    for (const row of buildDefaultPoTaxes({
+      taxableAmount,
+      taxPct,
+      sourceOfSupply: params.sourceOfSupply,
+      destinationOfSupply: params.destinationOfSupply,
+    })) {
+      merged.set(row.label, (merged.get(row.label) || 0) + row.amountInr);
+    }
+  }
+  return Array.from(merged, ([label, amountInr]) => ({ label, amountInr }));
+}
+
 export function purchaseOrderPdfInputFromOrder(
   order: {
     document_number: string;

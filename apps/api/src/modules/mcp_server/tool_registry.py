@@ -77,13 +77,6 @@ def register_tools_from_openapi(mcp: FastMCP, openapi: dict[str, Any]) -> list[s
                 readOnlyHint=read_only,
                 destructiveHint=entry.access == EndpointAccess.WRITE,
             ),
-            meta={
-                "erp_method": entry.method,
-                "erp_path": entry.path,
-                "erp_access": entry.access.value,
-                "erp_permission": entry.permission,
-                "input_schema": input_schema,
-            },
         )
         registered.append(entry.tool_name)
 
