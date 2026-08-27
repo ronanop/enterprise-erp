@@ -182,15 +182,8 @@ def is_stage_assignee_completed(record: Any, stage: str) -> bool:
 
 
 def is_stage_unlocked_by_progress(record: Any, stage: str) -> bool:
-    """True when every prior assignable stage has Partial completed or Completed progress."""
-    if stage not in ASSIGNABLE_STAGE_ORDER:
-        return False
-    idx = ASSIGNABLE_STAGE_ORDER.index(stage)
-    if idx <= 0:
-        return True
-    for prior in ASSIGNABLE_STAGE_ORDER[:idx]:
-        if not is_stage_progress_unlocked(record, prior):
-            return False
+    """Standalone steps — prior stage progress does not block this stage."""
+    del record, stage
     return True
 
 
@@ -204,14 +197,16 @@ def assignee_work_status(record: Any, assigned_stage: str, current_stage: str) -
 
 
 def can_open_stage_form(record: Any, assigned_stage: str, current_stage: str) -> bool:
-    """Assignee may open the step form (active stage or pre-assigned after prior progress)."""
-    # Completed (read-only) and Partial completed (still editable) both allow open
+    """Assignee may open their step form anytime before Completed progress."""
     if is_stage_progress_unlocked(record, assigned_stage):
         return True
     if current_stage == SiteWorkflowStage.COMPLETED.value:
         field = STAGE_ASSIGNEE_FIELDS.get(assigned_stage)
         if field and getattr(record, field, None):
             return True
+    field = STAGE_ASSIGNEE_FIELDS.get(assigned_stage)
+    if field and getattr(record, field, None):
+        return True
     effective = resolve_legacy_onsite_stage(record) if current_stage == SiteWorkflowStage.ONSITE.value else current_stage
     delivery = getattr(record, "delivery_type", SiteDeliveryType.SERVER_OS_RACK.value)
     if stage_work_status(assigned_stage, effective, delivery) == "in_progress":
@@ -528,6 +523,35 @@ def transition(stage: str, action: str, delivery_type: str) -> str:
     return _TRANSITIONS[stage][action]
 
 
+def resolve_action_target(action: str, delivery_type: str) -> str:
+    """Target workflow stage for a complete_* action (standalone — any step)."""
+    del delivery_type
+    if action == "complete_configuration":
+        action = "complete_installation"
+    for stage, actions in _TRANSITIONS.items():
+        if action not in actions:
+            continue
+        if stage == SiteWorkflowStage.ONSITE.value and action == "complete_onsite_delivery":
+            return SiteWorkflowStage.MATERIAL_HANDOVER.value
+        if stage == SiteWorkflowStage.ONSITE.value and action == "complete_material_handover":
+            return SiteWorkflowStage.INSTALLATION.value
+        return actions[action]
+    raise InvalidSiteInstallationState(f"Unknown workflow action '{action}'")
+
+
+def workflow_stage_after_action(current_stage: str, action: str, delivery_type: str) -> str | None:
+    """Move workflow forward only — completing a step never rewinds the pipeline."""
+    target = resolve_action_target(action, delivery_type)
+    current = _normalize_stage(current_stage)
+    if current == SiteWorkflowStage.ASSIGNMENT.value:
+        current = SiteWorkflowStage.SURVEY.value
+    if current == SiteWorkflowStage.ONSITE.value:
+        current = SiteWorkflowStage.ONSITE_DELIVERY.value
+    if _stage_index(target) > _stage_index(current):
+        return target
+    return None
+
+
 def _assert_installation_and_config_gates(record: Any, delivery: str) -> None:
     if delivery_is_rack_only(delivery):
         _require_true_with_date(
@@ -595,18 +619,7 @@ def _require_stage_attachment(record: Any, field: str, label: str) -> None:
         )
 
 
-def _require_progress_completed(record: Any, stage: str, label: str) -> None:
-    status = stage_progress_status(record, stage)
-    if status != PROGRESS_COMPLETED_STATUS:
-        raise InvalidSiteInstallationState(
-            f"{label} progress must be set to Completed before continuing"
-        )
-
-
 def _assert_onsite_delivery_gates(record: Any, delivery: str) -> None:
-    _require_progress_completed(
-        record, SiteWorkflowStage.ONSITE_DELIVERY.value, "Onsite Delivery"
-    )
     attachment = STAGE_ATTACHMENT_FIELDS[SiteWorkflowStage.ONSITE_DELIVERY.value]
     # Fall back to legacy attachment column when split column empty
     if not (isinstance(getattr(record, attachment, None), str) and getattr(record, attachment).strip()):
@@ -624,9 +637,6 @@ def _assert_onsite_delivery_gates(record: Any, delivery: str) -> None:
 
 
 def _assert_material_handover_gates(record: Any, delivery: str) -> None:
-    _require_progress_completed(
-        record, SiteWorkflowStage.MATERIAL_HANDOVER.value, "Material Handover"
-    )
     attachment = STAGE_ATTACHMENT_FIELDS[SiteWorkflowStage.MATERIAL_HANDOVER.value]
     if not (isinstance(getattr(record, attachment, None), str) and getattr(record, attachment).strip()):
         legacy = getattr(record, "onsite_attachment_name", None)
@@ -666,7 +676,6 @@ def assert_advance_gates(record: Any, action: str) -> None:
         return
 
     if action == "complete_survey":
-        _require_progress_completed(record, SiteWorkflowStage.SURVEY.value, "Survey")
         _require_stage_attachment(record, "survey_attachment_name", "Survey")
         if delivery_includes_rack(delivery):
             _require_material_lines(record, "cable_lines", "Cable", require_date=False)
@@ -687,7 +696,6 @@ def assert_advance_gates(record: Any, action: str) -> None:
         return
 
     if action == "complete_scm":
-        _require_progress_completed(record, SiteWorkflowStage.SCM.value, "SCM / Logistics")
         _require_stage_attachment(record, "scm_attachment_name", "SCM / Logistics")
         if delivery_includes_rack(delivery):
             _require_material_lines(record, "cable_lines", "Cable", require_date=True)
@@ -711,7 +719,6 @@ def assert_advance_gates(record: Any, action: str) -> None:
 
     if action == "complete_onsite":
         # Legacy combined gate — both delivery + handover verticals
-        _require_progress_completed(record, SiteWorkflowStage.ONSITE.value, "On-site")
         _require_stage_attachment(record, "onsite_attachment_name", "On-site")
         _require_true_with_date(record, "mo_request", "mo_request_date", "MO Request")
         _require_true_with_date(record, "im_material", "im_material_date", "IM Material")
@@ -735,9 +742,6 @@ def assert_advance_gates(record: Any, action: str) -> None:
         "complete_installation_rack_only",
         "complete_configuration",  # legacy alias
     }:
-        _require_progress_completed(
-            record, SiteWorkflowStage.INSTALLATION.value, "Installation"
-        )
         _require_stage_attachment(
             record, "installation_attachment_name", "Installation"
         )
@@ -745,9 +749,6 @@ def assert_advance_gates(record: Any, action: str) -> None:
         return
 
     if action == "complete_acceptance":
-        _require_progress_completed(
-            record, SiteWorkflowStage.ACCEPTANCE.value, "Acceptance"
-        )
         _require_stage_attachment(record, "acceptance_attachment_name", "Acceptance")
         _require_true_with_date(
             record, "handover_to_cloud_done", "handover_to_cloud_date", "Handover to Application Team"

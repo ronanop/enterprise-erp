@@ -125,16 +125,7 @@ export function SiteMaterialHandoverFormPage({ projectId }: { projectId: string 
       loadedValuesRef.current = v;
 
       if (isProgressCompleteForAdvance(v.material_handover_progress_status)) {
-        let site = await getSiteInstallationByProject(projectId);
-        if (site.workflow_stage === "onsite_delivery") {
-          site = await advanceSiteInstallation(projectId, "complete_onsite_delivery");
-        }
-        if (
-          site.workflow_stage === "material_handover" ||
-          site.workflow_stage === "onsite"
-        ) {
-          await advanceSiteInstallation(projectId, "complete_material_handover");
-        }
+        await advanceSiteInstallation(projectId, "complete_material_handover");
       }
 
       return `/projects/my-jobs`;

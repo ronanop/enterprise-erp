@@ -166,16 +166,7 @@ export function SiteOnsiteFormPage({ projectId }: { projectId: string }) {
       loadedValuesRef.current = v;
 
       if (isProgressCompleteForAdvance(v.onsite_progress_status)) {
-        let site = await getSiteInstallationByProject(projectId);
-        if (site.workflow_stage === "survey") {
-          site = await advanceSiteInstallation(projectId, "complete_survey");
-        }
-        if (site.workflow_stage === "scm") {
-          site = await advanceSiteInstallation(projectId, "complete_scm");
-        }
-        if (site.workflow_stage === "onsite") {
-          await advanceSiteInstallation(projectId, "complete_onsite");
-        }
+        await advanceSiteInstallation(projectId, "complete_onsite");
       }
 
       return `/projects/my-jobs`;

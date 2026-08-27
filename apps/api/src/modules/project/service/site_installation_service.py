@@ -282,6 +282,9 @@ class SiteInstallationService:
             self._module_admin.ensure_admin(ctx)
             return
 
+        if self._module_admin.is_admin(ctx):
+            return
+
         action_stage: dict[str, str] = {
             "complete_survey": SiteWorkflowStage.SURVEY.value,
             "complete_scm": SiteWorkflowStage.SCM.value,
@@ -728,15 +731,18 @@ class SiteInstallationService:
             raise InvalidSiteInstallationState("Cancelled site installation cannot advance")
 
         engine.assert_advance_gates(row, action)
-        new_stage = engine.transition(row.workflow_stage, action, row.delivery_type)
-
         updates: dict = {
-            "workflow_stage": new_stage,
             **engine.stage_date_updates_for_action(action, date.today()),
         }
+        new_stage = engine.workflow_stage_after_action(
+            row.workflow_stage, action, row.delivery_type
+        )
+        if new_stage is not None:
+            updates["workflow_stage"] = new_stage
+        final_stage = updates.get("workflow_stage", row.workflow_stage)
         # Keep survey start = creation day if somehow missing when entering survey work
         if (
-            new_stage == SiteWorkflowStage.SURVEY.value
+            final_stage == SiteWorkflowStage.SURVEY.value
             and getattr(row, "survey_assigned_date", None) is None
         ):
             updates["survey_assigned_date"] = date.today()
@@ -748,7 +754,7 @@ class SiteInstallationService:
                 )
             if getattr(row, "onsite_delivery_assigned_date", None) is None:
                 updates["onsite_delivery_assigned_date"] = date.today()
-        if new_stage == SiteWorkflowStage.COMPLETED.value:
+        if final_stage == SiteWorkflowStage.COMPLETED.value:
             updates["status"] = SiteInstallationStatus.COMPLETED.value
             project = self._projects.get(ctx, project_id)
             if project is not None and project.status not in {
@@ -763,7 +769,7 @@ class SiteInstallationService:
                 )
 
         # Activate matching phase when entering a stage
-        self._sync_phase_status(ctx, project_id, new_stage)
+        self._sync_phase_status(ctx, project_id, final_stage)
 
         updated = self._repo.update(ctx, row.id, **updates)
         if updated is None:

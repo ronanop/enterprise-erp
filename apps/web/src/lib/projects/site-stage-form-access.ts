@@ -91,12 +91,8 @@ export function isStageUnlockedByProgress(
   site: SiteInstallation,
   formStage: Exclude<SiteStageFormKey, "assignment" | "onsite">,
 ): boolean {
-  const idx = ASSIGNABLE_STAGES.indexOf(formStage);
-  if (idx < 0) return false;
-  if (idx === 0) return true;
-  for (let i = 0; i < idx; i++) {
-    if (!isStageProgressDone(site, ASSIGNABLE_STAGES[i])) return false;
-  }
+  void site;
+  void formStage;
   return true;
 }
 
@@ -115,7 +111,7 @@ function resolveFormStage(
   return formStage;
 }
 
-/** Project admin may open a step form (read-only) when it has progress or is reachable. */
+/** Project admin may open a step form when the step has an assignee or saved progress. */
 export function canAdminViewStageForm(
   site: SiteInstallation,
   formStage: SiteStageFormKey,
@@ -129,26 +125,16 @@ export function canAdminViewStageForm(
 
   if (isStageWorkDone(stageProgress, workStatus)) return true;
 
-  if (isSiteWorkflowTerminal(site)) {
-    const field = ASSIGNEE_FIELD[resolved];
-    let assigneeId = site[field];
-    if (!assigneeId && resolved === "onsite_delivery") {
-      assigneeId = site.onsite_assignee_employee_id;
-    }
-    if (typeof assigneeId === "string" && assigneeId.trim()) return true;
-    const savedProgress = progressForStage(site, resolved);
-    if (typeof savedProgress === "string" && savedProgress.trim()) return true;
-    return false;
+  const field = ASSIGNEE_FIELD[resolved];
+  let assigneeId = site[field];
+  if (!assigneeId && resolved === "onsite_delivery") {
+    assigneeId = site.onsite_assignee_employee_id;
   }
+  if (typeof assigneeId === "string" && assigneeId.trim()) return true;
 
-  const current = normalizeWorkflowStage(site.workflow_stage);
-  if (formStage === "installation") {
-    if (current === "installation" || current === "configuration") return true;
-  } else if (current === resolved || (formStage === "onsite" && current === "onsite_delivery")) {
-    return true;
-  }
+  if (typeof stageProgress === "string" && stageProgress.trim()) return true;
 
-  return isStageUnlockedByProgress(site, resolved);
+  return !isSiteWorkflowTerminal(site);
 }
 
 /** True when the site's active workflow has reached this assigned step. */
@@ -162,32 +148,33 @@ export function isAssignedStepActive(assignedStage: string, workflowStage: strin
   return current === assigned;
 }
 
-/** Assignee may open this step — active workflow stage or pre-assigned after prior progress. */
+/** Assignee may open this step — standalone; no prior-step progress required. */
 export function canOpenAssignedStageForm(
   site: SiteInstallation,
   assignedStage: Exclude<SiteStageFormKey, "assignment">,
   workflowStage: string,
 ): boolean {
+  void workflowStage;
   const resolved =
     assignedStage === "onsite" ? "onsite_delivery" : assignedStage;
-  if (isAssignedStepActive(resolved, workflowStage)) return true;
-  return isStageUnlockedByProgress(site, resolved);
+  if (isStageAssigneeCompleted(site, resolved)) return true;
+  const field = ASSIGNEE_FIELD[resolved];
+  let assigneeId = site[field];
+  if (!assigneeId && resolved === "onsite_delivery") {
+    assigneeId = site.onsite_assignee_employee_id;
+  }
+  return typeof assigneeId === "string" && assigneeId.trim().length > 0;
 }
 
 export function workflowStageNotCompleteMessage(
   site: SiteInstallation,
   assignedStage: Exclude<SiteStageFormKey, "assignment">,
 ): string {
+  void site;
   const resolved =
     assignedStage === "onsite" ? "onsite_delivery" : assignedStage;
-  const idx = ASSIGNABLE_STAGES.indexOf(resolved);
-  if (idx > 0) {
-    const prev = ASSIGNABLE_STAGES[idx - 1];
-    const prevLabel = siteWorkflowStageLabel(prev);
-    return `${prevLabel} must be Partial completed or Completed before you can open this step.`;
-  }
-  const label = siteWorkflowStageLabel(normalizeWorkflowStage(site.workflow_stage));
-  return `${label} is not completed yet. Please complete that step before opening this one.`;
+  const label = siteWorkflowStageLabel(resolved);
+  return `You are not assigned to ${label} yet. Ask the project admin to assign you from Project Tracking.`;
 }
 
 export function isAssigneeForStage(
@@ -230,10 +217,8 @@ export function canEditSiteStageForm(
   // Completed progress → read-only (handled by gate); block edits here.
   if (isStageAssigneeCompleted(site, resolved)) return false;
 
-  // Onsite Delivery: module admins may edit/complete alongside the PM assignee.
-  if (resolved === "onsite_delivery" && isProjectModuleAdmin) {
-    if (current === "onsite_delivery" || current === "onsite") return true;
-    return isStageUnlockedByProgress(site, resolved);
+  if (isProjectModuleAdmin) {
+    return true;
   }
 
   if (!sessionEmployeeId) return false;
@@ -246,13 +231,7 @@ export function canEditSiteStageForm(
   if (!assigneeId || typeof assigneeId !== "string") return false;
   if (assigneeId !== sessionEmployeeId) return false;
 
-  if (formStage === "installation") {
-    if (current === "installation" || current === "configuration") return true;
-  } else if (current === resolved) {
-    return true;
-  }
-
-  return isStageUnlockedByProgress(site, resolved);
+  return !isStageAssigneeCompleted(site, resolved);
 }
 
 export function canOpenCurrentStageForm(

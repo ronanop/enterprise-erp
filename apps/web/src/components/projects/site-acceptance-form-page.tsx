@@ -131,13 +131,7 @@ export function SiteAcceptanceFormPage({ projectId }: { projectId: string }) {
       loadedValuesRef.current = v;
 
       if (isProgressCompleteForAdvance(v.acceptance_progress_status)) {
-        let site = await getSiteInstallationByProject(projectId);
-        if (site.workflow_stage === "installation") {
-          site = await advanceSiteInstallation(projectId, "complete_installation");
-        }
-        if (site.workflow_stage === "acceptance") {
-          await advanceSiteInstallation(projectId, "complete_acceptance");
-        }
+        await advanceSiteInstallation(projectId, "complete_acceptance");
       }
 
       return `/projects/my-jobs`;

@@ -165,13 +165,7 @@ export function SiteScmFormPage({ projectId }: { projectId: string }) {
       });
 
       if (isProgressCompleteForAdvance(v.scm_progress_status)) {
-        let site = await getSiteInstallationByProject(projectId);
-        if (site.workflow_stage === "survey") {
-          site = await advanceSiteInstallation(projectId, "complete_survey");
-        }
-        if (site.workflow_stage === "scm") {
-          await advanceSiteInstallation(projectId, "complete_scm");
-        }
+        await advanceSiteInstallation(projectId, "complete_scm");
       }
 
       return `/projects/my-jobs`;

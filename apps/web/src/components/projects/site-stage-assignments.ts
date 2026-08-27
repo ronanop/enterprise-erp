@@ -124,9 +124,7 @@ export function previousAssignableStage(stage: string): AssignableStage | null {
 
 /**
  * Whether Project Tracking may show an assignee picker for this stage.
- * Survey: after project create (until Survey workflow is Done).
- * Later stages: when the previous stage progress is Partial completed or Completed.
- * Onsite Delivery is auto-assigned to PM — still allow admin reassignment until completed.
+ * Standalone — any open step can be assigned without waiting on prior steps.
  */
 export function canAssignStageFromTracking(
   stage: string,
@@ -144,32 +142,14 @@ export function canAssignStageFromTracking(
 
   const row = assignments.find((a) => a.stage === normalized);
   if (!row || stageAssignmentClosed(row)) return false;
-
-  const prev = previousAssignableStage(normalized);
-  if (!prev) {
-    // Survey — assign anytime before survey workflow completes
-    return row.work_status === "pending" || row.work_status === "in_progress";
-  }
-
-  const prevRow = assignments.find((a) => a.stage === prev);
-  return previousStageReadyForNextAssignment(prevRow);
+  return true;
 }
 
 export function assignWaitingHint(
-  stage: string,
-  assignments: StageAssignmentRow[],
+  _stage: string,
+  _assignments: StageAssignmentRow[],
 ): string | null {
-  const normalized =
-    stage === "configuration"
-      ? "installation"
-      : stage === "onsite"
-        ? "onsite_delivery"
-        : stage;
-  const prev = previousAssignableStage(normalized);
-  if (!prev) return null;
-  const prevRow = assignments.find((a) => a.stage === prev);
-  if (previousStageReadyForNextAssignment(prevRow)) return null;
-  return `Assign after ${prevRow?.label ?? prev} is Partial completed or Completed`;
+  return null;
 }
 
 export function stageWorkStatus(

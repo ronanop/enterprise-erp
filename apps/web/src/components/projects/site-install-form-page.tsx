@@ -198,22 +198,12 @@ export function SiteInstallFormPage({ projectId }: { projectId: string }) {
       loadedValuesRef.current = v;
 
       if (isProgressCompleteForAdvance(v.installation_progress_status)) {
-        let site = await getSiteInstallationByProject(projectId);
-        if (site.workflow_stage === "scm") {
-          site = await advanceSiteInstallation(projectId, "complete_scm");
-        }
-        if (
-          site.workflow_stage === "onsite_delivery" ||
-          site.workflow_stage === "onsite"
-        ) {
-          site = await advanceSiteInstallation(projectId, "complete_onsite_delivery");
-        }
-        if (site.workflow_stage === "material_handover") {
-          site = await advanceSiteInstallation(projectId, "complete_material_handover");
-        }
-        if (site.workflow_stage === "installation" || site.workflow_stage === "configuration") {
-          await advanceSiteInstallation(projectId, "complete_installation");
-        }
+        await advanceSiteInstallation(
+          projectId,
+          deliveryType === "rack_only"
+            ? "complete_installation_rack_only"
+            : "complete_installation",
+        );
       }
 
       return `/projects/my-jobs`;
