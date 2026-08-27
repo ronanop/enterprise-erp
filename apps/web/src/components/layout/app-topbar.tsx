@@ -32,7 +32,12 @@ export function AppTopbar() {
   return (
     <header className="sticky top-0 z-40 flex h-14 items-center justify-between gap-4 border-b border-border/80 bg-card/80 px-4 backdrop-blur-md supports-backdrop-filter:bg-card/70 sm:px-6">
       <div className="min-w-0 shrink-0 sm:w-44">
-        <p className="truncate text-sm font-medium tracking-tight">Workspace</p>
+        <Link
+          href="/"
+          className="block cursor-pointer truncate text-sm font-medium tracking-tight transition-opacity duration-200 hover:opacity-80"
+        >
+          Workspace
+        </Link>
         <p className="truncate text-xs text-muted-foreground">
           {workspaceSubtitle(pathname, signedIn)}
         </p>

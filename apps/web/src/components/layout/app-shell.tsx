@@ -26,20 +26,20 @@ export function AppShell({ children }: AppShellProps) {
   const isProjects = pathname === "/projects" || pathname.startsWith("/projects/");
   const isProcurement =
     pathname === "/procurement" || pathname.startsWith("/procurement/");
-  const useModulePrimarySidebar =
-    standalone && (isCrm || isProjects || isProcurement);
-  const showAppSidebar = !standalone || !useModulePrimarySidebar;
 
   return (
     <div className="flex min-h-dvh w-full max-w-[100dvw] overflow-x-clip bg-background">
       {hrMode ? (
         <HrSidebar />
-      ) : showAppSidebar ? (
+      ) : standalone ? (
+        <>
+          {isCrm ? <CrmSidebar /> : null}
+          {isProjects ? <ProjectsSidebar /> : null}
+          {isProcurement ? <ProcurementSidebar /> : null}
+        </>
+      ) : (
         <AppSidebar />
-      ) : null}
-      {standalone && isCrm ? <CrmSidebar /> : null}
-      {standalone && isProjects ? <ProjectsSidebar /> : null}
-      {standalone && isProcurement ? <ProcurementSidebar /> : null}
+      )}
       <div className="flex min-w-0 flex-1 flex-col overflow-x-clip">
         <AppTopbar />
         <main className="min-w-0 flex-1 overflow-x-clip px-4 py-6 sm:px-6 lg:px-8">

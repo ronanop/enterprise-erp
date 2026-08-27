@@ -35,7 +35,7 @@ export type NavItem = {
   href: string;
   description?: string;
   icon?: LucideIcon;
-  /** Navigate inside the main shell (same tab) instead of standalone module tab. */
+  /** Keep navigation in the current tab (e.g. Dashboard). Module links open in a new tab. */
   inApp?: boolean;
 };
 
