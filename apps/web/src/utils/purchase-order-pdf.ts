@@ -1,11 +1,13 @@
-import { jsPDF } from "jspdf";
+import { GState, jsPDF } from "jspdf";
 
 import { loadCacheLogo } from "@/utils/load-cache-logo";
 import {
   amountInIndianWords,
+  amountInUsdWords,
   dash,
   formatInrPdf,
   formatPoDateSlash,
+  formatUsdPdf,
 } from "@/utils/purchase-order-amount-words";
 
 export type PurchaseOrderPdfInput = {
@@ -25,7 +27,7 @@ export type PurchaseOrderPdfInput = {
   date: string;
   billingAddress: string;
   shippingAddress: string;
-  currency: "INR";
+  currency: "INR" | "USD";
   paymentTerms: string;
   authorizedSignatoryName?: string;
   lines: Array<{
@@ -34,6 +36,7 @@ export type PurchaseOrderPdfInput = {
     hsnCode?: string;
     qty: number;
     unitPriceInr: number;
+    rateCurrency?: "INR" | "USD";
   }>;
   distributionChargesInr?: number;
   taxes: Array<{ label: string; amountInr: number }>;
@@ -69,19 +72,28 @@ const PEACH: [number, number, number] = [248, 224, 200];
 const HEADER_GRAY: [number, number, number] = [232, 236, 241];
 
 function computeTotals(input: PurchaseOrderPdfInput) {
-  const lineRows = input.lines.map((line, index) => ({
-    ...line,
-    sNo: index + 1,
-    lineTotal: line.qty * line.unitPriceInr,
-  }));
-  const subtotal = lineRows.reduce((sum, row) => sum + row.lineTotal, 0);
-  const distribution = input.distributionChargesInr ?? 0;
-  const taxTotal = input.taxes.reduce((sum, tax) => sum + tax.amountInr, 0);
+  const lineRows = input.lines.map((line, index) => {
+    const isUsd = (line.rateCurrency || "INR") === "USD";
+    return {
+      ...line,
+      sNo: index + 1,
+      isUsd,
+      lineTotal: line.qty * line.unitPriceInr,
+    };
+  });
+  const allUsd = lineRows.length > 0 && lineRows.every((row) => row.isUsd);
+  const subtotal = lineRows.reduce((sum, row) => {
+    if (allUsd) return sum + row.lineTotal;
+    return row.isUsd ? sum : sum + row.lineTotal;
+  }, 0);
+  const distribution = allUsd ? 0 : (input.distributionChargesInr ?? 0);
+  const taxTotal = allUsd ? 0 : input.taxes.reduce((sum, tax) => sum + tax.amountInr, 0);
   return {
     lineRows,
     subtotal,
     distribution,
     taxTotal,
+    allUsd,
     grandTotal: subtotal + distribution + taxTotal,
   };
 }
@@ -94,6 +106,29 @@ function strokeRect(doc: jsPDF, x: number, y: number, w: number, h: number) {
   doc.setDrawColor(0);
   doc.setLineWidth(0.35);
   doc.rect(x, y, w, h);
+}
+
+/** Diagonal DRAFT PO mark — only for unfinalized PDF previews. */
+function applyPreviewWatermark(doc: jsPDF) {
+  const pageCount = doc.getNumberOfPages();
+  const pageW = doc.internal.pageSize.getWidth();
+  const pageH = doc.internal.pageSize.getHeight();
+  const soft = new GState({ opacity: 0.14 });
+  const solid = new GState({ opacity: 1 });
+
+  for (let page = 1; page <= pageCount; page += 1) {
+    doc.setPage(page);
+    doc.setGState(soft);
+    doc.setTextColor(185, 28, 28);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(54);
+    doc.text("DRAFT PO", pageW / 2, pageH / 2, {
+      align: "center",
+      angle: 32,
+    });
+    doc.setGState(solid);
+    doc.setTextColor(0, 0, 0);
+  }
 }
 
 function fillStrokeRect(
@@ -150,7 +185,7 @@ export function buildDefaultPoTaxes(params: {
   return [{ label: `IGST (${pct}%)`, amountInr: (taxable * pct) / 100 }];
 }
 
-/** Build GST lines from mixed taxable buckets (different line tax rates). */
+/** Group taxable buckets by GST % and merge CGST/SGST/IGST labels. */
 export function buildPoTaxesFromBuckets(params: {
   buckets: Array<{ taxableAmount: number; taxPct: number }>;
   sourceOfSupply?: string;
@@ -158,14 +193,13 @@ export function buildPoTaxesFromBuckets(params: {
 }): Array<{ label: string; amountInr: number }> {
   const byPct = new Map<number, number>();
   for (const bucket of params.buckets) {
-    const taxPct = Number(bucket.taxPct);
-    const taxableAmount = Math.max(0, Number(bucket.taxableAmount) || 0);
-    if (!Number.isFinite(taxPct) || taxPct <= 0 || taxableAmount <= 0) continue;
-    byPct.set(taxPct, (byPct.get(taxPct) || 0) + taxableAmount);
+    const pct = Number.isFinite(bucket.taxPct) ? bucket.taxPct : 0;
+    const taxable = Math.max(0, bucket.taxableAmount);
+    if (pct <= 0 || taxable <= 0) continue;
+    byPct.set(pct, (byPct.get(pct) || 0) + taxable);
   }
-
   const merged = new Map<string, number>();
-  for (const [taxPct, taxableAmount] of byPct) {
+  for (const [taxPct, taxableAmount] of [...byPct.entries()].sort((a, b) => a[0] - b[0])) {
     for (const row of buildDefaultPoTaxes({
       taxableAmount,
       taxPct,
@@ -175,37 +209,80 @@ export function buildPoTaxesFromBuckets(params: {
       merged.set(row.label, (merged.get(row.label) || 0) + row.amountInr);
     }
   }
-  return Array.from(merged, ([label, amountInr]) => ({ label, amountInr }));
+  return [...merged.entries()].map(([label, amountInr]) => ({ label, amountInr }));
+}
+
+/** Master-data stub used when SCM OVF lines are not catalog products. */
+const SCM_PLACEHOLDER_PRODUCT_CODES = new Set(["SCM-PURCHASED"]);
+
+/**
+ * Prefer product name on the PDF when there is no real catalog part code.
+ * Never print the SCM catalog placeholder code as the Product value.
+ */
+export function resolvePoPdfLineLabels(
+  productCode?: string | null,
+  productName?: string | null,
+): { partNo: string; description: string } {
+  const code = (productCode || "").trim();
+  const name = (productName || "").trim();
+  const codeIsPlaceholder =
+    !code || SCM_PLACEHOLDER_PRODUCT_CODES.has(code.toUpperCase());
+
+  if (codeIsPlaceholder) {
+    return {
+      partNo: name || "—",
+      description: name || "—",
+    };
+  }
+
+  return {
+    partNo: code,
+    description: name || code || "—",
+  };
 }
 
 export function purchaseOrderPdfInputFromOrder(
   order: {
     document_number: string;
     document_date: string;
+    company_po_number?: string | null;
     payment_terms?: string | null;
     approved_by_name?: string | null;
+    order_ref_cache?: string | null;
     lines?: Array<{
       product_code?: string | null;
       product_name?: string | null;
       quantity: number;
       unit_cost: number;
+      rate_currency?: string | null;
     }>;
   },
   vendor: { name: string; address?: string },
   options?: { taxPct?: number },
 ): PurchaseOrderPdfInput {
   const lines = (order.lines || []).map((ln) => {
-    const code = (ln.product_code || "").trim();
-    const name = (ln.product_name || "").trim();
+    const { partNo, description } = resolvePoPdfLineLabels(
+      ln.product_code,
+      ln.product_name,
+    );
+    const isUsd = (ln.rate_currency || "INR").toUpperCase() === "USD";
     return {
-      partNo: code || name || "—",
-      description: name || code || "—",
+      partNo,
+      description,
       qty: Number(ln.quantity) || 0,
       unitPriceInr: Number(ln.unit_cost) || 0,
+      rateCurrency: isUsd ? ("USD" as const) : ("INR" as const),
     };
   });
-  const taxableAmount = lines.reduce((sum, row) => sum + row.qty * row.unitPriceInr, 0);
+  const allUsd = lines.length > 0 && lines.every((row) => row.rateCurrency === "USD");
+  const taxableAmount = allUsd
+    ? 0
+    : lines.reduce(
+        (sum, row) => (row.rateCurrency === "USD" ? sum : sum + row.qty * row.unitPriceInr),
+        0,
+      );
   const taxPct = options?.taxPct ?? 18;
+  const companyPo = (order.company_po_number || "").trim();
   return {
     company: {
       name: DEFAULT_CACHE_COMPANY.name,
@@ -219,15 +296,16 @@ export function purchaseOrderPdfInputFromOrder(
       name: (vendor.name || "").trim() || "—",
       address: (vendor.address || "").trim() || "—",
     },
-    poNumber: order.document_number || "PO",
+    orderRef: (order.order_ref_cache || "").trim() || undefined,
+    poNumber: companyPo || order.document_number || "PO",
     date: order.document_date || new Date().toISOString().slice(0, 10),
     billingAddress: KAILASH_BILLING,
     shippingAddress: KAILASH_BILLING,
-    currency: "INR",
+    currency: allUsd ? "USD" : "INR",
     paymentTerms: order.payment_terms || "Net 30 Days",
     authorizedSignatoryName: (order.approved_by_name || "").trim() || undefined,
     lines,
-    taxes: buildDefaultPoTaxes({ taxableAmount, taxPct }),
+    taxes: allUsd ? [] : buildDefaultPoTaxes({ taxableAmount, taxPct }),
     termsAndConditions: [...CACHE_PO_TERMS],
   };
 }
@@ -236,9 +314,17 @@ export async function downloadOrderPdf(
   order: Parameters<typeof purchaseOrderPdfInputFromOrder>[0],
   vendor: { name: string; address?: string },
   fileName?: string,
+  options?: { watermark?: boolean },
 ): Promise<void> {
   const input = purchaseOrderPdfInputFromOrder(order, vendor);
-  await downloadPurchaseOrderPdf(input, fileName || `PO-${input.poNumber}.pdf`);
+  const watermark = Boolean(options?.watermark);
+  const safePo = (input.poNumber || "PO").replace(/[\\/:*?"<>|]+/g, "-");
+  const baseName = fileName || `PO-${safePo}.pdf`;
+  await downloadPurchaseOrderPdf(
+    input,
+    watermark ? baseName.replace(/\.pdf$/i, "-draft.pdf") : baseName,
+    { watermark },
+  );
 }
 
 export async function previewPurchaseOrderPdf(
@@ -254,7 +340,7 @@ export async function previewPurchaseOrderPdf(
 export async function downloadPurchaseOrderPdf(
   input: PurchaseOrderPdfInput,
   fileName?: string,
-  options?: { preview?: boolean },
+  options?: { preview?: boolean; watermark?: boolean },
 ): Promise<void> {
   const payload: PurchaseOrderPdfInput = {
     ...input,
@@ -276,7 +362,7 @@ export async function downloadPurchaseOrderPdf(
       input.termsAndConditions.length > 0 ? input.termsAndConditions : [...CACHE_PO_TERMS],
   };
 
-  const { lineRows, subtotal, distribution, grandTotal } = computeTotals(payload);
+  const { lineRows, subtotal, distribution, grandTotal, allUsd } = computeTotals(payload);
   const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
   const pageW = doc.internal.pageSize.getWidth();
   const pageH = doc.internal.pageSize.getHeight();
@@ -298,7 +384,7 @@ export async function downloadPurchaseOrderPdf(
   y += titleH;
 
   // ========== 2. Logo | Company ==========
-  const headH = 28;
+  const headH = 34;
   const logoW = W * 0.7;
   const companyW = W - logoW;
   strokeRect(doc, L, y, logoW, headH);
@@ -348,10 +434,11 @@ export async function downloadPurchaseOrderPdf(
   for (const line of payload.company.addressLines) {
     for (const row of wrap(doc, line, companyMaxW)) {
       doc.text(row, companyRightX, ay, { align: "right" });
-      ay += 3.6;
+      ay += 3.8;
     }
   }
-  doc.text(`Tel: ${dash(payload.company.phone)}`, companyRightX, Math.min(ay, y + headH - 3), {
+  ay += 2.2;
+  doc.text(`Tel: ${dash(payload.company.phone)}`, companyRightX, Math.min(ay, y + headH - 6), {
     align: "right",
   });
   y += headH;
@@ -391,6 +478,7 @@ export async function downloadPurchaseOrderPdf(
   ];
   const metaX = L + leftW + 2.5;
   const metaMaxW = rightW - 5;
+  const metaLabelGap = 2.2;
   let my = y + 5;
   for (const [label, value] of meta) {
     const valueText = value === "—" && label.startsWith("Order Ref") ? "" : value;
@@ -399,20 +487,19 @@ export async function downloadPurchaseOrderPdf(
     doc.setFontSize(7.5);
     const wrapped = wrap(doc, line, metaMaxW).slice(0, 2);
     for (const row of wrapped) {
-      // Bold label portion only on first fragment when it still starts with label
       if (row.startsWith(label)) {
         doc.setFont("helvetica", "bold");
         doc.setFontSize(7.5);
         doc.text(label, metaX, my);
-        const rest = row.slice(label.length);
+        const rest = row.slice(label.length).trim();
         if (rest) {
           doc.setFont("helvetica", "normal");
-          doc.text(rest, metaX + doc.getTextWidth(label), my);
+          doc.text(rest, metaX + doc.getTextWidth(label) + metaLabelGap, my);
         }
       } else {
         doc.setFont("helvetica", "normal");
         doc.setFontSize(7.5);
-        doc.text(row, metaX, my);
+        doc.text(row.trim(), metaX, my);
       }
       my += 5.5;
     }
@@ -473,11 +560,11 @@ export async function downloadPurchaseOrderPdf(
   doc.setFontSize(7.5);
   const headers: Array<[string, number, "left" | "center" | "right"]> = [
     ["S. NO", col.sno, "center"],
-    ["Product Part No.", col.part, "left"],
+    ["Product", col.part, "left"],
     ["Description", col.desc, "left"],
     ["Total Qty.", col.qty, "right"],
-    ["Unit Price INR", col.unit, "right"],
-    ["Total INR", col.total, "right"],
+    ["Unit Price", col.unit, "right"],
+    ["Amount", col.total, "right"],
   ];
   {
     let x = L;
@@ -526,11 +613,12 @@ export async function downloadPurchaseOrderPdf(
       dy += 3.5;
     }
     const numX = L + col.sno + col.part + col.desc;
+    const money = row.isUsd ? formatUsdPdf : formatInrPdf;
     doc.text(formatInrPdf(row.qty), numX + col.qty - 1.5, y + 4.8, { align: "right" });
-    doc.text(formatInrPdf(row.unitPriceInr), numX + col.qty + col.unit - 1.5, y + 4.8, {
+    doc.text(money(row.unitPriceInr), numX + col.qty + col.unit - 1.5, y + 4.8, {
       align: "right",
     });
-    doc.text(formatInrPdf(row.lineTotal), numX + col.qty + col.unit + col.total - 1.5, y + 4.8, {
+    doc.text(money(row.lineTotal), numX + col.qty + col.unit + col.total - 1.5, y + 4.8, {
       align: "right",
     });
     y += h;
@@ -543,16 +631,23 @@ export async function downloadPurchaseOrderPdf(
   }
 
   // ========== 7. Amount in Words (left) | Totals (right) — matches CACHE sample ==========
+  const money = allUsd ? formatUsdPdf : formatInrPdf;
   const totalRows: Array<[string, string, boolean]> = [
-    ["Total INR", formatInrPdf(subtotal), true],
+    [allUsd ? "Total USD" : "Total INR", money(subtotal), true],
   ];
   if (distribution > 0) {
     totalRows.push(["Distribution charges (INR)", formatInrPdf(distribution), true]);
   }
-  for (const tax of payload.taxes) {
-    totalRows.push([tax.label, formatInrPdf(tax.amountInr), true]);
+  if (!allUsd) {
+    for (const tax of payload.taxes) {
+      totalRows.push([tax.label, formatInrPdf(tax.amountInr), true]);
+    }
   }
-  totalRows.push(["Total Value of PO (INR)", formatInrPdf(grandTotal), true]);
+  totalRows.push([
+    allUsd ? "Total Value of PO (USD)" : "Total Value of PO (INR)",
+    money(grandTotal),
+    true,
+  ]);
 
   const tRowH = 6.5;
   const totalsH = Math.max(22, totalRows.length * tRowH);
@@ -569,7 +664,11 @@ export async function downloadPurchaseOrderPdf(
   doc.setFont("helvetica", "normal");
   doc.setFontSize(8.5);
   let wy = y + 11;
-  for (const row of wrap(doc, amountInIndianWords(grandTotal), wordsW - 5)) {
+  for (const row of wrap(
+    doc,
+    allUsd ? amountInUsdWords(grandTotal) : amountInIndianWords(grandTotal),
+    wordsW - 5,
+  )) {
     if (wy > y + totalsH - 2) break;
     doc.text(row, L + 2.5, wy);
     wy += 3.6;
@@ -648,6 +747,10 @@ export async function downloadPurchaseOrderPdf(
     Math.max(ty + 12, pageH - 24),
     { align: "center" },
   );
+
+  if (options?.preview || options?.watermark) {
+    applyPreviewWatermark(doc);
+  }
 
   if (options?.preview) {
     const url = doc.output("bloburl");

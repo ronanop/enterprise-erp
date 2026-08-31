@@ -71,6 +71,7 @@ import {
   ovfProductKey,
   ovfRequiresInStockCreatePoApproval,
   ovfVendorPoGroups,
+  takeOvfPoRemainderProducts,
 } from "@/utils/ovf-stock";
 
 function applyVendorAddressFields(
@@ -828,7 +829,14 @@ export function ScmCreatePoPage({ ovfId }: { ovfId: string }) {
       setVendors(vendorRows);
 
       const seedVendorLines = remainderFromStock
-        ? ovf.vendor_lines || []
+        ? (() => {
+            const all = ovf.vendor_lines || [];
+            const limited = takeOvfPoRemainderProducts(ovfId);
+            if (!limited || limited.length === 0) return all;
+            const keys = new Set(limited.map((name) => ovfProductKey(name)));
+            const matched = all.filter((ln) => keys.has(ovfProductKey(ln.product_name)));
+            return matched.length > 0 ? matched : all;
+          })()
         : ovfPoSeedVendorLines(ovf.vendor_lines || [], distributorParam);
       const selectedDistributor =
         (distributorParam || seedVendorLines[0]?.distributor_name || ovf.distributor_name || "").trim();

@@ -149,6 +149,39 @@ export function ovfCreatePoRemainderHref(ovfId: string, distributorName?: string
   return `${base}${base.includes("?") ? "&" : "?"}from=stock-remainder`;
 }
 
+const PO_REMAINDER_PRODUCTS_KEY = (ovfId: string) =>
+  `erp.scm.ovf-po-remainder-products:${ovfId}`;
+
+/** Limit stock-remainder Create PO to these inventory shortfall products (combined PO). */
+export function setOvfPoRemainderProducts(ovfId: string, productNames: string[]): void {
+  if (typeof window === "undefined") return;
+  const names = productNames.map((name) => name.trim()).filter(Boolean);
+  try {
+    if (names.length === 0) {
+      window.sessionStorage.removeItem(PO_REMAINDER_PRODUCTS_KEY(ovfId));
+      return;
+    }
+    window.sessionStorage.setItem(PO_REMAINDER_PRODUCTS_KEY(ovfId), JSON.stringify(names));
+  } catch {
+    /* ignore quota */
+  }
+}
+
+export function takeOvfPoRemainderProducts(ovfId: string): string[] | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.sessionStorage.getItem(PO_REMAINDER_PRODUCTS_KEY(ovfId));
+    window.sessionStorage.removeItem(PO_REMAINDER_PRODUCTS_KEY(ovfId));
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as unknown;
+    if (!Array.isArray(parsed)) return null;
+    const names = parsed.map((row) => String(row || "").trim()).filter(Boolean);
+    return names.length > 0 ? names : null;
+  } catch {
+    return null;
+  }
+}
+
 export function ovfPoSeedVendorLines(
   lines: ScmVendorLine[],
   distributorName?: string | null,

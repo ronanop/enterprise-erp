@@ -214,75 +214,75 @@ function PendingGrnQueueCard({
                   ? resolveChallanBillStatus(savedChallan)
                   : "none";
                 return (
-                  <tr
-                    key={row.id}
-                    className={cn(procurementUi.tr, "cursor-pointer")}
-                    role="link"
-                    tabIndex={0}
-                    onClick={() => router.push(href)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter" || e.key === " ") {
-                        e.preventDefault();
-                        router.push(href);
-                      }
-                    }}
-                  >
-                    <td className={cn(procurementUi.td, "font-medium tabular-nums", isSaved ? "text-foreground" : "text-muted-foreground")}>
-                      {row.docNumber || "—"}
-                    </td>
-                    <td className={cn(procurementUi.tdNumeric, "text-muted-foreground")}>
-                      {row.docDate || "—"}
-                    </td>
-                    <td className={cn(procurementUi.td, "max-w-[160px] font-medium tabular-nums")}>
-                      {row.purchaseOrderNumber || "—"}
-                    </td>
-                    <td className={cn(procurementUi.td, "max-w-[160px] font-medium tabular-nums")}>
-                      {row.grnNumber || "—"}
-                    </td>
-                    <td className={cn(procurementUi.tdNumeric, "text-muted-foreground")}>
-                      {pendingDate(row.createdAt)}
-                    </td>
-                    <td className={procurementUi.tdMuted}>{row.vendorName || "—"}</td>
-                    <td className={procurementUi.td}>{row.customerName?.trim() || "—"}</td>
-                    <td className={procurementUi.td}>
-                      {isSaved ? (
-                        <Badge variant="default" className={cn(procurementUi.statusBadge, "bg-emerald-600 text-white hover:bg-emerald-600")}>
-                          Sent
-                        </Badge>
-                      ) : (
-                        <Badge variant="warning" className={procurementUi.statusBadge}>
-                          Pending
-                        </Badge>
-                      )}
-                    </td>
-                    <td className={procurementUi.td} onClick={(e) => e.stopPropagation()}>
-                      <div className="flex flex-wrap items-center gap-1">
-                        <DeliveryBillTakenBadge status={billStatus} />
-                        {savedChallan ? (
-                          <DeliveryBillTakenButton
-                            status={billStatus}
-                            onClick={() => onBill(savedChallan.id)}
-                          />
-                        ) : null}
-                      </div>
-                    </td>
-                    <td className={procurementUi.td}>
-                      <div className={procurementUi.rowActions}>
-                        <Link
-                          href={href}
-                          onClick={(e) => e.stopPropagation()}
-                          className={cn(
-                            buttonVariants({ size: "sm", variant: "ghost" }),
-                            procurementUi.actionBtn,
-                            "text-[#0369A1] hover:text-[#0369A1]",
-                          )}
-                        >
-                          {actionLabel}
-                        </Link>
-                      </div>
-                    </td>
-                  </tr>
-                );
+                <tr
+                  key={row.id}
+                  className={cn(procurementUi.tr, "cursor-pointer")}
+                  role="link"
+                  tabIndex={0}
+                  onClick={() => router.push(href)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      router.push(href);
+                    }
+                  }}
+                >
+                  <td className={cn(procurementUi.td, "font-medium tabular-nums", isSaved ? "text-foreground" : "text-muted-foreground")}>
+                    {row.docNumber || "—"}
+                  </td>
+                  <td className={cn(procurementUi.tdNumeric, "text-muted-foreground")}>
+                    {row.docDate || "—"}
+                  </td>
+                  <td className={cn(procurementUi.td, "max-w-[160px] font-medium tabular-nums")}>
+                    {row.purchaseOrderNumber || "—"}
+                  </td>
+                  <td className={cn(procurementUi.td, "max-w-[160px] font-medium tabular-nums")}>
+                    {row.grnNumber || "—"}
+                  </td>
+                  <td className={cn(procurementUi.tdNumeric, "text-muted-foreground")}>
+                    {pendingDate(row.createdAt)}
+                  </td>
+                  <td className={procurementUi.tdMuted}>{row.vendorName || "—"}</td>
+                  <td className={procurementUi.td}>{row.customerName?.trim() || "—"}</td>
+                  <td className={procurementUi.td}>
+                    {isSaved ? (
+                      <Badge variant="default" className={cn(procurementUi.statusBadge, "bg-emerald-600 text-white hover:bg-emerald-600")}>
+                        Sent
+                      </Badge>
+                    ) : (
+                      <Badge variant="warning" className={procurementUi.statusBadge}>
+                        Pending
+                      </Badge>
+                    )}
+                  </td>
+                  <td className={procurementUi.td} onClick={(e) => e.stopPropagation()}>
+                    <div className="flex flex-wrap items-center gap-1">
+                      <DeliveryBillTakenBadge status={billStatus} />
+                      {savedChallan ? (
+                        <DeliveryBillTakenButton
+                          status={billStatus}
+                          onClick={() => onBill(savedChallan.id)}
+                        />
+                      ) : null}
+                    </div>
+                  </td>
+                  <td className={procurementUi.td}>
+                    <div className={procurementUi.rowActions}>
+                      <Link
+                        href={href}
+                        onClick={(e) => e.stopPropagation()}
+                        className={cn(
+                          buttonVariants({ size: "sm", variant: "ghost" }),
+                          procurementUi.actionBtn,
+                          "text-[#0369A1] hover:text-[#0369A1]",
+                        )}
+                      >
+                        {actionLabel}
+                      </Link>
+                    </div>
+                  </td>
+                </tr>
+              );
               })
             )}
           </tbody>

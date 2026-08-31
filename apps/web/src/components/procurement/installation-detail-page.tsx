@@ -19,10 +19,7 @@ import {
   getScmOvfPreview,
 } from "@/services/procurement-service";
 import {
-  advanceSiteInstallation,
-  createProject,
   getProjectPoPrefill,
-  updateSiteInstallationByProject,
 } from "@/services/projects-portal-service";
 import { challanDeliveredQuantity } from "@/utils/delivery-challan-bill";
 import { getDeliveryChallan } from "@/utils/delivery-challan-storage";
@@ -36,12 +33,13 @@ import { installationListHref } from "@/utils/installation-routes";
 import {
   emptyInstallationManual,
   firstInstallationError,
-  markInstallationSharedToProject,
+  markInstallationSharedToPoQueue,
   resolveInstallation,
   upsertInstallation,
   validateInstallationManual,
   type InstallationManualFields,
 } from "@/utils/installation-storage";
+import { enqueueProjectPoQueueHandoff } from "@/utils/project-po-queue-handoff";
 
 function textOrDash(value: string | number | null | undefined): string {
   if (value === null || value === undefined) return "—";
@@ -147,8 +145,6 @@ export function InstallationDetailPage({ challanId }: { challanId: string }) {
       }
 
       const projectName = crmProjectTitle || install.projectName || "";
-      const deliveredQty = challanDeliveredQuantity(challan);
-      const deliveredQtyDigits = String(deliveredQty ?? "").replace(/[^\d]/g, "");
       setManual({
         projectName,
         circleName: install.circleName,
@@ -156,7 +152,6 @@ export function InstallationDetailPage({ challanId }: { challanId: string }) {
         contactPerson: install.contactPerson,
         contactNumber: install.contactNumber,
         rackQuantity: install.rackQuantity,
-        serverQuantity: install.serverQuantity || deliveredQtyDigits,
         serverType: install.serverType,
       });
       setShared({
@@ -258,19 +253,24 @@ export function InstallationDetailPage({ challanId }: { challanId: string }) {
         ...manual,
       });
 
-      const prefill = await getProjectPoPrefill(auto.orderId).catch(() => null);
-      const branchId = prefill?.branch_id || auto.branchId;
-      if (!branchId) {
-        setError("Could not resolve branch for project create.");
+      const [prefill, order] = await Promise.all([
+        getProjectPoPrefill(auto.orderId, { installationHandoff: true }).catch(() => null),
+        getPurchaseOrder(auto.orderId, { includeCommercial: true }).catch(() => null),
+      ]);
+      const branchId = prefill?.branch_id || order?.branch_id || auto.branchId;
+      const companyId = prefill?.company_id || order?.company_id || "";
+      if (!branchId || !companyId) {
+        setError("Could not resolve company/branch for Projects PO Queue.");
+        return;
+      }
+      if (!order?.vendor_id && !prefill) {
+        setError("Could not load purchase order for Projects PO Queue.");
         return;
       }
 
-      const rackQty = Number(manual.rackQuantity);
-      const serverQty = Number(manual.serverQuantity);
       const remarks = [
         `Contact: ${manual.contactPerson} (${manual.contactNumber})`,
         `Server type: ${manual.serverType}`,
-        `Server quantity: ${manual.serverQuantity}`,
         `Rack quantity: ${manual.rackQuantity}`,
         auto.oemName ? `OEM: ${auto.oemName}` : null,
         auto.deliveredDate ? `Delivered: ${auto.deliveredDate}` : null,
@@ -278,49 +278,39 @@ export function InstallationDetailPage({ challanId }: { challanId: string }) {
         .filter(Boolean)
         .join("\n");
 
-      const saved = await createProject({
-        branch_id: branchId,
-        project_name: manual.projectName.trim(),
-        customer_id: prefill?.customer_id || undefined,
-        proc_order_id: auto.orderId,
-        description: remarks,
-        site_installation: {
-          delivery_type: "server_os_rack",
-          site_name: manual.site.trim(),
-          circle: manual.circleName.trim(),
-          requestor_name: manual.contactPerson.trim(),
-          application: manual.serverType.trim(),
-          server_qty: Number.isFinite(serverQty) ? serverQty : null,
-          rack_qty: Number.isFinite(rackQty) ? rackQty : null,
-          remarks,
-        },
+      enqueueProjectPoQueueHandoff({
+        orderId: auto.orderId,
+        challanId,
+        projectName: manual.projectName.trim(),
+        circleName: manual.circleName.trim(),
+        siteName: manual.site.trim(),
+        contactPerson: manual.contactPerson.trim(),
+        contactNumber: manual.contactNumber.trim(),
+        rackQuantity: manual.rackQuantity.trim(),
+        serverType: manual.serverType.trim(),
+        remarks,
+        companyPoNumber:
+          order?.company_po_number || prefill?.company_po_number || auto.poNumber || null,
+        documentNumber: order?.document_number || auto.poNumber || "PO",
+        documentDate: order?.document_date || new Date().toISOString().slice(0, 10),
+        customerName: order?.customer_name || prefill?.customer_name || auto.customerName || null,
+        customerPoNumber: order?.customer_po_number || prefill?.customer_po_number || null,
+        vendorId: order?.vendor_id || "",
+        totalAmount: Number(order?.total_amount || order?.vendor_total || 0),
+        customerTotal: Number(order?.customer_total || 0),
+        status: order?.status || "sent",
+        ovfId: order?.source_document_id || prefill?.ovf_id || null,
+        branchId,
+        companyId,
       });
 
-      try {
-        await updateSiteInstallationByProject(saved.id, {
-          delivery_type: "server_os_rack",
-          site_name: manual.site.trim(),
-          circle: manual.circleName.trim(),
-          requestor_name: manual.contactPerson.trim(),
-          application: manual.serverType.trim(),
-          remarks,
-          server_qty: Number.isFinite(serverQty) ? serverQty : null,
-          rack_qty: Number.isFinite(rackQty) ? rackQty : null,
-        });
-        if (manual.site.trim()) {
-          await advanceSiteInstallation(saved.id, "complete_intake").catch(() => undefined);
-        }
-      } catch {
-        // Project exists; site fields may still be editable in Projects.
-      }
-
-      const linked = markInstallationSharedToProject(challanId, saved.id);
+      const linked = markInstallationSharedToPoQueue(challanId);
       setShared({
         sharedToProject: true,
         projectHref: linked.projectHref,
       });
-      setBanner("Shared to Project module.");
-      router.push(`/projects/projects/${saved.id}`);
+      setBanner("Shared to Projects PO Queue. Create the project from there.");
+      router.push("/projects/po-queue");
     } catch (err) {
       setError(
         err instanceof ApiClientError ? err.message : "Failed to share to Project module",
@@ -366,7 +356,9 @@ export function InstallationDetailPage({ challanId }: { challanId: string }) {
                 "cursor-pointer transition-colors duration-200",
               )}
             >
-              Open project
+              {shared.projectHref.includes("/po-queue")
+                ? "Open PO Queue"
+                : "Open project"}
             </Link>
           ) : null
         }
@@ -408,7 +400,9 @@ export function InstallationDetailPage({ challanId }: { challanId: string }) {
               </Badge>
               {shared.sharedToProject ? (
                 <Badge variant="secondary" className={procurementUi.statusBadge}>
-                  Shared to project
+                  {shared.projectHref?.includes("/po-queue")
+                    ? "Shared to PO Queue"
+                    : "Shared to project"}
                 </Badge>
               ) : (
                 <Badge variant="outline" className={procurementUi.statusBadge}>
@@ -433,7 +427,7 @@ export function InstallationDetailPage({ challanId }: { challanId: string }) {
           <DeliverySectionCard
             title="Site installation details"
             icon={MapPinned}
-            subtitle="Details save automatically as you type. Share to Projects when all required fields are complete."
+            subtitle="Details save automatically as you type. Share sends the PO to Projects → PO Queue."
           >
             <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
               <FinanceField
@@ -502,18 +496,6 @@ export function InstallationDetailPage({ challanId }: { challanId: string }) {
                   disabled={shared.sharedToProject}
                 />
               </FinanceField>
-              <FinanceField label="Server quantity *" error={fieldErrors.serverQuantity}>
-                <Input
-                  value={manual.serverQuantity}
-                  onChange={(e) =>
-                    patchManual({ serverQuantity: e.target.value.replace(/[^\d]/g, "") })
-                  }
-                  className="h-8"
-                  inputMode="numeric"
-                  placeholder="0"
-                  disabled={shared.sharedToProject}
-                />
-              </FinanceField>
               <FinanceField
                 label="Server type *"
                 error={fieldErrors.serverType}
@@ -543,12 +525,12 @@ export function InstallationDetailPage({ challanId }: { challanId: string }) {
                   ? "Sharing…"
                   : shared.sharedToProject
                     ? "Already shared"
-                    : "Share to Project module"}
+                    : "Share to PO Queue"}
               </Button>
             </div>
             {!detailsComplete && !shared.sharedToProject ? (
               <p className="mt-2 text-xs text-muted-foreground">
-                Complete all required site fields before sharing to Projects.
+                Complete all required site fields before sharing to Projects PO Queue.
               </p>
             ) : null}
           </DeliverySectionCard>

@@ -348,7 +348,6 @@ class OrderResponse(BaseModel):
     current_receipt_batch_at: datetime | None = None
     current_grn_number: str | None = None
     grn_sequence: int = 0
-    created_at: datetime | None = None
     version: int
     lines: list[OrderLineResponse] = Field(default_factory=list)
 

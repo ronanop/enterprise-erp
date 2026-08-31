@@ -60,6 +60,10 @@ import {
   type ScmOvfPreview,
   type ScmVendorLine,
 } from "@/services/procurement-service";
+import {
+  deriveScmOvfQueueStatus,
+  type ScmOvfQueueStatus,
+} from "@/utils/scm-queue-ovf-status";
 
 function ovfLineNameKey(name: string | null | undefined): string {
   return (name || "").trim().toLowerCase();
@@ -149,20 +153,6 @@ function parseChargeInput(raw: string): string | null {
 function normalizeChargeOnBlur(value: string): string {
   if (value.trim() === "" || value === ".") return "0";
   return value;
-}
-
-type ScmOvfQueueStatus = "open" | "close" | "hold" | "draft";
-
-function deriveScmOvfQueueStatus(preview: ScmOvfPreview): ScmOvfQueueStatus {
-  const poStatus = (preview.purchase_order_status || "").toLowerCase();
-  if (poStatus === "draft" && preview.purchase_order_id && !preview.can_create_po) {
-    return "draft";
-  }
-  if (preview.scm_on_hold || poStatus === "hold" || poStatus === "cancelled") return "hold";
-  if (preview.stock_fulfillment_status === "complete" && !preview.can_create_po) return "close";
-  if (!preview.purchase_order_id || preview.can_create_po) return "open";
-  if (poStatus === "submitted" || poStatus === "") return "open";
-  return "close";
 }
 
 function ScmOvfStatusBadge({ status }: { status: ScmOvfQueueStatus }) {

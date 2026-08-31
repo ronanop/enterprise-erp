@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, type MouseEvent } from "react";
 import { BadgeCheck, Check, Eye, Loader2, Paperclip, RefreshCw, X } from "lucide-react";
 
 import { PageHeader } from "@/components/layout/page-header";
@@ -165,6 +165,7 @@ export function ProcurementApprovalsPage() {
   const { rows, pending, pendingCount, decide, refresh } = useProcurementApprovals();
   const [busyId, setBusyId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
   const [filter, setFilter] = useState<"all" | "pending" | "accepted" | "rejected">("all");
   const [enriching, setEnriching] = useState(false);
 
@@ -230,14 +231,22 @@ export function ProcurementApprovalsPage() {
   const acceptedCount = rows.filter((row) => row.status === "accepted").length;
   const rejectedCount = rows.filter((row) => row.status === "rejected").length;
 
-  async function onAccept(row: PoApprovalRequest) {
+  async function onAccept(row: PoApprovalRequest, event?: MouseEvent) {
+    event?.preventDefault();
+    event?.stopPropagation();
     setBusyId(row.id);
     setError(null);
+    setSuccess(null);
     try {
       if (row.kind === "finalize") {
         await finalizeScmOrder(row.orderId);
       }
       decide(row.id, "accepted");
+      setSuccess(
+        row.kind === "create_po_in_stock"
+          ? "Create PO approved. Requester can create the PO in SCM — nothing is sent to Projects."
+          : "PO issued. It stays in Procurement (GRN / delivery). It is not sent to Projects — share only from Installation.",
+      );
     } catch (err) {
       setError(
         formatApiError(
@@ -252,11 +261,15 @@ export function ProcurementApprovalsPage() {
     }
   }
 
-  function onReject(row: PoApprovalRequest) {
+  function onReject(row: PoApprovalRequest, event?: MouseEvent) {
+    event?.preventDefault();
+    event?.stopPropagation();
     setBusyId(row.id);
     setError(null);
+    setSuccess(null);
     try {
       decide(row.id, "rejected");
+      setSuccess("Request rejected. Requester can edit and resubmit.");
     } finally {
       setBusyId(null);
     }
@@ -268,7 +281,7 @@ export function ProcurementApprovalsPage() {
         title="Approval"
         description={
           isAdmin
-            ? "Approve Create PO for IN STOCK OVFs, or accept finalize to issue a draft PO. Reject so the requester can edit and resubmit."
+            ? "Approve Create PO for IN STOCK OVFs, or accept finalize to issue a draft PO. Accepting does not send the PO to Projects — that happens only from Installation → Share to Project."
             : "Track Create PO (IN STOCK) and finalize requests you sent. You get a notification when an admin decides."
         }
         actions={
@@ -280,6 +293,7 @@ export function ProcurementApprovalsPage() {
               className="cursor-pointer transition-colors duration-200"
               onClick={() => {
                 setError(null);
+                setSuccess(null);
                 refresh();
                 void hydrateLabels();
               }}
@@ -335,6 +349,11 @@ export function ProcurementApprovalsPage() {
       </div>
 
       {error ? <ProcurementErrorBanner>{error}</ProcurementErrorBanner> : null}
+      {success ? (
+        <div className="rounded-md border border-emerald-200/80 bg-emerald-50 px-3 py-2 text-sm text-emerald-950">
+          {success}
+        </div>
+      ) : null}
 
       <ProcurementListPanel>
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border/80 px-3 py-2">
@@ -419,7 +438,7 @@ export function ProcurementApprovalsPage() {
                             <button
                               type="button"
                               disabled={busyId === row.id}
-                              onClick={() => void onAccept(row)}
+                              onClick={(event) => void onAccept(row, event)}
                               className={cn(
                                 "inline-flex cursor-pointer items-center gap-1 rounded-md bg-[#0F172A] px-2.5 py-1 text-[11px] font-semibold text-white",
                                 "transition-[opacity,transform] duration-200 hover:opacity-90",
@@ -439,7 +458,7 @@ export function ProcurementApprovalsPage() {
                             <button
                               type="button"
                               disabled={busyId === row.id}
-                              onClick={() => onReject(row)}
+                              onClick={(event) => onReject(row, event)}
                               className={cn(
                                 "inline-flex cursor-pointer items-center gap-1 rounded-md border border-red-200 bg-red-50 px-2.5 py-1 text-[11px] font-semibold text-red-800",
                                 "transition-colors duration-200 hover:bg-red-100",

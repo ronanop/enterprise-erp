@@ -301,43 +301,23 @@ export function ProcurementInventoryListPage() {
                         <th className={cn(procurementUi.th, "px-4 text-right")}>Vendor price</th>
                         <th className={cn(procurementUi.th, "px-4")}>Serial number</th>
                         <th className={cn(procurementUi.th, "px-4")}>GRN number</th>
+                        <th className={cn(procurementUi.th, "px-4")}>Source</th>
                       </tr>
                     </thead>
                     <tbody>
                       {grnStockByProduct.map((line) => (
                         <tr key={line.productKey} className={procurementUi.tr}>
                           <td className={cn(procurementUi.td, "px-4")}>
-                            <div className="flex min-w-0 flex-wrap items-center gap-2">
-                              <span
-                                className={cn(
-                                  "inline-flex shrink-0 rounded border px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide",
-                                  line.addedBy === "po"
-                                    ? "border-sky-200 bg-sky-50 text-sky-800"
-                                    : line.addedBy === "manual"
-                                      ? "border-border/80 bg-muted/60 text-muted-foreground"
-                                      : "border-amber-200 bg-amber-50 text-amber-900",
-                                )}
-                                title={
-                                  line.addedBy === "po"
-                                    ? "Received via purchase order / GRN"
-                                    : line.addedBy === "manual"
-                                      ? "Added via Add stock or Excel import"
-                                      : "Includes both PO/GRN and manual stock"
-                                }
-                              >
-                                {inventoryAddedByLabel(line.addedBy)}
-                              </span>
-                              <button
-                                type="button"
-                                className="cursor-pointer text-left font-medium text-foreground transition-colors duration-200 hover:text-[#0369A1] hover:underline"
-                                onClick={() => {
-                                  setDetailError(null);
-                                  setDetailProductKey(line.productKey);
-                                }}
-                              >
-                                {line.productName}
-                              </button>
-                            </div>
+                            <button
+                              type="button"
+                              className="cursor-pointer text-left font-medium text-foreground transition-colors duration-200 hover:text-[#0369A1] hover:underline"
+                              onClick={() => {
+                                setDetailError(null);
+                                setDetailProductKey(line.productKey);
+                              }}
+                            >
+                              {line.productName}
+                            </button>
                           </td>
                           <td
                             className={cn(
@@ -388,6 +368,27 @@ export function ProcurementInventoryListPage() {
                                 Reversed
                               </span>
                             ) : null}
+                          </td>
+                          <td className={cn(procurementUi.td, "px-4")}>
+                            <span
+                              className={cn(
+                                "inline-flex shrink-0 rounded border px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide",
+                                line.addedBy === "po"
+                                  ? "border-sky-200 bg-sky-50 text-sky-800"
+                                  : line.addedBy === "manual"
+                                    ? "border-border/80 bg-muted/60 text-muted-foreground"
+                                    : "border-amber-200 bg-amber-50 text-amber-900",
+                              )}
+                              title={
+                                line.addedBy === "po"
+                                  ? "Received via purchase order / GRN"
+                                  : line.addedBy === "manual"
+                                    ? "Added via Add stock or Excel import"
+                                    : "Includes both PO/GRN and manual stock"
+                              }
+                            >
+                              {inventoryAddedByLabel(line.addedBy)}
+                            </span>
                           </td>
                         </tr>
                       ))}

@@ -83,7 +83,7 @@ export function pushPoApprovalDecisionNotification(input: {
         ? `Admin approved Create PO for ${poLabel} (IN STOCK). You can create the purchase order now.`
         : `Admin rejected Create PO for ${poLabel} (IN STOCK). Use inventory or request again if needed.`
       : input.decision === "accepted"
-        ? `Admin accepted ${poLabel}. The purchase order is issued.`
+        ? `Admin accepted ${poLabel}. The purchase order is issued in Procurement — not sent to Projects.`
         : `Admin rejected ${poLabel}. Edit and resubmit for approval if needed.`;
   const row: PoApprovalDecisionNotification = {
     id: crypto.randomUUID(),
