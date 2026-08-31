@@ -3,12 +3,16 @@
 Active-code uniqueness is enforced by partial unique index
 ``uq_ast_asset_component_active_code`` (migration 0484), not a table UK,
 so replaced/disposed history may retain the same component_code.
+
+Optional ``component_asset_id`` links a real ``ast_asset`` installed as a
+component. One active attachment per child asset is enforced by
+``uq_ast_asset_component_one_active_child_asset`` (migration 0507).
 """
 
 from decimal import Decimal
 from uuid import UUID, uuid4
 
-from sqlalchemy import CheckConstraint, ForeignKey, Numeric, String
+from sqlalchemy import CheckConstraint, ForeignKey, Index, Numeric, String, text
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -29,6 +33,15 @@ class AstAssetComponent(Base, *AstDetailMixin):
             ")",
             name="ck_ast_asset_component_type",
         ),
+        Index(
+            "uq_ast_asset_component_one_active_child_asset",
+            "component_asset_id",
+            unique=True,
+            postgresql_where=text(
+                "status = 'active' AND is_deleted = false "
+                "AND component_asset_id IS NOT NULL"
+            ),
+        ),
         {"schema": "asset"},
     )
 
@@ -45,6 +58,12 @@ class AstAssetComponent(Base, *AstDetailMixin):
         PG_UUID(as_uuid=True),
         ForeignKey("asset.ast_asset.id", ondelete="RESTRICT"),
         nullable=False,
+        index=True,
+    )
+    component_asset_id: Mapped[UUID | None] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("asset.ast_asset.id", ondelete="RESTRICT"),
+        nullable=True,
         index=True,
     )
     component_code: Mapped[str] = mapped_column(String(50), nullable=False)

@@ -210,6 +210,19 @@ export function AssignmentWizardContainer({
     [assets, service],
   );
 
+  const refreshIssuedItems = useCallback(async () => {
+    const assetId = wizardState.assetId;
+    if (!assetId) {
+      setIssuedItems([]);
+      return;
+    }
+    try {
+      setIssuedItems(await service.listComponents(assetId));
+    } catch {
+      /* keep existing list */
+    }
+  }, [service, wizardState.assetId]);
+
   useEffect(() => {
     const assetId = wizardState.assetId;
     if (!assetId || wizardState.allocationType !== "employee") {
@@ -342,6 +355,7 @@ export function AssignmentWizardContainer({
         employees={employees}
         assets={assets}
         issuedItems={issuedItems}
+        onRefreshIssuedItems={refreshIssuedItems}
         finishLabel="Submit"
         unavailableAssetMessage={unavailableAssetMessage}
         onClearUnavailableAsset={() => {

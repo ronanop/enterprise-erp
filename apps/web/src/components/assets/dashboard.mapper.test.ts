@@ -11,6 +11,7 @@ import {
   mapAssignmentsToActivityRows,
   mapDashboardPayloadToViewModel,
   mapDashboardSummaryToKpis,
+  mapTransfersToDashboardRows,
   resolveBranchLabel,
 } from "@/components/assets/dashboard.mapper";
 import type { AssetDashboardSummaryDto, AssetPaginatedListResult } from "@/services/assets-service";
@@ -36,6 +37,7 @@ describe("mapDashboardSummaryToKpis", () => {
       retired: 5,
       pendingDisposal: 8,
       disposed: 7,
+      inUseAsComponent: 0,
     });
   });
 
@@ -57,6 +59,7 @@ describe("mapDashboardSummaryToKpis", () => {
       retired: 0,
       pendingDisposal: 0,
       disposed: 0,
+      inUseAsComponent: 0,
     });
   });
 });
@@ -220,6 +223,89 @@ describe("mapDashboardPayloadToViewModel", () => {
         retired: 2,
         pendingDisposal: 2,
         disposed: 1,
+      },
+    ]);
+    expect(view.byLocation).toEqual([]);
+  });
+
+  it("maps by_location breakdown", () => {
+    const view = mapDashboardPayloadToViewModel({
+      summary: {
+        ...summaryFixture,
+        by_location: [
+          {
+            location_id: "loc-delhi",
+            label: "New Delhi",
+            total_assets: 40,
+            ready_to_move: 5,
+            assigned: 30,
+            retired: 2,
+            pending_disposal: 2,
+            disposed: 1,
+          },
+        ],
+      },
+      readyList: { items: [], total: 0, page: 1, page_size: 10 },
+      disposalList: { items: [], total: 0, page: 1, page_size: 10 },
+      assignmentsList: { items: [], total: 0, page: 1, page_size: 10 },
+      branchLookup,
+    });
+    expect(view.byLocation).toEqual([
+      {
+        locationId: "loc-delhi",
+        label: "New Delhi",
+        totalAssets: 40,
+        readyToMove: 5,
+        assigned: 30,
+        retired: 2,
+        pendingDisposal: 2,
+        disposed: 1,
+      },
+    ]);
+  });
+});
+
+describe("mapTransfersToDashboardRows", () => {
+  it("joins transfer rows with asset names", () => {
+    const rows = mapTransfersToDashboardRows(
+      {
+        items: [
+          {
+            id: "t1",
+            document_number: "TRF-1",
+            asset_id: "a1",
+            from_location_label: "New Delhi · CRC2",
+            to_location_label: "Mumbai · CRC-1",
+            from_branch_id: "b1",
+            to_branch_id: "b2",
+            effective_date: "2026-08-30",
+            reason: "Relocation",
+            status: "submitted",
+          },
+        ],
+      },
+      {
+        items: [{ id: "a1", asset_code: "AST-1", asset_name: "Laptop" }],
+        total: 1,
+        page: 1,
+        page_size: 10,
+      },
+    );
+    expect(rows).toEqual([
+      {
+        id: "t1",
+        documentNumber: "TRF-1",
+        assetId: "a1",
+        assetCode: "AST-1",
+        assetName: "Laptop",
+        fromLocation: "New Delhi · CRC2",
+        toLocation: "Mumbai · CRC-1",
+        fromBranchId: "b1",
+        toBranchId: "b2",
+        effectiveDate: "2026-08-30",
+        reason: "Relocation",
+        status: "submitted",
+        workflowStatus: null,
       },
     ]);
   });

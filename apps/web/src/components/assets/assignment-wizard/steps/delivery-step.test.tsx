@@ -49,11 +49,9 @@ describe("DeliveryStep", () => {
     expect(
       screen.getByText(/Most assets don't need a DC at handover/i),
     ).toBeTruthy();
-    expect(
-      screen.getByText(/needs the DC before or right at handover/i),
-    ).toBeTruthy();
-    expect(screen.getByText(/already prepared in advance/i)).toBeTruthy();
-    expect(screen.getByText(/created separately from Operations/i)).toBeTruthy();
+    expect(screen.getByText(/Needs DC before or at handover/i)).toBeTruthy();
+    expect(screen.getByText(/Attach a challan prepared in advance/i)).toBeTruthy();
+    expect(screen.getByText(/create DC from Operations later/i)).toBeTruthy();
   });
 
   it("keeps Handle later as the default selected mode", () => {
@@ -61,7 +59,7 @@ describe("DeliveryStep", () => {
       <DeliveryStep state={EMPTY_ASSIGNMENT_WIZARD_STATE} onChange={vi.fn()} />,
     );
     const later = screen.getByRole("button", { name: /Handle later/i });
-    expect(later.getAttribute("class")).toMatch(/bg-primary|default/);
+    expect(later.getAttribute("class")).toMatch(/0369A1|rgba\(3,\s*105,\s*161/);
   });
 
   it("hides Create DC modes for warehouse allocation", () => {

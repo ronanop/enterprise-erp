@@ -45,7 +45,7 @@ describe("EmployeeStep manual entry", () => {
         onChange={onChange}
       />,
     );
-    await user.click(screen.getByRole("button", { name: /Select from directory/i }));
+    await user.click(screen.getByRole("button", { name: /From directory/i }));
     expect(onChange).toHaveBeenCalledWith(
       expect.objectContaining({
         employeeSource: "MASTER_DATA",

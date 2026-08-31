@@ -11,7 +11,7 @@ import { EMPTY_INVENTORY_FILTERS } from "@/components/assets/shared";
 
 const sample: InventoryUiSnapshot = {
   preset: "assigned",
-  headerBranchId: "branch-1",
+  headerLocationId: "branch-1",
   draftFilters: { ...EMPTY_INVENTORY_FILTERS, operationalStatus: "ASSIGNED", search: "lap" },
   appliedFilters: { ...EMPTY_INVENTORY_FILTERS, operationalStatus: "ASSIGNED", search: "lap" },
   quickSearch: "lap",
@@ -44,7 +44,7 @@ describe("inventory UI snapshot", () => {
     expect(snap?.quickSearch).toBe("lap");
     expect(snap?.appliedFilters.operationalStatus).toBe("ASSIGNED");
     expect(snap?.page).toBe(3);
-    expect(snap?.headerBranchId).toBe("branch-1");
+    expect(snap?.headerLocationId).toBe("branch-1");
     expect(snap?.preset).toBe("assigned");
   });
 

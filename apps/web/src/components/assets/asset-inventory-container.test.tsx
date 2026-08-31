@@ -41,10 +41,20 @@ vi.mock("@/services/assets-service", async (importOriginal) => {
   };
 });
 
+vi.mock("@/services/asset-type-service", () => ({
+  listItAssetTypes: vi.fn().mockResolvedValue([]),
+}));
+
+vi.mock("@/services/asset-site-location-service", () => ({
+  listSiteLocations: vi.fn().mockResolvedValue([
+    { id: "loc-mumbai", name: "Mumbai", is_head_office: false, org_location_id: null, company_id: "c1", version: 1 },
+    { id: "loc-delhi", name: "New Delhi", is_head_office: true, org_location_id: null, company_id: "c1", version: 1 },
+  ]),
+}));
+
 vi.mock("@/lib/org-options", () => ({
   listBranchOptions: vi.fn().mockResolvedValue([{ id: "b1", label: "Noida" }]),
   listDepartmentOptions: vi.fn().mockResolvedValue([{ id: "d1", label: "IT" }]),
-  listLocationOptions: vi.fn().mockResolvedValue([{ id: "loc1", label: "Floor 3" }]),
   listEmployeeOptions: vi.fn().mockResolvedValue([{ id: "e1", label: "Asha Nair (EMP-001)" }]),
   listEmployeeDirectory: vi.fn().mockResolvedValue([
     {
@@ -110,7 +120,7 @@ describe("fetchInventoryPage", () => {
     await fetchInventoryPage({
       preset: "ready",
       filters: EMPTY_INVENTORY_FILTERS,
-      headerBranchId: BRANCH_ALL_VALUE,
+      headerLocationId: BRANCH_ALL_VALUE,
       page: 1,
       deps: { listAssets, listAssignments },
     });
@@ -124,7 +134,7 @@ describe("fetchInventoryPage", () => {
     const result = await fetchInventoryPage({
       preset: "all",
       filters: EMPTY_INVENTORY_FILTERS,
-      headerBranchId: BRANCH_ALL_VALUE,
+      headerLocationId: BRANCH_ALL_VALUE,
       page: 1,
     });
     expect(assetOperationsService.listAssets).toHaveBeenCalled();
@@ -186,17 +196,19 @@ describe("AssetInventoryContainer", () => {
     expect(screen.getAllByText("AST-100")[0]).toBeInTheDocument();
   });
 
-  it("refetches when header branch changes", async () => {
+  it("refetches when header location changes", async () => {
     const user = userEvent.setup();
     render(<AssetInventoryContainer />);
     await waitFor(() => expect(assetOperationsService.listAssets).toHaveBeenCalled());
-    const group = await screen.findByRole("group", { name: "Branch" });
+    const group = await screen.findByRole("group", { name: "Location" });
     await waitFor(() => {
-      expect(within(group).getByRole("button", { name: "Noida" })).toBeInTheDocument();
+      expect(within(group).getByRole("button", { name: "Mumbai" })).toBeInTheDocument();
     });
-    await user.click(within(group).getByRole("button", { name: "Noida" }));
+    await user.click(within(group).getByRole("button", { name: "Mumbai" }));
     await waitFor(() => {
-      expect(assetOperationsService.listAssets).toHaveBeenCalledWith(expect.objectContaining({ branch_id: "b1" }));
+      expect(assetOperationsService.listAssets).toHaveBeenCalledWith(
+        expect.objectContaining({ location_id: "loc-mumbai" }),
+      );
     });
   });
 });

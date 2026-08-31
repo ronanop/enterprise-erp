@@ -10,6 +10,7 @@ describe("asset-status labels", () => {
   it("formats operational labels for UX", () => {
     expect(OPERATIONAL_STATUS_LABELS.READY_TO_MOVE).toBe("Ready to Move");
     expect(OPERATIONAL_STATUS_LABELS.PENDING_DISPOSAL).toBe("Pending Disposal");
+    expect(OPERATIONAL_STATUS_LABELS.IN_USE_AS_COMPONENT).toBe("In Use as Component");
   });
 
   it("formats lifecycle labels including maintenance", () => {
@@ -29,13 +30,22 @@ describe("isAssignmentEligibleAsset", () => {
     ).toBe(true);
   });
 
-  it("allows READY_TO_MOVE + in_maintenance (ops still ready)", () => {
+  it("rejects READY_TO_MOVE + in_maintenance lifecycle", () => {
     expect(
       isAssignmentEligibleAsset({
         operational_status: "READY_TO_MOVE",
         status: "in_maintenance",
       }),
-    ).toBe(true);
+    ).toBe(false);
+  });
+
+  it("rejects IN_MAINTENANCE operational status", () => {
+    expect(
+      isAssignmentEligibleAsset({
+        operational_status: "IN_MAINTENANCE",
+        status: "active",
+      }),
+    ).toBe(false);
   });
 
   it("rejects ASSIGNED even when lifecycle active", () => {
@@ -51,6 +61,15 @@ describe("isAssignmentEligibleAsset", () => {
     expect(
       isAssignmentEligibleAsset({
         operational_status: "RETIRED",
+        status: "active",
+      }),
+    ).toBe(false);
+  });
+
+  it("rejects IN_USE_AS_COMPONENT even when lifecycle active", () => {
+    expect(
+      isAssignmentEligibleAsset({
+        operational_status: "IN_USE_AS_COMPONENT",
         status: "active",
       }),
     ).toBe(false);

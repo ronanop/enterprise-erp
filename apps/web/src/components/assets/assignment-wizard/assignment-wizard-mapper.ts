@@ -25,6 +25,8 @@ export type WizardIssuedItemOption = WizardSelectOption & {
   serialNumber?: string | null;
   availability?: string;
   disabled?: boolean;
+  linkedAssetCode?: string | null;
+  linkedAssetName?: string | null;
 };
 
 export type AssignmentApiRow = {

@@ -158,7 +158,7 @@ export function runRowValidation(
 export function buildMasterLookups(input: {
   branches: Array<{ id: string; label: string }>;
   departments: Array<{ id: string; label: string }>;
-  categories: Array<{ id: string; label: string }>;
+  types: Array<{ id: string; label: string }>;
   employees: Array<{ id: string; label: string }>;
 }): ExcelImportMasterLookups {
   const branchesByLabel = new Map<string, string>();
@@ -171,10 +171,10 @@ export function buildMasterLookups(input: {
     departmentsByLabel.set(normalizeLookupKey(d.label), d.id);
     departmentsByLabel.set(normalizeLookupKey(d.id), d.id);
   }
-  const categoriesByLabel = new Map<string, string>();
-  for (const c of input.categories) {
-    categoriesByLabel.set(normalizeLookupKey(c.label), c.id);
-    categoriesByLabel.set(normalizeLookupKey(c.id), c.id);
+  const typesByLabel = new Map<string, string>();
+  for (const t of input.types) {
+    typesByLabel.set(normalizeLookupKey(t.label), t.id);
+    typesByLabel.set(normalizeLookupKey(t.id), t.id);
   }
   const employeesByKey = new Map<string, string>();
   for (const e of input.employees) {
@@ -183,7 +183,7 @@ export function buildMasterLookups(input: {
     const code = extractEmployeeCode(e.label);
     if (code) employeesByKey.set(normalizeLookupKey(code), e.id);
   }
-  return { branchesByLabel, departmentsByLabel, categoriesByLabel, employeesByKey };
+  return { branchesByLabel, departmentsByLabel, typesByLabel, employeesByKey };
 }
 
 export const excelImportService = {

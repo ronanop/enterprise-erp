@@ -47,7 +47,7 @@ export type ExportInventoryRegisterInput = {
   format: InventoryExportFormat;
   preset: InventoryPresetId;
   filters: InventoryFilterValues;
-  headerBranchId: string;
+  headerLocationId: string;
   lookup: InventoryExportLookupContext;
   /** Allow empty file with headers only (default true). */
   allowEmpty?: boolean;
@@ -92,7 +92,7 @@ export async function fetchAllAssignmentPages(
 export async function fetchAllInventoryRowsForExport(input: {
   preset: InventoryPresetId;
   filters: InventoryFilterValues;
-  headerBranchId: string;
+  headerLocationId: string;
   lookup: InventoryExportLookupContext;
   deps?: {
     listAssets?: InventoryExportListAssets;
@@ -108,7 +108,7 @@ export async function fetchAllInventoryRowsForExport(input: {
   const baseQuery = buildInventoryListQuery({
     preset: input.preset,
     filters: input.filters,
-    headerBranchId: input.headerBranchId,
+    headerLocationId: input.headerLocationId,
     page: 1,
     pageSize: INVENTORY_EXPORT_API_PAGE_SIZE,
   });
@@ -141,7 +141,7 @@ export async function fetchAllInventoryRowsForExport(input: {
       const query = buildInventoryListQuery({
         preset: input.preset,
         filters: input.filters,
-        headerBranchId: input.headerBranchId,
+        headerLocationId: input.headerLocationId,
         page,
         pageSize,
       });
@@ -169,7 +169,7 @@ export async function exportInventoryRegister(
   const rows = await fetchAllInventoryRowsForExport({
     preset: input.preset,
     filters: input.filters,
-    headerBranchId: input.headerBranchId,
+    headerLocationId: input.headerLocationId,
     lookup: input.lookup,
     deps: input.deps,
   });

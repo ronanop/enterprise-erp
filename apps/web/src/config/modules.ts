@@ -1200,21 +1200,22 @@ export const erpModules: ErpModule[] = [
       {
         key: "asset-categories",
         title: "Categories",
-        description: "Asset category taxonomy",
+        description: "Asset category taxonomy (internal)",
         apiPath: "/assets/asset-categories",
+        listable: false,
       },
       {
         key: "asset-types",
         title: "Asset Types",
-        description: "Type catalog by category (UI catalog)",
-        apiPath: "/assets/assets",
+        description: "IT asset type master (CRUD)",
+        apiPath: "/assets/asset-types",
         listable: false,
       },
       {
         key: "locations",
         title: "Locations",
-        description: "Physical locations (organization master)",
-        apiPath: "/locations",
+        description: "IT Location → Building master",
+        apiPath: "/assets/site-locations",
         listable: false,
       },
       {

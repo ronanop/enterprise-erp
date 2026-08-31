@@ -22,6 +22,7 @@ export type AssetExcelImportApiRow = {
   employee_id?: string | null;
   department_id?: string | null;
   asset_category_id?: string | null;
+  asset_type_id: string;
   serial_number?: string | null;
   make?: string | null;
   model?: string | null;
@@ -91,6 +92,9 @@ export function buildImportPayloadRows(
     const branchId = resolveId(lookups.branchesByLabel, row.values.branch);
     if (!branchId) continue;
 
+    const typeId = resolveId(lookups.typesByLabel, row.values.assetType);
+    if (!typeId) continue;
+
     const ops = normalizeOperationalStatus(row.values.operationalStatus ?? "");
     if (!ops) continue;
 
@@ -108,7 +112,7 @@ export function buildImportPayloadRows(
       operational_status: ops,
       employee_id: resolveId(lookups.employeesByKey, row.values.employeeId),
       department_id: resolveId(lookups.departmentsByLabel, row.values.department),
-      asset_category_id: resolveId(lookups.categoriesByLabel, row.values.category),
+      asset_type_id: typeId,
       serial_number: (row.values.serialNumber ?? "").trim() || null,
       make: (row.values.manufacturer ?? "").trim() || null,
       model: (row.values.model ?? "").trim() || null,

@@ -24,6 +24,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  ASSETS_SURFACE_CARD,
+  AssetsPremiumPage,
+} from "@/components/assets/shared/premium-surface";
 import { isAuthenticated } from "@/lib/auth";
 import {
   type AssetCategoryRow,
@@ -201,10 +205,10 @@ export function AssetCategoryWorkspace() {
   }
 
   return (
-    <div className="space-y-4">
+    <AssetsPremiumPage>
       <PageHeader
         title="Asset Categories"
-        description="Company taxonomy for asset registration — create, edit, deactivate, and reactivate. Business delete is deactivate only."
+        description="Company taxonomy for IT asset registration — create, edit, deactivate, and reactivate."
         actions={
           <Button
             type="button"
@@ -225,16 +229,18 @@ export function AssetCategoryWorkspace() {
       />
 
       {error ? (
-        <p className="rounded-md border border-destructive/40 bg-destructive/5 px-3 py-2 text-sm text-destructive">
+        <p className="rounded-lg border border-destructive/40 bg-destructive/5 px-3 py-2 text-sm text-destructive">
           {error}
         </p>
       ) : null}
 
       <div className="grid gap-4 lg:grid-cols-12">
-        <Card className="lg:col-span-7">
-          <CardHeader className="space-y-3 pb-3">
-            <CardTitle className="flex items-center gap-2 text-base">
-              <Tags className="size-4" aria-hidden />
+        <Card className={`lg:col-span-7 ${ASSETS_SURFACE_CARD}`}>
+          <CardHeader className="space-y-3 border-b border-border/50 pb-3 pt-4">
+            <CardTitle className="flex items-center gap-2 text-sm font-semibold tracking-tight">
+              <span className="flex size-7 items-center justify-center rounded-lg bg-[rgba(3,105,161,0.1)] text-[#0369A1]">
+                <Tags className="size-3.5" aria-hidden />
+              </span>
               Categories
             </CardTitle>
             <div className="flex flex-wrap gap-2">
@@ -357,11 +363,11 @@ export function AssetCategoryWorkspace() {
         </Card>
 
         <div className="space-y-4 lg:col-span-5">
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base">Create category</CardTitle>
+          <Card className={ASSETS_SURFACE_CARD}>
+            <CardHeader className="border-b border-border/50 pb-3 pt-4">
+              <CardTitle className="text-sm font-semibold tracking-tight">Create category</CardTitle>
             </CardHeader>
-            <CardContent className="space-y-3">
+            <CardContent className="space-y-3 p-4">
               <div className="space-y-1.5">
                 <Label htmlFor="cat_code">Code</Label>
                 <Input
@@ -444,13 +450,13 @@ export function AssetCategoryWorkspace() {
             </CardContent>
           </Card>
 
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base">
+          <Card className={ASSETS_SURFACE_CARD}>
+            <CardHeader className="border-b border-border/50 pb-3 pt-4">
+              <CardTitle className="text-sm font-semibold tracking-tight">
                 {selected ? "Edit category" : "Select a category"}
               </CardTitle>
             </CardHeader>
-            <CardContent className="space-y-3">
+            <CardContent className="space-y-3 p-4">
               {!selected ? (
                 <p className="text-sm text-muted-foreground">
                   Select a row to edit, deactivate, or reactivate.
@@ -605,6 +611,6 @@ export function AssetCategoryWorkspace() {
           </Card>
         </div>
       </div>
-    </div>
+    </AssetsPremiumPage>
   );
 }

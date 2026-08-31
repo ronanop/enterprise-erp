@@ -44,6 +44,9 @@ export type ReturnWizardContainerService = {
       component_name?: string | null;
       component_type?: string | null;
       serial_number?: string | null;
+      linked_asset_code?: string | null;
+      linked_asset_name?: string | null;
+      linked_asset_operational_status?: string | null;
     }>
   >;
   formatError: (err: unknown, fallback: string) => string;
@@ -142,16 +145,24 @@ export function ReturnWizardContainer({
         : [];
       const componentReturns = issuedLines
         .filter((line) => line.issue_status === "ISSUED")
-        .map((line) => ({
-          componentId: line.component_id,
-          label:
-            [line.component_type, line.component_name || line.component_code]
-              .filter(Boolean)
-              .join(" · ") || line.component_id.slice(0, 8),
-          serialNumber: line.serial_number?.trim() || "—",
-          issueStatus: "RETURNED" as const,
-          returnRemarks: "",
-        }));
+        .map((line) => {
+          const linked =
+            line.linked_asset_code || line.linked_asset_name
+              ? [line.linked_asset_code, line.linked_asset_name].filter(Boolean).join(" · ")
+              : null;
+          return {
+            componentId: line.component_id,
+            label:
+              linked ||
+              [line.component_type, line.component_name || line.component_code]
+                .filter(Boolean)
+                .join(" · ") ||
+              line.component_id.slice(0, 8),
+            serialNumber: line.serial_number?.trim() || "—",
+            issueStatus: "RETURNED" as const,
+            returnRemarks: "",
+          };
+        });
 
       setAssignmentId(assignment.id);
       setSummary(buildReturnSummary(assignment, asset, empLabel));

@@ -230,6 +230,18 @@ class AssignmentComponentService:
 
     def _enrich(self, ctx: TenantContext, row: AstAssignmentComponent) -> dict:
         component = self._components.get(ctx, row.component_id)
+        linked_code = None
+        linked_name = None
+        linked_ops = None
+        child_id = getattr(component, "component_asset_id", None) if component else None
+        if child_id is not None:
+            from modules.asset.repository.asset_repository import AssetRepository
+
+            child = AssetRepository(self._components.db).get(ctx, child_id)
+            if child is not None:
+                linked_code = child.asset_code
+                linked_name = child.asset_name
+                linked_ops = child.operational_status
         return {
             "id": row.id,
             "assignment_id": row.assignment_id,
@@ -246,6 +258,10 @@ class AssignmentComponentService:
             "component_type": getattr(component, "component_type", None) if component else None,
             "serial_number": component.serial_number if component else None,
             "component_status": component.status if component else None,
+            "component_asset_id": child_id,
+            "linked_asset_code": linked_code,
+            "linked_asset_name": linked_name,
+            "linked_asset_operational_status": linked_ops,
         }
 
 

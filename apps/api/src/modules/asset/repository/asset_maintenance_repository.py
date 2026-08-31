@@ -29,6 +29,7 @@ class AssetMaintenanceListFilters:
     status: str | None = None
     maintenance_type: str | None = None
     search: str | None = None
+    open_only: bool = False
 
 
 class AssetMaintenanceRepository(AstScopedRepository):
@@ -75,6 +76,8 @@ class AssetMaintenanceRepository(AstScopedRepository):
             stmt = stmt.where(AstAssetMaintenance.branch_id == filters.branch_id)
         if filters.status is not None:
             stmt = stmt.where(AstAssetMaintenance.status == filters.status)
+        if filters.open_only:
+            stmt = stmt.where(AstAssetMaintenance.status.in_(OPEN_WO_STATUSES))
         if filters.maintenance_type is not None:
             stmt = stmt.where(AstAssetMaintenance.maintenance_type == filters.maintenance_type)
         if filters.search:
@@ -145,6 +148,8 @@ class AssetMaintenanceRepository(AstScopedRepository):
                 "completed_date",
                 "cost_amount",
                 "quality_inspection_id",
+                "reason",
+                "expected_duration_days",
             }:
                 setattr(row, k, v)
         row.updated_at = utcnow()

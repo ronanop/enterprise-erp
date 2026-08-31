@@ -3,7 +3,7 @@ export type WizardStepMeta = {
   label: string;
 };
 
-/** Section anchors for the single-page Issue Asset form (not a gated wizard). */
+/** Ordered steps for the gated Issue Asset wizard (one step visible at a time). */
 export const ASSIGNMENT_FORM_SECTIONS: WizardStepMeta[] = [
   { id: "allocation", label: "Allocation & Employee" },
   { id: "asset", label: "Asset" },

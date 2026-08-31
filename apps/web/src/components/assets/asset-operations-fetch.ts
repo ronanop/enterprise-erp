@@ -3,25 +3,24 @@ import {
   assetOperationsService,
   type AssetDashboardSummaryDto,
   type AssetPaginatedListResult,
+  type AssetTransferPaginatedListResult,
 } from "@/services/assets-service";
 
 export type AssetOperationsFetchResult = {
   summary: AssetDashboardSummaryDto | null;
-  readyList: AssetPaginatedListResult | null;
-  disposalList: AssetPaginatedListResult | null;
-  assignmentsList: AssetPaginatedListResult | null;
+  transfersList: AssetTransferPaginatedListResult | null;
+  assetsList: AssetPaginatedListResult | null;
   errors: {
     summary?: string;
-    ready?: string;
-    disposal?: string;
-    assignments?: string;
+    transfers?: string;
+    assets?: string;
   };
 };
 
 export type AssetOperationsFetcher = typeof fetchAssetOperationsData;
 
-function branchQueryParam(branchId: string): string | undefined {
-  return branchId === BRANCH_ALL_VALUE ? undefined : branchId;
+function locationQueryParam(locationId: string): string | undefined {
+  return locationId === BRANCH_ALL_VALUE ? undefined : locationId;
 }
 
 function errorMessage(err: unknown, fallback: string): string {
@@ -40,64 +39,42 @@ async function settle<T>(
 }
 
 /**
- * Loads dashboard summary, asset queues, and recent assignments in parallel.
+ * Loads dashboard summary and transfer list in parallel.
+ * UI filter uses location_id for summary KPIs; transfer list is company-scoped
+ * (branch RBAC still applied server-side via ctx).
  */
 export async function fetchAssetOperationsData(
-  branchId: string,
+  locationId: string,
   deps: {
     getDashboardSummary?: typeof assetOperationsService.getDashboardSummary;
+    listTransfers?: typeof assetOperationsService.listTransfers;
     listAssets?: typeof assetOperationsService.listAssets;
-    listAssignments?: typeof assetOperationsService.listAssignments;
   } = {},
 ): Promise<AssetOperationsFetchResult> {
   const getDashboardSummary =
     deps.getDashboardSummary ?? assetOperationsService.getDashboardSummary.bind(assetOperationsService);
+  const listTransfers =
+    deps.listTransfers ?? assetOperationsService.listTransfers.bind(assetOperationsService);
   const listAssets =
     deps.listAssets ?? assetOperationsService.listAssets.bind(assetOperationsService);
-  const listAssignments =
-    deps.listAssignments ?? assetOperationsService.listAssignments.bind(assetOperationsService);
 
-  const branch_id = branchQueryParam(branchId);
+  const location_id = locationQueryParam(locationId);
 
-  const [summaryRes, readyRes, disposalRes, assignmentsRes] = await Promise.all([
-    settle(getDashboardSummary(branch_id ? { branch_id } : {})),
-    settle(
-      listAssets({
-        operational_status: "READY_TO_MOVE",
-        page_size: 10,
-        page: 1,
-        branch_id,
-      }),
-    ),
-    settle(
-      listAssets({
-        operational_status: "PENDING_DISPOSAL",
-        page_size: 10,
-        page: 1,
-        branch_id,
-      }),
-    ),
-    settle(
-      listAssignments({
-        status: "active",
-        page_size: 10,
-        page: 1,
-        branch_id,
-      }),
-    ),
+  const [summaryRes, transfersRes, assetsRes] = await Promise.all([
+    settle(getDashboardSummary(location_id ? { location_id } : {})),
+    settle(listTransfers({ page: 1, page_size: 50 })),
+    settle(listAssets({ page: 1, page_size: 200 })),
   ]);
 
   const errors: AssetOperationsFetchResult["errors"] = {};
   if (!summaryRes.ok) errors.summary = summaryRes.error;
-  if (!readyRes.ok) errors.ready = readyRes.error;
-  if (!disposalRes.ok) errors.disposal = disposalRes.error;
-  if (!assignmentsRes.ok) errors.assignments = assignmentsRes.error;
+  if (!transfersRes.ok) errors.transfers = transfersRes.error;
+  if (!assetsRes.ok) errors.assets = assetsRes.error;
 
   return {
     summary: summaryRes.ok ? summaryRes.value : null,
-    readyList: readyRes.ok ? readyRes.value : null,
-    disposalList: disposalRes.ok ? disposalRes.value : null,
-    assignmentsList: assignmentsRes.ok ? assignmentsRes.value : null,
+    transfersList: transfersRes.ok ? transfersRes.value : null,
+    assetsList: assetsRes.ok ? assetsRes.value : null,
     errors,
   };
 }

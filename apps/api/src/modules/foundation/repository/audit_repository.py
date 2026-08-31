@@ -96,6 +96,38 @@ class AuditRepository:
             for r in self.db.scalars(stmt).all()
         ]
 
+    def list_logs_for_entity(
+        self,
+        *,
+        tenant_id: UUID | None,
+        entity_name: str,
+        entity_id: UUID,
+    ) -> list[AuditLogEntity]:
+        stmt = (
+            select(AuditLog)
+            .where(
+                AuditLog.entity_name == entity_name,
+                AuditLog.entity_id == entity_id,
+            )
+            .order_by(AuditLog.performed_at.asc())
+        )
+        if tenant_id:
+            stmt = stmt.where(AuditLog.tenant_id == tenant_id)
+        return [
+            AuditLogEntity(
+                id=r.id,
+                tenant_id=r.tenant_id,
+                entity_name=r.entity_name,
+                entity_id=r.entity_id,
+                operation=r.operation,
+                performed_at=r.performed_at,
+                performed_by=r.performed_by,
+                old_value=r.old_value,
+                new_value=r.new_value,
+            )
+            for r in self.db.scalars(stmt).all()
+        ]
+
     def get_log(self, log_id: UUID) -> AuditLogEntity | None:
         row = self.db.get(AuditLog, log_id)
         if row is None:

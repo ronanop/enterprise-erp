@@ -88,6 +88,10 @@ class MaintenanceValidator:
             "maintenance_plan_id": fields.get("maintenance_plan_id", row.maintenance_plan_id),
             "scheduled_date": fields.get("scheduled_date", row.scheduled_date),
             "cost_amount": fields.get("cost_amount", row.cost_amount),
+            "reason": fields.get("reason", row.reason),
+            "expected_duration_days": fields.get(
+                "expected_duration_days", row.expected_duration_days
+            ),
         }
         asset = self._assets.get(ctx, row.asset_id)
         if asset is None:
@@ -171,6 +175,12 @@ class MaintenanceValidator:
         """Ensure reopening does not create a second open work order (MNT-03)."""
         self._validate_open_work_order(ctx, row.asset_id, exclude_id=row.id)
 
+    def validate_start_maintenance_fields(self, *, reason: str | None, expected_duration_days: int | None) -> None:
+        if not reason or not str(reason).strip():
+            raise MaintenanceValidationError("reason is required")
+        if expected_duration_days is None or int(expected_duration_days) < 1:
+            raise MaintenanceValidationError("expected_duration_days must be at least 1")
+
     def _validate_type_and_refs(
         self,
         ctx: TenantContext,
@@ -236,5 +246,6 @@ class MaintenanceValidator:
         ops = str(operational_status or "").strip().upper()
         if ops in OPS_BLOCKED_FOR_MAINTENANCE_OR_TRANSFER:
             raise MaintenanceValidationError(
-                "Retired, pending disposal, or disposed assets cannot enter maintenance."
+                "Retired, pending disposal, disposed, in maintenance, or in-use-as-component "
+                "assets cannot enter maintenance."
             )

@@ -38,6 +38,11 @@ import {
   type InventoryFilterOption,
   type InventoryFilterValues,
 } from "@/components/assets/shared";
+import {
+  ASSETS_ACCENT_BTN,
+  ASSETS_SURFACE_CARD,
+  AssetsPremiumPage,
+} from "@/components/assets/shared/premium-surface";
 import { InventoryExportToolbar } from "@/components/assets/inventory/export/inventory-export-toolbar";
 import { PageHeader } from "@/components/layout/page-header";
 import { Button } from "@/components/ui/button";
@@ -46,6 +51,8 @@ import { cn } from "@/lib/utils";
 import { applyOperationalGatesToInventoryPermissions } from "@/components/assets/navigation/inventory-permissions";
 import { isOperationalStatus } from "@/components/assets/shared/asset-status";
 import { BRANCH_ALL_VALUE } from "@/components/assets/shared";
+import { Plus } from "lucide-react";
+import Link from "next/link";
 
 function hasActiveInventoryFilters(
   filters: InventoryFilterValues,
@@ -62,8 +69,9 @@ function hasActiveInventoryFilters(
 export type AssetInventoryWorkspaceProps = {
   preset: InventoryPresetId;
   onPresetChange: (preset: InventoryPresetId) => void;
-  headerBranchId: string;
-  onHeaderBranchChange: (branchId: string) => void;
+  headerLocationId: string;
+  onHeaderLocationChange: (locationId: string) => void;
+  siteLocations: BranchOption[];
   branches: BranchOption[];
   quickSearch: string;
   onQuickSearchChange: (value: string) => void;
@@ -78,6 +86,7 @@ export type AssetInventoryWorkspaceProps = {
   categories: InventoryFilterOption[];
   departments: InventoryFilterOption[];
   locations: InventoryFilterOption[];
+  assetTypes?: InventoryFilterOption[];
   rows: InventoryRowViewModel[];
   total: number;
   page: number;
@@ -119,8 +128,9 @@ const TABLE_COLUMNS = [
 export function AssetInventoryWorkspace({
   preset,
   onPresetChange,
-  headerBranchId,
-  onHeaderBranchChange,
+  headerLocationId,
+  onHeaderLocationChange,
+  siteLocations,
   branches,
   quickSearch,
   onQuickSearchChange,
@@ -135,6 +145,7 @@ export function AssetInventoryWorkspace({
   categories,
   departments,
   locations,
+  assetTypes = [],
   rows,
   total,
   page,
@@ -206,17 +217,18 @@ export function AssetInventoryWorkspace({
     : emptyCopy.description;
 
   return (
-    <div className="space-y-5" data-testid="asset-inventory-workspace">
+    <AssetsPremiumPage testId="asset-inventory-workspace">
       <PageHeader
         title="IT Asset Inventory"
-        description="Manage enterprise asset inventory"
+        description="Search, filter, and manage the enterprise IT asset register."
         actions={
           <div className="flex flex-wrap items-center gap-2">
             <BranchSelector
-              value={headerBranchId}
-              onChange={onHeaderBranchChange}
-              branches={branches}
-              aria-label="Branch"
+              value={headerLocationId}
+              onChange={onHeaderLocationChange}
+              branches={siteLocations}
+              aria-label="Location"
+              allLabel="All"
             />
             {onExportExcel && onExportCsv ? (
               <InventoryExportToolbar
@@ -228,6 +240,12 @@ export function AssetInventoryWorkspace({
                 disabled={loading}
               />
             ) : null}
+            <Button asChild className={ASSETS_ACCENT_BTN}>
+              <Link href="/assets/assets/new">
+                <Plus className="size-4" aria-hidden />
+                Add asset
+              </Link>
+            </Button>
           </div>
         }
       />
@@ -247,11 +265,11 @@ export function AssetInventoryWorkspace({
               role="tab"
               aria-selected={selected}
               className={cn(
-                "cursor-pointer rounded-md border px-3 py-1.5 text-sm font-medium transition-colors duration-200 motion-reduce:transition-none",
+                "cursor-pointer rounded-lg border px-3 py-1.5 text-sm font-medium transition-colors duration-200 motion-reduce:transition-none",
                 "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
                 selected
                   ? INVENTORY_PRESET_PILL_CLASS[tab.id]
-                  : "border-border bg-background text-foreground hover:bg-muted/80",
+                  : "border-border/70 bg-background/90 text-foreground hover:border-[#0369A1]/40 hover:bg-[rgba(3,105,161,0.03)]",
               )}
               onClick={() => onPresetChange(tab.id)}
             >
@@ -261,60 +279,68 @@ export function AssetInventoryWorkspace({
         })}
       </div>
 
-      <div className="space-y-3">
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-start">
-          <InventorySearchTypeahead
-            value={quickSearch}
-            onValueChange={onQuickSearchChange}
-            onSubmit={onQuickSearchSubmit}
-            onSelectSuggestion={(suggestion) => onSelectSearchSuggestion?.(suggestion)}
-            branchId={headerBranchId !== BRANCH_ALL_VALUE ? headerBranchId : undefined}
+      <Card className={ASSETS_SURFACE_CARD}>
+        <div className="space-y-3 border-b border-border/50 p-4">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-start">
+            <InventorySearchTypeahead
+              value={quickSearch}
+              onValueChange={onQuickSearchChange}
+              onSubmit={onQuickSearchSubmit}
+              onSelectSuggestion={(suggestion) => onSelectSearchSuggestion?.(suggestion)}
+              branchId={
+                draftFilters.branchId !== BRANCH_ALL_VALUE ? draftFilters.branchId : undefined
+              }
+              locationId={
+                headerLocationId !== BRANCH_ALL_VALUE ? headerLocationId : undefined
+              }
+            />
+            <InventoryFilterPopover activeCount={advancedFilterCount}>
+              {({ close }) => (
+                <InventoryFilterBar
+                  values={draftFilters}
+                  onChange={onDraftFiltersChange}
+                  onApply={() => {
+                    onApplyFilters();
+                    close();
+                  }}
+                  onReset={() => {
+                    onResetFilters();
+                    close();
+                  }}
+                  branches={branches}
+                  categories={categories}
+                  departments={departments}
+                  locations={locations}
+                  assetTypes={assetTypes}
+                />
+              )}
+            </InventoryFilterPopover>
+          </div>
+          <InventoryActiveFilterChips
+            filters={currentApplied}
+            branches={branches}
+            categories={categories}
+            departments={departments}
+            locations={locations}
+            assetTypes={assetTypes}
+            onDismiss={onDismissFilter ?? (() => undefined)}
           />
-          <InventoryFilterPopover activeCount={advancedFilterCount}>
-            {({ close }) => (
-              <InventoryFilterBar
-                values={draftFilters}
-                onChange={onDraftFiltersChange}
-                onApply={() => {
-                  onApplyFilters();
-                  close();
-                }}
-                onReset={() => {
-                  onResetFilters();
-                  close();
-                }}
-                branches={branches}
-                categories={categories}
-                departments={departments}
-                locations={locations}
-              />
-            )}
-          </InventoryFilterPopover>
         </div>
-        <InventoryActiveFilterChips
-          filters={currentApplied}
-          branches={branches}
-          categories={categories}
-          departments={departments}
-          locations={locations}
-          onDismiss={onDismissFilter ?? (() => undefined)}
-        />
-      </div>
 
       {errorMessage ? (
-        <Card className="border-destructive/30 bg-destructive/5" role="alert" data-testid="inventory-error-card">
-          <CardContent className="flex flex-col gap-3 py-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="border-b border-destructive/20 bg-destructive/5 px-4 py-3" role="alert" data-testid="inventory-error-card">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <p className="text-sm text-destructive">{errorMessage}</p>
             {onRetry ? (
               <Button type="button" variant="outline" className="cursor-pointer" onClick={onRetry}>
                 Retry
               </Button>
             ) : null}
-          </CardContent>
-        </Card>
+          </div>
+        </div>
       ) : null}
 
-      <div className="hidden overflow-x-auto rounded-lg border border-border/70 md:block">
+      <div className="hidden overflow-x-auto md:block">
         <table
           className="w-full min-w-[1100px] text-sm lg:min-w-[1280px]"
           data-testid="inventory-table"
@@ -383,7 +409,7 @@ export function AssetInventoryWorkspace({
         </table>
       </div>
 
-      <div className="space-y-3 md:hidden" data-testid="inventory-mobile-cards">
+      <div className="space-y-3 border-t border-border/50 p-4 md:hidden" data-testid="inventory-mobile-cards">
         {loading ? (
           <TableRowsSkeleton rows={4} />
         ) : rows.length === 0 ? (
@@ -420,9 +446,10 @@ export function AssetInventoryWorkspace({
         )}
       </div>
 
-      <div className="flex flex-wrap items-center justify-between gap-2">
+      <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border/50 px-4 py-3">
         <p className="text-xs text-muted-foreground">
-          Showing {rows.length} of {total} assets (page {page} of {totalPages})
+          Showing {rows.length} of {total} assets
+          {totalPages > 1 ? ` · page ${page} of ${totalPages}` : null}
         </p>
         <div className="flex gap-2">
           <Button
@@ -447,6 +474,7 @@ export function AssetInventoryWorkspace({
           </Button>
         </div>
       </div>
+      </Card>
 
       <AssetDetailDrawer
         open={drawerOpen}
@@ -467,7 +495,7 @@ export function AssetInventoryWorkspace({
         dcChallan={drawerOpen ? linkedDc : undefined}
         dcChallanLoading={linkedDcLoading}
       />
-    </div>
+    </AssetsPremiumPage>
   );
 }
 

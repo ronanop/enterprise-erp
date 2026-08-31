@@ -14,7 +14,8 @@ const UI_STATE_KEY = "cr004.inventory.uiState";
 
 export type InventoryUiSnapshot = {
   preset: InventoryPresetId;
-  headerBranchId: string;
+  /** IT site location id from Configuration → Locations (header filter). */
+  headerLocationId: string;
   draftFilters: InventoryFilterValues;
   appliedFilters: InventoryFilterValues;
   quickSearch: string;
@@ -41,9 +42,11 @@ export function peekInventoryUiSnapshot(): InventoryUiSnapshot | null {
     if (!raw) return null;
     const parsed = JSON.parse(raw) as InventoryUiSnapshot;
     if (!parsed || typeof parsed !== "object") return null;
+    const legacyHeader = (parsed as { headerBranchId?: string }).headerBranchId;
     return {
       preset: parsed.preset ?? "all",
-      headerBranchId: parsed.headerBranchId ?? BRANCH_ALL_VALUE,
+      headerLocationId:
+        parsed.headerLocationId ?? legacyHeader ?? BRANCH_ALL_VALUE,
       draftFilters: { ...EMPTY_INVENTORY_FILTERS, ...parsed.draftFilters },
       appliedFilters: { ...EMPTY_INVENTORY_FILTERS, ...parsed.appliedFilters },
       quickSearch: parsed.quickSearch ?? "",

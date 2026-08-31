@@ -17,6 +17,7 @@ VALID_IMPORT_OPERATIONAL_STATUSES = frozenset(
         "ASSIGNED",
         "RETIRED",
         "PENDING_DISPOSAL",
+        "IN_USE_AS_COMPONENT",
     }
 )
 
@@ -38,7 +39,7 @@ class ExcelImportSkipReason(str, Enum):
 
 @dataclass(frozen=True)
 class ExcelImportDefaults:
-    asset_category_id: UUID
+    asset_category_id: UUID | None = None
     asset_type: str = "fixed"
     purchase_date: date | None = None
     purchase_cost: Decimal = Decimal("0")
@@ -49,18 +50,20 @@ class ExcelImportDefaults:
 class ExcelImportRowInput:
     row_number: int
     preview_status: str
-    asset_tag: str
+    asset_tag: str | None
     asset_name: str
-    branch_id: UUID
+    branch_id: UUID | None
     operational_status: str
     employee_id: UUID | None = None
     department_id: UUID | None = None
     asset_category_id: UUID | None = None
+    asset_type_id: UUID | None = None
     serial_number: str | None = None
     make: str | None = None
     model: str | None = None
     configuration: str | None = None
     location_label: str | None = None
+    location_id: UUID | None = None
     issue_date: date | None = None
     delivery_reference_number: str | None = None
     delivery_reference_status: str | None = None

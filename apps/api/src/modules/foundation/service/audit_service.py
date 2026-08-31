@@ -63,3 +63,16 @@ class AuditService:
 
     def list_events(self, tenant_id: UUID | None = None):
         return self._repo.list_events(tenant_id=tenant_id)
+
+    def list_logs_for_entity(
+        self,
+        *,
+        tenant_id: UUID | None,
+        entity_name: str,
+        entity_id: UUID,
+    ):
+        return self._repo.list_logs_for_entity(
+            tenant_id=tenant_id,
+            entity_name=entity_name,
+            entity_id=entity_id,
+        )

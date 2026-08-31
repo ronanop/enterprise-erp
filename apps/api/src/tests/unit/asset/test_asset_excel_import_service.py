@@ -217,12 +217,12 @@ def test_confirm_warnings_forwarded() -> None:
 
 def test_company_id_forwarded() -> None:
     svc, _, eng, _ = _service_with_engine()
-    cid = uuid4()
+    ctx = _ctx()
     eng.import_row.return_value = ExcelImportRowResult(
         row_number=1, outcome=ExcelImportRowOutcome.IMPORTED.value
     )
-    svc.import_rows(_ctx(), [_row(1)], defaults=_defaults(), company_id=cid)
-    assert eng.import_row.call_args.kwargs["company_id"] == cid
+    svc.import_rows(ctx, [_row(1)], defaults=_defaults(), company_id=ctx.company_id)
+    assert eng.import_row.call_args.kwargs["company_id"] == ctx.company_id
 
 
 def test_partial_failures_across_batches() -> None:
@@ -289,3 +289,85 @@ def test_performance_many_rows_mocked() -> None:
     assert summary.batch_count == 3
     assert db.commit.call_count == 3
     assert summary.duration_ms >= 0
+
+
+def test_resolves_missing_category_from_it_equipment() -> None:
+    from unittest.mock import patch
+
+    from modules.asset.domain.excel_import import ExcelImportDefaults
+
+    db = MagicMock()
+    nested = MagicMock()
+    db.begin_nested.return_value = nested
+    eng = MagicMock()
+    eng.import_row.return_value = ExcelImportRowResult(
+        row_number=1, outcome=ExcelImportRowOutcome.IMPORTED.value
+    )
+    svc = AssetExcelImportService(db, engine=eng)
+
+    it_equipment = MagicMock()
+    it_equipment.id = uuid4()
+    it_equipment.category_name = "IT Equipment"
+    other = MagicMock()
+    other.id = uuid4()
+    other.category_name = "Other IT"
+
+    with patch(
+        "modules.asset.service.asset_excel_import_service.AssetCategoryRepository"
+    ) as repo_cls:
+        repo_cls.return_value.list_rows.return_value = [other, it_equipment]
+        svc.import_rows(
+            _ctx(),
+            [_row(1)],
+            defaults=ExcelImportDefaults(purchase_cost=Decimal("0")),
+        )
+
+    passed_defaults = eng.import_row.call_args.kwargs["defaults"]
+    assert passed_defaults.asset_category_id == it_equipment.id
+
+
+def test_resolves_row_branch_from_context() -> None:
+    from unittest.mock import patch
+
+    from modules.asset.domain.excel_import import ExcelImportDefaults
+
+    ctx = TenantContext(
+        tenant_id=uuid4(),
+        user_id=uuid4(),
+        user_type="employee",
+        company_id=uuid4(),
+        branch_id=uuid4(),
+    )
+    db = MagicMock()
+    nested = MagicMock()
+    db.begin_nested.return_value = nested
+    eng = MagicMock()
+    eng.import_row.return_value = ExcelImportRowResult(
+        row_number=1, outcome=ExcelImportRowOutcome.IMPORTED.value
+    )
+    svc = AssetExcelImportService(db, engine=eng)
+
+    row_without_branch = ExcelImportRowInput(
+        row_number=1,
+        preview_status="valid",
+        asset_tag="AST-1",
+        asset_name="Asset 1",
+        branch_id=None,
+        operational_status="READY_TO_MOVE",
+    )
+
+    with patch(
+        "modules.asset.service.asset_excel_import_service.AssetCategoryRepository"
+    ) as repo_cls:
+        cat = MagicMock()
+        cat.id = uuid4()
+        cat.category_name = "IT Equipment"
+        repo_cls.return_value.list_rows.return_value = [cat]
+        svc.import_rows(
+            ctx,
+            [row_without_branch],
+            defaults=ExcelImportDefaults(purchase_cost=Decimal("0")),
+        )
+
+    passed_row = eng.import_row.call_args.args[1]
+    assert passed_row.branch_id == ctx.branch_id

@@ -30,9 +30,11 @@ class AssetCategoryService:
         *,
         status: str | None = None,
         search: str | None = None,
+        asset_domain: str | None = None,
     ):
         cid = self._scope.resolve_company_id(ctx, company_id)
-        return self._repo.list_rows(ctx, cid, status=status, search=search)
+        domain = (asset_domain or "").strip().upper() or "IT"
+        return self._repo.list_rows(ctx, cid, status=status, search=search, asset_domain=domain)
 
     def get(self, ctx: TenantContext, row_id: UUID) -> AstAssetCategory:
         row = self._repo.get(ctx, row_id)

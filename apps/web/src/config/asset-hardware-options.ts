@@ -1,49 +1,7 @@
 /**
- * Extensible IT hardware configuration visibility/required rules by PRD asset type.
- * Generation is shown only when an Intel processor is selected (UI concern).
+ * IT hardware option lists + helpers for Add Asset configuration string.
+ * Visibility/required is driven by Asset Type.requires_hardware_config (API).
  */
-
-export type AssetItConfigRule = {
-  showProcessor: boolean;
-  showRam: boolean;
-  showStorage: boolean;
-  /** When true, Processor/RAM/Storage are required (Generation required only for Intel). */
-  requireHardware: boolean;
-};
-
-const COMPUTER: AssetItConfigRule = {
-  showProcessor: true,
-  showRam: true,
-  showStorage: true,
-  requireHardware: true,
-};
-
-const PERIPHERAL: AssetItConfigRule = {
-  showProcessor: false,
-  showRam: false,
-  showStorage: false,
-  requireHardware: false,
-};
-
-/** Rules keyed by PRD type id — add future types here without rewriting form JSX. */
-export const ASSET_IT_CONFIG_RULES: Record<string, AssetItConfigRule> = {
-  laptop: COMPUTER,
-  desktop: COMPUTER,
-  mobile: COMPUTER,
-  monitor: PERIPHERAL,
-  keyboard: PERIPHERAL,
-  mouse: PERIPHERAL,
-  furniture: PERIPHERAL,
-  vehicle: PERIPHERAL,
-  other: PERIPHERAL,
-};
-
-export const DEFAULT_IT_CONFIG_RULE: AssetItConfigRule = PERIPHERAL;
-
-export function getItConfigRule(prdTypeId: string | undefined | null): AssetItConfigRule {
-  if (!prdTypeId) return DEFAULT_IT_CONFIG_RULE;
-  return ASSET_IT_CONFIG_RULES[prdTypeId] ?? DEFAULT_IT_CONFIG_RULE;
-}
 
 export const PROCESSOR_OPTIONS = [
   "Intel Celeron",

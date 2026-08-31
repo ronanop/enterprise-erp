@@ -1,5 +1,7 @@
 """Asset assignment service (FP-ASSET-003)."""
 
+from __future__ import annotations
+
 from uuid import UUID
 
 from sqlalchemy.orm import Session
@@ -394,6 +396,16 @@ class AssignmentService:
         )
         # Reconcile components first so a failure rolls back with the request UoW.
         self._assignment_components.reconcile_return(ctx, row, component_returns)
+        # Detach asset-linked components → READY_TO_MOVE regardless of parent return_condition.
+        from modules.asset.service.component_service import AssetComponentService
+
+        AssetComponentService(self._db).detach_linked_for_parent(
+            ctx,
+            row.asset_id,
+            reason=f"parent_assignment_return:{return_condition}",
+            source_entity=ENTITY_AST_ASSIGNMENT,
+            source_entity_id=row_id,
+        )
         asset = self._assets.lock_for_update(ctx, row.asset_id)
         if asset is None:
             raise NotFoundException("Asset not found")

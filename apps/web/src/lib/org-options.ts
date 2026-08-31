@@ -31,11 +31,15 @@ function trimOrNull(value: unknown): string | null {
 }
 
 export async function listBranchOptions(): Promise<OrgOption[]> {
-  const res = await resourceService.list("/branches?page=1&page_size=100");
-  return asArray(res.data).map((r) => ({
-    id: String(r.id),
-    label: String(r.branch_name ?? r.name ?? r.branch_code ?? r.id),
-  }));
+  try {
+    const res = await resourceService.list("/branches?page=1&page_size=100");
+    return asArray(res.data).map((r) => ({
+      id: String(r.id),
+      label: String(r.branch_name ?? r.name ?? r.branch_code ?? r.id),
+    }));
+  } catch {
+    return [];
+  }
 }
 
 /** Full employee directory from GET /employees (id, code, name, mobile). */

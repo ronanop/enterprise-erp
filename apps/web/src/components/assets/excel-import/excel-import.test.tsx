@@ -57,7 +57,7 @@ const goodHeaders = [
   "Operational Status",
   "Employee ID",
   "Department",
-  "Asset Category",
+  "Type",
   "Issue Date",
   "Delivery Status",
 ];
@@ -65,7 +65,7 @@ const goodHeaders = [
 const lookups = buildMasterLookups({
   branches: [{ id: "b1", label: "Noida" }],
   departments: [{ id: "d1", label: "IT" }],
-  categories: [{ id: "c1", label: "Laptop" }],
+  types: [{ id: "t1", label: "Laptop" }],
   employees: [{ id: "e1", label: "Asha Nair (EMP-001)" }],
 });
 
@@ -251,20 +251,20 @@ describe("validateImportRows", () => {
 
   it("flags invalid department", () => {
     const sheet = makeSheet(goodHeaders, [
-      ["AST-1", "L", "Noida", "READY_TO_MOVE", "", "Marketing", "", "", ""],
+      ["AST-1", "L", "Noida", "READY_TO_MOVE", "", "Marketing", "Laptop", "", ""],
     ]);
     const mapping = suggestColumnMapping(goodHeaders);
     const summary = validateImportRows(sheet, mapping, lookups);
     expect(summary.previewRows[0].issues.some((i) => i.code === "invalid_department")).toBe(true);
   });
 
-  it("flags invalid category", () => {
+  it("flags invalid type", () => {
     const sheet = makeSheet(goodHeaders, [
       ["AST-1", "L", "Noida", "READY_TO_MOVE", "", "IT", "Desk", "", ""],
     ]);
     const mapping = suggestColumnMapping(goodHeaders);
     const summary = validateImportRows(sheet, mapping, lookups);
-    expect(summary.previewRows[0].issues.some((i) => i.code === "invalid_category")).toBe(true);
+    expect(summary.previewRows[0].issues.some((i) => i.code === "invalid_type")).toBe(true);
   });
 
   it("flags invalid employee", () => {
@@ -306,7 +306,9 @@ describe("validateImportRows", () => {
   });
 
   it("warns ASSIGNED without employee", () => {
-    const sheet = makeSheet(goodHeaders, [["AST-1", "L", "Noida", "ASSIGNED"]]);
+    const sheet = makeSheet(goodHeaders, [
+      ["AST-1", "L", "Noida", "ASSIGNED", "", "IT", "Laptop", "", ""],
+    ]);
     const mapping = suggestColumnMapping(goodHeaders);
     const summary = validateImportRows(sheet, mapping, lookups);
     expect(summary.warningCount).toBe(1);
@@ -314,7 +316,9 @@ describe("validateImportRows", () => {
   });
 
   it("normalizes ops status on valid row", () => {
-    const sheet = makeSheet(goodHeaders, [["AST-1", "L", "Noida", "Ready to Move"]]);
+    const sheet = makeSheet(goodHeaders, [
+      ["AST-1", "L", "Noida", "Ready to Move", "", "IT", "Laptop", "", ""],
+    ]);
     const mapping = suggestColumnMapping(goodHeaders);
     const summary = validateImportRows(sheet, mapping, lookups);
     expect(summary.previewRows[0].values.operationalStatus).toBe("READY_TO_MOVE");
@@ -398,7 +402,9 @@ describe("EXCEL_IMPORT_TARGET_FIELDS", () => {
     const keys = EXCEL_IMPORT_TARGET_FIELDS.map((f) => f.key);
     expect(keys).toContain("assetTag");
     expect(keys).toContain("operationalStatus");
+    expect(keys).toContain("assetType");
     expect(keys).toContain("deliveryStatus");
+    expect(keys).not.toContain("category");
   });
   it("marks assetTag required", () => {
     expect(EXCEL_IMPORT_TARGET_FIELDS.find((f) => f.key === "assetTag")?.required).toBe(true);
@@ -562,7 +568,7 @@ describe("ExcelImportPage", () => {
     expect(screen.getByTestId("excel-import-run-validation")).toBeInTheDocument();
   });
 
-  it("renders preview with import gated until category selected", () => {
+  it("renders preview with import gated when importEnabled is false", () => {
     const sheet = makeSheet(goodHeaders, [["AST-1", "L", "Noida", "READY_TO_MOVE"]]);
     const mapping = suggestColumnMapping(goodHeaders);
     const validation = validateImportRows(sheet, mapping, lookups);

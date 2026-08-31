@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   dashboardNavigationPaths,
+  navigateDashboardKpi,
   navigateDashboardQuickAction,
   navigateDashboardViewAll,
   openInventoryWithPreset,
@@ -22,6 +23,32 @@ describe("dashboardNavigationPaths", () => {
     expect(dashboardNavigationPaths.qrBarcode).toBe("/assets/qr-barcode");
     expect(dashboardNavigationPaths.assignments).toBe("/assets/asset-assignments");
     expect(dashboardNavigationPaths.inventory).toBe("/assets/assets");
+  });
+});
+
+describe("navigateDashboardKpi", () => {
+  beforeEach(() => {
+    clearInventoryUiSnapshot();
+  });
+
+  it("maps each KPI to the matching inventory preset", () => {
+    const push = vi.fn();
+    const cases = [
+      ["total", "all"],
+      ["ready", "ready"],
+      ["assigned", "assigned"],
+      ["inUseAsComponent", "in_use_as_component"],
+      ["retired", "retired"],
+      ["pendingDisposal", "pending_disposal"],
+      ["disposed", "disposed"],
+    ] as const;
+
+    for (const [kpi, preset] of cases) {
+      clearInventoryUiSnapshot();
+      navigateDashboardKpi(push, kpi);
+      expect(peekInventoryUiSnapshot()?.preset).toBe(preset);
+      expect(push).toHaveBeenCalledWith("/assets/assets");
+    }
   });
 });
 
@@ -49,7 +76,7 @@ describe("navigateDashboardQuickAction", () => {
     navigateDashboardQuickAction(push, "discovery", "branch-1");
     expect(push).toHaveBeenCalledWith("/assets/assets");
     expect(peekInventoryUiSnapshot()?.preset).toBe("ready");
-    expect(peekInventoryUiSnapshot()?.headerBranchId).toBe("branch-1");
+    expect(peekInventoryUiSnapshot()?.headerLocationId).toBe("branch-1");
   });
 
   it("opens all-assets inventory for information portal", () => {
@@ -57,7 +84,7 @@ describe("navigateDashboardQuickAction", () => {
     navigateDashboardQuickAction(push, "informationPortal");
     expect(push).toHaveBeenCalledWith("/assets/assets");
     expect(peekInventoryUiSnapshot()?.preset).toBe("all");
-    expect(peekInventoryUiSnapshot()?.headerBranchId).toBe(BRANCH_ALL_VALUE);
+    expect(peekInventoryUiSnapshot()?.headerLocationId).toBe(BRANCH_ALL_VALUE);
   });
 });
 
@@ -92,7 +119,7 @@ describe("openInventoryWithPreset", () => {
     openInventoryWithPreset(push, "disposed", "branch-x");
     const snap = peekInventoryUiSnapshot();
     expect(snap?.preset).toBe("disposed");
-    expect(snap?.headerBranchId).toBe("branch-x");
+    expect(snap?.headerLocationId).toBe("branch-x");
     expect(snap?.page).toBe(1);
     expect(push).toHaveBeenCalledWith("/assets/assets");
   });

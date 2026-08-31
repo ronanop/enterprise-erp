@@ -22,6 +22,7 @@ import {
   filterActiveCategories,
   type AssetCategoryRow,
 } from "@/services/assets-service";
+import { listItAssetTypes, type ItAssetType } from "@/services/asset-type-service";
 import { ApiClientError, resourceService } from "@/services/api-client";
 
 type AssetRow = {
@@ -32,6 +33,7 @@ type AssetRow = {
   workflow_status?: string | null;
   branch_id: string;
   asset_category_id?: string;
+  asset_type_id?: string | null;
   asset_type?: string;
   purchase_cost?: string | number | null;
   currency_code?: string;
@@ -53,7 +55,6 @@ type ListPayload<T> = {
 };
 
 const STATUS_OPTIONS = ["", "draft", "submitted", "active", "cancelled"] as const;
-const ASSET_TYPES = ["fixed", "consumable", "digital", "leased"] as const;
 
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -74,6 +75,7 @@ function parseListItems<T>(data: unknown): T[] {
 export function AssetRegistrationWorkspace() {
   const [rows, setRows] = useState<AssetRow[]>([]);
   const [categories, setCategories] = useState<CategoryRow[]>([]);
+  const [assetTypes, setAssetTypes] = useState<ItAssetType[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [pageSize] = useState(25);
@@ -85,7 +87,7 @@ export function AssetRegistrationWorkspace() {
   const [actionLoading, setActionLoading] = useState(false);
   const [draft, setDraft] = useState({
     asset_name: "",
-    asset_type: "fixed" as (typeof ASSET_TYPES)[number],
+    asset_type_id: "",
     currency_code: "USD",
     purchase_cost: "",
     branch_id: "",
@@ -93,7 +95,7 @@ export function AssetRegistrationWorkspace() {
   });
   const [edit, setEdit] = useState({
     asset_name: "",
-    asset_type: "fixed",
+    asset_type_id: "",
     purchase_cost: "",
     currency_code: "USD",
     asset_category_id: "",
@@ -105,13 +107,23 @@ export function AssetRegistrationWorkspace() {
   const loadCategories = useCallback(async () => {
     if (!isAuthenticated()) return;
     try {
-      const res = await resourceService.list(
-        `${categoryPath}?status=active&page=1&page_size=500`,
-      );
-      const items = parseListItems<CategoryRow | AssetCategoryRow>(res.data);
+      const [catRes, types] = await Promise.all([
+        resourceService.list(`${categoryPath}?status=active&page=1&page_size=500`),
+        listItAssetTypes({ active: true }).catch(() => [] as ItAssetType[]),
+      ]);
+      const items = parseListItems<CategoryRow | AssetCategoryRow>(catRes.data);
       setCategories(filterActiveCategories(items));
+      setAssetTypes(types);
+      const first = filterActiveCategories(items)[0];
+      if (first) {
+        setDraft((d) => (d.asset_category_id ? d : { ...d, asset_category_id: first.id }));
+      }
+      if (types[0]) {
+        setDraft((d) => (d.asset_type_id ? d : { ...d, asset_type_id: types[0]!.id }));
+      }
     } catch {
       setCategories([]);
+      setAssetTypes([]);
     }
   }, [categoryPath]);
 
@@ -158,7 +170,7 @@ export function AssetRegistrationWorkspace() {
     if (!selected) return;
     setEdit({
       asset_name: selected.asset_name ?? "",
-      asset_type: selected.asset_type ?? "fixed",
+      asset_type_id: selected.asset_type_id ?? "",
       purchase_cost: String(selected.purchase_cost ?? ""),
       currency_code: selected.currency_code ?? "USD",
       asset_category_id: selected.asset_category_id ?? "",
@@ -180,7 +192,8 @@ export function AssetRegistrationWorkspace() {
 
   function validateCreatePayload(): string | null {
     if (!isUuid(draft.branch_id)) return "Enter a valid branch UUID.";
-    if (!draft.asset_category_id) return "Select an asset category.";
+    if (!draft.asset_category_id) return "No active asset category is available.";
+    if (!draft.asset_type_id) return "Select an asset type.";
     if (!draft.asset_name.trim()) return "Asset name is required.";
     const cost = Number(draft.purchase_cost);
     if (!Number.isFinite(cost) || cost < 0) return "Purchase cost must be zero or greater.";
@@ -216,7 +229,7 @@ export function AssetRegistrationWorkspace() {
         branch_id: draft.branch_id.trim(),
         asset_category_id: draft.asset_category_id,
         asset_name: draft.asset_name.trim(),
-        asset_type: draft.asset_type,
+        asset_type_id: draft.asset_type_id,
         purchase_date: new Date().toISOString().slice(0, 10),
         purchase_cost: Number(draft.purchase_cost),
         currency_code: draft.currency_code,
@@ -236,7 +249,7 @@ export function AssetRegistrationWorkspace() {
       return;
     }
     if (!edit.asset_category_id) {
-      setError("Select an asset category.");
+      setError("No active asset category is available.");
       return;
     }
     setActionLoading(true);
@@ -244,7 +257,7 @@ export function AssetRegistrationWorkspace() {
     try {
       await resourceService.update(apiPath, selected.id, {
         asset_name: edit.asset_name.trim(),
-        asset_type: edit.asset_type,
+        asset_type_id: edit.asset_type_id || undefined,
         asset_category_id: edit.asset_category_id,
         purchase_cost: Number(edit.purchase_cost),
         currency_code: edit.currency_code,
@@ -414,32 +427,6 @@ export function AssetRegistrationWorkspace() {
                 />
               </div>
               <div className="space-y-1">
-                <Label htmlFor="asset_category_id">Asset category</Label>
-                <Select
-                  value={draft.asset_category_id || "__none"}
-                  onValueChange={(v) =>
-                    setDraft((d) => ({
-                      ...d,
-                      asset_category_id: v === "__none" ? "" : v,
-                    }))
-                  }
-                >
-                  <SelectTrigger id="asset_category_id" className="cursor-pointer">
-                    <SelectValue placeholder="Select category" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="__none" className="cursor-pointer">
-                      Select…
-                    </SelectItem>
-                    {categories.map((cat) => (
-                      <SelectItem key={cat.id} value={cat.id} className="cursor-pointer">
-                        {cat.category_code} — {cat.category_name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-1">
                 <Label htmlFor="asset_name">Asset name</Label>
                 <Input
                   id="asset_name"
@@ -448,23 +435,18 @@ export function AssetRegistrationWorkspace() {
                 />
               </div>
               <div className="space-y-1">
-                <Label htmlFor="asset_type">Asset type</Label>
+                <Label htmlFor="asset_type_id">Asset type</Label>
                 <Select
-                  value={draft.asset_type}
-                  onValueChange={(v) =>
-                    setDraft((d) => ({
-                      ...d,
-                      asset_type: v as (typeof ASSET_TYPES)[number],
-                    }))
-                  }
+                  value={draft.asset_type_id}
+                  onValueChange={(v) => setDraft((d) => ({ ...d, asset_type_id: v }))}
                 >
-                  <SelectTrigger id="asset_type" className="cursor-pointer">
-                    <SelectValue />
+                  <SelectTrigger id="asset_type_id" className="cursor-pointer">
+                    <SelectValue placeholder="Select type" />
                   </SelectTrigger>
                   <SelectContent>
-                    {ASSET_TYPES.map((t) => (
-                      <SelectItem key={t} value={t} className="cursor-pointer">
-                        {t}
+                    {assetTypes.map((t) => (
+                      <SelectItem key={t.id} value={t.id} className="cursor-pointer">
+                        {t.name}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -507,32 +489,6 @@ export function AssetRegistrationWorkspace() {
                         value={edit.asset_name}
                         onChange={(e) => setEdit((x) => ({ ...x, asset_name: e.target.value }))}
                       />
-                    </div>
-                    <div className="space-y-1">
-                      <Label htmlFor="edit_category">Category</Label>
-                      <Select
-                        value={edit.asset_category_id || "__none"}
-                        onValueChange={(v) =>
-                          setEdit((x) => ({
-                            ...x,
-                            asset_category_id: v === "__none" ? "" : v,
-                          }))
-                        }
-                      >
-                        <SelectTrigger id="edit_category" className="cursor-pointer">
-                          <SelectValue placeholder="Category" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="__none" className="cursor-pointer">
-                            Select…
-                          </SelectItem>
-                          {categories.map((cat) => (
-                            <SelectItem key={cat.id} value={cat.id} className="cursor-pointer">
-                              {cat.category_code} — {cat.category_name}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
                     </div>
                     <Button
                       type="button"

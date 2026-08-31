@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Loader2 } from "lucide-react";
+import { Loader2, Upload } from "lucide-react";
 
 import { PageHeader } from "@/components/layout/page-header";
 import { Button } from "@/components/ui/button";
@@ -23,15 +23,8 @@ import {
   RAM_OPTIONS,
   STORAGE_OPTIONS,
   buildConfigurationString,
-  getItConfigRule,
   isIntelProcessor,
-} from "@/config/asset-it-config-rules";
-import { ASSET_PRD_TYPES, getPrdType } from "@/config/asset-prd-types";
-import {
-  ASSET_SITE_CATALOG,
-  buildingsForCity,
-  composeLocationLabel,
-} from "@/config/asset-site-catalog";
+} from "@/config/asset-hardware-options";
 import { isAuthenticated } from "@/lib/auth";
 import { listBranchOptions, type OrgOption } from "@/lib/org-options";
 import { buildSelfServiceUrl } from "@/services/assets-service";
@@ -40,23 +33,35 @@ import {
   assetRegisterService,
   assetRegistrationQueueService,
   filterActiveCategories,
-  type AssetCategoryRow,
   type IncomingRegistrationPrefill,
 } from "@/services/assets-service";
+import {
+  listItAssetTypes,
+  type ItAssetType,
+} from "@/services/asset-type-service";
+import {
+  listSiteBuildings,
+  listSiteLocations,
+  type SiteBuilding,
+  type SiteLocation,
+} from "@/services/asset-site-location-service";
 import { ApiClientError } from "@/services/api-client";
+import {
+  ItAssetImportDialog,
+} from "@/components/assets/it-asset-import-dialog";
 
 type FieldErrors = Partial<
   Record<
     | "asset_name"
     | "asset_category_id"
-    | "prd_type_id"
+    | "asset_type_id"
     | "make"
     | "model"
     | "processor"
     | "generation"
     | "ram"
     | "storage"
-    | "city_id"
+    | "location_id"
     | "building_id"
     | "branch_id",
     string
@@ -73,8 +78,11 @@ export function AssetAddForm({
   incomingLineId,
 }: AssetAddFormProps = {}) {
   const router = useRouter();
-  const [categories, setCategories] = useState<AssetCategoryRow[]>([]);
   const [branches, setBranches] = useState<OrgOption[]>([]);
+  const [siteLocations, setSiteLocations] = useState<SiteLocation[]>([]);
+  const [siteBuildings, setSiteBuildings] = useState<SiteBuilding[]>([]);
+  const [assetTypes, setAssetTypes] = useState<ItAssetType[]>([]);
+  const [importOpen, setImportOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
@@ -87,7 +95,7 @@ export function AssetAddForm({
     asset_name: "",
     serial_number: "",
     asset_category_id: "",
-    prd_type_id: "",
+    asset_type_id: "",
     branch_id: "",
     purchase_date: new Date().toISOString().slice(0, 10),
     purchase_cost: "0",
@@ -98,33 +106,40 @@ export function AssetAddForm({
     generation: "",
     ram: "",
     storage: "",
-    city_id: "",
+    location_id: "",
     building_id: "",
   });
 
   const fromIncoming = Boolean(incomingUnitId);
-  const itRule = getItConfigRule(form.prd_type_id);
-  const showGeneration = itRule.showProcessor && isIntelProcessor(form.processor);
+  const selectedType = useMemo(
+    () => assetTypes.find((t) => t.id === form.asset_type_id) ?? null,
+    [assetTypes, form.asset_type_id],
+  );
+  const requiresHardware = selectedType?.requires_hardware_config === true;
+  const showGeneration = requiresHardware && isIntelProcessor(form.processor);
   const buildingOptions = useMemo(
-    () => buildingsForCity(form.city_id),
-    [form.city_id],
+    () => siteBuildings.filter((b) => b.location_id === form.location_id),
+    [siteBuildings, form.location_id],
   );
 
   useEffect(() => {
     void (async () => {
       if (!isAuthenticated()) return;
       try {
-        const [categoryPayload, branchOptions] = await Promise.all([
+        const [categoryPayload, branchOptions, locs, types] = await Promise.all([
           assetCategoryService.search({
             page: 1,
             page_size: 200,
             status: "active",
           }),
           listBranchOptions(),
+          listSiteLocations().catch(() => [] as SiteLocation[]),
+          listItAssetTypes({ active: true }).catch(() => [] as ItAssetType[]),
         ]);
         const active = filterActiveCategories(categoryPayload.items);
-        setCategories(active);
         setBranches(branchOptions);
+        setSiteLocations(locs);
+        setAssetTypes(types);
 
         let prefill: IncomingRegistrationPrefill | null = null;
         if (incomingUnitId) {
@@ -150,13 +165,20 @@ export function AssetAddForm({
                 prefill.purchase_cost != null ? String(prefill.purchase_cost) : next.purchase_cost,
               currency_code: prefill.currency_code || next.currency_code,
             };
-            if (prefill.asset_type) {
-              const match = ASSET_PRD_TYPES.find((t) => t.apiAssetType === prefill.asset_type);
-              if (match) next = { ...next, prd_type_id: match.id };
+            if (prefill.asset_type_id) {
+              next = { ...next, asset_type_id: prefill.asset_type_id };
+            } else if (prefill.asset_type) {
+              const match = types.find(
+                (t) => t.name.toLowerCase() === String(prefill.asset_type).toLowerCase(),
+              );
+              if (match) next = { ...next, asset_type_id: match.id };
             }
           }
-          if (!next.asset_category_id && active.length === 1) {
-            next = { ...next, asset_category_id: active[0].id };
+          if (!next.asset_category_id && active.length > 0) {
+            next = { ...next, asset_category_id: active[0]!.id };
+          }
+          if (!next.asset_type_id && types.length > 0) {
+            next = { ...next, asset_type_id: types[0]!.id };
           }
           if (!next.branch_id && branchOptions.length > 0) {
             next = { ...next, branch_id: branchOptions[0].id };
@@ -167,18 +189,17 @@ export function AssetAddForm({
         setError(
           err instanceof ApiClientError
             ? err.message
-            : "Failed to load categories, branches, or incoming prefill.",
+            : "Failed to load registration defaults (branch / location / types).",
         );
       }
     })();
   }, [incomingUnitId, incomingLineId]);
 
-  const onPrdType = useCallback((prdTypeId: string) => {
-    setFieldErrors((e) => ({ ...e, prd_type_id: undefined }));
+  const onAssetType = useCallback((assetTypeId: string) => {
+    setFieldErrors((e) => ({ ...e, asset_type_id: undefined }));
     setForm((f) => ({
       ...f,
-      prd_type_id: prdTypeId,
-      // Clear hardware when switching types so stale Laptop values don't leak
+      asset_type_id: assetTypeId,
       processor: "",
       generation: "",
       ram: "",
@@ -189,22 +210,21 @@ export function AssetAddForm({
   function validate(): boolean {
     const next: FieldErrors = {};
     if (!form.asset_name.trim()) next.asset_name = "Asset name is required.";
-    if (!form.asset_category_id) next.asset_category_id = "Category is required.";
-    if (!form.prd_type_id) next.prd_type_id = "Asset type is required.";
+    if (!form.asset_category_id) {
+      next.asset_category_id = "No active asset category is available. Contact an administrator.";
+    }
+    if (!form.asset_type_id) next.asset_type_id = "Asset type is required.";
     if (!form.branch_id) next.branch_id = "Branch is required.";
-    if (!form.city_id) next.city_id = "Location is required.";
+    if (!form.location_id) next.location_id = "Location is required.";
     if (!form.building_id) next.building_id = "Building is required.";
 
-    const rule = getItConfigRule(form.prd_type_id);
-    if (rule.requireHardware) {
-      if (rule.showProcessor && !form.processor.trim()) {
-        next.processor = "Processor is required.";
-      }
-      if (rule.showProcessor && isIntelProcessor(form.processor) && !form.generation.trim()) {
+    if (requiresHardware) {
+      if (!form.processor.trim()) next.processor = "Processor is required.";
+      if (isIntelProcessor(form.processor) && !form.generation.trim()) {
         next.generation = "Generation is required for Intel processors.";
       }
-      if (rule.showRam && !form.ram.trim()) next.ram = "RAM is required.";
-      if (rule.showStorage && !form.storage.trim()) next.storage = "Storage is required.";
+      if (!form.ram.trim()) next.ram = "RAM is required.";
+      if (!form.storage.trim()) next.storage = "Storage is required.";
     }
 
     setFieldErrors(next);
@@ -225,20 +245,19 @@ export function AssetAddForm({
     try {
       let id = createdAssetId;
       if (!id) {
-        const prd = getPrdType(form.prd_type_id);
-        const configuration = buildConfigurationString({
-          processor: form.processor,
-          generation: showGeneration ? form.generation : "",
-          ram: form.ram,
-          storage: form.storage,
-        });
-        const locationLabel = composeLocationLabel(form.city_id, form.building_id);
-
+        const configuration = requiresHardware
+          ? buildConfigurationString({
+              processor: form.processor,
+              generation: showGeneration ? form.generation : "",
+              ram: form.ram,
+              storage: form.storage,
+            })
+          : undefined;
         const createBody: Record<string, unknown> = {
           branch_id: form.branch_id,
           asset_category_id: form.asset_category_id,
           asset_name: form.asset_name.trim(),
-          asset_type: prd?.apiAssetType ?? "fixed",
+          asset_type_id: form.asset_type_id,
           serial_number: form.serial_number.trim() || undefined,
           purchase_date: form.purchase_date,
           purchase_cost: Number(form.purchase_cost || 0),
@@ -246,7 +265,8 @@ export function AssetAddForm({
           make: form.make.trim() || undefined,
           model: form.model.trim() || undefined,
           configuration,
-          location_label: locationLabel,
+          location_id: form.location_id,
+          building_id: form.building_id,
         };
         if (fromIncoming && incomingUnitId) {
           createBody.incoming_unit_id = incomingUnitId;
@@ -376,12 +396,38 @@ export function AssetAddForm({
     <div className="space-y-4">
       <PageHeader
         title="Add Asset"
-        description="Register a new IT asset"
+        description="Register a new IT asset or import many from Excel"
         actions={
-          <Button variant="outline" size="sm" asChild className="cursor-pointer">
-            <Link href="/assets/assets">Cancel</Link>
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            {!fromIncoming ? (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="cursor-pointer"
+                onClick={() => setImportOpen(true)}
+              >
+                <Upload className="mr-2 size-4" />
+                Import from Excel
+              </Button>
+            ) : null}
+            <Button variant="outline" size="sm" asChild className="cursor-pointer">
+              <Link href="/assets/assets">Cancel</Link>
+            </Button>
+          </div>
         }
+      />
+
+      <ItAssetImportDialog
+        open={importOpen}
+        onOpenChange={setImportOpen}
+        assetTypes={assetTypes}
+        siteLocations={siteLocations}
+        fallbackBranchId={form.branch_id || undefined}
+        currencyCode={form.currency_code}
+        onImported={() => {
+          /* summary shown in dialog */
+        }}
       />
 
       {error ? (
@@ -474,50 +520,31 @@ export function AssetAddForm({
               onChange={(e) => setForm((f) => ({ ...f, serial_number: e.target.value }))}
             />
           </Field>
-          <Field
-            label="Category *"
-            error={fieldErrors.asset_category_id}
-          >
-            <Select
-              value={form.asset_category_id}
-              onValueChange={(v) => {
-                setFieldErrors((err) => ({ ...err, asset_category_id: undefined }));
-                setForm((f) => ({ ...f, asset_category_id: v }));
-              }}
-            >
-              <SelectTrigger className="cursor-pointer" aria-label="Category">
-                <SelectValue placeholder="Select category" />
-              </SelectTrigger>
-              <SelectContent>
-                {categories.length === 0 ? (
-                  <SelectItem value="__none" disabled>
-                    No active categories
-                  </SelectItem>
-                ) : (
-                  categories.map((c) => (
-                    <SelectItem key={c.id} value={c.id}>
-                      {c.category_name}
-                    </SelectItem>
-                  ))
-                )}
-              </SelectContent>
-            </Select>
-          </Field>
-          <Field label="Asset Type *" error={fieldErrors.prd_type_id}>
-            <Select value={form.prd_type_id} onValueChange={onPrdType}>
+          <Field label="Asset Type *" error={fieldErrors.asset_type_id}>
+            <Select value={form.asset_type_id} onValueChange={onAssetType}>
               <SelectTrigger className="cursor-pointer" aria-label="Asset Type">
                 <SelectValue placeholder="Select asset type" />
               </SelectTrigger>
               <SelectContent>
-                {ASSET_PRD_TYPES.map((t) => (
+                {assetTypes.map((t) => (
                   <SelectItem key={t.id} value={t.id}>
-                    {t.typeName}
+                    {t.name}
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
           </Field>
         </div>
+        {fieldErrors.asset_category_id ? (
+          <p className="mt-2 text-sm text-destructive" role="alert">
+            {fieldErrors.asset_category_id}
+          </p>
+        ) : null}
+        {assetTypes.length === 0 ? (
+          <p className="mt-2 text-xs text-muted-foreground">
+            No active asset types. An IT admin must create types under Configuration → Asset Types.
+          </p>
+        ) : null}
       </section>
 
       <section
@@ -544,7 +571,7 @@ export function AssetAddForm({
               onChange={(e) => setForm((f) => ({ ...f, model: e.target.value }))}
             />
           </Field>
-          {itRule.showProcessor ? (
+          {requiresHardware ? (
             <Field label="Processor *" error={fieldErrors.processor}>
               <Select
                 value={form.processor}
@@ -596,7 +623,7 @@ export function AssetAddForm({
               </Select>
             </Field>
           ) : null}
-          {itRule.showRam ? (
+          {requiresHardware ? (
             <Field label="RAM *" error={fieldErrors.ram}>
               <Select
                 value={form.ram}
@@ -618,7 +645,7 @@ export function AssetAddForm({
               </Select>
             </Field>
           ) : null}
-          {itRule.showStorage ? (
+          {requiresHardware ? (
             <Field label="Storage *" error={fieldErrors.storage}>
               <Select
                 value={form.storage}
@@ -641,9 +668,10 @@ export function AssetAddForm({
             </Field>
           ) : null}
         </div>
-        {!itRule.showProcessor ? (
+        {!requiresHardware ? (
           <p className="mt-2 text-xs text-muted-foreground">
-            Hardware configuration fields apply to Laptop, Desktop, and Mobile Device types.
+            Hardware configuration fields appear when the selected asset type requires them
+            (configured under Configuration → Asset Types).
           </p>
         ) : null}
       </section>
@@ -656,25 +684,29 @@ export function AssetAddForm({
           Location &amp; Registration
         </h2>
         <div className="grid gap-3 sm:grid-cols-2">
-          <Field label="Location *" error={fieldErrors.city_id}>
+          <Field label="Location *" error={fieldErrors.location_id}>
             <Select
-              value={form.city_id}
+              value={form.location_id}
               onValueChange={(v) => {
                 setFieldErrors((err) => ({
                   ...err,
-                  city_id: undefined,
+                  location_id: undefined,
                   building_id: undefined,
                 }));
-                setForm((f) => ({ ...f, city_id: v, building_id: "" }));
+                setForm((f) => ({ ...f, location_id: v, building_id: "" }));
+                void listSiteBuildings(v)
+                  .then(setSiteBuildings)
+                  .catch(() => setSiteBuildings([]));
               }}
             >
               <SelectTrigger className="cursor-pointer" aria-label="Location">
                 <SelectValue placeholder="Select location" />
               </SelectTrigger>
               <SelectContent>
-                {ASSET_SITE_CATALOG.map((c) => (
+                {siteLocations.map((c) => (
                   <SelectItem key={c.id} value={c.id}>
-                    {c.label}
+                    {c.name}
+                    {c.is_head_office ? " (Head Office)" : ""}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -687,11 +719,11 @@ export function AssetAddForm({
                 setFieldErrors((err) => ({ ...err, building_id: undefined }));
                 setForm((f) => ({ ...f, building_id: v }));
               }}
-              disabled={!form.city_id}
+              disabled={!form.location_id}
             >
               <SelectTrigger className="cursor-pointer" aria-label="Building">
                 <SelectValue
-                  placeholder={form.city_id ? "Select building" : "Select location first"}
+                  placeholder={form.location_id ? "Select building" : "Select location first"}
                 />
               </SelectTrigger>
               <SelectContent>
@@ -702,7 +734,7 @@ export function AssetAddForm({
                 ) : (
                   buildingOptions.map((b) => (
                     <SelectItem key={b.id} value={b.id}>
-                      {b.label}
+                      {b.name}
                     </SelectItem>
                   ))
                 )}
@@ -711,7 +743,7 @@ export function AssetAddForm({
           </Field>
         </div>
         <p className="mt-2 text-xs text-muted-foreground">
-          Location is saved as the asset&apos;s current location label on create.
+          Location and Building come from Configuration → Locations.
         </p>
       </section>
 

@@ -17,6 +17,7 @@ from modules.asset.domain.workflow_codes import ENTITY_AST_ASSET
 from modules.asset.models import AstAsset
 from modules.asset.repository.asset_category_repository import AssetCategoryRepository
 from modules.asset.repository.asset_repository import AssetListFilters, AssetRepository
+from modules.asset.repository.asset_type_repository import AssetTypeRepository
 from modules.asset.service.asset_dashboard_summary_service import AssetDashboardSummaryService
 from modules.asset.service.asset_operational_status_service import AssetOperationalStatusService
 from modules.asset.service.asset_scope_validator import AssetScopeValidator
@@ -35,6 +36,7 @@ class AssetService:
     def __init__(self, db: Session) -> None:
         self._repo = AssetRepository(db)
         self._categories = AssetCategoryRepository(db)
+        self._types = AssetTypeRepository(db)
         self._scope = AssetScopeValidator(db)
         self._numbers = DocumentNumberService(db)
         self._engine = AssetEngine()
@@ -57,6 +59,8 @@ class AssetService:
         asset_category_id: UUID | None = None,
         search: str | None = None,
         asset_type: str | None = None,
+        asset_type_id: UUID | None = None,
+        asset_domain: str | None = None,
         department_id: UUID | None = None,
         location_id: UUID | None = None,
         employee_id: UUID | None = None,
@@ -73,6 +77,8 @@ class AssetService:
             raise RegistrationValidationError(
                 "assignment_state must be 'assigned' or 'unassigned'"
             )
+        # Default-filter to IT when no domain query param (preserve existing IT screens).
+        domain = (asset_domain or "").strip().upper() or "IT"
         filters = AssetListFilters(
             company_id=cid,
             branch_id=branch_id,
@@ -81,6 +87,8 @@ class AssetService:
             asset_category_id=asset_category_id,
             search=search,
             asset_type=asset_type,
+            asset_type_id=asset_type_id,
+            asset_domain=domain,
             department_id=department_id,
             location_id=location_id,
             employee_id=employee_id,
@@ -136,6 +144,29 @@ class AssetService:
             text = str(value).strip()
             fields[key] = text or None
 
+    def _apply_type_master_defaults(
+        self, ctx: TenantContext, company_id: UUID, fields: dict
+    ) -> None:
+        """Resolve asset_type_id against the type master; keep legacy enum as 'fixed'.
+
+        The type master is authoritative for what "type" means. The legacy
+        ``asset_type`` column remains NOT NULL for existing readers and is
+        defaulted to ``fixed`` when omitted — not dual-written from type name.
+        """
+        type_id = fields.get("asset_type_id")
+        if type_id is not None:
+            asset_type = self._types.get(ctx, type_id)
+            if asset_type is None:
+                raise RegistrationValidationError("Asset type not found")
+            if asset_type.company_id != company_id:
+                raise RegistrationValidationError(
+                    "Asset type does not belong to this company"
+                )
+            if not asset_type.active:
+                raise RegistrationValidationError("Asset type is not active")
+        if not fields.get("asset_type"):
+            fields["asset_type"] = "fixed"
+
     def _persist_registration_location(
         self,
         ctx: TenantContext,
@@ -144,8 +175,22 @@ class AssetService:
         branch_id: UUID,
         company_id: UUID,
         location_label: str | None,
+        location_id: UUID | None = None,
+        building_id: UUID | None = None,
     ) -> str | None:
         """Create current ast_asset_location via LocationService. No-op when blank."""
+        org_location_id = None
+        if location_id is not None and building_id is not None:
+            from modules.asset.service.site_location_service import SiteLocationService
+
+            _loc, _bldg, location_label, org_location_id = SiteLocationService(
+                self._db
+            ).resolve_pair(
+                ctx,
+                company_id=company_id,
+                location_id=location_id,
+                building_id=building_id,
+            )
         if not location_label:
             return None
         from modules.asset.service.location_service import LocationService
@@ -156,6 +201,9 @@ class AssetService:
             asset_id=asset_id,
             branch_id=branch_id,
             location_label=location_label,
+            org_location_id=org_location_id,
+            location_id=location_id,
+            building_id=building_id,
         )
         return loc.location_label
 
@@ -168,6 +216,9 @@ class AssetService:
         incoming_line_id = fields.pop("incoming_line_id", None)
         self._normalize_optional_text_fields(fields)
         location_label = fields.pop("location_label", None)
+        location_id = fields.pop("location_id", None)
+        building_id = fields.pop("building_id", None)
+        self._apply_type_master_defaults(ctx, cid, fields)
         self._validator.validate_create_fields(
             ctx, company_id=cid, branch_id=branch_id, fields={**fields, "branch_id": branch_id}
         )
@@ -212,6 +263,8 @@ class AssetService:
             branch_id=branch_id,
             company_id=cid,
             location_label=location_label,
+            location_id=location_id,
+            building_id=building_id,
         )
         if persisted_location:
             object.__setattr__(row, "current_location_label", persisted_location)
@@ -238,14 +291,14 @@ class AssetService:
         ctx: TenantContext,
         *,
         branch_id: UUID,
-        asset_code: str,
+        asset_code: str | None = None,
         company_id: UUID | None = None,
         **fields,
     ):
-        """Create draft asset for Excel import with external Asset Tag as asset_code.
+        """Create draft asset for Excel import.
 
-        document_number remains system-assigned. Operational status is not set here —
-        activate via submit → approve (initialize_ready_to_move).
+        When ``asset_code`` is blank, assigns the next governed AST-YYYY-###### code
+        (same sequence as single Add Asset). Otherwise uses the supplied external tag.
         """
         cid = self._scope.resolve_company_id(ctx, company_id)
         self._scope.validate_branch_access(ctx, branch_id)
@@ -253,7 +306,10 @@ class AssetService:
         fields.pop("status", None)
         self._normalize_optional_text_fields(fields)
         location_label = fields.pop("location_label", None)
+        location_id = fields.pop("location_id", None)
+        building_id = fields.pop("building_id", None)
         code = (asset_code or "").strip()
+        self._apply_type_master_defaults(ctx, cid, fields)
         self._validator.validate_create_for_import_fields(
             ctx,
             company_id=cid,
@@ -261,6 +317,8 @@ class AssetService:
             fields={**fields, "branch_id": branch_id, "asset_code": code},
         )
         doc = self._numbers.generate(AstEntityType.ASSET, cid, AstAsset, "document_number", ctx=ctx)
+        if not code:
+            code = doc
         row = self._repo.create(
             ctx,
             company_id=cid,
@@ -276,6 +334,8 @@ class AssetService:
             branch_id=branch_id,
             company_id=cid,
             location_label=location_label,
+            location_id=location_id,
+            building_id=building_id,
         )
         if persisted_location:
             object.__setattr__(row, "current_location_label", persisted_location)

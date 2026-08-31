@@ -3,6 +3,28 @@
 from enum import Enum
 
 
+class AssetDomain(str, Enum):
+    """IT vs Non-IT partition of the asset register (additive domain flag)."""
+
+    IT = "IT"
+    NON_IT = "NON_IT"
+
+
+ASSET_DOMAIN_VALUES: frozenset[str] = frozenset(s.value for s in AssetDomain)
+
+
+class DomainMembershipRole(str, Enum):
+    """Role within a single asset domain (IT or Non-IT team)."""
+
+    ADMIN = "admin"
+    MEMBER = "member"
+
+
+DOMAIN_MEMBERSHIP_ROLE_VALUES: frozenset[str] = frozenset(
+    s.value for s in DomainMembershipRole
+)
+
+
 class AssetCategoryStatus(str, Enum):
     ACTIVE = "active"
     INACTIVE = "inactive"
@@ -25,9 +47,11 @@ class AssetOperationalStatus(str, Enum):
 
     READY_TO_MOVE = "READY_TO_MOVE"
     ASSIGNED = "ASSIGNED"
+    IN_MAINTENANCE = "IN_MAINTENANCE"
     RETIRED = "RETIRED"
     PENDING_DISPOSAL = "PENDING_DISPOSAL"
     DISPOSED = "DISPOSED"
+    IN_USE_AS_COMPONENT = "IN_USE_AS_COMPONENT"
 
 
 ASSET_OPERATIONAL_STATUS_VALUES: frozenset[str] = frozenset(
@@ -480,3 +504,78 @@ CODE_PREFIXES: dict[AstEntityType, tuple[str, int, bool]] = {
     AstEntityType.REPORT: ("ARPT-", 6, True),
     AstEntityType.DC_CHALLAN: ("DC-", 6, True),
 }
+
+
+# --- Non-IT asset register (separate tables; not ast_asset) ---
+
+
+class NonItAssignmentMode(str, Enum):
+    EMPLOYEE = "EMPLOYEE"
+    LOCATION = "LOCATION"
+    BOTH = "BOTH"
+
+
+NONIT_ASSIGNMENT_MODE_VALUES: frozenset[str] = frozenset(s.value for s in NonItAssignmentMode)
+
+
+class NonItAssetStatus(str, Enum):
+    IN_STOCK = "IN_STOCK"
+    ASSIGNED = "ASSIGNED"
+    MAINTENANCE = "MAINTENANCE"
+    DISPOSED = "DISPOSED"
+
+
+NONIT_ASSET_STATUS_VALUES: frozenset[str] = frozenset(s.value for s in NonItAssetStatus)
+
+
+class NonItTimelineEventType(str, Enum):
+    CREATED = "CREATED"
+    ASSIGNED = "ASSIGNED"
+    UNASSIGNED = "UNASSIGNED"
+    LOCATION_CHANGED = "LOCATION_CHANGED"
+    STATUS_CHANGED = "STATUS_CHANGED"
+    MAINTENANCE_STARTED = "MAINTENANCE_STARTED"
+    MAINTENANCE_COMPLETED = "MAINTENANCE_COMPLETED"
+    DISPOSED = "DISPOSED"
+    IMPORTED = "IMPORTED"
+
+
+class NonItLocationKind(str, Enum):
+    """Physical place categories for Non-IT assignment targets."""
+
+    CONFERENCE_ROOM = "CONFERENCE_ROOM"
+    MEETING_ROOM = "MEETING_ROOM"
+    DEPARTMENT = "DEPARTMENT"
+    FLOOR = "FLOOR"
+    CABIN = "CABIN"
+    LOBBY = "LOBBY"
+    CAFETERIA = "CAFETERIA"
+    COMMON_AREA = "COMMON_AREA"
+    WAREHOUSE = "WAREHOUSE"
+    PARKING = "PARKING"
+    OTHER = "OTHER"
+
+
+NONIT_LOCATION_KIND_VALUES: frozenset[str] = frozenset(s.value for s in NonItLocationKind)
+
+
+class NonItAssetTypeCategory(str, Enum):
+    """High-level Non-IT type groupings for admin UX / filters."""
+
+    FURNITURE = "FURNITURE"
+    APPLIANCE = "APPLIANCE"
+    ELECTRONICS = "ELECTRONICS"
+    FIXTURE = "FIXTURE"
+    EQUIPMENT = "EQUIPMENT"
+    STORAGE = "STORAGE"
+    OTHER = "OTHER"
+
+
+NONIT_ASSET_TYPE_CATEGORY_VALUES: frozenset[str] = frozenset(
+    s.value for s in NonItAssetTypeCategory
+)
+
+
+NONIT_TIMELINE_EVENT_TYPE_VALUES: frozenset[str] = frozenset(
+    s.value for s in NonItTimelineEventType
+)

@@ -87,6 +87,24 @@ class TransferService:
     def create(self, ctx: TenantContext, *, branch_id: UUID, company_id: UUID | None = None, **fields):
         cid = self._scope.resolve_company_id(ctx, company_id)
         self._scope.validate_branch_access(ctx, branch_id)
+        to_location_id = fields.pop("to_location_id", None)
+        to_building_id = fields.pop("to_building_id", None)
+        if to_location_id is not None and to_building_id is not None:
+            from modules.asset.service.site_location_service import SiteLocationService
+
+            _loc, _bldg, label, org_id = SiteLocationService(self._db).resolve_pair(
+                ctx,
+                company_id=cid,
+                location_id=to_location_id,
+                building_id=to_building_id,
+            )
+            fields["to_location_label"] = label
+            if fields.get("to_org_location_id") is None:
+                fields["to_org_location_id"] = org_id
+            # Stash for execute — not persisted on transfer row
+            fields["_site_location_id"] = to_location_id
+            fields["_site_building_id"] = to_building_id
+
         self._validator.validate_create_fields(ctx, company_id=cid, fields=fields)
 
         asset = self._assets.get(ctx, fields["asset_id"])
@@ -109,8 +127,19 @@ class TransferService:
         payload = {
             k: v
             for k, v in fields.items()
-            if k not in {"asset_id", "company_id", "branch_id", "document_number", "status"}
+            if k
+            not in {
+                "asset_id",
+                "company_id",
+                "branch_id",
+                "document_number",
+                "status",
+                "_site_location_id",
+                "_site_building_id",
+            }
         }
+        # Persist site master ids in transfer_notes marker only if unused — instead
+        # re-resolve from to_location_label at execute via SiteLocationService.
         row = self._repo.create(
             ctx,
             company_id=cid,
@@ -125,6 +154,9 @@ class TransferService:
             status=AssetTransferStatus.DRAFT.value,
             **payload,
         )
+        # Attach resolved site FKs for execute path (same request / in-memory only).
+        object.__setattr__(row, "_site_location_id", to_location_id)
+        object.__setattr__(row, "_site_building_id", to_building_id)
         self._audit.log_entity_change(
             tenant_id=ctx.tenant_id,
             entity_name=ENTITY_AST_TRANSFER,
@@ -137,6 +169,20 @@ class TransferService:
 
     def update(self, ctx: TenantContext, row_id: UUID, **fields):
         row = self.get(ctx, row_id)
+        to_location_id = fields.pop("to_location_id", None)
+        to_building_id = fields.pop("to_building_id", None)
+        if to_location_id is not None and to_building_id is not None:
+            from modules.asset.service.site_location_service import SiteLocationService
+
+            _loc, _bldg, label, org_id = SiteLocationService(self._db).resolve_pair(
+                ctx,
+                company_id=row.company_id,
+                location_id=to_location_id,
+                building_id=to_building_id,
+            )
+            fields["to_location_label"] = label
+            if fields.get("to_org_location_id") is None:
+                fields["to_org_location_id"] = org_id
         self._validator.validate_update_fields(ctx, row, fields)
         updated = self._repo.update(ctx, row_id, **fields)
         if updated is None:
@@ -306,6 +352,11 @@ class TransferService:
             for current in self._locations.find_current(ctx, transfer.asset_id):
                 self._location_engine.mark_historical(current)
                 current.effective_to = effective_from
+            site_loc_id, site_bld_id = self._resolve_site_ids_from_label(
+                ctx,
+                company_id=transfer.company_id,
+                label=transfer.to_location_label,
+            )
             self._locations.create(
                 ctx,
                 company_id=transfer.company_id,
@@ -315,6 +366,8 @@ class TransferService:
                 or transfer.from_location_label
                 or "Transferred location",
                 org_location_id=transfer.to_org_location_id,
+                location_id=site_loc_id,
+                building_id=site_bld_id,
                 effective_from=effective_from,
                 is_current=True,
                 status="active",
@@ -355,4 +408,27 @@ class TransferService:
         if effective_date is None:
             return utcnow()
         return datetime.combine(effective_date, time.min, tzinfo=timezone.utc)
+
+    def _resolve_site_ids_from_label(
+        self,
+        ctx: TenantContext,
+        *,
+        company_id: UUID,
+        label: str | None,
+    ) -> tuple[UUID | None, UUID | None]:
+        if not label or " · " not in label:
+            return None, None
+        loc_name, bld_name = label.split(" · ", 1)
+        from modules.asset.repository.site_location_repository import (
+            SiteBuildingRepository,
+            SiteLocationRepository,
+        )
+
+        loc = SiteLocationRepository(self._db).get_by_name(ctx, company_id, loc_name.strip())
+        if loc is None:
+            return None, None
+        bldg = SiteBuildingRepository(self._db).get_by_name(ctx, loc.id, bld_name.strip())
+        if bldg is None:
+            return loc.id, None
+        return loc.id, bldg.id
 

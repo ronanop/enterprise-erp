@@ -6,14 +6,18 @@ import { fetchAssetOperationsData } from "@/components/assets/asset-operations-f
 import { AssetOperationsDashboard } from "@/components/assets/asset-operations-dashboard";
 import {
   branchLookupFromOptions,
-  mapDashboardPayloadToViewModel,
+  mapByLocationBreakdown,
+  mapDashboardSummaryToKpiTrends,
+  mapDashboardSummaryToKpis,
+  mapTransfersToDashboardRows,
   type AssetOperationsKpiModel,
   type AssetOperationsKpiTrends,
-  type AssetOperationsQueueTotals,
-  type BranchBreakdownRow,
+  type DashboardTransferRow,
+  type LocationBreakdownRow,
 } from "@/components/assets/dashboard.mapper";
-import { BRANCH_ALL_VALUE, type BranchOption, type QueueCardRow } from "@/components/assets/shared";
+import { BRANCH_ALL_VALUE, type BranchOption } from "@/components/assets/shared";
 import { listBranchOptions } from "@/lib/org-options";
+import { listSiteLocations } from "@/services/asset-site-location-service";
 import type { AssetDashboardSummaryDto } from "@/services/assets-service";
 
 const EMPTY_SUMMARY: AssetDashboardSummaryDto = {
@@ -29,27 +33,31 @@ const EMPTY_SUMMARY: AssetDashboardSummaryDto = {
 const EMPTY_LIST = { items: [], total: 0, page: 1, page_size: 10 };
 
 export function AssetOperationsContainer() {
-  const [branchId, setBranchId] = useState(BRANCH_ALL_VALUE);
+  const [locationId, setLocationId] = useState(BRANCH_ALL_VALUE);
+  const [locations, setLocations] = useState<BranchOption[]>([]);
   const [branches, setBranches] = useState<BranchOption[]>([]);
   const [kpis, setKpis] = useState<AssetOperationsKpiModel | null>(null);
   const [kpiTrends, setKpiTrends] = useState<AssetOperationsKpiTrends | null>(null);
-  const [queueTotals, setQueueTotals] = useState<AssetOperationsQueueTotals | null>(null);
-  const [byBranchRows, setByBranchRows] = useState<BranchBreakdownRow[]>([]);
-  const [readyQueueRows, setReadyQueueRows] = useState<QueueCardRow[]>([]);
-  const [disposalQueueRows, setDisposalQueueRows] = useState<QueueCardRow[]>([]);
-  const [assignmentRows, setAssignmentRows] = useState<QueueCardRow[]>([]);
+  const [byLocationRows, setByLocationRows] = useState<LocationBreakdownRow[]>([]);
+  const [transferRows, setTransferRows] = useState<DashboardTransferRow[]>([]);
+  const [transferTotal, setTransferTotal] = useState(0);
   const [kpisLoading, setKpisLoading] = useState(true);
-  const [queuesLoading, setQueuesLoading] = useState(true);
+  const [transfersLoading, setTransfersLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [queueErrors, setQueueErrors] = useState<{
-    ready?: string;
-    disposal?: string;
-    assignments?: string;
-  }>({});
+  const [transferError, setTransferError] = useState<string | null>(null);
   const [reloadToken, setReloadToken] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
+    void listSiteLocations()
+      .then((rows) => {
+        if (!cancelled) {
+          setLocations(rows.map((o) => ({ id: o.id, label: o.name })));
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setLocations([]);
+      });
     void listBranchOptions()
       .then((options) => {
         if (!cancelled) {
@@ -68,36 +76,24 @@ export function AssetOperationsContainer() {
 
   const load = useCallback(async () => {
     setKpisLoading(true);
-    setQueuesLoading(true);
+    setTransfersLoading(true);
     setErrorMessage(null);
-    setQueueErrors({});
+    setTransferError(null);
 
-    const result = await fetchAssetOperationsData(branchId);
+    const result = await fetchAssetOperationsData(locationId);
 
-    setQueueErrors({
-      ready: result.errors.ready,
-      disposal: result.errors.disposal,
-      assignments: result.errors.assignments,
-    });
-
-    const nothingLoaded =
-      !result.summary &&
-      !result.readyList &&
-      !result.disposalList &&
-      !result.assignmentsList;
+    const nothingLoaded = !result.summary && !result.transfersList;
 
     if (nothingLoaded) {
       const messages = Object.values(result.errors).filter(Boolean);
       setErrorMessage(messages[0] ?? "Something went wrong. Please try again.");
       setKpis(null);
       setKpiTrends(null);
-      setQueueTotals(null);
-      setByBranchRows([]);
-      setReadyQueueRows([]);
-      setDisposalQueueRows([]);
-      setAssignmentRows([]);
+      setByLocationRows([]);
+      setTransferRows([]);
+      setTransferTotal(0);
       setKpisLoading(false);
-      setQueuesLoading(false);
+      setTransfersLoading(false);
       return;
     }
 
@@ -105,34 +101,34 @@ export function AssetOperationsContainer() {
       setErrorMessage(result.errors.summary);
       setKpis(null);
       setKpiTrends(null);
-      setByBranchRows([]);
-    } else {
+      setByLocationRows([]);
+    } else if (result.summary) {
       setErrorMessage(null);
+      const kpisModel = mapDashboardSummaryToKpis(result.summary);
+      setKpis(kpisModel);
+      setKpiTrends(mapDashboardSummaryToKpiTrends(kpisModel));
+      setByLocationRows(mapByLocationBreakdown(result.summary));
+    } else {
+      setKpis(mapDashboardSummaryToKpis(EMPTY_SUMMARY));
+      setKpiTrends(null);
+      setByLocationRows([]);
     }
 
-    const view = mapDashboardPayloadToViewModel({
-      summary: result.summary ?? EMPTY_SUMMARY,
-      readyList: result.readyList ?? EMPTY_LIST,
-      disposalList: result.disposalList ?? EMPTY_LIST,
-      assignmentsList: result.assignmentsList ?? EMPTY_LIST,
-      branchLookup,
-    });
-
-    setKpis(result.summary ? view.kpis : null);
-    setKpiTrends(result.summary ? view.kpiTrends : null);
-    setByBranchRows(result.summary ? view.byBranch : []);
-    setQueueTotals({
-      ready: result.readyList ? view.queueTotals.ready : 0,
-      disposal: result.disposalList ? view.queueTotals.disposal : 0,
-      assignments: result.assignmentsList ? view.queueTotals.assignments : 0,
-    });
-    setReadyQueueRows(result.readyList ? view.queues.readyRows : []);
-    setDisposalQueueRows(result.disposalList ? view.queues.disposalRows : []);
-    setAssignmentRows(result.assignmentsList ? view.queues.assignmentRows : []);
+    if (result.errors.transfers) {
+      setTransferError(result.errors.transfers);
+      setTransferRows([]);
+      setTransferTotal(0);
+    } else {
+      setTransferError(null);
+      const transfers = result.transfersList ?? EMPTY_LIST;
+      const assets = result.assetsList ?? EMPTY_LIST;
+      setTransferRows(mapTransfersToDashboardRows(transfers, assets));
+      setTransferTotal(transfers.total ?? transfers.items.length);
+    }
 
     setKpisLoading(false);
-    setQueuesLoading(false);
-  }, [branchId, branchLookup]);
+    setTransfersLoading(false);
+  }, [locationId]);
 
   useEffect(() => {
     void load();
@@ -144,21 +140,20 @@ export function AssetOperationsContainer() {
 
   return (
     <AssetOperationsDashboard
-      branchId={branchId}
-      branches={branches}
-      onBranchChange={setBranchId}
+      locationId={locationId}
+      locations={locations}
+      onLocationChange={setLocationId}
       kpisLoading={kpisLoading}
-      queuesLoading={queuesLoading}
+      transfersLoading={transfersLoading}
       kpis={kpis}
       kpiTrends={kpiTrends}
-      queueTotals={queueTotals}
-      byBranchRows={byBranchRows}
-      readyQueueRows={readyQueueRows}
-      disposalQueueRows={disposalQueueRows}
-      assignmentRows={assignmentRows}
+      byLocationRows={byLocationRows}
+      transferRows={transferRows}
+      transferTotal={transferTotal}
+      transferError={transferError}
       errorMessage={errorMessage}
       onRetry={onRetry}
-      queueErrors={queueErrors}
+      branchLookup={branchLookup}
     />
   );
 }

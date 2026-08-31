@@ -7,6 +7,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
+from modules.asset.models import AstAssetMaintenance
 from modules.asset.dependencies import (
     PaginationParams,
     extract_update_fields,
@@ -34,6 +35,7 @@ from modules.asset.schemas import (
     AssetChecklistResponse,
     AssetChecklistUpdate,
     AssetComponentCreate,
+    AssetComponentAttachableAsset,
     AssetComponentHistoryResult,
     AssetComponentListResult,
     AssetComponentReplace,
@@ -99,7 +101,9 @@ from modules.asset.schemas import (
     AssetLocationUpdate,
     AssetMaintenanceCreate,
     AssetMaintenanceListResult,
+    AssetMaintenanceQuickDraftCreate,
     AssetMaintenanceResponse,
+    AssetMaintenanceStartRequest,
     AssetMaintenanceUpdate,
     AssetNotificationCreate,
     AssetNotificationListResult,
@@ -135,6 +139,8 @@ from modules.asset.schemas import (
     MaintenancePlanResponse,
     MaintenancePlanUpdate,
     MaintenanceScheduleRequest,
+    MaintenanceStartResult,
+    MaintenanceTimelineResult,
     MeterReadingCreate,
     MeterReadingListResult,
     MeterReadingResponse,
@@ -190,9 +196,10 @@ def list_asset_categories(
     company_id: UUID | None = None,
     status: str | None = None,
     q: str | None = None,
+    asset_domain: str | None = None,
 ):
     items = AssetCategoryService(db).list(
-        ctx, company_id=company_id, status=status, search=q
+        ctx, company_id=company_id, status=status, search=q, asset_domain=asset_domain
     )
     total = len(items)
     page_items = paginate(items, pagination)
@@ -264,6 +271,32 @@ def reactivate_asset_category(
 
 assets_router = APIRouter(prefix="/assets", tags=["Asset — Asset"])
 
+
+def _asset_type_name_map(db: Session, ctx: TenantContext, items: list) -> dict:
+    from modules.asset.repository.asset_type_repository import AssetTypeRepository
+
+    ids = {getattr(i, "asset_type_id", None) for i in items}
+    ids.discard(None)
+    names: dict = {}
+    repo = AssetTypeRepository(db)
+    for tid in ids:
+        row = repo.get(ctx, tid)
+        if row is not None:
+            names[tid] = row.name
+    return names
+
+
+def _to_asset_response(row, type_names: dict | None = None) -> AssetResponse:
+    data = AssetResponse.model_validate(row)
+    tid = getattr(row, "asset_type_id", None)
+    name = None
+    if type_names and tid is not None:
+        name = type_names.get(tid)
+    elif tid is not None and type_names is None:
+        name = None
+    return data.model_copy(update={"asset_type_name": name})
+
+
 @assets_router.get("", response_model=APIResponse[AssetListResult])
 def list_assets(
     ctx: Annotated[TenantContext, Depends(require_permission("asset.asset:read"))],
@@ -276,6 +309,8 @@ def list_assets(
     asset_category_id: UUID | None = None,
     q: str | None = None,
     asset_type: str | None = None,
+    asset_type_id: UUID | None = None,
+    asset_domain: str | None = None,
     department_id: UUID | None = None,
     location_id: UUID | None = None,
     employee_id: UUID | None = None,
@@ -287,8 +322,10 @@ def list_assets(
 
     Search ``q`` matches asset code/name/serial/document/make/model and
     active-assignee employee name/code. Location filter uses current
-    ``AstAssetLocation.org_location_id`` (not branch). Department filter uses
+    ``AstAssetLocation.location_id`` (IT site location master). Department filter uses
     active assignment custody only (not historical).
+    When ``asset_domain`` is omitted, defaults to ``IT`` (preserves existing screens).
+    Prefer ``asset_type_id`` (type master) over legacy ``asset_type`` enum filter.
     """
     items, total = AssetService(db).search(
         ctx,
@@ -299,6 +336,8 @@ def list_assets(
         asset_category_id=asset_category_id,
         search=q,
         asset_type=asset_type,
+        asset_type_id=asset_type_id,
+        asset_domain=asset_domain,
         department_id=department_id,
         location_id=location_id,
         employee_id=employee_id,
@@ -308,8 +347,9 @@ def list_assets(
         offset=pagination.offset,
         limit=pagination.page_size,
     )
+    type_names = _asset_type_name_map(db, ctx, items)
     payload = AssetListResult(
-        items=[AssetResponse.model_validate(i) for i in items],
+        items=[_to_asset_response(i, type_names) for i in items],
         total=total,
         page=pagination.page,
         page_size=pagination.page_size,
@@ -326,6 +366,8 @@ def get_assets_dashboard_summary(
     db: Annotated[Session, Depends(get_db)],
     company_id: UUID | None = None,
     branch_id: UUID | None = None,
+    location_id: UUID | None = None,
+    asset_domain: str | None = None,
 ):
     return APIResponse(
         message="OK",
@@ -333,6 +375,8 @@ def get_assets_dashboard_summary(
             ctx,
             company_id=company_id,
             branch_id=branch_id,
+            location_id=location_id,
+            asset_domain=asset_domain,
         ),
     )
 
@@ -372,11 +416,13 @@ def import_assets_from_excel(
             employee_id=r.employee_id,
             department_id=r.department_id,
             asset_category_id=r.asset_category_id,
+            asset_type_id=r.asset_type_id,
             serial_number=r.serial_number,
             make=r.make,
             model=r.model,
             configuration=r.configuration,
             location_label=r.location_label,
+            location_id=r.location_id,
             issue_date=r.issue_date,
             delivery_reference_number=r.delivery_reference_number,
             delivery_reference_status=r.delivery_reference_status,
@@ -468,7 +514,9 @@ def get_assets(
     ctx: Annotated[TenantContext, Depends(require_permission("asset.asset:read"))],
     db: Annotated[Session, Depends(get_db)],
 ):
-    return APIResponse(message="OK", data=AssetService(db).get(ctx, row_id))
+    row = AssetService(db).get(ctx, row_id)
+    type_names = _asset_type_name_map(db, ctx, [row])
+    return APIResponse(message="OK", data=_to_asset_response(row, type_names))
 
 
 @assets_router.get(
@@ -566,9 +614,11 @@ def create_assets(
 ):
     payload = body.model_dump(exclude_none=True)
     branch_id = payload.pop("branch_id")
+    row = AssetService(db).create(ctx, branch_id=branch_id, **payload)
+    type_names = _asset_type_name_map(db, ctx, [row])
     return APIResponse(
         message="Created",
-        data=AssetService(db).create(ctx, branch_id=branch_id, **payload),
+        data=_to_asset_response(row, type_names),
     )
 
 @assets_router.patch("/{row_id}", response_model=APIResponse[AssetResponse])
@@ -726,6 +776,32 @@ def tree_asset_components(
         message="OK",
         data=AssetComponentService(db).tree(ctx, asset_id, company_id=company_id),
     )
+
+
+@asset_components_router.get(
+    "/attachable-assets",
+    response_model=APIResponse[list[AssetComponentAttachableAsset]],
+)
+def list_attachable_component_assets(
+    parent_asset_id: UUID,
+    ctx: Annotated[TenantContext, Depends(require_permission("asset.component:read"))],
+    db: Annotated[Session, Depends(get_db)],
+    company_id: UUID | None = None,
+    q: str | None = None,
+    limit: int = 50,
+):
+    rows = AssetComponentService(db).list_attachable_assets(
+        ctx,
+        parent_asset_id=parent_asset_id,
+        company_id=company_id,
+        search=q,
+        limit=min(max(limit, 1), 100),
+    )
+    return APIResponse(
+        message="OK",
+        data=[AssetComponentAttachableAsset(**r) for r in rows],
+    )
+
 
 @asset_components_router.get("/{row_id}", response_model=APIResponse[AssetComponentResponse])
 def get_asset_components(
@@ -1483,6 +1559,15 @@ def close_maintenance_plans(
 
 asset_maintenances_router = APIRouter(prefix="/asset-maintenances", tags=["Asset — AssetMaintenance"])
 
+
+def _maintenance_response(
+    db: Session,
+    ctx: TenantContext,
+    row: AstAssetMaintenance,
+) -> AssetMaintenanceResponse:
+    return MaintenanceService(db).to_response(ctx, row)
+
+
 @asset_maintenances_router.get("", response_model=APIResponse[AssetMaintenanceListResult])
 def list_asset_maintenances(
     ctx: Annotated[TenantContext, Depends(require_permission("asset.maintenance:read"))],
@@ -1494,8 +1579,10 @@ def list_asset_maintenances(
     status: str | None = None,
     maintenance_type: str | None = None,
     q: str | None = None,
+    open_only: bool = False,
 ):
-    items, total = MaintenanceService(db).search(
+    svc = MaintenanceService(db)
+    items, total = svc.search(
         ctx,
         company_id=company_id,
         asset_id=asset_id,
@@ -1503,16 +1590,39 @@ def list_asset_maintenances(
         status=status,
         maintenance_type=maintenance_type,
         search=q,
+        open_only=open_only,
         offset=pagination.offset,
         limit=pagination.page_size,
     )
     payload = AssetMaintenanceListResult(
-        items=items,
+        items=svc.to_response_list(ctx, items),
         total=total,
         page=pagination.page,
         page_size=pagination.page_size,
     )
     return APIResponse(message="OK", data=payload)
+
+@asset_maintenances_router.post(
+    "/quick-draft",
+    response_model=APIResponse[AssetMaintenanceResponse],
+)
+def quick_draft_asset_maintenances(
+    body: AssetMaintenanceQuickDraftCreate,
+    ctx: Annotated[TenantContext, Depends(require_permission("asset.maintenance:create"))],
+    db: Annotated[Session, Depends(get_db)],
+):
+    return APIResponse(
+        message="Created",
+        data=_maintenance_response(
+            db,
+            ctx,
+            MaintenanceService(db).quick_create_draft(
+                ctx,
+                asset_id=body.asset_id,
+                company_id=body.company_id,
+            ),
+        ),
+    )
 
 @asset_maintenances_router.get("/{row_id}", response_model=APIResponse[AssetMaintenanceResponse])
 def get_asset_maintenances(
@@ -1520,7 +1630,22 @@ def get_asset_maintenances(
     ctx: Annotated[TenantContext, Depends(require_permission("asset.maintenance:read"))],
     db: Annotated[Session, Depends(get_db)],
 ):
-    return APIResponse(message="OK", data=MaintenanceService(db).get(ctx, row_id))
+    return APIResponse(
+        message="OK",
+        data=_maintenance_response(db, ctx, MaintenanceService(db).get(ctx, row_id)),
+    )
+
+@asset_maintenances_router.get(
+    "/{row_id}/timeline",
+    response_model=APIResponse[MaintenanceTimelineResult],
+)
+def timeline_asset_maintenances(
+    row_id: UUID,
+    ctx: Annotated[TenantContext, Depends(require_permission("asset.maintenance:read"))],
+    db: Annotated[Session, Depends(get_db)],
+):
+    events = MaintenanceService(db).get_timeline(ctx, row_id)
+    return APIResponse(message="OK", data=MaintenanceTimelineResult(events=events))
 
 @asset_maintenances_router.post("", response_model=APIResponse[AssetMaintenanceResponse])
 def create_asset_maintenances(
@@ -1530,10 +1655,14 @@ def create_asset_maintenances(
 ):
     return APIResponse(
         message="Created",
-        data=MaintenanceService(db).create(
+        data=_maintenance_response(
+            db,
             ctx,
-            branch_id=body.branch_id,
-            **body.model_dump(exclude={"branch_id"}, exclude_none=True),
+            MaintenanceService(db).create(
+                ctx,
+                branch_id=body.branch_id,
+                **body.model_dump(exclude={"branch_id"}, exclude_none=True),
+            ),
         ),
     )
 
@@ -1546,7 +1675,11 @@ def update_asset_maintenances(
 ):
     return APIResponse(
         message="Updated",
-        data=MaintenanceService(db).update(ctx, row_id, **body.model_dump(exclude_unset=True)),
+        data=_maintenance_response(
+            db,
+            ctx,
+            MaintenanceService(db).update(ctx, row_id, **body.model_dump(exclude_unset=True)),
+        ),
     )
 
 @asset_maintenances_router.post("/{row_id}/submit", response_model=APIResponse[AssetMaintenanceResponse])
@@ -1555,7 +1688,10 @@ def submit_asset_maintenances(
     ctx: Annotated[TenantContext, Depends(require_permission("asset.maintenance:submit"))],
     db: Annotated[Session, Depends(get_db)],
 ):
-    return APIResponse(message="submit", data=MaintenanceService(db).submit(ctx, row_id))
+    return APIResponse(
+        message="submit",
+        data=_maintenance_response(db, ctx, MaintenanceService(db).submit(ctx, row_id)),
+    )
 
 @asset_maintenances_router.post("/{row_id}/approve", response_model=APIResponse[AssetMaintenanceResponse])
 def approve_asset_maintenances(
@@ -1565,7 +1701,12 @@ def approve_asset_maintenances(
     body: WorkflowActionRequest | None = None,
 ):
     comments = body.comments if body else None
-    return APIResponse(message="approve", data=MaintenanceService(db).approve(ctx, row_id, comments=comments))
+    return APIResponse(
+        message="approve",
+        data=_maintenance_response(
+            db, ctx, MaintenanceService(db).approve(ctx, row_id, comments=comments)
+        ),
+    )
 
 @asset_maintenances_router.post("/{row_id}/reject", response_model=APIResponse[AssetMaintenanceResponse])
 def reject_asset_maintenances(
@@ -1575,7 +1716,12 @@ def reject_asset_maintenances(
     body: WorkflowActionRequest | None = None,
 ):
     comments = body.comments if body else None
-    return APIResponse(message="reject", data=MaintenanceService(db).reject(ctx, row_id, comments=comments))
+    return APIResponse(
+        message="reject",
+        data=_maintenance_response(
+            db, ctx, MaintenanceService(db).reject(ctx, row_id, comments=comments)
+        ),
+    )
 
 @asset_maintenances_router.post("/{row_id}/cancel", response_model=APIResponse[AssetMaintenanceResponse])
 def cancel_asset_maintenances(
@@ -1583,7 +1729,10 @@ def cancel_asset_maintenances(
     ctx: Annotated[TenantContext, Depends(require_permission("asset.maintenance:create"))],
     db: Annotated[Session, Depends(get_db)],
 ):
-    return APIResponse(message="cancel", data=MaintenanceService(db).cancel_draft(ctx, row_id))
+    return APIResponse(
+        message="cancel",
+        data=_maintenance_response(db, ctx, MaintenanceService(db).cancel_draft(ctx, row_id)),
+    )
 
 @asset_maintenances_router.post("/{row_id}/reopen", response_model=APIResponse[AssetMaintenanceResponse])
 def reopen_asset_maintenances(
@@ -1591,7 +1740,10 @@ def reopen_asset_maintenances(
     ctx: Annotated[TenantContext, Depends(require_permission("asset.maintenance:create"))],
     db: Annotated[Session, Depends(get_db)],
 ):
-    return APIResponse(message="reopen", data=MaintenanceService(db).reopen(ctx, row_id))
+    return APIResponse(
+        message="reopen",
+        data=_maintenance_response(db, ctx, MaintenanceService(db).reopen(ctx, row_id)),
+    )
 
 @asset_maintenances_router.post("/{row_id}/resubmit", response_model=APIResponse[AssetMaintenanceResponse])
 def resubmit_asset_maintenances(
@@ -1599,7 +1751,10 @@ def resubmit_asset_maintenances(
     ctx: Annotated[TenantContext, Depends(require_permission("asset.maintenance:submit"))],
     db: Annotated[Session, Depends(get_db)],
 ):
-    return APIResponse(message="resubmit", data=MaintenanceService(db).resubmit(ctx, row_id))
+    return APIResponse(
+        message="resubmit",
+        data=_maintenance_response(db, ctx, MaintenanceService(db).resubmit(ctx, row_id)),
+    )
 
 @asset_maintenances_router.post("/{row_id}/schedule", response_model=APIResponse[AssetMaintenanceResponse])
 def schedule_asset_maintenances(
@@ -1611,7 +1766,11 @@ def schedule_asset_maintenances(
     scheduled_date = body.scheduled_date if body else None
     return APIResponse(
         message="schedule",
-        data=MaintenanceService(db).schedule(ctx, row_id, scheduled_date=scheduled_date),
+        data=_maintenance_response(
+            db,
+            ctx,
+            MaintenanceService(db).schedule(ctx, row_id, scheduled_date=scheduled_date),
+        ),
     )
 
 @asset_maintenances_router.post("/{row_id}/start", response_model=APIResponse[AssetMaintenanceResponse])
@@ -1620,7 +1779,10 @@ def start_asset_maintenances(
     ctx: Annotated[TenantContext, Depends(require_permission("asset.maintenance:complete"))],
     db: Annotated[Session, Depends(get_db)],
 ):
-    return APIResponse(message="start", data=MaintenanceService(db).start(ctx, row_id))
+    return APIResponse(
+        message="start",
+        data=_maintenance_response(db, ctx, MaintenanceService(db).start(ctx, row_id)),
+    )
 
 @asset_maintenances_router.post("/{row_id}/complete", response_model=APIResponse[AssetMaintenanceResponse])
 def complete_asset_maintenances(
@@ -1628,7 +1790,42 @@ def complete_asset_maintenances(
     ctx: Annotated[TenantContext, Depends(require_permission("asset.maintenance:complete"))],
     db: Annotated[Session, Depends(get_db)],
 ):
-    return APIResponse(message="complete", data=MaintenanceService(db).complete(ctx, row_id))
+    return APIResponse(
+        message="complete",
+        data=_maintenance_response(db, ctx, MaintenanceService(db).complete(ctx, row_id)),
+    )
+
+@asset_maintenances_router.post(
+    "/{row_id}/start-maintenance",
+    response_model=APIResponse[MaintenanceStartResult],
+)
+def start_maintenance_asset_maintenances(
+    row_id: UUID,
+    body: AssetMaintenanceStartRequest,
+    ctx: Annotated[TenantContext, Depends(require_permission("asset.maintenance:create"))],
+    db: Annotated[Session, Depends(get_db)],
+):
+    svc = MaintenanceService(db)
+    row, outcome, message = svc.start_maintenance(
+        ctx,
+        row_id,
+        reason=body.reason,
+        expected_duration_days=body.expected_duration_days,
+        maintenance_type=body.maintenance_type,
+        scheduled_date=body.scheduled_date,
+        vendor_id=body.vendor_id,
+        cost_amount=body.cost_amount,
+        technician_employee_id=body.technician_employee_id,
+        version=body.version,
+    )
+    return APIResponse(
+        message="OK",
+        data=MaintenanceStartResult(
+            status=outcome,
+            message=message,
+            maintenance=svc.to_response(ctx, row),
+        ),
+    )
 
 service_histories_router = APIRouter(prefix="/service-histories", tags=["Asset — ServiceHistory"])
 

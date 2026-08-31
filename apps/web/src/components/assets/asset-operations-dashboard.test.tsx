@@ -18,9 +18,9 @@ vi.mock("next/navigation", () => ({
   useRouter: () => ({ push, replace: vi.fn(), prefetch: vi.fn() }),
 }));
 
-const branches = [
-  { id: "b1", label: "Noida" },
-  { id: "b2", label: "Mumbai" },
+const locations = [
+  { id: "loc1", label: "New Delhi" },
+  { id: "loc2", label: "Mumbai" },
 ];
 
 const defaultKpis = {
@@ -30,23 +30,42 @@ const defaultKpis = {
   retired: 1,
   pendingDisposal: 1,
   disposed: 0,
+  inUseAsComponent: 0,
 };
 
+const sampleTransfers = [
+  {
+    id: "t1",
+    documentNumber: "TRF-2026-000001",
+    assetId: "a1",
+    assetCode: "AST-1",
+    assetName: "Laptop One",
+    fromLocation: "New Delhi · CRC2",
+    toLocation: "Mumbai · CRC-1",
+    fromBranchId: "b1",
+    toBranchId: "b2",
+    effectiveDate: "2026-08-30",
+    reason: "Relocation",
+    status: "submitted",
+    workflowStatus: "in_progress",
+  },
+];
+
 function renderDashboard(overrides: Partial<ComponentProps<typeof AssetOperationsDashboard>> = {}) {
-  const onBranchChange = vi.fn();
+  const onLocationChange = vi.fn();
   render(
     <AssetOperationsDashboard
-      branchId={BRANCH_ALL_VALUE}
-      branches={branches}
-      onBranchChange={onBranchChange}
+      locationId={BRANCH_ALL_VALUE}
+      locations={locations}
+      onLocationChange={onLocationChange}
       kpis={defaultKpis}
-      readyQueueRows={[{ id: "1", cells: ["AST-1", "Laptop", "Noida"] }]}
-      disposalQueueRows={[]}
-      assignmentRows={[]}
+      transferRows={sampleTransfers}
+      transferTotal={1}
+      branchLookup={{ b1: "Noida", b2: "Mumbai" }}
       {...overrides}
     />,
   );
-  return { onBranchChange };
+  return { onLocationChange };
 }
 
 beforeEach(() => {
@@ -66,31 +85,57 @@ describe("AssetOperationsDashboard layout", () => {
 
   it("renders page title and subtitle", () => {
     renderDashboard();
-    expect(screen.getByRole("heading", { level: 1, name: "Asset Operations" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 1, name: "IT Asset Operations" })).toBeInTheDocument();
     expect(
-      screen.getByText("Manage enterprise IT assets and daily operations"),
+      screen.getByText(
+        "Operational status, location mix, and transfer activity — click a KPI to open All Assets filtered.",
+      ),
     ).toBeInTheDocument();
   });
 
-  it("renders notification and profile placeholders", () => {
+  it("does not render placeholder notification or profile controls", () => {
     renderDashboard();
-    expect(screen.getByRole("button", { name: "Notifications (placeholder)" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Profile (placeholder)" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Notifications (placeholder)" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Profile (placeholder)" })).not.toBeInTheDocument();
   });
 
-  it("renders branch selector with All and branches", () => {
+  it("renders location selector with All and locations", () => {
     renderDashboard();
-    const group = screen.getByRole("group", { name: "Branch" });
+    const group = screen.getByRole("group", { name: "Location" });
     expect(within(group).getByRole("button", { name: "All" })).toBeInTheDocument();
-    expect(within(group).getByRole("button", { name: "Noida" })).toBeInTheDocument();
+    expect(within(group).getByRole("button", { name: "New Delhi" })).toBeInTheDocument();
   });
 
-  it("delegates branch change to parent", async () => {
+  it("opens All Assets with ready preset when Ready to Move KPI is clicked", async () => {
     const user = userEvent.setup();
-    const { onBranchChange } = renderDashboard();
-    const group = screen.getByRole("group", { name: "Branch" });
+    renderDashboard();
+    await user.click(screen.getByRole("button", { name: "Open Ready to Move assets" }));
+    expect(push).toHaveBeenCalledWith("/assets/assets");
+    expect(peekInventoryUiSnapshot()?.preset).toBe("ready");
+  });
+
+  it("opens All Assets with assigned preset when Assigned KPI is clicked", async () => {
+    const user = userEvent.setup();
+    renderDashboard();
+    await user.click(screen.getByRole("button", { name: "Open Assigned assets" }));
+    expect(push).toHaveBeenCalledWith("/assets/assets");
+    expect(peekInventoryUiSnapshot()?.preset).toBe("assigned");
+  });
+
+  it("opens all-assets preset from Total Assets KPI", async () => {
+    const user = userEvent.setup();
+    renderDashboard();
+    await user.click(screen.getByRole("button", { name: "Open All Assets" }));
+    expect(push).toHaveBeenCalledWith("/assets/assets");
+    expect(peekInventoryUiSnapshot()?.preset).toBe("all");
+  });
+
+  it("delegates location change to parent", async () => {
+    const user = userEvent.setup();
+    const { onLocationChange } = renderDashboard();
+    const group = screen.getByRole("group", { name: "Location" });
     await user.click(within(group).getByRole("button", { name: "Mumbai" }));
-    expect(onBranchChange).toHaveBeenCalledWith("b2");
+    expect(onLocationChange).toHaveBeenCalledWith("loc2");
   });
 
   it("shows KPI loading skeletons when loading", () => {
@@ -101,7 +146,7 @@ describe("AssetOperationsDashboard layout", () => {
   it("renders KPI values from props", () => {
     renderDashboard();
     expect(screen.getByTestId("asset-ops-kpi-ops-note")).toHaveTextContent(
-      "Counts by Operational Status",
+      "Click any card to open All Assets with that status filter applied",
     );
     const kpiGrid = screen.getByTestId("asset-ops-kpi-grid");
     expect(within(kpiGrid).getByText("12")).toBeInTheDocument();
@@ -132,31 +177,45 @@ describe("AssetOperationsDashboard layout", () => {
     expect(screen.getByText("67% of total")).toBeInTheDocument();
   });
 
-  it("renders branch breakdown when provided", () => {
+  it("renders location breakdown when provided", () => {
     renderDashboard({
-      byBranchRows: [
+      byLocationRows: [
         {
-          branchId: "b1",
-          label: "Noida",
+          locationId: "loc1",
+          label: "New Delhi",
           totalAssets: 10,
           readyToMove: 2,
           assigned: 6,
           retired: 1,
           pendingDisposal: 1,
           disposed: 0,
+          inUseAsComponent: 0,
         },
       ],
     });
-    expect(screen.getByTestId("asset-ops-branch-breakdown")).toBeInTheDocument();
-    expect(screen.getByText("By branch")).toBeInTheDocument();
+    expect(screen.getByTestId("asset-ops-location-breakdown")).toBeInTheDocument();
+    expect(screen.getByText("By Location")).toBeInTheDocument();
   });
 
-  it("shows queue count badges", () => {
-    renderDashboard({
-      queueTotals: { ready: 12, disposal: 3, assignments: 8 },
-    });
-    expect(screen.getAllByTestId("queue-card-count")).toHaveLength(3);
-    expect(screen.getByLabelText("12 total")).toBeInTheDocument();
+  it("renders transfer list table with full columns", () => {
+    renderDashboard();
+    expect(screen.getByTestId("asset-ops-transfers")).toBeInTheDocument();
+    expect(screen.getByText("Transfer list")).toBeInTheDocument();
+    expect(screen.getByText("TRF-2026-000001")).toBeInTheDocument();
+    expect(screen.getByText("Laptop One")).toBeInTheDocument();
+    expect(screen.getByText("AST-1")).toBeInTheDocument();
+    expect(screen.getByText("New Delhi · CRC2")).toBeInTheDocument();
+    expect(screen.getByText("Mumbai · CRC-1")).toBeInTheDocument();
+    expect(screen.getByText("Relocation")).toBeInTheDocument();
+    expect(screen.queryByText("Ready to Move Queue")).not.toBeInTheDocument();
+    expect(screen.queryByText("Pending Disposal Queue")).not.toBeInTheDocument();
+  });
+
+  it("navigates to transfers workspace from view all", async () => {
+    const user = userEvent.setup();
+    renderDashboard();
+    await user.click(screen.getByRole("button", { name: "View all transfers" }));
+    expect(push).toHaveBeenCalledWith("/assets/asset-transfers");
   });
 
   it("renders six quick action cards", () => {
@@ -180,42 +239,6 @@ describe("AssetOperationsDashboard layout", () => {
     expect(push).toHaveBeenCalledWith("/assets/qr-barcode");
   });
 
-  it("opens inventory presets from view-all actions", async () => {
-    const user = userEvent.setup();
-    renderDashboard({ branchId: "b1" });
-    await user.click(screen.getByRole("button", { name: "View all ready" }));
-    expect(push).toHaveBeenCalledWith("/assets/assets");
-    expect(peekInventoryUiSnapshot()?.preset).toBe("ready");
-    expect(peekInventoryUiSnapshot()?.headerBranchId).toBe("b1");
-
-    await user.click(screen.getByRole("button", { name: "View all pending disposal" }));
-    expect(peekInventoryUiSnapshot()?.preset).toBe("pending_disposal");
-
-    await user.click(screen.getByRole("button", { name: "View all assignments" }));
-    expect(push).toHaveBeenCalledWith("/assets/asset-assignments");
-  });
-
-  it("renders operations queues", () => {
-    renderDashboard();
-    expect(screen.getByText("Ready to Move Queue")).toBeInTheDocument();
-    expect(screen.getByText("Pending Disposal Queue")).toBeInTheDocument();
-    expect(screen.getByText("Recent Assignments")).toBeInTheDocument();
-    expect(screen.getByText("AST-1")).toBeInTheDocument();
-  });
-
-  it("uses 2+1 operations layout (queues row + full-width assignments)", () => {
-    renderDashboard();
-    const queues = screen.getByTestId("asset-ops-operations-grid");
-    expect(queues.className).toMatch(/lg:grid-cols-2/);
-    expect(queues.className).not.toMatch(/lg:grid-cols-3/);
-    expect(within(queues).getByText("Ready to Move Queue")).toBeInTheDocument();
-    expect(within(queues).getByText("Pending Disposal Queue")).toBeInTheDocument();
-    expect(within(queues).queryByText("Recent Assignments")).not.toBeInTheDocument();
-    expect(
-      within(screen.getByTestId("asset-ops-assignments-row")).getByText("Recent Assignments"),
-    ).toBeInTheDocument();
-  });
-
   it("does not cap dashboard with an inner max-width", () => {
     renderDashboard();
     const root = screen.getByTestId("asset-operations-dashboard");
@@ -231,12 +254,11 @@ describe("AssetOperationsDashboard layout", () => {
     expect(onRetry).toHaveBeenCalledOnce();
   });
 
-  it("shows custom empty queue messaging", () => {
+  it("shows transfer error messaging", () => {
     renderDashboard({
-      readyQueueRows: [],
-      queueErrors: { ready: "Queue API failed" },
+      transferRows: [],
+      transferError: "Transfer API failed",
     });
-    expect(screen.getByText("Could not load queue")).toBeInTheDocument();
-    expect(screen.getByText("Queue API failed")).toBeInTheDocument();
+    expect(screen.getByText("Transfer API failed")).toBeInTheDocument();
   });
 });

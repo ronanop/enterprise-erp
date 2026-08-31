@@ -43,6 +43,7 @@ class AssetCategoryRepository(AstScopedRepository):
         *,
         status: str | None = None,
         search: str | None = None,
+        asset_domain: str | None = "IT",
     ):
         stmt = select(AstAssetCategory).where(
             AstAssetCategory.company_id == company_id,
@@ -50,6 +51,14 @@ class AssetCategoryRepository(AstScopedRepository):
         )
         if status:
             stmt = stmt.where(AstAssetCategory.status == status)
+        if asset_domain is not None:
+            # Domain-scoped OR shared (null) categories
+            stmt = stmt.where(
+                or_(
+                    AstAssetCategory.asset_domain == asset_domain,
+                    AstAssetCategory.asset_domain.is_(None),
+                )
+            )
         if search and search.strip():
             term = f"%{search.strip()}%"
             stmt = stmt.where(
@@ -92,6 +101,7 @@ class AssetCategoryRepository(AstScopedRepository):
                 "gl_accum_depr_account_id",
                 "gl_expense_account_id",
                 "branch_id",
+                "asset_domain",
             }:
                 setattr(row, k, v)
         row.updated_at = utcnow()

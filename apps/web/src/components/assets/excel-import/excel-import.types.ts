@@ -79,10 +79,10 @@ export const EXCEL_IMPORT_TARGET_FIELDS = [
     aliases: ["department", "dept", "department name"],
   },
   {
-    key: "category",
-    label: "Asset Category",
-    required: false,
-    aliases: ["category", "asset category", "category name", "asset_category"],
+    key: "assetType",
+    label: "Type",
+    required: true,
+    aliases: ["type", "asset type", "asset_type", "type name"],
   },
   {
     key: "issueDate",
@@ -172,6 +172,7 @@ export const VALID_OPERATIONAL_STATUSES = [
   "ASSIGNED",
   "RETIRED",
   "PENDING_DISPOSAL",
+  "IN_USE_AS_COMPONENT",
 ] as const;
 
 /** Human labels / Excel tab names → enum. */
@@ -185,6 +186,8 @@ export const OPERATIONAL_STATUS_ALIASES: Record<string, (typeof VALID_OPERATIONA
   pending_disposal: "PENDING_DISPOSAL",
   "pending disposal": "PENDING_DISPOSAL",
   "not working": "PENDING_DISPOSAL",
+  in_use_as_component: "IN_USE_AS_COMPONENT",
+  "in use as component": "IN_USE_AS_COMPONENT",
 };
 
 export const VALID_DELIVERY_STATUSES = [
@@ -228,7 +231,7 @@ export type ExcelImportIssueCode =
   | "invalid_operational_status"
   | "invalid_branch"
   | "invalid_department"
-  | "invalid_category"
+  | "invalid_type"
   | "invalid_employee"
   | "invalid_date"
   | "invalid_delivery_status"
@@ -272,7 +275,7 @@ export type ExcelImportMasterLookups = {
   /** Normalized label/code → id */
   branchesByLabel: Map<string, string>;
   departmentsByLabel: Map<string, string>;
-  categoriesByLabel: Map<string, string>;
+  typesByLabel: Map<string, string>;
   /** employee id, code, or display fragment → id */
   employeesByKey: Map<string, string>;
 };

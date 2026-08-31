@@ -1,34 +1,96 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
-import { useMemo, useState } from "react";
+import { usePathname, useSearchParams } from "next/navigation";
+import { useEffect, useMemo, useState } from "react";
 import { ChevronLeft, ChevronRight, Package, Search } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { assetManagementNav, isAssetNavActive } from "@/config/assets";
+import {
+  activeAssetDomainFromPath,
+  buildAssetSidebarNav,
+  isAssetNavActive,
+  type AssetDomainKey,
+} from "@/config/assets";
 import { cn } from "@/lib/utils";
+import { fetchMyDomainAccess } from "@/services/asset-domain-membership-service";
 
 /**
- * Docked Asset Management sidebar for standalone module tabs.
- * Replaces AppSidebar — in-flow, opaque, collapse via toggle (never overlays content).
+ * Docked Asset Management sidebar.
+ * Top: IT / Non-IT domain switcher. Active domain expands workspace + nested Users.
  */
 export function AssetsModuleSidebar() {
   const pathname = usePathname();
+  const searchParams = useSearchParams();
   const [collapsed, setCollapsed] = useState(false);
   const [query, setQuery] = useState("");
+  const [isModuleAdmin, setIsModuleAdmin] = useState(false);
+  const [domains, setDomains] = useState<string[]>([]);
+  const [adminDomains, setAdminDomains] = useState<string[]>([]);
+  const [accessLoaded, setAccessLoaded] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const me = await fetchMyDomainAccess();
+        if (!cancelled) {
+          setIsModuleAdmin(me.is_module_admin);
+          setDomains(me.domains ?? []);
+          setAdminDomains(me.admin_domains ?? []);
+        }
+      } catch {
+        if (!cancelled) {
+          setIsModuleAdmin(false);
+          setDomains([]);
+          setAdminDomains([]);
+        }
+      } finally {
+        if (!cancelled) setAccessLoaded(true);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const activeDomain: AssetDomainKey | null = useMemo(() => {
+    if (pathname.startsWith("/assets/users")) {
+      const q = (searchParams.get("domain") || "").toUpperCase();
+      if (q === "IT" || q === "NON_IT") return q;
+      return "IT";
+    }
+    return activeAssetDomainFromPath(pathname);
+  }, [pathname, searchParams]);
+
+  const gatedNav = useMemo(() => {
+    if (!accessLoaded) {
+      return buildAssetSidebarNav({
+        isModuleAdmin: false,
+        domains: ["IT"],
+        adminDomains: [],
+        activeDomain: activeDomain ?? "IT",
+      });
+    }
+    return buildAssetSidebarNav({
+      isModuleAdmin,
+      domains,
+      adminDomains,
+      activeDomain,
+    });
+  }, [accessLoaded, isModuleAdmin, domains, adminDomains, activeDomain]);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (!q) return assetManagementNav;
-    return assetManagementNav
+    if (!q) return gatedNav;
+    return gatedNav
       .map((group) => ({
         ...group,
         items: group.items.filter((item) => item.title.toLowerCase().includes(q)),
       }))
       .filter((group) => group.items.length > 0);
-  }, [query]);
+  }, [query, gatedNav]);
 
   return (
     <aside
@@ -50,7 +112,7 @@ export function AssetsModuleSidebar() {
             <p className="truncate text-sm font-medium tracking-tight text-sidebar-foreground">
               Asset Management
             </p>
-            <p className="truncate text-[11px] text-sidebar-foreground/55">Inventory · operations</p>
+            <p className="truncate text-[11px] text-sidebar-foreground/55">IT · Non-IT</p>
           </div>
         ) : null}
       </div>
@@ -87,10 +149,20 @@ export function AssetsModuleSidebar() {
             ) : null}
             <ul className="space-y-0.5">
               {group.items.map((item) => {
-                const active = isAssetNavActive(pathname, item.href, item.match ?? "prefix");
+                let active = isAssetNavActive(pathname, item.href, item.match ?? "prefix");
+                if (item.href === "/assets" && item.title === "IT Assets") {
+                  active = activeDomain === "IT";
+                } else if (item.href === "/assets/non-it" && item.title === "Non-IT Assets") {
+                  active = activeDomain === "NON_IT";
+                } else if (item.href.startsWith("/assets/users")) {
+                  active =
+                    pathname.startsWith("/assets/users") &&
+                    (searchParams.get("domain") || "IT").toUpperCase() ===
+                      (item.href.includes("NON_IT") ? "NON_IT" : "IT");
+                }
                 const Icon = item.icon;
                 return (
-                  <li key={item.href}>
+                  <li key={`${item.href}-${item.title}`}>
                     <Link
                       href={item.href}
                       title={collapsed ? item.title : undefined}

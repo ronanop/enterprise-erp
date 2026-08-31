@@ -10,7 +10,9 @@ export type WizardFooterProps = {
   isLast: boolean;
   loading?: boolean;
   nextDisabled?: boolean;
+  finishDisabled?: boolean;
   finishLabel?: string;
+  finishClassName?: string;
   showSaveDraft?: boolean;
   onBack: () => void;
   onNext: () => void;
@@ -25,7 +27,9 @@ export function WizardFooter({
   isLast,
   loading,
   nextDisabled,
+  finishDisabled,
   finishLabel = "Finish",
+  finishClassName,
   showSaveDraft = true,
   onBack,
   onNext,
@@ -37,7 +41,7 @@ export function WizardFooter({
   return (
     <footer
       className={cn(
-        "sticky bottom-0 z-10 -mx-1 flex flex-wrap items-center justify-between gap-2 border-t border-border/80 bg-card/95 px-1 pt-4 backdrop-blur-sm",
+        "sticky bottom-0 z-10 -mx-1 flex flex-wrap items-center justify-between gap-2 border-t border-border/60 bg-background/95 px-1 pt-4 backdrop-blur-sm",
         className,
       )}
     >
@@ -65,7 +69,7 @@ export function WizardFooter({
             Back
           </Button>
         ) : null}
-        {showSaveDraft && onSaveDraft && !isLast ? (
+        {showSaveDraft && onSaveDraft ? (
           <Button
             type="button"
             variant="secondary"
@@ -82,9 +86,9 @@ export function WizardFooter({
           <Button
             type="button"
             size="sm"
-            className="cursor-pointer transition-colors duration-200"
+            className={cn("cursor-pointer transition-colors duration-200", finishClassName)}
             onClick={onFinish}
-            disabled={loading || nextDisabled}
+            disabled={loading || finishDisabled || nextDisabled}
           >
             {loading ? <Loader2 className="mr-1 size-4 animate-spin" aria-hidden /> : null}
             {finishLabel}
@@ -93,7 +97,7 @@ export function WizardFooter({
           <Button
             type="button"
             size="sm"
-            className="cursor-pointer transition-colors duration-200"
+            className={cn("cursor-pointer transition-colors duration-200", finishClassName)}
             onClick={onNext}
             disabled={loading || nextDisabled}
           >

@@ -26,7 +26,10 @@ class AssetListFilters:
     asset_category_id: UUID | None = None
     search: str | None = None
     # Phase 5F — server-authoritative inventory filters
-    asset_type: str | None = None
+    asset_type: str | None = None  # legacy enum filter (kept for API compat)
+    asset_type_id: UUID | None = None  # IT type master filter
+    # IT / Non-IT partition — callers default to IT when omitted
+    asset_domain: str | None = "IT"
     department_id: UUID | None = None
     location_id: UUID | None = None
     employee_id: UUID | None = None
@@ -43,6 +46,7 @@ class OperationalStatusCounts:
     retired: int
     pending_disposal: int
     disposed: int
+    in_use_as_component: int
 
 
 @dataclass(frozen=True)
@@ -54,6 +58,20 @@ class BranchOperationalSummary:
     retired: int
     pending_disposal: int
     disposed: int
+    in_use_as_component: int
+
+
+@dataclass(frozen=True)
+class LocationOperationalSummary:
+    location_id: UUID
+    label: str
+    total_assets: int
+    ready_to_move: int
+    assigned: int
+    retired: int
+    pending_disposal: int
+    disposed: int
+    in_use_as_component: int
 
 
 _OPS_STATUS_TO_COUNT_ATTR: dict[str, str] = {
@@ -62,6 +80,7 @@ _OPS_STATUS_TO_COUNT_ATTR: dict[str, str] = {
     AssetOperationalStatus.RETIRED.value: "retired",
     AssetOperationalStatus.PENDING_DISPOSAL.value: "pending_disposal",
     AssetOperationalStatus.DISPOSED.value: "disposed",
+    AssetOperationalStatus.IN_USE_AS_COMPONENT.value: "in_use_as_component",
 }
 
 
@@ -73,6 +92,16 @@ class AssetRepository(AstScopedRepository):
         stmt = select(AstAsset).where(AstAsset.id == row_id, AstAsset.is_deleted.is_(False))
         stmt = self.apply_ast_filter(stmt, AstAsset, ctx, branch_scoped=True)
         return self.db.scalar(stmt)
+
+    def get_by_ids(self, ctx: TenantContext, row_ids: list[UUID]) -> list[AstAsset]:
+        if not row_ids:
+            return []
+        stmt = select(AstAsset).where(
+            AstAsset.id.in_(row_ids),
+            AstAsset.is_deleted.is_(False),
+        )
+        stmt = self.apply_ast_filter(stmt, AstAsset, ctx, branch_scoped=False)
+        return list(self.db.scalars(stmt).all())
 
     def get_operational_status(self, ctx: TenantContext, row_id: UUID) -> str | None:
         """Read operational_status only."""
@@ -186,8 +215,12 @@ class AssetRepository(AstScopedRepository):
             stmt = stmt.where(AstAsset.operational_status == filters.operational_status)
         if filters.asset_category_id is not None:
             stmt = stmt.where(AstAsset.asset_category_id == filters.asset_category_id)
+        if filters.asset_type_id is not None:
+            stmt = stmt.where(AstAsset.asset_type_id == filters.asset_type_id)
         if filters.asset_type is not None:
             stmt = stmt.where(AstAsset.asset_type == filters.asset_type)
+        if filters.asset_domain is not None:
+            stmt = stmt.where(AstAsset.asset_domain == filters.asset_domain)
         if filters.make:
             stmt = stmt.where(AstAsset.make.ilike(f"%{filters.make.strip()}%"))
         if filters.model:
@@ -216,8 +249,8 @@ class AssetRepository(AstScopedRepository):
             )
 
         if filters.location_id is not None:
-            # Branch != location. Match current AstAssetLocation.org_location_id only.
-            stmt = stmt.where(self._exists_current_location(filters.location_id))
+            # IT site location (Configuration → Locations), not org branch or org_location_id.
+            stmt = stmt.where(self._exists_current_site_location(filters.location_id))
 
         search = (filters.search or "").strip()
         if search:
@@ -299,6 +332,19 @@ class AssetRepository(AstScopedRepository):
         )
 
     @staticmethod
+    def _exists_current_site_location(site_location_id: UUID):
+        return exists(
+            select(1)
+            .select_from(AstAssetLocation)
+            .where(
+                AstAssetLocation.asset_id == AstAsset.id,
+                AstAssetLocation.is_deleted.is_(False),
+                AstAssetLocation.is_current.is_(True),
+                AstAssetLocation.location_id == site_location_id,
+            )
+        )
+
+    @staticmethod
     def _exists_active_assignment_employee_search(company_id: UUID, term: str):
         full_name = func.concat(
             MasterEmployee.first_name, " ", MasterEmployee.last_name
@@ -369,13 +415,19 @@ class AssetRepository(AstScopedRepository):
         *,
         company_id: UUID,
         branch_id: UUID | None = None,
+        location_id: UUID | None = None,
+        asset_domain: str | None = "IT",
     ) -> OperationalStatusCounts:
         inner = select(AstAsset.operational_status, func.count().label("cnt")).where(
             AstAsset.company_id == company_id,
             AstAsset.is_deleted.is_(False),
         )
+        if asset_domain is not None:
+            inner = inner.where(AstAsset.asset_domain == asset_domain)
         if branch_id is not None:
             inner = inner.where(AstAsset.branch_id == branch_id)
+        if location_id is not None:
+            inner = inner.where(self._exists_current_site_location(location_id))
         inner = self.apply_ast_filter(inner, AstAsset, ctx, branch_scoped=True)
         inner = inner.group_by(AstAsset.operational_status)
         rows = self.db.execute(inner).all()
@@ -390,8 +442,12 @@ class AssetRepository(AstScopedRepository):
             AstAsset.company_id == company_id,
             AstAsset.is_deleted.is_(False),
         )
+        if asset_domain is not None:
+            total_stmt = total_stmt.where(AstAsset.asset_domain == asset_domain)
         if branch_id is not None:
             total_stmt = total_stmt.where(AstAsset.branch_id == branch_id)
+        if location_id is not None:
+            total_stmt = total_stmt.where(self._exists_current_site_location(location_id))
         total_stmt = self.apply_ast_filter(total_stmt, AstAsset, ctx, branch_scoped=True)
         total = int(self.db.scalar(total_stmt) or 0)
 
@@ -402,6 +458,7 @@ class AssetRepository(AstScopedRepository):
             retired=buckets["retired"],
             pending_disposal=buckets["pending_disposal"],
             disposed=buckets["disposed"],
+            in_use_as_component=buckets["in_use_as_component"],
         )
 
     def summary_by_branch(
@@ -409,6 +466,7 @@ class AssetRepository(AstScopedRepository):
         ctx: TenantContext,
         *,
         company_id: UUID,
+        asset_domain: str | None = "IT",
     ) -> list[BranchOperationalSummary]:
         inner = select(
             AstAsset.branch_id,
@@ -418,6 +476,8 @@ class AssetRepository(AstScopedRepository):
             AstAsset.company_id == company_id,
             AstAsset.is_deleted.is_(False),
         )
+        if asset_domain is not None:
+            inner = inner.where(AstAsset.asset_domain == asset_domain)
         inner = self.apply_ast_filter(inner, AstAsset, ctx, branch_scoped=True)
         inner = inner.group_by(AstAsset.branch_id, AstAsset.operational_status)
         rows = self.db.execute(inner).all()
@@ -438,6 +498,8 @@ class AssetRepository(AstScopedRepository):
             AstAsset.company_id == company_id,
             AstAsset.is_deleted.is_(False),
         )
+        if asset_domain is not None:
+            totals_stmt = totals_stmt.where(AstAsset.asset_domain == asset_domain)
         totals_stmt = self.apply_ast_filter(totals_stmt, AstAsset, ctx, branch_scoped=True)
         totals_stmt = totals_stmt.group_by(AstAsset.branch_id)
         total_rows = self.db.execute(totals_stmt).all()
@@ -454,6 +516,96 @@ class AssetRepository(AstScopedRepository):
                     retired=buckets["retired"],
                     pending_disposal=buckets["pending_disposal"],
                     disposed=buckets["disposed"],
+                    in_use_as_component=buckets["in_use_as_component"],
+                )
+            )
+        return summaries
+
+    def summary_by_location(
+        self,
+        ctx: TenantContext,
+        *,
+        company_id: UUID,
+        asset_domain: str | None = "IT",
+    ) -> list[LocationOperationalSummary]:
+        from modules.asset.models.site_location import AstLocation
+
+        inner = (
+            select(
+                AstAssetLocation.location_id,
+                AstLocation.name,
+                AstAsset.operational_status,
+                func.count().label("cnt"),
+            )
+            .join(AstAsset, AstAsset.id == AstAssetLocation.asset_id)
+            .outerjoin(AstLocation, AstLocation.id == AstAssetLocation.location_id)
+            .where(
+                AstAsset.company_id == company_id,
+                AstAsset.is_deleted.is_(False),
+                AstAssetLocation.is_deleted.is_(False),
+                AstAssetLocation.is_current.is_(True),
+                AstAssetLocation.location_id.is_not(None),
+            )
+        )
+        if asset_domain is not None:
+            inner = inner.where(AstAsset.asset_domain == asset_domain)
+        inner = self.apply_ast_filter(inner, AstAsset, ctx, branch_scoped=True)
+        inner = inner.group_by(
+            AstAssetLocation.location_id,
+            AstLocation.name,
+            AstAsset.operational_status,
+        )
+        rows = self.db.execute(inner).all()
+
+        by_loc: dict[UUID, dict] = {}
+        for loc_id, loc_name, status_value, cnt in rows:
+            if loc_id is None:
+                continue
+            bucket = by_loc.setdefault(
+                loc_id,
+                {
+                    "label": loc_name or str(loc_id),
+                    **{attr: 0 for attr in _OPS_STATUS_TO_COUNT_ATTR.values()},
+                },
+            )
+            if loc_name:
+                bucket["label"] = loc_name
+            attr = _OPS_STATUS_TO_COUNT_ATTR.get(status_value)
+            if attr is not None:
+                bucket[attr] = int(cnt or 0)
+
+        totals_stmt = (
+            select(AstAssetLocation.location_id, func.count().label("cnt"))
+            .join(AstAsset, AstAsset.id == AstAssetLocation.asset_id)
+            .where(
+                AstAsset.company_id == company_id,
+                AstAsset.is_deleted.is_(False),
+                AstAssetLocation.is_deleted.is_(False),
+                AstAssetLocation.is_current.is_(True),
+                AstAssetLocation.location_id.is_not(None),
+            )
+        )
+        if asset_domain is not None:
+            totals_stmt = totals_stmt.where(AstAsset.asset_domain == asset_domain)
+        totals_stmt = self.apply_ast_filter(totals_stmt, AstAsset, ctx, branch_scoped=True)
+        totals_stmt = totals_stmt.group_by(AstAssetLocation.location_id)
+        totals_map = {
+            lid: int(cnt or 0) for lid, cnt in self.db.execute(totals_stmt).all() if lid is not None
+        }
+
+        summaries: list[LocationOperationalSummary] = []
+        for loc_id, buckets in sorted(by_loc.items(), key=lambda x: str(x[1]["label"])):
+            summaries.append(
+                LocationOperationalSummary(
+                    location_id=loc_id,
+                    label=str(buckets["label"]),
+                    total_assets=totals_map.get(loc_id, 0),
+                    ready_to_move=buckets["ready_to_move"],
+                    assigned=buckets["assigned"],
+                    retired=buckets["retired"],
+                    pending_disposal=buckets["pending_disposal"],
+                    disposed=buckets["disposed"],
+                    in_use_as_component=buckets["in_use_as_component"],
                 )
             )
         return summaries

@@ -81,6 +81,8 @@ class LocationService:
             asset_id=fields["asset_id"],
             location_label=fields["location_label"].strip(),
             org_location_id=fields.get("org_location_id"),
+            location_id=fields.get("location_id"),
+            building_id=fields.get("building_id"),
             effective_from=effective_from,
             is_current=True,
             status=AssetLocationStatus.ACTIVE.value,

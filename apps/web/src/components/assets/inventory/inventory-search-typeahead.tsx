@@ -24,6 +24,8 @@ export type InventorySearchTypeaheadProps = {
   onSubmit: () => void;
   onSelectSuggestion: (suggestion: InventorySearchSuggestion) => void;
   branchId?: string;
+  /** IT site location id — scopes search to assets at that location. */
+  locationId?: string;
   className?: string;
   /** When set, run one GET /assets per status and merge (API accepts a single status). */
   operationalStatuses?: readonly string[];
@@ -53,6 +55,7 @@ function rowToSuggestion(row: AssetsRow): InventorySearchSuggestion | null {
 async function searchSuggestions(input: {
   q: string;
   branchId?: string;
+  locationId?: string;
   operationalStatuses?: readonly string[];
 }): Promise<InventorySearchSuggestion[]> {
   const base = {
@@ -60,6 +63,7 @@ async function searchSuggestions(input: {
     page: 1,
     page_size: 8,
     ...(input.branchId ? { branch_id: input.branchId } : {}),
+    ...(input.locationId ? { location_id: input.locationId } : {}),
   };
   const statuses = input.operationalStatuses ?? [];
   const pages =
@@ -89,6 +93,7 @@ export function InventorySearchTypeahead({
   onSubmit,
   onSelectSuggestion,
   branchId,
+  locationId,
   className,
   operationalStatuses,
   emptyMessage = "No matching assets",
@@ -120,7 +125,7 @@ export function InventorySearchTypeahead({
       const requestId = ++requestRef.current;
       setLoading(true);
       setOpen(true);
-      void searchSuggestions({ q, branchId, operationalStatuses: statuses })
+      void searchSuggestions({ q, branchId, locationId, operationalStatuses: statuses })
         .then((next) => {
           if (requestId !== requestRef.current) return;
           setItems(next);
@@ -137,7 +142,7 @@ export function InventorySearchTypeahead({
     }, DEBOUNCE_MS);
 
     return () => window.clearTimeout(handle);
-  }, [value, branchId, active, statusKey]);
+  }, [value, branchId, locationId, active, statusKey]);
 
   useEffect(() => {
     function onPointerDown(e: MouseEvent) {

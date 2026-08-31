@@ -57,6 +57,7 @@ def _row(**overrides) -> ExcelImportRowInput:
         employee_id=None,
         department_id=None,
         asset_category_id=None,
+        asset_type_id=uuid4(),
         serial_number=None,
     )
     base.update(overrides)
@@ -158,12 +159,19 @@ def test_duplicate_serial_skips() -> None:
     assets.create_for_import.assert_not_called()
 
 
-def test_empty_asset_tag_fails() -> None:
-    engine, _, _, _ = _engine()
+def test_empty_asset_tag_imports_with_auto_code() -> None:
+    engine, assets, _, _ = _engine()
+    asset_id = uuid4()
+    assets.find_by_serial_number.return_value = None
+    assets.create_for_import.return_value = SimpleNamespace(id=asset_id)
+    assets.submit.return_value = SimpleNamespace(id=asset_id)
+    assets.approve.return_value = SimpleNamespace(id=asset_id, version=2)
     result = engine.import_row(
         _ctx(), _row(asset_tag="  "), defaults=_defaults(), confirm_warnings=False
     )
-    assert result.outcome == ExcelImportRowOutcome.FAILED.value
+    assert result.outcome == ExcelImportRowOutcome.IMPORTED.value
+    assets.create_for_import.assert_called_once()
+    assert assets.create_for_import.call_args.kwargs["asset_code"] is None
 
 
 def test_invalid_operational_status_fails() -> None:

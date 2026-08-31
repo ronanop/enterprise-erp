@@ -23,6 +23,7 @@ from modules.asset.domain.enums import (
 from modules.asset.domain.exceptions import AssignmentValidationError
 from modules.asset.models import AstAssetAssignment
 from modules.asset.repository.asset_assignment_repository import AssetAssignmentRepository
+from modules.asset.repository.asset_maintenance_repository import AssetMaintenanceRepository
 from modules.asset.repository.asset_repository import AssetRepository
 from modules.asset.repository.asset_transfer_repository import AssetTransferRepository
 from modules.foundation.domain.value_objects import TenantContext
@@ -50,6 +51,9 @@ _OPS_NOT_ASSIGNABLE_MESSAGES: dict[str, str] = {
         "Asset is pending disposal and cannot be assigned."
     ),
     AssetOperationalStatus.DISPOSED.value: "Disposed assets cannot be assigned.",
+    AssetOperationalStatus.IN_USE_AS_COMPONENT.value: (
+        "Asset is in use as a component and cannot be assigned."
+    ),
 }
 
 
@@ -78,6 +82,7 @@ class AssignmentValidator:
         self._assets = AssetRepository(db)
         self._assignments = AssetAssignmentRepository(db)
         self._transfers = AssetTransferRepository(db)
+        self._maintenances = AssetMaintenanceRepository(db)
         self._org = AssetOrganizationAdapter(db)
         self._master = AssetMasterDataAdapter(db)
 
@@ -101,6 +106,7 @@ class AssignmentValidator:
         self._validate_allocation_fields(ctx, company_id=company_id, fields=fields)
         self._validate_exclusive_assignment(ctx, asset, exclude_id=None)
         self._validate_pending_transfer(ctx, asset_id)
+        self._validate_no_open_maintenance(ctx, asset_id)
         return self.validate_enrichment_fields(fields, context="create")
 
     def validate_enrichment_fields(
@@ -235,6 +241,7 @@ class AssignmentValidator:
         self._validate_allocation_fields(ctx, company_id=row.company_id, fields=fields)
         self._validate_exclusive_assignment(ctx, asset, exclude_id=row.id)
         self._validate_pending_transfer(ctx, row.asset_id)
+        self._validate_no_open_maintenance(ctx, row.asset_id, exclude_id=row.id)
         self.validate_enrichment_on_row(row, require_employee_issue=True)
 
     def validate_return_readiness(self, ctx: TenantContext, row: AstAssetAssignment) -> None:
@@ -270,6 +277,7 @@ class AssignmentValidator:
         self._validate_allocation_fields(ctx, company_id=row.company_id, fields=fields)
         self._validate_exclusive_assignment(ctx, asset, exclude_id=row.id)
         self._validate_pending_transfer(ctx, row.asset_id)
+        self._validate_no_open_maintenance(ctx, row.asset_id, exclude_id=row.id)
         self.validate_enrichment_on_row(row, require_employee_issue=True)
 
     def allocation_identity_payload(self, fields: dict) -> dict:
@@ -408,10 +416,23 @@ class AssignmentValidator:
                 f"Asset has a pending transfer ({pending.document_number})"
             )
 
+    def _validate_no_open_maintenance(
+        self,
+        ctx: TenantContext,
+        asset_id: UUID,
+        *,
+        exclude_id: UUID | None = None,
+    ) -> None:
+        open_wo = self._maintenances.find_open_for_asset(ctx, asset_id, exclude_id=exclude_id)
+        if open_wo is not None:
+            raise AssignmentValidationError(
+                f"Asset has an open maintenance work order ({open_wo.document_number})"
+            )
+
     @staticmethod
     def _validate_asset_is_assignable(status: str) -> None:
-        if status not in {AssetStatus.ACTIVE.value, AssetStatus.IN_MAINTENANCE.value}:
-            raise AssignmentValidationError("Only active or in_maintenance assets can be assigned")
+        if status != AssetStatus.ACTIVE.value:
+            raise AssignmentValidationError("Only active assets can be assigned")
 
     @staticmethod
     def _validate_operational_eligibility(operational_status: str | None) -> None:

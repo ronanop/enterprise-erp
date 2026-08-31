@@ -233,23 +233,47 @@ describe("WizardFooter", () => {
   });
 });
 
+async function advanceToReview(user: ReturnType<typeof userEvent.setup>) {
+  for (let i = 0; i < 4; i += 1) {
+    await user.click(screen.getByRole("button", { name: /^Next$/i }));
+  }
+  expect(screen.getByRole("button", { name: /^Submit$/i })).toBeInTheDocument();
+}
+
 describe("AssignmentWizard", () => {
-  it("renders issue asset title and all sections without step gating", () => {
+  it("renders issue asset title with one gated step and Next", () => {
     render(<AssignmentWizard onCancel={vi.fn()} />);
     expect(screen.getByRole("heading", { name: /Issue asset/i })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: /Allocation & Employee/i })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: /^Asset$/i })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: /Issued Items/i })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: /Delivery \(DC paperwork\)/i })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: /Review & Submit/i })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /^Next$/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: /^Asset$/i })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^Next$/i })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^Submit$/i })).not.toBeInTheDocument();
+    expect(screen.getByRole("progressbar", { name: /wizard progress/i })).toBeInTheDocument();
   });
 
-  it("disables submit and lists missing fields", () => {
+  it("blocks Next on allocation until employee is set", async () => {
+    const user = userEvent.setup();
     render(<AssignmentWizard onCancel={vi.fn()} />);
-    expect(screen.getByRole("button", { name: /^Submit$/i })).toBeDisabled();
-    expect(screen.getByTestId("issue-missing-summary")).toHaveTextContent(/Employee/i);
-    expect(screen.getByTestId("issue-missing-summary")).toHaveTextContent(/Asset/i);
+    await user.click(screen.getByRole("button", { name: /^Next$/i }));
+    expect(screen.getByTestId("issue-step-error")).toHaveTextContent(/employee/i);
+    expect(screen.getByRole("heading", { name: /Allocation & Employee/i })).toBeInTheDocument();
+  });
+
+  it("disables submit on review when fields missing after navigating with partial data", async () => {
+    const user = userEvent.setup();
+    render(
+      <AssignmentWizard
+        onCancel={vi.fn()}
+        initialState={{
+          employeeId: "emp-1",
+          // asset intentionally omitted — cannot pass step 1
+        }}
+      />,
+    );
+    await user.click(screen.getByRole("button", { name: /^Next$/i }));
+    expect(screen.getByRole("heading", { name: /^Asset$/i })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /^Next$/i }));
+    expect(screen.getByTestId("issue-step-error")).toHaveTextContent(/asset/i);
   });
 
   it("enables submit when required fields are present and calls onFinish", async () => {
@@ -266,9 +290,51 @@ describe("AssignmentWizard", () => {
         }}
       />,
     );
+    await advanceToReview(user);
     expect(screen.getByRole("button", { name: /^Submit$/i })).toBeEnabled();
     await user.click(screen.getByRole("button", { name: /^Submit$/i }));
     expect(onFinish).toHaveBeenCalled();
+  });
+
+  it("lists missing fields on review when delivery number required", async () => {
+    const user = userEvent.setup();
+    render(
+      <AssignmentWizard
+        onCancel={vi.fn()}
+        initialState={{
+          employeeId: "emp-1",
+          assetId: "asset-1",
+          deliveryReferenceStatus: "issued",
+          deliveryReferenceNumber: "",
+        }}
+      />,
+    );
+    await user.click(screen.getByRole("button", { name: /^Next$/i }));
+    await user.click(screen.getByRole("button", { name: /^Next$/i }));
+    await user.click(screen.getByRole("button", { name: /^Next$/i }));
+    await user.click(screen.getByRole("button", { name: /^Next$/i }));
+    expect(screen.getByTestId("issue-step-error")).toHaveTextContent(/Delivery reference/i);
+  });
+
+  it("shows missing summary on review after clearing identity via step rail", async () => {
+    const user = userEvent.setup();
+    render(
+      <AssignmentWizard
+        onCancel={vi.fn()}
+        employees={[{ id: "emp-1", label: "Ada" }]}
+        initialState={{
+          employeeId: "emp-1",
+          assetId: "asset-1",
+          deliveryReferenceStatus: "pending",
+        }}
+      />,
+    );
+    await advanceToReview(user);
+    await user.click(screen.getAllByRole("button", { name: /Allocation & Employee/i })[0]!);
+    await user.click(screen.getByRole("button", { name: /Enter manually/i }));
+    await user.click(screen.getAllByRole("button", { name: /Review & Submit/i })[0]!);
+    expect(screen.getByTestId("issue-missing-summary")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^Submit$/i })).toBeDisabled();
   });
 
   it("calls onSaveDraft from footer without requiring completeness", async () => {
@@ -458,8 +524,8 @@ describe("WizardFooter back", () => {
 });
 
 describe("responsive layout", () => {
-  it("does not render a step progress bar on the issue form", () => {
-    const { container } = render(<AssignmentWizard onCancel={vi.fn()} />);
-    expect(container.querySelector('[role="progressbar"]')).toBeNull();
+  it("renders a step progress bar on the issue wizard", () => {
+    render(<AssignmentWizard onCancel={vi.fn()} />);
+    expect(screen.getByRole("progressbar", { name: /wizard progress/i })).toBeInTheDocument();
   });
 });

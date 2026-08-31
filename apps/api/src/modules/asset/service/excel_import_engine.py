@@ -22,6 +22,7 @@ from modules.asset.domain.excel_import import (
     VALID_IMPORT_OPERATIONAL_STATUSES,
 )
 from modules.asset.domain.exceptions import DuplicateAssetRegistrationError
+from modules.asset.repository.site_location_repository import SiteLocationRepository
 from modules.asset.service.asset_operational_status_service import AssetOperationalStatusService
 from modules.asset.service.asset_service import AssetService
 from modules.asset.service.assignment_service import AssignmentService
@@ -95,6 +96,12 @@ class AssetExcelImportEngine:
 
         try:
             cid = company_id or row.company_id
+            if row.branch_id is None:
+                return ExcelImportRowResult(
+                    row_number=row.row_number,
+                    outcome=ExcelImportRowOutcome.FAILED.value,
+                    reason="branch_id is required (set user branch context or pass branch_id)",
+                )
             dup = self._detect_duplicate(ctx, company_id=cid, row=row)
             if dup is not None:
                 return dup
@@ -148,20 +155,15 @@ class AssetExcelImportEngine:
         row: ExcelImportRowInput,
     ) -> ExcelImportRowResult | None:
         tag = (row.asset_tag or "").strip()
-        if not tag:
-            return ExcelImportRowResult(
-                row_number=row.row_number,
-                outcome=ExcelImportRowOutcome.FAILED.value,
-                reason="asset_tag is required",
-            )
-        existing = self._assets.find_by_asset_code(ctx, tag, company_id=company_id)
-        if existing is not None:
-            return ExcelImportRowResult(
-                row_number=row.row_number,
-                outcome=ExcelImportRowOutcome.DUPLICATE.value,
-                reason=ExcelImportSkipReason.DUPLICATE_ASSET_TAG.value,
-                asset_id=existing.id,
-            )
+        if tag:
+            existing = self._assets.find_by_asset_code(ctx, tag, company_id=company_id)
+            if existing is not None:
+                return ExcelImportRowResult(
+                    row_number=row.row_number,
+                    outcome=ExcelImportRowOutcome.DUPLICATE.value,
+                    reason=ExcelImportSkipReason.DUPLICATE_ASSET_TAG.value,
+                    asset_id=existing.id,
+                )
         serial = (row.serial_number or "").strip()
         if serial:
             by_serial = self._assets.find_by_serial_number(ctx, serial, company_id=company_id)
@@ -185,13 +187,29 @@ class AssetExcelImportEngine:
         category_id = row.asset_category_id or defaults.asset_category_id
         purchase_date = row.issue_date or defaults.purchase_date or date.today()
         purchase_cost = defaults.purchase_cost if defaults.purchase_cost is not None else Decimal("0")
+        if row.asset_type_id is None:
+            from modules.asset.domain.exceptions import RegistrationValidationError
+
+            raise RegistrationValidationError("asset_type_id is required for Excel import")
+        location_label = (row.location_label or "").strip() or None
+        location_id = row.location_id
+        if location_label and location_id is None:
+            cid = company_id or row.company_id
+            if cid is None:
+                raise ValueError("company_id is required to resolve location")
+            site_loc = SiteLocationRepository(self._db).get_by_name(ctx, cid, location_label)
+            if site_loc is None:
+                raise ValueError(f"Location '{location_label}' not found in Locations master")
+            location_id = site_loc.id
+            location_label = site_loc.name
         asset = self._assets.create_for_import(
             ctx,
             branch_id=row.branch_id,
             company_id=company_id,
-            asset_code=row.asset_tag.strip(),
+            asset_code=(row.asset_tag or "").strip() or None,
             asset_name=row.asset_name.strip(),
             asset_category_id=category_id,
+            asset_type_id=row.asset_type_id,
             asset_type=defaults.asset_type or "fixed",
             purchase_date=purchase_date,
             purchase_cost=purchase_cost,
@@ -200,7 +218,8 @@ class AssetExcelImportEngine:
             make=(row.make or "").strip() or None,
             model=(row.model or "").strip() or None,
             configuration=(row.configuration or "").strip() or None,
-            location_label=(row.location_label or "").strip() or None,
+            location_label=location_label,
+            location_id=location_id,
             department_id=row.department_id,
         )
         self._assets.submit(ctx, asset.id)

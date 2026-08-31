@@ -2,7 +2,10 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Loader2, QrCode, Trash2, UserPlus, Wrench } from "lucide-react";
+
+import { openMaintenanceForAsset } from "@/components/assets/asset-maintenance-workspace";
 
 import { AssetDiscoveryPanel } from "@/components/assets/asset-discovery-panel";
 import { StartDisposalConfirmDialog } from "@/components/assets/start-disposal-confirm-dialog";
@@ -67,6 +70,7 @@ function displayText(value: unknown): string {
 }
 
 export function AssetDetailWorkspace({ assetId }: { assetId: string }) {
+  const router = useRouter();
   const [tab, setTab] = useState<Tab>("overview");
   const [asset, setAsset] = useState<AssetsRow | null>(null);
   const [assignments, setAssignments] = useState<AssetsRow[]>([]);
@@ -85,6 +89,7 @@ export function AssetDetailWorkspace({ assetId }: { assetId: string }) {
   const [employeeLookup, setEmployeeLookup] = useState<EmployeeLookup>({});
   const [currentLocationLabel, setCurrentLocationLabel] = useState<string | null>(null);
   const [branchLabel, setBranchLabel] = useState<string>("—");
+  const [maintenanceSubmitting, setMaintenanceSubmitting] = useState(false);
 
   const load = useCallback(async () => {
     if (!isAuthenticated()) return;
@@ -292,11 +297,20 @@ export function AssetDetailWorkspace({ assetId }: { assetId: string }) {
               </p>
             ) : null}
             {!transferMaintBlocked ? (
-              <Button variant="outline" size="sm" asChild className="cursor-pointer">
-                <Link href={`/assets/asset-maintenances?assetId=${assetId}`}>
-                  <Wrench className="mr-1 size-4" />
-                  Maintenance
-                </Link>
+              <Button
+                variant="outline"
+                size="sm"
+                className="cursor-pointer"
+                disabled={maintenanceSubmitting}
+                onClick={() => {
+                  setMaintenanceSubmitting(true);
+                  void openMaintenanceForAsset(assetId, (href) => router.push(href)).finally(
+                    () => setMaintenanceSubmitting(false),
+                  );
+                }}
+              >
+                <Wrench className="mr-1 size-4" />
+                Maintenance
               </Button>
             ) : null}
             {showStartDisposal ? (
@@ -431,10 +445,10 @@ export function AssetDetailWorkspace({ assetId }: { assetId: string }) {
                 </p>
               ) : null}
               <p>
-                <span className="text-muted-foreground">Category / Type: </span>
-                {displayText(asset.category_name) !== "—"
-                  ? displayText(asset.category_name)
-                  : displayText(asset.asset_type)}
+                <span className="text-muted-foreground">Type: </span>
+                {asset.asset_type_name
+                  ? displayText(asset.asset_type_name)
+                  : "Unclassified"}
               </p>
             </CardContent>
           </Card>
@@ -527,8 +541,19 @@ export function AssetDetailWorkspace({ assetId }: { assetId: string }) {
                       key={c.id}
                       className="rounded-md border border-border px-3 py-2 transition-colors duration-200"
                     >
-                      <div className="font-medium">{componentTypeLabel(c.component_type)}</div>
-                      <div className="text-muted-foreground">{c.component_name}</div>
+                      <div className="font-medium">
+                        {c.linked_asset_code
+                          ? `${componentTypeLabel(c.component_type)} · ${c.linked_asset_code}`
+                          : componentTypeLabel(c.component_type)}
+                      </div>
+                      <div className="text-muted-foreground">
+                        {c.linked_asset_name || c.component_name}
+                      </div>
+                      {c.linked_asset_operational_status ? (
+                        <div className="text-xs text-muted-foreground">
+                          Ops: {c.linked_asset_operational_status}
+                        </div>
+                      ) : null}
                       <div className="text-xs text-muted-foreground">
                         S/N: {c.serial_number?.trim() || "—"}
                       </div>

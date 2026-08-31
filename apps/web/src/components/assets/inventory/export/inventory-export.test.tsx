@@ -277,7 +277,7 @@ describe("fetchAllInventoryRowsForExport", () => {
     const rows = await fetchAllInventoryRowsForExport({
       preset: "ready",
       filters: EMPTY_INVENTORY_FILTERS,
-      headerBranchId: "b1",
+      headerLocationId: "loc-mumbai",
       lookup,
       deps: { listAssets, listAssignments },
     });
@@ -311,7 +311,7 @@ describe("fetchAllInventoryRowsForExport", () => {
     const rows = await fetchAllInventoryRowsForExport({
       preset: "all",
       filters: { ...EMPTY_INVENTORY_FILTERS, departmentId: "d1" },
-      headerBranchId: BRANCH_ALL_VALUE,
+      headerLocationId: BRANCH_ALL_VALUE,
       lookup,
       deps: { listAssets, listAssignments },
     });
@@ -358,7 +358,7 @@ describe("fetchAllInventoryRowsForExport", () => {
     const rows = await fetchAllInventoryRowsForExport({
       preset: "assigned",
       filters: EMPTY_INVENTORY_FILTERS,
-      headerBranchId: "b1",
+      headerLocationId: "loc-mumbai",
       lookup,
       deps: { listAssets, listAssignments },
     });
@@ -371,7 +371,7 @@ describe("fetchAllInventoryRowsForExport", () => {
       fetchAllInventoryRowsForExport({
         preset: "all",
         filters: EMPTY_INVENTORY_FILTERS,
-        headerBranchId: BRANCH_ALL_VALUE,
+        headerLocationId: BRANCH_ALL_VALUE,
         lookup,
         deps: {
           listAssets: vi.fn().mockRejectedValue(new Error("network")),
@@ -425,7 +425,7 @@ describe("fetchAllInventoryRowsForExport", () => {
     await fetchAllInventoryRowsForExport({
       preset: "all",
       filters: EMPTY_INVENTORY_FILTERS,
-      headerBranchId: "b1",
+      headerLocationId: "loc-mumbai",
       lookup,
       deps: { listAssets, listAssignments },
     });
@@ -448,7 +448,7 @@ describe("exportInventoryRegister", () => {
       format: "csv",
       preset: "all",
       filters: EMPTY_INVENTORY_FILTERS,
-      headerBranchId: BRANCH_ALL_VALUE,
+      headerLocationId: BRANCH_ALL_VALUE,
       lookup,
       stamp: new Date("2026-08-05T00:00:00Z"),
       download,
@@ -482,7 +482,7 @@ describe("exportInventoryRegister", () => {
       format: "xlsx",
       preset: "all",
       filters: EMPTY_INVENTORY_FILTERS,
-      headerBranchId: BRANCH_ALL_VALUE,
+      headerLocationId: BRANCH_ALL_VALUE,
       lookup,
       stamp: new Date("2026-08-05T00:00:00Z"),
       download,
@@ -506,7 +506,7 @@ describe("exportInventoryRegister", () => {
         format: "csv",
         preset: "all",
         filters: EMPTY_INVENTORY_FILTERS,
-        headerBranchId: BRANCH_ALL_VALUE,
+        headerLocationId: BRANCH_ALL_VALUE,
         lookup,
         allowEmpty: false,
         download: vi.fn(),
@@ -524,7 +524,7 @@ describe("exportInventoryRegister", () => {
       format: "csv",
       preset: "all",
       filters: { ...EMPTY_INVENTORY_FILTERS, search: "thinkpad" },
-      headerBranchId: BRANCH_ALL_VALUE,
+      headerLocationId: BRANCH_ALL_VALUE,
       lookup,
       download: vi.fn(),
       deps: {
@@ -654,7 +654,7 @@ describe("workspace export wiring", () => {
     await fetchAllInventoryRowsForExport({
       preset: "all",
       filters: { ...EMPTY_INVENTORY_FILTERS, categoryId: "cat-9" },
-      headerBranchId: BRANCH_ALL_VALUE,
+      headerLocationId: BRANCH_ALL_VALUE,
       lookup: {
         branchLabels: {},
         departmentLabels: {},
@@ -670,12 +670,12 @@ describe("workspace export wiring", () => {
     expect(listAssets.mock.calls[0][0].asset_category_id).toBe("cat-9");
   });
 
-  it("filtered export query includes branch header", async () => {
+  it("filtered export query includes location header", async () => {
     const listAssets = vi.fn().mockResolvedValue({ items: [], total: 0, page: 1, page_size: 200 });
     await fetchAllInventoryRowsForExport({
       preset: "all",
       filters: EMPTY_INVENTORY_FILTERS,
-      headerBranchId: "branch-99",
+      headerLocationId: "loc-mumbai",
       lookup: {
         branchLabels: {},
         departmentLabels: {},
@@ -688,7 +688,8 @@ describe("workspace export wiring", () => {
         listAssignments: vi.fn().mockResolvedValue({ items: [], total: 0, page: 1, page_size: 200 }),
       },
     });
-    expect(listAssets.mock.calls[0][0].branch_id).toBe("branch-99");
+    expect(listAssets.mock.calls[0][0].location_id).toBe("loc-mumbai");
+    expect(listAssets.mock.calls[0][0].branch_id).toBeUndefined();
   });
 
   it("sends asset_type to listAssets (server-side filter)", async () => {
@@ -709,8 +710,8 @@ describe("workspace export wiring", () => {
     });
     const rows = await fetchAllInventoryRowsForExport({
       preset: "all",
-      filters: { ...EMPTY_INVENTORY_FILTERS, assetType: "fixed" },
-      headerBranchId: BRANCH_ALL_VALUE,
+      filters: { ...EMPTY_INVENTORY_FILTERS, assetType: "type-uuid-1" },
+      headerLocationId: BRANCH_ALL_VALUE,
       lookup: {
         branchLabels: {},
         departmentLabels: {},
@@ -723,7 +724,7 @@ describe("workspace export wiring", () => {
         listAssignments: vi.fn().mockResolvedValue({ items: [], total: 0, page: 1, page_size: 200 }),
       },
     });
-    expect(listAssets).toHaveBeenCalledWith(expect.objectContaining({ asset_type: "fixed" }));
+    expect(listAssets).toHaveBeenCalledWith(expect.objectContaining({ asset_type_id: "type-uuid-1" }));
     expect(rows).toHaveLength(1);
     expect(rows[0].assetTag).toBe("A");
   });

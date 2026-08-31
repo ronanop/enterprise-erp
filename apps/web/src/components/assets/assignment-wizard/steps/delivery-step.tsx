@@ -2,7 +2,6 @@
 
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
 import {
   Select,
   SelectContent,
@@ -12,6 +11,7 @@ import {
 } from "@/components/ui/select";
 import type { AssignmentWizardState } from "@/components/assets/assignment-wizard/wizard-types";
 import { isEmployeeAllocation } from "@/components/assets/navigation/dc-challan-navigation";
+import { cn } from "@/lib/utils";
 
 /** Primary DC workflow options. Received kept for historical assignment reload. */
 const DELIVERY_STATUSES = [
@@ -41,17 +41,17 @@ const MODES: Array<{ value: AssignmentWizardState["dcChallanMode"]; label: strin
   {
     value: "create_now",
     label: "Create DC now",
-    hint: "Employee is going elsewhere (another branch, location, or company) and needs the DC before or right at handover.",
+    hint: "Needs DC before or at handover.",
   },
   {
     value: "link_existing",
     label: "Link existing",
-    hint: "A DC was already prepared in advance for this asset — attach it to this assignment now.",
+    hint: "Attach a challan prepared in advance.",
   },
   {
     value: "later",
     label: "Handle later",
-    hint: "Hand over the asset now; DC paperwork will be created separately from Operations → DC Challan afterwards.",
+    hint: "Issue now; create DC from Operations later.",
   },
 ];
 
@@ -71,21 +71,28 @@ export function DeliveryStep({ state, onChange, unlinkedChallans = [] }: Deliver
           <p className="text-xs text-muted-foreground">
             Most assets don&apos;t need a DC at handover — choose an option only if this one does.
           </p>
-          <div className="grid gap-2">
-            {MODES.map((modeOption) => (
-              <Button
-                key={modeOption.value}
-                type="button"
-                variant={mode === modeOption.value ? "default" : "outline"}
-                className="h-auto cursor-pointer justify-start py-2 text-left transition-colors duration-200"
-                onClick={() => onChange({ dcChallanMode: modeOption.value })}
-              >
-                <span>
-                  <span className="block text-sm">{modeOption.label}</span>
-                  <span className="block text-xs font-normal opacity-80">{modeOption.hint}</span>
-                </span>
-              </Button>
-            ))}
+          <div className="grid gap-1.5 sm:grid-cols-3">
+            {MODES.map((modeOption) => {
+              const active = mode === modeOption.value;
+              return (
+                <button
+                  key={modeOption.value}
+                  type="button"
+                  onClick={() => onChange({ dcChallanMode: modeOption.value })}
+                  className={cn(
+                    "cursor-pointer rounded-lg border px-3 py-2.5 text-left transition-colors duration-200",
+                    active
+                      ? "border-[#0369A1] bg-[rgba(3,105,161,0.08)] shadow-sm"
+                      : "border-border/80 hover:bg-muted/40",
+                  )}
+                >
+                  <span className="block text-sm font-medium text-foreground">{modeOption.label}</span>
+                  <span className="mt-0.5 block text-[11px] leading-snug text-muted-foreground">
+                    {modeOption.hint}
+                  </span>
+                </button>
+              );
+            })}
           </div>
         </div>
       ) : (

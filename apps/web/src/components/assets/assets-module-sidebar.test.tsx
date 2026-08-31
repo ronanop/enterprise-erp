@@ -1,27 +1,34 @@
 /** @vitest-environment jsdom */
 
-import { cleanup, render, screen, within } from "@testing-library/react";
+import { cleanup, render, screen, within, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { AssetsModuleSidebar } from "@/components/assets/assets-module-sidebar";
-import { assetManagementNav, isAssetNavActive } from "@/config/assets";
+import {
+  buildAssetSidebarNav,
+  isAssetNavActive,
+  itAssetWorkspaceNav,
+  nonItAssetWorkspaceNav,
+} from "@/config/assets";
 
 vi.mock("next/navigation", () => ({
   usePathname: () => "/assets/assets",
+  useSearchParams: () => new URLSearchParams(),
+}));
+
+vi.mock("@/services/asset-domain-membership-service", () => ({
+  fetchMyDomainAccess: vi.fn(async () => ({
+    is_module_admin: true,
+    domains: ["IT", "NON_IT"],
+    admin_domains: ["IT", "NON_IT"],
+    memberships: [],
+  })),
 }));
 
 afterEach(() => {
   cleanup();
 });
-
-const APPROVED_GROUP_TITLES = [
-  "Assets",
-  "Configuration",
-  "Operations",
-  "Lifecycle",
-  "Extended",
-] as const;
 
 const HIDDEN_TITLES = [
   "Depreciation",
@@ -40,7 +47,7 @@ const HIDDEN_TITLES = [
 ] as const;
 
 describe("AssetsModuleSidebar", () => {
-  it("exposes Asset Management landmark", () => {
+  it("exposes Asset Management landmark", async () => {
     render(<AssetsModuleSidebar />);
     expect(screen.getByTestId("assets-module-sidebar")).toHaveAttribute(
       "aria-label",
@@ -67,9 +74,23 @@ describe("AssetsModuleSidebar", () => {
     expect(sidebar.className).not.toMatch(/w-\[260px\]/);
   });
 
-  it("locks nav to the approved current-scope sections and order", () => {
-    expect(assetManagementNav.map((g) => g.title)).toEqual([...APPROVED_GROUP_TITLES]);
-    expect(assetManagementNav[0]?.items.map((i) => i.title)).toEqual([
+  it("builds domain switcher + IT workspace with nested Users for module admin", () => {
+    const nav = buildAssetSidebarNav({
+      isModuleAdmin: true,
+      domains: ["IT", "NON_IT"],
+      adminDomains: ["IT", "NON_IT"],
+      activeDomain: "IT",
+    });
+    expect(nav.map((g) => g.title)).toEqual([
+      "Domains",
+      "IT Assets",
+      "Configuration",
+      "Operations",
+      "Lifecycle",
+      "Extended",
+    ]);
+    expect(nav[0]?.items.map((i) => i.title)).toEqual(["IT Assets", "Non-IT Assets"]);
+    expect(itAssetWorkspaceNav[0]?.items.map((i) => i.title)).toEqual([
       "Dashboard",
       "All Assets",
       "Incoming Assets",
@@ -77,37 +98,46 @@ describe("AssetsModuleSidebar", () => {
       "Pending Registration",
       "Add Asset",
     ]);
-    expect(assetManagementNav[1]?.items.map((i) => i.title)).toEqual([
-      "Categories",
-      "Asset Types",
+    const extended = nav.find((g) => g.title === "Extended");
+    expect(extended?.items.map((i) => i.title)).toContain("Users");
+    expect(nonItAssetWorkspaceNav[0]?.items.map((i) => i.title)).toEqual([
+      "Dashboard",
+      "Inventory",
+      "Types",
       "Locations",
-      "Departments",
+      "Users",
     ]);
-    expect(assetManagementNav[2]?.items.map((i) => i.title)).toEqual([
-      "Asset Assignment",
-      "DC Challan",
-      "Transfers",
-      "Maintenance",
-    ]);
-    expect(assetManagementNav[3]?.items.map((i) => i.title)).toEqual(["Disposal"]);
-    expect(assetManagementNav[4]?.items.map((i) => i.title)).toEqual([
-      "Components",
-      "Documents",
-      "QR / Barcode",
-      "Reports",
-    ]);
+    expect(nonItAssetWorkspaceNav[0]?.items.some((i) => i.title === "Users")).toBe(true);
   });
 
-  it("hides future modules from the rail", () => {
+  it("hides Users tab for domain members who are not admins", () => {
+    const nav = buildAssetSidebarNav({
+      isModuleAdmin: false,
+      domains: ["IT"],
+      adminDomains: [],
+      activeDomain: "IT",
+    });
+    const allTitles = nav.flatMap((g) => g.items.map((i) => i.title));
+    expect(allTitles).not.toContain("Users");
+    expect(allTitles).toContain("All Assets");
+  });
+
+  it("hides future modules from the rail", async () => {
     render(<AssetsModuleSidebar />);
+    await waitFor(() => {
+      expect(screen.getByRole("link", { name: "All Assets" })).toBeInTheDocument();
+    });
     const nav = screen.getByTestId("assets-module-sidebar-nav");
     for (const title of HIDDEN_TITLES) {
       expect(within(nav).queryByRole("link", { name: title })).not.toBeInTheDocument();
     }
   });
 
-  it("keeps only Locations (no Asset Locations duplicate)", () => {
+  it("keeps only Locations (no Asset Locations duplicate)", async () => {
     render(<AssetsModuleSidebar />);
+    await waitFor(() => {
+      expect(screen.getByRole("link", { name: "Locations" })).toBeInTheDocument();
+    });
     const nav = screen.getByTestId("assets-module-sidebar-nav");
     expect(within(nav).getByRole("link", { name: "Locations" })).toHaveAttribute(
       "href",
@@ -116,8 +146,11 @@ describe("AssetsModuleSidebar", () => {
     expect(within(nav).queryByRole("link", { name: "Asset Locations" })).not.toBeInTheDocument();
   });
 
-  it("labels retained links and marks active All Assets", () => {
+  it("labels retained links and marks active All Assets", async () => {
     render(<AssetsModuleSidebar />);
+    await waitFor(() => {
+      expect(screen.getByRole("link", { name: "All Assets" })).toBeInTheDocument();
+    });
     const nav = screen.getByTestId("assets-module-sidebar-nav");
     expect(within(nav).getByRole("link", { name: "Dashboard" })).toHaveAttribute(
       "href",

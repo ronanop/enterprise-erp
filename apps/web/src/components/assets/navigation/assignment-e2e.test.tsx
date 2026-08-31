@@ -126,7 +126,7 @@ describe("E2E — refresh lifecycle (no duplicate)", () => {
   it("restores filters/search/page/branch from snapshot on remount", async () => {
     saveInventoryUiSnapshot({
       preset: "ready",
-      headerBranchId: "b1",
+      headerLocationId: "b1",
       draftFilters: { ...EMPTY_INVENTORY_FILTERS, operationalStatus: "READY_TO_MOVE", search: "surf" },
       appliedFilters: {
         ...EMPTY_INVENTORY_FILTERS,

@@ -78,8 +78,11 @@ async function waitForWizard() {
   });
 }
 
-/** Advance is no longer required — Submit is always on the page. */
-async function waitForSubmit() {
+/** Advance through gated steps until Submit is on the review step. */
+async function advanceToSubmit(user: ReturnType<typeof userEvent.setup>) {
+  for (let i = 0; i < 4; i += 1) {
+    await user.click(screen.getByRole("button", { name: /^Next$/i }));
+  }
   await waitFor(() => {
     expect(screen.getByRole("button", { name: /^Submit$/i })).toBeInTheDocument();
   });
@@ -87,6 +90,15 @@ async function waitForSubmit() {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  listReadyAssets.mockReset();
+  listComponents.mockReset();
+  listEmployees.mockReset();
+  createDraft.mockReset();
+  loadDraft.mockReset();
+  updateDraft.mockReset();
+  submitDraft.mockReset();
+  activateAssignment.mockReset();
+  formatError.mockReset();
   listReadyAssets.mockResolvedValue(readyAssets());
   listComponents.mockResolvedValue([{ id: "c1", label: "Dock", status: "active" }]);
   listEmployees.mockResolvedValue([{ id: "e1", label: "Emp One" }]);
@@ -323,7 +335,7 @@ describe("AssignmentWizardContainer — submit and activate", () => {
       />,
     );
     await waitForWizard();
-    await waitForSubmit();
+    await advanceToSubmit(user);
     await user.click(screen.getByRole("button", { name: /^Submit$/i }));
     await waitFor(() => expect(createDraft).toHaveBeenCalled());
     await waitFor(() => expect(submitDraft).toHaveBeenCalledWith("new-1"));
@@ -343,7 +355,7 @@ describe("AssignmentWizardContainer — submit and activate", () => {
       />,
     );
     await waitForWizard();
-    await waitForSubmit();
+    await advanceToSubmit(user);
     await user.click(screen.getByRole("button", { name: /^Submit$/i }));
     await waitFor(() => expect(updateDraft).toHaveBeenCalled());
     await waitFor(() => expect(submitDraft).toHaveBeenCalledWith("d1"));
@@ -364,7 +376,7 @@ describe("AssignmentWizardContainer — submit and activate", () => {
       />,
     );
     await waitForWizard();
-    await waitForSubmit();
+    await advanceToSubmit(user);
     await user.click(screen.getByRole("button", { name: /^Submit$/i }));
     await waitFor(() => expect(onSuccess).toHaveBeenCalledWith("new-1"));
   });
@@ -382,7 +394,7 @@ describe("AssignmentWizardContainer — submit and activate", () => {
       />,
     );
     await waitForWizard();
-    await waitForSubmit();
+    await advanceToSubmit(user);
     await user.click(screen.getByRole("button", { name: /^Submit$/i }));
     await waitFor(() => {
       expect(screen.getByRole("alert")).toHaveTextContent(/cannot submit/i);
@@ -404,7 +416,7 @@ describe("AssignmentWizardContainer — submit and activate", () => {
       />,
     );
     await waitForWizard();
-    await waitForSubmit();
+    await advanceToSubmit(user);
     await user.click(screen.getByRole("button", { name: /^Submit$/i }));
     await waitFor(() => {
       expect(screen.getByRole("alert")).toHaveTextContent(/persist failed/i);
@@ -440,7 +452,7 @@ describe("AssignmentWizardContainer — cancel and UX", () => {
       />,
     );
     await waitForWizard();
-    await waitForSubmit();
+    await advanceToSubmit(user);
     expect(screen.getByRole("button", { name: /^Submit$/i })).toBeInTheDocument();
   });
 
@@ -514,6 +526,7 @@ describe("AssignmentWizardContainer — payload mapping", () => {
 
 describe("AssignmentWizardContainer — asset change", () => {
   it("blocks deep-link when asset is not in ready list", async () => {
+    const user = userEvent.setup();
     listReadyAssets.mockResolvedValue(readyAssets());
     render(
       <AssignmentWizardContainer
@@ -523,6 +536,7 @@ describe("AssignmentWizardContainer — asset change", () => {
       />,
     );
     await waitForWizard();
+    await user.click(screen.getByRole("button", { name: /^Next$/i }));
     await waitFor(() => {
       expect(screen.getByTestId("assignment-asset-unavailable")).toBeInTheDocument();
     });
@@ -552,6 +566,7 @@ describe("AssignmentWizardContainer — asset change", () => {
       />,
     );
     await waitForWizard();
+    await user.click(screen.getByRole("button", { name: /^Next$/i }));
     await waitFor(() => screen.getByRole("option", { name: /Monitor/i }));
     await user.click(screen.getByRole("option", { name: /Monitor/i }));
     await waitFor(() => expect(listComponents).toHaveBeenCalledWith("a2"));
@@ -581,6 +596,7 @@ describe("AssignmentWizardContainer — asset change", () => {
       />,
     );
     await waitForWizard();
+    await user.click(screen.getByRole("button", { name: /^Next$/i }));
     await waitFor(() => screen.getByRole("option", { name: /Monitor/i }));
     await user.click(screen.getByRole("option", { name: /Monitor/i }));
     await waitFor(() => expect(listComponents).toHaveBeenCalledWith("a2"));

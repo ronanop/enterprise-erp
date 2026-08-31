@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 
 import { AssetInventoryWorkspace } from "@/components/assets/asset-inventory-workspace";
 import {
@@ -23,7 +24,10 @@ import {
   saveInventoryUiSnapshot,
   type InventoryUiSnapshot,
 } from "@/components/assets/inventory/inventory-ui-state";
-import { handleInventoryMenuWorkflow } from "@/components/assets/inventory/inventory-workflow";
+import {
+  handleInventoryMenuWorkflow,
+} from "@/components/assets/inventory/inventory-workflow";
+import { openMaintenanceForAsset } from "@/components/assets/asset-maintenance-workspace";
 import { StartDisposalConfirmDialog } from "@/components/assets/start-disposal-confirm-dialog";
 import { ReinstateConfirmDialog } from "@/components/assets/reinstate-confirm-dialog";
 import {
@@ -55,11 +59,11 @@ import {
   listBranchOptions,
   listDepartmentOptions,
   listEmployeeDirectory,
-  listLocationOptions,
   employeeDirectoryById,
   employeeLabelsFromDirectory,
   type EmployeeDirectoryEntry,
 } from "@/lib/org-options";
+import { listSiteLocations } from "@/services/asset-site-location-service";
 import type { EmployeeLookup } from "@/components/assets/inventory/register-parity";
 import {
   assetCategoryService,
@@ -71,6 +75,7 @@ import {
   filterActiveCategories,
   type AssetPaginatedListResult,
 } from "@/services/assets-service";
+import { listItAssetTypes } from "@/services/asset-type-service";
 import { ApiClientError } from "@/services/api-client";
 
 const PAGE_SIZE = 25;
@@ -101,7 +106,7 @@ async function fetchCurrentAssetLocationLabels(): Promise<Record<string, string>
 
 const DEFAULT_UI_SNAPSHOT: InventoryUiSnapshot = {
   preset: "all",
-  headerBranchId: BRANCH_ALL_VALUE,
+  headerLocationId: BRANCH_ALL_VALUE,
   draftFilters: EMPTY_INVENTORY_FILTERS,
   appliedFilters: EMPTY_INVENTORY_FILTERS,
   quickSearch: "",
@@ -116,7 +121,7 @@ function readInventoryUiOnMount(): InventoryUiSnapshot {
 export async function fetchInventoryPage(input: {
   preset: InventoryPresetId;
   filters: InventoryFilterValues;
-  headerBranchId: string;
+  headerLocationId: string;
   page: number;
   deps?: {
     listAssets?: typeof assetOperationsService.listAssets;
@@ -130,7 +135,7 @@ export async function fetchInventoryPage(input: {
   const query = buildInventoryListQuery({
     preset: input.preset,
     filters: input.filters,
-    headerBranchId: input.headerBranchId,
+    headerLocationId: input.headerLocationId,
     page: input.page,
     pageSize: PAGE_SIZE,
   });
@@ -166,10 +171,16 @@ export async function fetchInventoryPage(input: {
         const assetId = String(row.asset_id);
         const list = accessoriesByAssetId.get(assetId) ?? [];
         list.push({
-          typeLabel: componentTypeLabel(row.component_type),
+          typeLabel: row.linked_asset_code
+            ? `${componentTypeLabel(row.component_type)} · ${row.linked_asset_code}`
+            : componentTypeLabel(row.component_type),
           serialDisplay: row.serial_number?.trim() || "—",
-          componentName: row.component_name?.trim() || undefined,
-          status: row.status,
+          componentName:
+            row.linked_asset_name?.trim() ||
+            row.linked_asset_code?.trim() ||
+            row.component_name?.trim() ||
+            undefined,
+          status: row.linked_asset_operational_status || row.status,
         });
         accessoriesByAssetId.set(assetId, list);
       }
@@ -183,6 +194,7 @@ export async function fetchInventoryPage(input: {
 
 export function AssetInventoryContainer() {
   const navigation = useAssetNavigation();
+  const router = useRouter();
   const { can } = useUserPermissions();
   const actionPermissions = useMemo(() => buildInventoryActionPermissions(can), [can]);
   const quickLinkPermissions = useMemo(() => buildInventoryQuickLinkPermissions(can), [can]);
@@ -194,7 +206,7 @@ export function AssetInventoryContainer() {
   const initialUiRef = useRef(readInventoryUiOnMount());
   const initialUi = initialUiRef.current;
   const [preset, setPreset] = useState<InventoryPresetId>(initialUi.preset);
-  const [headerBranchId, setHeaderBranchId] = useState(initialUi.headerBranchId);
+  const [headerLocationId, setHeaderLocationId] = useState(initialUi.headerLocationId);
   const [draftFilters, setDraftFilters] = useState<InventoryFilterValues>(initialUi.draftFilters);
   const [appliedFilters, setAppliedFilters] = useState<InventoryFilterValues>(initialUi.appliedFilters);
   const [quickSearch, setQuickSearch] = useState(initialUi.quickSearch);
@@ -211,30 +223,38 @@ export function AssetInventoryContainer() {
   const [startDisposalSubmitting, setStartDisposalSubmitting] = useState(false);
   const [startDisposalError, setStartDisposalError] = useState<string | null>(null);
   const [reinstateRow, setReinstateRow] = useState<InventoryRowViewModel | null>(null);
+  const [maintenanceSubmitting, setMaintenanceSubmitting] = useState(false);
+  const [maintenanceError, setMaintenanceError] = useState<string | null>(null);
   const [reinstateSubmitting, setReinstateSubmitting] = useState(false);
   const [reinstateError, setReinstateError] = useState<string | null>(null);
 
   const [branches, setBranches] = useState<Array<{ id: string; label: string }>>([]);
   const [departments, setDepartments] = useState<Array<{ id: string; label: string }>>([]);
-  const [locations, setLocations] = useState<Array<{ id: string; label: string }>>([]);
+  const [siteLocations, setSiteLocations] = useState<Array<{ id: string; label: string }>>([]);
   const [categories, setCategories] = useState<Array<{ id: string; category_name: string }>>([]);
+  const [assetTypeOptions, setAssetTypeOptions] = useState<
+    Array<{ value: string; label: string }>
+  >([{ value: "", label: "All types" }]);
   const [employeeLabels, setEmployeeLabels] = useState<Record<string, string>>({});
   const [employeeLookup, setEmployeeLookup] = useState<EmployeeLookup>({});
 
   useEffect(() => {
     void (async () => {
-      const [branchOpts, deptOpts, locOpts, empDir, catRes] = await Promise.all([
+      const [branchOpts, deptOpts, siteLocOpts, empDir, catRes, types] = await Promise.all([
         listBranchOptions().catch(() => []),
         listDepartmentOptions().catch(() => []),
-        listLocationOptions().catch(() => []),
+        listSiteLocations().catch(() => []),
         listEmployeeDirectory().catch(() => [] as EmployeeDirectoryEntry[]),
         assetCategoryService
           .search({ page: 1, page_size: 200, status: "active" })
           .catch(() => ({ items: [] })),
+        listItAssetTypes({ active: true }).catch(() => []),
       ]);
       setBranches(branchOpts);
       setDepartments(deptOpts);
-      setLocations(locOpts);
+      setSiteLocations(
+        siteLocOpts.map((loc) => ({ id: loc.id, label: loc.name })),
+      );
       setEmployeeLabels(employeeLabelsFromDirectory(empDir));
       const byId = employeeDirectoryById(empDir);
       const lookup: EmployeeLookup = {};
@@ -248,6 +268,10 @@ export function AssetInventoryContainer() {
       }
       setEmployeeLookup(lookup);
       setCategories(filterActiveCategories(catRes.items));
+      setAssetTypeOptions([
+        { value: "", label: "All types" },
+        ...types.map((t) => ({ value: t.id, label: t.name })),
+      ]);
     })();
   }, []);
 
@@ -261,8 +285,12 @@ export function AssetInventoryContainer() {
     [categories],
   );
   const locationOptions = useMemo(
-    () => locations.map((l) => ({ value: l.id, label: l.label })),
-    [locations],
+    () => siteLocations.map((l) => ({ value: l.id, label: l.label })),
+    [siteLocations],
+  );
+  const headerLocationOptions = useMemo(
+    () => siteLocations.map((l) => ({ id: l.id, label: l.label })),
+    [siteLocations],
   );
 
   const lookupRef = useRef<InventoryLookupContext | null>(null);
@@ -274,7 +302,7 @@ export function AssetInventoryContainer() {
       const { assetList, assignmentList, accessoriesByAssetId } = await fetchInventoryPage({
         preset,
         filters: appliedFilters,
-        headerBranchId,
+        headerLocationId,
         page,
       });
 
@@ -325,7 +353,7 @@ export function AssetInventoryContainer() {
     departmentLabels,
     employeeLabels,
     employeeLookup,
-    headerBranchId,
+    headerLocationId,
     page,
     preset,
   ]);
@@ -353,13 +381,13 @@ export function AssetInventoryContainer() {
   const snapshotUiForWorkflow = useCallback(() => {
     saveInventoryUiSnapshot({
       preset,
-      headerBranchId,
+      headerLocationId,
       draftFilters,
       appliedFilters,
       quickSearch,
       page,
     });
-  }, [appliedFilters, draftFilters, headerBranchId, page, preset, quickSearch]);
+  }, [appliedFilters, draftFilters, headerLocationId, page, preset, quickSearch]);
 
   const onPresetChange = useCallback((next: InventoryPresetId) => {
     setPreset(next);
@@ -440,6 +468,20 @@ export function AssetInventoryContainer() {
         setReinstateRow(row);
         return;
       }
+      if (action === "maintenance") {
+        closeDrawer();
+        setMaintenanceError(null);
+        setMaintenanceSubmitting(true);
+        void openMaintenanceForAsset(row.id, (href) => router.push(href))
+          .catch((err) => {
+            const message =
+              err instanceof ApiClientError ? err.message : "Could not create maintenance draft";
+            setMaintenanceError(message);
+            setExportError(message);
+          })
+          .finally(() => setMaintenanceSubmitting(false));
+        return;
+      }
       if (action === "assign" || action === "return") {
         snapshotUiForWorkflow();
       }
@@ -450,7 +492,7 @@ export function AssetInventoryContainer() {
         closeDrawer,
       });
     },
-    [closeDrawer, navigation, snapshotUiForWorkflow],
+    [closeDrawer, navigation, router, snapshotUiForWorkflow],
   );
 
   const confirmStartDisposal = useCallback(async () => {
@@ -512,7 +554,7 @@ export function AssetInventoryContainer() {
           format,
           preset,
           filters: appliedFilters,
-          headerBranchId,
+          headerLocationId,
           lookup: {
             branchLabels,
             departmentLabels,
@@ -544,7 +586,7 @@ export function AssetInventoryContainer() {
       departmentLabels,
       employeeLabels,
       employeeLookup,
-      headerBranchId,
+      headerLocationId,
       preset,
     ],
   );
@@ -554,11 +596,12 @@ export function AssetInventoryContainer() {
       <AssetInventoryWorkspace
         preset={preset}
         onPresetChange={onPresetChange}
-        headerBranchId={headerBranchId}
-        onHeaderBranchChange={(id) => {
-          setHeaderBranchId(id);
+        headerLocationId={headerLocationId}
+        onHeaderLocationChange={(id) => {
+          setHeaderLocationId(id);
           setPage(1);
         }}
+        siteLocations={headerLocationOptions}
         branches={branches}
         quickSearch={quickSearch}
         onQuickSearchChange={setQuickSearch}
@@ -573,6 +616,7 @@ export function AssetInventoryContainer() {
         categories={categories.map((c) => ({ value: c.id, label: c.category_name }))}
         departments={departments.map((d) => ({ value: d.id, label: d.label }))}
         locations={locationOptions}
+        assetTypes={assetTypeOptions}
         rows={rows}
         total={total}
         page={page}

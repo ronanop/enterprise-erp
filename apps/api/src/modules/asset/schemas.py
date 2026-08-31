@@ -4,7 +4,7 @@ from datetime import date, datetime
 from decimal import Decimal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, computed_field, field_validator
 
 
 class OrmModel(BaseModel):
@@ -22,6 +22,7 @@ class AssetCategoryCreate(BaseModel):
     gl_accum_depr_account_id: UUID | None = None
     gl_expense_account_id: UUID | None = None
     status: str | None = None
+    asset_domain: str | None = "IT"
 
 
 class AssetCategoryUpdate(BaseModel):
@@ -32,6 +33,7 @@ class AssetCategoryUpdate(BaseModel):
     gl_accum_depr_account_id: UUID | None = None
     gl_expense_account_id: UUID | None = None
     branch_id: UUID | None = None
+    asset_domain: str | None = None
     version: int | None = None
 
 
@@ -46,6 +48,7 @@ class AssetCategoryResponse(OrmModel):
     gl_accum_depr_account_id: UUID | None
     gl_expense_account_id: UUID | None
     status: str
+    asset_domain: str | None = None
     company_id: UUID
     version: int
 
@@ -64,7 +67,10 @@ class AssetCreate(BaseModel):
     branch_id: UUID
     asset_name: str
     asset_category_id: UUID
-    asset_type: str
+    asset_type_id: UUID
+    # Legacy enum — optional; server defaults to "fixed" when omitted.
+    asset_type: str | None = None
+    asset_domain: str = "IT"
     purchase_date: date
     purchase_cost: Decimal
     currency_code: str = "USD"
@@ -94,6 +100,8 @@ class AssetCreate(BaseModel):
     incoming_unit_id: UUID | None = None
     incoming_line_id: UUID | None = None
     location_label: str | None = None
+    location_id: UUID | None = None
+    building_id: UUID | None = None
 
 
 AssetRegistrationCreate = AssetCreate
@@ -102,7 +110,9 @@ AssetRegistrationCreate = AssetCreate
 class AssetUpdate(BaseModel):
     asset_name: str | None = None
     asset_category_id: UUID | None = None
+    asset_type_id: UUID | None = None
     asset_type: str | None = None
+    asset_domain: str | None = None
     purchase_date: date | None = None
     purchase_cost: Decimal | None = None
     currency_code: str | None = None
@@ -161,18 +171,34 @@ class AssetDashboardBranchSummary(BaseModel):
     retired: int
     pending_disposal: int
     disposed: int
+    in_use_as_component: int = 0
 
 
-class AssetDashboardSummaryResponse(BaseModel):
-    company_id: UUID
-    branch_id: UUID | None = None
+class AssetDashboardLocationSummary(BaseModel):
+    location_id: UUID
+    label: str
     total_assets: int
     ready_to_move: int
     assigned: int
     retired: int
     pending_disposal: int
     disposed: int
+    in_use_as_component: int = 0
+
+
+class AssetDashboardSummaryResponse(BaseModel):
+    company_id: UUID
+    branch_id: UUID | None = None
+    location_id: UUID | None = None
+    total_assets: int
+    ready_to_move: int
+    assigned: int
+    retired: int
+    pending_disposal: int
+    disposed: int
+    in_use_as_component: int = 0
     by_branch: list[AssetDashboardBranchSummary] = []
+    by_location: list[AssetDashboardLocationSummary] = []
 
 
 class AssetResponse(OrmModel):
@@ -182,6 +208,9 @@ class AssetResponse(OrmModel):
     asset_name: str
     asset_category_id: UUID
     asset_type: str
+    asset_type_id: UUID | None = None
+    asset_type_name: str | None = None
+    asset_domain: str = "IT"
     master_asset_id: UUID | None
     product_id: UUID | None
     supplier_vendor_id: UUID | None
@@ -313,12 +342,13 @@ class AssetComponentCreate(BaseModel):
     company_id: UUID | None = None
     branch_id: UUID | None = None
     asset_id: UUID
-    component_code: str
-    component_name: str
+    component_code: str | None = None
+    component_name: str | None = None
     component_type: str | None = Field(default="OTHER", max_length=30)
     product_id: UUID | None = None
     serial_number: str | None = None
     quantity: Decimal | None = None
+    component_asset_id: UUID | None = None
 
 
 class AssetComponentUpdate(BaseModel):
@@ -345,6 +375,7 @@ class AssetComponentResponse(OrmModel):
     id: UUID
     branch_id: UUID | None
     asset_id: UUID
+    component_asset_id: UUID | None = None
     component_code: str
     component_name: str
     component_type: str = "OTHER"
@@ -356,6 +387,9 @@ class AssetComponentResponse(OrmModel):
     version: int
     # Populated when listing for assignment wizard / availability
     availability: str | None = None
+    linked_asset_code: str | None = None
+    linked_asset_name: str | None = None
+    linked_asset_operational_status: str | None = None
 
 
 class AssetComponentListResult(BaseModel):
@@ -366,15 +400,19 @@ class AssetComponentListResult(BaseModel):
 
 
 class AssetComponentTreeNode(BaseModel):
-    id: str
+    id: UUID | str
     component_code: str
     component_name: str
     component_type: str = "OTHER"
     serial_number: str | None = None
-    quantity: str | None = None
+    quantity: str | Decimal | None = None
     status: str
-    product_id: str | None = None
+    product_id: UUID | str | None = None
     version: int
+    component_asset_id: UUID | str | None = None
+    linked_asset_code: str | None = None
+    linked_asset_name: str | None = None
+    linked_asset_operational_status: str | None = None
 
 
 class AssetComponentTreeAsset(BaseModel):
@@ -399,6 +437,7 @@ class AssetComponentHistoryEntry(BaseModel):
     created_at: str | None = None
     updated_at: str | None = None
     version: int
+    component_asset_id: str | None = None
 
 
 class AssetComponentHistoryResult(BaseModel):
@@ -412,6 +451,15 @@ class AssetComponentHistoryResult(BaseModel):
 class AssetComponentReplaceResult(BaseModel):
     replaced: AssetComponentResponse
     successor: AssetComponentResponse
+
+
+class AssetComponentAttachableAsset(BaseModel):
+    id: str
+    asset_code: str
+    asset_name: str
+    serial_number: str | None = None
+    operational_status: str | None = None
+    asset_type_id: str | None = None
 
 
 class AssignmentComponentReturnLine(BaseModel):
@@ -436,6 +484,10 @@ class AssignmentComponentResponse(OrmModel):
     component_type: str | None = None
     serial_number: str | None = None
     component_status: str | None = None
+    component_asset_id: UUID | None = None
+    linked_asset_code: str | None = None
+    linked_asset_name: str | None = None
+    linked_asset_operational_status: str | None = None
 
 
 class AssignmentComponentListResult(BaseModel):
@@ -549,6 +601,8 @@ class AssetTransferCreate(BaseModel):
     to_employee_id: UUID | None = None
     to_location_label: str | None = None
     to_org_location_id: UUID | None = None
+    to_location_id: UUID | None = None
+    to_building_id: UUID | None = None
     reason: str | None = None
     effective_date: date | None = None
     transfer_notes: str | None = None
@@ -559,6 +613,8 @@ class AssetTransferUpdate(BaseModel):
     to_employee_id: UUID | None = None
     to_location_label: str | None = None
     to_org_location_id: UUID | None = None
+    to_location_id: UUID | None = None
+    to_building_id: UUID | None = None
     reason: str | None = None
     effective_date: date | None = None
     transfer_notes: str | None = None
@@ -605,12 +661,16 @@ class AssetLocationCreate(BaseModel):
     asset_id: UUID
     location_label: str
     org_location_id: UUID | None = None
+    location_id: UUID | None = None
+    building_id: UUID | None = None
     effective_from: datetime | None = None
 
 
 class AssetLocationUpdate(BaseModel):
     location_label: str | None = None
     org_location_id: UUID | None = None
+    location_id: UUID | None = None
+    building_id: UUID | None = None
     effective_from: datetime | None = None
     effective_to: datetime | None = None
     branch_id: UUID | None = None
@@ -623,6 +683,8 @@ class AssetLocationResponse(OrmModel):
     asset_id: UUID
     location_label: str
     org_location_id: UUID | None
+    location_id: UUID | None = None
+    building_id: UUID | None = None
     effective_from: datetime | None
     effective_to: datetime | None
     is_current: bool
@@ -781,15 +843,33 @@ class AssetMaintenanceCreate(BaseModel):
     maintenance_type: str
     maintenance_plan_id: UUID | None = None
     scheduled_date: date | None = None
+    reason: str | None = None
+    expected_duration_days: int | None = None
     vendor_id: UUID | None = None
     cost_amount: Decimal | None = None
     technician_employee_id: UUID | None = None
     quality_inspection_id: UUID | None = None
 
+class AssetMaintenanceQuickDraftCreate(BaseModel):
+    asset_id: UUID
+    company_id: UUID | None = None
+
+class AssetMaintenanceStartRequest(BaseModel):
+    reason: str
+    expected_duration_days: int = Field(ge=1)
+    maintenance_type: str | None = None
+    scheduled_date: date | None = None
+    vendor_id: UUID | None = None
+    cost_amount: Decimal | None = None
+    technician_employee_id: UUID | None = None
+    version: int | None = None
+
 class AssetMaintenanceUpdate(BaseModel):
     maintenance_type: str | None = None
     maintenance_plan_id: UUID | None = None
     scheduled_date: date | None = None
+    reason: str | None = None
+    expected_duration_days: int | None = Field(default=None, ge=1)
     vendor_id: UUID | None = None
     cost_amount: Decimal | None = None
     technician_employee_id: UUID | None = None
@@ -800,8 +880,15 @@ class AssetMaintenanceResponse(OrmModel):
     id: UUID
     document_number: str
     asset_id: UUID
+    asset_code: str | None = None
+    asset_name: str | None = None
+    serial_number: str | None = None
+    make: str | None = None
+    model: str | None = None
     maintenance_plan_id: UUID | None
     maintenance_type: str
+    reason: str | None = None
+    expected_duration_days: int | None = None
     scheduled_date: date | None
     completed_date: date | None
     vendor_id: UUID | None
@@ -816,12 +903,41 @@ class AssetMaintenanceResponse(OrmModel):
     version: int
     created_by: UUID | None = None
 
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def expected_return_date(self) -> date | None:
+        if self.scheduled_date and self.expected_duration_days:
+            from datetime import timedelta
+
+            return self.scheduled_date + timedelta(days=self.expected_duration_days)
+        return None
+
 
 class AssetMaintenanceListResult(BaseModel):
     items: list["AssetMaintenanceResponse"]
     total: int
     page: int
     page_size: int
+
+
+class MaintenanceStartResult(BaseModel):
+    status: str
+    message: str | None = None
+    maintenance: AssetMaintenanceResponse
+
+
+class MaintenanceTimelineEvent(BaseModel):
+    id: str
+    kind: str
+    label: str
+    occurred_at: datetime
+    performed_by: UUID | None = None
+    detail: str | None = None
+
+
+class MaintenanceTimelineResult(BaseModel):
+    events: list[MaintenanceTimelineEvent]
+
 
 class MaintenanceScheduleRequest(BaseModel):
     scheduled_date: date | None = None
@@ -1287,7 +1403,7 @@ class WorkflowActionRequest(BaseModel):
 
 
 class AssetExcelImportDefaults(BaseModel):
-    asset_category_id: UUID
+    asset_category_id: UUID | None = None
     asset_type: str = "fixed"
     purchase_date: date | None = None
     purchase_cost: Decimal = Decimal("0")
@@ -1299,18 +1415,20 @@ class AssetExcelImportRow(BaseModel):
 
     row_number: int = Field(ge=1)
     preview_status: str = Field(description="valid | warning | invalid")
-    asset_tag: str = Field(min_length=1, max_length=100)
+    asset_tag: str | None = Field(default=None, max_length=100)
     asset_name: str = Field(min_length=1, max_length=255)
-    branch_id: UUID
+    branch_id: UUID | None = None
     operational_status: str
     employee_id: UUID | None = None
     department_id: UUID | None = None
     asset_category_id: UUID | None = None
+    asset_type_id: UUID
     serial_number: str | None = Field(default=None, max_length=100)
     make: str | None = Field(default=None, max_length=100)
     model: str | None = Field(default=None, max_length=100)
     configuration: str | None = Field(default=None, max_length=500)
     location_label: str | None = Field(default=None, max_length=255)
+    location_id: UUID | None = None
     issue_date: date | None = None
     delivery_reference_number: str | None = Field(default=None, max_length=100)
     delivery_reference_status: str | None = None
@@ -1763,3 +1881,54 @@ class DcChallanBulkSendResult(BaseModel):
     results: list[DcChallanBulkSendItem]
     sent_count: int
     skipped_count: int
+
+
+# --- Domain membership (IT / Non-IT teams) ---
+
+
+class DomainMembershipCreate(BaseModel):
+    user_id: UUID
+    domain: str
+    role: str = "member"
+    company_id: UUID | None = None
+
+
+class DomainMembershipUpdate(BaseModel):
+    role: str
+
+
+class DomainMembershipResponse(OrmModel):
+    id: UUID
+    user_id: UUID
+    display_name: str | None = None
+    email: str | None = None
+    domain: str
+    role: str
+    assigned_at: datetime
+    assigned_by: UUID | None = None
+    company_id: UUID
+    version: int
+
+
+class DomainMembershipListResult(BaseModel):
+    items: list[DomainMembershipResponse]
+    total: int
+
+
+class DomainMembershipUserOption(BaseModel):
+    user_id: UUID
+    display_name: str
+    email: str
+
+
+class DomainMembershipMeMembership(BaseModel):
+    id: UUID
+    domain: str
+    role: str
+
+
+class DomainMembershipMeResponse(BaseModel):
+    is_module_admin: bool
+    domains: list[str]
+    admin_domains: list[str] = []
+    memberships: list[DomainMembershipMeMembership]

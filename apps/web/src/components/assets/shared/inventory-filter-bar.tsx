@@ -50,10 +50,6 @@ export const DEFAULT_LIFECYCLE_OPTIONS: InventoryFilterOption[] = [
 
 export const DEFAULT_ASSET_TYPE_OPTIONS: InventoryFilterOption[] = [
   { value: "", label: "All types" },
-  { value: "fixed", label: "Fixed" },
-  { value: "consumable", label: "Consumable" },
-  { value: "digital", label: "Digital" },
-  { value: "leased", label: "Leased" },
 ];
 
 export type InventoryFilterBarProps = {
@@ -88,7 +84,7 @@ export function InventoryFilterBar({
   onApply,
   onReset,
   branches = [],
-  categories = [],
+  categories: _categories = [],
   departments = [],
   assetTypes = DEFAULT_ASSET_TYPE_OPTIONS,
   locations = [],
@@ -127,25 +123,6 @@ export function InventoryFilterBar({
               {branches.map((b) => (
                 <SelectItem key={b.id} value={b.id}>
                   {b.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-        <div className="space-y-1.5">
-          <Label>Category</Label>
-          <Select
-            value={values.categoryId || "__all"}
-            onValueChange={(v) => onChange({ categoryId: v === "__all" ? "" : v })}
-          >
-            <SelectTrigger className="w-full cursor-pointer">
-              <SelectValue placeholder="Category" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="__all">All categories</SelectItem>
-              {categories.map((c) => (
-                <SelectItem key={c.value} value={c.value}>
-                  {c.label}
                 </SelectItem>
               ))}
             </SelectContent>

@@ -48,12 +48,22 @@ export function QueueCard({
   const showCount = typeof count === "number" && Number.isFinite(count);
 
   return (
-    <Card className={cn("border-border/80 shadow-sm", className)}>
-      <CardHeader className={cn("flex flex-row items-center justify-between gap-2 space-y-0", dense ? "pb-2 pt-3" : "pb-3")}>
-        <CardTitle className="text-sm font-medium tracking-tight">{title}</CardTitle>
+    <Card
+      className={cn(
+        "overflow-hidden border-border/70 bg-background/95 shadow-md",
+        className,
+      )}
+    >
+      <CardHeader
+        className={cn(
+          "flex flex-row items-center justify-between gap-2 space-y-0 border-b border-border/50",
+          dense ? "pb-2.5 pt-3.5" : "pb-3 pt-4",
+        )}
+      >
+        <CardTitle className="text-sm font-semibold tracking-tight">{title}</CardTitle>
         {showCount ? (
           <span
-            className="inline-flex min-w-6 items-center justify-center rounded-md border border-border/70 bg-muted/50 px-1.5 py-0.5 font-mono text-[11px] font-semibold tabular-nums text-muted-foreground"
+            className="inline-flex min-w-6 items-center justify-center rounded-md border border-border/70 bg-muted/40 px-1.5 py-0.5 font-mono text-[11px] font-semibold tabular-nums text-muted-foreground"
             data-testid="queue-card-count"
             aria-label={`${count} total`}
           >
@@ -61,7 +71,7 @@ export function QueueCard({
           </span>
         ) : null}
       </CardHeader>
-      <CardContent className={cn("pt-0", dense && "pb-2")}>
+      <CardContent className={cn("pt-3", dense && "pb-2")}>
         {isEmpty ? (
           <EmptyState
             variant={emptyVariant}

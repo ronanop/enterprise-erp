@@ -287,15 +287,21 @@ export const assignmentFrontendService = {
       return page.items.map((row) => {
         const typeLabel = componentTypeLabel(row.component_type);
         const unavailable = row.availability === "unavailable";
+        const linkedLabel =
+          row.linked_asset_code || row.linked_asset_name
+            ? [row.linked_asset_code, row.linked_asset_name].filter(Boolean).join(" · ")
+            : null;
         return {
           id: row.id,
-          label: typeLabel,
+          label: linkedLabel || typeLabel,
           status: unavailable ? "Currently issued" : row.status || "active",
           componentType: row.component_type ?? "OTHER",
-          componentName: row.component_name,
+          componentName: linkedLabel || row.component_name,
           serialNumber: row.serial_number ?? null,
           availability: row.availability ?? "available",
           disabled: unavailable,
+          linkedAssetCode: row.linked_asset_code ?? null,
+          linkedAssetName: row.linked_asset_name ?? null,
         };
       });
     }, "Failed to list asset components.");

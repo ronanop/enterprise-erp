@@ -4,7 +4,7 @@ import { fetchAssetOperationsData } from "@/components/assets/asset-operations-f
 import { BRANCH_ALL_VALUE } from "@/components/assets/shared";
 
 describe("fetchAssetOperationsData", () => {
-  it("calls all four APIs in parallel", async () => {
+  it("calls summary, transfers, and assets in parallel", async () => {
     const getDashboardSummary = vi.fn().mockResolvedValue({
       company_id: "c",
       total_assets: 1,
@@ -14,30 +14,21 @@ describe("fetchAssetOperationsData", () => {
       pending_disposal: 0,
       disposed: 0,
     });
-    const listAssets = vi.fn().mockResolvedValue({ items: [], total: 0, page: 1, page_size: 10 });
-    const listAssignments = vi.fn().mockResolvedValue({ items: [], total: 0, page: 1, page_size: 10 });
+    const listTransfers = vi.fn().mockResolvedValue({ items: [], total: 0, page: 1, page_size: 50 });
+    const listAssets = vi.fn().mockResolvedValue({ items: [], total: 0, page: 1, page_size: 200 });
 
     await fetchAssetOperationsData(BRANCH_ALL_VALUE, {
       getDashboardSummary,
+      listTransfers,
       listAssets,
-      listAssignments,
     });
 
     expect(getDashboardSummary).toHaveBeenCalledOnce();
-    expect(listAssets).toHaveBeenCalledTimes(2);
-    expect(listAssignments).toHaveBeenCalledOnce();
-    expect(listAssets).toHaveBeenCalledWith(
-      expect.objectContaining({ operational_status: "READY_TO_MOVE", page_size: 10 }),
-    );
-    expect(listAssets).toHaveBeenCalledWith(
-      expect.objectContaining({ operational_status: "PENDING_DISPOSAL", page_size: 10 }),
-    );
-    expect(listAssignments).toHaveBeenCalledWith(
-      expect.objectContaining({ status: "active", page_size: 10 }),
-    );
+    expect(listTransfers).toHaveBeenCalledWith({ page: 1, page_size: 50 });
+    expect(listAssets).toHaveBeenCalledWith({ page: 1, page_size: 200 });
   });
 
-  it("passes branch_id when branch is selected", async () => {
+  it("passes location_id when location is selected", async () => {
     const getDashboardSummary = vi.fn().mockResolvedValue({
       company_id: "c",
       total_assets: 0,
@@ -47,21 +38,19 @@ describe("fetchAssetOperationsData", () => {
       pending_disposal: 0,
       disposed: 0,
     });
-    const listAssets = vi.fn().mockResolvedValue({ items: [], total: 0, page: 1, page_size: 10 });
-    const listAssignments = vi.fn().mockResolvedValue({ items: [], total: 0, page: 1, page_size: 10 });
+    const listTransfers = vi.fn().mockResolvedValue({ items: [], total: 0, page: 1, page_size: 50 });
+    const listAssets = vi.fn().mockResolvedValue({ items: [], total: 0, page: 1, page_size: 200 });
 
-    await fetchAssetOperationsData("branch-uuid", {
+    await fetchAssetOperationsData("location-uuid", {
       getDashboardSummary,
+      listTransfers,
       listAssets,
-      listAssignments,
     });
 
-    expect(getDashboardSummary).toHaveBeenCalledWith({ branch_id: "branch-uuid" });
-    expect(listAssets).toHaveBeenCalledWith(expect.objectContaining({ branch_id: "branch-uuid" }));
-    expect(listAssignments).toHaveBeenCalledWith(expect.objectContaining({ branch_id: "branch-uuid" }));
+    expect(getDashboardSummary).toHaveBeenCalledWith({ location_id: "location-uuid" });
   });
 
-  it("omits branch_id for All", async () => {
+  it("omits location_id for All", async () => {
     const getDashboardSummary = vi.fn().mockResolvedValue({
       company_id: "c",
       total_assets: 0,
@@ -71,52 +60,49 @@ describe("fetchAssetOperationsData", () => {
       pending_disposal: 0,
       disposed: 0,
     });
-    const listAssets = vi.fn().mockResolvedValue({ items: [], total: 0, page: 1, page_size: 10 });
-    const listAssignments = vi.fn().mockResolvedValue({ items: [], total: 0, page: 1, page_size: 10 });
+    const listTransfers = vi.fn().mockResolvedValue({ items: [], total: 0, page: 1, page_size: 50 });
+    const listAssets = vi.fn().mockResolvedValue({ items: [], total: 0, page: 1, page_size: 200 });
 
     await fetchAssetOperationsData(BRANCH_ALL_VALUE, {
       getDashboardSummary,
+      listTransfers,
       listAssets,
-      listAssignments,
     });
 
     expect(getDashboardSummary).toHaveBeenCalledWith({});
-    expect(listAssets).toHaveBeenCalledWith(expect.objectContaining({ branch_id: undefined }));
   });
 
   it("captures partial API failures", async () => {
     const getDashboardSummary = vi.fn().mockRejectedValue(new Error("summary down"));
-    const listAssets = vi.fn().mockResolvedValue({ items: [], total: 0, page: 1, page_size: 10 });
-    const listAssignments = vi.fn().mockResolvedValue({ items: [], total: 0, page: 1, page_size: 10 });
+    const listTransfers = vi.fn().mockResolvedValue({ items: [], total: 0, page: 1, page_size: 50 });
+    const listAssets = vi.fn().mockResolvedValue({ items: [], total: 0, page: 1, page_size: 200 });
 
     const result = await fetchAssetOperationsData(BRANCH_ALL_VALUE, {
       getDashboardSummary,
+      listTransfers,
       listAssets,
-      listAssignments,
     });
 
     expect(result.summary).toBeNull();
-    expect(result.readyList).not.toBeNull();
+    expect(result.transfersList).not.toBeNull();
     expect(result.errors.summary).toBe("summary down");
   });
 
   it("captures all failures", async () => {
     const getDashboardSummary = vi.fn().mockRejectedValue(new Error("a"));
-    const listAssets = vi.fn().mockRejectedValue(new Error("b"));
-    const listAssignments = vi.fn().mockRejectedValue(new Error("c"));
+    const listTransfers = vi.fn().mockRejectedValue(new Error("b"));
+    const listAssets = vi.fn().mockRejectedValue(new Error("c"));
 
     const result = await fetchAssetOperationsData(BRANCH_ALL_VALUE, {
       getDashboardSummary,
+      listTransfers,
       listAssets,
-      listAssignments,
     });
 
     expect(result.summary).toBeNull();
-    expect(result.readyList).toBeNull();
-    expect(result.disposalList).toBeNull();
-    expect(result.assignmentsList).toBeNull();
-    expect(result.errors.ready).toBe("b");
-    expect(result.errors.disposal).toBe("b");
-    expect(result.errors.assignments).toBe("c");
+    expect(result.transfersList).toBeNull();
+    expect(result.assetsList).toBeNull();
+    expect(result.errors.transfers).toBe("b");
+    expect(result.errors.assets).toBe("c");
   });
 });

@@ -54,9 +54,13 @@ function renderWorkspace(overrides: Partial<ComponentProps<typeof AssetInventory
     <AssetInventoryWorkspace
       preset="all"
       onPresetChange={vi.fn()}
-      headerBranchId={BRANCH_ALL_VALUE}
-      onHeaderBranchChange={vi.fn()}
-      branches={[{ id: "b1", label: "Noida" }]}
+      headerLocationId={BRANCH_ALL_VALUE}
+      onHeaderLocationChange={vi.fn()}
+      siteLocations={[
+        { id: "loc-mumbai", label: "Mumbai" },
+        { id: "loc-delhi", label: "New Delhi" },
+      ]}
+      branches={[{ id: "b1", label: "Head Office" }]}
       quickSearch=""
       onQuickSearchChange={vi.fn()}
       onQuickSearchSubmit={vi.fn()}
@@ -191,7 +195,7 @@ describe("AssetInventoryWorkspace", () => {
       appliedFilters: { ...EMPTY_INVENTORY_FILTERS, branchId: "b1" },
       onDismissFilter: vi.fn(),
     });
-    expect(screen.getByTestId("inventory-active-filter-chips")).toHaveTextContent("Branch: Noida");
+    expect(screen.getByTestId("inventory-active-filter-chips")).toHaveTextContent("Branch: Head Office");
   });
 
   it("renders export toolbar when handlers provided", async () => {

@@ -260,23 +260,6 @@ export function ExcelImportPage({
           </div>
           <ExcelImportPreviewGrid rows={validation.previewRows} filter={previewFilter} />
           <div className="space-y-3 rounded-md border border-border p-4">
-            <label className="block text-sm font-medium" htmlFor="excel-import-default-category">
-              Default asset category (required for import)
-            </label>
-            <select
-              id="excel-import-default-category"
-              className="w-full max-w-md cursor-pointer rounded-md border border-input bg-background px-3 py-2 text-sm transition-colors duration-200"
-              value={defaultCategoryId}
-              onChange={(e) => onDefaultCategoryChange?.(e.target.value)}
-              data-testid="excel-import-default-category"
-            >
-              <option value="">Select category…</option>
-              {categories.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.label}
-                </option>
-              ))}
-            </select>
             <label className="flex cursor-pointer items-center gap-2 text-sm">
               <input
                 type="checkbox"
@@ -327,7 +310,7 @@ export function ExcelImportPage({
               title={
                 importEnabled
                   ? "Import validated rows"
-                  : "Select a default category and ensure valid rows exist"
+                  : "Ensure valid rows exist before importing"
               }
             >
               {busy ? "Importing…" : "Import"}

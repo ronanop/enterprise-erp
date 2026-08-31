@@ -25,6 +25,82 @@ vi.mock("@/lib/org-options", () => ({
   listBranchOptions: vi.fn().mockResolvedValue([{ id: "b1", label: "Noida" }]),
 }));
 
+vi.mock("@/services/asset-site-location-service", () => ({
+  listSiteLocations: vi.fn().mockResolvedValue([
+    {
+      id: "loc-mumbai",
+      name: "Mumbai",
+      is_head_office: false,
+      org_location_id: null,
+      company_id: "c1",
+      version: 1,
+    },
+    {
+      id: "loc-bangalore",
+      name: "Bangalore",
+      is_head_office: false,
+      org_location_id: null,
+      company_id: "c1",
+      version: 1,
+    },
+  ]),
+  listSiteBuildings: vi.fn().mockImplementation(async (locationId?: string) => {
+    if (locationId === "loc-mumbai") {
+      return [
+        {
+          id: "bld-crc1",
+          location_id: "loc-mumbai",
+          name: "CRC-1",
+          company_id: "c1",
+          version: 1,
+        },
+        {
+          id: "bld-park",
+          location_id: "loc-mumbai",
+          name: "Mumbai IT Park",
+          company_id: "c1",
+          version: 1,
+        },
+      ];
+    }
+    if (locationId === "loc-bangalore") {
+      return [
+        {
+          id: "bld-manyata",
+          location_id: "loc-bangalore",
+          name: "Manyata Tech Park",
+          company_id: "c1",
+          version: 1,
+        },
+      ];
+    }
+    return [];
+  }),
+}));
+
+vi.mock("@/services/asset-type-service", () => ({
+  listItAssetTypes: vi.fn().mockResolvedValue([
+    {
+      id: "type-laptop",
+      name: "Laptop",
+      active: true,
+      requires_hardware_config: true,
+      description: null,
+      company_id: "co1",
+      version: 1,
+    },
+    {
+      id: "type-monitor",
+      name: "Monitor",
+      active: true,
+      requires_hardware_config: false,
+      description: null,
+      company_id: "co1",
+      version: 1,
+    },
+  ]),
+}));
+
 vi.mock("@/services/assets-service", () => ({
   buildSelfServiceUrl: (id: string) => `https://example.test/self/${id}`,
   assetCategoryService: {
@@ -58,21 +134,23 @@ async function fillMinimalLaptopForm(user: ReturnType<typeof userEvent.setup>) {
     expect(screen.getByRole("heading", { name: "Add Asset" })).toBeInTheDocument(),
   );
   await waitFor(() =>
-    expect(screen.getByRole("combobox", { name: /Category/i })).toBeInTheDocument(),
+    expect(screen.getByRole("combobox", { name: /Asset Type/i })).toBeInTheDocument(),
   );
 
   const name = screen.getByLabelText(/Asset Name/i);
   await user.clear(name);
   await user.type(name, "Dell Latitude");
 
-  await selectByLabel(user, /Category/i, "c1");
-  await selectByLabel(user, /Asset Type/i, "laptop");
+  await selectByLabel(user, /Asset Type/i, "type-laptop");
   await selectByLabel(user, /Processor/i, "Intel i5");
   await selectByLabel(user, /Generation/i, "12th");
   await selectByLabel(user, /^RAM/i, "16 GB");
   await selectByLabel(user, /Storage/i, "512 GB");
-  await selectByLabel(user, /^Location/i, "mumbai");
-  await selectByLabel(user, /Building/i, "mumbai-crc-1");
+  await selectByLabel(user, /^Location/i, "loc-mumbai");
+  await waitFor(() => {
+    expect(screen.getByRole("combobox", { name: /Building/i })).not.toBeDisabled();
+  });
+  await selectByLabel(user, /Building/i, "bld-crc1");
 }
 
 describe("AssetAddForm single-page registration", () => {
@@ -106,7 +184,10 @@ describe("AssetAddForm single-page registration", () => {
       expect(screen.getByRole("combobox", { name: /^Location/i })).toBeInTheDocument(),
     );
 
-    await selectByLabel(user, /^Location/i, "mumbai");
+    await selectByLabel(user, /^Location/i, "loc-mumbai");
+    await waitFor(() => {
+      expect(screen.getByRole("combobox", { name: /Building/i })).not.toBeDisabled();
+    });
     const building = screen.getByRole("combobox", { name: /Building/i });
     expect(within(building).getByRole("option", { name: "CRC-1" })).toBeInTheDocument();
     expect(within(building).getByRole("option", { name: "Mumbai IT Park" })).toBeInTheDocument();
@@ -122,7 +203,7 @@ describe("AssetAddForm single-page registration", () => {
       expect(screen.getByRole("combobox", { name: /Asset Type/i })).toBeInTheDocument(),
     );
 
-    await selectByLabel(user, /Asset Type/i, "laptop");
+    await selectByLabel(user, /Asset Type/i, "type-laptop");
     await selectByLabel(user, /Processor/i, "Intel i7");
     expect(screen.getByRole("combobox", { name: /Generation/i })).toBeInTheDocument();
 
@@ -130,19 +211,19 @@ describe("AssetAddForm single-page registration", () => {
     expect(screen.queryByRole("combobox", { name: /Generation/i })).not.toBeInTheDocument();
   });
 
-  it("shows IT hardware fields for Laptop and hides for Monitor", async () => {
+  it("shows IT hardware fields when requires_hardware_config is true and hides when false", async () => {
     const user = userEvent.setup();
     render(<AssetAddForm />);
     await waitFor(() =>
       expect(screen.getByRole("combobox", { name: /Asset Type/i })).toBeInTheDocument(),
     );
 
-    await selectByLabel(user, /Asset Type/i, "laptop");
+    await selectByLabel(user, /Asset Type/i, "type-laptop");
     expect(screen.getByRole("combobox", { name: /Processor/i })).toBeInTheDocument();
     expect(screen.getByRole("combobox", { name: /^RAM/i })).toBeInTheDocument();
     expect(screen.getByRole("combobox", { name: /Storage/i })).toBeInTheDocument();
 
-    await selectByLabel(user, /Asset Type/i, "monitor");
+    await selectByLabel(user, /Asset Type/i, "type-monitor");
     expect(screen.queryByRole("combobox", { name: /Processor/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("combobox", { name: /^RAM/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("combobox", { name: /Storage/i })).not.toBeInTheDocument();
@@ -198,11 +279,13 @@ describe("AssetAddForm single-page registration", () => {
     const body = create.mock.calls[0]![0] as Record<string, unknown>;
     expect(body.asset_name).toBe("Dell Latitude");
     expect(body.asset_category_id).toBe("c1");
-    expect(body.asset_type).toBe("fixed");
+    expect(body.asset_type_id).toBe("type-laptop");
+    expect(body.asset_type).toBeUndefined();
     expect(body.branch_id).toBe("b1");
     expect(body.make).toBe("Dell");
     expect(body.model).toBe("Latitude 5440");
-    expect(body.location_label).toBe("Mumbai · CRC-1");
+    expect(body.location_id).toBe("loc-mumbai");
+    expect(body.building_id).toBe("bld-crc1");
     expect(String(body.configuration)).toContain("Processor: Intel i5");
     expect(String(body.configuration)).toContain("Generation: 12th");
     expect(String(body.configuration)).toContain("RAM: 16 GB");

@@ -111,6 +111,7 @@ describe("StatusBadge", () => {
     "RETIRED",
     "PENDING_DISPOSAL",
     "DISPOSED",
+    "IN_USE_AS_COMPONENT",
   ] as const)("renders operational label for %s", (status) => {
     const { container } = render(<StatusBadge kind="operational" status={status} />);
     expect(container).toHaveTextContent(OPERATIONAL_STATUS_LABELS[status]);
@@ -124,6 +125,12 @@ describe("StatusBadge", () => {
   it("uses distinct operational colors from statusColorMap", () => {
     const { container } = render(<StatusBadge kind="operational" status="ASSIGNED" />);
     expect(container.firstChild).toHaveClass("border-emerald-200");
+  });
+
+  it("renders Non-IT status from statusColorMap", () => {
+    const { container } = render(<StatusBadge kind="nonIt" status="MAINTENANCE" />);
+    expect(container).toHaveTextContent("In Maintenance");
+    expect(container.firstChild).toHaveClass("border-amber-200");
   });
 
   it("renders DC challan status from statusColorMap", () => {

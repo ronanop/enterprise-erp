@@ -15,6 +15,8 @@ Assigned = AssetOperationalStatus.ASSIGNED.value
 Retired = AssetOperationalStatus.RETIRED.value
 Pending = AssetOperationalStatus.PENDING_DISPOSAL.value
 Disposed = AssetOperationalStatus.DISPOSED.value
+InUse = AssetOperationalStatus.IN_USE_AS_COMPONENT.value
+InMaint = AssetOperationalStatus.IN_MAINTENANCE.value
 
 VALIDATOR = OperationalStatusValidator()
 
@@ -47,6 +49,11 @@ def test_validate_transition_blocked() -> None:
         ("start_disposal", Retired, Pending),
         ("reinstate", Pending, Ready),
         ("complete_disposal", Pending, Disposed),
+        ("attach_as_component", Ready, InUse),
+        ("detach_as_component", InUse, Ready),
+        ("complete_disposal", InUse, Disposed),
+        ("start_maintenance", Ready, InMaint),
+        ("complete_maintenance", InMaint, Ready),
     ],
 )
 def test_validate_action_maps_to_target(action: str, current: str, expected_target: str) -> None:

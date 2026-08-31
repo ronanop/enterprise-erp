@@ -18,6 +18,12 @@ import {
 } from "@/components/ui/select";
 import { getAccessTokenUserId, isAuthenticated } from "@/lib/auth";
 import { ApiClientError, resourceService } from "@/services/api-client";
+import {
+  listSiteBuildings,
+  listSiteLocations,
+  type SiteBuilding,
+  type SiteLocation,
+} from "@/services/asset-site-location-service";
 
 type AssetRow = {
   id: string;
@@ -88,13 +94,17 @@ export function AssetTransferWorkspace() {
   const [actionLoading, setActionLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [workflowComments, setWorkflowComments] = useState("");
+  const [siteLocations, setSiteLocations] = useState<SiteLocation[]>([]);
+  const [draftBuildings, setDraftBuildings] = useState<SiteBuilding[]>([]);
+  const [editBuildings, setEditBuildings] = useState<SiteBuilding[]>([]);
   const [draft, setDraft] = useState({
     asset_id: "",
     branch_id: "",
     to_branch_id: "",
     to_department_id: "",
     to_employee_id: "",
-    to_location_label: "",
+    to_location_id: "",
+    to_building_id: "",
     reason: "",
     effective_date: "",
     transfer_notes: "",
@@ -103,7 +113,8 @@ export function AssetTransferWorkspace() {
     to_branch_id: "",
     to_department_id: "",
     to_employee_id: "",
-    to_location_label: "",
+    to_location_id: "",
+    to_building_id: "",
     reason: "",
     effective_date: "",
     transfer_notes: "",
@@ -198,16 +209,24 @@ export function AssetTransferWorkspace() {
   }, [load]);
 
   useEffect(() => {
+    void listSiteLocations()
+      .then(setSiteLocations)
+      .catch(() => setSiteLocations([]));
+  }, []);
+
+  useEffect(() => {
     if (!selected) return;
     setEdit({
       to_branch_id: selected.to_branch_id ?? "",
       to_department_id: selected.to_department_id ?? "",
       to_employee_id: selected.to_employee_id ?? "",
-      to_location_label: selected.to_location_label ?? "",
+      to_location_id: "",
+      to_building_id: "",
       reason: selected.reason ?? "",
       effective_date: selected.effective_date ?? "",
       transfer_notes: selected.transfer_notes ?? "",
     });
+    setEditBuildings([]);
   }, [selected]);
 
   function onDraftAssetChange(assetId: string) {
@@ -228,9 +247,12 @@ export function AssetTransferWorkspace() {
       !payload.to_branch_id.trim() &&
       !payload.to_department_id.trim() &&
       !payload.to_employee_id.trim() &&
-      !payload.to_location_label.trim()
+      !payload.to_location_id.trim()
     ) {
       return "Add at least one transfer target.";
+    }
+    if (payload.to_location_id.trim() && !payload.to_building_id.trim()) {
+      return "Select a building for the destination location.";
     }
     return null;
   }
@@ -255,7 +277,8 @@ export function AssetTransferWorkspace() {
         to_branch_id: draft.to_branch_id || undefined,
         to_department_id: draft.to_department_id || undefined,
         to_employee_id: draft.to_employee_id || undefined,
-        to_location_label: draft.to_location_label.trim() || undefined,
+        to_location_id: draft.to_location_id || undefined,
+        to_building_id: draft.to_building_id || undefined,
         reason: draft.reason.trim() || undefined,
         effective_date: draft.effective_date || undefined,
         transfer_notes: draft.transfer_notes.trim() || undefined,
@@ -266,11 +289,13 @@ export function AssetTransferWorkspace() {
         to_branch_id: "",
         to_department_id: "",
         to_employee_id: "",
-        to_location_label: "",
+        to_location_id: "",
+        to_building_id: "",
         reason: "",
         effective_date: "",
         transfer_notes: "",
       });
+      setDraftBuildings([]);
       await load();
     } catch (err) {
       setError(err instanceof ApiClientError ? err.message : "Failed to create transfer");
@@ -296,7 +321,8 @@ export function AssetTransferWorkspace() {
         to_branch_id: edit.to_branch_id || undefined,
         to_department_id: edit.to_department_id || undefined,
         to_employee_id: edit.to_employee_id || undefined,
-        to_location_label: edit.to_location_label.trim() || undefined,
+        to_location_id: edit.to_location_id || undefined,
+        to_building_id: edit.to_building_id || undefined,
         reason: edit.reason.trim() || undefined,
         effective_date: edit.effective_date || undefined,
         transfer_notes: edit.transfer_notes.trim() || undefined,
@@ -537,12 +563,51 @@ export function AssetTransferWorkspace() {
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="draft-location">To location</Label>
-                <Input
-                  id="draft-location"
-                  value={draft.to_location_label}
-                  onChange={(e) => setDraft((s) => ({ ...s, to_location_label: e.target.value }))}
-                />
+                <Label>To location</Label>
+                <Select
+                  value={draft.to_location_id}
+                  onValueChange={(v) => {
+                    setDraft((s) => ({ ...s, to_location_id: v, to_building_id: "" }));
+                    void listSiteBuildings(v)
+                      .then(setDraftBuildings)
+                      .catch(() => setDraftBuildings([]));
+                  }}
+                >
+                  <SelectTrigger className="cursor-pointer" aria-label="To location">
+                    <SelectValue placeholder="Select location" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {siteLocations.map((loc) => (
+                      <SelectItem key={loc.id} value={loc.id}>
+                        {loc.name}
+                        {loc.is_head_office ? " (Head Office)" : ""}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>To building</Label>
+                <Select
+                  value={draft.to_building_id}
+                  onValueChange={(v) => setDraft((s) => ({ ...s, to_building_id: v }))}
+                  disabled={!draft.to_location_id}
+                >
+                  <SelectTrigger className="cursor-pointer" aria-label="To building">
+                    <SelectValue
+                      placeholder={
+                        draft.to_location_id ? "Select building" : "Select location first"
+                      }
+                    />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {draftBuildings.map((b) => (
+                      <SelectItem key={b.id} value={b.id}>
+                        {b.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
               <div className="space-y-2">
                 <Label htmlFor="draft-date">Effective date</Label>
@@ -730,12 +795,51 @@ export function AssetTransferWorkspace() {
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="edit-location">To location</Label>
-                  <Input
-                    id="edit-location"
-                    value={edit.to_location_label}
-                    onChange={(e) => setEdit((s) => ({ ...s, to_location_label: e.target.value }))}
-                  />
+                  <Label>To location</Label>
+                  <Select
+                    value={edit.to_location_id}
+                    onValueChange={(v) => {
+                      setEdit((s) => ({ ...s, to_location_id: v, to_building_id: "" }));
+                      void listSiteBuildings(v)
+                        .then(setEditBuildings)
+                        .catch(() => setEditBuildings([]));
+                    }}
+                  >
+                    <SelectTrigger className="cursor-pointer" aria-label="Edit to location">
+                      <SelectValue placeholder="Select location" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {siteLocations.map((loc) => (
+                        <SelectItem key={loc.id} value={loc.id}>
+                          {loc.name}
+                          {loc.is_head_office ? " (Head Office)" : ""}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label>To building</Label>
+                  <Select
+                    value={edit.to_building_id}
+                    onValueChange={(v) => setEdit((s) => ({ ...s, to_building_id: v }))}
+                    disabled={!edit.to_location_id}
+                  >
+                    <SelectTrigger className="cursor-pointer" aria-label="Edit to building">
+                      <SelectValue
+                        placeholder={
+                          edit.to_location_id ? "Select building" : "Select location first"
+                        }
+                      />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {editBuildings.map((b) => (
+                        <SelectItem key={b.id} value={b.id}>
+                          {b.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="edit-date">Effective date</Label>

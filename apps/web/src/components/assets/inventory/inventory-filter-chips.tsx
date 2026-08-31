@@ -23,6 +23,7 @@ export function listActiveInventoryFilterChips(
     categories?: InventoryFilterOption[];
     departments?: InventoryFilterOption[];
     locations?: InventoryFilterOption[];
+    assetTypes?: InventoryFilterOption[];
   } = {},
 ): InventoryFilterChip[] {
   const chips: InventoryFilterChip[] = [];
@@ -40,11 +41,6 @@ export function listActiveInventoryFilterChips(
       lookups.branches?.find((b) => b.id === filters.branchId)?.label ?? filters.branchId;
     chips.push({ key: "branchId", label: `Branch: ${branch}` });
   }
-  if (filters.categoryId) {
-    const category =
-      lookups.categories?.find((c) => c.value === filters.categoryId)?.label ?? filters.categoryId;
-    chips.push({ key: "categoryId", label: `Category: ${category}` });
-  }
   if (filters.departmentId) {
     const department =
       lookups.departments?.find((d) => d.value === filters.departmentId)?.label ??
@@ -52,9 +48,11 @@ export function listActiveInventoryFilterChips(
     chips.push({ key: "departmentId", label: `Department: ${department}` });
   }
   if (filters.assetType) {
+    const typeOptions = lookups.assetTypes?.length
+      ? lookups.assetTypes
+      : DEFAULT_ASSET_TYPE_OPTIONS;
     const type =
-      DEFAULT_ASSET_TYPE_OPTIONS.find((o) => o.value === filters.assetType)?.label ??
-      filters.assetType;
+      typeOptions.find((o) => o.value === filters.assetType)?.label ?? filters.assetType;
     chips.push({ key: "assetType", label: `Type: ${type}` });
   }
   if (filters.assignmentState) {
@@ -75,6 +73,7 @@ export type InventoryActiveFilterChipsProps = {
   categories?: InventoryFilterOption[];
   departments?: InventoryFilterOption[];
   locations?: InventoryFilterOption[];
+  assetTypes?: InventoryFilterOption[];
   onDismiss: (key: keyof InventoryFilterValues) => void;
 };
 
@@ -84,6 +83,7 @@ export function InventoryActiveFilterChips({
   categories,
   departments,
   locations,
+  assetTypes,
   onDismiss,
 }: InventoryActiveFilterChipsProps) {
   const chips = listActiveInventoryFilterChips(filters, {
@@ -91,6 +91,7 @@ export function InventoryActiveFilterChips({
     categories,
     departments,
     locations,
+    assetTypes,
   });
   if (chips.length === 0) return null;
 

@@ -48,6 +48,13 @@ class InvalidAssetMaintenanceState(ConflictException):
     def __init__(self, message: str = "Invalid assetmaintenance state") -> None:
         super().__init__(message)
 
+
+class MaintenanceApprovalPendingError(AppException):
+    """Maintenance submitted but cannot be approved/started by the current user."""
+
+    def __init__(self, message: str) -> None:
+        super().__init__(message, status_code=409)
+
 class InvalidAssetServiceHistoryState(ConflictException):
     def __init__(self, message: str = "Invalid assetservicehistory state") -> None:
         super().__init__(message)

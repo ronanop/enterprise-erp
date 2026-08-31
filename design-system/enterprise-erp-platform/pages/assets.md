@@ -12,9 +12,13 @@
 
 - **Structure:** App shell + assets workspace (page header → KPI strip → lifecycle funnel → workspace groups → activity panels)
 - **Max Width:** Full workspace (`max-w-none` under AppShell for `/assets`); standalone module nav is a docked full-height sidebar (`72px` collapsed / `260px` expanded) that **pushes** content — never an overlay rail
-- **Operations layout:** Ready to Move + Pending Disposal in 2 columns; Recent Assignments full-width below
-- **Grid:** 12-col for KPIs; horizontal funnel; dense tables for register / maintenance / depreciation / disposal
+- **KPI cards:** Clickable — each opens All Assets with matching inventory operational-status preset (`all` / `ready` / `assigned` / `in_use_as_component` / `retired` / `pending_disposal` / `disposed`)
+- **Header chrome:** Primary actions only (All assets, Add asset); no placeholder notification/profile controls on the IT dashboard
+- **Operations layout:** Full-width Transfer list table (document, asset, from/to location, branches, effective date, reason, status); Ready/Disposal/Assignments queues removed from IT dashboard
+- **Surfaces:** Soft atmosphere wash, accent left-rail on transfer table, tonal KPI hover rings; density remains high
 - **Do not** use event/conference heroes, oversized display type, or dark themes
+
+- **Grid:** 12-col for KPIs; dense tables for register / transfers / maintenance / disposal
 
 ### Spacing Overrides
 

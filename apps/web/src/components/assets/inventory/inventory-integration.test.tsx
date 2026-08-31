@@ -40,10 +40,13 @@ vi.mock("@/services/assets-service", async (importOriginal) => {
   };
 });
 
+vi.mock("@/services/asset-site-location-service", () => ({
+  listSiteLocations: vi.fn().mockResolvedValue([]),
+}));
+
 vi.mock("@/lib/org-options", () => ({
   listBranchOptions: vi.fn().mockResolvedValue([{ id: "b1", label: "Noida" }]),
   listDepartmentOptions: vi.fn().mockResolvedValue([]),
-  listLocationOptions: vi.fn().mockResolvedValue([]),
   listEmployeeOptions: vi.fn().mockResolvedValue([]),
   listEmployeeDirectory: vi.fn().mockResolvedValue([]),
   employeeLabelsFromDirectory: () => ({}),

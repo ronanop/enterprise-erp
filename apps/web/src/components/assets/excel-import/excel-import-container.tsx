@@ -30,6 +30,7 @@ import {
   assetCategoryService,
   filterActiveCategories,
 } from "@/services/assets-service";
+import { listItAssetTypes } from "@/services/asset-type-service";
 
 export function ExcelImportContainer() {
   const [step, setStep] = useState<ExcelImportStep>("select");
@@ -46,28 +47,26 @@ export function ExcelImportContainer() {
 
   const [branches, setBranches] = useState<Array<{ id: string; label: string }>>([]);
   const [departments, setDepartments] = useState<Array<{ id: string; label: string }>>([]);
-  const [categories, setCategories] = useState<Array<{ id: string; label: string }>>([]);
+  const [types, setTypes] = useState<Array<{ id: string; label: string }>>([]);
   const [employees, setEmployees] = useState<Array<{ id: string; label: string }>>([]);
 
   useEffect(() => {
     void (async () => {
-      const [branchOpts, deptOpts, empOpts, catRes] = await Promise.all([
+      const [branchOpts, deptOpts, empOpts, catRes, typeRows] = await Promise.all([
         listBranchOptions().catch(() => []),
         listDepartmentOptions().catch(() => []),
         listEmployeeOptions().catch(() => []),
         assetCategoryService
           .search({ page: 1, page_size: 200, status: "active" })
           .catch(() => ({ items: [] })),
+        listItAssetTypes({ active: true }).catch(() => []),
       ]);
       setBranches(branchOpts);
       setDepartments(deptOpts);
       setEmployees(empOpts);
-      setCategories(
-        filterActiveCategories(catRes.items).map((c) => ({
-          id: c.id,
-          label: c.category_name,
-        })),
-      );
+      setTypes(typeRows.map((t) => ({ id: t.id, label: t.name })));
+      const first = filterActiveCategories(catRes.items)[0];
+      if (first) setDefaultCategoryId(first.id);
     })();
   }, []);
 
@@ -76,10 +75,10 @@ export function ExcelImportContainer() {
       buildMasterLookups({
         branches,
         departments,
-        categories,
+        types,
         employees,
       }),
-    [branches, categories, departments, employees],
+    [branches, departments, employees, types],
   );
 
   const importEnabled = useMemo(() => {
@@ -213,9 +212,6 @@ export function ExcelImportContainer() {
       onConfirmMapping={onConfirmMapping}
       onBackToMapping={() => setStep("mapping")}
       onReset={reset}
-      categories={categories}
-      defaultCategoryId={defaultCategoryId}
-      onDefaultCategoryChange={setDefaultCategoryId}
       confirmWarnings={confirmWarnings}
       onConfirmWarningsChange={setConfirmWarnings}
       importEnabled={importEnabled}

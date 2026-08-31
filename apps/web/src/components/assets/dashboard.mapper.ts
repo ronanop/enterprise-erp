@@ -15,6 +15,7 @@ export type AssetOperationsKpiModel = {
   retired: number;
   pendingDisposal: number;
   disposed: number;
+  inUseAsComponent: number;
 };
 
 export type AssetOperationsKpiTrends = {
@@ -23,6 +24,7 @@ export type AssetOperationsKpiTrends = {
   retired?: StatCardTrend;
   pendingDisposal?: StatCardTrend;
   disposed?: StatCardTrend;
+  inUseAsComponent?: StatCardTrend;
 };
 
 export type AssetOperationsQueueModels = {
@@ -46,6 +48,35 @@ export type BranchBreakdownRow = {
   retired: number;
   pendingDisposal: number;
   disposed: number;
+  inUseAsComponent: number;
+};
+
+export type LocationBreakdownRow = {
+  locationId: string;
+  label: string;
+  totalAssets: number;
+  readyToMove: number;
+  assigned: number;
+  retired: number;
+  pendingDisposal: number;
+  disposed: number;
+  inUseAsComponent: number;
+};
+
+export type DashboardTransferRow = {
+  id: string;
+  documentNumber: string;
+  assetId: string;
+  assetCode: string;
+  assetName: string;
+  fromLocation: string;
+  toLocation: string;
+  fromBranchId: string | null;
+  toBranchId: string | null;
+  effectiveDate: string | null;
+  reason: string | null;
+  status: string;
+  workflowStatus: string | null;
 };
 
 export type BranchLabelLookup = Record<string, string>;
@@ -79,6 +110,7 @@ export function mapDashboardSummaryToKpis(
     retired: summary.retired ?? 0,
     pendingDisposal: summary.pending_disposal ?? 0,
     disposed: summary.disposed ?? 0,
+    inUseAsComponent: summary.in_use_as_component ?? 0,
   };
 }
 
@@ -92,6 +124,7 @@ export function mapDashboardSummaryToKpiTrends(
     retired: kpiShareOfTotal(kpis.retired, total),
     pendingDisposal: kpiShareOfTotal(kpis.pendingDisposal, total),
     disposed: kpiShareOfTotal(kpis.disposed, total),
+    inUseAsComponent: kpiShareOfTotal(kpis.inUseAsComponent, total),
   };
 }
 
@@ -109,6 +142,24 @@ export function mapByBranchBreakdown(
     retired: b.retired ?? 0,
     pendingDisposal: b.pending_disposal ?? 0,
     disposed: b.disposed ?? 0,
+    inUseAsComponent: b.in_use_as_component ?? 0,
+  }));
+}
+
+export function mapByLocationBreakdown(
+  summary: AssetDashboardSummaryDto,
+): LocationBreakdownRow[] {
+  const rows = summary.by_location ?? [];
+  return rows.map((row) => ({
+    locationId: String(row.location_id),
+    label: row.label || String(row.location_id).slice(0, 8),
+    totalAssets: row.total_assets ?? 0,
+    readyToMove: row.ready_to_move ?? 0,
+    assigned: row.assigned ?? 0,
+    retired: row.retired ?? 0,
+    pendingDisposal: row.pending_disposal ?? 0,
+    disposed: row.disposed ?? 0,
+    inUseAsComponent: row.in_use_as_component ?? 0,
   }));
 }
 
@@ -223,6 +274,41 @@ export function mapAssignmentsToActivityRows(list: AssetPaginatedListResult): Qu
   });
 }
 
+export function mapTransfersToDashboardRows(
+  transfers: { items: Array<Record<string, unknown>> },
+  assets: AssetPaginatedListResult,
+): DashboardTransferRow[] {
+  const assetMap = new Map(
+    assets.items.map((row) => [
+      String(row.id ?? ""),
+      {
+        code: String(row.asset_code ?? ""),
+        name: String(row.asset_name ?? ""),
+      },
+    ]),
+  );
+
+  return transfers.items.map((row, index) => {
+    const assetId = String(row.asset_id ?? "");
+    const asset = assetMap.get(assetId);
+    return {
+      id: typeof row.id === "string" && row.id ? row.id : `transfer-${index}`,
+      documentNumber: String(row.document_number ?? "—"),
+      assetId,
+      assetCode: asset?.code || "—",
+      assetName: asset?.name || assetId.slice(0, 8) || "Unresolved asset",
+      fromLocation: String(row.from_location_label ?? "—"),
+      toLocation: String(row.to_location_label ?? "—"),
+      fromBranchId: row.from_branch_id != null ? String(row.from_branch_id) : null,
+      toBranchId: row.to_branch_id != null ? String(row.to_branch_id) : null,
+      effectiveDate: row.effective_date != null ? String(row.effective_date) : null,
+      reason: row.reason != null ? String(row.reason) : null,
+      status: String(row.status ?? "draft"),
+      workflowStatus: row.workflow_status != null ? String(row.workflow_status) : null,
+    };
+  });
+}
+
 export function mapDashboardPayloadToViewModel(input: {
   summary: AssetDashboardSummaryDto;
   readyList: AssetPaginatedListResult;
@@ -235,6 +321,7 @@ export function mapDashboardPayloadToViewModel(input: {
   queues: AssetOperationsQueueModels;
   queueTotals: AssetOperationsQueueTotals;
   byBranch: BranchBreakdownRow[];
+  byLocation: LocationBreakdownRow[];
 } {
   const kpis = mapDashboardSummaryToKpis(input.summary);
   return {
@@ -251,6 +338,7 @@ export function mapDashboardPayloadToViewModel(input: {
       assignments: input.assignmentsList.total ?? input.assignmentsList.items.length,
     },
     byBranch: mapByBranchBreakdown(input.summary, input.branchLookup),
+    byLocation: mapByLocationBreakdown(input.summary),
   };
 }
 

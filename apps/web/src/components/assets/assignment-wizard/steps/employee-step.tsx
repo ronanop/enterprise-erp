@@ -2,7 +2,6 @@
 
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
 import {
   Select,
   SelectContent,
@@ -21,11 +20,11 @@ import { cn } from "@/lib/utils";
 const ALLOCATION_TYPES = ["employee", "department", "project", "branch", "warehouse"] as const;
 
 const EMPLOYEE_MODES: Array<{ value: EmployeeSource; label: string; hint: string }> = [
-  { value: "MASTER_DATA", label: "Select from directory", hint: "Employee exists in HR master data." },
+  { value: "MASTER_DATA", label: "From directory", hint: "Employee in HR master data." },
   {
     value: "MANUAL_ENTRY",
-    label: "Enter manually — employee not in directory",
-    hint: "On payroll but deployed elsewhere; not in this company's directory.",
+    label: "Enter manually",
+    hint: "Not in directory — deployed elsewhere.",
   },
 ];
 
@@ -96,25 +95,34 @@ export function EmployeeStep({
       </div>
 
       {state.allocationType === "employee" ? (
-        <div className="space-y-3">
+        <div className="space-y-2">
           <p className="text-xs text-muted-foreground">How is this employee identified?</p>
-          <div className="grid gap-2" role="group" aria-label="Employee source">
-            {EMPLOYEE_MODES.map((mode) => (
-              <Button
-                key={mode.value}
-                type="button"
-                variant={state.employeeSource === mode.value ? "default" : "outline"}
-                className={cn(
-                  "h-auto cursor-pointer justify-start py-2 text-left transition-colors duration-200",
-                )}
-                onClick={() => switchEmployeeSource(mode.value)}
-              >
-                <span>
-                  <span className="block text-sm">{mode.label}</span>
-                  <span className="block text-xs font-normal opacity-80">{mode.hint}</span>
-                </span>
-              </Button>
-            ))}
+          <div
+            className="grid grid-cols-1 gap-1.5 sm:grid-cols-2"
+            role="group"
+            aria-label="Employee source"
+          >
+            {EMPLOYEE_MODES.map((mode) => {
+              const active = state.employeeSource === mode.value;
+              return (
+                <button
+                  key={mode.value}
+                  type="button"
+                  onClick={() => switchEmployeeSource(mode.value)}
+                  className={cn(
+                    "cursor-pointer rounded-lg border px-3 py-2.5 text-left transition-colors duration-200",
+                    active
+                      ? "border-[#0369A1] bg-[rgba(3,105,161,0.08)] shadow-sm"
+                      : "border-border/80 hover:bg-muted/40",
+                  )}
+                >
+                  <span className="block text-sm font-medium text-foreground">{mode.label}</span>
+                  <span className="mt-0.5 block text-[11px] leading-snug text-muted-foreground">
+                    {mode.hint}
+                  </span>
+                </button>
+              );
+            })}
           </div>
         </div>
       ) : null}

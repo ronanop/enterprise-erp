@@ -31,7 +31,7 @@ def test_valid_ops_statuses() -> None:
     assert "READY_TO_MOVE" in VALID_IMPORT_OPERATIONAL_STATUSES
     assert "DISPOSED" not in VALID_IMPORT_OPERATIONAL_STATUSES
     assert "PENDING_DISPOSAL" in VALID_IMPORT_OPERATIONAL_STATUSES
-    assert len(VALID_IMPORT_OPERATIONAL_STATUSES) == 4
+    assert len(VALID_IMPORT_OPERATIONAL_STATUSES) == 5
 
 
 def test_skip_reasons() -> None:
@@ -39,16 +39,16 @@ def test_skip_reasons() -> None:
     assert ExcelImportSkipReason.BATCH_ROLLED_BACK.value == "batch_rolled_back"
 
 
-def test_import_row_schema_requires_tag() -> None:
-    with pytest.raises(ValidationError):
-        AssetExcelImportRow(
-            row_number=1,
-            preview_status="valid",
-            asset_tag="",
-            asset_name="x",
-            branch_id=uuid4(),
-            operational_status="READY_TO_MOVE",
-        )
+def test_import_row_schema_allows_blank_tag() -> None:
+    row = AssetExcelImportRow(
+        row_number=1,
+        preview_status="valid",
+        asset_name="x",
+        branch_id=uuid4(),
+        operational_status="READY_TO_MOVE",
+        asset_type_id=uuid4(),
+    )
+    assert row.asset_tag is None
 
 
 def test_import_request_defaults() -> None:
@@ -62,12 +62,29 @@ def test_import_request_defaults() -> None:
                 asset_name="N",
                 branch_id=uuid4(),
                 operational_status="READY_TO_MOVE",
+                asset_type_id=uuid4(),
             )
         ],
     )
     assert body.batch_size == 50
     assert body.confirm_warnings is False
     assert body.defaults.purchase_cost == Decimal("0")
+
+
+def test_import_request_allows_missing_category_default() -> None:
+    body = AssetExcelImportRequest(
+        defaults=AssetExcelImportDefaults(),
+        rows=[
+            AssetExcelImportRow(
+                row_number=1,
+                preview_status="valid",
+                asset_name="N",
+                operational_status="READY_TO_MOVE",
+                asset_type_id=uuid4(),
+            )
+        ],
+    )
+    assert body.defaults.asset_category_id is None
 
 
 def test_import_request_batch_bounds() -> None:

@@ -126,6 +126,36 @@ class AssetComponentRepository(AstScopedRepository):
         stmt = self.apply_ast_filter(stmt, AstAssetComponent, ctx, branch_scoped=False)
         return self.db.scalar(stmt)
 
+    def find_active_by_component_asset(
+        self,
+        ctx: TenantContext,
+        *,
+        component_asset_id: UUID,
+        exclude_id: UUID | None = None,
+    ) -> AstAssetComponent | None:
+        stmt = select(AstAssetComponent).where(
+            AstAssetComponent.component_asset_id == component_asset_id,
+            AstAssetComponent.status == AssetComponentStatus.ACTIVE.value,
+            AstAssetComponent.is_deleted.is_(False),
+        )
+        if exclude_id is not None:
+            stmt = stmt.where(AstAssetComponent.id != exclude_id)
+        stmt = self.apply_ast_filter(stmt, AstAssetComponent, ctx, branch_scoped=False)
+        return self.db.scalar(stmt)
+
+    def list_active_linked_for_parent(
+        self, ctx: TenantContext, *, asset_id: UUID
+    ) -> list[AstAssetComponent]:
+        """Active component rows on parent that point at a real child asset."""
+        stmt = select(AstAssetComponent).where(
+            AstAssetComponent.asset_id == asset_id,
+            AstAssetComponent.component_asset_id.is_not(None),
+            AstAssetComponent.status == AssetComponentStatus.ACTIVE.value,
+            AstAssetComponent.is_deleted.is_(False),
+        )
+        stmt = self.apply_ast_filter(stmt, AstAssetComponent, ctx, branch_scoped=False)
+        return list(self.db.scalars(stmt.order_by(AstAssetComponent.component_code.asc())).all())
+
     def find_active_by_serial(
         self,
         ctx: TenantContext,

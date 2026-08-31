@@ -1,5 +1,12 @@
-export { StatCard, type StatCardProps, type StatCardTrend } from "./stat-card";
+export { StatCard, type StatCardProps, type StatCardTrend, type StatCardTone } from "./stat-card";
 export { QueueCard, type QueueCardProps, type QueueCardRow } from "./queue-card";
+export {
+  AssetsAtmosphere,
+  AssetsPremiumPage,
+  ASSETS_ACCENT_BTN,
+  ASSETS_SURFACE_CARD,
+  ASSETS_ICON_CHIP,
+} from "./premium-surface";
 export { StatusBadge, type StatusBadgeProps, type StatusBadgeKind } from "./status-badge";
 export {
   BranchSelector,
@@ -33,7 +40,12 @@ export {
   LIFECYCLE_STATUS_BADGE_CLASS,
   DC_CHALLAN_STATUS_BADGE_CLASS,
   DC_CHALLAN_STATUS_LABELS,
+  NON_IT_ASSET_STATUS_VALUES,
+  NON_IT_ASSET_STATUS_LABELS,
+  NON_IT_ASSET_STATUS_BADGE_CLASS,
   statusColorMap,
   isOperationalStatus,
+  isNonItAssetStatus,
   type OperationalStatusValue,
+  type NonItAssetStatusValue,
 } from "./asset-status";

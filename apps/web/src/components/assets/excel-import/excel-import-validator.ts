@@ -124,6 +124,7 @@ export function validateImportRows(
       { key: "laptopName", label: "Laptop Name" },
       { key: "branch", label: "Branch" },
       { key: "operationalStatus", label: "Operational Status" },
+      { key: "assetType", label: "Type" },
     ];
 
     for (const req of requireNonEmpty) {
@@ -192,15 +193,15 @@ export function validateImportRows(
       }
     }
 
-    if (values.category?.trim()) {
-      if (!lookupHit(lookups.categoriesByLabel, values.category)) {
+    if (values.assetType?.trim()) {
+      if (!lookupHit(lookups.typesByLabel, values.assetType)) {
         issues.push({
           severity: "error",
-          code: "invalid_category",
-          message: `Unknown asset category: ${values.category}`,
+          code: "invalid_type",
+          message: `Unknown asset type: ${values.assetType}`,
           rowNumber: row.rowNumber,
-          field: "category",
-          value: values.category,
+          field: "assetType",
+          value: values.assetType,
         });
       }
     }

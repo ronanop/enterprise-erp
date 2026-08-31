@@ -30,7 +30,7 @@ describe("buildInventoryListQuery", () => {
     const q = buildInventoryListQuery({
       preset: "assigned",
       filters: { ...EMPTY_INVENTORY_FILTERS, search: "laptop" },
-      headerBranchId: BRANCH_ALL_VALUE,
+      headerLocationId: BRANCH_ALL_VALUE,
       page: 2,
       pageSize: 25,
     });
@@ -42,15 +42,16 @@ describe("buildInventoryListQuery", () => {
     });
   });
 
-  it("uses header branch when set", () => {
+  it("uses header location when set", () => {
     const q = buildInventoryListQuery({
       preset: "all",
       filters: EMPTY_INVENTORY_FILTERS,
-      headerBranchId: "branch-1",
+      headerLocationId: "loc-mumbai",
       page: 1,
       pageSize: 25,
     });
-    expect(q.branch_id).toBe("branch-1");
+    expect(q.location_id).toBe("loc-mumbai");
+    expect(q.branch_id).toBeUndefined();
   });
 
   it("includes lifecycle, category, and Phase 5F server filters", () => {
@@ -61,18 +62,18 @@ describe("buildInventoryListQuery", () => {
         lifecycleStatus: "active",
         categoryId: "cat-1",
         departmentId: "dept-1",
-        assetType: "fixed",
+        assetType: "type-1",
         locationId: "loc-1",
         assignmentState: "assigned",
       },
-      headerBranchId: BRANCH_ALL_VALUE,
+      headerLocationId: BRANCH_ALL_VALUE,
       page: 1,
       pageSize: 25,
     });
     expect(q.status).toBe("active");
     expect(q.asset_category_id).toBe("cat-1");
     expect(q.department_id).toBe("dept-1");
-    expect(q.asset_type).toBe("fixed");
+    expect(q.asset_type_id).toBe("type-1");
     expect(q.location_id).toBe("loc-1");
     expect(q.assignment_state).toBe("assigned");
   });
@@ -81,7 +82,7 @@ describe("buildInventoryListQuery", () => {
     const q = buildInventoryListQuery({
       preset: "all",
       filters: { ...EMPTY_INVENTORY_FILTERS, locationId: BRANCH_ALL_VALUE },
-      headerBranchId: BRANCH_ALL_VALUE,
+      headerLocationId: BRANCH_ALL_VALUE,
       page: 1,
       pageSize: 25,
     });

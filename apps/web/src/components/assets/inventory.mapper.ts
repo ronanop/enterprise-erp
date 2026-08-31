@@ -94,7 +94,7 @@ export function resolveOperationalStatusForQuery(
 export function buildInventoryListQuery(input: {
   preset: InventoryPresetId;
   filters: InventoryFilterValues;
-  headerBranchId: string;
+  headerLocationId: string;
   page: number;
   pageSize: number;
 }): {
@@ -105,23 +105,21 @@ export function buildInventoryListQuery(input: {
   operational_status?: string;
   status?: string;
   asset_category_id?: string;
-  asset_type?: string;
+  asset_type_id?: string;
   department_id?: string;
   location_id?: string;
   assignment_state?: string;
 } {
   const branchId =
-    input.headerBranchId !== BRANCH_ALL_VALUE
-      ? input.headerBranchId
-      : input.filters.branchId !== BRANCH_ALL_VALUE
-        ? input.filters.branchId
-        : undefined;
+    input.filters.branchId !== BRANCH_ALL_VALUE ? input.filters.branchId : undefined;
 
   const operational = resolveOperationalStatusForQuery(input.preset, input.filters);
   const locationId =
-    input.filters.locationId && input.filters.locationId !== BRANCH_ALL_VALUE
-      ? input.filters.locationId
-      : undefined;
+    input.headerLocationId !== BRANCH_ALL_VALUE
+      ? input.headerLocationId
+      : input.filters.locationId && input.filters.locationId !== BRANCH_ALL_VALUE
+        ? input.filters.locationId
+        : undefined;
 
   return {
     page: input.page,
@@ -131,7 +129,7 @@ export function buildInventoryListQuery(input: {
     operational_status: operational,
     status: input.filters.lifecycleStatus || undefined,
     asset_category_id: input.filters.categoryId || undefined,
-    asset_type: input.filters.assetType || undefined,
+    asset_type_id: input.filters.assetType || undefined,
     department_id: input.filters.departmentId || undefined,
     location_id: locationId,
     assignment_state: input.filters.assignmentState || undefined,

@@ -1,15 +1,70 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
+import { useEffect, useMemo, useState } from "react";
 
-import { assetManagementNav, isAssetNavActive } from "@/config/assets";
+import {
+  activeAssetDomainFromPath,
+  buildAssetSidebarNav,
+  isAssetNavActive,
+  type AssetDomainKey,
+} from "@/config/assets";
 import { cn } from "@/lib/utils";
+import { fetchMyDomainAccess } from "@/services/asset-domain-membership-service";
 
 /** Horizontal strip when Assets shares the main app sidebar (non-standalone). */
 export function AssetsWorkspaceNav() {
   const pathname = usePathname();
-  const items = assetManagementNav.flatMap((group) => group.items);
+  const searchParams = useSearchParams();
+  const [isModuleAdmin, setIsModuleAdmin] = useState(false);
+  const [domains, setDomains] = useState<string[]>([]);
+  const [adminDomains, setAdminDomains] = useState<string[]>([]);
+  const [accessLoaded, setAccessLoaded] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const me = await fetchMyDomainAccess();
+        if (!cancelled) {
+          setIsModuleAdmin(me.is_module_admin);
+          setDomains(me.domains ?? []);
+          setAdminDomains(me.admin_domains ?? []);
+        }
+      } catch {
+        if (!cancelled) {
+          setIsModuleAdmin(false);
+          setDomains([]);
+          setAdminDomains([]);
+        }
+      } finally {
+        if (!cancelled) setAccessLoaded(true);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const activeDomain: AssetDomainKey | null = useMemo(() => {
+    if (pathname.startsWith("/assets/users")) {
+      const q = (searchParams.get("domain") || "").toUpperCase();
+      if (q === "IT" || q === "NON_IT") return q;
+      return "IT";
+    }
+    return activeAssetDomainFromPath(pathname);
+  }, [pathname, searchParams]);
+
+  const items = useMemo(() => {
+    const nav = buildAssetSidebarNav({
+      isModuleAdmin: accessLoaded ? isModuleAdmin : false,
+      domains: accessLoaded ? domains : ["IT"],
+      adminDomains: accessLoaded ? adminDomains : [],
+      activeDomain: activeDomain ?? "IT",
+    });
+    return nav.flatMap((group) => group.items);
+  }, [accessLoaded, isModuleAdmin, domains, adminDomains, activeDomain]);
 
   return (
     <div className="grid min-w-0 max-w-full grid-cols-1">
@@ -20,9 +75,19 @@ export function AssetsWorkspaceNav() {
       >
         <ul className="flex w-max items-center gap-0.5 border-b border-border/70 pb-px">
           {items.map((item) => {
-            const active = isAssetNavActive(pathname, item.href, item.match ?? "prefix");
+            let active = isAssetNavActive(pathname, item.href, item.match ?? "prefix");
+            if (item.href === "/assets" && item.title === "IT Assets") {
+              active = activeDomain === "IT";
+            } else if (item.href === "/assets/non-it" && item.title === "Non-IT Assets") {
+              active = activeDomain === "NON_IT";
+            } else if (item.href.startsWith("/assets/users")) {
+              active =
+                pathname.startsWith("/assets/users") &&
+                (searchParams.get("domain") || "IT").toUpperCase() ===
+                  (item.href.includes("NON_IT") ? "NON_IT" : "IT");
+            }
             return (
-              <li key={item.href} className="shrink-0">
+              <li key={`${item.href}-${item.title}`} className="shrink-0">
                 <Link
                   href={item.href}
                   className={cn(

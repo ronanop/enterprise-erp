@@ -3,9 +3,11 @@
 export const OPERATIONAL_STATUS_VALUES = [
   "READY_TO_MOVE",
   "ASSIGNED",
+  "IN_MAINTENANCE",
   "RETIRED",
   "PENDING_DISPOSAL",
   "DISPOSED",
+  "IN_USE_AS_COMPONENT",
 ] as const;
 
 export type OperationalStatusValue = (typeof OPERATIONAL_STATUS_VALUES)[number];
@@ -13,10 +15,32 @@ export type OperationalStatusValue = (typeof OPERATIONAL_STATUS_VALUES)[number];
 export const OPERATIONAL_STATUS_LABELS: Record<OperationalStatusValue, string> = {
   READY_TO_MOVE: "Ready to Move",
   ASSIGNED: "Assigned",
+  IN_MAINTENANCE: "In Maintenance",
   RETIRED: "Retired",
   PENDING_DISPOSAL: "Pending Disposal",
   DISPOSED: "Disposed",
+  IN_USE_AS_COMPONENT: "In Use as Component",
 };
+
+export const NON_IT_ASSET_STATUS_VALUES = [
+  "IN_STOCK",
+  "ASSIGNED",
+  "MAINTENANCE",
+  "DISPOSED",
+] as const;
+
+export type NonItAssetStatusValue = (typeof NON_IT_ASSET_STATUS_VALUES)[number];
+
+export const NON_IT_ASSET_STATUS_LABELS: Record<NonItAssetStatusValue, string> = {
+  IN_STOCK: "In Stock",
+  ASSIGNED: "Assigned",
+  MAINTENANCE: "In Maintenance",
+  DISPOSED: "Disposed",
+};
+
+export function isNonItAssetStatus(value: string): value is NonItAssetStatusValue {
+  return (NON_IT_ASSET_STATUS_VALUES as readonly string[]).includes(value);
+}
 
 /**
  * Distinct badge/pill colors for operational + lifecycle states.
@@ -28,12 +52,16 @@ export const statusColorMap = {
       "border-sky-200 bg-sky-50 text-sky-900 dark:border-sky-800 dark:bg-sky-950/50 dark:text-sky-200",
     ASSIGNED:
       "border-emerald-200 bg-emerald-50 text-emerald-900 dark:border-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-200",
+    IN_MAINTENANCE:
+      "border-amber-200 bg-amber-50 text-amber-950 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200",
     RETIRED:
       "border-rose-200 bg-rose-50 text-rose-900 dark:border-rose-800 dark:bg-rose-950/40 dark:text-rose-200",
     PENDING_DISPOSAL:
       "border-amber-200 bg-amber-50 text-amber-950 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200",
     DISPOSED:
       "border-zinc-400 bg-zinc-200 text-zinc-800 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-200",
+    IN_USE_AS_COMPONENT:
+      "border-indigo-200 bg-indigo-50 text-indigo-950 dark:border-indigo-800 dark:bg-indigo-950/40 dark:text-indigo-200",
   } satisfies Record<OperationalStatusValue, string>,
   lifecycle: {
     active:
@@ -69,6 +97,17 @@ export const statusColorMap = {
     CANCELLED:
       "border-zinc-300 bg-zinc-100 text-zinc-700 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-300",
   } satisfies Record<string, string>,
+  /** Non-IT register status (IN_STOCK | ASSIGNED | MAINTENANCE | DISPOSED). */
+  nonIt: {
+    IN_STOCK:
+      "border-sky-200 bg-sky-50 text-sky-900 dark:border-sky-800 dark:bg-sky-950/50 dark:text-sky-200",
+    ASSIGNED:
+      "border-emerald-200 bg-emerald-50 text-emerald-900 dark:border-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-200",
+    MAINTENANCE:
+      "border-amber-200 bg-amber-50 text-amber-950 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200",
+    DISPOSED:
+      "border-zinc-400 bg-zinc-200 text-zinc-800 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-200",
+  } satisfies Record<NonItAssetStatusValue, string>,
 } as const;
 
 export const DC_CHALLAN_STATUS_VALUES = [
@@ -98,6 +137,7 @@ export function isDcChallanStatus(value: string): value is DcChallanStatusValue 
 export const OPERATIONAL_STATUS_BADGE_CLASS = statusColorMap.operational;
 export const LIFECYCLE_STATUS_BADGE_CLASS = statusColorMap.lifecycle;
 export const DC_CHALLAN_STATUS_BADGE_CLASS = statusColorMap.dcChallan;
+export const NON_IT_ASSET_STATUS_BADGE_CLASS = statusColorMap.nonIt;
 
 export function isOperationalStatus(value: string): value is OperationalStatusValue {
   return (OPERATIONAL_STATUS_VALUES as readonly string[]).includes(value);
@@ -124,14 +164,14 @@ export function formatLifecycleStatusLabel(status: string): string {
     .join(" ");
 }
 
-/** Assignment eligibility: operational READY_TO_MOVE + lifecycle active|in_maintenance. */
+/** Assignment eligibility: operational READY_TO_MOVE + lifecycle active only. */
 export function isAssignmentEligibleAsset(row: {
   operational_status?: string | null;
   status?: string | null;
 }): boolean {
   const ops = String(row.operational_status ?? "").toUpperCase();
   const life = String(row.status ?? "").toLowerCase();
-  return ops === "READY_TO_MOVE" && (life === "active" || life === "in_maintenance");
+  return ops === "READY_TO_MOVE" && life === "active";
 }
 
 /** Phase 5D: Start Disposal is only valid for operational RETIRED. */
@@ -153,7 +193,12 @@ export function isOpsBlockedForNormalOperations(
   operationalStatus: string | null | undefined,
 ): boolean {
   const ops = String(operationalStatus ?? "").toUpperCase();
-  return ops === "RETIRED" || ops === "PENDING_DISPOSAL" || ops === "DISPOSED";
+  return (
+    ops === "RETIRED" ||
+    ops === "PENDING_DISPOSAL" ||
+    ops === "DISPOSED" ||
+    ops === "IN_USE_AS_COMPONENT"
+  );
 }
 
 /** Phase 5E: Transfer/Maintenance require no employee custody (not ASSIGNED). */
@@ -161,7 +206,7 @@ export function isOpsBlockedForTransferOrMaintenance(
   operationalStatus: string | null | undefined,
 ): boolean {
   const ops = String(operationalStatus ?? "").toUpperCase();
-  return isOpsBlockedForNormalOperations(ops) || ops === "ASSIGNED";
+  return isOpsBlockedForNormalOperations(ops) || ops === "ASSIGNED" || ops === "IN_MAINTENANCE";
 }
 
 export function operationalStatusHelpText(
@@ -176,6 +221,12 @@ export function operationalStatusHelpText(
   }
   if (ops === "DISPOSED") {
     return "Disposed — asset has completed the disposal workflow.";
+  }
+  if (ops === "IN_USE_AS_COMPONENT") {
+    return "In use as a component — not available for assignment or transfer.";
+  }
+  if (ops === "IN_MAINTENANCE") {
+    return "In maintenance — not available for assignment or transfer.";
   }
   return null;
 }

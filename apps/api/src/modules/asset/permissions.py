@@ -95,6 +95,23 @@ ASSET_PERMISSIONS: list[tuple[str, str, str, str]] = [
     ("asset.dc_challan:update", "asset.dc_challan", "update", "asset"),
     ("asset.dc_challan:send", "asset.dc_challan", "send", "asset"),
     ("asset.dc_challan:receive", "asset.dc_challan", "receive", "asset"),
+    # Module-admin gate for domain membership management (IT / Non-IT Users screen)
+    ("asset.module:admin", "asset.module", "admin", "asset"),
+    # Non-IT register (separate tables)
+    ("asset.nonit_asset:read", "asset.nonit_asset", "read", "asset"),
+    ("asset.nonit_asset:create", "asset.nonit_asset", "create", "asset"),
+    ("asset.nonit_asset:update", "asset.nonit_asset", "update", "asset"),
+    ("asset.nonit_type:read", "asset.nonit_type", "read", "asset"),
+    ("asset.nonit_type:create", "asset.nonit_type", "create", "asset"),
+    ("asset.nonit_type:update", "asset.nonit_type", "update", "asset"),
+    # IT Location → Building master (Config → Locations)
+    ("asset.site:read", "asset.site", "read", "asset"),
+    ("asset.site:create", "asset.site", "create", "asset"),
+    ("asset.site:update", "asset.site", "update", "asset"),
+    # IT Asset Type master (Config → Asset Types)
+    ("asset.type:read", "asset.type", "read", "asset"),
+    ("asset.type:create", "asset.type", "create", "asset"),
+    ("asset.type:update", "asset.type", "update", "asset"),
 ]
 
 _ALL = [p[0] for p in ASSET_PERMISSIONS]
@@ -110,6 +127,7 @@ ASSET_EXECUTIVE_PERMISSIONS = [
             "depreciation:calculate",
             "disposal:approve",
             "revaluation:approve",
+            "asset.module:admin",
         )
     )
 ]

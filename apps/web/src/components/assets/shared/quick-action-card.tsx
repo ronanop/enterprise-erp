@@ -26,10 +26,9 @@ export function QuickActionCard({
   return (
     <Card
       className={cn(
-        "border-border/70 shadow-sm transition-[border-color,box-shadow] duration-200",
-        !disabled && "cursor-pointer hover:border-primary/25 hover:shadow-md",
+        "border-border/70 bg-background/95 shadow-sm transition-all duration-200",
+        !disabled && "cursor-pointer hover:border-[#0369A1]/40 hover:shadow-md",
         disabled && "opacity-50",
-        compact && "bg-muted/20",
         className,
       )}
     >
@@ -47,13 +46,15 @@ export function QuickActionCard({
         >
           <span
             className={cn(
-              "flex shrink-0 items-center justify-center rounded-md border border-border/60 bg-muted/50",
+              "flex shrink-0 items-center justify-center rounded-lg bg-[rgba(3,105,161,0.1)] text-[#0369A1]",
               compact ? "size-7" : "size-9",
             )}
           >
-            <Icon className={cn(compact ? "size-3.5" : "size-4", "text-foreground")} aria-hidden />
+            <Icon className={cn(compact ? "size-3.5" : "size-4")} aria-hidden />
           </span>
-          <CardTitle className={cn("font-medium", compact ? "text-xs" : "text-sm")}>{title}</CardTitle>
+          <CardTitle className={cn("font-semibold", compact ? "text-xs" : "text-sm")}>
+            {title}
+          </CardTitle>
         </CardHeader>
         {description && !compact ? (
           <CardContent className="pt-0">

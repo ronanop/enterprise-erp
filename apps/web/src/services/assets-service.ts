@@ -419,6 +419,7 @@ export type ComponentRow = {
   id: string;
   branch_id?: string | null;
   asset_id: string;
+  component_asset_id?: string | null;
   component_code: string;
   component_name: string;
   component_type?: ComponentType | string;
@@ -429,6 +430,9 @@ export type ComponentRow = {
   company_id: string;
   version: number;
   availability?: "available" | "unavailable" | string | null;
+  linked_asset_code?: string | null;
+  linked_asset_name?: string | null;
+  linked_asset_operational_status?: string | null;
 };
 
 export type ComponentListResult = {
@@ -456,6 +460,10 @@ export type ComponentTreeResult = {
     status: string;
     product_id?: string | null;
     version: number;
+    component_asset_id?: string | null;
+    linked_asset_code?: string | null;
+    linked_asset_name?: string | null;
+    linked_asset_operational_status?: string | null;
   }>;
   depth: number;
 };
@@ -497,6 +505,10 @@ export type AssignmentComponentRow = {
   component_type?: string | null;
   serial_number?: string | null;
   component_status?: string | null;
+  component_asset_id?: string | null;
+  linked_asset_code?: string | null;
+  linked_asset_name?: string | null;
+  linked_asset_operational_status?: string | null;
 };
 
 const ASSET_COMPONENTS_PATH = "/assets/asset-components";
@@ -568,16 +580,59 @@ export const componentService = {
 
   async install(body: {
     asset_id: string;
-    component_code: string;
-    component_name: string;
+    component_code?: string;
+    component_name?: string;
     component_type?: string;
     product_id?: string;
     serial_number?: string;
     quantity?: number | string;
     branch_id?: string;
+    component_asset_id?: string;
   }): Promise<ComponentRow> {
     const res = await resourceService.create<ComponentRow>(ASSET_COMPONENTS_PATH, body);
     return res.data as ComponentRow;
+  },
+
+  async listAttachableAssets(params: {
+    parent_asset_id: string;
+    q?: string;
+    limit?: number;
+  }): Promise<
+    Array<{
+      id: string;
+      asset_code: string;
+      asset_name: string;
+      serial_number?: string | null;
+      operational_status?: string | null;
+      asset_type_id?: string | null;
+    }>
+  > {
+    const query = new URLSearchParams();
+    query.set("parent_asset_id", params.parent_asset_id);
+    if (params.q) query.set("q", params.q);
+    if (params.limit) query.set("limit", String(params.limit));
+    const res = await resourceService.list<
+      Array<{
+        id: string;
+        asset_code: string;
+        asset_name: string;
+        serial_number?: string | null;
+        operational_status?: string | null;
+        asset_type_id?: string | null;
+      }>
+    >(`${ASSET_COMPONENTS_PATH}/attachable-assets?${query.toString()}`);
+    const data = res.data as unknown;
+    if (Array.isArray(data)) {
+      return data as Array<{
+        id: string;
+        asset_code: string;
+        asset_name: string;
+        serial_number?: string | null;
+        operational_status?: string | null;
+        asset_type_id?: string | null;
+      }>;
+    }
+    return [];
   },
 
   async update(
@@ -632,6 +687,146 @@ export const componentService = {
     );
     const data = res.data as { items?: AssignmentComponentRow[] };
     return Array.isArray(data?.items) ? data.items : [];
+  },
+};
+
+const ASSET_MAINTENANCES_PATH = "/assets/asset-maintenances";
+
+export type MaintenanceRow = {
+  id: string;
+  document_number: string;
+  asset_id: string;
+  asset_code?: string | null;
+  asset_name?: string | null;
+  serial_number?: string | null;
+  make?: string | null;
+  model?: string | null;
+  maintenance_type: string;
+  reason?: string | null;
+  expected_duration_days?: number | null;
+  expected_return_date?: string | null;
+  maintenance_plan_id?: string | null;
+  scheduled_date?: string | null;
+  completed_date?: string | null;
+  vendor_id?: string | null;
+  cost_amount?: string | number | null;
+  technician_employee_id?: string | null;
+  workflow_status?: string | null;
+  status: string;
+  version: number;
+  created_by?: string | null;
+  branch_id: string;
+};
+
+export type MaintenanceListResult = {
+  items: MaintenanceRow[];
+  total: number;
+  page: number;
+  page_size: number;
+};
+
+export type MaintenanceTimelineEvent = {
+  id: string;
+  kind: string;
+  label: string;
+  occurred_at: string;
+  performed_by?: string | null;
+  detail?: string | null;
+};
+
+export type MaintenanceStartResult = {
+  status: "started" | "approval_pending";
+  message?: string | null;
+  maintenance: MaintenanceRow;
+};
+
+function parseMaintenanceList(data: unknown): MaintenanceListResult {
+  if (data && typeof data === "object" && "items" in data) {
+    const payload = data as MaintenanceListResult;
+    return {
+      items: Array.isArray(payload.items) ? payload.items : [],
+      total: payload.total ?? 0,
+      page: payload.page ?? 1,
+      page_size: payload.page_size ?? 25,
+    };
+  }
+  return { items: [], total: 0, page: 1, page_size: 25 };
+}
+
+export const maintenanceService = {
+  async search(params: {
+    page?: number;
+    page_size?: number;
+    asset_id?: string;
+    status?: string;
+    maintenance_type?: string;
+    q?: string;
+    open_only?: boolean;
+  }): Promise<MaintenanceListResult> {
+    const query = new URLSearchParams();
+    if (params.page) query.set("page", String(params.page));
+    if (params.page_size) query.set("page_size", String(params.page_size));
+    if (params.asset_id) query.set("asset_id", params.asset_id);
+    if (params.status) query.set("status", params.status);
+    if (params.maintenance_type) query.set("maintenance_type", params.maintenance_type);
+    if (params.q) query.set("q", params.q);
+    if (params.open_only) query.set("open_only", "true");
+    const res = await resourceService.list<MaintenanceListResult>(
+      `${ASSET_MAINTENANCES_PATH}?${query.toString()}`,
+    );
+    return parseMaintenanceList(res.data);
+  },
+
+  async get(id: string): Promise<MaintenanceRow> {
+    const res = await resourceService.get<MaintenanceRow>(ASSET_MAINTENANCES_PATH, id);
+    return res.data as MaintenanceRow;
+  },
+
+  async quickDraft(assetId: string): Promise<MaintenanceRow> {
+    const res = await resourceService.create<MaintenanceRow>(
+      `${ASSET_MAINTENANCES_PATH}/quick-draft`,
+      { asset_id: assetId },
+    );
+    return res.data as MaintenanceRow;
+  },
+
+  async startMaintenance(
+    id: string,
+    body: {
+      reason: string;
+      expected_duration_days: number;
+      maintenance_type?: string;
+      scheduled_date?: string;
+      vendor_id?: string;
+      cost_amount?: number;
+      technician_employee_id?: string;
+      version?: number;
+    },
+  ): Promise<MaintenanceStartResult> {
+    const res = await resourceService.action<MaintenanceStartResult>(
+      ASSET_MAINTENANCES_PATH,
+      id,
+      "start-maintenance",
+      body,
+    );
+    return res.data as MaintenanceStartResult;
+  },
+
+  async complete(id: string): Promise<MaintenanceRow> {
+    const res = await resourceService.action<MaintenanceRow>(
+      ASSET_MAINTENANCES_PATH,
+      id,
+      "complete",
+    );
+    return res.data as MaintenanceRow;
+  },
+
+  async timeline(id: string): Promise<MaintenanceTimelineEvent[]> {
+    const res = await resourceService.list<{ events: MaintenanceTimelineEvent[] }>(
+      `${ASSET_MAINTENANCES_PATH}/${id}/timeline`,
+    );
+    const data = res.data as { events?: MaintenanceTimelineEvent[] };
+    return Array.isArray(data?.events) ? data.events : [];
   },
 };
 
@@ -848,7 +1043,7 @@ function parseSnapshotList(data: unknown): ReportSnapshotListResult {
 
 export const reportService = {
   async catalog(): Promise<ReportCatalogItem[]> {
-    const res = await resourceService.list<ReportCatalogItem[]>(
+    const res = await resourceService.list<ReportCatalogItem>(
       `${ASSET_REPORTS_PATH}/catalog`,
     );
     return Array.isArray(res.data) ? res.data : [];
@@ -1622,12 +1817,14 @@ export async function loadAssetsOverview(): Promise<AssetsOverview> {
 export type AssetDashboardSummaryDto = {
   company_id: string;
   branch_id?: string | null;
+  location_id?: string | null;
   total_assets: number;
   ready_to_move: number;
   assigned: number;
   retired: number;
   pending_disposal: number;
   disposed: number;
+  in_use_as_component?: number;
   by_branch?: Array<{
     branch_id: string;
     total_assets: number;
@@ -1636,11 +1833,51 @@ export type AssetDashboardSummaryDto = {
     retired: number;
     pending_disposal: number;
     disposed: number;
+    in_use_as_component?: number;
+  }>;
+  by_location?: Array<{
+    location_id: string;
+    label: string;
+    total_assets: number;
+    ready_to_move: number;
+    assigned: number;
+    retired: number;
+    pending_disposal: number;
+    disposed: number;
+    in_use_as_component?: number;
   }>;
 };
 
 export type AssetPaginatedListResult = {
   items: AssetsRow[];
+  total: number;
+  page: number;
+  page_size: number;
+};
+
+export type AssetTransferRowDto = {
+  id: string;
+  document_number: string;
+  asset_id: string;
+  from_branch_id?: string | null;
+  to_branch_id?: string | null;
+  from_department_id?: string | null;
+  to_department_id?: string | null;
+  from_employee_id?: string | null;
+  to_employee_id?: string | null;
+  from_location_label?: string | null;
+  to_location_label?: string | null;
+  effective_date?: string | null;
+  reason?: string | null;
+  transfer_notes?: string | null;
+  status: string;
+  workflow_status?: string | null;
+  version?: number;
+  created_by?: string | null;
+};
+
+export type AssetTransferPaginatedListResult = {
+  items: AssetTransferRowDto[];
   total: number;
   page: number;
   page_size: number;
@@ -1659,6 +1896,27 @@ function parsePaginatedAssetList(data: unknown): AssetPaginatedListResult {
   return { items: normalizeRows(data), total: normalizeRows(data).length, page: 1, page_size: 25 };
 }
 
+function parsePaginatedTransferList(data: unknown): AssetTransferPaginatedListResult {
+  if (data && typeof data === "object" && "items" in data) {
+    const payload = data as AssetTransferPaginatedListResult;
+    return {
+      items: Array.isArray(payload.items) ? payload.items : [],
+      total: asNumber(payload.total),
+      page: asNumber(payload.page) || 1,
+      page_size: asNumber(payload.page_size) || 25,
+    };
+  }
+  if (Array.isArray(data)) {
+    return {
+      items: data as AssetTransferRowDto[],
+      total: data.length,
+      page: 1,
+      page_size: data.length || 25,
+    };
+  }
+  return { items: [], total: 0, page: 1, page_size: 25 };
+}
+
 export type AssetOperationsListParams = {
   page?: number;
   page_size?: number;
@@ -1668,6 +1926,7 @@ export type AssetOperationsListParams = {
   asset_category_id?: string;
   q?: string;
   asset_type?: string;
+  asset_type_id?: string;
   department_id?: string;
   location_id?: string;
   employee_id?: string;
@@ -1686,7 +1945,8 @@ function buildAssetListQuery(params: AssetOperationsListParams): Record<string, 
   if (params.status) query.status = params.status;
   if (params.asset_category_id) query.asset_category_id = params.asset_category_id;
   if (params.q) query.q = params.q;
-  if (params.asset_type) query.asset_type = params.asset_type;
+  if (params.asset_type_id) query.asset_type_id = params.asset_type_id;
+  else if (params.asset_type) query.asset_type = params.asset_type;
   if (params.department_id) query.department_id = params.department_id;
   if (params.location_id) query.location_id = params.location_id;
   if (params.employee_id) query.employee_id = params.employee_id;
@@ -1699,12 +1959,14 @@ function buildAssetListQuery(params: AssetOperationsListParams): Record<string, 
 export const assetOperationsService = {
   async getDashboardSummary(params?: {
     branch_id?: string;
+    location_id?: string;
     company_id?: string;
   }): Promise<AssetDashboardSummaryDto> {
     const res = await apiClient<AssetDashboardSummaryDto>("/assets/assets/dashboard-summary", {
       method: "GET",
       query: {
         branch_id: params?.branch_id,
+        location_id: params?.location_id,
         company_id: params?.company_id,
       },
     });
@@ -1719,7 +1981,7 @@ export const assetOperationsService = {
     batch_size?: number;
     confirm_warnings: boolean;
     defaults: {
-      asset_category_id: string;
+      asset_category_id?: string;
       asset_type?: string;
       purchase_date?: string | null;
       purchase_cost?: string;
@@ -1789,6 +2051,25 @@ export const assetOperationsService = {
       query,
     );
     return parsePaginatedAssetList(res.data);
+  },
+
+  async listTransfers(params: {
+    page?: number;
+    page_size?: number;
+    status?: string;
+    q?: string;
+  } = {}): Promise<AssetTransferPaginatedListResult> {
+    const query: Record<string, string | number> = {
+      page: params.page ?? 1,
+      page_size: Math.min(params.page_size ?? 25, 200),
+    };
+    if (params.status) query.status = params.status;
+    if (params.q) query.q = params.q;
+    const res = await resourceService.list<AssetTransferPaginatedListResult>(
+      "/assets/asset-transfers",
+      query,
+    );
+    return parsePaginatedTransferList(res.data);
   },
 };
 
@@ -2155,6 +2436,7 @@ export type IncomingRegistrationPrefill = {
   currency_code?: string;
   asset_category_id?: string | null;
   asset_type?: string;
+  asset_type_id?: string | null;
   qc_status: string;
   registration_status: string;
   registered_asset_id?: string | null;

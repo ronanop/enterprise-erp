@@ -50,6 +50,7 @@ export function ExcelImportPreviewGrid({
             <th className="px-2 py-2">Laptop Name</th>
             <th className="px-2 py-2">Branch</th>
             <th className="px-2 py-2">Ops Status</th>
+            <th className="px-2 py-2">Type</th>
             <th className="px-2 py-2">Employee</th>
             <th className="px-2 py-2">Messages</th>
           </tr>
@@ -74,6 +75,7 @@ export function ExcelImportPreviewGrid({
               <td className="px-2 py-2 font-mono text-xs">
                 {row.values.operationalStatus ?? "—"}
               </td>
+              <td className="px-2 py-2">{row.values.assetType ?? "—"}</td>
               <td className="px-2 py-2 font-mono text-xs">{row.values.employeeId ?? "—"}</td>
               <td className="px-2 py-2 text-xs text-muted-foreground">
                 {row.issues.length === 0 ? (

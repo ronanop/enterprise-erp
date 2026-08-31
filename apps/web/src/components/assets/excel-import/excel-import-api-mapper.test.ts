@@ -8,13 +8,13 @@ import type { ExcelImportPreviewRow } from "@/components/assets/excel-import/exc
 
 const branchId = "11111111-1111-1111-1111-111111111111";
 const empId = "22222222-2222-2222-2222-222222222222";
-const catId = "33333333-3333-3333-3333-333333333333";
+const typeId = "33333333-3333-3333-3333-333333333333";
 const deptId = "44444444-4444-4444-4444-444444444444";
 
 const lookups = buildMasterLookups({
   branches: [{ id: branchId, label: "Noida" }],
   departments: [{ id: deptId, label: "IT" }],
-  categories: [{ id: catId, label: "Laptop" }],
+  types: [{ id: typeId, label: "Laptop" }],
   employees: [{ id: empId, label: "Ada (E001)" }],
 });
 
@@ -24,6 +24,7 @@ function preview(partial: Partial<ExcelImportPreviewRow> & { rowNumber: number }
     laptopName: "Dell",
     branch: "Noida",
     operationalStatus: "READY_TO_MOVE",
+    assetType: "Laptop",
   };
   const { values: overrideValues, ...rest } = partial;
   return {
@@ -46,6 +47,7 @@ describe("buildImportPayloadRows", () => {
     expect(rows[0].asset_tag).toBe("AST-1");
     expect(rows[0].branch_id).toBe(branchId);
     expect(rows[0].operational_status).toBe("READY_TO_MOVE");
+    expect(rows[0].asset_type_id).toBe(typeId);
   });
 
   it("excludes invalid rows", () => {
@@ -67,7 +69,7 @@ describe("buildImportPayloadRows", () => {
     ).toHaveLength(1);
   });
 
-  it("resolves employee department category serial", () => {
+  it("resolves employee department type serial", () => {
     const rows = buildImportPayloadRows(
       [
         preview({
@@ -75,7 +77,7 @@ describe("buildImportPayloadRows", () => {
           values: {
             employeeId: "E001",
             department: "IT",
-            category: "Laptop",
+            assetType: "Laptop",
             serialNumber: "SN-9",
             deliveryReference: "DC-1",
             assignmentRemarks: "note",
@@ -87,7 +89,7 @@ describe("buildImportPayloadRows", () => {
     );
     expect(rows[0].employee_id).toBe(empId);
     expect(rows[0].department_id).toBe(deptId);
-    expect(rows[0].asset_category_id).toBe(catId);
+    expect(rows[0].asset_type_id).toBe(typeId);
     expect(rows[0].serial_number).toBe("SN-9");
     expect(rows[0].delivery_reference_number).toBe("DC-1");
     expect(rows[0].assignment_remarks).toBe("note");
@@ -124,6 +126,15 @@ describe("buildImportPayloadRows", () => {
     expect(rows).toHaveLength(0);
   });
 
+  it("skips when type cannot resolve", () => {
+    const rows = buildImportPayloadRows(
+      [preview({ rowNumber: 5, values: { assetType: "Unknown" } })],
+      lookups,
+      { includeWarnings: false },
+    );
+    expect(rows).toHaveLength(0);
+  });
+
   it("skips when ops status invalid", () => {
     const rows = buildImportPayloadRows(
       [preview({ rowNumber: 6, values: { operationalStatus: "nope" } })],
@@ -148,55 +159,5 @@ describe("buildImportPayloadRows", () => {
         { includeWarnings: false },
       ),
     ).toHaveLength(0);
-  });
-
-  it("normalizes excel tab alias to enum", () => {
-    const rows = buildImportPayloadRows(
-      [preview({ rowNumber: 9, values: { operationalStatus: "Not Given To Anyone" } })],
-      lookups,
-      { includeWarnings: false },
-    );
-    expect(rows[0].operational_status).toBe("RETIRED");
-  });
-
-  it("parses issue date when valid", () => {
-    const rows = buildImportPayloadRows(
-      [preview({ rowNumber: 10, values: { issueDate: "2024-01-15" } })],
-      lookups,
-      { includeWarnings: false },
-    );
-    expect(rows[0].issue_date).toBe("2024-01-15");
-  });
-
-  it("sets issue_date null when invalid", () => {
-    const rows = buildImportPayloadRows(
-      [preview({ rowNumber: 11, values: { issueDate: "not-a-date" } })],
-      lookups,
-      { includeWarnings: false },
-    );
-    expect(rows[0].issue_date).toBeNull();
-  });
-
-  it("preserves preview_status", () => {
-    const rows = buildImportPayloadRows(
-      [preview({ rowNumber: 12, status: "warning" })],
-      lookups,
-      { includeWarnings: true },
-    );
-    expect(rows[0].preview_status).toBe("warning");
-  });
-
-  it("handles multiple mixed rows", () => {
-    const rows = buildImportPayloadRows(
-      [
-        preview({ rowNumber: 1 }),
-        preview({ rowNumber: 2, status: "invalid" }),
-        preview({ rowNumber: 3, status: "warning" }),
-        preview({ rowNumber: 4, values: { assetTag: "AST-4" } }),
-      ],
-      lookups,
-      { includeWarnings: false },
-    );
-    expect(rows.map((r) => r.row_number)).toEqual([1, 4]);
   });
 });

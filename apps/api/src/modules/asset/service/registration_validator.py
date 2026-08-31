@@ -17,6 +17,7 @@ from modules.asset.domain.exceptions import (
 from modules.asset.models import AstAsset
 from modules.asset.repository.asset_category_repository import AssetCategoryRepository
 from modules.asset.repository.asset_repository import AssetRepository
+from modules.asset.repository.asset_type_repository import AssetTypeRepository
 from modules.foundation.domain.value_objects import TenantContext
 
 
@@ -26,6 +27,7 @@ class RegistrationValidator:
     def __init__(self, db: Session) -> None:
         self._assets = AssetRepository(db)
         self._categories = AssetCategoryRepository(db)
+        self._types = AssetTypeRepository(db)
         self._master = AssetMasterDataAdapter(db)
         self._org = AssetOrganizationAdapter(db)
         self._procurement = ProcurementReadPort(db)
@@ -52,17 +54,16 @@ class RegistrationValidator:
         branch_id: UUID,
         fields: dict,
     ) -> None:
-        """Excel import may supply external asset_code (Asset Tag); document_number stays system-assigned."""
+        """Excel import may supply external asset_code (Asset Tag) or leave blank for auto-generation."""
         asset_code = (fields.get("asset_code") or "").strip()
-        if not asset_code:
-            raise RegistrationValidationError("asset_code is required for Excel import")
         if fields.get("status") and fields["status"] != AssetStatus.DRAFT.value:
             raise RegistrationValidationError("New registrations must start in draft status")
-        existing = self._assets.find_by_code(ctx, company_id, asset_code)
-        if existing is not None:
-            raise DuplicateAssetRegistrationError(
-                f"Asset tag '{asset_code}' is already registered"
-            )
+        if asset_code:
+            existing = self._assets.find_by_code(ctx, company_id, asset_code)
+            if existing is not None:
+                raise DuplicateAssetRegistrationError(
+                    f"Asset tag '{asset_code}' is already registered"
+                )
         self._validate_common(ctx, company_id=company_id, fields=fields, exclude_id=None)
 
     def validate_update_fields(
@@ -78,6 +79,7 @@ class RegistrationValidator:
         merged = {
             "asset_name": fields.get("asset_name", row.asset_name),
             "asset_category_id": fields.get("asset_category_id", row.asset_category_id),
+            "asset_type_id": fields.get("asset_type_id", row.asset_type_id),
             "asset_type": fields.get("asset_type", row.asset_type),
             "purchase_date": fields.get("purchase_date", row.purchase_date),
             "purchase_cost": fields.get("purchase_cost", row.purchase_cost),
@@ -106,6 +108,8 @@ class RegistrationValidator:
             missing.append("asset_name")
         if not row.asset_category_id:
             missing.append("asset_category_id")
+        if not row.asset_type_id:
+            missing.append("asset_type_id")
         if not row.asset_type:
             missing.append("asset_type")
         if row.purchase_date is None:
@@ -124,6 +128,7 @@ class RegistrationValidator:
             fields={
                 "asset_name": row.asset_name,
                 "asset_category_id": row.asset_category_id,
+                "asset_type_id": row.asset_type_id,
                 "asset_type": row.asset_type,
                 "purchase_date": row.purchase_date,
                 "purchase_cost": row.purchase_cost,
@@ -152,6 +157,18 @@ class RegistrationValidator:
         asset_type = fields.get("asset_type")
         if asset_type is not None and asset_type not in self.ASSET_TYPES:
             raise RegistrationValidationError(f"Invalid asset_type '{asset_type}'")
+
+        type_id = fields.get("asset_type_id")
+        if type_id is not None:
+            asset_type_row = self._types.get(ctx, type_id)
+            if asset_type_row is None:
+                raise RegistrationValidationError("Asset type not found")
+            if asset_type_row.company_id != company_id:
+                raise RegistrationValidationError(
+                    "Asset type does not belong to this company"
+                )
+            if not asset_type_row.active:
+                raise RegistrationValidationError("Asset type is not active")
 
         category_id = fields.get("asset_category_id")
         if category_id is not None:
@@ -215,6 +232,7 @@ class RegistrationValidator:
             for name in (
                 "asset_name",
                 "asset_category_id",
+                "asset_type_id",
                 "asset_type",
                 "purchase_date",
                 "purchase_cost",

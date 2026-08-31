@@ -31,11 +31,11 @@ export const dashboardNavigationPaths = {
 
 function inventorySnapshot(
   preset: InventoryPresetId,
-  branchId: string,
+  locationId: string,
 ): InventoryUiSnapshot {
   return {
     preset,
-    headerBranchId: branchId || BRANCH_ALL_VALUE,
+    headerLocationId: locationId || BRANCH_ALL_VALUE,
     draftFilters: { ...EMPTY_INVENTORY_FILTERS },
     appliedFilters: { ...EMPTY_INVENTORY_FILTERS },
     quickSearch: "",
@@ -47,9 +47,9 @@ function inventorySnapshot(
 export function openInventoryWithPreset(
   push: AssetNavigateFn,
   preset: InventoryPresetId,
-  branchId: string = BRANCH_ALL_VALUE,
+  locationId: string = BRANCH_ALL_VALUE,
 ): void {
-  saveInventoryUiSnapshot(inventorySnapshot(preset, branchId));
+  saveInventoryUiSnapshot(inventorySnapshot(preset, locationId));
   push(dashboardNavigationPaths.inventory);
 }
 
@@ -64,7 +64,7 @@ export type DashboardQuickActionId =
 export function navigateDashboardQuickAction(
   push: AssetNavigateFn,
   action: DashboardQuickActionId,
-  branchId: string = BRANCH_ALL_VALUE,
+  locationId: string = BRANCH_ALL_VALUE,
 ): void {
   switch (action) {
     case "register":
@@ -77,10 +77,10 @@ export function navigateDashboardQuickAction(
       push(dashboardNavigationPaths.returnAsset);
       break;
     case "discovery":
-      openInventoryWithPreset(push, "ready", branchId);
+      openInventoryWithPreset(push, "ready", locationId);
       break;
     case "informationPortal":
-      openInventoryWithPreset(push, "all", branchId);
+      openInventoryWithPreset(push, "all", locationId);
       break;
     case "qr":
       push(dashboardNavigationPaths.qrBarcode);
@@ -94,17 +94,45 @@ export function navigateDashboardQuickAction(
 
 export type DashboardQueueViewAllId = "ready" | "pendingDisposal" | "assignments";
 
+export type DashboardKpiId =
+  | "total"
+  | "ready"
+  | "assigned"
+  | "inUseAsComponent"
+  | "retired"
+  | "pendingDisposal"
+  | "disposed";
+
+const KPI_TO_PRESET: Record<DashboardKpiId, InventoryPresetId> = {
+  total: "all",
+  ready: "ready",
+  assigned: "assigned",
+  inUseAsComponent: "in_use_as_component",
+  retired: "retired",
+  pendingDisposal: "pending_disposal",
+  disposed: "disposed",
+};
+
+/** Open All Assets with the operational-status filter matching a dashboard KPI card. */
+export function navigateDashboardKpi(
+  push: AssetNavigateFn,
+  kpi: DashboardKpiId,
+  locationId: string = BRANCH_ALL_VALUE,
+): void {
+  openInventoryWithPreset(push, KPI_TO_PRESET[kpi], locationId);
+}
+
 export function navigateDashboardViewAll(
   push: AssetNavigateFn,
   target: DashboardQueueViewAllId,
-  branchId: string = BRANCH_ALL_VALUE,
+  locationId: string = BRANCH_ALL_VALUE,
 ): void {
   switch (target) {
     case "ready":
-      openInventoryWithPreset(push, "ready", branchId);
+      openInventoryWithPreset(push, "ready", locationId);
       break;
     case "pendingDisposal":
-      openInventoryWithPreset(push, "pending_disposal", branchId);
+      openInventoryWithPreset(push, "pending_disposal", locationId);
       break;
     case "assignments":
       push(dashboardNavigationPaths.assignments);

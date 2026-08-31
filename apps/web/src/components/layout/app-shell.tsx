@@ -1,6 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
+import { Suspense } from "react";
 import { usePathname } from "next/navigation";
 
 import { AssetsModuleSidebar } from "@/components/assets/assets-module-sidebar";
@@ -27,7 +28,11 @@ export function AppShell({ children }: AppShellProps) {
       {!standalone ? <AppSidebar /> : null}
       {standalone && isCrm ? <CrmSidebar /> : null}
       {standalone && isProjects ? <ProjectsSidebar /> : null}
-      {standalone && isAssets ? <AssetsModuleSidebar /> : null}
+      {standalone && isAssets ? (
+        <Suspense fallback={null}>
+          <AssetsModuleSidebar />
+        </Suspense>
+      ) : null}
       <div className="flex min-w-0 flex-1 flex-col overflow-x-clip">
         <AppTopbar />
         <main

@@ -12,7 +12,9 @@ def test_operational_status_values_locked() -> None:
     assert AssetOperationalStatus.RETIRED.value == "RETIRED"
     assert AssetOperationalStatus.PENDING_DISPOSAL.value == "PENDING_DISPOSAL"
     assert AssetOperationalStatus.DISPOSED.value == "DISPOSED"
-    assert len(AssetOperationalStatus) == 5
+    assert AssetOperationalStatus.IN_USE_AS_COMPONENT.value == "IN_USE_AS_COMPONENT"
+    assert AssetOperationalStatus.IN_MAINTENANCE.value == "IN_MAINTENANCE"
+    assert len(AssetOperationalStatus) == 7
 
 
 def test_operational_status_values_frozenset() -> None:
@@ -23,5 +25,7 @@ def test_operational_status_values_frozenset() -> None:
             "RETIRED",
             "PENDING_DISPOSAL",
             "DISPOSED",
+            "IN_USE_AS_COMPONENT",
+            "IN_MAINTENANCE",
         }
     )

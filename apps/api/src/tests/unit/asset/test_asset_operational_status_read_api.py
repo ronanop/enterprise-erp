@@ -143,6 +143,7 @@ def test_dashboard_service_maps_counts() -> None:
         retired=1,
         pending_disposal=1,
         disposed=1,
+        in_use_as_component=0,
     )
     branch = BranchOperationalSummary(
         branch_id=ctx.branch_id,
@@ -152,6 +153,7 @@ def test_dashboard_service_maps_counts() -> None:
         retired=0,
         pending_disposal=1,
         disposed=0,
+        in_use_as_component=0,
     )
     with (
         patch.object(svc._scope, "resolve_company_id", return_value=ctx.company_id),
@@ -169,7 +171,7 @@ def test_dashboard_service_maps_counts() -> None:
 def test_dashboard_service_branch_scope_skips_by_branch() -> None:
     svc = AssetDashboardSummaryService(MagicMock())
     ctx = _ctx()
-    counts = OperationalStatusCounts(1, 1, 0, 0, 0, 0)
+    counts = OperationalStatusCounts(1, 1, 0, 0, 0, 0, 0)
     with (
         patch.object(svc._scope, "resolve_company_id", return_value=ctx.company_id),
         patch.object(svc._scope, "validate_branch_access", return_value=None),
@@ -226,6 +228,7 @@ def test_operational_status_counts_dataclass(field: str, value: int) -> None:
         retired=3,
         pending_disposal=4,
         disposed=5,
+        in_use_as_component=0,
     )
     assert getattr(counts, field) == value
 

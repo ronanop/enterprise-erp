@@ -13,7 +13,6 @@ import {
   ShieldCheck,
   SquarePen,
   Undo2,
-  Users,
   X,
 } from "lucide-react";
 
@@ -32,7 +31,6 @@ import {
 } from "@/components/ui/select";
 import { getAccessTokenUserId, isAuthenticated } from "@/lib/auth";
 import {
-  DEMO_EMPLOYEE_ROSTER_LABELS,
   listDepartmentOptions,
   listEmployeeOptions,
   type OrgOption,
@@ -520,50 +518,6 @@ export function AssetAssignmentWorkspace() {
           {error}
         </p>
       ) : null}
-
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="flex items-center gap-2 text-base">
-            <Users className="size-4" aria-hidden />
-            Team roster
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-2">
-          {employees.length > 0 ? (
-            <div className="flex flex-wrap gap-2">
-              {employees.map((emp) => (
-                <Button
-                  key={emp.id}
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="cursor-pointer transition-colors duration-200"
-                  onClick={() => openCreate({ employee_id: emp.id, allocation_type: "employee" })}
-                >
-                  {emp.label}
-                </Button>
-              ))}
-            </div>
-          ) : (
-            <>
-              <p className="text-sm text-muted-foreground">
-                Load employees from Master Data to assign by name. Demo roster (after{" "}
-                <span className="font-mono text-xs">seed_demo_modules</span>):
-              </p>
-              <div className="flex flex-wrap gap-2">
-                {DEMO_EMPLOYEE_ROSTER_LABELS.map((label) => (
-                  <span
-                    key={label}
-                    className="rounded-md border border-border/70 bg-muted/30 px-2.5 py-1 text-xs text-muted-foreground"
-                  >
-                    {label}
-                  </span>
-                ))}
-              </div>
-            </>
-          )}
-        </CardContent>
-      </Card>
 
       <Card>
         <CardHeader className="space-y-3 pb-3">

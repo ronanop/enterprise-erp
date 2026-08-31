@@ -30,6 +30,10 @@ class AstAsset(Base, *AstTransactionMixin):
             name="ck_ast_asset_type",
         ),
         CheckConstraint(
+            "asset_domain IN ('IT','NON_IT')",
+            name="ck_ast_asset_domain",
+        ),
+        CheckConstraint(
             "depreciation_method IS NULL OR depreciation_method IN "
             "('straight_line','wdv','units_of_production')",
             name="ck_ast_asset_depr_method",
@@ -41,7 +45,8 @@ class AstAsset(Base, *AstTransactionMixin):
         ),
         CheckConstraint(
             "operational_status IS NULL OR operational_status IN "
-            "('READY_TO_MOVE','ASSIGNED','RETIRED','PENDING_DISPOSAL','DISPOSED')",
+            "('READY_TO_MOVE','ASSIGNED','RETIRED','PENDING_DISPOSAL','DISPOSED',"
+            "'IN_USE_AS_COMPONENT')",
             name="ck_ast_asset_operational_status",
         ),
         CheckConstraint(
@@ -61,7 +66,18 @@ class AstAsset(Base, *AstTransactionMixin):
         nullable=False,
         index=True,
     )
+    # Legacy 4-value classification (fixed|consumable|digital|leased). Kept for
+    # existing readers; new source of truth is asset_type_id → ast_asset_type.
     asset_type: Mapped[str] = mapped_column(String(40), nullable=False)
+    asset_type_id: Mapped[UUID | None] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("asset.ast_asset_type.id", ondelete="RESTRICT"),
+        nullable=True,
+        index=True,
+    )
+    asset_domain: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="IT", server_default="IT", index=True
+    )
     master_asset_id: Mapped[UUID | None] = mapped_column(
         PG_UUID(as_uuid=True),
         ForeignKey("master.master_asset.id", ondelete="RESTRICT"),

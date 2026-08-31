@@ -1,5 +1,3 @@
-"""Asset Excel import orchestration — batches, transactions, summary (CR-004 Phase 8B)."""
-
 from __future__ import annotations
 
 import time
@@ -7,6 +5,7 @@ from uuid import UUID
 
 from sqlalchemy.orm import Session
 
+from core.exceptions import AppException
 from modules.asset.domain.excel_import import (
     DEFAULT_IMPORT_BATCH_SIZE,
     MAX_IMPORT_BATCH_SIZE,
@@ -17,7 +16,9 @@ from modules.asset.domain.excel_import import (
     ExcelImportSkipReason,
     ExcelImportSummary,
 )
+from modules.asset.repository.asset_category_repository import AssetCategoryRepository
 from modules.asset.service.excel_import_engine import AssetExcelImportEngine
+from modules.asset.service.asset_scope_validator import AssetScopeValidator
 from modules.foundation.domain.value_objects import TenantContext
 
 
@@ -51,14 +52,17 @@ class AssetExcelImportService:
             summary.duration_ms = int((time.perf_counter() - started) * 1000)
             return summary
 
-        batches = [rows[i : i + size] for i in range(0, len(rows), size)]
+        resolved_defaults = self._resolve_defaults(ctx, defaults, company_id)
+        resolved_rows = [self._resolve_row_branch(ctx, row) for row in rows]
+
+        batches = [resolved_rows[i : i + size] for i in range(0, len(resolved_rows), size)]
         summary.batch_count = len(batches)
 
         for batch in batches:
             self._import_batch(
                 ctx,
                 batch,
-                defaults=defaults,
+                defaults=resolved_defaults,
                 confirm_warnings=confirm_warnings,
                 company_id=company_id,
                 summary=summary,
@@ -140,3 +144,45 @@ class AssetExcelImportService:
         if batch_size < 1:
             return DEFAULT_IMPORT_BATCH_SIZE
         return min(batch_size, MAX_IMPORT_BATCH_SIZE)
+
+    def _resolve_defaults(
+        self,
+        ctx: TenantContext,
+        defaults: ExcelImportDefaults,
+        company_id: UUID | None,
+    ) -> ExcelImportDefaults:
+        cid = AssetScopeValidator(self._db).resolve_company_id(ctx, company_id)
+        category_id = defaults.asset_category_id
+        if category_id is None:
+            category_id = self._default_it_category_id(ctx, cid)
+        return ExcelImportDefaults(
+            asset_category_id=category_id,
+            asset_type=defaults.asset_type,
+            purchase_date=defaults.purchase_date,
+            purchase_cost=defaults.purchase_cost,
+            currency_code=defaults.currency_code,
+        )
+
+    def _default_it_category_id(self, ctx: TenantContext, company_id: UUID) -> UUID:
+        categories = AssetCategoryRepository(self._db).list_rows(
+            ctx,
+            company_id,
+            status="active",
+            asset_domain="IT",
+        )
+        if not categories:
+            raise AppException("No active IT asset category is configured for import")
+        for row in categories:
+            if str(row.category_name or "").strip().lower() == "it equipment":
+                return row.id
+        return categories[0].id
+
+    @staticmethod
+    def _resolve_row_branch(ctx: TenantContext, row: ExcelImportRowInput) -> ExcelImportRowInput:
+        if row.branch_id is not None:
+            return row
+        if ctx.branch_id is None:
+            return row
+        from dataclasses import replace
+
+        return replace(row, branch_id=ctx.branch_id)

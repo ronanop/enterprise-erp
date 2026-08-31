@@ -10,13 +10,15 @@ from modules.asset.domain.operational_status_exceptions import (
 from modules.asset.domain.operational_status_rules import (
     Assigned,
     Disposed,
+    InMaintenance,
+    InUseAsComponent,
     Pending,
     Ready,
     Retired,
 )
 from modules.asset.service.engines.asset_operational_status_engine import AssetOperationalStatusEngine
 
-# Named business actions → expected target from allowed source states (Phase 2B-1).
+# Named business actions → expected target from allowed source states.
 _ACTION_TARGETS: dict[str, str] = {
     "assign": Assigned,
     "return_to_ready": Ready,
@@ -25,6 +27,10 @@ _ACTION_TARGETS: dict[str, str] = {
     "start_disposal": Pending,
     "reinstate": Ready,
     "complete_disposal": Disposed,
+    "attach_as_component": InUseAsComponent,
+    "detach_as_component": Ready,
+    "start_maintenance": InMaintenance,
+    "complete_maintenance": Ready,
 }
 
 

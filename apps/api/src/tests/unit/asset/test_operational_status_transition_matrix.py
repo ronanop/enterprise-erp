@@ -12,7 +12,7 @@ ENGINE = AssetOperationalStatusEngine()
 
 
 def test_allowed_matrix_count() -> None:
-    assert len(ALLOWED_OPERATIONAL_TRANSITIONS) == 7
+    assert len(ALLOWED_OPERATIONAL_TRANSITIONS) == 12
 
 
 @pytest.mark.parametrize("current", ALL)

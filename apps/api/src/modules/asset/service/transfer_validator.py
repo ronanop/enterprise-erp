@@ -14,6 +14,7 @@ from modules.asset.domain.operational_status_rules import (
 )
 from modules.asset.models import AstAssetTransfer
 from modules.asset.repository.asset_assignment_repository import AssetAssignmentRepository
+from modules.asset.repository.asset_maintenance_repository import AssetMaintenanceRepository
 from modules.asset.repository.asset_repository import AssetRepository
 from modules.asset.repository.asset_transfer_repository import AssetTransferRepository
 from modules.foundation.domain.value_objects import TenantContext
@@ -28,6 +29,7 @@ class TransferValidator:
         self._assets = AssetRepository(db)
         self._transfers = AssetTransferRepository(db)
         self._assignments = AssetAssignmentRepository(db)
+        self._maintenances = AssetMaintenanceRepository(db)
         self._org = AssetOrganizationAdapter(db)
         self._master = AssetMasterDataAdapter(db)
 
@@ -53,6 +55,7 @@ class TransferValidator:
             raise TransferValidationError("Asset does not belong to this company")
         self._validate_target_fields(ctx, company_id=company_id, fields=fields)
         self._validate_pending_transfer(ctx, asset_id, exclude_id=None)
+        self._validate_no_open_maintenance(ctx, asset_id)
 
     def validate_update_fields(
         self,
@@ -89,6 +92,7 @@ class TransferValidator:
         )
         self._validate_no_open_assignment(ctx, row.asset_id)
         self._validate_pending_transfer(ctx, row.asset_id, exclude_id=row.id)
+        self._validate_no_open_maintenance(ctx, row.asset_id, exclude_id=row.id)
         if not any(
             (
                 self._different(row.from_branch_id, row.to_branch_id),
@@ -112,6 +116,7 @@ class TransferValidator:
         )
         self._validate_no_open_assignment(ctx, row.asset_id)
         self._validate_pending_transfer(ctx, row.asset_id, exclude_id=row.id)
+        self._validate_no_open_maintenance(ctx, row.asset_id, exclude_id=row.id)
         if not any(
             (
                 self._different(row.from_branch_id, row.to_branch_id),
@@ -190,17 +195,31 @@ class TransferValidator:
         if open_asn is not None:
             raise TransferValidationError(_ASSIGNED_BLOCK_MESSAGE)
 
+    def _validate_no_open_maintenance(
+        self,
+        ctx: TenantContext,
+        asset_id: UUID,
+        *,
+        exclude_id: UUID | None = None,
+    ) -> None:
+        open_wo = self._maintenances.find_open_for_asset(ctx, asset_id, exclude_id=exclude_id)
+        if open_wo is not None:
+            raise TransferValidationError(
+                f"Asset has an open maintenance work order ({open_wo.document_number})"
+            )
+
     @staticmethod
     def _validate_asset_is_transferable(status: str) -> None:
-        if status not in {AssetStatus.ACTIVE.value, AssetStatus.IN_MAINTENANCE.value}:
-            raise TransferValidationError("Only active or in_maintenance assets can be transferred")
+        if status != AssetStatus.ACTIVE.value:
+            raise TransferValidationError("Only active assets can be transferred")
 
     @staticmethod
     def _validate_operational_allows_transfer(operational_status: str | None) -> None:
         ops = str(operational_status or "").strip().upper()
         if ops in OPS_BLOCKED_FOR_MAINTENANCE_OR_TRANSFER:
             raise TransferValidationError(
-                "Retired, pending disposal, or disposed assets cannot be transferred."
+                "Retired, pending disposal, disposed, in maintenance, or in-use-as-component "
+                "assets cannot be transferred."
             )
 
     @staticmethod

@@ -3,14 +3,22 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Boxes,
+  Eye,
   History,
   Loader2,
   Plus,
   RefreshCw,
   Replace,
   Trash2,
+  X,
 } from "lucide-react";
 
+import {
+  ASSETS_ACCENT_BTN,
+  ASSETS_SURFACE_CARD,
+  AssetsPremiumPage,
+} from "@/components/assets/shared/premium-surface";
+import { StatusBadge } from "@/components/assets/shared";
 import { PageHeader } from "@/components/layout/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -25,6 +33,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { isAuthenticated } from "@/lib/auth";
+import { cn } from "@/lib/utils";
 import {
   type ComponentHistoryResult,
   type ComponentRow,
@@ -39,6 +48,14 @@ type AssetRow = {
   id: string;
   asset_code: string;
   asset_name: string;
+};
+
+type AttachableAsset = {
+  id: string;
+  asset_code: string;
+  asset_name: string;
+  serial_number?: string | null;
+  operational_status?: string | null;
 };
 
 type ListPayload<T> = {
@@ -64,77 +81,77 @@ function parseListPayload<T>(data: unknown): ListPayload<T> {
   return { items: [], total: 0, page: 1, page_size: PAGE_SIZE };
 }
 
-function statusVariant(status: string): "default" | "secondary" | "outline" {
-  if (status === "active") return "default";
-  if (status === "replaced") return "secondary";
-  return "outline";
+function errMessage(err: unknown, fallback: string): string {
+  if (err instanceof ApiClientError) return err.message || fallback;
+  if (err instanceof Error) return err.message || fallback;
+  return fallback;
+}
+
+function displayIdentity(row: ComponentRow): { primary: string; secondary: string } {
+  if (row.linked_asset_code || row.linked_asset_name) {
+    return {
+      primary: [row.linked_asset_code, row.linked_asset_name].filter(Boolean).join(" · "),
+      secondary: componentTypeLabel(row.component_type),
+    };
+  }
+  return {
+    primary: componentTypeLabel(row.component_type),
+    secondary: row.component_name || row.component_code,
+  };
 }
 
 export function AssetComponentsWorkspace() {
-  const assetsPath = "/assets/assets";
-
   const [rows, setRows] = useState<ComponentRow[]>([]);
-  const [assetOptions, setAssetOptions] = useState<AssetRow[]>([]);
+  const [assets, setAssets] = useState<AssetRow[]>([]);
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(1);
+  const [q, setQ] = useState("");
+  const [status, setStatus] = useState<string>("");
+  const [assetFilter, setAssetFilter] = useState<string>("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const [installOpen, setInstallOpen] = useState(false);
+  const [installMode, setInstallMode] = useState<"type" | "asset">("type");
+  const [draftAssetId, setDraftAssetId] = useState("");
+  const [draftType, setDraftType] = useState("OTHER");
+  const [draftSerial, setDraftSerial] = useState("");
+  const [draftQty, setDraftQty] = useState("1");
+  const [draftChildAssetId, setDraftChildAssetId] = useState("");
+  const [attachable, setAttachable] = useState<AttachableAsset[]>([]);
+  const [attachQ, setAttachQ] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  const [detailOpen, setDetailOpen] = useState(false);
   const [selected, setSelected] = useState<ComponentRow | null>(null);
   const [tree, setTree] = useState<ComponentTreeResult | null>(null);
   const [history, setHistory] = useState<ComponentHistoryResult | null>(null);
-  const [total, setTotal] = useState(0);
-  const [page, setPage] = useState(1);
-  const [statusFilter, setStatusFilter] = useState("");
-  const [assetFilter, setAssetFilter] = useState("");
-  const [search, setSearch] = useState("");
-  const [loading, setLoading] = useState(true);
-  const [actionLoading, setActionLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [showCreate, setShowCreate] = useState(false);
-  const [showReplace, setShowReplace] = useState(false);
+  const [editMode, setEditMode] = useState(false);
+  const [editName, setEditName] = useState("");
+  const [editSerial, setEditSerial] = useState("");
+  const [editQty, setEditQty] = useState("");
+  const [replaceOpen, setReplaceOpen] = useState(false);
+  const [replaceName, setReplaceName] = useState("");
+  const [replaceSerial, setReplaceSerial] = useState("");
 
-  const [draft, setDraft] = useState({
-    asset_id: "",
-    component_type: "OTHER",
-    component_code: "",
-    component_name: "",
-    serial_number: "",
-    quantity: "1",
-  });
-
-  const [replaceDraft, setReplaceDraft] = useState({
-    component_type: "OTHER",
-    component_name: "",
-    serial_number: "",
-    quantity: "",
-  });
-
-  const [editDraft, setEditDraft] = useState({
-    component_type: "OTHER",
-    component_name: "",
-    serial_number: "",
-    quantity: "",
-  });
-  const [editing, setEditing] = useState(false);
-
-  const assetMap = useMemo(
-    () => new Map(assetOptions.map((asset) => [asset.id, asset])),
-    [assetOptions],
-  );
-
-  const canEdit = selected?.status === "active";
-  const canReplace = selected?.status === "active";
-  const canDispose = selected?.status === "active";
+  const assetLabelById = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const a of assets) {
+      map.set(a.id, `${a.asset_code} · ${a.asset_name}`);
+    }
+    return map;
+  }, [assets]);
 
   const loadAssets = useCallback(async () => {
     if (!isAuthenticated()) return;
-    try {
-      const res = await resourceService.list<ListPayload<AssetRow>>(
-        `${assetsPath}?page=1&page_size=200&status=active`,
-      );
-      setAssetOptions(parseListPayload<AssetRow>(res.data).items);
-    } catch {
-      setAssetOptions([]);
-    }
-  }, [assetsPath]);
+    const res = await resourceService.list<ListPayload<AssetRow>>(
+      "/assets/assets?page=1&page_size=200&sort=asset_code",
+    );
+    const parsed = parseListPayload<AssetRow>(res.data);
+    setAssets(parsed.items);
+  }, []);
 
-  const load = useCallback(async () => {
+  const loadRows = useCallback(async () => {
     if (!isAuthenticated()) return;
     setLoading(true);
     setError(null);
@@ -142,717 +159,765 @@ export function AssetComponentsWorkspace() {
       const payload = await componentService.search({
         page,
         page_size: PAGE_SIZE,
-        status: statusFilter || undefined,
+        q: q.trim() || undefined,
+        status: status || undefined,
         asset_id: assetFilter || undefined,
-        q: search.trim() || undefined,
-        sort: "component_code",
+        sort: "created_at",
       });
       setRows(payload.items);
       setTotal(payload.total);
     } catch (err) {
-      setError(err instanceof ApiClientError ? err.message : "Failed to load components");
+      setError(errMessage(err, "Failed to load components"));
       setRows([]);
       setTotal(0);
     } finally {
       setLoading(false);
     }
-  }, [page, statusFilter, assetFilter, search]);
-
-  const loadTree = useCallback(async (assetId: string) => {
-    try {
-      const payload = await componentService.tree(assetId);
-      setTree(payload);
-    } catch {
-      setTree(null);
-    }
-  }, []);
-
-  const loadHistory = useCallback(async (id: string) => {
-    try {
-      const payload = await componentService.history(id);
-      setHistory(payload);
-    } catch {
-      setHistory(null);
-    }
-  }, []);
-
-  useEffect(() => {
-    void load();
-  }, [load]);
+  }, [page, q, status, assetFilter]);
 
   useEffect(() => {
     void loadAssets();
   }, [loadAssets]);
 
   useEffect(() => {
-    if (!selected) {
-      setHistory(null);
-      return;
-    }
-    setEditDraft({
-      component_type: String(selected.component_type ?? "OTHER"),
-      component_name: selected.component_name,
-      serial_number: selected.serial_number ?? "",
-      quantity: selected.quantity != null ? String(selected.quantity) : "",
-    });
-    setReplaceDraft({
-      component_type: String(selected.component_type ?? "OTHER"),
-      component_name: selected.component_name,
-      serial_number: "",
-      quantity: selected.quantity != null ? String(selected.quantity) : "1",
-    });
-    setEditing(false);
-    setShowReplace(false);
-    void loadHistory(selected.id);
-    void loadTree(selected.asset_id);
-  }, [selected, loadHistory, loadTree]);
+    void loadRows();
+  }, [loadRows]);
 
   useEffect(() => {
-    if (assetFilter) {
-      void loadTree(assetFilter);
-    } else if (!selected) {
-      setTree(null);
+    if (!installOpen || installMode !== "asset" || !draftAssetId) {
+      setAttachable([]);
+      return;
     }
-  }, [assetFilter, selected, loadTree]);
+    let cancelled = false;
+    void componentService
+      .listAttachableAssets({
+        parent_asset_id: draftAssetId,
+        q: attachQ.trim() || undefined,
+        limit: 40,
+      })
+      .then((list) => {
+        if (!cancelled) setAttachable(list);
+      })
+      .catch(() => {
+        if (!cancelled) setAttachable([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [installOpen, installMode, draftAssetId, attachQ]);
 
-  const handleInstall = async () => {
-    if (!draft.asset_id || !draft.component_code.trim() || !draft.component_name.trim()) {
-      setError("Asset, component code, and name are required.");
+  async function openDetail(row: ComponentRow) {
+    setSelected(row);
+    setDetailOpen(true);
+    setEditMode(false);
+    setReplaceOpen(false);
+    setEditName(row.component_name);
+    setEditSerial(row.serial_number ?? "");
+    setEditQty(row.quantity != null ? String(row.quantity) : "");
+    try {
+      const [t, h] = await Promise.all([
+        componentService.tree(row.asset_id),
+        componentService.history(row.id),
+      ]);
+      setTree(t);
+      setHistory(h);
+    } catch {
+      setTree(null);
+      setHistory(null);
+    }
+  }
+
+  async function handleInstall() {
+    if (!draftAssetId) {
+      setError("Select a parent asset");
       return;
     }
-    if (draft.component_type === "CHARGER" && !draft.serial_number.trim()) {
-      setError("Serial number is required for Charger components.");
+    if (installMode === "asset" && !draftChildAssetId) {
+      setError("Select an asset to attach as a component");
       return;
     }
-    setActionLoading(true);
+    if (installMode === "type" && draftType === "CHARGER" && !draftSerial.trim()) {
+      setError("Serial number is required for chargers");
+      return;
+    }
+    setSaving(true);
     setError(null);
     try {
       const created = await componentService.install({
-        asset_id: draft.asset_id,
-        component_type: draft.component_type,
-        component_code: draft.component_code.trim(),
-        component_name: draft.component_name.trim(),
-        serial_number: draft.serial_number.trim() || undefined,
-        quantity: draft.quantity.trim() || undefined,
+        asset_id: draftAssetId,
+        component_type: installMode === "type" ? draftType : "OTHER",
+        serial_number: draftSerial.trim() || undefined,
+        quantity: draftQty.trim() ? Number(draftQty) : undefined,
+        component_asset_id: installMode === "asset" ? draftChildAssetId : undefined,
       });
-      setShowCreate(false);
-      setDraft({
-        asset_id: "",
-        component_type: "OTHER",
-        component_code: "",
-        component_name: "",
-        serial_number: "",
-        quantity: "1",
-      });
-      setSelected(created);
-      setPage(1);
-      await load();
+      setInstallOpen(false);
+      setDraftChildAssetId("");
+      setDraftSerial("");
+      setDraftQty("1");
+      await loadRows();
+      await openDetail(created);
     } catch (err) {
-      setError(err instanceof ApiClientError ? err.message : "Failed to install component");
+      setError(errMessage(err, "Install failed"));
     } finally {
-      setActionLoading(false);
+      setSaving(false);
     }
-  };
+  }
 
-  const handleUpdate = async () => {
-    if (!selected || !canEdit) return;
-    if (!editDraft.component_name.trim()) {
-      setError("Component name is required.");
-      return;
-    }
-    if (editDraft.component_type === "CHARGER" && !editDraft.serial_number.trim()) {
-      setError("Serial number is required for Charger components.");
-      return;
-    }
-    setActionLoading(true);
+  async function handleUpdate() {
+    if (!selected) return;
+    setSaving(true);
     setError(null);
     try {
       const updated = await componentService.update(selected.id, {
-        component_type: editDraft.component_type,
-        component_name: editDraft.component_name.trim(),
-        serial_number: editDraft.serial_number.trim() || null,
-        quantity: editDraft.quantity.trim() || null,
+        component_name: editName.trim() || selected.component_name,
+        serial_number: editSerial.trim() || null,
+        quantity: editQty.trim() ? Number(editQty) : null,
         version: selected.version,
       });
       setSelected(updated);
-      setEditing(false);
-      await load();
+      setEditMode(false);
+      await loadRows();
     } catch (err) {
-      setError(err instanceof ApiClientError ? err.message : "Failed to update component");
+      setError(errMessage(err, "Update failed"));
     } finally {
-      setActionLoading(false);
+      setSaving(false);
     }
-  };
+  }
 
-  const handleReplace = async () => {
-    if (!selected || !canReplace) return;
-    if (replaceDraft.component_type === "CHARGER" && !replaceDraft.serial_number.trim()) {
-      setError("Serial number is required for Charger components.");
-      return;
-    }
-    setActionLoading(true);
+  async function handleReplace() {
+    if (!selected) return;
+    setSaving(true);
     setError(null);
     try {
       const result = await componentService.replace(selected.id, {
-        component_type: replaceDraft.component_type,
-        component_name: replaceDraft.component_name.trim() || undefined,
-        serial_number: replaceDraft.serial_number.trim() || undefined,
-        quantity: replaceDraft.quantity.trim() || undefined,
+        component_name: replaceName.trim() || undefined,
+        serial_number: replaceSerial.trim() || undefined,
       });
-      setShowReplace(false);
-      setSelected(result.successor);
-      await load();
+      setReplaceOpen(false);
+      await loadRows();
+      await openDetail(result.successor);
     } catch (err) {
-      setError(err instanceof ApiClientError ? err.message : "Failed to replace component");
+      setError(errMessage(err, "Replace failed"));
     } finally {
-      setActionLoading(false);
+      setSaving(false);
     }
-  };
+  }
 
-  const handleDispose = async () => {
-    if (!selected || !canDispose) return;
-    setActionLoading(true);
+  async function handleDispose() {
+    if (!selected) return;
+    if (
+      !window.confirm(
+        selected.component_asset_id
+          ? "Dispose this component and cascade-dispose the linked asset (ops only, no finance workflow)?"
+          : "Dispose this component?",
+      )
+    ) {
+      return;
+    }
+    setSaving(true);
     setError(null);
     try {
       const updated = await componentService.dispose(selected.id);
       setSelected(updated);
-      await load();
+      await loadRows();
     } catch (err) {
-      setError(err instanceof ApiClientError ? err.message : "Failed to dispose component");
+      setError(errMessage(err, "Dispose failed"));
     } finally {
-      setActionLoading(false);
+      setSaving(false);
     }
-  };
+  }
 
   const pageCount = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
   return (
-    <div className="space-y-6 p-4 md:p-6">
+    <AssetsPremiumPage testId="asset-components-workspace">
       <PageHeader
         title="Asset Components"
-        description="Lightweight child parts under a parent asset (depth 1). Not inventory or warehouse stock."
+        description="Install accessories on a parent asset — lightweight types or attach a registered asset."
         actions={
           <div className="flex flex-wrap gap-2">
             <Button
               type="button"
               variant="outline"
-              className="cursor-pointer transition-colors duration-200"
-              onClick={() => void load()}
-              disabled={loading}
+              className="cursor-pointer gap-2 transition-colors duration-200"
+              onClick={() => void loadRows()}
             >
-              {loading ? (
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              ) : (
-                <RefreshCw className="mr-2 h-4 w-4" />
-              )}
+              <RefreshCw className="size-4" />
               Refresh
             </Button>
             <Button
               type="button"
-              className="cursor-pointer transition-colors duration-200"
-              onClick={() => setShowCreate((v) => !v)}
+              className={cn("cursor-pointer", ASSETS_ACCENT_BTN)}
+              onClick={() => {
+                setInstallOpen(true);
+                setInstallMode("type");
+                setError(null);
+              }}
             >
-              <Plus className="mr-2 h-4 w-4" />
+              <Plus className="size-4" />
               Install Component
             </Button>
           </div>
         }
       />
 
-      <div className="rounded-md border border-border bg-muted/40 px-4 py-3 text-sm text-muted-foreground">
-        Components belong to exactly one parent asset. Replace preserves history under the same
-        component code; dispose is terminal.
-      </div>
-
       {error ? (
-        <div className="rounded-md border border-destructive/40 bg-destructive/5 px-4 py-3 text-sm text-destructive">
+        <div
+          role="alert"
+          className="rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive"
+        >
           {error}
         </div>
       ) : null}
 
-      {showCreate ? (
-        <Card>
-          <CardHeader>
-            <CardTitle>Install component</CardTitle>
-          </CardHeader>
-          <CardContent className="grid gap-4 sm:grid-cols-2">
-            <div className="space-y-2 sm:col-span-2">
-              <Label htmlFor="cmp-asset">Parent asset</Label>
-              <Select
-                value={draft.asset_id || undefined}
-                onValueChange={(value) => setDraft((d) => ({ ...d, asset_id: value }))}
-              >
-                <SelectTrigger id="cmp-asset" className="cursor-pointer">
-                  <SelectValue placeholder="Select asset" />
-                </SelectTrigger>
-                <SelectContent>
-                  {assetOptions.map((asset) => (
-                    <SelectItem key={asset.id} value={asset.id} className="cursor-pointer">
-                      {asset.asset_code} — {asset.asset_name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2 sm:col-span-2">
-              <Label htmlFor="cmp-type">Component type</Label>
-              <Select
-                value={draft.component_type}
-                onValueChange={(value) => setDraft((d) => ({ ...d, component_type: value }))}
-              >
-                <SelectTrigger id="cmp-type" className="cursor-pointer">
-                  <SelectValue placeholder="Select type" />
-                </SelectTrigger>
-                <SelectContent>
-                  {COMPONENT_TYPE_OPTIONS.map((opt) => (
-                    <SelectItem key={opt.value} value={opt.value} className="cursor-pointer">
-                      {opt.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="cmp-code">Component code</Label>
+      <Card className={ASSETS_SURFACE_CARD}>
+        <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-3 space-y-0 pb-3">
+          <CardTitle className="flex items-center gap-2 text-base">
+            <Boxes className="size-4 text-[#0369A1]" />
+            Component register
+          </CardTitle>
+          <div className="flex flex-wrap items-end gap-2">
+            <div className="grid gap-1">
+              <Label className="text-xs text-muted-foreground">Search</Label>
               <Input
-                id="cmp-code"
-                value={draft.component_code}
-                onChange={(e) => setDraft((d) => ({ ...d, component_code: e.target.value }))}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="cmp-name">Component name</Label>
-              <Input
-                id="cmp-name"
-                value={draft.component_name}
-                onChange={(e) => setDraft((d) => ({ ...d, component_name: e.target.value }))}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="cmp-serial">
-                Serial number{draft.component_type === "CHARGER" ? " *" : ""}
-              </Label>
-              <Input
-                id="cmp-serial"
-                value={draft.serial_number}
-                onChange={(e) => setDraft((d) => ({ ...d, serial_number: e.target.value }))}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="cmp-qty">Quantity</Label>
-              <Input
-                id="cmp-qty"
-                value={draft.quantity}
-                onChange={(e) => setDraft((d) => ({ ...d, quantity: e.target.value }))}
-              />
-            </div>
-            <div className="flex gap-2 sm:col-span-2">
-              <Button
-                type="button"
-                className="cursor-pointer transition-colors duration-200"
-                disabled={actionLoading}
-                onClick={() => void handleInstall()}
-              >
-                {actionLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                Install
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                className="cursor-pointer transition-colors duration-200"
-                onClick={() => setShowCreate(false)}
-              >
-                Cancel
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-      ) : null}
-
-      <div className="grid gap-6 lg:grid-cols-[1.4fr_1fr]">
-        <Card>
-          <CardHeader className="flex flex-row items-center gap-2">
-            <Boxes className="h-5 w-5 text-muted-foreground" />
-            <CardTitle>Component register</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="flex flex-wrap gap-3">
-              <Input
-                aria-label="Search components"
-                placeholder="Search code, name, or serial"
-                value={search}
+                className="h-9 w-44"
+                value={q}
                 onChange={(e) => {
                   setPage(1);
-                  setSearch(e.target.value);
+                  setQ(e.target.value);
                 }}
-                className="max-w-xs"
+                placeholder="Code, name, serial…"
               />
+            </div>
+            <div className="grid gap-1">
+              <Label className="text-xs text-muted-foreground">Status</Label>
               <Select
-                value={statusFilter || "__all"}
-                onValueChange={(value) => {
+                value={status || "all"}
+                onValueChange={(v) => {
                   setPage(1);
-                  setStatusFilter(value === "__all" ? "" : value);
+                  setStatus(v === "all" ? "" : v);
                 }}
               >
-                <SelectTrigger className="w-36 cursor-pointer" aria-label="Filter by status">
-                  <SelectValue placeholder="Status" />
+                <SelectTrigger className="h-9 w-36 cursor-pointer">
+                  <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {STATUS_OPTIONS.map((status) => (
-                    <SelectItem
-                      key={status || "__all"}
-                      value={status || "__all"}
-                      className="cursor-pointer"
-                    >
-                      {status || "All statuses"}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <Select
-                value={assetFilter || "__all"}
-                onValueChange={(value) => {
-                  setPage(1);
-                  setAssetFilter(value === "__all" ? "" : value);
-                }}
-              >
-                <SelectTrigger className="w-52 cursor-pointer" aria-label="Filter by asset">
-                  <SelectValue placeholder="Asset" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__all" className="cursor-pointer">
-                    All assets
-                  </SelectItem>
-                  {assetOptions.map((asset) => (
-                    <SelectItem key={asset.id} value={asset.id} className="cursor-pointer">
-                      {asset.asset_code}
+                  <SelectItem value="all">All</SelectItem>
+                  {STATUS_OPTIONS.filter(Boolean).map((s) => (
+                    <SelectItem key={s} value={s}>
+                      {s}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </div>
-
-            <div className="overflow-x-auto rounded-md border border-border">
-              <table className="w-full min-w-[640px] text-left text-sm">
-                <thead className="bg-muted/50 text-muted-foreground">
-                  <tr>
-                    <th className="px-3 py-2 font-medium">Code</th>
-                    <th className="px-3 py-2 font-medium">Type</th>
-                    <th className="px-3 py-2 font-medium">Name</th>
-                    <th className="px-3 py-2 font-medium">Asset</th>
-                    <th className="px-3 py-2 font-medium">Status</th>
-                    <th className="px-3 py-2 font-medium">Qty</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {loading ? (
-                    <tr>
-                      <td colSpan={6} className="px-3 py-8 text-center text-muted-foreground">
-                        <Loader2 className="mx-auto h-5 w-5 animate-spin" />
-                      </td>
-                    </tr>
-                  ) : rows.length === 0 ? (
-                    <tr>
-                      <td colSpan={6} className="px-3 py-8 text-center text-muted-foreground">
-                        No components found
-                      </td>
-                    </tr>
-                  ) : (
-                    rows.map((row) => {
-                      const asset = assetMap.get(row.asset_id);
-                      return (
-                        <tr
-                          key={row.id}
-                          className={`cursor-pointer border-t border-border transition-colors duration-200 hover:bg-muted/40 ${
-                            selected?.id === row.id ? "bg-muted/60" : ""
-                          }`}
-                          onClick={() => setSelected(row)}
-                        >
-                          <td className="px-3 py-2 font-medium">{row.component_code}</td>
-                          <td className="px-3 py-2">{componentTypeLabel(row.component_type)}</td>
-                          <td className="px-3 py-2">{row.component_name}</td>
-                          <td className="px-3 py-2 text-muted-foreground">
-                            {asset?.asset_code ?? row.asset_id.slice(0, 8)}
-                          </td>
-                          <td className="px-3 py-2">
-                            <Badge variant={statusVariant(row.status)}>{row.status}</Badge>
-                          </td>
-                          <td className="px-3 py-2">{row.quantity ?? "—"}</td>
-                        </tr>
-                      );
-                    })
-                  )}
-                </tbody>
-              </table>
+            <div className="grid gap-1">
+              <Label className="text-xs text-muted-foreground">Parent asset</Label>
+              <Select
+                value={assetFilter || "all"}
+                onValueChange={(v) => {
+                  setPage(1);
+                  setAssetFilter(v === "all" ? "" : v);
+                }}
+              >
+                <SelectTrigger className="h-9 w-56 cursor-pointer">
+                  <SelectValue placeholder="All assets" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All assets</SelectItem>
+                  {assets.map((a) => (
+                    <SelectItem key={a.id} value={a.id}>
+                      {a.asset_code} · {a.asset_name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
-
-            <div className="flex items-center justify-between text-sm text-muted-foreground">
-              <span>
-                Page {page} of {pageCount} · {total} total
-              </span>
-              <div className="flex gap-2">
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="cursor-pointer transition-colors duration-200"
-                  disabled={page <= 1}
-                  onClick={() => setPage((p) => Math.max(1, p - 1))}
-                >
-                  Previous
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="cursor-pointer transition-colors duration-200"
-                  disabled={page >= pageCount}
-                  onClick={() => setPage((p) => p + 1)}
-                >
-                  Next
-                </Button>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <div className="space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>Detail</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4 text-sm">
-              {!selected ? (
-                <p className="text-muted-foreground">Select a component to view details.</p>
+          </div>
+        </CardHeader>
+        <CardContent className="overflow-x-auto p-0">
+          <table className="w-full min-w-[720px] border-collapse text-sm">
+            <thead>
+              <tr className="border-b border-border bg-muted/40 text-left text-xs uppercase tracking-wide text-muted-foreground">
+                <th className="px-4 py-2.5 font-medium">Identity</th>
+                <th className="px-4 py-2.5 font-medium">Type</th>
+                <th className="px-4 py-2.5 font-medium">Parent asset</th>
+                <th className="px-4 py-2.5 font-medium">Status</th>
+                <th className="px-4 py-2.5 font-medium">Qty</th>
+                <th className="px-4 py-2.5 font-medium text-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {loading ? (
+                <tr>
+                  <td colSpan={6} className="px-4 py-10 text-center text-muted-foreground">
+                    <Loader2 className="mx-auto size-5 animate-spin" />
+                  </td>
+                </tr>
+              ) : rows.length === 0 ? (
+                <tr>
+                  <td colSpan={6} className="px-4 py-10 text-center text-muted-foreground">
+                    No components found.
+                  </td>
+                </tr>
               ) : (
-                <>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="font-medium">{selected.component_code}</span>
-                    <Badge variant={statusVariant(selected.status)}>{selected.status}</Badge>
-                  </div>
-                  {editing ? (
-                    <div className="space-y-3">
-                      <div className="space-y-2">
-                        <Label htmlFor="edit-name">Name</Label>
-                        <Input
-                          id="edit-name"
-                          value={editDraft.component_name}
-                          onChange={(e) =>
-                            setEditDraft((d) => ({ ...d, component_name: e.target.value }))
-                          }
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="edit-serial">Serial</Label>
-                        <Input
-                          id="edit-serial"
-                          value={editDraft.serial_number}
-                          onChange={(e) =>
-                            setEditDraft((d) => ({ ...d, serial_number: e.target.value }))
-                          }
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="edit-qty">Quantity</Label>
-                        <Input
-                          id="edit-qty"
-                          value={editDraft.quantity}
-                          onChange={(e) =>
-                            setEditDraft((d) => ({ ...d, quantity: e.target.value }))
-                          }
-                        />
-                      </div>
-                      <div className="flex gap-2">
-                        <Button
-                          type="button"
-                          size="sm"
-                          className="cursor-pointer transition-colors duration-200"
-                          disabled={actionLoading}
-                          onClick={() => void handleUpdate()}
-                        >
-                          Save
-                        </Button>
+                rows.map((row) => {
+                  const idn = displayIdentity(row);
+                  return (
+                    <tr
+                      key={row.id}
+                      className="border-b border-border/70 transition-colors duration-150 hover:bg-muted/30"
+                    >
+                      <td className="px-4 py-2.5">
+                        <div className="font-medium">{idn.primary}</div>
+                        <div className="text-xs text-muted-foreground">{idn.secondary}</div>
+                        {row.linked_asset_operational_status ? (
+                          <div className="mt-1">
+                            <StatusBadge
+                              kind="operational"
+                              status={row.linked_asset_operational_status}
+                            />
+                          </div>
+                        ) : null}
+                      </td>
+                      <td className="px-4 py-2.5">{componentTypeLabel(row.component_type)}</td>
+                      <td className="px-4 py-2.5">
+                        {assetLabelById.get(row.asset_id) ?? row.asset_id.slice(0, 8)}
+                      </td>
+                      <td className="px-4 py-2.5">
+                        <Badge variant="secondary">{row.status}</Badge>
+                      </td>
+                      <td className="px-4 py-2.5 tabular-nums">
+                        {row.quantity != null ? String(row.quantity) : "—"}
+                      </td>
+                      <td className="px-4 py-2.5 text-right">
                         <Button
                           type="button"
                           size="sm"
                           variant="outline"
-                          className="cursor-pointer transition-colors duration-200"
-                          onClick={() => setEditing(false)}
+                          className="cursor-pointer gap-1.5 transition-colors duration-200"
+                          onClick={() => void openDetail(row)}
                         >
-                          Cancel
+                          <Eye className="size-3.5" />
+                          View Detail
                         </Button>
-                      </div>
-                    </div>
-                  ) : (
-                    <dl className="grid gap-2">
-                      <div>
-                        <dt className="text-muted-foreground">Name</dt>
-                        <dd>{selected.component_name}</dd>
-                      </div>
-                      <div>
-                        <dt className="text-muted-foreground">Serial</dt>
-                        <dd>{selected.serial_number || "—"}</dd>
-                      </div>
-                      <div>
-                        <dt className="text-muted-foreground">Quantity</dt>
-                        <dd>{selected.quantity ?? "—"}</dd>
-                      </div>
-                      <div>
-                        <dt className="text-muted-foreground">Version</dt>
-                        <dd>{selected.version}</dd>
-                      </div>
-                    </dl>
-                  )}
-
-                  <div className="flex flex-wrap gap-2">
-                    {canEdit && !editing ? (
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="outline"
-                        className="cursor-pointer transition-colors duration-200"
-                        onClick={() => setEditing(true)}
-                      >
-                        Edit
-                      </Button>
-                    ) : null}
-                    {canReplace ? (
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="outline"
-                        className="cursor-pointer transition-colors duration-200"
-                        onClick={() => setShowReplace((v) => !v)}
-                      >
-                        <Replace className="mr-1 h-4 w-4" />
-                        Replace
-                      </Button>
-                    ) : null}
-                    {canDispose ? (
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="destructive"
-                        className="cursor-pointer transition-colors duration-200"
-                        disabled={actionLoading}
-                        onClick={() => void handleDispose()}
-                      >
-                        <Trash2 className="mr-1 h-4 w-4" />
-                        Dispose
-                      </Button>
-                    ) : null}
-                  </div>
-
-                  {showReplace ? (
-                    <div className="space-y-3 rounded-md border border-border p-3">
-                      <p className="text-muted-foreground">
-                        Marks this component replaced and installs a new active successor (same
-                        code by default).
-                      </p>
-                      <div className="space-y-2">
-                        <Label htmlFor="rep-name">Successor name</Label>
-                        <Input
-                          id="rep-name"
-                          value={replaceDraft.component_name}
-                          onChange={(e) =>
-                            setReplaceDraft((d) => ({ ...d, component_name: e.target.value }))
-                          }
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="rep-serial">New serial (optional)</Label>
-                        <Input
-                          id="rep-serial"
-                          value={replaceDraft.serial_number}
-                          onChange={(e) =>
-                            setReplaceDraft((d) => ({ ...d, serial_number: e.target.value }))
-                          }
-                        />
-                      </div>
-                      <Button
-                        type="button"
-                        size="sm"
-                        className="cursor-pointer transition-colors duration-200"
-                        disabled={actionLoading}
-                        onClick={() => void handleReplace()}
-                      >
-                        Confirm replace
-                      </Button>
-                    </div>
-                  ) : null}
-                </>
+                      </td>
+                    </tr>
+                  );
+                })
               )}
-            </CardContent>
-          </Card>
+            </tbody>
+          </table>
+          <div className="flex items-center justify-between gap-2 border-t border-border px-4 py-2 text-xs text-muted-foreground">
+            <span>
+              {total} total · page {page} of {pageCount}
+            </span>
+            <div className="flex gap-2">
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className="cursor-pointer"
+                disabled={page <= 1}
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+              >
+                Previous
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className="cursor-pointer"
+                disabled={page >= pageCount}
+                onClick={() => setPage((p) => p + 1)}
+              >
+                Next
+              </Button>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
 
-          <Card>
-            <CardHeader className="flex flex-row items-center gap-2">
-              <Boxes className="h-4 w-4 text-muted-foreground" />
-              <CardTitle className="text-base">Hierarchy (depth 1)</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-2 text-sm">
-              {!tree ? (
-                <p className="text-muted-foreground">
-                  Select a component or filter by asset to view the tree.
+      {installOpen ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <button
+            type="button"
+            className="absolute inset-0 cursor-pointer bg-black/40"
+            aria-label="Close install dialog"
+            onClick={() => setInstallOpen(false)}
+          />
+          <div
+            role="dialog"
+            aria-modal
+            className="relative z-10 w-full max-w-lg rounded-xl border border-border bg-background p-5 shadow-xl"
+          >
+            <div className="mb-4 flex items-start justify-between gap-2">
+              <div>
+                <h2 className="text-lg font-semibold">Install component</h2>
+                <p className="text-sm text-muted-foreground">
+                  Code and name are generated automatically.
                 </p>
+              </div>
+              <Button
+                type="button"
+                size="icon"
+                variant="ghost"
+                className="cursor-pointer"
+                onClick={() => setInstallOpen(false)}
+              >
+                <X className="size-4" />
+              </Button>
+            </div>
+            <div className="mb-3 flex gap-2">
+              <Button
+                type="button"
+                size="sm"
+                variant={installMode === "type" ? "default" : "outline"}
+                className="cursor-pointer"
+                onClick={() => setInstallMode("type")}
+              >
+                By type
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant={installMode === "asset" ? "default" : "outline"}
+                className="cursor-pointer"
+                onClick={() => setInstallMode("asset")}
+              >
+                Attach asset
+              </Button>
+            </div>
+            <div className="grid gap-3">
+              <div className="grid gap-1.5">
+                <Label>Parent asset</Label>
+                <Select value={draftAssetId || undefined} onValueChange={setDraftAssetId}>
+                  <SelectTrigger className="cursor-pointer">
+                    <SelectValue placeholder="Select parent asset" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {assets.map((a) => (
+                      <SelectItem key={a.id} value={a.id}>
+                        {a.asset_code} · {a.asset_name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              {installMode === "type" ? (
+                <>
+                  <div className="grid gap-1.5">
+                    <Label>Component type</Label>
+                    <Select value={draftType} onValueChange={setDraftType}>
+                      <SelectTrigger className="cursor-pointer">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {COMPONENT_TYPE_OPTIONS.map((o) => (
+                          <SelectItem key={o.value} value={o.value}>
+                            {o.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="grid gap-1.5">
+                    <Label>Serial number{draftType === "CHARGER" ? " *" : ""}</Label>
+                    <Input
+                      value={draftSerial}
+                      onChange={(e) => setDraftSerial(e.target.value)}
+                      placeholder="Optional unless charger"
+                    />
+                  </div>
+                  <div className="grid gap-1.5">
+                    <Label>Quantity</Label>
+                    <Input
+                      value={draftQty}
+                      onChange={(e) => setDraftQty(e.target.value)}
+                      inputMode="decimal"
+                    />
+                  </div>
+                </>
               ) : (
                 <>
-                  <p className="font-medium">
-                    {tree.asset.asset_code} — {tree.asset.asset_name}
-                  </p>
-                  <ul className="space-y-1 border-l border-border pl-3">
+                  <div className="grid gap-1.5">
+                    <Label>Search eligible assets</Label>
+                    <Input
+                      value={attachQ}
+                      onChange={(e) => setAttachQ(e.target.value)}
+                      placeholder="Code, name, serial…"
+                      disabled={!draftAssetId}
+                    />
+                  </div>
+                  <div className="max-h-48 overflow-y-auto rounded-md border border-border">
+                    {!draftAssetId ? (
+                      <p className="p-3 text-sm text-muted-foreground">Select a parent first.</p>
+                    ) : attachable.length === 0 ? (
+                      <p className="p-3 text-sm text-muted-foreground">
+                        No Ready to Move eligible assets (types marked eligible as component).
+                      </p>
+                    ) : (
+                      <ul className="m-0 list-none divide-y divide-border p-0">
+                        {attachable.map((a) => (
+                          <li key={a.id}>
+                            <label
+                              className={cn(
+                                "flex cursor-pointer items-start gap-2 px-3 py-2 transition-colors duration-150 hover:bg-muted/40",
+                                draftChildAssetId === a.id && "bg-primary/5",
+                              )}
+                            >
+                              <input
+                                type="radio"
+                                className="mt-1 cursor-pointer"
+                                checked={draftChildAssetId === a.id}
+                                onChange={() => setDraftChildAssetId(a.id)}
+                              />
+                              <span className="text-sm">
+                                <span className="font-medium">
+                                  {a.asset_code} · {a.asset_name}
+                                </span>
+                                <span className="mt-0.5 block text-xs text-muted-foreground">
+                                  S/N: {a.serial_number?.trim() || "—"} · {a.operational_status}
+                                </span>
+                              </span>
+                            </label>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                </>
+              )}
+            </div>
+            <div className="mt-5 flex justify-end gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                className="cursor-pointer"
+                onClick={() => setInstallOpen(false)}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                className={cn("cursor-pointer", ASSETS_ACCENT_BTN)}
+                disabled={saving}
+                onClick={() => void handleInstall()}
+              >
+                {saving ? <Loader2 className="size-4 animate-spin" /> : "Install"}
+              </Button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {detailOpen && selected ? (
+        <div className="fixed inset-0 z-50 flex justify-end" data-testid="component-detail-drawer">
+          <button
+            type="button"
+            className="absolute inset-0 cursor-pointer bg-black/40"
+            aria-label="Close detail drawer"
+            onClick={() => setDetailOpen(false)}
+          />
+          <aside
+            role="dialog"
+            aria-modal
+            className="relative z-10 flex h-full w-full max-w-md flex-col border-l border-border bg-background shadow-xl"
+          >
+            <div className="flex items-start justify-between gap-2 border-b border-border px-4 py-3">
+              <div>
+                <h2 className="text-base font-semibold">Component detail</h2>
+                <p className="text-xs text-muted-foreground">{displayIdentity(selected).primary}</p>
+              </div>
+              <Button
+                type="button"
+                size="icon"
+                variant="ghost"
+                className="cursor-pointer"
+                onClick={() => setDetailOpen(false)}
+              >
+                <X className="size-4" />
+              </Button>
+            </div>
+            <div className="flex-1 space-y-4 overflow-y-auto p-4">
+              <section className="space-y-2 text-sm">
+                <div className="flex flex-wrap items-center gap-2">
+                  <Badge variant="secondary">{selected.status}</Badge>
+                  {selected.component_asset_id ? (
+                    <Badge variant="outline">Asset-linked</Badge>
+                  ) : null}
+                </div>
+                <p>
+                  <span className="text-muted-foreground">Type: </span>
+                  {componentTypeLabel(selected.component_type)}
+                </p>
+                <p>
+                  <span className="text-muted-foreground">Code: </span>
+                  {selected.component_code}
+                </p>
+                <p>
+                  <span className="text-muted-foreground">Name: </span>
+                  {selected.component_name}
+                </p>
+                {selected.linked_asset_code ? (
+                  <>
+                    <p>
+                      <span className="text-muted-foreground">Linked asset: </span>
+                      {selected.linked_asset_code} · {selected.linked_asset_name}
+                    </p>
+                    {selected.linked_asset_operational_status ? (
+                      <StatusBadge
+                        kind="operational"
+                        status={selected.linked_asset_operational_status}
+                      />
+                    ) : null}
+                  </>
+                ) : null}
+                <p>
+                  <span className="text-muted-foreground">Parent: </span>
+                  {assetLabelById.get(selected.asset_id) ?? selected.asset_id}
+                </p>
+                <p>
+                  <span className="text-muted-foreground">S/N: </span>
+                  {selected.serial_number?.trim() || "—"}
+                </p>
+                {selected.status === "active" && !selected.component_asset_id ? (
+                  <div className="flex flex-wrap gap-2 pt-2">
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      className="cursor-pointer"
+                      onClick={() => setEditMode((v) => !v)}
+                    >
+                      Edit
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      className="cursor-pointer gap-1"
+                      onClick={() => {
+                        setReplaceOpen(true);
+                        setReplaceName(selected.component_name);
+                        setReplaceSerial("");
+                      }}
+                    >
+                      <Replace className="size-3.5" />
+                      Replace
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="destructive"
+                      className="cursor-pointer gap-1"
+                      onClick={() => void handleDispose()}
+                    >
+                      <Trash2 className="size-3.5" />
+                      Dispose
+                    </Button>
+                  </div>
+                ) : null}
+                {selected.status === "active" && selected.component_asset_id ? (
+                  <div className="pt-2">
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="destructive"
+                      className="cursor-pointer gap-1"
+                      onClick={() => void handleDispose()}
+                    >
+                      <Trash2 className="size-3.5" />
+                      Dispose (cascade)
+                    </Button>
+                  </div>
+                ) : null}
+                {editMode ? (
+                  <div className="mt-3 space-y-2 rounded-md border border-border p-3">
+                    <Label>Name</Label>
+                    <Input value={editName} onChange={(e) => setEditName(e.target.value)} />
+                    <Label>Serial</Label>
+                    <Input value={editSerial} onChange={(e) => setEditSerial(e.target.value)} />
+                    <Label>Quantity</Label>
+                    <Input value={editQty} onChange={(e) => setEditQty(e.target.value)} />
+                    <Button
+                      type="button"
+                      size="sm"
+                      className={cn("cursor-pointer", ASSETS_ACCENT_BTN)}
+                      disabled={saving}
+                      onClick={() => void handleUpdate()}
+                    >
+                      Save
+                    </Button>
+                  </div>
+                ) : null}
+                {replaceOpen ? (
+                  <div className="mt-3 space-y-2 rounded-md border border-border p-3">
+                    <Label>Successor name</Label>
+                    <Input value={replaceName} onChange={(e) => setReplaceName(e.target.value)} />
+                    <Label>New serial</Label>
+                    <Input
+                      value={replaceSerial}
+                      onChange={(e) => setReplaceSerial(e.target.value)}
+                    />
+                    <Button
+                      type="button"
+                      size="sm"
+                      className={cn("cursor-pointer", ASSETS_ACCENT_BTN)}
+                      disabled={saving}
+                      onClick={() => void handleReplace()}
+                    >
+                      Confirm replace
+                    </Button>
+                  </div>
+                ) : null}
+              </section>
+
+              <section>
+                <h3 className="mb-2 flex items-center gap-1.5 text-sm font-semibold">
+                  <Boxes className="size-3.5" /> Hierarchy
+                </h3>
+                {tree ? (
+                  <ul className="m-0 space-y-1 list-none p-0 text-sm">
+                    <li className="font-medium">
+                      {tree.asset.asset_code} · {tree.asset.asset_name}
+                    </li>
                     {tree.components.map((c) => (
-                      <li key={c.id}>
-                        <button
-                          type="button"
-                          className="cursor-pointer text-left transition-colors duration-200 hover:text-foreground"
-                          onClick={() => {
-                            void componentService.get(c.id).then(setSelected).catch(() => {
-                              setError("Failed to load component detail");
-                            });
-                          }}
-                        >
-                          {c.component_code} · {c.component_name}{" "}
-                          <Badge variant={statusVariant(c.status)} className="ml-1">
-                            {c.status}
-                          </Badge>
-                        </button>
+                      <li key={String(c.id)} className="pl-3 text-muted-foreground">
+                        · {c.linked_asset_code || c.component_code} ({c.status})
                       </li>
                     ))}
                   </ul>
-                </>
-              )}
-            </CardContent>
-          </Card>
+                ) : (
+                  <p className="text-sm text-muted-foreground">No hierarchy loaded.</p>
+                )}
+              </section>
 
-          <Card>
-            <CardHeader className="flex flex-row items-center gap-2">
-              <History className="h-4 w-4 text-muted-foreground" />
-              <CardTitle className="text-base">Code history</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-2 text-sm">
-              {!history || history.lineage.length === 0 ? (
-                <p className="text-muted-foreground">No history for the selected component.</p>
-              ) : (
-                <ol className="space-y-2 border-l border-border pl-3">
-                  {history.lineage.map((entry) => (
-                    <li key={entry.id}>
-                      <div className="flex flex-wrap items-center gap-2">
-                        <Badge variant={statusVariant(entry.status)}>{entry.status}</Badge>
-                        <span>{entry.component_name}</span>
-                      </div>
-                      <p className="text-xs text-muted-foreground">
-                        {entry.created_at ?? "—"}
-                        {entry.serial_number ? ` · SN ${entry.serial_number}` : ""}
-                      </p>
-                    </li>
-                  ))}
-                </ol>
-              )}
-            </CardContent>
-          </Card>
+              <section>
+                <h3 className="mb-2 flex items-center gap-1.5 text-sm font-semibold">
+                  <History className="size-3.5" /> Code history
+                </h3>
+                {history?.lineage?.length ? (
+                  <ul className="m-0 space-y-2 list-none p-0 text-sm">
+                    {history.lineage.map((h) => (
+                      <li key={h.id} className="rounded-md border border-border/70 px-2 py-1.5">
+                        <div className="font-medium">
+                          {h.status} · {h.component_name}
+                        </div>
+                        <div className="text-xs text-muted-foreground">
+                          {h.created_at ?? "—"} · S/N {h.serial_number || "—"}
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="text-sm text-muted-foreground">No history.</p>
+                )}
+              </section>
+            </div>
+          </aside>
         </div>
-      </div>
-    </div>
+      ) : null}
+    </AssetsPremiumPage>
   );
 }
