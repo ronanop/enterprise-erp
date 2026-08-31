@@ -1,0 +1,97 @@
+"""Unit tests for InsuranceService (FP-ASSET-010)."""
+
+from datetime import date
+from types import SimpleNamespace
+from unittest.mock import MagicMock, patch
+from uuid import uuid4
+
+import pytest
+
+from modules.asset.domain.exceptions import InsuranceValidationError
+from modules.asset.service.insurance_service import InsuranceService
+from modules.foundation.domain.value_objects import TenantContext
+
+
+def _ctx() -> TenantContext:
+    return TenantContext(
+        tenant_id=uuid4(),
+        user_id=uuid4(),
+        user_type="employee",
+        company_id=uuid4(),
+        branch_id=uuid4(),
+    )
+
+
+def test_create_sets_draft_status() -> None:
+    svc = InsuranceService(MagicMock())
+    ctx = _ctx()
+    created = SimpleNamespace(
+        id=uuid4(),
+        asset_id=uuid4(),
+        policy_number="POL-001",
+        status="draft",
+    )
+    with (
+        patch.object(svc._scope, "resolve_company_id", return_value=ctx.company_id),
+        patch.object(svc._validator, "validate_create_fields"),
+        patch.object(svc._repo, "create", return_value=created) as create,
+        patch.object(svc._audit, "log_entity_change"),
+    ):
+        row = svc.create(
+            ctx,
+            asset_id=created.asset_id,
+            policy_number="POL-001",
+            insurer_name="Acme",
+            start_date=date(2026, 1, 1),
+            end_date=date(2027, 1, 1),
+        )
+    assert row.status == "draft"
+    assert create.call_args.kwargs["status"] == "draft"
+
+
+def test_renew_updates_end_date() -> None:
+    svc = InsuranceService(MagicMock())
+    ctx = _ctx()
+    row_id = uuid4()
+    active = SimpleNamespace(
+        id=row_id,
+        status="active",
+        version=1,
+        end_date=date(2027, 1, 1),
+    )
+    claimed = SimpleNamespace(
+        id=row_id,
+        status="active",
+        version=2,
+        end_date=date(2027, 1, 1),
+    )
+    renewed = SimpleNamespace(
+        id=row_id,
+        status="renewed",
+        version=3,
+        end_date=date(2028, 1, 1),
+    )
+    with (
+        patch.object(svc, "get", return_value=active),
+        patch.object(svc._validator, "validate_renew_readiness"),
+        patch.object(svc._repo, "update", side_effect=[claimed, renewed]),
+        patch.object(svc._engine, "renew"),
+        patch.object(svc._audit, "log_entity_change"),
+    ):
+        result = svc.renew(ctx, row_id, new_end_date=date(2028, 1, 1))
+    assert result.end_date == date(2028, 1, 1)
+
+
+def test_update_propagates_validator_error() -> None:
+    svc = InsuranceService(MagicMock())
+    row = SimpleNamespace(id=uuid4(), status="expired")
+    with (
+        patch.object(svc, "get", return_value=row),
+        patch.object(
+            svc._validator,
+            "validate_update_fields",
+            side_effect=InsuranceValidationError("Only draft or active"),
+        ),
+    ):
+        with pytest.raises(InsuranceValidationError, match="draft or active"):
+            svc.update(_ctx(), row.id, policy_number="x", version=1)

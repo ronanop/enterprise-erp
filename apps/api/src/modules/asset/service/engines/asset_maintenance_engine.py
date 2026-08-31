@@ -1,11 +1,8 @@
-"""AssetMaintenance lifecycle engine."""
+"""AssetMaintenance lifecycle engine (FP-ASSET-004)."""
 
-from modules.asset.domain.enums import (
-    AssetMaintenanceStatus,
-)
-from modules.asset.domain.exceptions import (
-    InvalidAssetMaintenanceState,
-)
+from modules.asset.domain.enums import AssetMaintenanceStatus
+from modules.asset.domain.exceptions import InvalidAssetMaintenanceState
+from modules.foundation.domain.enums import WorkflowStatus
 
 
 class AssetMaintenanceEngine:
@@ -25,7 +22,10 @@ class AssetMaintenanceEngine:
         row.status = AssetMaintenanceStatus.SCHEDULED.value
 
     def start(self, row) -> None:
-        if row.status not in {AssetMaintenanceStatus.APPROVED.value, AssetMaintenanceStatus.SCHEDULED.value}:
+        if row.status not in {
+            AssetMaintenanceStatus.APPROVED.value,
+            AssetMaintenanceStatus.SCHEDULED.value,
+        }:
             raise InvalidAssetMaintenanceState("Maintenance not startable")
         row.status = AssetMaintenanceStatus.IN_PROGRESS.value
 
@@ -38,3 +38,14 @@ class AssetMaintenanceEngine:
             raise InvalidAssetMaintenanceState("Maintenance not completable")
         row.status = AssetMaintenanceStatus.COMPLETED.value
 
+    def cancel_draft(self, row) -> None:
+        if row.status != AssetMaintenanceStatus.DRAFT.value:
+            raise InvalidAssetMaintenanceState("Only draft maintenance can be cancelled")
+        row.status = AssetMaintenanceStatus.CANCELLED.value
+
+    def reopen(self, row, *, workflow_status: str | None) -> None:
+        if row.status != AssetMaintenanceStatus.CANCELLED.value:
+            raise InvalidAssetMaintenanceState("Only cancelled maintenance can be reopened")
+        if workflow_status != WorkflowStatus.REJECTED.value:
+            raise InvalidAssetMaintenanceState("Only rejected workflow maintenance can be reopened")
+        row.status = AssetMaintenanceStatus.DRAFT.value

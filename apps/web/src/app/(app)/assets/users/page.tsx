@@ -1,5 +1,11 @@
-import { ModuleUsersPage } from "@/components/organization/module-users-page";
+import { Suspense } from "react";
 
-export default function Page() {
-  return <ModuleUsersPage moduleKey="assets" />;
+import { AssetDomainUsersPage } from "@/components/assets/asset-domain-users-page";
+
+export default function AssetsUsersPage() {
+  return (
+    <Suspense fallback={<p className="text-sm text-muted-foreground">Loading…</p>}>
+      <AssetDomainUsersPage />
+    </Suspense>
+  );
 }

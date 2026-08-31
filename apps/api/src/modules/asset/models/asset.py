@@ -14,7 +14,7 @@ from sqlalchemy import (
     String,
     UniqueConstraint,
 )
-from sqlalchemy.dialects.postgresql import UUID as PG_UUID
+from sqlalchemy.dialects.postgresql import JSONB, UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from database.base import Base
@@ -30,6 +30,10 @@ class AstAsset(Base, *AstTransactionMixin):
             name="ck_ast_asset_type",
         ),
         CheckConstraint(
+            "asset_domain IN ('IT','NON_IT')",
+            name="ck_ast_asset_domain",
+        ),
+        CheckConstraint(
             "depreciation_method IS NULL OR depreciation_method IN "
             "('straight_line','wdv','units_of_production')",
             name="ck_ast_asset_depr_method",
@@ -38,6 +42,12 @@ class AstAsset(Base, *AstTransactionMixin):
             "status IN ('draft','submitted','approved','active','in_maintenance',"
             "'transferred','disposed','written_off','cancelled')",
             name="ck_ast_asset_status",
+        ),
+        CheckConstraint(
+            "operational_status IS NULL OR operational_status IN "
+            "('READY_TO_MOVE','ASSIGNED','RETIRED','PENDING_DISPOSAL','DISPOSED',"
+            "'IN_USE_AS_COMPONENT')",
+            name="ck_ast_asset_operational_status",
         ),
         CheckConstraint(
             "purchase_cost IS NULL OR purchase_cost >= 0",
@@ -56,7 +66,18 @@ class AstAsset(Base, *AstTransactionMixin):
         nullable=False,
         index=True,
     )
+    # Legacy 4-value classification (fixed|consumable|digital|leased). Kept for
+    # existing readers; new source of truth is asset_type_id → ast_asset_type.
     asset_type: Mapped[str] = mapped_column(String(40), nullable=False)
+    asset_type_id: Mapped[UUID | None] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("asset.ast_asset_type.id", ondelete="RESTRICT"),
+        nullable=True,
+        index=True,
+    )
+    asset_domain: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="IT", server_default="IT", index=True
+    )
     master_asset_id: Mapped[UUID | None] = mapped_column(
         PG_UUID(as_uuid=True),
         ForeignKey("master.master_asset.id", ondelete="RESTRICT"),
@@ -79,6 +100,9 @@ class AstAsset(Base, *AstTransactionMixin):
     barcode: Mapped[str | None] = mapped_column(String(100), nullable=True)
     qr_code: Mapped[str | None] = mapped_column(String(100), nullable=True)
     rfid_tag: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    make: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    model: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    configuration: Mapped[str | None] = mapped_column(String(500), nullable=True)
     purchase_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     purchase_cost: Mapped[Decimal | None] = mapped_column(Numeric(18, 4), nullable=True)
     current_book_value: Mapped[Decimal | None] = mapped_column(Numeric(18, 4), nullable=True)
@@ -107,6 +131,7 @@ class AstAsset(Base, *AstTransactionMixin):
     quality_inspection_id: Mapped[UUID | None] = mapped_column(PG_UUID(as_uuid=True), nullable=True)
     is_shared: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     status: Mapped[str] = mapped_column(String(30), nullable=False, default="draft", index=True)
+    operational_status: Mapped[str | None] = mapped_column(String(30), nullable=True, index=True)
 
     workflow_status: Mapped[str | None] = mapped_column(String(30), nullable=True)
     workflow_instance_id: Mapped[UUID | None] = mapped_column(
@@ -114,4 +139,5 @@ class AstAsset(Base, *AstTransactionMixin):
         ForeignKey("foundation.wf_instance.id", ondelete="SET NULL"),
         nullable=True,
     )
+    discovery_profile_json: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
 
