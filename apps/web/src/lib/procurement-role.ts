@@ -1,27 +1,19 @@
-/** Demo procurement persona: normal user vs team admin (local only). */
+/** Procurement persona labels used by UI copy. Admin is ERP module-admin assignment. */
 
 export type ProcurementRole = "user" | "admin";
 
-const STORAGE_KEY = "erp.procurement.role";
+/** @deprecated Local storage role toggle removed — kept for type/event compatibility only. */
 export const PROCUREMENT_ROLE_EVENT = "erp-procurement-role-change";
 
+/** @deprecated Prefer useProcurementRole() which reads ERP module admin assignment. */
 export function readProcurementRole(): ProcurementRole {
-  if (typeof window === "undefined") return "user";
-  try {
-    const raw = window.localStorage.getItem(STORAGE_KEY);
-    return raw === "admin" ? "admin" : "user";
-  } catch {
-    return "user";
-  }
+  return "user";
 }
 
-export function writeProcurementRole(role: ProcurementRole): void {
-  window.localStorage.setItem(STORAGE_KEY, role);
-  window.dispatchEvent(new Event(PROCUREMENT_ROLE_EVENT));
-}
+/** @deprecated No-op — ERP module admin assignment is the source of truth. */
+export function writeProcurementRole(_role: ProcurementRole): void {}
 
+/** @deprecated No-op — ERP module admin assignment is the source of truth. */
 export function toggleProcurementRole(): ProcurementRole {
-  const next: ProcurementRole = readProcurementRole() === "admin" ? "user" : "admin";
-  writeProcurementRole(next);
-  return next;
+  return "user";
 }

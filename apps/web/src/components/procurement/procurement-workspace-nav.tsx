@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useState, type ComponentType } from "react";
+import { useEffect, useMemo, useState, type ComponentType } from "react";
 import {
   BadgeCheck,
   BarChart3,
@@ -13,8 +13,6 @@ import {
   ClipboardList,
   FileBarChart,
   LayoutDashboard,
-  LogIn,
-  LogOut,
   MapPinned,
   Package,
   PackageCheck,
@@ -24,18 +22,25 @@ import {
   Wrench,
 } from "lucide-react";
 
+import { ModuleUsersNavTab } from "@/components/organization/module-users-nav-tab";
+import { SidebarAccountSection } from "@/components/layout/sidebar-account-section";
 import { Button } from "@/components/ui/button";
-import { clearTokens } from "@/lib/auth";
+import { canManageModuleUsers } from "@/lib/module-access";
 import { cn } from "@/lib/utils";
-import { useClientAuth } from "@/hooks/use-client-auth";
+import { useAuthUser } from "@/hooks/use-auth-user";
 import { useProcurementApprovals } from "@/hooks/use-procurement-approvals";
 import { useProcurementRole } from "@/hooks/use-procurement-role";
 import { useScmQueueUnreadCount } from "@/hooks/use-scm-queue-unread-count";
-import { authService } from "@/services/api-client";
 import { prefetchProcurementTab } from "@/services/procurement-service";
 import { useDeliveryReminderSweep } from "@/hooks/use-delivery-reminder-sweep";
 
 type NavIcon = ComponentType<{ className?: string; "aria-hidden"?: boolean }>;
+
+type ProcurementNavItem = {
+  title: string;
+  href: string;
+  icon: NavIcon;
+};
 
 export const PROCUREMENT_NAV = [
   { title: "Dashboard", href: "/procurement", icon: LayoutDashboard },
@@ -48,12 +53,12 @@ export const PROCUREMENT_NAV = [
   { title: "Vendors", href: "/procurement/vendors", icon: Building2 },
   { title: "Inventory", href: "/procurement/inventory", icon: Boxes },
   { title: "Approval", href: "/procurement/approval", icon: BadgeCheck },
-] as const satisfies ReadonlyArray<{ title: string; href: string; icon: NavIcon }>;
+] as const satisfies ReadonlyArray<ProcurementNavItem>;
 
 export const PROCUREMENT_INSIGHT_NAV = [
   { title: "Reports", href: "/procurement/reports", icon: FileBarChart },
   { title: "Analytics", href: "/procurement/analytics", icon: BarChart3 },
-] as const satisfies ReadonlyArray<{ title: string; href: string; icon: NavIcon }>;
+] as const satisfies ReadonlyArray<ProcurementNavItem>;
 
 export const ALL_PROCUREMENT_NAV = [
   ...PROCUREMENT_NAV,
@@ -72,6 +77,7 @@ export function warmAllProcurementNavTargets(router: ReturnType<typeof useRouter
   for (const item of ALL_PROCUREMENT_NAV) {
     warmProcurementNavTarget(router, item.href);
   }
+  warmProcurementNavTarget(router, "/procurement/users");
 }
 
 function isProcurementNavActive(pathname: string, href: string): boolean {
@@ -88,7 +94,7 @@ function NavLinkItem({
   collapsed,
   badge,
 }: {
-  item: { title: string; href: string; icon: NavIcon };
+  item: ProcurementNavItem;
   pathname: string;
   router: ReturnType<typeof useRouter>;
   collapsed?: boolean;
@@ -105,21 +111,28 @@ function NavLinkItem({
       onMouseEnter={() => warmProcurementNavTarget(router, item.href)}
       onFocus={() => warmProcurementNavTarget(router, item.href)}
       className={cn(
-        "group relative flex cursor-pointer items-center gap-3 rounded-xl px-3 py-2.5 text-[13px] transition-[background-color,color,box-shadow] duration-200",
+        "group relative flex cursor-pointer items-center gap-2.5 rounded-lg px-2.5 py-2 text-[13px] transition-colors duration-200",
         active
-          ? "bg-[#0F172A] font-semibold text-white shadow-sm"
-          : "font-medium text-muted-foreground hover:bg-muted/70 hover:text-foreground",
+          ? "bg-sidebar-accent font-medium text-sidebar-accent-foreground shadow-sm"
+          : "font-medium text-sidebar-foreground/70 hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground",
         collapsed && "justify-center px-0",
       )}
     >
+      {active ? (
+        <span className="absolute inset-y-1.5 left-0 w-0.5 rounded-full bg-sidebar-primary" />
+      ) : null}
       <Icon
         className={cn(
-          "size-4 shrink-0",
-          active ? "text-white" : "text-muted-foreground group-hover:text-foreground",
+          "size-4 shrink-0 transition-colors duration-200",
+          active
+            ? "text-sidebar-primary"
+            : "text-sidebar-foreground/50 group-hover:text-sidebar-foreground/80",
         )}
         aria-hidden
       />
-      {!collapsed ? <span className="min-w-0 flex-1 truncate">{item.title}</span> : null}
+      {!collapsed ? <span className="min-w-0 flex-1 truncate">{item.title}</span> : (
+        <span className="sr-only">{item.title}</span>
+      )}
       {badge && badge > 0 ? (
         <span
           className={cn(
@@ -179,6 +192,7 @@ export function ProcurementWorkspaceNav() {
               </li>
             );
           })}
+          <ModuleUsersNavTab moduleKey="procurement" variant="pill" />
         </ul>
       </nav>
     </div>
@@ -190,11 +204,19 @@ export function ProcurementSidebar() {
   const pathname = usePathname();
   const router = useRouter();
   const [collapsed, setCollapsed] = useState(false);
-  const signedIn = useClientAuth();
-  const { role, isAdmin, switchRole } = useProcurementRole();
+  const { signedIn, user, adminModuleKeys } = useAuthUser();
+  const { isAdmin } = useProcurementRole();
   const { pendingCount } = useProcurementApprovals();
   const scmUnreadCount = useScmQueueUnreadCount();
   useDeliveryReminderSweep();
+
+  const navItems = useMemo(() => {
+    const items: ProcurementNavItem[] = [...PROCUREMENT_NAV];
+    if (canManageModuleUsers("procurement", adminModuleKeys, user?.userType)) {
+      items.push({ title: "Users", href: "/procurement/users", icon: UserCog });
+    }
+    return items;
+  }, [adminModuleKeys, user?.userType]);
 
   useEffect(() => {
     if (typeof requestIdleCallback !== "undefined") {
@@ -209,46 +231,60 @@ export function ProcurementSidebar() {
 
   useEffect(() => {
     const active =
+      navItems.find((item) => isProcurementNavActive(pathname, item.href)) ??
       ALL_PROCUREMENT_NAV.find((item) => isProcurementNavActive(pathname, item.href)) ??
       PROCUREMENT_NAV[0];
     warmProcurementNavTarget(router, active.href);
-  }, [pathname, router]);
-
-  async function handleLogout() {
-    try {
-      await authService.logout();
-    } catch {
-      clearTokens();
-    }
-  }
+  }, [navItems, pathname, router]);
 
   return (
     <aside
       data-erp-primary-sidebar
       className={cn(
-        "sticky top-0 z-20 flex h-dvh shrink-0 flex-col border-r border-border/80 bg-white text-foreground transition-[width] duration-200",
-        collapsed ? "w-[76px]" : "w-[260px]",
+        "sticky top-0 z-20 flex h-dvh shrink-0 flex-col border-r border-sidebar-border bg-sidebar text-sidebar-foreground transition-[width] duration-200",
+        collapsed ? "w-[72px]" : "w-[260px]",
       )}
     >
-      <div className={cn("flex items-center gap-3 px-4 py-5", collapsed && "justify-center px-2")}>
-        <div className="flex size-10 items-center justify-center rounded-xl bg-[#0F172A] text-white shadow-sm">
-          <Package className="size-4" aria-hidden />
-        </div>
-        {!collapsed ? (
-          <div className="min-w-0">
-            <p className="truncate text-base font-semibold tracking-tight text-foreground">
-              Procurement
-            </p>
-            <p className="truncate text-[11px] font-normal text-muted-foreground">
-              {isAdmin ? "Admin workspace" : "SCM workspace"}
-            </p>
+      {signedIn ? (
+        <SidebarAccountSection collapsed={collapsed}>
+          <div className="flex items-center gap-2">
+            <Package className="size-3.5 shrink-0 text-sidebar-primary" aria-hidden />
+            <div className="min-w-0">
+              <p className="truncate text-xs font-medium text-sidebar-foreground">Procurement</p>
+              <p className="truncate text-[10px] text-sidebar-foreground/55">
+                {isAdmin ? "Admin workspace" : "SCM workspace"}
+              </p>
+            </div>
           </div>
-        ) : null}
-      </div>
+        </SidebarAccountSection>
+      ) : (
+        <div className={cn("px-4 py-4", collapsed && "px-2")}>
+          <div className={cn("flex items-center gap-3", collapsed && "justify-center")}>
+            <div className="flex size-9 items-center justify-center rounded-xl bg-sidebar-primary text-sidebar-primary-foreground shadow-sm">
+              <Package className="size-4" aria-hidden />
+            </div>
+            {!collapsed ? (
+              <div className="min-w-0">
+                <p className="truncate text-sm font-medium tracking-tight text-sidebar-foreground">
+                  Procurement
+                </p>
+                <p className="truncate text-[11px] text-sidebar-foreground/55">
+                  {isAdmin ? "Admin workspace" : "SCM workspace"}
+                </p>
+              </div>
+            ) : null}
+          </div>
+        </div>
+      )}
 
-      <nav aria-label="Procurement workspace" className="erp-scroll flex-1 overflow-y-auto px-3 py-1">
-        <ul className="space-y-1">
-          {PROCUREMENT_NAV.map((item) => (
+      <nav aria-label="Procurement workspace" className="erp-scroll flex-1 overflow-y-auto px-2.5 py-2">
+        {!collapsed ? (
+          <p className="mb-2 px-2.5 text-[10px] font-medium tracking-[0.14em] text-sidebar-foreground/40 uppercase">
+            Workspace
+          </p>
+        ) : null}
+        <ul className="space-y-0.5">
+          {navItems.map((item) => (
             <li key={item.href}>
               <NavLinkItem
                 item={item}
@@ -269,13 +305,13 @@ export function ProcurementSidebar() {
 
         <div className={cn("mt-5", collapsed && "mt-4")}>
           {!collapsed ? (
-            <p className="mb-1.5 px-3 text-[10px] font-semibold tracking-[0.12em] text-muted-foreground uppercase">
+            <p className="mb-2 px-2.5 text-[10px] font-medium tracking-[0.14em] text-sidebar-foreground/40 uppercase">
               Insight
             </p>
           ) : (
-            <div className="mx-auto mb-2 h-px w-8 bg-border/80" aria-hidden />
+            <div className="mx-auto mb-2 h-px w-8 bg-sidebar-border" aria-hidden />
           )}
-          <ul className="space-y-1">
+          <ul className="space-y-0.5">
             {PROCUREMENT_INSIGHT_NAV.map((item) => (
               <li key={item.href}>
                 <NavLinkItem item={item} pathname={pathname} router={router} collapsed={collapsed} />
@@ -285,74 +321,19 @@ export function ProcurementSidebar() {
         </div>
       </nav>
 
-      <div className="space-y-1 border-t border-border/70 p-3">
-        <button
-          type="button"
-          onClick={() => switchRole()}
-          title={isAdmin ? "Switch to normal user" : "Switch to admin"}
-          className={cn(
-            "group flex w-full cursor-pointer items-center gap-3 rounded-xl px-3 py-2.5 text-[13px] font-medium",
-            "border border-border/80 bg-muted/30 text-foreground transition-[background-color,color] duration-200",
-            "hover:bg-muted/70",
-            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1",
-            collapsed && "justify-center px-0",
-          )}
-        >
-          <UserCog className="size-4 shrink-0" aria-hidden />
-          {!collapsed ? (
-            <span className="min-w-0 flex-1 truncate text-left">
-              {isAdmin ? "Switch to User" : "Switch to Admin"}
-            </span>
-          ) : null}
-          {!collapsed ? (
-            <span className="rounded-md bg-[#0F172A] px-1.5 py-0.5 text-[9px] font-bold tracking-wide text-white uppercase">
-              {role}
-            </span>
-          ) : null}
-        </button>
+      <div className="border-t border-sidebar-border p-2.5">
         <Button
           variant="ghost"
           size="sm"
-          className="w-full cursor-pointer justify-center text-muted-foreground transition-colors duration-200 hover:bg-muted hover:text-foreground"
+          className="w-full cursor-pointer justify-center text-sidebar-foreground/70 transition-colors duration-200 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
           onClick={() => setCollapsed((v) => !v)}
           aria-label={collapsed ? "Expand procurement sidebar" : "Collapse procurement sidebar"}
         >
           {collapsed ? <ChevronRight className="size-4" /> : <ChevronLeft className="size-4" />}
           {!collapsed ? <span className="ml-1.5 text-xs">Collapse</span> : null}
         </Button>
-        {signedIn ? (
-          <button
-            type="button"
-            onClick={() => void handleLogout()}
-            title="Sign out"
-            className={cn(
-              "group flex w-full cursor-pointer items-center gap-3 rounded-xl px-3 py-2.5 text-[13px] font-medium",
-              "text-muted-foreground transition-[background-color,color] duration-200",
-              "hover:bg-muted/70 hover:text-foreground",
-              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1",
-              collapsed && "justify-center px-0",
-            )}
-          >
-            <LogOut className="size-4 shrink-0" aria-hidden />
-            {!collapsed ? <span className="min-w-0 flex-1 truncate text-left">Sign out</span> : null}
-          </button>
-        ) : (
-          <Link
-            href="/login"
-            title="Sign in"
-            className={cn(
-              "group flex w-full cursor-pointer items-center gap-3 rounded-xl px-3 py-2.5 text-[13px] font-medium",
-              "text-muted-foreground transition-[background-color,color] duration-200",
-              "hover:bg-muted/70 hover:text-foreground",
-              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1",
-              collapsed && "justify-center px-0",
-            )}
-          >
-            <LogIn className="size-4 shrink-0" aria-hidden />
-            {!collapsed ? <span className="min-w-0 flex-1 truncate">Sign in</span> : null}
-          </Link>
-        )}
       </div>
     </aside>
   );
 }
+

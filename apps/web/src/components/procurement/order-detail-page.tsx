@@ -9,7 +9,6 @@ import {
   FileDown,
   PackageCheck,
   RefreshCw,
-  Truck,
 } from "lucide-react";
 
 import { DeliveryChallanFormPage } from "@/components/procurement/delivery-challan-form-page";
@@ -73,7 +72,6 @@ import {
   getDeliveryStatus,
   shipmentStatusBadgeVariant,
 } from "@/utils/delivery-status-storage";
-import { deliveryStatusUpdateHref } from "@/utils/delivery-status-routes";
 import { receiptBatchKey } from "@/utils/delivery-challan-grn";
 import { addPendingGrnChallan } from "@/utils/grn-challan-pending";
 import {
@@ -864,6 +862,10 @@ export function OrderDetailPage({ orderId }: { orderId: string }) {
     order?.source_module === "crm" && order.source_document_id
       ? `/procurement/scm/ovf/${order.source_document_id}/po`
       : null;
+  const ovfViewHref =
+    order?.source_module === "crm" && order.source_document_id
+      ? `/procurement/scm/ovf/${order.source_document_id}`
+      : null;
   const lineCount = order?.lines?.length ?? 0;
   const orderLines = useMemo(() => {
     const rows = [...(order?.lines || [])];
@@ -1200,6 +1202,22 @@ export function OrderDetailPage({ orderId }: { orderId: string }) {
                   <DetailItem label="Company PO">
                     {order.company_po_number?.trim() || order.document_number}
                   </DetailItem>
+                  <DetailItem label="OVF number">
+                    {order.ovf_no?.trim() ? (
+                      ovfViewHref ? (
+                        <Link
+                          href={ovfViewHref}
+                          className="font-medium text-[#0369A1] underline-offset-2 transition-colors duration-200 hover:text-[#0284C7] hover:underline"
+                        >
+                          {order.ovf_no.trim()}
+                        </Link>
+                      ) : (
+                        order.ovf_no.trim()
+                      )
+                    ) : (
+                      "—"
+                    )}
+                  </DetailItem>
                   <DetailItem label="PO date">{order.document_date || "—"}</DetailItem>
                   <DetailItem label="Status">
                     <Badge
@@ -1349,16 +1367,6 @@ export function OrderDetailPage({ orderId }: { orderId: string }) {
                         </td>
                         <td className="px-3 py-2">
                           <div className="flex flex-wrap gap-1.5">
-                            <Link
-                              href={deliveryStatusUpdateHref(challan.id)}
-                              className={cn(
-                                buttonVariants({ size: "sm", variant: "outline" }),
-                                "h-7 cursor-pointer gap-1 px-2 text-xs transition-colors duration-200",
-                              )}
-                            >
-                              <Truck className="size-3.5" />
-                              Status
-                            </Link>
                             <Button
                               type="button"
                               size="sm"

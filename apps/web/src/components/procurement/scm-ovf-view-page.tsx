@@ -8,6 +8,7 @@ import {
   ClipboardList,
   FileDown,
   Package,
+  PackageCheck,
   PauseCircle,
   Percent,
   RefreshCw,
@@ -17,7 +18,6 @@ import {
   type LucideIcon,
 } from "lucide-react";
 
-import { ScmCreatePoEntry } from "@/components/procurement/scm-create-po-entry";
 import { ScmCommercialDocumentsPanel } from "@/components/procurement/scm-commercial-documents-panel";
 import { ConfirmDialog } from "@/components/finance/journals/confirm-dialog";
 import { FinanceStatusBadge } from "@/components/finance/finance-status-badge";
@@ -33,33 +33,32 @@ import {
   scmHoldSinceDisplay,
 } from "@/utils/scm-ovf-hold";
 import { downloadScmOvfPdf } from "@/utils/scm-ovf-pdf";
-import {
-  buildOvfFulfillmentRows,
-  ovfChallanHref,
-  ovfCreatePoHref,
-  ovfCreatePoRemainderHref,
-  ovfFromStockHref,
-  ovfItemPlanHref,
-  ovfHasInventoryShortfall,
-  ovfRequiresInStockCreatePoApproval,
-  type OvfChallanShipSource,
-  type OvfShipDocumentKind,
-} from "@/utils/ovf-stock";
-import { useProcurementApprovals } from "@/hooks/use-procurement-approvals";
-import { useProcurementRole } from "@/hooks/use-procurement-role";
-import {
-  findLatestCreatePoInStockApprovalForOvf,
-  PROCUREMENT_APPROVALS_EVENT,
-} from "@/lib/procurement-approvals";
 import { ApiClientError } from "@/services/api-client";
 import {
   getScmOvfPreview,
   holdScmOvf,
+  listProcurementInventory,
   releaseScmOvfHold,
   updateScmOvfCharges,
+  type ProcurementInventoryRow,
   type ScmOvfPreview,
   type ScmVendorLine,
 } from "@/services/procurement-service";
+import {
+  buildGrnPoInventoryShipLines,
+  buildOvfBookedInventoryShipLines,
+  buildOvfFulfillmentRows,
+  ovfChallanHref,
+  ovfCreatePoHref,
+  ovfDistributorKey,
+  ovfGrnStockChallanHref,
+  ovfItemPlanHref,
+  poAllowsGrnRecording,
+  resolvePoForDistributor,
+  setOvfInventoryShipSelection,
+  type OvfInventoryShipLine,
+  type OvfShipDocumentKind,
+} from "@/utils/ovf-stock";
 import {
   deriveScmOvfQueueStatus,
   type ScmOvfQueueStatus,
@@ -194,6 +193,150 @@ function DetailItem({
         {label}
       </dt>
       <dd className="text-sm font-normal text-slate-600 break-words">{children}</dd>
+    </div>
+  );
+}
+
+function formatItemPlanQty(value: number | null | undefined): string {
+  const n = Number(value) || 0;
+  if (Number.isInteger(n)) return String(n);
+  return n.toLocaleString("en-IN", { maximumFractionDigits: 2 });
+}
+
+type InventoryLineSelection = Record<string, { selected: boolean; qty: number }>;
+
+function ShipInventoryLinePicker({
+  lines,
+  selection,
+  onSelectionChange,
+  loading,
+  emptyLabel,
+}: {
+  lines: OvfInventoryShipLine[];
+  selection: InventoryLineSelection;
+  onSelectionChange: (next: InventoryLineSelection) => void;
+  loading?: boolean;
+  emptyLabel: string;
+}) {
+  const selectedCount = lines.filter(
+    (line) => selection[line.id]?.selected && (selection[line.id]?.qty ?? 0) > 0,
+  ).length;
+  const allSelected = lines.length > 0 && selectedCount === lines.length;
+
+  function setLineSelected(id: string, selected: boolean) {
+    const line = lines.find((row) => row.id === id);
+    if (!line) return;
+    onSelectionChange({
+      ...selection,
+      [id]: {
+        selected,
+        qty: selection[id]?.qty ?? line.max_qty,
+      },
+    });
+  }
+
+  function setLineQty(id: string, raw: string) {
+    const line = lines.find((row) => row.id === id);
+    if (!line) return;
+    const parsed = Number(raw);
+    const qty = Number.isFinite(parsed)
+      ? Math.max(0, Math.min(line.max_qty, parsed))
+      : 0;
+    onSelectionChange({
+      ...selection,
+      [id]: {
+        selected: selection[id]?.selected ?? true,
+        qty,
+      },
+    });
+  }
+
+  function toggleAll(selected: boolean) {
+    const next: InventoryLineSelection = { ...selection };
+    for (const line of lines) {
+      next[line.id] = {
+        selected,
+        qty: next[line.id]?.qty ?? line.max_qty,
+      };
+    }
+    onSelectionChange(next);
+  }
+
+  return (
+    <div className="space-y-1.5">
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+          Inventory (GRN stock on linked PO)
+        </p>
+        {lines.length > 0 ? (
+          <button
+            type="button"
+            className="cursor-pointer text-[10px] font-medium text-sky-800 underline-offset-2 transition-colors duration-200 hover:text-sky-950 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+            onClick={() => toggleAll(!allSelected)}
+          >
+            {allSelected ? "Clear all" : "Select all"}
+          </button>
+        ) : null}
+      </div>
+      {loading ? (
+        <p className="text-xs text-muted-foreground">Loading GRN warehouse stock…</p>
+      ) : lines.length === 0 ? (
+        <p className="text-xs text-muted-foreground">{emptyLabel}</p>
+      ) : (
+        <ul className="max-h-44 space-y-1 overflow-y-auto rounded-md border border-border/60 bg-background/80 p-1.5">
+          {lines.map((line) => {
+            const row = selection[line.id];
+            const selected = Boolean(row?.selected);
+            const qty = row?.qty ?? line.max_qty;
+            return (
+              <li
+                key={line.id}
+                className={cn(
+                  "flex items-start gap-2 rounded-md border px-2 py-1.5 transition-colors duration-200",
+                  selected
+                    ? "border-sky-200/80 bg-sky-50/50"
+                    : "border-transparent bg-transparent opacity-70",
+                )}
+              >
+                <input
+                  type="checkbox"
+                  className="mt-0.5 size-3.5 shrink-0 cursor-pointer accent-sky-700"
+                  checked={selected}
+                  onChange={(event) => setLineSelected(line.id, event.target.checked)}
+                  aria-label={`Include ${line.product_name}`}
+                />
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-xs font-medium text-foreground">
+                    {line.product_name}
+                  </p>
+                  {line.detail ? (
+                    <p className="truncate text-[10px] text-muted-foreground">{line.detail}</p>
+                  ) : null}
+                </div>
+                <div className="flex shrink-0 items-center gap-1">
+                  <Input
+                    type="number"
+                    min={0}
+                    max={line.max_qty}
+                    step="any"
+                    value={qty}
+                    disabled={!selected}
+                    onChange={(event) => setLineQty(line.id, event.target.value)}
+                    className="h-7 w-16 px-1.5 text-right text-xs tabular-nums"
+                    aria-label={`Quantity for ${line.product_name}`}
+                  />
+                  <span className="text-[10px] text-muted-foreground">/ {line.max_qty}</span>
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+      {lines.length > 0 ? (
+        <p className="text-[10px] text-muted-foreground">
+          {selectedCount} of {lines.length} item{lines.length === 1 ? "" : "s"} selected
+        </p>
+      ) : null}
     </div>
   );
 }
@@ -341,32 +484,6 @@ function ChargeTable({
   );
 }
 
-function VendorSourceBadge({
-  source,
-  distributorName,
-}: {
-  source?: string | null;
-  distributorName?: string | null;
-}) {
-  const fromInventory =
-    source === "inventory" ||
-    ["in stock", "instock", "inventory"].includes(
-      (distributorName || "").trim().toLowerCase().replace(/\s+/g, " "),
-    );
-  if (fromInventory) {
-    return (
-      <span className="inline-flex rounded-md border border-emerald-300 bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-900">
-        From inventory
-      </span>
-    );
-  }
-  return (
-    <span className="inline-flex rounded-md border border-amber-300 bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-900">
-      Create PO
-    </span>
-  );
-}
-
 function VendorPurchaseTable({
   rows,
   customerRows,
@@ -395,7 +512,7 @@ function VendorPurchaseTable({
   return (
     <div className="overflow-hidden rounded-md border border-border">
       <div className="overflow-x-auto">
-        <table className="w-full min-w-[980px] table-fixed text-sm">
+        <table className="w-full min-w-[872px] table-fixed text-sm">
             <colgroup>
               <col className="w-12" />
               <col className="min-w-[120px]" />
@@ -403,7 +520,6 @@ function VendorPurchaseTable({
               <col className="w-16" />
               <col className="min-w-[120px]" />
               <col className="w-[7.5rem]" />
-              <col className="w-[7.25rem]" />
               <col className="w-[7.25rem]" />
               <col className="w-[7.25rem]" />
               <col className="w-[8.5rem]" />
@@ -415,7 +531,6 @@ function VendorPurchaseTable({
                 <th className="px-3 py-2 text-left font-medium">Item description</th>
                 <th className="px-3 py-2 text-right font-medium tabular-nums">Qty</th>
                 <th className="px-3 py-2 text-left font-medium">Distributor</th>
-                <th className="px-3 py-2 text-left font-medium">Source</th>
                 <th className="px-3 py-2 text-right font-medium tabular-nums whitespace-nowrap">
                   Unit (INR)
                 </th>
@@ -433,7 +548,7 @@ function VendorPurchaseTable({
             <tbody>
               {orderedRows.length === 0 ? (
                 <tr>
-                  <td colSpan={10} className="px-3 py-6 text-center text-muted-foreground">
+                  <td colSpan={9} className="px-3 py-6 text-center text-muted-foreground">
                     {emptyLabel}
                   </td>
                 </tr>
@@ -448,12 +563,6 @@ function VendorPurchaseTable({
                     <td className="px-3 py-2 text-right tabular-nums">{row.qty}</td>
                     <td className="px-3 py-2 font-medium text-slate-700">
                       {textOrDash(row.distributor_name)}
-                    </td>
-                    <td className="px-3 py-2">
-                      <VendorSourceBadge
-                        source={row.fulfillment_source}
-                        distributorName={row.distributor_name}
-                      />
                     </td>
                     <td className="px-3 py-2 text-right tabular-nums">
                       {moneyPrecise(row.unit_price)}
@@ -474,7 +583,7 @@ function VendorPurchaseTable({
             {orderedRows.length > 0 ? (
               <tfoot className="border-t border-border bg-muted/30 text-sm font-semibold">
                 <tr>
-                  <td colSpan={7} className="px-3 py-2 text-right">
+                  <td colSpan={6} className="px-3 py-2 text-right">
                     Totals
                   </td>
                   <td className="px-3 py-2 text-right tabular-nums whitespace-nowrap">
@@ -497,22 +606,18 @@ function VendorPurchaseTable({
 
 export function ScmOvfViewPage({ ovfId }: { ovfId: string }) {
   const router = useRouter();
-  const { role } = useProcurementRole();
-  const { submitCreatePoInStockRequest, refresh: refreshApprovals } = useProcurementApprovals();
   const [preview, setPreview] = useState<ScmOvfPreview | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [requestPoBusy, setRequestPoBusy] = useState(false);
-  const [createPoApprovalStatus, setCreatePoApprovalStatus] = useState<
-    "pending" | "accepted" | "rejected" | null
-  >(null);
   const [chargesBusy, setChargesBusy] = useState(false);
   const [chargesBanner, setChargesBanner] = useState<string | null>(null);
   const [stockAllocatedBanner, setStockAllocatedBanner] = useState(false);
   const [shipDialogOpen, setShipDialogOpen] = useState(false);
-  const [shipSource, setShipSource] = useState<OvfChallanShipSource>("inventory");
   const [shipKind, setShipKind] = useState<OvfShipDocumentKind>("delivery_challan");
+  const [poInventoryRows, setPoInventoryRows] = useState<ProcurementInventoryRow[]>([]);
+  const [shipInventoryLoading, setShipInventoryLoading] = useState(false);
+  const [inventorySelection, setInventorySelection] = useState<InventoryLineSelection>({});
   const [holdDialogOpen, setHoldDialogOpen] = useState(false);
   const [unholdDialogOpen, setUnholdDialogOpen] = useState(false);
   const [unholdBusy, setUnholdBusy] = useState(false);
@@ -561,58 +666,12 @@ export function ScmOvfViewPage({ ovfId }: { ovfId: string }) {
   }, [load]);
 
   useEffect(() => {
-    const sync = () => {
-      setCreatePoApprovalStatus(findLatestCreatePoInStockApprovalForOvf(ovfId)?.status ?? null);
-    };
-    sync();
-    refreshApprovals();
-    window.addEventListener(PROCUREMENT_APPROVALS_EVENT, sync);
-    window.addEventListener("storage", sync);
-    return () => {
-      window.removeEventListener(PROCUREMENT_APPROVALS_EVENT, sync);
-      window.removeEventListener("storage", sync);
-    };
-  }, [ovfId, refreshApprovals]);
-
-  useEffect(() => {
     if (typeof window === "undefined") return;
     const params = new URLSearchParams(window.location.search);
     if (params.get("stockAllocated") !== "1") return;
     setStockAllocatedBanner(true);
     router.replace(`/procurement/scm/ovf/${ovfId}`, { scroll: false });
   }, [ovfId, router]);
-
-  const requiresInStockCreatePoApproval = useMemo(
-    () => (preview ? ovfRequiresInStockCreatePoApproval(preview) : false),
-    [preview],
-  );
-  const stockShortForCreatePo = useMemo(
-    () => (preview ? ovfHasInventoryShortfall(preview) : false),
-    [preview],
-  );
-
-  function requestCreatePoApproval() {
-    if (!preview) return;
-    setRequestPoBusy(true);
-    setError(null);
-    try {
-      submitCreatePoInStockRequest({
-        ovfId,
-        ovfNo: preview.ovf_no,
-        customerName: preview.customer_name || preview.account_name,
-        vendorName: preview.distributor_name || "IN STOCK",
-        reason: stockShortForCreatePo ? "stock_short" : "user_choice",
-      });
-      setCreatePoApprovalStatus("pending");
-      setChargesBanner(
-        stockShortForCreatePo
-          ? "Create PO request sent to admin — inventory is short or already used. You can create the PO after approval."
-          : "Create PO request sent to admin. IN STOCK lines normally use inventory; you can create the PO after approval.",
-      );
-    } finally {
-      setRequestPoBusy(false);
-    }
-  }
 
   async function saveCharges() {
     if (!preview || preview.purchase_order_id) return;
@@ -716,17 +775,21 @@ export function ScmOvfViewPage({ ovfId }: { ovfId: string }) {
   const canUnholdOvf = Boolean(
     preview?.can_create_po && preview?.scm_on_hold && !chargesLockedByPo,
   );
-  const canFulfillFromStock = Boolean(
-    preview?.stock_availability?.some(
-      (row) => Number(row.remaining_qty) > 0 && Number(row.on_hand_qty) > 0,
-    ),
-  );
   const fulfillmentRows = useMemo(
     () => (preview ? buildOvfFulfillmentRows(preview) : []),
     [preview],
   );
-  const hasInventoryTaken = fulfillmentRows.some((row) => row.allocated_qty > 0);
-  const canShipInventory = hasInventoryTaken;
+  const itemPlanLines = preview?.item_plan?.lines || [];
+  const openDistributorKeys = useMemo(
+    () =>
+      new Set(
+        (preview?.open_distributor_names || [])
+          .map((name) => ovfDistributorKey(name))
+          .filter(Boolean),
+      ),
+    [preview?.open_distributor_names],
+  );
+  const ovfOnHold = Boolean(preview?.scm_on_hold);
   const linkedPos = preview?.purchase_orders?.length
     ? preview.purchase_orders
     : preview?.purchase_order_id
@@ -740,16 +803,82 @@ export function ScmOvfViewPage({ ovfId }: { ovfId: string }) {
           },
         ]
       : [];
-  const canShipPo = linkedPos.length > 0;
-  const canShipCombined = canShipInventory && canShipPo;
-  const canCreateDeliveryChallan = canShipInventory || canShipPo;
-  const createPoHref = preview
-    ? preview.open_distributor_names && preview.open_distributor_names.length > 0
-      ? ovfCreatePoHref(ovfId, preview.open_distributor_names[0])
-      : preview.stock_fulfillment_status === "partial"
-        ? ovfCreatePoRemainderHref(ovfId)
-        : ovfCreatePoHref(ovfId)
-    : ovfCreatePoHref(ovfId);
+  const linkedPoOrderIds = useMemo(
+    () => linkedPos.map((row) => String(row.id)).filter(Boolean),
+    [linkedPos],
+  );
+
+  useEffect(() => {
+    if (!shipDialogOpen || linkedPoOrderIds.length === 0) {
+      if (!shipDialogOpen) setPoInventoryRows([]);
+      return;
+    }
+    let cancelled = false;
+    setShipInventoryLoading(true);
+    void listProcurementInventory()
+      .then((rows) => {
+        if (!cancelled) setPoInventoryRows(rows);
+      })
+      .catch(() => {
+        if (!cancelled) setPoInventoryRows([]);
+      })
+      .finally(() => {
+        if (!cancelled) setShipInventoryLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [shipDialogOpen, linkedPoOrderIds]);
+
+  const grnPoInventoryLines = useMemo(
+    () => buildGrnPoInventoryShipLines(poInventoryRows, linkedPoOrderIds),
+    [poInventoryRows, linkedPoOrderIds],
+  );
+  const bookedOvfInventoryLines = useMemo(
+    () => (preview ? buildOvfBookedInventoryShipLines(preview) : []),
+    [preview],
+  );
+  const inventoryShipLineOptions = useMemo(
+    () => [...grnPoInventoryLines, ...bookedOvfInventoryLines],
+    [grnPoInventoryLines, bookedOvfInventoryLines],
+  );
+  const canShipInventory = inventoryShipLineOptions.length > 0;
+  const hasSelectedInventoryShipLines = useMemo(
+    () =>
+      inventoryShipLineOptions.some(
+        (line) =>
+          inventorySelection[line.id]?.selected &&
+          (inventorySelection[line.id]?.qty ?? 0) > 0,
+      ),
+    [inventoryShipLineOptions, inventorySelection],
+  );
+
+  useEffect(() => {
+    if (!shipDialogOpen) return;
+    setInventorySelection((prev) => {
+      const next: InventoryLineSelection = { ...prev };
+      let changed = false;
+      for (const line of inventoryShipLineOptions) {
+        if (!next[line.id]) {
+          next[line.id] = { selected: true, qty: line.max_qty };
+          changed = true;
+          continue;
+        }
+        const clampedQty = Math.min(next[line.id].qty, line.max_qty);
+        if (clampedQty !== next[line.id].qty) {
+          next[line.id] = { ...next[line.id], qty: clampedQty };
+          changed = true;
+        }
+      }
+      for (const id of Object.keys(next)) {
+        if (!inventoryShipLineOptions.some((line) => line.id === id)) {
+          delete next[id];
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
+  }, [shipDialogOpen, inventoryShipLineOptions]);
   const showActiveHold = Boolean(preview?.scm_on_hold || queueStatus === "hold");
   const holdHistory = useMemo(() => {
     if (!preview?.scm_hold_history?.length) return [];
@@ -759,32 +888,43 @@ export function ScmOvfViewPage({ ovfId }: { ovfId: string }) {
   }, [preview]);
 
   function openShipDialog() {
-    const initial: OvfChallanShipSource = canShipInventory
-      ? "inventory"
-      : canShipPo
-        ? "po"
-        : "inventory";
-    setShipSource(initial);
     setShipKind("delivery_challan");
+    setInventorySelection({});
     setShipDialogOpen(true);
   }
 
   function confirmShipChallan() {
-    if (!preview) return;
-    const available =
-      (shipSource === "inventory" && canShipInventory) ||
-      (shipSource === "po" && canShipPo) ||
-      (shipSource === "combined" && canShipCombined);
-    if (!available) return;
+    if (!preview || !canShipInventory || !hasSelectedInventoryShipLines) return;
     setShipDialogOpen(false);
-    router.push(
-      ovfChallanHref(
-        ovfId,
-        shipSource,
-        preview.purchase_order_id || linkedPos[0]?.id,
-        shipKind,
-      ),
-    );
+    const orderId = String(preview.purchase_order_id || linkedPos[0]?.id || "");
+
+    const selectedLines = inventoryShipLineOptions
+      .filter(
+        (line) =>
+          inventorySelection[line.id]?.selected &&
+          (inventorySelection[line.id]?.qty ?? 0) > 0,
+      )
+      .map((line) => ({
+        id: line.id,
+        source: line.source,
+        product_name: line.product_name,
+        qty: Math.min(inventorySelection[line.id].qty, line.max_qty),
+        stock_unit_id: line.stock_unit_id,
+        serial_number: line.serial_number,
+        grn_number: line.grn_number,
+        unit_cost: line.unit_cost,
+      }));
+    setOvfInventoryShipSelection({
+      ovf_id: ovfId,
+      order_id: orderId,
+      lines: selectedLines,
+    });
+    const hasGrnLines = selectedLines.some((line) => line.source === "grn");
+    if (hasGrnLines && orderId) {
+      router.push(ovfGrnStockChallanHref(ovfId, orderId, shipKind));
+      return;
+    }
+    router.push(ovfChallanHref(ovfId, "inventory", orderId || null, shipKind));
   }
 
   async function downloadPdf() {
@@ -842,8 +982,8 @@ export function ScmOvfViewPage({ ovfId }: { ovfId: string }) {
                   "cursor-pointer transition-colors duration-200",
                 )}
               >
-                <Package className="mr-1.5 size-3.5" />
-                Item plan
+                <ShoppingCart className="mr-1.5 size-3.5" />
+                Create PO
               </Link>
             ) : null}
             {canUnholdOvf ? (
@@ -877,46 +1017,7 @@ export function ScmOvfViewPage({ ovfId }: { ovfId: string }) {
                 Hold
               </Button>
             ) : null}
-            {preview?.can_create_po ? (
-              <ScmCreatePoEntry
-                ovfId={ovfId}
-                href={createPoHref}
-                scmOnHold={Boolean(preview.scm_on_hold) || queueStatus === "hold"}
-                scmOnHoldAt={preview.scm_on_hold_at}
-                className="cursor-pointer transition-colors duration-200"
-                icon={<ShoppingCart className="mr-1.5 size-3.5" />}
-                requiresInStockApproval={requiresInStockCreatePoApproval}
-                createPoApprovalStatus={createPoApprovalStatus}
-                canCreateWithoutApproval={role === "admin"}
-                onRequestCreatePoApproval={requestCreatePoApproval}
-                requestBusy={requestPoBusy}
-              />
-            ) : null}
-            {linkedPos.map((po) => (
-              <Link
-                key={po.id}
-                href={`/procurement/orders/${po.id}`}
-                className={cn(
-                  buttonVariants({ size: "sm", variant: "outline" }),
-                  "cursor-pointer transition-colors duration-200",
-                )}
-              >
-                Open {po.company_po_number || po.document_number || "purchase order"}
-              </Link>
-            ))}
-            {canFulfillFromStock ? (
-              <Link
-                href={ovfFromStockHref(ovfId)}
-                className={cn(
-                  buttonVariants({ size: "sm", variant: "outline" }),
-                  "cursor-pointer transition-colors duration-200",
-                )}
-              >
-                <Package className="mr-1.5 size-3.5" />
-                Fulfill from inventory
-              </Link>
-            ) : null}
-            {canCreateDeliveryChallan ? (
+            {preview ? (
               <Button
                 type="button"
                 variant="outline"
@@ -1199,13 +1300,121 @@ export function ScmOvfViewPage({ ovfId }: { ovfId: string }) {
             </div>
           </SectionCard>
 
+          <SectionCard
+            title="Purchase orders by product"
+            icon={ShoppingCart}
+            subtitle="Each line shows the vendor PO for that product. Record GRN after the PO is issued."
+          >
+            <div className="overflow-x-auto rounded-md border border-border">
+              <table className="w-full min-w-[720px] text-sm">
+                <thead className="border-b border-border bg-muted/40 text-xs uppercase tracking-wide text-muted-foreground">
+                  <tr>
+                    <th className="px-3 py-2 text-left font-medium">Product</th>
+                    <th className="px-3 py-2 text-right font-medium">Qty</th>
+                    <th className="px-3 py-2 text-left font-medium">Distributor</th>
+                    <th className="px-3 py-2 text-left font-medium">Company PO</th>
+                    <th className="px-3 py-2 text-left font-medium">GRN</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {itemPlanLines.length === 0 ? (
+                    <tr>
+                      <td colSpan={5} className="px-3 py-6 text-center text-muted-foreground">
+                        No vendor charge lines on this OVF.
+                      </td>
+                    </tr>
+                  ) : (
+                    itemPlanLines.map((line, index) => {
+                      const vendorName = (line.distributor_name || "").trim();
+                      const linkedPo =
+                        line.source === "purchase_order" && vendorName && preview
+                          ? resolvePoForDistributor(preview, vendorName)
+                          : null;
+                      const poOpen =
+                        line.source === "purchase_order" &&
+                        vendorName &&
+                        openDistributorKeys.has(ovfDistributorKey(vendorName));
+                      const grnEnabled = linkedPo ? poAllowsGrnRecording(linkedPo.status) : false;
+                      return (
+                        <tr
+                          key={`${line.product_name}-${index}`}
+                          className="border-b border-border/70 last:border-b-0"
+                        >
+                          <td className="px-3 py-2 font-medium">{line.product_name}</td>
+                          <td className="px-3 py-2 text-right tabular-nums">
+                            {formatItemPlanQty(line.qty)}
+                          </td>
+                          <td className="px-3 py-2">
+                            {line.source === "inventory" ? "Inventory" : vendorName || "—"}
+                          </td>
+                          <td className="px-3 py-2">
+                            {line.source === "inventory" ? (
+                              <span className="text-xs text-muted-foreground">From stock</span>
+                            ) : linkedPo ? (
+                              <Link
+                                href={`/procurement/orders/${linkedPo.id}`}
+                                className="cursor-pointer text-sm font-medium text-[#0369A1] underline-offset-2 transition-colors duration-200 hover:text-[#0284C7] hover:underline"
+                              >
+                                {linkedPo.label}
+                              </Link>
+                            ) : poOpen && !ovfOnHold ? (
+                              <Link
+                                href={ovfCreatePoHref(ovfId, vendorName)}
+                                className="cursor-pointer text-xs font-medium text-[#0369A1] underline-offset-2 transition-colors duration-200 hover:text-[#0284C7] hover:underline"
+                              >
+                                Create PO
+                              </Link>
+                            ) : (
+                              <span className="text-xs text-muted-foreground">—</span>
+                            )}
+                          </td>
+                          <td className="px-3 py-2">
+                            {line.source === "inventory" ? (
+                              <span className="text-xs text-muted-foreground">—</span>
+                            ) : linkedPo && grnEnabled ? (
+                              <Link
+                                href={`/procurement/orders/${linkedPo.id}?tab=grn`}
+                                className={cn(
+                                  buttonVariants({ size: "sm", variant: "outline" }),
+                                  "h-7 cursor-pointer gap-1 px-2 text-xs transition-colors duration-200",
+                                )}
+                              >
+                                <PackageCheck className="size-3.5" aria-hidden />
+                                GRN
+                              </Link>
+                            ) : linkedPo ? (
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                className="h-7 cursor-not-allowed px-2 text-xs opacity-60"
+                                disabled
+                                title="GRN is available after admin issues this PO"
+                              >
+                                <PackageCheck className="mr-1 size-3.5" aria-hidden />
+                                GRN
+                              </Button>
+                            ) : (
+                              <span className="text-xs text-muted-foreground">—</span>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </SectionCard>
+
           <ScmCommercialDocumentsPanel
             ovfId={ovfId}
             branchId={preview.branch_id}
             companyId={preview.company_id}
             title="OVF documents"
-            description="Files attached by sales on this OVF. They are included automatically when the PO is sent for admin approval."
+            description="Sales attachments on this OVF — included when the PO is sent for approval."
             allowUpload={false}
+            compact
           />
         </>
       ) : null}
@@ -1213,15 +1422,11 @@ export function ScmOvfViewPage({ ovfId }: { ovfId: string }) {
       <ConfirmDialog
         open={shipDialogOpen}
         title="Billing or delivery challan"
-        description="Choose Billing (invoice) or delivery challan, then which items to include. Inventory and PO lines can ship separately or together."
+        description="Choose billing (invoice) or delivery challan, then select GRN warehouse stock to ship."
         confirmLabel="Continue"
         cancelLabel="Not now"
         contentClassName="max-w-lg"
-        confirmDisabled={
-          (shipSource === "inventory" && !canShipInventory) ||
-          (shipSource === "po" && !canShipPo) ||
-          (shipSource === "combined" && !canShipCombined)
-        }
+        confirmDisabled={!canShipInventory || !hasSelectedInventoryShipLines}
         onConfirm={confirmShipChallan}
         onCancel={() => setShipDialogOpen(false)}
       >
@@ -1262,62 +1467,27 @@ export function ScmOvfViewPage({ ovfId }: { ovfId: string }) {
               </span>
             </label>
           ))}
-          <p className="pt-2 text-xs font-medium text-foreground">Items to include</p>
-          {(
-            [
-              {
-                value: "inventory" as const,
-                title: "Inventory items only",
-                detail: "Ship quantities already taken from stock.",
-                enabled: canShipInventory,
-              },
-              {
-                value: "po" as const,
-                title: "PO items only",
-                detail: "Ship purchase-order lines (after vendor PO is created).",
-                enabled: canShipPo,
-              },
-              {
-                value: "combined" as const,
-                title: "Combined",
-                detail: "Include inventory allocations and PO lines on one challan.",
-                enabled: canShipCombined,
-              },
-            ] as const
-          ).map((option) => (
-            <label
-              key={option.value}
-              className={cn(
-                "flex cursor-pointer items-start gap-3 rounded-md border px-3 py-2.5 transition-colors duration-200",
-                option.enabled
-                  ? "border-border hover:bg-muted/40 has-[:checked]:border-sky-400 has-[:checked]:bg-sky-50/70"
-                  : "cursor-not-allowed border-border/60 bg-muted/20 opacity-60",
-              )}
-            >
-              <input
-                type="radio"
-                name="ovf-ship-source"
-                className="mt-0.5 cursor-pointer accent-sky-700 disabled:cursor-not-allowed"
-                value={option.value}
-                checked={shipSource === option.value}
-                disabled={!option.enabled}
-                onChange={() => setShipSource(option.value)}
-              />
-              <span className="min-w-0 space-y-0.5">
-                <span className="block text-sm font-medium text-foreground">{option.title}</span>
-                <span className="block text-xs text-muted-foreground">{option.detail}</span>
-                {!option.enabled ? (
-                  <span className="block text-xs text-amber-800">
-                    {option.value === "inventory"
-                      ? "Allocate stock first."
-                      : option.value === "po"
-                        ? "Create a purchase order first."
-                        : "Need both stock allocation and a purchase order."}
-                  </span>
-                ) : null}
-              </span>
-            </label>
-          ))}
+          <div className="mt-3 space-y-2.5 rounded-md border border-border bg-muted/20 p-2.5">
+            <p className="text-xs font-medium text-foreground">Items on this challan</p>
+            {!canShipInventory ? (
+              <p className="text-xs text-amber-800">
+                {linkedPoOrderIds.length > 0
+                  ? "Receive stock on the PO GRN first (billing + stock split)."
+                  : "Create a PO and receive GRN stock first."}
+              </p>
+            ) : null}
+            <ShipInventoryLinePicker
+              lines={inventoryShipLineOptions}
+              selection={inventorySelection}
+              onSelectionChange={setInventorySelection}
+              loading={shipInventoryLoading}
+              emptyLabel={
+                linkedPoOrderIds.length > 0
+                  ? "No GRN warehouse stock on linked PO(s) yet."
+                  : "No purchase order linked yet."
+              }
+            />
+          </div>
         </div>
       </ConfirmDialog>
 

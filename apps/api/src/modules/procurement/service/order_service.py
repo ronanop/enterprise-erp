@@ -122,6 +122,7 @@ class OrderService:
                     "customer_name": ovf.get("customer_name"),
                     "customer_po_number": ovf.get("po_number"),
                     "customer_payment_days": int(ovf.get("customer_payment_days") or 0),
+                    "ovf_no": ovf.get("ovf_no"),
                 }
                 po_date = ovf.get("po_date")
                 if po_date is not None:

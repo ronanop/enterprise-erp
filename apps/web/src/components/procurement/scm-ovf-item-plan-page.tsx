@@ -1,14 +1,22 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ClipboardList, Package, RefreshCw, ShoppingCart, Truck } from "lucide-react";
 
 import { PageHeader } from "@/components/layout/page-header";
+import { FinanceStatusBadge } from "@/components/finance/finance-status-badge";
 import { ScmOvfBookFromStockDialog } from "@/components/procurement/scm-ovf-book-from-stock-dialog";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import {
+  findLatestApprovalForOrder,
+  findLatestCreatePoInStockApprovalForOvf,
+  findPendingApprovalForOrder,
+  findPendingCreatePoInStockApprovalForOvf,
+  PROCUREMENT_APPROVALS_EVENT,
+} from "@/lib/procurement-approvals";
 import { formatApiError } from "@/services/api-client";
 import {
   getScmOvfPreview,
@@ -17,7 +25,9 @@ import {
 import {
   ovfChallanHref,
   ovfCreatePoHref,
+  ovfDistributorKey,
   ovfProductKey,
+  resolvePoForDistributor,
   type OvfChallanShipSource,
   type OvfShipDocumentKind,
 } from "@/utils/ovf-stock";
@@ -26,6 +36,40 @@ function formatPlanQty(value: number | null | undefined): string {
   const n = Number(value) || 0;
   if (Number.isInteger(n)) return String(n);
   return n.toLocaleString("en-IN", { maximumFractionDigits: 2 });
+}
+
+function resolveItemPlanApprovalStatus(input: {
+  lineSource: string;
+  linkedPo: { id: string; status?: string | null } | null;
+  poOpen: boolean;
+  ovfId: string;
+  onHold: boolean;
+}): string | null {
+  const { lineSource, linkedPo, poOpen, ovfId, onHold } = input;
+  if (lineSource === "inventory") return null;
+
+  if (linkedPo) {
+    if (findPendingApprovalForOrder(linkedPo.id)) return "pending";
+    const latest = findLatestApprovalForOrder(linkedPo.id);
+    if (latest?.status === "rejected") return "rejected";
+    if (latest?.status === "accepted") {
+      const poStatus = (linkedPo.status || "").trim().toLowerCase();
+      if (poStatus && !["draft", "submitted"].includes(poStatus)) return poStatus;
+      return "accepted";
+    }
+    const poStatus = (linkedPo.status || "").trim().toLowerCase();
+    if (poStatus && poStatus !== "draft") return poStatus;
+    return null;
+  }
+
+  if (poOpen && !onHold) {
+    if (findPendingCreatePoInStockApprovalForOvf(ovfId)) return "pending";
+    const createPoLatest = findLatestCreatePoInStockApprovalForOvf(ovfId);
+    if (createPoLatest?.status === "rejected") return "rejected";
+    if (createPoLatest?.status === "accepted") return "accepted";
+  }
+
+  return null;
 }
 
 function deliveryStorageKey(ovfId: string): string {
@@ -41,6 +85,18 @@ export function ScmOvfItemPlanPage({ ovfId }: { ovfId: string }) {
   const [shipKind, setShipKind] = useState<OvfShipDocumentKind>("delivery_challan");
   const [bookProductName, setBookProductName] = useState<string | null>(null);
   const [bookOpen, setBookOpen] = useState(false);
+  const [approvalRevision, setApprovalRevision] = useState(0);
+
+  useEffect(() => {
+    const sync = () => setApprovalRevision((value) => value + 1);
+    sync();
+    window.addEventListener(PROCUREMENT_APPROVALS_EVENT, sync);
+    window.addEventListener("storage", sync);
+    return () => {
+      window.removeEventListener(PROCUREMENT_APPROVALS_EVENT, sync);
+      window.removeEventListener("storage", sync);
+    };
+  }, []);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -67,6 +123,10 @@ export function ScmOvfItemPlanPage({ ovfId }: { ovfId: string }) {
 
   const lines = preview?.item_plan?.lines || [];
   const openDistributors = preview?.open_distributor_names || [];
+  const openDistributorKeys = useMemo(
+    () => new Set(openDistributors.map((name) => ovfDistributorKey(name)).filter(Boolean)),
+    [openDistributors],
+  );
   const bookedProducts = (preview?.stock_availability || []).filter(
     (row) => Number(row.allocated_qty) > 0,
   ).length;
@@ -159,19 +219,20 @@ export function ScmOvfItemPlanPage({ ovfId }: { ovfId: string }) {
           <section className="space-y-3 rounded-lg border-2 border-foreground/20 bg-card p-4 shadow-sm">
             <h2 className="text-base font-semibold tracking-tight">Items</h2>
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[720px] text-sm">
+              <table key={approvalRevision} className="w-full min-w-[860px] text-sm">
                 <thead className="border-b border-border bg-muted/40 text-xs uppercase tracking-wide text-muted-foreground">
                   <tr>
                     <th className="px-3 py-2 text-left font-medium">Product</th>
                     <th className="px-3 py-2 text-right font-medium">Qty</th>
-                    <th className="px-3 py-2 text-left font-medium">Source</th>
+                    <th className="px-3 py-2 text-left font-medium">Distributor name</th>
+                    <th className="px-3 py-2 text-left font-medium">Approval status</th>
                     <th className="px-3 py-2 text-left font-medium">Action</th>
                   </tr>
                 </thead>
                 <tbody>
                   {lines.length === 0 ? (
                     <tr>
-                      <td colSpan={4} className="px-3 py-8 text-center text-muted-foreground">
+                      <td colSpan={5} className="px-3 py-8 text-center text-muted-foreground">
                         No vendor charge lines on this OVF.
                       </td>
                     </tr>
@@ -188,15 +249,33 @@ export function ScmOvfItemPlanPage({ ovfId }: { ovfId: string }) {
                       const poOpen =
                         line.source === "purchase_order" &&
                         vendorName &&
-                        openDistributors.some(
-                          (name) => name.trim().toLowerCase() === vendorName.toLowerCase(),
-                        );
+                        openDistributorKeys.has(ovfDistributorKey(vendorName));
+                      const linkedPo =
+                        line.source === "purchase_order" && vendorName && preview
+                          ? resolvePoForDistributor(preview, vendorName)
+                          : null;
+                      const approvalStatus = resolveItemPlanApprovalStatus({
+                        lineSource: line.source,
+                        linkedPo,
+                        poOpen: Boolean(poOpen),
+                        ovfId,
+                        onHold,
+                      });
                       return (
                         <tr key={`${line.product_name}-${index}`} className="border-b border-border/70">
                           <td className="px-3 py-2 font-medium">{line.product_name}</td>
                           <td className="px-3 py-2 text-right tabular-nums">{formatPlanQty(line.qty)}</td>
                           <td className="px-3 py-2">
-                            {line.source === "inventory" ? "Inventory" : vendorName || "Purchase order"}
+                            {line.source === "inventory"
+                              ? "Inventory"
+                              : vendorName || "—"}
+                          </td>
+                          <td className="px-3 py-2">
+                            {approvalStatus ? (
+                              <FinanceStatusBadge status={approvalStatus} />
+                            ) : (
+                              <span className="text-xs text-muted-foreground">—</span>
+                            )}
                           </td>
                           <td className="px-3 py-2">
                             {line.source === "inventory" ? (
@@ -220,6 +299,16 @@ export function ScmOvfItemPlanPage({ ovfId }: { ovfId: string }) {
                                   <span className="text-xs text-muted-foreground">—</span>
                                 ) : null}
                               </div>
+                            ) : linkedPo ? (
+                              <Link
+                                href={`/procurement/orders/${linkedPo.id}`}
+                                className={cn(
+                                  buttonVariants({ size: "sm", variant: "outline" }),
+                                  "h-auto w-fit cursor-pointer px-2 py-1 text-xs transition-colors duration-200",
+                                )}
+                              >
+                                {linkedPo.label}
+                              </Link>
                             ) : poOpen && !onHold ? (
                               <Link
                                 href={ovfCreatePoHref(ovfId, vendorName)}
@@ -231,13 +320,8 @@ export function ScmOvfItemPlanPage({ ovfId }: { ovfId: string }) {
                                 <ShoppingCart className="mr-1.5 size-3.5" />
                                 Create PO
                               </Link>
-                            ) : line.source === "purchase_order" &&
-                              vendorName &&
-                              !openDistributors.some(
-                                (name) => name.trim().toLowerCase() === vendorName.toLowerCase(),
-                              ) &&
-                              canShipPo ? (
-                              <span className="text-xs font-medium text-emerald-800">PO created</span>
+                            ) : onHold && line.source === "purchase_order" ? (
+                              <span className="text-xs text-muted-foreground">On hold</span>
                             ) : (
                               <span className="text-xs text-muted-foreground">
                                 {line.action === "no_vendor" ? "Assign vendor in CRM" : "—"}

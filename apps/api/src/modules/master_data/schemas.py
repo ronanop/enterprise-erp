@@ -3,14 +3,17 @@
 from datetime import date, datetime
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class AddressJson(BaseModel):
     """Billing/shipping address payload.
 
     Defaults keep list/get responses working when legacy rows stored `{}`.
+    `extra='allow'` preserves vendor multi-address payloads (`addresses`, `billing`, etc.).
     """
+
+    model_config = ConfigDict(extra="allow")
 
     line1: str = "TBD"
     city: str = "TBD"

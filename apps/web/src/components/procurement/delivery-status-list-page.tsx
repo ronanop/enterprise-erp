@@ -14,6 +14,7 @@ import { procurementUi } from "@/components/procurement/procurement-ui";
 import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { listProcurementInventory } from "@/services/procurement-service";
 import {
   aggregatePoDcBillStatus,
   challanDeliveredQuantity,
@@ -24,6 +25,7 @@ import {
 import {
   getDeliveryChallan,
   listDeliveryChallans,
+  upsertDeliveryChallan,
   type DeliveryChallanRecord,
 } from "@/utils/delivery-challan-storage";
 import {
@@ -38,6 +40,10 @@ import {
   shipmentStatusBadgeVariant,
   type DeliveryStatusRow,
 } from "@/utils/delivery-status-storage";
+import {
+  formatGeneratedGrnNumbers,
+  resolveChallanDisplayGrnNumbers,
+} from "@/utils/grn-number-display";
 
 type DeliveryStatusListRow = DeliveryStatusRow & {
   billStatusLabel: string;
@@ -71,6 +77,32 @@ function loadDeliveryStatusRows(): DeliveryStatusListRow[] {
   });
 }
 
+async function enrichDeliveryStatusGrnNumbers(
+  rows: DeliveryStatusListRow[],
+): Promise<DeliveryStatusListRow[]> {
+  try {
+    const inventory = await listProcurementInventory();
+    return rows.map((row) => {
+      const challan = getDeliveryChallan(row.challanId);
+      if (!challan) return row;
+      const numbers = resolveChallanDisplayGrnNumbers(challan, inventory);
+      const label = formatGeneratedGrnNumbers(numbers);
+      if (
+        numbers.length > 0 &&
+        (challan.selectedGrnNumbers || []).join(", ") !== numbers.join(", ")
+      ) {
+        upsertDeliveryChallan({
+          ...challan,
+          selectedGrnNumbers: numbers,
+        });
+      }
+      return { ...row, grnSummary: label };
+    });
+  } catch {
+    return rows;
+  }
+}
+
 export function DeliveryStatusListPage() {
   const [version, setVersion] = useState(0);
   const [query, setQuery] = useState("");
@@ -86,7 +118,9 @@ export function DeliveryStatusListPage() {
 
   useEffect(() => {
     setFlash(consumeDeliveryStatusFlash());
-    setRows(loadDeliveryStatusRows());
+    const base = loadDeliveryStatusRows();
+    setRows(base);
+    void enrichDeliveryStatusGrnNumbers(base).then(setRows);
   }, [version]);
 
   const filtered = useMemo(() => {

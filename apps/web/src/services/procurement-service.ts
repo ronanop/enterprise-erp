@@ -213,6 +213,16 @@ export type ScmLinkedPurchaseOrder = {
   status?: string | null;
 };
 
+export type ScmPoGroup = {
+  distributor_name: string;
+  line_count: number;
+  has_po: boolean;
+  purchase_order_id?: string | null;
+  document_number?: string | null;
+  company_po_number?: string | null;
+  status?: string | null;
+};
+
 export type ScmQueueItem = {
   ovf_id: string;
   ovf_no: string;
@@ -406,6 +416,7 @@ export type ScmOvfPreview = {
   purchase_order_number: string | null;
   can_create_po: boolean;
   open_distributor_names?: string[];
+  po_groups?: ScmPoGroup[];
   purchase_orders?: ScmLinkedPurchaseOrder[];
   scm_on_hold?: boolean;
   scm_on_hold_at?: string | null;
@@ -490,6 +501,7 @@ export type ProcOrder = {
   company_po_number: string | null;
   entity_code?: string | null;
   customer_name: string | null;
+  ovf_no?: string | null;
   approved_by_name?: string | null;
   customer_po_number?: string | null;
   order_ref_cache?: string | null;
@@ -1483,8 +1495,13 @@ function toVendorOption(
   const id = String(row.id ?? "");
   const taxNumber = typeof row.tax_number === "string" ? row.tax_number : "";
   const parsed = parseVendorAddressEntries(row.address_json, taxNumber);
+  const fallbackEntries = fallback?.addressEntries?.filter((e) => e.address.trim()) || [];
   const addressEntries =
-    parsed.length > 0 ? parsed : fallback?.addressEntries?.filter((e) => e.address) || [];
+    fallbackEntries.length > parsed.length
+      ? fallbackEntries
+      : parsed.length > 0
+        ? parsed
+        : fallbackEntries;
   const addresses = addressEntries.map((e) => e.address);
   const addrJson =
     row.address_json && typeof row.address_json === "object"

@@ -330,6 +330,7 @@ class OrderResponse(BaseModel):
     company_po_number: str | None = None
     entity_code: str | None = None
     customer_name: str | None = None
+    ovf_no: str | None = None
     approved_by_name: str | None = None
     order_ref_cache: str | None = None
     ovf_date: date | None = None
@@ -386,6 +387,16 @@ class ScmLinkedPurchaseOrder(BaseModel):
     id: UUID
     vendor_id: UUID | None = None
     vendor_name: str | None = None
+    document_number: str | None = None
+    company_po_number: str | None = None
+    status: str | None = None
+
+
+class ScmPoGroup(BaseModel):
+    distributor_name: str
+    line_count: int = 0
+    has_po: bool = False
+    purchase_order_id: UUID | None = None
     document_number: str | None = None
     company_po_number: str | None = None
     status: str | None = None
@@ -573,6 +584,7 @@ class ScmOvfPreviewResponse(BaseModel):
     purchase_order_number: str | None = None
     can_create_po: bool = True
     open_distributor_names: list[str] = Field(default_factory=list)
+    po_groups: list[ScmPoGroup] = Field(default_factory=list)
     purchase_orders: list[ScmLinkedPurchaseOrder] = Field(default_factory=list)
     scm_on_hold: bool = False
     scm_on_hold_at: datetime | None = None

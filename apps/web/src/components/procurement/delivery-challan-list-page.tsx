@@ -1,6 +1,6 @@
 "use client";
 
-/** Delivery challan queue — pending GRNs only (no saved-challan table or search). */
+/** Delivery challan queue — pending + saved DCs with generated GRN numbers. */
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
@@ -16,19 +16,66 @@ import { ProcurementPageHeader } from "@/components/procurement/procurement-page
 import { procurementUi } from "@/components/procurement/procurement-ui";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import {
+  listProcurementInventory,
+  type ProcurementInventoryRow,
+} from "@/services/procurement-service";
 import type { GrnChallanKind } from "@/utils/delivery-challan-storage";
-import { getDeliveryChallan } from "@/utils/delivery-challan-storage";
-import { Badge } from "@/components/ui/badge";
+import {
+  getDeliveryChallan,
+  upsertDeliveryChallan,
+} from "@/utils/delivery-challan-storage";
 import { resolveChallanBillStatus } from "@/utils/delivery-challan-bill";
 import {
-  listAllGrnChallansByKind,
+  listDeliveryChallanQueueByKind,
+  patchPendingGrnChallan,
   pendingGrnChallanHref,
   type PendingGrnChallan,
 } from "@/utils/grn-challan-pending";
+import {
+  formatGeneratedGrnNumbers,
+  isGeneratedGrnNumber,
+  resolveDisplayGrnNumbers,
+} from "@/utils/grn-number-display";
 
 const LIST_RETURN_TO = encodeURIComponent("/procurement/delivery-challan");
 
 type QueueTab = GrnChallanKind;
+
+function enrichQueueRowsWithGeneratedGrns(
+  rows: PendingGrnChallan[],
+  inventory: ProcurementInventoryRow[],
+): PendingGrnChallan[] {
+  return rows.map((row) => {
+    const saved =
+      row.savedRecordId ? getDeliveryChallan(row.savedRecordId) : null;
+    const numbers = resolveDisplayGrnNumbers({
+      stored: [row.grnNumber, ...(saved?.selectedGrnNumbers || [])],
+      orderId: row.orderId || saved?.orderId,
+      inventory,
+    });
+    const label = formatGeneratedGrnNumbers(numbers);
+
+    if (numbers.length > 0) {
+      if (!isGeneratedGrnNumber(row.grnNumber) || row.grnNumber !== label) {
+        patchPendingGrnChallan(row.orderId, row.batchKey, row.kind, {
+          grnNumber: label,
+        });
+      }
+      if (
+        saved &&
+        (saved.selectedGrnNumbers || []).join(", ") !== numbers.join(", ")
+      ) {
+        upsertDeliveryChallan({
+          ...saved,
+          selectedGrnNumbers: numbers,
+        });
+      }
+    }
+
+    return { ...row, grnNumber: label };
+  });
+}
 
 export function DeliveryChallanListPage() {
   const [tab, setTab] = useState<QueueTab>("delivery_challan");
@@ -37,13 +84,23 @@ export function DeliveryChallanListPage() {
   const [billChallanId, setBillChallanId] = useState<string | null>(null);
   const [billTick, setBillTick] = useState(0);
 
-  const load = useCallback(() => {
-    setPendingBilling(listAllGrnChallansByKind("billing"));
-    setPendingDc(listAllGrnChallansByKind("delivery_challan"));
+  const load = useCallback(async () => {
+    const billing = listDeliveryChallanQueueByKind("billing");
+    const dc = listDeliveryChallanQueueByKind("delivery_challan");
+    setPendingBilling(billing);
+    setPendingDc(dc);
+
+    try {
+      const inventory = await listProcurementInventory();
+      setPendingBilling(enrichQueueRowsWithGeneratedGrns(billing, inventory));
+      setPendingDc(enrichQueueRowsWithGeneratedGrns(dc, inventory));
+    } catch {
+      /* keep local queue rows if inventory is unavailable */
+    }
   }, []);
 
   useEffect(() => {
-    load();
+    void load();
   }, [load]);
 
   const pendingForTab = tab === "billing" ? pendingBilling : pendingDc;
@@ -61,7 +118,7 @@ export function DeliveryChallanListPage() {
               variant="outline"
               size="sm"
               className="cursor-pointer transition-colors duration-200"
-              onClick={load}
+              onClick={() => void load()}
             >
               <RefreshCw className="mr-1.5 size-3.5" />
               Refresh
@@ -135,8 +192,8 @@ export function DeliveryChallanListPage() {
         onBill={(challanId) => setBillChallanId(challanId)}
         emptyLabel={
           tab === "billing"
-            ? "No billing GRNs waiting."
-            : "No delivery challan GRNs waiting."
+            ? "No billing documents yet."
+            : "No delivery challans yet."
         }
       />
 
@@ -145,17 +202,12 @@ export function DeliveryChallanListPage() {
         challanId={billChallanId}
         onClose={() => setBillChallanId(null)}
         onSaved={() => {
-          load();
+          void load();
           setBillTick((n) => n + 1);
         }}
       />
     </div>
   );
-}
-
-function pendingDate(iso: string): string {
-  const day = (iso || "").slice(0, 10);
-  return day || "—";
 }
 
 function PendingGrnQueueCard({
@@ -180,17 +232,14 @@ function PendingGrnQueueCard({
   return (
     <div className={procurementUi.tableShell} aria-label={label}>
       <div className={procurementUi.tableScroll}>
-        <table className={cn(procurementUi.table, "min-w-[1180px]")}>
+        <table className={cn(procurementUi.table, "min-w-[980px]")}>
           <thead className={procurementUi.thead}>
             <tr>
               <th className={procurementUi.th}>{isBilling ? "Invoice number" : "Challan number"}</th>
               <th className={procurementUi.th}>{isBilling ? "Invoice date" : "Challan date"}</th>
               <th className={procurementUi.th}>PO number</th>
-              <th className={procurementUi.th}>GRN number</th>
-              <th className={procurementUi.th}>GRN date</th>
               <th className={procurementUi.th}>Vendor name</th>
               <th className={procurementUi.th}>Customer name</th>
-              <th className={procurementUi.th}>Status</th>
               <th className={procurementUi.th}>Bill taken</th>
               <th className={procurementUi.th}>View</th>
             </tr>
@@ -198,7 +247,7 @@ function PendingGrnQueueCard({
           <tbody key={billTick}>
             {rows.length === 0 ? (
               <tr>
-                <td colSpan={10} className={procurementUi.empty}>
+                <td colSpan={7} className={procurementUi.empty}>
                   {emptyLabel}
                 </td>
               </tr>
@@ -236,25 +285,8 @@ function PendingGrnQueueCard({
                   <td className={cn(procurementUi.td, "max-w-[160px] font-medium tabular-nums")}>
                     {row.purchaseOrderNumber || "—"}
                   </td>
-                  <td className={cn(procurementUi.td, "max-w-[160px] font-medium tabular-nums")}>
-                    {row.grnNumber || "—"}
-                  </td>
-                  <td className={cn(procurementUi.tdNumeric, "text-muted-foreground")}>
-                    {pendingDate(row.createdAt)}
-                  </td>
                   <td className={procurementUi.tdMuted}>{row.vendorName || "—"}</td>
                   <td className={procurementUi.td}>{row.customerName?.trim() || "—"}</td>
-                  <td className={procurementUi.td}>
-                    {isSaved ? (
-                      <Badge variant="default" className={cn(procurementUi.statusBadge, "bg-emerald-600 text-white hover:bg-emerald-600")}>
-                        Sent
-                      </Badge>
-                    ) : (
-                      <Badge variant="warning" className={procurementUi.statusBadge}>
-                        Pending
-                      </Badge>
-                    )}
-                  </td>
                   <td className={procurementUi.td} onClick={(e) => e.stopPropagation()}>
                     <div className="flex flex-wrap items-center gap-1">
                       <DeliveryBillTakenBadge status={billStatus} />

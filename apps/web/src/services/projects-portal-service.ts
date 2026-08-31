@@ -272,8 +272,14 @@ export async function listProjectPoQueue(): Promise<ProjectPoQueueItem[]> {
   return asArray(res.data);
 }
 
-export async function getProjectPoPrefill(orderId: string): Promise<ProjectPoPrefill> {
-  return unwrap(await apiClient<ProjectPoPrefill>(`${PROJECT_PO_QUEUE_API}/${orderId}/prefill`));
+export async function getProjectPoPrefill(
+  orderId: string,
+  options?: { installationHandoff?: boolean },
+): Promise<ProjectPoPrefill> {
+  const qs = options?.installationHandoff ? "?installation_handoff=true" : "";
+  return unwrap(
+    await apiClient<ProjectPoPrefill>(`${PROJECT_PO_QUEUE_API}/${orderId}/prefill${qs}`),
+  );
 }
 
 // ---------------------------------------------------------------------------

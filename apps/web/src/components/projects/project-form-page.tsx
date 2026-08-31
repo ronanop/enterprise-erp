@@ -29,6 +29,7 @@ import { getPurchaseOrder, getScmOvfPreview } from "@/services/procurement-servi
 import { challanDeliveredQuantity } from "@/utils/delivery-challan-bill";
 import { listDeliveryChallansByOrderId } from "@/utils/delivery-challan-storage";
 import { resolveScmInstallationPrefillForOrder } from "@/utils/installation-storage";
+import { getProjectPoQueueHandoff } from "@/utils/project-po-queue-handoff";
 
 function digitsOnly(value: string | number | null | undefined): string {
   if (value == null) return "";
@@ -54,6 +55,7 @@ const EMPTY_CREATE: FormValues = {
   branch_id: "",
   circle: "",
   company_po_number: "",
+  customer_po_number: "",
   customer_id: "",
   customer_label: "",
   delivery_type: "server_os_rack",
@@ -108,12 +110,19 @@ export function ProjectFormPage({ projectId }: { projectId?: string }) {
 
       setLinkedPoId(record.proc_order_id);
       let companyPoNumber = "";
+      let customerPoNumber = "";
       if (record.proc_order_id) {
         try {
           const order = await getPurchaseOrder(record.proc_order_id);
           companyPoNumber = order.company_po_number || order.document_number || "";
+          customerPoNumber = (order.customer_po_number || "").trim();
+          if (!customerPoNumber) {
+            const handoff = getProjectPoQueueHandoff(record.proc_order_id);
+            customerPoNumber = (handoff?.customerPoNumber || "").trim();
+          }
         } catch {
           companyPoNumber = "";
+          customerPoNumber = "";
         }
       }
 
@@ -124,6 +133,7 @@ export function ProjectFormPage({ projectId }: { projectId?: string }) {
         branch_id: record.branch_id,
         circle: site?.circle ?? "",
         company_po_number: companyPoNumber,
+        customer_po_number: customerPoNumber,
         customer_id: record.customer_id ?? "",
         customer_label: customerLabel,
         delivery_type: site?.delivery_type || "server_os_rack",
@@ -153,6 +163,7 @@ export function ProjectFormPage({ projectId }: { projectId?: string }) {
     let ovfProjectTitle = "";
     let ovfOemName = "";
     let receivedQtyDigits = "";
+    let orderCustomerPo = "";
 
     try {
       scmInstall = poId ? resolveScmInstallationPrefillForOrder(poId) : null;
@@ -170,6 +181,10 @@ export function ProjectFormPage({ projectId }: { projectId?: string }) {
         ]);
         ovfProjectTitle = (ovfPreview?.project_title || "").trim();
         ovfOemName = (ovfPreview?.oem_name || "").trim();
+        orderCustomerPo = (order?.customer_po_number || "").trim();
+        if (!orderCustomerPo && ovfPreview?.po_number) {
+          orderCustomerPo = String(ovfPreview.po_number).trim();
+        }
 
         const fromOrder = (order?.lines || []).reduce((sum, ln) => {
           const qty = Number(ln.quantity_received) || 0;
@@ -204,6 +219,13 @@ export function ProjectFormPage({ projectId }: { projectId?: string }) {
     const serverType =
       scmInstall?.serverType?.trim() || ovfOemName || "";
 
+    const handoff = poId ? getProjectPoQueueHandoff(poId) : null;
+    const customerPoNumber =
+      (handoff?.customerPoNumber || "").trim() ||
+      (prefill?.customer_po_number || "").trim() ||
+      orderCustomerPo ||
+      "";
+
     return {
       values: {
         branch_id: prefill?.branch_id || branches[0]?.id || "",
@@ -214,8 +236,9 @@ export function ProjectFormPage({ projectId }: { projectId?: string }) {
           prefill?.circle_name?.trim() ||
           "",
         company_po_number: prefill?.company_po_number?.trim() || "",
+        customer_po_number: customerPoNumber,
         customer_id: prefill?.customer_id || "",
-        customer_label: resolvedCustomerLabel,
+        customer_label: resolvedCustomerLabel || (handoff?.customerName || "").trim() || "",
         project_name: projectTitle,
         rack_qty: rackQty,
         server_qty: serverQty,
@@ -344,8 +367,8 @@ export function ProjectFormPage({ projectId }: { projectId?: string }) {
       ...(showPoReadonlyIntake
         ? [
           {
-            name: "company_po_number",
-            label: "PO Number",
+            name: "customer_po_number",
+            label: "Customer PO Number",
             type: "readonly" as const,
           },
           {

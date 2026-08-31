@@ -43,6 +43,26 @@ def _first(*values: Any) -> Any:
     return None
 
 
+def _aggregate_distributor_names(vendor_dtos: list[dict[str, Any]]) -> str | None:
+    """Unique distributor labels from OVF vendor charge lines (comma-separated)."""
+    names: list[str] = []
+    seen: set[str] = set()
+    for dto in vendor_dtos:
+        raw = (dto.get("distributor_name") or "").strip()
+        if not raw:
+            continue
+        for part in raw.replace(";", ",").split(","):
+            name = part.strip()
+            if not name:
+                continue
+            key = name.lower()
+            if key in seen:
+                continue
+            seen.add(key)
+            names.append(name)
+    return ", ".join(names) if names else None
+
+
 def resolve_scm_hold_started_at(ovf: CrmOvf) -> datetime | None:
     """When hold started; falls back to updated_at for legacy rows without scm_on_hold_at."""
     if not bool(getattr(ovf, "scm_on_hold", False)):
@@ -145,6 +165,7 @@ class OvfService:
         rows = self._repo.list_by_ids(ctx, list(ovf_ids))
         return {
             row.id: {
+                "ovf_no": row.ovf_no,
                 "po_number": row.po_number,
                 "customer_name": row.customer_name,
                 "po_date": self._resolve_customer_po_display_date(ctx, row),
@@ -183,7 +204,7 @@ class OvfService:
         if tax_pct <= 0:
             tax_pct = 18.0
 
-        oem = self._resolve_oem_context(ctx, ovf.opportunity_id)
+        oem = self._resolve_lead_scm_context(ctx, ovf.opportunity_id)
 
         def charge_dto(ln: Any) -> dict[str, Any]:
             key = (ln.product_name or "").strip().lower()
@@ -289,6 +310,10 @@ class OvfService:
         billing_parts = [ovf.billing_address, ovf.billing_state, ovf.billing_country]
         shipping_parts = [ovf.shipping_address, ovf.shipping_state, ovf.shipping_country]
 
+        distributor_name = (oem.get("distributor_name") or "").strip() or None
+        if not distributor_name:
+            distributor_name = _aggregate_distributor_names(vendor_dtos)
+
         return {
             "ovf_id": ovf.id,
             "ovf_no": ovf.ovf_no,
@@ -308,6 +333,8 @@ class OvfService:
             "oem_contact_person": oem.get("oem_contact_person"),
             "oem_contact_email": oem.get("oem_contact_email"),
             "oem_contact_number": oem.get("oem_contact_number"),
+            "distributor_name": distributor_name,
+            "project_title": oem.get("project_title"),
             "blueprint_state": ovf.blueprint_state,
             "approval_status": ovf.approval_status,
             "scm_on_hold": bool(getattr(ovf, "scm_on_hold", False)),
@@ -415,26 +442,42 @@ class OvfService:
             "customer_po_date": self._resolve_customer_po_display_date(ctx, ovf),
         }
 
-    def _resolve_oem_context(self, ctx: TenantContext, opportunity_id: UUID) -> dict[str, str | None]:
-        """OEM + contact from the originating lead (for SCM vendor context)."""
-        empty = {
+    def _resolve_lead_scm_context(self, ctx: TenantContext, opportunity_id: UUID) -> dict[str, str | None]:
+        """Lead fields surfaced to SCM (OEM, distributor, project title)."""
+        empty: dict[str, str | None] = {
             "oem_name": None,
             "oem_contact_person": None,
             "oem_contact_email": None,
             "oem_contact_number": None,
+            "distributor_name": None,
+            "project_title": None,
         }
         opp = self._opportunities.get(ctx, opportunity_id)
-        if opp is None or opp.lead_id is None:
+        if opp is None:
             return empty
+        project_title = (opp.project_title or "").strip() or None
+        if opp.lead_id is None:
+            return {**empty, "project_title": project_title}
         lead = self._leads.get(ctx, opp.lead_id)
         if lead is None:
-            return empty
-        name = (lead.oem_name or "").strip() or None
+            return {**empty, "project_title": project_title}
         return {
-            "oem_name": name,
+            "oem_name": (lead.oem_name or "").strip() or None,
             "oem_contact_person": (lead.oem_contact_person or "").strip() or None,
             "oem_contact_email": (lead.oem_contact_email or "").strip() or None,
             "oem_contact_number": (lead.oem_contact_number or "").strip() or None,
+            "distributor_name": (lead.distributor_name or "").strip() or None,
+            "project_title": _first(project_title, lead.project_title),
+        }
+
+    def _resolve_oem_context(self, ctx: TenantContext, opportunity_id: UUID) -> dict[str, str | None]:
+        """OEM + contact from the originating lead (for SCM vendor context)."""
+        lead_ctx = self._resolve_lead_scm_context(ctx, opportunity_id)
+        return {
+            "oem_name": lead_ctx["oem_name"],
+            "oem_contact_person": lead_ctx["oem_contact_person"],
+            "oem_contact_email": lead_ctx["oem_contact_email"],
+            "oem_contact_number": lead_ctx["oem_contact_number"],
         }
 
     def _resolve_oem_name(self, ctx: TenantContext, opportunity_id: UUID) -> str | None:

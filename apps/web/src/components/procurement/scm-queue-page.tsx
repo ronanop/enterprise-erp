@@ -39,7 +39,6 @@ import {
 import { resolveVendorDisplayName } from "@/utils/vendor-oem-match";
 import { textTokenMatch } from "@/utils/procurement-search";
 import { getUnseenScmOvfIds, markScmQueueSeen } from "@/utils/scm-queue-seen";
-import { ovfItemPlanHref } from "@/utils/ovf-stock";
 import {
   deriveScmOvfQueueStatus,
   pendingFinalizeOrderIds,
@@ -83,20 +82,6 @@ function parseQueueFilter(value: string | null): QueueFilter {
   return "all";
 }
 
-function ItemPlanCell({ ovfId }: { ovfId: string }) {
-  return (
-    <Link
-      href={ovfItemPlanHref(ovfId)}
-      className={cn(
-        buttonVariants({ size: "sm", variant: "outline" }),
-        "cursor-pointer transition-colors duration-200",
-      )}
-    >
-      Open plan
-    </Link>
-  );
-}
-
 function payTermsLabel(days: number | null | undefined): string {
   const value = Number(days) || 0;
   if (value <= 0) return "—";
@@ -110,6 +95,17 @@ function formatNetMarginPct(margin: number | null | undefined, customerTotal: nu
   return `${pct.toFixed(2)}%`;
 }
 
+function queuePoNumberLabels(row: ScmQueueItem): string[] {
+  const fromLinked = (row.purchase_orders || [])
+    .map((po) => (po.company_po_number || po.document_number || "").trim())
+    .filter(Boolean);
+  if (fromLinked.length > 0) {
+    return [...new Set(fromLinked)];
+  }
+  const single = (row.company_po_number || "").trim();
+  return single ? [single] : [];
+}
+
 function scmQueueRowMatchesSearch(
   row: ScmQueueItem & { ovf_status?: OvfStatus },
   rawQuery: string,
@@ -117,22 +113,42 @@ function scmQueueRowMatchesSearch(
   const tokens = rawQuery.trim().toLowerCase().split(/\s+/).filter(Boolean);
   if (tokens.length === 0) return true;
 
-  const poNumber = String(row.company_po_number ?? "").toLowerCase();
+  const poNumbers = [
+    row.company_po_number,
+    ...(row.purchase_orders || []).flatMap((po) => [
+      po.company_po_number,
+      po.document_number,
+    ]),
+  ]
+    .map((value) => String(value ?? "").toLowerCase())
+    .filter(Boolean);
   const customerName = String(row.customer_name ?? "").toLowerCase();
   const vendorName = String(row.distributor_name ?? "").toLowerCase();
 
   return tokens.every((token) => {
     if (/^\d+$/.test(token)) {
-      if (!poNumber) return false;
-      if (poNumber.includes(token)) return true;
-      const poDigits = poNumber.replace(/\D/g, "");
-      return poDigits.includes(token) || poDigits.endsWith(token);
+      return poNumbers.some((po) => po.includes(token));
     }
-
     return (
-      textTokenMatch(customerName, token) ||
-      textTokenMatch(vendorName, token) ||
-      textTokenMatch(poNumber, token)
+      poNumbers.some((po) => po.includes(token)) ||
+      customerName.includes(token) ||
+      vendorName.includes(token) ||
+      textTokenMatch(
+        [
+          row.ovf_no,
+          row.customer_name,
+          row.account_name,
+          row.vendor_name,
+          row.distributor_name,
+          row.oem_name,
+          row.project_title,
+          row.quote_name,
+          row.po_number,
+        ]
+          .filter(Boolean)
+          .join(" "),
+        token,
+      )
     );
   });
 }
@@ -385,13 +401,15 @@ export function ScmQueuePage() {
 
       <ProcurementListPanel id="procurement-list" className="scroll-mt-24">
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[1360px] text-left text-sm">
+          <table className="w-full min-w-[1260px] text-left text-sm">
             <thead className="border-b border-border bg-muted/40 text-xs font-bold uppercase tracking-wide text-muted-foreground">
               <tr>
                 <th className="px-3 py-2 font-bold">PO number</th>
                 <th className="px-3 py-2 font-bold">Customer name</th>
                 <th className="px-3 py-2 font-bold">Customer pay terms</th>
-                <th className="px-3 py-2 font-bold">Vendor name</th>
+                <th className="px-3 py-2 font-bold" title="From CRM lead distributor name(s)">
+                  Vendor name
+                </th>
                 <th className="px-3 py-2 font-bold">Vendor pay terms</th>
                 <th className="px-3 py-2 font-bold">OVF date</th>
                 <th className="px-3 py-2 font-bold text-right">Customer amt</th>
@@ -405,25 +423,19 @@ export function ScmQueuePage() {
                 <th className="px-3 py-2 font-bold text-right">Margin %</th>
                 <th className="px-3 py-2 font-bold">OVF status</th>
                 <th className="px-3 py-2 font-bold">View OVF</th>
-                <th
-                  className="px-3 py-2 font-bold"
-                  title="IN STOCK lines book from inventory when on hand. Vendor-allocated lines create a PO. Mixed sources deliver separately."
-                >
-                  PO plan
-                </th>
               </tr>
             </thead>
             <tbody>
               {loading && filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={13} className="px-3 py-8 text-center text-muted-foreground">
+                  <td colSpan={12} className="px-3 py-8 text-center text-muted-foreground">
                     Loading SCM queue…
                   </td>
                 </tr>
               ) : null}
               {!loading && filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={13} className="px-3 py-8 text-center text-muted-foreground">
+                  <td colSpan={12} className="px-3 py-8 text-center text-muted-foreground">
                     {query.trim()
                       ? "No queue rows match your search."
                       : filter === "open"
@@ -449,7 +461,17 @@ export function ScmQueuePage() {
                   >
                     <td className="px-3 py-2 font-medium tabular-nums">
                       <span className="inline-flex flex-wrap items-center gap-1.5">
-                        <span>{row.company_po_number || "—"}</span>
+                        {(() => {
+                          const labels = queuePoNumberLabels(row);
+                          if (labels.length === 0) return <span>—</span>;
+                          return (
+                            <span className="flex flex-col gap-0.5">
+                              {labels.map((label) => (
+                                <span key={label}>{label}</span>
+                              ))}
+                            </span>
+                          );
+                        })()}
                         {isNew ? (
                           <span
                             className="text-xs font-semibold tracking-tight text-sky-700"
@@ -515,9 +537,6 @@ export function ScmQueuePage() {
                       >
                         View OVF
                       </Link>
-                    </td>
-                    <td className="px-3 py-2 align-top">
-                      <ItemPlanCell ovfId={row.ovf_id} />
                     </td>
                   </tr>
                 );

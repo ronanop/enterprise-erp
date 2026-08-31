@@ -191,18 +191,29 @@ export function markInstallationSharedToProject(
   });
 }
 
+export function markInstallationSharedToPoQueue(challanId: string): InstallationRecord {
+  const existing = resolveInstallation(challanId);
+  return upsertInstallation({
+    ...existing,
+    sharedToProject: true,
+    projectId: null,
+    projectHref: "/projects/po-queue",
+    sharedAt: new Date().toISOString(),
+  });
+}
+
 export function validateInstallationManual(
-  fields: InstallationManualFields,
+  fields: Partial<InstallationManualFields> | null | undefined,
 ): Partial<Record<keyof InstallationManualFields, string>> {
   const errors: Partial<Record<keyof InstallationManualFields, string>> = {};
-  if (!fields.projectName.trim()) errors.projectName = "Project name is required.";
-  if (!fields.circleName.trim()) errors.circleName = "Circle name is required.";
-  if (!fields.site.trim()) errors.site = "Site is required.";
-  if (!fields.contactPerson.trim()) errors.contactPerson = "Contact person is required.";
-  if (!fields.contactNumber.trim()) errors.contactNumber = "Contact number is required.";
-  if (!fields.rackQuantity.trim()) errors.rackQuantity = "Rack quantity is required.";
-  if (!fields.serverQuantity.trim()) errors.serverQuantity = "Server quantity is required.";
-  if (!fields.serverType.trim()) errors.serverType = "Server type is required.";
+  if (!asText(fields?.projectName).trim()) errors.projectName = "Project name is required.";
+  if (!asText(fields?.circleName).trim()) errors.circleName = "Circle name is required.";
+  if (!asText(fields?.site).trim()) errors.site = "Site is required.";
+  if (!asText(fields?.contactPerson).trim()) errors.contactPerson = "Contact person is required.";
+  if (!asText(fields?.contactNumber).trim()) errors.contactNumber = "Contact number is required.";
+  if (!asText(fields?.rackQuantity).trim()) errors.rackQuantity = "Rack quantity is required.";
+  if (!asText(fields?.serverQuantity).trim()) errors.serverQuantity = "Server quantity is required.";
+  if (!asText(fields?.serverType).trim()) errors.serverType = "Server type is required.";
   return errors;
 }
 

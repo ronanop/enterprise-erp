@@ -9,27 +9,21 @@ import {
   ProcurementPageHeader,
 } from "@/components/procurement/procurement-page-header";
 import { procurementUi } from "@/components/procurement/procurement-ui";
-import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { listDeliveryChallans } from "@/utils/delivery-challan-storage";
 import {
   deliveryStatusRowFromChallan,
   isDeliveredShipmentStatus,
-  shipmentStatusBadgeVariant,
 } from "@/utils/delivery-status-storage";
 import { installationDetailHref } from "@/utils/installation-routes";
-import { resolveInstallation } from "@/utils/installation-storage";
 
 type InstallationListRow = {
   challanId: string;
   companyPoNumber: string;
   customerName: string;
-  customerPoNumber: string;
   deliveredDate: string;
   challanOrInvoice: string;
-  deliveryStatus: string;
-  sharedToProject: boolean;
 };
 
 function loadInstallationRows(): InstallationListRow[] {
@@ -47,7 +41,6 @@ function loadInstallationRows(): InstallationListRow[] {
         challan.invoiceNumber?.trim() ||
         "";
       const challanNo = challan.challanNumber?.trim() || "";
-      const install = resolveInstallation(challan.id);
 
       return [
         {
@@ -58,11 +51,8 @@ function loadInstallationRows(): InstallationListRow[] {
             challan.purchaseOrderNumber ||
             "—",
           customerName: status.customerName || challan.customerName || "—",
-          customerPoNumber: status.customerPoNumber || "—",
           deliveredDate: status.actualDeliveryDate || "—",
           challanOrInvoice: invoice || challanNo || "—",
-          deliveryStatus: status.shipmentStatus || "Delivered",
-          sharedToProject: install.sharedToProject,
         },
       ];
     } catch {
@@ -91,11 +81,8 @@ export function InstallationListPage() {
       [
         row.companyPoNumber,
         row.customerName,
-        row.customerPoNumber,
         row.deliveredDate,
         row.challanOrInvoice,
-        row.deliveryStatus,
-        row.sharedToProject ? "shared" : "pending",
       ]
         .join(" ")
         .toLowerCase()
@@ -135,14 +122,12 @@ export function InstallationListPage() {
 
       <div className={procurementUi.tableShell}>
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[820px] text-sm">
+          <table className="w-full min-w-[720px] text-sm">
             <thead className="border-b border-border bg-muted/40 text-xs uppercase tracking-wide text-muted-foreground">
               <tr>
                 <th className="px-3 py-2 text-left font-medium">Company PO number</th>
                 <th className="px-3 py-2 text-left font-medium">Customer name</th>
-                <th className="px-3 py-2 text-left font-medium">Customer PO number</th>
                 <th className="px-3 py-2 text-left font-medium">Delivered date</th>
-                <th className="px-3 py-2 text-left font-medium">Status</th>
                 <th className="px-3 py-2 text-left font-medium">Challan / invoice number</th>
                 <th className="px-3 py-2 text-left font-medium">Actions</th>
               </tr>
@@ -150,7 +135,7 @@ export function InstallationListPage() {
             <tbody>
               {filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="px-3 py-10 text-center text-muted-foreground">
+                  <td colSpan={5} className="px-3 py-10 text-center text-muted-foreground">
                     <div className="mx-auto flex max-w-md flex-col items-center gap-2">
                       <Wrench className="size-5 text-muted-foreground/70" aria-hidden />
                       <p>
@@ -168,24 +153,7 @@ export function InstallationListPage() {
                   >
                     <td className="px-3 py-2 font-medium tabular-nums">{row.companyPoNumber}</td>
                     <td className="px-3 py-2">{row.customerName}</td>
-                    <td className="px-3 py-2 tabular-nums">{row.customerPoNumber}</td>
                     <td className="px-3 py-2 tabular-nums">{row.deliveredDate}</td>
-                    <td className="px-3 py-2">
-                      <div className="flex flex-wrap items-center gap-1">
-                        <Badge
-                          variant={shipmentStatusBadgeVariant(row.deliveryStatus)}
-                          className={procurementUi.statusBadge}
-                        >
-                          {row.deliveryStatus}
-                        </Badge>
-                        <Badge
-                          variant={row.sharedToProject ? "secondary" : "outline"}
-                          className={procurementUi.statusBadge}
-                        >
-                          {row.sharedToProject ? "Shared" : "Pending share"}
-                        </Badge>
-                      </div>
-                    </td>
                     <td className="px-3 py-2 tabular-nums">{row.challanOrInvoice}</td>
                     <td className="px-3 py-2">
                       <Link

@@ -54,14 +54,27 @@ class ProjectPoQueueService:
                 if order.source_module == "crm" and order.source_document_type == "ovf"
                 else None
             )
+            customer_name = (order.customer_name or "").strip() or None
+            customer_po_number = (order.customer_po_number or "").strip() or None
+            if ovf_id is not None and (not customer_name or not customer_po_number):
+                try:
+                    crm_ctx = self._crm.resolve_ovf_project_context(ctx, ovf_id)
+                    if not customer_name:
+                        customer_name = crm_ctx.get("customer_name") or customer_name
+                    if not customer_po_number:
+                        customer_po_number = (
+                            crm_ctx.get("customer_po_number") or customer_po_number
+                        )
+                except Exception:
+                    pass
             out.append(
                 ProjectPoQueueItem(
                     order_id=order.id,
                     company_po_number=order.company_po_number,
                     document_number=order.document_number,
                     document_date=order.document_date,
-                    customer_name=order.customer_name,
-                    customer_po_number=order.customer_po_number,
+                    customer_name=customer_name,
+                    customer_po_number=customer_po_number,
                     vendor_id=order.vendor_id,
                     total_amount=float(order.total_amount or 0),
                     customer_total=float(order.customer_total or 0),
@@ -69,13 +82,14 @@ class ProjectPoQueueService:
                     ovf_id=ovf_id,
                     branch_id=order.branch_id,
                     company_id=order.company_id,
-                    created_at=order.created_at,
+                    # OrderResponse has no created_at; UI falls back to document_date.
+                    created_at=None,
                 )
             )
         out.sort(
             key=lambda row: (
                 row.created_at.isoformat() if row.created_at else "",
-                row.document_date.isoformat(),
+                row.document_date.isoformat() if row.document_date else "",
                 row.company_po_number or "",
             ),
             reverse=True,

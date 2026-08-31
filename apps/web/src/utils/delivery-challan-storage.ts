@@ -184,10 +184,19 @@ export function findDeliveryChallanByOrderId(orderId: string): DeliveryChallanRe
   return listDeliveryChallansByOrderId(orderId)[0] ?? null;
 }
 
-/** Display label for GRN(s) covered by a challan. */
-export function formatChallanGrnSummary(record: DeliveryChallanRecord): string {
-  const nums = (record.selectedGrnNumbers || []).map((n) => String(n ?? "").trim()).filter(Boolean);
-  if (nums.length > 0) return nums.join(", ");
+import type { ProcurementInventoryRow } from "@/services/procurement-service";
+import {
+  formatGeneratedGrnNumbers,
+  resolveChallanDisplayGrnNumbers,
+} from "@/utils/grn-number-display";
+
+/** Display label for GRN(s) covered by a challan (generated GRN numbers when known). */
+export function formatChallanGrnSummary(
+  record: DeliveryChallanRecord,
+  inventory?: ProcurementInventoryRow[],
+): string {
+  const nums = resolveChallanDisplayGrnNumbers(record, inventory);
+  if (nums.length > 0) return formatGeneratedGrnNumbers(nums);
   if (record.itemsSourceMode === "full_po") return "Full PO";
   return "—";
 }

@@ -61,6 +61,7 @@ export function ScmCommercialDocumentsPanel({
   title = "Documents",
   description,
   allowUpload = false,
+  compact = false,
   className,
   onChanged,
   draftOnly = false,
@@ -73,6 +74,8 @@ export function ScmCommercialDocumentsPanel({
   title?: string;
   description?: string;
   allowUpload?: boolean;
+  /** Dense table layout for read-only document lists (e.g. OVF view). */
+  compact?: boolean;
   className?: string;
   onChanged?: (rows: ScmCommercialAttachment[]) => void;
   /** Queue files before a PO exists; the parent uploads them after PO creation. */
@@ -273,7 +276,8 @@ export function ScmCommercialDocumentsPanel({
   return (
     <section
       className={cn(
-        "space-y-3 rounded-lg border border-border/80 bg-card p-4 shadow-sm",
+        "rounded-lg border border-border/80 bg-card shadow-sm",
+        compact ? "space-y-2 p-3" : "space-y-3 p-4",
         className,
       )}
     >
@@ -302,7 +306,9 @@ export function ScmCommercialDocumentsPanel({
             {title}
           </h2>
           {description ? (
-            <p className="text-xs text-muted-foreground">{description}</p>
+            <p className={cn("text-muted-foreground", compact ? "text-[11px] leading-snug" : "text-xs")}>
+              {description}
+            </p>
           ) : null}
         </div>
         {canUpload ? (
@@ -421,6 +427,73 @@ export function ScmCommercialDocumentsPanel({
         <p className="text-xs text-muted-foreground">Loading documents…</p>
       ) : !draftOnly && rows.length === 0 ? (
         <p className="text-xs text-muted-foreground">No documents attached yet.</p>
+      ) : !draftOnly && compact ? (
+        <div className="max-h-52 overflow-auto rounded-md border border-border">
+          <table className="w-full min-w-[520px] text-left text-xs">
+            <thead className="sticky top-0 z-[1] border-b border-border bg-muted/60 text-[10px] uppercase tracking-wide text-muted-foreground">
+              <tr>
+                <th className="px-2 py-1.5 font-medium">File</th>
+                <th className="px-2 py-1.5 font-medium">Source</th>
+                <th className="px-2 py-1.5 font-medium">Category</th>
+                <th className="px-2 py-1.5 text-right font-medium"> </th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((row) => (
+                <tr key={row.id} className="border-b border-border/60 last:border-b-0">
+                  <td className="max-w-[220px] px-2 py-1.5">
+                    <p className="truncate font-medium text-foreground" title={row.file_name}>
+                      {row.file_name}
+                    </p>
+                    {row.remarks ? (
+                      <p className="truncate text-[10px] text-muted-foreground" title={row.remarks}>
+                        {row.remarks}
+                      </p>
+                    ) : null}
+                  </td>
+                  <td className="px-2 py-1.5 whitespace-nowrap">
+                    <Badge variant="secondary" className="h-5 px-1.5 text-[10px] capitalize">
+                      {sourceLabel(row.entity_type)}
+                    </Badge>
+                  </td>
+                  <td className="px-2 py-1.5 whitespace-nowrap">
+                    <Badge variant="outline" className="h-5 px-1.5 text-[10px] capitalize">
+                      {categoryLabel(row.category)}
+                    </Badge>
+                  </td>
+                  <td className="px-2 py-1.5">
+                    <div className="flex items-center justify-end gap-0.5">
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="ghost"
+                        className="size-7 cursor-pointer p-0 transition-colors duration-200"
+                        disabled={openingId === row.id || downloadingId === row.id}
+                        aria-label={`View ${row.file_name}`}
+                        title="View"
+                        onClick={() => void onOpen(row)}
+                      >
+                        <Eye className="size-3.5" />
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="ghost"
+                        className="size-7 cursor-pointer p-0 transition-colors duration-200"
+                        disabled={openingId === row.id || downloadingId === row.id}
+                        aria-label={`Download ${row.file_name}`}
+                        title="Download"
+                        onClick={() => void onDownload(row)}
+                      >
+                        <Download className="size-3.5" />
+                      </Button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       ) : !draftOnly ? (
         <ul className="space-y-1.5">
           {rows.map((row) => (

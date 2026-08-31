@@ -72,8 +72,11 @@ export function resolveVendorDisplayName(input: {
   vendor_name?: string | null;
   distributor_name?: string | null;
   oem_name?: string | null;
+  open_distributor_names?: string[] | null;
 }): string {
   const distributor = input.distributor_name?.trim();
   if (distributor) return distributor;
+  const open = (input.open_distributor_names || []).map((n) => n.trim()).filter(Boolean);
+  if (open.length > 0) return open.join(", ");
   return "—";
 }

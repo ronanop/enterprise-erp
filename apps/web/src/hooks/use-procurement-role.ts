@@ -1,36 +1,33 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useMemo } from "react";
 
-import {
-  PROCUREMENT_ROLE_EVENT,
-  readProcurementRole,
-  toggleProcurementRole,
-  writeProcurementRole,
-  type ProcurementRole,
-} from "@/lib/procurement-role";
+import { useAuthUser } from "@/hooks/use-auth-user";
+import { canManageModuleUsers } from "@/lib/module-access";
+import type { ProcurementRole } from "@/lib/procurement-role";
 
+/**
+ * Procurement admin is the ERP-assigned module admin for `procurement`
+ * (Organization → module users), not a local Switch to Admin toggle.
+ */
 export function useProcurementRole() {
-  const [role, setRole] = useState<ProcurementRole>("user");
-  const [ready, setReady] = useState(false);
+  const { user, adminModuleKeys, loading } = useAuthUser();
 
-  useEffect(() => {
-    const sync = () => setRole(readProcurementRole());
-    sync();
-    setReady(true);
-    window.addEventListener(PROCUREMENT_ROLE_EVENT, sync);
-    window.addEventListener("storage", sync);
-    return () => {
-      window.removeEventListener(PROCUREMENT_ROLE_EVENT, sync);
-      window.removeEventListener("storage", sync);
-    };
-  }, []);
+  const isAdmin = useMemo(
+    () => canManageModuleUsers("procurement", adminModuleKeys, user?.userType),
+    [adminModuleKeys, user?.userType],
+  );
 
-  const setProcurementRole = useCallback((next: ProcurementRole) => {
-    writeProcurementRole(next);
-  }, []);
+  const role: ProcurementRole = isAdmin ? "admin" : "user";
+  const ready = !loading;
 
-  const switchRole = useCallback(() => toggleProcurementRole(), []);
-
-  return { role, ready, isAdmin: role === "admin", setProcurementRole, switchRole };
+  return {
+    role,
+    ready,
+    isAdmin,
+    /** @deprecated Local role override removed — ERP module admin assignment is the source of truth. */
+    setProcurementRole: (_next: ProcurementRole) => {},
+    /** @deprecated Local role toggle removed — use Organization module admin assignment. */
+    switchRole: () => role,
+  };
 }

@@ -31,6 +31,7 @@ import {
   getPurchaseOrder,
   getScmOvfPreview,
   listOrderReceiptBatches,
+  listProcurementInventory,
   listVendorOptions,
   type ProcOrder,
   type ScmOvfPreview,
@@ -39,9 +40,11 @@ import {
 } from "@/services/procurement-service";
 import {
   fullPoChallanLines,
+  mergeGrnInventoryStockToChallanLines,
   mergeInventoryAndPoChallanLines,
   mergeOvfStockAllocationsToChallanLines,
   mergeSelectedGrnChallanLines,
+  ovfInventorySelectionToChallanLines,
   receiptBatchKey,
   resolveChallanReceiptBatches,
   type ChallanItemsSourceMode,
@@ -54,6 +57,7 @@ import {
 import {
   applyCustomerPoToChallanFields,
   buildChallanPrefillHeader,
+  resolveCustomerPoFields,
   formatPoNumberDateLine,
   resolveChallanTaxSupplyStates,
   resolveEntityPdfBlock,
@@ -71,10 +75,10 @@ import {
   type GrnChallanKind,
 } from "@/utils/delivery-challan-storage";
 import { resolveChallanBillStatus } from "@/utils/delivery-challan-bill";
-import { patchPendingGrnChallan } from "@/utils/grn-challan-pending";
+import { patchPendingGrnChallan, upsertPendingGrnChallan } from "@/utils/grn-challan-pending";
 import { deliveryStatusUpdateHref } from "@/utils/delivery-status-routes";
 import { ensureDeliveryStatusForChallan } from "@/utils/delivery-status-storage";
-import { ovfStockSourceKey } from "@/utils/ovf-stock";
+import { ovfGrnStockSourceKey, ovfStockSourceKey, takeOvfInventoryShipSelection } from "@/utils/ovf-stock";
 
 function todayIso(): string {
   return new Date().toISOString().slice(0, 10);
@@ -132,9 +136,12 @@ export function DeliveryChallanFormPage({ challanId, embedded }: DeliveryChallan
   const isOvfShip =
     Boolean(ovfIdParam?.trim()) &&
     (ovfShipSource === "ovf_stock" ||
+      ovfShipSource === "ovf_grn_stock" ||
       ovfShipSource === "ovf_po" ||
       ovfShipSource === "ovf_combined");
   const isOvfStock = Boolean(ovfIdParam?.trim()) && ovfShipSource === "ovf_stock";
+  const isOvfGrnStock = Boolean(ovfIdParam?.trim()) && ovfShipSource === "ovf_grn_stock";
+  const isOvfPrefilledLines = isOvfStock || isOvfGrnStock;
   const returnToParam = searchParams.get("returnTo");
   const returnTo = useMemo(() => safeProcurementReturnTo(returnToParam), [returnToParam]);
   const backHref = resolveChallanModuleExitHref(returnTo);
@@ -171,6 +178,7 @@ export function DeliveryChallanFormPage({ challanId, embedded }: DeliveryChallan
   const [receiverSignature, setReceiverSignature] = useState("");
   const [itemsSourceMode, setItemsSourceMode] = useState<ChallanItemsSourceMode>("full_po");
   const [selectedGrnKeys, setSelectedGrnKeys] = useState<string[]>([]);
+  const [linkedGrnNumbers, setLinkedGrnNumbers] = useState<string[]>([]);
   const [grnKind, setGrnKind] = useState<GrnChallanKind | "">("");
   const [invoiceNumber, setInvoiceNumber] = useState("");
   const [invoiceDate, setInvoiceDate] = useState("");
@@ -219,11 +227,13 @@ export function DeliveryChallanFormPage({ challanId, embedded }: DeliveryChallan
   );
 
   const selectedGrnNumbers = useMemo(() => {
+    if (linkedGrnNumbers.length > 0) return linkedGrnNumbers;
     const keySet = new Set(selectedGrnKeys);
     return effectiveGrnBatches
       .filter((batch) => keySet.has(receiptBatchKey(batch)))
-      .map((batch) => batch.grn_number);
-  }, [effectiveGrnBatches, selectedGrnKeys]);
+      .map((batch) => batch.grn_number)
+      .filter(Boolean);
+  }, [effectiveGrnBatches, linkedGrnNumbers, selectedGrnKeys]);
 
   const poNumberDatePdf = useMemo(
     () => formatPoNumberDateLine(purchaseOrderNumber, poDate),
@@ -386,6 +396,9 @@ export function DeliveryChallanFormPage({ challanId, embedded }: DeliveryChallan
     setReceiverSignature(saved.receiverSignature);
     setItemsSourceMode(saved.itemsSourceMode ?? "full_po");
     setSelectedGrnKeys(saved.selectedGrnKeys ?? []);
+    setLinkedGrnNumbers(
+      (saved.selectedGrnNumbers || []).map((n) => String(n ?? "").trim()).filter(Boolean),
+    );
     setGrnKind(saved.grnKind ?? "");
     setInvoiceNumber(saved.invoiceNumber ?? "");
     setInvoiceDate(saved.invoiceDate ?? "");
@@ -403,10 +416,41 @@ export function DeliveryChallanFormPage({ challanId, embedded }: DeliveryChallan
       if (saved.orderId) {
         void (async () => {
           try {
-            const { order, batches, ovf } = await loadOrderContext(saved.orderId!);
+            const [{ order, batches, ovf }, inventory] = await Promise.all([
+              loadOrderContext(saved.orderId!),
+              listProcurementInventory().catch(() => []),
+            ]);
             setLoadedOrder(order);
             setOvfContext(ovf);
             setGrnBatches(batches);
+            const fromSaved = (saved.selectedGrnNumbers || [])
+              .map((n) => String(n ?? "").trim())
+              .filter(Boolean);
+            const fromBatches = batches
+              .map((batch) => (batch.grn_number || "").trim())
+              .filter(Boolean);
+            const fromInventory = inventory
+              .filter((row) => row.source === "grn" && row.order_id === saved.orderId)
+              .map((row) => (row.grn_number || "").trim())
+              .filter(Boolean);
+            const resolvedGrns = [
+              ...new Set(
+                fromSaved.length > 0
+                  ? fromSaved
+                  : fromBatches.length > 0
+                    ? fromBatches
+                    : fromInventory,
+              ),
+            ];
+            if (resolvedGrns.length > 0) {
+              setLinkedGrnNumbers(resolvedGrns);
+              if (fromSaved.join(", ") !== resolvedGrns.join(", ")) {
+                upsertDeliveryChallan({
+                  ...saved,
+                  selectedGrnNumbers: resolvedGrns,
+                });
+              }
+            }
             const corrected = applyCustomerPoToChallanFields(
               {
                 purchaseOrderNumber: saved.purchaseOrderNumber,
@@ -427,6 +471,8 @@ export function DeliveryChallanFormPage({ challanId, embedded }: DeliveryChallan
                 purchaseOrderNumber: corrected.purchaseOrderNumber,
                 poDate: corrected.poDate,
                 poNumberDate: corrected.poNumberDate || saved.poNumberDate,
+                selectedGrnNumbers:
+                  resolvedGrns.length > 0 ? resolvedGrns : saved.selectedGrnNumbers,
               });
             }
           } catch {
@@ -486,8 +532,74 @@ export function DeliveryChallanFormPage({ challanId, embedded }: DeliveryChallan
             setOrderId(ovfIdParam);
             setItemsSourceMode("selected_grns");
             setSelectedGrnKeys([ovfStockSourceKey(ovfIdParam)]);
-            const allocLines = mergeOvfStockAllocationsToChallanLines(ovf.stock_allocations);
+            const shipSelection = takeOvfInventoryShipSelection(ovfIdParam);
+            const allocLines = shipSelection
+              ? ovfInventorySelectionToChallanLines(shipSelection, ovf)
+              : mergeOvfStockAllocationsToChallanLines(ovf.stock_allocations, ovf);
             setLines(allocLines.length > 0 ? allocLines : [emptyChallanLine()]);
+            return;
+          }
+
+          if (ovfShipSource === "ovf_grn_stock") {
+            const orderIdForGrn = (orderIdParam || ovf.purchase_order_id || "").trim();
+            if (!orderIdForGrn) {
+              setLoadError("Link a purchase order before shipping GRN warehouse stock.");
+              setLines([emptyChallanLine()]);
+              return;
+            }
+            const shipSelection = takeOvfInventoryShipSelection(ovfIdParam);
+            const [{ order, vendor, batches }, inventory] = await Promise.all([
+              loadOrderContext(orderIdForGrn),
+              listProcurementInventory(),
+            ]);
+            if (cancelled) return;
+            setOrderId(orderIdForGrn);
+            setLoadedOrder(order);
+            setGrnBatches(batches);
+            if (vendor?.label) setVendorName(vendor.label);
+            const customerPo = resolveCustomerPoFields(order, ovf);
+            setPurchaseOrderNumber(customerPo.poNumber);
+            setPoDate(customerPo.poDate || (ovf.po_date || "").slice(0, 10));
+            setItemsSourceMode("selected_grns");
+            setSelectedGrnKeys([]);
+            const grnNumsFromSelection = [
+              ...new Set(
+                (shipSelection?.lines || [])
+                  .map((line) => {
+                    const fromLine = (line.grn_number || "").trim();
+                    if (fromLine) return fromLine;
+                    if (!line.stock_unit_id) return "";
+                    const inv = inventory.find(
+                      (row) => String(row.stock_unit_id) === String(line.stock_unit_id),
+                    );
+                    return (inv?.grn_number || "").trim();
+                  })
+                  .filter(Boolean),
+              ),
+            ];
+            const grnNumsFromInventory = [
+              ...new Set(
+                inventory
+                  .filter(
+                    (row) =>
+                      row.source === "grn" &&
+                      row.order_id === orderIdForGrn &&
+                      (Number(row.received_quantity) || 0) > 0,
+                  )
+                  .map((row) => (row.grn_number || "").trim())
+                  .filter(Boolean),
+              ),
+            ];
+            setLinkedGrnNumbers(
+              grnNumsFromSelection.length > 0 ? grnNumsFromSelection : grnNumsFromInventory,
+            );
+            const grnStockLines = shipSelection
+              ? ovfInventorySelectionToChallanLines(shipSelection, ovf, inventory)
+              : mergeGrnInventoryStockToChallanLines(inventory, orderIdForGrn, ovf, order);
+            setLines(grnStockLines.length > 0 ? grnStockLines : [emptyChallanLine()]);
+            if (grnStockLines.length === 0) {
+              setLoadError("No GRN warehouse stock found for this purchase order.");
+            }
             return;
           }
 
@@ -507,9 +619,9 @@ export function DeliveryChallanFormPage({ challanId, embedded }: DeliveryChallan
           setLoadedOrder(order);
           setGrnBatches(batches);
           if (vendor?.label) setVendorName(vendor.label);
-          const companyPo = order.company_po_number?.trim() || order.document_number || "";
-          if (companyPo) setPurchaseOrderNumber(companyPo);
-          if (order.document_date) setPoDate(String(order.document_date).slice(0, 10));
+          const customerPo = resolveCustomerPoFields(order, ovf);
+          setPurchaseOrderNumber(customerPo.poNumber);
+          setPoDate(customerPo.poDate || (ovf.po_date || "").slice(0, 10));
 
           if (ovfShipSource === "ovf_po") {
             setItemsSourceMode("full_po");
@@ -642,6 +754,14 @@ export function DeliveryChallanFormPage({ challanId, embedded }: DeliveryChallan
     });
   }
 
+  function resolveSaveGrnKeys(): string[] {
+    if (selectedGrnKeys.length > 0) return selectedGrnKeys;
+    if (isOvfGrnStock && ovfIdParam?.trim()) {
+      return [ovfGrnStockSourceKey(ovfIdParam.trim(), recordId)];
+    }
+    return selectedGrnKeys;
+  }
+
   function buildSavePayload() {
     const entity = resolveEntityPdfBlock(
       loadedOrder,
@@ -676,7 +796,7 @@ export function DeliveryChallanFormPage({ challanId, embedded }: DeliveryChallan
       deliveredBy: deliveredBy.trim(),
       vendorName: vendorName.trim(),
       itemsSourceMode,
-      selectedGrnKeys,
+      selectedGrnKeys: resolveSaveGrnKeys(),
       selectedGrnNumbers,
       grnKind: grnKind || undefined,
       invoiceNumber: invoiceNumber.trim() || undefined,
@@ -728,14 +848,45 @@ export function DeliveryChallanFormPage({ challanId, embedded }: DeliveryChallan
           }
         : { billStatus: "unbilled" },
     );
-    if (orderId && selectedGrnKeys[0]) {
-      const gk = grnKind === "billing" || grnKind === "delivery_challan" ? grnKind : undefined;
-      if (gk) {
-        patchPendingGrnChallan(orderId, selectedGrnKeys[0], gk, {
+    const gk = grnKind === "billing" || grnKind === "delivery_challan" ? grnKind : undefined;
+    const saveKeys = resolveSaveGrnKeys();
+    const batchKey = saveKeys[0] || null;
+    if (gk && batchKey) {
+      let pendingOrderId = orderId;
+      let source: "grn" | "ovf_stock" | "ovf_grn_stock" = "grn";
+      if (batchKey.startsWith("ovf-stock:")) {
+        source = "ovf_stock";
+        pendingOrderId = ovfIdParam?.trim() || orderId;
+      } else if (batchKey.startsWith("ovf-grn-stock:")) {
+        source = "ovf_grn_stock";
+      }
+      if (pendingOrderId) {
+        upsertPendingGrnChallan({
+          orderId: pendingOrderId,
+          batchKey,
+          grnNumber:
+            selectedGrnNumbers.length > 0
+              ? selectedGrnNumbers.join(", ")
+              : source === "ovf_stock"
+                ? "—"
+                : batchKey.startsWith("ovf-")
+                  ? "—"
+                  : batchKey,
+          purchaseOrderNumber: purchaseOrderNumber.trim(),
+          vendorName: vendorName.trim(),
+          customerName: customerName.trim(),
+          kind: gk,
           status: "saved",
-          docNumber: grnKind === "billing" ? invoiceNumber.trim() || challanNumber.trim() : challanNumber.trim(),
-          docDate: grnKind === "billing" ? invoiceDate.trim() || challanDate.trim() : challanDate.trim(),
+          docNumber:
+            grnKind === "billing"
+              ? invoiceNumber.trim() || challanNumber.trim()
+              : challanNumber.trim(),
+          docDate:
+            grnKind === "billing"
+              ? invoiceDate.trim() || challanDate.trim()
+              : challanDate.trim(),
           savedRecordId: recordId,
+          source,
         });
       }
     }
@@ -923,11 +1074,13 @@ export function DeliveryChallanFormPage({ challanId, embedded }: DeliveryChallan
               className="h-8"
             />
           </FinanceField>
-          {selectedGrnNumbers.length > 0 ? (
-            <FinanceField label="GRN number">
-              <Input value={selectedGrnNumbers.join(", ")} readOnly className="h-8 bg-muted/30" />
-            </FinanceField>
-          ) : null}
+          <FinanceField label="GRN number">
+            <Input
+              value={selectedGrnNumbers.length > 0 ? selectedGrnNumbers.join(", ") : "—"}
+              readOnly
+              className="h-8 bg-muted/30"
+            />
+          </FinanceField>
         </div>
         {grnKind === "billing" ? (
           <div className="mt-3 grid gap-3 sm:grid-cols-2">
@@ -1090,7 +1243,7 @@ export function DeliveryChallanFormPage({ challanId, embedded }: DeliveryChallan
                       title="Remove"
                       className="inline-flex size-8 cursor-pointer items-center justify-center rounded-md text-destructive transition-colors duration-200 hover:bg-destructive/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-40"
                       onClick={() => removeLine(row.id)}
-                      disabled={isOvfStock}
+                      disabled={isOvfPrefilledLines}
                     >
                       <Trash2 className="size-4" aria-hidden />
                     </button>
@@ -1106,7 +1259,7 @@ export function DeliveryChallanFormPage({ challanId, embedded }: DeliveryChallan
           size="sm"
           className="mt-2 h-7 cursor-pointer px-2 text-xs"
           onClick={addLine}
-          disabled={isOvfStock}
+          disabled={isOvfPrefilledLines}
         >
           Add item
         </Button>

@@ -350,7 +350,6 @@ function FilePickRow({
       <input
         id={inputId}
         type="file"
-        accept=".pdf,.png,.jpg,.jpeg,.webp"
         className="sr-only"
         onChange={(e) => {
           onPick(e.target.files);

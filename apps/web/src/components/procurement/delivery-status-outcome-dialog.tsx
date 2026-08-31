@@ -186,7 +186,6 @@ export function DeliveryStatusOutcomeDialog({
                   <input
                     id="outcome-pod-document"
                     type="file"
-                    accept=".pdf,.png,.jpg,.jpeg,.webp"
                     className="sr-only"
                     onChange={(e) => {
                       void onPickPod(e.target.files);

@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { ClipboardList, FolderInput, MapPinned } from "lucide-react";
 
 import { FinanceField } from "@/components/finance/journals/finance-form-field";
@@ -64,7 +63,6 @@ type AutoFields = {
 };
 
 export function InstallationDetailPage({ challanId }: { challanId: string }) {
-  const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [banner, setBanner] = useState<string | null>(null);
@@ -152,6 +150,7 @@ export function InstallationDetailPage({ challanId }: { challanId: string }) {
         contactPerson: install.contactPerson,
         contactNumber: install.contactNumber,
         rackQuantity: install.rackQuantity,
+        serverQuantity: install.serverQuantity,
         serverType: install.serverType,
       });
       setShared({
@@ -183,7 +182,10 @@ export function InstallationDetailPage({ challanId }: { challanId: string }) {
           "",
         quantity: challanDeliveredQuantity(challan),
         customerName: status.customerName || challan.customerName || "",
-        customerPoNumber: status.customerPoNumber || "",
+        customerPoNumber:
+          (status.customerPoNumber || "").trim() ||
+          (challan.purchaseOrderNumber || "").trim() ||
+          "",
         customerPoDate,
         challanNumber: challan.challanNumber?.trim() || "",
         invoiceNumber:
@@ -272,6 +274,7 @@ export function InstallationDetailPage({ challanId }: { challanId: string }) {
         `Contact: ${manual.contactPerson} (${manual.contactNumber})`,
         `Server type: ${manual.serverType}`,
         `Rack quantity: ${manual.rackQuantity}`,
+        `Server quantity: ${manual.serverQuantity}`,
         auto.oemName ? `OEM: ${auto.oemName}` : null,
         auto.deliveredDate ? `Delivered: ${auto.deliveredDate}` : null,
       ]
@@ -290,11 +293,15 @@ export function InstallationDetailPage({ challanId }: { challanId: string }) {
         serverType: manual.serverType.trim(),
         remarks,
         companyPoNumber:
-          order?.company_po_number || prefill?.company_po_number || auto.poNumber || null,
-        documentNumber: order?.document_number || auto.poNumber || "PO",
+          order?.company_po_number || prefill?.company_po_number || auto.companyPoNumber || null,
+        documentNumber: order?.document_number || auto.companyPoNumber || "PO",
         documentDate: order?.document_date || new Date().toISOString().slice(0, 10),
         customerName: order?.customer_name || prefill?.customer_name || auto.customerName || null,
-        customerPoNumber: order?.customer_po_number || prefill?.customer_po_number || null,
+        customerPoNumber:
+          (auto.customerPoNumber || "").trim() ||
+          (prefill?.customer_po_number || "").trim() ||
+          (order?.customer_po_number || "").trim() ||
+          null,
         vendorId: order?.vendor_id || "",
         totalAmount: Number(order?.total_amount || order?.vendor_total || 0),
         customerTotal: Number(order?.customer_total || 0),
@@ -309,8 +316,7 @@ export function InstallationDetailPage({ challanId }: { challanId: string }) {
         sharedToProject: true,
         projectHref: linked.projectHref,
       });
-      setBanner("Shared to Projects PO Queue. Create the project from there.");
-      router.push("/projects/po-queue");
+      setBanner("Shared to Projects PO Queue. Open Projects → PO Queue when ready to create the project.");
     } catch (err) {
       setError(
         err instanceof ApiClientError ? err.message : "Failed to share to Project module",
@@ -430,20 +436,11 @@ export function InstallationDetailPage({ challanId }: { challanId: string }) {
             subtitle="Details save automatically as you type. Share sends the PO to Projects → PO Queue."
           >
             <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-              <FinanceField
-                label="Project name *"
-                error={fieldErrors.projectName}
-                hint={
-                  crmProjectTitle
-                    ? "Auto-filled from CRM project title."
-                    : undefined
-                }
-              >
+              <FinanceField label="Project name *" error={fieldErrors.projectName}>
                 <Input
                   value={manual.projectName}
                   onChange={(e) => patchManual({ projectName: e.target.value })}
                   className="h-8"
-                  placeholder={crmProjectTitle ? "From CRM" : "Project name"}
                   disabled={shared.sharedToProject || Boolean(crmProjectTitle)}
                   readOnly={Boolean(crmProjectTitle)}
                 />
@@ -453,7 +450,6 @@ export function InstallationDetailPage({ challanId }: { challanId: string }) {
                   value={manual.circleName}
                   onChange={(e) => patchManual({ circleName: e.target.value })}
                   className="h-8"
-                  placeholder="Circle"
                   disabled={shared.sharedToProject}
                 />
               </FinanceField>
@@ -462,7 +458,6 @@ export function InstallationDetailPage({ challanId }: { challanId: string }) {
                   value={manual.site}
                   onChange={(e) => patchManual({ site: e.target.value })}
                   className="h-8"
-                  placeholder="Site name / location"
                   disabled={shared.sharedToProject}
                 />
               </FinanceField>
@@ -471,7 +466,6 @@ export function InstallationDetailPage({ challanId }: { challanId: string }) {
                   value={manual.contactPerson}
                   onChange={(e) => patchManual({ contactPerson: e.target.value })}
                   className="h-8"
-                  placeholder="Name"
                   disabled={shared.sharedToProject}
                 />
               </FinanceField>
@@ -480,32 +474,40 @@ export function InstallationDetailPage({ challanId }: { challanId: string }) {
                   value={manual.contactNumber}
                   onChange={(e) => patchManual({ contactNumber: e.target.value })}
                   className="h-8"
-                  placeholder="Phone"
                   disabled={shared.sharedToProject}
                 />
               </FinanceField>
               <FinanceField label="Rack quantity *" error={fieldErrors.rackQuantity}>
                 <Input
-                  value={manual.rackQuantity}
+                  value={manual.rackQuantity ?? ""}
                   onChange={(e) =>
                     patchManual({ rackQuantity: e.target.value.replace(/[^\d]/g, "") })
                   }
                   className="h-8"
                   inputMode="numeric"
-                  placeholder="0"
+                  disabled={shared.sharedToProject}
+                />
+              </FinanceField>
+              <FinanceField label="Server quantity *" error={fieldErrors.serverQuantity}>
+                <Input
+                  value={manual.serverQuantity ?? ""}
+                  onChange={(e) =>
+                    patchManual({ serverQuantity: e.target.value.replace(/[^\d]/g, "") })
+                  }
+                  className="h-8"
+                  inputMode="numeric"
                   disabled={shared.sharedToProject}
                 />
               </FinanceField>
               <FinanceField
                 label="Server type *"
                 error={fieldErrors.serverType}
-                className="sm:col-span-2 lg:col-span-3"
+                className="sm:col-span-2 lg:col-span-2"
               >
                 <Input
-                  value={manual.serverType}
+                  value={manual.serverType ?? ""}
                   onChange={(e) => patchManual({ serverType: e.target.value })}
                   className="h-8"
-                  placeholder="Server / hardware type"
                   disabled={shared.sharedToProject}
                 />
               </FinanceField>

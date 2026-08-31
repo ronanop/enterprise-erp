@@ -1,6 +1,7 @@
 import {
   getScmOvfPreview,
   type ProcOrder,
+  type ProcurementInventoryRow,
   type ScmOvfPreview,
   type ScmOvfStockAllocation,
   type ScmReceiptBatch,
@@ -20,9 +21,37 @@ import {
   type GrnChallanKind,
 } from "@/utils/delivery-challan-storage";
 import { ensureDeliveryStatusForChallan } from "@/utils/delivery-status-storage";
-import { ovfProductKey } from "@/utils/ovf-stock";
+import { ovfProductKey, ovfVendorDescriptionByProduct } from "@/utils/ovf-stock";
+import type { OvfInventoryShipSelection } from "@/utils/ovf-stock";
 
 export type ChallanItemsSourceMode = "full_po" | "selected_grns";
+
+function buildChallanDescriptionLookup(
+  ovf: ScmOvfPreview | null | undefined,
+  order?: ProcOrder | null,
+): Map<string, string> {
+  const map = ovfVendorDescriptionByProduct(
+    ovf?.vendor_lines || [],
+    ovf?.customer_lines,
+  );
+  for (const ln of order?.lines || []) {
+    const key = ovfProductKey(ln.product_name || ln.product_code || "");
+    if (!key || map.has(key)) continue;
+    const desc = (ln.description || "").trim();
+    if (desc) map.set(key, desc);
+  }
+  return map;
+}
+
+function resolveChallanProductDescription(
+  product: string,
+  descByProduct: Map<string, string>,
+  inventoryDescription?: string | null,
+): string {
+  const fromCatalog = (descByProduct.get(ovfProductKey(product)) || "").trim();
+  if (fromCatalog) return fromCatalog;
+  return (inventoryDescription || "").trim();
+}
 
 export function receiptBatchKey(batch: ScmReceiptBatch): string {
   if (batch.id) return String(batch.id);
@@ -169,7 +198,9 @@ export function fullPoChallanLines(
 /** One challan line per product — stock units with the same name are summed. */
 export function mergeOvfStockAllocationsToChallanLines(
   allocations: ScmOvfStockAllocation[] | null | undefined,
+  ovf?: ScmOvfPreview | null,
 ): DeliveryChallanLine[] {
+  const descByProduct = buildChallanDescriptionLookup(ovf);
   const byProduct = new Map<
     string,
     { product: string; qty: number; serials: string[] }
@@ -201,13 +232,106 @@ export function mergeOvfStockAllocationsToChallanLines(
     return {
       id: crypto.randomUUID(),
       product,
-      itemName: serialText
-        ? `From inventory · ${serialText}`
-        : "From inventory",
+      itemName: resolveChallanProductDescription(product, descByProduct),
       quantitySent: String(qty),
       hsnSac: "",
-      assetNo: serials.length === 1 ? serials[0] : "-",
+      assetNo: serials.length === 1 ? serials[0] : serials.length > 1 ? serialText : "-",
       rate: "0",
+      shipTo: "",
+    };
+  });
+}
+
+/** Build challan lines from OVF ship-dialog inventory selection. */
+export function ovfInventorySelectionToChallanLines(
+  selection: OvfInventoryShipSelection,
+  ovf?: ScmOvfPreview | null,
+  inventory?: ProcurementInventoryRow[],
+): DeliveryChallanLine[] {
+  const descByProduct = buildChallanDescriptionLookup(ovf);
+  const inventoryByStockUnit = new Map(
+    (inventory || [])
+      .filter((row) => row.stock_unit_id)
+      .map((row) => [String(row.stock_unit_id), row]),
+  );
+  return selection.lines
+    .filter((row) => row.qty > 0)
+    .map((row) => {
+      const serial = (row.serial_number || "").trim();
+      const serialLabel =
+        serial && serial !== "—" && serial !== "-" ? serial : "";
+      const invRow = row.stock_unit_id
+        ? inventoryByStockUnit.get(String(row.stock_unit_id))
+        : undefined;
+      return {
+        id: crypto.randomUUID(),
+        product: row.product_name,
+        itemName: resolveChallanProductDescription(
+          row.product_name,
+          descByProduct,
+          invRow?.description,
+        ),
+        quantitySent: String(row.qty),
+        hsnSac: "",
+        assetNo: serialLabel || "-",
+        rate: String(row.unit_cost || 0),
+        shipTo: "",
+      };
+    });
+}
+
+/** Warehouse units received on PO GRN and held in inventory (stock split on GRN). */
+export function mergeGrnInventoryStockToChallanLines(
+  inventory: ProcurementInventoryRow[],
+  orderId: string,
+  ovf?: ScmOvfPreview | null,
+  order?: ProcOrder | null,
+): DeliveryChallanLine[] {
+  const descByProduct = buildChallanDescriptionLookup(ovf, order);
+  const byProduct = new Map<
+    string,
+    { product: string; qty: number; serials: string[]; rate: number; description: string }
+  >();
+  for (const row of inventory) {
+    if (row.source !== "grn") continue;
+    if (row.order_id !== orderId) continue;
+    const product = (row.product_name || "").trim();
+    if (!product) continue;
+    const qty = Number(row.received_quantity) || 0;
+    if (qty <= 0) continue;
+    const key = ovfProductKey(product);
+    const serial = (row.serial_number || "").trim();
+    const rate = Number(row.unit_cost) || 0;
+    const rowDescription = (row.description || "").trim();
+    const prev = byProduct.get(key);
+    if (prev) {
+      prev.qty += qty;
+      if (serial && serial !== "—" && serial !== "-" && !prev.serials.includes(serial)) {
+        prev.serials.push(serial);
+      }
+      if (!prev.rate && rate) prev.rate = rate;
+      if (!prev.description && rowDescription) prev.description = rowDescription;
+    } else {
+      byProduct.set(key, {
+        product,
+        qty,
+        serials:
+          serial && serial !== "—" && serial !== "-" ? [serial] : [],
+        rate,
+        description: rowDescription,
+      });
+    }
+  }
+  return [...byProduct.values()].map(({ product, qty, serials, rate, description }) => {
+    const serialText = serials.join(", ");
+    return {
+      id: crypto.randomUUID(),
+      product,
+      itemName: resolveChallanProductDescription(product, descByProduct, description),
+      quantitySent: String(qty),
+      hsnSac: "",
+      assetNo: serials.length === 1 ? serials[0] : serials.length > 1 ? serialText : "-",
+      rate: String(rate || 0),
       shipTo: "",
     };
   });
@@ -219,7 +343,7 @@ export function mergeInventoryAndPoChallanLines(
   order: ProcOrder | null,
   ovf: ScmOvfPreview | null,
 ): DeliveryChallanLine[] {
-  const stock = mergeOvfStockAllocationsToChallanLines(allocations);
+  const stock = mergeOvfStockAllocationsToChallanLines(allocations, ovf);
   const po = order
     ? fullPoChallanLines(order, "", ovf).map((ln) => ({
         ...ln,

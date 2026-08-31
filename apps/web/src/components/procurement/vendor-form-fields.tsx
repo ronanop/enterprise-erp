@@ -187,7 +187,7 @@ export function buildVendorAddressEntryFromForm(
   };
 }
 
-function validateAddressBlock(
+export function validateAddressBlock(
   block: VendorFormAddressBlock,
   index: number,
 ): string | null {
@@ -308,7 +308,7 @@ function PostalAddressFields({
   );
 }
 
-function VendorAddressBlockFields({
+export function VendorAddressBlockFields({
   index,
   block,
   onChange,
@@ -474,7 +474,7 @@ export function VendorFormFields({
             value={value.vendorName}
             onChange={(e) => onChange({ ...value, vendorName: e.target.value })}
             className="h-9"
-            placeholder={vendorNamePlaceholder}
+            placeholder={vendorNamePlaceholder === "" ? undefined : vendorNamePlaceholder}
             disabled={disabled}
           />
         </FinanceField>

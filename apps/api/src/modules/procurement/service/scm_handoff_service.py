@@ -451,6 +451,9 @@ class ScmHandoffService:
                 order = unused.pop(match_idx)
                 group["has_po"] = True
                 group["purchase_order_id"] = order.id
+                group["document_number"] = order.document_number
+                group["company_po_number"] = order.company_po_number
+                group["status"] = order.status
         # Any leftover POs cover remaining unmatched distributor groups so a
         # created PO cannot leave the OVF stuck Open due to name mismatch.
         for group in grouped.values():
@@ -459,6 +462,9 @@ class ScmHandoffService:
             order = unused.pop(0)
             group["has_po"] = True
             group["purchase_order_id"] = order.id
+            group["document_number"] = order.document_number
+            group["company_po_number"] = order.company_po_number
+            group["status"] = order.status
         return list(grouped.values())
 
     def _open_distributor_names(self, groups: list[dict]) -> list[str]:
@@ -838,6 +844,7 @@ class ScmHandoffService:
         handoff["stock_availability"] = stock["stock_availability"]
         handoff["stock_allocations"] = self._serialize_allocations(allocations)
         handoff["open_distributor_names"] = open_distributors
+        handoff["po_groups"] = po_groups
         handoff["purchase_orders"] = self._serialize_linked_pos(ctx, existing_orders)
         handoff["item_plan"] = self._item_plan(
             handoff.get("vendor_lines") or [],
@@ -1277,7 +1284,7 @@ class ScmHandoffService:
                 raise ConflictException(
                     f"Vendor PO already exists for this distributor ({existing.document_number})"
                 )
-            # Re-edit draft (e.g. after approval reject) — keep company PO number.
+            # Re-edit draft (e.g. after approval reject) — reassign company PO when entity changes.
             code = normalize_entity_code(entity_code)
             self._master.get_vendor(ctx, vendor_id)
             company_id = handoff["company_id"]
@@ -1288,6 +1295,13 @@ class ScmHandoffService:
             terms = payment_terms
             if not terms and handoff.get("vendor_payment_days"):
                 terms = f"Net {int(handoff['vendor_payment_days'])} days"
+
+            previous_entity = (
+                normalize_entity_code(existing.entity_code)
+                if existing.entity_code
+                else None
+            )
+            entity_changed = previous_entity is not None and previous_entity != code
 
             updated = self._orders.update_order(
                 ctx,
@@ -1319,7 +1333,7 @@ class ScmHandoffService:
                     ctx, order.id, line_payloads
                 )
 
-            if not order.company_po_number:
+            if not order.company_po_number or entity_changed:
                 order.company_po_number = peek_next_company_po_number(
                     self._db, company_id=company_id, entity_code=code
                 )
