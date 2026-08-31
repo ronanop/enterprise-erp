@@ -4,8 +4,7 @@ from __future__ import annotations
 
 import secrets
 import string
-from datetime import datetime, timezone
-from uuid import UUID, uuid4
+from uuid import UUID
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -16,8 +15,15 @@ from modules.foundation.models.audit import AuditEvent, AuditLog
 from modules.foundation.models.security import SecRole, SecUser, SecUserOrgScope, SecUserRole
 from modules.foundation.service.audit_service import AuditService
 from modules.foundation.service.user_service import UserService
-from modules.hr.schemas import HrActivityLogRecord, HrAdminPasswordResponse, HrAdminRecord
+from modules.hr.schemas import (
+    HrActivityLogRecord,
+    HrAdminEntityOption,
+    HrAdminPasswordResponse,
+    HrAdminRecord,
+)
 from modules.master_data.models.employee import MasterEmployee
+from modules.organization.models.company import OrgCompany
+from modules.organization.repository.org_scope_repository import OrgScopeRepository
 from security.password import PasswordHasher
 
 HR_ADMIN_ROLE_CODE = "HR_ADMIN"
@@ -62,6 +68,7 @@ class HrSuperadminService:
         self._db = db
         self._users = UserService(db)
         self._audit = AuditService(db)
+        self._scopes = OrgScopeRepository(db)
 
     def _role(self, tenant_id: UUID, code: str) -> SecRole:
         role = self._db.scalar(
@@ -94,6 +101,7 @@ class HrSuperadminService:
         *,
         login_created: bool,
         temporary_password: str | None = None,
+        company_ids: list[UUID] | None = None,
     ) -> HrAdminRecord:
         return HrAdminRecord(
             employee_id=emp.id,
@@ -104,7 +112,97 @@ class HrSuperadminService:
             user_id=user.id,
             login_created=login_created,
             temporary_password=temporary_password,
+            company_ids=company_ids if company_ids is not None else self._company_ids_for_user(user.id),
         )
+
+    def _company_ids_for_user(self, user_id: UUID) -> list[UUID]:
+        rows = self._db.scalars(
+            select(SecUserOrgScope.company_id).where(SecUserOrgScope.user_id == user_id)
+        ).all()
+        unique: list[UUID] = []
+        seen: set[UUID] = set()
+        for company_id in rows:
+            if company_id in seen:
+                continue
+            seen.add(company_id)
+            unique.append(company_id)
+        return unique
+
+    def _resolve_company_ids(
+        self,
+        ctx: TenantContext,
+        emp: MasterEmployee,
+        company_ids: list[UUID] | None,
+        *,
+        require_nonempty: bool = False,
+    ) -> list[UUID]:
+        requested = list(company_ids or [])
+        if not requested and emp.company_id:
+            requested = [emp.company_id]
+        unique: list[UUID] = []
+        seen: set[UUID] = set()
+        for company_id in requested:
+            if company_id in seen:
+                continue
+            seen.add(company_id)
+            unique.append(company_id)
+        if require_nonempty and not unique:
+            raise AppException("Assign at least one entity")
+        for company_id in unique:
+            company = self._db.scalar(
+                select(OrgCompany).where(
+                    OrgCompany.id == company_id,
+                    OrgCompany.tenant_id == ctx.tenant_id,
+                    OrgCompany.is_deleted.is_(False),
+                )
+            )
+            if company is None:
+                raise AppException("Entity not found")
+        return unique
+
+    def _apply_entity_scopes(
+        self,
+        ctx: TenantContext,
+        user_id: UUID,
+        company_ids: list[UUID],
+        *,
+        default_company_id: UUID | None,
+    ) -> list[UUID]:
+        applied = self._scopes.replace_company_scopes(
+            ctx,
+            user_id=user_id,
+            company_ids=company_ids,
+            default_company_id=default_company_id,
+        )
+        self._audit.log_entity_change(
+            tenant_id=ctx.tenant_id,
+            entity_name="sec_user_org_scope",
+            entity_id=user_id,
+            operation="update",
+            performed_by=ctx.user_id,
+            new_value={"company_ids": [str(cid) for cid in applied]},
+        )
+        return applied
+
+    def list_entities(self, ctx: TenantContext) -> list[HrAdminEntityOption]:
+        rows = self._db.scalars(
+            select(OrgCompany)
+            .where(
+                OrgCompany.tenant_id == ctx.tenant_id,
+                OrgCompany.is_deleted.is_(False),
+            )
+            .order_by(OrgCompany.company_name)
+        ).all()
+        return [
+            HrAdminEntityOption(
+                id=row.id,
+                company_code=row.company_code,
+                company_name=row.company_name,
+                legal_name=row.legal_name or "",
+                status=row.status,
+            )
+            for row in rows
+        ]
 
     def list_admins(self, ctx: TenantContext) -> list[HrAdminRecord]:
         role = self._role(ctx.tenant_id, HR_ADMIN_ROLE_CODE)
@@ -121,28 +219,6 @@ class HrSuperadminService:
             .order_by(MasterEmployee.first_name, MasterEmployee.last_name)
         ).all()
         return [self._to_record(emp, user, login_created=False) for emp, user in rows]
-
-    def _ensure_org_scope(self, ctx: TenantContext, user: SecUser, emp: MasterEmployee) -> None:
-        exists = self._db.scalar(
-            select(SecUserOrgScope).where(
-                SecUserOrgScope.user_id == user.id,
-                SecUserOrgScope.company_id == emp.company_id,
-            )
-        )
-        if exists:
-            return
-        self._db.add(
-            SecUserOrgScope(
-                id=uuid4(),
-                tenant_id=ctx.tenant_id,
-                user_id=user.id,
-                company_id=emp.company_id,
-                branch_id=emp.branch_id,
-                is_default=True,
-                assigned_at=datetime.now(timezone.utc),
-                assigned_by=ctx.user_id,
-            )
-        )
 
     def _assert_not_superadmin(self, ctx: TenantContext, user: SecUser) -> None:
         if user.user_type == "super_admin":
@@ -193,7 +269,12 @@ class HrSuperadminService:
             details_json={"by": str(ctx.user_id), "email": user.email},
         )
 
-    def assign(self, ctx: TenantContext, employee_id: UUID) -> HrAdminRecord:
+    def assign(
+        self,
+        ctx: TenantContext,
+        employee_id: UUID,
+        company_ids: list[UUID] | None = None,
+    ) -> HrAdminRecord:
         emp = self._employee(ctx, employee_id)
         role = self._role(ctx.tenant_id, HR_ADMIN_ROLE_CODE)
         login_created = False
@@ -241,10 +322,36 @@ class HrSuperadminService:
             role_id=role.id,
             assigned_by=ctx.user_id,
         )
-        self._ensure_org_scope(ctx, user, emp)
-        return self._to_record(
-            emp, user, login_created=login_created, temporary_password=temporary_password
+        applied = self._apply_entity_scopes(
+            ctx,
+            user.id,
+            self._resolve_company_ids(ctx, emp, company_ids),
+            default_company_id=emp.company_id,
         )
+        return self._to_record(
+            emp,
+            user,
+            login_created=login_created,
+            temporary_password=temporary_password,
+            company_ids=applied,
+        )
+
+    def set_entities(
+        self,
+        ctx: TenantContext,
+        employee_id: UUID,
+        company_ids: list[UUID],
+    ) -> HrAdminRecord:
+        emp = self._employee(ctx, employee_id)
+        user = self._require_hr_admin(ctx, emp)
+        ids = self._resolve_company_ids(ctx, emp, company_ids, require_nonempty=True)
+        previous = set(self._company_ids_for_user(user.id))
+        applied = self._apply_entity_scopes(
+            ctx, user.id, ids, default_company_id=emp.company_id
+        )
+        if previous - set(applied):
+            self._users.revoke_all_sessions(ctx.tenant_id, user.id, revoked_by=ctx.user_id)
+        return self._to_record(emp, user, login_created=False, company_ids=applied)
 
     def reset_password(self, ctx: TenantContext, employee_id: UUID) -> HrAdminPasswordResponse:
         emp = self._employee(ctx, employee_id)
@@ -268,6 +375,19 @@ class HrSuperadminService:
             user_id=emp.user_id,
             role_id=role.id,
             revoked_by=ctx.user_id,
+        )
+        home = [emp.company_id] if emp.company_id else []
+        self._apply_entity_scopes(
+            ctx, emp.user_id, home, default_company_id=emp.company_id
+        )
+        self._users.revoke_all_sessions(
+            ctx.tenant_id, emp.user_id, revoked_by=ctx.user_id
+        )
+        self._audit.log_security_event(
+            tenant_id=ctx.tenant_id,
+            event_type="hr.hr_admin.revoked",
+            user_id=emp.user_id,
+            details_json={"by": str(ctx.user_id), "employee_id": str(emp.id)},
         )
 
     def list_activity(self, ctx: TenantContext, *, limit: int = 200) -> list[HrActivityLogRecord]:

@@ -235,6 +235,10 @@ export type OnboardingInvitation = {
   channel: InvitationChannel;
   resendCount: number;
   lastChannel?: InvitationChannel;
+  /** Auto-generated portal login password (shown to HR for testing; emailed to candidate). */
+  portalPassword?: string;
+  /** Login email captured at create (same as candidate email). */
+  loginEmail?: string;
 };
 
 export type OnboardingCase = {

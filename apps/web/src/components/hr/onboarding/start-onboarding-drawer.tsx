@@ -211,7 +211,7 @@ export function StartOnboardingDrawer({ open, onClose, onSubmit }: Props) {
       onClose={onClose}
       wide
       title="Start Onboarding"
-      description="Create a pre-joining case. The candidate completes their profile via the portal; HR verifies and assigns employment details after joining."
+      description="Create a pre-joining case. An auto-generated password is emailed to the candidate with the login page. They sign in to fill onboarding details; HR can copy the same credentials for testing."
       footer={
         <>
           <Button type="button" variant="outline" className="cursor-pointer" onClick={onClose}>
@@ -246,7 +246,11 @@ export function StartOnboardingDrawer({ open, onClose, onSubmit }: Props) {
         </SetupField>
 
         <div className="grid gap-3 sm:grid-cols-2">
-          <SetupField label="Personal mail" required hint="Candidate personal email (not company email)">
+          <SetupField
+            label="Personal mail"
+            required
+            hint="Candidate login email — an auto-generated password is emailed to this address"
+          >
             <SetupInput
               type="email"
               value={candidateEmail}

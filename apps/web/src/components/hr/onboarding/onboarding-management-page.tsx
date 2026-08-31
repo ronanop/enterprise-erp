@@ -16,6 +16,7 @@ import {
   RefreshCw,
   Search,
   Send,
+  Trash2,
   UserCheck,
   UserPlus,
   Users,
@@ -68,6 +69,7 @@ import {
   activateOnboardingEmployee,
   approveCandidateReview,
   completeOnboarding,
+  clearAllOnboardingCases,
   computeOnboardingStats,
   downloadTextFile,
   exportOnboardingCsv,
@@ -80,6 +82,7 @@ import {
   updateOnboardingAssignment,
   verifyDocument,
   copyInvitationLink,
+  openInvitationMailto,
   type OnboardingDirectory,
   type OnboardingStatBucket,
 } from "@/services/onboarding-management-service";
@@ -212,6 +215,7 @@ export function OnboardingManagementPage() {
   const [docsPoliciesLoading, setDocsPoliciesLoading] = useState(false);
   const [previewDoc, setPreviewDoc] = useState<OnboardingDocument | null>(null);
   const [managementGroups, setManagementGroups] = useState<ManagementGroup[]>([]);
+  const [clearing, setClearing] = useState(false);
 
   async function openEmployeeDetails(employeeKey: string | undefined) {
     if (!employeeKey) return;
@@ -378,19 +382,58 @@ export function OnboardingManagementPage() {
   async function handleStart(input: StartOnboardingInput) {
     try {
       const created = await startOnboarding(input);
-      toast(`Onboarding ${created.caseCode} created`);
+      const sent = await sendInvitation(created.id, "email", input.invitationExpiryDays);
+      const row = sent ?? created;
+      await copyInvitationLink(row);
+      openInvitationMailto(row);
+      toast(
+        `Onboarding ${row.caseCode} created. Login email and password emailed — shown below for testing.`,
+      );
       await load();
-      setInviteCase(created);
+      setInviteCase(row);
     } catch (e) {
       toast(e instanceof Error ? e.message : "Could not start onboarding", "error");
       throw e;
     }
   }
 
+  async function handleClearList() {
+    const count = dir?.cases.length ?? 0;
+    const ok = window.confirm(
+      count
+        ? `Remove all ${count} onboarding case(s) from this company?\n\nThis cannot be undone from the UI. New onboarding can be started afterwards.`
+        : "Clear the onboarding list and local cache?",
+    );
+    if (!ok) return;
+    setClearing(true);
+    try {
+      const result = await clearAllOnboardingCases();
+      setSelected(new Set());
+      setExpandedId(null);
+      setDetailCase(null);
+      setInviteCase(null);
+      setDocsCase(null);
+      toast(result.message || "Onboarding list cleared");
+      await load();
+    } catch (e) {
+      toast(e instanceof Error ? e.message : "Could not clear onboarding list", "error");
+    } finally {
+      setClearing(false);
+    }
+  }
+
   async function handleSend(caseId: string, channel: InvitationChannel, expiryDays: number) {
     const updated = await sendInvitation(caseId, channel, expiryDays);
     if (updated) {
-      toast(`Invitation sent via ${channel}`);
+      await copyInvitationLink(updated);
+      if (channel === "email") {
+        openInvitationMailto(updated);
+      }
+      toast(
+        channel === "email"
+          ? "Invitation emailed with login email and password. Credentials copied for testing."
+          : `Invitation sent via ${channel}. Credentials copied for testing.`,
+      );
       setInviteCase(updated);
       await load();
     } else {
@@ -444,6 +487,16 @@ export function OnboardingManagementPage() {
             >
               <RefreshCw className={cn("size-3.5", loading && "animate-spin")} />
               Refresh
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              className="cursor-pointer text-destructive hover:bg-destructive/10"
+              disabled={loading || clearing}
+              onClick={() => void handleClearList()}
+            >
+              <Trash2 className="size-3.5" />
+              {clearing ? "Clearing…" : "Clear list"}
             </Button>
           </div>
         }
@@ -1020,8 +1073,8 @@ export function OnboardingManagementPage() {
                               setInviteCase(next);
                               toast(
                                 copied
-                                  ? "Document rejected — portal reopened. Link copied — send it from the invitation drawer."
-                                  : "Document rejected — portal reopened. Use the invitation drawer to share the link.",
+                                  ? "Document rejected — portal reopened. Login credentials copied — email them from the invitation drawer."
+                                  : "Document rejected — portal reopened. Use the invitation drawer to email login credentials.",
                               );
                               void load();
                             })();
@@ -1209,8 +1262,8 @@ export function OnboardingManagementPage() {
               setInviteCase(next);
               toast(
                 copied
-                  ? "Document rejected — portal reopened. Link copied — send it from the invitation drawer."
-                  : "Document rejected — portal reopened. Use the invitation drawer to share the link.",
+                  ? "Document rejected — portal reopened. Login credentials copied — email them from the invitation drawer."
+                  : "Document rejected — portal reopened. Use the invitation drawer to email login credentials.",
               );
             } else {
               toast("Document verified");

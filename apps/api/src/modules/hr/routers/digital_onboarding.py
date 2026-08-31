@@ -40,6 +40,11 @@ class AcceptTermsRequest(BaseModel):
     terms_version: str = Field(default="v1", max_length=40)
 
 
+class PortalLoginRequest(BaseModel):
+    email: str = Field(..., min_length=3, max_length=255)
+    password: str = Field(..., min_length=1, max_length=128)
+
+
 def _handle_state(exc: InvalidDigitalOnboardingState):
     raise AppException(exc.message, status_code=400) from exc
 
@@ -131,6 +136,15 @@ def upsert_digital_onboarding(
     except InvalidDigitalOnboardingState as exc:
         _handle_state(exc)
     return APIResponse(message="Saved", data=data)
+
+
+@public_onboarding_router.post("/login", response_model=APIResponse[dict])
+def public_portal_login(
+    body: PortalLoginRequest,
+    db: Annotated[Session, Depends(get_db)],
+):
+    data = DigitalOnboardingService(db).login_by_credentials(body.email, body.password)
+    return APIResponse(message="Signed in", data=data)
 
 
 @public_onboarding_router.get("/{token}", response_model=APIResponse[dict])

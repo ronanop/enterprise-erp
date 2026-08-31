@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { CheckCircle2, ChevronLeft, ChevronRight, Eye, FileText, Upload, X } from "lucide-react";
+import { CheckCircle2, ChevronLeft, ChevronRight, Eye, FileText, LogOut, Upload, X } from "lucide-react";
 
 import {
   SetupField,
@@ -18,7 +18,9 @@ import {
 } from "@/config/hr-master-options";
 import {
   acceptOnboardingTerms,
+  clearPortalSession,
   getCaseByTokenAsync,
+  getPortalSession,
   ONBOARDING_TERMS_VERSION,
   savePortalProgress,
   submitPortal,
@@ -32,6 +34,7 @@ import {
 } from "@/services/hr-setup-service";
 import type {
   DocumentKind,
+  DocumentVerifyStatus,
   OnboardingCase,
   OnboardingDocument,
   PortalPayload,
@@ -262,6 +265,7 @@ function asDocumentKind(kind: string): DocumentKind {
 }
 
 export function CandidateOnboardingPortal({ token }: { token: string }) {
+  const [sessionOk, setSessionOk] = useState(false);
   const [caseRow, setCaseRow] = useState<OnboardingCase | null>(null);
   const [portal, setPortal] = useState<PortalPayload | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -276,6 +280,20 @@ export function CandidateOnboardingPortal({ token }: { token: string }) {
   const [docTypes, setDocTypes] = useState<PortalDocumentType[]>([]);
   const [photoUploading, setPhotoUploading] = useState(false);
   const portalRef = useRef<PortalPayload | null>(null);
+
+  useEffect(() => {
+    const session = getPortalSession();
+    if (!session || session.token !== token) {
+      window.location.replace("/onboarding/login");
+      return;
+    }
+    setSessionOk(true);
+  }, [token]);
+
+  function signOutPortal() {
+    clearPortalSession();
+    window.location.replace("/onboarding/login");
+  }
 
   useEffect(() => {
     portalRef.current = portal;
@@ -307,6 +325,7 @@ export function CandidateOnboardingPortal({ token }: { token: string }) {
   }
 
   useEffect(() => {
+    if (!sessionOk) return;
     let cancelled = false;
     setLoading(true);
     setError(null);
@@ -354,7 +373,7 @@ export function CandidateOnboardingPortal({ token }: { token: string }) {
     return () => {
       cancelled = true;
     };
-  }, [token]);
+  }, [token, sessionOk]);
 
   useEffect(() => {
     void listPortalDocumentTypes().then(setDocTypes);
@@ -730,10 +749,12 @@ export function CandidateOnboardingPortal({ token }: { token: string }) {
     }
   }
 
-  if (loading) {
+  if (!sessionOk || loading) {
     return (
       <Shell>
-        <p className="text-sm text-muted-foreground">Loading your onboarding portal…</p>
+        <p className="text-sm text-muted-foreground">
+          {!sessionOk ? "Checking your session…" : "Loading your onboarding portal…"}
+        </p>
       </Shell>
     );
   }
@@ -744,6 +765,14 @@ export function CandidateOnboardingPortal({ token }: { token: string }) {
         <div className="rounded-xl border border-destructive/30 bg-red-50 px-4 py-6 text-sm text-red-900">
           {error}
         </div>
+        <Button
+          type="button"
+          variant="outline"
+          className="mt-4 cursor-pointer"
+          onClick={signOutPortal}
+        >
+          Sign in again
+        </Button>
       </Shell>
     );
   }
@@ -769,6 +798,14 @@ export function CandidateOnboardingPortal({ token }: { token: string }) {
           {caseRow.employeeId ? (
             <p className="mt-3 font-mono text-sm text-emerald-950">Employee ID: {caseRow.employeeId}</p>
           ) : null}
+          <Button
+            type="button"
+            variant="outline"
+            className="mt-5 cursor-pointer"
+            onClick={signOutPortal}
+          >
+            Sign out
+          </Button>
         </div>
       </Shell>
     );
@@ -833,6 +870,13 @@ export function CandidateOnboardingPortal({ token }: { token: string }) {
           >
             {acceptingTerms ? "Saving…" : "Accept & continue to onboarding"}
           </Button>
+          <button
+            type="button"
+            className="mt-2 w-full cursor-pointer text-xs text-muted-foreground underline-offset-2 hover:underline"
+            onClick={signOutPortal}
+          >
+            Sign out
+          </button>
         </div>
       </Shell>
     );
@@ -848,10 +892,22 @@ export function CandidateOnboardingPortal({ token }: { token: string }) {
   return (
     <Shell>
       <div className="mb-6">
-        <p className="text-[11px] font-medium tracking-wide text-muted-foreground uppercase">
-          Secure onboarding · {caseRow.caseCode}
-          {caseRow.entityName ? ` · ${caseRow.entityName}` : ""}
-        </p>
+        <div className="flex items-start justify-between gap-3">
+          <p className="text-[11px] font-medium tracking-wide text-muted-foreground uppercase">
+            Secure onboarding · {caseRow.caseCode}
+            {caseRow.entityName ? ` · ${caseRow.entityName}` : ""}
+          </p>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="cursor-pointer h-7 shrink-0 px-2 text-xs text-muted-foreground"
+            onClick={signOutPortal}
+          >
+            <LogOut className="size-3.5" />
+            Sign out
+          </Button>
+        </div>
         <h1 className="mt-1 text-xl font-semibold tracking-tight text-foreground">
           Welcome, {caseRow.candidateName}
         </h1>
@@ -863,7 +919,7 @@ export function CandidateOnboardingPortal({ token }: { token: string }) {
               You are joining <span className="font-medium text-foreground">{caseRow.entityName}</span>.
             </>
           ) : null}{" "}
-          Link expires{" "}
+          Access expires{" "}
           {caseRow.invitation
             ? new Date(caseRow.invitation.expiresAt).toLocaleDateString()
             : "soon"}
@@ -1826,12 +1882,12 @@ function FilePickField({
   fileName?: string;
   hint?: string;
   disabled?: boolean;
-  verifyStatus?: "pending" | "verified" | "rejected";
+  verifyStatus?: DocumentVerifyStatus;
   onFile: (file: File | undefined) => void | Promise<void>;
 }) {
   const inputId = `file-${label.replace(/\s+/g, "-").toLowerCase()}`;
   const rejected = verifyStatus === "rejected";
-  const verified = verifyStatus === "verified";
+  const verified = verifyStatus === "verified" || verifyStatus === "accepted";
   return (
     <SetupField label={label} required={required} hint={hint}>
       <label
@@ -1887,7 +1943,7 @@ function MultiFilePickField({
   label: string;
   required?: boolean;
   accept: string;
-  files: { id: string; name: string; verifyStatus?: "pending" | "verified" | "rejected" }[];
+  files: { id: string; name: string; verifyStatus?: DocumentVerifyStatus }[];
   hint?: string;
   maxFiles?: number;
   emphasized?: boolean;
@@ -1941,7 +1997,8 @@ function MultiFilePickField({
                 className={cn(
                   "flex items-center justify-between gap-2 rounded-md border border-border/60 bg-card px-2.5 py-1.5 text-xs",
                   f.verifyStatus === "rejected" && "border-amber-300 bg-amber-50",
-                  f.verifyStatus === "verified" && "border-emerald-200 bg-emerald-50/60",
+                  (f.verifyStatus === "verified" || f.verifyStatus === "accepted") &&
+                    "border-emerald-200 bg-emerald-50/60",
                 )}
               >
                 <span className="truncate font-medium">{f.name}</span>
@@ -1950,7 +2007,7 @@ function MultiFilePickField({
                     <span className="rounded bg-amber-200/80 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-amber-950">
                       Rejected
                     </span>
-                  ) : f.verifyStatus === "verified" ? (
+                  ) : f.verifyStatus === "verified" || f.verifyStatus === "accepted" ? (
                     <span className="rounded bg-emerald-200/80 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-emerald-950">
                       Verified
                     </span>

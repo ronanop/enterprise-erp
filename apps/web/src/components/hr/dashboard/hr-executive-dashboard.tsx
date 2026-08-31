@@ -12,16 +12,16 @@ import {
   ClipboardCheck,
   FileStack,
   Fingerprint,
+  GraduationCap,
   LayoutGrid,
   RefreshCw,
   Search,
-  TrendingDown,
-  TrendingUp,
   UserCheck,
   UserMinus,
   UserPlus,
   UserX,
   Users,
+  Wallet,
   type LucideIcon,
 } from "lucide-react";
 
@@ -61,6 +61,8 @@ const QUICK_ACTIONS = [
   { label: "Employee Request", href: "/hr/ess", icon: Bell },
   { label: "Biometric Devices", href: "/hr/time/biometric-devices", icon: Fingerprint },
   { label: "Offboarding", href: "/hr/separation", icon: UserMinus },
+  { label: "Payroll", href: "/hr/payroll", icon: Wallet },
+  { label: "Training", href: "/hr/learning", icon: GraduationCap },
 ] as const;
 
 const EVENT_PILLS: Record<string, { label: string; className: string }> = {
@@ -86,14 +88,6 @@ function sliceStacked(
 function sliceLeave(rows: LeaveTrendPoint[], period: AnalyticsPeriod): LeaveTrendPoint[] {
   const n = period === "this_month" ? 1 : period === "last_3" ? 3 : 6;
   return rows.slice(-n);
-}
-
-function trendFromSeries(rows: NamedCount[]): number {
-  if (rows.length < 2) return 0;
-  const curr = rows[rows.length - 1]!.value;
-  const prev = rows[rows.length - 2]!.value;
-  if (prev === 0) return curr > 0 ? 100 : 0;
-  return Math.round(((curr - prev) / prev) * 100);
 }
 
 function relativeDayLabel(iso: string): string {
@@ -220,7 +214,6 @@ export function HrExecutiveDashboardPage() {
     tint: string;
     iconBg: string;
     iconColor: string;
-    trendPct: number;
   }[] = [
     {
       label: "Headcount",
@@ -230,7 +223,6 @@ export function HrExecutiveDashboardPage() {
       tint: "bg-[#F4EDFB]",
       iconBg: "bg-[#9B5BB8]/15",
       iconColor: "text-[#9B5BB8]",
-      trendPct: trendFromSeries(charts?.employeeGrowth ?? []),
     },
     {
       label: "On leave today",
@@ -240,7 +232,6 @@ export function HrExecutiveDashboardPage() {
       tint: "bg-hrms-mint",
       iconBg: "bg-[#01BD7E]/15",
       iconColor: "text-[#01BD7E]",
-      trendPct: trendFromSeries(charts?.leaveTrend ?? []),
     },
     {
       label: "Open roles",
@@ -250,7 +241,6 @@ export function HrExecutiveDashboardPage() {
       tint: "bg-hrms-peach",
       iconBg: "bg-[#FF8904]/15",
       iconColor: "text-[#FF8904]",
-      trendPct: 0,
     },
     {
       label: "Onboarding in process",
@@ -260,7 +250,6 @@ export function HrExecutiveDashboardPage() {
       tint: "bg-hrms-blue",
       iconBg: "bg-[#155DFD]/15",
       iconColor: "text-[#155DFD]",
-      trendPct: 0,
     },
   ];
 
@@ -360,22 +349,21 @@ export function HrExecutiveDashboardPage() {
               subtitle="Common HR actions"
               icon={LayoutGrid}
             >
-              <div className="grid h-full grid-cols-2 content-stretch gap-2">
+              <div className="grid grid-cols-2 content-stretch gap-2">
                 {QUICK_ACTIONS.map((a) => {
                   const Icon = a.icon;
                   return (
                     <Link
                       key={a.href + a.label}
                       href={a.href}
-                      className="group flex h-full cursor-pointer items-center gap-2 rounded-xl bg-hrms-lavender px-2.5 py-2 transition-colors duration-150 hover:bg-[#E8D5F5]"
+                      className="flex min-h-[2.75rem] cursor-pointer items-center gap-2 rounded-xl bg-hrms-lavender px-3 py-2 transition-colors duration-150 hover:bg-[#E8D5F5]"
                     >
                       <span className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-white text-primary shadow-sm">
                         <Icon className="size-3.5" />
                       </span>
-                      <span className="min-w-0 flex-1 truncate text-[11px] font-medium text-foreground">
+                      <span className="min-w-0 flex-1 text-left text-xs font-medium leading-snug text-foreground">
                         {a.label}
                       </span>
-                      <ChevronRight className="size-3.5 shrink-0 text-muted-foreground group-hover:text-primary" />
                     </Link>
                   );
                 })}
@@ -440,8 +428,6 @@ export function HrExecutiveDashboardPage() {
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
               {kpiCards.map((k) => {
                 const Icon = k.icon;
-                const up = k.trendPct >= 0;
-                const TrendIcon = up ? TrendingUp : TrendingDown;
                 const card = (
                   <div
                     className={cn(
@@ -465,19 +451,6 @@ export function HrExecutiveDashboardPage() {
                       <p className="mt-0.5 text-2xl font-semibold tabular-nums leading-none text-foreground">
                         {loading ? "—" : (k.value ?? 0).toLocaleString("en-IN")}
                       </p>
-                    </div>
-                    <div className="shrink-0 text-right">
-                      <p
-                        className={cn(
-                          "inline-flex items-center gap-0.5 text-xs font-semibold",
-                          up ? "text-hrms-success" : "text-hrms-danger",
-                        )}
-                      >
-                        <TrendIcon className="size-3.5" />
-                        {up ? "+" : ""}
-                        {k.trendPct}%
-                      </p>
-                      <p className="mt-0.5 text-[10px] text-muted-foreground">vs last month</p>
                     </div>
                   </div>
                 );

@@ -39,7 +39,7 @@ def create_app() -> FastAPI:
     application.add_middleware(RequestContextMiddleware)
 
     cors_origins = list(settings.cors_origins)
-    dev_origin_regex = r"https?://(localhost|127\.0\.0\.1|192\.168\.\d{1,3}\.\d{1,3}|10\.\d{1,3}\.\d{1,3}\.\d{1,3})(:\d+)?"
+    dev_origin_regex = r"https?://(localhost|127\.0\.0\.1|192\.168\.\d{1,3}\.\d{1,3}|10\.\d{1,3}\.\d{1,3}\.\d{1,3}|172\.(1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3})(:\d+)?"
     if settings.is_development:
         for origin in (
             "http://localhost:3000",

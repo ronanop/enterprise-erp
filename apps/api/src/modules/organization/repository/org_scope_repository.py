@@ -87,3 +87,40 @@ class OrgScopeRepository:
         self.db.add(row)
         self.db.flush()
         return row
+
+    def delete_user_scopes(self, tenant_id: UUID, user_id: UUID) -> None:
+        stmt = select(SecUserOrgScope).where(
+            SecUserOrgScope.tenant_id == tenant_id,
+            SecUserOrgScope.user_id == user_id,
+        )
+        for row in self.db.scalars(stmt).all():
+            self.db.delete(row)
+        self.db.flush()
+
+    def replace_company_scopes(
+        self,
+        ctx: TenantContext,
+        *,
+        user_id: UUID,
+        company_ids: list[UUID],
+        default_company_id: UUID | None = None,
+    ) -> list[UUID]:
+        """Replace a user's org scopes with one company-level row per selected entity."""
+        unique: list[UUID] = []
+        seen: set[UUID] = set()
+        for company_id in company_ids:
+            if company_id in seen:
+                continue
+            seen.add(company_id)
+            unique.append(company_id)
+        self.delete_user_scopes(ctx.tenant_id, user_id)
+        default_id = default_company_id if default_company_id in seen else (unique[0] if unique else None)
+        for company_id in unique:
+            self.assign_scope(
+                ctx,
+                user_id=user_id,
+                company_id=company_id,
+                branch_id=None,
+                is_default=company_id == default_id,
+            )
+        return unique

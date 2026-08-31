@@ -1682,6 +1682,19 @@ class EmployeeClearResponse(BaseModel):
 
 class HrAdminAssignRequest(BaseModel):
     employee_id: UUID
+    company_ids: list[UUID] = []
+
+
+class HrAdminEntitiesRequest(BaseModel):
+    company_ids: list[UUID]
+
+
+class HrAdminEntityOption(BaseModel):
+    id: UUID
+    company_code: str
+    company_name: str
+    legal_name: str = ""
+    status: str = "active"
 
 
 class HrAdminRecord(BaseModel):
@@ -1693,6 +1706,7 @@ class HrAdminRecord(BaseModel):
     user_id: UUID
     login_created: bool = False
     temporary_password: str | None = None
+    company_ids: list[UUID] = []
 
 
 class HrAdminPasswordResponse(BaseModel):

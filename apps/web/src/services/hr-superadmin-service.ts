@@ -9,6 +9,15 @@ export type HrAdminRecord = {
   user_id: string;
   login_created: boolean;
   temporary_password: string | null;
+  company_ids: string[];
+};
+
+export type HrAdminEntityOption = {
+  id: string;
+  company_code: string;
+  company_name: string;
+  legal_name: string;
+  status: string;
 };
 
 export type HrAdminPasswordResponse = {
@@ -31,16 +40,45 @@ export type HrActivityLogRecord = {
 
 export async function listHrAdmins(): Promise<HrAdminRecord[]> {
   const res = await apiClient<HrAdminRecord[]>("/hr/superadmin/admins");
+  return (res.data ?? []).map((row) => ({
+    ...row,
+    company_ids: Array.isArray(row.company_ids) ? row.company_ids.map(String) : [],
+  }));
+}
+
+export async function listHrEntities(): Promise<HrAdminEntityOption[]> {
+  const res = await apiClient<HrAdminEntityOption[]>("/hr/superadmin/entities");
   return res.data ?? [];
 }
 
-export async function assignHrAdmin(employeeId: string): Promise<HrAdminRecord> {
+export async function assignHrAdmin(
+  employeeId: string,
+  companyIds: string[] = [],
+): Promise<HrAdminRecord> {
   const res = await apiClient<HrAdminRecord>("/hr/superadmin/admins", {
     method: "POST",
-    body: { employee_id: employeeId },
+    body: { employee_id: employeeId, company_ids: companyIds },
   });
   if (!res.data) throw new Error(res.message || "Assign failed");
-  return res.data;
+  return {
+    ...res.data,
+    company_ids: Array.isArray(res.data.company_ids) ? res.data.company_ids.map(String) : [],
+  };
+}
+
+export async function setHrAdminEntities(
+  employeeId: string,
+  companyIds: string[],
+): Promise<HrAdminRecord> {
+  const res = await apiClient<HrAdminRecord>(`/hr/superadmin/admins/${employeeId}/entities`, {
+    method: "PATCH",
+    body: { company_ids: companyIds },
+  });
+  if (!res.data) throw new Error(res.message || "Entity update failed");
+  return {
+    ...res.data,
+    company_ids: Array.isArray(res.data.company_ids) ? res.data.company_ids.map(String) : [],
+  };
 }
 
 export async function revokeHrAdmin(employeeId: string): Promise<void> {

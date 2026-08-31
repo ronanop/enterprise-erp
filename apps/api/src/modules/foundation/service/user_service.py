@@ -130,7 +130,14 @@ class UserService:
     def revoke_all_sessions(
         self, tenant_id: UUID, user_id: UUID, revoked_by: UUID | None = None
     ) -> None:
-        self._sessions.revoke_all_for_user(tenant_id, user_id, revoked_by=revoked_by)
+        from core.redis import SessionStore
+
+        session_ids = self._sessions.revoke_all_for_user(tenant_id, user_id, revoked_by=revoked_by)
+        self._sessions.revoke_refresh_tokens_for_user(tenant_id, user_id)
+        store = SessionStore()
+        for session_id in session_ids:
+            store.delete_session(session_id)
+        self._rbac.invalidate_user(user_id)
         self._audit.log_security_event(
             tenant_id=tenant_id,
             event_type="auth.sessions_revoked",

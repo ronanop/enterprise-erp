@@ -355,7 +355,7 @@ export function SetupEntityPanel({
 
   function openCreate() {
     const codes = rows.flatMap((r) =>
-      [r[codeKey], r.code, r.branch_code, r.department_code, r.designation_code]
+      [r[codeKey], r.code, r.branch_code, r.department_code, r.designation_code, r.company_code]
         .map((v) => String(v ?? ""))
         .filter(Boolean),
     );

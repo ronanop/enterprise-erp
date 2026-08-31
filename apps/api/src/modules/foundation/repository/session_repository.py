@@ -59,15 +59,30 @@ class SessionRepository(TenantScopedRepository):
 
     def revoke_all_for_user(
         self, tenant_id: UUID, user_id: UUID, revoked_by: UUID | None = None
-    ) -> None:
+    ) -> list[UUID]:
         stmt = select(SecSession).where(
             SecSession.tenant_id == tenant_id,
             SecSession.user_id == user_id,
             SecSession.revoked_at.is_(None),
         )
+        revoked_ids: list[UUID] = []
+        now = utcnow()
         for row in self.db.scalars(stmt).all():
-            row.revoked_at = utcnow()
+            row.revoked_at = now
             row.revoked_by = revoked_by
+            revoked_ids.append(row.id)
+        self.db.flush()
+        return revoked_ids
+
+    def revoke_refresh_tokens_for_user(self, tenant_id: UUID, user_id: UUID) -> None:
+        stmt = select(SecRefreshToken).where(
+            SecRefreshToken.tenant_id == tenant_id,
+            SecRefreshToken.user_id == user_id,
+            SecRefreshToken.revoked_at.is_(None),
+        )
+        now = utcnow()
+        for row in self.db.scalars(stmt).all():
+            row.revoked_at = now
         self.db.flush()
 
     def store_refresh_token(

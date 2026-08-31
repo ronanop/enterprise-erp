@@ -131,8 +131,9 @@ export const hrSetupSections: HrSetupSection[] = [
       {
         id: "entities",
         title: "Legal Entities",
-        description: "Company / legal entities for employee assignment",
-        source: "local",
+        description: "Company / legal entities — saved to the database and used in Assign HR",
+        source: "api",
+        apiPath: "/hr/legal-entities",
         codePrefix: "ENT",
       },
     ],

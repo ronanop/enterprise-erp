@@ -8,7 +8,7 @@ from uuid import UUID, uuid4
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from core.exceptions import NotFoundException
+from core.exceptions import NotFoundException, UnauthorizedException
 from modules.foundation.domain.value_objects import TenantContext
 from modules.hr.models.digital_onboarding import HrDigitalOnboarding
 from modules.hr.service.pii_mask import (
@@ -211,7 +211,7 @@ class DigitalOnboardingService:
             expired = True
             case["status"] = "overdue"
         case["_expired"] = expired
-        return case
+        return self._without_portal_secret(case)
 
     def accept_terms(
         self,
@@ -231,7 +231,7 @@ class DigitalOnboardingService:
         payload["termsVersion"] = row.terms_version
         row.case_json = payload
         self._db.flush()
-        return self._to_case(row, include_pii=True)
+        return self._without_portal_secret(self._to_case(row, include_pii=True))
 
     def save_portal(self, token: str, portal: dict, *, advance_status: bool = True) -> dict:
         row = self._find_by_token(token)
@@ -251,7 +251,7 @@ class DigitalOnboardingService:
         row.case_json = payload
         self._db.flush()
         # Return clear PII so the candidate UI can keep editing
-        return self._to_case(row, include_pii=True)
+        return self._without_portal_secret(self._to_case(row, include_pii=True))
 
     def submit_portal(self, token: str, portal: dict) -> dict:
         row = self._find_by_token(token)
@@ -272,7 +272,54 @@ class DigitalOnboardingService:
         row.status = "hr_review"
         row.case_json = payload
         self._db.flush()
-        return self._to_case(row, include_pii=True)
+        return self._without_portal_secret(self._to_case(row, include_pii=True))
+
+    def login_by_credentials(self, email: str, password: str) -> dict:
+        """Candidate portal login — email + auto-generated password from the invitation."""
+        email_norm = (email or "").strip().lower()
+        password_plain = (password or "").strip()
+        if not email_norm or not password_plain:
+            raise UnauthorizedException("Invalid email or password")
+
+        rows = self._db.scalars(
+            select(HrDigitalOnboarding).where(HrDigitalOnboarding.is_deleted.is_(False))
+        ).all()
+        matched: list[HrDigitalOnboarding] = []
+        for row in rows:
+            payload = row.case_json if isinstance(row.case_json, dict) else {}
+            inv = payload.get("invitation") if isinstance(payload.get("invitation"), dict) else {}
+            stored_pwd = str(inv.get("portalPassword") or "").strip()
+            if not stored_pwd or stored_pwd != password_plain:
+                continue
+            login_email = str(
+                inv.get("loginEmail") or row.candidate_email or payload.get("candidateEmail") or ""
+            ).strip().lower()
+            if login_email != email_norm:
+                continue
+            if str(row.status or "") == "cancelled":
+                continue
+            matched.append(row)
+
+        if not matched:
+            raise UnauthorizedException("Invalid email or password")
+
+        def _updated(row: HrDigitalOnboarding):
+            return row.updated_at or datetime.min.replace(tzinfo=timezone.utc)
+
+        row = max(matched, key=_updated)
+        if row.invitation_expires_at and row.invitation_expires_at < datetime.now(timezone.utc):
+            raise UnauthorizedException(
+                "This onboarding invitation has expired. Please contact HR."
+            )
+        return self._without_portal_secret(self._to_case(row, include_pii=True))
+
+    @staticmethod
+    def _without_portal_secret(case: dict) -> dict:
+        payload = dict(case)
+        inv = dict(payload.get("invitation") or {})
+        inv.pop("portalPassword", None)
+        payload["invitation"] = inv
+        return payload
 
     def _find_by_token(self, token: str) -> HrDigitalOnboarding:
         clean = (token or "").strip()
@@ -288,38 +335,9 @@ class DigitalOnboardingService:
                 if str(inv.get("token") or "").strip() == clean:
                     row = candidate
                     break
-        if row is None:
+        if row is None or row.is_deleted:
             raise NotFoundException("Onboarding link not found")
-        if row.is_deleted:
-            self._restore_cleared_case(row, clean)
         return row
-
-    def _restore_cleared_case(self, row: HrDigitalOnboarding, token: str) -> None:
-        """Reactivate a case that was removed from the HR list so the invitation still works."""
-        payload = dict(row.case_json or {})
-        inv = dict(payload.get("invitation") or {})
-        original_token = str(inv.get("token") or token).strip() or token
-        original_code = str(payload.get("caseCode") or payload.get("case_code") or row.case_code)
-        if "-DEL-" in original_code:
-            original_code = original_code.split("-DEL-")[0]
-        clash = self._db.scalar(
-            select(HrDigitalOnboarding.id).where(
-                HrDigitalOnboarding.tenant_id == row.tenant_id,
-                HrDigitalOnboarding.case_code == original_code,
-                HrDigitalOnboarding.is_deleted.is_(False),
-                HrDigitalOnboarding.id != row.id,
-            )
-        )
-        row.is_deleted = False
-        row.deleted_at = None
-        row.deleted_by = None
-        row.invitation_token = original_token
-        if clash is None and original_code:
-            row.case_code = original_code[:40]
-        payload["invitation"] = {**inv, "token": original_token}
-        payload["caseCode"] = row.case_code
-        row.case_json = payload
-        self._db.flush()
 
     def _assert_not_expired(self, row: HrDigitalOnboarding) -> None:
         if row.invitation_expires_at and row.invitation_expires_at < datetime.now(timezone.utc):

@@ -15,14 +15,18 @@ class CompanyCreateRequest(BaseModel):
     registration_number: str | None = None
     tax_number: str | None = None
     fiscal_year_start_month: int = 4
-    timezone: str = "UTC"
+    timezone: str = "Asia/Kolkata"
+    status: str = "active"
 
 
 class CompanyUpdateRequest(BaseModel):
+    company_code: str | None = Field(default=None, max_length=50)
     company_name: str | None = None
     legal_name: str | None = None
     status: str | None = None
     timezone: str | None = None
+    country_code: str | None = None
+    currency_code: str | None = None
 
 
 class CompanyResponse(BaseModel):

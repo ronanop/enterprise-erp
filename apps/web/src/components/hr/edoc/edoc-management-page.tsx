@@ -244,24 +244,24 @@ export function EdocManagementPage() {
       />
 
       <div className="shrink-0">
-        <HrUnderlineTabs
-          tabs={TABS}
-          value={tab}
-          onChange={(id) => setTab(id as EdocTab)}
-        />
+      <HrUnderlineTabs
+        tabs={TABS}
+        value={tab}
+        onChange={(id) => setTab(id as EdocTab)}
+      />
       </div>
 
       {tab === "document-types" ? (
         <div className="erp-scroll min-h-0 flex-1 overflow-y-auto">
-          <EdocDocumentTypesPanel />
+        <EdocDocumentTypesPanel />
         </div>
       ) : tab === "onboarding-policies" ? (
         <div className="erp-scroll min-h-0 flex-1 overflow-y-auto">
-          <OnboardingPoliciesPanel />
+        <OnboardingPoliciesPanel />
         </div>
       ) : tab === "other" ? (
         <div className="erp-scroll min-h-0 flex-1 overflow-y-auto">
-          <EdocOtherDocumentsPanel />
+        <EdocOtherDocumentsPanel />
         </div>
       ) : (
         <EdocEmployeeVault

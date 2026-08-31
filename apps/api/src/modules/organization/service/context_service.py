@@ -38,6 +38,9 @@ class OrgContextService:
         scopes = self._scopes.list_user_scopes(ctx.user_id, ctx.tenant_id)
         company_ids = {s.company_id for s in scopes}
         if not company_ids:
+            # HR Admins are strictly entity-scoped. Empty scope must not leak every company.
+            if self._is_hr_admin(ctx):
+                return []
             return self._companies.list_companies(ctx)
 
         companies = []
@@ -94,3 +97,27 @@ class OrgContextService:
             "company_id": str(company_id),
             "branch_id": str(branch_id) if branch_id else None,
         }
+
+    def _is_hr_admin(self, ctx: TenantContext) -> bool:
+        from sqlalchemy import select
+
+        from modules.foundation.models.security import SecRole, SecUserRole
+
+        role_id = self._db.scalar(
+            select(SecRole.id).where(
+                SecRole.tenant_id == ctx.tenant_id,
+                SecRole.role_code == "HR_ADMIN",
+                SecRole.is_deleted.is_(False),
+            )
+        )
+        if role_id is None:
+            return False
+        return (
+            self._db.scalar(
+                select(SecUserRole.id).where(
+                    SecUserRole.user_id == ctx.user_id,
+                    SecUserRole.role_id == role_id,
+                )
+            )
+            is not None
+        )

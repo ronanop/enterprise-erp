@@ -5,6 +5,7 @@
  */
 
 import { ApiClientError, apiClient, resourceService } from "@/services/api-client";
+import { getShareableOrigin } from "@/utils/env";
 import { registerLocalEmployee, updateLocalEmployeeLifecycle } from "@/services/hr-master-connector";
 import { applyOnboardingPortalToEmployee } from "@/services/employee-management-service";
 import { loadRecruitmentOverview, type RecruitmentRow } from "@/services/recruitment-service";
@@ -13,6 +14,7 @@ import { isJoiningDateReached } from "@/lib/onboarding-workflow";
 import { employmentDurationKind } from "@/config/hr-master-options";
 import { previewNextEmployeeCode } from "@/services/employee-management-service";
 import {
+  clearAllSignedPolicyDocs,
   saveSignedPolicyDocsForCase,
   stripSignedDocPayloads,
 } from "@/lib/onboarding-signed-docs-store";
@@ -38,8 +40,44 @@ import {
 const CASES_KEY = "erp_onboarding_cases_v1";
 const AUDIT_KEY = "erp_onboarding_audit_v1";
 const SEQ_KEY = "erp_onboarding_seq_v1";
+const PORTAL_SESSION_KEY = "erp_onboarding_portal_session_v1";
+const LOCAL_RESET_KEY = "erp_onboarding_local_reset_20260831";
 const INVITE_EXPIRY_DEFAULT_DAYS = 14;
 export const ONBOARDING_TERMS_VERSION = "v1";
+
+const PASSWORD_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789";
+
+export type PortalSession = {
+  token: string;
+  email: string;
+  caseId: string;
+};
+
+/** Readable auto password, e.g. Onb-k7mP2xQw9A */
+export function generatePortalPassword(): string {
+  const bytes = new Uint8Array(10);
+  crypto.getRandomValues(bytes);
+  let body = "";
+  for (const b of bytes) body += PASSWORD_ALPHABET[b % PASSWORD_ALPHABET.length];
+  return `Onb-${body}`;
+}
+
+function ensureInvitationCredentials(
+  invitation: OnboardingCase["invitation"] | undefined,
+  email: string,
+): NonNullable<OnboardingCase["invitation"]> {
+  const loginEmail = (invitation?.loginEmail || email || "").trim();
+  return {
+    token: invitation?.token || crypto.randomUUID().replace(/-/g, "").slice(0, 16),
+    sentAt: invitation?.sentAt || "",
+    expiresAt: invitation?.expiresAt || new Date().toISOString(),
+    channel: invitation?.channel || "email",
+    resendCount: invitation?.resendCount ?? 0,
+    lastChannel: invitation?.lastChannel,
+    loginEmail,
+    portalPassword: invitation?.portalPassword || generatePortalPassword(),
+  };
+}
 
 function normalizeApiCase(raw: Record<string, unknown>): OnboardingCase | null {
   if (!raw || typeof raw !== "object") return null;
@@ -134,18 +172,47 @@ async function syncCaseToApi(
   return caseRow;
 }
 
-async function fetchCasesFromApi(): Promise<OnboardingCase[]> {
+async function fetchCasesFromApi(): Promise<{ ok: boolean; cases: OnboardingCase[] }> {
   try {
     const res = await apiClient<Record<string, unknown>[]>("/hr/digital-onboarding", {
       method: "GET",
     });
     const rows = Array.isArray(res.data) ? res.data : [];
-    return rows
-      .map((r) => normalizeApiCase(r as Record<string, unknown>))
-      .filter((c): c is OnboardingCase => Boolean(c));
+    return {
+      ok: true,
+      cases: rows
+        .map((r) => normalizeApiCase(r as Record<string, unknown>))
+        .filter((c): c is OnboardingCase => Boolean(c)),
+    };
   } catch {
-    return [];
+    return { ok: false, cases: [] };
   }
+}
+
+export function clearLocalOnboardingCases(): void {
+  writeJson(CASES_KEY, []);
+  writeJson(AUDIT_KEY, []);
+  writeJson(SEQ_KEY, 0);
+  if (typeof window !== "undefined") {
+    try {
+      localStorage.removeItem(PORTAL_SESSION_KEY);
+    } catch {
+      /* ignore */
+    }
+  }
+}
+
+export async function clearAllOnboardingCases(): Promise<{ deleted: number; message: string }> {
+  const res = await apiClient<{ deleted: number; message: string }>(
+    "/hr/digital-onboarding/clear-all",
+    { method: "POST", body: {} },
+  );
+  clearLocalOnboardingCases();
+  await clearAllSignedPolicyDocs().catch(() => undefined);
+  return {
+    deleted: res.data?.deleted ?? 0,
+    message: res.data?.message || "Onboarding list cleared",
+  };
 }
 
 /** Clear-text portal PII for hire / employee import (HR only). */
@@ -164,7 +231,22 @@ export async function fetchPortalFullCase(caseId: string): Promise<OnboardingCas
 function mergeCasesById(preferred: OnboardingCase[], fallback: OnboardingCase[]): OnboardingCase[] {
   const map = new Map<string, OnboardingCase>();
   for (const c of fallback) map.set(c.id, c);
-  for (const c of preferred) map.set(c.id, c);
+  for (const c of preferred) {
+    const prev = map.get(c.id);
+    const incomingInv = c.invitation;
+    if (incomingInv && (prev?.invitation?.portalPassword || prev?.invitation?.loginEmail)) {
+      map.set(c.id, {
+        ...c,
+        invitation: {
+          ...incomingInv,
+          portalPassword: incomingInv.portalPassword || prev.invitation?.portalPassword,
+          loginEmail: incomingInv.loginEmail || prev.invitation?.loginEmail,
+        },
+      });
+    } else {
+      map.set(c.id, c);
+    }
+  }
   return Array.from(map.values()).sort(
     (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime(),
   );
@@ -288,7 +370,19 @@ function saveCases(cases: OnboardingCase[]): boolean {
 function upsertCase(next: OnboardingCase): OnboardingCase | null {
   const all = loadCases();
   const idx = all.findIndex((c) => c.id === next.id);
-  const refreshed = refreshCaseDerived({ ...next, updatedAt: nowIso() });
+  const existing = idx >= 0 ? all[idx] : undefined;
+  const incomingInv = next.invitation;
+  const merged: OnboardingCase = incomingInv
+    ? {
+        ...next,
+        invitation: {
+          ...incomingInv,
+          portalPassword: incomingInv.portalPassword || existing?.invitation?.portalPassword,
+          loginEmail: incomingInv.loginEmail || existing?.invitation?.loginEmail,
+        },
+      }
+    : next;
+  const refreshed = refreshCaseDerived({ ...merged, updatedAt: nowIso() });
   if (idx >= 0) all[idx] = refreshed;
   else all.unshift(refreshed);
   if (!saveCases(all)) return null;
@@ -327,6 +421,18 @@ export type OnboardingDirectory = {
 };
 
 export async function loadOnboardingDirectory(): Promise<OnboardingDirectory> {
+  if (typeof window !== "undefined") {
+    try {
+      if (!localStorage.getItem(LOCAL_RESET_KEY)) {
+        clearLocalOnboardingCases();
+        localStorage.setItem(LOCAL_RESET_KEY, "1");
+        void clearAllSignedPolicyDocs().catch(() => undefined);
+      }
+    } catch {
+      /* ignore */
+    }
+  }
+
   let acceptedOffers: AcceptedOfferOption[] = [];
   let apiOnboardingCount = 0;
   try {
@@ -360,18 +466,12 @@ export async function loadOnboardingDirectory(): Promise<OnboardingDirectory> {
   }
 
   const localCases = loadCases();
-  const apiCases = await fetchCasesFromApi();
-  // Push any local-only cases to API so invitations survive browser clear
-  if (apiCases.length >= 0) {
-    const apiIds = new Set(apiCases.map((c) => c.id));
-    for (const local of localCases) {
-      if (!apiIds.has(local.id) && local.invitation?.token) {
-        await syncCaseToApi(local);
-      }
-    }
-  }
-  const refreshedApi = apiCases.length ? await fetchCasesFromApi() : apiCases;
-  const cases = mergeCasesById(refreshedApi, localCases);
+  const fetched = await fetchCasesFromApi();
+  // When the API is reachable it is the source of truth. Do not re-upload
+  // local leftovers (they reappear after a list clear / company switch).
+  const cases = fetched.ok
+    ? mergeCasesById(fetched.cases, localCases.filter((c) => fetched.cases.some((a) => a.id === c.id)))
+    : localCases;
   saveCases(cases);
   // Re-stamp stored signed PDFs without legacy "Digitally signed" label.
   await migrateSignedPolicyStampFormat(cases).catch(() => undefined);
@@ -542,6 +642,8 @@ export async function startOnboarding(input: StartOnboardingInput): Promise<Onbo
       expiresAt: expires.toISOString(),
       channel: "email",
       resendCount: 0,
+      loginEmail: input.candidateEmail.trim(),
+      portalPassword: generatePortalPassword(),
     },
   };
 
@@ -559,8 +661,160 @@ export async function startOnboarding(input: StartOnboardingInput): Promise<Onbo
 }
 
 export function getInvitationUrl(token: string): string {
-  if (typeof window === "undefined") return `/onboarding/${token}`;
-  return `${window.location.origin}/onboarding/${token}`;
+  const origin = getShareableOrigin();
+  if (!origin) return `/onboarding/${token}`;
+  return `${origin}/onboarding/${token}`;
+}
+
+/** Candidate signs in here with the emailed email + auto-generated password. */
+export function getPortalLoginUrl(): string {
+  const origin = getShareableOrigin();
+  if (!origin) return "/onboarding/login";
+  return `${origin}/onboarding/login`;
+}
+
+export function invitationLoginEmail(caseRow: OnboardingCase): string {
+  return (caseRow.invitation?.loginEmail || caseRow.candidateEmail || "").trim();
+}
+
+export function invitationPortalPassword(caseRow: OnboardingCase): string {
+  return (caseRow.invitation?.portalPassword || "").trim();
+}
+
+export function buildInvitationEmailBody(caseRow: OnboardingCase): string {
+  const loginUrl = getPortalLoginUrl();
+  const email = invitationLoginEmail(caseRow);
+  const password = invitationPortalPassword(caseRow);
+  const expires = caseRow.invitation?.expiresAt
+    ? new Date(caseRow.invitation.expiresAt).toLocaleDateString()
+    : "the expiry date in this email";
+  return [
+    `Hello ${caseRow.candidateName || "there"},`,
+    "",
+    "Your employee onboarding portal is ready. Sign in with the credentials below (do not share them).",
+    "",
+    `Login page: ${loginUrl}`,
+    `Email: ${email}`,
+    `Password: ${password}`,
+    "",
+    `This access expires on ${expires}.`,
+    "",
+    "If the link is missing or you are signed out, open the login page and sign in again with the same email and password.",
+    "",
+    "— HR Team",
+  ].join("\n");
+}
+
+export function buildInvitationCredentialsText(caseRow: OnboardingCase): string {
+  return [
+    `Login: ${getPortalLoginUrl()}`,
+    `Email: ${invitationLoginEmail(caseRow)}`,
+    `Password: ${invitationPortalPassword(caseRow)}`,
+  ].join("\n");
+}
+
+/** Opens the mail client with login credentials for the candidate. */
+export function openInvitationMailto(caseRow: OnboardingCase): void {
+  const to = invitationLoginEmail(caseRow);
+  if (!to || typeof window === "undefined") return;
+  const subject = encodeURIComponent(`Your onboarding login — ${caseRow.caseCode}`);
+  const body = encodeURIComponent(buildInvitationEmailBody(caseRow));
+  const href = `mailto:${to}?subject=${subject}&body=${body}`;
+  const link = document.createElement("a");
+  link.href = href;
+  link.style.display = "none";
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+}
+
+export async function copyInvitationCredentials(caseRow: OnboardingCase): Promise<boolean> {
+  if (typeof navigator === "undefined" || !navigator.clipboard) return false;
+  try {
+    await navigator.clipboard.writeText(buildInvitationCredentialsText(caseRow));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export function savePortalSession(session: PortalSession): void {
+  if (typeof window === "undefined") return;
+  sessionStorage.setItem(PORTAL_SESSION_KEY, JSON.stringify(session));
+}
+
+export function getPortalSession(): PortalSession | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = sessionStorage.getItem(PORTAL_SESSION_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as PortalSession;
+    if (!parsed?.token || !parsed?.email) return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+export function clearPortalSession(): void {
+  if (typeof window === "undefined") return;
+  sessionStorage.removeItem(PORTAL_SESSION_KEY);
+}
+
+export function portalSessionMatches(token: string): boolean {
+  const session = getPortalSession();
+  return Boolean(session && session.token === token);
+}
+
+export async function loginOnboardingPortal(
+  email: string,
+  password: string,
+): Promise<OnboardingCase> {
+  const emailNorm = email.trim().toLowerCase();
+  const passwordPlain = password.trim();
+  if (!emailNorm || !passwordPlain) {
+    throw new Error("Enter the email and password from your invitation.");
+  }
+
+  try {
+    const res = await apiClient<Record<string, unknown>>("/public/onboarding/login", {
+      method: "POST",
+      auth: false,
+      body: { email: emailNorm, password: passwordPlain },
+    });
+    const normalized = normalizeApiCase((res.data ?? {}) as Record<string, unknown>);
+    if (normalized) {
+      upsertCaseLocal(normalized);
+      return normalized;
+    }
+  } catch (e) {
+    if (e instanceof ApiClientError && (e.status === 401 || e.status === 400)) {
+      throw new Error(e.message || "Invalid email or password.");
+    }
+    if (e instanceof ApiClientError && e.status === 404) {
+      throw new Error("Invalid email or password.");
+    }
+    if (e instanceof ApiClientError && e.status !== 0 && e.status < 500) {
+      throw new Error(e.message || "Could not sign in. Please try again.");
+    }
+    /* API down — try local cases so HR testing still works */
+  }
+
+  const matches = loadCases().filter((c) => {
+    if (c.status === "cancelled") return false;
+    const loginEmail = invitationLoginEmail(c).toLowerCase();
+    const stored = invitationPortalPassword(c);
+    return loginEmail === emailNorm && stored === passwordPlain;
+  });
+  if (!matches.length) {
+    throw new Error("Invalid email or password.");
+  }
+  matches.sort((a, b) => String(b.updatedAt).localeCompare(String(a.updatedAt)));
+  const picked = matches[0];
+  if (picked.invitation && new Date(picked.invitation.expiresAt).getTime() < Date.now()) {
+    throw new Error("This onboarding invitation has expired. Please contact HR.");
+  }
+  return picked;
 }
 
 export async function sendInvitation(
@@ -576,6 +830,7 @@ export async function sendInvitation(
   expires.setDate(expires.getDate() + (expiryDays ?? INVITE_EXPIRY_DEFAULT_DAYS));
   // Always mint a fresh token so “new link” works after resend
   const token = crypto.randomUUID().replace(/-/g, "").slice(0, 16);
+  const creds = ensureInvitationCredentials(c.invitation, c.candidateEmail);
 
   const next: OnboardingCase = {
     ...c,
@@ -587,6 +842,8 @@ export async function sendInvitation(
       channel,
       lastChannel: channel,
       resendCount: (c.invitation?.resendCount ?? 0) + (c.invitation?.sentAt ? 1 : 0),
+      loginEmail: creds.loginEmail,
+      portalPassword: creds.portalPassword,
     },
     // New invitation clears prior terms so candidate re-confirms on the new link
     termsAcceptedAt: undefined,
@@ -597,7 +854,7 @@ export async function sendInvitation(
   appendOnboardingAudit({
     caseId,
     action: "send_invitation",
-    detail: `Invitation via ${channel} → ${getInvitationUrl(token)}`,
+    detail: `Invitation via ${channel} → ${getPortalLoginUrl()}`,
     actor: actor(),
   });
   return syncCaseToApi(saved);
@@ -872,14 +1129,7 @@ export function openDocumentReuploadMailto(_caseRow: OnboardingCase): void {
 }
 
 export async function copyInvitationLink(caseRow: OnboardingCase): Promise<boolean> {
-  const token = caseRow.invitation?.token;
-  if (!token || typeof navigator === "undefined" || !navigator.clipboard) return false;
-  try {
-    await navigator.clipboard.writeText(getInvitationUrl(token));
-    return true;
-  } catch {
-    return false;
-  }
+  return copyInvitationCredentials(caseRow);
 }
 
 export function markReadyToJoin(caseId: string): OnboardingCase | null {

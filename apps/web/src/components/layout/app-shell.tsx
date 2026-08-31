@@ -32,7 +32,7 @@ export function AppShell({ children }: AppShellProps) {
     >
       {hrMode ? <HrSidebar /> : <AppSidebar />}
       <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-        <AppTopbar />
+        {hrMode ? null : <AppTopbar />}
         <main
           className={cn(
             "min-h-0 flex-1 px-4 py-4 sm:px-6 lg:px-8",

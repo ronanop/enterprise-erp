@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import {
   CheckCircle2,
   Circle,
@@ -30,7 +30,7 @@ import {
 } from "@/components/hr/setup/setup-drawer";
 import { Button } from "@/components/ui/button";
 import { EMPLOYMENT_TYPE_OPTIONS, employmentDurationKind, formatEmploymentTypeLabel } from "@/config/hr-master-options";
-import { getInvitationUrl, type OnboardingAssignmentInput } from "@/services/onboarding-management-service";
+import { getPortalLoginUrl, type OnboardingAssignmentInput } from "@/services/onboarding-management-service";
 import { previewNextEmployeeCode } from "@/services/employee-management-service";
 import {
   loadHrMasterDirectory,
@@ -52,7 +52,6 @@ import {
   canCompleteOnboardingCase,
   hasOnboardingEmployeeRecord,
   isJoiningDateReached,
-  isPortalInProgressStatus,
 } from "@/lib/onboarding-workflow";
 import { cn } from "@/lib/utils";
 
@@ -125,9 +124,7 @@ export function CaseDetailDrawer({
   onActivate,
   onInvite,
 }: Props) {
-  const [tab, setTab] = useState<"overview" | "portal" | "docs" | "checklist" | "timeline">(
-    "overview",
-  );
+  const [tab, setTab] = useState<"overview" | "portal" | "docs" | "checklist">("overview");
   const [note, setNote] = useState("");
   const [previewDoc, setPreviewDoc] = useState<OnboardingDocument | null>(null);
   const [managementGroupId, setManagementGroupId] = useState(
@@ -195,41 +192,6 @@ export function CaseDetailDrawer({
     });
   }, [open]);
 
-  const timeline = useMemo(() => {
-    if (!caseRow) return [];
-    const items: { label: string; at?: string; done: boolean }[] = [
-      { label: "Case created", at: caseRow.createdAt, done: true },
-      {
-        label: "Invitation sent",
-        at: caseRow.invitation?.sentAt,
-        done: Boolean(caseRow.invitation?.sentAt),
-      },
-      {
-        label: "Portal in progress",
-        done: isPortalInProgressStatus(caseRow.status),
-      },
-      {
-        label: "Candidate submitted",
-        at: caseRow.portal.submittedAt,
-        done: Boolean(caseRow.portal.submittedAt),
-      },
-      {
-        label: "HR verified",
-        done: ["ready_to_join", "pending_join", "joined"].includes(caseRow.status),
-      },
-      {
-        label: "Employee profile created",
-        done: hasOnboardingEmployeeRecord(caseRow),
-      },
-      {
-        label: "Employee activated",
-        at: caseRow.activatedAt,
-        done: caseRow.status === "joined",
-      },
-    ];
-    return items;
-  }, [caseRow]);
-
   if (!caseRow || !form) return null;
 
   const hrTasks = caseRow.checklist.filter((t) => t.owner === "hr");
@@ -277,7 +239,6 @@ export function CaseDetailDrawer({
     { id: "portal", label: "Portal", icon: Globe },
     { id: "docs", label: "Documents", icon: FileText },
     ...(showChecklist ? [{ id: "checklist", label: "Checklist", icon: ClipboardList }] : []),
-    { id: "timeline", label: "Timeline", icon: CheckCircle2 },
   ];
 
   async function handleSaveAssignment() {
@@ -705,9 +666,15 @@ export function CaseDetailDrawer({
             />
           </div>
           {caseRow.invitation?.token ? (
-            <p className="break-all font-mono text-[10px] text-muted-foreground">
-              Portal: {getInvitationUrl(caseRow.invitation.token)}
-            </p>
+            <div className="space-y-1 break-all font-mono text-[10px] text-muted-foreground">
+              <p>Login: {getPortalLoginUrl()}</p>
+              {caseRow.invitation.loginEmail || caseRow.candidateEmail ? (
+                <p>Email: {caseRow.invitation.loginEmail || caseRow.candidateEmail}</p>
+              ) : null}
+              {caseRow.invitation.portalPassword ? (
+                <p>Password: {caseRow.invitation.portalPassword}</p>
+              ) : null}
+            </div>
           ) : null}
         </div>
       ) : null}
@@ -801,129 +768,7 @@ export function CaseDetailDrawer({
           </SetupField>
         </div>
       ) : null}
-
-      {tab === "timeline" ? <CircularTimeline items={timeline} /> : null}
     </SetupDrawer>
-  );
-}
-
-function CircularTimeline({
-  items,
-}: {
-  items: { label: string; at?: string; done: boolean }[];
-}) {
-  const n = items.length;
-  if (!n) return null;
-
-  const doneCount = items.filter((i) => i.done).length;
-  const allDone = doneCount === n;
-  const currentIdx = allDone ? n - 1 : Math.min(doneCount, n - 1);
-  const current = items[currentIdx];
-
-  const size = 220;
-  const cx = size / 2;
-  const cy = size / 2;
-  const r = 78;
-  const circ = 2 * Math.PI * r;
-  const progress = doneCount / n;
-  const dashOffset = circ * (1 - progress);
-
-  return (
-    <div className="flex flex-col items-center gap-6 py-2">
-      <div className="relative" style={{ width: size, height: size }}>
-        <svg width={size} height={size} className="-rotate-90" aria-hidden>
-          <circle
-            cx={cx}
-            cy={cy}
-            r={r}
-            fill="none"
-            stroke="currentColor"
-            strokeWidth={6}
-            className="text-border"
-          />
-          <circle
-            cx={cx}
-            cy={cy}
-            r={r}
-            fill="none"
-            stroke="currentColor"
-            strokeWidth={6}
-            strokeLinecap="round"
-            strokeDasharray={circ}
-            strokeDashoffset={dashOffset}
-            className="text-emerald-500 transition-[stroke-dashoffset] duration-700 ease-[cubic-bezier(0.22,1,0.36,1)]"
-          />
-        </svg>
-
-        {items.map((item, i) => {
-          const angle = (i / n) * 2 * Math.PI - Math.PI / 2;
-          const x = cx + r * Math.cos(angle);
-          const y = cy + r * Math.sin(angle);
-          const isCurrent = i === currentIdx && !allDone;
-
-          return (
-            <div
-              key={item.label}
-              className="absolute -translate-x-1/2 -translate-y-1/2"
-              style={{ left: x, top: y }}
-            >
-              <span
-                className={cn(
-                  "block size-3 rounded-full border-2 border-card transition-all duration-500",
-                  item.done ? "scale-100 bg-emerald-500" : "scale-90 bg-muted-foreground/40",
-                  isCurrent && "scale-125 ring-4 ring-emerald-500/25",
-                )}
-              />
-            </div>
-          );
-        })}
-
-        <div
-          key={current?.label}
-          className="absolute inset-0 flex flex-col items-center justify-center px-8 text-center animate-in fade-in-0 zoom-in-95 duration-300"
-        >
-          <p className="text-[10px] uppercase tracking-wide text-muted-foreground">
-            {allDone ? "Complete" : "Current"}
-          </p>
-          <p className="mt-0.5 text-sm font-semibold text-foreground">{current?.label}</p>
-          {current?.at ? (
-            <p className="mt-1 text-[10px] text-muted-foreground">
-              {new Date(current.at).toLocaleString()}
-            </p>
-          ) : null}
-          <p className="mt-2 text-xs text-muted-foreground">
-            {doneCount}/{n} steps
-          </p>
-        </div>
-      </div>
-
-      <ol className="grid w-full max-w-xs grid-cols-1 gap-1.5">
-        {items.map((t, i) => (
-          <li
-            key={t.label}
-            className={cn(
-              "flex items-center gap-2 rounded-md px-2 py-1 text-xs transition-colors duration-300",
-              i === currentIdx ? "bg-emerald-500/10" : "bg-transparent",
-            )}
-          >
-            <span
-              className={cn(
-                "size-2 shrink-0 rounded-full transition-colors duration-500",
-                t.done ? "bg-emerald-500" : "bg-muted-foreground/40",
-              )}
-            />
-            <span className={cn("font-medium", t.done ? "text-foreground" : "text-muted-foreground")}>
-              {t.label}
-            </span>
-            {t.at ? (
-              <span className="ml-auto text-[10px] text-muted-foreground">
-                {new Date(t.at).toLocaleDateString()}
-              </span>
-            ) : null}
-          </li>
-        ))}
-      </ol>
-    </div>
   );
 }
 

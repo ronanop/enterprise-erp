@@ -58,6 +58,16 @@ export function getSignedPolicyDocsForCaseSync(caseId: string): SignedPolicyDocu
   return cache?.[caseId] ?? [];
 }
 
+/** Drop all signed policy PDFs after the onboarding list is cleared. */
+export async function clearAllSignedPolicyDocs(): Promise<void> {
+  cache = {};
+  loadPromise = Promise.resolve(cache);
+  persistQueue = persistQueue.then(async () => {
+    await idbSetJson(STORAGE_KEY, {});
+  });
+  await persistQueue;
+}
+
 /** Metadata-only copy safe for localStorage (no base64 payloads). */
 export function stripSignedDocPayloads(
   docs: SignedPolicyDocument[],

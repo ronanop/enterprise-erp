@@ -47,21 +47,33 @@ class SessionStore:
         return json.loads(raw)
 
     def delete_session(self, session_id: UUID) -> None:
-        self._client.delete(f"session:{session_id}")
+        try:
+            self._client.delete(f"session:{session_id}")
+        except redis.ConnectionError:
+            return
 
     def set_permissions(self, user_id: UUID, permissions: set[str]) -> None:
         key = f"permissions:{user_id}"
         ttl = settings.jwt_access_token_expire_minutes * 60
-        self._client.setex(key, ttl, json.dumps(list(permissions)))
+        try:
+            self._client.setex(key, ttl, json.dumps(list(permissions)))
+        except redis.ConnectionError:
+            return
 
     def get_permissions(self, user_id: UUID) -> set[str] | None:
-        raw = cast(str | None, self._client.get(f"permissions:{user_id}"))
+        try:
+            raw = cast(str | None, self._client.get(f"permissions:{user_id}"))
+        except redis.ConnectionError:
+            return None
         if raw is None:
             return None
         return set(json.loads(raw))
 
     def invalidate_permissions(self, user_id: UUID) -> None:
-        self._client.delete(f"permissions:{user_id}")
+        try:
+            self._client.delete(f"permissions:{user_id}")
+        except redis.ConnectionError:
+            return
 
     def increment_login_attempts(self, ip: str) -> int:
         key = f"rate_limit:login:{ip}"

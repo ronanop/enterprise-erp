@@ -79,6 +79,14 @@ function mapJobLevel(row: SetupRow): SetupRow {
   };
 }
 
+function mapEntity(row: SetupRow): SetupRow {
+  return {
+    ...row,
+    code: row.company_code,
+    name: row.company_name,
+  };
+}
+
 function mapGrade(row: SetupRow): SetupRow {
   const formatCtc = (v: unknown) => {
     if (v == null || v === "") return "—";
@@ -750,7 +758,9 @@ const TAB_CONFIG: Partial<Record<HrSetupTabId, TabConfig>> = {
     ],
   },
   entities: {
-    nameKeys: ["name"],
+    nameKeys: ["name", "company_name"],
+    codeKey: "company_code",
+    mapApiRow: mapEntity,
     columns: [
       { key: "name", label: "Entity" },
       { key: "code", label: "Code" },
@@ -758,17 +768,68 @@ const TAB_CONFIG: Partial<Record<HrSetupTabId, TabConfig>> = {
       { key: "status", label: "Status" },
     ],
     fields: [
-      { key: "name", label: "Entity name", required: true, placeholder: "e.g. Cache Digitech Pvt Ltd" },
-      { key: "legal_name", label: "Legal name", placeholder: "Registered legal name (optional)" },
-      { key: "code", label: "Code", required: true, readOnly: true },
       {
-        key: "description",
-        label: "Notes",
-        type: "textarea",
-        hint: "Used on onboarding and Add Employee legal-entity selection",
+        key: "company_name",
+        label: "Entity name",
+        required: true,
+        placeholder: "e.g. Cache Digitech Pvt Ltd",
       },
-      STATUS_FIELD,
+      {
+        key: "legal_name",
+        label: "Legal name",
+        placeholder: "Registered legal name (optional)",
+      },
+      {
+        key: "company_code",
+        label: "Code",
+        required: true,
+        hint: "Company code used in Assign HR (e.g. DEMOCO)",
+      },
+      {
+        key: "country_code",
+        label: "Country",
+        type: "searchable",
+        required: true,
+        options: COUNTRY_CODE_OPTIONS,
+        placeholder: "Select country…",
+      },
+      {
+        key: "currency_code",
+        label: "Currency",
+        type: "select",
+        required: true,
+        autoDefault: true,
+        options: [
+          { value: "INR", label: "INR" },
+          { value: "USD", label: "USD" },
+          { value: "EUR", label: "EUR" },
+          { value: "AED", label: "AED" },
+        ],
+      },
+      BRANCH_STATUS_FIELD,
     ],
+    statusActions: {
+      activate: "active",
+      deactivate: "inactive",
+      archive: "inactive",
+    },
+    buildCreateBody: (f) => ({
+      company_code: String(f.company_code || "").trim().toUpperCase(),
+      company_name: f.company_name,
+      legal_name: (f.legal_name || f.company_name).trim(),
+      country_code: f.country_code || "IN",
+      currency_code: f.currency_code || "INR",
+      timezone: "Asia/Kolkata",
+      status: f.status || "active",
+    }),
+    buildUpdateBody: (f) => ({
+      company_code: String(f.company_code || "").trim().toUpperCase() || undefined,
+      company_name: f.company_name,
+      legal_name: (f.legal_name || f.company_name).trim(),
+      country_code: f.country_code || undefined,
+      currency_code: f.currency_code || undefined,
+      status: f.status,
+    }),
   },
   "employment-type": {
     nameKeys: ["name"],

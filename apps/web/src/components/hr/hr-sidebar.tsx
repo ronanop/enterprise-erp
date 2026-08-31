@@ -3,13 +3,14 @@
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useMemo, useState } from "react";
-import { ChevronDown, ChevronLeft, ChevronRight, Moon, Search, Sun } from "lucide-react";
+import { ChevronDown, ChevronLeft, ChevronRight, LogOut, Search } from "lucide-react";
 
 import { flattenHrNavHrefs, hrNavGroups, type HrNavGroup, type HrNavItem } from "@/config/hr-nav";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { useHrmsColorMode } from "@/hooks/use-hrms-color-mode";
 import { useUserPermissions } from "@/hooks/use-user-permissions";
+import { clearTokens } from "@/lib/auth";
+import { authService } from "@/services/api-client";
 import { cn } from "@/lib/utils";
 
 function navHrefMatches(pathname: string, search: string, href: string): boolean {
@@ -237,11 +238,66 @@ function SidebarNavBody({
   );
 }
 
+/** CACHE Digitech lettermark — open C with center dot. */
+function CacheMark({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 40 40" className={className} aria-hidden>
+      <circle
+        cx="20"
+        cy="20"
+        r="14.5"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="5.5"
+        strokeLinecap="round"
+        pathLength="100"
+        strokeDasharray="76 24"
+        transform="rotate(-40 20 20)"
+      />
+      <circle cx="20" cy="20" r="4.25" fill="currentColor" />
+    </svg>
+  );
+}
+
+function SidebarBrand({ collapsed }: { collapsed: boolean }) {
+  return (
+    <Link
+      href="/hr"
+      title="CACHE"
+      className={cn(
+        "flex items-center rounded-xl outline-none transition-colors hover:bg-white/5 focus-visible:ring-2 focus-visible:ring-[#9B5BB8]",
+        collapsed ? "justify-center p-1" : "px-0.5 py-1",
+      )}
+    >
+      {collapsed ? (
+        <span className="flex size-9 items-center justify-center text-[#E31C24]">
+          <CacheMark className="size-full" />
+        </span>
+      ) : (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src="/brand/cache-wordmark.png?v=3"
+          alt="CACHE"
+          className="block h-[52px] w-auto max-w-full object-contain object-left mix-blend-screen"
+        />
+      )}
+    </Link>
+  );
+}
+
 /** Persistent HRMS-only sidebar (swapped in while on /hr routes). */
 export function HrSidebar() {
   const [collapsed, setCollapsed] = useState(false);
   const [query, setQuery] = useState("");
-  const { dark, toggle } = useHrmsColorMode();
+
+  async function handleLogout() {
+    try {
+      await authService.logout();
+    } catch {
+      clearTokens();
+    }
+    window.location.assign("/login");
+  }
 
   return (
     <aside
@@ -251,18 +307,8 @@ export function HrSidebar() {
         collapsed ? "w-[72px]" : "w-[260px]",
       )}
     >
-      <div className={cn("flex items-center gap-3 bg-[#0A0A0A] px-4 py-5", collapsed && "justify-center px-2")}>
-        <div className="flex size-9 items-center justify-center rounded-xl bg-[#9B5BB8] text-[11px] font-bold tracking-wide text-white">
-          HR
-        </div>
-        {!collapsed ? (
-          <div className="min-w-0 flex-1">
-            <p className="truncate text-sm font-medium tracking-tight text-white">
-              HRMS
-            </p>
-            <p className="truncate text-[11px] text-[#AEB6C3]">People operations</p>
-          </div>
-        ) : null}
+      <div className={cn("bg-[#0A0A0A]", collapsed ? "p-2" : "px-3 pt-3 pb-2")}>
+        <SidebarBrand collapsed={collapsed} />
       </div>
 
       {!collapsed ? (
@@ -290,12 +336,12 @@ export function HrSidebar() {
           type="button"
           variant="ghost"
           size="sm"
-          onClick={toggle}
+          onClick={() => void handleLogout()}
           className="w-full cursor-pointer justify-center text-[#AEB6C3] hover:bg-[#2A2A2A] hover:text-white"
-          aria-label={dark ? "Switch to light mode" : "Switch to dark mode"}
+          aria-label="Sign out"
         >
-          {dark ? <Sun className="size-4 text-white" /> : <Moon className="size-4 text-white" />}
-          {!collapsed ? <span className="ml-1">{dark ? "Light mode" : "Dark mode"}</span> : null}
+          <LogOut className="size-4 text-white" />
+          {!collapsed ? <span className="ml-1">Sign out</span> : null}
         </Button>
         <Button
           type="button"

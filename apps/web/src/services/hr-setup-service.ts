@@ -188,25 +188,6 @@ export const DEFAULT_DOCUMENT_TYPES: SetupRow[] = [
   },
 ];
 
-const DEFAULT_ENTITIES: SetupRow[] = [
-  {
-    id: "ent-cache-digitech",
-    code: "ENT-001",
-    name: "Cache Digitech Pvt Ltd",
-    legal_name: "Cache Digitech",
-    description: "Primary demo entity (DEMOCO)",
-    status: "active",
-  },
-  {
-    id: "ent-cache-tech",
-    code: "ENT-002",
-    name: "Cache Technologies",
-    legal_name: "Cache Technologies & Infotech",
-    description: "Second demo entity for multi-company HR",
-    status: "active",
-  },
-];
-
 const DEFAULT_EMPLOYMENT_TYPES: SetupRow[] = [
   {
     id: "et-permanent",
@@ -243,7 +224,6 @@ const DEFAULT_LOCAL: Partial<Record<HrSetupTabId, SetupRow[]>> = {
   "job-levels": [],
   grades: [],
   "employment-types": [],
-  entities: DEFAULT_ENTITIES,
   "employment-type": DEFAULT_EMPLOYMENT_TYPES,
   "document-types": DEFAULT_DOCUMENT_TYPES,
   "leave-policies": [],
@@ -843,14 +823,14 @@ export function cell(row: SetupRow, ...keys: string[]): string {
 
 export type SetupMasterOption = { value: string; label: string };
 
-/** Legal entities configured in HR Setup → Legal Entities. */
+/** Legal entities from organization.org_company (same source as Assign HR). */
 export async function listEntityOptions(): Promise<SetupMasterOption[]> {
-  const rows = await listLocalSetup("entities");
+  const rows = await listAllNormalized("/hr/legal-entities");
   return rows
     .filter((r) => String(r.status ?? "active").toLowerCase() === "active")
     .map((r) => ({
       value: String(r.id),
-      label: String(r.name ?? r.code ?? "Entity"),
+      label: String(r.company_name ?? r.name ?? r.legal_name ?? r.company_code ?? "Entity"),
     }));
 }
 

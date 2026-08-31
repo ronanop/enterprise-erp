@@ -27,3 +27,28 @@ def test_generated_hr_login_password_meets_policy() -> None:
         validate_password_policy(password)
         assert len(password) >= 8
 
+
+def test_hr_admin_assign_request_accepts_company_ids() -> None:
+    from uuid import uuid4
+
+    from modules.hr.schemas import HrAdminAssignRequest, HrAdminEntitiesRequest, HrAdminRecord
+
+    employee_id = uuid4()
+    company_id = uuid4()
+    body = HrAdminAssignRequest(employee_id=employee_id, company_ids=[company_id])
+    assert body.company_ids == [company_id]
+
+    entities = HrAdminEntitiesRequest(company_ids=[company_id])
+    assert entities.company_ids == [company_id]
+
+    record = HrAdminRecord(
+        employee_id=employee_id,
+        employee_code="EMP-1",
+        display_name="Test User",
+        email="hr@example.com",
+        designation="HR",
+        user_id=uuid4(),
+        company_ids=[company_id],
+    )
+    assert record.company_ids == [company_id]
+

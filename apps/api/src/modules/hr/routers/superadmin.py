@@ -13,6 +13,8 @@ from modules.hr.permissions import HR_SUPERADMIN_PERMISSION
 from modules.hr.schemas import (
     HrActivityLogRecord,
     HrAdminAssignRequest,
+    HrAdminEntitiesRequest,
+    HrAdminEntityOption,
     HrAdminPasswordResponse,
     HrAdminRecord,
 )
@@ -30,14 +32,33 @@ def list_hr_admins(
     return APIResponse(message="OK", data=HrSuperadminService(db).list_admins(ctx))
 
 
+@superadmin_router.get("/entities", response_model=APIResponse[list[HrAdminEntityOption]])
+def list_hr_entities(
+    ctx: Annotated[TenantContext, Depends(require_permission(HR_SUPERADMIN_PERMISSION))],
+    db: Annotated[Session, Depends(get_db)],
+):
+    return APIResponse(message="OK", data=HrSuperadminService(db).list_entities(ctx))
+
+
 @superadmin_router.post("/admins", response_model=APIResponse[HrAdminRecord])
 def assign_hr_admin(
     body: HrAdminAssignRequest,
     ctx: Annotated[TenantContext, Depends(require_permission(HR_SUPERADMIN_PERMISSION))],
     db: Annotated[Session, Depends(get_db)],
 ):
-    data = HrSuperadminService(db).assign(ctx, body.employee_id)
+    data = HrSuperadminService(db).assign(ctx, body.employee_id, body.company_ids)
     return APIResponse(message="Employee assigned as HR Admin", data=data)
+
+
+@superadmin_router.patch("/admins/{employee_id}/entities", response_model=APIResponse[HrAdminRecord])
+def set_hr_admin_entities(
+    employee_id: UUID,
+    body: HrAdminEntitiesRequest,
+    ctx: Annotated[TenantContext, Depends(require_permission(HR_SUPERADMIN_PERMISSION))],
+    db: Annotated[Session, Depends(get_db)],
+):
+    data = HrSuperadminService(db).set_entities(ctx, employee_id, body.company_ids)
+    return APIResponse(message="HR Admin entities updated", data=data)
 
 
 @superadmin_router.post(
