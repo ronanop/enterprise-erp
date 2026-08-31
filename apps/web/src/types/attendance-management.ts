@@ -88,7 +88,7 @@ export type AttendanceCorrection = {
   attendanceId: string;
   employeeId: string;
   date: string;
-  field: "check_in" | "check_out";
+  field: "check_in" | "check_out" | "attendance_status";
   oldTime: string;
   newTime: string;
   reason: string;
@@ -96,6 +96,7 @@ export type AttendanceCorrection = {
   workflowStage: "employee" | "manager" | "hr" | "approved" | "rejected";
   createdBy: string;
   createdAt: string;
+  portion?: "full_day" | "first_half" | "second_half" | "absent" | "work_from_home";
 };
 
 export type AttendanceAuditEntry = {

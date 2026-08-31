@@ -31,9 +31,12 @@ export type HrSetupTabId =
   | "grades"
   | "work-locations"
   | "rooms"
+  | "entities"
   | "employment-types"
+  | "employment-type"
   | "reporting"
   | "document-types"
+  | "onboarding-policies"
   | "leave-policies"
   | "leave-types"
   | "holiday-calendar"
@@ -126,12 +129,12 @@ export const hrSetupSections: HrSetupSection[] = [
         codePrefix: "LOC",
       },
       {
-        id: "rooms",
-        title: "Meeting Room",
-        description: "Meeting rooms, conference halls, and training rooms with capacity & features",
+        id: "entities",
+        title: "Legal Entities",
+        description: "Company / legal entities — saved to the database and used in Assign HR",
         source: "api",
-        apiPath: "/hr/training-rooms",
-        codePrefix: "ROOM",
+        apiPath: "/hr/legal-entities",
+        codePrefix: "ENT",
       },
     ],
   },
@@ -143,11 +146,18 @@ export const hrSetupSections: HrSetupSection[] = [
     tabs: [
       {
         id: "employment-types",
-        title: "Employment Types",
+        title: "Employment Group",
         description: "Management groups — shifts, calendars, feature toggles",
         source: "api",
         apiPath: "/hr/management-groups",
         codePrefix: "MG",
+      },
+      {
+        id: "employment-type",
+        title: "Employment Type",
+        description: "Permanent, contract, trainee — used in profiles and onboarding",
+        source: "local",
+        codePrefix: "ET",
       },
       {
         id: "reporting",
@@ -155,13 +165,7 @@ export const hrSetupSections: HrSetupSection[] = [
         description: "Reporting managers derived from roles",
         source: "derived",
       },
-      {
-        id: "document-types",
-        title: "Document Types",
-        description: "KYC catalog — drives onboarding uploads",
-        source: "local",
-        codePrefix: "DOC",
-      },
+      // Document Types & Onboarding Policies moved to EDoc (/hr/edoc)
     ],
   },
   {
@@ -170,13 +174,14 @@ export const hrSetupSections: HrSetupSection[] = [
     description: "Policies, types, and holidays",
     icon: CalendarDays,
     tabs: [
-      {
-        id: "leave-policies",
-        title: "Leave Policies",
-        description: "Accrual and approval rules",
-        source: "local",
-        codePrefix: "LP",
-      },
+      // Leave Policies — hidden for now (managed elsewhere / future release)
+      // {
+      //   id: "leave-policies",
+      //   title: "Leave Policies",
+      //   description: "Accrual and approval rules",
+      //   source: "local",
+      //   codePrefix: "LP",
+      // },
       {
         id: "leave-types",
         title: "Leave Types",
@@ -205,6 +210,16 @@ export const hrSetupSections: HrSetupSection[] = [
   },
 ];
 
+/** Standalone Meeting Room module (sidebar) — not an Org Setup tab. */
+export const meetingRoomTab: HrSetupTab = {
+  id: "rooms",
+  title: "Meeting Room",
+  description: "Meeting rooms, conference halls, and training rooms with capacity & features",
+  source: "api",
+  apiPath: "/hr/training-rooms",
+  codePrefix: "ROOM",
+};
+
 export const setupSectionIcons: Record<HrSetupSectionId, LucideIcon> = {
   organization: Building2,
   employment: Briefcase,
@@ -219,9 +234,12 @@ export const setupTabIcons: Partial<Record<HrSetupTabId, LucideIcon>> = {
   grades: Layers,
   "work-locations": MapPin,
   rooms: DoorOpen,
+  entities: Building2,
   "employment-types": UserCog,
+  "employment-type": Briefcase,
   reporting: Users,
   "document-types": FileText,
+  "onboarding-policies": Shield,
   "leave-policies": Shield,
   "leave-types": CalendarDays,
   "holiday-calendar": CalendarDays,
@@ -250,11 +268,10 @@ export function getSetupTab(sectionId: string, tabId: string | null | undefined)
 
 export function nextCode(prefix: string, existing: string[]): string {
   let max = 0;
-  const needle = `${prefix}-`;
+  const re = new RegExp(`^${prefix}-(\\d+)$`, "i");
   for (const code of existing) {
-    if (!code.toUpperCase().startsWith(needle.toUpperCase())) continue;
-    const digits = code.slice(needle.length);
-    if (/^\d+$/.test(digits)) max = Math.max(max, Number(digits));
+    const m = code.match(re);
+    if (m) max = Math.max(max, Number(m[1]));
   }
   return `${prefix}-${String(max + 1).padStart(3, "0")}`;
 }

@@ -52,6 +52,7 @@ class CompanyRepository(OrgScopedRepository):
         tax_number: str | None = None,
         fiscal_year_start_month: int = 4,
         timezone: str = "UTC",
+        status: str = "active",
     ) -> CompanyEntity:
         row = OrgCompany(
             id=uuid4(),
@@ -65,7 +66,7 @@ class CompanyRepository(OrgScopedRepository):
             tax_number=tax_number,
             fiscal_year_start_month=fiscal_year_start_month,
             timezone=timezone,
-            status="draft",
+            status=status or "active",
             created_by=ctx.user_id,
             updated_by=ctx.user_id,
         )

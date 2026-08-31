@@ -1,15 +1,17 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Pencil } from "lucide-react";
+import { Pencil, Trash2, X } from "lucide-react";
 
+import { LeaveStatusBadge } from "@/components/hr/leave/leave-status-badge";
+import { SetupConfirmDialog } from "@/components/hr/setup/setup-confirm";
 import { SetupDrawer, SetupField, SetupInput, SetupSelect, SetupTextarea } from "@/components/hr/setup/setup-drawer";
 import { toast } from "@/components/hr/setup/setup-toast";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { EmsTimeline } from "@/components/hr/workforce/ems-primitives";
 import {
   advanceLeaveApproval,
+  deleteLeaveType,
   generateCarryForward,
   leaveTrendByMonth,
   saveCompOff,
@@ -18,135 +20,8 @@ import {
   type LeaveDirectory,
 } from "@/services/leave-management-service";
 import type { LeaveRequestRecord, LeaveTypeRecord } from "@/types/leave-management";
-import { LEAVE_STATUS_LABELS } from "@/types/leave-management";
 
-export function LeaveBalancePanel({ directory }: { directory: LeaveDirectory }) {
-  const [employeeId, setEmployeeId] = useState("");
-  const [query, setQuery] = useState("");
-
-  const employees = useMemo(() => {
-    const map = new Map<string, { id: string; name: string; code: string }>();
-    for (const b of directory.balances) {
-      if (!map.has(b.employeeId)) {
-        map.set(b.employeeId, {
-          id: b.employeeId,
-          name: b.employeeName || "Unknown",
-          code: b.employeeCode || "",
-        });
-      }
-    }
-    for (const e of directory.options.employees) {
-      if (!map.has(e.id)) {
-        map.set(e.id, { id: e.id, name: e.label, code: e.code });
-      }
-    }
-    return [...map.values()].sort((a, b) => a.name.localeCompare(b.name));
-  }, [directory]);
-
-  const byEmployee = useMemo(() => {
-    const map = new Map<string, typeof directory.balances>();
-    const q = query.trim().toLowerCase();
-    for (const b of directory.balances) {
-      if (employeeId && b.employeeId !== employeeId) continue;
-      if (q) {
-        const hay = `${b.employeeName} ${b.employeeCode} ${b.leaveTypeName}`.toLowerCase();
-        if (!hay.includes(q)) continue;
-      }
-      const list = map.get(b.employeeId) ?? [];
-      list.push(b);
-      map.set(b.employeeId, list);
-    }
-    return [...map.entries()].sort((a, b) =>
-      (a[1][0]?.employeeName ?? "").localeCompare(b[1][0]?.employeeName ?? ""),
-    );
-  }, [directory.balances, employeeId, query]);
-
-  return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap items-end gap-2 rounded-xl border border-border/70 bg-card p-3 shadow-sm">
-        <div className="min-w-[12rem] flex-1 space-y-1">
-          <label className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-            Employee
-          </label>
-          <SetupSelect
-            value={employeeId}
-            onChange={(e) => setEmployeeId(e.target.value)}
-            className="w-full"
-          >
-            <option value="">All employees</option>
-            {employees.map((e) => (
-              <option key={e.id} value={e.id}>
-                {e.name} ({e.code})
-              </option>
-            ))}
-          </SetupSelect>
-        </div>
-        <div className="min-w-[14rem] flex-[2] space-y-1">
-          <label className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-            Search
-          </label>
-          <Input
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search name, ID, leave type…"
-          />
-        </div>
-        <Button
-          type="button"
-          size="sm"
-          variant="outline"
-          className="cursor-pointer"
-          onClick={() => {
-            setEmployeeId("");
-            setQuery("");
-          }}
-        >
-          Clear
-        </Button>
-        <p className="w-full text-[11px] text-muted-foreground">
-          Showing {byEmployee.length} employee{byEmployee.length === 1 ? "" : "s"}
-          {employeeId ? " (filtered)" : ""}
-        </p>
-      </div>
-
-      {byEmployee.map(([empId, rows]) => (
-        <div key={empId} className="rounded-xl border border-border/70 bg-card p-4 shadow-sm">
-          <h3 className="text-sm font-semibold">
-            {rows[0]?.employeeName}{" "}
-            <span className="font-mono text-xs text-muted-foreground">{rows[0]?.employeeCode}</span>
-          </h3>
-          <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-            {rows.map((b) => {
-              const pct = b.allocated > 0 ? Math.min(100, Math.round((b.used / b.allocated) * 100)) : 0;
-              return (
-                <div key={b.id} className="rounded-lg border border-border/60 p-2.5">
-                  <p className="text-xs font-medium">{b.leaveTypeName}</p>
-                  <p className="mt-1 text-[10px] text-muted-foreground">
-                    Alloc {b.allocated} · Used {b.used} · Pending {b.pending} · Avail {b.available}
-                  </p>
-                  <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-muted">
-                    <div className="h-full rounded-full bg-primary transition-all" style={{ width: `${pct}%` }} />
-                  </div>
-                  <p className="mt-1 text-[10px] text-muted-foreground">
-                    CF {b.carryForward} · Encashed {b.encashed}
-                  </p>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      ))}
-
-      {!byEmployee.length ? (
-        <p className="text-xs text-muted-foreground">
-          {directory.balances.length
-            ? "No balances match this employee filter."
-            : "No leave balances loaded. Seed HR balances or import."}
-        </p>
-      ) : null}
-    </div>
-  );
-}
+export { LeaveBalancePanel } from "@/components/hr/leave/leave-balance-matrix";
 
 export function LeaveTypePolicyPanel({
   directory,
@@ -156,6 +31,12 @@ export function LeaveTypePolicyPanel({
   onSaved: () => void;
 }) {
   const [editing, setEditing] = useState<LeaveTypeRecord | null>(null);
+
+  const editingUsed = editing
+    ? directory.balances
+        .filter((b) => b.leaveTypeId === editing.id)
+        .reduce((s, b) => s + b.used, 0)
+    : 0;
 
   return (
     <>
@@ -205,6 +86,7 @@ export function LeaveTypePolicyPanel({
       <LeaveTypeEditDrawer
         open={Boolean(editing)}
         leaveType={editing}
+        usedDays={editingUsed}
         onClose={() => setEditing(null)}
         onSaved={() => {
           setEditing(null);
@@ -218,11 +100,13 @@ export function LeaveTypePolicyPanel({
 export function LeaveTypeEditDrawer({
   open,
   leaveType,
+  usedDays = 0,
   onClose,
   onSaved,
 }: {
   open: boolean;
   leaveType: LeaveTypeRecord | null;
+  usedDays?: number;
   onClose: () => void;
   onSaved: () => void;
 }) {
@@ -232,12 +116,14 @@ export function LeaveTypeEditDrawer({
   const [isPaid, setIsPaid] = useState(true);
   const [requiresAttachment, setRequiresAttachment] = useState(false);
   const [status, setStatus] = useState("active");
-  const [color, setColor] = useState("#059669");
+  const [color, setColor] = useState("#9B5BB8");
   const [carryForwardAllowed, setCarryForwardAllowed] = useState(true);
   const [approvalRequired, setApprovalRequired] = useState(true);
   const [genderRestriction, setGenderRestriction] = useState("");
   const [eligibility, setEligibility] = useState("All employees");
   const [busy, setBusy] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   // Sync form when drawer opens for a type
   useEffect(() => {
@@ -254,16 +140,31 @@ export function LeaveTypeEditDrawer({
     setGenderRestriction(leaveType.genderRestriction || "");
     setEligibility(leaveType.eligibility || "All employees");
     setBusy(false);
+    setConfirmDelete(false);
+    setDeleting(false);
   }, [open, leaveType]);
 
   return (
+    <>
     <SetupDrawer
       open={open}
-      title="Edit leave type policy"
+      title="Edit Leave Type Policy"
       description={leaveType ? `${leaveType.code} · policy & eligibility` : ""}
       onClose={onClose}
       footer={
         <>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            className="mr-auto cursor-pointer text-destructive hover:bg-destructive/10 hover:text-destructive"
+            disabled={busy || deleting || !leaveType || usedDays > 0}
+            title={usedDays > 0 ? "Cannot delete while used balance exists" : "Delete leave type"}
+            onClick={() => setConfirmDelete(true)}
+          >
+            <Trash2 className="size-3.5" />
+            Delete
+          </Button>
           <Button type="button" size="sm" variant="outline" className="cursor-pointer" onClick={onClose}>
             Cancel
           </Button>
@@ -271,7 +172,7 @@ export function LeaveTypeEditDrawer({
             type="button"
             size="sm"
             className="cursor-pointer"
-            disabled={busy || !leaveType}
+            disabled={busy || deleting || !leaveType}
             onClick={() => {
               if (!leaveType) return;
               setBusy(true);
@@ -385,6 +286,35 @@ export function LeaveTypeEditDrawer({
         </div>
       ) : null}
     </SetupDrawer>
+    <SetupConfirmDialog
+      open={confirmDelete}
+      title="Delete leave type"
+      message={
+        leaveType
+          ? `Remove “${leaveType.name}” (${leaveType.code})? Types with used balance or open requests cannot be deleted.`
+          : ""
+      }
+      confirmLabel="Delete"
+      destructive
+      loading={deleting}
+      onCancel={() => {
+        if (deleting) return;
+        setConfirmDelete(false);
+      }}
+      onConfirm={() => {
+        if (!leaveType) return;
+        setDeleting(true);
+        void deleteLeaveType(leaveType)
+          .then(() => {
+            toast("Leave type deleted", "success");
+            setConfirmDelete(false);
+            onSaved();
+          })
+          .catch((e) => toast(e instanceof Error ? e.message : "Delete failed", "error"))
+          .finally(() => setDeleting(false));
+      }}
+    />
+    </>
   );
 }
 
@@ -401,8 +331,14 @@ export function LeaveApprovalDrawer({
 }) {
   const [comment, setComment] = useState("");
   const [loading, setLoading] = useState(false);
+  const [showHistory, setShowHistory] = useState(false);
 
-  if (!request) return null;
+  useEffect(() => {
+    setComment("");
+    setShowHistory(false);
+  }, [request?.id]);
+
+  if (!open || !request) return null;
 
   async function act(action: "approve" | "reject" | "send_back" | "request_info" | "cancel") {
     setLoading(true);
@@ -418,66 +354,159 @@ export function LeaveApprovalDrawer({
     }
   }
 
+  const isHr =
+    request.status === "manager_approved" || request.extension.approvalStage === "hr_review";
+  const history = request.extension.approvalHistory ?? [];
+
   return (
-    <SetupDrawer
-      open={open}
-      title="Leave approval"
-      description={`${request.employeeName} · ${request.leaveTypeName}`}
-      wide
-      onClose={onClose}
-      footer={
-        <div className="flex flex-wrap gap-2">
-          <Button size="sm" className="cursor-pointer" disabled={loading} onClick={() => void act("approve")}>
-            {request.status === "manager_approved" || request.extension.approvalStage === "hr_review"
-              ? "HR Approve"
-              : "Reporting manager approve"}
+    <aside className="flex h-full w-full shrink-0 flex-col overflow-hidden rounded-xl border border-border/70 bg-card shadow-sm lg:w-[320px] xl:w-[340px]">
+      <div className="flex items-start justify-between gap-2 border-b border-border/70 px-3 py-2.5">
+        <div className="min-w-0">
+          <p className="truncate text-sm font-semibold">{request.employeeName}</p>
+          <p className="truncate text-[11px] text-muted-foreground">
+            {request.employeeCode} · {request.leaveTypeName}
+          </p>
+        </div>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon-sm"
+          className="cursor-pointer shrink-0"
+          onClick={onClose}
+          aria-label="Close"
+        >
+          <X className="size-3.5" />
+        </Button>
+      </div>
+
+      <div className="erp-scroll min-h-0 flex-1 space-y-3 overflow-y-auto px-3 py-3">
+        <div className="flex flex-wrap items-center gap-2">
+          <LeaveStatusBadge status={request.extension.approvalStage || request.status} />
+          <span className="text-[11px] text-muted-foreground">
+            {request.totalDays} day{request.totalDays === 1 ? "" : "s"} ·{" "}
+            {request.extension.session.replace(/_/g, " ")}
+          </span>
+        </div>
+
+        <dl className="grid grid-cols-[auto_1fr] gap-x-2 gap-y-1 text-xs">
+          <dt className="text-muted-foreground">Dates</dt>
+          <dd className="font-medium">
+            {request.fromDate} → {request.toDate}
+          </dd>
+          <dt className="text-muted-foreground">Dept</dt>
+          <dd>{request.departmentName || "—"}</dd>
+          <dt className="text-muted-foreground">Applied</dt>
+          <dd>{request.appliedOn.slice(0, 10)}</dd>
+          <dt className="text-muted-foreground">Approver</dt>
+          <dd>{request.approverName || "—"}</dd>
+        </dl>
+
+        <div className="rounded-md border border-border/60 bg-muted/40 px-2.5 py-2">
+          <p className="mb-0.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+            Reason
+          </p>
+          <p className="text-xs leading-snug whitespace-pre-wrap">
+            {request.reason?.trim() || "No reason provided."}
+          </p>
+        </div>
+
+        {(request.extension.contactDuringLeave || request.extension.emergencyContact) && (
+          <div className="space-y-0.5 text-[11px] text-muted-foreground">
+            {request.extension.contactDuringLeave ? (
+              <p>Contact: {request.extension.contactDuringLeave}</p>
+            ) : null}
+            {request.extension.emergencyContact ? (
+              <p>Emergency: {request.extension.emergencyContact}</p>
+            ) : null}
+          </div>
+        )}
+
+        <SetupField label="Comment">
+          <SetupTextarea
+            value={comment}
+            onChange={(e) => setComment(e.target.value)}
+            className="min-h-[56px] text-xs"
+            placeholder="Optional note…"
+          />
+        </SetupField>
+
+        {history.length > 0 ? (
+          <div>
+            <button
+              type="button"
+              className="cursor-pointer text-[11px] font-medium text-primary underline-offset-2 hover:underline"
+              onClick={() => setShowHistory((v) => !v)}
+            >
+              {showHistory ? "Hide history" : `History (${history.length})`}
+            </button>
+            {showHistory ? (
+              <ul className="mt-1.5 space-y-1.5 border-t border-border/50 pt-1.5">
+                {history.slice(0, 5).map((h) => (
+                  <li key={h.id} className="text-[11px] leading-snug">
+                    <span className="font-medium capitalize">{h.action.replace(/_/g, " ")}</span>
+                    {h.comment ? <span className="text-muted-foreground"> · {h.comment}</span> : null}
+                    <span className="block text-muted-foreground">
+                      {h.actor} · {h.at.slice(0, 16).replace("T", " ")}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+          </div>
+        ) : null}
+      </div>
+
+      <div className="space-y-1.5 border-t border-border/70 px-3 py-2.5">
+        <div className="grid grid-cols-2 gap-1.5">
+          <Button
+            size="sm"
+            className="cursor-pointer h-8 text-xs"
+            disabled={loading}
+            onClick={() => void act("approve")}
+          >
+            {isHr ? "HR Approve" : "Approve"}
           </Button>
-          <Button size="sm" variant="destructive" className="cursor-pointer" disabled={loading} onClick={() => void act("reject")}>
+          <Button
+            size="sm"
+            variant="destructive"
+            className="cursor-pointer h-8 text-xs"
+            disabled={loading}
+            onClick={() => void act("reject")}
+          >
             Reject
           </Button>
-          <Button size="sm" variant="outline" className="cursor-pointer" disabled={loading} onClick={() => void act("send_back")}>
+        </div>
+        <div className="grid grid-cols-3 gap-1">
+          <Button
+            size="sm"
+            variant="outline"
+            className="cursor-pointer h-7 px-1 text-[10px]"
+            disabled={loading}
+            onClick={() => void act("send_back")}
+          >
             Send back
           </Button>
-          <Button size="sm" variant="outline" className="cursor-pointer" disabled={loading} onClick={() => void act("request_info")}>
-            Request info
+          <Button
+            size="sm"
+            variant="outline"
+            className="cursor-pointer h-7 px-1 text-[10px]"
+            disabled={loading}
+            onClick={() => void act("request_info")}
+          >
+            Info
           </Button>
-          <Button size="sm" variant="ghost" className="cursor-pointer" disabled={loading} onClick={() => void act("cancel")}>
-            Cancel leave
+          <Button
+            size="sm"
+            variant="ghost"
+            className="cursor-pointer h-7 px-1 text-[10px]"
+            disabled={loading}
+            onClick={() => void act("cancel")}
+          >
+            Cancel
           </Button>
-        </div>
-      }
-    >
-      <div className="space-y-3 text-sm">
-        <p className="text-xs text-muted-foreground">
-          Workflow: Employee → Reporting manager → HR → Director (optional) → Approved
-        </p>
-        <p>
-          <span className="text-muted-foreground">Dates:</span> {request.fromDate} → {request.toDate} (
-          {request.totalDays} days, {request.extension.session.replace(/_/g, " ")})
-        </p>
-        <p>
-          <span className="text-muted-foreground">Status:</span>{" "}
-          {LEAVE_STATUS_LABELS[request.extension.approvalStage] ?? request.status}
-        </p>
-        <p>
-          <span className="text-muted-foreground">Reason:</span> {request.reason || "—"}
-        </p>
-        <SetupField label="Approval comments">
-          <SetupTextarea value={comment} onChange={(e) => setComment(e.target.value)} />
-        </SetupField>
-        <div>
-          <h4 className="mb-2 text-xs font-semibold uppercase text-muted-foreground">Approval history</h4>
-          <EmsTimeline
-            items={(request.extension.approvalHistory ?? []).map((h) => ({
-              title: `${h.action} · ${h.stage}`,
-              detail: h.comment,
-              at: h.at,
-              actor: h.actor,
-            }))}
-          />
         </div>
       </div>
-    </SetupDrawer>
+    </aside>
   );
 }
 
@@ -586,16 +615,16 @@ export function CompOffEncashDrawers({
     <>
       <div className="flex flex-wrap gap-2">
         <Button size="sm" variant="outline" className="cursor-pointer" onClick={() => setCompOpen(true)}>
-          Generate comp off
+          Generate Comp Off
         </Button>
         <Button size="sm" variant="outline" className="cursor-pointer" onClick={() => setEncOpen(true)}>
-          Leave encashment
+          Leave Encashment
         </Button>
       </div>
 
       <SetupDrawer
         open={compOpen}
-        title="Generate comp off"
+        title="Generate Comp Off"
         onClose={() => setCompOpen(false)}
         footer={
           <Button
@@ -651,7 +680,7 @@ export function CompOffEncashDrawers({
 
       <SetupDrawer
         open={encOpen}
-        title="Leave encashment"
+        title="Leave Encashment"
         onClose={() => setEncOpen(false)}
         footer={
           <Button

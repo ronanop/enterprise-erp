@@ -7,10 +7,16 @@ import { SetupDrawer, SetupField, SetupInput, SetupSelect, SetupTextarea } from 
 import { toast } from "@/components/hr/setup/setup-toast";
 import { Button } from "@/components/ui/button";
 import {
+  extractDataMatrix,
+  matrixToCsv,
+  parseSpreadsheetFileAsMatrix,
+} from "@/lib/spreadsheet";
+import {
   applyAttendanceCorrection,
   downloadTextFile,
   importAttendanceCsv,
   type AttendanceDirectory,
+  type RegularizeKind,
 } from "@/services/attendance-management-service";
 import type { AttendanceRecord } from "@/types/attendance-management";
 
@@ -54,8 +60,8 @@ export function AttendanceImportDrawer({
   return (
     <SetupDrawer
       open={open}
-      title="Import attendance"
-      description="CSV import with duplicate validation (employee + date)."
+      title="Import Attendance"
+      description="CSV or Excel import with duplicate validation (employee + date)."
       onClose={onClose}
       footer={
         <>
@@ -83,7 +89,7 @@ export function AttendanceImportDrawer({
                 .finally(() => setBusy(false));
             }}
           >
-            {busy ? "Importing…" : "Import CSV"}
+            {busy ? "Importing…" : "Import"}
           </Button>
         </>
       }
@@ -98,16 +104,32 @@ export function AttendanceImportDrawer({
         <Download className="size-3.5" />
         Download sample CSV
       </Button>
-      <SetupField label="Upload CSV">
+      <SetupField label="Upload CSV or Excel">
         <input
           type="file"
-          accept=".csv,text/csv"
+          accept=".csv,.xlsx,.xlsm,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
           className="cursor-pointer text-xs"
           onChange={(e) => {
             const file = e.target.files?.[0];
             if (!file) return;
             setFileName(file.name);
-            void file.text().then(setCsvText);
+            void (async () => {
+              try {
+                const name = file.name.toLowerCase();
+                if (name.endsWith(".csv") || file.type === "text/csv") {
+                  setCsvText(await file.text());
+                  return;
+                }
+                const matrix = extractDataMatrix(
+                  await parseSpreadsheetFileAsMatrix(file),
+                  "employee_code",
+                );
+                setCsvText(matrixToCsv(matrix));
+              } catch (err) {
+                setCsvText("");
+                toast(err instanceof Error ? err.message : "Could not read file", "error");
+              }
+            })();
           }}
         />
       </SetupField>
@@ -120,6 +142,13 @@ export function AttendanceImportDrawer({
   );
 }
 
+const REGULARIZE_STATUSES: { value: RegularizeKind; label: string }[] = [
+  { value: "full_day", label: "Full day" },
+  { value: "half_day", label: "Half day" },
+  { value: "absent", label: "Absent" },
+  { value: "work_from_home", label: "Work from home" },
+];
+
 export function AttendanceCorrectionDrawer({
   open,
   onClose,
@@ -131,36 +160,33 @@ export function AttendanceCorrectionDrawer({
   record: AttendanceRecord | null;
   onSaved: () => void;
 }) {
-  const [field, setField] = useState<"check_in" | "check_out">("check_in");
-  const [newTime, setNewTime] = useState("");
+  const [kind, setKind] = useState<RegularizeKind>("full_day");
+  const [halfPortion, setHalfPortion] = useState<"first_half" | "second_half">("first_half");
   const [reason, setReason] = useState("");
   const [fileName, setFileName] = useState("");
   const [busy, setBusy] = useState(false);
 
-  const oldTime = useMemo(() => {
+  const punchSummary = useMemo(() => {
     if (!record) return "";
-    const iso = field === "check_in" ? record.checkIn : record.checkOut;
-    return formatPunchTimeForDisplay(iso);
-  }, [record, field]);
+    const inn = formatPunchTimeForDisplay(record.checkIn) || "—";
+    const out = formatPunchTimeForDisplay(record.checkOut) || "—";
+    return `In ${inn} · Out ${out}`;
+  }, [record]);
 
   useEffect(() => {
     if (!open || !record) return;
-    setField("check_in");
-    setNewTime("");
+    setKind("full_day");
+    setHalfPortion("first_half");
     setReason("");
     setFileName("");
     setBusy(false);
   }, [open, record]);
 
-  useEffect(() => {
-    setNewTime("");
-  }, [field]);
-
   return (
     <SetupDrawer
       open={open}
-      title="Attendance correction"
-      description="Updates punch time and logs a correction request"
+      title="Regularize Attendance"
+      description="Regularize as full day, half day (1st or 2nd), absent, or work from home. Punch times stay as recorded."
       onClose={onClose}
       footer={
         <>
@@ -173,28 +199,28 @@ export function AttendanceCorrectionDrawer({
             className="cursor-pointer"
             disabled={busy}
             onClick={() => {
-              if (!record || !newTime || !reason) {
-                toast("Correct time and reason required", "error");
+              if (!record || !reason.trim()) {
+                toast("Reason is required", "error");
                 return;
               }
               setBusy(true);
               void applyAttendanceCorrection({
                 record,
-                field,
-                newTime,
-                reason,
+                kind,
+                halfPortion: kind === "half_day" ? halfPortion : undefined,
+                reason: reason.trim(),
                 attachmentName: fileName,
               })
                 .then(() => {
-                  toast("Correction applied and logged", "success");
+                  toast("Attendance regularized", "success");
                   onSaved();
                   onClose();
                 })
-                .catch((e) => toast(e instanceof Error ? e.message : "Correction failed", "error"))
+                .catch((e) => toast(e instanceof Error ? e.message : "Regularization failed", "error"))
                 .finally(() => setBusy(false));
             }}
           >
-            {busy ? "Saving…" : "Submit correction"}
+            {busy ? "Saving…" : "Apply regularization"}
           </Button>
         </>
       }
@@ -204,18 +230,35 @@ export function AttendanceCorrectionDrawer({
           <p className="text-xs text-muted-foreground">
             {record.extension.employeeName} · {record.attendanceDate}
           </p>
-          <SetupField label="Field">
-            <SetupSelect value={field} onChange={(e) => setField(e.target.value as "check_in" | "check_out")}>
-              <option value="check_in">Check in</option>
-              <option value="check_out">Check out</option>
+          <SetupField label="Date">
+            <SetupInput type="date" value={record.attendanceDate} readOnly />
+          </SetupField>
+          <SetupField label="Recorded punches">
+            <SetupInput value={punchSummary} readOnly />
+          </SetupField>
+          <SetupField label="Attendance status" required>
+            <SetupSelect
+              value={kind}
+              onChange={(e) => setKind(e.target.value as RegularizeKind)}
+            >
+              {REGULARIZE_STATUSES.map((opt) => (
+                <option key={opt.value} value={opt.value}>
+                  {opt.label}
+                </option>
+              ))}
             </SetupSelect>
           </SetupField>
-          <SetupField label="Old time">
-            <SetupInput value={oldTime} readOnly />
-          </SetupField>
-          <SetupField label="Correct time" required>
-            <SetupInput type="time" value={newTime} onChange={(e) => setNewTime(e.target.value)} />
-          </SetupField>
+          {kind === "half_day" ? (
+            <SetupField label="Half" required>
+              <SetupSelect
+                value={halfPortion}
+                onChange={(e) => setHalfPortion(e.target.value as "first_half" | "second_half")}
+              >
+                <option value="first_half">First half</option>
+                <option value="second_half">Second half</option>
+              </SetupSelect>
+            </SetupField>
+          ) : null}
           <SetupField label="Reason" required>
             <SetupTextarea value={reason} onChange={(e) => setReason(e.target.value)} />
           </SetupField>
@@ -227,9 +270,9 @@ export function AttendanceCorrectionDrawer({
             />
           </SetupField>
           <ol className="list-decimal pl-4 text-[10px] text-muted-foreground">
-            <li>Punch time is updated immediately</li>
-            <li>Correction request is audit-logged</li>
-            <li>Status moves to pending approval review</li>
+            <li>Actual check-in / check-out times are not changed</li>
+            <li>Day is marked full day, half day (1st/2nd), absent, or work from home</li>
+            <li>Regularization is audit-logged on the attendance record</li>
           </ol>
         </div>
       ) : null}

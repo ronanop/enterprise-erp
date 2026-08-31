@@ -58,8 +58,39 @@ def test_resolve_employee_missing_raises(monkeypatch):
 def test_get_me_maps_employee(monkeypatch):
     emp = _employee()
     ctx = _ctx(user_id=emp.user_id, tenant_id=emp.tenant_id)
-    svc = EssService(db=SimpleNamespace())
+
+    class _ScalarsResult:
+        def all(self):
+            return []
+
+    class _FakeDb:
+        def scalars(self, *a, **k):
+            return _ScalarsResult()
+
+        def scalar(self, *a, **k):
+            return None
+
+        def get(self, *a, **k):
+            return None
+
+    svc = EssService(db=_FakeDb())
     monkeypatch.setattr(svc._employees, "get_by_user_id", lambda c, u: emp)
+
+    class _FakeRbac:
+        def __init__(self, db):
+            pass
+
+        def get_user_permissions(self, user_id, tenant_id):
+            return set()
+
+    monkeypatch.setattr(
+        "modules.foundation.service.rbac_service.RBACService",
+        _FakeRbac,
+    )
+
+    compliance = SimpleNamespace(pending_policy_count=lambda c: 0)
+    monkeypatch.setattr(svc, "_compliance", lambda: compliance)
+
     me = svc.get_me(ctx)
     assert me.employee_id == emp.id
     assert me.display_name == "Ada Lovelace"

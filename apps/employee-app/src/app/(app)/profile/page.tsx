@@ -22,11 +22,15 @@ const PROFESSIONAL_LINKS = [
   { label: "Bank Details", href: "/profile/bank" },
   { label: "Education & Skills", href: "/profile/education" },
   { label: "Company Assets", href: "/assets" },
+  { label: "Meeting rooms", href: "/rooms" },
+  { label: "Help & tickets", href: "/support" },
   { label: "My Training", href: "/training" },
   { label: "Performance", href: "/performance" },
   { label: "Separation", href: "/separation" },
   { label: "My Documents", href: "/documents" },
   { label: "Security Settings", href: "/profile/security" },
+  { label: "Change password", href: "/profile/change-password" },
+  { label: "Policies", href: "/compliance" },
 ] as const;
 
 export default function ProfilePage() {
@@ -142,6 +146,20 @@ export default function ProfilePage() {
               />
             </div>
           </section>
+
+          {me?.is_ess_admin && me.admin_use_web_portal ? (
+            <section className={`${ui.card} border border-[#dbe1ff] bg-[#eff4ff] p-4 text-sm text-[#0b1c30]`}>
+              <p className="font-semibold text-[#004ac6]">HR / admin access</p>
+              <p className="mt-1 text-[#434655]">
+                Your account has admin permissions. Use the HRMS web portal for configuration,
+                bulk operations, and helpdesk agent tools. This mobile app stays focused on
+                employee and manager self-service.
+              </p>
+              <p className="mt-2 text-xs text-[#434655]">
+                Role: {me.ess_role ?? "admin"} · {me.role_codes?.join(", ") || "—"}
+              </p>
+            </section>
+          ) : null}
 
           <section className={ui.cardFlush}>
             <p className={`${ui.sectionTitle} px-4 pb-1 pt-3`}>Employment</p>

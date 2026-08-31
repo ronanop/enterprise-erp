@@ -32,7 +32,27 @@ class OrgContextService:
         }
 
     def list_accessible_companies(self, ctx: TenantContext):
-        return self._companies.list_companies(ctx)
+        if ctx.user_type in {"super_admin", "tenant_admin"}:
+            return self._companies.list_companies(ctx)
+
+        scopes = self._scopes.list_user_scopes(ctx.user_id, ctx.tenant_id)
+        company_ids = {s.company_id for s in scopes}
+        if not company_ids:
+            # HR Admins are strictly entity-scoped. Empty scope must not leak every company.
+            if self._is_hr_admin(ctx):
+                return []
+            return self._companies.list_companies(ctx)
+
+        companies = []
+        seen: set[UUID] = set()
+        for company_id in company_ids:
+            if company_id in seen:
+                continue
+            company = self._companies.get_by_id(ctx, company_id)
+            if company is not None:
+                companies.append(company)
+                seen.add(company_id)
+        return companies
 
     def list_accessible_branches(self, ctx: TenantContext, company_id: UUID):
         from modules.organization.repository.branch_repository import BranchRepository
@@ -77,3 +97,27 @@ class OrgContextService:
             "company_id": str(company_id),
             "branch_id": str(branch_id) if branch_id else None,
         }
+
+    def _is_hr_admin(self, ctx: TenantContext) -> bool:
+        from sqlalchemy import select
+
+        from modules.foundation.models.security import SecRole, SecUserRole
+
+        role_id = self._db.scalar(
+            select(SecRole.id).where(
+                SecRole.tenant_id == ctx.tenant_id,
+                SecRole.role_code == "HR_ADMIN",
+                SecRole.is_deleted.is_(False),
+            )
+        )
+        if role_id is None:
+            return False
+        return (
+            self._db.scalar(
+                select(SecUserRole.id).where(
+                    SecUserRole.user_id == ctx.user_id,
+                    SecUserRole.role_id == role_id,
+                )
+            )
+            is not None
+        )

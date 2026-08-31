@@ -62,6 +62,11 @@ export const mockMe: EssMe = {
   date_of_joining: "2023-04-10",
   status: "active",
   display_name: "Riya Sharma",
+  ess_role: "employee",
+  is_manager: false,
+  can_approve_team_leave: false,
+  pending_approvals_count: 0,
+  role_codes: ["HR_EMPLOYEE"],
 };
 
 export const mockLeaveTypes: EssLeaveType[] = [

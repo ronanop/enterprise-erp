@@ -32,7 +32,7 @@ class HrMasterDataAdapter:
         date_of_leaving: date,
     ):
         status = EmployeeStatus.RESIGNED.value
-        if separation_type == "termination":
+        if separation_type in {"termination", "death"}:
             status = EmployeeStatus.TERMINATED.value
         return self._employees.update_employee(
             ctx,

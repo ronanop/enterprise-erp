@@ -1,27 +1,64 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { CheckCircle2, Circle, UserCheck } from "lucide-react";
+import { useEffect, useState } from "react";
+import {
+  CheckCircle2,
+  Circle,
+  ClipboardList,
+  FileText,
+  Globe,
+  LayoutList,
+  Loader2,
+  Save,
+  UserCheck,
+} from "lucide-react";
 
-import { HrStatusBadge } from "@/components/hr/hr-primitives";
+import { EmployeeIdModeFields } from "@/components/hr/onboarding/employee-id-mode-fields";
+import {
+  OnboardingDocumentPreviewDialog,
+  OnboardingDocumentRow,
+} from "@/components/hr/onboarding/onboarding-document-preview";
+import { MasterSelect } from "@/components/hr/shared/employee-select";
+import { toast } from "@/components/hr/setup/setup-toast";
+import { HrStatusBadge, HrUnderlineTabs, type HrTabItem } from "@/components/hr/hr-primitives";
 import {
   SetupDrawer,
   SetupField,
+  SetupInput,
+  SetupSelect,
   SetupTextarea,
 } from "@/components/hr/setup/setup-drawer";
 import { Button } from "@/components/ui/button";
-import { getInvitationUrl } from "@/services/onboarding-management-service";
+import { EMPLOYMENT_TYPE_OPTIONS, employmentDurationKind, formatEmploymentTypeLabel } from "@/config/hr-master-options";
+import { getPortalLoginUrl, type OnboardingAssignmentInput } from "@/services/onboarding-management-service";
+import { previewNextEmployeeCode } from "@/services/employee-management-service";
+import {
+  loadHrMasterDirectory,
+  type HrMasterOption,
+} from "@/services/hr-master-connector";
+import { listEmploymentTypeOptions, listEntityOptions, loadSetupOrgLookups } from "@/services/hr-setup-service";
+import type { ManagementGroup } from "@/services/management-group-service";
 import type {
   ChecklistItem,
   OnboardingCase,
   OnboardingDocument,
 } from "@/types/onboarding-management";
-import { ONBOARDING_STATUS_LABELS, PORTAL_STEPS } from "@/types/onboarding-management";
+import { PORTAL_STEPS } from "@/types/onboarding-management";
+import { resolveOnboardingDisplayStatus } from "@/lib/onboarding-display-status";
+import { maskAadhaar, maskEmail, maskPan, maskPhone } from "@/lib/pii-mask";
+import {
+  canActivateOnboardingCase,
+  canApproveOnboardingCase,
+  canCompleteOnboardingCase,
+  hasOnboardingEmployeeRecord,
+  isJoiningDateReached,
+} from "@/lib/onboarding-workflow";
 import { cn } from "@/lib/utils";
 
 type Props = {
   open: boolean;
   caseRow: OnboardingCase | null;
+  managementGroups: ManagementGroup[];
   onClose: () => void;
   onChecklist: (caseId: string, itemId: string, status: ChecklistItem["status"]) => void;
   onVerifyDoc: (
@@ -29,64 +66,209 @@ type Props = {
     docId: string,
     status: OnboardingDocument["verifyStatus"],
   ) => void;
-  onReady: (caseId: string) => void;
-  onActivate: (caseId: string, opts: { employeeCode: string; shiftId?: string }) => void;
+  onSaveAssignment: (caseId: string, input: OnboardingAssignmentInput) => Promise<void>;
+  onApprove: (caseId: string) => void;
+  onComplete: (
+    caseId: string,
+    managementGroup?: ManagementGroup,
+    employeeCode?: string,
+  ) => void | Promise<void>;
+  onActivate: (caseId: string, managementGroup?: ManagementGroup) => void | Promise<void>;
   onInvite: (caseRow: OnboardingCase) => void;
 };
+
+type AssignmentForm = {
+  joiningDate: string;
+  entityId: string;
+  entityName: string;
+  department: string;
+  designation: string;
+  reportingManager: string;
+  branch: string;
+  branchId: string;
+  employmentType: string;
+  probationPeriodDays: string;
+  trainingDurationDays: string;
+  employeeIdMode: "auto" | "manual";
+  assignedEmployeeCode: string;
+};
+
+function formFromCase(c: OnboardingCase): AssignmentForm {
+  return {
+    joiningDate: c.joiningDate || "",
+    entityId: c.entityId || "",
+    entityName: c.entityName || "",
+    department: c.department || "",
+    designation: c.designation || "",
+    reportingManager: c.reportingManager || "",
+    branch: c.branch || "",
+    branchId: c.branchId || "",
+    employmentType: c.employmentType || "permanent",
+    probationPeriodDays: c.probationPeriodDays || "",
+    trainingDurationDays: c.trainingDurationDays || "",
+    employeeIdMode: c.employeeIdMode === "manual" ? "manual" : "auto",
+    assignedEmployeeCode: c.assignedEmployeeCode || "",
+  };
+}
 
 export function CaseDetailDrawer({
   open,
   caseRow,
+  managementGroups,
   onClose,
   onChecklist,
   onVerifyDoc,
-  onReady,
+  onSaveAssignment,
+  onApprove,
+  onComplete,
   onActivate,
   onInvite,
 }: Props) {
-  const [tab, setTab] = useState<"overview" | "portal" | "docs" | "checklist" | "timeline">(
-    "overview",
-  );
+  const [tab, setTab] = useState<"overview" | "portal" | "docs" | "checklist">("overview");
   const [note, setNote] = useState("");
-  const [empCodeInput, setEmpCodeInput] = useState("");
+  const [previewDoc, setPreviewDoc] = useState<OnboardingDocument | null>(null);
+  const [managementGroupId, setManagementGroupId] = useState(
+    () => caseRow?.managementGroupId ?? "",
+  );
+  const [form, setForm] = useState<AssignmentForm | null>(null);
+  const [savingAssignment, setSavingAssignment] = useState(false);
+  const [actionBusy, setActionBusy] = useState<"complete" | "activate" | null>(null);
+  const [masters, setMasters] = useState<{
+    departments: HrMasterOption[];
+    designations: HrMasterOption[];
+    managers: HrMasterOption[];
+    branches: HrMasterOption[];
+  }>({
+    departments: [],
+    designations: [],
+    managers: [],
+    branches: [],
+  });
+  const [employmentTypes, setEmploymentTypes] = useState(EMPLOYMENT_TYPE_OPTIONS);
+  const [entities, setEntities] = useState<{ value: string; label: string }[]>([]);
+  const [nextAutoCode, setNextAutoCode] = useState("");
 
-  const timeline = useMemo(() => {
-    if (!caseRow) return [];
-    const items: { label: string; at?: string; done: boolean }[] = [
-      { label: "Case created", at: caseRow.createdAt, done: true },
-      {
-        label: "Invitation sent",
-        at: caseRow.invitation?.sentAt,
-        done: Boolean(caseRow.invitation?.sentAt),
-      },
-      {
-        label: "Portal in progress",
-        done: ["in_progress", "submitted", "hr_review", "ready_to_join", "joined"].includes(
-          caseRow.status,
-        ),
-      },
-      {
-        label: "Candidate submitted",
-        at: caseRow.portal.submittedAt,
-        done: Boolean(caseRow.portal.submittedAt),
-      },
-      {
-        label: "Ready to join",
-        done: ["ready_to_join", "joined"].includes(caseRow.status),
-      },
-      {
-        label: "Employee activated",
-        at: caseRow.activatedAt,
-        done: caseRow.status === "joined",
-      },
-    ];
-    return items;
-  }, [caseRow]);
+  useEffect(() => {
+    if (!open) setActionBusy(null);
+  }, [open]);
 
-  if (!caseRow) return null;
+  useEffect(() => {
+    if (!caseRow) {
+      setForm(null);
+      return;
+    }
+    setForm(formFromCase(caseRow));
+    setManagementGroupId(caseRow.managementGroupId ?? "");
+  }, [caseRow?.id, caseRow?.updatedAt]);
+
+  useEffect(() => {
+    if (!open) return;
+    void Promise.all([
+      loadHrMasterDirectory(),
+      listEmploymentTypeOptions(),
+      listEntityOptions(),
+      loadSetupOrgLookups(),
+    ]).then(([m, types, entityOpts, org]) => {
+      // Prefer Org Setup → Branches (Sultanpur, etc.) so HR sees company branches
+      const orgBranches: HrMasterOption[] = org.branches.map((b) => ({
+        id: b.value,
+        label: b.label,
+        companyId: b.companyId,
+      }));
+      const byId = new Map<string, HrMasterOption>();
+      for (const b of [...orgBranches, ...m.branches]) {
+        if (b.id && !byId.has(b.id)) byId.set(b.id, b);
+      }
+      const branches = [...byId.values()];
+      setMasters({
+        departments: m.departments,
+        designations: m.designations,
+        managers: m.managers,
+        branches,
+      });
+      setEmploymentTypes(types);
+      setEntities(entityOpts);
+      setNextAutoCode(previewNextEmployeeCode());
+    });
+  }, [open]);
+
+  if (!caseRow || !form) return null;
 
   const hrTasks = caseRow.checklist.filter((t) => t.owner === "hr");
   const mgrTasks = caseRow.checklist.filter((t) => t.owner === "manager");
+  const showChecklist = caseRow.status === "joined" && caseRow.checklist.length > 0;
+  const canApprove = canApproveOnboardingCase(caseRow);
+  const canComplete = canCompleteOnboardingCase(caseRow);
+  const canActivate = canActivateOnboardingCase(caseRow);
+  const isPendingJoin = caseRow.status === "pending_join";
+  const joiningNotReached = isPendingJoin && !isJoiningDateReached(caseRow.joiningDate);
+  const selectedManagementGroup =
+    managementGroups.find((group) => group.id === managementGroupId) ?? undefined;
+  const assignmentEditable = !["joined", "cancelled"].includes(caseRow.status);
+
+  async function runComplete() {
+    if (actionBusy || !form) return;
+    if (form.employeeIdMode === "manual" && !form.assignedEmployeeCode.trim()) {
+      toast("Enter an employee ID or switch to auto-generate.", "error");
+      return;
+    }
+    setActionBusy("complete");
+    try {
+      await onComplete(
+        caseRow.id,
+        selectedManagementGroup,
+        form.employeeIdMode === "manual" ? form.assignedEmployeeCode.trim().toUpperCase() : undefined,
+      );
+    } finally {
+      setActionBusy(null);
+    }
+  }
+
+  async function runActivate() {
+    if (actionBusy) return;
+    setActionBusy("activate");
+    try {
+      await onActivate(caseRow.id, selectedManagementGroup);
+    } finally {
+      setActionBusy(null);
+    }
+  }
+
+  const drawerTabs: HrTabItem[] = [
+    { id: "overview", label: "Overview", icon: LayoutList },
+    { id: "portal", label: "Portal", icon: Globe },
+    { id: "docs", label: "Documents", icon: FileText },
+    ...(showChecklist ? [{ id: "checklist", label: "Checklist", icon: ClipboardList }] : []),
+  ];
+
+  async function handleSaveAssignment() {
+    if (!caseRow || !form) return;
+    setSavingAssignment(true);
+    try {
+      const entity = entities.find((e) => e.value === form.entityId);
+      await onSaveAssignment(caseRow.id, {
+        joiningDate: form.joiningDate,
+        entityId: form.entityId,
+        entityName: entity?.label || form.entityName,
+        department: form.department,
+        designation: form.designation,
+        reportingManager: form.reportingManager,
+        branch: form.branch,
+        branchId: form.branchId || undefined,
+        employmentType: form.employmentType,
+        probationPeriodDays: form.probationPeriodDays,
+        trainingDurationDays: form.trainingDurationDays,
+        employeeIdMode: form.employeeIdMode,
+        employeeCode: form.assignedEmployeeCode,
+      });
+    } finally {
+      setSavingAssignment(false);
+    }
+  }
+
+  function patchForm(partial: Partial<AssignmentForm>) {
+    setForm((prev) => (prev ? { ...prev, ...partial } : prev));
+  }
 
   return (
     <SetupDrawer
@@ -94,114 +276,389 @@ export function CaseDetailDrawer({
       onClose={onClose}
       wide
       title={caseRow.candidateName}
-      description={`${caseRow.caseCode} · ${ONBOARDING_STATUS_LABELS[caseRow.status]} · ${caseRow.progressPct}%`}
+      description={`${caseRow.caseCode} · ${resolveOnboardingDisplayStatus(caseRow.status, caseRow.joiningDate)} · ${caseRow.progressPct}%`}
       footer={
         <>
-          <Button type="button" variant="outline" className="cursor-pointer" onClick={onClose}>
+          <Button
+            type="button"
+            variant="outline"
+            className="cursor-pointer"
+            disabled={Boolean(actionBusy)}
+            onClick={onClose}
+          >
             Close
           </Button>
           <Button
             type="button"
             variant="outline"
             className="cursor-pointer"
+            disabled={Boolean(actionBusy)}
             onClick={() => onInvite(caseRow)}
           >
             Invitation
           </Button>
-          {caseRow.status !== "joined" ? (
-            <>
-              <Button
-                type="button"
-                variant="outline"
-                className="cursor-pointer"
-                onClick={() => onReady(caseRow.id)}
-              >
-                Mark ready
-              </Button>
-              <Button
-                type="button"
-                className="cursor-pointer"
-                onClick={() => {
-                  const code = (empCodeInput || caseRow.employeeId || "").trim();
-                  if (!code || code.toUpperCase().startsWith("ONB-")) {
-                    window.alert(
-                      "Enter a permanent Employee ID before activation (e.g. EMP-000101).",
-                    );
-                    return;
-                  }
-                  onActivate(caseRow.id, { employeeCode: code });
-                }}
-              >
+          {canApprove ? (
+            <Button
+              type="button"
+              variant="outline"
+              className="cursor-pointer"
+              disabled={Boolean(actionBusy)}
+              onClick={() => onApprove(caseRow.id)}
+            >
+              Approve submission
+            </Button>
+          ) : null}
+          {canComplete ? (
+            <Button
+              type="button"
+              className="cursor-pointer"
+              disabled={Boolean(actionBusy)}
+              onClick={() => void runComplete()}
+            >
+              {actionBusy === "complete" ? (
+                <Loader2 className="size-3.5 animate-spin" />
+              ) : (
                 <UserCheck className="size-3.5" />
-                Activate employee
-              </Button>
-            </>
+              )}
+              {actionBusy === "complete" ? "Opening…" : "Complete onboarding"}
+            </Button>
+          ) : null}
+          {isPendingJoin ? (
+            <Button
+              type="button"
+              className="cursor-pointer"
+              disabled={Boolean(actionBusy)}
+              title={
+                joiningNotReached
+                  ? `Joining date ${caseRow.joiningDate} — will stay on Pending Join until then`
+                  : "Activate employee for Workforce"
+              }
+              onClick={() => void runActivate()}
+            >
+              {actionBusy === "activate" ? (
+                <Loader2 className="size-3.5 animate-spin" />
+              ) : (
+                <UserCheck className="size-3.5" />
+              )}
+              {actionBusy === "activate" ? "Opening employee…" : "Activate employee"}
+            </Button>
           ) : null}
         </>
       }
     >
-      <div className="mb-3 flex flex-wrap gap-1">
-        {(
-          [
-            ["overview", "Overview"],
-            ["portal", "Portal"],
-            ["docs", "Documents"],
-            ["checklist", "Checklist"],
-            ["timeline", "Timeline"],
-          ] as const
-        ).map(([id, label]) => (
-          <button
-            key={id}
-            type="button"
-            className={cn(
-              "cursor-pointer rounded-md px-2.5 py-1 text-[11px] font-medium transition-colors duration-200",
-              tab === id
-                ? "bg-primary text-primary-foreground"
-                : "bg-muted text-muted-foreground hover:text-foreground",
-            )}
-            onClick={() => setTab(id)}
-          >
-            {label}
-          </button>
-        ))}
-      </div>
+      {actionBusy ? (
+        <div className="mb-3 flex items-center gap-2 rounded-lg border border-primary/30 bg-primary/5 px-3 py-2 text-xs text-foreground">
+          <Loader2 className="size-3.5 shrink-0 animate-spin text-primary" />
+          <span>
+            {actionBusy === "activate"
+              ? "Activating employee and opening details…"
+              : "Completing onboarding and opening employee details…"}
+          </span>
+        </div>
+      ) : null}
+      <HrUnderlineTabs
+        embedded
+        size="sm"
+        className="mb-3"
+        tabs={drawerTabs}
+        value={tab}
+        onChange={setTab}
+      />
 
       {tab === "overview" ? (
         <div className="space-y-3 text-xs">
-          <div className="grid gap-2 sm:grid-cols-2">
-            <Info label="Offer" value={caseRow.offerCode} />
-            <Info label="Joining" value={caseRow.joiningDate} />
-            <Info label="Department" value={caseRow.department} />
-            <Info label="Designation" value={caseRow.designation} />
-            <Info label="Reporting manager" value={caseRow.reportingManager || "—"} />
-            <Info label="Branch" value={caseRow.branch} />
-            <Info label="Shift" value={caseRow.shift} />
-            <Info label="Leave policy" value={caseRow.leavePolicy} />
-            <Info label="HR owner" value={caseRow.hrOwner} />
-            <Info label="Buddy" value={caseRow.buddy || "—"} />
-            <Info label="Employee ID" value={caseRow.employeeId || "Pending"} />
-            {caseRow.status !== "joined" ? (
-              <div className="sm:col-span-2 rounded-lg border border-border/60 bg-muted/30 p-3 space-y-2">
-                <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-                  Activation — assign permanent Employee ID
-                </p>
-                <input
-                  className="h-8 w-full rounded-md border border-border bg-background px-2 text-xs"
-                  placeholder="e.g. EMP-000101"
-                  value={empCodeInput || (caseRow.employeeId?.startsWith("ONB-") ? "" : caseRow.employeeId) || ""}
-                  onChange={(e) => setEmpCodeInput(e.target.value.toUpperCase())}
-                />
-                <p className="text-[10px] text-muted-foreground">
-                  Employee becomes Active and payroll-eligible only after activation. Temporary ONB-*
-                  codes are replaced here.
-                </p>
-              </div>
-            ) : null}
+          <div className="flex flex-wrap items-center justify-between gap-2">
             <div>
-              <p className="text-[10px] uppercase text-muted-foreground">Status</p>
-              <HrStatusBadge status={ONBOARDING_STATUS_LABELS[caseRow.status]} />
+              <p className="text-[10px] uppercase text-muted-foreground">Case status</p>
+              <HrStatusBadge
+                status={resolveOnboardingDisplayStatus(caseRow.status, caseRow.joiningDate)}
+              />
             </div>
+            {assignmentEditable && form && !hasOnboardingEmployeeRecord(caseRow) ? (
+              <div className="min-w-[16rem]">
+                <EmployeeIdModeFields
+                  mode={form.employeeIdMode}
+                  manualCode={form.assignedEmployeeCode}
+                  nextAutoCode={nextAutoCode}
+                  onModeChange={(employeeIdMode) => patchForm({ employeeIdMode })}
+                  onManualCodeChange={(assignedEmployeeCode) => patchForm({ assignedEmployeeCode })}
+                />
+              </div>
+            ) : (
+              <p className="text-[11px] text-muted-foreground">
+                Employee ID:{" "}
+                <span className="font-medium text-foreground">
+                  {caseRow.employeeId || caseRow.assignedEmployeeCode || "Assigned after completion"}
+                </span>
+              </p>
+            )}
           </div>
+
+          {assignmentEditable ? (
+            <p className="rounded-lg border border-border/60 bg-muted/30 px-3 py-2 text-[11px] text-muted-foreground">
+              After verifying documents, assign department, designation, reporting manager,
+              employment type, and duration here. Save, then Approve submission.
+            </p>
+          ) : null}
+
+          <div className="grid gap-3 sm:grid-cols-2">
+            {assignmentEditable ? (
+              <>
+                <SetupField label="Joining date" required>
+                  <SetupInput
+                    type="date"
+                    value={form.joiningDate}
+                    onChange={(e) => patchForm({ joiningDate: e.target.value })}
+                  />
+                </SetupField>
+                <SetupField label="Legal entity" hint="HR Setup → Legal Entities">
+                  <SetupSelect
+                    value={form.entityId}
+                    onChange={(e) => {
+                      const id = e.target.value;
+                      const ent = entities.find((x) => x.value === id);
+                      patchForm({ entityId: id, entityName: ent?.label || "" });
+                    }}
+                  >
+                    <option value="">Select entity…</option>
+                    {entities.map((e) => (
+                      <option key={e.value} value={e.value}>
+                        {e.label}
+                      </option>
+                    ))}
+                  </SetupSelect>
+                </SetupField>
+                <SetupField label="Employment type" required>
+                  <SetupSelect
+                    value={form.employmentType}
+                    onChange={(e) => {
+                      const next = e.target.value;
+                      const kind = employmentDurationKind(next);
+                      patchForm({
+                        employmentType: next,
+                        probationPeriodDays: kind === "probation" ? form.probationPeriodDays : "",
+                        trainingDurationDays: kind === "training" ? form.trainingDurationDays : "",
+                      });
+                    }}
+                  >
+                    {employmentTypes.map((t) => (
+                      <option key={t.value} value={t.value}>
+                        {t.label}
+                      </option>
+                    ))}
+                  </SetupSelect>
+                </SetupField>
+                {employmentDurationKind(form.employmentType) === "probation" ? (
+                  <SetupField
+                    label="Probation period (days)"
+                    required
+                    hint="Applied when the employee is activated"
+                  >
+                    <SetupInput
+                      type="number"
+                      min={1}
+                      max={730}
+                      placeholder="e.g. 90"
+                      value={form.probationPeriodDays}
+                      onChange={(e) => patchForm({ probationPeriodDays: e.target.value })}
+                    />
+                  </SetupField>
+                ) : null}
+                {employmentDurationKind(form.employmentType) === "training" ? (
+                  <SetupField
+                    label="Training duration (days)"
+                    required
+                    hint="Intern / trainee duration"
+                  >
+                    <SetupInput
+                      type="number"
+                      min={1}
+                      max={730}
+                      placeholder="e.g. 90"
+                      value={form.trainingDurationDays}
+                      onChange={(e) => patchForm({ trainingDurationDays: e.target.value })}
+                    />
+                  </SetupField>
+                ) : null}
+                <MasterSelect
+                  label="Department"
+                  required
+                  value={masters.departments.find((d) => d.label === form.department)?.id || ""}
+                  options={masters.departments}
+                  onChange={(_id, opt) => patchForm({ department: opt?.label || "" })}
+                  placeholder="Select department…"
+                />
+                <MasterSelect
+                  label="Designation"
+                  required
+                  value={masters.designations.find((d) => d.label === form.designation)?.id || ""}
+                  options={masters.designations}
+                  onChange={(_id, opt) => patchForm({ designation: opt?.label || "" })}
+                  placeholder="Select designation…"
+                />
+                <MasterSelect
+                  label="Reporting manager"
+                  hint="Employees marked as reporting managers"
+                  value={
+                    masters.managers.find((m) => m.label.startsWith(form.reportingManager))?.id ||
+                    ""
+                  }
+                  options={masters.managers}
+                  onChange={(_id, opt) =>
+                    patchForm({
+                      reportingManager: opt ? opt.label.split(" (")[0] : "",
+                    })
+                  }
+                  placeholder="Select manager…"
+                />
+                <MasterSelect
+                  label="Branch"
+                  hint="Org Setup → Branches (company branches e.g. Sultanpur)"
+                  value={
+                    form.branchId ||
+                    masters.branches.find((b) => b.label === form.branch)?.id ||
+                    ""
+                  }
+                  options={masters.branches}
+                  onChange={(id, opt) =>
+                    patchForm({
+                      branchId: id,
+                      branch: opt?.label || "",
+                    })
+                  }
+                  placeholder={
+                    masters.branches.length
+                      ? "Select company branch…"
+                      : "No branches — add in Org Setup → Branches"
+                  }
+                />
+              </>
+            ) : (
+              <>
+                <Info label="Joining date" value={caseRow.joiningDate || "—"} />
+                <Info label="Legal entity" value={caseRow.entityName || "—"} />
+                <Info
+                  label="Employment type"
+                  value={formatEmploymentTypeLabel(caseRow.employmentType)}
+                />
+                {employmentDurationKind(caseRow.employmentType) === "probation" ? (
+                  <Info
+                    label="Probation"
+                    value={
+                      caseRow.probationPeriodDays
+                        ? `${caseRow.probationPeriodDays} days`
+                        : "—"
+                    }
+                  />
+                ) : null}
+                {employmentDurationKind(caseRow.employmentType) === "training" ? (
+                  <Info
+                    label="Training duration"
+                    value={
+                      caseRow.trainingDurationDays
+                        ? `${caseRow.trainingDurationDays} days`
+                        : "—"
+                    }
+                  />
+                ) : null}
+                <Info label="Department" value={caseRow.department || "—"} />
+                <Info label="Designation" value={caseRow.designation || "—"} />
+                <Info label="Reporting manager" value={caseRow.reportingManager || "—"} />
+                <Info label="Branch" value={caseRow.branch || "—"} />
+                <Info label="HR owner" value={caseRow.hrOwner || "—"} />
+              </>
+            )}
+          </div>
+
+          {assignmentEditable ? (
+            <div className="flex justify-end">
+              <Button
+                type="button"
+                size="sm"
+                className="cursor-pointer gap-1"
+                disabled={savingAssignment}
+                onClick={() => void handleSaveAssignment()}
+              >
+                <Save className="size-3.5" />
+                {savingAssignment ? "Saving…" : "Save details"}
+              </Button>
+            </div>
+          ) : null}
+
+          {(canComplete || isPendingJoin) ? (
+            <SetupField
+              label="Employment group"
+              hint="Optional. Applies the group's default shift, calendars, and HRMS feature toggles."
+              labelClassName="normal-case"
+            >
+              <SetupSelect
+                value={managementGroupId}
+                onChange={(event) => setManagementGroupId(event.target.value)}
+              >
+                <option value="">No employment group</option>
+                {managementGroups
+                  .filter((group) => group.status === "active")
+                  .map((group) => (
+                    <option key={group.id} value={group.id}>
+                      {group.group_name} · {group.employment_type}
+                    </option>
+                  ))}
+              </SetupSelect>
+            </SetupField>
+          ) : null}
+          {caseRow.status !== "joined" ? (
+            <p className="rounded-lg border border-border/60 bg-muted/30 px-3 py-2 text-[11px] text-muted-foreground">
+              {canApprove
+                ? "Verify all documents, save assignment on Overview, then approve the submission."
+                : isPendingJoin
+                  ? joiningNotReached
+                    ? `Employee profile created (${caseRow.employeeId}). Activation is available on or after ${caseRow.joiningDate}. They appear under Pending Join in Employee Management until then.`
+                    : `Employee profile ready (${caseRow.employeeId}). Click Activate employee to move them to Probation in Workforce.`
+                  : canComplete
+                    ? "Complete onboarding to create the employee profile and open their details. If joining date is in the future, they are added to the list and activate on that date."
+                    : "After verification and assignment, complete onboarding to create the employee record."}{" "}
+              Employment group is optional; you can still assign shifts, leave policy, and other
+              details from Workforce once the employee is active.
+            </p>
+          ) : null}
+          {isPendingJoin ? (
+            <div
+              className={cn(
+                "rounded-lg border px-3 py-3 text-xs",
+                canActivate
+                  ? "border-emerald-200 bg-emerald-50 text-emerald-900"
+                  : "border-amber-200 bg-amber-50 text-amber-950",
+              )}
+            >
+              <p className="font-medium">
+                {canActivate ? "Ready to activate" : "Waiting for joining date"}
+              </p>
+              <p className="mt-1 text-[11px] opacity-90">
+                {canActivate
+                  ? "Use Activate employee below to move this hire into Workforce (Probation)."
+                  : `If you activate before ${caseRow.joiningDate}, they stay on the employee list and become active on the joining date.`}
+              </p>
+              <Button
+                type="button"
+                size="sm"
+                className="mt-2 cursor-pointer"
+                disabled={Boolean(actionBusy)}
+                title={
+                  joiningNotReached
+                    ? `Added to list — active on ${caseRow.joiningDate}`
+                    : "Activate employee for Workforce"
+                }
+                onClick={() => void runActivate()}
+              >
+                {actionBusy === "activate" ? (
+                  <Loader2 className="size-3.5 animate-spin" />
+                ) : (
+                  <UserCheck className="size-3.5" />
+                )}
+                {actionBusy === "activate" ? "Opening employee…" : "Activate employee"}
+              </Button>
+            </div>
+          ) : null}
           <div className="h-2 overflow-hidden rounded-full bg-muted">
             <div
               className="h-full rounded-full bg-emerald-500 transition-all duration-300"
@@ -209,9 +666,15 @@ export function CaseDetailDrawer({
             />
           </div>
           {caseRow.invitation?.token ? (
-            <p className="break-all font-mono text-[10px] text-muted-foreground">
-              Portal: {getInvitationUrl(caseRow.invitation.token)}
-            </p>
+            <div className="space-y-1 break-all font-mono text-[10px] text-muted-foreground">
+              <p>Login: {getPortalLoginUrl()}</p>
+              {caseRow.invitation.loginEmail || caseRow.candidateEmail ? (
+                <p>Email: {caseRow.invitation.loginEmail || caseRow.candidateEmail}</p>
+              ) : null}
+              {caseRow.invitation.portalPassword ? (
+                <p>Password: {caseRow.invitation.portalPassword}</p>
+              ) : null}
+            </div>
           ) : null}
         </div>
       ) : null}
@@ -246,11 +709,14 @@ export function CaseDetailDrawer({
             <p className="font-medium text-foreground">Personal snapshot</p>
             <p className="mt-1 text-muted-foreground">
               {caseRow.portal.personal.firstName} {caseRow.portal.personal.lastName} ·{" "}
-              {caseRow.portal.personal.email || caseRow.candidateEmail}
+              {maskEmail(caseRow.portal.personal.email || caseRow.candidateEmail)}
             </p>
             <p className="text-muted-foreground">
-              PAN {caseRow.portal.governmentIds.pan || "—"} · Aadhaar{" "}
-              {caseRow.portal.governmentIds.aadhaar || "—"}
+              Phone {maskPhone(caseRow.portal.personal.phone || caseRow.candidatePhone) || "—"}
+            </p>
+            <p className="text-muted-foreground">
+              PAN {maskPan(caseRow.portal.governmentIds.pan) || "—"} · Aadhaar{" "}
+              {maskAadhaar(caseRow.portal.governmentIds.aadhaar) || "—"}
             </p>
           </div>
         </div>
@@ -258,47 +724,35 @@ export function CaseDetailDrawer({
 
       {tab === "docs" ? (
         <div className="space-y-2">
+          <p className="text-[11px] text-muted-foreground">
+            Click the file name or View to open a preview (PDF, images, Word, Excel, text).
+          </p>
           {caseRow.portal.documents.length === 0 ? (
             <p className="text-xs text-muted-foreground">No documents uploaded yet.</p>
           ) : (
             caseRow.portal.documents.map((d) => (
-              <div
+              <OnboardingDocumentRow
                 key={d.id}
-                className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border/70 px-3 py-2 text-xs"
-              >
-                <div>
-                  <p className="font-medium">{d.fileName}</p>
-                  <p className="text-[10px] text-muted-foreground uppercase">{d.kind}</p>
-                </div>
-                <div className="flex items-center gap-1">
-                  <HrStatusBadge status={d.verifyStatus} />
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    className="h-7 cursor-pointer"
-                    onClick={() => onVerifyDoc(caseRow.id, d.id, "verified")}
-                  >
-                    Verify
-                  </Button>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="ghost"
-                    className="h-7 cursor-pointer text-destructive"
-                    onClick={() => onVerifyDoc(caseRow.id, d.id, "rejected")}
-                  >
-                    Reject
-                  </Button>
-                </div>
-              </div>
+                doc={d}
+                onView={setPreviewDoc}
+                onVerify={() => onVerifyDoc(caseRow.id, d.id, "verified")}
+                onReject={() => onVerifyDoc(caseRow.id, d.id, "rejected")}
+              />
             ))
           )}
         </div>
       ) : null}
 
-      {tab === "checklist" ? (
+      <OnboardingDocumentPreviewDialog
+        doc={previewDoc}
+        onClose={() => setPreviewDoc(null)}
+      />
+
+      {tab === "checklist" && showChecklist ? (
         <div className="space-y-4">
+          <p className="text-[11px] text-muted-foreground">
+            Post-join tasks — complete assignment details in Workforce as each item is done.
+          </p>
           <ChecklistGroup
             title="HR Tasks"
             items={hrTasks}
@@ -313,29 +767,6 @@ export function CaseDetailDrawer({
             <SetupTextarea value={note} onChange={(e) => setNote(e.target.value)} rows={2} />
           </SetupField>
         </div>
-      ) : null}
-
-      {tab === "timeline" ? (
-        <ol className="space-y-3 border-l border-border pl-4">
-          {timeline.map((t) => (
-            <li key={t.label} className="relative text-xs">
-              <span
-                className={cn(
-                  "absolute -left-[21px] top-0.5 size-2.5 rounded-full border-2 border-card",
-                  t.done ? "bg-emerald-500" : "bg-muted-foreground/40",
-                )}
-              />
-              <p className={cn("font-medium", t.done ? "text-foreground" : "text-muted-foreground")}>
-                {t.label}
-              </p>
-              {t.at ? (
-                <p className="text-[10px] text-muted-foreground">
-                  {new Date(t.at).toLocaleString()}
-                </p>
-              ) : null}
-            </li>
-          ))}
-        </ol>
       ) : null}
     </SetupDrawer>
   );

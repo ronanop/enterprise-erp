@@ -7,11 +7,13 @@ from uuid import UUID
 from sqlalchemy.orm import Session
 
 from core.config import settings
-from core.exceptions import NotFoundException, ValidationException
+from core.exceptions import AppException, NotFoundException, ValidationException
 from modules.foundation.adapters.graph_email_adapter import GraphEmailAdapter
-from modules.foundation.models.notification import NtfTemplate
+from modules.foundation.domain.entities import NotificationInboxItem
+from modules.foundation.models.notification import NtfEvent, NtfTemplate
 from modules.foundation.repository.notification_repository import NotificationRepository
 from modules.foundation.service.audit_service import AuditService
+from modules.foundation.service.notification_href import sanitize_inbox_href
 from modules.foundation.service.engines.email_delivery_engine import (
     EmailDeliveryEngine,
     render_template,
@@ -275,6 +277,82 @@ class NotificationService:
             send_notification_task.delay(str(event_id), str(delivery_id))
         except Exception:  # noqa: BLE001 — fall back to sync if broker unavailable
             EmailDeliveryEngine(self._db).deliver(event_id, delivery_id)
+
+
+    def list_inbox(
+        self, *, tenant_id: UUID, user_id: UUID | None, limit: int = 50
+    ) -> list[NotificationInboxItem]:
+        if user_id is None:
+            raise AppException("Authenticated user required")
+        rows = self._repo.list_inbox(tenant_id=tenant_id, user_id=user_id, limit=limit)
+        return [self._to_inbox_item(row) for row in rows]
+
+    def unread_count(self, *, tenant_id: UUID, user_id: UUID | None) -> int:
+        if user_id is None:
+            raise AppException("Authenticated user required")
+        return self._repo.unread_count(tenant_id=tenant_id, user_id=user_id)
+
+    def mark_read(
+        self, *, tenant_id: UUID, user_id: UUID | None, event_id: UUID
+    ) -> NotificationInboxItem:
+        from modules.foundation.repository.base import utcnow
+
+        if user_id is None:
+            raise AppException("Authenticated user required")
+        row = self._repo.get_inbox_event(tenant_id=tenant_id, user_id=user_id, event_id=event_id)
+        if row is None:
+            raise NotFoundException("Notification not found")
+        if row.read_at is None:
+            row.read_at = utcnow()
+        row.status = "read"
+        self._repo.db.flush()
+        return self._to_inbox_item(row)
+
+    def mark_all_read(self, *, tenant_id: UUID, user_id: UUID | None) -> int:
+        from modules.foundation.repository.base import utcnow
+
+        if user_id is None:
+            raise AppException("Authenticated user required")
+        rows = self._repo.list_unread(tenant_id=tenant_id, user_id=user_id)
+        now = utcnow()
+        for row in rows:
+            if row.read_at is None:
+                row.read_at = now
+            row.status = "read"
+        self._repo.db.flush()
+        return len(rows)
+
+    def find_unread_digest(
+        self,
+        *,
+        tenant_id: UUID,
+        user_id: UUID,
+        event_type: str,
+        digest_key: str,
+    ) -> NtfEvent | None:
+        return self._repo.find_unread_digest(
+            tenant_id=tenant_id,
+            user_id=user_id,
+            event_type=event_type,
+            digest_key=digest_key,
+        )
+
+    @staticmethod
+    def _to_inbox_item(row: NtfEvent) -> NotificationInboxItem:
+        payload = row.payload_json if isinstance(row.payload_json, dict) else {}
+        kind = str(payload.get("kind") or row.event_type or "info")
+        href = sanitize_inbox_href(payload.get("href") or payload.get("action_href"), kind=kind)
+        unread = row.read_at is None and row.status != "read"
+        return NotificationInboxItem(
+            id=row.id,
+            title=str(payload.get("title") or row.event_type),
+            body=str(payload.get("body") or ""),
+            kind=kind,
+            unread=unread,
+            created_at=row.created_at,
+            href=href,
+            read_at=row.read_at,
+        )
 
     def register_device_token(
         self,

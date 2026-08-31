@@ -43,7 +43,7 @@ export default function CinematicSplashPage() {
   }, [router]);
 
   return (
-    <main className="relative mx-auto flex min-h-dvh w-full max-w-lg flex-col items-center overflow-hidden bg-[#f8f9ff] text-[#0b1c30]">
+    <main className="relative flex h-dvh max-h-dvh w-full max-w-lg flex-col items-center overflow-hidden bg-[#f8f9ff] text-[#0b1c30] touch-none">
       {/* Soft mesh background (Stitch shader → CSS) */}
       <div className="pointer-events-none absolute inset-0 opacity-70" aria-hidden>
         <div className="splash-blob absolute -left-16 top-10 h-72 w-72 rounded-full bg-[#2563eb]/20 blur-[90px]" />
@@ -51,12 +51,17 @@ export default function CinematicSplashPage() {
         <div className="splash-blob absolute bottom-24 left-1/3 h-64 w-64 rounded-full bg-[#7c3aed]/12 blur-[80px]" />
       </div>
 
-      {/* Spacer — matches top breathing room without logo card */}
-      <div className="h-12 shrink-0" aria-hidden />
+      <div
+        className="pointer-events-none absolute inset-x-0 bottom-0 z-[5] h-1/3 bg-gradient-to-t from-[#f8f9ff] to-transparent"
+        aria-hidden
+      />
 
-      {/* Hero: objects only — soft edges so no “second screen” card */}
-      <div className="relative z-10 flex min-h-0 flex-1 flex-col items-center justify-center">
-        <div className="splash-float relative w-[118%] max-w-none -mx-[9%]">
+      {/* Spacer — matches top breathing room without logo card */}
+      <div className="h-6 shrink-0 sm:h-8" aria-hidden />
+
+      {/* Hero scaled to fit above title + loading pill (one screen) */}
+      <div className="relative z-10 flex min-h-0 w-full flex-1 flex-col items-center justify-center overflow-hidden px-2">
+        <div className="splash-float relative flex h-full max-h-[min(64dvh,100%)] w-[112%] max-w-none items-center justify-center">
           <div
             className="pointer-events-none absolute left-1/2 top-1/2 h-[70%] w-[70%] -translate-x-1/2 -translate-y-1/2 rounded-full bg-[#2563eb]/12 blur-[90px]"
             aria-hidden
@@ -65,14 +70,13 @@ export default function CinematicSplashPage() {
           <img
             src="/splash/cinematic-hero.png"
             alt="Employee Portal AI workspace"
-            className="splash-hero-blend relative w-full select-none"
+            className="splash-hero-blend relative max-h-full max-w-full scale-[1.18] select-none object-contain object-center sm:scale-[1.22]"
             draggable={false}
           />
         </div>
       </div>
 
-      {/* Title + loading (second photo) */}
-      <footer className="relative z-20 flex w-full shrink-0 flex-col items-center gap-4 px-5 pb-16">
+      <footer className="relative z-20 flex w-full shrink-0 flex-col items-center gap-3 px-5 pb-10 pt-1 sm:pb-12">
         <div className="animate-[fade-up_0.9s_ease_both] text-center [animation-delay:120ms]">
           <h1 className="text-[1.75rem] font-bold leading-[1.2] tracking-tight text-[#0b1c30] sm:text-[2rem]">
             Employee Portal AI

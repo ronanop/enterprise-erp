@@ -1,26 +1,38 @@
 """ESS REST routes — employee-scoped self-service (auth only, no admin RBAC)."""
 
 from datetime import date
+from io import BytesIO
 from typing import Annotated
+from urllib.parse import quote
 from uuid import UUID
 
 from fastapi import APIRouter, Body, Depends, Query
+from fastapi.responses import FileResponse, StreamingResponse
 from sqlalchemy.orm import Session
 
 from modules.ess.dependencies import get_db, get_tenant_context
 from modules.ess.schemas import (
     EssAnnouncementItem,
+    EssApprovalItem,
+    EssAssetDetail,
     EssAssetItem,
+    EssAssetTicketCreate,
     EssAttendanceCorrectionCreate,
     EssAttendanceCorrectionResponse,
     EssAttendanceResponse,
+    EssAttendanceSummaryResponse,
     EssBankResponse,
     EssBankUpdate,
     EssDocumentResponse,
+    EssDocumentUploadBody,
     EssEducationSkillsResponse,
     EssEducationSkillsUpdate,
     EssEmergencyContactResponse,
     EssEmergencyUpdate,
+    EssFaceImageBody,
+    EssFaceStatusResponse,
+    EssFaceVerifyResponse,
+    EssFaceEnabledBody,
     EssHolidayCalendarResponse,
     EssKycResponse,
     EssLeaveBalanceResponse,
@@ -29,9 +41,15 @@ from modules.ess.schemas import (
     EssLeaveTypeResponse,
     EssMeResponse,
     EssMeUpdate,
+    EssMeetingBookingCreate,
+    EssMeetingBookingResponse,
+    EssMeetingRoomAvailability,
+    EssMeetingRoomItem,
     EssNotificationResponse,
+    EssNotificationPollResponse,
     EssOnDutyCreate,
     EssOnDutyResponse,
+    EssChangePasswordBody,
     EssCompoffCreate,
     EssCompoffResponse,
     EssDeviceTokenRegister,
@@ -40,10 +58,22 @@ from modules.ess.schemas import (
     EssPerformanceItem,
     EssPunchRequest,
     EssPunchResponse,
+    EssPunchPolicyResponse,
+    EssPolicyAckResponse,
+    EssPolicyItem,
+    EssPolicyWalkthrough,
     EssSeparationCreate,
     EssSeparationItem,
+    EssSupportTicketCommentCreate,
+    EssSupportTicketCommentItem,
+    EssSupportTicketCreate,
+    EssSupportTicketDetail,
+    EssSupportTicketItem,
     EssTeamLeaveItem,
     EssTrainingItem,
+    EssUnreadCountResponse,
+    EssWfhCreate,
+    EssWfhResponse,
 )
 from modules.ess.service import EssService
 from modules.foundation.domain.value_objects import TenantContext
@@ -108,6 +138,36 @@ def create_leave_request(
     )
 
 
+@ess_router.get(
+    "/leave-requests/{request_id}",
+    response_model=APIResponse[EssLeaveRequestResponse],
+)
+def get_leave_request(
+    request_id: UUID,
+    ctx: Annotated[TenantContext, Depends(get_tenant_context)],
+    db: Annotated[Session, Depends(get_db)],
+):
+    return APIResponse(
+        message="OK",
+        data=EssService(db).get_leave_request(ctx, request_id),
+    )
+
+
+@ess_router.post(
+    "/leave-requests/{request_id}/cancel",
+    response_model=APIResponse[EssLeaveRequestResponse],
+)
+def cancel_leave_request(
+    request_id: UUID,
+    ctx: Annotated[TenantContext, Depends(get_tenant_context)],
+    db: Annotated[Session, Depends(get_db)],
+):
+    return APIResponse(
+        message="Leave request cancelled",
+        data=EssService(db).cancel_leave_request(ctx, request_id),
+    )
+
+
 @ess_router.get("/attendance", response_model=APIResponse[list[EssAttendanceResponse]])
 def list_attendance(
     ctx: Annotated[TenantContext, Depends(get_tenant_context)],
@@ -119,6 +179,26 @@ def list_attendance(
         message="OK",
         data=EssService(db).list_attendance(ctx, from_date=from_date, to_date=to_date),
     )
+
+
+@ess_router.get(
+    "/attendance/summary",
+    response_model=APIResponse[EssAttendanceSummaryResponse],
+)
+def attendance_summary(
+    ctx: Annotated[TenantContext, Depends(get_tenant_context)],
+    db: Annotated[Session, Depends(get_db)],
+    month: Annotated[str, Query(description="YYYY-MM")],
+):
+    return APIResponse(message="OK", data=EssService(db).attendance_summary(ctx, month=month))
+
+
+@ess_router.get("/attendance/punch-policy", response_model=APIResponse[EssPunchPolicyResponse])
+def punch_policy(
+    ctx: Annotated[TenantContext, Depends(get_tenant_context)],
+    db: Annotated[Session, Depends(get_db)],
+):
+    return APIResponse(message="OK", data=EssService(db).get_punch_policy(ctx))
 
 
 @ess_router.post("/attendance/punch", response_model=APIResponse[EssPunchResponse])
@@ -237,6 +317,48 @@ def create_ess_on_duty(
     )
 
 
+@ess_router.get("/wfh-requests", response_model=APIResponse[list[EssWfhResponse]])
+def list_ess_wfh(
+    ctx: Annotated[TenantContext, Depends(get_tenant_context)],
+    db: Annotated[Session, Depends(get_db)],
+):
+    rows = EssService(db).list_wfh(ctx)
+    return APIResponse(
+        message="OK",
+        data=[
+            EssWfhResponse(
+                id=r.id,
+                wfh_date=r.wfh_date,
+                end_date=r.end_date,
+                portion=r.portion,
+                reason=r.reason,
+                status=r.status,
+            )
+            for r in rows
+        ],
+    )
+
+
+@ess_router.post("/wfh-requests", response_model=APIResponse[EssWfhResponse])
+def create_ess_wfh(
+    body: EssWfhCreate,
+    ctx: Annotated[TenantContext, Depends(get_tenant_context)],
+    db: Annotated[Session, Depends(get_db)],
+):
+    row = EssService(db).create_wfh(ctx, **body.model_dump())
+    return APIResponse(
+        message="WFH submitted",
+        data=EssWfhResponse(
+            id=row.id,
+            wfh_date=row.wfh_date,
+            end_date=row.end_date,
+            portion=row.portion,
+            reason=row.reason,
+            status=row.status,
+        ),
+    )
+
+
 @ess_router.get("/compoff-requests", response_model=APIResponse[list[EssCompoffResponse]])
 def list_ess_compoff(
     ctx: Annotated[TenantContext, Depends(get_tenant_context)],
@@ -325,6 +447,50 @@ def list_documents(
     return APIResponse(message="OK", data=EssService(db).list_documents(ctx))
 
 
+@ess_router.get("/documents/{document_id}", response_model=APIResponse[EssDocumentResponse])
+def get_document(
+    document_id: UUID,
+    ctx: Annotated[TenantContext, Depends(get_tenant_context)],
+    db: Annotated[Session, Depends(get_db)],
+):
+    return APIResponse(message="OK", data=EssService(db).get_document(ctx, document_id))
+
+
+@ess_router.post("/documents", response_model=APIResponse[EssDocumentResponse])
+def upload_document(
+    body: EssDocumentUploadBody,
+    ctx: Annotated[TenantContext, Depends(get_tenant_context)],
+    db: Annotated[Session, Depends(get_db)],
+):
+    return APIResponse(
+        message="Document uploaded",
+        data=EssService(db).upload_document(ctx, body),
+    )
+
+
+@ess_router.get("/documents/{document_id}/download")
+def download_document(
+    document_id: UUID,
+    ctx: Annotated[TenantContext, Depends(get_tenant_context)],
+    db: Annotated[Session, Depends(get_db)],
+):
+    download = EssService(db).resolve_document_download(ctx, document_id)
+    headers = {
+        "Content-Disposition": f'attachment; filename="{quote(download.filename)}"'
+    }
+    if download.path:
+        return FileResponse(
+            download.path,
+            media_type=download.media_type,
+            filename=download.filename,
+        )
+    return StreamingResponse(
+        BytesIO(download.content or b""),
+        media_type=download.media_type,
+        headers=headers,
+    )
+
+
 @ess_router.get("/holidays", response_model=APIResponse[list[EssHolidayCalendarResponse]])
 def list_holidays(
     ctx: Annotated[TenantContext, Depends(get_tenant_context)],
@@ -339,6 +505,44 @@ def list_notifications(
     db: Annotated[Session, Depends(get_db)],
 ):
     return APIResponse(message="OK", data=EssService(db).list_notifications(ctx))
+
+
+@ess_router.get("/notifications/unread-count", response_model=APIResponse[EssUnreadCountResponse])
+def notification_unread_count(
+    ctx: Annotated[TenantContext, Depends(get_tenant_context)],
+    db: Annotated[Session, Depends(get_db)],
+):
+    count = EssService(db).notification_unread_count(ctx)
+    return APIResponse(message="OK", data=EssUnreadCountResponse(unread_count=count))
+
+
+@ess_router.get("/notifications/poll", response_model=APIResponse[EssNotificationPollResponse])
+def notification_poll(
+    ctx: Annotated[TenantContext, Depends(get_tenant_context)],
+    db: Annotated[Session, Depends(get_db)],
+):
+    return APIResponse(message="OK", data=EssService(db).notification_poll(ctx))
+
+
+@ess_router.post("/notifications/read-all", response_model=APIResponse[dict])
+def mark_all_notifications_read(
+    ctx: Annotated[TenantContext, Depends(get_tenant_context)],
+    db: Annotated[Session, Depends(get_db)],
+):
+    updated = EssService(db).mark_all_notifications_read(ctx)
+    db.commit()
+    return APIResponse(message="OK", data={"marked": updated})
+
+
+@ess_router.post("/notifications/{notification_id}/read", response_model=APIResponse[dict])
+def mark_notification_read(
+    notification_id: UUID,
+    ctx: Annotated[TenantContext, Depends(get_tenant_context)],
+    db: Annotated[Session, Depends(get_db)],
+):
+    EssService(db).mark_notification_read(ctx, notification_id)
+    db.commit()
+    return APIResponse(message="OK", data={"id": str(notification_id)})
 
 
 @ess_router.get("/payslips", response_model=APIResponse[list[EssPayslipSummary]])
@@ -356,6 +560,16 @@ def get_payslip(
     db: Annotated[Session, Depends(get_db)],
 ):
     return APIResponse(message="OK", data=EssService(db).get_payslip(ctx, payslip_id))
+
+
+@ess_router.get("/payslips/{payslip_id}/export-text", response_model=APIResponse[dict])
+def export_payslip_text(
+    payslip_id: UUID,
+    ctx: Annotated[TenantContext, Depends(get_tenant_context)],
+    db: Annotated[Session, Depends(get_db)],
+):
+    text = EssService(db).get_payslip_export_text(ctx, payslip_id)
+    return APIResponse(message="OK", data={"text": text})
 
 
 @ess_router.get("/profile/emergency", response_model=APIResponse[EssEmergencyContactResponse])
@@ -424,6 +638,94 @@ def reject_team_leave(
     return APIResponse(message="Leave rejected", data=_leave_request_response(row))
 
 
+@ess_router.get("/approvals", response_model=APIResponse[list[EssApprovalItem]])
+def list_pending_approvals(
+    ctx: Annotated[TenantContext, Depends(get_tenant_context)],
+    db: Annotated[Session, Depends(get_db)],
+):
+    return APIResponse(message="OK", data=EssService(db).list_pending_approvals(ctx))
+
+
+@ess_router.post("/team-compoff/{row_id}/manager-approve", response_model=APIResponse[dict])
+def manager_approve_team_compoff(
+    row_id: UUID,
+    ctx: Annotated[TenantContext, Depends(get_tenant_context)],
+    db: Annotated[Session, Depends(get_db)],
+):
+    row = EssService(db).manager_approve_team_compoff(ctx, row_id)
+    return APIResponse(message="Manager approved", data={"id": str(row.id), "status": row.status})
+
+
+@ess_router.post("/team-compoff/{row_id}/reject", response_model=APIResponse[dict])
+def reject_team_compoff(
+    row_id: UUID,
+    ctx: Annotated[TenantContext, Depends(get_tenant_context)],
+    db: Annotated[Session, Depends(get_db)],
+):
+    row = EssService(db).reject_team_compoff(ctx, row_id)
+    return APIResponse(message="Rejected", data={"id": str(row.id), "status": row.status})
+
+
+@ess_router.post("/team-on-duty/{row_id}/approve", response_model=APIResponse[dict])
+def approve_team_on_duty(
+    row_id: UUID,
+    ctx: Annotated[TenantContext, Depends(get_tenant_context)],
+    db: Annotated[Session, Depends(get_db)],
+):
+    row = EssService(db).approve_team_on_duty(ctx, row_id)
+    return APIResponse(message="Approved", data={"id": str(row.id), "status": row.status})
+
+
+@ess_router.post("/team-on-duty/{row_id}/reject", response_model=APIResponse[dict])
+def reject_team_on_duty(
+    row_id: UUID,
+    ctx: Annotated[TenantContext, Depends(get_tenant_context)],
+    db: Annotated[Session, Depends(get_db)],
+):
+    row = EssService(db).reject_team_on_duty(ctx, row_id)
+    return APIResponse(message="Rejected", data={"id": str(row.id), "status": row.status})
+
+
+@ess_router.post("/team-corrections/{row_id}/approve", response_model=APIResponse[dict])
+def approve_team_correction(
+    row_id: UUID,
+    ctx: Annotated[TenantContext, Depends(get_tenant_context)],
+    db: Annotated[Session, Depends(get_db)],
+):
+    row = EssService(db).approve_team_correction(ctx, row_id)
+    return APIResponse(message="Approved", data={"id": str(row.id), "status": row.status})
+
+
+@ess_router.post("/team-corrections/{row_id}/reject", response_model=APIResponse[dict])
+def reject_team_correction(
+    row_id: UUID,
+    ctx: Annotated[TenantContext, Depends(get_tenant_context)],
+    db: Annotated[Session, Depends(get_db)],
+):
+    row = EssService(db).reject_team_correction(ctx, row_id)
+    return APIResponse(message="Rejected", data={"id": str(row.id), "status": row.status})
+
+
+@ess_router.post("/team-wfh/{row_id}/manager-approve", response_model=APIResponse[dict])
+def manager_approve_team_wfh(
+    row_id: UUID,
+    ctx: Annotated[TenantContext, Depends(get_tenant_context)],
+    db: Annotated[Session, Depends(get_db)],
+):
+    row = EssService(db).manager_approve_team_wfh(ctx, row_id)
+    return APIResponse(message="Approved", data={"id": str(row.id), "status": row.status})
+
+
+@ess_router.post("/team-wfh/{row_id}/reject", response_model=APIResponse[dict])
+def reject_team_wfh(
+    row_id: UUID,
+    ctx: Annotated[TenantContext, Depends(get_tenant_context)],
+    db: Annotated[Session, Depends(get_db)],
+):
+    row = EssService(db).reject_team_wfh(ctx, row_id)
+    return APIResponse(message="Rejected", data={"id": str(row.id), "status": row.status})
+
+
 @ess_router.get("/announcements", response_model=APIResponse[list[EssAnnouncementItem]])
 def list_announcements(
     ctx: Annotated[TenantContext, Depends(get_tenant_context)],
@@ -474,3 +776,215 @@ def create_separation(
         message="Separation request created",
         data=EssService(db).create_separation(ctx, body),
     )
+
+
+@ess_router.get("/security/face/status", response_model=APIResponse[EssFaceStatusResponse])
+def face_status(
+    ctx: Annotated[TenantContext, Depends(get_tenant_context)],
+    db: Annotated[Session, Depends(get_db)],
+):
+    return APIResponse(message="OK", data=EssService(db).face_status(ctx))
+
+
+@ess_router.post("/security/face/enroll", response_model=APIResponse[EssFaceStatusResponse])
+def face_enroll(
+    body: EssFaceImageBody,
+    ctx: Annotated[TenantContext, Depends(get_tenant_context)],
+    db: Annotated[Session, Depends(get_db)],
+):
+    return APIResponse(
+        message="Face enrolled",
+        data=EssService(db).face_enroll(ctx, body.image_base64),
+    )
+
+
+@ess_router.post("/security/face/verify", response_model=APIResponse[EssFaceVerifyResponse])
+def face_verify(
+    body: EssFaceImageBody,
+    ctx: Annotated[TenantContext, Depends(get_tenant_context)],
+    db: Annotated[Session, Depends(get_db)],
+):
+    return APIResponse(
+        message="OK",
+        data=EssService(db).face_verify(ctx, body.image_base64),
+    )
+
+
+@ess_router.patch("/security/face/enabled", response_model=APIResponse[EssFaceStatusResponse])
+def face_set_enabled(
+    body: EssFaceEnabledBody,
+    ctx: Annotated[TenantContext, Depends(get_tenant_context)],
+    db: Annotated[Session, Depends(get_db)],
+):
+    return APIResponse(
+        message="OK",
+        data=EssService(db).face_set_enabled(ctx, body.enabled),
+    )
+
+
+@ess_router.get("/meeting-rooms", response_model=APIResponse[list[EssMeetingRoomItem]])
+def list_meeting_rooms(
+    ctx: Annotated[TenantContext, Depends(get_tenant_context)],
+    db: Annotated[Session, Depends(get_db)],
+):
+    return APIResponse(message="OK", data=EssService(db).list_meeting_rooms(ctx))
+
+
+@ess_router.get("/meeting-rooms/availability", response_model=APIResponse[list[EssMeetingRoomAvailability]])
+def meeting_room_availability(
+    on_date: date,
+    ctx: Annotated[TenantContext, Depends(get_tenant_context)],
+    db: Annotated[Session, Depends(get_db)],
+):
+    return APIResponse(message="OK", data=EssService(db).meeting_room_availability(ctx, on_date=on_date))
+
+
+@ess_router.get("/meeting-rooms/bookings", response_model=APIResponse[list[EssMeetingBookingResponse]])
+def list_meeting_bookings(
+    ctx: Annotated[TenantContext, Depends(get_tenant_context)],
+    db: Annotated[Session, Depends(get_db)],
+    on_date: date | None = None,
+):
+    return APIResponse(message="OK", data=EssService(db).list_meeting_bookings(ctx, on_date=on_date))
+
+
+@ess_router.post("/meeting-rooms/bookings", response_model=APIResponse[EssMeetingBookingResponse])
+def create_meeting_booking(
+    body: EssMeetingBookingCreate,
+    ctx: Annotated[TenantContext, Depends(get_tenant_context)],
+    db: Annotated[Session, Depends(get_db)],
+):
+    row = EssService(db).create_meeting_booking(ctx, body)
+    db.commit()
+    return APIResponse(message="Booked", data=row)
+
+
+@ess_router.get("/assets/lookup", response_model=APIResponse[EssAssetDetail])
+def lookup_asset(
+    code: str,
+    ctx: Annotated[TenantContext, Depends(get_tenant_context)],
+    db: Annotated[Session, Depends(get_db)],
+):
+    return APIResponse(message="OK", data=EssService(db).lookup_asset(ctx, code=code))
+
+
+@ess_router.get("/assets/{asset_id}", response_model=APIResponse[EssAssetDetail])
+def get_asset(
+    asset_id: UUID,
+    ctx: Annotated[TenantContext, Depends(get_tenant_context)],
+    db: Annotated[Session, Depends(get_db)],
+):
+    return APIResponse(message="OK", data=EssService(db).get_asset(ctx, asset_id))
+
+
+@ess_router.post("/assets/{asset_id}/tickets", response_model=APIResponse[EssSupportTicketDetail])
+def create_asset_ticket(
+    asset_id: UUID,
+    body: EssAssetTicketCreate,
+    ctx: Annotated[TenantContext, Depends(get_tenant_context)],
+    db: Annotated[Session, Depends(get_db)],
+):
+    row = EssService(db).create_asset_ticket(
+        ctx,
+        asset_id,
+        subject=body.subject or "Asset issue",
+        description=body.description,
+        problem_category=body.problem_category,
+        urgency=body.urgency,
+    )
+    db.commit()
+    return APIResponse(message="Ticket created", data=row)
+
+
+@ess_router.get("/support-tickets", response_model=APIResponse[list[EssSupportTicketItem]])
+def list_support_tickets(
+    ctx: Annotated[TenantContext, Depends(get_tenant_context)],
+    db: Annotated[Session, Depends(get_db)],
+):
+    return APIResponse(message="OK", data=EssService(db).list_support_tickets(ctx))
+
+
+@ess_router.post("/support-tickets", response_model=APIResponse[EssSupportTicketDetail])
+def create_support_ticket(
+    body: EssSupportTicketCreate,
+    ctx: Annotated[TenantContext, Depends(get_tenant_context)],
+    db: Annotated[Session, Depends(get_db)],
+):
+    row = EssService(db).create_support_ticket(ctx, body)
+    db.commit()
+    return APIResponse(message="Ticket created", data=row)
+
+
+@ess_router.get("/support-tickets/{ticket_id}", response_model=APIResponse[EssSupportTicketDetail])
+def get_support_ticket(
+    ticket_id: UUID,
+    ctx: Annotated[TenantContext, Depends(get_tenant_context)],
+    db: Annotated[Session, Depends(get_db)],
+):
+    return APIResponse(message="OK", data=EssService(db).get_support_ticket(ctx, ticket_id))
+
+
+@ess_router.get(
+    "/support-tickets/{ticket_id}/comments",
+    response_model=APIResponse[list[EssSupportTicketCommentItem]],
+)
+def list_support_ticket_comments(
+    ticket_id: UUID,
+    ctx: Annotated[TenantContext, Depends(get_tenant_context)],
+    db: Annotated[Session, Depends(get_db)],
+):
+    return APIResponse(message="OK", data=EssService(db).list_support_ticket_comments(ctx, ticket_id))
+
+
+@ess_router.post(
+    "/support-tickets/{ticket_id}/comments",
+    response_model=APIResponse[EssSupportTicketCommentItem],
+)
+def add_support_ticket_comment(
+    ticket_id: UUID,
+    body: EssSupportTicketCommentCreate,
+    ctx: Annotated[TenantContext, Depends(get_tenant_context)],
+    db: Annotated[Session, Depends(get_db)],
+):
+    row = EssService(db).add_support_ticket_comment(ctx, ticket_id, body)
+    db.commit()
+    return APIResponse(message="Comment added", data=row)
+
+
+@ess_router.get("/policies", response_model=APIResponse[list[EssPolicyItem]])
+def list_ess_policies(
+    ctx: Annotated[TenantContext, Depends(get_tenant_context)],
+    db: Annotated[Session, Depends(get_db)],
+):
+    return APIResponse(message="OK", data=EssService(db).list_policies(ctx))
+
+
+@ess_router.get("/policies/{policy_id}", response_model=APIResponse[EssPolicyWalkthrough])
+def get_ess_policy_walkthrough(
+    policy_id: UUID,
+    ctx: Annotated[TenantContext, Depends(get_tenant_context)],
+    db: Annotated[Session, Depends(get_db)],
+):
+    return APIResponse(message="OK", data=EssService(db).get_policy_walkthrough(ctx, policy_id))
+
+
+@ess_router.post("/policies/{policy_id}/acknowledge", response_model=APIResponse[EssPolicyAckResponse])
+def acknowledge_ess_policy(
+    policy_id: UUID,
+    ctx: Annotated[TenantContext, Depends(get_tenant_context)],
+    db: Annotated[Session, Depends(get_db)],
+):
+    row = EssService(db).acknowledge_policy(ctx, policy_id)
+    db.commit()
+    return APIResponse(message="Acknowledged", data=row)
+
+
+@ess_router.post("/security/change-password", response_model=APIResponse[dict])
+def ess_change_password(
+    body: EssChangePasswordBody,
+    ctx: Annotated[TenantContext, Depends(get_tenant_context)],
+    db: Annotated[Session, Depends(get_db)],
+):
+    EssService(db).change_password(ctx, body)
+    db.commit()
+    return APIResponse(message="Password updated", data={"ok": True})

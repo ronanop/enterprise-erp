@@ -1,0 +1,117 @@
+/** Geo dropdown options for address fields (searchable selects). */
+
+export type GeoOption = { value: string; label: string };
+
+/** Indian states and union territories (full names — employee address forms). */
+export const INDIA_STATE_OPTIONS: GeoOption[] = [
+  "Andaman and Nicobar Islands",
+  "Andhra Pradesh",
+  "Arunachal Pradesh",
+  "Assam",
+  "Bihar",
+  "Chandigarh",
+  "Chhattisgarh",
+  "Dadra and Nagar Haveli and Daman and Diu",
+  "Delhi",
+  "Goa",
+  "Gujarat",
+  "Haryana",
+  "Himachal Pradesh",
+  "Jammu and Kashmir",
+  "Jharkhand",
+  "Karnataka",
+  "Kerala",
+  "Ladakh",
+  "Lakshadweep",
+  "Madhya Pradesh",
+  "Maharashtra",
+  "Manipur",
+  "Meghalaya",
+  "Mizoram",
+  "Nagaland",
+  "Odisha",
+  "Puducherry",
+  "Punjab",
+  "Rajasthan",
+  "Sikkim",
+  "Tamil Nadu",
+  "Telangana",
+  "Tripura",
+  "Uttar Pradesh",
+  "Uttarakhand",
+  "West Bengal",
+].map((name) => ({ value: name, label: name }));
+
+/**
+ * Indian states/UTs for Org Setup branch `state_code` (max 20 chars).
+ * value = short code stored in API; label = searchable name.
+ */
+export const INDIA_STATE_CODE_OPTIONS: GeoOption[] = [
+  { value: "AN", label: "Andaman and Nicobar Islands" },
+  { value: "AP", label: "Andhra Pradesh" },
+  { value: "AR", label: "Arunachal Pradesh" },
+  { value: "AS", label: "Assam" },
+  { value: "BR", label: "Bihar" },
+  { value: "CH", label: "Chandigarh" },
+  { value: "CG", label: "Chhattisgarh" },
+  { value: "DH", label: "Dadra and Nagar Haveli and Daman and Diu" },
+  { value: "DL", label: "Delhi" },
+  { value: "GA", label: "Goa" },
+  { value: "GJ", label: "Gujarat" },
+  { value: "HR", label: "Haryana" },
+  { value: "HP", label: "Himachal Pradesh" },
+  { value: "JK", label: "Jammu and Kashmir" },
+  { value: "JH", label: "Jharkhand" },
+  { value: "KA", label: "Karnataka" },
+  { value: "KL", label: "Kerala" },
+  { value: "LA", label: "Ladakh" },
+  { value: "LD", label: "Lakshadweep" },
+  { value: "MP", label: "Madhya Pradesh" },
+  { value: "MH", label: "Maharashtra" },
+  { value: "MN", label: "Manipur" },
+  { value: "ML", label: "Meghalaya" },
+  { value: "MZ", label: "Mizoram" },
+  { value: "NL", label: "Nagaland" },
+  { value: "OD", label: "Odisha" },
+  { value: "PY", label: "Puducherry" },
+  { value: "PB", label: "Punjab" },
+  { value: "RJ", label: "Rajasthan" },
+  { value: "SK", label: "Sikkim" },
+  { value: "TN", label: "Tamil Nadu" },
+  { value: "TS", label: "Telangana" },
+  { value: "TR", label: "Tripura" },
+  { value: "UP", label: "Uttar Pradesh" },
+  { value: "UK", label: "Uttarakhand" },
+  { value: "WB", label: "West Bengal" },
+];
+
+/** Common countries for HR address forms (full names). */
+export const COUNTRY_OPTIONS: GeoOption[] = [
+  "India",
+  "United Arab Emirates",
+  "United States",
+  "United Kingdom",
+  "Singapore",
+  "Australia",
+  "Canada",
+  "Germany",
+  "Nepal",
+  "Bangladesh",
+  "Sri Lanka",
+  "Other",
+].map((name) => ({ value: name, label: name }));
+
+/** ISO country codes for Org Setup (`country_code` max 3 chars). */
+export const COUNTRY_CODE_OPTIONS: GeoOption[] = [
+  { value: "IN", label: "India" },
+  { value: "AE", label: "United Arab Emirates" },
+  { value: "US", label: "United States" },
+  { value: "GB", label: "United Kingdom" },
+  { value: "SG", label: "Singapore" },
+  { value: "AU", label: "Australia" },
+  { value: "CA", label: "Canada" },
+  { value: "DE", label: "Germany" },
+  { value: "NP", label: "Nepal" },
+  { value: "BD", label: "Bangladesh" },
+  { value: "LK", label: "Sri Lanka" },
+];

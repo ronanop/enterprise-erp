@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { CheckCircle2, ChevronLeft, ChevronRight, FileText, Upload, X } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { CheckCircle2, ChevronLeft, ChevronRight, Eye, FileText, LogOut, Upload, X } from "lucide-react";
 
 import {
   SetupField,
@@ -12,68 +12,236 @@ import {
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import {
-  getCaseByToken,
+  GENDER_OPTIONS,
+  MARITAL_STATUS_OPTIONS,
+  RELATIONSHIP_OPTIONS,
+} from "@/config/hr-master-options";
+import {
+  acceptOnboardingTerms,
+  clearPortalSession,
+  getCaseByTokenAsync,
+  getPortalSession,
+  ONBOARDING_TERMS_VERSION,
   savePortalProgress,
   submitPortal,
 } from "@/services/onboarding-management-service";
+import { ApiClientError } from "@/services/api-client";
+import { MAX_DOCUMENT_BYTES, MAX_PHOTO_BYTES, readFileAsDataUrl } from "@/services/employee-management-service";
+import { MAX_SIGNATURE_BYTES, stampPoliciesWithSignature } from "@/lib/stamp-policy-signatures";
 import {
   listPortalDocumentTypes,
   type PortalDocumentType,
 } from "@/services/hr-setup-service";
 import type {
   DocumentKind,
+  DocumentVerifyStatus,
   OnboardingCase,
   OnboardingDocument,
   PortalPayload,
   PortalStepId,
 } from "@/types/onboarding-management";
-import { POLICY_DOCS, PORTAL_STEPS, emptyEducationMarks } from "@/types/onboarding-management";
+import { PORTAL_STEPS, emptyEducationMarks } from "@/types/onboarding-management";
 import type { PortalDocumentSection } from "@/services/hr-setup-service";
-
-const DOC_SECTION_META: {
-  id: PortalDocumentSection;
-  title: string;
-  hint: string;
-}[] = [
-  {
-    id: "identity",
-    title: "Identity & bank",
-    hint: "Photo and government / bank proofs",
-  },
-  {
-    id: "education",
-    title: "Education",
-    hint: "Enter marks (10th & 12th required) and upload certificates",
-  },
-  {
-    id: "previous_employment",
-    title: "Previous employment",
-    hint: "Upload up to 3 previous appointment and relieving letters",
-  },
-  {
-    id: "other",
-    title: "Other documents",
-    hint: "Optional supporting documents",
-  },
-];
+import {
+  maskAadhaar,
+  maskAccount,
+  maskEmail,
+  maskPan,
+  maskPhone,
+} from "@/lib/pii-mask";
+import {
+  ensureOnboardingPoliciesLoaded,
+  listActivePoliciesForPortal,
+  type PortalPolicyDoc,
+} from "@/services/onboarding-policies-service";
+import { DocumentPreviewContent } from "@/components/hr/shared/document-preview-content";
 
 const AADHAAR_LEN = 16;
+const PHONE_LEN = 10;
 const PAN_RE = /^[A-Z]{5}[0-9]{4}[A-Z]$/;
 const ACCOUNT_MIN = 9;
 const ACCOUNT_MAX = 18;
 const IFSC_RE = /^[A-Z]{4}0[A-Z0-9]{6}$/;
 
-const DEMO_POLICY_BODY: Record<string, string> = {
-  handbook:
-    "Employee Handbook (demo)\n\nWelcome to the organization. This handbook outlines workplace expectations, leave entitlements, attendance rules, and HR contacts. Full PDF will be linked by HR in production.",
-  nda: "Non-Disclosure Agreement (demo)\n\nYou agree not to disclose confidential company information, customer data, or trade secrets during and after employment. This is seed content for onboarding preview.",
-  it_policy:
-    "IT Policy (demo)\n\nUse company devices and accounts responsibly. Do not share passwords. Report security incidents promptly. Personal software installs require IT approval.",
-  code_of_conduct:
-    "Code of Conduct (demo)\n\nTreat colleagues with respect. Zero tolerance for harassment or discrimination. Follow conflict-of-interest and gift policies.",
-  privacy:
-    "Privacy Policy (demo)\n\nWe process personal data for employment, payroll, and compliance. Data is retained per statutory requirements and shared only with authorized processors.",
-};
+function digitsOnly(value: string) {
+  return value.replace(/\D/g, "");
+}
+
+function isValidPhone10(value: string): boolean {
+  return digitsOnly(value).length === PHONE_LEN;
+}
+
+function isValidPan(value: string): boolean {
+  const pan = value.trim().toUpperCase();
+  return pan.length === 10 && PAN_RE.test(pan);
+}
+
+function hasPassportPhoto(data: PortalPayload): boolean {
+  return Boolean(
+    data.personal.photoName ||
+      data.documents.some((d) => d.kind === "photo" || d.typeCode === "DOC-PHOTO"),
+  );
+}
+
+function validateStep(
+  stepId: PortalStepId,
+  portal: PortalPayload,
+  docTypes: PortalDocumentType[],
+): string | null {
+  switch (stepId) {
+    case "personal": {
+      if (!portal.personal.firstName.trim() || !portal.personal.lastName.trim()) {
+        return "First and last name are required.";
+      }
+      const email = (portal.personal.personalEmail || portal.personal.email).trim();
+      if (!email) return "Email id is required.";
+      if (!portal.personal.phone.trim()) return "Phone number is required.";
+      if (!isValidPhone10(portal.personal.phone)) {
+        return "Wrong format — phone must be exactly 10 digits.";
+      }
+      if (!portal.personal.address.trim()) return "Current address is required.";
+      const permanent = portal.personal.sameAsCurrentAddress
+        ? portal.personal.address.trim()
+        : (portal.personal.permanentAddress || "").trim();
+      if (!permanent) return "Permanent address is required.";
+      if (!portal.personal.gender.trim()) return "Gender is required.";
+      if (!portal.personal.dob?.trim()) return "Date of birth is required.";
+      {
+        const dob = new Date(portal.personal.dob);
+        if (Number.isNaN(dob.getTime())) return "Enter a valid date of birth.";
+        const today = new Date();
+        let age = today.getFullYear() - dob.getFullYear();
+        const m = today.getMonth() - dob.getMonth();
+        if (m < 0 || (m === 0 && today.getDate() < dob.getDate())) age -= 1;
+        if (age < 18) return "Candidate must be at least 18 years old.";
+      }
+      if (!portal.personal.maritalStatus.trim()) return "Marital status is required.";
+      if (!hasPassportPhoto(portal)) return "Photo is required.";
+      return null;
+    }
+    case "government_ids": {
+      const aadhaar = digitsOnly(portal.governmentIds.aadhaar);
+      const pan = portal.governmentIds.pan.trim().toUpperCase();
+      if (aadhaar.length !== AADHAAR_LEN) {
+        return `Aadhaar must be exactly ${AADHAAR_LEN} digits.`;
+      }
+      if (!pan) return "PAN is required.";
+      if (!isValidPan(pan)) {
+        return "Wrong format — PAN must be 10 characters like ABCDE1234F.";
+      }
+      return null;
+    }
+    case "bank": {
+      const account = digitsOnly(portal.bank.accountNumber);
+      const ifsc = portal.bank.ifsc.trim().toUpperCase();
+      if (!portal.bank.bankName.trim() || !portal.bank.accountHolder.trim()) {
+        return "Bank name and account holder are required.";
+      }
+      if (account.length < ACCOUNT_MIN || account.length > ACCOUNT_MAX) {
+        return `Account number must be ${ACCOUNT_MIN}–${ACCOUNT_MAX} digits.`;
+      }
+      if (!IFSC_RE.test(ifsc)) {
+        return "Wrong format — IFSC must be 11 characters (e.g. HDFC0001234).";
+      }
+      if (!portal.bank.branch.trim()) {
+        return "Bank branch is required.";
+      }
+      return null;
+    }
+    case "emergency": {
+      if (!portal.emergency.name.trim()) return "Emergency contact name is required.";
+      if (!portal.emergency.phone.trim()) return "Emergency contact phone number is required.";
+      if (!isValidPhone10(portal.emergency.phone)) {
+        return "Wrong format — phone must be exactly 10 digits.";
+      }
+      return null;
+    }
+    case "documents": {
+      if (!portal.documents.some((d) => d.kind === "resume" || d.typeCode === "DOC-RESUME")) {
+        return "Please upload your Resume (required).";
+      }
+      if (portal.documents.some((d) => d.verifyStatus === "rejected")) {
+        return "Please re-upload documents marked as rejected before continuing.";
+      }
+      const excludedFromMandatory = new Set([
+        "DOC-SLIPS",
+        "DOC-CERT",
+        "DOC-REL",
+        "DOC-RLV",
+        "DOC-PGDIP",
+        "doc-type-any-cert",
+        "doc-type-relieving",
+        "doc-type-relieving-letter",
+        "doc-type-slips",
+        "doc-type-pg-diploma",
+        "salary_slips",
+        "relieving_letter",
+        "other",
+      ]);
+      const missing = docTypes.filter(
+        (t) =>
+          t.mandatory &&
+          !t.multiple &&
+          !excludedFromMandatory.has(t.code) &&
+          !excludedFromMandatory.has(t.kind) &&
+          !portal.documents.some(
+            (d) => d.typeCode === t.code || d.typeCode?.startsWith(`${t.code}-`) || (!d.typeCode && d.kind === t.kind),
+          ),
+      );
+      if (missing.length) {
+        return `Please upload: ${missing.map((m) => m.name).join(", ")}.`;
+      }
+      return null;
+    }
+    case "policies": {
+      if (!portal.policies.agreed) {
+        return "Please agree to the policies before continuing.";
+      }
+      const hasSignature =
+        Boolean(portal.policies.signatureDataUrl) ||
+        Boolean(portal.policies.signatureFileName);
+      if (!hasSignature) {
+        return "Please upload a digital signature file to continue.";
+      }
+      return null;
+    }
+    default:
+      return null;
+  }
+}
+
+const DOC_SECTION_META: {
+  id: PortalDocumentSection;
+  title: string;
+  hint: string;
+  required?: boolean;
+}[] = [
+  {
+    id: "education",
+    title: "Education",
+    hint: "Upload 10th, 12th, graduation, and post graduate / diploma certificates",
+  },
+  {
+    id: "identity",
+    title: "Bank Details",
+    hint: "Cancelled cheque or passbook proof",
+    required: true,
+  },
+  {
+    id: "previous_employment",
+    title: "Employment Documents",
+    hint: "Resume, offer & appointment letters, relieving letters & last 3 month salary slip (multi-file, up to 3 each)",
+  },
+  {
+    id: "other",
+    title: "Certificates",
+    hint: "Optional — upload any additional certificates (multiple files allowed)",
+  },
+];
+
+function matchesDocTypeCode(typeCode: string | undefined, code: string): boolean {
+  return typeCode === code || Boolean(typeCode?.startsWith(`${code}-`));
+}
 
 function asDocumentKind(kind: string): DocumentKind {
   const known: DocumentKind[] = [
@@ -97,39 +265,162 @@ function asDocumentKind(kind: string): DocumentKind {
 }
 
 export function CandidateOnboardingPortal({ token }: { token: string }) {
+  const [sessionOk, setSessionOk] = useState(false);
   const [caseRow, setCaseRow] = useState<OnboardingCase | null>(null);
   const [portal, setPortal] = useState<PortalPayload | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [stepError, setStepError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [done, setDone] = useState(false);
-  const [policyPreview, setPolicyPreview] = useState<(typeof POLICY_DOCS)[number] | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [termsChecked, setTermsChecked] = useState(false);
+  const [acceptingTerms, setAcceptingTerms] = useState(false);
+  const [policyPreview, setPolicyPreview] = useState<{ id: string; label: string } | null>(null);
+  const [policyDocs, setPolicyDocs] = useState<PortalPolicyDoc[]>([]);
   const [docTypes, setDocTypes] = useState<PortalDocumentType[]>([]);
+  const [photoUploading, setPhotoUploading] = useState(false);
+  const portalRef = useRef<PortalPayload | null>(null);
 
   useEffect(() => {
-    const c = getCaseByToken(token);
-    if (!c) {
-      setError("This onboarding link is invalid or has been removed.");
+    const session = getPortalSession();
+    if (!session || session.token !== token) {
+      window.location.replace("/onboarding/login");
       return;
     }
-    if (c.invitation && new Date(c.invitation.expiresAt).getTime() < Date.now()) {
-      setError("This onboarding link has expired. Please contact HR for a new invitation.");
-      setCaseRow(c);
-      return;
-    }
-    if (c.portal.submittedAt || c.status === "joined") {
-      setDone(true);
-    }
-    setCaseRow(c);
-    setPortal({
-      ...c.portal,
-      educationMarks: c.portal.educationMarks ?? emptyEducationMarks(),
-    });
+    setSessionOk(true);
   }, [token]);
+
+  function signOutPortal() {
+    clearPortalSession();
+    window.location.replace("/onboarding/login");
+  }
+
+  useEffect(() => {
+    portalRef.current = portal;
+  }, [portal]);
+
+  useEffect(() => {
+    if (!policyPreview) return;
+    const blockPrintKeys = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "p") {
+        e.preventDefault();
+        e.stopPropagation();
+      }
+    };
+    document.body.classList.add("confidential-print-blocked");
+    window.addEventListener("keydown", blockPrintKeys, true);
+    return () => {
+      document.body.classList.remove("confidential-print-blocked");
+      window.removeEventListener("keydown", blockPrintKeys, true);
+    };
+  }, [policyPreview]);
+
+  function currentPortal(): PortalPayload | null {
+    return portalRef.current ?? portal;
+  }
+
+  function applyPortal(next: PortalPayload) {
+    portalRef.current = next;
+    setPortal(next);
+  }
+
+  useEffect(() => {
+    if (!sessionOk) return;
+    let cancelled = false;
+    setLoading(true);
+    setError(null);
+    void (async () => {
+      try {
+        const c = await getCaseByTokenAsync(token);
+        if (cancelled) return;
+        if (!c) {
+          setError("This onboarding link is invalid or has been removed.");
+          setLoading(false);
+          return;
+        }
+        if (c.invitation && new Date(c.invitation.expiresAt).getTime() < Date.now()) {
+          setError("This onboarding link has expired. Please contact HR for a new invitation.");
+          setCaseRow(c);
+          setLoading(false);
+          return;
+        }
+        const hasRejected = c.portal.documents.some((d) => d.verifyStatus === "rejected");
+        if (c.status === "joined") {
+          setDone(true);
+        } else if (hasRejected) {
+          setDone(false);
+        } else if (c.portal.submittedAt) {
+          setDone(true);
+        }
+        setCaseRow(c);
+        const nextPortal = {
+          ...c.portal,
+          educationMarks: c.portal.educationMarks ?? emptyEducationMarks(),
+          ...(hasRejected ? { currentStep: "documents" as const } : {}),
+        };
+        setPortal(nextPortal);
+        setLoading(false);
+      } catch (e) {
+        if (cancelled) return;
+        setError(
+          e instanceof ApiClientError
+            ? e.message
+            : "Could not load this onboarding link. Please try again.",
+        );
+        setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [token, sessionOk]);
 
   useEffect(() => {
     void listPortalDocumentTypes().then(setDocTypes);
   }, []);
+
+  useEffect(() => {
+    void ensureOnboardingPoliciesLoaded().then(() => {
+      setPolicyDocs(listActivePoliciesForPortal(caseRow?.entityId));
+    });
+  }, [caseRow?.entityId]);
+
+  useEffect(() => {
+    if (!portal || portal.currentStep !== "documents") return;
+    const rejected = portal.documents.filter((d) => d.verifyStatus === "rejected");
+    if (!rejected.length) return;
+    const t = window.setTimeout(() => {
+      const target =
+        document.querySelector<HTMLElement>("[id^='doc-rejected-']") ||
+        document.getElementById("rejected-docs-banner");
+      target?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 150);
+    return () => window.clearTimeout(t);
+  }, [portal?.currentStep, portal?.documents]);
+
+  const termsAccepted = Boolean(caseRow?.termsAcceptedAt);
+
+  async function handleAcceptTerms() {
+    if (!termsChecked) {
+      setStepError("Please tick the box to accept the terms before continuing.");
+      return;
+    }
+    setAcceptingTerms(true);
+    setStepError(null);
+    try {
+      const updated = await acceptOnboardingTerms(token);
+      if (!updated) {
+        setError("Could not record your acceptance. Please try again.");
+        return;
+      }
+      setCaseRow(updated);
+    } catch (e) {
+      const msg = e instanceof ApiClientError ? e.message : "Could not accept terms.";
+      setStepError(msg);
+    } finally {
+      setAcceptingTerms(false);
+    }
+  }
 
   const stepIdx = useMemo(() => {
     if (!portal) return 0;
@@ -140,122 +431,107 @@ export function CandidateOnboardingPortal({ token }: { token: string }) {
   }, [portal]);
 
   function patchPortal(partial: Partial<PortalPayload>) {
-    setPortal((p) => (p ? { ...p, ...partial } : p));
+    setPortal((p) => {
+      if (!p) return p;
+      const next = { ...p, ...partial };
+      portalRef.current = next;
+      return next;
+    });
   }
 
   function go(step: PortalStepId) {
-    if (!portal) return;
-    const next = { ...portal, currentStep: step };
-    setPortal(next);
+    const p = currentPortal();
+    if (!p) return;
+    const targetIdx = PORTAL_STEPS.findIndex((s) => s.id === step);
+    const currentIdx = PORTAL_STEPS.findIndex((s) => s.id === p.currentStep);
+    if (targetIdx > currentIdx) {
+      for (let i = currentIdx; i < targetIdx; i += 1) {
+        const msg = validateStep(PORTAL_STEPS[i].id, p, docTypes);
+        if (msg) {
+          setStepError(msg);
+          return;
+        }
+      }
+    }
+    const next = { ...p, currentStep: step };
+    applyPortal(next);
     setStepError(null);
-    savePortalProgress(token, next);
+    void (async () => {
+      try {
+        const saved = await savePortalProgress(token, next);
+        if (!saved) setStepError("Could not save progress. Please try again.");
+      } catch (e) {
+        setStepError(e instanceof ApiClientError ? e.message : "Could not save progress.");
+      }
+    })();
   }
 
   function validateCurrentStep(): string | null {
-    if (!portal) return "Portal not loaded.";
-    switch (portal.currentStep) {
-      case "government_ids": {
-        const aadhaar = digitsOnly(portal.governmentIds.aadhaar);
-        const pan = portal.governmentIds.pan.trim().toUpperCase();
-        if (aadhaar.length !== AADHAAR_LEN) {
-          return `Aadhaar must be exactly ${AADHAAR_LEN} digits.`;
-        }
-        if (!PAN_RE.test(pan)) {
-          return "PAN must be 10 characters (e.g. ABCDE1234F).";
-        }
-        return null;
-      }
-      case "bank": {
-        const account = digitsOnly(portal.bank.accountNumber);
-        const ifsc = portal.bank.ifsc.trim().toUpperCase();
-        if (!portal.bank.bankName.trim() || !portal.bank.accountHolder.trim()) {
-          return "Bank name and account holder are required.";
-        }
-        if (account.length < ACCOUNT_MIN || account.length > ACCOUNT_MAX) {
-          return `Account number must be ${ACCOUNT_MIN}–${ACCOUNT_MAX} digits.`;
-        }
-        if (!IFSC_RE.test(ifsc)) {
-          return "IFSC must be 11 characters (e.g. HDFC0001234).";
-        }
-        return null;
-      }
-      case "documents": {
-        const marks = portal.educationMarks ?? emptyEducationMarks();
-        if (!marks.tenth.trim()) return "Please enter 10th marks (required).";
-        if (!marks.twelfth.trim()) return "Please enter 12th marks (required).";
-        const excludedFromMandatory = new Set([
-          "DOC-CHEQUE",
-          "DOC-GRAD",
-          "DOC-SLIPS",
-          "doc-type-cheque",
-          "doc-type-grad",
-          "cancelled_cheque",
-          "salary_slips",
-        ]);
-        const missing = docTypes.filter(
-          (t) =>
-            t.mandatory &&
-            !excludedFromMandatory.has(t.code) &&
-            !excludedFromMandatory.has(t.kind) &&
-            !portal.documents.some(
-              (d) => d.typeCode === t.code || (!d.typeCode && d.kind === t.kind),
-            ),
-        );
-        if (missing.length) {
-          return `Please upload: ${missing.map((m) => m.name).join(", ")}.`;
-        }
-        return null;
-      }
-      case "policies": {
-        if (!portal.policies.agreed) {
-          return "Please agree to the policies before continuing.";
-        }
-        if (!portal.policies.signature.trim() && !portal.policies.signatureDataUrl) {
-          return "Digital signature is required before continuing.";
-        }
-        return null;
-      }
-      default:
-        return null;
-    }
+    const p = currentPortal();
+    if (!p) return "Portal not loaded.";
+    return validateStep(p.currentStep, p, docTypes);
   }
 
   function nextStep() {
-    if (!portal) return;
+    const p = currentPortal();
+    if (!p) return;
     const msg = validateCurrentStep();
     if (msg) {
       setStepError(msg);
       return;
     }
     setStepError(null);
-    let nextPortal = portal;
-    if (portal.currentStep === "government_ids") {
+    let nextPortal = p;
+    if (p.currentStep === "personal") {
       nextPortal = {
-        ...portal,
-        governmentIds: {
-          ...portal.governmentIds,
-          aadhaar: digitsOnly(portal.governmentIds.aadhaar),
-          pan: portal.governmentIds.pan.trim().toUpperCase(),
+        ...p,
+        personal: {
+          ...p.personal,
+          phone: digitsOnly(p.personal.phone).slice(0, PHONE_LEN),
         },
       };
-    } else if (portal.currentStep === "bank") {
+    } else if (p.currentStep === "government_ids") {
       nextPortal = {
-        ...portal,
+        ...p,
+        governmentIds: {
+          ...p.governmentIds,
+          aadhaar: digitsOnly(p.governmentIds.aadhaar),
+          pan: p.governmentIds.pan.trim().toUpperCase(),
+        },
+      };
+    } else if (p.currentStep === "bank") {
+      nextPortal = {
+        ...p,
         bank: {
-          ...portal.bank,
-          accountNumber: digitsOnly(portal.bank.accountNumber),
-          ifsc: portal.bank.ifsc.trim().toUpperCase(),
+          ...p.bank,
+          accountNumber: digitsOnly(p.bank.accountNumber),
+          ifsc: p.bank.ifsc.trim().toUpperCase(),
+        },
+      };
+    } else if (p.currentStep === "emergency") {
+      nextPortal = {
+        ...p,
+        emergency: {
+          ...p.emergency,
+          phone: digitsOnly(p.emergency.phone).slice(0, PHONE_LEN),
         },
       };
     }
-    const i = PORTAL_STEPS.findIndex((s) => s.id === portal.currentStep);
+    const i = PORTAL_STEPS.findIndex((s) => s.id === p.currentStep);
     if (i >= PORTAL_STEPS.length - 1) {
-      setPortal(nextPortal);
+      applyPortal(nextPortal);
       return;
     }
     const advanced = { ...nextPortal, currentStep: PORTAL_STEPS[i + 1].id };
-    setPortal(advanced);
-    savePortalProgress(token, advanced);
+    applyPortal(advanced);
+    void (async () => {
+      try {
+        const saved = await savePortalProgress(token, advanced);
+        if (!saved) setStepError("Could not save progress. Please try again.");
+      } catch (e) {
+        setStepError(e instanceof ApiClientError ? e.message : "Could not save progress.");
+      }
+    })();
   }
 
   function prevStep() {
@@ -265,64 +541,222 @@ export function CandidateOnboardingPortal({ token }: { token: string }) {
     if (i > 0) go(PORTAL_STEPS[i - 1].id);
   }
 
-  function upsertDocument(kind: DocumentKind, fileName: string, typeCode?: string) {
-    if (!portal || !fileName) return;
+  async function upsertDocument(
+    kind: DocumentKind,
+    file: File,
+    typeCode?: string,
+    personalPatch?: Partial<PortalPayload["personal"]>,
+    options?: { append?: boolean },
+  ): Promise<boolean> {
+    let fileDataUrl: string;
+    try {
+      fileDataUrl = await readFileAsDataUrl(file);
+    } catch {
+      setStepError("Could not read the selected file. Try again.");
+      return false;
+    }
+    const storedTypeCode =
+      options?.append && typeCode ? `${typeCode}-${crypto.randomUUID().slice(0, 8)}` : typeCode;
     const doc: OnboardingDocument = {
       id: crypto.randomUUID(),
       kind,
-      typeCode,
-      fileName,
+      typeCode: storedTypeCode,
+      fileName: file.name,
       uploadedAt: new Date().toISOString(),
       verifyStatus: "pending",
+      fileDataUrl,
+      mimeType: file.type || undefined,
     };
-    const rest = portal.documents.filter((d) => {
-      if (typeCode) {
-        if (d.typeCode) return d.typeCode !== typeCode;
-        return d.kind !== kind;
+
+    const p = currentPortal();
+    if (!p) return false;
+
+    const rest = options?.append
+      ? p.documents.filter((d) => {
+          // Drop rejected files of the same type so a new upload replaces them
+          if (d.verifyStatus === "rejected") {
+            if (typeCode) {
+              return !(d.typeCode === typeCode || d.typeCode?.startsWith(`${typeCode}-`));
+            }
+            return d.kind !== kind;
+          }
+          return true;
+        })
+      : p.documents.filter((d) => {
+          if (typeCode) {
+            if (d.typeCode === typeCode) return false;
+            // Replace legacy untyped same-kind docs when filling the first slot
+            if (
+              !d.typeCode &&
+              d.kind === kind &&
+              (typeCode.endsWith("-1") || !typeCode.includes("-"))
+            ) {
+              return false;
+            }
+            return true;
+          }
+          return d.kind !== kind;
+        });
+    const nextPortal: PortalPayload = {
+      ...p,
+      personal: personalPatch ? { ...p.personal, ...personalPatch } : p.personal,
+      documents: [...rest, doc],
+    };
+
+    applyPortal(nextPortal);
+    try {
+      const saved = await savePortalProgress(token, nextPortal);
+      if (!saved) {
+        setStepError("Could not save the file. Try a smaller image or clear browser storage.");
+        return false;
       }
-      return d.kind !== kind;
-    });
-    patchPortal({ documents: [...rest, doc] });
+    } catch (e) {
+      setStepError(e instanceof ApiClientError ? e.message : "Could not save the file.");
+      return false;
+    }
+    return true;
   }
 
-  function onPickFile(docType: PortalDocumentType, file: File | undefined) {
+  async function removeDocument(docId: string) {
+    const p = currentPortal();
+    if (!p) return;
+    const nextPortal: PortalPayload = {
+      ...p,
+      documents: p.documents.filter((d) => d.id !== docId),
+    };
+    applyPortal(nextPortal);
+    try {
+      const saved = await savePortalProgress(token, nextPortal);
+      if (!saved) setStepError("Could not update documents. Please try again.");
+    } catch (e) {
+      setStepError(e instanceof ApiClientError ? e.message : "Could not update documents.");
+    }
+  }
+
+  async function onPickFile(docType: PortalDocumentType, file: File | undefined) {
     if (!file) return;
     if (docType.maxSizeMb && file.size > docType.maxSizeMb * 1024 * 1024) {
       setStepError(`${docType.name} must be under ${docType.maxSizeMb} MB.`);
       return;
     }
     setStepError(null);
-    upsertDocument(asDocumentKind(docType.kind), file.name, docType.code);
+    await upsertDocument(asDocumentKind(docType.kind), file, docType.code, undefined, {
+      append: Boolean(docType.multiple),
+    });
+  }
+
+  async function onPickFiles(
+    docType: PortalDocumentType,
+    files: FileList | null,
+    options?: { maxFiles?: number; existingCount?: number },
+  ) {
+    if (!files?.length) return;
+    const maxFiles = options?.maxFiles;
+    const existing = options?.existingCount ?? 0;
+    const incoming = Array.from(files);
+    if (maxFiles != null && existing + incoming.length > maxFiles) {
+      setStepError(
+        `You can upload up to ${maxFiles} files for ${docType.name}. Remove one to add another.`,
+      );
+      return;
+    }
+    setStepError(null);
+    for (const file of incoming) {
+      if (docType.maxSizeMb && file.size > docType.maxSizeMb * 1024 * 1024) {
+        setStepError(`${file.name} must be under ${docType.maxSizeMb} MB.`);
+        return;
+      }
+      if (file.size > MAX_DOCUMENT_BYTES) {
+        setStepError(`${file.name} must be under 2 MB.`);
+        return;
+      }
+      const ok = await upsertDocument(asDocumentKind(docType.kind), file, docType.code, undefined, {
+        append: true,
+      });
+      if (!ok) return;
+    }
   }
 
   async function handleSave() {
-    if (!portal) return;
+    const p = currentPortal();
+    if (!p) return;
     setSaving(true);
     try {
-      savePortalProgress(token, portal);
+      const saved = await savePortalProgress(token, p);
+      if (!saved) setStepError("Could not save progress. Please try again.");
+    } catch (e) {
+      setStepError(e instanceof ApiClientError ? e.message : "Could not save progress.");
     } finally {
       setSaving(false);
     }
   }
 
   async function handleSubmit() {
-    if (!portal) return;
-    if (!portal.policies.agreed || (!portal.policies.signature.trim() && !portal.policies.signatureDataUrl)) {
-      setError("Please accept policies and provide a digital signature before submitting.");
-      return;
+    const p = currentPortal();
+    if (!p) return;
+    for (const s of PORTAL_STEPS) {
+      const msg = validateStep(s.id, p, docTypes);
+      if (msg) {
+        setError(msg);
+        setStepError(msg);
+        return;
+      }
     }
     setSaving(true);
     setError(null);
+    setStepError(null);
     try {
-      const submitted = submitPortal(token, portal);
+      let portalToSubmit = p;
+      if (p.policies.agreed && p.policies.signatureDataUrl && policyDocs.length > 0) {
+        try {
+          const signedDocuments = await stampPoliciesWithSignature({
+            policies: policyDocs,
+            signatureDataUrl: p.policies.signatureDataUrl,
+            signatureMimeType: p.policies.signatureMimeType,
+            candidateName: `${p.personal.firstName} ${p.personal.lastName}`.trim(),
+          });
+          portalToSubmit = {
+            ...p,
+            policies: {
+              ...p.policies,
+              signedDocuments,
+              acceptedAt: p.policies.acceptedAt || new Date().toISOString(),
+            },
+          };
+          applyPortal(portalToSubmit);
+        } catch (stampErr) {
+          setError(
+            stampErr instanceof Error
+              ? `Could not apply signature to policies: ${stampErr.message}`
+              : "Could not apply signature to policies. Use a PNG/JPG signature under 100 KB.",
+          );
+          setSaving(false);
+          return;
+        }
+      }
+
+      const submitted = await submitPortal(token, portalToSubmit);
       if (submitted) {
         setDone(true);
         setCaseRow(submitted);
-        setPortal(submitted.portal);
+      } else {
+        setError("Could not submit onboarding. Please try again.");
       }
+    } catch (e) {
+      setError(e instanceof ApiClientError ? e.message : "Could not submit onboarding. Please try again.");
     } finally {
       setSaving(false);
     }
+  }
+
+  if (!sessionOk || loading) {
+    return (
+      <Shell>
+        <p className="text-sm text-muted-foreground">
+          {!sessionOk ? "Checking your session…" : "Loading your onboarding portal…"}
+        </p>
+      </Shell>
+    );
   }
 
   if (error && !caseRow) {
@@ -331,6 +765,14 @@ export function CandidateOnboardingPortal({ token }: { token: string }) {
         <div className="rounded-xl border border-destructive/30 bg-red-50 px-4 py-6 text-sm text-red-900">
           {error}
         </div>
+        <Button
+          type="button"
+          variant="outline"
+          className="mt-4 cursor-pointer"
+          onClick={signOutPortal}
+        >
+          Sign in again
+        </Button>
       </Shell>
     );
   }
@@ -348,7 +790,7 @@ export function CandidateOnboardingPortal({ token }: { token: string }) {
       <Shell>
         <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-5 py-8 text-center">
           <CheckCircle2 className="mx-auto size-10 text-emerald-600" />
-          <h1 className="mt-3 text-lg font-semibold text-emerald-950">Onboarding submitted</h1>
+          <h1 className="mt-3 text-lg font-semibold text-emerald-950">Onboarding Submitted</h1>
           <p className="mt-1 text-sm text-emerald-900/80">
             Thank you, {caseRow.candidateName}. HR will verify your information before{" "}
             {caseRow.joiningDate || "your joining date"}.
@@ -356,6 +798,85 @@ export function CandidateOnboardingPortal({ token }: { token: string }) {
           {caseRow.employeeId ? (
             <p className="mt-3 font-mono text-sm text-emerald-950">Employee ID: {caseRow.employeeId}</p>
           ) : null}
+          <Button
+            type="button"
+            variant="outline"
+            className="mt-5 cursor-pointer"
+            onClick={signOutPortal}
+          >
+            Sign out
+          </Button>
+        </div>
+      </Shell>
+    );
+  }
+
+  if (!termsAccepted) {
+    return (
+      <Shell>
+        <div className="mx-auto max-w-xl space-y-4 rounded-xl border border-border/70 bg-card p-5 shadow-sm">
+          <div>
+            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+              {caseRow.caseCode} · {caseRow.entityName || "Employer"}
+            </p>
+            <h1 className="mt-1 text-lg font-semibold text-foreground">
+              Welcome, {caseRow.candidateName}
+            </h1>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Before you begin onboarding, please review and accept how we collect and use your
+              personal information.
+            </p>
+          </div>
+
+          <div className="max-h-56 space-y-2 overflow-y-auto rounded-lg border border-border/60 bg-muted/20 p-3 text-xs leading-relaxed text-muted-foreground">
+            <p className="font-medium text-foreground">Terms &amp; privacy notice ({ONBOARDING_TERMS_VERSION})</p>
+            <p>
+              We collect personal details, government IDs, bank information, emergency contacts, and
+              employment documents solely for employment onboarding, payroll setup, statutory
+              compliance, and workplace administration.
+            </p>
+            <p>
+              Your information is processed by authorized HR and payroll staff of the hiring entity
+              and will not be sold to third parties. You may contact HR to correct inaccurate data.
+              Providing false information may delay or cancel your joining.
+            </p>
+            <p>
+              By continuing you confirm that you are the invited candidate, that the information you
+              submit is accurate to the best of your knowledge, and that you consent to this
+              processing for employment purposes.
+            </p>
+          </div>
+
+          <label className="flex cursor-pointer items-start gap-2.5 rounded-lg border border-border/60 px-3 py-2.5 text-sm">
+            <input
+              type="checkbox"
+              className="mt-0.5 size-4 cursor-pointer accent-primary"
+              checked={termsChecked}
+              onChange={(e) => setTermsChecked(e.target.checked)}
+            />
+            <span>
+              I have read and accept the terms &amp; conditions and consent to the collection and use
+              of my personal information for employment onboarding.
+            </span>
+          </label>
+
+          {stepError ? <p className="text-xs text-destructive">{stepError}</p> : null}
+          {error ? <p className="text-xs text-destructive">{error}</p> : null}
+
+          <Button
+            className="w-full cursor-pointer"
+            disabled={acceptingTerms || !termsChecked}
+            onClick={() => void handleAcceptTerms()}
+          >
+            {acceptingTerms ? "Saving…" : "Accept & continue to onboarding"}
+          </Button>
+          <button
+            type="button"
+            className="mt-2 w-full cursor-pointer text-xs text-muted-foreground underline-offset-2 hover:underline"
+            onClick={signOutPortal}
+          >
+            Sign out
+          </button>
         </div>
       </Shell>
     );
@@ -366,18 +887,39 @@ export function CandidateOnboardingPortal({ token }: { token: string }) {
     [...portal.documents]
       .reverse()
       .find((d) => d.typeCode === typeCode || (!d.typeCode && d.kind === kind));
+  const rejectedDocs = portal.documents.filter((d) => d.verifyStatus === "rejected");
 
   return (
     <Shell>
       <div className="mb-6">
-        <p className="text-[11px] font-medium tracking-wide text-muted-foreground uppercase">
-          Secure onboarding · {caseRow.caseCode}
-        </p>
+        <div className="flex items-start justify-between gap-3">
+          <p className="text-[11px] font-medium tracking-wide text-muted-foreground uppercase">
+            Secure onboarding · {caseRow.caseCode}
+            {caseRow.entityName ? ` · ${caseRow.entityName}` : ""}
+          </p>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="cursor-pointer h-7 shrink-0 px-2 text-xs text-muted-foreground"
+            onClick={signOutPortal}
+          >
+            <LogOut className="size-3.5" />
+            Sign out
+          </Button>
+        </div>
         <h1 className="mt-1 text-xl font-semibold tracking-tight text-foreground">
           Welcome, {caseRow.candidateName}
         </h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          Complete your profile before joining on {caseRow.joiningDate || "—"}. Link expires{" "}
+          Complete your profile before joining on {caseRow.joiningDate || "—"}.
+          {caseRow.entityName ? (
+            <>
+              {" "}
+              You are joining <span className="font-medium text-foreground">{caseRow.entityName}</span>.
+            </>
+          ) : null}{" "}
+          Access expires{" "}
           {caseRow.invitation
             ? new Date(caseRow.invitation.expiresAt).toLocaleDateString()
             : "soon"}
@@ -421,8 +963,25 @@ export function CandidateOnboardingPortal({ token }: { token: string }) {
       </div>
 
       <div className="rounded-xl border border-border/70 bg-card p-4 shadow-sm">
-        <h2 className="text-sm font-semibold">{step.label}</h2>
+        <h2 className="text-sm font-semibold">
+          {step.label}
+          {step.id === "bank" ? <span className="text-destructive"> *</span> : null}
+        </h2>
         <p className="mb-4 text-xs text-muted-foreground">{step.description}</p>
+
+        {rejectedDocs.length > 0 ? (
+          <div
+            id="rejected-docs-banner"
+            className="mb-4 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2.5 text-xs text-amber-950"
+          >
+            <p className="font-semibold">Action required: re-upload rejected documents</p>
+            <p className="mt-1 text-amber-900/90">
+              HR rejected:{" "}
+              {rejectedDocs.map((d) => d.fileName).join(", ")}. Replace those files below, then
+              continue to Review and submit again.
+            </p>
+          </div>
+        ) : null}
 
         {step.id === "personal" ? (
           <div className="grid gap-3 sm:grid-cols-2">
@@ -450,7 +1009,7 @@ export function CandidateOnboardingPortal({ token }: { token: string }) {
                 }
               />
             </SetupField>
-            <SetupField label="Gender">
+            <SetupField label="Gender" required>
               <SetupSelect
                 value={portal.personal.gender}
                 onChange={(e) =>
@@ -458,53 +1017,60 @@ export function CandidateOnboardingPortal({ token }: { token: string }) {
                 }
               >
                 <option value="">Select</option>
-                <option value="female">Female</option>
-                <option value="male">Male</option>
-                <option value="other">Other</option>
+                {GENDER_OPTIONS.map((g) => (
+                  <option key={g.value} value={g.value}>
+                    {g.label}
+                  </option>
+                ))}
               </SetupSelect>
             </SetupField>
-            <SetupField label="Date of birth">
+            <SetupField label="Date of birth" required>
               <SetupInput
                 type="date"
                 value={portal.personal.dob}
+                max={(() => {
+                  const d = new Date();
+                  d.setFullYear(d.getFullYear() - 18);
+                  return d.toISOString().slice(0, 10);
+                })()}
                 onChange={(e) =>
                   patchPortal({ personal: { ...portal.personal, dob: e.target.value } })
                 }
               />
             </SetupField>
-            <SetupField label="Marital status">
-              <SetupInput
+            <SetupField label="Marital status" required>
+              <SetupSelect
                 value={portal.personal.maritalStatus}
                 onChange={(e) =>
                   patchPortal({ personal: { ...portal.personal, maritalStatus: e.target.value } })
                 }
-              />
+              >
+                <option value="">Select status</option>
+                {MARITAL_STATUS_OPTIONS.map((s) => (
+                  <option key={s.value} value={s.value}>
+                    {s.label}
+                  </option>
+                ))}
+              </SetupSelect>
             </SetupField>
-            <SetupField label="Nationality">
+            <SetupField label="Phone" required hint="Exactly 10 digits">
               <SetupInput
-                value={portal.personal.nationality}
-                onChange={(e) =>
-                  patchPortal({ personal: { ...portal.personal, nationality: e.target.value } })
-                }
-              />
-            </SetupField>
-            <SetupField label="Blood group">
-              <SetupInput
-                value={portal.personal.bloodGroup}
-                onChange={(e) =>
-                  patchPortal({ personal: { ...portal.personal, bloodGroup: e.target.value } })
-                }
-              />
-            </SetupField>
-            <SetupField label="Phone">
-              <SetupInput
+                inputMode="numeric"
+                autoComplete="tel"
+                maxLength={PHONE_LEN}
+                placeholder="10-digit mobile number"
                 value={portal.personal.phone}
                 onChange={(e) =>
-                  patchPortal({ personal: { ...portal.personal, phone: e.target.value } })
+                  patchPortal({
+                    personal: {
+                      ...portal.personal,
+                      phone: digitsOnly(e.target.value).slice(0, PHONE_LEN),
+                    },
+                  })
                 }
               />
             </SetupField>
-            <SetupField label="Personal email" required hint="Candidate personal email (not company email)">
+            <SetupField label="Email id" required hint="Personal email (not company / cache email)">
               <SetupInput
                 type="email"
                 value={portal.personal.personalEmail || portal.personal.email}
@@ -520,26 +1086,105 @@ export function CandidateOnboardingPortal({ token }: { token: string }) {
               />
             </SetupField>
             <div className="sm:col-span-2">
-              <SetupField label="Address">
+              <SetupField label="Current address" required>
                 <SetupTextarea
                   value={portal.personal.address}
+                  onChange={(e) => {
+                    const address = e.target.value;
+                    patchPortal({
+                      personal: {
+                        ...portal.personal,
+                        address,
+                        ...(portal.personal.sameAsCurrentAddress
+                          ? { permanentAddress: address }
+                          : {}),
+                      },
+                    });
+                  }}
+                  rows={2}
+                />
+              </SetupField>
+            </div>
+            <div className="sm:col-span-2 space-y-2">
+              <label className="flex cursor-pointer items-center gap-2 text-sm text-foreground">
+                <input
+                  type="checkbox"
+                  className="size-4 cursor-pointer accent-primary"
+                  checked={Boolean(portal.personal.sameAsCurrentAddress)}
+                  onChange={(e) => {
+                    const same = e.target.checked;
+                    patchPortal({
+                      personal: {
+                        ...portal.personal,
+                        sameAsCurrentAddress: same,
+                        permanentAddress: same
+                          ? portal.personal.address
+                          : portal.personal.permanentAddress || "",
+                      },
+                    });
+                  }}
+                />
+                Permanent address same as current
+              </label>
+              <SetupField label="Permanent address" required>
+                <SetupTextarea
+                  value={
+                    portal.personal.sameAsCurrentAddress
+                      ? portal.personal.address
+                      : portal.personal.permanentAddress || ""
+                  }
                   onChange={(e) =>
-                    patchPortal({ personal: { ...portal.personal, address: e.target.value } })
+                    patchPortal({
+                      personal: {
+                        ...portal.personal,
+                        sameAsCurrentAddress: false,
+                        permanentAddress: e.target.value,
+                      },
+                    })
                   }
                   rows={2}
+                  disabled={Boolean(portal.personal.sameAsCurrentAddress)}
                 />
               </SetupField>
             </div>
             <div className="sm:col-span-2">
               <FilePickField
                 label="Photo"
-                accept="image/*"
-                fileName={portal.personal.photoName}
-                hint="Upload from this device (PC or phone) — images only"
-                onFile={(file) => {
+                required
+                accept="image/jpeg,image/png,image/webp,.jpg,.jpeg,.png,.webp"
+                fileName={
+                  portal.personal.photoName ||
+                  [...portal.documents]
+                    .reverse()
+                    .find((d) => d.kind === "photo" || d.typeCode === "DOC-PHOTO")?.fileName
+                }
+                hint={
+                  photoUploading
+                    ? "Uploading photo…"
+                    : "Upload passport size photo — max 300 KB, JPG or PNG only"
+                }
+                disabled={photoUploading}
+                onFile={async (file) => {
                   if (!file) return;
-                  patchPortal({ personal: { ...portal.personal, photoName: file.name } });
-                  upsertDocument("photo", file.name, "DOC-PHOTO");
+                  if (!file.type.startsWith("image/")) {
+                    setStepError("Photo must be an image file (JPG or PNG).");
+                    return;
+                  }
+                  if (file.size > MAX_PHOTO_BYTES) {
+                    setStepError("Photo must be under 300 KB.");
+                    return;
+                  }
+                  setStepError(null);
+                  setPhotoUploading(true);
+                  try {
+                    const ok = await upsertDocument("photo", file, "DOC-PHOTO", {
+                      photoName: file.name,
+                    });
+                    if (!ok) return;
+                    setStepError(null);
+                  } finally {
+                    setPhotoUploading(false);
+                  }
                 }}
               />
             </div>
@@ -565,7 +1210,7 @@ export function CandidateOnboardingPortal({ token }: { token: string }) {
                 }
               />
             </SetupField>
-            <SetupField label="PAN" required hint="Format: ABCDE1234F">
+            <SetupField label="PAN" required hint="Format: ABCDE1234F (10 characters)">
               <SetupInput
                 autoComplete="off"
                 placeholder="ABCDE1234F"
@@ -614,21 +1259,25 @@ export function CandidateOnboardingPortal({ token }: { token: string }) {
                 }
               />
             </SetupField>
-            <SetupField label="ESIC">
-              <SetupInput
-                value={portal.governmentIds.esic}
-                onChange={(e) =>
-                  patchPortal({
-                    governmentIds: { ...portal.governmentIds, esic: e.target.value },
-                  })
-                }
-              />
-            </SetupField>
           </div>
         ) : null}
 
         {step.id === "bank" ? (
-          <div className="grid gap-3 sm:grid-cols-2">
+          <div className="space-y-4">
+            <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-3 text-xs leading-relaxed text-amber-950">
+              <p className="font-semibold text-amber-950">Salary Account — Important Information</p>
+              <ul className="mt-2 list-disc space-y-1 pl-4">
+                <li>
+                  Salary will be credited to an <strong>ICICI Bank salary account</strong>. Existing
+                  ICICI account holders may provide their account details.
+                </li>
+                <li>
+                  If you do not have an ICICI account, the company will facilitate opening one after
+                  onboarding. An alternative account may be provided temporarily.
+                </li>
+              </ul>
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2">
             <SetupField label="Bank name" required>
               <SetupInput
                 placeholder="e.g. HDFC Bank"
@@ -687,7 +1336,7 @@ export function CandidateOnboardingPortal({ token }: { token: string }) {
                 }
               />
             </SetupField>
-            <SetupField label="Branch">
+            <SetupField label="Branch" required>
               <SetupInput
                 value={portal.bank.branch}
                 onChange={(e) =>
@@ -695,13 +1344,7 @@ export function CandidateOnboardingPortal({ token }: { token: string }) {
                 }
               />
             </SetupField>
-            <SetupField label="UPI">
-              <SetupInput
-                placeholder="name@upi"
-                value={portal.bank.upi}
-                onChange={(e) => patchPortal({ bank: { ...portal.bank, upi: e.target.value } })}
-              />
-            </SetupField>
+            </div>
           </div>
         ) : null}
 
@@ -716,20 +1359,36 @@ export function CandidateOnboardingPortal({ token }: { token: string }) {
               />
             </SetupField>
             <SetupField label="Relationship">
-              <SetupInput
+              <SetupSelect
                 value={portal.emergency.relationship}
                 onChange={(e) =>
                   patchPortal({
                     emergency: { ...portal.emergency, relationship: e.target.value },
                   })
                 }
-              />
+              >
+                <option value="">Select relationship</option>
+                {RELATIONSHIP_OPTIONS.map((r) => (
+                  <option key={r.value} value={r.value}>
+                    {r.label}
+                  </option>
+                ))}
+              </SetupSelect>
             </SetupField>
-            <SetupField label="Phone">
+            <SetupField label="Phone" required hint="Exactly 10 digits">
               <SetupInput
+                inputMode="numeric"
+                autoComplete="tel"
+                maxLength={PHONE_LEN}
+                placeholder="10-digit mobile number"
                 value={portal.emergency.phone}
                 onChange={(e) =>
-                  patchPortal({ emergency: { ...portal.emergency, phone: e.target.value } })
+                  patchPortal({
+                    emergency: {
+                      ...portal.emergency,
+                      phone: digitsOnly(e.target.value).slice(0, PHONE_LEN),
+                    },
+                  })
                 }
               />
             </SetupField>
@@ -755,157 +1414,107 @@ export function CandidateOnboardingPortal({ token }: { token: string }) {
                 Types.
               </p>
             ) : (
-              DOC_SECTION_META.map((section) => {
-                const types = docTypes.filter(
-                  (t) =>
-                    t.section === section.id &&
-                    t.code !== "DOC-CHEQUE" &&
-                    t.kind !== "cancelled_cheque" &&
-                    t.code !== "DOC-GRAD",
-                );
-                if (types.length === 0 && section.id !== "education") return null;
-                const marks = portal.educationMarks ?? emptyEducationMarks();
-                return (
-                  <section
-                    key={section.id}
-                    className="space-y-3 rounded-lg border border-border/70 bg-muted/20 p-3 sm:p-4"
-                  >
-                    <div>
-                      <h3 className="text-sm font-semibold text-foreground">{section.title}</h3>
-                      <p className="text-[11px] text-muted-foreground">{section.hint}</p>
-                    </div>
-
-                    {section.id === "identity" ? (
-                      <div className="grid gap-3 sm:grid-cols-2">
-                        {types.map((t) => (
-                          <FilePickField
-                            key={t.id}
-                            label={t.name}
-                            required={t.mandatory}
-                            accept={t.accept || ".pdf,image/*"}
-                            fileName={latestDoc(t.code, t.kind)?.fileName}
-                            hint={
-                              t.maxSizeMb
-                                ? `Upload from this device · max ${t.maxSizeMb} MB · ${t.code}`
-                                : `Upload from this device · ${t.code}`
-                            }
-                            onFile={(file) => onPickFile(t, file)}
-                          />
-                        ))}
+              <>
+                {DOC_SECTION_META.map((section) => {
+                  const types = docTypes.filter((t) => t.section === section.id);
+                  if (!types.length) return null;
+                  return (
+                    <section
+                      key={section.id}
+                      className="space-y-3 rounded-lg border border-border/70 bg-muted/20 p-3 sm:p-4"
+                    >
+                      <div>
+                        <h3 className="text-sm font-semibold text-foreground">
+                          {section.title}
+                          {section.required ? (
+                            <span className="text-destructive"> *</span>
+                          ) : null}
+                        </h3>
+                        {section.hint ? (
+                          <p className="text-[11px] text-muted-foreground">{section.hint}</p>
+                        ) : null}
                       </div>
-                    ) : null}
-
-                    {section.id === "education" ? (
                       <div className="space-y-3">
-                        <div className="grid gap-3 sm:grid-cols-3">
-                          <SetupField label="10th marks" required hint="Percentage or CGPA">
-                            <SetupInput
-                              value={marks.tenth}
-                              placeholder="e.g. 85% or 8.5 CGPA"
-                              onChange={(e) =>
-                                patchPortal({
-                                  educationMarks: { ...marks, tenth: e.target.value },
-                                })
+                        {types.map((t) => {
+                          if (t.multiple) {
+                            const files = portal.documents.filter((d) => {
+                              if (matchesDocTypeCode(d.typeCode, t.code)) return true;
+                              if (t.code === "DOC-REL" && !d.typeCode && d.kind === "relieving_letter") {
+                                return true;
                               }
-                            />
-                          </SetupField>
-                          <SetupField label="12th marks" required hint="Percentage or CGPA">
-                            <SetupInput
-                              value={marks.twelfth}
-                              placeholder="e.g. 82% or 8.2 CGPA"
-                              onChange={(e) =>
-                                patchPortal({
-                                  educationMarks: { ...marks, twelfth: e.target.value },
-                                })
+                              if (t.code === "DOC-SLIPS" && !d.typeCode && d.kind === "salary_slips") {
+                                return true;
                               }
-                            />
-                          </SetupField>
-                          <SetupField label="Graduation marks" hint="Optional">
-                            <SetupInput
-                              value={marks.graduation}
-                              placeholder="e.g. 7.8 CGPA"
-                              onChange={(e) =>
-                                patchPortal({
-                                  educationMarks: { ...marks, graduation: e.target.value },
-                                })
-                              }
-                            />
-                          </SetupField>
-                        </div>
-
-                        {types.map((t) => (
-                          <FilePickField
-                            key={t.id}
-                            label={t.name}
-                            required={t.mandatory}
-                            accept={t.accept || ".pdf,image/*"}
-                            fileName={latestDoc(t.code, t.kind)?.fileName}
-                            hint={
-                              t.maxSizeMb
-                                ? `Upload from this device · max ${t.maxSizeMb} MB · ${t.code}`
-                                : `Upload from this device · ${t.code}`
-                            }
-                            onFile={(file) => onPickFile(t, file)}
-                          />
-                        ))}
-                      </div>
-                    ) : null}
-
-                    {section.id === "previous_employment" ? (
-                      <div className="space-y-3">
-                        <SalarySlipsMultiUploader
-                          portalDocs={portal.documents}
-                          onUpload={(slipNum, file) => {
-                            if (!file) return;
-                            upsertDocument(
-                              "salary_slips",
-                              file.name,
-                              `DOC-SLIPS-${slipNum}`,
+                              return false;
+                            });
+                            const sectionRejected = files.some((d) => d.verifyStatus === "rejected");
+                            const maxHint = t.maxFiles
+                              ? `select up to ${t.maxFiles} files`
+                              : "select multiple files";
+                            return (
+                              <div
+                                key={t.id}
+                                id={sectionRejected ? `doc-rejected-${t.code}` : undefined}
+                              >
+                                <MultiFilePickField
+                                  label={t.name}
+                                  required={t.mandatory}
+                                  accept={t.accept || ".pdf,image/*"}
+                                  files={files.map((d) => ({
+                                    id: d.id,
+                                    name: d.fileName,
+                                    verifyStatus: d.verifyStatus,
+                                  }))}
+                                  hint={
+                                    sectionRejected
+                                      ? "Rejected — choose a new file to replace"
+                                      : t.maxSizeMb
+                                        ? `${maxHint} · max ${t.maxSizeMb} MB each`
+                                        : maxHint
+                                  }
+                                  maxFiles={t.maxFiles}
+                                  emphasized={sectionRejected}
+                                  onFiles={(list) =>
+                                    void onPickFiles(t, list, {
+                                      maxFiles: t.maxFiles,
+                                      existingCount: files.length,
+                                    })
+                                  }
+                                  onRemove={(id) => void removeDocument(id)}
+                                />
+                              </div>
                             );
-                          }}
-                        />
-                        {types
-                          .filter((t) => t.code !== "DOC-SLIPS")
-                          .map((t) => (
-                            <FilePickField
+                          }
+                          const doc = latestDoc(t.code, t.kind);
+                          const rejected = doc?.verifyStatus === "rejected";
+                          return (
+                            <div
                               key={t.id}
-                              label={t.name}
-                              required={t.mandatory}
-                              accept={t.accept || ".pdf,image/*"}
-                              fileName={latestDoc(t.code, t.kind)?.fileName}
-                              hint={
-                                t.maxSizeMb
-                                  ? `Upload from this device · max ${t.maxSizeMb} MB · ${t.code}`
-                                  : `Upload from this device · ${t.code}`
-                              }
-                              onFile={(file) => onPickFile(t, file)}
-                            />
-                          ))}
+                              id={rejected ? `doc-rejected-${t.code}` : undefined}
+                            >
+                              <FilePickField
+                                label={t.name}
+                                required={t.mandatory}
+                                accept={t.accept || ".pdf,image/*"}
+                                fileName={doc?.fileName}
+                                verifyStatus={doc?.verifyStatus}
+                                hint={
+                                  rejected
+                                    ? "Rejected by HR — upload a new file"
+                                    : t.maxSizeMb
+                                      ? `Upload from this device · max ${t.maxSizeMb} MB`
+                                      : "Upload from this device"
+                                }
+                                onFile={(file) => onPickFile(t, file)}
+                              />
+                            </div>
+                          );
+                        })}
                       </div>
-                    ) : null}
-
-                    {section.id === "other" ? (
-                      <div className="space-y-3">
-                        {types.map((t) => (
-                          <FilePickField
-                            key={t.id}
-                            label={t.name}
-                            required={t.mandatory}
-                            accept={t.accept || ".pdf,image/*"}
-                            fileName={latestDoc(t.code, t.kind)?.fileName}
-                            hint={
-                              t.maxSizeMb
-                                ? `Upload from this device · max ${t.maxSizeMb} MB · ${t.code}`
-                                : `Upload from this device · ${t.code}`
-                            }
-                            onFile={(file) => onPickFile(t, file)}
-                          />
-                        ))}
-                      </div>
-                    ) : null}
-                  </section>
-                );
-              })
+                    </section>
+                  );
+                })}
+              </>
             )}
           </div>
         ) : null}
@@ -913,7 +1522,7 @@ export function CandidateOnboardingPortal({ token }: { token: string }) {
         {step.id === "policies" ? (
           <div className="space-y-3">
             <ul className="space-y-2 text-xs">
-              {POLICY_DOCS.map((p) => (
+              {policyDocs.map((p) => (
                 <li
                   key={p.id}
                   className="flex items-center justify-between rounded-lg border border-border/70 px-3 py-2"
@@ -924,14 +1533,22 @@ export function CandidateOnboardingPortal({ token }: { token: string }) {
                   </span>
                   <button
                     type="button"
-                    className="cursor-pointer font-medium text-primary underline-offset-2 hover:underline"
-                    onClick={() => setPolicyPreview(p)}
+                    className="inline-flex size-8 cursor-pointer items-center justify-center rounded-full border border-border bg-card text-primary shadow-sm transition-colors hover:bg-primary/5"
+                    aria-label={`View ${p.label}`}
+                    title="View"
+                    onClick={() => setPolicyPreview({ id: p.id, label: p.label })}
                   >
-                    View PDF
+                    <Eye className="size-3.5" />
                   </button>
                 </li>
               ))}
             </ul>
+            {policyDocs.length === 0 ? (
+              <p className="text-xs text-amber-800">
+                No active policies configured. HR should add them under Org Setup → Employment →
+                Onboarding Policies.
+              </p>
+            ) : null}
             <label className="flex cursor-pointer items-start gap-2 text-xs">
               <input
                 type="checkbox"
@@ -942,60 +1559,72 @@ export function CandidateOnboardingPortal({ token }: { token: string }) {
                     policies: {
                       ...portal.policies,
                       agreed: e.target.checked,
-                      policies: POLICY_DOCS.map((p) => p.id),
+                      policies: policyDocs.map((p) => p.id),
                       acceptedAt: e.target.checked ? new Date().toISOString() : undefined,
                     },
                   })
                 }
               />
               <span>
-                I agree to the Employee Handbook, NDA, IT Policy, Code of Conduct, and Privacy
-                Policy.
+                I agree to the company policies listed above.
                 <span className="text-destructive"> *</span>
               </span>
             </label>
             <SetupField
               label="Digital signature"
               required
-              hint="Upload signature image (JPG/PNG) or type your full name"
+              hint="PNG or JPG image · max 100 KB — stamped on all policies at submit"
             >
               <div className="space-y-2">
                 <input
                   type="file"
-                  accept="image/*,.pdf"
+                  accept="image/png,image/jpeg,image/jpg,.png,.jpg,.jpeg"
                   className="block w-full cursor-pointer text-xs file:mr-2 file:cursor-pointer file:rounded-md file:border-0 file:bg-muted file:px-2 file:py-1"
                   onChange={(e) => {
                     const file = e.target.files?.[0];
                     if (!file) return;
-                    const reader = new FileReader();
-                    reader.onload = () => {
-                      patchPortal({
-                        policies: {
-                          ...portal.policies,
-                          signatureFileName: file.name,
-                          signatureDataUrl: String(reader.result ?? ""),
-                          signature: portal.policies.signature || file.name.replace(/\.[^.]+$/, ""),
-                        },
-                      });
-                      upsertDocument("signature", file.name, "DOC-SIGN");
-                    };
-                    reader.readAsDataURL(file);
+                    if (file.size > MAX_SIGNATURE_BYTES) {
+                      setStepError("Signature file must be 100 KB or smaller.");
+                      e.target.value = "";
+                      return;
+                    }
+                    const okType =
+                      file.type === "image/png" ||
+                      file.type === "image/jpeg" ||
+                      file.type === "image/jpg" ||
+                      /\.(png|jpe?g)$/i.test(file.name);
+                    if (!okType) {
+                      setStepError("Upload a signature image (PNG or JPG).");
+                      e.target.value = "";
+                      return;
+                    }
+                    void (async () => {
+                      let fileDataUrl = "";
+                      try {
+                        fileDataUrl = await readFileAsDataUrl(file);
+                      } catch {
+                        setStepError("Could not read signature file. Try again.");
+                        return;
+                      }
+                      const policies = {
+                        ...portal.policies,
+                        signatureFileName: file.name,
+                        signatureDataUrl: fileDataUrl,
+                        signatureMimeType: file.type || "image/png",
+                        signature: "",
+                      };
+                      patchPortal({ policies });
+                      const ok = await upsertDocument("signature", file, "DOC-SIGN");
+                      if (!ok) return;
+                      setStepError(null);
+                    })();
                   }}
                 />
                 {portal.policies.signatureFileName ? (
-                  <p className="text-[11px] text-muted-foreground">
+                  <p className="text-[11px] text-emerald-700">
                     Uploaded: {portal.policies.signatureFileName}
                   </p>
                 ) : null}
-                <SetupInput
-                  placeholder="Or type full name as signature"
-                  value={portal.policies.signature}
-                  onChange={(e) =>
-                    patchPortal({
-                      policies: { ...portal.policies, signature: e.target.value },
-                    })
-                  }
-                />
               </div>
             </SetupField>
           </div>
@@ -1007,25 +1636,105 @@ export function CandidateOnboardingPortal({ token }: { token: string }) {
               label="Name"
               value={`${portal.personal.firstName} ${portal.personal.lastName}`}
             />
-            <ReviewRow label="Personal email" value={portal.personal.personalEmail || portal.personal.email} />
-            <ReviewRow label="Aadhaar" value={portal.governmentIds.aadhaar || "—"} />
-            <ReviewRow label="PAN" value={portal.governmentIds.pan || "—"} />
-            <ReviewRow label="Bank" value={portal.bank.bankName || "—"} />
-            <ReviewRow label="Account" value={portal.bank.accountNumber || "—"} />
-            <ReviewRow label="Emergency" value={portal.emergency.name || "—"} />
             <ReviewRow
-              label="10th / 12th / Grad marks"
-              value={`${portal.educationMarks?.tenth || "—"} / ${portal.educationMarks?.twelfth || "—"} / ${portal.educationMarks?.graduation || "—"}`}
+              label="Personal Email"
+              value={maskEmail(portal.personal.personalEmail || portal.personal.email) || "—"}
+            />
+            <ReviewRow label="Phone" value={maskPhone(portal.personal.phone) || "—"} />
+            <ReviewRow label="Aadhaar" value={maskAadhaar(portal.governmentIds.aadhaar) || "—"} />
+            <ReviewRow label="PAN" value={maskPan(portal.governmentIds.pan) || "—"} />
+            <ReviewRow label="Bank" value={portal.bank.bankName || "—"} />
+            <ReviewRow label="Account" value={maskAccount(portal.bank.accountNumber) || "—"} />
+            <ReviewRow
+              label="Emergency"
+              value={
+                portal.emergency.name
+                  ? `${portal.emergency.name} · ${maskPhone(portal.emergency.phone) || "—"}`
+                  : "—"
+              }
+            />
+            <ReviewRow
+              label="Education"
+              value={
+                portal.documents
+                  .filter(
+                    (d) =>
+                      d.kind === "education" ||
+                      d.typeCode === "DOC-10TH" ||
+                      d.typeCode === "DOC-12TH" ||
+                      d.typeCode === "DOC-GRAD" ||
+                      d.typeCode === "DOC-PGDIP",
+                  )
+                  .map((d) => d.fileName)
+                  .join(", ") || "—"
+              }
+            />
+            <ReviewRow
+              label="Certificates"
+              value={
+                portal.documents
+                  .filter((d) => d.typeCode === "DOC-CERT" || d.typeCode?.startsWith("DOC-CERT-"))
+                  .map((d) => d.fileName)
+                  .join(", ") || "—"
+              }
+            />
+            <ReviewRow
+              label="Cancelled Cheque / Passbook"
+              value={
+                portal.documents.find(
+                  (d) => d.typeCode === "DOC-CHEQUE" || d.kind === "cancelled_cheque",
+                )?.fileName || "—"
+              }
+            />
+            <ReviewRow
+              label="Offer & Appointment Letters"
+              value={
+                portal.documents
+                  .filter(
+                    (d) =>
+                      matchesDocTypeCode(d.typeCode, "DOC-REL") ||
+                      (!d.typeCode && d.kind === "relieving_letter"),
+                  )
+                  .map((d) => d.fileName)
+                  .join(", ") || "—"
+              }
+            />
+            <ReviewRow
+              label="Relieving Letters"
+              value={
+                portal.documents
+                  .filter((d) => matchesDocTypeCode(d.typeCode, "DOC-RLV"))
+                  .map((d) => d.fileName)
+                  .join(", ") || "—"
+              }
+            />
+            <ReviewRow
+              label="Last 3 Month Salary Slip"
+              value={
+                portal.documents
+                  .filter(
+                    (d) =>
+                      d.kind === "salary_slips" ||
+                      d.typeCode === "DOC-SLIPS" ||
+                      d.typeCode?.startsWith("DOC-SLIPS-"),
+                  )
+                  .map((d) => d.fileName)
+                  .join(", ") || "—"
+              }
             />
             <ReviewRow label="Documents" value={String(portal.documents.length)} />
             <ReviewRow
               label="Policies"
               value={
-                portal.policies.agreed ? `Signed: ${portal.policies.signature}` : "Not accepted"
+                portal.policies.agreed
+                  ? portal.policies.signatureFileName
+                    ? `Signed · ${portal.policies.signatureFileName}`
+                    : "Accepted"
+                  : "Not accepted"
               }
             />
             <p className="text-muted-foreground">
-              After submit, HR will verify documents and activate your employee profile.
+              After submit, HR will verify your documents. Employment details are assigned after you join.
             </p>
           </div>
         ) : null}
@@ -1081,15 +1790,16 @@ export function CandidateOnboardingPortal({ token }: { token: string }) {
 
       {policyPreview ? (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 confidential-no-print"
           role="dialog"
           aria-modal="true"
           aria-labelledby="policy-preview-title"
           onClick={() => setPolicyPreview(null)}
         >
           <div
-            className="max-h-[85vh] w-full max-w-lg overflow-hidden rounded-xl border border-border bg-card shadow-lg"
+            className="flex max-h-[90vh] w-full max-w-3xl flex-col overflow-hidden rounded-xl border border-border bg-card shadow-lg"
             onClick={(e) => e.stopPropagation()}
+            onContextMenu={(e) => e.preventDefault()}
           >
             <div className="flex items-center justify-between border-b border-border/70 px-4 py-3">
               <h3 id="policy-preview-title" className="text-sm font-semibold">
@@ -1104,13 +1814,40 @@ export function CandidateOnboardingPortal({ token }: { token: string }) {
                 <X className="size-4" />
               </button>
             </div>
-            <div className="max-h-[60vh] overflow-y-auto px-4 py-4">
-              <p className="mb-2 text-[10px] font-medium tracking-wide text-muted-foreground uppercase">
-                Demo policy preview
-              </p>
-              <pre className="whitespace-pre-wrap font-sans text-sm leading-relaxed text-foreground">
-                {DEMO_POLICY_BODY[policyPreview.id] ?? "Demo policy content."}
-              </pre>
+            <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-4 py-4 select-none">
+              {(() => {
+                const doc = policyDocs.find((p) => p.id === policyPreview.id);
+                if (!doc) {
+                  return (
+                    <p className="text-sm text-muted-foreground">
+                      No policy content configured. Ask HR to update eDoc → Onboarding Policies.
+                    </p>
+                  );
+                }
+                return (
+                  <>
+                    {doc.fileDataUrl ? (
+                      <DocumentPreviewContent
+                        fileName={doc.fileName || `${doc.label}.pdf`}
+                        dataUrl={doc.fileDataUrl}
+                        mimeType={doc.mimeType || "application/pdf"}
+                        frameClassName="max-h-[55vh]"
+                        viewOnly
+                      />
+                    ) : null}
+                    {doc.body ? (
+                      <pre className="pointer-events-none whitespace-pre-wrap font-sans text-sm leading-relaxed text-foreground">
+                        {doc.body}
+                      </pre>
+                    ) : null}
+                    {!doc.fileDataUrl && !doc.body ? (
+                      <p className="text-sm text-muted-foreground">
+                        No policy content configured. Ask HR to update eDoc → Onboarding Policies.
+                      </p>
+                    ) : null}
+                  </>
+                );
+              })()}
             </div>
             <div className="flex justify-end border-t border-border/70 px-4 py-3">
               <Button
@@ -1129,16 +1866,14 @@ export function CandidateOnboardingPortal({ token }: { token: string }) {
   );
 }
 
-function digitsOnly(value: string) {
-  return value.replace(/\D/g, "");
-}
-
 function FilePickField({
   label,
   required,
   accept,
   fileName,
   hint,
+  disabled,
+  verifyStatus,
   onFile,
 }: {
   label: string;
@@ -1146,29 +1881,46 @@ function FilePickField({
   accept: string;
   fileName?: string;
   hint?: string;
-  onFile: (file: File | undefined) => void;
+  disabled?: boolean;
+  verifyStatus?: DocumentVerifyStatus;
+  onFile: (file: File | undefined) => void | Promise<void>;
 }) {
   const inputId = `file-${label.replace(/\s+/g, "-").toLowerCase()}`;
+  const rejected = verifyStatus === "rejected";
+  const verified = verifyStatus === "verified" || verifyStatus === "accepted";
   return (
     <SetupField label={label} required={required} hint={hint}>
       <label
         htmlFor={inputId}
         className={cn(
-          "flex h-10 w-full cursor-pointer items-center gap-2 rounded-lg border border-dashed border-input bg-transparent px-2.5 text-sm transition-colors",
-          "hover:border-ring hover:bg-muted/40",
+          "flex h-10 w-full items-center gap-2 rounded-lg border border-dashed border-input bg-transparent px-2.5 text-sm transition-colors",
+          disabled ? "cursor-not-allowed opacity-60" : "cursor-pointer hover:border-ring hover:bg-muted/40",
+          verified && "border-emerald-300 bg-emerald-50/50",
+          rejected && "border-amber-400 bg-amber-50 ring-1 ring-amber-300",
+          fileName && !rejected && !verified && "border-emerald-300 bg-emerald-50/50",
         )}
       >
         <Upload className="size-3.5 shrink-0 text-muted-foreground" />
         <span className={cn("truncate", fileName ? "text-foreground" : "text-muted-foreground")}>
           {fileName || "Choose file…"}
         </span>
+        {rejected ? (
+          <span className="ml-auto shrink-0 rounded bg-amber-200/80 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-amber-950">
+            Rejected
+          </span>
+        ) : verified ? (
+          <span className="ml-auto shrink-0 rounded bg-emerald-200/80 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-emerald-950">
+            Verified
+          </span>
+        ) : null}
         <input
           id={inputId}
           type="file"
           accept={accept}
+          disabled={disabled}
           className="sr-only"
           onChange={(e) => {
-            onFile(e.target.files?.[0]);
+            void onFile(e.target.files?.[0]);
             e.target.value = "";
           }}
         />
@@ -1177,9 +1929,110 @@ function FilePickField({
   );
 }
 
+function MultiFilePickField({
+  label,
+  required,
+  accept,
+  files,
+  hint,
+  maxFiles,
+  emphasized,
+  onFiles,
+  onRemove,
+}: {
+  label: string;
+  required?: boolean;
+  accept: string;
+  files: { id: string; name: string; verifyStatus?: DocumentVerifyStatus }[];
+  hint?: string;
+  maxFiles?: number;
+  emphasized?: boolean;
+  onFiles: (files: FileList | null) => void | Promise<void>;
+  onRemove: (id: string) => void | Promise<void>;
+}) {
+  const inputId = `files-${label.replace(/\s+/g, "-").toLowerCase()}`;
+  const atLimit = maxFiles != null && files.length >= maxFiles;
+  return (
+    <SetupField label={label} required={required} hint={hint}>
+      <div className="space-y-2">
+        <label
+          htmlFor={inputId}
+          className={cn(
+            "flex h-10 w-full items-center gap-2 rounded-lg border border-dashed border-input bg-transparent px-2.5 text-sm transition-colors",
+            atLimit
+              ? "cursor-not-allowed opacity-60"
+              : "cursor-pointer hover:border-ring hover:bg-muted/40",
+            files.length > 0 && !emphasized && "border-emerald-300 bg-emerald-50/50",
+            emphasized && "border-amber-400 bg-amber-50 ring-1 ring-amber-300",
+          )}
+        >
+          <Upload className="size-3.5 shrink-0 text-muted-foreground" />
+          <span className="truncate text-muted-foreground">
+            {atLimit
+              ? `Limit reached (${files.length}/${maxFiles})`
+              : files.length
+                ? `Add more files (${files.length}${maxFiles ? `/${maxFiles}` : ""} uploaded)`
+                : maxFiles
+                  ? `Choose files… (up to ${maxFiles})`
+                  : "Choose files…"}
+          </span>
+          <input
+            id={inputId}
+            type="file"
+            accept={accept}
+            multiple
+            disabled={atLimit}
+            className="sr-only"
+            onChange={(e) => {
+              void onFiles(e.target.files);
+              e.target.value = "";
+            }}
+          />
+        </label>
+        {files.length ? (
+          <ul className="space-y-1">
+            {files.map((f) => (
+              <li
+                key={f.id}
+                className={cn(
+                  "flex items-center justify-between gap-2 rounded-md border border-border/60 bg-card px-2.5 py-1.5 text-xs",
+                  f.verifyStatus === "rejected" && "border-amber-300 bg-amber-50",
+                  (f.verifyStatus === "verified" || f.verifyStatus === "accepted") &&
+                    "border-emerald-200 bg-emerald-50/60",
+                )}
+              >
+                <span className="truncate font-medium">{f.name}</span>
+                <span className="flex shrink-0 items-center gap-1">
+                  {f.verifyStatus === "rejected" ? (
+                    <span className="rounded bg-amber-200/80 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-amber-950">
+                      Rejected
+                    </span>
+                  ) : f.verifyStatus === "verified" || f.verifyStatus === "accepted" ? (
+                    <span className="rounded bg-emerald-200/80 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-emerald-950">
+                      Verified
+                    </span>
+                  ) : null}
+                  <button
+                    type="button"
+                    className="cursor-pointer rounded p-0.5 text-muted-foreground hover:bg-muted hover:text-destructive"
+                    aria-label={`Remove ${f.name}`}
+                    onClick={() => void onRemove(f.id)}
+                  >
+                    <X className="size-3.5" />
+                  </button>
+                </span>
+              </li>
+            ))}
+          </ul>
+        ) : null}
+      </div>
+    </SetupField>
+  );
+}
+
 function Shell({ children }: { children: React.ReactNode }) {
   return (
-    <div className="min-h-screen bg-[#F8FAFC] px-4 py-8 sm:px-6">
+    <div className="hrms-theme min-h-screen bg-background px-4 py-8 text-foreground sm:px-6">
       <div className="mx-auto max-w-3xl">{children}</div>
     </div>
   );
@@ -1190,55 +2043,6 @@ function ReviewRow({ label, value }: { label: string; value: string }) {
     <div className="flex justify-between gap-3 rounded-lg border border-border/60 px-3 py-2">
       <span className="text-muted-foreground">{label}</span>
       <span className="font-medium text-foreground">{value}</span>
-    </div>
-  );
-}
-
-
-
-function SalarySlipsMultiUploader({
-  portalDocs,
-  onUpload,
-}: {
-  portalDocs: OnboardingDocument[];
-  onUpload: (slipNum: number, file: File | undefined) => void;
-}) {
-  const getSlipFile = (num: number) => {
-    const code = `DOC-SLIPS-${num}`;
-    const doc = [...portalDocs].reverse().find((d) => d.typeCode === code);
-    if (doc) return doc.fileName;
-    if (num === 1) {
-      const genericDoc = [...portalDocs]
-        .reverse()
-        .find((d) => d.kind === "salary_slips" && !d.typeCode?.startsWith("DOC-SLIPS-"));
-      return genericDoc?.fileName;
-    }
-    return undefined;
-  };
-
-  return (
-    <div className="space-y-3 rounded-lg border border-border/70 bg-card p-3 sm:p-4">
-      <div>
-        <h4 className="text-xs font-semibold text-foreground">
-          Salary Slips (Up to 3 Slips) <span className="font-normal text-muted-foreground">(Optional)</span>
-        </h4>
-        <p className="text-[11px] text-muted-foreground">
-          Upload up to 3 previous salary slips. Accepts PDF, JPG, PNG, JPEG.
-        </p>
-      </div>
-
-      <div className="grid gap-3 sm:grid-cols-3">
-        {[1, 2, 3].map((num) => (
-          <FilePickField
-            key={num}
-            label={`Salary Slip ${num}`}
-            accept=".pdf,image/*,.jpg,.jpeg,.png"
-            fileName={getSlipFile(num)}
-            hint={`Salary slip ${num} (PDF or Image)`}
-            onFile={(file) => onUpload(num, file)}
-          />
-        ))}
-      </div>
     </div>
   );
 }

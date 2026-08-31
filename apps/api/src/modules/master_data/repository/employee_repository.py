@@ -29,7 +29,6 @@ class EmployeeRepository(MasterScopedRepository):
             stmt = stmt.where(MasterEmployee.company_id == company_id)
         if branch_id:
             stmt = stmt.where(MasterEmployee.branch_id == branch_id)
-        stmt = stmt.where(~MasterEmployee.email.ilike("%@example.com"))
         return [self._to_entity(r) for r in self.db.scalars(stmt).all()]
 
     def get_by_id(self, ctx: TenantContext, employee_id: UUID) -> EmployeeEntity | None:
@@ -78,6 +77,7 @@ class EmployeeRepository(MasterScopedRepository):
         reporting_manager_id: UUID | None = None,
         date_of_leaving: date | None = None,
         user_id: UUID | None = None,
+        status: str = "draft",
     ) -> EmployeeEntity:
         row = MasterEmployee(
             id=uuid4(),
@@ -95,7 +95,7 @@ class EmployeeRepository(MasterScopedRepository):
             reporting_manager_id=reporting_manager_id,
             date_of_leaving=date_of_leaving,
             user_id=user_id,
-            status="draft",
+            status=status,
             created_by=ctx.user_id,
             updated_by=ctx.user_id,
         )

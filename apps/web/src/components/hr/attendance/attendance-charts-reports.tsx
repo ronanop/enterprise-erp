@@ -15,11 +15,11 @@ export function AttendanceStatusChart({ records }: { records: AttendanceRecord[]
   };
   const max = Math.max(1, ...Object.values(counts));
   const items = [
-    { label: "Present", value: counts.present, color: "bg-emerald-500" },
-    { label: "Absent", value: counts.absent, color: "bg-red-400" },
-    { label: "WFH", value: counts.wfh, color: "bg-sky-500" },
-    { label: "Leave", value: counts.leave, color: "bg-amber-500" },
-    { label: "Other", value: counts.other, color: "bg-slate-400" },
+    { label: "Present", value: counts.present, color: "bg-hrms-success" },
+    { label: "Absent", value: counts.absent, color: "bg-hrms-danger" },
+    { label: "WFH", value: counts.wfh, color: "bg-hrms-info" },
+    { label: "Leave", value: counts.leave, color: "bg-hrms-warning" },
+    { label: "Other", value: counts.other, color: "bg-hrms-teal" },
   ];
   return (
     <div className="rounded-xl border border-border/70 bg-card p-4 shadow-sm">

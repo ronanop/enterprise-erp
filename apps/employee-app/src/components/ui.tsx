@@ -65,16 +65,18 @@ export function PageHeader({
 }) {
   void light;
   return (
-    <header className="flex items-start justify-between gap-3">
-      <div>
+    <header className="space-y-4">
+      <div className="min-w-0 space-y-1.5">
         <h1 className="text-[1.65rem] font-bold tracking-tight text-[#0b1c30]">
           {title}
         </h1>
         {subtitle ? (
-          <p className={`mt-1 text-sm ${ui.muted}`}>{subtitle}</p>
+          <p className={`text-sm leading-relaxed ${ui.muted}`}>{subtitle}</p>
         ) : null}
       </div>
-      {action}
+      {action ? (
+        <div className="flex w-full min-w-0 flex-wrap items-center gap-2">{action}</div>
+      ) : null}
     </header>
   );
 }
@@ -267,23 +269,6 @@ export function ViewportFab({
   return createPortal(node, document.body);
 }
 
-export function AiFab({ href = "/leave" }: { href?: string }) {
-  return (
-    <ViewportFab
-      href={href}
-      aria-label="AI assistant"
-      className="bg-gradient-to-tr from-[#712ae2] to-[#2563eb]"
-    >
-      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden>
-        <path
-          d="M12 3l1.2 4.8L18 9l-4.8 1.2L12 15l-1.2-4.8L6 9l4.8-1.2L12 3z"
-          fill="currentColor"
-        />
-        <path
-          d="M18.5 14.5l.6 2.4 2.4.6-2.4.6-.6 2.4-.6-2.4-2.4-.6 2.4-.6.6-2.4z"
-          fill="currentColor"
-        />
-      </svg>
-    </ViewportFab>
-  );
+export function AiFab(_props: { href?: string }) {
+  return null;
 }

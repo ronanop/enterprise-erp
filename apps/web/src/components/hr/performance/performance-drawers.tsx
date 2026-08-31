@@ -467,12 +467,14 @@ export function ReviewDrawer({
   onClose,
   cycles,
   employees = [],
+  managers = [],
   onSubmit,
 }: {
   open: boolean;
   onClose: () => void;
   cycles: ReviewCycle[];
   employees?: HrMasterOption[];
+  managers?: HrMasterOption[];
   onSubmit: (input: Omit<PerformanceReview, "id" | "reviewCode" | "createdAt" | "updatedAt">) => void;
 }) {
   const [employeeId, setEmployeeId] = useState("");
@@ -537,7 +539,7 @@ export function ReviewDrawer({
         <EmployeeSelect
           label="Reviewer / reporting manager"
           value={reviewerEmployeeId}
-          options={employees}
+          options={managers.length ? managers : employees}
           onChange={(id, opt) => {
             setReviewerEmployeeId(id);
             setManagerName(opt ? opt.label.split(" · ")[0] : "");

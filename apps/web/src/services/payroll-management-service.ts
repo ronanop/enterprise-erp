@@ -3,7 +3,7 @@
  */
 
 import { formatInr, loadPayrollOverview } from "@/services/payroll-service";
-import { resourceService } from "@/services/api-client";
+import { apiClient, resourceService } from "@/services/api-client";
 import type {
   BonusRecord,
   EmployeeSalary,
@@ -24,12 +24,33 @@ import {
   monthLabel,
   structureDeductions,
   structureGross,
+  type PayrollEmployeeAttendance,
   type SalaryStructureTemplate,
 } from "@/types/payroll-management";
+import { buildPayrollCycle, readPayrollCutoverDay } from "@/lib/payroll-cycle";
+import { summarizePayrollAttendance } from "@/lib/payroll-attendance-cycle";
+import type { PayrollCycle } from "@/lib/payroll-cycle";
 
 const PAY_CTX_KEY = "erp_pay_api_context_v1";
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+function employeeSalaryKey(employeeId: string): string {
+  return String(employeeId ?? "")
+    .trim()
+    .toLowerCase();
+}
+
+/** Keep one salary row per employee (last occurrence wins). */
+export function dedupeEmployeeSalaries(rows: EmployeeSalary[]): EmployeeSalary[] {
+  const seen = new Map<string, EmployeeSalary>();
+  for (const row of rows) {
+    const key = employeeSalaryKey(row.employeeId);
+    if (!key) continue;
+    seen.set(key, row);
+  }
+  return [...seen.values()];
+}
 
 const K = {
   structures: "erp_pay_structures_v1",
@@ -44,6 +65,7 @@ const K = {
   payslips: "erp_pay_payslips_v1",
   audit: "erp_pay_audit_v1",
   seq: "erp_pay_seq_v1",
+  runAttendance: "erp_pay_run_attendance_v1",
 } as const;
 
 type Seq = { run: number; slip: number };
@@ -97,6 +119,81 @@ export function appendPayrollAudit(entry: Omit<PayrollAudit, "id" | "at">): void
 
 export function listPayrollAudit(): PayrollAudit[] {
   return readJson<PayrollAudit[]>(K.audit, []);
+}
+
+function saveRunAttendance(runId: string, lines: PayrollEmployeeAttendance[]): void {
+  const map = readJson<Record<string, PayrollEmployeeAttendance[]>>(K.runAttendance, {});
+  map[runId] = lines;
+  writeJson(K.runAttendance, map);
+}
+
+export function getPayrollRunAttendance(runId: string): PayrollEmployeeAttendance[] {
+  const map = readJson<Record<string, PayrollEmployeeAttendance[]>>(K.runAttendance, {});
+  return map[runId] ?? [];
+}
+
+function normalizePayrollRun(row: PayrollRun): PayrollRun {
+  if (row.cycleStart && row.cycleEnd && row.cycleLabel) return row;
+  const cycle = buildPayrollCycle(row.month, row.cycleCutoverDay ?? readPayrollCutoverDay());
+  return {
+    ...row,
+    cycleStart: cycle.start,
+    cycleEnd: cycle.end,
+    cycleCutoverDay: cycle.cutoverDay,
+    cycleLabel: cycle.label,
+  };
+}
+
+async function buildAttendanceLinesForCycle(
+  cycle: PayrollCycle,
+): Promise<PayrollEmployeeAttendance[]> {
+  const salaries = load<EmployeeSalary>(K.salaries).filter((s) => s.salaryStatus === "active");
+  if (!salaries.length) return [];
+
+  const [{ loadAttendanceDirectory }, { loadLeaveDirectory }, master] = await Promise.all([
+    import("@/services/attendance-management-service"),
+    import("@/services/leave-management-service"),
+    import("@/services/hr-master-connector").then((m) =>
+      m.loadHrMasterDirectory().catch(() => null),
+    ),
+  ]);
+
+  const [attDir, leaveDir] = await Promise.all([
+    loadAttendanceDirectory().catch(() => ({ records: [], options: { employees: [] } })),
+    loadLeaveDirectory().catch(() => ({ requests: [] })),
+  ]);
+
+  const hrIdByCode = new Map<string, string>();
+  for (const e of master?.employees ?? []) {
+    if (e.code) hrIdByCode.set(e.code.toLowerCase(), e.id);
+    hrIdByCode.set(e.id.toLowerCase(), e.id);
+  }
+
+  const refs = salaries.map((sal) => ({
+    employeeId: sal.employeeId,
+    employeeName: sal.employeeName,
+    employeeCode: sal.employeeId,
+    department: sal.department,
+    hrEmployeeId:
+      hrIdByCode.get(sal.employeeId.toLowerCase()) ??
+      (UUID_RE.test(sal.employeeId) ? sal.employeeId : undefined),
+  }));
+
+  return summarizePayrollAttendance(
+    cycle,
+    refs,
+    attDir.records,
+    leaveDir.requests ?? [],
+  );
+}
+
+export async function previewPayrollAttendanceForCycle(
+  anchorMonth: string,
+  cutoverDay?: number,
+): Promise<{ cycle: PayrollCycle; lines: PayrollEmployeeAttendance[] }> {
+  const cycle = buildPayrollCycle(anchorMonth, cutoverDay ?? readPayrollCutoverDay());
+  const lines = await buildAttendanceLinesForCycle(cycle);
+  return { cycle, lines };
 }
 
 function load<T>(key: string): T[] {
@@ -263,21 +360,28 @@ export async function loadPayrollDirectory(): Promise<PayrollDirectory> {
     }
 
     if (overview.employeeSalaries.length) {
-      salaries = overview.employeeSalaries.map((e, i) => ({
-        id: String(e.id ?? crypto.randomUUID()),
-        employeeId: String(e.employee_code ?? e.employee_id ?? `EMP-${i + 1}`),
-        employeeName: String(e.employee_name ?? e.full_name ?? `Employee ${i + 1}`),
-        structureId: String(e.salary_structure_id ?? structures[0]?.id ?? ""),
-        structureName: String(e.structure_name ?? structures[0]?.name ?? "Default"),
-        effectiveDate: String(e.effective_from ?? e.effective_date ?? "").slice(0, 10),
-        monthlyCtc: Number(e.monthly_ctc ?? e.ctc ?? 50000),
-        annualCtc: Number(e.annual_ctc ?? (Number(e.monthly_ctc ?? 50000) * 12)),
-        payrollGroup: String(e.payroll_group ?? "General"),
-        bankAccount: String(e.bank_account ?? "XXXX1234"),
-        taxRegime: String(e.tax_regime ?? "new").includes("old") ? "old" : "new",
-        salaryStatus: "active",
-        department: String(e.department_name ?? "—"),
-      }));
+      salaries = dedupeEmployeeSalaries(
+        overview.employeeSalaries.map((e, i) => {
+          const monthly = Number(
+            e.gross_amount ?? e.monthly_ctc ?? (e.ctc_amount != null ? Number(e.ctc_amount) / 12 : e.ctc) ?? 50000,
+          );
+          return {
+            id: String(e.id ?? crypto.randomUUID()),
+            employeeId: String(e.employee_code ?? e.employee_id ?? `EMP-${i + 1}`),
+            employeeName: String(e.employee_name ?? e.full_name ?? `Employee ${i + 1}`),
+            structureId: String(e.salary_structure_id ?? structures[0]?.id ?? ""),
+            structureName: String(e.structure_name ?? structures[0]?.name ?? "Default"),
+            effectiveDate: String(e.effective_from ?? e.effective_date ?? "").slice(0, 10),
+            monthlyCtc: monthly,
+            annualCtc: Number(e.annual_ctc ?? e.ctc_amount ?? monthly * 12),
+            payrollGroup: String(e.payroll_group ?? "General"),
+            bankAccount: String(e.bank_account ?? "XXXX1234"),
+            taxRegime: String(e.tax_regime ?? "new").includes("old") ? ("old" as const) : ("new" as const),
+            salaryStatus: "active" as const,
+            department: String(e.department_name ?? "—"),
+          };
+        }),
+      );
       save(K.salaries, salaries);
     }
 
@@ -312,11 +416,27 @@ export async function loadPayrollDirectory(): Promise<PayrollDirectory> {
     if (overview.runs.length) {
       runs = overview.runs.map((r, i) => {
         const month = String(r.period_code ?? r.payroll_month ?? `2026-${String((i % 12) + 1).padStart(2, "0")}`);
-        return {
+        const ym = month.slice(0, 7);
+        const start = String(r.start_date ?? "").slice(0, 10);
+        const end = String(r.end_date ?? "").slice(0, 10);
+        const cycle =
+          start && end
+            ? {
+                start,
+                end,
+                label: `${start} – ${end}`,
+                cutoverDay: readPayrollCutoverDay(),
+              }
+            : buildPayrollCycle(ym, readPayrollCutoverDay());
+        return normalizePayrollRun({
           id: String(r.id ?? crypto.randomUUID()),
           runCode: String(r.document_number ?? `PAY-${String(i + 1).padStart(6, "0")}`),
-          month: month.slice(0, 7),
-          monthLabel: monthLabel(month.slice(0, 7)),
+          month: ym,
+          monthLabel: `${cycle.label}`,
+          cycleStart: cycle.start,
+          cycleEnd: cycle.end,
+          cycleCutoverDay: cycle.cutoverDay,
+          cycleLabel: cycle.label,
           employeeCount: Number(r.employee_count ?? 0),
           grossTotal: Number(r.gross_amount ?? r.gross_total ?? 0),
           deductionTotal: Number(r.deduction_amount ?? 0),
@@ -327,7 +447,7 @@ export async function loadPayrollDirectory(): Promise<PayrollDirectory> {
           otSynced: true,
           createdAt: nowIso(),
           updatedAt: nowIso(),
-        };
+        });
       });
       save(K.runs, runs);
     }
@@ -404,6 +524,12 @@ export async function loadPayrollDirectory(): Promise<PayrollDirectory> {
     structures = normalizeStructures(structures);
     save(K.structures, structures);
   }
+
+  const beforeDedupe = salaries.length;
+  salaries = dedupeEmployeeSalaries(salaries);
+  if (salaries.length !== beforeDedupe) save(K.salaries, salaries);
+
+  runs = runs.map(normalizePayrollRun);
 
   return {
     structures,
@@ -525,9 +651,19 @@ export function resetStructuresToCacheDigitech(): SalaryStructure[] {
 }
 
 export async function assignEmployeeSalary(
-  input: Omit<EmployeeSalary, "id">,
+  input: Omit<EmployeeSalary, "id"> & { id?: string },
 ): Promise<EmployeeSalary> {
-  const row: EmployeeSalary = { ...input, id: crypto.randomUUID() };
+  const all = load<EmployeeSalary>(K.salaries);
+  const key = employeeSalaryKey(input.employeeId);
+  const existingIdx = all.findIndex((s) => employeeSalaryKey(s.employeeId) === key);
+  const existing = existingIdx >= 0 ? all[existingIdx] : undefined;
+  const id = input.id || existing?.id || crypto.randomUUID();
+  const row: EmployeeSalary = {
+    ...input,
+    id,
+    annualCtc: input.annualCtc || (Number(input.monthlyCtc) || 0) * 12,
+  };
+
   try {
     const ctx = readJson<{
       branchId?: string;
@@ -537,18 +673,25 @@ export async function assignEmployeeSalary(
     const structureIsUuid = UUID_RE.test(input.structureId);
     const employeeIsUuid = UUID_RE.test(input.employeeId);
     const employmentId = ctx.employmentId;
-    if (ctx.branchId && structureIsUuid && employeeIsUuid && employmentId && UUID_RE.test(employmentId)) {
+    const payload = {
+      salary_structure_id: structureIsUuid ? input.structureId : undefined,
+      effective_from: input.effectiveDate || nowIso().slice(0, 10),
+      ctc_amount: input.monthlyCtc * 12,
+      gross_amount: input.monthlyCtc,
+      currency_code: "INR",
+      status: "active",
+    };
+
+    if (UUID_RE.test(id) && existing) {
+      await resourceService.update("/payroll/employee-salaries", id, payload);
+    } else if (ctx.branchId && structureIsUuid && employeeIsUuid && employmentId && UUID_RE.test(employmentId)) {
       const res = await resourceService.create<Record<string, unknown>>("/payroll/employee-salaries", {
         branch_id: ctx.branchId,
         employee_id: input.employeeId,
         salary_structure_id: input.structureId,
         employment_id: employmentId,
         department_id: ctx.departmentId || null,
-        effective_from: input.effectiveDate || nowIso().slice(0, 10),
-        ctc_amount: input.monthlyCtc * 12,
-        gross_amount: input.monthlyCtc,
-        currency_code: "INR",
-        status: "active",
+        ...payload,
       });
       const apiId = String(res.data?.id ?? "");
       if (apiId) row.id = apiId;
@@ -556,21 +699,34 @@ export async function assignEmployeeSalary(
   } catch (err) {
     console.warn("assignEmployeeSalary API failed; local cache kept", err);
   }
-  const all = load<EmployeeSalary>(K.salaries);
-  all.unshift(row);
-  save(K.salaries, all);
+
+  if (existingIdx >= 0) {
+    const without = all.filter((s) => employeeSalaryKey(s.employeeId) !== key);
+    without.unshift(row);
+    save(K.salaries, without);
+  } else {
+    all.unshift(row);
+    save(K.salaries, dedupeEmployeeSalaries(all));
+  }
   appendPayrollAudit({
-    action: "salary_assigned",
-    detail: `${row.employeeName} → ${row.structureName}`,
+    action: existing ? "salary_updated" : "salary_assigned",
+    detail: `${row.employeeName} → ${row.structureName} (${formatInr(row.monthlyCtc)}/mo)`,
     actor: actor(),
   });
   return row;
 }
 
-export async function runPayroll(month: string): Promise<PayrollRun> {
+export async function runPayroll(month: string, cutoverDay?: number): Promise<PayrollRun> {
   if (isMonthLocked(month)) {
     throw new Error(`Payroll month ${monthLabel(month)} is locked and cannot be processed.`);
   }
+  const cutover = cutoverDay ?? readPayrollCutoverDay();
+  const cycle = buildPayrollCycle(month, cutover);
+  const attendanceLines = await buildAttendanceLinesForCycle(cycle);
+  const factorByEmployee = new Map(
+    attendanceLines.map((l) => [l.employeeId.toLowerCase(), l.attendanceFactor]),
+  );
+
   const salaries = load<EmployeeSalary>(K.salaries).filter((s) => s.salaryStatus === "active");
   const structures = load<SalaryStructure>(K.structures);
   const structureMap = new Map(structures.map((s) => [s.id, s]));
@@ -598,13 +754,16 @@ export async function runPayroll(month: string): Promise<PayrollRun> {
       ];
 
   for (const sal of employees) {
+    const factor =
+      factorByEmployee.get(sal.employeeId.toLowerCase()) ??
+      (attendanceLines.length ? 1 : 1);
     const st = structureMap.get(sal.structureId) ?? structures[0];
     if (st) {
-      gross += structureGross(st);
-      ded += structureDeductions(st);
+      gross += structureGross(st) * factor;
+      ded += structureDeductions(st) * factor;
     } else {
-      gross += sal.monthlyCtc;
-      ded += Math.round(sal.monthlyCtc * 0.12);
+      gross += sal.monthlyCtc * factor;
+      ded += Math.round(sal.monthlyCtc * 0.12 * factor);
     }
   }
 
@@ -612,17 +771,20 @@ export async function runPayroll(month: string): Promise<PayrollRun> {
     id: crypto.randomUUID(),
     runCode: nextCode("run", "PAY"),
     month,
-    monthLabel: monthLabel(month),
+    monthLabel: cycle.label,
+    cycleStart: cycle.start,
+    cycleEnd: cycle.end,
+    cycleCutoverDay: cycle.cutoverDay,
+    cycleLabel: cycle.label,
     employeeCount: employees.length,
-    grossTotal: gross,
-    deductionTotal: ded,
-    netTotal: Math.max(0, gross - ded),
+    grossTotal: Math.round(gross),
+    deductionTotal: Math.round(ded),
+    netTotal: Math.max(0, Math.round(gross - ded)),
     status: "pending_hr",
-    attendanceSynced: Boolean(
-      readJson<unknown[]>("erp_attendance_audit_v1", []).length ||
-        readJson<unknown[]>("erp_shift_roster_assignments_cache_v1", []).length,
+    attendanceSynced: attendanceLines.length > 0,
+    leaveSynced: attendanceLines.some((l) => l.leaveDays > 0) || Boolean(
+      readJson<unknown[]>("erp_leave_audit_v1", []).length,
     ),
-    leaveSynced: Boolean(readJson<unknown[]>("erp_leave_audit_v1", []).length),
     otSynced: true,
     createdAt: nowIso(),
     updatedAt: nowIso(),
@@ -678,9 +840,12 @@ export async function runPayroll(month: string): Promise<PayrollRun> {
   const all = load<PayrollRun>(K.runs);
   all.unshift(row);
   save(K.runs, all);
+  if (attendanceLines.length) {
+    saveRunAttendance(row.id, attendanceLines);
+  }
   appendPayrollAudit({
     action: "payroll_generated",
-    detail: `${row.runCode} for ${row.monthLabel} · net ${formatInr(row.netTotal)}`,
+    detail: `${row.runCode} for ${row.cycleLabel} · net ${formatInr(row.netTotal)} · attendance-based`,
     actor: actor(),
   });
   return row;
@@ -1018,12 +1183,75 @@ export async function addLoan(
   return row;
 }
 
+function mapApiPayslipToRecord(p: Record<string, unknown>, run: PayrollRun): PayslipRecord {
+  const json = (p.payslip_json as Record<string, unknown> | null) ?? {};
+  const att = (json.attendance as Record<string, unknown> | null) ?? {};
+  const emp = (json.employee as Record<string, unknown> | null) ?? {};
+  const earningsRaw = Array.isArray(json.earnings) ? json.earnings : [];
+  const deductionsRaw = Array.isArray(json.deductions) ? json.deductions : [];
+  const gross = Number(p.gross_salary ?? (json.summary as Record<string, unknown>)?.gross ?? 0);
+  const totalDeductions = Number(p.total_deductions ?? (json.summary as Record<string, unknown>)?.total_deductions ?? 0);
+  const net = Number(p.net_salary ?? (json.summary as Record<string, unknown>)?.net_pay ?? 0);
+  return {
+    id: String(p.id ?? crypto.randomUUID()),
+    payslipCode: String(p.document_number ?? nextCode("slip", "PSL")),
+    runId: String(p.payroll_run_id ?? run.id),
+    employeeId: String(p.employee_id ?? emp.id ?? ""),
+    employeeName: String(p.employee_name ?? emp.name ?? p.employee_id ?? ""),
+    month: run.month,
+    monthLabel: run.monthLabel,
+    department: "—",
+    bankAccount: "—",
+    presentDays: Number(att.paid_days ?? 0),
+    leaveDays: Number(att.leave_days ?? 0),
+    earnings: earningsRaw.map((e) => ({
+      label: String((e as Record<string, unknown>).label ?? "Earning"),
+      amount: Number((e as Record<string, unknown>).amount ?? 0),
+    })),
+    deductions: deductionsRaw
+      .filter((d) => (d as Record<string, unknown>).code !== "pf_total")
+      .map((d) => ({
+        label: String((d as Record<string, unknown>).label ?? "Deduction"),
+        amount: Number((d as Record<string, unknown>).amount ?? 0),
+      })),
+    gross,
+    totalDeductions,
+    net,
+    taxRegime: "new",
+    generatedAt: nowIso(),
+    exportText: typeof json.export_text === "string" ? json.export_text : undefined,
+  };
+}
+
 export async function generatePayslips(runId: string): Promise<PayslipRecord[]> {
   const runs = load<PayrollRun>(K.runs);
   const run = runs.find((r) => r.id === runId);
   if (!run) throw new Error("Payroll run not found");
 
   if (UUID_RE.test(runId)) {
+    try {
+      const gen = await resourceService.action<Record<string, unknown>[]>(
+        "/payroll/payroll-runs",
+        runId,
+        "generate-payslips",
+        { issue: true },
+      );
+      const rows = Array.isArray(gen.data) ? gen.data : [];
+      if (rows.length) {
+        const slips = rows.map((p) => mapApiPayslipToRecord(p, run));
+        const all = load<PayslipRecord>(K.payslips);
+        save(K.payslips, [...slips, ...all.filter((p) => p.runId !== runId || !UUID_RE.test(p.id))]);
+        appendPayrollAudit({
+          action: "payslips_generated",
+          detail: `${slips.length} payslips (API) for ${run.monthLabel}`,
+          actor: actor(),
+        });
+        return slips;
+      }
+    } catch (err) {
+      console.warn("generate-payslips API failed; falling back", err);
+    }
+
     try {
       const ctx = readJson<{ branchId?: string }>(PAY_CTX_KEY, {});
       if (ctx.branchId && UUID_RE.test(ctx.branchId)) {
@@ -1125,6 +1353,11 @@ export async function generatePayslips(runId: string): Promise<PayslipRecord[]> 
       ];
 
   const slips: PayslipRecord[] = employees.map((sal) => {
+    const att =
+      getPayrollRunAttendance(runId).find(
+        (l) => l.employeeId.toLowerCase() === sal.employeeId.toLowerCase(),
+      ) ?? null;
+    const factor = att?.attendanceFactor ?? 1;
     const st = structureMap.get(sal.structureId) ?? structures[0];
     const earnings = st
       ? [
@@ -1149,8 +1382,16 @@ export async function generatePayslips(runId: string): Promise<PayslipRecord[]> 
           { label: "Other Deductions", amount: st.otherDeductions },
         ].filter((d) => d.amount > 0)
       : [{ label: "Statutory", amount: Math.round(sal.monthlyCtc * 0.12) }];
-    const gross = earnings.reduce((s, e) => s + e.amount, 0);
-    const totalDeductions = deductions.reduce((s, d) => s + d.amount, 0);
+    const gross = Math.round(earnings.reduce((s, e) => s + e.amount, 0) * factor);
+    const totalDeductions = Math.round(deductions.reduce((s, d) => s + d.amount, 0) * factor);
+    const scaledEarnings = earnings.map((e) => ({
+      ...e,
+      amount: Math.round(e.amount * factor),
+    }));
+    const scaledDeductions = deductions.map((d) => ({
+      ...d,
+      amount: Math.round(d.amount * factor),
+    }));
     return {
       id: crypto.randomUUID(),
       payslipCode: nextCode("slip", "PSL"),
@@ -1158,13 +1399,13 @@ export async function generatePayslips(runId: string): Promise<PayslipRecord[]> 
       employeeId: sal.employeeId,
       employeeName: sal.employeeName,
       month: run.month,
-      monthLabel: run.monthLabel,
+      monthLabel: run.cycleLabel || run.monthLabel,
       department: sal.department,
       bankAccount: sal.bankAccount,
-      presentDays: 22,
-      leaveDays: 1,
-      earnings,
-      deductions,
+      presentDays: att?.presentDays ?? 0,
+      leaveDays: att?.leaveDays ?? 0,
+      earnings: scaledEarnings,
+      deductions: scaledDeductions,
       gross,
       totalDeductions,
       net: Math.max(0, gross - totalDeductions),
@@ -1184,6 +1425,9 @@ export async function generatePayslips(runId: string): Promise<PayslipRecord[]> 
 }
 
 export function exportPayslipText(slip: PayslipRecord): string {
+  if (slip.exportText?.trim()) {
+    return slip.exportText;
+  }
   const lines = [
     "========================================",
     "           EMPLOYEE PAYSLIP",
@@ -1211,6 +1455,20 @@ export function exportPayslipText(slip: PayslipRecord): string {
     "========================================",
   ];
   return lines.join("\n");
+}
+
+export async function fetchPayrollRunBankExportCsv(runId: string): Promise<string> {
+  if (!UUID_RE.test(runId)) {
+    throw new Error("Payroll run id must be a UUID to export bank file from API");
+  }
+  const res = await apiClient<{ csv: string }>(`/payroll/payroll-runs/${runId}/bank-export`, {
+    method: "GET",
+  });
+  const csv = res.data?.csv;
+  if (!csv) {
+    throw new Error("Bank export returned no CSV data");
+  }
+  return csv;
 }
 
 export function downloadTextFile(filename: string, content: string, mime = "text/plain") {

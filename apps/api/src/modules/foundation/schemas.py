@@ -218,6 +218,22 @@ class DeviceTokenRegisterRequest(BaseModel):
     platform: str = "web"
 
 
+class NotificationInboxItemResponse(BaseModel):
+    id: UUID
+    title: str
+    body: str
+    kind: str
+    unread: bool
+    created_at: datetime
+    href: str | None = None
+    read_at: datetime | None = None
+
+
+class NotificationUnreadCountResponse(BaseModel):
+    unread_count: int
+
+
+
 
 class SettingUpsertRequest(BaseModel):
     setting_value: str

@@ -6,7 +6,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, Header
 from sqlalchemy.orm import Session
 
-from modules.foundation.dependencies import require_permission
+from modules.foundation.dependencies import require_any_permission, require_permission
 from modules.foundation.domain.value_objects import TenantContext
 from modules.hr.dependencies import (
     PaginationParams,
@@ -65,6 +65,7 @@ from modules.hr.schemas import (
     LeaveApproveRequest,
     LeaveBalanceCreate,
     LeaveBalanceResponse,
+    LeaveBalanceUpdate,
     CompOffCreditRequest,
     CarryForwardRequest,
     CarryForwardResponse,
@@ -103,9 +104,15 @@ from modules.hr.schemas import (
     RosterEntryResponse,
     RosterEntryUpdate,
     SeparationApproveRequest,
+    SeparationSubmitRequest,
     SeparationCompleteRequest,
+    SeparationConfirmLwdRequest,
+    SeparationDirectExitRequest,
+    SeparationStartNoticeRequest,
+    SeparationWaiveFnfRequest,
     SeparationChecklistUpdate,
     SeparationCreate,
+    SeparationDocumentUploadRequest,
     SeparationExitInterviewRequest,
     SeparationResponse,
     ShiftAssignmentCreate,
@@ -179,6 +186,11 @@ roster_entries_router = APIRouter(prefix="/roster-entries", tags=["HR - Roster E
 holiday_calendars_router = APIRouter(prefix="/holiday-calendars", tags=["HR - Holiday Calendars"])
 leave_types_router = APIRouter(prefix="/leave-types", tags=["HR - Leave Types"])
 leave_balances_router = APIRouter(prefix="/leave-balances", tags=["HR - Leave Balances"])
+_require_leave_balance_manage = require_any_permission(
+    "hr.leave:update",
+    "hr.leave:approve",
+    "hr.leave:create",
+)
 leave_requests_router = APIRouter(prefix="/leave-requests", tags=["HR - Leave Requests"])
 leave_adjustments_router = APIRouter(prefix="/leave-adjustments", tags=["HR - Leave Adjustments"])
 attendance_router = APIRouter(prefix="/attendance", tags=["HR - Attendance"])
@@ -241,6 +253,16 @@ def update_designation(
     return APIResponse(message="OK", data=DesignationService(db).update(ctx, row_id, **extract_update_fields(body)))
 
 
+@designations_router.delete("/{row_id}", response_model=APIResponse[None])
+def delete_designation(
+    row_id: UUID,
+    ctx: Annotated[TenantContext, Depends(require_permission("hr.designation:update"))],
+    db: Annotated[Session, Depends(get_db)],
+):
+    DesignationService(db).delete(ctx, row_id)
+    return APIResponse(message="Deleted", data=None)
+
+
 @employee_profiles_router.get("", response_model=APIResponse[list[EmployeeProfileResponse]])
 def list_profiles(
     ctx: Annotated[TenantContext, Depends(require_permission("hr.employee_profile:read"))],
@@ -268,6 +290,22 @@ def update_profile(
     db: Annotated[Session, Depends(get_db)],
 ):
     return APIResponse(message="OK", data=EmployeeProfileService(db).update(ctx, row_id, **extract_update_fields(body)))
+
+
+@employee_profiles_router.post(
+    "/force-password-reset/{employee_id}",
+    response_model=APIResponse[dict],
+)
+def force_ess_password_reset(
+    employee_id: UUID,
+    ctx: Annotated[TenantContext, Depends(require_permission("hr.employee_profile:update"))],
+    db: Annotated[Session, Depends(get_db)],
+):
+    from modules.hr.service.ess_password_admin import force_ess_password_reset as _force
+
+    data = _force(db, ctx, employee_id)
+    db.commit()
+    return APIResponse(message="Employee must change password on next ESS login", data=data)
 
 
 @management_groups_router.get("/feature-catalog", response_model=APIResponse[list[dict]])
@@ -404,6 +442,7 @@ def activate_employment(
             row_id,
             employee_code=payload.employee_code,
             shift_id=payload.shift_id,
+            management_group_id=payload.management_group_id,
             start_probation=payload.start_probation,
             probation_days=payload.probation_days,
             mark_payroll_eligible=payload.mark_payroll_eligible,
@@ -754,6 +793,16 @@ def update_leave_type(
     return APIResponse(message="OK", data=LeaveTypeService(db).update(ctx, row_id, **extract_update_fields(body)))
 
 
+@leave_types_router.delete("/{row_id}", response_model=APIResponse[None])
+def delete_leave_type(
+    row_id: UUID,
+    ctx: Annotated[TenantContext, Depends(require_permission("hr.leave_type:update"))],
+    db: Annotated[Session, Depends(get_db)],
+):
+    message = LeaveTypeService(db).delete(ctx, row_id)
+    return APIResponse(message=message, data=None)
+
+
 @leave_balances_router.get("", response_model=APIResponse[list[LeaveBalanceResponse]])
 def list_balances(
     ctx: Annotated[TenantContext, Depends(require_permission("hr.leave:read"))],
@@ -767,10 +816,33 @@ def list_balances(
 @leave_balances_router.post("", response_model=APIResponse[LeaveBalanceResponse])
 def create_balance(
     body: LeaveBalanceCreate,
-    ctx: Annotated[TenantContext, Depends(require_permission("hr.leave:create"))],
+    ctx: Annotated[TenantContext, Depends(_require_leave_balance_manage)],
     db: Annotated[Session, Depends(get_db)],
 ):
     return APIResponse(message="OK", data=LeaveBalanceService(db).create(ctx, **body.model_dump()))
+
+
+@leave_balances_router.patch("/{row_id}", response_model=APIResponse[LeaveBalanceResponse])
+def update_balance(
+    row_id: UUID,
+    body: LeaveBalanceUpdate,
+    ctx: Annotated[TenantContext, Depends(_require_leave_balance_manage)],
+    db: Annotated[Session, Depends(get_db)],
+):
+    return APIResponse(
+        message="OK",
+        data=LeaveBalanceService(db).update(ctx, row_id, **extract_update_fields(body)),
+    )
+
+
+@leave_balances_router.delete("/{row_id}", response_model=APIResponse[None])
+def delete_balance(
+    row_id: UUID,
+    ctx: Annotated[TenantContext, Depends(_require_leave_balance_manage)],
+    db: Annotated[Session, Depends(get_db)],
+):
+    LeaveBalanceService(db).delete(ctx, row_id)
+    return APIResponse(message="Leave balance removed", data=None)
 
 
 @leave_balances_router.post("/compoff-credit", response_model=APIResponse[LeaveBalanceResponse])
@@ -876,6 +948,18 @@ def create_leave_adjustment(
     db: Annotated[Session, Depends(get_db)],
 ):
     return APIResponse(message="OK", data=LeaveAdjustmentService(db).create(ctx, **body.model_dump()))
+
+
+@leave_adjustments_router.post("/apply", response_model=APIResponse[LeaveAdjustmentResponse])
+def apply_leave_adjustment(
+    body: LeaveAdjustmentCreate,
+    ctx: Annotated[TenantContext, Depends(require_any_permission("hr.leave:approve", "hr.leave:update"))],
+    db: Annotated[Session, Depends(get_db)],
+):
+    return APIResponse(
+        message="Leave adjustment applied",
+        data=LeaveAdjustmentService(db).create_and_apply(ctx, **body.model_dump(exclude={"status"})),
+    )
 
 
 @leave_adjustments_router.post("/{row_id}/submit", response_model=APIResponse[LeaveAdjustmentResponse])
@@ -1854,8 +1938,9 @@ def submit_separation(
     row_id: UUID,
     ctx: Annotated[TenantContext, Depends(require_permission("hr.separation:submit"))],
     db: Annotated[Session, Depends(get_db)],
+    body: SeparationSubmitRequest = SeparationSubmitRequest(),
 ):
-    return APIResponse(message="OK", data=SeparationService(db).submit(ctx, row_id))
+    return APIResponse(message="OK", data=SeparationService(db).submit(ctx, row_id, **body.model_dump()))
 
 
 @separation_router.post("/{row_id}/approve", response_model=APIResponse[SeparationResponse])
@@ -1878,6 +1963,45 @@ def complete_separation(
     return APIResponse(message="OK", data=SeparationService(db).complete(ctx, row_id, **body.model_dump()))
 
 
+@separation_router.post("/{row_id}/start-notice", response_model=APIResponse[SeparationResponse])
+def start_separation_notice(
+    row_id: UUID,
+    ctx: Annotated[TenantContext, Depends(require_permission("hr.separation:approve"))],
+    db: Annotated[Session, Depends(get_db)],
+    body: SeparationStartNoticeRequest = SeparationStartNoticeRequest(),
+):
+    return APIResponse(
+        message="On notice",
+        data=SeparationService(db).start_notice(ctx, row_id, **body.model_dump()),
+    )
+
+
+@separation_router.post("/{row_id}/direct-exit", response_model=APIResponse[SeparationResponse])
+def direct_exit_separation(
+    row_id: UUID,
+    ctx: Annotated[TenantContext, Depends(require_permission("hr.separation:approve"))],
+    db: Annotated[Session, Depends(get_db)],
+    body: SeparationDirectExitRequest = SeparationDirectExitRequest(),
+):
+    return APIResponse(
+        message="Marked directly exited",
+        data=SeparationService(db).mark_direct_exit(ctx, row_id, **body.model_dump()),
+    )
+
+
+@separation_router.post("/{row_id}/confirm-lwd", response_model=APIResponse[SeparationResponse])
+def confirm_separation_lwd(
+    row_id: UUID,
+    ctx: Annotated[TenantContext, Depends(require_permission("hr.separation:approve"))],
+    db: Annotated[Session, Depends(get_db)],
+    body: SeparationConfirmLwdRequest = SeparationConfirmLwdRequest(),
+):
+    return APIResponse(
+        message="Last working day confirmed",
+        data=SeparationService(db).confirm_last_working_day(ctx, row_id, **body.model_dump()),
+    )
+
+
 @separation_router.post("/{row_id}/fnf/prepare", response_model=APIResponse[SeparationResponse])
 def prepare_separation_fnf(
     row_id: UUID,
@@ -1894,6 +2018,19 @@ def settle_separation_fnf(
     db: Annotated[Session, Depends(get_db)],
 ):
     return APIResponse(message="FNF settled", data=SeparationService(db).settle_fnf(ctx, row_id))
+
+
+@separation_router.post("/{row_id}/fnf/waive", response_model=APIResponse[SeparationResponse])
+def waive_separation_fnf(
+    row_id: UUID,
+    ctx: Annotated[TenantContext, Depends(require_permission("hr.separation:complete"))],
+    db: Annotated[Session, Depends(get_db)],
+    body: SeparationWaiveFnfRequest = SeparationWaiveFnfRequest(),
+):
+    return APIResponse(
+        message="FNF waived",
+        data=SeparationService(db).waive_fnf(ctx, row_id, **body.model_dump()),
+    )
 
 
 @separation_router.post("/{row_id}/checklist", response_model=APIResponse[SeparationResponse])
@@ -1919,6 +2056,19 @@ def save_separation_exit_interview(
     return APIResponse(
         message="Exit interview saved",
         data=SeparationService(db).save_exit_interview(ctx, row_id, **body.model_dump()),
+    )
+
+
+@separation_router.post("/{row_id}/documents", response_model=APIResponse[SeparationResponse])
+def upload_separation_document(
+    row_id: UUID,
+    body: SeparationDocumentUploadRequest,
+    ctx: Annotated[TenantContext, Depends(require_permission("hr.separation:approve"))],
+    db: Annotated[Session, Depends(get_db)],
+):
+    return APIResponse(
+        message="Document recorded",
+        data=SeparationService(db).add_document(ctx, row_id, **body.model_dump()),
     )
 
 

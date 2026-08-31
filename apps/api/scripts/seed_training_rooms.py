@@ -25,6 +25,9 @@ from modules.organization.models.branch import OrgBranch  # noqa: E402
 from modules.organization.models.company import OrgCompany  # noqa: E402
 
 ROOMS = [
+    ("ROOM-HQ-001", "Conference Room A", "HQ", 14, ["Projector", "Whiteboard", "Video Conferencing", "AC"]),
+    ("ROOM-HQ-002", "Focus Room 1", "HQ", 4, ["TV Display", "Whiteboard", "Wi-Fi"]),
+    ("ROOM-HQ-003", "Town Hall", "HQ", 48, ["Projector", "Microphone", "Sound System", "Wi-Fi", "AC"]),
     ("ROOM-001", "Innovation Lab", "MUM", 24, ["Projector", "Whiteboard", "Video Conferencing", "Wi-Fi", "AC"]),
     ("ROOM-002", "Board Room", "MUM", 12, ["Video Conferencing", "TV Display", "Speakerphone", "AC"]),
     ("ROOM-003", "Training Hall A", "MUM", 40, ["Projector", "Microphone", "Sound System", "Wi-Fi", "AC"]),

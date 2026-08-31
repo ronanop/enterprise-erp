@@ -28,6 +28,7 @@ import {
   type ManagementGroup,
 } from "@/services/management-group-service";
 import { cn } from "@/lib/utils";
+import { EMPLOYMENT_TYPE_OPTIONS } from "@/config/hr-master-options";
 
 type Lookup = { id: string; label: string };
 
@@ -224,12 +225,18 @@ export function ManagementGroupPanel({ tab }: { tab: HrSetupTab }) {
   }, [rows, query]);
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="text-xs text-muted-foreground">
-          Management groups (employment types) control default shifts, calendars, and HRMS feature toggles.
-        </p>
-        <div className="flex gap-2">
+        <div className="relative min-w-[12rem] flex-1 max-w-md">
+          <Search className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search groups…"
+            className="h-9 pl-8"
+          />
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
           <Button
             size="sm"
             variant="outline"
@@ -245,16 +252,6 @@ export function ManagementGroupPanel({ tab }: { tab: HrSetupTab }) {
             Add management group
           </Button>
         </div>
-      </div>
-
-      <div className="relative max-w-md">
-        <Search className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted-foreground" />
-        <Input
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder="Search groups…"
-          className="h-9 pl-8"
-        />
       </div>
 
       <div className="overflow-hidden rounded-lg border border-border bg-card">
@@ -321,7 +318,7 @@ export function ManagementGroupPanel({ tab }: { tab: HrSetupTab }) {
         open={mode !== null}
         wide
         title={mode === "edit" ? "Edit management group" : "Add management group"}
-        description="General info, attendance defaults, and feature toggles for this employment type."
+        description="General info, attendance defaults, and feature toggles for this employment group."
         onClose={() => setMode(null)}
         footer={
           <>
@@ -355,9 +352,9 @@ export function ManagementGroupPanel({ tab }: { tab: HrSetupTab }) {
             <div className="grid gap-3 sm:grid-cols-2">
               <SetupField label="Linked employment type">
                 <SetupSelect value={employmentType} onChange={(e) => setEmploymentType(e.target.value)}>
-                  {["permanent", "contract", "intern", "consultant"].map((t) => (
-                    <option key={t} value={t}>
-                      {t}
+                  {EMPLOYMENT_TYPE_OPTIONS.map((t) => (
+                    <option key={t.value} value={t.value}>
+                      {t.label}
                     </option>
                   ))}
                 </SetupSelect>
@@ -446,7 +443,7 @@ export function ManagementGroupPanel({ tab }: { tab: HrSetupTab }) {
                           aria-checked={Boolean(toggles[f.key])}
                           disabled={parentOff}
                           className={cn(
-                            "relative h-6 w-11 shrink-0 cursor-pointer rounded-full transition-colors duration-200",
+                            "inline-flex h-6 w-11 shrink-0 cursor-pointer items-center overflow-hidden rounded-full border-2 border-transparent transition-colors duration-200",
                             toggles[f.key] ? "bg-primary" : "bg-muted",
                             parentOff && "cursor-not-allowed opacity-50",
                           )}
@@ -454,7 +451,7 @@ export function ManagementGroupPanel({ tab }: { tab: HrSetupTab }) {
                         >
                           <span
                             className={cn(
-                              "absolute top-0.5 size-5 rounded-full bg-white shadow transition-transform duration-200",
+                              "pointer-events-none block size-5 shrink-0 rounded-full bg-white shadow-sm transition-transform duration-200",
                               toggles[f.key] ? "translate-x-5" : "translate-x-0.5",
                             )}
                           />

@@ -1,36 +1,37 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState, Children, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import Link from "next/link";
 import {
+  BadgeCheck,
   Bell,
   Briefcase,
-  Cake,
   CalendarDays,
+  ChevronDown,
+  ChevronRight,
   ClipboardCheck,
-  Download,
-  FileSpreadsheet,
-  FileText,
+  FileStack,
+  Fingerprint,
+  GraduationCap,
   LayoutGrid,
+  RefreshCw,
   Search,
+  UserCheck,
+  UserMinus,
   UserPlus,
+  UserX,
   Users,
   Wallet,
-  ChevronRight,
-  RefreshCw,
   type LucideIcon,
 } from "lucide-react";
 
+import { HrAuthBanner } from "@/components/hr/hr-primitives";
 import {
-  HrAuthBanner,
-  HrEmptyState,
-  HrStatusBadge,
-} from "@/components/hr/hr-primitives";
-import {
-  PremiumAreaChart,
+  ChartHeightContext,
   PremiumBarChart,
   PremiumDonutChart,
-  PremiumFunnelChart,
+  PremiumMultiLineChart,
+  PremiumStackedBarChart,
 } from "@/components/hr/dashboard/hr-analytics-charts";
 import { toast, SetupToastHost } from "@/components/hr/setup/setup-toast";
 import { EmsSkeleton } from "@/components/hr/workforce/ems-primitives";
@@ -38,65 +39,115 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import {
-  downloadBlob,
-  exportDashboardCsv,
-  getDashboardRole,
   greetingForHour,
   loadHrExecutiveDashboard,
-  setDashboardRole,
 } from "@/services/hr-executive-dashboard-service";
 import type {
   CalendarEvent,
   DashboardRole,
-  DashboardTrainingItem,
   HrExecutiveDashboard,
+  LeaveTrendPoint,
+  NamedCount,
+  StackedAttendancePoint,
 } from "@/types/hr-executive-dashboard";
 import { DASHBOARD_ROLE_LABELS } from "@/types/hr-executive-dashboard";
 
 const QUICK_ACTIONS = [
-  { label: "Employee", href: "/hr/workforce", icon: Users },
-  { label: "Payroll", href: "/hr/payroll", icon: Wallet },
-  { label: "Leave", href: "/hr/leave", icon: CalendarDays },
-  { label: "Onboarding", href: "/hr/onboarding", icon: UserPlus },
-  { label: "Create Job", href: "/hr/recruitment", icon: Briefcase },
+  { label: "Employees", href: "/hr/workforce", icon: Users },
   { label: "Attendance", href: "/hr/time", icon: ClipboardCheck },
+  { label: "Onboarding", href: "/hr/onboarding", icon: UserPlus },
+  { label: "Performance", href: "/hr/talent", icon: BadgeCheck },
+  { label: "EDoc", href: "/hr/edoc", icon: FileStack },
+  { label: "Employee Request", href: "/hr/ess", icon: Bell },
+  { label: "Biometric Devices", href: "/hr/time/biometric-devices", icon: Fingerprint },
+  { label: "Offboarding", href: "/hr/separation", icon: UserMinus },
+  { label: "Payroll", href: "/hr/payroll", icon: Wallet },
+  { label: "Training", href: "/hr/learning", icon: GraduationCap },
 ] as const;
 
-function quickActionsForRole(role: DashboardRole): typeof QUICK_ACTIONS[number][] {
-  if (role === "employee") {
-    return QUICK_ACTIONS.filter((a) => ["Leave", "Attendance"].includes(a.label));
-  }
-  if (role === "recruiter") {
-    return QUICK_ACTIONS.filter((a) =>
-      ["Create Job", "Onboarding", "Employee"].includes(a.label),
-    );
-  }
-  if (role === "finance") {
-    return QUICK_ACTIONS.filter((a) => ["Payroll", "Employee"].includes(a.label));
-  }
-  if (role === "manager") {
-    return QUICK_ACTIONS.filter((a) => !["Create Job", "Payroll"].includes(a.label));
-  }
-  return [...QUICK_ACTIONS];
-}
-
-const EVENT_LABELS: Record<string, string> = {
-  birthday: "Birthday",
-  anniversary: "Anniversary",
-  interview: "Interview",
-  leave: "Leave",
-  holiday: "Holiday",
-  meeting: "Meeting",
-  payroll: "Payroll",
+const EVENT_PILLS: Record<string, { label: string; className: string }> = {
+  birthday: { label: "Birthday", className: "bg-[#F4EDFB] text-[#9B5BB8]" },
+  anniversary: { label: "Work Anniversary", className: "bg-[#FFF4E5] text-[#FF8904]" },
 };
 
-function useClock() {
+type AnalyticsPeriod = "this_month" | "last_3" | "last_6";
+
+function sliceNamed(rows: NamedCount[], period: AnalyticsPeriod): NamedCount[] {
+  const n = period === "this_month" ? 1 : period === "last_3" ? 3 : 6;
+  return rows.slice(-n);
+}
+
+function sliceStacked(
+  rows: StackedAttendancePoint[],
+  period: AnalyticsPeriod,
+): StackedAttendancePoint[] {
+  const n = period === "this_month" ? 1 : period === "last_3" ? 3 : 6;
+  return rows.slice(-n);
+}
+
+function sliceLeave(rows: LeaveTrendPoint[], period: AnalyticsPeriod): LeaveTrendPoint[] {
+  const n = period === "this_month" ? 1 : period === "last_3" ? 3 : 6;
+  return rows.slice(-n);
+}
+
+function relativeDayLabel(iso: string): string {
+  const d = new Date(iso);
+  if (!Number.isFinite(d.getTime())) return "";
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const day = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  const diff = Math.round((day.getTime() - today.getTime()) / 86_400_000);
+  if (diff === 0) return "Today";
+  if (diff === 1) return "Tomorrow";
+  return d.toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short" });
+}
+
+function initialsFromName(name: string): string {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return "?";
+  if (parts.length === 1) return parts[0]!.slice(0, 1).toUpperCase();
+  return `${parts[0]!.slice(0, 1)}${parts[parts.length - 1]!.slice(0, 1)}`.toUpperCase();
+}
+
+function DashboardClock() {
   const [now, setNow] = useState(() => new Date());
   useEffect(() => {
     const id = window.setInterval(() => setNow(new Date()), 1000);
     return () => window.clearInterval(id);
   }, []);
-  return now;
+  return (
+    <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground">
+      <span>
+        {now.toLocaleDateString("en-IN", {
+          weekday: "long",
+          day: "numeric",
+          month: "long",
+          year: "numeric",
+        })}
+      </span>
+      <span className="hidden sm:inline">·</span>
+      <span className="font-mono tabular-nums">
+        {now.toLocaleTimeString("en-IN", {
+          hour: "2-digit",
+          minute: "2-digit",
+          second: "2-digit",
+        })}
+      </span>
+    </div>
+  );
+}
+
+function GreetingTitle({ role, displayName }: { role: DashboardRole; displayName?: string }) {
+  const [hour, setHour] = useState(() => new Date().getHours());
+  useEffect(() => {
+    const id = window.setInterval(() => setHour(new Date().getHours()), 60_000);
+    return () => window.clearInterval(id);
+  }, []);
+  return (
+    <h1 className="mt-1.5 text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">
+      {greetingForHour(new Date(2000, 0, 1, hour))}, {displayName ?? DASHBOARD_ROLE_LABELS[role]}
+    </h1>
+  );
 }
 
 export function HrExecutiveDashboardPage() {
@@ -104,17 +155,15 @@ export function HrExecutiveDashboardPage() {
   const [loading, setLoading] = useState(true);
   const [role, setRole] = useState<DashboardRole>("hr");
   const [query, setQuery] = useState("");
-  const [notifOpen, setNotifOpen] = useState(false);
-  const now = useClock();
+  const [period, setPeriod] = useState<AnalyticsPeriod>("last_6");
 
-  const load = useCallback(async (r?: DashboardRole) => {
-    setLoading(true);
+  const load = useCallback(async (opts?: { silent?: boolean }) => {
+    if (!opts?.silent) setLoading(true);
     try {
-      const nextRole = r ?? getDashboardRole();
-      setRole(nextRole);
-      setData(await loadHrExecutiveDashboard(nextRole));
+      setRole("hr");
+      setData(await loadHrExecutiveDashboard("hr"));
     } catch {
-      toast("Failed to load HR dashboard", "error");
+      if (!opts?.silent) toast("Failed to load HR dashboard", "error");
     } finally {
       setLoading(false);
     }
@@ -124,10 +173,10 @@ export function HrExecutiveDashboardPage() {
     void load();
   }, [load]);
 
-  const unread = useMemo(
-    () => data?.notifications.filter((n) => n.unread).length ?? 0,
-    [data],
-  );
+  useEffect(() => {
+    const id = window.setInterval(() => void load({ silent: true }), 60_000);
+    return () => window.clearInterval(id);
+  }, [load]);
 
   const filteredCalendar = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -138,167 +187,130 @@ export function HrExecutiveDashboardPage() {
     );
   }, [data, query]);
 
-  const filteredApprovals = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    const rows = data?.approvals ?? [];
-    if (!q) return rows;
-    return rows.filter((a) =>
-      [a.title, a.requester, a.category].join(" ").toLowerCase().includes(q),
-    );
-  }, [data, query]);
-
-  const birthdayEvents = useMemo(
-    () => filteredCalendar.filter((e) => e.type === "birthday"),
-    [filteredCalendar],
-  );
-
-  const anniversaryEvents = useMemo(
-    () => filteredCalendar.filter((e) => e.type === "anniversary"),
-    [filteredCalendar],
-  );
-
-  const generalEvents = useMemo(
+  const upcomingEvents = useMemo(
     () =>
-      filteredCalendar.filter((e) => !["birthday", "anniversary"].includes(e.type)),
+      filteredCalendar
+        .filter((e) => e.type === "birthday" || e.type === "anniversary")
+        .sort((a, b) => a.at.localeCompare(b.at)),
     [filteredCalendar],
   );
 
-  const trainingItems = data?.trainingItems ?? [];
-  const roleQuickActions = quickActionsForRole(role);
+  const upcomingHolidays = useMemo(() => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    return filteredCalendar
+      .filter((e) => e.type === "holiday" && new Date(e.at).getTime() >= today.getTime())
+      .sort((a, b) => a.at.localeCompare(b.at));
+  }, [filteredCalendar]);
 
   const stats = data?.stats;
   const charts = data?.charts;
 
-  const kpiCards = [
-    { label: "Headcount", value: stats?.totalEmployees, icon: Users, hint: "Active workforce" },
-    { label: "Present Today", value: stats?.presentToday, icon: ClipboardCheck, hint: "Attendance" },
-    { label: "On Leave", value: stats?.onLeave, icon: CalendarDays, hint: "Approved today" },
-    { label: "Pending Approvals", value: stats?.pendingApprovals, icon: ClipboardCheck, hint: "Leave / shifts" },
-    { label: "Open Roles", value: stats?.openPositions, icon: Briefcase, hint: "Requisitions" },
-    { label: "Pipeline", value: stats?.candidatesInPipeline, icon: Users, hint: "Active applicants" },
+  const kpiCards: {
+    label: string;
+    value: number | undefined;
+    icon: typeof Users;
+    href?: string;
+    tint: string;
+    iconBg: string;
+    iconColor: string;
+  }[] = [
+    {
+      label: "Headcount",
+      value: stats?.totalEmployees,
+      icon: Users,
+      href: "/hr/workforce",
+      tint: "bg-[#F4EDFB]",
+      iconBg: "bg-[#9B5BB8]/15",
+      iconColor: "text-[#9B5BB8]",
+    },
+    {
+      label: "On leave today",
+      value: stats?.onLeave,
+      icon: CalendarDays,
+      href: "/hr/leave?view=on-leave-today",
+      tint: "bg-hrms-mint",
+      iconBg: "bg-[#01BD7E]/15",
+      iconColor: "text-[#01BD7E]",
+    },
+    {
+      label: "Open roles",
+      value: stats?.openPositions,
+      icon: Briefcase,
+      href: "/hr/recruitment",
+      tint: "bg-hrms-peach",
+      iconBg: "bg-[#FF8904]/15",
+      iconColor: "text-[#FF8904]",
+    },
+    {
+      label: "Onboarding in process",
+      value: stats?.onboardingInProcess,
+      icon: UserPlus,
+      href: "/hr/onboarding",
+      tint: "bg-hrms-blue",
+      iconBg: "bg-[#155DFD]/15",
+      iconColor: "text-[#155DFD]",
+    },
   ];
 
-  const showRecruiting = role === "hr" || role === "super_admin" || role === "recruiter";
-  const showPayroll = role === "hr" || role === "super_admin" || role === "finance";
-  const showPeopleAnalytics = role !== "employee" && role !== "recruiter";
+  const departmentWise = charts?.departmentWise ?? [];
+  const locationWise = charts?.locationWise ?? [];
+  const employeeGrowth = sliceNamed(charts?.employeeGrowth ?? [], period);
+  const attendanceStacked = sliceStacked(charts?.attendanceStacked ?? [], period);
+  const leaveTrendByType = sliceLeave(charts?.leaveTrendByType ?? [], period);
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-7 pb-6">
       <SetupToastHost />
 
-      {/* Top section */}
-      <div className="rounded-xl border border-border/70 bg-card px-4 py-4 shadow-sm sm:px-5">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+      <div className="relative overflow-hidden rounded-2xl border border-border bg-card px-6 py-6 shadow-[var(--hrms-card-shadow)] sm:px-8 sm:py-7">
+        <div
+          className="pointer-events-none absolute -top-20 -right-8 size-56 rounded-full bg-[#9B5BB8]/15 blur-3xl"
+          aria-hidden
+        />
+        <div
+          className="pointer-events-none absolute -bottom-24 left-16 size-48 rounded-full bg-[#C4A5E0]/20 blur-3xl"
+          aria-hidden
+        />
+        <div className="relative flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
           <div>
-            <p className="text-[11px] font-medium tracking-wide text-muted-foreground uppercase">
+            <p className="text-[11px] font-semibold tracking-[0.16em] text-primary uppercase">
               HRMS Executive Dashboard
-              {role === "super_admin" ? " · All companies" : null}
             </p>
-            <h1 className="mt-1 text-xl font-semibold tracking-tight text-foreground sm:text-2xl">
-              {greetingForHour(now)}, {data?.displayName ?? DASHBOARD_ROLE_LABELS[role]}
-            </h1>
-            <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
-              <span>
-                {now.toLocaleDateString("en-IN", {
-                  weekday: "long",
-                  day: "numeric",
-                  month: "long",
-                  year: "numeric",
-                })}
-              </span>
-              <span className="hidden sm:inline">·</span>
-              <span className="font-mono tabular-nums">
-                {now.toLocaleTimeString("en-IN", {
-                  hour: "2-digit",
-                  minute: "2-digit",
-                  second: "2-digit",
-                })}
-              </span>
-            </div>
+            <GreetingTitle role={role} displayName={data?.displayName} />
+            <DashboardClock />
           </div>
 
-          <div className="flex flex-wrap items-center gap-2">
-            <div className="relative min-w-[180px] flex-1 sm:max-w-xs">
-              <Search className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted-foreground" />
+          <div className="flex flex-wrap items-center gap-2.5">
+            <div className="relative min-w-[200px] flex-1 sm:max-w-xs">
+              <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
               <Input
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                placeholder="Quick search…"
-                className="h-9 pl-8"
+                placeholder="Search events…"
+                className="h-10 rounded-xl pl-9"
               />
             </div>
 
-            <select
-              className="h-9 cursor-pointer rounded-md border border-input bg-background px-2 text-xs"
-              value={role}
-              onChange={(e) => {
-                const next = e.target.value as DashboardRole;
-                setDashboardRole(next);
-                void load(next);
-              }}
-              aria-label="Dashboard role"
-            >
-              {(Object.keys(DASHBOARD_ROLE_LABELS) as DashboardRole[]).map((r) => (
-                <option key={r} value={r}>
-                  {DASHBOARD_ROLE_LABELS[r]}
-                </option>
-              ))}
-            </select>
-
-            <div className="relative">
-              <Button
-                size="sm"
-                variant="outline"
-                className="cursor-pointer"
-                onClick={() => setNotifOpen((v) => !v)}
-              >
-                <Bell className="size-3.5" />
-                {unread > 0 ? (
-                  <span className="ml-1 rounded-full bg-destructive px-1.5 text-[10px] text-white">
-                    {unread}
-                  </span>
-                ) : null}
-              </Button>
-              {notifOpen ? (
-                <div className="absolute right-0 z-20 mt-2 w-80 max-w-[calc(100vw-2rem)] rounded-xl border border-border/80 bg-card p-2 shadow-lg">
-                  <p className="px-2 py-1.5 text-xs font-semibold">Notifications</p>
-                  <ul className="max-h-72 space-y-1 overflow-y-auto">
-                    {(data?.notifications ?? []).map((n) => (
-                      <li
-                        key={n.id}
-                        className={cn(
-                          "rounded-lg px-2 py-2 text-xs transition-colors duration-150 hover:bg-muted/60",
-                          n.unread && "bg-primary/5",
-                        )}
-                      >
-                        <p className="font-medium">{n.title}</p>
-                        <p className="mt-0.5 text-muted-foreground">{n.body}</p>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              ) : null}
+            <div className="flex h-10 items-center gap-2.5 rounded-xl border border-border/70 bg-muted/30 px-3 text-sm">
+              <span className="flex size-7 items-center justify-center rounded-full bg-primary text-[11px] font-semibold text-primary-foreground">
+                {(data?.displayName ?? "HR").slice(0, 1).toUpperCase()}
+              </span>
+              <span className="hidden font-medium sm:inline">
+                {data?.displayName ?? DASHBOARD_ROLE_LABELS[role]}
+              </span>
             </div>
 
             <Button
               size="sm"
               variant="outline"
-              className="cursor-pointer"
+              className="h-10 cursor-pointer rounded-xl px-4"
               disabled={loading}
-              onClick={() => void load(role)}
+              onClick={() => void load()}
             >
               <RefreshCw className={cn("size-3.5", loading && "animate-spin")} />
               Refresh
             </Button>
-
-            <div className="flex h-9 items-center gap-2 rounded-md border border-border/70 bg-muted/40 px-2.5 text-xs">
-              <span className="flex size-6 items-center justify-center rounded-full bg-primary text-[10px] font-semibold text-primary-foreground">
-                {(data?.displayName ?? "HR").slice(0, 1).toUpperCase()}
-              </span>
-              <span className="hidden font-medium sm:inline">
-                {DASHBOARD_ROLE_LABELS[role]}
-              </span>
-            </div>
           </div>
         </div>
       </div>
@@ -314,21 +326,18 @@ export function HrExecutiveDashboardPage() {
         <EmsSkeleton rows={8} />
       ) : (
         <>
-          {/* Top row — 4 portrait (3:4) boxes, then key metrics below */}
-          <section className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <section className="grid auto-rows-fr grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
             <DashboardListBox
-              title="Events"
-              subtitle="Interviews, leave, holidays"
-              icon={CalendarDays}
-              footerHref="/hr/reports"
-              footerLabel="Reports"
-              portrait
+              title="Upcoming Events"
+              subtitle="Birthdays and work anniversaries"
+              headerHref="/hr/workforce"
+              headerLabel="View all"
             >
-              {generalEvents.length === 0 ? (
-                <p className="py-8 text-center text-xs text-muted-foreground">No upcoming events</p>
+              {upcomingEvents.length === 0 ? (
+                <p className="py-6 text-center text-sm text-muted-foreground">No upcoming events</p>
               ) : (
-                <ul className="space-y-2">
-                  {generalEvents.slice(0, 5).map((e) => (
+                <ul className="divide-y divide-border/70">
+                  {upcomingEvents.slice(0, 4).map((e) => (
                     <EventRow key={e.id} event={e} />
                   ))}
                 </ul>
@@ -337,23 +346,22 @@ export function HrExecutiveDashboardPage() {
 
             <DashboardListBox
               title="Quick Actions"
-              subtitle="Open HR modules"
+              subtitle="Common HR actions"
               icon={LayoutGrid}
-              portrait
             >
-              <div className="grid grid-cols-2 gap-2">
-                {roleQuickActions.map((a) => {
+              <div className="grid grid-cols-2 content-stretch gap-2">
+                {QUICK_ACTIONS.map((a) => {
                   const Icon = a.icon;
                   return (
                     <Link
                       key={a.href + a.label}
                       href={a.href}
-                      className="group flex cursor-pointer flex-col items-start gap-1.5 rounded-lg border border-border/60 bg-muted/30 px-2.5 py-2.5 transition-[border-color,background-color] duration-200 hover:border-primary/35 hover:bg-primary/5"
+                      className="flex min-h-[2.75rem] cursor-pointer items-center gap-2 rounded-xl bg-hrms-lavender px-3 py-2 transition-colors duration-150 hover:bg-[#E8D5F5]"
                     >
-                      <span className="flex size-7 items-center justify-center rounded-md bg-primary/10 text-primary">
+                      <span className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-white text-primary shadow-sm">
                         <Icon className="size-3.5" />
                       </span>
-                      <span className="text-[11px] font-medium leading-tight text-foreground">
+                      <span className="min-w-0 flex-1 text-left text-xs font-medium leading-snug text-foreground">
                         {a.label}
                       </span>
                     </Link>
@@ -363,369 +371,171 @@ export function HrExecutiveDashboardPage() {
             </DashboardListBox>
 
             <DashboardListBox
-              title="People events"
-              subtitle="Birthdays · training · anniversaries"
-              icon={Cake}
-              footerHref="/hr/learning"
-              footerLabel="Learning hub"
-              portrait
+              title="Holiday Calendar"
+              subtitle="Upcoming holidays"
+              headerHref="/hr/setup?section=leave"
+              headerLabel="View all"
             >
-              <div className="space-y-3">
-                <PeopleEventsGroup title="Birthdays" empty="No birthdays soon">
-                  {birthdayEvents.slice(0, 2).map((e) => (
-                    <EventRow key={e.id} event={e} compact />
+              {upcomingHolidays.length === 0 ? (
+                <p className="py-6 text-center text-sm text-muted-foreground">No upcoming holidays</p>
+              ) : (
+                <ul className="divide-y divide-border/70">
+                  {upcomingHolidays.slice(0, 4).map((e) => (
+                    <HolidayRow key={e.id} event={e} />
                   ))}
-                </PeopleEventsGroup>
-                <PeopleEventsGroup title="Training" empty="No training scheduled">
-                  {trainingItems.slice(0, 2).map((t) => (
-                    <TrainingRow key={t.id} item={t} compact />
-                  ))}
-                </PeopleEventsGroup>
-                <PeopleEventsGroup title="Anniversaries" empty="No work anniversaries">
-                  {anniversaryEvents.slice(0, 2).map((e) => (
-                    <EventRow key={e.id} event={e} compact />
-                  ))}
-                </PeopleEventsGroup>
-              </div>
+                </ul>
+              )}
             </DashboardListBox>
 
             <DashboardListBox
-              title="Attendance calendar"
-              subtitle={now.toLocaleDateString("en-IN", { month: "long", year: "numeric" })}
-              icon={ClipboardCheck}
+              title="Today's Attendance"
+              subtitle={new Date().toLocaleDateString("en-IN", {
+                weekday: "long",
+                day: "numeric",
+                month: "short",
+              })}
+              icon={CalendarDays}
               footerHref="/hr/time"
-              footerLabel="Attendance"
-              portrait
+              footerLabel="View attendance details"
             >
-              <AttendanceMonthCalendar today={now} />
-              <div className="mt-3 grid grid-cols-3 gap-2 border-t border-border/60 pt-3">
-                <AttendanceStat label="Present" value={stats?.presentToday ?? 0} variant="present" />
-                <AttendanceStat label="Absent" value={stats?.absentToday ?? 0} variant="absent" />
-                <AttendanceStat label="On leave" value={stats?.onLeave ?? 0} variant="leave" />
+              <div className="flex h-full flex-col justify-between gap-2">
+                <AttendanceBar
+                  label="Present"
+                  value={stats?.presentToday ?? 0}
+                  icon={UserCheck}
+                  tone="bg-hrms-mint text-hrms-success"
+                />
+                <AttendanceBar
+                  label="Absent"
+                  value={stats?.absentToday ?? 0}
+                  icon={UserX}
+                  tone="bg-hrms-pink text-hrms-danger"
+                />
+                <AttendanceBar
+                  label="On Leave"
+                  value={stats?.onLeave ?? 0}
+                  icon={CalendarDays}
+                  tone="bg-hrms-blue text-hrms-info"
+                />
               </div>
             </DashboardListBox>
           </section>
 
-          {/* Key metrics — below top boxes */}
           <section>
-            <div className="mb-2 flex items-end justify-between gap-2">
-              <h2 className="text-sm font-semibold tracking-tight">Key metrics</h2>
-              <p className="text-[11px] text-muted-foreground">
-                Live from employees · attendance · leave · recruitment
-              </p>
+            <div className="mb-3">
+              <h2 className="text-base font-semibold tracking-tight">Key Metrics</h2>
             </div>
-            <div className="grid gap-2.5 grid-cols-2 sm:grid-cols-3 xl:grid-cols-6">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
               {kpiCards.map((k) => {
                 const Icon = k.icon;
-                return (
+                const card = (
                   <div
-                    key={k.label}
-                    className="rounded-xl border border-border/70 bg-card px-3 py-3 shadow-sm transition-shadow duration-200 hover:shadow-md"
+                    className={cn(
+                      "flex items-center gap-3 rounded-2xl border border-border px-4 py-3.5 shadow-[var(--hrms-card-shadow)] transition-all duration-200",
+                      k.tint,
+                      k.href && "hover:border-primary/30 hover:shadow-md",
+                    )}
                   >
-                    <div className="flex items-start justify-between gap-2">
-                      <div>
-                        <p className="text-[10px] font-medium tracking-wide text-muted-foreground uppercase leading-tight">
-                          {k.label}
-                        </p>
-                        <p className="mt-0.5 text-[10px] text-muted-foreground/80">{k.hint}</p>
-                      </div>
-                      <Icon className="size-3.5 shrink-0 text-muted-foreground" />
+                    <span
+                      className={cn(
+                        "flex size-11 shrink-0 items-center justify-center rounded-xl",
+                        k.iconBg,
+                      )}
+                    >
+                      <Icon className={cn("size-5", k.iconColor)} />
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-[10px] font-semibold tracking-wide text-muted-foreground uppercase">
+                        {k.label}
+                      </p>
+                      <p className="mt-0.5 text-2xl font-semibold tabular-nums leading-none text-foreground">
+                        {loading ? "—" : (k.value ?? 0).toLocaleString("en-IN")}
+                      </p>
                     </div>
-                    <p className="mt-1.5 text-xl font-semibold tabular-nums text-foreground">
-                      {loading ? "—" : (k.value ?? 0).toLocaleString("en-IN")}
-                    </p>
                   </div>
+                );
+                return k.href ? (
+                  <Link key={k.label} href={k.href} className="block cursor-pointer">
+                    {card}
+                  </Link>
+                ) : (
+                  <div key={k.label}>{card}</div>
                 );
               })}
             </div>
           </section>
 
-          {/* Analytics — premium charts */}
-          <section className="space-y-3">
-            <div className="flex items-end justify-between gap-2">
-              <div>
-                <h2 className="text-sm font-semibold tracking-tight">HR Analytics</h2>
-                <p className="mt-0.5 text-[11px] text-muted-foreground">
-                  Pie · trends · funnel — live from related ERP tables
-                </p>
-              </div>
+          <section className="space-y-4">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <h2 className="text-base font-semibold tracking-tight">HR Analytics</h2>
+              <label className="relative inline-flex h-9 items-center">
+                <select
+                  value={period}
+                  onChange={(e) => setPeriod(e.target.value as AnalyticsPeriod)}
+                  className="h-9 cursor-pointer appearance-none rounded-xl border border-border bg-card py-1.5 pr-8 pl-3 text-xs font-medium shadow-sm outline-none hover:border-primary/40 focus:ring-2 focus:ring-primary/20"
+                >
+                  <option value="this_month">This Month</option>
+                  <option value="last_3">Last 3 months</option>
+                  <option value="last_6">Last 6 months</option>
+                </select>
+                <ChevronDown className="pointer-events-none absolute top-1/2 right-2.5 size-3.5 -translate-y-1/2 text-muted-foreground" />
+              </label>
             </div>
 
-            <div className="grid gap-3 lg:grid-cols-2 xl:grid-cols-3">
-              {showPeopleAnalytics ? (
-                <>
-                  <PremiumAreaChart
-                    title="Employee Growth"
-                    subtitle="Cumulative headcount by joining date"
-                    data={charts?.employeeGrowth ?? []}
-                    color="#0F766E"
-                  />
+            <ChartHeightContext.Provider value={268}>
+              <div className="grid grid-cols-1 gap-5 xl:grid-cols-2">
+                <ChartFrame>
                   <PremiumBarChart
                     title="Department-wise Employees"
-                    subtitle="master_employee → org_department"
-                    data={charts?.departmentWise ?? []}
+                    data={departmentWise}
                     layout="horizontal"
+                    showValues
                   />
+                </ChartFrame>
+                <ChartFrame>
+                  <PremiumBarChart
+                    title="Location-wise Employees"
+                    data={locationWise}
+                    layout="horizontal"
+                    showValues
+                  />
+                </ChartFrame>
+                <ChartFrame>
                   <PremiumDonutChart
                     title="Gender Diversity"
-                    subtitle="hr_employee_profile.gender"
                     data={charts?.genderDiversity ?? []}
                   />
+                </ChartFrame>
+                <ChartFrame>
                   <PremiumBarChart
-                    title="Age Distribution"
-                    subtitle="hr_employee_profile.date_of_birth"
-                    data={charts?.ageDistribution ?? []}
+                    title="Headcount Trend"
+                    data={employeeGrowth}
+                    showValues
                   />
-                </>
-              ) : null}
-
-              {showRecruiting ? (
-                <PremiumFunnelChart
-                  title="Hiring Funnel"
-                  subtitle="recruitment.rec_application stages"
-                  data={charts?.hiringFunnel ?? []}
-                />
-              ) : null}
-
-              {role !== "recruiter" && role !== "finance" ? (
-                <>
-                  <PremiumAreaChart
+                </ChartFrame>
+                <ChartFrame>
+                  <PremiumStackedBarChart
                     title="Attendance Trend"
-                    subtitle="Present / WFH days by month"
-                    data={charts?.attendanceTrend ?? []}
-                    color="#0891B2"
+                    data={attendanceStacked}
                   />
-                  <PremiumAreaChart
+                </ChartFrame>
+                <ChartFrame>
+                  <PremiumMultiLineChart
                     title="Leave Trend"
-                    subtitle="Submitted + approved requests by month"
-                    data={charts?.leaveTrend ?? []}
-                    color="#D97706"
+                    data={leaveTrendByType}
                   />
-                </>
-              ) : null}
-
-              {showPayroll ? (
-                <PremiumAreaChart
-                  title="Payroll Cost Trend"
-                  subtitle="Est. monthly CTC from hr_employment"
-                  data={charts?.payrollCostTrend ?? []}
-                  color="#2563EB"
-                  formatValue={(n) =>
-                    n >= 100000
-                      ? `₹${(n / 100000).toFixed(1)}L`
-                      : `₹${n.toLocaleString("en-IN")}`
-                  }
-                />
-              ) : null}
-
-              {showPeopleAnalytics ? (
-                <>
-                  <PremiumAreaChart
-                    title="Attrition Trend"
-                    subtitle="% exits / headcount"
-                    data={charts?.attritionTrend ?? []}
-                    color="#DC2626"
-                    formatValue={(n) => `${n}%`}
-                  />
-                  <PremiumDonutChart
-                    title="Performance Distribution"
-                    subtitle="hr_performance_review.overall_rating"
-                    data={charts?.performanceDistribution ?? []}
-                  />
-                  <PremiumDonutChart
-                    title="Training Completion"
-                    subtitle="hr_training_attendance"
-                    data={charts?.trainingCompletion ?? []}
-                  />
-                </>
-              ) : null}
-            </div>
+                </ChartFrame>
+              </div>
+            </ChartHeightContext.Provider>
           </section>
-
-          {/* Approvals / Notifications */}
-          <div className="grid gap-3 lg:grid-cols-2">
-            <section className="rounded-xl border border-border/70 bg-card shadow-sm">
-              <div className="flex items-center justify-between border-b border-border/70 px-4 py-3">
-                <div>
-                  <h2 className="text-sm font-semibold">Pending Approvals</h2>
-                  <p className="text-[11px] text-muted-foreground">
-                    Leave, attendance, payroll, offers
-                  </p>
-                </div>
-                <div className="flex items-center gap-2">
-                  <HrStatusBadge status={`${filteredApprovals.length} open`} />
-                  <Link
-                    href="/hr/ess"
-                    className="cursor-pointer text-[11px] font-medium text-primary hover:underline"
-                  >
-                    ESS inbox
-                  </Link>
-                </div>
-              </div>
-              <ul className="divide-y divide-border/60">
-                {filteredApprovals.length === 0 ? (
-                  <li className="p-6">
-                    <HrEmptyState title="All clear" description="No pending approvals." />
-                  </li>
-                ) : (
-                  filteredApprovals.slice(0, 8).map((a) => (
-                    <li key={a.id}>
-                      <Link
-                        href={a.href}
-                        className="flex cursor-pointer items-center gap-3 px-4 py-2.5 transition-colors duration-150 hover:bg-muted/40"
-                      >
-                        <div className="min-w-0 flex-1">
-                          <p className="truncate text-sm font-medium">{a.title}</p>
-                          <p className="text-[11px] text-muted-foreground">
-                            {a.requester} · {a.category}
-                          </p>
-                        </div>
-                        <HrStatusBadge status={a.status} />
-                        <ChevronRight className="size-3.5 text-muted-foreground" />
-                      </Link>
-                    </li>
-                  ))
-                )}
-              </ul>
-            </section>
-
-            <section className="rounded-xl border border-border/70 bg-card shadow-sm">
-              <div className="border-b border-border/70 px-4 py-3">
-                <h2 className="text-sm font-semibold">Notification Center</h2>
-                <p className="text-[11px] text-muted-foreground">
-                  Payroll, interviews, documents, policy
-                </p>
-              </div>
-              <ul className="divide-y divide-border/60">
-                {(data?.notifications ?? []).length === 0 ? (
-                  <li className="p-6">
-                    <HrEmptyState title="No notifications" />
-                  </li>
-                ) : (
-                  (data?.notifications ?? []).map((n) => (
-                    <li
-                      key={n.id}
-                      className={cn(
-                        "px-4 py-2.5 transition-colors duration-150 hover:bg-muted/40",
-                        n.unread && "bg-primary/5",
-                      )}
-                    >
-                      <div className="flex items-start justify-between gap-2">
-                        <p className="text-sm font-medium">{n.title}</p>
-                        {n.unread ? (
-                          <span className="mt-1 size-1.5 shrink-0 rounded-full bg-primary" />
-                        ) : null}
-                      </div>
-                      <p className="mt-0.5 text-[11px] text-muted-foreground">{n.body}</p>
-                    </li>
-                  ))
-                )}
-              </ul>
-            </section>
-          </div>
-
-          {/* Activity + Reports */}
-          <div className="grid gap-3 lg:grid-cols-[1.4fr_1fr]">
-            <section className="rounded-xl border border-border/70 bg-card shadow-sm">
-              <div className="border-b border-border/70 px-4 py-3">
-                <h2 className="text-sm font-semibold">Recent Activities</h2>
-                <p className="text-[11px] text-muted-foreground">Organization timeline</p>
-              </div>
-              <ul className="relative space-y-0 px-4 py-3">
-                {(data?.activities ?? []).length === 0 ? (
-                  <HrEmptyState title="No recent activity" />
-                ) : (
-                  (data?.activities ?? []).slice(0, 12).map((a, idx) => (
-                    <li key={a.id} className="relative flex gap-3 pb-4 last:pb-0">
-                      {idx < (data?.activities.length ?? 0) - 1 ? (
-                        <span className="absolute top-3 left-[7px] h-[calc(100%-8px)] w-px bg-border" />
-                      ) : null}
-                      <span className="relative z-[1] mt-1 size-3.5 shrink-0 rounded-full border-2 border-primary bg-card" />
-                      <div className="min-w-0 flex-1">
-                        <p className="text-sm font-medium">{a.action}</p>
-                        <p className="text-[11px] text-muted-foreground">{a.detail}</p>
-                        <p className="mt-0.5 text-[10px] text-muted-foreground">
-                          {a.actor} · {new Date(a.at).toLocaleString("en-IN")}
-                        </p>
-                      </div>
-                    </li>
-                  ))
-                )}
-              </ul>
-            </section>
-
-            <section className="rounded-xl border border-border/70 bg-card p-4 shadow-sm">
-              <h2 className="text-sm font-semibold">Quick Reports</h2>
-              <p className="mt-0.5 text-[11px] text-muted-foreground">
-                Export Excel / CSV or open module reports
-              </p>
-              <div className="mt-3 space-y-2">
-                {(data?.reports ?? []).map((r) => (
-                  <Link
-                    key={r.id}
-                    href={r.href}
-                    className="flex cursor-pointer items-center justify-between gap-2 rounded-lg border border-border/60 px-3 py-2.5 transition-colors duration-150 hover:bg-muted/50"
-                  >
-                    <div>
-                      <p className="text-sm font-medium">{r.title}</p>
-                      <p className="text-[11px] text-muted-foreground">{r.description}</p>
-                    </div>
-                    <ChevronRight className="size-3.5 text-muted-foreground" />
-                  </Link>
-                ))}
-              </div>
-              <div className="mt-4 flex flex-wrap gap-2">
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="cursor-pointer"
-                  disabled={!data}
-                  onClick={() => {
-                    if (!data) return;
-                    downloadBlob(
-                      `hr-dashboard-${new Date().toISOString().slice(0, 10)}.csv`,
-                      exportDashboardCsv(data),
-                    );
-                    toast("Downloaded Excel/CSV");
-                  }}
-                >
-                  <FileSpreadsheet className="size-3.5" />
-                  Download Excel
-                </Button>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="cursor-pointer"
-                  disabled={!data}
-                  onClick={() => {
-                    if (!data) return;
-                    const text = [
-                      "HRMS Executive Dashboard",
-                      `Role: ${DASHBOARD_ROLE_LABELS[data.role]}`,
-                      `Generated: ${new Date().toLocaleString()}`,
-                      "",
-                      ...Object.entries(data.stats).map(
-                        ([k, v]) => `${k}: ${v}`,
-                      ),
-                    ].join("\n");
-                    downloadBlob(
-                      `hr-dashboard-${new Date().toISOString().slice(0, 10)}.txt`,
-                      text,
-                      "text/plain",
-                    );
-                    toast("Downloaded PDF-ready summary");
-                  }}
-                >
-                  <Download className="size-3.5" />
-                  Download PDF
-                </Button>
-              </div>
-            </section>
-          </div>
         </>
       )}
     </div>
   );
+}
+
+function ChartFrame({ children }: { children: ReactNode }) {
+  return <div className="h-[340px] min-h-[300px]">{children}</div>;
 }
 
 function DashboardListBox({
@@ -733,49 +543,56 @@ function DashboardListBox({
   subtitle,
   icon: Icon,
   children,
+  headerHref,
+  headerLabel,
   footerHref,
   footerLabel,
   className,
-  portrait = false,
 }: {
   title: string;
   subtitle: string;
-  icon: LucideIcon;
+  icon?: LucideIcon;
   children: ReactNode;
+  headerHref?: string;
+  headerLabel?: string;
   footerHref?: string;
   footerLabel?: string;
   className?: string;
-  /** ~3:4 portrait tile on xl screens */
-  portrait?: boolean;
 }) {
   return (
     <section
       className={cn(
-        "flex flex-col rounded-xl border border-border/70 bg-card shadow-sm",
-        portrait
-          ? "min-h-[300px] xl:aspect-[3/4] xl:min-h-0 xl:max-h-[440px]"
-          : "min-h-[280px]",
+        "flex h-full min-h-0 flex-col rounded-2xl border border-border bg-card shadow-[var(--hrms-card-shadow)]",
         className,
       )}
     >
-      <div className="flex items-start justify-between gap-2 border-b border-border/70 px-4 py-3">
-        <div>
+      <div className="flex items-start justify-between gap-2 px-4 pt-3.5 pb-1.5">
+        <div className="min-w-0">
           <h2 className="text-sm font-semibold tracking-tight">{title}</h2>
-          <p className="text-[11px] text-muted-foreground">{subtitle}</p>
+          <p className="mt-0.5 text-[11px] text-muted-foreground">{subtitle}</p>
         </div>
-        <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
-          <Icon className="size-4" />
-        </span>
+        {headerHref && headerLabel ? (
+          <Link
+            href={headerHref}
+            className="shrink-0 rounded-full bg-hrms-lavender px-3 py-1 text-[11px] font-semibold text-primary transition-colors duration-150 hover:bg-[#E8D5F5]"
+          >
+            {headerLabel}
+          </Link>
+        ) : Icon ? (
+          <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground">
+            <Icon className="size-4" />
+          </span>
+        ) : null}
       </div>
-      <div className="flex-1 overflow-y-auto px-4 py-3">{children}</div>
+      <div className="flex min-h-0 flex-1 flex-col px-3 pb-3">{children}</div>
       {footerHref && footerLabel ? (
-        <div className="border-t border-border/70 px-4 py-2">
+        <div className="mt-auto px-4 pb-3">
           <Link
             href={footerHref}
-            className="inline-flex cursor-pointer items-center gap-1 text-[11px] font-medium text-primary transition-colors duration-150 hover:text-primary/80"
+            className="inline-flex cursor-pointer items-center gap-1 text-[12px] font-semibold text-primary transition-colors duration-150 hover:underline"
           >
             {footerLabel}
-            <ChevronRight className="size-3" />
+            <ChevronRight className="size-3.5" />
           </Link>
         </div>
       ) : null}
@@ -783,119 +600,67 @@ function DashboardListBox({
   );
 }
 
-const WEEKDAY_LABELS = ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"] as const;
-
-function PeopleEventsGroup({
-  title,
-  empty,
-  children,
-}: {
-  title: string;
-  empty: string;
-  children: ReactNode;
-}) {
-  const items = Children.toArray(children).filter(Boolean);
-  return (
-    <div>
-      <p className="mb-1.5 text-[10px] font-bold uppercase tracking-wide text-muted-foreground">
-        {title}
-      </p>
-      {items.length === 0 ? (
-        <p className="text-[10px] text-muted-foreground/80">{empty}</p>
-      ) : (
-        <ul className="space-y-1.5">{items}</ul>
-      )}
-    </div>
-  );
-}
-
-function AttendanceMonthCalendar({ today }: { today: Date }) {
-  const cells = useMemo(() => {
-    const y = today.getFullYear();
-    const m = today.getMonth();
-    const lastDate = new Date(y, m + 1, 0).getDate();
-    const startPad = new Date(y, m, 1).getDay();
-    const out: { day: number | null; isToday: boolean }[] = [];
-    for (let i = 0; i < startPad; i += 1) out.push({ day: null, isToday: false });
-    for (let d = 1; d <= lastDate; d += 1) {
-      out.push({
-        day: d,
-        isToday:
-          d === today.getDate() && m === today.getMonth() && y === today.getFullYear(),
-      });
-    }
-    return out;
-  }, [today]);
-
-  return (
-    <div aria-label="Current month calendar">
-      <div className="mb-1 grid grid-cols-7 gap-0.5 text-center text-[9px] font-medium text-muted-foreground">
-        {WEEKDAY_LABELS.map((w) => (
-          <span key={w}>{w}</span>
-        ))}
-      </div>
-      <div className="grid grid-cols-7 gap-0.5">
-        {cells.map((c, i) => (
-          <span
-            key={`${c.day ?? "pad"}-${i}`}
-            className={cn(
-              "flex aspect-square items-center justify-center rounded-md text-[10px] tabular-nums",
-              c.day == null && "invisible",
-              c.isToday && "bg-primary font-semibold text-primary-foreground shadow-sm",
-              !c.isToday && c.day != null && "text-foreground/80",
-            )}
-          >
-            {c.day ?? ""}
-          </span>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function AttendanceStat({
+function AttendanceBar({
   label,
   value,
-  variant,
+  icon: Icon,
+  tone,
 }: {
   label: string;
   value: number;
-  variant: "present" | "absent" | "leave";
+  icon: LucideIcon;
+  tone: string;
 }) {
-  const tones = {
-    present: "border-emerald-200/80 bg-emerald-50 text-emerald-900",
-    absent: "border-red-200/80 bg-red-50 text-red-900",
-    leave: "border-amber-200/80 bg-amber-50 text-amber-950",
-  };
   return (
-    <div className={cn("rounded-lg border px-1 py-2 text-center", tones[variant])}>
-      <p className="text-lg font-semibold tabular-nums leading-none">
-        {value.toLocaleString("en-IN")}
-      </p>
-      <p className="mt-1 text-[9px] font-medium uppercase tracking-wide opacity-90">{label}</p>
+    <div className={cn("flex min-h-[2.75rem] flex-1 items-center gap-2 rounded-lg px-2.5 py-2", tone)}>
+      <span className="flex size-7 shrink-0 items-center justify-center rounded-md bg-white/80">
+        <Icon className="size-3.5" />
+      </span>
+      <div className="min-w-0">
+        <p className="text-sm font-semibold tabular-nums leading-none">
+          {value.toLocaleString("en-IN")}
+        </p>
+        <p className="mt-0.5 text-[10px] font-semibold tracking-wide uppercase opacity-80">
+          {label}
+        </p>
+      </div>
     </div>
   );
 }
 
-function EventRow({ event, compact = false }: { event: CalendarEvent; compact?: boolean }) {
+function eventDisplayTitle(event: CalendarEvent): string {
+  return event.title
+    .replace(/\s+[—–-]\s*Birthday\s*$/i, "")
+    .replace(/\s+[—–-]\s*\d+\s*Year(?:s)?\s*Anniversary\s*$/i, "")
+    .replace(/\s+Anniversary\s*$/i, "")
+    .trim();
+}
+
+function EventRow({ event }: { event: CalendarEvent }) {
+  const name = eventDisplayTitle(event);
+  const pill = EVENT_PILLS[event.type] ?? {
+    label: event.type,
+    className: "bg-muted text-muted-foreground",
+  };
   return (
-    <li
-      className={cn(
-        "flex items-start gap-2 rounded-lg border border-border/50 bg-muted/20",
-        compact ? "px-2 py-1.5" : "px-2.5 py-2",
-      )}
-    >
-      <span className="mt-0.5 shrink-0 rounded border border-border bg-background px-1 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-muted-foreground">
-        {EVENT_LABELS[event.type] ?? event.type}
+    <li className="flex items-center gap-2.5 py-2.5">
+      <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-hrms-lavender text-[11px] font-semibold text-primary">
+        {initialsFromName(name)}
       </span>
       <div className="min-w-0 flex-1">
-        <p className="truncate text-xs font-medium text-foreground">{event.title}</p>
-        <p className="text-[10px] text-muted-foreground">
-          {new Date(event.at).toLocaleDateString("en-IN", {
-            weekday: "short",
-            day: "numeric",
-            month: "short",
-          })}
+        <div className="flex flex-wrap items-center gap-1.5">
+          <span
+            className={cn(
+              "inline-flex rounded-md px-1.5 py-0.5 text-[9px] font-semibold tracking-wide uppercase",
+              pill.className,
+            )}
+          >
+            {pill.label}
+          </span>
+        </div>
+        <p className="mt-0.5 truncate text-xs font-medium text-foreground">{name}</p>
+        <p className="truncate text-[10px] text-muted-foreground">
+          {relativeDayLabel(event.at)}
           {event.meta ? ` · ${event.meta}` : ""}
         </p>
       </div>
@@ -903,31 +668,28 @@ function EventRow({ event, compact = false }: { event: CalendarEvent; compact?: 
   );
 }
 
-function TrainingRow({
-  item,
-  compact = false,
-}: {
-  item: DashboardTrainingItem;
-  compact?: boolean;
-}) {
+function HolidayRow({ event }: { event: CalendarEvent }) {
+  const d = new Date(event.at);
+  const day = Number.isFinite(d.getTime())
+    ? d.toLocaleDateString("en-IN", { day: "2-digit" })
+    : "--";
+  const month = Number.isFinite(d.getTime())
+    ? d.toLocaleDateString("en-IN", { month: "short" }).toUpperCase()
+    : "";
+  const weekday = Number.isFinite(d.getTime())
+    ? d.toLocaleDateString("en-IN", { weekday: "long" })
+    : "";
   return (
-    <li
-      className={cn(
-        "flex items-start gap-2 rounded-lg border border-border/50 bg-muted/20",
-        compact ? "px-2 py-1.5" : "px-2.5 py-2",
-      )}
-    >
-      <span className="mt-0.5 shrink-0 rounded bg-primary/10 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-primary">
-        Training
-      </span>
-      <div className="min-w-0 flex-1">
-        <p className="truncate text-xs font-medium text-foreground">{item.title}</p>
-        <p className="text-[10px] text-muted-foreground">
-          {new Date(item.at).toLocaleDateString("en-IN", {
-            day: "numeric",
-            month: "short",
-          })}
-          {item.meta ? ` · ${item.meta}` : ""}
+    <li className="flex items-center gap-3 py-2.5">
+      <div className="w-11 shrink-0 text-center">
+        <p className="text-lg font-bold leading-none tabular-nums text-primary">{day}</p>
+        <p className="mt-0.5 text-[10px] font-semibold tracking-wide text-primary">{month}</p>
+      </div>
+      <div className="min-w-0">
+        <p className="truncate text-xs font-medium text-foreground">{event.title}</p>
+        <p className="mt-0.5 truncate text-[10px] text-muted-foreground">
+          {weekday}
+          {event.meta ? ` · ${event.meta}` : ""}
         </p>
       </div>
     </li>

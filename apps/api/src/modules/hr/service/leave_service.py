@@ -4,6 +4,7 @@ from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 from uuid import UUID
 
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from core.exceptions import AppException, NotFoundException
@@ -12,7 +13,12 @@ from modules.foundation.service.audit_service import AuditService
 from modules.hr.adapters.master_data_port import HrMasterDataAdapter
 from modules.hr.domain.enums import HolidayCalendarStatus, HrEntityType, LeaveAdjustmentStatus, LeaveRequestStatus
 from modules.hr.domain.exceptions import InvalidLeaveAdjustmentState
-from modules.hr.models import HrLeaveRequest
+from modules.hr.domain.leave_cycle_rules import (
+    assert_leave_balance_for_cycle,
+    assert_no_future_calendar_month_leave,
+    validate_leave_cycle_application,
+)
+from modules.hr.models import HrLeaveBalance, HrLeaveRequest
 from modules.hr.repository.holiday_calendar_repository import HolidayCalendarRepository
 from modules.hr.repository.leave_adjustment_repository import LeaveAdjustmentRepository
 from modules.hr.repository.leave_balance_repository import LeaveBalanceRepository
@@ -63,13 +69,14 @@ def _count_leave_days(
     end: date,
     non_working: set[date],
     *,
-    sandwich: bool,
+    sandwich: bool = False,
 ) -> Decimal:
-    """Sandwich on → inclusive calendar span (weekends/holidays count).
-    Sandwich off → working days only (exclude weekends + published holidays).
+    """Leave requests always count working days (exclude weekends + published holidays).
+
+    ``sandwich`` is ignored here. Sandwich is an attendance LOP rule: weekly offs
+    between unauthorized absences become LOP unless those days have approved leave.
     """
-    if sandwich:
-        return Decimal((end - start).days + 1)
+    del sandwich
     count = 0
     cur = start
     while cur <= end:
@@ -81,9 +88,11 @@ def _count_leave_days(
 
 class LeaveTypeService:
     def __init__(self, db: Session) -> None:
+        self._db = db
         self._repo = LeaveTypeRepository(db)
         self._scope = HrScopeValidator(db)
         self._engine = LeaveTypeEngine()
+        self._audit = AuditService(db)
 
     def list(self, ctx: TenantContext, company_id: UUID | None = None):
         cid = self._scope.resolve_company_id(ctx, company_id)
@@ -105,6 +114,56 @@ class LeaveTypeService:
         if row is None:
             raise NotFoundException("Leave type not found")
         return row
+
+    def delete(self, ctx: TenantContext, row_id: UUID) -> str:
+        """Soft-delete when unused; otherwise deactivate so history stays intact."""
+        self.get(ctx, row_id)
+
+        used_total = self._db.scalar(
+            select(func.coalesce(func.sum(HrLeaveBalance.used), 0)).where(
+                HrLeaveBalance.leave_type_id == row_id,
+                HrLeaveBalance.is_deleted.is_(False),
+            )
+        )
+        referenced = Decimal(str(used_total or 0)) > 0
+
+        if not referenced:
+            any_requests = self._db.scalar(
+                select(func.count())
+                .select_from(HrLeaveRequest)
+                .where(
+                    HrLeaveRequest.leave_type_id == row_id,
+                    HrLeaveRequest.is_deleted.is_(False),
+                )
+            )
+            referenced = int(any_requests or 0) > 0
+
+        if referenced:
+            row = self._repo.update(ctx, row_id, status="inactive")
+            if row is None:
+                raise NotFoundException("Leave type not found")
+            self._audit.log_entity_change(
+                tenant_id=ctx.tenant_id,
+                entity_name="hr_leave_type",
+                entity_id=row_id,
+                operation="deactivate",
+                performed_by=ctx.user_id,
+            )
+            return (
+                "Leave type deactivated (still referenced by leave requests or used balances). "
+                "It will no longer appear for new applications."
+            )
+
+        if not self._repo.soft_delete(ctx, row_id):
+            raise NotFoundException("Leave type not found")
+        self._audit.log_entity_change(
+            tenant_id=ctx.tenant_id,
+            entity_name="hr_leave_type",
+            entity_id=row_id,
+            operation="delete",
+            performed_by=ctx.user_id,
+        )
+        return "Leave type deleted"
 
 
 class LeaveBalanceService:
@@ -236,6 +295,168 @@ class LeaveBalanceService:
         except Exception:
             pass
         return updated or balance
+
+    def update(self, ctx: TenantContext, row_id: UUID, **fields):
+        row = self.get(ctx, row_id)
+        opening = Decimal(str(fields.get("opening_balance", row.opening_balance or 0)))
+        accrued = Decimal(str(fields.get("accrued", row.accrued or 0)))
+        used = Decimal(str(fields.get("used", row.used or 0)))
+        fields["closing_balance"] = opening + accrued - used
+        updated = self._repo.update(ctx, row_id, **fields)
+        if updated is None:
+            raise NotFoundException("Leave balance not found")
+        self._audit.log_entity_change(
+            tenant_id=ctx.tenant_id,
+            entity_name="hr_leave_balance",
+            entity_id=row_id,
+            operation="update",
+            performed_by=ctx.user_id,
+        )
+        return updated
+
+    def delete(self, ctx: TenantContext, row_id: UUID) -> None:
+        row = self.get(ctx, row_id)
+        used = Decimal(str(row.used or 0))
+        if used > 0:
+            raise AppException("Cannot remove leave type while used balance is greater than zero")
+        if not self._repo.soft_delete(ctx, row_id):
+            raise NotFoundException("Leave balance not found")
+        self._audit.log_entity_change(
+            tenant_id=ctx.tenant_id,
+            entity_name="hr_leave_balance",
+            entity_id=row_id,
+            operation="delete",
+            performed_by=ctx.user_id,
+        )
+
+    def apply_monthly_accrual_for_balance(
+        self,
+        ctx: TenantContext,
+        balance,
+        *,
+        period_yyyymm: str,
+        leave_type,
+    ) -> Decimal:
+        """Credit monthly_credit_days once per period; returns days credited (0 if skipped)."""
+        if balance.status != "open":
+            return Decimal("0")
+        if getattr(balance, "last_accrual_yyyymm", None) == period_yyyymm:
+            return Decimal("0")
+        monthly = getattr(leave_type, "monthly_credit_days", None)
+        if monthly is None:
+            return Decimal("0")
+        credit = Decimal(str(monthly))
+        if credit <= 0:
+            return Decimal("0")
+
+        max_days = getattr(leave_type, "max_days_per_year", None)
+        if max_days is not None:
+            cap = Decimal(str(max_days))
+            current_total = (
+                Decimal(str(balance.opening_balance or 0)) + Decimal(str(balance.accrued or 0))
+            )
+            headroom = cap - current_total
+            if headroom <= 0:
+                self._repo.update(ctx, balance.id, last_accrual_yyyymm=period_yyyymm)
+                return Decimal("0")
+            credit = min(credit, headroom)
+
+        self._engine.accrue(balance, credit)
+        self._repo.update(
+            ctx,
+            balance.id,
+            accrued=balance.accrued,
+            closing_balance=balance.closing_balance,
+            last_accrual_yyyymm=period_yyyymm,
+        )
+        self._audit.log_entity_change(
+            tenant_id=ctx.tenant_id,
+            entity_name="hr_leave_balance",
+            entity_id=balance.id,
+            operation=f"monthly_accrual_{period_yyyymm}",
+            performed_by=ctx.user_id,
+        )
+        return credit
+
+    def run_monthly_accrual_for_company(
+        self,
+        ctx: TenantContext,
+        *,
+        period_yyyymm: str,
+        balance_year: int,
+        company_id: UUID,
+    ) -> dict:
+        types = {t.id: t for t in self._types.list_rows(ctx, company_id)}
+        credited_rows = 0
+        total_days = Decimal("0")
+        for bal in self._repo.list_rows(ctx, company_id):
+            if bal.balance_year != balance_year or bal.status != "open":
+                continue
+            lt = types.get(bal.leave_type_id)
+            if lt is None:
+                continue
+            days = self.apply_monthly_accrual_for_balance(
+                ctx, bal, period_yyyymm=period_yyyymm, leave_type=lt
+            )
+            if days > 0:
+                credited_rows += 1
+                total_days += days
+        return {
+            "company_id": str(company_id),
+            "credited_rows": credited_rows,
+            "total_days": str(total_days),
+        }
+
+    @staticmethod
+    def run_monthly_accrual_all_tenants(db: Session, *, period_yyyymm: str, balance_year: int) -> dict:
+        """System task: accrue monthly credit for every open balance in the given year."""
+        from uuid import uuid4
+
+        from sqlalchemy import select
+
+        from modules.foundation.domain.value_objects import TenantContext
+        from modules.hr.models import HrLeaveBalance
+
+        open_rows = list(
+            db.scalars(
+                select(HrLeaveBalance).where(
+                    HrLeaveBalance.is_deleted.is_(False),
+                    HrLeaveBalance.status == "open",
+                    HrLeaveBalance.balance_year == balance_year,
+                )
+            ).all()
+        )
+        companies: set[tuple] = {(r.tenant_id, r.company_id) for r in open_rows}
+        system_user = uuid4()
+        total_credited = 0
+        total_days = Decimal("0")
+        svc = LeaveBalanceService(db)
+        for tenant_id, company_id in companies:
+            ctx = TenantContext(
+                tenant_id=tenant_id,
+                user_id=system_user,
+                user_type="super_admin",
+                company_id=company_id,
+            )
+            try:
+                result = svc.run_monthly_accrual_for_company(
+                    ctx,
+                    period_yyyymm=period_yyyymm,
+                    balance_year=balance_year,
+                    company_id=company_id,
+                )
+                total_credited += int(result.get("credited_rows") or 0)
+                total_days += Decimal(str(result.get("total_days") or "0"))
+            except Exception:
+                continue
+        return {
+            "status": "ok",
+            "period": period_yyyymm,
+            "balance_year": balance_year,
+            "credited_rows": total_credited,
+            "total_days": str(total_days),
+            "companies": len(companies),
+        }
 
     def carry_forward_year_end(
         self,
@@ -416,8 +637,92 @@ class LeaveRequestService:
         if end_date < start_date:
             raise AppException("end_date must be on or after start_date")
         non_working = self._load_non_working_dates(ctx, company_id, start_date, end_date)
-        sandwich = bool(getattr(leave_type, "sandwich_rule_enabled", False))
-        return _count_leave_days(start_date, end_date, non_working, sandwich=sandwich)
+        return _count_leave_days(start_date, end_date, non_working)
+
+    def _find_open_balance(self, ctx: TenantContext, company_id: UUID, employee_id: UUID, leave_type_id: UUID, year: int):
+        for bal in self._balances.list_rows(ctx, company_id):
+            if (
+                bal.employee_id == employee_id
+                and bal.leave_type_id == leave_type_id
+                and bal.balance_year == year
+                and bal.status == "open"
+            ):
+                return bal
+        return None
+
+    def _company_sandwich_enabled(self, ctx: TenantContext, company_id: UUID) -> bool:
+        for leave_type in self._types.list_rows(ctx, company_id):
+            if str(getattr(leave_type, "status", "")).lower() != "active":
+                continue
+            if bool(getattr(leave_type, "sandwich_rule_enabled", False)):
+                return True
+        return False
+
+    def _refresh_attendance_sandwich(
+        self,
+        ctx: TenantContext,
+        *,
+        company_id: UUID,
+        employee_id: UUID,
+        branch_id: UUID | None,
+        around_start: date,
+        around_end: date,
+    ) -> None:
+        """Re-evaluate sandwich LOP after leave approval (approved leave → sandwich off)."""
+        if not self._company_sandwich_enabled(ctx, company_id):
+            return
+        from modules.hr.service.sandwich_attendance_service import apply_sandwich_for_employee
+
+        window_start = around_start - timedelta(days=10)
+        window_end = around_end + timedelta(days=10)
+        non_working = self._load_non_working_dates(ctx, company_id, window_start, window_end)
+        holiday_dates: set[date] = set()
+        years = {window_start.year, window_end.year}
+        for cal in self._holidays.list_rows(ctx, company_id):
+            if cal.status != HolidayCalendarStatus.PUBLISHED.value:
+                continue
+            if cal.calendar_year not in years:
+                continue
+            if cal.holidays_json:
+                holiday_dates |= _holiday_dates_from_json(cal.holidays_json)
+        apply_sandwich_for_employee(
+            self._db,
+            tenant_id=ctx.tenant_id,
+            company_id=company_id,
+            branch_id=branch_id,
+            employee_id=employee_id,
+            window_start=window_start,
+            window_end=window_end,
+            as_of=date.today(),
+            is_non_working=lambda d: d in non_working,
+            holiday_dates=holiday_dates,
+        )
+
+    def _validate_cycle_for_request(
+        self,
+        ctx: TenantContext,
+        *,
+        company_id: UUID,
+        employee_id: UUID,
+        leave_type_id: UUID,
+        start_date: date,
+        end_date: date,
+        days_count,
+        require_balance: bool = True,
+    ) -> None:
+        leave_type = self._types.get(ctx, leave_type_id)
+        balance = self._find_open_balance(
+            ctx, company_id, employee_id, leave_type_id, start_date.year
+        )
+        validate_leave_cycle_application(
+            start_date=start_date,
+            end_date=end_date,
+            days_count=days_count,
+            closing_balance=None if balance is None else balance.closing_balance,
+            last_accrual_yyyymm=getattr(balance, "last_accrual_yyyymm", None) if balance else None,
+            monthly_credit_days=getattr(leave_type, "monthly_credit_days", None) if leave_type else None,
+            require_balance=require_balance,
+        )
 
     def create(self, ctx: TenantContext, *, branch_id: UUID, employee_id: UUID, company_id: UUID | None = None, **fields):
         cid = self._scope.resolve_company_id(ctx, company_id)
@@ -426,6 +731,11 @@ class LeaveRequestService:
         start_date = fields["start_date"]
         end_date = fields["end_date"]
         leave_type_id = fields["leave_type_id"]
+        leave_type = self._types.get(ctx, leave_type_id)
+        if leave_type is None:
+            raise NotFoundException("Leave type not found")
+        if str(getattr(leave_type, "status", "")).lower() != "active":
+            raise AppException("Cannot apply leave against an inactive leave type")
         fields["days_count"] = self._apply_sandwich_days(
             ctx,
             company_id=cid,
@@ -433,6 +743,19 @@ class LeaveRequestService:
             start_date=start_date,
             end_date=end_date,
         )
+        # Leave cycle: calendar months only (past/current). Posted balance only — no early credit.
+        assert_no_future_calendar_month_leave(start_date, end_date)
+        balance = self._find_open_balance(ctx, cid, employee_id, leave_type_id, start_date.year)
+        if balance is not None:
+            leave_type = self._types.get(ctx, leave_type_id)
+            assert_leave_balance_for_cycle(
+                days_count=fields["days_count"],
+                closing_balance=balance.closing_balance,
+                start_date=start_date,
+                end_date=end_date,
+                last_accrual_yyyymm=getattr(balance, "last_accrual_yyyymm", None),
+                monthly_credit_days=getattr(leave_type, "monthly_credit_days", None) if leave_type else None,
+            )
         doc = self._numbers.generate(HrEntityType.LEAVE_REQUEST, cid, HrLeaveRequest, "document_number")
         return self._repo.create(
             ctx,
@@ -446,10 +769,21 @@ class LeaveRequestService:
 
     def submit(self, ctx: TenantContext, row_id: UUID):
         row = self.get(ctx, row_id)
+        self._validate_cycle_for_request(
+            ctx,
+            company_id=row.company_id,
+            employee_id=row.employee_id,
+            leave_type_id=row.leave_type_id,
+            start_date=row.start_date,
+            end_date=row.end_date,
+            days_count=row.days_count,
+            require_balance=True,
+        )
         self._engine.submit(row)
         updated = self._repo.update(ctx, row_id, status=row.status)
         try:
-            from modules.hr.service.hr_notify import notify_employee
+            from modules.hr.service.hr_notify import notify_employee, notify_users_with_permission
+            from modules.master_data.models.employee import MasterEmployee
 
             notify_employee(
                 self._db,
@@ -461,6 +795,31 @@ class LeaveRequestService:
                 title="Leave request submitted",
                 body=f"Leave request {row.document_number} was submitted and is pending approval.",
                 kind="leave",
+                extra={"href": "/hr/ess", "leave_request_id": str(row.id)},
+            )
+            exclude: set[UUID] = set()
+            if ctx.user_id:
+                exclude.add(ctx.user_id)
+            emp = self._db.get(MasterEmployee, row.employee_id)
+            if emp is not None:
+                if emp.user_id:
+                    exclude.add(emp.user_id)
+                if emp.reporting_manager_id:
+                    mgr = self._db.get(MasterEmployee, emp.reporting_manager_id)
+                    if mgr is not None and mgr.user_id:
+                        exclude.add(mgr.user_id)
+            notify_users_with_permission(
+                self._db,
+                tenant_id=ctx.tenant_id,
+                permission_code="hr.leave:approve",
+                template_code="hr.leave_submitted",
+                template_name="Leave Request Submitted",
+                event_type="hr.leave_submitted",
+                title="Leave Pending",
+                body=f"Leave request {row.document_number} needs approval.",
+                kind="leave",
+                extra={"href": "/hr/ess-inbox", "leave_request_id": str(row.id)},
+                exclude_user_ids=exclude,
             )
         except Exception:
             pass
@@ -483,21 +842,41 @@ class LeaveRequestService:
             operation="manager_approve",
             performed_by=ctx.user_id,
         )
+        try:
+            from modules.hr.service.hr_notify import notify_employee
+
+            notify_employee(
+                self._db,
+                tenant_id=ctx.tenant_id,
+                employee_id=row.employee_id,
+                template_code="hr.leave_manager_approved",
+                template_name="Leave Manager Approved",
+                event_type="hr.leave_manager_approved",
+                title="Leave approved by manager",
+                body=f"Leave request {row.document_number} was approved by your manager and is pending HR.",
+                kind="leave",
+                cc_reporting_manager=False,
+            )
+        except Exception:
+            pass
         return updated
 
     def approve(self, ctx: TenantContext, row_id: UUID, *, approver_employee_id: UUID | None = None):
         row = self.get(ctx, row_id)
+        self._validate_cycle_for_request(
+            ctx,
+            company_id=row.company_id,
+            employee_id=row.employee_id,
+            leave_type_id=row.leave_type_id,
+            start_date=row.start_date,
+            end_date=row.end_date,
+            days_count=row.days_count,
+            require_balance=True,
+        )
         self._engine.approve(row)
-        balance = None
-        for bal in self._balances.list_rows(ctx, row.company_id):
-            if (
-                bal.employee_id == row.employee_id
-                and bal.leave_type_id == row.leave_type_id
-                and bal.balance_year == row.start_date.year
-                and bal.status == "open"
-            ):
-                balance = bal
-                break
+        balance = self._find_open_balance(
+            ctx, row.company_id, row.employee_id, row.leave_type_id, row.start_date.year
+        )
         if balance is None:
             raise NotFoundException("Open leave balance not found for approval year")
         self._balance_engine.apply_usage(balance, row.days_count)
@@ -522,6 +901,34 @@ class LeaveRequestService:
             operation="approve",
             performed_by=ctx.user_id,
         )
+        try:
+            from modules.hr.service.hr_notify import notify_employee
+
+            notify_employee(
+                self._db,
+                tenant_id=ctx.tenant_id,
+                employee_id=row.employee_id,
+                template_code="hr.leave_approved",
+                template_name="Leave Approved",
+                event_type="hr.leave_approved",
+                title="Leave approved",
+                body=f"Your leave request {row.document_number} has been approved.",
+                kind="leave",
+                cc_reporting_manager=False,
+            )
+        except Exception:
+            pass
+        try:
+            self._refresh_attendance_sandwich(
+                ctx,
+                company_id=row.company_id,
+                employee_id=row.employee_id,
+                branch_id=row.branch_id,
+                around_start=row.start_date,
+                around_end=row.end_date,
+            )
+        except Exception:
+            pass
         return updated
 
     def reject(self, ctx: TenantContext, row_id: UUID, *, approver_employee_id: UUID | None = None):
@@ -541,6 +948,54 @@ class LeaveRequestService:
             operation="reject",
             performed_by=ctx.user_id,
         )
+        try:
+            from modules.hr.service.hr_notify import notify_employee
+
+            notify_employee(
+                self._db,
+                tenant_id=ctx.tenant_id,
+                employee_id=row.employee_id,
+                template_code="hr.leave_rejected",
+                template_name="Leave Rejected",
+                event_type="hr.leave_rejected",
+                title="Leave rejected",
+                body=f"Your leave request {row.document_number} was rejected.",
+                kind="leave",
+                cc_reporting_manager=False,
+            )
+        except Exception:
+            pass
+        return updated
+
+    def cancel(self, ctx: TenantContext, row_id: UUID, *, employee_id: UUID | None = None):
+        row = self.get(ctx, row_id)
+        if employee_id is not None and row.employee_id != employee_id:
+            raise NotFoundException("Leave request not found")
+        self._engine.cancel(row)
+        updated = self._repo.update(ctx, row_id, status=row.status)
+        self._audit.log_entity_change(
+            tenant_id=ctx.tenant_id,
+            entity_name="hr_leave_request",
+            entity_id=row_id,
+            operation="cancel",
+            performed_by=ctx.user_id,
+        )
+        try:
+            from modules.hr.service.hr_notify import notify_employee
+
+            notify_employee(
+                self._db,
+                tenant_id=ctx.tenant_id,
+                employee_id=row.employee_id,
+                template_code="hr.leave_cancelled",
+                template_name="Leave Request Cancelled",
+                event_type="hr.leave_cancelled",
+                title="Leave request cancelled",
+                body=f"Leave request {row.document_number} was cancelled.",
+                kind="leave",
+            )
+        except Exception:
+            pass
         return updated
 
 
@@ -645,6 +1100,32 @@ class LeaveAdjustmentService:
             performed_by=ctx.user_id,
         )
         return updated
+
+    def create_and_apply(
+        self,
+        ctx: TenantContext,
+        *,
+        branch_id: UUID,
+        employee_id: UUID,
+        leave_type_id: UUID,
+        adjustment_month: date,
+        days_delta: Decimal,
+        company_id: UUID | None = None,
+        reason: str | None = None,
+    ):
+        """HR shortcut: create a submitted adjustment and approve immediately."""
+        row = self.create(
+            ctx,
+            branch_id=branch_id,
+            employee_id=employee_id,
+            leave_type_id=leave_type_id,
+            adjustment_month=adjustment_month,
+            days_delta=days_delta,
+            company_id=company_id,
+            reason=reason,
+            status=LeaveAdjustmentStatus.SUBMITTED.value,
+        )
+        return self.approve(ctx, row.id)
 
     def reject(self, ctx: TenantContext, row_id: UUID):
         row = self.get(ctx, row_id)

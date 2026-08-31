@@ -156,7 +156,7 @@ export async function loadHrOverview(): Promise<HrOverview> {
     safeList("/hr/holiday-calendars"),
     safeList("/hr/leave-types"),
     safeList("/hr/leave-balances"),
-    safeList("/hr/leave-requests"),
+    safeListAll("/hr/leave-requests"),
     safeListAll("/hr/attendance"),
     safeList("/hr/employee-documents"),
     safeList("/hr/performance-reviews"),
@@ -245,10 +245,12 @@ export async function listHrEmployeeOptions(): Promise<HrOption[]> {
 export async function listLeaveTypeOptions(): Promise<HrOption[]> {
   try {
     const res = await resourceService.list("/hr/leave-types");
-    return asArray(res.data).map((r) => ({
-      id: String(r.id),
-      label: String(r.leave_type_name ?? r.leave_type_code ?? r.name ?? r.id),
-    }));
+    return asArray(res.data)
+      .filter((r) => String(r.status ?? "active").toLowerCase() === "active")
+      .map((r) => ({
+        id: String(r.id),
+        label: String(r.leave_type_name ?? r.leave_type_code ?? r.name ?? r.id),
+      }));
   } catch {
     return [];
   }

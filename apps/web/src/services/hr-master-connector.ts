@@ -7,7 +7,7 @@ import {
   loadEmployeeDirectory,
   type EmployeeDirectoryOptions,
 } from "@/services/employee-management-service";
-import type { EmployeeRecord } from "@/types/employee-management";
+import type { EmployeeRecord, EmployeeLifecycleStatus } from "@/types/employee-management";
 import {
   consumeEmployeeSequence,
   formatEmployeeCode,
@@ -30,6 +30,7 @@ export type HrMasterOption = {
   departmentId?: string;
   branchId?: string;
   branchName?: string;
+  companyId?: string;
   headEmployeeId?: string;
   shiftId?: string;
   shiftName?: string;
@@ -43,6 +44,7 @@ export type HrMasterDirectory = {
   records: EmployeeRecord[];
   departments: HrMasterOption[];
   branches: HrMasterOption[];
+  locations: HrMasterOption[];
   designations: HrMasterOption[];
   managers: HrMasterOption[];
   shifts: HrMasterOption[];
@@ -107,6 +109,7 @@ export function registerLocalEmployee(
     reportingManager?: string;
     joiningDate?: string;
     employeeCode?: string;
+    lifecycleStatus?: EmployeeLifecycleStatus;
   },
 ): EmployeeRecord {
   const seq = consumeEmployeeSequence();
@@ -130,7 +133,8 @@ export function registerLocalEmployee(
   employment.employmentType = input.employmentType ?? "full_time";
   employment.reportingManagerName = input.reportingManager ?? "";
   employment.joiningDate = input.joiningDate ?? new Date().toISOString().slice(0, 10);
-  employment.lifecycleStatus = "probation";
+  const lifecycle = input.lifecycleStatus ?? "probation";
+  employment.lifecycleStatus = lifecycle;
 
   const record: EmployeeRecord = {
     id,
@@ -144,11 +148,15 @@ export function registerLocalEmployee(
     designationName: employment.designationName,
     branchId: "",
     branchName: employment.branchName,
+    companyId: "",
+    companyName: "—",
+    locationId: "",
+    locationName: employment.location || "—",
     reportingManagerId: "",
     reportingManagerName: employment.reportingManagerName,
     employmentType: employment.employmentType,
     joiningDate: employment.joiningDate,
-    lifecycleStatus: "probation",
+    lifecycleStatus: lifecycle,
     gender: "",
     isDeleted: false,
     extension: {
@@ -171,6 +179,30 @@ export function registerLocalEmployee(
   all.unshift(record);
   writeJson(LOCAL_EMP_KEY, all.slice(0, 2000));
   return record;
+}
+
+export function updateLocalEmployeeLifecycle(
+  employeeCode: string,
+  lifecycleStatus: EmployeeLifecycleStatus,
+): EmployeeRecord | null {
+  const all = listLocalEmployees();
+  const idx = all.findIndex((e) => e.employeeCode === employeeCode);
+  if (idx < 0) return null;
+  const next = {
+    ...all[idx],
+    lifecycleStatus,
+    extension: {
+      ...all[idx].extension,
+      employment: {
+        ...all[idx].extension.employment,
+        lifecycleStatus,
+      },
+      updatedAt: new Date().toISOString(),
+    },
+  };
+  all[idx] = next;
+  writeJson(LOCAL_EMP_KEY, all);
+  return next;
 }
 
 export function resolveEmployeeOption(
@@ -245,8 +277,10 @@ export async function loadHrMasterDirectory(): Promise<HrMasterDirectory> {
   let options: EmployeeDirectoryOptions = {
     branches: [],
     departments: [],
+    locations: [],
     designations: [],
     managers: [],
+    employees: [],
     managementGroups: [],
     shifts: [],
   };
@@ -289,6 +323,12 @@ export async function loadHrMasterDirectory(): Promise<HrMasterDirectory> {
       id: b.id,
       label: b.label,
       headEmployeeId: b.headEmployeeId,
+    })),
+    locations: options.locations.map((l) => ({
+      id: l.id,
+      label: l.label,
+      branchId: l.branchId,
+      code: l.code,
     })),
     designations: options.designations.map((d) => ({ id: d.id, label: d.label })),
     managers: options.managers.map((m) => ({ id: m.id, label: m.label })),

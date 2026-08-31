@@ -1,4 +1,5 @@
 import { clearTokens, getAccessToken, setTokens } from "@/lib/auth";
+import { clearFaceVerified } from "@/lib/face-auth";
 import { mockApi } from "@/data/mock-ess";
 import type {
   ApiResponse,
@@ -7,6 +8,7 @@ import type {
   UserProfile,
 } from "@/types/api";
 import { env } from "@/utils/env";
+import { fetchWithRetry } from "@/lib/fetch-retry";
 
 export class ApiClientError extends Error {
   constructor(
@@ -46,7 +48,7 @@ export async function apiClient<T>(
 
   let response: Response;
   try {
-    response = await fetch(buildUrl(path, query), {
+    response = await fetchWithRetry(buildUrl(path, query), {
       ...rest,
       headers: {
         "Content-Type": "application/json",
@@ -64,11 +66,18 @@ export async function apiClient<T>(
     );
   }
 
+  const text = await response.text();
   let payload: ApiResponse<T> | ErrorResponse;
   try {
-    payload = (await response.json()) as ApiResponse<T> | ErrorResponse;
+    payload = (text ? JSON.parse(text) : { success: false, message: "Empty API response" }) as
+      | ApiResponse<T>
+      | ErrorResponse;
   } catch {
-    throw new ApiClientError("Invalid API response", response.status);
+    const preview = text.trim().slice(0, 120);
+    const hint = preview.startsWith("<")
+      ? "Server returned HTML (check API URL / proxy)."
+      : preview || `HTTP ${response.status}`;
+    throw new ApiClientError(`Invalid API response: ${hint}`, response.status);
   }
 
   if (!response.ok || payload.success === false) {
@@ -81,6 +90,38 @@ export async function apiClient<T>(
   }
 
   return payload as ApiResponse<T>;
+}
+
+export async function apiClientBlob(path: string): Promise<Blob> {
+  const token = getAccessToken();
+  let response: Response;
+  try {
+    response = await fetchWithRetry(buildUrl(path), {
+      method: "GET",
+      headers: {
+        Accept: "*/*",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      cache: "no-store",
+    });
+  } catch {
+    throw new ApiClientError(
+      "Cannot reach the API. Check that the ERP server is running.",
+      0,
+    );
+  }
+  if (!response.ok) {
+    const text = await response.text();
+    let message = `Download failed (HTTP ${response.status})`;
+    try {
+      const parsed = JSON.parse(text) as ErrorResponse;
+      if (parsed.message) message = parsed.message;
+    } catch {
+      // ignore
+    }
+    throw new ApiClientError(message, response.status);
+  }
+  return response.blob();
 }
 
 export const authService = {
@@ -112,6 +153,31 @@ export const authService = {
     });
   },
 
+  essCaptcha: () =>
+    apiClient<{
+      captcha_id: string;
+      question: string;
+      enabled: boolean;
+    }>("/auth/ess/captcha", { method: "GET", auth: false }),
+
+  essLogin: async (body: {
+    company_code: string;
+    employee_code: string;
+    password: string;
+    captcha_id?: string;
+    captcha_answer?: string;
+  }) =>
+    apiClient<TokenData>("/auth/ess/login", {
+      method: "POST",
+      auth: false,
+      body,
+    }).then((res) => {
+      if (res.data?.access_token) {
+        setTokens(res.data.access_token, res.data.refresh_token ?? undefined);
+      }
+      return res;
+    }),
+
   me: () =>
     env.useMock
       ? mockApi.meProfile()
@@ -128,6 +194,7 @@ export const authService = {
       // Offline / expired token — still sign out locally.
     } finally {
       clearTokens();
+      clearFaceVerified();
     }
   },
 };

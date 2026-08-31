@@ -5,18 +5,18 @@ import Link from "next/link";
 import { AppHeader } from "@/components/app-header";
 import {
   IconCalendar,
+  IconClock,
   IconFingerprint,
-  IconSparkle,
+  IconHelp,
+  IconHome,
+  IconLocation,
   IconWallet,
 } from "@/components/icons";
-import { AiFab, AlertBox } from "@/components/ui";
+import { AlertBox } from "@/components/ui";
+import { useEssMe } from "@/context/ess-me-context";
 import { ApiClientError } from "@/services/api-client";
 import { essService } from "@/services/ess-service";
-import type {
-  EssAttendance,
-  EssLeaveBalance,
-  EssMe,
-} from "@/types/api";
+import type { EssAttendance } from "@/types/api";
 import * as ui from "@/theme/classes";
 import {
   formatHmsSince,
@@ -29,34 +29,38 @@ import {
 const DAILY_GOAL_H = 8;
 
 export default function HomePage() {
-  const [me, setMe] = useState<EssMe | null>(null);
+  const { me, loading: meLoading } = useEssMe();
   const [today, setToday] = useState<EssAttendance | null>(null);
-  const [balances, setBalances] = useState<EssLeaveBalance[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [timer, setTimer] = useState("00:00:00");
-  const [greeting, setGreeting] = useState("Good day");
+  const [now, setNow] = useState(() => new Date());
 
   useEffect(() => {
-    setGreeting(greetingForNow());
+    const id = window.setInterval(() => setNow(new Date()), 1000);
+    return () => window.clearInterval(id);
   }, []);
+
+  const greeting = greetingForNow(now);
 
   useEffect(() => {
     let cancelled = false;
+
+    if (meLoading || !me) {
+      return () => {
+        cancelled = true;
+      };
+    }
+
     (async () => {
       try {
-        const [meRes, attRes, balRes] = await Promise.all([
-          essService.me(),
-          essService.attendance(),
-          essService.leaveBalances(),
-        ]);
+        const attRes = await essService.attendance();
         if (cancelled) return;
-        setMe(meRes.data);
         const todayStr = todayLocalDate();
         setToday(
           (attRes.data ?? []).find((row) => row.attendance_date === todayStr) ??
             null,
         );
-        setBalances(balRes.data ?? []);
+        setError(null);
       } catch (err) {
         if (!cancelled) {
           setError(
@@ -65,10 +69,11 @@ export default function HomePage() {
         }
       }
     })();
+
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [meLoading, me?.employee_id ?? ""]);
 
   const punchDone = Boolean(today?.check_out_at);
   const punchedIn = Boolean(today?.check_in_at) && !punchDone;
@@ -105,11 +110,6 @@ export default function HomePage() {
         : 0;
   const pct = Math.min(100, Math.round((workedH / DAILY_GOAL_H) * 100));
 
-  const leavesLeft = balances.reduce(
-    (sum, b) => sum + (Number(b.closing_balance) || 0),
-    0,
-  );
-
   const firstName = me?.display_name?.split(/\s+/)[0] ?? "there";
 
   return (
@@ -123,18 +123,44 @@ export default function HomePage() {
           <h1 className="text-[1.75rem] font-bold leading-tight tracking-tight text-[#0b1c30]">
             {greeting}, {firstName}
           </h1>
-          <p className="mt-1 text-base text-[#434655]">
-            Ready for a productive day?
-          </p>
-        </div>
-        {leavesLeft > 0 ? (
-          <div className="inline-flex max-w-full items-center gap-2 rounded-full border border-[#c3c6d7]/30 bg-[#eff4ff] px-4 py-2 animate-pulse-soft">
-            <IconSparkle size={16} className="shrink-0 text-[#712ae2]" />
-            <span className="truncate text-sm font-medium text-[#434655]">
-              You have {leavesLeft % 1 === 0 ? leavesLeft : leavesLeft.toFixed(1)}{" "}
-              leaves remaining. Planning a trip?
+          <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-sm text-[#434655]">
+            <span>
+              {now.toLocaleDateString("en-IN", {
+                weekday: "long",
+                day: "numeric",
+                month: "long",
+                year: "numeric",
+              })}
+            </span>
+            <span aria-hidden>·</span>
+            <span className="font-mono tabular-nums">
+              {now.toLocaleTimeString("en-IN", {
+                hour: "2-digit",
+                minute: "2-digit",
+                second: "2-digit",
+              })}
             </span>
           </div>
+        </div>
+        {me?.can_approve_team_leave ? (
+          <Link
+            href="/approvals"
+            className={`${ui.card} flex items-center justify-between gap-3 p-4 transition active:scale-[0.99]`}
+          >
+            <div>
+              <p className="font-semibold text-[#0b1c30]">Team approvals</p>
+              <p className="text-sm text-[#434655]">
+                Leave, on-duty, attendance corrections
+              </p>
+            </div>
+            {(me.pending_approvals_count ?? 0) > 0 ? (
+              <span className="flex h-8 min-w-8 items-center justify-center rounded-full bg-[#ba1a1a] px-2 text-sm font-bold text-white">
+                {me.pending_approvals_count! > 99 ? "99+" : me.pending_approvals_count}
+              </span>
+            ) : (
+              <span className="text-sm font-semibold text-[#004ac6]">Open</span>
+            )}
+          </Link>
         ) : null}
       </section>
 
@@ -189,55 +215,90 @@ export default function HomePage() {
         </div>
       </section>
 
-      <section className="space-y-2">
+      <section className="space-y-3">
         <h3 className="px-1 text-lg font-semibold text-[#0b1c30]">
           Quick Actions
         </h3>
-        <div className="grid grid-cols-4 gap-2">
-          <Link href="/attendance" className={ui.quick}>
-            <span className={punchedIn ? ui.quickIconActive : ui.quickIcon}>
-              <IconFingerprint size={26} />
+        <div className="grid grid-cols-4 gap-2.5">
+          <Link
+            href="/attendance"
+            className={`${ui.quickPremium} ${ui.fadeUp}`}
+            style={{ animationDelay: "0ms" }}
+          >
+            <span
+              className={
+                punchDone
+                  ? ui.quickIconPremium
+                  : ui.quickIconPremiumPrimary
+              }
+            >
+              <IconFingerprint size={28} />
             </span>
-            <span className="text-[11px] font-semibold leading-tight text-[#434655]">
+            <span className={ui.quickLabel}>
               {punchDone ? "Attendance" : punchedIn ? "Check Out" : "Check In"}
             </span>
           </Link>
-          <Link href="/leave" className={ui.quick}>
-            <span className={ui.quickIcon}>
-              <IconCalendar size={26} />
+          <Link
+            href="/leave"
+            className={`${ui.quickPremium} ${ui.fadeUp}`}
+            style={{ animationDelay: "40ms" }}
+          >
+            <span className={ui.quickIconPremiumViolet}>
+              <IconCalendar size={28} />
             </span>
-            <span className="text-[11px] font-semibold leading-tight text-[#434655]">
-              Apply Leave
-            </span>
+            <span className={ui.quickLabel}>Apply Leave</span>
           </Link>
-          <Link href="/payslips" className={ui.quick}>
-            <span className={ui.quickIcon}>
-              <IconWallet size={26} />
+          <Link
+            href="/payslips"
+            className={`${ui.quickPremium} ${ui.fadeUp}`}
+            style={{ animationDelay: "80ms" }}
+          >
+            <span className={ui.quickIconPremiumEmerald}>
+              <IconWallet size={28} />
             </span>
-            <span className="text-[11px] font-semibold leading-tight text-[#434655]">
-              Payslip
-            </span>
+            <span className={ui.quickLabel}>Payslip</span>
           </Link>
-          <Link href="/leave" className={ui.quick}>
-            <span className={ui.quickIcon}>
-              <svg
-                width="26"
-                height="26"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="1.9"
-                strokeLinecap="round"
-                aria-hidden
-              >
-                <path d="M3 10.5 12 3l9 7.5" />
-                <path d="M5.5 9.5V20h13V9.5" />
-                <path d="M9 14h6" />
-              </svg>
+          <Link
+            href="/attendance/correction"
+            className={`${ui.quickPremium} ${ui.fadeUp}`}
+            style={{ animationDelay: "120ms" }}
+          >
+            <span className={ui.quickIconPremiumAmber}>
+              <IconClock size={28} />
             </span>
-            <span className="text-[11px] font-semibold leading-tight text-[#434655]">
-              WFH
+            <span className={ui.quickLabel}>Correction</span>
+          </Link>
+        </div>
+        <div className="grid grid-cols-4 gap-2.5">
+          <Link
+            href="/attendance/wfh"
+            className={`${ui.quickPremium} ${ui.fadeUp}`}
+            style={{ animationDelay: "160ms" }}
+          >
+            <span className={ui.quickIconPremium}>
+              <IconHome size={28} />
             </span>
+            <span className={ui.quickLabel}>WFH</span>
+          </Link>
+          <Link
+            href="/rooms"
+            className={`${ui.quickPremium} ${ui.fadeUp}`}
+            style={{ animationDelay: "200ms" }}
+          >
+            <span className={ui.quickIconPremiumViolet}>
+              <IconLocation size={28} />
+            </span>
+            <span className={ui.quickLabel}>Meeting rooms</span>
+          </Link>
+          <Link
+            href="/support"
+            className={`${ui.quickPremium} ${ui.fadeUp}`}
+            style={{ animationDelay: "240ms" }}
+          >
+            <span className={ui.quickIconPremiumAmber}>
+              <IconHelp size={28} />
+            </span>
+            <span className={ui.quickLabel}>Help</span>
           </Link>
         </div>
       </section>
@@ -271,9 +332,9 @@ export default function HomePage() {
             }
           />
           <TimelineItem
-            time="Leave balances"
-            title={`${leavesLeft % 1 === 0 ? leavesLeft : leavesLeft.toFixed(1)} days available`}
-            subtitle="Tap Apply Leave to request time off"
+            time="Leave"
+            title="Balances & requests"
+            subtitle="Open Leave for balances and new applications"
             soft
           />
           <TimelineItem
@@ -286,7 +347,6 @@ export default function HomePage() {
         </div>
       </section>
 
-      <AiFab href="/leave" />
     </div>
   );
 }

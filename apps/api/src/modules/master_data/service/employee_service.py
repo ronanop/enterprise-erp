@@ -75,6 +75,7 @@ class EmployeeService:
         user_id: UUID | None = None,
         hire_source: str = "direct",
         bypass_onboarding: bool = False,
+        status: str = "draft",
     ):
         if hire_source != "recruitment_onboarding" and not bypass_onboarding:
             raise ConflictException(
@@ -123,6 +124,7 @@ class EmployeeService:
             reporting_manager_id=reporting_manager_id,
             date_of_leaving=date_of_leaving,
             user_id=user_id,
+            status=status,
         )
         self._audit.log_entity_change(
             tenant_id=ctx.tenant_id,

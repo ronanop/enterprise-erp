@@ -19,6 +19,12 @@ import {
   type ManagerRosterValidation,
   type ShiftRosterDirectory,
 } from "@/services/shift-roster-service";
+import { downloadManagerRosterXlsx } from "@/lib/roster-xlsx-export";
+import {
+  extractDataMatrix,
+  matrixToCsv,
+  parseSpreadsheetFileAsMatrix,
+} from "@/lib/spreadsheet";
 
 function currentMonth(): string {
   const d = new Date();
@@ -52,6 +58,8 @@ export function DownloadManagerRosterDrawer({
     return directory.options.employees.filter((e) => e.managerId === managerId).length;
   }, [directory, managerId]);
 
+  const [downloading, setDownloading] = useState(false);
+
   function download() {
     if (!directory) return;
     if (!managerId) {
@@ -62,21 +70,23 @@ export function DownloadManagerRosterDrawer({
       toast("Month must be YYYY-MM", "error");
       return;
     }
-    try {
-      const { filename, csv, teamCount: n } = exportManagerRosterCsv(directory, managerId, month);
-      downloadTextFile(filename, csv, "text/csv");
-      toast(`Downloaded roster for ${n} employees`, "success");
-      onClose();
-    } catch (err) {
-      toast(err instanceof Error ? err.message : "Download failed", "error");
-    }
+    setDownloading(true);
+    void downloadManagerRosterXlsx(directory, managerId, month)
+      .then(({ teamCount: n }) => {
+        toast(`Downloaded Excel roster for ${n} employees`, "success");
+        onClose();
+      })
+      .catch((err) => {
+        toast(err instanceof Error ? err.message : "Download failed", "error");
+      })
+      .finally(() => setDownloading(false));
   }
 
   return (
     <SetupDrawer
       open={open}
       title="Download manager roster"
-      description="Export a month calendar CSV for one manager’s team. Send it to the manager to fill shift codes."
+      description="Sheet columns: employee code, name, and real calendar dates only. Manager is chosen here before download."
       onClose={onClose}
       footer={
         <>
@@ -85,17 +95,41 @@ export function DownloadManagerRosterDrawer({
             variant="outline"
             className="cursor-pointer transition-colors duration-200"
             onClick={onClose}
+            disabled={downloading}
           >
             Cancel
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            className="cursor-pointer transition-colors duration-200"
+            disabled={!managerId || teamCount === 0 || downloading}
+            onClick={() => {
+              if (!directory) return;
+              try {
+                const { filename, csv, teamCount: n } = exportManagerRosterCsv(
+                  directory,
+                  managerId,
+                  month,
+                );
+                downloadTextFile(filename, csv, "text/csv");
+                toast(`Downloaded plain CSV for ${n} employees`, "success");
+              } catch (err) {
+                toast(err instanceof Error ? err.message : "CSV failed", "error");
+              }
+            }}
+          >
+            Plain CSV
           </Button>
           <Button
             size="sm"
             className="cursor-pointer transition-colors duration-200"
             onClick={download}
-            disabled={!managerId || teamCount === 0}
+            disabled={!managerId || teamCount === 0 || downloading}
           >
             <Download className="size-3.5" />
-            Download CSV
+            {downloading ? "Building…" : "Download Excel"}
           </Button>
         </>
       }
@@ -117,7 +151,7 @@ export function DownloadManagerRosterDrawer({
         <p className="text-xs text-muted-foreground">
           {managerId
             ? teamCount
-              ? `${teamCount} employee(s) included for ${month || "selected month"}. Day columns are d01–d31 (Excel-safe). Fill cells with shift codes, WO, or HO.`
+              ? `${teamCount} employee(s) for ${month || "selected month"}. Fill day cells with shift codes (A/B/C/D…), WO, or HO.`
               : "No employees report to this manager."
             : "Pick a manager to see team size."}
         </p>
@@ -139,10 +173,12 @@ export function DownloadManagerRosterDrawer({
           </div>
         ) : null}
         <div className="rounded-lg border border-border/60 bg-muted/30 px-3 py-2 text-[11px] text-muted-foreground">
-          <p className="font-medium text-foreground">CSV columns</p>
+          <p className="font-medium text-foreground">Sheet layout</p>
           <p className="mt-1">
-            manager_code, manager_name, month, employee_code, employee_name, department, then{" "}
-            <strong>d01…d31</strong> (Excel-safe day headers — not calendar dates).
+            Columns are <strong>employee_code</strong>, <strong>employee_name</strong>, then real
+            dates (e.g. <strong>2026-08-11 (Mon)</strong>). Day cells use conditional formatting so
+            colors update when you change shift / WO / HO via the dropdown. CSV has the same values
+            without colors.
           </p>
         </div>
       </div>
@@ -161,10 +197,22 @@ export function UploadManagerRosterDrawer({
   onApplied: () => void;
   directory: ShiftRosterDirectory | null;
 }) {
+  const managers = directory?.options.managers ?? [];
+  const [managerId, setManagerId] = useState("");
+  const [month, setMonth] = useState(currentMonth);
   const [fileName, setFileName] = useState("");
   const [raw, setRaw] = useState("");
   const [validation, setValidation] = useState<ManagerRosterValidation | null>(null);
   const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    if (!open) return;
+    setMonth(currentMonth());
+    setManagerId((prev) => {
+      if (prev && managers.some((m) => m.id === prev)) return prev;
+      return managers[0]?.id ?? "";
+    });
+  }, [open, managers]);
 
   function reset() {
     setFileName("");
@@ -180,18 +228,40 @@ export function UploadManagerRosterDrawer({
   async function onFile(file: File | null) {
     if (!file) return;
     setFileName(file.name);
-    const text = await file.text();
-    setRaw(text);
     setValidation(null);
+    try {
+      const name = file.name.toLowerCase();
+      if (name.endsWith(".csv") || file.type === "text/csv") {
+        // Keep raw CSV (including # legend lines) for the existing validator.
+        setRaw(await file.text());
+        return;
+      }
+      const matrix = extractDataMatrix(
+        await parseSpreadsheetFileAsMatrix(file),
+        "employee_code",
+      );
+      setRaw(matrixToCsv(matrix));
+    } catch (err) {
+      setRaw("");
+      toast(err instanceof Error ? err.message : "Could not read file", "error");
+    }
   }
 
   function validate() {
     if (!directory) return;
-    if (!raw.trim()) {
-      toast("Choose a CSV file first", "error");
+    if (!managerId) {
+      toast("Select a reporting manager", "error");
       return;
     }
-    const result = validateManagerRosterCsv(directory, raw);
+    if (!/^\d{4}-\d{2}$/.test(month)) {
+      toast("Month must be YYYY-MM", "error");
+      return;
+    }
+    if (!raw.trim()) {
+      toast("Choose a CSV or Excel file first", "error");
+      return;
+    }
+    const result = validateManagerRosterCsv(directory, raw, { managerId, month });
     setValidation(result);
     if (result.errors.length && result.ok === 0) {
       toast("Validation failed — see errors", "error");
@@ -229,7 +299,7 @@ export function UploadManagerRosterDrawer({
     <SetupDrawer
       open={open}
       title="Upload manager roster"
-      description="Upload the filled manager CSV to update the roster calendar for that team."
+      description="Select the same manager and month used on download, then upload the filled CSV or Excel file."
       onClose={handleClose}
       wide
       footer={
@@ -248,7 +318,7 @@ export function UploadManagerRosterDrawer({
             variant="outline"
             className="cursor-pointer transition-colors duration-200"
             onClick={validate}
-            disabled={!raw || busy}
+            disabled={!raw || !managerId || busy}
           >
             Validate
           </Button>
@@ -265,10 +335,27 @@ export function UploadManagerRosterDrawer({
       }
     >
       <div className="space-y-3">
-        <SetupField label="Roster CSV" required hint="Same format as Download manager roster">
+        <SetupField label="Reporting manager" required hint="Must match the team in the file">
+          <SetupSelect value={managerId} onChange={(e) => setManagerId(e.target.value)}>
+            <option value="">Select manager</option>
+            {managers.map((m) => (
+              <option key={m.id} value={m.id}>
+                {m.code} · {m.label}
+              </option>
+            ))}
+          </SetupSelect>
+        </SetupField>
+        <SetupField label="Month" required hint="Format YYYY-MM">
+          <SetupInput type="month" value={month} onChange={(e) => setMonth(e.target.value)} />
+        </SetupField>
+        <SetupField
+          label="Roster file"
+          required
+          hint="CSV or XLSX · Columns: employee_code, employee_name, then date headers"
+        >
           <input
             type="file"
-            accept=".csv,text/csv"
+            accept=".csv,.xlsx,.xlsm,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
             className="block w-full cursor-pointer text-xs"
             onChange={(e) => void onFile(e.target.files?.[0] ?? null)}
           />
@@ -278,10 +365,11 @@ export function UploadManagerRosterDrawer({
         </SetupField>
 
         <div className="rounded-lg border border-border/60 bg-muted/30 px-3 py-2 text-[11px] text-muted-foreground">
-          Allowed cell values: shift <strong>codes or names</strong> from Shift master,{" "}
+          Allowed cell values: shift <strong>codes</strong> from Shift master (e.g. A/B/C/D),{" "}
           <strong>WO</strong> (weekly off), <strong>HO</strong> (holiday), or blank (clear
-          override). Day columns: <strong>d01…d31</strong> (also accepts Excel date headers from
-          older files).
+          override). Day columns: full dates like <strong>2026-08-11 (Mon)</strong> (legacy{" "}
+          <strong>d01…d31</strong> headers still import). Re-upload the Excel file from Download
+          Excel, or a CSV with the same columns.
         </div>
 
         {directory && directory.shifts.length > 0 ? (

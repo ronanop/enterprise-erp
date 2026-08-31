@@ -44,3 +44,4 @@ class HrLeaveBalance(Base, *HrTransactionMixin):
     used: Mapped[Decimal] = mapped_column(Numeric(9, 2), nullable=False, default=0)
     closing_balance: Mapped[Decimal] = mapped_column(Numeric(9, 2), nullable=False, default=0)
     status: Mapped[str] = mapped_column(String(30), nullable=False, default="open", index=True)
+    last_accrual_yyyymm: Mapped[str | None] = mapped_column(String(7), nullable=True)

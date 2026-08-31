@@ -264,11 +264,11 @@ export function EmployeeAttendanceExplorer({
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
         {[
-          { label: "Records in range", value: summary.total },
+          { label: "Records in Range", value: summary.total },
           { label: "Present", value: summary.present },
           { label: "Absent", value: summary.absent },
-          { label: "Half day", value: summary.half },
-          { label: "Total hours", value: summary.hours },
+          { label: "Half Day", value: summary.half },
+          { label: "Total Hours", value: summary.hours },
         ].map((c) => (
           <div key={c.label} className="rounded-lg border border-border/70 bg-card px-3 py-2 shadow-sm">
             <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">

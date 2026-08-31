@@ -113,6 +113,18 @@ class NotificationTemplateEntity:
     is_active: bool = True
 
 
+@dataclass(frozen=True)
+class NotificationInboxItem:
+    id: UUID
+    title: str
+    body: str
+    kind: str
+    unread: bool
+    created_at: datetime
+    href: str | None = None
+    read_at: datetime | None = None
+
+
 @dataclass
 class AuditLogEntity:
     id: UUID

@@ -3,13 +3,15 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   CalendarDays,
+  ClipboardList,
+  Clock3,
   Download,
   Pencil,
   Plus,
-  RefreshCw,
   Repeat,
   Upload,
   UserPlus,
+  Users,
 } from "lucide-react";
 
 import { AssignShiftDrawer, CreateRotationDrawer } from "@/components/hr/shift-roster/assign-rotation-drawers";
@@ -24,6 +26,8 @@ import {
   HrEmptyState,
   HrStatusBadge,
   HrToolbar,
+  HrUnderlineTabs,
+  type HrTabItem,
 } from "@/components/hr/hr-primitives";
 import { SetupDrawer, SetupField, SetupInput, SetupSelect } from "@/components/hr/setup/setup-drawer";
 import { toast, SetupToastHost } from "@/components/hr/setup/setup-toast";
@@ -43,7 +47,6 @@ import {
   listShiftAudit,
   loadShiftRosterDirectory,
   saveWeeklyOffRules,
-  shiftUtilizationReport,
   submitShiftSwap,
   runAttendanceAutoAbsentJob,
   type ShiftRosterDirectory,
@@ -54,7 +57,7 @@ import { WEEKLY_OFF_RULE_OPTIONS } from "@/lib/hr/weekly-off-rules";
 
 const PAGE = 10;
 
-type Tab = "shifts" | "assignments" | "calendar" | "rotations" | "rules" | "reports" | "audit";
+type Tab = "shifts" | "assignments" | "calendar" | "rotations" | "rules" | "audit";
 
 export function ShiftRosterManagementPage() {
   const [dir, setDir] = useState<ShiftRosterDirectory | null>(null);
@@ -117,7 +120,6 @@ export function ShiftRosterManagementPage() {
   }, [dir]);
 
   const audit = useMemo(() => listShiftAudit(), [dir, tab]);
-  const utilization = useMemo(() => (dir ? shiftUtilizationReport(dir) : []), [dir]);
 
   const authBlocked = !isAuthenticated() && !loading && !dir?.shifts.length;
 
@@ -126,7 +128,6 @@ export function ShiftRosterManagementPage() {
       <SetupToastHost />
       <PageHeader
         title="Shift & Roster"
-        description="Manage shifts, rotations, weekly offs, and employee assignments."
         actions={
           <HrToolbar onRefresh={() => void load()} loading={loading}>
             <Button size="sm" className="cursor-pointer" onClick={() => { setEditingShift(null); setCreateShiftOpen(true); }}>
@@ -141,20 +142,9 @@ export function ShiftRosterManagementPage() {
               <Repeat className="size-3.5" />
               Create rotation
             </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              className="cursor-pointer"
-              onClick={() => {
-                setTab("calendar");
-              }}
-            >
-              <CalendarDays className="size-3.5" />
-              Roster calendar
-            </Button>
             <Button size="sm" variant="outline" className="cursor-pointer" onClick={() => setDownloadManagerOpen(true)}>
               <Download className="size-3.5" />
-              Reporting manager roster
+              Reporting Manager Roster
             </Button>
             <Button size="sm" variant="outline" className="cursor-pointer" onClick={() => setUploadManagerOpen(true)}>
               <Upload className="size-3.5" />
@@ -176,9 +166,6 @@ export function ShiftRosterManagementPage() {
               <Download className="size-3.5" />
               Export
             </Button>
-            <Button size="sm" variant="ghost" className="cursor-pointer" onClick={() => void load()}>
-              <RefreshCw className={cn("size-3.5", loading && "animate-spin")} />
-            </Button>
           </HrToolbar>
         }
       />
@@ -194,7 +181,7 @@ export function ShiftRosterManagementPage() {
             ["Employees assigned", stats.employeesAssigned],
             ["Rotations", stats.rotations],
             ["Night shifts", stats.nightShifts],
-            ["Weekly off rules", stats.weeklyOffRules],
+            ["Weekly Off Rules", stats.weeklyOffRules],
           ].map(([label, value]) => (
             <div key={label} className="rounded-xl border border-border/70 bg-card px-3 py-2.5 shadow-sm">
               <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">{label}</p>
@@ -204,36 +191,25 @@ export function ShiftRosterManagementPage() {
         </div>
       ) : null}
 
-      <div className="flex flex-wrap gap-2 border-b border-border/60 pb-2">
-        {(
+      <HrUnderlineTabs
+        tabs={
           [
-            ["shifts", "Shift master"],
-            ["assignments", "Assignments"],
-            ["calendar", "Roster calendar"],
-            ["rotations", "Rotations"],
-            ["rules", "Rules & swap"],
-            ["reports", "Reports"],
-            ["audit", "Audit log"],
-          ] as const
-        ).map(([id, label]) => (
-          <button
-            key={id}
-            type="button"
-            className={cn(
-              "cursor-pointer rounded-lg px-3 py-1.5 text-xs font-medium transition-colors",
-              tab === id ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted",
-            )}
-            onClick={() => {
-              setTab(id);
-              setPage(1);
-            }}
-          >
-            {label}
-          </button>
-        ))}
-      </div>
+            { id: "shifts", label: "Shift Master", icon: Clock3 },
+            { id: "assignments", label: "Assignments", icon: Users },
+            { id: "calendar", label: "Roster Calendar", icon: CalendarDays },
+            { id: "rotations", label: "Rotations", icon: Repeat },
+            { id: "rules", label: "Rules & Swap", icon: Pencil },
+            { id: "audit", label: "Audit Log", icon: ClipboardList },
+          ] satisfies HrTabItem[]
+        }
+        value={tab}
+        onChange={(id) => {
+          setTab(id as Tab);
+          setPage(1);
+        }}
+      />
 
-      {tab !== "calendar" && tab !== "audit" && tab !== "reports" ? (
+      {tab !== "calendar" && tab !== "audit" ? (
         <div className="flex flex-wrap gap-2">
           <Input
             className="max-w-sm"
@@ -271,34 +247,30 @@ export function ShiftRosterManagementPage() {
         ) : (
           <div className="overflow-hidden rounded-xl border border-border/70 bg-card shadow-sm">
             <div className="erp-scroll overflow-x-auto">
-              <table className="w-full min-w-[900px] text-sm">
+              <table className="w-full min-w-[720px] text-left text-sm">
                 <thead className="sticky top-0 border-b bg-muted/90 backdrop-blur-sm">
                   <tr className="text-[10px] uppercase text-muted-foreground">
                     <th className="px-2 py-2 text-left">Shift</th>
-                    <th className="px-2 py-2">Code</th>
-                    <th className="px-2 py-2">Type</th>
-                    <th className="px-2 py-2">Timing</th>
-                    <th className="px-2 py-2">Grace</th>
-                    <th className="px-2 py-2">Night</th>
-                    <th className="px-2 py-2">Status</th>
+                    <th className="px-2 py-2 text-left">Type</th>
+                    <th className="px-2 py-2 text-left">Timing</th>
+                    <th className="px-2 py-2 text-left">Night</th>
+                    <th className="px-2 py-2 text-left">Status</th>
                     <th className="px-2 py-2 text-right">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
                   {shiftPage.map((s) => (
                     <tr key={s.id} className="border-b border-border/50 hover:bg-muted/30">
-                      <td className="px-2 py-2">
+                      <td className="px-2 py-2 text-left">
                         <span className="inline-flex items-center gap-2">
                           <span className="size-2.5 rounded-full" style={{ backgroundColor: s.extension.color }} />
                           <span className="font-medium">{s.shiftName}</span>
                         </span>
                       </td>
-                      <td className="px-2 py-2 font-mono text-xs">{s.shiftCode}</td>
-                      <td className="px-2 py-2 text-xs capitalize">{s.shiftType}</td>
-                      <td className="px-2 py-2 text-xs">{s.startTime} – {s.endTime}</td>
-                      <td className="px-2 py-2 text-xs">{s.graceMinutes}m</td>
-                      <td className="px-2 py-2 text-xs">{s.isOvernight ? "Yes" : "—"}</td>
-                      <td className="px-2 py-2"><HrStatusBadge status={s.status} /></td>
+                      <td className="px-2 py-2 text-left text-xs capitalize">{s.shiftType}</td>
+                      <td className="px-2 py-2 text-left text-xs">{s.startTime} – {s.endTime}</td>
+                      <td className="px-2 py-2 text-left text-xs">{s.isOvernight ? "Yes" : "—"}</td>
+                      <td className="px-2 py-2 text-left"><HrStatusBadge status={s.status} /></td>
                       <td className="px-2 py-2 text-right">
                         <Button
                           type="button"
@@ -436,7 +408,7 @@ export function ShiftRosterManagementPage() {
       {tab === "rules" && dir ? (
         <div className="grid gap-4 lg:grid-cols-2">
           <div className="rounded-xl border border-border/70 bg-card p-4 shadow-sm space-y-3">
-            <h3 className="text-sm font-semibold">Weekly off rules</h3>
+            <h3 className="text-sm font-semibold">Weekly Off Rules</h3>
             <p className="text-[11px] text-muted-foreground">
               Used for roster WO cells and for auto week-off attendance (Celery / backfill below).
             </p>
@@ -516,7 +488,7 @@ export function ShiftRosterManagementPage() {
                 {jobBusy ? "Running…" : "Run for yesterday"}
               </Button>
             </div>
-            <h3 className="text-sm font-semibold pt-2">Holiday rules</h3>
+            <h3 className="text-sm font-semibold pt-2">Holiday Rules</h3>
             <p className="text-xs text-muted-foreground">
               {dir.holidays.length} holidays loaded from HR holiday calendars (national / company).
             </p>
@@ -528,7 +500,7 @@ export function ShiftRosterManagementPage() {
           </div>
           <div className="rounded-xl border border-border/70 bg-card p-4 shadow-sm space-y-3">
             <div className="flex items-center justify-between">
-              <h3 className="text-sm font-semibold">Shift swap requests</h3>
+              <h3 className="text-sm font-semibold">Shift Swap Requests</h3>
               <Button size="sm" variant="outline" className="cursor-pointer h-7" onClick={() => setSwapOpen(true)}>
                 Request swap
               </Button>
@@ -548,30 +520,6 @@ export function ShiftRosterManagementPage() {
                 ))}
               </ul>
             )}
-          </div>
-        </div>
-      ) : null}
-
-      {tab === "reports" && dir ? (
-        <div className="grid gap-4 lg:grid-cols-2">
-          <div className="rounded-xl border border-border/70 bg-card p-4 shadow-sm">
-            <h3 className="text-xs font-semibold uppercase text-muted-foreground">Shift utilization</h3>
-            <table className="mt-3 w-full text-xs">
-              <thead><tr className="text-muted-foreground"><th className="py-1 text-left">Shift</th><th>Assigned</th></tr></thead>
-              <tbody>
-                {utilization.map((u) => (
-                  <tr key={u.code} className="border-t border-border/40">
-                    <td className="py-1.5">{u.shift}</td>
-                    <td className="py-1.5 text-center">{u.assigned}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          <div className="rounded-xl border border-border/70 bg-card p-4 shadow-sm">
-            <h3 className="text-xs font-semibold uppercase text-muted-foreground">Night shift report</h3>
-            <p className="mt-2 text-2xl font-semibold">{stats?.nightShifts ?? 0}</p>
-            <p className="text-xs text-muted-foreground">Active night / overnight shift definitions</p>
           </div>
         </div>
       ) : null}
@@ -647,7 +595,7 @@ function SwapRequestDrawer({
   return (
     <SetupDrawer
       open={open}
-      title="Shift swap request"
+      title="Shift Swap Request"
       onClose={onClose}
       footer={
         <Button size="sm" className="cursor-pointer" onClick={() => {

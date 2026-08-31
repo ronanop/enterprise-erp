@@ -196,15 +196,33 @@ class SeparationType(str, Enum):
     RESIGNATION = "resignation"
     TERMINATION = "termination"
     RETIREMENT = "retirement"
+    DEATH = "death"
+    OTHER = "other"
 
 
 class SeparationStatus(str, Enum):
     DRAFT = "draft"
     SUBMITTED = "submitted"
     MANAGER_APPROVED = "manager_approved"
+    IT_APPROVED = "it_approved"
+    ACCOUNTS_APPROVED = "accounts_approved"
     HR_APPROVED = "hr_approved"
     COMPLETED = "completed"
     CANCELLED = "cancelled"
+
+
+class NoticeStatus(str, Enum):
+    PENDING = "pending"
+    ON_NOTICE = "on_notice"
+    SERVED = "served"
+    NOT_SERVED = "not_served"
+    DIRECT_EXIT = "direct_exit"
+    NOT_APPLICABLE = "not_applicable"
+
+
+class SeparationInitiatedBy(str, Enum):
+    EMPLOYEE = "employee"
+    HR = "hr"
 
 
 class HrEntityType(str, Enum):

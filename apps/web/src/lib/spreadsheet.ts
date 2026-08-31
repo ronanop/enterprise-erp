@@ -12,14 +12,9 @@ export function downloadBlob(filename: string, blob: Blob) {
   URL.revokeObjectURL(url);
 }
 
-function neutralizeCsvFormula(value: string): string {
-  if (/^[=+\-@\t\r]/.test(value)) return `'${value}`;
-  return value;
-}
-
 function escapeCsvCell(value: unknown): string {
   if (value == null) return "";
-  const str = neutralizeCsvFormula(String(value));
+  const str = String(value);
   if (/[",\n\r]/.test(str)) return `"${str.replace(/"/g, '""')}"`;
   return str;
 }
@@ -40,17 +35,6 @@ export function downloadCsv(filename: string, rows: SpreadsheetRow[]) {
     filename,
     new Blob([`\uFEFF${csv}`], { type: "text/csv;charset=utf-8" }),
   );
-}
-
-/** Decode CSV uploads without silently converting legacy Windows text to mojibake. */
-export function decodeCsvBuffer(buffer: ArrayBuffer): string {
-  const bytes = new Uint8Array(buffer);
-  try {
-    return new TextDecoder("utf-8", { fatal: true }).decode(bytes);
-  } catch {
-    // Excel on legacy Windows commonly writes CSV as Windows-1252.
-    return new TextDecoder("windows-1252").decode(bytes);
-  }
 }
 
 function rowsToSheetCells(rows: SpreadsheetRow[]) {
@@ -83,7 +67,7 @@ export async function downloadXlsx(
   downloadBlob(filename, blob);
 }
 
-function parseCsvText(text: string): Record<string, unknown>[] {
+function parseCsvToMatrix(text: string): string[][] {
   const normalized = text.replace(/^\uFEFF/, "");
   const rows: string[][] = [];
   let current: string[] = [];
@@ -132,17 +116,27 @@ function parseCsvText(text: string): Record<string, unknown>[] {
   }
   current.push(cell);
   if (current.some((c) => c !== "")) rows.push(current);
+  return rows.map((row) => row.map((c) => c.trim()));
+}
 
-  if (rows.length === 0) return [];
-  const headers = rows[0].map((h) => h.trim());
-  return rows.slice(1).map((cols) => {
-    const out: Record<string, unknown> = {};
-    headers.forEach((header, idx) => {
-      if (!header) return;
-      out[header] = cols[idx] ?? "";
-    });
-    return out;
-  });
+function parseCsvText(text: string): Record<string, unknown>[] {
+  return matrixToObjects(parseCsvToMatrix(text));
+}
+
+function cellToString(value: unknown): string {
+  if (value == null) return "";
+  if (value instanceof Date && !Number.isNaN(value.getTime())) {
+    const y = value.getUTCFullYear();
+    const m = String(value.getUTCMonth() + 1).padStart(2, "0");
+    const d = String(value.getUTCDate()).padStart(2, "0");
+    return `${y}-${m}-${d}`;
+  }
+  if (typeof value === "boolean" || typeof value === "number") return String(value);
+  return String(value).trim();
+}
+
+function matrixToStringRows(matrix: unknown[][]): string[][] {
+  return matrix.map((row) => row.map((cell) => cellToString(cell)));
 }
 
 function matrixToObjects(matrix: unknown[][]): Record<string, unknown>[] {
@@ -161,6 +155,40 @@ function matrixToObjects(matrix: unknown[][]): Record<string, unknown>[] {
   });
 }
 
+/** Drop title/legend rows until a row contains the required header cell. */
+export function extractDataMatrix(
+  matrix: string[][],
+  requiredHeader: string,
+): string[][] {
+  const needle = requiredHeader.toLowerCase();
+  const idx = matrix.findIndex((row) =>
+    row.some((cell) => cell.toLowerCase() === needle),
+  );
+  return idx >= 0 ? matrix.slice(idx) : matrix;
+}
+
+export function matrixToCsv(matrix: string[][]): string {
+  return matrix.map((row) => row.map(escapeCsvCell).join(",")).join("\r\n");
+}
+
+/** Parse CSV or XLSX (first sheet) into a string matrix (including header row). */
+export async function parseSpreadsheetFileAsMatrix(file: File): Promise<string[][]> {
+  const name = file.name.toLowerCase();
+
+  if (name.endsWith(".csv") || file.type === "text/csv") {
+    const buffer = await file.arrayBuffer();
+    const text = new TextDecoder("utf-8").decode(buffer);
+    return parseCsvToMatrix(text);
+  }
+
+  if (name.endsWith(".xlsx") || name.endsWith(".xlsm")) {
+    const matrix = await readSheet(file);
+    return matrixToStringRows(matrix);
+  }
+
+  throw new Error("Unsupported file type. Please upload a .csv or .xlsx file.");
+}
+
 /** Parse CSV or XLSX (first sheet) into row objects keyed by header. */
 export async function parseSpreadsheetFile(
   file: File,
@@ -169,27 +197,14 @@ export async function parseSpreadsheetFile(
 
   if (name.endsWith(".csv") || file.type === "text/csv") {
     const buffer = await file.arrayBuffer();
-    const text = decodeCsvBuffer(buffer);
+    const text = new TextDecoder("utf-8").decode(buffer);
     return parseCsvText(text);
   }
 
   if (name.endsWith(".xlsx") || name.endsWith(".xlsm")) {
     const matrix = await readSheet(file);
-    return matrixToObjects(matrix);
+    return matrixToObjects(matrixToStringRows(matrix));
   }
 
   throw new Error("Unsupported file type. Please upload a .csv or .xlsx file.");
-}
-
-export async function parseSpreadsheetMatrix(file: File): Promise<unknown[][]> {
-  const name = file.name.toLowerCase();
-  if (name.endsWith(".csv") || file.type === "text/csv") {
-    const buffer = await file.arrayBuffer();
-    const text = decodeCsvBuffer(buffer);
-    const objects = parseCsvText(text);
-    if (objects.length === 0) return [];
-    const headers = Object.keys(objects[0]);
-    return [headers, ...objects.map((row) => headers.map((h) => row[h] ?? ""))];
-  }
-  return readSheet(file);
 }

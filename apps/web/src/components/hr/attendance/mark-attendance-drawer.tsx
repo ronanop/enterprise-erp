@@ -6,22 +6,36 @@ import { SetupDrawer, SetupField, SetupInput, SetupSelect, SetupTextarea, toApiT
 import { toast } from "@/components/hr/setup/setup-toast";
 import { Button } from "@/components/ui/button";
 import { ApiClientError } from "@/services/api-client";
-import { markAttendance } from "@/services/attendance-management-service";
-import type { AttendanceDirectory } from "@/services/attendance-management-service";
+import { markAttendance, type AttendanceDirectory, type RegularizeKind } from "@/services/attendance-management-service";
 import { getAssignedShiftId } from "@/services/hr-master-connector";
 import type { AttendanceSource, AttendanceStatusCode } from "@/types/attendance-management";
-import { ATTENDANCE_STATUS_LABELS } from "@/types/attendance-management";
 
-const SOURCES: AttendanceSource[] = [
-  "manual",
-  "biometric",
-  "mobile",
-  "web",
-  "qr",
-  "face_recognition",
+const SOURCE_LABELS: Record<AttendanceSource, string> = {
+  manual: "Manual",
+  biometric: "Biometric",
+  mobile: "Mobile",
+  web: "Web",
+  qr: "QR",
+  face_recognition: "Face recognition",
+};
+
+const SOURCES = Object.keys(SOURCE_LABELS) as AttendanceSource[];
+
+const MARK_STATUSES: { value: RegularizeKind; label: string }[] = [
+  { value: "full_day", label: "Full day" },
+  { value: "half_day", label: "Half day" },
+  { value: "absent", label: "Absent" },
+  { value: "work_from_home", label: "Work from home" },
 ];
 
-const STATUSES = Object.keys(ATTENDANCE_STATUS_LABELS) as AttendanceStatusCode[];
+function statusFromKind(
+  kind: RegularizeKind,
+): AttendanceStatusCode {
+  if (kind === "full_day") return "present";
+  if (kind === "half_day") return "half_day";
+  if (kind === "absent") return "absent";
+  return "work_from_home";
+}
 
 export function MarkAttendanceDrawer({
   open,
@@ -42,7 +56,8 @@ export function MarkAttendanceDrawer({
   const [checkOut, setCheckOut] = useState("18:00");
   const [breakStart, setBreakStart] = useState("13:00");
   const [breakEnd, setBreakEnd] = useState("13:30");
-  const [status, setStatus] = useState<AttendanceStatusCode>("present");
+  const [kind, setKind] = useState<RegularizeKind>("full_day");
+  const [halfPortion, setHalfPortion] = useState<"first_half" | "second_half">("first_half");
   const [location, setLocation] = useState("");
   const [source, setSource] = useState<AttendanceSource>("manual");
   const [gps, setGps] = useState("");
@@ -77,11 +92,14 @@ export function MarkAttendanceDrawer({
         checkOut,
         breakStart,
         breakEnd,
-        status,
+        status: statusFromKind(kind),
         location,
         source,
         gpsCoordinates: gps,
-        notes,
+        notes:
+          kind === "half_day"
+            ? [notes, `regularized:${halfPortion}`].filter(Boolean).join(" · ")
+            : notes,
       });
       toast("Attendance saved", "success");
       onSaved();
@@ -96,7 +114,7 @@ export function MarkAttendanceDrawer({
   return (
     <SetupDrawer
       open={open}
-      title="Mark attendance"
+      title="Mark Attendance"
       description="Record check-in/out, breaks, source, and GPS for audit-ready tracking."
       wide
       onClose={onClose}
@@ -157,14 +175,25 @@ export function MarkAttendanceDrawer({
           <SetupInput type="time" value={breakEnd} onChange={(e) => setBreakEnd(e.target.value)} />
         </SetupField>
         <SetupField label="Attendance status">
-          <SetupSelect value={status} onChange={(e) => setStatus(e.target.value as AttendanceStatusCode)}>
-            {STATUSES.map((s) => (
-              <option key={s} value={s}>
-                {ATTENDANCE_STATUS_LABELS[s]}
+          <SetupSelect value={kind} onChange={(e) => setKind(e.target.value as RegularizeKind)}>
+            {MARK_STATUSES.map((opt) => (
+              <option key={opt.value} value={opt.value}>
+                {opt.label}
               </option>
             ))}
           </SetupSelect>
         </SetupField>
+        {kind === "half_day" ? (
+          <SetupField label="Half">
+            <SetupSelect
+              value={halfPortion}
+              onChange={(e) => setHalfPortion(e.target.value as "first_half" | "second_half")}
+            >
+              <option value="first_half">First half</option>
+              <option value="second_half">Second half</option>
+            </SetupSelect>
+          </SetupField>
+        ) : null}
         <SetupField label="Location">
           <SetupInput value={location} onChange={(e) => setLocation(e.target.value)} placeholder="Office / WFH city" />
         </SetupField>
@@ -172,7 +201,7 @@ export function MarkAttendanceDrawer({
           <SetupSelect value={source} onChange={(e) => setSource(e.target.value as AttendanceSource)}>
             {SOURCES.map((s) => (
               <option key={s} value={s}>
-                {s.replace(/_/g, " ")}
+                {SOURCE_LABELS[s]}
               </option>
             ))}
           </SetupSelect>

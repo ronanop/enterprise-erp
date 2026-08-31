@@ -126,6 +126,7 @@ export type PerformanceDirectory = {
   appraisals: AppraisalRecord[];
   departments: string[];
   employees: HrMasterOption[];
+  managers: HrMasterOption[];
 };
 
 export async function loadPerformanceDirectory(): Promise<PerformanceDirectory> {
@@ -133,11 +134,13 @@ export async function loadPerformanceDirectory(): Promise<PerformanceDirectory> 
   let reviews = load<PerformanceReview>(KEYS.reviews);
   let appraisals = load<AppraisalRecord>(KEYS.appraisals);
   let employees: HrMasterOption[] = [];
+  let managers: HrMasterOption[] = [];
   let departments: string[] = [];
 
   try {
     const master = await loadHrMasterDirectory();
     employees = master.employees;
+    managers = master.managers;
     departments = master.departments.map((d) => d.label);
   } catch {
     /* fall through */
@@ -328,6 +331,7 @@ export async function loadPerformanceDirectory(): Promise<PerformanceDirectory> 
     appraisals,
     departments: goalDepts,
     employees,
+    managers,
   };
 }
 

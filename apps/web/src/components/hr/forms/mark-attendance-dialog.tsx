@@ -79,7 +79,7 @@ export function MarkAttendanceDialog({ open, onClose, onSaved }: Props) {
   return (
     <HrFormDialog
       open={open}
-      title="Mark attendance"
+      title="Mark Attendance"
       description="Record daily attendance for an employee."
       onClose={onClose}
       footer={

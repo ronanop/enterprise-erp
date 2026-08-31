@@ -60,7 +60,9 @@ class DepartmentRepository(OrgScopedRepository):
         department_code: str,
         department_name: str,
         parent_department_id: UUID | None = None,
+        head_employee_id: UUID | None = None,
     ) -> DepartmentEntity:
+        now = utcnow()
         row = OrgDepartment(
             id=uuid4(),
             tenant_id=ctx.tenant_id,
@@ -69,7 +71,10 @@ class DepartmentRepository(OrgScopedRepository):
             department_code=department_code,
             department_name=department_name,
             parent_department_id=parent_department_id,
-            status="draft",
+            head_employee_id=head_employee_id,
+            status="active",
+            created_at=now,
+            updated_at=now,
             created_by=ctx.user_id,
             updated_by=ctx.user_id,
         )
@@ -121,7 +126,12 @@ class DepartmentRepository(OrgScopedRepository):
             department_name=row.department_name,
             status=row.status,
             parent_department_id=row.parent_department_id,
+            head_employee_id=row.head_employee_id,
             version=row.version,
+            created_at=row.created_at,
+            created_by=row.created_by,
+            updated_at=row.updated_at,
+            updated_by=row.updated_by,
         )
 
 
@@ -240,6 +250,7 @@ class LocationRepository(OrgScopedRepository):
         latitude: float | None = None,
         longitude: float | None = None,
         geofence_radius_meters: int | None = None,
+        status: str = "active",
     ) -> LocationEntity:
         row = OrgLocation(
             id=uuid4(),
@@ -252,7 +263,7 @@ class LocationRepository(OrgScopedRepository):
             latitude=latitude,
             longitude=longitude,
             geofence_radius_meters=geofence_radius_meters,
-            status="draft",
+            status=status if status in {"draft", "active", "inactive"} else "active",
             created_by=ctx.user_id,
             updated_by=ctx.user_id,
         )
@@ -303,6 +314,21 @@ class LocationRepository(OrgScopedRepository):
             longitude=float(row.longitude) if row.longitude is not None else None,
             geofence_radius_meters=row.geofence_radius_meters,
         )
+
+    def soft_delete(self, ctx: TenantContext, location_id: UUID) -> bool:
+        row = self.db.scalar(
+            select(OrgLocation).where(
+                OrgLocation.id == location_id,
+                OrgLocation.tenant_id == ctx.tenant_id,
+            )
+        )
+        if row is None or row.is_deleted:
+            return False
+        row.is_deleted = True
+        row.deleted_at = utcnow()
+        row.deleted_by = ctx.user_id
+        self.db.flush()
+        return True
 
 
 class CostCenterRepository(OrgScopedRepository):

@@ -20,7 +20,7 @@ export function HrPipelineFunnel({ counts, loading }: HrPipelineFunnelProps) {
   return (
     <div className="rounded-xl border border-border/80 bg-card p-4 shadow-sm">
       <div className="mb-3 flex items-baseline justify-between gap-2">
-        <h2 className="text-base font-extrabold tracking-tight">HRMS pipeline</h2>
+        <h2 className="text-sm font-medium tracking-tight">HRMS Pipeline</h2>
         <p className="text-[11px] text-muted-foreground">Profiles → Training (FRD-09)</p>
       </div>
       <ol className="grid gap-2 sm:grid-cols-5">
@@ -44,11 +44,11 @@ export function HrPipelineFunnel({ counts, loading }: HrPipelineFunnelProps) {
                 <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-muted">
                   <div
                     className={cn(
-                      "h-full rounded-full bg-sky-600 transition-[width] duration-300",
-                      index === 1 && "bg-sky-700",
-                      index === 2 && "bg-teal-600",
-                      index === 3 && "bg-emerald-600",
-                      index === 4 && "bg-slate-500",
+                      "h-full rounded-full bg-primary transition-[width] duration-300",
+                      index === 1 && "bg-hrms-teal",
+                      index === 2 && "bg-hrms-success",
+                      index === 3 && "bg-hrms-warning",
+                      index === 4 && "bg-hrms-info",
                     )}
                     style={{ width: `${width}%` }}
                     role="presentation"
