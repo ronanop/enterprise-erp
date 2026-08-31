@@ -12,18 +12,20 @@ export function managerDisplayName(
 
 export function resolveBranchHeadName(
   branchId: string,
-  options: Pick<EmployeeDirectoryOptions, "branches" | "managers">,
+  options: Pick<EmployeeDirectoryOptions, "branches" | "managers" | "employees">,
 ): string {
   const branch = options.branches.find((b) => b.id === branchId);
-  return managerDisplayName(branch?.headEmployeeId, options.managers);
+  const lookup = options.employees?.length ? options.employees : options.managers;
+  return managerDisplayName(branch?.headEmployeeId, lookup);
 }
 
 export function resolveDepartmentHeadName(
   departmentId: string,
-  options: Pick<EmployeeDirectoryOptions, "departments" | "managers">,
+  options: Pick<EmployeeDirectoryOptions, "departments" | "managers" | "employees">,
 ): string {
   const dept = options.departments.find((d) => d.id === departmentId);
-  return managerDisplayName(dept?.headEmployeeId, options.managers);
+  const lookup = options.employees?.length ? options.employees : options.managers;
+  return managerDisplayName(dept?.headEmployeeId, lookup);
 }
 
 export function resolveOrgHeadsForEmployment(

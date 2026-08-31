@@ -53,6 +53,8 @@ class HrAttendanceRule(Base, *HrMasterMixin):
     early_leave_half_day_minutes: Mapped[int] = mapped_column(Integer, nullable=False, default=120)
     overtime_allowed: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     geofence_required: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    ess_selfie_required: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    ess_face_at_punch_required: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     miss_punch_window_hours: Mapped[int] = mapped_column(Integer, nullable=False, default=48)
     compoff_half_day_hours: Mapped[Decimal] = mapped_column(
         Numeric(5, 2), nullable=False, default=Decimal("4.00")

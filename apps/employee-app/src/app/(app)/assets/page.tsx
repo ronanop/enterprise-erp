@@ -56,6 +56,10 @@ export default function AssetsPage() {
     <div className="space-y-5">
       <AppHeader title="My Assets" />
 
+      <Link href="/assets/scan" className={`${ui.btnSecondary} block text-center`}>
+        Scan QR code
+      </Link>
+
       <SearchField
         value={query}
         onChange={setQuery}

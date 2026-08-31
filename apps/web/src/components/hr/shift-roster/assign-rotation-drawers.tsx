@@ -134,17 +134,50 @@ export function CreateRotationDrawer({
   const [sequence, setSequence] = useState("");
   const [effectiveFrom, setEffectiveFrom] = useState(() => new Date().toISOString().slice(0, 10));
   const [employeeIds, setEmployeeIds] = useState<string[]>([]);
+  const [empQuery, setEmpQuery] = useState("");
+
+  const employees = directory?.options.employees ?? [];
+  const filteredEmployees = empQuery.trim()
+    ? employees.filter((e) => {
+        const q = empQuery.trim().toLowerCase();
+        return e.label.toLowerCase().includes(q) || e.code.toLowerCase().includes(q);
+      })
+    : employees;
+
+  const allFilteredSelected =
+    filteredEmployees.length > 0 && filteredEmployees.every((e) => employeeIds.includes(e.id));
+
+  function toggleEmployee(id: string) {
+    setEmployeeIds((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
+    );
+  }
+
+  function toggleAllFiltered() {
+    if (allFilteredSelected) {
+      const remove = new Set(filteredEmployees.map((e) => e.id));
+      setEmployeeIds((prev) => prev.filter((id) => !remove.has(id)));
+      return;
+    }
+    setEmployeeIds((prev) => {
+      const next = new Set(prev);
+      for (const e of filteredEmployees) next.add(e.id);
+      return Array.from(next);
+    });
+  }
 
   return (
     <SetupDrawer
       open={open}
       title="Create rotation"
-      description="Morning → Evening → Night → Off cycles."
+      description="Define a repeating shift pattern and assign it to one or more employees."
       wide
       onClose={onClose}
       footer={
         <>
-          <Button variant="outline" size="sm" className="cursor-pointer" onClick={onClose}>Cancel</Button>
+          <Button variant="outline" size="sm" className="cursor-pointer" onClick={onClose}>
+            Cancel
+          </Button>
           <Button
             size="sm"
             className="cursor-pointer"
@@ -174,39 +207,114 @@ export function CreateRotationDrawer({
       }
     >
       <div className="grid gap-3 sm:grid-cols-2">
-        <SetupField label="Rotation name" required>
-          <SetupInput value={name} onChange={(e) => setName(e.target.value)} />
+        <SetupField label="Rotation name" required hint="Display name for this rotation pattern">
+          <SetupInput
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="e.g. Warehouse Team A"
+          />
         </SetupField>
-        <SetupField label="Rotation code">
+        <SetupField label="Rotation code" hint="Short unique ID used in reports">
           <SetupInput value={code} onChange={(e) => setCode(e.target.value)} />
         </SetupField>
-        <SetupField label="Cycle">
+        <SetupField label="Cycle" hint="How long one full pass through the sequence lasts">
           <SetupSelect value={cycle} onChange={(e) => setCycle(e.target.value as typeof cycle)}>
             <option value="weekly">Weekly</option>
             <option value="bi_weekly">Bi-weekly</option>
             <option value="monthly">Monthly</option>
           </SetupSelect>
         </SetupField>
-        <SetupField label="Effective date">
-          <SetupInput type="date" value={effectiveFrom} onChange={(e) => setEffectiveFrom(e.target.value)} />
+        <SetupField label="Effective date" hint="First day this rotation applies on the roster">
+          <SetupInput
+            type="date"
+            value={effectiveFrom}
+            onChange={(e) => setEffectiveFrom(e.target.value)}
+          />
         </SetupField>
-        <SetupField label="Sequence" hint="Morning → Evening → Night → Off">
-          <SetupInput value={sequence} onChange={(e) => setSequence(e.target.value)} className="sm:col-span-2" />
-        </SetupField>
-        <SetupField label="Assign employees">
-          <select
-            multiple
-            className="min-h-[80px] w-full rounded-lg border border-input px-2 text-xs"
-            value={employeeIds}
-            onChange={(e) =>
-              setEmployeeIds(Array.from(e.target.selectedOptions).map((o) => o.value))
+        <div className="sm:col-span-2">
+          <SetupField
+            label="Sequence"
+            hint="Shift order by day, separated by → or comma. Use shift codes (GEN, SHIFT-001) or Off / WO."
+          >
+            <SetupInput
+              value={sequence}
+              onChange={(e) => setSequence(e.target.value)}
+              placeholder="GEN → SHIFT-001 → SHIFT-002 → Off"
+            />
+          </SetupField>
+        </div>
+        <div className="sm:col-span-2">
+          <SetupField
+            label="Assign employees"
+            hint={
+              employeeIds.length
+                ? `${employeeIds.length} selected — these people follow this rotation on the roster calendar`
+                : "Tick one or more employees who will rotate through the sequence"
             }
           >
-            {directory?.options.employees.map((emp) => (
-              <option key={emp.id} value={emp.id}>{emp.label}</option>
-            ))}
-          </select>
-        </SetupField>
+            <div className="rounded-lg border border-input">
+              <div className="flex flex-wrap items-center gap-2 border-b border-border/60 px-2.5 py-2">
+                <SetupInput
+                  value={empQuery}
+                  onChange={(e) => setEmpQuery(e.target.value)}
+                  placeholder="Search employees…"
+                  className="h-7 min-w-[10rem] flex-1 border-0 bg-transparent px-0 shadow-none focus-visible:ring-0"
+                />
+                <button
+                  type="button"
+                  className="cursor-pointer text-[10px] font-medium text-primary transition-colors duration-200 hover:underline"
+                  onClick={toggleAllFiltered}
+                >
+                  {allFilteredSelected ? "Clear filtered" : "Select filtered"}
+                </button>
+                {employeeIds.length > 0 ? (
+                  <button
+                    type="button"
+                    className="cursor-pointer text-[10px] font-medium text-muted-foreground transition-colors duration-200 hover:text-foreground"
+                    onClick={() => setEmployeeIds([])}
+                  >
+                    Clear all
+                  </button>
+                ) : null}
+              </div>
+              <div className="erp-scroll max-h-48 overflow-y-auto p-1.5">
+                {filteredEmployees.length === 0 ? (
+                  <p className="px-2 py-6 text-center text-[11px] text-muted-foreground">
+                    No employees match your search.
+                  </p>
+                ) : (
+                  <ul className="space-y-0.5">
+                    {filteredEmployees.map((emp) => {
+                      const checked = employeeIds.includes(emp.id);
+                      return (
+                        <li key={emp.id}>
+                          <label
+                            className={`flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-xs transition-colors duration-150 hover:bg-muted/50 ${
+                              checked ? "bg-muted/40" : ""
+                            }`}
+                          >
+                            <input
+                              type="checkbox"
+                              className="size-3.5 cursor-pointer accent-primary"
+                              checked={checked}
+                              onChange={() => toggleEmployee(emp.id)}
+                            />
+                            <span className="min-w-0 flex-1 truncate font-medium">{emp.label}</span>
+                            {emp.code ? (
+                              <span className="shrink-0 font-mono text-[10px] text-muted-foreground">
+                                {emp.code}
+                              </span>
+                            ) : null}
+                          </label>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                )}
+              </div>
+            </div>
+          </SetupField>
+        </div>
       </div>
     </SetupDrawer>
   );

@@ -167,7 +167,12 @@ export async function submitCorrection(
         : {};
     const bid = branchId || orgCtx.branchId;
     if (bid && uuidRe.test(payload.employeeId)) {
-      const field = payload.field === "check_out" ? "check_out" : "check_in";
+      const field =
+        payload.field === "check_out"
+          ? "check_out"
+          : payload.field === "attendance_status"
+            ? "attendance_status"
+            : "check_in";
       const res = await resourceService.create<Record<string, unknown>>("/hr/attendance-corrections", {
         branch_id: bid,
         employee_id: payload.employeeId,
@@ -177,7 +182,7 @@ export async function submitCorrection(
         old_value: payload.oldTime || null,
         new_value: payload.newTime || "",
         reason: payload.reason || null,
-        status: "submitted",
+        status: field === "attendance_status" ? "approved" : "submitted",
       });
       const apiId = String(res.data?.id ?? "");
       if (apiId) item.id = apiId;
@@ -445,12 +450,15 @@ export function filterAttendanceRecords(
   records: AttendanceRecord[],
   query: string,
   filters: AttendanceFilters,
+  statsBucket: AttendanceStatBucket | null = null,
 ): AttendanceRecord[] {
   const q = query.trim().toLowerCase();
+  const today = todayIso();
   return records.filter((r) => {
+    if (statsBucket && !matchesAttendanceStatBucket(r, statsBucket, today)) return false;
     if (filters.branchId && r.branchId !== filters.branchId) return false;
     if (filters.shiftId && r.shiftId !== filters.shiftId) return false;
-    if (filters.status && r.status !== filters.status) return false;
+    if (!statsBucket && filters.status && r.status !== filters.status) return false;
     if (filters.dateFrom && r.attendanceDate < filters.dateFrom) return false;
     if (filters.dateTo && r.attendanceDate > filters.dateTo) return false;
     if (filters.location && !r.location.toLowerCase().includes(filters.location.toLowerCase())) {
@@ -475,17 +483,38 @@ export function filterAttendanceRecords(
   });
 }
 
-export function computeDashboardStats(records: AttendanceRecord[], date: string) {
-  const today = records.filter((r) => r.attendanceDate === date);
-  const present = today.filter((r) => ["present", "late"].includes(r.status)).length;
-  const absent = today.filter((r) => r.status === "absent").length;
-  const late = today.filter((r) => r.status === "late" || r.extension.isLate).length;
-  const half = today.filter((r) => r.status === "half_day").length;
-  const wfh = today.filter((r) => r.status === "work_from_home").length;
-  const leave = today.filter((r) => r.status === "leave").length;
-  const otHours = today.reduce((s, r) => s + r.overtimeHours, 0);
-  const missing = today.filter((r) => r.status === "missed_punch" || r.extension.missedPunch).length;
-  return { present, absent, late, half, wfh, leave, otHours: Math.round(otHours * 10) / 10, missing };
+export type AttendanceStatBucket = "present" | "absent" | "late" | "missing";
+
+export function matchesAttendanceStatBucket(
+  record: AttendanceRecord,
+  bucket: AttendanceStatBucket,
+  date: string,
+): boolean {
+  if (record.attendanceDate !== date) return false;
+  switch (bucket) {
+    case "present":
+      return record.status === "present" || record.status === "late";
+    case "absent":
+      return record.status === "absent";
+    case "late":
+      return record.status === "late" || record.extension.isLate;
+    case "missing":
+      return record.status === "missed_punch" || record.extension.missedPunch;
+    default:
+      return false;
+  }
+}
+
+export function computeDashboardStats(
+  records: AttendanceRecord[],
+  date: string,
+): Record<AttendanceStatBucket, number> {
+  return {
+    present: records.filter((r) => matchesAttendanceStatBucket(r, "present", date)).length,
+    absent: records.filter((r) => matchesAttendanceStatBucket(r, "absent", date)).length,
+    late: records.filter((r) => matchesAttendanceStatBucket(r, "late", date)).length,
+    missing: records.filter((r) => matchesAttendanceStatBucket(r, "missing", date)).length,
+  };
 }
 
 export async function markAttendance(payload: MarkAttendancePayload): Promise<void> {
@@ -718,41 +747,76 @@ export async function importAttendanceCsv(
   return { created, skipped, errors: errors.slice(0, 10) };
 }
 
+export type RegularizeKind = "full_day" | "half_day" | "absent" | "work_from_home";
+export type RegularizePortion = "full_day" | "first_half" | "second_half" | "absent" | "work_from_home";
+
+function resolveRegularizeChoice(
+  kind: RegularizeKind,
+  halfPortion: "first_half" | "second_half",
+): { status: AttendanceStatusCode; portion: RegularizePortion; label: string } {
+  if (kind === "full_day") {
+    return { status: "present", portion: "full_day", label: "full day" };
+  }
+  if (kind === "half_day") {
+    return {
+      status: "half_day",
+      portion: halfPortion,
+      label: halfPortion === "first_half" ? "half day — 1st half" : "half day — 2nd half",
+    };
+  }
+  if (kind === "absent") {
+    return { status: "absent", portion: "absent", label: "absent" };
+  }
+  return { status: "work_from_home", portion: "work_from_home", label: "work from home" };
+}
+
 export async function applyAttendanceCorrection(input: {
   record: AttendanceRecord;
-  field: "check_in" | "check_out";
-  newTime: string;
+  kind: RegularizeKind;
+  halfPortion?: "first_half" | "second_half";
   reason: string;
   attachmentName: string;
 }): Promise<void> {
-  const { record, field, newTime, reason, attachmentName } = input;
-  const timePart = newTime.length === 5 ? `${newTime}:00` : newTime;
-  const iso = `${record.attendanceDate}T${timePart}`;
-  const nextIn = field === "check_in" ? iso : record.checkIn;
-  const nextOut = field === "check_out" ? iso : record.checkOut;
-  const working = diffHours(nextIn, nextOut, record.breakTime);
+  const { record, kind, reason, attachmentName } = input;
+  const { status: nextStatus, portion, label: portionLabel } = resolveRegularizeChoice(
+    kind,
+    input.halfPortion ?? "first_half",
+  );
+  const noteTag = `regularized:${portion}`;
+  const baseNotes = (record.notes || "")
+    .replace(/\s*·?\s*regularized:(full_day|first_half|second_half|absent|work_from_home)/g, "")
+    .replace(/\s*·?\s*Corrected:[^·]*/g, "")
+    .trim();
+  const notes = [baseNotes, noteTag, reason].filter(Boolean).join(" · ");
 
   await resourceService.update("/hr/attendance", record.id, {
     version: record.version,
-    check_in_at: nextIn || null,
-    check_out_at: nextOut || null,
-    total_hours: working > 0 ? working : null,
-    notes: `${record.notes ? `${record.notes} · ` : ""}Corrected: ${reason}`,
+    attendance_status: mapToApiStatus(nextStatus),
+    notes,
   });
 
   await submitCorrection({
     attendanceId: record.id,
     employeeId: record.employeeId,
     date: record.attendanceDate,
-    field,
-    oldTime: field === "check_in" ? record.checkIn : record.checkOut,
-    newTime,
-    reason,
+    field: "attendance_status",
+    oldTime: record.status,
+    newTime: nextStatus,
+    reason: `${portionLabel}: ${reason}`,
     attachmentName,
+    portion,
   });
 
   saveExtension(record.id, {
     ...record.extension,
-    approvalStatus: "pending",
+    displayStatus: nextStatus,
+    approvalStatus: "approved",
+  });
+
+  appendAttendanceAudit({
+    attendanceId: record.id,
+    action: "regularized",
+    detail: `${record.status} → ${nextStatus} (${portionLabel}); punches unchanged`,
+    actor: actorLabel(),
   });
 }

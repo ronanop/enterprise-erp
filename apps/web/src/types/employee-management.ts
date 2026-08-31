@@ -3,6 +3,7 @@
 export type EmployeeLifecycleStatus =
   | "active"
   | "inactive"
+  | "onboarding"
   | "probation"
   | "notice"
   | "resigned"
@@ -121,6 +122,8 @@ export type PersonalInfo = {
   alternateMobile: string;
   officialEmail: string;
   personalEmail: string;
+  /** Optional — often collected on Excel import sheets. */
+  fatherName?: string;
   currentAddress: AddressBlock;
   permanentAddress: AddressBlock;
   emergency: EmergencyContact;
@@ -135,6 +138,7 @@ export type EmploymentInfo = {
   designationName: string;
   branchId: string;
   branchName: string;
+  locationId: string;
   location: string;
   employmentType: string;
   reportingManagerId: string;
@@ -147,9 +151,12 @@ export type EmploymentInfo = {
   shiftName: string;
   managementGroupId: string;
   managementGroupName: string;
+  entityId: string;
+  entityName: string;
   leavePolicyId: string;
   leavePolicyName: string;
   probationPeriodDays: string;
+  trainingDurationDays: string;
   confirmationDate: string;
   lifecycleStatus: EmployeeLifecycleStatus;
 };
@@ -207,6 +214,10 @@ export type EmployeeRecord = {
   designationName: string;
   branchId: string;
   branchName: string;
+  companyId: string;
+  companyName: string;
+  locationId: string;
+  locationName: string;
   reportingManagerId: string;
   reportingManagerName: string;
   employmentType: string;
@@ -220,6 +231,7 @@ export type EmployeeRecord = {
 
 export type EmployeeListFilters = {
   branchId: string;
+  entityId: string;
   departmentId: string;
   designation: string;
   employmentType: string;
@@ -227,7 +239,6 @@ export type EmployeeListFilters = {
   reportingManagerId: string;
   location: string;
   joiningFrom: string;
-  joiningTo: string;
   gender: string;
 };
 
@@ -265,6 +276,7 @@ export function emptyPersonal(): PersonalInfo {
     alternateMobile: "",
     officialEmail: "",
     personalEmail: "",
+    fatherName: "",
     currentAddress: { ...EMPTY_ADDRESS },
     permanentAddress: { ...EMPTY_ADDRESS },
     emergency: { name: "", phone: "", relationship: "" },
@@ -281,6 +293,7 @@ export function emptyEmployment(code = ""): EmploymentInfo {
     designationName: "",
     branchId: "",
     branchName: "",
+    locationId: "",
     location: "",
     employmentType: "permanent",
     reportingManagerId: "",
@@ -293,9 +306,12 @@ export function emptyEmployment(code = ""): EmploymentInfo {
     shiftName: "",
     managementGroupId: "",
     managementGroupName: "",
+    entityId: "",
+    entityName: "",
     leavePolicyId: "",
     leavePolicyName: "",
     probationPeriodDays: "90",
+    trainingDurationDays: "",
     confirmationDate: "",
     lifecycleStatus: "active",
   };

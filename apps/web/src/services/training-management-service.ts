@@ -131,7 +131,20 @@ export async function loadTrainingDirectory(): Promise<TrainingDirectory> {
       name: String(row.room_name ?? ""),
       capacity: Number(row.capacity ?? 0),
       equipment: Array.isArray(row.equipment_json)
-        ? (row.equipment_json as unknown[]).map(String)
+        ? (row.equipment_json as unknown[]).map((item) => {
+            if (item && typeof item === "object" && "name" in item) {
+              const o = item as Record<string, unknown>;
+              const name = String(o.name ?? "").trim();
+              const remarks = String(o.remarks ?? "").trim();
+              const serial = String(o.serial ?? o.serial_number ?? "").trim();
+              if (!name) return "";
+              let s = name;
+              if (remarks) s += ` (${remarks})`;
+              if (serial) s += ` · ${serial}`;
+              return s;
+            }
+            return String(item).trim();
+          }).filter(Boolean)
         : [],
       notes: String(row.notes ?? ""),
       status: String(row.status ?? "active"),

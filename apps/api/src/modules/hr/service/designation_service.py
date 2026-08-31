@@ -48,3 +48,14 @@ class DesignationService:
         if row is None:
             raise NotFoundException("Designation not found")
         return row
+
+    def delete(self, ctx: TenantContext, row_id: UUID) -> None:
+        if not self._repo.soft_delete(ctx, row_id):
+            raise NotFoundException("Designation not found")
+        self._audit.log_entity_change(
+            tenant_id=ctx.tenant_id,
+            entity_name="hr_designation",
+            entity_id=row_id,
+            operation="delete",
+            performed_by=ctx.user_id,
+        )

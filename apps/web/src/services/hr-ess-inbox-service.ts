@@ -28,12 +28,14 @@ export const INBOX_CATEGORY_LABELS: Record<HrEssInboxCategory, string> = {
   compoff: "Comp Off (OT)",
   attendance_correction: "Attendance",
   ot_allotment: "OT / Overday",
-  on_duty: "On duty",
+  on_duty: "On tour / On duty",
 };
 
-export async function loadHrEssInbox(): Promise<HrEssInboxItem[]> {
+export async function loadHrEssInbox(opts?: { includeCompoff?: boolean }): Promise<HrEssInboxItem[]> {
   const res = await apiClient<HrEssInboxItem[]>("/hr/ess-inbox");
-  return Array.isArray(res.data) ? res.data : [];
+  const rows = Array.isArray(res.data) ? res.data : [];
+  if (opts?.includeCompoff) return rows;
+  return rows.filter((item) => item.category !== "compoff");
 }
 
 export async function runInboxAction(
@@ -42,4 +44,18 @@ export async function runInboxAction(
 ): Promise<void> {
   const path = `${item.api_path}/${item.source_id}/${action}`;
   await apiClient(path, { method: "POST", body: {} });
+}
+
+export function inboxItemHref(item: HrEssInboxItem): string {
+  switch (item.category) {
+    case "leave":
+    case "compoff":
+      return "/hr/leave";
+    case "attendance_correction":
+    case "ot_allotment":
+    case "on_duty":
+      return "/hr/time";
+    default:
+      return `/hr/workforce/${item.employee_id}`;
+  }
 }

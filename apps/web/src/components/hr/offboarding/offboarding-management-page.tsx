@@ -1,0 +1,1223 @@
+"use client";
+
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { Check, ClipboardList, Clock, FileText, GitBranch, MessageSquare, Plus, Upload, Wallet } from "lucide-react";
+
+import {
+  ExitDocumentDrawer,
+  ExitInterviewDrawer,
+  NewResignationDrawer,
+} from "@/components/hr/offboarding/offboarding-drawers";
+import {
+  HrAuthBanner,
+  HrEmptyState,
+  HrKpiGrid,
+  HrLoadingBlock,
+  HrStatusBadge,
+  HrToolbar,
+  HrUnderlineTabs,
+  type HrTabItem,
+} from "@/components/hr/hr-primitives";
+import { toast, SetupToastHost } from "@/components/hr/setup/setup-toast";
+import { SetupField, SetupTextarea } from "@/components/hr/setup/setup-drawer";
+import { PageHeader } from "@/components/layout/page-header";
+import { Button } from "@/components/ui/button";
+import { SetupSelect } from "@/components/hr/setup/setup-drawer";
+import { isAuthenticated } from "@/lib/auth";
+import { cn } from "@/lib/utils";
+import {
+  isApiError,
+  loadOffboardingCases,
+  offboardingAction,
+  patchOffboardingCaseFromRow,
+} from "@/services/offboarding-service";
+import type { OffboardingCase, WorkflowApprovalEntry } from "@/types/offboarding";
+import {
+  NOTICE_STATUS_LABELS,
+  POST_HR_STEPS,
+  SEPARATION_TYPE_LABELS,
+  WORKFLOW_STEPS,
+  isDirectExit,
+  isFnfPendingWork,
+  isOnNotice,
+  noticeServedLabel,
+  postHrStepIndex,
+  workflowStepIndex,
+} from "@/types/offboarding";
+
+type TabId = "resignations" | "on_notice" | "workflow" | "clearance" | "exit_interview" | "documents" | "fnf";
+type KpiFilter = "all" | "on_notice" | "direct_exit" | "fnf_pending";
+
+const TABS: HrTabItem[] = [
+  { id: "resignations", label: "EX-Employee", icon: FileText },
+  { id: "on_notice", label: "On Notice", icon: Clock },
+  { id: "workflow", label: "Exit Workflow", icon: GitBranch },
+  { id: "clearance", label: "Clearance", icon: ClipboardList },
+  { id: "exit_interview", label: "Exit Interview", icon: MessageSquare },
+  { id: "documents", label: "Documents", icon: Upload },
+  { id: "fnf", label: "FNF Settlement", icon: Wallet },
+];
+
+const STAGE_LABELS: Record<string, string> = {
+  submitted: "Submitted",
+  manager: "Manager Approved",
+  it: "IT Approved",
+  accounts: "Accounts Approved",
+  hr: "HR Approved",
+};
+
+const MAX_APPROVAL_FILE_BYTES = 2 * 1024 * 1024;
+
+function readFileAsDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result ?? ""));
+    reader.onerror = () => reject(new Error("Could not read file"));
+    reader.readAsDataURL(file);
+  });
+}
+
+function WorkflowActionPanel({
+  title,
+  hint,
+  confirmLabel,
+  acting,
+  onConfirm,
+}: {
+  title: string;
+  hint: string;
+  confirmLabel: string;
+  acting: boolean;
+  onConfirm: (payload: {
+    remarks: string;
+    file_name: string | null;
+    file_data_url: string | null;
+  }) => Promise<void>;
+}) {
+  const [remarks, setRemarks] = useState("");
+  const [fileName, setFileName] = useState<string | null>(null);
+  const [fileDataUrl, setFileDataUrl] = useState<string | null>(null);
+  const [fileError, setFileError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setRemarks("");
+    setFileName(null);
+    setFileDataUrl(null);
+    setFileError(null);
+  }, [title]);
+
+  async function onFile(file: File | null) {
+    setFileError(null);
+    if (!file) {
+      setFileName(null);
+      setFileDataUrl(null);
+      return;
+    }
+    if (file.size > MAX_APPROVAL_FILE_BYTES) {
+      setFileError("File must be 2 MB or smaller.");
+      setFileName(null);
+      setFileDataUrl(null);
+      return;
+    }
+    try {
+      const dataUrl = await readFileAsDataUrl(file);
+      setFileName(file.name);
+      setFileDataUrl(dataUrl);
+    } catch {
+      setFileError("Could not read file.");
+      setFileName(null);
+      setFileDataUrl(null);
+    }
+  }
+
+  return (
+    <div className="space-y-2.5 rounded-lg border border-border/70 bg-muted/20 p-3">
+      <div>
+        <p className="text-sm font-semibold text-foreground">{title}</p>
+        <p className="mt-0.5 text-[11px] text-muted-foreground">{hint}</p>
+      </div>
+      <SetupField label="Remarks" hint="Optional — visible on this approval step">
+        <SetupTextarea
+          rows={2}
+          className="min-h-[56px]"
+          value={remarks}
+          placeholder="Add remarks for this step…"
+          onChange={(e) => setRemarks(e.target.value)}
+        />
+      </SetupField>
+      <SetupField label="Attachment" hint="Optional — PDF, image, or office file (max 2 MB)">
+        <label className="flex cursor-pointer items-center gap-1.5 rounded-lg border border-dashed border-border px-3 py-2 text-xs text-muted-foreground hover:bg-muted/40">
+          <Upload className="size-3.5 shrink-0" />
+          <span className="truncate font-medium text-foreground">{fileName || "Choose file"}</span>
+          <input
+            type="file"
+            className="sr-only"
+            accept=".pdf,.png,.jpg,.jpeg,.doc,.docx,.xls,.xlsx,image/*,application/pdf"
+            onChange={(e) => void onFile(e.target.files?.[0] ?? null)}
+          />
+        </label>
+        {fileError ? <p className="mt-1 text-[11px] text-destructive">{fileError}</p> : null}
+      </SetupField>
+      <Button
+        size="sm"
+        className="cursor-pointer"
+        disabled={acting || Boolean(fileError)}
+        onClick={() =>
+          void onConfirm({
+            remarks: remarks.trim(),
+            file_name: fileName,
+            file_data_url: fileDataUrl,
+          })
+        }
+      >
+        {acting ? "Working…" : confirmLabel}
+      </Button>
+    </div>
+  );
+}
+
+function ApprovalHistory({ entries }: { entries: WorkflowApprovalEntry[] }) {
+  if (!entries.length) return null;
+  return (
+    <div className="space-y-2 rounded-lg border border-border/60 bg-card p-3">
+      <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+        Approval remarks &amp; files
+      </p>
+      <ul className="space-y-2">
+        {entries.map((e) => (
+          <li
+            key={e.id || `${e.stage}-${e.at}`}
+            className="rounded-md border border-border/50 bg-muted/20 px-2.5 py-2 text-xs"
+          >
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <span className="font-medium text-foreground">
+                {STAGE_LABELS[e.stage] || e.stage}
+              </span>
+              {e.at ? (
+                <span className="text-[10px] text-muted-foreground">
+                  {e.at.slice(0, 19).replace("T", " ")}
+                </span>
+              ) : null}
+            </div>
+            {e.remarks ? <p className="mt-1 text-muted-foreground">{e.remarks}</p> : null}
+            {e.fileName ? (
+              <p className="mt-1 inline-flex items-center gap-1 text-[11px] text-foreground">
+                <FileText className="size-3" />
+                {e.fileDataUrl ? (
+                  <a
+                    href={e.fileDataUrl}
+                    download={e.fileName}
+                    className="underline-offset-2 hover:underline"
+                  >
+                    {e.fileName}
+                  </a>
+                ) : (
+                  e.fileName
+                )}
+              </p>
+            ) : null}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+function WorkflowStrip({ c }: { c: OffboardingCase }) {
+  const active = workflowStepIndex(c.status, c.fnfStatus);
+  const postActive = postHrStepIndex(c);
+  return (
+    <div className="space-y-2">
+      <ol className="flex flex-wrap items-center gap-1.5">
+        {WORKFLOW_STEPS.map((step, i) => {
+          const done = i < active;
+          const current = i === active;
+          return (
+            <li key={step.key} className="flex items-center gap-1.5">
+              <span
+                className={cn(
+                  "inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-[10px] font-medium transition-colors duration-200",
+                  done
+                    ? "border-emerald-200 bg-emerald-50 text-emerald-900"
+                    : current
+                      ? "border-primary/40 bg-primary/5 text-foreground"
+                      : "border-border bg-muted/40 text-muted-foreground",
+                )}
+              >
+                {done ? <Check className="size-3 shrink-0" /> : null}
+                {!done && current ? (
+                  <span className="size-1.5 shrink-0 rounded-full bg-primary" aria-hidden />
+                ) : null}
+                {step.label}
+              </span>
+              {i < WORKFLOW_STEPS.length - 1 ? (
+                <span className="text-[10px] text-muted-foreground">→</span>
+              ) : null}
+            </li>
+          );
+        })}
+      </ol>
+      {postActive >= 0 ? (
+        <ol className="flex flex-wrap items-center gap-1.5 border-t border-border/50 pt-2">
+          <li className="text-[10px] font-medium text-muted-foreground mr-1">After HR:</li>
+          {POST_HR_STEPS.map((step, i) => {
+            const done = i < postActive;
+            const current = i === postActive;
+            return (
+              <li key={step.key} className="flex items-center gap-1.5">
+                <span
+                  className={cn(
+                    "inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-[10px] font-medium",
+                    done
+                      ? "border-sky-200 bg-sky-50 text-sky-900"
+                      : current
+                        ? "border-primary/40 bg-primary/5 text-foreground"
+                        : "border-border bg-muted/40 text-muted-foreground",
+                  )}
+                >
+                  {done ? <Check className="size-3" /> : null}
+                  {step.label}
+                </span>
+                {i < POST_HR_STEPS.length - 1 ? (
+                  <span className="text-[10px] text-muted-foreground">→</span>
+                ) : null}
+              </li>
+            );
+          })}
+        </ol>
+      ) : null}
+    </div>
+  );
+}
+
+function OffboardingCaseHeader({ c }: { c: OffboardingCase }) {
+  return (
+    <div className="flex flex-col gap-2 border-b border-border/60 pb-3 sm:flex-row sm:items-start sm:justify-between">
+      <div className="min-w-0">
+        <p className="truncate text-base font-semibold text-foreground">{c.employeeName}</p>
+        <p className="mt-0.5 text-xs text-muted-foreground">
+          <span className="font-mono font-medium text-foreground">{c.employeeCode}</span>
+          <span className="mx-1.5 text-border">|</span>
+          <span className="font-mono">{c.documentNumber}</span>
+          <span className="mx-1.5 text-border">|</span>
+          {SEPARATION_TYPE_LABELS[c.separationType] ?? c.separationType}
+          <span className="mx-1.5 text-border">|</span>
+          LWD {c.approvedLwd || c.expectedExitDate || c.requestedLwd || "—"}
+        </p>
+      </div>
+      <div className="flex shrink-0 flex-wrap gap-1.5">
+        <HrStatusBadge status={NOTICE_STATUS_LABELS[c.noticeStatus] ?? c.noticeStatus} />
+        <HrStatusBadge status={c.status} />
+        <HrStatusBadge status={c.fnfStatus} />
+      </div>
+    </div>
+  );
+}
+
+function OffboardingCasePicker({
+  cases,
+  selectedId,
+  onSelect,
+}: {
+  cases: OffboardingCase[];
+  selectedId: string | null;
+  onSelect: (id: string) => void;
+}) {
+  return (
+    <div className="flex flex-col gap-1.5 sm:flex-row sm:items-center sm:gap-3">
+      <span className="text-xs font-medium text-muted-foreground shrink-0">Employee / case</span>
+      <SetupSelect
+        className="w-full min-w-0 sm:min-w-[min(100%,20rem)] sm:flex-1"
+        value={selectedId ?? ""}
+        onChange={(e) => onSelect(e.target.value)}
+      >
+        <option value="">Select offboarding case…</option>
+        {cases.map((c) => (
+          <option key={c.id} value={c.id}>
+            {c.employeeName} ({c.employeeCode}) — {c.documentNumber}
+          </option>
+        ))}
+      </SetupSelect>
+    </div>
+  );
+}
+
+export function OffboardingManagementPage() {
+  const [cases, setCases] = useState<OffboardingCase[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [tab, setTab] = useState<TabId>("resignations");
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [acting, setActing] = useState(false);
+  const [newOpen, setNewOpen] = useState(false);
+  const [interviewOpen, setInterviewOpen] = useState(false);
+  const [documentOpen, setDocumentOpen] = useState(false);
+  const [kpiFilter, setKpiFilter] = useState<KpiFilter>("all");
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const rows = await loadOffboardingCases();
+      setCases(rows);
+      setSelectedId((prev) => (prev && rows.some((r) => r.id === prev) ? prev : rows[0]?.id ?? null));
+    } catch (e) {
+      toast(isApiError(e), "error");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  const selected = useMemo(
+    () => cases.find((c) => c.id === selectedId) ?? null,
+    [cases, selectedId],
+  );
+
+  function tabForCase(c: OffboardingCase): TabId {
+    const st = c.status.toLowerCase();
+    if (
+      ["draft", "submitted", "manager_approved", "it_approved", "accounts_approved"].includes(st)
+    ) {
+      return "workflow";
+    }
+    if (st === "hr_approved") {
+      if (!c.exitInterview) return "exit_interview";
+      if ((c.documents?.length ?? 0) === 0) return "documents";
+      if (!["settled", "waived"].includes(c.fnfStatus.toLowerCase())) return "fnf";
+      return "documents";
+    }
+    return "workflow";
+  }
+
+  function openCase(c: OffboardingCase, nextTab?: TabId) {
+    setSelectedId(c.id);
+    setTab(nextTab ?? tabForCase(c));
+  }
+
+  const authBlocked = !isAuthenticated() && !loading && cases.length === 0;
+
+  async function act(action: string, body?: Record<string, unknown>, label?: string) {
+    if (!selected) return;
+    setActing(true);
+    try {
+      await offboardingAction(selected.id, action, body);
+      toast(label ?? "Updated", "success");
+      await load();
+    } catch (e) {
+      toast(isApiError(e), "error");
+    } finally {
+      setActing(false);
+    }
+  }
+
+  async function toggleChecklist(key: string, done: boolean) {
+    if (!selected) return;
+    setActing(true);
+    try {
+      const row = await offboardingAction(selected.id, "checklist", { item_key: key, done });
+      setCases((prev) =>
+        prev.map((c) => (c.id === selected.id ? patchOffboardingCaseFromRow(c, row) : c)),
+      );
+      toast(done ? "Marked cleared" : "Clearance reset", "success");
+    } catch (e) {
+      toast(isApiError(e), "error");
+    } finally {
+      setActing(false);
+    }
+  }
+
+  const onNoticeCount = cases.filter(isOnNotice).length;
+  const directExitCount = cases.filter(isDirectExit).length;
+  const fnfPendingCount = cases.filter(isFnfPendingWork).length;
+  const exEmployeeSplit = `${directExitCount}/${onNoticeCount}`;
+
+  const tabs: HrTabItem[] = useMemo(
+    () =>
+      TABS.map((t) =>
+        t.id === "resignations"
+          ? { ...t, badge: exEmployeeSplit }
+          : t.id === "on_notice"
+            ? { ...t, badge: onNoticeCount }
+            : t,
+      ),
+    [exEmployeeSplit, onNoticeCount],
+  );
+
+  const visibleCases = useMemo(() => {
+    if (kpiFilter === "on_notice") return cases.filter(isOnNotice);
+    if (kpiFilter === "direct_exit") return cases.filter(isDirectExit);
+    if (kpiFilter === "fnf_pending") return cases.filter(isFnfPendingWork);
+    return cases;
+  }, [cases, kpiFilter]);
+
+  function onKpiClick(key: string) {
+    const next = key as KpiFilter;
+    if (next === "on_notice") {
+      if (tab === "on_notice") {
+        setTab("resignations");
+        setKpiFilter("all");
+        return;
+      }
+      setKpiFilter("on_notice");
+      setTab("on_notice");
+      return;
+    }
+    if (kpiFilter === next && tab === "resignations") {
+      setKpiFilter("all");
+      return;
+    }
+    setKpiFilter(next);
+    setTab("resignations");
+  }
+
+  const kpiActiveKey =
+    tab === "on_notice" || kpiFilter === "on_notice"
+      ? "on_notice"
+      : kpiFilter === "direct_exit" || kpiFilter === "fnf_pending"
+        ? kpiFilter
+        : undefined;
+
+  return (
+    <div className="space-y-4 pb-2">
+      <SetupToastHost />
+      <PageHeader
+        title="Offboarding"
+        actions={
+          <HrToolbar onRefresh={() => void load()} loading={loading}>
+            <Button
+              size="sm"
+              className="cursor-pointer transition-colors duration-200"
+              onClick={() => setNewOpen(true)}
+            >
+              <Plus className="size-3.5" />
+              New exit
+            </Button>
+          </HrToolbar>
+        }
+      />
+      {authBlocked ? <HrAuthBanner /> : null}
+      {loading && cases.length === 0 ? <HrLoadingBlock /> : null}
+
+      {tab === "resignations" || tab === "on_notice" ? (
+        <HrKpiGrid
+          activeKey={kpiActiveKey}
+          onItemClick={onKpiClick}
+          items={[
+            { key: "on_notice", label: "On Notice", value: onNoticeCount },
+            {
+              key: "direct_exit",
+              label: "EX-Employee",
+              value: exEmployeeSplit,
+              hint: "exits / on notice",
+            },
+            { key: "fnf_pending", label: "FNF pending", value: fnfPendingCount },
+          ]}
+        />
+      ) : null}
+
+      <HrUnderlineTabs
+        tabs={tabs}
+        value={tab}
+        onChange={(id) => {
+          const next = id as TabId;
+          setTab(next);
+          if (next === "resignations") setKpiFilter("all");
+          if (next === "on_notice") setKpiFilter("on_notice");
+        }}
+      />
+
+      {tab !== "resignations" && tab !== "on_notice" && cases.length > 0 ? (
+        <div className="rounded-xl border border-border/70 bg-card px-4 py-3 shadow-sm">
+          <OffboardingCasePicker
+            cases={cases}
+            selectedId={selectedId}
+            onSelect={(id) => setSelectedId(id)}
+          />
+        </div>
+      ) : null}
+
+      {tab === "resignations" ? (
+        <section className="space-y-3">
+          {visibleCases.length === 0 ? (
+            <HrEmptyState
+              title={
+                kpiFilter === "direct_exit"
+                  ? "No direct exits"
+                  : kpiFilter === "fnf_pending"
+                    ? "No FNF pending"
+                    : kpiFilter === "on_notice"
+                      ? "No employees On Notice"
+                      : "No offboarding cases"
+              }
+              description={
+                kpiFilter === "all"
+                  ? "Create a resignation or exit request to start Manager → IT → Accounts → HR, with On Notice or direct exit."
+                  : "Click the card again to show all exits."
+              }
+              action={
+                kpiFilter === "all" ? (
+                  <Button size="sm" className="cursor-pointer" onClick={() => setNewOpen(true)}>
+                    New exit
+                  </Button>
+                ) : (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="cursor-pointer"
+                    onClick={() => setKpiFilter("all")}
+                  >
+                    Show all exits
+                  </Button>
+                )
+              }
+            />
+          ) : (
+            <div className="overflow-x-auto rounded-xl border border-border/70 bg-card shadow-sm">
+              <p className="border-b border-border/60 px-3 py-2 text-[11px] text-muted-foreground">
+                {kpiFilter === "direct_exit"
+                  ? "Direct exits — notice was skipped. Click the Direct exits card again to show all."
+                  : kpiFilter === "fnf_pending"
+                    ? "Cases where FNF is still pending after exit. Click the FNF pending card again to show all."
+                    : "On Notice is a live employment state, not just an open case. Direct exits skip notice. Click a summary card to filter."}
+              </p>
+              <table className="w-full min-w-[1080px] text-left text-sm">
+                <thead className="border-b bg-muted/40 text-[11px] uppercase text-muted-foreground">
+                  <tr>
+                    <th className="px-3 py-2 font-medium">Document</th>
+                    <th className="px-3 py-2 font-medium">Employee</th>
+                    <th className="px-3 py-2 font-medium">Type</th>
+                    <th className="px-3 py-2 font-medium">Notice</th>
+                    <th className="px-3 py-2 font-medium">Expected exit</th>
+                    <th className="px-3 py-2 font-medium">Status</th>
+                    <th className="px-3 py-2 font-medium">FNF</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {visibleCases.map((c) => (
+                    <tr
+                      key={c.id}
+                      role="button"
+                      tabIndex={0}
+                      className={cn(
+                        "cursor-pointer border-b border-border/50 transition-colors duration-200 hover:bg-muted/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
+                        selectedId === c.id && "bg-muted/40",
+                      )}
+                      onClick={() => openCase(c)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault();
+                          openCase(c);
+                        }
+                      }}
+                    >
+                      <td className="px-3 py-2">
+                        <span className="font-mono text-xs font-medium text-primary underline-offset-2 hover:underline">
+                          {c.documentNumber}
+                        </span>
+                      </td>
+                      <td className="px-3 py-2 font-medium">{c.employeeName}</td>
+                      <td className="px-3 py-2 text-xs capitalize">
+                        {SEPARATION_TYPE_LABELS[c.separationType] ?? c.separationType}
+                      </td>
+                      <td className="px-3 py-2">
+                        <HrStatusBadge status={NOTICE_STATUS_LABELS[c.noticeStatus] ?? c.noticeStatus} />
+                      </td>
+                      <td className="px-3 py-2 text-xs tabular-nums">
+                        {c.expectedExitDate || c.approvedLwd || c.requestedLwd || "—"}
+                      </td>
+                      <td className="px-3 py-2">
+                        <button
+                          type="button"
+                          className="cursor-pointer rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            openCase(c, "workflow");
+                          }}
+                        >
+                          <HrStatusBadge status={c.status} />
+                        </button>
+                      </td>
+                      <td className="px-3 py-2">
+                        <button
+                          type="button"
+                          className="cursor-pointer rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            openCase(c, "fnf");
+                          }}
+                        >
+                          <HrStatusBadge status={c.fnfStatus} />
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
+      ) : null}
+
+      {tab === "on_notice" ? (
+        <section className="space-y-3">
+          {cases.filter(isOnNotice).length === 0 ? (
+            <HrEmptyState
+              title="No employees On Notice"
+              description="After manager approval, resignations that serve notice appear here until last working day."
+            />
+          ) : (
+            <div className="overflow-x-auto rounded-xl border border-border/70 bg-card shadow-sm">
+              <p className="border-b border-border/60 px-3 py-2 text-[11px] text-muted-foreground">
+                Employees currently serving notice. Approvals (Manager → IT → Accounts → HR) can continue while they remain On Notice.
+              </p>
+              <table className="w-full min-w-[1080px] text-left text-sm">
+                <thead className="border-b bg-muted/40 text-[11px] uppercase text-muted-foreground">
+                  <tr>
+                    <th className="px-3 py-2 font-medium">Employee</th>
+                    <th className="px-3 py-2 font-medium">Exit type</th>
+                    <th className="px-3 py-2 font-medium">Notice start</th>
+                    <th className="px-3 py-2 font-medium">Notice period</th>
+                    <th className="px-3 py-2 font-medium">Expected exit</th>
+                    <th className="px-3 py-2 font-medium">Notice</th>
+                    <th className="px-3 py-2 font-medium">Status</th>
+                    <th className="px-3 py-2 font-medium">FNF</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {cases.filter(isOnNotice).map((c) => (
+                    <tr
+                      key={c.id}
+                      role="button"
+                      tabIndex={0}
+                      className={cn(
+                        "cursor-pointer border-b border-border/50 transition-colors duration-200 hover:bg-muted/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
+                        selectedId === c.id && "bg-muted/40",
+                      )}
+                      onClick={() => openCase(c, "workflow")}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault();
+                          openCase(c, "workflow");
+                        }
+                      }}
+                    >
+                      <td className="px-3 py-2">
+                        <p className="font-medium">{c.employeeName}</p>
+                        <p className="font-mono text-[10px] text-muted-foreground">
+                          {c.employeeCode} · {c.documentNumber}
+                        </p>
+                      </td>
+                      <td className="px-3 py-2 text-xs">
+                        {SEPARATION_TYPE_LABELS[c.separationType] ?? c.separationType}
+                      </td>
+                      <td className="px-3 py-2 text-xs tabular-nums">{c.noticeStartDate || "—"}</td>
+                      <td className="px-3 py-2 text-xs tabular-nums">
+                        {c.noticePeriodDays != null ? `${c.noticePeriodDays} days` : "—"}
+                      </td>
+                      <td className="px-3 py-2 text-xs tabular-nums">
+                        {c.expectedExitDate || c.requestedLwd || "—"}
+                      </td>
+                      <td className="px-3 py-2 text-xs">{noticeServedLabel(c)}</td>
+                      <td className="px-3 py-2">
+                        <HrStatusBadge status={c.status} />
+                      </td>
+                      <td className="px-3 py-2">
+                        <HrStatusBadge status={c.fnfStatus} />
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
+      ) : null}
+
+      {!selected && tab !== "resignations" && tab !== "on_notice" ? (
+        <HrEmptyState
+          title="Select a Case"
+          description="Choose an offboarding case from EX-Employee or On Notice to manage workflow, clearance, interview, and FNF."
+          action={
+            <Button size="sm" variant="outline" className="cursor-pointer" onClick={() => setTab("resignations")}>
+              View EX-Employee
+            </Button>
+          }
+        />
+      ) : null}
+
+      {selected && tab === "workflow" ? (
+        <section className="h-fit w-full space-y-3 rounded-xl border border-border/70 bg-card p-4 shadow-sm">
+          <OffboardingCaseHeader c={selected} />
+          <WorkflowStrip c={selected} />
+          {isOnNotice(selected) ? (
+            <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-950">
+              This employee is <strong>On Notice</strong> until{" "}
+              {selected.expectedExitDate || selected.requestedLwd || "the expected exit date"}.
+              Manager → IT → Accounts → HR can continue while they serve notice.
+            </p>
+          ) : null}
+          {isFnfPendingWork(selected) && !["settled", "waived"].includes(selected.fnfStatus.toLowerCase()) ? (
+            <p className="rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-xs text-sky-950">
+              <strong>FNF is pending.</strong> Prepare and settle full & final after clearance and exit interview.
+            </p>
+          ) : null}
+          <ApprovalHistory entries={selected.approvals ?? []} />
+          <div className="space-y-2">
+            {["pending", "not_applicable"].includes(selected.noticeStatus) &&
+            !["draft", "cancelled", "completed"].includes(selected.status) ? (
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="cursor-pointer"
+                  disabled={acting}
+                  onClick={() => void act("start-notice", {}, "Employee is On Notice")}
+                >
+                  Start notice period
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="cursor-pointer"
+                  disabled={acting}
+                  onClick={() => void act("direct-exit", {}, "Marked directly exited")}
+                >
+                  Mark directly exited
+                </Button>
+              </div>
+            ) : null}
+            {selected.noticeStatus === "on_notice" ? (
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  size="sm"
+                  className="cursor-pointer"
+                  disabled={acting}
+                  onClick={() => void act("confirm-lwd", {}, "Notice served — last working day confirmed")}
+                >
+                  Confirm last working day (notice served)
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="cursor-pointer"
+                  disabled={acting}
+                  onClick={() => void act("direct-exit", {}, "Left without serving notice")}
+                >
+                  Left without serving notice
+                </Button>
+              </div>
+            ) : null}
+            {selected.status === "draft" ? (
+              <WorkflowActionPanel
+                title="Submit exit request"
+                hint="Add optional remarks and a supporting file before sending for manager approval."
+                confirmLabel="Submit"
+                acting={acting}
+                onConfirm={async (payload) => {
+                  await act(
+                    "submit",
+                    {
+                      remarks: payload.remarks || null,
+                      file_name: payload.file_name,
+                      file_data_url: payload.file_data_url,
+                    },
+                    "Submitted for approval",
+                  );
+                }}
+              />
+            ) : null}
+            {selected.status === "submitted" ? (
+              <WorkflowActionPanel
+                title="Manager approve"
+                hint="HR can move this to Manager Approved with remarks and an attachment."
+                confirmLabel="Manager approve"
+                acting={acting}
+                onConfirm={async (payload) => {
+                  await act(
+                    "approve",
+                    {
+                      stage: "manager",
+                      remarks: payload.remarks || null,
+                      file_name: payload.file_name,
+                      file_data_url: payload.file_data_url,
+                    },
+                    "Manager approved",
+                  );
+                }}
+              />
+            ) : null}
+            {selected.status === "manager_approved" ? (
+              <WorkflowActionPanel
+                title="IT approve"
+                hint="Add IT clearance remarks and any supporting file."
+                confirmLabel="IT approve"
+                acting={acting}
+                onConfirm={async (payload) => {
+                  await act(
+                    "approve",
+                    {
+                      stage: "it",
+                      remarks: payload.remarks || null,
+                      file_name: payload.file_name,
+                      file_data_url: payload.file_data_url,
+                    },
+                    "IT approved",
+                  );
+                }}
+              />
+            ) : null}
+            {selected.status === "it_approved" ? (
+              <WorkflowActionPanel
+                title="Accounts approve"
+                hint="Add accounts clearance remarks and any supporting file."
+                confirmLabel="Accounts approve"
+                acting={acting}
+                onConfirm={async (payload) => {
+                  await act(
+                    "approve",
+                    {
+                      stage: "accounts",
+                      remarks: payload.remarks || null,
+                      file_name: payload.file_name,
+                      file_data_url: payload.file_data_url,
+                    },
+                    "Accounts approved",
+                  );
+                }}
+              />
+            ) : null}
+            {selected.status === "accounts_approved" ? (
+              <WorkflowActionPanel
+                title="HR approve"
+                hint="Add HR approval remarks and any supporting file."
+                confirmLabel="HR approve"
+                acting={acting}
+                onConfirm={async (payload) => {
+                  await act(
+                    "approve",
+                    {
+                      stage: "hr",
+                      remarks: payload.remarks || null,
+                      file_name: payload.file_name,
+                      file_data_url: payload.file_data_url,
+                    },
+                    "HR approved",
+                  );
+                }}
+              />
+            ) : null}
+            {selected.status === "hr_approved" && !selected.exitInterview ? (
+              <Button
+                size="sm"
+                variant="outline"
+                className="cursor-pointer"
+                disabled={acting}
+                onClick={() => setInterviewOpen(true)}
+              >
+                Record exit interview
+              </Button>
+            ) : null}
+            {selected.status === "hr_approved" && selected.exitInterview ? (
+              <Button
+                size="sm"
+                variant="outline"
+                className="cursor-pointer"
+                disabled={acting}
+                onClick={() => setDocumentOpen(true)}
+              >
+                Upload document
+              </Button>
+            ) : null}
+            {selected.status === "hr_approved" &&
+            selected.exitInterview &&
+            ["pending", "prepared"].includes(selected.fnfStatus.toLowerCase()) ? (
+              <Button
+                size="sm"
+                variant="outline"
+                className="cursor-pointer"
+                disabled={acting}
+                onClick={() => void act("fnf/prepare", {}, "FNF prepared")}
+              >
+                Prepare FNF
+              </Button>
+            ) : null}
+            {["calculated", "prepared"].includes(selected.fnfStatus.toLowerCase()) ? (
+              <Button
+                size="sm"
+                variant="outline"
+                className="cursor-pointer"
+                disabled={acting}
+                onClick={() => void act("fnf/settle", {}, "FNF settled")}
+              >
+                Settle FNF
+              </Button>
+            ) : null}
+            {selected.status === "hr_approved" &&
+            ["settled", "waived"].includes(selected.fnfStatus.toLowerCase()) ? (
+              <Button
+                size="sm"
+                className="cursor-pointer"
+                disabled={acting}
+                onClick={() => void act("complete", {}, "Offboarding completed")}
+              >
+                Complete exit
+              </Button>
+            ) : null}
+          </div>
+          {selected.reason ? (
+            <p className="text-xs text-muted-foreground">
+              <span className="font-medium text-foreground">Reason:</span> {selected.reason}
+            </p>
+          ) : null}
+        </section>
+      ) : null}
+
+      {selected && tab === "clearance" ? (
+        <section className="space-y-3 rounded-xl border border-border/70 bg-card p-4 shadow-sm">
+          <OffboardingCaseHeader c={selected} />
+          <h3 className="text-sm font-semibold">Clearance Checklist</h3>
+          <p className="text-xs text-muted-foreground">
+            Sign-off for <span className="font-medium text-foreground">{selected.employeeName}</span>{" "}
+            ({selected.employeeCode}) before FNF and completion.
+          </p>
+          <ul className="space-y-2">
+            {selected.checklist.map((item) => (
+              <li
+                key={item.key}
+                className="flex items-center justify-between gap-3 rounded-lg border border-border/60 px-3 py-2"
+              >
+                <div>
+                  <p className="text-sm font-medium">{item.label}</p>
+                  {item.notes ? (
+                    <p className="text-[10px] text-muted-foreground">{item.notes}</p>
+                  ) : null}
+                </div>
+                <Button
+                  size="sm"
+                  variant={item.done ? "secondary" : "outline"}
+                  className="h-7 cursor-pointer text-xs"
+                  disabled={acting || selected.status === "completed"}
+                  onClick={() => void toggleChecklist(item.key, !item.done)}
+                >
+                  {item.done ? "Cleared" : "Mark cleared"}
+                </Button>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
+
+      {selected && tab === "exit_interview" ? (
+        <section className="space-y-3 rounded-xl border border-border/70 bg-card p-4 shadow-sm">
+          <OffboardingCaseHeader c={selected} />
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <h3 className="text-sm font-semibold">Exit Interview</h3>
+              <p className="text-xs text-muted-foreground">
+                Structured feedback for {selected.employeeName} ({selected.employeeCode}). Required
+                before FNF.
+              </p>
+            </div>
+            <Button
+              size="sm"
+              className="cursor-pointer"
+              disabled={
+                selected.status === "completed" || selected.status.toLowerCase() !== "hr_approved"
+              }
+              onClick={() => setInterviewOpen(true)}
+            >
+              {selected.exitInterview ? "Update interview" : "Record interview"}
+            </Button>
+          </div>
+          {selected.exitInterview ? (
+            <div className="rounded-lg border border-border/60 bg-muted/20 p-3 text-xs space-y-2">
+              {Object.entries(selected.exitInterview.answers).map(([k, v]) => (
+                <p key={k}>
+                  <span className="font-medium capitalize">{k.replace(/_/g, " ")}:</span> {v}
+                </p>
+              ))}
+              {selected.exitInterview.interviewerNotes ? (
+                <p className="border-t border-border/50 pt-2 text-muted-foreground">
+                  HR notes: {selected.exitInterview.interviewerNotes}
+                </p>
+              ) : null}
+            </div>
+          ) : (
+            <p className="text-xs text-muted-foreground">No exit interview recorded yet.</p>
+          )}
+        </section>
+      ) : null}
+
+      {selected && tab === "documents" ? (
+        <section className="space-y-3 rounded-xl border border-border/70 bg-card p-4 shadow-sm">
+          <OffboardingCaseHeader c={selected} />
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <h3 className="text-sm font-semibold">Exit Documents</h3>
+              <p className="text-xs text-muted-foreground">
+                Upload resignation / relieving / experience letters after HR approval.
+              </p>
+            </div>
+            <Button
+              size="sm"
+              className="cursor-pointer"
+              disabled={
+                selected.status === "completed" ||
+                !["hr_approved", "manager_approved", "it_approved", "accounts_approved"].includes(
+                  selected.status.toLowerCase(),
+                )
+              }
+              onClick={() => setDocumentOpen(true)}
+            >
+              Upload document
+            </Button>
+          </div>
+          {selected.documents.length === 0 ? (
+            <p className="text-xs text-muted-foreground">No exit documents recorded yet.</p>
+          ) : (
+            <ul className="space-y-2">
+              {selected.documents.map((d) => (
+                <li
+                  key={d.id}
+                  className="rounded-lg border border-border/60 px-3 py-2 text-sm"
+                >
+                  <p className="font-medium">{d.name}</p>
+                  <p className="text-[10px] text-muted-foreground">
+                    {d.docType.replace(/_/g, " ")}
+                    {d.fileName ? ` · ${d.fileName}` : ""}
+                    {d.uploadedAt ? ` · ${d.uploadedAt.slice(0, 10)}` : ""}
+                  </p>
+                  {d.notes ? (
+                    <p className="mt-1 text-xs text-muted-foreground">{d.notes}</p>
+                  ) : null}
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+      ) : null}
+
+      {selected && tab === "fnf" ? (
+        <section className="space-y-3 rounded-xl border border-border/70 bg-card p-4 shadow-sm">
+          <OffboardingCaseHeader c={selected} />
+          <h3 className="text-sm font-semibold">FNF Settlement</h3>
+          {isFnfPendingWork(selected) && !["settled", "waived"].includes(selected.fnfStatus.toLowerCase()) ? (
+            <p className="rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-xs text-sky-950">
+              FNF is pending for {selected.employeeName}. Payroll and HR have been notified.
+            </p>
+          ) : null}
+          <div className="rounded-lg border border-border/60 bg-muted/20 px-3 py-2 text-xs text-muted-foreground space-y-1.5">
+            <p className="font-medium text-foreground">How FNF works</p>
+            <ol className="list-decimal space-y-1 pl-4">
+              <li>
+                Complete approvals: Manager → IT → Accounts → <strong>HR</strong> (in parallel with On Notice).
+              </li>
+              <li>
+                Confirm last working day (notice served) or mark a <strong>direct exit</strong>. FNF pending is notified then.
+              </li>
+              <li>
+                Record <strong>Exit Interview</strong>, then upload exit <strong>Documents</strong>.
+              </li>
+              <li>
+                Click <strong>Prepare FNF</strong> to create a final-settlement payroll run with leave
+                encashment and gratuity.
+              </li>
+              <li>
+                <strong>Settle FNF</strong> (or waive), then <strong>Complete exit</strong>.
+              </li>
+            </ol>
+          </div>
+          <dl className="grid gap-2 text-sm sm:grid-cols-2">
+            <div className="rounded-lg border border-border/60 px-3 py-2">
+              <dt className="text-[10px] uppercase text-muted-foreground">FNF status</dt>
+              <dd className="mt-1">
+                <HrStatusBadge status={selected.fnfStatus} />
+              </dd>
+            </div>
+            <div className="rounded-lg border border-border/60 px-3 py-2">
+              <dt className="text-[10px] uppercase text-muted-foreground">Payroll run</dt>
+              <dd className="mt-1 font-mono text-xs">{selected.fnfPayrollRunId ?? "—"}</dd>
+            </div>
+          </dl>
+          <div className="flex flex-wrap gap-2">
+            {selected.status.toLowerCase() === "hr_approved" &&
+            selected.exitInterview &&
+            ["pending", "prepared"].includes(selected.fnfStatus.toLowerCase()) ? (
+              <Button
+                size="sm"
+                className="cursor-pointer"
+                disabled={acting}
+                onClick={() => void act("fnf/prepare", {}, "FNF calculation started")}
+              >
+                Prepare FNF
+              </Button>
+            ) : null}
+            {["calculated", "prepared"].includes(selected.fnfStatus.toLowerCase()) ? (
+              <Button
+                size="sm"
+                variant="outline"
+                className="cursor-pointer"
+                disabled={acting}
+                onClick={() => void act("fnf/settle", {}, "FNF marked settled")}
+              >
+                Mark FNF settled
+              </Button>
+            ) : null}
+            {selected.status.toLowerCase() === "hr_approved" &&
+            !["settled", "waived"].includes(selected.fnfStatus.toLowerCase()) ? (
+              <Button
+                size="sm"
+                variant="outline"
+                className="cursor-pointer"
+                disabled={acting}
+                onClick={() => void act("fnf/waive", { reason: "Waived by HR" }, "FNF waived")}
+              >
+                Waive FNF
+              </Button>
+            ) : null}
+          </div>
+          {selected.fnfMeta ? (
+            <pre className="max-h-40 overflow-auto rounded-lg bg-muted/30 p-2 text-[10px]">
+              {JSON.stringify(selected.fnfMeta, null, 2)}
+            </pre>
+          ) : null}
+        </section>
+      ) : null}
+
+      <NewResignationDrawer
+        open={newOpen}
+        onClose={() => setNewOpen(false)}
+        onCreated={() => {
+          toast("Offboarding case created", "success");
+          void load();
+          setTab("workflow");
+        }}
+      />
+      {selected ? (
+        <>
+          <ExitInterviewDrawer
+            open={interviewOpen}
+            onClose={() => setInterviewOpen(false)}
+            caseId={selected.id}
+            initialNotes={selected.exitInterview?.interviewerNotes ?? undefined}
+            onSaved={() => {
+              toast("Exit interview saved", "success");
+              void load();
+            }}
+          />
+          <ExitDocumentDrawer
+            open={documentOpen}
+            onClose={() => setDocumentOpen(false)}
+            caseId={selected.id}
+            onSaved={() => {
+              toast("Document recorded", "success");
+              void load();
+            }}
+          />
+        </>
+      ) : null}
+    </div>
+  );
+}

@@ -1,12 +1,11 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import Link from "next/link";
 import {
   AppHeader,
   FilterChips,
 } from "@/components/app-header";
-import { IconBell } from "@/components/icons";
+import { NotificationBellLink } from "@/components/notification-bell-link";
 import { AiFab, EmptyState } from "@/components/ui";
 import { essService } from "@/services/ess-service";
 import type { EssAnnouncement } from "@/types/api";
@@ -53,13 +52,7 @@ export default function AnnouncementsPage() {
 
       <div className="flex items-center justify-between gap-2">
         <FilterChips options={FILTERS} value={filter} onChange={setFilter} />
-        <Link
-          href="/notifications"
-          className="flex h-10 w-10 shrink-0 items-center justify-center text-[#004ac6]"
-          aria-label="Notifications"
-        >
-          <IconBell size={22} />
-        </Link>
+        <NotificationBellLink />
       </div>
 
       {loading ? (

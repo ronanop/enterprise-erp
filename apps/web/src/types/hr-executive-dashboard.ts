@@ -19,6 +19,23 @@ export const DASHBOARD_ROLE_LABELS: Record<DashboardRole, string> = {
 
 export type NamedCount = { label: string; value: number };
 
+export type StackedAttendancePoint = {
+  label: string;
+  present: number;
+  absent: number;
+  leave: number;
+  halfDay: number;
+  late: number;
+};
+
+export type LeaveTrendPoint = {
+  label: string;
+  casual: number;
+  sick: number;
+  earned: number;
+  unpaid: number;
+};
+
 export type HrDashboardStats = {
   totalEmployees: number;
   activeEmployees: number;
@@ -26,6 +43,7 @@ export type HrDashboardStats = {
   onLeave: number;
   presentToday: number;
   absentToday: number;
+  onDutyToday: number;
   lateArrivals: number;
   openPositions: number;
   candidatesInPipeline: number;
@@ -35,17 +53,22 @@ export type HrDashboardStats = {
   upcomingAnniversaries: number;
   onProbation: number;
   onNoticePeriod: number;
+  /** Invitation links sent / active onboarding cases */
+  onboardingInProcess: number;
 };
 
 export type HrDashboardCharts = {
   employeeGrowth: NamedCount[];
   departmentWise: NamedCount[];
+  locationWise: NamedCount[];
   genderDiversity: NamedCount[];
   ageDistribution: NamedCount[];
   hiringFunnel: NamedCount[];
   attendanceTrend: NamedCount[];
+  attendanceStacked: StackedAttendancePoint[];
   leaveTrend: NamedCount[];
-  payrollCostTrend: NamedCount[];
+  leaveTrendByType: LeaveTrendPoint[];
+  onboardingProgress: NamedCount[];
   attritionTrend: NamedCount[];
   performanceDistribution: NamedCount[];
   trainingCompletion: NamedCount[];
@@ -58,6 +81,7 @@ export type CalendarEventType =
   | "leave"
   | "holiday"
   | "meeting"
+  | "joining"
   | "payroll";
 
 export type CalendarEvent = {
@@ -77,7 +101,11 @@ export type ApprovalItem = {
     | "payroll"
     | "expense"
     | "asset"
-    | "offer";
+    | "offer"
+    | "compoff"
+    | "on_duty"
+    | "ot_allotment"
+    | "attendance_correction";
   title: string;
   requester: string;
   status: string;
@@ -101,11 +129,13 @@ export type NotificationItem = {
     | "document"
     | "probation"
     | "offer"
-    | "policy";
+    | "policy"
+    | "birthday";
   title: string;
   body: string;
   at: string;
   unread: boolean;
+  href?: string;
 };
 
 export type QuickReport = {

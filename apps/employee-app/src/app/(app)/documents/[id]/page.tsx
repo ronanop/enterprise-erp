@@ -1,120 +1,140 @@
 "use client";
 
-import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useCallback, useEffect, useState } from "react";
+import { useParams, useRouter } from "next/navigation";
 import { SubHeader } from "@/components/app-header";
-import { IconDownload, IconSparkle } from "@/components/icons";
-import { mockDocuments } from "@/data/mock-portal";
+import { IconDownload } from "@/components/icons";
+import { AlertBox, EmptyState } from "@/components/ui";
+import { ApiClientError } from "@/services/api-client";
+import { essService } from "@/services/ess-service";
+import type { EssDocument } from "@/types/api";
 import * as ui from "@/theme/classes";
 
 export default function DocumentViewerPage() {
   const params = useParams<{ id: string }>();
-  const doc =
-    mockDocuments.find((d) => d.id === params.id) ?? mockDocuments[2];
+  const router = useRouter();
+  const [doc, setDoc] = useState<EssDocument | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [downloading, setDownloading] = useState(false);
+
+  useEffect(() => {
+    essService
+      .document(params.id)
+      .then((res) => {
+        setDoc(res.data);
+        if (!res.data) setError("Document not found");
+      })
+      .catch((err) =>
+        setError(
+          err instanceof ApiClientError ? err.message : "Failed to load document",
+        ),
+      )
+      .finally(() => setLoading(false));
+  }, [params.id]);
+
+  const canDownload = Boolean(doc?.storage_uri?.startsWith("ess-doc:"));
+
+  const onDownload = useCallback(async () => {
+    if (!doc || !canDownload) return;
+    setDownloading(true);
+    setError(null);
+    try {
+      const blob = await essService.downloadDocumentBlob(doc.id);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = doc.document_name;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      setError(
+        err instanceof ApiClientError ? err.message : "Download failed",
+      );
+    } finally {
+      setDownloading(false);
+    }
+  }, [doc, canDownload]);
+
+  if (loading) {
+    return (
+      <div className="p-6 text-sm text-[#434655]">Loading document…</div>
+    );
+  }
+
+  if (!doc) {
+    return (
+      <div className="space-y-4">
+        <SubHeader title="Document" backHref="/documents" />
+        {error ? <AlertBox>{error}</AlertBox> : <EmptyState title="Not found" />}
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-4 pb-8">
       <SubHeader
-        title={doc.title.replace(/\.pdf$/i, "")}
+        title={doc.document_name}
         backHref="/documents"
         right={
-          <div className="flex items-center gap-2">
-            <button type="button" className="text-[#004ac6]" aria-label="Download">
+          canDownload ? (
+            <button
+              type="button"
+              onClick={() => void onDownload()}
+              disabled={downloading}
+              className="text-[#004ac6] disabled:opacity-50"
+              aria-label="Download"
+            >
               <IconDownload size={20} />
             </button>
-            <button type="button" className={`${ui.btn} !px-3 !py-1.5 text-xs`}>
-              Sign Now
-            </button>
-          </div>
+          ) : null
         }
       />
-      <p className="-mt-2 px-1 text-xs text-[#434655]">{doc.modified}</p>
 
-      <Meta icon="⏱" label="Version" value="v2.4 Final" tone="blue" />
-      <Meta icon="✓" label="Status" value="Ready to Sign" tone="purple" />
-      <Meta icon="🔒" label="Access" value="Confidential" tone="green" />
+      {error ? <AlertBox>{error}</AlertBox> : null}
 
-      <div className={`${ui.card} flex items-center gap-3 p-4`}>
-        <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-[#dbe1ff] text-[#004ac6]">
-          ■
-        </span>
-        <div>
-          <p className="font-semibold text-[#0b1c30]">Quantum Collective</p>
-          <p className="text-sm text-[#434655]">
-            124 Innovation Way, Tech Valley, CA
-          </p>
-        </div>
+      <div className={`${ui.card} space-y-2 p-4 text-sm`}>
+        <Row label="Type" value={doc.document_type} />
+        <Row label="Number" value={doc.document_number} />
+        <Row label="Verification" value={doc.verification_status} />
+        <Row label="Status" value={doc.status} />
+        {doc.issued_on ? <Row label="Issued" value={doc.issued_on} /> : null}
+        {doc.expires_on ? <Row label="Expires" value={doc.expires_on} /> : null}
       </div>
 
-      <section className={`${ui.card} space-y-3 p-4`}>
-        <div className="flex items-center gap-2">
-          <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-[#712ae2] to-[#2563eb] text-white">
-            <IconSparkle size={14} />
-          </span>
-          <h2 className="font-semibold text-[#0b1c30]">AI Smart Summary</h2>
-        </div>
-        <div className="grid grid-cols-2 gap-2">
-          <Summary label="Key Term" value="Base: $165k/yr" color="bg-[#dbe1ff] text-[#004ac6]" />
-          <Summary label="Notice Period" value="4-week notice" color="bg-[#eaddff] text-[#712ae2]" />
-          <Summary label="Equity" value="4-year Vesting" color="bg-emerald-100 text-emerald-800" />
-          <Summary label="Expiration" value="Valid 7 Days" color="bg-[#ffdad6] text-[#ba1a1a]" />
-        </div>
-        <Link
-          href="/documents"
-          className="block text-center text-sm text-[#434655]"
+      {canDownload ? (
+        <button
+          type="button"
+          onClick={() => void onDownload()}
+          disabled={downloading}
+          className={`${ui.btn} block w-full text-center disabled:opacity-50`}
         >
-          View full clause breakdown
-        </Link>
-      </section>
-    </div>
-  );
-}
+          {downloading ? "Downloading…" : "Download file"}
+        </button>
+      ) : (
+        <p className="text-center text-sm text-[#434655]">
+          This document has no downloadable file attached in the employee portal.
+        </p>
+      )}
 
-function Meta({
-  icon,
-  label,
-  value,
-  tone,
-}: {
-  icon: string;
-  label: string;
-  value: string;
-  tone: "blue" | "purple" | "green";
-}) {
-  const bg =
-    tone === "purple"
-      ? "bg-[#eaddff] text-[#712ae2]"
-      : tone === "green"
-        ? "bg-emerald-100 text-emerald-700"
-        : "bg-[#dbe1ff] text-[#004ac6]";
-  return (
-    <div className={`${ui.card} flex items-center gap-3 p-4`}>
-      <span
-        className={`flex h-10 w-10 items-center justify-center rounded-full text-sm ${bg}`}
+      <button
+        type="button"
+        onClick={() => router.push("/documents")}
+        className="w-full text-center text-sm font-medium text-[#004ac6]"
       >
-        {icon}
-      </span>
-      <div>
-        <p className="text-xs text-[#434655]">{label}</p>
-        <p className="font-semibold text-[#0b1c30]">{value}</p>
-      </div>
+        Back to documents
+      </button>
     </div>
   );
 }
 
-function Summary({
-  label,
-  value,
-  color,
-}: {
-  label: string;
-  value: string;
-  color: string;
-}) {
+function Row({ label, value }: { label: string; value: string }) {
   return (
-    <div className={`rounded-xl p-3 ${color}`}>
-      <p className="text-[10px] font-bold uppercase opacity-80">{label}</p>
-      <p className="mt-1 text-sm font-bold">{value}</p>
+    <div className="flex justify-between gap-3 border-b border-[#c3c6d7]/20 py-2 last:border-0">
+      <span className="text-[#434655]">{label}</span>
+      <span className="max-w-[60%] truncate text-right font-semibold text-[#0b1c30]">
+        {value}
+      </span>
     </div>
   );
 }

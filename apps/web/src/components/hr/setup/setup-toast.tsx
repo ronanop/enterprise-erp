@@ -43,20 +43,20 @@ export function SetupToastHost() {
             className={cn(
               "pointer-events-auto flex items-start gap-2 rounded-xl border bg-card px-3 py-2.5 text-sm shadow-lg",
               item.tone === "error"
-                ? "border-red-200"
+                ? "border-hrms-pink bg-hrms-pink"
                 : item.tone === "info"
-                  ? "border-sky-200"
-                  : "border-emerald-200",
+                  ? "border-hrms-blue bg-hrms-blue"
+                  : "border-hrms-mint bg-hrms-mint",
             )}
           >
             <Icon
               className={cn(
                 "mt-0.5 size-4 shrink-0",
                 item.tone === "error"
-                  ? "text-red-600"
+                  ? "text-hrms-danger"
                   : item.tone === "info"
-                    ? "text-sky-600"
-                    : "text-emerald-600",
+                    ? "text-hrms-info"
+                    : "text-hrms-success",
               )}
             />
             <p className="min-w-0 flex-1 text-xs text-foreground">{item.message}</p>

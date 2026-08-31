@@ -7,10 +7,14 @@ from modules.hr.service.fnf_amounts import basic_from_gross, compute_gratuity, d
 from modules.hr.service.leave_service import _count_leave_days
 
 
-def test_sandwich_on_counts_inclusive_calendar_days():
+def test_leave_days_always_count_working_days_only():
     fri = date(2026, 7, 24)
     mon = date(2026, 7, 27)
-    assert _count_leave_days(fri, mon, set(), sandwich=True) == Decimal("4")
+    sat = date(2026, 7, 25)
+    sun = date(2026, 7, 26)
+    # Sandwich flag must not inflate leave-request days (attendance LOP handles sandwich).
+    assert _count_leave_days(fri, mon, {sat, sun}, sandwich=True) == Decimal("2")
+    assert _count_leave_days(fri, mon, {sat, sun}, sandwich=False) == Decimal("2")
 
 
 def test_sandwich_off_excludes_weekends_and_holidays():

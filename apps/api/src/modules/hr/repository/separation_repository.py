@@ -4,6 +4,7 @@ from uuid import UUID, uuid4
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
+from sqlalchemy.orm.attributes import flag_modified
 
 from modules.foundation.domain.value_objects import TenantContext
 from modules.hr.models import HrSeparation
@@ -46,6 +47,8 @@ class SeparationRepository(HrScopedRepository):
         for k, v in fields.items():
             if v is not None:
                 setattr(row, k, v)
+                if k == "clearance_json":
+                    flag_modified(row, "clearance_json")
         row.updated_at = utcnow()
         row.updated_by = ctx.user_id
         if hasattr(row, "version"):

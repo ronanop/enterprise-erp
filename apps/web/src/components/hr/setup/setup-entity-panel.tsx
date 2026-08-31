@@ -14,6 +14,7 @@ import {
   Trash2,
 } from "lucide-react";
 
+import { RoomEquipmentEditor } from "@/components/hr/setup/room-equipment-editor";
 import { SetupConfirmDialog } from "@/components/hr/setup/setup-confirm";
 import {
   SetupDrawer,
@@ -29,8 +30,10 @@ import { HrStatusBadge } from "@/components/hr/hr-primitives";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 import { RowActionsItem, RowActionsMenu } from "@/components/ui/row-actions-menu";
 import { nextCode, type HrSetupTab } from "@/config/hr-setup";
+import { getStoredOrgContext } from "@/lib/org-context-storage";
 import { ApiClientError, resourceService } from "@/services/api-client";
 import {
   archiveLocal,
@@ -51,7 +54,16 @@ import { cn } from "@/lib/utils";
 export type FieldDef = {
   key: string;
   label: string;
-  type?: "text" | "number" | "date" | "time" | "select" | "textarea" | "checkbox";
+  type?:
+    | "text"
+    | "number"
+    | "date"
+    | "time"
+    | "select"
+    | "searchable"
+    | "textarea"
+    | "checkbox"
+    | "equipment_list";
   required?: boolean;
   readOnly?: boolean;
   options?: { value: string; label: string }[];
@@ -72,6 +84,14 @@ type ColumnDef = {
 type Mode = "create" | "edit" | "view" | "history" | null;
 
 const PAGE_SIZE = 10;
+
+/** Plural tab titles → singular labels for Add / Edit actions. */
+function singularTabTitle(title: string): string {
+  if (title.endsWith("ies")) return `${title.slice(0, -3)}y`;
+  if (/(?:ches|shes|sses|xes|zes)$/i.test(title)) return title.slice(0, -2);
+  if (title.endsWith("s") && !title.endsWith("ss")) return title.slice(0, -1);
+  return title;
+}
 
 function toFormValue(value: unknown, type?: FieldDef["type"]): string {
   if (value == null) return type === "checkbox" ? "false" : "";
@@ -98,24 +118,107 @@ function SkeletonRows() {
   );
 }
 
-function AuditBlock({ row }: { row: SetupRow }) {
+/**
+ * Percentage-only widths that always sum to 100% (checkbox 5% + actions 8% + data = 87%).
+ * Mixing rem + % was causing horizontal overflow.
+ */
+function setupColumnWidths(columns: { key: string }[]): string[] {
+  const budget = 87;
+  if (columns.length === 0) return [];
+  const weights = columns.map((c, i) => {
+    if (
+      c.key === "code" ||
+      c.key === "employee_code" ||
+      c.key === "status" ||
+      c.key === "sort_order" ||
+      c.key === "capacity" ||
+      c.key === "leave_days" ||
+      c.key === "year" ||
+      c.key === "paid"
+    ) {
+      return 0.75;
+    }
+    if (i === 0) return 1.55;
+    return 1;
+  });
+  const total = weights.reduce((a, b) => a + b, 0);
+  return weights.map((w) => `${((w / total) * budget).toFixed(2)}%`);
+}
+
+function formatAuditWhen(value: unknown): string {
+  if (value == null || String(value).trim() === "") return "—";
+  const raw = String(value).trim();
+  const d = new Date(raw);
+  if (Number.isNaN(d.getTime())) return raw;
+  return d.toLocaleString(undefined, {
+    year: "numeric",
+    month: "short",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+function formatAuditWho(value: unknown, usersById: Record<string, string>): string {
+  if (value == null || String(value).trim() === "") return "—";
+  const id = String(value).trim();
+  if (usersById[id]) return usersById[id];
+  if (id === "current.user") {
+    try {
+      const raw = localStorage.getItem("erp_user_profile");
+      if (raw) {
+        const p = JSON.parse(raw) as { full_name?: string; email?: string };
+        return p.full_name || p.email || "Current user";
+      }
+    } catch {
+      /* ignore */
+    }
+    return "Current user";
+  }
+  // UUID → short readable fallback
+  if (/^[0-9a-f-]{36}$/i.test(id)) return `User ${id.slice(0, 8)}…`;
+  return id;
+}
+
+function resolveEmployeeLabel(
+  value: unknown,
+  employees: { value: string; label: string }[],
+): string {
+  if (value == null || value === "" || value === "—") return "—";
+  const id = String(value).trim();
+  const found = employees.find((e) => e.value === id);
+  if (found) {
+    // Label is often "Name · CODE" — show name only in the grid
+    return found.label.split(" · ")[0]?.trim() || found.label;
+  }
+  if (/^[0-9a-f-]{36}$/i.test(id)) return "—";
+  return id;
+}
+
+function AuditBlock({
+  row,
+  usersById,
+}: {
+  row: SetupRow;
+  usersById: Record<string, string>;
+}) {
   return (
     <div className="mt-4 grid gap-2 rounded-xl border border-border/70 bg-muted/30 p-3 text-[11px] text-muted-foreground sm:grid-cols-2">
       <div>
         <span className="font-medium text-foreground">Created by</span>
-        <p>{cell(row, "created_by")}</p>
+        <p>{formatAuditWho(row.created_by, usersById)}</p>
       </div>
       <div>
         <span className="font-medium text-foreground">Created at</span>
-        <p>{cell(row, "created_at")}</p>
+        <p>{formatAuditWhen(row.created_at)}</p>
       </div>
       <div>
         <span className="font-medium text-foreground">Updated by</span>
-        <p>{cell(row, "updated_by")}</p>
+        <p>{formatAuditWho(row.updated_by, usersById)}</p>
       </div>
       <div>
         <span className="font-medium text-foreground">Updated at</span>
-        <p>{cell(row, "updated_at")}</p>
+        <p>{formatAuditWhen(row.updated_at)}</p>
       </div>
     </div>
   );
@@ -131,7 +234,6 @@ export function SetupEntityPanel({
   buildCreateBody,
   buildUpdateBody,
   statusActions,
-  statsExtra,
 }: {
   tab: HrSetupTab;
   columns: ColumnDef[];
@@ -146,7 +248,6 @@ export function SetupEntityPanel({
     deactivate?: string;
     archive?: string;
   };
-  statsExtra?: (rows: SetupRow[]) => { label: string; value: number | string }[];
 }) {
   const [rows, setRows] = useState<SetupRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -170,6 +271,7 @@ export function SetupEntityPanel({
     employees: { value: string; label: string }[];
     shifts: { value: string; label: string }[];
   }>({ companies: [], branches: [], departments: [], employees: [], shifts: [] });
+  const [usersById, setUsersById] = useState<Record<string, string>>({});
 
   const needsOrgLookups = fields.some((f) => f.optionsSource);
 
@@ -191,6 +293,22 @@ export function SetupEntityPanel({
         const lookups = await loadSetupOrgLookups();
         setOrgLookups(lookups);
       }
+      // Best-effort user directory for audit "created by / updated by" labels
+      void resourceService
+        .list<Record<string, unknown>>("/users")
+        .then((res) => {
+          const map: Record<string, string> = {};
+          const list = Array.isArray(res.data) ? res.data : [];
+          for (const u of list) {
+            const id = String(u.id ?? "");
+            if (!id) continue;
+            map[id] = String(u.display_name || u.email || id);
+          }
+          setUsersById(map);
+        })
+        .catch(() => {
+          /* permission may block; UUIDs still show as short ids */
+        });
     } catch (err) {
       toast(err instanceof ApiClientError ? err.message : "Failed to load records", "error");
       setRows([]);
@@ -219,24 +337,7 @@ export function SetupEntityPanel({
 
   const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const pageRows = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
-
-  const stats = useMemo(() => {
-    const base = [
-      { label: "Total", value: rows.length },
-      {
-        label: "Active",
-        value: rows.filter((r) => String(r.status).toLowerCase() === "active").length,
-      },
-      {
-        label: "Inactive / Archived",
-        value: rows.filter((r) =>
-          ["inactive", "archived", "draft"].includes(String(r.status).toLowerCase()),
-        ).length,
-      },
-      { label: "Selected", value: selected.size },
-    ];
-    return statsExtra ? [...base, ...statsExtra(rows)] : base;
-  }, [rows, selected, statsExtra]);
+  const columnWidths = useMemo(() => setupColumnWidths(columns), [columns]);
 
   function resolveFieldOptions(f: FieldDef): { value: string; label: string }[] {
     if (f.options?.length) return f.options;
@@ -253,16 +354,41 @@ export function SetupEntityPanel({
   }
 
   function openCreate() {
-    const codes = rows.map((r) => String(r[codeKey] ?? r.code ?? ""));
+    const codes = rows.flatMap((r) =>
+      [r[codeKey], r.code, r.branch_code, r.department_code, r.designation_code, r.company_code]
+        .map((v) => String(v ?? ""))
+        .filter(Boolean),
+    );
     const prefix = tab.codePrefix ?? "CFG";
     const initial: Record<string, string> = {};
+    const usedCodes = [...codes];
     for (const f of fields) {
-      if (f.key === codeKey || f.key === "code" || f.key.endsWith("_code") || f.key === "document_number") {
-        initial[f.key] = nextCode(prefix, codes);
+      // Only mint the entity identity code — never state_code / country_code / etc.
+      const isIdentityCode =
+        f.key === codeKey || f.key === "code" || f.key === "document_number";
+      if (isIdentityCode) {
+        const minted = nextCode(prefix, usedCodes);
+        initial[f.key] = minted;
+        usedCodes.push(minted);
       } else if (f.type === "checkbox") {
         initial[f.key] = "false";
       } else if (f.key === "status") {
         initial[f.key] = "active";
+      } else if (f.key === "country_code" && f.type === "searchable") {
+        initial[f.key] = "IN";
+      } else if (f.key === "company_id") {
+        // Prefer the signed-in org company so created branches appear in the list
+        const sessionCompanyId = getStoredOrgContext()?.companyId
+          ? String(getStoredOrgContext()?.companyId)
+          : "";
+        const companies = orgLookups.companies;
+        if (sessionCompanyId && companies.some((c) => c.value === sessionCompanyId)) {
+          initial[f.key] = sessionCompanyId;
+        } else if (f.autoDefault && companies[0]) {
+          initial[f.key] = companies[0].value;
+        } else {
+          initial[f.key] = "";
+        }
       } else if (f.type === "time" && f.key === "start_time") {
         initial[f.key] = "09:00";
       } else if (f.type === "time" && f.key === "end_time") {
@@ -342,6 +468,16 @@ export function SetupEntityPanel({
         return;
       }
     }
+    const minRaw = form.min_ctc;
+    const maxRaw = form.max_ctc;
+    if (minRaw != null && minRaw !== "" && maxRaw != null && maxRaw !== "") {
+      const min = Number(minRaw);
+      const max = Number(maxRaw);
+      if (Number.isFinite(min) && Number.isFinite(max) && max < min) {
+        toast("Maximum salary must be ≥ minimum salary", "error");
+        return;
+      }
+    }
     setSaving(true);
     try {
       if (tab.source === "local") {
@@ -353,7 +489,21 @@ export function SetupEntityPanel({
         }
       } else if (tab.apiPath) {
         if (mode === "create") {
-          const body = buildCreateBody ? buildCreateBody(form) : form;
+          // Avoid duplicate identity codes (e.g. BR-001 already used)
+          let createForm = { ...form };
+          if (codeKey && createForm[codeKey]) {
+            const existing = new Set(
+              rows.flatMap((r) =>
+                [r[codeKey], r.code].map((v) => String(v ?? "").toUpperCase()).filter(Boolean),
+              ),
+            );
+            let code = String(createForm[codeKey]);
+            if (existing.has(code.toUpperCase())) {
+              code = nextCode(tab.codePrefix ?? "CFG", Array.from(existing));
+              createForm = { ...createForm, [codeKey]: code };
+            }
+          }
+          const body = buildCreateBody ? buildCreateBody(createForm) : createForm;
           await resourceService.create(tab.apiPath, body);
         } else if (active) {
           const body = buildUpdateBody ? buildUpdateBody(form) : form;
@@ -383,7 +533,13 @@ export function SetupEntityPanel({
       } else if (tab.apiPath) {
         for (const id of ids) {
           if (type === "delete") {
-            await resourceService.delete(tab.apiPath, id);
+            const res = await resourceService.delete(tab.apiPath, id);
+            if (ids.length === 1 && res.message && res.message !== "OK") {
+              toast(res.message, "success");
+              setConfirm(null);
+              await load();
+              return;
+            }
           } else if (type === "archive") {
             await resourceService.update(tab.apiPath, id, {
               status: statusActions?.archive ?? "archived",
@@ -413,7 +569,7 @@ export function SetupEntityPanel({
   const canCreate = tab.source !== "derived";
 
   return (
-    <div className="space-y-4">
+    <div className="w-full min-w-0 space-y-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <div className="flex flex-wrap items-center gap-2">
@@ -422,7 +578,6 @@ export function SetupEntityPanel({
               {tab.source === "api" ? "Live API" : tab.source === "local" ? "Config store" : "Derived"}
             </Badge>
           </div>
-          <p className="mt-0.5 text-xs text-muted-foreground">{tab.description}</p>
         </div>
         <div className="flex flex-wrap gap-2">
           <Button type="button" variant="outline" size="sm" className="cursor-pointer" onClick={() => void load()}>
@@ -448,24 +603,13 @@ export function SetupEntityPanel({
           {canCreate ? (
             <Button type="button" size="sm" className="cursor-pointer" onClick={openCreate}>
               <Plus className="size-3.5" />
-              Add {tab.title.replace(/s$/, "")}
+              Add {singularTabTitle(tab.title)}
             </Button>
           ) : null}
         </div>
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        {stats.map((s) => (
-          <div key={s.label} className="rounded-xl border border-border/70 bg-card px-3 py-2.5 shadow-sm">
-            <p className="text-[10px] font-medium tracking-wide text-muted-foreground uppercase">
-              {s.label}
-            </p>
-            <p className="mt-0.5 text-xl font-semibold tracking-tight">{s.value}</p>
-          </div>
-        ))}
-      </div>
-
-      <div className="flex flex-wrap items-center gap-2">
+      <div className="flex w-full flex-wrap items-center gap-2">
         <div className="relative min-w-[200px] flex-1">
           <Search className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted-foreground" />
           <Input
@@ -563,17 +707,24 @@ export function SetupEntityPanel({
           {canCreate ? (
             <Button type="button" size="sm" className="mt-4 cursor-pointer" onClick={openCreate}>
               <Plus className="size-3.5" />
-              Add {tab.title.replace(/s$/, "")}
+              Add {singularTabTitle(tab.title)}
             </Button>
           ) : null}
         </div>
       ) : (
-        <div className="rounded-xl border border-border/70 bg-card shadow-sm">
-          <div className="erp-scroll overflow-x-auto">
-            <table className="w-full min-w-[720px] text-left text-sm">
-              <thead className="border-b border-border/70 bg-muted/40">
-                <tr>
-                  <th className="w-10 px-3 py-2">
+        <div className="w-full max-w-full min-w-0 overflow-hidden rounded-xl border border-border/70 bg-card shadow-sm">
+          <div className="w-full max-w-full overflow-x-hidden">
+            <table className="w-full max-w-full table-fixed border-collapse text-left text-sm">
+              <colgroup>
+                <col style={{ width: "5%" }} />
+                {columnWidths.map((w, i) => (
+                  <col key={columns[i]?.key ?? i} style={{ width: w }} />
+                ))}
+                <col style={{ width: "8%" }} />
+              </colgroup>
+              <thead>
+                <tr className="border-b border-border/70 bg-muted/40">
+                  <th className="overflow-hidden px-2 py-2.5 sm:px-3">
                     <input
                       type="checkbox"
                       className="cursor-pointer"
@@ -591,12 +742,13 @@ export function SetupEntityPanel({
                   {columns.map((c) => (
                     <th
                       key={c.key}
-                      className="px-3 py-2 text-[11px] font-medium tracking-wide text-muted-foreground uppercase"
+                      className="overflow-hidden px-2 py-2.5 text-[11px] font-medium tracking-wide text-ellipsis whitespace-nowrap text-muted-foreground uppercase sm:px-3"
+                      title={c.label}
                     >
                       {c.label}
                     </th>
                   ))}
-                  <th className="px-3 py-2 text-[11px] font-medium tracking-wide text-muted-foreground uppercase">
+                  <th className="overflow-hidden px-2 py-2.5 text-right text-[11px] font-medium tracking-wide whitespace-nowrap text-muted-foreground uppercase sm:px-3">
                     Actions
                   </th>
                 </tr>
@@ -604,7 +756,7 @@ export function SetupEntityPanel({
               <tbody>
                 {pageRows.map((row) => (
                   <tr key={row.id} className="border-b border-border/50 last:border-0 hover:bg-muted/30">
-                    <td className="px-3 py-2">
+                    <td className="overflow-hidden px-2 py-2 sm:px-3">
                       <input
                         type="checkbox"
                         className="cursor-pointer"
@@ -618,15 +770,35 @@ export function SetupEntityPanel({
                       />
                     </td>
                     {columns.map((c) => (
-                      <td key={c.key} className="px-3 py-2.5 align-middle">
+                      <td key={c.key} className="max-w-0 overflow-hidden px-2 py-2.5 align-middle sm:px-3">
                         {c.render
-                          ? c.render(row)
+                          ? <div className="min-w-0 truncate">{c.render(row)}</div>
                           : c.key === "status"
-                            ? <HrStatusBadge status={cell(row, "status")} />
-                            : cell(row, c.key, ...nameKeys)}
+                            ? (
+                              <div className="min-w-0 truncate">
+                                <HrStatusBadge status={cell(row, "status")} />
+                              </div>
+                            )
+                            : c.key === "head"
+                              ? (() => {
+                                  const label = resolveEmployeeLabel(
+                                    row.head ?? row.head_employee_id,
+                                    orgLookups.employees,
+                                  );
+                                  return (
+                                    <span className="block truncate" title={label}>
+                                      {label}
+                                    </span>
+                                  );
+                                })()
+                            : (
+                              <span className="block truncate" title={cell(row, c.key, ...nameKeys)}>
+                                {cell(row, c.key, ...nameKeys)}
+                              </span>
+                            )}
                       </td>
                     ))}
-                    <td className="px-3 py-2">
+                    <td className="overflow-hidden px-2 py-2 text-right align-middle sm:px-3">
                       <RowActionsMenu
                         open={menuId === row.id}
                         onOpenChange={(open) => setMenuId(open ? row.id : null)}
@@ -685,7 +857,7 @@ export function SetupEntityPanel({
               </tbody>
             </table>
           </div>
-          <div className="flex items-center justify-between border-t border-border/70 px-3 py-2 text-xs text-muted-foreground">
+          <div className="flex w-full items-center justify-between border-t border-border/70 px-3 py-2 text-xs text-muted-foreground">
             <span>
               Showing {(page - 1) * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE, filtered.length)} of{" "}
               {filtered.length}
@@ -720,12 +892,11 @@ export function SetupEntityPanel({
         open={mode === "create" || mode === "edit" || mode === "view"}
         title={
           mode === "create"
-            ? `Add ${tab.title.replace(/s$/, "")}`
+            ? `Add ${singularTabTitle(tab.title)}`
             : mode === "view"
-              ? `View ${tab.title.replace(/s$/, "")}`
-              : `Edit ${tab.title.replace(/s$/, "")}`
+              ? `View ${singularTabTitle(tab.title)}`
+              : `Edit ${singularTabTitle(tab.title)}`
         }
-        description={tab.description}
         wide
         onClose={() => setMode(null)}
         footer={
@@ -747,14 +918,36 @@ export function SetupEntityPanel({
       >
         <div className="grid gap-3 sm:grid-cols-2">
           {fields.map((f) => (
-            <div key={f.key} className={f.type === "textarea" ? "sm:col-span-2" : undefined}>
+            <div
+              key={f.key}
+              className={
+                f.type === "textarea" || f.type === "equipment_list" ? "sm:col-span-2" : undefined
+              }
+            >
               <SetupField label={f.label} required={f.required} hint={f.hint}>
-                {f.type === "textarea" ? (
+                {f.type === "equipment_list" ? (
+                  <RoomEquipmentEditor
+                    value={form[f.key] ?? "[]"}
+                    disabled={readOnly || f.readOnly}
+                    onChange={(json) => setForm((prev) => ({ ...prev, [f.key]: json }))}
+                  />
+                ) : f.type === "textarea" ? (
                   <SetupTextarea
                     value={form[f.key] ?? ""}
                     disabled={readOnly || f.readOnly}
                     onChange={(e) => setForm((prev) => ({ ...prev, [f.key]: e.target.value }))}
                     placeholder={f.placeholder}
+                  />
+                ) : f.type === "searchable" ? (
+                  <SearchableSelect
+                    value={form[f.key] ?? ""}
+                    disabled={readOnly || f.readOnly}
+                    options={resolveFieldOptions(f)}
+                    placeholder={f.placeholder || (f.required ? "Select…" : "None")}
+                    searchPlaceholder={`Search ${f.label.toLowerCase()}…`}
+                    onChange={(value) =>
+                      setForm((prev) => ({ ...prev, [f.key]: value }))
+                    }
                   />
                 ) : f.type === "select" || f.optionsSource ? (
                   <SetupSelect
@@ -815,7 +1008,7 @@ export function SetupEntityPanel({
             </div>
           ))}
         </div>
-        {active ? <AuditBlock row={active} /> : null}
+        {active ? <AuditBlock row={active} usersById={usersById} /> : null}
       </SetupDrawer>
 
       <SetupDrawer
@@ -832,10 +1025,7 @@ export function SetupEntityPanel({
         {active ? (
           <>
             <p className="text-sm font-medium">{cell(active, ...nameKeys)}</p>
-            <AuditBlock row={active} />
-            <p className="mt-3 text-[11px] text-muted-foreground">
-              Full change-log timeline requires audit API enrichment. Showing available audit columns.
-            </p>
+            <AuditBlock row={active} usersById={usersById} />
           </>
         ) : null}
       </SetupDrawer>

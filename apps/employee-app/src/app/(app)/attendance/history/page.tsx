@@ -3,11 +3,6 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import {
-  FilterChips,
-  SearchField,
-  SubHeader,
-} from "@/components/app-header";
-import {
   IconChevronRight,
   IconClock,
   IconFingerprint,
@@ -19,7 +14,7 @@ import { ApiClientError } from "@/services/api-client";
 import { essService } from "@/services/ess-service";
 import type { EssAttendance, EssMe } from "@/types/api";
 import * as ui from "@/theme/classes";
-import { formatHoursLabel, formatTime, todayLocalDate } from "@/utils/datetime";
+import { formatDisplayDateDDMMYYYY, formatHoursLabel, formatTime, todayLocalDate } from "@/utils/datetime";
 
 const FILTERS = ["All", "Present", "Late", "Overtime", "Absent"];
 
@@ -183,6 +178,9 @@ export default function AttendanceHistoryPage() {
                       <p className="font-semibold text-[#0b1c30]">
                         {formatLongDate(row.attendance_date)}
                       </p>
+                      <p className="text-xs text-[#434655]">
+                        {formatDisplayDateDDMMYYYY(row.attendance_date)}
+                      </p>
                       <p className="text-[10px] font-bold uppercase tracking-wide text-[#434655]">
                         Regular shift · {row.source}
                       </p>
@@ -233,10 +231,12 @@ export default function AttendanceHistoryPage() {
                     <span className="font-semibold text-[#004ac6]">
                       Total: {formatHoursLabel(row.total_hours)}
                     </span>
-                    <span className="text-[#434655]">
-                      <IconClock size={12} className="mr-1 inline" />
-                      Break: 01h 00m
-                    </span>
+                    <Link
+                      href={`/attendance/correction?date=${encodeURIComponent(row.attendance_date)}`}
+                      className="font-semibold text-[#004ac6]"
+                    >
+                      Correct this day
+                    </Link>
                   </div>
                 </li>
               );
@@ -255,16 +255,9 @@ export default function AttendanceHistoryPage() {
         </Link>
         <Link
           href="/attendance/on-duty"
-          className={`${ui.card} flex items-center justify-between px-3 py-3 text-sm font-semibold text-[#0b1c30]`}
-        >
-          On Duty
-          <IconChevronRight size={16} className="text-[#434655]" />
-        </Link>
-        <Link
-          href="/attendance/compoff"
           className={`${ui.card} col-span-2 flex items-center justify-between px-3 py-3 text-sm font-semibold text-[#0b1c30]`}
         >
-          Comp Off request
+          On Duty
           <IconChevronRight size={16} className="text-[#434655]" />
         </Link>
       </section>

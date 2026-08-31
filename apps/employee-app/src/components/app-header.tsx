@@ -2,7 +2,8 @@
 
 import type { ReactNode } from "react";
 import Link from "next/link";
-import { IconBack, IconBell } from "@/components/icons";
+import { IconBack } from "@/components/icons";
+import { NotificationBellLink } from "@/components/notification-bell-link";
 import { Avatar } from "@/components/ui";
 
 export function AppHeader({
@@ -22,13 +23,7 @@ export function AppHeader({
           {title}
         </span>
       </div>
-      <Link
-        href="/notifications"
-        className="flex h-10 w-10 items-center justify-center text-[#004ac6] transition active:scale-95"
-        aria-label="Notifications"
-      >
-        <IconBell size={22} />
-      </Link>
+      <NotificationBellLink />
     </header>
   );
 }
@@ -64,13 +59,7 @@ export function SubHeader({
             <Avatar name={name} size="sm" ring />
           </Link>
         ) : (
-          <Link
-            href="/notifications"
-            className="flex h-10 w-10 items-center justify-center text-[#004ac6]"
-            aria-label="Notifications"
-          >
-            <IconBell size={22} />
-          </Link>
+          <NotificationBellLink />
         ))}
     </header>
   );

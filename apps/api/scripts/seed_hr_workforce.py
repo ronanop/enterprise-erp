@@ -68,21 +68,23 @@ EMPLOYEES = [
     ("EMP-002", "Rohan", "Mehta", "rohan.mehta@example.com", "DES-ACC", "Accountant", "mid", "FIN", date(2023, 6, 1), "900000", "male", "EMP-001"),
     ("EMP-003", "Neha", "Kapoor", "neha.kapoor@example.com", "DES-SAL", "Sales Executive", "junior", "SAL", date(2024, 2, 12), "750000", "female", "EMP-001"),
     ("EMP-004", "Priya", "Sharma", "priya.sharma@example.com", "DES-SWE", "Software Engineer", "mid", "IT", date(2024, 4, 1), "1100000", "female", "EMP-007"),
-    ("EMP-005", "Arjun", "Patel", "arjun.patel@example.com", "DES-WHS", "Warehouse Supervisor", "mid", "OPS", date(2023, 9, 18), "850000", "male", "EMP-001"),
-    ("EMP-006", "Meera", "Iyer", "meera.iyer@example.com", "DES-QA", "Quality Analyst", "junior", "QA", date(2024, 7, 8), "780000", "female", "EMP-007"),
+    ("EMP-005", "Arjun", "Patel", "arjun.patel@example.com", "DES-WHS", "Warehouse Supervisor", "mid", "SAL", date(2023, 9, 18), "850000", "male", "EMP-001"),
+    ("EMP-006", "Meera", "Iyer", "meera.iyer@example.com", "DES-QA", "Quality Analyst", "junior", "IT", date(2024, 7, 8), "780000", "female", "EMP-007"),
     ("EMP-007", "Kabir", "Singh", "kabir.singh@example.com", "DES-PM", "Project Manager", "senior", "IT", date(2022, 11, 3), "1500000", "male", "EMP-001"),
-    ("EMP-008", "Sana", "Qureshi", "sana.qureshi@example.com", "DES-CSL", "Customer Support Lead", "mid", "CS", date(2024, 1, 22), "820000", "female", "EMP-001"),
+    ("EMP-008", "Sana", "Qureshi", "sana.qureshi@example.com", "DES-CSL", "Customer Support Lead", "mid", "SAL", date(2024, 1, 22), "820000", "female", "EMP-001"),
 ]
 
+# Canonical Cache HR department master — keep Technical Delivery; drop OPS/QA/CS extras.
 DEPARTMENTS = [
     ("HR", "Human Resources"),
     ("FIN", "Finance"),
     ("SAL", "Sales"),
     ("IT", "Information Technology"),
-    ("OPS", "Operations"),
-    ("QA", "Quality Assurance"),
-    ("CS", "Customer Support"),
+    ("TD", "Technical Delivery"),
 ]
+
+# Legacy codes soft-deleted on re-seed (and any duplicate SALES → SAL).
+EXTRA_DEPARTMENT_CODES = ("OPS", "QA", "CS", "SALES")
 
 LEAVE_TYPES = [
     # code, name, max_days_per_year, monthly_credit_days, is_paid
@@ -91,8 +93,7 @@ LEAVE_TYPES = [
     ("EL", "Earned Leave", Decimal("18"), Decimal("1.5"), True),
     ("ML", "Maternity Leave", Decimal("182"), None, True),
     ("PL", "Paternity Leave", Decimal("15"), None, True),
-    ("LOP", "Loss of Pay", Decimal("0"), None, False),
-    ("CO", "Comp Off", Decimal("0"), None, True),
+    ("CLWP", "Leave Without Pay (CLWP)", Decimal("0"), None, False),
 ]
 
 def previous_weekdays(from_day: date, count: int) -> list[date]:
@@ -264,6 +265,34 @@ def seed(db) -> None:
                 "updated_by": admin_id,
             },
         )
+        upsert_fields(
+            db,
+            OrgDepartment,
+            {"tenant_id": tenant_id, "company_id": company_id, "department_code": code},
+            {
+                "department_name": name,
+                "status": "active",
+                "is_deleted": False,
+            },
+        )
+
+    # Remove unnecessary seeded departments (QA / CS / OPS / legacy SALES).
+    extras = db.scalars(
+        select(OrgDepartment).where(
+            OrgDepartment.tenant_id == tenant_id,
+            OrgDepartment.company_id == company_id,
+            OrgDepartment.department_code.in_(EXTRA_DEPARTMENT_CODES),
+            OrgDepartment.is_deleted.is_(False),
+        )
+    ).all()
+    if extras:
+        print(f"Soft-deleting {len(extras)} extra department(s): "
+              f"{', '.join(sorted({e.department_code for e in extras}))}")
+        for row in extras:
+            row.is_deleted = True
+            row.status = "inactive"
+            row.updated_by = admin_id
+        db.flush()
 
     print("Seeding designations / leave types / shift…")
     designations: dict[str, HrDesignation] = {}

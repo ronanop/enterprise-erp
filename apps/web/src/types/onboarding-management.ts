@@ -7,6 +7,7 @@ export type OnboardingCaseStatus =
   | "submitted"
   | "hr_review"
   | "ready_to_join"
+  | "pending_join"
   | "joined"
   | "overdue"
   | "cancelled";
@@ -43,14 +44,14 @@ export type DocumentKind =
   | "signature"
   | "other";
 
-export type DocumentVerifyStatus = "pending" | "verified" | "rejected";
+export type DocumentVerifyStatus = "pending" | "verified" | "rejected" | "accepted";
 
 export const PORTAL_STEPS: { id: PortalStepId; label: string; description: string }[] = [
   { id: "personal", label: "Personal Details", description: "Identity and contact" },
   { id: "government_ids", label: "Government IDs", description: "Aadhaar, PAN, and more" },
-  { id: "bank", label: "Bank Details", description: "Salary account" },
+  { id: "bank", label: "Bank Details", description: "Salary account (required)" },
   { id: "emergency", label: "Emergency Contact", description: "Primary contact" },
-  { id: "documents", label: "Upload Documents", description: "Identity, education & previous employment" },
+  { id: "documents", label: "Upload Documents", description: "Marksheets, resume, bank & employment proofs" },
   { id: "policies", label: "Policies", description: "Agree and upload signature" },
   { id: "review", label: "Review & Submit", description: "Confirm all steps" },
 ];
@@ -72,8 +73,23 @@ export const DEFAULT_HR_CHECKLIST: { code: string; name: string }[] = [
   { code: "SCHEDULE_ORIENT", name: "Schedule Orientation" },
 ];
 
+/** HR tasks deferred until after the candidate joins and becomes an employee. */
+export const POST_JOIN_HR_CHECKLIST: { code: string; name: string }[] = [
+  { code: "GEN_EMP_ID", name: "Generate Employee ID" },
+  { code: "CREATE_PROFILE", name: "Create Employee Profile" },
+  { code: "ASSIGN_DEPT", name: "Assign Department" },
+  { code: "ASSIGN_SHIFT", name: "Assign Shift" },
+  { code: "ASSIGN_LEAVE", name: "Assign Leave Policy" },
+  { code: "ASSIGN_ROLE", name: "Assign Role" },
+  { code: "GEN_EMAIL", name: "Generate Company Email" },
+  { code: "GEN_ID_CARD", name: "Generate ID Card" },
+  { code: "CREATE_PAYROLL", name: "Create Payroll Record" },
+  { code: "ISSUE_LAPTOP", name: "Issue Laptop" },
+  { code: "ISSUE_ASSETS", name: "Issue Assets" },
+  { code: "SCHEDULE_ORIENT", name: "Schedule Orientation" },
+];
+
 export const DEFAULT_MANAGER_CHECKLIST: { code: string; name: string }[] = [
-  { code: "ASSIGN_BUDDY", name: "Assign Buddy" },
   { code: "CREATE_GOALS", name: "Create Goals" },
   { code: "WELCOME_MEETING", name: "Welcome Meeting" },
   { code: "TEAM_INTRO", name: "Team Introduction" },
@@ -86,6 +102,7 @@ export const ONBOARDING_STATUS_LABELS: Record<OnboardingCaseStatus, string> = {
   submitted: "Submitted",
   hr_review: "HR Review",
   ready_to_join: "Ready to Join",
+  pending_join: "Pending Join",
   joined: "Joined",
   overdue: "Overdue",
   cancelled: "Cancelled",
@@ -113,7 +130,12 @@ export type PersonalDetails = {
   /** Personal / candidate email (not company email) */
   email: string;
   personalEmail: string;
+  /** Current residential address */
   address: string;
+  /** Permanent address (may match current) */
+  permanentAddress: string;
+  /** When true, permanent address mirrors current address */
+  sameAsCurrentAddress?: boolean;
 };
 
 export type GovernmentIds = {
@@ -150,6 +172,18 @@ export type OnboardingDocument = {
   uploadedAt: string;
   verifyStatus: DocumentVerifyStatus;
   notes?: string;
+  /** Base64 data URL for HR preview (stored with portal progress in local demo). */
+  fileDataUrl?: string;
+  mimeType?: string;
+};
+
+export type SignedPolicyDocument = {
+  policyId: string;
+  title: string;
+  fileName: string;
+  fileDataUrl: string;
+  mimeType: string;
+  signedAt: string;
 };
 
 export type PolicyAcceptance = {
@@ -157,8 +191,12 @@ export type PolicyAcceptance = {
   signature: string;
   signatureFileName?: string;
   signatureDataUrl?: string;
+  /** MIME of uploaded signature (for stamping). */
+  signatureMimeType?: string;
   acceptedAt?: string;
   policies: string[];
+  /** Policy PDFs stamped with candidate signature at submit. */
+  signedDocuments?: SignedPolicyDocument[];
 };
 
 export type EducationMarks = {
@@ -197,6 +235,10 @@ export type OnboardingInvitation = {
   channel: InvitationChannel;
   resendCount: number;
   lastChannel?: InvitationChannel;
+  /** Auto-generated portal login password (shown to HR for testing; emailed to candidate). */
+  portalPassword?: string;
+  /** Login email captured at create (same as candidate email). */
+  loginEmail?: string;
 };
 
 export type OnboardingCase = {
@@ -209,14 +251,29 @@ export type OnboardingCase = {
   offerId: string;
   offerCode: string;
   joiningDate: string;
+  /** HR Setup → Legal Entities */
+  entityId?: string;
+  entityName?: string;
   department: string;
   designation: string;
   reportingManager: string;
   branch: string;
+  /** Org Setup → Branches row id */
+  branchId?: string;
   shift: string;
   leavePolicy: string;
   employmentType: string;
+  /** Probation length in days (permanent). Applied on activate. */
+  probationPeriodDays?: string;
+  /** Training duration in days (intern / trainee). */
+  trainingDurationDays?: string;
+  managementGroupId?: string;
+  managementGroupName?: string;
   employeeId?: string;
+  /** How HR will set the employee code when completing onboarding. */
+  employeeIdMode?: "auto" | "manual";
+  /** Intended employee code when `employeeIdMode` is manual (before completion). */
+  assignedEmployeeCode?: string;
   buddy?: string;
   hrOwner: string;
   status: OnboardingCaseStatus;
@@ -228,6 +285,9 @@ export type OnboardingCase = {
   updatedAt: string;
   activatedAt?: string;
   progressPct: number;
+  /** Candidate accepted privacy / T&C before portal steps */
+  termsAcceptedAt?: string;
+  termsVersion?: string;
 };
 
 export type OnboardingAuditEntry = {
@@ -271,6 +331,8 @@ export function emptyPersonal(): PersonalDetails {
     email: "",
     personalEmail: "",
     address: "",
+    permanentAddress: "",
+    sameAsCurrentAddress: false,
   };
 }
 
@@ -322,17 +384,18 @@ export type StartOnboardingInput = {
   candidateName: string;
   candidateEmail: string;
   candidatePhone: string;
-  offerId: string;
-  offerCode: string;
   joiningDate: string;
+  entityId: string;
+  entityName: string;
   department: string;
   designation: string;
   reportingManager: string;
   branch: string;
-  shift: string;
-  leavePolicy: string;
   employmentType: string;
-  buddy?: string;
-  hrOwner: string;
+  probationPeriodDays?: string;
+  trainingDurationDays?: string;
+  hrOwner?: string;
   invitationExpiryDays: number;
+  employeeIdMode?: "auto" | "manual";
+  assignedEmployeeCode?: string;
 };

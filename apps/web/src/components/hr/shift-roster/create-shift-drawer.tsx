@@ -50,7 +50,7 @@ export function CreateShiftDrawer({
   const [overnight, setOvernight] = useState(false);
   const [otAllowed, setOtAllowed] = useState(true);
   const [autoAtt, setAutoAtt] = useState(false);
-  const [color, setColor] = useState("#059669");
+  const [color, setColor] = useState("#9B5BB8");
   const [weeklyOff, setWeeklyOff] = useState("sunday");
   const [description, setDescription] = useState("");
   const [status, setStatus] = useState("active");
@@ -77,7 +77,7 @@ export function CreateShiftDrawer({
       setOvernight(Boolean(initial.isOvernight));
       setOtAllowed(ext.overtimeAllowed !== false);
       setAutoAtt(Boolean(ext.autoAttendance));
-      setColor(ext.color || "#059669");
+      setColor(ext.color || "#9B5BB8");
       setWeeklyOff(ext.weeklyOffRule || "sunday");
       setDescription(ext.description || "");
       setStatus(initial.status || "active");
@@ -100,7 +100,7 @@ export function CreateShiftDrawer({
     setOvernight(false);
     setOtAllowed(true);
     setAutoAtt(false);
-    setColor("#059669");
+    setColor("#9B5BB8");
     setWeeklyOff("sunday");
     setDescription("");
     setStatus("active");

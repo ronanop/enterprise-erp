@@ -16,10 +16,64 @@ export function formatDateTime(value: string | null | undefined): string {
 /** Local calendar date YYYY-MM-DD (matches APP_TIMEZONE business day for IST users). */
 export function todayLocalDate(): string {
   const d = new Date();
+  return toIsoDate(d);
+}
+
+/** Parse YYYY-MM-DD to Date at local noon (avoids TZ drift). */
+export function parseIsoDate(iso: string): Date {
+  return new Date(`${iso}T12:00:00`);
+}
+
+export function toIsoDate(d: Date): string {
   const y = d.getFullYear();
   const m = String(d.getMonth() + 1).padStart(2, "0");
   const day = String(d.getDate()).padStart(2, "0");
   return `${y}-${m}-${day}`;
+}
+
+/** Display as dd/mm/yyyy for ESS UI (API still uses ISO). */
+export function formatDisplayDateDDMMYYYY(
+  iso: string | null | undefined,
+): string {
+  if (!iso) return "—";
+  const d = parseIsoDate(iso.slice(0, 10));
+  if (Number.isNaN(d.getTime())) return iso;
+  const day = String(d.getDate()).padStart(2, "0");
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  const year = d.getFullYear();
+  return `${day}/${month}/${year}`;
+}
+
+/** One-line leave range: 05/08/2025 → 07/08/2025 · 3 day(s) */
+export function formatLeaveRangeLine(
+  startIso: string,
+  endIso: string,
+  daysCount?: string | number,
+): string {
+  const start = formatDisplayDateDDMMYYYY(startIso);
+  const end = formatDisplayDateDDMMYYYY(endIso);
+  const range =
+    startIso.slice(0, 10) === endIso.slice(0, 10) ? start : `${start} → ${end}`;
+  if (daysCount === undefined || daysCount === "") return range;
+  return `${range} · ${daysCount} day(s)`;
+}
+
+export function compareIsoDates(a: string, b: string): number {
+  return a.slice(0, 10).localeCompare(b.slice(0, 10));
+}
+
+export function isIsoInRange(
+  iso: string,
+  start: string,
+  end?: string | null,
+): boolean {
+  if (!start) return false;
+  const d = iso.slice(0, 10);
+  const s = start.slice(0, 10);
+  const e = (end && end.length >= 10 ? end : start).slice(0, 10);
+  const lo = s <= e ? s : e;
+  const hi = s <= e ? e : s;
+  return d >= lo && d <= hi;
 }
 
 /** @deprecated use todayLocalDate — kept for callers during transition */

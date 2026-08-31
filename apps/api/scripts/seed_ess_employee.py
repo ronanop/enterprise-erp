@@ -1,7 +1,9 @@
 """Seed one employee login linked to real HRMS workforce data.
 
 Creates/updates:
-  - User: employee@example.com / Secure1!
+  - User: employee@example.com
+  - Password: {employee_code}+{DOB as DDMMYYYY} when HR profile has date_of_birth,
+    else fallback Secure1!
   - Links that user to master_employee EMP-004 (Priya Sharma) from
     seed_hr_workforce so ESS /me, leave, and attendance return real HR data.
 
@@ -37,6 +39,8 @@ from modules.foundation.service.user_service import UserService  # noqa: E402
 from modules.master_data.models.employee import MasterEmployee  # noqa: E402
 from modules.organization.models.branch import OrgBranch  # noqa: E402
 from modules.organization.models.company import OrgCompany  # noqa: E402
+from modules.hr.models.employee_profile import HrEmployeeProfile  # noqa: E402
+from security.ess_default_password import build_ess_default_password  # noqa: E402
 from security.password import PasswordHasher  # noqa: E402
 
 DEMO_PASSWORD = "Secure1!"
@@ -111,6 +115,21 @@ def main() -> None:
 
         display_name = f"{employee.first_name} {employee.last_name}".strip() or "Demo Employee"
 
+        profile = db.scalar(
+            select(HrEmployeeProfile).where(
+                HrEmployeeProfile.employee_id == employee.id,
+                HrEmployeeProfile.is_deleted.is_(False),
+            )
+        )
+        login_password = DEMO_PASSWORD
+        if profile and profile.date_of_birth:
+            try:
+                login_password = build_ess_default_password(
+                    employee.employee_code, profile.date_of_birth
+                )
+            except ValueError:
+                login_password = DEMO_PASSWORD
+
         service = UserService(db)
         user = db.scalar(
             select(SecUser).where(
@@ -123,22 +142,25 @@ def main() -> None:
             created = service.create_user(
                 tenant_id=tenant.id,
                 email=ESS_EMAIL,
-                password=DEMO_PASSWORD,
+                password=login_password,
                 display_name=display_name,
                 user_type="employee",
                 created_by=admin_id,
             )
             user = db.scalar(select(SecUser).where(SecUser.id == created.id))
             assert user is not None
+            user.must_change_password = True
         else:
             user.display_name = display_name
             user.user_type = "employee"
+            user.password_hash = PasswordHasher.hash_password(login_password)
+            user.must_change_password = True
             user.updated_by = admin_id
 
         role = db.scalar(
             select(SecRole).where(
                 SecRole.tenant_id == tenant.id,
-                SecRole.role_code == "TENANT_ADMIN",
+                SecRole.role_code == "HR_EMPLOYEE",
                 SecRole.is_deleted.is_(False),
             )
         )
@@ -156,6 +178,23 @@ def main() -> None:
                     role_id=role.id,
                     assigned_by=admin_id,
                 )
+
+        tenant_admin_role = db.scalar(
+            select(SecRole).where(
+                SecRole.tenant_id == tenant.id,
+                SecRole.role_code == "TENANT_ADMIN",
+                SecRole.is_deleted.is_(False),
+            )
+        )
+        if tenant_admin_role is not None:
+            stale = db.scalar(
+                select(SecUserRole).where(
+                    SecUserRole.user_id == user.id,
+                    SecUserRole.role_id == tenant_admin_role.id,
+                )
+            )
+            if stale is not None:
+                db.delete(stale)
 
         scope = db.scalar(
             select(SecUserOrgScope).where(
@@ -199,7 +238,8 @@ def main() -> None:
         print("ESS employee mapped to HRMS")
         print("=" * 60)
         print(f"Login email   : {ESS_EMAIL}")
-        print(f"Password      : {DEMO_PASSWORD}")
+        print(f"Password      : {login_password}")
+        print("  (Emp{code}@{DDMMYYYY} when HR profile has date_of_birth)")
         print(f"Employee code : {employee.employee_code}")
         print(f"Name          : {display_name}")
         print(f"HRMS email    : {employee.email}")

@@ -65,7 +65,7 @@ export function DesignationFormDialog({ open, onClose, onSaved }: Props) {
   return (
     <HrFormDialog
       open={open}
-      title="Add designation"
+      title="Add Designation"
       description="Create a job designation master."
       onClose={onClose}
       footer={

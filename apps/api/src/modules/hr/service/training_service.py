@@ -135,9 +135,9 @@ class TrainingRoomService:
 
     def create(self, ctx: TenantContext, company_id: UUID | None = None, **fields):
         cid = self._scope.resolve_company_id(ctx, company_id)
-        code = fields.pop("room_code", None) or self._numbers.generate(
-            HrEntityType.TRAINING_ROOM, cid, HrTrainingRoom, "room_code"
-        )
+        # Always allocate via sequence so client preview codes cannot collide with seeds.
+        fields.pop("room_code", None)
+        code = self._numbers.generate(HrEntityType.TRAINING_ROOM, cid, HrTrainingRoom, "room_code")
         return self._repo.create(ctx, company_id=cid, room_code=code, **fields)
 
     def update(self, ctx: TenantContext, row_id: UUID, **fields):

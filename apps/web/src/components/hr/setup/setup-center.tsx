@@ -1,25 +1,34 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo } from "react";
+import { useEffect, useMemo } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { ChevronRight } from "lucide-react";
 
+import {
+  formatRoomEquipmentSummary,
+  normalizeRoomEquipment,
+  roomEquipmentForApi,
+  roomEquipmentToJson,
+} from "@/components/hr/setup/room-equipment-editor";
 import { SetupEntityPanel, type FieldDef } from "@/components/hr/setup/setup-entity-panel";
 import { HolidayCalendarPanel } from "@/components/hr/setup/holiday-calendar-panel";
 import { AttendancePolicyPanel } from "@/components/hr/setup/attendance-policy-panel";
 import { ManagementGroupPanel } from "@/components/hr/setup/management-group-panel";
+import { OnboardingPoliciesPanel } from "@/components/hr/setup/onboarding-policies-panel";
 import { SetupToastHost } from "@/components/hr/setup/setup-toast";
 import { toApiTimeValue, toTimeInputValue } from "@/components/hr/setup/setup-drawer";
-import { HrStatusBadge } from "@/components/hr/hr-primitives";
+import { HrStatusBadge, HrUnderlineTabs, type HrTabItem } from "@/components/hr/hr-primitives";
 import {
   getSetupSection,
   getSetupTab,
-  hrSetupSections,
+  meetingRoomTab,
+  setupTabIcons,
   type HrSetupTab,
   type HrSetupTabId,
 } from "@/config/hr-setup";
 import { cell, type SetupRow } from "@/services/hr-setup-service";
+import { COUNTRY_CODE_OPTIONS, INDIA_STATE_CODE_OPTIONS } from "@/config/geo-options";
 import { cn } from "@/lib/utils";
 
 function mapBranch(row: SetupRow): SetupRow {
@@ -58,6 +67,40 @@ function mapLeaveType(row: SetupRow): SetupRow {
     paid: row.is_paid ? "Yes" : "No",
     max_year: row.max_days_per_year ?? "—",
     per_month: row.monthly_credit_days ?? "—",
+  };
+}
+
+function mapJobLevel(row: SetupRow): SetupRow {
+  return {
+    ...row,
+    code: row.level_code,
+    name: row.level_name,
+    sort_order: row.rank_order ?? 0,
+  };
+}
+
+function mapEntity(row: SetupRow): SetupRow {
+  return {
+    ...row,
+    code: row.company_code,
+    name: row.company_name,
+  };
+}
+
+function mapGrade(row: SetupRow): SetupRow {
+  const formatCtc = (v: unknown) => {
+    if (v == null || v === "") return "—";
+    const n = Number(v);
+    return Number.isFinite(n) ? n.toLocaleString("en-IN") : String(v);
+  };
+  return {
+    ...row,
+    code: row.grade_code,
+    name: row.grade_name,
+    min_ctc: row.min_ctc != null ? String(row.min_ctc) : "",
+    max_ctc: row.max_ctc != null ? String(row.max_ctc) : "",
+    min_salary: formatCtc(row.min_ctc),
+    max_salary: formatCtc(row.max_ctc),
   };
 }
 
@@ -151,28 +194,16 @@ function mapLocation(row: SetupRow): SetupRow {
   };
 }
 
-function parseEquipmentList(value: unknown): string[] {
-  if (Array.isArray(value)) {
-    return value.map((v) => String(v).trim()).filter(Boolean);
-  }
-  if (typeof value === "string") {
-    return value
-      .split(/[,;|]/)
-      .map((s) => s.trim())
-      .filter(Boolean);
-  }
-  return [];
-}
-
 function mapRoom(row: SetupRow): SetupRow {
-  const features = parseEquipmentList(row.equipment_json ?? row.equipment_features);
+  const items = normalizeRoomEquipment(row.equipment_json ?? row.equipment_features);
+  const summary = formatRoomEquipmentSummary(items);
   return {
     ...row,
     code: row.room_code,
     name: row.room_name,
     capacity: row.capacity ?? 0,
-    equipment_features: features.join(", "),
-    features: features.length ? features.join(", ") : "—",
+    equipment_features: roomEquipmentToJson(items),
+    features: summary,
   };
 }
 
@@ -215,6 +246,29 @@ const STATUS_FIELD: FieldDef = {
   ],
 };
 
+/** Branches / departments: draft|active|inactive (DB check). */
+const BRANCH_STATUS_FIELD: FieldDef = {
+  key: "status",
+  label: "Status",
+  type: "select",
+  options: [
+    { value: "active", label: "Active" },
+    { value: "inactive", label: "Inactive" },
+    { value: "draft", label: "Draft" },
+  ],
+};
+
+/** Job levels / grades: active|inactive only (DB check). */
+const ACTIVE_STATUS_FIELD: FieldDef = {
+  key: "status",
+  label: "Status",
+  type: "select",
+  options: [
+    { value: "active", label: "Active" },
+    { value: "inactive", label: "Inactive" },
+  ],
+};
+
 const HOLIDAY_STATUS_FIELD: FieldDef = {
   key: "status",
   label: "Status",
@@ -233,7 +287,6 @@ const TAB_CONFIG: Partial<Record<HrSetupTabId, TabConfig>> = {
     mapApiRow: mapBranch,
     columns: [
       { key: "name", label: "Branch Name" },
-      { key: "code", label: "Code" },
       { key: "location", label: "Location" },
       { key: "head", label: "Head" },
       { key: "status", label: "Status" },
@@ -257,8 +310,20 @@ const TAB_CONFIG: Partial<Record<HrSetupTabId, TabConfig>> = {
       ]},
       { key: "address_line1", label: "Address" },
       { key: "city", label: "City" },
-      { key: "state_code", label: "State" },
-      { key: "country_code", label: "Country", placeholder: "IN" },
+      {
+        key: "state_code",
+        label: "State",
+        type: "searchable",
+        options: INDIA_STATE_CODE_OPTIONS,
+        placeholder: "Select state…",
+      },
+      {
+        key: "country_code",
+        label: "Country",
+        type: "searchable",
+        options: COUNTRY_CODE_OPTIONS,
+        placeholder: "Select country…",
+      },
       {
         key: "head_employee_id",
         label: "Branch head",
@@ -266,8 +331,13 @@ const TAB_CONFIG: Partial<Record<HrSetupTabId, TabConfig>> = {
         optionsSource: "employees",
         hint: "Employee who leads this branch",
       },
-      STATUS_FIELD,
+      BRANCH_STATUS_FIELD,
     ],
+    statusActions: {
+      activate: "active",
+      deactivate: "inactive",
+      archive: "inactive",
+    },
     buildCreateBody: (f) => ({
       company_id: f.company_id,
       branch_code: f.branch_code,
@@ -283,8 +353,10 @@ const TAB_CONFIG: Partial<Record<HrSetupTabId, TabConfig>> = {
       branch_name: f.branch_name,
       branch_type: f.branch_type || undefined,
       status: f.status,
-      address_line1: f.address_line1 || undefined,
-      city: f.city || undefined,
+      address_line1: f.address_line1 || null,
+      city: f.city || null,
+      state_code: f.state_code || null,
+      country_code: f.country_code || null,
       head_employee_id: f.head_employee_id || null,
     }),
   },
@@ -339,8 +411,13 @@ const TAB_CONFIG: Partial<Record<HrSetupTabId, TabConfig>> = {
         optionsSource: "employees",
         hint: "Shown on employee onboarding / add employee",
       },
-      STATUS_FIELD,
+      BRANCH_STATUS_FIELD,
     ],
+    statusActions: {
+      activate: "active",
+      deactivate: "inactive",
+      archive: "inactive",
+    },
     buildCreateBody: (f) => ({
       company_id: f.company_id,
       branch_id: f.branch_id,
@@ -394,8 +471,13 @@ const TAB_CONFIG: Partial<Record<HrSetupTabId, TabConfig>> = {
           { value: "exec", label: "Exec" },
         ],
       },
-      STATUS_FIELD,
+      ACTIVE_STATUS_FIELD,
     ],
+    statusActions: {
+      activate: "active",
+      deactivate: "inactive",
+      archive: "inactive",
+    },
     buildCreateBody: (f) => ({
       designation_code: f.designation_code,
       designation_name: f.designation_name,
@@ -410,7 +492,9 @@ const TAB_CONFIG: Partial<Record<HrSetupTabId, TabConfig>> = {
     }),
   },
   "job-levels": {
-    nameKeys: ["name"],
+    nameKeys: ["name", "level_name"],
+    codeKey: "level_code",
+    mapApiRow: mapJobLevel,
     columns: [
       { key: "name", label: "Level" },
       { key: "code", label: "Code" },
@@ -418,15 +502,38 @@ const TAB_CONFIG: Partial<Record<HrSetupTabId, TabConfig>> = {
       { key: "status", label: "Status" },
     ],
     fields: [
-      { key: "name", label: "Level Name", required: true },
-      { key: "code", label: "Code", required: true, readOnly: true },
-      { key: "sort_order", label: "Sort Order", type: "number" },
-      { key: "description", label: "Description", type: "textarea" },
-      STATUS_FIELD,
+      { key: "level_name", label: "Level Name", required: true },
+      { key: "level_code", label: "Code", required: true, readOnly: true },
+      {
+        key: "rank_order",
+        label: "Sort Order",
+        type: "number",
+        hint: "Lower numbers appear first in dropdowns (e.g. 1 = Junior, 5 = CXO)",
+      },
+      ACTIVE_STATUS_FIELD,
     ],
+    statusActions: {
+      activate: "active",
+      deactivate: "inactive",
+      archive: "inactive",
+    },
+    buildCreateBody: (f) => ({
+      level_code: f.level_code,
+      level_name: f.level_name,
+      rank_order: f.rank_order ? Number(f.rank_order) : 0,
+      status: f.status || "active",
+    }),
+    buildUpdateBody: (f) => ({
+      level_name: f.level_name,
+      rank_order: f.rank_order != null && f.rank_order !== "" ? Number(f.rank_order) : undefined,
+      status: f.status,
+      version: f.version ? Number(f.version) : undefined,
+    }),
   },
   grades: {
-    nameKeys: ["name"],
+    nameKeys: ["name", "grade_name"],
+    codeKey: "grade_code",
+    mapApiRow: mapGrade,
     columns: [
       { key: "name", label: "Grade" },
       { key: "code", label: "Code" },
@@ -435,13 +542,51 @@ const TAB_CONFIG: Partial<Record<HrSetupTabId, TabConfig>> = {
       { key: "status", label: "Status" },
     ],
     fields: [
-      { key: "name", label: "Grade Name", required: true, placeholder: "L1" },
-      { key: "code", label: "Code", required: true, readOnly: true },
-      { key: "min_salary", label: "Minimum Salary", type: "number" },
-      { key: "max_salary", label: "Maximum Salary", type: "number" },
-      { key: "description", label: "Description", type: "textarea" },
-      STATUS_FIELD,
+      { key: "grade_name", label: "Grade Name", required: true, placeholder: "e.g. L1 / Band A" },
+      { key: "grade_code", label: "Code", required: true, readOnly: true },
+      {
+        key: "min_ctc",
+        label: "Minimum Salary (Annual CTC)",
+        type: "number",
+        hint: "Annual CTC in INR — used by payroll salary bands",
+        placeholder: "360000",
+      },
+      {
+        key: "max_ctc",
+        label: "Maximum Salary (Annual CTC)",
+        type: "number",
+        hint: "Must be ≥ minimum when both are set",
+        placeholder: "600000",
+      },
+      ACTIVE_STATUS_FIELD,
     ],
+    statusActions: {
+      activate: "active",
+      deactivate: "inactive",
+      archive: "inactive",
+    },
+    buildCreateBody: (f) => {
+      const min = f.min_ctc !== "" && f.min_ctc != null ? Number(f.min_ctc) : null;
+      const max = f.max_ctc !== "" && f.max_ctc != null ? Number(f.max_ctc) : null;
+      return {
+        grade_code: f.grade_code,
+        grade_name: f.grade_name,
+        min_ctc: Number.isFinite(min as number) ? min : null,
+        max_ctc: Number.isFinite(max as number) ? max : null,
+        status: f.status || "active",
+      };
+    },
+    buildUpdateBody: (f) => {
+      const min = f.min_ctc !== "" && f.min_ctc != null ? Number(f.min_ctc) : null;
+      const max = f.max_ctc !== "" && f.max_ctc != null ? Number(f.max_ctc) : null;
+      return {
+        grade_name: f.grade_name,
+        min_ctc: Number.isFinite(min as number) ? min : null,
+        max_ctc: Number.isFinite(max as number) ? max : null,
+        status: f.status,
+        version: f.version ? Number(f.version) : undefined,
+      };
+    },
   },
   "work-locations": {
     nameKeys: ["name", "location_name"],
@@ -508,6 +653,22 @@ const TAB_CONFIG: Partial<Record<HrSetupTabId, TabConfig>> = {
           ? Number(f.geofence_radius_meters)
           : null,
     }),
+    buildUpdateBody: (f) => ({
+      location_name: f.location_name,
+      location_type: f.location_type || "office",
+      latitude: f.latitude != null && f.latitude !== "" ? Number(f.latitude) : null,
+      longitude: f.longitude != null && f.longitude !== "" ? Number(f.longitude) : null,
+      geofence_radius_meters:
+        f.geofence_radius_meters != null && f.geofence_radius_meters !== ""
+          ? Number(f.geofence_radius_meters)
+          : null,
+      status: f.status || "active",
+    }),
+    statusActions: {
+      activate: "active",
+      deactivate: "inactive",
+      archive: "inactive",
+    },
   },
   rooms: {
     nameKeys: ["name", "room_name"],
@@ -515,7 +676,6 @@ const TAB_CONFIG: Partial<Record<HrSetupTabId, TabConfig>> = {
     mapApiRow: mapRoom,
     columns: [
       { key: "name", label: "Room" },
-      { key: "code", label: "Code" },
       { key: "capacity", label: "Capacity" },
       { key: "features", label: "Features" },
       { key: "status", label: "Status" },
@@ -547,10 +707,9 @@ const TAB_CONFIG: Partial<Record<HrSetupTabId, TabConfig>> = {
       },
       {
         key: "equipment_features",
-        label: "Room Features",
-        type: "textarea",
-        placeholder: "Projector, Whiteboard, Video Conferencing, AC, Wi-Fi",
-        hint: "Comma-separated amenities and equipment",
+        label: "Room features",
+        type: "equipment_list",
+        hint: "Add equipment with name, remarks, and optional serial or asset number",
       },
       {
         key: "notes",
@@ -570,14 +729,14 @@ const TAB_CONFIG: Partial<Record<HrSetupTabId, TabConfig>> = {
       room_code: f.room_code || null,
       room_name: f.room_name,
       capacity: Number(f.capacity) || 10,
-      equipment_json: parseEquipmentList(f.equipment_features),
+      equipment_json: roomEquipmentForApi(f.equipment_features),
       notes: f.notes || null,
       status: f.status || "active",
     }),
     buildUpdateBody: (f) => ({
       room_name: f.room_name,
       capacity: Number(f.capacity) || 10,
-      equipment_json: parseEquipmentList(f.equipment_features),
+      equipment_json: roomEquipmentForApi(f.equipment_features),
       notes: f.notes || null,
       status: f.status || "active",
       version: f.version ? Number(f.version) : undefined,
@@ -595,6 +754,100 @@ const TAB_CONFIG: Partial<Record<HrSetupTabId, TabConfig>> = {
       { key: "name", label: "Name", required: true },
       { key: "code", label: "Code", required: true, readOnly: true },
       { key: "description", label: "Description", type: "textarea" },
+      STATUS_FIELD,
+    ],
+  },
+  entities: {
+    nameKeys: ["name", "company_name"],
+    codeKey: "company_code",
+    mapApiRow: mapEntity,
+    columns: [
+      { key: "name", label: "Entity" },
+      { key: "code", label: "Code" },
+      { key: "legal_name", label: "Legal name" },
+      { key: "status", label: "Status" },
+    ],
+    fields: [
+      {
+        key: "company_name",
+        label: "Entity name",
+        required: true,
+        placeholder: "e.g. Cache Digitech Pvt Ltd",
+      },
+      {
+        key: "legal_name",
+        label: "Legal name",
+        placeholder: "Registered legal name (optional)",
+      },
+      {
+        key: "company_code",
+        label: "Code",
+        required: true,
+        hint: "Company code used in Assign HR (e.g. DEMOCO)",
+      },
+      {
+        key: "country_code",
+        label: "Country",
+        type: "searchable",
+        required: true,
+        options: COUNTRY_CODE_OPTIONS,
+        placeholder: "Select country…",
+      },
+      {
+        key: "currency_code",
+        label: "Currency",
+        type: "select",
+        required: true,
+        autoDefault: true,
+        options: [
+          { value: "INR", label: "INR" },
+          { value: "USD", label: "USD" },
+          { value: "EUR", label: "EUR" },
+          { value: "AED", label: "AED" },
+        ],
+      },
+      BRANCH_STATUS_FIELD,
+    ],
+    statusActions: {
+      activate: "active",
+      deactivate: "inactive",
+      archive: "inactive",
+    },
+    buildCreateBody: (f) => ({
+      company_code: String(f.company_code || "").trim().toUpperCase(),
+      company_name: f.company_name,
+      legal_name: (f.legal_name || f.company_name).trim(),
+      country_code: f.country_code || "IN",
+      currency_code: f.currency_code || "INR",
+      timezone: "Asia/Kolkata",
+      status: f.status || "active",
+    }),
+    buildUpdateBody: (f) => ({
+      company_code: String(f.company_code || "").trim().toUpperCase() || undefined,
+      company_name: f.company_name,
+      legal_name: (f.legal_name || f.company_name).trim(),
+      country_code: f.country_code || undefined,
+      currency_code: f.currency_code || undefined,
+      status: f.status,
+    }),
+  },
+  "employment-type": {
+    nameKeys: ["name"],
+    columns: [
+      { key: "name", label: "Type" },
+      { key: "value", label: "Value key" },
+      { key: "code", label: "Code" },
+      { key: "status", label: "Status" },
+    ],
+    fields: [
+      { key: "name", label: "Display name", required: true },
+      {
+        key: "value",
+        label: "Value key",
+        required: true,
+        hint: "Stored on employee profile (e.g. permanent, contract)",
+      },
+      { key: "code", label: "Code", required: true, readOnly: true },
       STATUS_FIELD,
     ],
   },
@@ -623,6 +876,12 @@ const TAB_CONFIG: Partial<Record<HrSetupTabId, TabConfig>> = {
         key: "mandatory",
         label: "Mandatory",
         render: (r) => (r.mandatory ? "Yes" : "No"),
+      },
+      {
+        key: "max_files",
+        label: "Max files",
+        render: (r) =>
+          r.max_files != null && r.max_files !== "" ? String(r.max_files) : r.multiple ? "Many" : "1",
       },
       { key: "status", label: "Status" },
     ],
@@ -654,8 +913,10 @@ const TAB_CONFIG: Partial<Record<HrSetupTabId, TabConfig>> = {
       },
       { key: "mandatory", label: "Mandatory", type: "checkbox" },
       { key: "expiry_required", label: "Expiry Required", type: "checkbox" },
+      { key: "multiple", label: "Allow multiple files", type: "checkbox" },
       { key: "formats", label: "Allowed Formats", placeholder: "PDF,JPG" },
       { key: "max_size_mb", label: "Max Size (MB)", type: "number" },
+      { key: "max_files", label: "Max files", type: "number", placeholder: "1" },
       STATUS_FIELD,
     ],
   },
@@ -725,8 +986,26 @@ const TAB_CONFIG: Partial<Record<HrSetupTabId, TabConfig>> = {
       { key: "requires_attachment", label: "Requires Attachment", type: "checkbox" },
       { key: "carry_forward_allowed", label: "Carry Forward Allowed", type: "checkbox" },
       { key: "max_carry_forward_days", label: "Max Carry Forward Days", type: "number" },
-      STATUS_FIELD,
+      { key: "encashment_allowed", label: "Encashment Allowed", type: "checkbox" },
+      {
+        key: "sandwich_rule_enabled",
+        label: "Sandwich Rule",
+        type: "checkbox",
+        hint: "Approved leave around a weekly off/holiday: sandwich off. Unauthorized absence (no approved leave, even if balance remains): weekly off/holiday becomes LOP.",
+      },
+      {
+        key: "leave_cycle_start_day",
+        label: "Cycle Start Day",
+        type: "number",
+        hint: "Day of month leave cycle starts (1–28)",
+      },
+      ACTIVE_STATUS_FIELD,
     ],
+    statusActions: {
+      activate: "active",
+      deactivate: "inactive",
+      archive: "inactive",
+    },
     buildCreateBody: (f) => ({
       leave_type_code: f.leave_type_code,
       leave_type_name: f.leave_type_name,
@@ -738,6 +1017,9 @@ const TAB_CONFIG: Partial<Record<HrSetupTabId, TabConfig>> = {
       max_carry_forward_days: f.max_carry_forward_days
         ? Number(f.max_carry_forward_days)
         : null,
+      encashment_allowed: f.encashment_allowed === "true",
+      sandwich_rule_enabled: f.sandwich_rule_enabled === "true",
+      leave_cycle_start_day: f.leave_cycle_start_day ? Number(f.leave_cycle_start_day) : 1,
       status: f.status || "active",
     }),
     buildUpdateBody: (f) => ({
@@ -751,6 +1033,14 @@ const TAB_CONFIG: Partial<Record<HrSetupTabId, TabConfig>> = {
       max_carry_forward_days:
         f.max_carry_forward_days != null && f.max_carry_forward_days !== ""
           ? Number(f.max_carry_forward_days)
+          : undefined,
+      encashment_allowed:
+        f.encashment_allowed != null ? f.encashment_allowed === "true" : undefined,
+      sandwich_rule_enabled:
+        f.sandwich_rule_enabled != null ? f.sandwich_rule_enabled === "true" : undefined,
+      leave_cycle_start_day:
+        f.leave_cycle_start_day != null && f.leave_cycle_start_day !== ""
+          ? Number(f.leave_cycle_start_day)
           : undefined,
       status: f.status,
       version: f.version ? Number(f.version) : undefined,
@@ -1248,6 +1538,9 @@ function TabPanel({ tab }: { tab: HrSetupTab }) {
   if (tab.id === "employment-types") {
     return <ManagementGroupPanel tab={tab} />;
   }
+  if (tab.id === "onboarding-policies") {
+    return <OnboardingPoliciesPanel />;
+  }
   const cfg = TAB_CONFIG[tab.id];
   if (!cfg) {
     return (
@@ -1283,6 +1576,12 @@ export function HrSetupCenter() {
   const section = useMemo(() => getSetupSection(sectionId), [sectionId]);
   const tab = useMemo(() => getSetupTab(section.id, tabId), [section, tabId]);
 
+  useEffect(() => {
+    if (tabId === "rooms") {
+      router.replace("/hr/meeting-rooms");
+    }
+  }, [tabId, router]);
+
   function go(nextSection: string, nextTab?: string) {
     const params = new URLSearchParams();
     params.set("section", nextSection);
@@ -1303,7 +1602,7 @@ export function HrSetupCenter() {
           HRMS
         </Link>
         <ChevronRight className="size-3" />
-        <span className="text-foreground">Setup</span>
+        <span className="text-foreground">Org Setup</span>
         <ChevronRight className="size-3" />
         <span className="text-foreground">{section.title}</span>
         <ChevronRight className="size-3" />
@@ -1311,70 +1610,47 @@ export function HrSetupCenter() {
       </nav>
 
       <div>
-        <h1 className="text-lg font-semibold tracking-tight">HR Setup</h1>
-        <p className="text-xs text-muted-foreground">
-          Enterprise configuration center for organization, leave, shifts, payroll, and workflows —
-          foundation for Employee, Attendance, Leave, Payroll, Recruitment, Training, and Performance.
-        </p>
+        <h1 className="text-lg font-bold tracking-tight uppercase">Org Setup</h1>
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-[220px_minmax(0,1fr)]">
-        <aside className="h-fit rounded-xl border border-border/70 bg-card p-2 shadow-sm">
-          <p className="px-2 py-1.5 text-[10px] font-medium tracking-[0.14em] text-muted-foreground uppercase">
-            Configuration
-          </p>
-          <ul className="space-y-0.5">
-            {hrSetupSections.map((s) => {
-              const Icon = s.icon;
-              const active = s.id === section.id;
-              return (
-                <li key={s.id}>
-                  <button
-                    type="button"
-                    onClick={() => go(s.id)}
-                    className={cn(
-                      "flex w-full cursor-pointer items-center gap-2 rounded-lg px-2.5 py-2 text-left text-sm transition-colors duration-200",
-                      active
-                        ? "bg-primary text-primary-foreground"
-                        : "text-muted-foreground hover:bg-muted hover:text-foreground",
-                    )}
-                  >
-                    <Icon className="size-4 shrink-0" />
-                    <span className="truncate font-medium">{s.title}</span>
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
-        </aside>
-
-        <div className="min-w-0 space-y-4">
-          <div className="erp-scroll overflow-x-auto rounded-xl border border-border/70 bg-card px-2 pt-2 shadow-sm">
-            <div className="flex min-w-max gap-0.5 border-b border-border/70">
-              {section.tabs.map((t) => {
-                const active = t.id === tab.id;
-                return (
-                  <button
-                    key={t.id}
-                    type="button"
-                    onClick={() => go(section.id, t.id)}
-                    className={cn(
-                      "cursor-pointer rounded-t-md px-3 py-2 text-xs font-medium transition-colors duration-200",
-                      active
-                        ? "border-b-2 border-primary text-foreground"
-                        : "text-muted-foreground hover:bg-muted/50 hover:text-foreground",
-                    )}
-                  >
-                    {t.title}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
+      <div className="space-y-4">
+        <div className="w-full min-w-0 space-y-4">
+          <HrUnderlineTabs
+            embedded
+            size="sm"
+            className="rounded-xl border border-border/70 bg-card px-2 pt-1 shadow-sm"
+            tabs={section.tabs.map(
+              (t): HrTabItem => ({
+                id: t.id,
+                label: t.title,
+                icon: setupTabIcons[t.id as HrSetupTabId],
+              }),
+            )}
+            value={tab.id}
+            onChange={(id) => go(section.id, id)}
+          />
 
           <TabPanel key={`${section.id}:${tab.id}`} tab={tab} />
         </div>
       </div>
     </div>
+  );
+}
+
+export function MeetingRoomMasterPanel() {
+  const cfg = TAB_CONFIG.rooms;
+  if (!cfg) return null;
+  return (
+    <SetupEntityPanel
+      tab={meetingRoomTab}
+      columns={cfg.columns}
+      fields={cfg.fields}
+      nameKeys={cfg.nameKeys}
+      codeKey={cfg.codeKey}
+      mapApiRow={cfg.mapApiRow}
+      buildCreateBody={cfg.buildCreateBody}
+      buildUpdateBody={cfg.buildUpdateBody}
+      statusActions={cfg.statusActions}
+    />
   );
 }

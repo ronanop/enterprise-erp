@@ -95,7 +95,6 @@ export function WorkforceHub() {
     <div className="space-y-5">
       <PageHeader
         title="Workforce"
-        description="Employee directory — profiles, employment status, and quick access to HR records."
         actions={
           <HrToolbar onRefresh={() => void load()} loading={loading}>
             <Link href="/hr/employee-profiles" className="inline-flex h-7 cursor-pointer items-center gap-1 rounded-lg bg-primary px-2.5 text-[0.8rem] font-medium text-primary-foreground hover:bg-primary/80">All profiles</Link>
@@ -173,8 +172,7 @@ export function LeaveHub() {
   return (
     <div className="space-y-5">
       <PageHeader
-        title="Leave management"
-        description="Balances, requests, and approval-friendly leave tracking."
+        title="Leave Management"
         actions={
           <HrToolbar onRefresh={() => void load()} loading={loading}>
             <Button size="sm" className="cursor-pointer" onClick={() => setOpen(true)}>
@@ -206,7 +204,7 @@ export function LeaveHub() {
         placeholder="Filter requests…"
         className="max-w-sm"
       />
-      <HrSection title="Leave requests" description="Recent and open requests">
+      <HrSection title="Leave Requests" description="Recent and open requests">
         <HrTable
           columns={[
             { key: "doc", label: "Document" },
@@ -264,7 +262,6 @@ export function TimeHub() {
     <div className="space-y-5">
       <PageHeader
         title="Attendance / Time"
-        description="Daily attendance, presence mix, and late/absent indicators."
         actions={
           <HrToolbar onRefresh={() => void load()} loading={loading}>
             <Button size="sm" className="cursor-pointer" onClick={() => setOpen(true)}>
@@ -329,7 +326,6 @@ export function SetupHub() {
     <div className="space-y-5">
       <PageHeader
         title="HR Setup"
-        description="Masters for designations, shifts, leave types, and holiday calendars."
         actions={
           <HrToolbar onRefresh={() => void load()} loading={loading}>
             <Button size="sm" className="cursor-pointer" onClick={() => setOpen(true)}>
@@ -355,13 +351,13 @@ export function SetupHub() {
           href="/hr/shifts"
         />
         <HrSetupCard
-          title="Leave types"
+          title="Leave Types"
           description="Casual, sick, privilege…"
           count={data?.leaveTypes.length ?? 0}
-          href="/hr/leave-types"
+          href="/hr/setup?section=leave&tab=leave-types"
         />
         <HrSetupCard
-          title="Holiday calendars"
+          title="Holiday Calendars"
           description="Company holiday sets"
           count={data?.holidayCalendars.length ?? 0}
           href="/hr/holiday-calendars"
@@ -373,7 +369,7 @@ export function SetupHub() {
           href="/organization/departments"
         />
         <HrSetupCard
-          title="Employees (master)"
+          title="Employees (Master)"
           description="Master employee records"
           count={0}
           href="/master-data/employees"
@@ -408,8 +404,7 @@ export function ShiftsHub() {
   return (
     <div className="space-y-5">
       <PageHeader
-        title="Shifts & roster"
-        description="Shift masters and employee shift assignments."
+        title="Shifts & Roster"
         actions={<HrToolbar onRefresh={() => void load()} loading={loading} />}
       />
       {authBlocked ? <HrAuthBanner /> : null}
@@ -476,7 +471,6 @@ export function TalentHub() {
     <div className="space-y-5">
       <PageHeader
         title="Talent / Performance"
-        description="Reviews, goals, and appraisals."
         actions={<HrToolbar onRefresh={() => void load()} loading={loading} />}
       />
       {authBlocked ? <HrAuthBanner /> : null}
@@ -521,7 +515,6 @@ export function TrainingHubPage() {
     <div className="space-y-5">
       <PageHeader
         title="Training / Learning"
-        description="Programs, assignments, and completion status."
         actions={<HrToolbar onRefresh={() => void load()} loading={loading} />}
       />
       {authBlocked ? <HrAuthBanner /> : null}
@@ -560,237 +553,6 @@ export function TrainingHubPage() {
   );
 }
 
-export function SeparationHub() {
-  const { data, loading, load, authBlocked } = useHrData();
-  const [actingId, setActingId] = useState<string | null>(null);
-
-  async function runAction(
-    id: string,
-    action: string,
-    body?: Record<string, unknown>,
-    label?: string,
-  ) {
-    setActingId(id);
-    try {
-      await resourceService.action("/hr/separation", id, action, body ?? {});
-      toast(label ?? `Separation ${action}`);
-      await load();
-    } catch (e) {
-      toast(e instanceof ApiClientError ? e.message : "Action failed", "error");
-    } finally {
-      setActingId(null);
-    }
-  }
-
-  return (
-    <div className="space-y-5">
-      <SetupToastHost />
-      <PageHeader
-        title="Separation / Exit"
-        description="Exit requests, last working day, FNF settlement, and clearance tracking."
-        actions={
-          <HrToolbar onRefresh={() => void load()} loading={loading}>
-            <Button
-              size="sm"
-              variant="outline"
-              className="cursor-pointer"
-              onClick={() => toast("Create via API POST /hr/separation or seed demo rows", "info")}
-            >
-              <Plus className="size-3.5" />
-              New separation
-            </Button>
-          </HrToolbar>
-        }
-      />
-      {authBlocked ? <HrAuthBanner /> : null}
-      {loading && !data ? <HrLoadingBlock /> : null}
-      <HrKpiGrid
-        items={[
-          { label: "Separations", value: data?.separation.length ?? 0 },
-          {
-            label: "Open",
-            value: countOpenDocs(data?.separation ?? [], ["completed", "cancelled", "closed"]),
-          },
-          {
-            label: "Completed",
-            value: countByStatus(data?.separation ?? [], ["completed", "closed"]),
-          },
-          { label: "Attrition (records)", value: data?.separation.length ?? 0 },
-        ]}
-      />
-      <HrTable
-        columns={[
-          { key: "doc", label: "Document" },
-          { key: "emp", label: "Employee" },
-          { key: "lwd", label: "Last working day" },
-          { key: "status", label: "Status" },
-          { key: "fnf", label: "FNF" },
-          { key: "actions", label: "Actions" },
-        ]}
-        emptyTitle="No separations"
-        emptyDescription="Exit requests will appear here when created."
-        rows={(data?.separation ?? []).map((row) => {
-          const id = String(row.id);
-          const status = String(row.status ?? "").toLowerCase();
-          const fnfStatus = String(row.fnf_status ?? "pending").toLowerCase();
-          const busy = actingId === id;
-          const canFnf =
-            (status === "hr_approved" || status === "manager_approved") &&
-            (fnfStatus === "pending" || fnfStatus === "prepared");
-          const canSettle = fnfStatus === "calculated" || fnfStatus === "prepared";
-          const canComplete =
-            status === "hr_approved" &&
-            (fnfStatus === "calculated" || fnfStatus === "settled" || fnfStatus === "waived");
-          return {
-            __key: id,
-            doc: String(row.document_number ?? row.id),
-            emp: String(row.employee_id ?? "—").slice(0, 8),
-            lwd: String(
-              row.approved_last_working_date ??
-                row.requested_last_working_date ??
-                row.last_working_date ??
-                row.relieving_date ??
-                "—",
-            ),
-            status: <HrStatusBadge status={String(row.status ?? "—")} />,
-            fnf: <HrStatusBadge status={fnfStatus} />,
-            actions: (
-              <div className="flex flex-wrap gap-1">
-                {status === "draft" ? (
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="h-7 cursor-pointer px-2 text-[0.75rem]"
-                    disabled={busy}
-                    onClick={() => void runAction(id, "submit", {}, "Submitted")}
-                  >
-                    Submit
-                  </Button>
-                ) : null}
-                {status === "submitted" ? (
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="h-7 cursor-pointer px-2 text-[0.75rem]"
-                    disabled={busy}
-                    onClick={() =>
-                      void runAction(id, "approve", { stage: "manager" }, "Reporting manager approved")
-                    }
-                  >
-                    Reporting manager approve
-                  </Button>
-                ) : null}
-                {status === "manager_approved" ? (
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="h-7 cursor-pointer px-2 text-[0.75rem]"
-                    disabled={busy}
-                    onClick={() => void runAction(id, "approve", { stage: "hr" }, "HR approved")}
-                  >
-                    HR Approve
-                  </Button>
-                ) : null}
-                {canFnf ? (
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="h-7 cursor-pointer px-2 text-[0.75rem]"
-                    disabled={busy}
-                    onClick={() => void runAction(id, "fnf/prepare", {}, "FNF prepared")}
-                  >
-                    Prepare FNF
-                  </Button>
-                ) : null}
-                {canSettle ? (
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="h-7 cursor-pointer px-2 text-[0.75rem]"
-                    disabled={busy}
-                    onClick={() => void runAction(id, "fnf/settle", {}, "FNF settled")}
-                  >
-                    Settle FNF
-                  </Button>
-                ) : null}
-                {canComplete ? (
-                  <Button
-                    size="sm"
-                    className="h-7 cursor-pointer px-2 text-[0.75rem]"
-                    disabled={busy}
-                    onClick={() => void runAction(id, "complete", {}, "Completed")}
-                  >
-                    Complete
-                  </Button>
-                ) : null}
-                {status !== "draft" && status !== "completed" ? (
-                  <>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="h-7 cursor-pointer px-2 text-[0.75rem]"
-                      disabled={busy}
-                      onClick={() =>
-                        void runAction(
-                          id,
-                          "checklist",
-                          { item_key: "assets", done: true },
-                          "Assets cleared",
-                        )
-                      }
-                    >
-                      Clear assets
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="h-7 cursor-pointer px-2 text-[0.75rem]"
-                      disabled={busy}
-                      onClick={() =>
-                        void runAction(
-                          id,
-                          "checklist",
-                          { item_key: "it", done: true },
-                          "IT cleared",
-                        )
-                      }
-                    >
-                      Clear IT
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="h-7 cursor-pointer px-2 text-[0.75rem]"
-                      disabled={busy}
-                      onClick={() =>
-                        void runAction(
-                          id,
-                          "exit-interview",
-                          {
-                            answers: {
-                              reason: "career_growth",
-                              recommend: "yes",
-                              comments: "Recorded via Separation Hub",
-                            },
-                            interviewer_notes: "Quick capture from hub",
-                          },
-                          "Exit interview saved",
-                        )
-                      }
-                    >
-                      Exit interview
-                    </Button>
-                  </>
-                ) : null}
-              </div>
-            ),
-          };
-        })}
-      />
-    </div>
-  );
-}
-
 export function ReportsHub() {
   const { data, loading, load, authBlocked } = useHrData();
   const [exporting, setExporting] = useState<string | null>(null);
@@ -819,7 +581,7 @@ export function ReportsHub() {
         label: "Open reviews",
         value: countOpenDocs(data?.reviews ?? [], ["closed", "cancelled"]),
       },
-      { label: "Exits", value: data?.separation.length ?? 0 },
+      { label: "EX-Employee", value: data?.separation.length ?? 0 },
       { label: "Training programs", value: data?.training.length ?? 0 },
       { label: "Shift assignments", value: data?.shiftAssignments.length ?? 0 },
     ];
@@ -855,8 +617,7 @@ export function ReportsHub() {
   return (
     <div className="space-y-5">
       <PageHeader
-        title="HR reports & KPIs"
-        description="Workforce health snapshot and CSV exports from live HR data."
+        title="HR Reports & KPIs"
         actions={<HrToolbar onRefresh={() => void load()} loading={loading} />}
       />
       {authBlocked ? <HrAuthBanner /> : null}
@@ -919,7 +680,6 @@ export function PayrollHubInHr() {
     <div className="space-y-5">
       <PageHeader
         title="Payroll"
-        description="Payroll cycle snapshot inside HRMS. Full payroll workspace remains under /payroll."
         actions={
           <HrToolbar onRefresh={() => void load()} loading={loading}>
             <Link href="/payroll" className="inline-flex h-7 cursor-pointer items-center rounded-lg border border-border bg-background px-2.5 text-[0.8rem] font-medium transition-colors hover:bg-muted">Open payroll module</Link>
@@ -937,9 +697,9 @@ export function PayrollHubInHr() {
         ]}
       />
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-        <HrSetupCard title="Payroll runs" description="Calculation runs" count={data?.runs.length ?? 0} href="/payroll/payroll-runs" />
+        <HrSetupCard title="Payroll Runs" description="Calculation runs" count={data?.runs.length ?? 0} href="/payroll/payroll-runs" />
         <HrSetupCard title="Payslips" description="Employee payslips" count={data?.payslips.length ?? 0} href="/payroll/payslips" />
-        <HrSetupCard title="Salary structures" description="CTC structures" count={data?.structures.length ?? 0} href="/payroll/salary-structures" />
+        <HrSetupCard title="Salary Structures" description="CTC structures" count={data?.structures.length ?? 0} href="/payroll/salary-structures" />
       </div>
       <HrTable
         columns={[
@@ -983,7 +743,6 @@ export function RecruitmentHubInHr() {
     <div className="space-y-5">
       <PageHeader
         title="Recruitment"
-        description="Open roles and hiring pipeline inside HRMS."
         actions={
           <HrToolbar onRefresh={() => void load()} loading={loading}>
             <Link href="/recruitment" className="inline-flex h-7 cursor-pointer items-center rounded-lg border border-border bg-background px-2.5 text-[0.8rem] font-medium transition-colors hover:bg-muted">Open recruitment module</Link>
@@ -1001,7 +760,7 @@ export function RecruitmentHubInHr() {
         ]}
       />
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-        <HrSetupCard title="Job requisitions" description="Open positions" count={data?.requisitions.length ?? 0} href="/recruitment/job-requisitions" />
+        <HrSetupCard title="Job Requisitions" description="Open positions" count={data?.requisitions.length ?? 0} href="/recruitment/job-requisitions" />
         <HrSetupCard title="Candidates" description="Talent pool" count={data?.candidates.length ?? 0} href="/recruitment/candidates" />
         <HrSetupCard title="Offers" description="Offer letters" count={data?.offers.length ?? 0} href="/recruitment/offers" />
       </div>
@@ -1042,7 +801,6 @@ export function OnboardingHub() {
     <div className="space-y-5">
       <PageHeader
         title="Onboarding"
-        description="Pre-employee handoff and onboarding task tracking."
         actions={
           <HrToolbar onRefresh={() => void load()} loading={loading}>
             <Link href="/recruitment/onboarding" className="inline-flex h-7 cursor-pointer items-center rounded-lg border border-border bg-background px-2.5 text-[0.8rem] font-medium transition-colors hover:bg-muted">Open onboarding list</Link>

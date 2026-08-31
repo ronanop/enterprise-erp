@@ -45,4 +45,6 @@ class HrEmployeeProfile(Base, *HrTransactionMixin):
     bank_account_holder: Mapped[str | None] = mapped_column(String(255), nullable=True)
     education_json: Mapped[dict | list | None] = mapped_column(JSONB, nullable=True)
     skills_json: Mapped[dict | list | None] = mapped_column(JSONB, nullable=True)
+    face_auth_enabled: Mapped[bool] = mapped_column(nullable=False, default=False)
+    face_auth_fingerprint: Mapped[str | None] = mapped_column(String(32), nullable=True)
     status: Mapped[str] = mapped_column(String(30), nullable=False, default="active", index=True)

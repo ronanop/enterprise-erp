@@ -14,6 +14,7 @@ from modules.payroll.routers import (
     payroll_runs_router,
     payslips_router,
     periods_router,
+    policies_router,
     postings_router,
     reimbursements_router,
     reports_router,
@@ -28,6 +29,7 @@ from modules.payroll.routers import (
 
 payroll_router = APIRouter(prefix="/payroll")
 payroll_router.include_router(periods_router)
+payroll_router.include_router(policies_router)
 payroll_router.include_router(salary_structures_router)
 payroll_router.include_router(salary_components_router)
 payroll_router.include_router(structure_lines_router)

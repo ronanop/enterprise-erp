@@ -187,6 +187,16 @@ def attendance_auto_absent() -> dict:
             db.add(row)
             existing[key] = row
 
+        from modules.hr.service.sandwich_attendance_service import apply_sandwich_after_auto_absent
+
+        sandwich_stats = apply_sandwich_after_auto_absent(
+            db,
+            yesterday,
+            employments,
+            holidays_by_company,
+            policy_by_company,
+        )
+
         db.commit()
         return {
             "status": "ok",
@@ -196,6 +206,7 @@ def attendance_auto_absent() -> dict:
             "holiday_created": created_holiday,
             "miss_punch_marked": miss_punch,
             "skipped_on_leave": skipped_leave,
+            **sandwich_stats,
         }
     except Exception as exc:
         db.rollback()
@@ -205,23 +216,32 @@ def attendance_auto_absent() -> dict:
 
 
 @celery_app.task(name="hr.leave_balance_accrual")
-def leave_balance_accrual() -> dict:
-    from sqlalchemy import select
+def leave_balance_accrual(period_yyyymm: str | None = None) -> dict:
+    """Credit monthly leave accrual for the last completed calendar month (1–31).
 
+    When ``period_yyyymm`` is omitted, uses the month that fully ended before today
+    (e.g. run on 1 Mar 2026 → ``2026-02``). Independent of payroll 20–20 cycle.
+    """
     from database.session import SessionLocal
-    from modules.hr.models import HrLeaveBalance
+    from modules.hr.domain.leave_accrual_calendar import (
+        balance_year_for_accrual_period,
+        completed_calendar_month_yyyymm,
+    )
+    from modules.hr.service.leave_service import LeaveBalanceService
+
+    period = period_yyyymm or completed_calendar_month_yyyymm()
+    balance_year = balance_year_for_accrual_period(period)
 
     db = SessionLocal()
     try:
-        rows = list(
-            db.scalars(
-                select(HrLeaveBalance).where(
-                    HrLeaveBalance.is_deleted.is_(False),
-                    HrLeaveBalance.status == "open",
-                )
-            ).all()
+        result = LeaveBalanceService.run_monthly_accrual_all_tenants(
+            db, period_yyyymm=period, balance_year=balance_year
         )
-        return {"status": "ok", "open_balances": len(rows)}
+        db.commit()
+        return {"status": "ok", "period_yyyymm": period, **result}
+    except Exception as exc:
+        db.rollback()
+        return {"status": "error", "message": str(exc)}
     finally:
         db.close()
 
@@ -419,7 +439,15 @@ def separation_followups() -> dict:
             db.scalars(
                 select(HrSeparation).where(
                     HrSeparation.is_deleted.is_(False),
-                    HrSeparation.status.in_(["submitted", "manager_approved", "hr_approved"]),
+                    HrSeparation.status.in_(
+                        [
+                            "submitted",
+                            "manager_approved",
+                            "it_approved",
+                            "accounts_approved",
+                            "hr_approved",
+                        ]
+                    ),
                 )
             ).all()
         )
@@ -651,23 +679,30 @@ def probation_reminders() -> dict:
 
 
 @celery_app.task(name="hr.leave_balance_monthly_credit")
-def leave_balance_monthly_credit() -> dict:
-    """Apply monthly leave credits from leave type policy and notify employees."""
+def leave_balance_monthly_credit(period_yyyymm: str | None = None) -> dict:
+    """Idempotent monthly leave credit (calendar month) + employee notifications."""
     from decimal import Decimal
 
     from sqlalchemy import select
 
     from database.session import SessionLocal
     from modules.foundation.service.notification_service import NotificationService
+    from modules.hr.domain.leave_accrual_calendar import (
+        balance_year_for_accrual_period,
+        completed_calendar_month_yyyymm,
+    )
     from modules.hr.models import HrLeaveBalance, HrLeaveType
-    from modules.hr.service.engines.leave_balance_engine import LeaveBalanceEngine
+    from modules.hr.service.leave_service import LeaveBalanceService
     from modules.master_data.models.employee import MasterEmployee
 
+    period = period_yyyymm or completed_calendar_month_yyyymm()
+    balance_year = balance_year_for_accrual_period(period)
+
     db = SessionLocal()
-    engine = LeaveBalanceEngine()
-    credited = 0
-    notified = 0
     try:
+        accrual = LeaveBalanceService.run_monthly_accrual_all_tenants(
+            db, period_yyyymm=period, balance_year=balance_year
+        )
         types = {
             t.id: t
             for t in db.scalars(
@@ -683,19 +718,20 @@ def leave_balance_monthly_credit() -> dict:
                 select(HrLeaveBalance).where(
                     HrLeaveBalance.is_deleted.is_(False),
                     HrLeaveBalance.status == "open",
+                    HrLeaveBalance.balance_year == balance_year,
+                    HrLeaveBalance.last_accrual_yyyymm == period,
                 )
             ).all()
         )
         notif = NotificationService(db)
+        notified = 0
         for bal in balances:
             lt = types.get(bal.leave_type_id)
             if lt is None or not lt.monthly_credit_days:
                 continue
             credit = Decimal(str(lt.monthly_credit_days))
-            engine.accrue(bal, credit)
-            credited += 1
             employee = db.get(MasterEmployee, bal.employee_id)
-            if employee is None:
+            if employee is None or not employee.user_id:
                 continue
             tpl = notif.get_or_create_template(
                 tenant_id=bal.tenant_id,
@@ -723,14 +759,75 @@ def leave_balance_monthly_credit() -> dict:
         db.commit()
         return {
             "status": "ok",
-            "balances_credited": credited,
+            "period_yyyymm": period,
             "notifications_sent": notified,
+            **accrual,
         }
     except Exception as exc:
         db.rollback()
         return {"status": "error", "message": str(exc)}
     finally:
         db.close()
+
+
+def _notify_upcoming_birthday_digests(db, today) -> int:
+    """Notify HR users about birthdays in the next 30 days (one digest per user per day)."""
+    from sqlalchemy import select
+
+    from modules.foundation.models.security import SecUser
+    from modules.foundation.service.notification_service import NotificationService
+    from modules.hr.models import HrEmployeeProfile
+    from modules.hr.service.birthday_window import is_upcoming_birthday
+    from modules.hr.service.hr_notify import _send_in_app
+    from security.rbac import RBACEngine
+
+    profiles = list(
+        db.scalars(
+            select(HrEmployeeProfile).where(
+                HrEmployeeProfile.is_deleted.is_(False),
+                HrEmployeeProfile.date_of_birth.is_not(None),
+            )
+        ).all()
+    )
+    counts: dict = {}
+    for profile in profiles:
+        if is_upcoming_birthday(profile.date_of_birth, today, days=30):
+            counts[profile.tenant_id] = counts.get(profile.tenant_id, 0) + 1
+
+    sent = 0
+    digest_key = f"upcoming_birthdays:{today.isoformat()}"
+    notif = NotificationService(db)
+    rbac = RBACEngine(db)
+    for tenant_id, count in counts.items():
+        if count <= 0:
+            continue
+        for uid in rbac.list_user_ids_with_permission(tenant_id, "hr.employee_profile:update"):
+            existing = notif.find_unread_digest(
+                tenant_id=tenant_id,
+                user_id=uid,
+                event_type="hr.upcoming_birthdays",
+                digest_key=digest_key,
+            )
+            if existing is not None:
+                continue
+            user = db.get(SecUser, uid)
+            if user is None or getattr(user, "is_deleted", False) or user.status != "active":
+                continue
+            if _send_in_app(
+                db,
+                tenant_id=tenant_id,
+                recipient_user_id=user.id,
+                recipient_address=user.email,
+                template_code="hr.upcoming_birthdays",
+                template_name="Upcoming Birthdays",
+                event_type="hr.upcoming_birthdays",
+                title="Upcoming Birthdays",
+                body=f"{count} birthday(s) in the next 30 days.",
+                kind="birthday",
+                extra={"href": "/hr", "digest_key": digest_key},
+            ):
+                sent += 1
+    return sent
 
 
 @celery_app.task(name="hr.birthday_anniversary_reminders")
@@ -771,6 +868,8 @@ def birthday_anniversary_reminders() -> dict:
                     title="Happy Birthday!",
                     body="Wishing you a wonderful birthday from the HR team.",
                     kind="birthday",
+                    extra={"href": "/hr/ess"},
+                    cc_reporting_manager=False,
                 ):
                     birthdays += 1
             except Exception:
@@ -807,11 +906,13 @@ def birthday_anniversary_reminders() -> dict:
             except Exception:
                 continue
 
+        hr_digests = _notify_upcoming_birthday_digests(db, today)
         db.commit()
         return {
             "status": "ok",
             "birthdays": birthdays,
             "anniversaries": anniversaries,
+            "hr_digests": hr_digests,
         }
     except Exception as exc:
         db.rollback()

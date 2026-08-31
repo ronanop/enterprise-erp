@@ -1,4 +1,4 @@
-import { resourceService } from "@/services/api-client";
+import { apiClient, resourceService } from "@/services/api-client";
 import { loadEmployeeDirectory } from "@/services/employee-management-service";
 import type { HrRow } from "@/services/hr-service";
 import type {
@@ -17,7 +17,10 @@ import type {
 import {
   DEFAULT_LEAVE_COLORS,
   defaultRequestExtension,
+  isVisibleLeaveType,
+  leaveStatusDisplay,
 } from "@/types/leave-management";
+import { validateLeaveCycleOnApply } from "@/lib/hr/leave-cycle-rules";
 
 const EXT_KEY = "erp_leave_request_ext_v1";
 const AUDIT_KEY = "erp_leave_audit_v1";
@@ -300,6 +303,7 @@ export async function loadLeaveDirectory(): Promise<LeaveDirectory> {
       employeeId: String(row.employee_id),
       employeeName: emp?.displayName ?? "",
       employeeCode: emp?.employeeCode ?? "",
+      branchId: String(row.branch_id ?? emp?.branchId ?? ""),
       leaveTypeId: String(row.leave_type_id),
       leaveTypeName: lt?.name ?? "—",
       leaveTypeCode: lt?.code ?? "",
@@ -313,6 +317,10 @@ export async function loadLeaveDirectory(): Promise<LeaveDirectory> {
       opening,
       accrued,
       closing,
+      lastAccrualYyyymm: row.last_accrual_yyyymm
+        ? String(row.last_accrual_yyyymm)
+        : undefined,
+      version: Number(row.version ?? 1),
     };
   });
 
@@ -377,7 +385,10 @@ export async function loadLeaveDirectory(): Promise<LeaveDirectory> {
         joiningDate: e.joiningDate,
         branchId: e.branchId,
       })),
-      leaveTypes: leaveTypes.map((t) => ({
+      leaveTypes: leaveTypes
+        .filter((t) => isVisibleLeaveType(t.code, t.name))
+        .filter((t) => String(t.status ?? "active").toLowerCase() === "active")
+        .map((t) => ({
         id: t.id,
         label: t.name,
         code: t.code,
@@ -413,15 +424,27 @@ export function filterLeaveRequests(
   query: string,
   filters: LeaveFilters,
   employees: LeaveDirectory["options"]["employees"],
+  options?: { statusBucket?: string | null; onLeaveToday?: boolean },
 ): LeaveRequestRecord[] {
   const q = query.trim().toLowerCase();
   const empMap = new Map(employees.map((e) => [e.id, e]));
+  const today = new Date().toISOString().slice(0, 10);
   return rows.filter((r) => {
+    if (options?.statusBucket) {
+      const bucket = leaveStatusDisplay(r.extension.approvalStage || r.status);
+      if (bucket.toLowerCase() !== options.statusBucket.toLowerCase()) return false;
+    }
+    if (options?.onLeaveToday) {
+      const approved =
+        leaveStatusDisplay(r.extension.approvalStage || r.status) === "Approved" ||
+        r.status === "approved";
+      if (!approved || r.fromDate > today || r.toDate < today) return false;
+    }
     if (filters.branchId && r.branchId !== filters.branchId) return false;
     if (filters.leaveTypeId && r.leaveTypeId !== filters.leaveTypeId) return false;
     if (filters.status) {
-      const st = r.extension.approvalStage || r.status;
-      if (st !== filters.status && r.status !== filters.status) return false;
+      const bucket = leaveStatusDisplay(r.extension.approvalStage || r.status);
+      if (bucket.toLowerCase() !== filters.status.toLowerCase()) return false;
     }
     if (filters.dateFrom && r.toDate < filters.dateFrom) return false;
     if (filters.dateTo && r.fromDate > filters.dateTo) return false;
@@ -467,7 +490,18 @@ export function validateLeaveApplication(
   const bal = dir.balances.find(
     (b) => b.employeeId === payload.employeeId && b.leaveTypeId === payload.leaveTypeId,
   );
-  if (bal && netDays > bal.available) {
+
+  const cycle = validateLeaveCycleOnApply({
+    fromDate: payload.fromDate,
+    toDate: payload.toDate,
+    netDays,
+    available: bal ? bal.available : null,
+    lastAccrualYyyymm: bal?.lastAccrualYyyymm,
+    monthlyCreditDays: lt?.daysPerMonth ?? 0,
+  });
+  if (cycle.error) {
+    messages.push({ tone: "error", text: cycle.error });
+  } else if (bal && netDays > bal.available) {
     messages.push({
       tone: "error",
       text: `Insufficient balance. Available ${bal.available} day(s), requested ${netDays}.`,
@@ -475,11 +509,14 @@ export function validateLeaveApplication(
   } else if (!bal) {
     messages.push({ tone: "warn", text: "No leave balance record found for this type — policy check skipped." });
   }
+  if (cycle.info) {
+    messages.push({ tone: "info", text: cycle.info });
+  }
 
   if (weekendOrHoliday.length) {
     messages.push({
       tone: "info",
-      text: `${weekendOrHoliday.length} weekend/holiday day(s) excluded from leave count.`,
+      text: `${weekendOrHoliday.length} weekend/holiday day(s) excluded from leave count. With Sandwich Rule on, unauthorized absence on both sides of an off (no approved leave) marks those days as LOP.`,
     });
   }
 
@@ -521,11 +558,6 @@ export function validateLeaveApplication(
   if (lt && !lt.approvalRequired) {
     messages.push({ tone: "info", text: "This leave type does not require multi-level approval." });
   }
-
-  messages.push({
-    tone: "info",
-    text: "Attendance and shift assignment checked against holidays and weekly offs.",
-  });
 
   const ok = !messages.some((m) => m.tone === "error");
   return { ok, messages, netDays };
@@ -928,9 +960,91 @@ export async function updateLeaveTypePolicy(
     action: "leave_type_updated",
     detail: `${patch.name || leaveType.name} (${leaveType.code}) · max ${patch.maxDays}/yr · ${
       patch.daysPerMonth
-    }/mo · ${patch.isPaid ? "paid" : "unpaid"} · CF ${patch.carryForwardAllowed ? "yes" : "no"} · approval ${
-      patch.approvalRequired ? "required" : "optional"
-    }`,
+    }/mo · ${patch.isPaid ? "paid" : "unpaid"} · CF ${patch.carryForwardAllowed ? "yes" : "no"    }`,
+    actor: actor(),
+  });
+}
+
+export async function deleteLeaveType(leaveType: LeaveTypeRecord): Promise<void> {
+  await resourceService.delete("/hr/leave-types", leaveType.id);
+
+  const all = readJson<Record<string, Partial<LeaveTypeRecord>>>(TYPE_EXT_KEY, {});
+  if (leaveType.id in all) {
+    delete all[leaveType.id];
+    writeJson(TYPE_EXT_KEY, all);
+  }
+
+  appendLeaveAudit({
+    requestId: leaveType.id,
+    action: "leave_type_deleted",
+    detail: `${leaveType.name} (${leaveType.code}) deleted`,
+    actor: actor(),
+  });
+}
+
+export async function createEmployeeLeaveBalance(input: {
+  branchId: string;
+  employeeId: string;
+  leaveTypeId: string;
+  balanceYear: number;
+  openingBalance?: number;
+  accruedDays?: number;
+}): Promise<void> {
+  await resourceService.create("/hr/leave-balances", {
+    branch_id: input.branchId,
+    employee_id: input.employeeId,
+    leave_type_id: input.leaveTypeId,
+    balance_year: input.balanceYear,
+    opening_balance: input.openingBalance ?? 0,
+    accrued: input.accruedDays ?? 0,
+    used: 0,
+    status: "open",
+  });
+  appendLeaveAudit({
+    requestId: input.employeeId,
+    action: "leave_balance_assigned",
+    detail: `Assigned leave type ${input.leaveTypeId} for ${input.balanceYear}`,
+    actor: actor(),
+  });
+}
+
+export async function removeEmployeeLeaveBalance(balanceId: string): Promise<void> {
+  await resourceService.delete("/hr/leave-balances", balanceId);
+  appendLeaveAudit({
+    requestId: balanceId,
+    action: "leave_balance_removed",
+    detail: `Removed leave balance ${balanceId}`,
+    actor: actor(),
+  });
+}
+
+/** Credit or debit days for a calendar month (posts via leave-adjustments/apply). */
+export async function applyLeaveMonthAdjustment(input: {
+  branchId: string;
+  employeeId: string;
+  leaveTypeId: string;
+  /** YYYY-MM */
+  month: string;
+  daysDelta: number;
+  reason?: string;
+}): Promise<void> {
+  const [y, m] = input.month.split("-").map(Number);
+  const adjustmentMonth = `${y}-${String(m).padStart(2, "0")}-01`;
+  await apiClient("/hr/leave-adjustments/apply", {
+    method: "POST",
+    body: {
+      branch_id: input.branchId,
+      employee_id: input.employeeId,
+      leave_type_id: input.leaveTypeId,
+      adjustment_month: adjustmentMonth,
+      days_delta: input.daysDelta,
+      reason: input.reason ?? null,
+    },
+  });
+  appendLeaveAudit({
+    requestId: input.employeeId,
+    action: "leave_month_adjustment",
+    detail: `${input.month}: ${input.daysDelta > 0 ? "+" : ""}${input.daysDelta}d (${input.leaveTypeId})`,
     actor: actor(),
   });
 }

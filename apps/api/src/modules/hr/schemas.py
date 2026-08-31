@@ -8,7 +8,14 @@ from pydantic import BaseModel, ConfigDict
 
 
 class OrmModel(BaseModel):
+    """ORM-backed response base — includes standard audit columns everywhere."""
+
     model_config = ConfigDict(from_attributes=True)
+
+    created_at: datetime | None = None
+    created_by: UUID | None = None
+    updated_at: datetime | None = None
+    updated_by: UUID | None = None
 
 
 class DesignationCreate(BaseModel):
@@ -217,7 +224,11 @@ class EmploymentResponse(OrmModel):
     probation_start_date: date | None = None
     probation_end_date: date | None = None
     confirmation_date: date | None = None
+    contract_end_date: date | None = None
     notice_period_days: int | None = None
+    ctc_amount: Decimal | None = None
+    currency_code: str | None = None
+    work_location_text: str | None = None
     lifecycle_source: str | None = None
     payroll_eligible: bool = False
     management_group_id: UUID | None = None
@@ -293,6 +304,7 @@ class EmploymentActivateRequest(BaseModel):
 
     employee_code: str | None = None
     shift_id: UUID | None = None
+    management_group_id: UUID | None = None
     start_probation: bool = True
     probation_days: int = 90
     mark_payroll_eligible: bool = True
@@ -528,6 +540,14 @@ class LeaveBalanceCreate(BaseModel):
     status: str = "open"
 
 
+class LeaveBalanceUpdate(BaseModel):
+    opening_balance: Decimal | None = None
+    accrued: Decimal | None = None
+    used: Decimal | None = None
+    status: str | None = None
+    version: int | None = None
+
+
 class CompOffCreditRequest(BaseModel):
     company_id: UUID | None = None
     branch_id: UUID
@@ -599,6 +619,7 @@ class LeaveRequestResponse(OrmModel):
     start_date: date
     end_date: date
     days_count: Decimal
+    reason: str | None = None
     status: str
     version: int
 
@@ -788,7 +809,6 @@ class KpiResponse(OrmModel):
     rating_scale: int
     status: str
     version: int
-    created_at: datetime | None = None
 
 
 class OkrKeyResultIn(BaseModel):
@@ -840,7 +860,6 @@ class OkrResponse(OrmModel):
     status: str
     version: int
     key_results: list[OkrKeyResultResponse] = []
-    created_at: datetime | None = None
 
 
 class AppraisalCreate(BaseModel):
@@ -950,7 +969,7 @@ class TrainingRoomCreate(BaseModel):
     room_code: str | None = None
     room_name: str
     capacity: int = 10
-    equipment_json: list[str] | None = None
+    equipment_json: list | None = None
     notes: str | None = None
     status: str = "active"
 
@@ -958,7 +977,7 @@ class TrainingRoomCreate(BaseModel):
 class TrainingRoomUpdate(BaseModel):
     room_name: str | None = None
     capacity: int | None = None
-    equipment_json: list[str] | None = None
+    equipment_json: list | None = None
     notes: str | None = None
     status: str | None = None
     version: int | None = None
@@ -1024,6 +1043,39 @@ class TrainingRequestResponse(OrmModel):
     attendees_json: list | None
     agenda: str | None
     approval_notes: str | None
+    status: str
+    company_id: UUID
+    version: int
+
+
+class EssPolicyAdminCreate(BaseModel):
+    company_id: UUID | None = None
+    policy_code: str
+    title: str
+    content_markdown: str
+    is_mandatory: bool = True
+    display_order: int = 0
+    status: str = "draft"
+
+
+class EssPolicyAdminUpdate(BaseModel):
+    title: str | None = None
+    content_markdown: str | None = None
+    is_mandatory: bool | None = None
+    display_order: int | None = None
+    status: str | None = None
+    version: int | None = None
+
+
+class EssPolicyAdminResponse(OrmModel):
+    id: UUID
+    policy_code: str
+    title: str
+    policy_version: int
+    content_markdown: str
+    is_mandatory: bool
+    display_order: int
+    published_at: datetime | None
     status: str
     company_id: UUID
     version: int
@@ -1414,14 +1466,47 @@ class SeparationCreate(BaseModel):
     requested_last_working_date: date
     reason: str | None = None
     clearance_json: dict | None = None
+    resignation_date: date | None = None
+    notice_period_days: int | None = None
+    expected_exit_date: date | None = None
+    serve_notice: bool | None = None
+    initiated_by: str | None = None
 
 
 class SeparationApproveRequest(BaseModel):
     stage: str = "manager"
+    remarks: str | None = None
+    file_name: str | None = None
+    file_data_url: str | None = None
+
+
+class SeparationSubmitRequest(BaseModel):
+    remarks: str | None = None
+    file_name: str | None = None
+    file_data_url: str | None = None
 
 
 class SeparationCompleteRequest(BaseModel):
     approved_last_working_date: date | None = None
+
+
+class SeparationStartNoticeRequest(BaseModel):
+    notice_period_days: int | None = None
+    notice_start_date: date | None = None
+
+
+class SeparationDirectExitRequest(BaseModel):
+    remarks: str | None = None
+    last_working_date: date | None = None
+
+
+class SeparationConfirmLwdRequest(BaseModel):
+    last_working_date: date | None = None
+    remarks: str | None = None
+
+
+class SeparationWaiveFnfRequest(BaseModel):
+    reason: str | None = None
 
 
 class SeparationChecklistUpdate(BaseModel):
@@ -1435,6 +1520,42 @@ class SeparationExitInterviewRequest(BaseModel):
     interviewer_notes: str | None = None
 
 
+class SeparationDocumentUploadRequest(BaseModel):
+    name: str
+    doc_type: str = "other"
+    notes: str | None = None
+    file_name: str | None = None
+
+
+class EmployeeAssetItem(BaseModel):
+    id: UUID
+    assignment_id: UUID | None = None
+    asset_code: str
+    asset_name: str
+    asset_type: str
+    serial_number: str | None = None
+    asset_status: str
+    assignment_status: str | None = None
+    document_number: str | None = None
+    allocated_at: datetime | None = None
+    expected_return_at: date | None = None
+    returned_at: datetime | None = None
+
+
+class EmployeeAssetOption(BaseModel):
+    id: UUID
+    asset_code: str
+    asset_name: str
+    asset_type: str
+    serial_number: str | None = None
+
+
+class EmployeeAssetAssignRequest(BaseModel):
+    asset_id: UUID
+    branch_id: UUID
+    expected_return_at: date | None = None
+
+
 class SeparationResponse(OrmModel):
     id: UUID
     company_id: UUID
@@ -1444,6 +1565,13 @@ class SeparationResponse(OrmModel):
     separation_type: str
     requested_last_working_date: date
     approved_last_working_date: date | None
+    resignation_date: date | None = None
+    notice_period_days: int | None = None
+    notice_start_date: date | None = None
+    expected_exit_date: date | None = None
+    notice_status: str = "pending"
+    initiated_by: str = "hr"
+    reason: str | None = None
     status: str
     fnf_status: str = "pending"
     fnf_payroll_run_id: UUID | None = None
@@ -1508,3 +1636,92 @@ class HrEssInboxItemResponse(OrmModel):
     pending: bool
     available_actions: list[str]
     api_path: str
+
+class EmployeeImportRow(BaseModel):
+    """Normalized Excel row for workforce bulk import."""
+
+    employee_code: str
+    name: str
+    entity: str | None = None
+    organisation: str | None = None
+    organization: str | None = None
+    base_location: str | None = None
+    designation: str | None = None
+    department: str | None = None
+    reporting_manager: str | None = None
+    email: str | None = None
+    mobile: str | None = None
+    joining_date: str | None = None
+
+
+class EmployeeImportRequest(BaseModel):
+    rows: list[EmployeeImportRow]
+
+
+class EmployeeImportResultRow(BaseModel):
+    row: int
+    employee_code: str
+    action: str
+    employee_id: str
+    company: str
+
+
+class EmployeeImportResponse(BaseModel):
+    created: int
+    updated: int
+    skipped: int
+    warnings: list[str] = []
+    errors: list[str] = []
+    results: list[EmployeeImportResultRow] = []
+
+
+class EmployeeClearResponse(BaseModel):
+    deleted: int
+    message: str = ""
+
+
+class HrAdminAssignRequest(BaseModel):
+    employee_id: UUID
+    company_ids: list[UUID] = []
+
+
+class HrAdminEntitiesRequest(BaseModel):
+    company_ids: list[UUID]
+
+
+class HrAdminEntityOption(BaseModel):
+    id: UUID
+    company_code: str
+    company_name: str
+    legal_name: str = ""
+    status: str = "active"
+
+
+class HrAdminRecord(BaseModel):
+    employee_id: UUID
+    employee_code: str
+    display_name: str
+    email: str
+    designation: str
+    user_id: UUID
+    login_created: bool = False
+    temporary_password: str | None = None
+    company_ids: list[UUID] = []
+
+
+class HrAdminPasswordResponse(BaseModel):
+    employee_id: UUID
+    display_name: str
+    email: str
+    temporary_password: str
+
+
+class HrActivityLogRecord(BaseModel):
+    id: UUID
+    occurred_at: datetime
+    kind: str
+    action: str
+    entity_name: str | None = None
+    actor_name: str | None = None
+    actor_email: str | None = None
+    summary: str = ""

@@ -4,6 +4,8 @@ import { FormEvent, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { SubHeader } from "@/components/app-header";
 import { AlertBox } from "@/components/ui";
+import { ApiClientError } from "@/services/api-client";
+import { essService } from "@/services/ess-service";
 import * as ui from "@/theme/classes";
 
 const URGENCY = ["Low", "Medium", "Critical"] as const;
@@ -17,15 +19,30 @@ export default function ReportAssetIssuePage() {
     useState<(typeof URGENCY)[number]>("Medium");
   const [desc, setDesc] = useState("");
   const [message, setMessage] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
     setLoading(true);
-    await new Promise((r) => setTimeout(r, 400));
-    setMessage("Issue report submitted to IT Ops");
-    setLoading(false);
-    setTimeout(() => router.push(`/assets/${assetId}`), 800);
+    setError(null);
+    try {
+      const res = await essService.createAssetTicket(assetId, {
+        subject: category ? `${category} issue` : "Asset issue",
+        description: desc,
+        problem_category: category || undefined,
+        urgency: urgency.toLowerCase(),
+      });
+      setMessage(`Ticket ${res.data?.document_number ?? ""} submitted`);
+      setTimeout(() => {
+        if (res.data?.id) router.push(`/support/${res.data.id}`);
+        else router.push(`/assets/${assetId}`);
+      }, 800);
+    } catch (err) {
+      setError(err instanceof ApiClientError ? err.message : "Submit failed");
+    } finally {
+      setLoading(false);
+    }
   }
 
   return (
@@ -33,6 +50,7 @@ export default function ReportAssetIssuePage() {
       <SubHeader title="Report Issue" backHref={`/assets/${assetId}`} />
 
       {message ? <AlertBox tone="success">{message}</AlertBox> : null}
+      {error ? <AlertBox tone="danger">{error}</AlertBox> : null}
 
       <form onSubmit={onSubmit} className="space-y-4">
         <h2 className="text-lg font-semibold text-[#0b1c30]">Asset Details</h2>
@@ -77,18 +95,6 @@ export default function ReportAssetIssuePage() {
               </button>
             ))}
           </div>
-        </div>
-
-        <div>
-          <p className="mb-2 text-sm font-semibold text-[#434655]">
-            Damage Evidence
-          </p>
-          <button
-            type="button"
-            className="flex w-full flex-col items-center gap-2 rounded-2xl border border-dashed border-[#2563eb]/40 bg-[#eff4ff] px-4 py-8 text-sm font-semibold text-[#004ac6]"
-          >
-            Tap to upload photos
-          </button>
         </div>
 
         <label className="block space-y-1.5 text-sm font-semibold text-[#434655]">

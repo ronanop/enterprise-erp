@@ -89,7 +89,7 @@ export function ApplyLeaveDialog({ open, onClose, onSaved }: Props) {
   return (
     <HrFormDialog
       open={open}
-      title="Apply leave"
+      title="Apply Leave"
       description="Submit a leave request for approval."
       onClose={onClose}
       footer={

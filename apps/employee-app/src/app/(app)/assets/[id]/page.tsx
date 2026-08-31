@@ -5,23 +5,21 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { SubHeader } from "@/components/app-header";
 import { essService } from "@/services/ess-service";
-import type { EssAsset } from "@/types/api";
+import type { EssAssetDetail } from "@/types/api";
 import * as ui from "@/theme/classes";
 
 export default function AssetDetailsPage() {
   const params = useParams<{ id: string }>();
-  const [asset, setAsset] = useState<EssAsset | null>(null);
+  const [asset, setAsset] = useState<EssAssetDetail | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
     essService
-      .assets()
+      .asset(params.id)
       .then((res) => {
-        if (cancelled) return;
-        const found = (res.data ?? []).find((a) => a.id === params.id) ?? null;
-        setAsset(found);
+        if (!cancelled) setAsset(res.data ?? null);
       })
       .catch(() => {
         if (!cancelled) setAsset(null);
@@ -69,6 +67,12 @@ export default function AssetDetailsPage() {
               <span className="text-[#434655]">Serial</span>
               <span className="font-semibold text-[#0b1c30]">{asset.serial_number || "—"}</span>
             </div>
+            {asset.qr_code ? (
+              <div className="flex justify-between gap-2">
+                <span className="text-[#434655]">QR</span>
+                <span className="font-semibold text-[#0b1c30]">{asset.qr_code}</span>
+              </div>
+            ) : null}
             <div className="flex justify-between gap-2">
               <span className="text-[#434655]">Assignment</span>
               <span className="font-semibold text-[#0b1c30]">

@@ -1,138 +1,166 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
+import { useEffect, useState } from "react";
+import Link from "next/link";
 import { SubHeader } from "@/components/app-header";
-import {
-  IconAlert,
-  IconChevronRight,
-  IconFingerprint,
-  IconLogout,
-  IconUser,
-} from "@/components/icons";
-import { AiFab } from "@/components/ui";
+import { FaceCapture } from "@/components/face-capture";
+import { IconUser } from "@/components/icons";
+import { AlertBox } from "@/components/ui";
+import { clearFaceVerified } from "@/lib/face-auth";
+import { ApiClientError } from "@/services/api-client";
+import { essService } from "@/services/ess-service";
+import type { EssFaceStatus } from "@/types/api";
 import * as ui from "@/theme/classes";
 
 export default function SecuritySettingsPage() {
-  const [face, setFace] = useState(true);
-  const [finger, setFinger] = useState(false);
-  const [bioLogin, setBioLogin] = useState(true);
+  const [status, setStatus] = useState<EssFaceStatus | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [showEnroll, setShowEnroll] = useState(false);
+
+  useEffect(() => {
+    essService
+      .faceStatus()
+      .then((r) => setStatus(r.data))
+      .catch((e) =>
+        setError(e instanceof ApiClientError ? e.message : "Failed to load"),
+      );
+  }, []);
+
+  async function onEnroll(imageBase64: string) {
+    setBusy(true);
+    setError(null);
+    setMessage(null);
+    try {
+      const res = await essService.faceEnroll(imageBase64);
+      setStatus(res.data);
+      setShowEnroll(false);
+      clearFaceVerified();
+      setMessage("Face enrolled. You will verify on next sign-in.");
+    } catch (e) {
+      setError(e instanceof ApiClientError ? e.message : "Enrollment failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function onToggleEnabled() {
+    if (!status) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await essService.faceSetEnabled(!status.enabled);
+      setStatus(res.data);
+      clearFaceVerified();
+      setMessage(
+        res.data?.enabled
+          ? "Face verification enabled for app access."
+          : "Face verification disabled.",
+      );
+    } catch (e) {
+      setError(e instanceof ApiClientError ? e.message : "Update failed");
+    } finally {
+      setBusy(false);
+    }
+  }
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-5 pb-8">
       <SubHeader title="Security Settings" backHref="/profile" />
+
+      {error ? <AlertBox>{error}</AlertBox> : null}
+      {message ? <AlertBox tone="success">{message}</AlertBox> : null}
 
       <section className="flex items-center gap-3 rounded-2xl bg-[#2563eb] p-5 text-white shadow-md">
         <span className="flex h-12 w-12 items-center justify-center rounded-full bg-white/20">
-          ✓
+          <IconUser size={22} />
         </span>
         <div>
-          <p className="text-lg font-semibold">Account Secure</p>
-          <p className="text-sm text-white/80">Last security scan 2 hours ago</p>
+          <p className="text-lg font-semibold">Face verification</p>
+          <p className="text-sm text-white/80">
+            {status?.enrolled
+              ? status.enabled
+                ? "Required after password login"
+                : "Enrolled but turned off"
+              : "Not enrolled — others could use your password"}
+          </p>
         </div>
       </section>
 
-      <SectionLabel>Biometrics</SectionLabel>
-      <div className={ui.cardFlush}>
-        <Toggle
-          title="Face ID"
-          subtitle="Use for quick authentication"
-          icon={<IconUser size={18} />}
-          on={face}
-          onChange={setFace}
-        />
-        <Toggle
-          title="Fingerprint"
-          subtitle="Backup biometric access"
-          icon={<IconFingerprint size={18} />}
-          on={finger}
-          onChange={setFinger}
-        />
-        <Toggle
-          title="Biometric Login"
-          subtitle="Skip password for app entry"
-          icon={<IconUser size={18} />}
-          on={bioLogin}
-          onChange={setBioLogin}
-        />
-      </div>
+      {status ? (
+        <div className={ui.cardFlush}>
+          <Toggle
+            title="Require face on login"
+            subtitle="Blocks access if face does not match"
+            on={status.enabled}
+            disabled={!status.enrolled || busy}
+            onChange={() => void onToggleEnabled()}
+          />
+        </div>
+      ) : null}
 
-      <SectionLabel>Credentials</SectionLabel>
-      <div className={ui.cardFlush}>
-        <NavRow
-          title="Change Password"
-          subtitle="Last updated 3 months ago"
-          tone="purple"
-        />
-        <NavRow
-          title="Change PIN"
-          subtitle="Set a 6-digit backup code"
-          tone="purple"
-        />
-      </div>
-
-      <div className="flex items-end justify-between">
-        <SectionLabel>Login History</SectionLabel>
-        <button type="button" className="text-sm font-semibold text-[#004ac6]">
-          Log out all
+      {!showEnroll ? (
+        <button
+          type="button"
+          className={`${ui.btn} w-full`}
+          onClick={() => setShowEnroll(true)}
+        >
+          {status?.enrolled ? "Re-enroll face" : "Enroll face"}
         </button>
-      </div>
-      <ul className="space-y-2">
-        <Device
-          name="iPhone 15 Pro"
-          place="London, United Kingdom"
-          meta="Active now"
-          current
-        />
-        <Device
-          name='MacBook Pro 14"'
-          place="San Francisco, USA"
-          meta="Oct 12, 14:22"
-        />
-        <Device
-          name="Windows Desktop"
-          place="Berlin, Germany"
-          meta="Oct 08, 09:45"
-        />
-      </ul>
+      ) : (
+        <section className="space-y-3">
+          <p className="text-sm text-[#434655]">
+            Look at the camera in good light. Use the same face you will use at
+            login.
+          </p>
+          <FaceCapture
+            onCapture={onEnroll}
+            busy={busy}
+            label={status?.enrolled ? "Update enrollment" : "Enroll face"}
+          />
+          <button
+            type="button"
+            className="w-full text-sm font-medium text-[#004ac6]"
+            onClick={() => setShowEnroll(false)}
+          >
+            Cancel
+          </button>
+        </section>
+      )}
 
-      <SectionLabel>Advanced</SectionLabel>
-      <button
-        type="button"
-        className={`${ui.card} flex w-full items-center gap-3 p-4 text-left text-[#ba1a1a]`}
-      >
-        <IconAlert size={18} />
-        <span className="font-semibold">Deactivate Account</span>
-      </button>
+      <p className="text-center text-xs text-[#434655]">
+        <Link href="/profile/change-password" className="font-semibold text-[#004ac6]">
+          Change password
+        </Link>
+      </p>
 
-      <AiFab href="/profile" />
+      <p className="text-center text-xs text-[#434655]">
+        Production deployments should use a certified face-matching provider; this
+        build uses server-side fingerprint matching for demo.
+      </p>
     </div>
-  );
-}
-
-function SectionLabel({ children }: { children: ReactNode }) {
-  return (
-    <p className="px-0.5 text-xs font-bold uppercase tracking-wide text-[#434655]">
-      {children}
-    </p>
   );
 }
 
 function Toggle({
   title,
   subtitle,
-  icon,
   on,
+  disabled,
   onChange,
 }: {
   title: string;
   subtitle: string;
-  icon: ReactNode;
   on: boolean;
-  onChange: (v: boolean) => void;
+  disabled?: boolean;
+  onChange: () => void;
 }) {
   return (
-    <div className={`${ui.listRow}`}>
-      <span className={ui.iconTile}>{icon}</span>
+    <div className={ui.listRow}>
+      <span className={ui.iconTile}>
+        <IconUser size={18} />
+      </span>
       <div className="min-w-0 flex-1">
         <p className="font-semibold text-[#0b1c30]">{title}</p>
         <p className="text-xs text-[#434655]">{subtitle}</p>
@@ -141,10 +169,11 @@ function Toggle({
         type="button"
         role="switch"
         aria-checked={on}
-        onClick={() => onChange(!on)}
+        disabled={disabled}
+        onClick={onChange}
         className={`relative h-7 w-12 rounded-full transition ${
           on ? "bg-[#2563eb]" : "bg-[#c3c6d7]"
-        }`}
+        } ${disabled ? "opacity-50" : ""}`}
       >
         <span
           className={`absolute top-0.5 h-6 w-6 rounded-full bg-white shadow transition ${
@@ -153,63 +182,5 @@ function Toggle({
         />
       </button>
     </div>
-  );
-}
-
-function NavRow({
-  title,
-  subtitle,
-  tone,
-}: {
-  title: string;
-  subtitle: string;
-  tone: "purple";
-}) {
-  void tone;
-  return (
-    <button type="button" className={`${ui.listRow} w-full text-left`}>
-      <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#eaddff] text-[#712ae2]">
-        •••
-      </span>
-      <div className="min-w-0 flex-1">
-        <p className="font-semibold text-[#0b1c30]">{title}</p>
-        <p className="text-xs text-[#434655]">{subtitle}</p>
-      </div>
-      <IconChevronRight className="text-[#c3c6d7]" />
-    </button>
-  );
-}
-
-function Device({
-  name,
-  place,
-  meta,
-  current,
-}: {
-  name: string;
-  place: string;
-  meta: string;
-  current?: boolean;
-}) {
-  return (
-    <li className={`${ui.card} flex items-center gap-3 p-4`}>
-      <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#dbe1ff] text-[#004ac6]">
-        □
-      </span>
-      <div className="min-w-0 flex-1">
-        <p className="font-semibold text-[#0b1c30]">{name}</p>
-        <p className="text-xs text-[#434655]">{place}</p>
-        <p className="text-xs italic text-[#434655]">{meta}</p>
-      </div>
-      {current ? (
-        <span className="rounded-full bg-emerald-500 px-2 py-0.5 text-[10px] font-bold text-white">
-          Current
-        </span>
-      ) : (
-        <button type="button" className="text-[#ba1a1a]" aria-label="Logout device">
-          <IconLogout size={18} />
-        </button>
-      )}
-    </li>
   );
 }
