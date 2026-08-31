@@ -1,9 +1,18 @@
-"""Asset component ORM per ERD_15 section 6.3."""
+"""Asset component ORM per ERD_15 section 6.3 (FP-ASSET-019).
+
+Active-code uniqueness is enforced by partial unique index
+``uq_ast_asset_component_active_code`` (migration 0484), not a table UK,
+so replaced/disposed history may retain the same component_code.
+
+Optional ``component_asset_id`` links a real ``ast_asset`` installed as a
+component. One active attachment per child asset is enforced by
+``uq_ast_asset_component_one_active_child_asset`` (migration 0507).
+"""
 
 from decimal import Decimal
 from uuid import UUID, uuid4
 
-from sqlalchemy import CheckConstraint, ForeignKey, Numeric, String, UniqueConstraint
+from sqlalchemy import CheckConstraint, ForeignKey, Index, Numeric, String, text
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -14,10 +23,24 @@ from modules.asset.models.mixins import AstDetailMixin
 class AstAssetComponent(Base, *AstDetailMixin):
     __tablename__ = "ast_asset_component"
     __table_args__ = (
-        UniqueConstraint("asset_id", "component_code", name="uk_ast_asset_component_code"),
         CheckConstraint(
             "status IN ('active','replaced','disposed')",
             name="ck_ast_asset_component_status",
+        ),
+        CheckConstraint(
+            "component_type IN ("
+            "'CHARGER','MOUSE','KEYBOARD','CABLE','PENDRIVE','LAPTOP_BAG','OTHER'"
+            ")",
+            name="ck_ast_asset_component_type",
+        ),
+        Index(
+            "uq_ast_asset_component_one_active_child_asset",
+            "component_asset_id",
+            unique=True,
+            postgresql_where=text(
+                "status = 'active' AND is_deleted = false "
+                "AND component_asset_id IS NOT NULL"
+            ),
         ),
         {"schema": "asset"},
     )
@@ -37,8 +60,17 @@ class AstAssetComponent(Base, *AstDetailMixin):
         nullable=False,
         index=True,
     )
+    component_asset_id: Mapped[UUID | None] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("asset.ast_asset.id", ondelete="RESTRICT"),
+        nullable=True,
+        index=True,
+    )
     component_code: Mapped[str] = mapped_column(String(50), nullable=False)
     component_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    component_type: Mapped[str] = mapped_column(
+        String(30), nullable=False, default="OTHER", index=True
+    )
     product_id: Mapped[UUID | None] = mapped_column(
         PG_UUID(as_uuid=True),
         ForeignKey("master.master_product.id", ondelete="RESTRICT"),

@@ -1,6 +1,7 @@
 """Asset service."""
 
 from datetime import date
+from typing import Any
 from uuid import UUID
 
 from sqlalchemy.orm import Session
@@ -14,6 +15,17 @@ from modules.master_data.repository.asset_repository import AssetRepository
 from modules.master_data.service.code_generator_service import CodeGeneratorService
 from modules.master_data.service.duplicate_checker_service import DuplicateCheckerService
 from modules.master_data.service.master_scope_validator import MasterScopeValidator
+
+
+def _json_safe_audit_value(value: Any) -> Any:
+    """Convert UUID values to strings for JSONB audit payloads; preserve None/scalars."""
+    if isinstance(value, UUID):
+        return str(value)
+    return value
+
+
+def _json_safe_audit_payload(fields: dict[str, Any]) -> dict[str, Any]:
+    return {key: _json_safe_audit_value(value) for key, value in fields.items()}
 
 
 class AssetService:
@@ -107,6 +119,7 @@ class AssetService:
         if "branch_id" in fields and fields["branch_id"] is not None:
             self._scope.validate_branch_access(ctx, fields["branch_id"])
 
+        # Keep original UUID-typed fields for ORM update; audit gets a JSON-safe copy.
         updated = self._repo.update(ctx, asset_id, **fields)
         if updated is None:
             raise NotFoundException("Asset not found")
@@ -116,7 +129,7 @@ class AssetService:
             entity_id=asset_id,
             operation="update",
             performed_by=ctx.user_id,
-            new_value=fields,
+            new_value=_json_safe_audit_payload(fields),
         )
         return updated
 
