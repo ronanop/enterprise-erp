@@ -295,14 +295,17 @@ class ScmHandoffService:
     _IN_STOCK_KEYS = frozenset({"in stock", "instock", "inventory", "from inventory", "from stock"})
 
     @classmethod
+    def _normalize_distributor_key(cls, value: str | None) -> str:
+        return " ".join(str(value or "").strip().lower().replace("-", " ").split())
+
+    @classmethod
     def _is_in_stock_line(cls, ln: dict) -> bool:
         source = str(ln.get("fulfillment_source") or "").strip().lower()
         if source == "inventory":
             return True
         if source == "purchase_order":
             return False
-        key = " ".join(str(ln.get("distributor_name") or "").strip().lower().split())
-        return key in cls._IN_STOCK_KEYS
+        return cls._normalize_distributor_key(ln.get("distributor_name")) in cls._IN_STOCK_KEYS
 
     @classmethod
     def _item_plan(cls, vendor_lines: list, stock_availability: list | None = None) -> dict:
@@ -676,7 +679,15 @@ class ScmHandoffService:
             has_draft = any(
                 order.status == OrderStatus.DRAFT.value for order in existing_orders
             )
-            can_create = bool(open_distributors) or has_draft
+            item_plan = self._item_plan(
+                handoff.get("vendor_lines") or [],
+                stock["stock_availability"],
+            )
+            has_plan_actions = any(
+                str(ln.get("action") or "") in {"book_stock", "stock_short", "create_po"}
+                for ln in (item_plan.get("lines") or [])
+            )
+            can_create = bool(open_distributors) or has_draft or has_plan_actions
             items.append(
                 {
                     "ovf_id": ovf.id,
@@ -737,10 +748,7 @@ class ScmHandoffService:
                     "stock_fulfillment_status": stock["stock_fulfillment_status"],
                     "remaining_demand_qty": remaining_demand,
                     "stock_availability": stock["stock_availability"],
-                    "item_plan": self._item_plan(
-                        handoff.get("vendor_lines") or [],
-                        stock["stock_availability"],
-                    ),
+                    "item_plan": item_plan,
                 }
             )
         def _queue_received_sort_key(row: dict) -> str:
@@ -813,9 +821,6 @@ class ScmHandoffService:
         handoff["purchase_order_number"] = (
             None if is_cancelled else (existing.document_number if existing else None)
         )
-        handoff["can_create_po"] = bool(open_distributors) or (
-            existing is not None and existing.status == OrderStatus.DRAFT.value
-        )
         handoff["purchase_order_status"] = _queue_po_status(existing)
         handoff["scm_on_hold"] = bool(handoff.get("scm_on_hold")) or is_cancelled
         handoff["company_po_number"] = (
@@ -850,6 +855,13 @@ class ScmHandoffService:
             handoff.get("vendor_lines") or [],
             stock["stock_availability"],
         )
+        has_plan_actions = any(
+            str(ln.get("action") or "") in {"book_stock", "stock_short", "create_po"}
+            for ln in (handoff["item_plan"].get("lines") or [])
+        )
+        handoff["can_create_po"] = bool(open_distributors) or (
+            existing is not None and existing.status == OrderStatus.DRAFT.value
+        ) or has_plan_actions
         return handoff
 
     def fulfill_ovf_from_stock(

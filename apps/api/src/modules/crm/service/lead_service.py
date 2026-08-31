@@ -206,16 +206,136 @@ class LeadService:
         if len(scoped) == 1:
             return scoped[0].id
 
+        if user is not None:
+            provisioned = self._ensure_employee_for_user(ctx, user)
+            if provisioned is not None:
+                return provisioned
+
         raise ConflictException(
             "Lead owner must be a valid employee. Select an owner from the list, or ask an admin "
             "to link your login to an employee in master data."
         )
 
+    def _ensure_employee_for_user(self, ctx: TenantContext, user: SecUser) -> UUID | None:
+        """Create/link a master employee so CRM users can own leads without admin prep."""
+        from uuid import uuid4
+
+        from modules.organization.models.branch import OrgBranch
+        from modules.organization.models.hierarchy import OrgDepartment
+
+        company_id = ctx.company_id
+        if company_id is None:
+            return None
+
+        branch_id = ctx.branch_id
+        if branch_id is None:
+            branch = self._db.scalar(
+                select(OrgBranch)
+                .where(
+                    OrgBranch.tenant_id == ctx.tenant_id,
+                    OrgBranch.company_id == company_id,
+                    OrgBranch.is_deleted.is_(False),
+                )
+                .order_by(OrgBranch.branch_code)
+                .limit(1)
+            )
+            if branch is None:
+                return None
+            branch_id = branch.id
+
+        department = self._db.scalar(
+            select(OrgDepartment)
+            .where(
+                OrgDepartment.tenant_id == ctx.tenant_id,
+                OrgDepartment.company_id == company_id,
+                OrgDepartment.branch_id == branch_id,
+                OrgDepartment.is_deleted.is_(False),
+            )
+            .order_by(OrgDepartment.department_code)
+            .limit(1)
+        )
+        if department is None:
+            department = self._db.scalar(
+                select(OrgDepartment)
+                .where(
+                    OrgDepartment.tenant_id == ctx.tenant_id,
+                    OrgDepartment.company_id == company_id,
+                    OrgDepartment.is_deleted.is_(False),
+                )
+                .order_by(OrgDepartment.department_code)
+                .limit(1)
+            )
+        if department is None:
+            return None
+
+        email = (user.email or "").strip().lower()
+        if not email:
+            email = f"crm-user-{user.id}@local.invalid"
+
+        existing = self._db.scalar(
+            select(MasterEmployee).where(
+                MasterEmployee.tenant_id == ctx.tenant_id,
+                MasterEmployee.company_id == company_id,
+                MasterEmployee.is_deleted.is_(False),
+                func.lower(MasterEmployee.email) == email,
+            )
+        )
+        if existing is not None:
+            if user.employee_id != existing.id:
+                user.employee_id = existing.id
+            if existing.user_id != user.id:
+                existing.user_id = user.id
+                existing.updated_by = ctx.user_id
+            self._db.flush()
+            return existing.id
+
+        display = (user.display_name or email.split("@", 1)[0] or "CRM User").strip()
+        parts = display.split(None, 1)
+        first_name = (parts[0] if parts else "CRM")[:100]
+        last_name = (parts[1] if len(parts) > 1 else "User")[:100]
+        employee_code = f"CRM-{str(user.id).replace('-', '')[:12].upper()}"
+
+        code_taken = self._db.scalar(
+            select(MasterEmployee.id).where(
+                MasterEmployee.tenant_id == ctx.tenant_id,
+                MasterEmployee.company_id == company_id,
+                MasterEmployee.employee_code == employee_code,
+                MasterEmployee.is_deleted.is_(False),
+            )
+        )
+        if code_taken is not None:
+            employee_code = f"CRM-{uuid4().hex[:12].upper()}"
+
+        row = MasterEmployee(
+            id=uuid4(),
+            tenant_id=ctx.tenant_id,
+            company_id=company_id,
+            branch_id=branch_id,
+            department_id=department.id,
+            employee_code=employee_code,
+            first_name=first_name,
+            last_name=last_name,
+            email=email,
+            mobile="0000000000",
+            designation="CRM Owner",
+            date_of_joining=date.today(),
+            status="active",
+            user_id=user.id,
+            created_by=ctx.user_id,
+            updated_by=ctx.user_id,
+        )
+        # Insert employee before linking sec_user.employee_id (FK order).
+        self._db.add(row)
+        self._db.flush()
+        user.employee_id = row.id
+        self._db.flush()
+        return row.id
+
     def create(self, ctx: TenantContext, *, branch_id: UUID, company_id: UUID | None = None, **fields):
         cid = self._scope.resolve_company_id(ctx, company_id)
         self._scope.validate_branch_access(ctx, branch_id)
-        fields.pop("owner_employee_id", None)
-        fields["owner_employee_id"] = self._resolve_owner_employee_id(ctx, None)
+        owner_candidate = fields.pop("owner_employee_id", None)
+        fields["owner_employee_id"] = self._resolve_owner_employee_id(ctx, owner_candidate)
         code = self._numbers.generate(CrmEntityType.LEAD, cid, CrmLead, "lead_code")
         fields.setdefault("document_date", date.today())
         fields.setdefault("status", LeadStatus.NEW.value)

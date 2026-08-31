@@ -126,6 +126,43 @@ class ProjectPoQueueItem(BaseModel):
     branch_id: UUID
     company_id: UUID
     created_at: datetime | None = None
+    shared_at: datetime | None = None
+
+
+class ProjectPoQueueShareCreate(BaseModel):
+    """Share a delivered installation PO to the Projects PO Queue."""
+
+    order_id: UUID
+    challan_id: str | None = Field(default=None, max_length=64)
+    project_name: str = Field(min_length=1, max_length=255)
+    circle_name: str = Field(min_length=1, max_length=255)
+    site_name: str = Field(min_length=1, max_length=255)
+    contact_person: str = Field(min_length=1, max_length=255)
+    contact_number: str = Field(min_length=1, max_length=64)
+    rack_quantity: str = Field(min_length=1, max_length=32)
+    server_quantity: str = Field(min_length=1, max_length=32)
+    server_type: str = Field(min_length=1, max_length=255)
+    remarks: str | None = None
+
+
+class ProjectPoQueueHandoffResponse(BaseModel):
+    """Stored installation handoff metadata for a PO queue entry."""
+
+    order_id: UUID
+    challan_id: str | None = None
+    shared_at: datetime
+    project_name: str | None = None
+    circle_name: str | None = None
+    site_name: str | None = None
+    contact_person: str | None = None
+    contact_number: str | None = None
+    rack_quantity: str | None = None
+    server_quantity: str | None = None
+    server_type: str | None = None
+    remarks: str | None = None
+    customer_name: str | None = None
+    customer_po_number: str | None = None
+    company_po_number: str | None = None
 
 
 class ProjectPoPrefillResponse(BaseModel):

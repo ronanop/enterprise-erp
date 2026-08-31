@@ -44,7 +44,7 @@ export function ScmCreatePoEntry({
 }: ScmCreatePoEntryProps) {
   const router = useRouter();
   const [dialogOpen, setDialogOpen] = useState(false);
-  const poHref = href || `/procurement/scm/ovf/${ovfId}/po`;
+  const poHref = href || `/procurement/scm/ovf/${ovfId}/item-plan`;
   const holdNotice = scmOnHold ? scmHoldCreatePoNotice(scmOnHoldAt) : null;
   const content = (
     <>

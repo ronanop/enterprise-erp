@@ -590,8 +590,10 @@ export function takeOvfInventoryShipSelection(
 }
 
 /** Matches CRM/API `_is_in_stock_distributor` — inventory path, not a vendor PO. */
+export const IN_STOCK_DISTRIBUTOR_LABEL = "IN STOCK";
+
 export function isInStockDistributor(value: string | null | undefined): boolean {
-  const key = (value || "").trim().toLowerCase().replace(/\s+/g, " ");
+  const key = (value || "").trim().toLowerCase().replace(/-/g, " ").replace(/\s+/g, " ");
   return (
     key === "in stock" ||
     key === "instock" ||

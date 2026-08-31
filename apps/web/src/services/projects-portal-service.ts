@@ -245,6 +245,39 @@ export type ProjectPoQueueItem = {
   branch_id: string;
   company_id: string;
   created_at: string | null;
+  shared_at?: string | null;
+};
+
+export type ProjectPoQueueHandoff = {
+  order_id: string;
+  challan_id: string | null;
+  shared_at: string;
+  project_name: string | null;
+  circle_name: string | null;
+  site_name: string | null;
+  contact_person: string | null;
+  contact_number: string | null;
+  rack_quantity: string | null;
+  server_quantity: string | null;
+  server_type: string | null;
+  remarks: string | null;
+  customer_name: string | null;
+  customer_po_number: string | null;
+  company_po_number: string | null;
+};
+
+export type ProjectPoQueueShareInput = {
+  order_id: string;
+  challan_id?: string | null;
+  project_name: string;
+  circle_name: string;
+  site_name: string;
+  contact_person: string;
+  contact_number: string;
+  rack_quantity: string;
+  server_quantity: string;
+  server_type: string;
+  remarks?: string | null;
 };
 
 export type ProjectPoPrefill = {
@@ -270,6 +303,24 @@ export type ProjectPoPrefill = {
 export async function listProjectPoQueue(): Promise<ProjectPoQueueItem[]> {
   const res = await apiClient<ProjectPoQueueItem[]>(`${PROJECT_PO_QUEUE_API}/queue`);
   return asArray(res.data);
+}
+
+export async function shareProjectPoQueue(
+  input: ProjectPoQueueShareInput,
+): Promise<ProjectPoQueueHandoff> {
+  return unwrap(
+    await apiClient<ProjectPoQueueHandoff>(`${PROJECT_PO_QUEUE_API}/queue/share`, {
+      method: "POST",
+      body: JSON.stringify(input),
+    }),
+  );
+}
+
+export async function getProjectPoHandoff(orderId: string): Promise<ProjectPoQueueHandoff | null> {
+  const res = await apiClient<ProjectPoQueueHandoff | null>(
+    `${PROJECT_PO_QUEUE_API}/${orderId}/handoff`,
+  );
+  return res.data ?? null;
 }
 
 export async function getProjectPoPrefill(

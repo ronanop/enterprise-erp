@@ -13,6 +13,22 @@ export const PROCUREMENT_ORDERS_CACHE_KEY = "erp.procurement.orders";
 export const PROCUREMENT_VENDOR_POS_CACHE_KEY = "erp.procurement.vendor-pos";
 export const PROCUREMENT_VENDOR_OPTIONS_CACHE_KEY = "erp.procurement.vendor-options";
 
+export function scmOvfPreviewCacheKey(ovfId: string): string {
+  return `erp.procurement.scm-ovf:${ovfId.trim()}`;
+}
+
+export function peekScmOvfPreviewFromCache(ovfId: string): ScmOvfPreview | null {
+  return peekCachedValue<ScmOvfPreview>(scmOvfPreviewCacheKey(ovfId));
+}
+
+export function invalidateScmOvfPreviewCache(ovfId?: string): void {
+  if (ovfId?.trim()) {
+    invalidateClientCache(scmOvfPreviewCacheKey(ovfId));
+    return;
+  }
+  invalidateClientCache("erp.procurement.scm-ovf:");
+}
+
 export function peekProcurementInventoryFromCache(): ProcurementInventoryRow[] | null {
   return peekCachedValue<ProcurementInventoryRow[]>(PROCUREMENT_INVENTORY_CACHE_KEY);
 }
@@ -562,8 +578,11 @@ export async function listScmQueue(): Promise<ScmQueueItem[]> {
 }
 
 export async function getScmOvfPreview(ovfId: string): Promise<ScmOvfPreview> {
-  const res = await apiClient<ScmOvfPreview>(`${SCM_API}/ovf/${ovfId}`);
-  return unwrapData(res);
+  const id = ovfId.trim();
+  return cachedFetch(scmOvfPreviewCacheKey(id), PROCUREMENT_LIST_TTL_MS, async () => {
+    const res = await apiClient<ScmOvfPreview>(`${SCM_API}/ovf/${id}`);
+    return unwrapData(res);
+  });
 }
 
 export async function fulfillOvfFromStock(
@@ -578,6 +597,7 @@ export async function fulfillOvfFromStock(
     },
   );
   invalidateProcurementListCache();
+  invalidateScmOvfPreviewCache(ovfId);
   return unwrapData(res);
 }
 
@@ -587,6 +607,7 @@ export async function holdScmOvf(ovfId: string, remark: string): Promise<ScmOvfP
     body: { remark: remark.trim() },
   });
   invalidateProcurementListCache();
+  invalidateScmOvfPreviewCache(ovfId);
   return unwrapData(res);
 }
 
@@ -596,6 +617,7 @@ export async function releaseScmOvfHold(ovfId: string): Promise<ScmOvfPreview> {
     body: {},
   });
   invalidateProcurementListCache();
+  invalidateScmOvfPreviewCache(ovfId);
   return unwrapData(res);
 }
 
@@ -611,6 +633,7 @@ export async function updateScmOvfCharges(
     method: "PATCH",
     body,
   });
+  invalidateScmOvfPreviewCache(ovfId);
   return unwrapData(res);
 }
 
@@ -641,6 +664,7 @@ export async function createPoFromOvf(
     body,
   });
   invalidateProcurementListCache();
+  invalidateScmOvfPreviewCache(ovfId);
   return unwrapData(res);
 }
 

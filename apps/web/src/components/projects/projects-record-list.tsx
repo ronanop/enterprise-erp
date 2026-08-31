@@ -32,7 +32,7 @@ export type RecordColumn<T> = {
   sortable?: boolean;
   /** Extra classes for the body cell. */
   className?: string;
-  align?: "left" | "right";
+  align?: "left" | "center" | "right";
 };
 
 export function ProjectsRecordList<T extends { id: string }>({
@@ -178,6 +178,7 @@ export function ProjectsRecordList<T extends { id: string }>({
                       className={cn(
                         "px-4 py-2.5",
                         col.align === "right" && "text-right",
+                        col.align === "center" && "text-center",
                       )}
                     >
                       {col.label ? (
@@ -231,6 +232,7 @@ export function ProjectsRecordList<T extends { id: string }>({
                         className={cn(
                           "px-4 py-2.5",
                           col.align === "right" && "text-right",
+                          col.align === "center" && "text-center",
                           col.className ?? "text-muted-foreground",
                         )}
                       >

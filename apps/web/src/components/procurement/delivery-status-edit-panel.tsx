@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { FileText, MapPinned, Package, Receipt, Truck } from "lucide-react";
+import { FileText, MapPinned, Package, Truck } from "lucide-react";
 
 import { DeliveryStatusBillDialog } from "@/components/procurement/delivery-status-bill-dialog";
 import { DeliveryStatusOutcomeDialog } from "@/components/procurement/delivery-status-outcome-dialog";
@@ -15,7 +15,6 @@ import {
 } from "@/components/procurement/delivery-status-form";
 import { DeliverySectionCard } from "@/components/procurement/delivery-section-card";
 import { FinanceField } from "@/components/finance/journals/finance-form-field";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
@@ -31,14 +30,10 @@ import {
   type DeliveryStatusGrnItemRow,
 } from "@/utils/delivery-challan-grn";
 import {
-  aggregatePoDcBillStatus,
   challanDeliveredQuantity,
-  deliveryBillStatusBadgeVariant,
-  formatDeliveryBillStatusLabel,
   resolveDeliveryBillStatus,
 } from "@/utils/delivery-challan-bill";
 import {
-  formatChallanGrnSummary,
   getDeliveryChallan,
   type DeliveryChallanRecord,
 } from "@/utils/delivery-challan-storage";
@@ -209,11 +204,6 @@ export function DeliveryStatusEditPanel({ challanId }: DeliveryStatusEditPanelPr
     );
   }
 
-  const poNumber =
-    String(form?.cachePoNumber ?? "").trim() ||
-    String(challan.companyPoNumber ?? "").trim() ||
-    String(challan.purchaseOrderNumber ?? "").trim();
-
   const status = resolveDeliveryStatusForChallan(challan);
   const billKey = resolveDeliveryBillStatus(status, challanDeliveredQuantity(challan));
   const canUpdateBill = billKey === "fully_billed";
@@ -247,7 +237,6 @@ export function DeliveryStatusEditPanel({ challanId }: DeliveryStatusEditPanelPr
                 className="cursor-pointer transition-colors duration-200"
                 onClick={() => setBillOpen(true)}
               >
-                <Receipt className="mr-1.5 size-3.5" />
                 Update bill
               </Button>
             ) : null}
@@ -261,49 +250,8 @@ export function DeliveryStatusEditPanel({ challanId }: DeliveryStatusEditPanelPr
         </div>
       ) : null}
 
-      <DeliverySectionCard title="Bill status" icon={Receipt}>
-        <div className="grid gap-3 sm:grid-cols-3">
-          <div className="space-y-1">
-            <div className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-              DC bill
-            </div>
-            <Badge
-              variant={deliveryBillStatusBadgeVariant(billKey)}
-              className={procurementUi.statusBadge}
-            >
-              {formatDeliveryBillStatusLabel(billKey)}
-            </Badge>
-          </div>
-          <div className="space-y-1">
-            <div className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-              PO bill
-            </div>
-            <div className="text-sm font-medium">
-              {aggregatePoDcBillStatus(challan.orderId)}
-            </div>
-          </div>
-          <div className="space-y-1">
-            <div className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-              Billed qty
-            </div>
-            <div className="text-sm font-medium tabular-nums">
-              {status.billedQuantity?.trim() || "—"}
-              {challanDeliveredQuantity(challan) > 0
-                ? ` / ${challanDeliveredQuantity(challan)}`
-                : ""}
-            </div>
-          </div>
-        </div>
-        <p className="mt-3 text-xs text-muted-foreground">
-          Delivery challan means the item is delivered without taking a bill. Record bill
-          taken later — including after this status or after installation.
-        </p>
-      </DeliverySectionCard>
-
       <DeliverySectionCard title="PO details" icon={FileText}>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <ReadOnlyField label="PO number" value={poNumber} />
-          <ReadOnlyField label="GRN number" value={formatChallanGrnSummary(challan)} />
           {readOnly || !form ? (
             <>
               <ReadOnlyField label="Customer name" value={form?.customerName ?? challan.customerName ?? ""} />

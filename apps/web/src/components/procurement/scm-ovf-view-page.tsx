@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useState, useTransition, type ReactNode } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -606,6 +606,7 @@ function VendorPurchaseTable({
 
 export function ScmOvfViewPage({ ovfId }: { ovfId: string }) {
   const router = useRouter();
+  const [createPoPending, startCreatePoNav] = useTransition();
   const [preview, setPreview] = useState<ScmOvfPreview | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -790,27 +791,30 @@ export function ScmOvfViewPage({ ovfId }: { ovfId: string }) {
     [preview?.open_distributor_names],
   );
   const ovfOnHold = Boolean(preview?.scm_on_hold);
-  const linkedPos = preview?.purchase_orders?.length
-    ? preview.purchase_orders
-    : preview?.purchase_order_id
-      ? [
-          {
-            id: preview.purchase_order_id,
-            document_number: preview.purchase_order_number,
-            company_po_number: preview.company_po_number,
-            vendor_name: preview.vendor_name,
-            status: preview.purchase_order_status,
-          },
-        ]
-      : [];
+  const linkedPos = useMemo(() => {
+    if (!preview?.purchase_orders?.length) {
+      if (!preview?.purchase_order_id) return [];
+      return [
+        {
+          id: preview.purchase_order_id,
+          document_number: preview.purchase_order_number,
+          company_po_number: preview.company_po_number,
+          vendor_name: preview.vendor_name,
+          status: preview.purchase_order_status,
+        },
+      ];
+    }
+    return preview.purchase_orders;
+  }, [preview]);
   const linkedPoOrderIds = useMemo(
     () => linkedPos.map((row) => String(row.id)).filter(Boolean),
     [linkedPos],
   );
 
   useEffect(() => {
-    if (!shipDialogOpen || linkedPoOrderIds.length === 0) {
-      if (!shipDialogOpen) setPoInventoryRows([]);
+    if (!shipDialogOpen) return;
+    if (linkedPoOrderIds.length === 0) {
+      setPoInventoryRows([]);
       return;
     }
     let cancelled = false;
@@ -890,7 +894,20 @@ export function ScmOvfViewPage({ ovfId }: { ovfId: string }) {
   function openShipDialog() {
     setShipKind("delivery_challan");
     setInventorySelection({});
+    setPoInventoryRows([]);
     setShipDialogOpen(true);
+  }
+
+  function openCreatePo() {
+    startCreatePoNav(() => {
+      router.push(ovfItemPlanHref(ovfId));
+    });
+  }
+
+  function openVendorCreatePo(vendorName: string) {
+    startCreatePoNav(() => {
+      router.push(ovfCreatePoHref(ovfId, vendorName));
+    });
   }
 
   function confirmShipChallan() {
@@ -975,16 +992,17 @@ export function ScmOvfViewPage({ ovfId }: { ovfId: string }) {
               </Button>
             ) : null}
             {preview ? (
-              <Link
-                href={ovfItemPlanHref(ovfId)}
-                className={cn(
-                  buttonVariants({ size: "sm", variant: "outline" }),
-                  "cursor-pointer transition-colors duration-200",
-                )}
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="cursor-pointer transition-colors duration-200"
+                disabled={loading || pdfBusy || createPoPending}
+                onClick={openCreatePo}
               >
                 <ShoppingCart className="mr-1.5 size-3.5" />
-                Create PO
-              </Link>
+                {createPoPending ? "Opening…" : "Create PO"}
+              </Button>
             ) : null}
             {canUnholdOvf ? (
               <Button
@@ -1349,7 +1367,15 @@ export function ScmOvfViewPage({ ovfId }: { ovfId: string }) {
                           </td>
                           <td className="px-3 py-2">
                             {line.source === "inventory" ? (
-                              <span className="text-xs text-muted-foreground">From stock</span>
+                              <button
+                                type="button"
+                                disabled={createPoPending}
+                                onClick={openCreatePo}
+                                className="cursor-pointer text-xs font-medium text-[#0369A1] underline-offset-2 transition-colors duration-200 hover:text-[#0284C7] hover:underline disabled:cursor-not-allowed disabled:opacity-60"
+                                title="Open item plan to book from inventory"
+                              >
+                                From stock
+                              </button>
                             ) : linkedPo ? (
                               <Link
                                 href={`/procurement/orders/${linkedPo.id}`}
@@ -1358,12 +1384,14 @@ export function ScmOvfViewPage({ ovfId }: { ovfId: string }) {
                                 {linkedPo.label}
                               </Link>
                             ) : poOpen && !ovfOnHold ? (
-                              <Link
-                                href={ovfCreatePoHref(ovfId, vendorName)}
-                                className="cursor-pointer text-xs font-medium text-[#0369A1] underline-offset-2 transition-colors duration-200 hover:text-[#0284C7] hover:underline"
+                              <button
+                                type="button"
+                                disabled={createPoPending}
+                                onClick={() => openVendorCreatePo(vendorName)}
+                                className="cursor-pointer text-xs font-medium text-[#0369A1] underline-offset-2 transition-colors duration-200 hover:text-[#0284C7] hover:underline disabled:cursor-not-allowed disabled:opacity-60"
                               >
                                 Create PO
-                              </Link>
+                              </button>
                             ) : (
                               <span className="text-xs text-muted-foreground">—</span>
                             )}

@@ -1,5 +1,6 @@
 import { erpModules } from "@/config/modules";
 import { canAccessHref } from "@/lib/module-access";
+import { ApiClientError } from "@/services/api-client";
 import { loadAnalyticsOverview } from "@/services/analytics-service";
 import { loadAssetsOverview } from "@/services/assets-service";
 import {
@@ -40,6 +41,15 @@ import { listOvfs, listQuotes } from "@/services/sales-crm-service";
 import { loadSalesOverview } from "@/services/sales-service";
 import { loadServiceOverview } from "@/services/service-mgmt-service";
 import { buildProcurementPipelineMetrics } from "@/utils/procurement-pipeline-metrics";
+
+/** RBAC denials / missing resources — expected for non-admin module scopes, not outages. */
+function isAccessDeniedStatus(status: number): boolean {
+  return status === 403 || status === 404;
+}
+
+function isAccessDeniedError(err: unknown): boolean {
+  return err instanceof ApiClientError && isAccessDeniedStatus(err.status);
+}
 
 export type PlatformKpi = {
   label: string;
@@ -91,18 +101,84 @@ type ModuleLoaderResult = {
   analytics: Omit<ModuleAnalytics, "key" | "title" | "href">;
   pipeline?: Partial<Record<string, number>>;
   executive?: Partial<Record<string, number | string>>;
+  statusCodes?: number[];
 };
 
-function formatCount(value: number): string {
-  return value.toLocaleString("en-IN");
+function classifyModuleHealth(
+  errors: string[],
+  statusCodes: number[],
+  recordCount: number,
+): { status: ModuleAnalytics["status"]; errors: string[]; statusCodes: number[] } {
+  const isDeniedMessage = (message: string) => {
+    const m = message.toLowerCase();
+    return (
+      m.includes("missing permission") ||
+      m.includes("forbidden") ||
+      m.includes("not authorized") ||
+      m.includes("access denied") ||
+      m.includes("permission denied")
+    );
+  };
+
+  // All reported statuses are RBAC denials → healthy for this user's scope.
+  if (statusCodes.length > 0 && statusCodes.every(isAccessDeniedStatus)) {
+    return { status: "ok", errors: [], statusCodes: [] };
+  }
+
+  // All error messages are permission denials (status may be missing / remapped).
+  if (errors.length > 0 && errors.every(isDeniedMessage)) {
+    return { status: "ok", errors: [], statusCodes: [] };
+  }
+
+  const hardErrors: string[] = [];
+  const hardCodes: number[] = [];
+  const pairCount = Math.max(errors.length, statusCodes.length);
+
+  for (let i = 0; i < pairCount; i += 1) {
+    const code = statusCodes[i];
+    const message = errors[i];
+    if (typeof code === "number" && isAccessDeniedStatus(code)) {
+      continue;
+    }
+    if (message && isDeniedMessage(message)) {
+      continue;
+    }
+    if (typeof code === "number") hardCodes.push(code);
+    if (message) hardErrors.push(message);
+  }
+
+  if (hardCodes.includes(401) && recordCount === 0) {
+    return {
+      status: "error",
+      errors: hardErrors.length ? hardErrors : ["Authentication required"],
+      statusCodes: hardCodes,
+    };
+  }
+
+  if (hardErrors.length === 0 && hardCodes.length === 0) {
+    return { status: "ok", errors: [], statusCodes: [] };
+  }
+
+  if (hardErrors.length === 0 && hardCodes.every((c) => c === 401)) {
+    return { status: "ok", errors: [], statusCodes: hardCodes };
+  }
+
+  const status: ModuleAnalytics["status"] = recordCount > 0 ? "partial" : "error";
+  return { status, errors: hardErrors, statusCodes: hardCodes };
 }
 
-function formatInr(value: number): string {
+function formatCount(value: number | null | undefined): string {
+  const n = typeof value === "number" && Number.isFinite(value) ? value : Number(value);
+  return (Number.isFinite(n) ? n : 0).toLocaleString("en-IN");
+}
+
+function formatInr(value: number | null | undefined): string {
+  const n = typeof value === "number" && Number.isFinite(value) ? value : Number(value);
   return new Intl.NumberFormat("en-IN", {
     style: "currency",
     currency: "INR",
     maximumFractionDigits: 0,
-  }).format(value);
+  }).format(Number.isFinite(n) ? n : 0);
 }
 
 function moduleMeta(key: string) {
@@ -130,18 +206,19 @@ function resultFromOverview(
   const meta = moduleMeta(key);
   const errors = overview.errors ?? [];
   const statusCodes = overview.statusCodes ?? [];
+  const classified = classifyModuleHealth(errors, statusCodes, recordCount);
   return {
     key,
     ...meta,
     analytics: {
-      status: errors.length ? (overview.partial ? "partial" : "error") : "ok",
+      status: classified.status,
       recordCount,
       kpis,
-      errors,
+      errors: classified.errors,
     },
     pipeline: extras?.pipeline,
     executive: extras?.executive,
-    ...(statusCodes.length ? { statusCodes } : {}),
+    ...(classified.statusCodes.length ? { statusCodes: classified.statusCodes } : {}),
   };
 }
 
@@ -227,7 +304,10 @@ async function loadFinanceAnalytics(): Promise<ModuleLoaderResult> {
 
 async function loadProcurementAnalytics(): Promise<ModuleLoaderResult> {
   const overview = await loadProcurementOverview();
-  const pipeline = buildProcurementPipelineMetrics(overview);
+  const pipeline = buildProcurementPipelineMetrics({
+    scmQueueCount: overview.scmQueue.length,
+    vendorPos: overview.vendorPos.length > 0 ? overview.vendorPos : overview.orders,
+  });
   const openPos = overview.orders.filter((row) => {
     const status = procAsStatus(row.status);
     return status !== "draft" && status !== "submitted" && status !== "cancelled";
@@ -245,7 +325,7 @@ async function loadProcurementAnalytics(): Promise<ModuleLoaderResult> {
       { label: "SCM queue", value: formatCount(pipeline.scm) },
       { label: "Issued POs", value: formatCount(openPos) },
       { label: "GRN docs", value: formatCount(pipeline.grns) },
-      { label: "Receipt %", value: `${pipeline.receiptPct}%` },
+      { label: "Receipt %", value: `${pipeline.receiptPct ?? 0}%` },
       { label: "Delivery challans", value: formatCount(pipeline["delivery-challan"]) },
     ],
     {
@@ -447,6 +527,13 @@ const MODULE_LOADERS: Record<string, () => Promise<ModuleLoaderResult>> = {
         },
       };
     } catch (err) {
+      if (isAccessDeniedError(err)) {
+        return {
+          key: "marketing",
+          ...moduleMeta("marketing"),
+          analytics: { status: "ok", recordCount: 0, kpis: [], errors: [] },
+        };
+      }
       return {
         key: "marketing",
         ...moduleMeta("marketing"),
@@ -483,6 +570,13 @@ const MODULE_LOADERS: Record<string, () => Promise<ModuleLoaderResult>> = {
         },
       };
     } catch (err) {
+      if (isAccessDeniedError(err)) {
+        return {
+          key: "grc",
+          ...moduleMeta("grc"),
+          analytics: { status: "ok", recordCount: 0, kpis: [], errors: [] },
+        };
+      }
       return {
         key: "grc",
         ...moduleMeta("grc"),
@@ -596,6 +690,13 @@ const MODULE_LOADERS: Record<string, () => Promise<ModuleLoaderResult>> = {
         },
       };
     } catch (err) {
+      if (isAccessDeniedError(err)) {
+        return {
+          key: "email",
+          ...moduleMeta("email"),
+          analytics: { status: "ok", recordCount: 0, kpis: [], errors: [] },
+        };
+      }
       return {
         key: "email",
         ...moduleMeta("email"),
@@ -611,60 +712,93 @@ const MODULE_LOADERS: Record<string, () => Promise<ModuleLoaderResult>> = {
 };
 
 function buildConnectedPipeline(results: ModuleLoaderResult[]): ConnectedPipelineStage[] {
+  const keys = new Set(results.map((row) => row.key));
   const crm = results.find((row) => row.key === "crm")?.pipeline ?? {};
   const proc = results.find((row) => row.key === "procurement")?.pipeline ?? {};
   const prj = results.find((row) => row.key === "projects")?.pipeline ?? {};
-  return [
-    { stage: "Leads", count: crm.leads ?? 0, module: "CRM", href: "/crm/leads" },
-    { stage: "Opportunities", count: crm.opportunities ?? 0, module: "CRM", href: "/crm/opportunities" },
-    { stage: "Quotes", count: crm.quotes ?? 0, module: "CRM", href: "/crm/quotes" },
-    { stage: "OVF", count: crm.ovf ?? 0, module: "CRM", href: "/crm/ovf" },
-    { stage: "SCM queue", count: proc.scmQueue ?? 0, module: "Procurement", href: "/procurement/scm" },
-    { stage: "Purchase orders", count: proc.purchaseOrders ?? 0, module: "Procurement", href: "/procurement/orders" },
-    { stage: "GRNs", count: proc.grns ?? 0, module: "Procurement", href: "/procurement/grns" },
-    { stage: "Projects", count: prj.projects ?? 0, module: "Projects", href: "/projects/projects" },
-    { stage: "Tasks", count: prj.tasks ?? 0, module: "Projects", href: "/projects/project-tasks" },
-    { stage: "Issues", count: prj.issues ?? 0, module: "Projects", href: "/projects/project-issues" },
-  ];
+  const stages: ConnectedPipelineStage[] = [];
+  if (keys.has("crm")) {
+    stages.push(
+      { stage: "Leads", count: crm.leads ?? 0, module: "CRM", href: "/crm/leads" },
+      { stage: "Opportunities", count: crm.opportunities ?? 0, module: "CRM", href: "/crm/opportunities" },
+      { stage: "Quotes", count: crm.quotes ?? 0, module: "CRM", href: "/crm/quotes" },
+      { stage: "OVF", count: crm.ovf ?? 0, module: "CRM", href: "/crm/ovf" },
+    );
+  }
+  if (keys.has("procurement")) {
+    stages.push(
+      { stage: "SCM queue", count: proc.scmQueue ?? 0, module: "Procurement", href: "/procurement/scm" },
+      { stage: "Purchase orders", count: proc.purchaseOrders ?? 0, module: "Procurement", href: "/procurement/orders" },
+      { stage: "GRNs", count: proc.grns ?? 0, module: "Procurement", href: "/procurement/grns" },
+    );
+  }
+  if (keys.has("projects")) {
+    stages.push(
+      { stage: "Projects", count: prj.projects ?? 0, module: "Projects", href: "/projects/projects" },
+      { stage: "Tasks", count: prj.tasks ?? 0, module: "Projects", href: "/projects/project-tasks" },
+      { stage: "Issues", count: prj.issues ?? 0, module: "Projects", href: "/projects/project-issues" },
+    );
+  }
+  return stages;
 }
 
 function buildExecutive(results: ModuleLoaderResult[]): PlatformKpi[] {
+  const keys = new Set(results.map((row) => row.key));
   const exec: Record<string, number | string> = {};
   for (const row of results) {
     if (row.executive) Object.assign(exec, row.executive);
   }
-  return [
-    {
+  const kpis: PlatformKpi[] = [];
+  if (keys.has("crm")) {
+    kpis.push({
       label: "Pipeline value",
       value: formatInr(Number(exec.pipelineValue ?? 0)),
       hint: "Open CRM opportunities",
-    },
-    {
-      label: "AR outstanding",
-      value: formatInr(Number(exec.arOutstanding ?? 0)),
-      hint: "Finance receivables",
-    },
-    {
-      label: "AP outstanding",
-      value: formatInr(Number(exec.apOutstanding ?? 0)),
-      hint: "Finance payables",
-    },
-    {
+    });
+  }
+  if (keys.has("finance")) {
+    kpis.push(
+      {
+        label: "AR outstanding",
+        value: formatInr(Number(exec.arOutstanding ?? 0)),
+        hint: "Finance receivables",
+      },
+      {
+        label: "AP outstanding",
+        value: formatInr(Number(exec.apOutstanding ?? 0)),
+        hint: "Finance payables",
+      },
+    );
+  }
+  if (keys.has("procurement")) {
+    kpis.push({
       label: "Open POs",
       value: formatCount(Number(exec.openPos ?? 0)),
       hint: "Issued procurement orders",
-    },
-    {
+    });
+  }
+  if (keys.has("helpdesk")) {
+    kpis.push({
       label: "Open tickets",
       value: formatCount(Number(exec.openTickets ?? 0)),
       hint: "Helpdesk backlog",
-    },
-    {
+    });
+  }
+  if (keys.has("hr")) {
+    kpis.push({
       label: "Headcount",
       value: formatCount(Number(exec.headcount ?? 0)),
       hint: "Active employee profiles",
-    },
-  ];
+    });
+  }
+  if (keys.has("projects") && !kpis.some((k) => k.label === "Active projects")) {
+    kpis.push({
+      label: "Active projects",
+      value: formatCount(Number(exec.activeProjects ?? 0)),
+      hint: "Projects in portfolio",
+    });
+  }
+  return kpis;
 }
 
 export async function loadPlatformDashboard(
@@ -679,16 +813,36 @@ export async function loadPlatformDashboard(
     accessibleKeys.map((key) => MODULE_LOADERS[key]()),
   );
 
-  const results: ModuleLoaderResult[] = settled
-    .filter((row): row is PromiseFulfilledResult<ModuleLoaderResult> => row.status === "fulfilled")
-    .map((row) => row.value);
+  const results: ModuleLoaderResult[] = settled.map((row, index) => {
+    const key = accessibleKeys[index] ?? "unknown";
+    if (row.status === "fulfilled") return row.value;
+    if (isAccessDeniedError(row.reason)) {
+      return {
+        key,
+        ...moduleMeta(key),
+        analytics: { status: "ok" as const, recordCount: 0, kpis: [], errors: [] },
+      };
+    }
+    return {
+      key,
+      ...moduleMeta(key),
+      analytics: {
+        status: "error" as const,
+        recordCount: 0,
+        kpis: [],
+        errors: [
+          row.reason instanceof Error ? row.reason.message : "Failed to load module analytics",
+        ],
+      },
+    };
+  });
 
   const statusCodes: number[] = [];
   let partial = false;
 
   for (const row of results) {
     if (row.analytics.status !== "ok") partial = true;
-    if ("statusCodes" in row && Array.isArray(row.statusCodes)) {
+    if (row.statusCodes?.length) {
       statusCodes.push(...row.statusCodes);
     }
   }
@@ -730,6 +884,7 @@ export async function loadPlatformDashboard(
 }
 
 function buildOpsBacklog(results: ModuleLoaderResult[]): OpsBacklogItem[] {
+  const keys = new Set(results.map((row) => row.key));
   const crm = results.find((row) => row.key === "crm")?.pipeline ?? {};
   const proc = results.find((row) => row.key === "procurement")?.pipeline ?? {};
   const prj = results.find((row) => row.key === "projects")?.pipeline ?? {};
@@ -737,42 +892,54 @@ function buildOpsBacklog(results: ModuleLoaderResult[]): OpsBacklogItem[] {
   for (const row of results) {
     if (row.executive) Object.assign(exec, row.executive);
   }
-  return [
-    {
+  const items: OpsBacklogItem[] = [];
+  if (keys.has("crm")) {
+    items.push({
       name: "Open opportunities",
       count: Number(exec.openOpportunities ?? crm.opportunities ?? 0),
       module: "CRM",
       href: "/crm/opportunities",
-    },
-    {
-      name: "SCM queue",
-      count: Number(proc.scmQueue ?? 0),
-      module: "Procurement",
-      href: "/procurement/scm",
-    },
-    {
-      name: "Open POs",
-      count: Number(exec.openPos ?? 0),
-      module: "Procurement",
-      href: "/procurement/orders",
-    },
-    {
+    });
+  }
+  if (keys.has("procurement")) {
+    items.push(
+      {
+        name: "SCM queue",
+        count: Number(proc.scmQueue ?? 0),
+        module: "Procurement",
+        href: "/procurement/scm",
+      },
+      {
+        name: "Open POs",
+        count: Number(exec.openPos ?? 0),
+        module: "Procurement",
+        href: "/procurement/orders",
+      },
+    );
+  }
+  if (keys.has("helpdesk")) {
+    items.push({
       name: "Open tickets",
       count: Number(exec.openTickets ?? 0),
       module: "Helpdesk",
       href: "/helpdesk",
-    },
-    {
-      name: "Active projects",
-      count: Number(prj.projects ?? exec.activeProjects ?? 0),
-      module: "Projects",
-      href: "/projects/projects",
-    },
-    {
-      name: "Project issues",
-      count: Number(prj.issues ?? 0),
-      module: "Projects",
-      href: "/projects/project-issues",
-    },
-  ];
+    });
+  }
+  if (keys.has("projects")) {
+    items.push(
+      {
+        name: "Active projects",
+        count: Number(prj.projects ?? exec.activeProjects ?? 0),
+        module: "Projects",
+        href: "/projects/projects",
+      },
+      {
+        name: "Project issues",
+        count: Number(prj.issues ?? 0),
+        module: "Projects",
+        href: "/projects/project-issues",
+      },
+    );
+  }
+  return items;
 }

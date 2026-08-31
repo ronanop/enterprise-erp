@@ -19,6 +19,8 @@ import {
 } from "@/services/procurement-service";
 import {
   getProjectPoPrefill,
+  getProjectPoHandoff,
+  shareProjectPoQueue,
 } from "@/services/projects-portal-service";
 import { challanDeliveredQuantity } from "@/utils/delivery-challan-bill";
 import { getDeliveryChallan } from "@/utils/delivery-challan-storage";
@@ -38,7 +40,6 @@ import {
   validateInstallationManual,
   type InstallationManualFields,
 } from "@/utils/installation-storage";
-import { enqueueProjectPoQueueHandoff } from "@/utils/project-po-queue-handoff";
 
 function textOrDash(value: string | number | null | undefined): string {
   if (value === null || value === undefined) return "—";
@@ -158,6 +159,16 @@ export function InstallationDetailPage({ challanId }: { challanId: string }) {
         projectHref: install.projectHref,
       });
       setCrmProjectTitle(crmProjectTitle);
+
+      if (orderId) {
+        const existingHandoff = await getProjectPoHandoff(orderId).catch(() => null);
+        if (existingHandoff) {
+          setShared({
+            sharedToProject: true,
+            projectHref: "/projects/po-queue",
+          });
+        }
+      }
 
       const shipmentStatus = isFailedShipmentStatus(status.shipmentStatus)
         ? "Failed delivery"
@@ -281,34 +292,18 @@ export function InstallationDetailPage({ challanId }: { challanId: string }) {
         .filter(Boolean)
         .join("\n");
 
-      enqueueProjectPoQueueHandoff({
-        orderId: auto.orderId,
-        challanId,
-        projectName: manual.projectName.trim(),
-        circleName: manual.circleName.trim(),
-        siteName: manual.site.trim(),
-        contactPerson: manual.contactPerson.trim(),
-        contactNumber: manual.contactNumber.trim(),
-        rackQuantity: manual.rackQuantity.trim(),
-        serverType: manual.serverType.trim(),
+      await shareProjectPoQueue({
+        order_id: auto.orderId,
+        challan_id: challanId,
+        project_name: manual.projectName.trim(),
+        circle_name: manual.circleName.trim(),
+        site_name: manual.site.trim(),
+        contact_person: manual.contactPerson.trim(),
+        contact_number: manual.contactNumber.trim(),
+        rack_quantity: manual.rackQuantity.trim(),
+        server_quantity: manual.serverQuantity.trim(),
+        server_type: manual.serverType.trim(),
         remarks,
-        companyPoNumber:
-          order?.company_po_number || prefill?.company_po_number || auto.companyPoNumber || null,
-        documentNumber: order?.document_number || auto.companyPoNumber || "PO",
-        documentDate: order?.document_date || new Date().toISOString().slice(0, 10),
-        customerName: order?.customer_name || prefill?.customer_name || auto.customerName || null,
-        customerPoNumber:
-          (auto.customerPoNumber || "").trim() ||
-          (prefill?.customer_po_number || "").trim() ||
-          (order?.customer_po_number || "").trim() ||
-          null,
-        vendorId: order?.vendor_id || "",
-        totalAmount: Number(order?.total_amount || order?.vendor_total || 0),
-        customerTotal: Number(order?.customer_total || 0),
-        status: order?.status || "sent",
-        ovfId: order?.source_document_id || prefill?.ovf_id || null,
-        branchId,
-        companyId,
       });
 
       const linked = markInstallationSharedToPoQueue(challanId);

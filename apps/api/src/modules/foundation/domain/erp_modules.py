@@ -37,6 +37,28 @@ MODULE_ROLE_ADMIN = "admin"
 MODULE_ROLE_MEMBER = "member"
 MODULE_ROLES = frozenset({MODULE_ROLE_ADMIN, MODULE_ROLE_MEMBER})
 
+# Permission seed `module` column occasionally differs from UI/module-assignment keys.
+PERMISSION_MODULE_ALIASES: dict[str, str] = {
+    "project": "projects",
+}
+
+
+def resolve_erp_module_key(module_or_permission_prefix: str) -> str | None:
+    """Map a permission module / code prefix to an assignable ERP module key."""
+    raw = (module_or_permission_prefix or "").strip().lower()
+    if not raw:
+        return None
+    aliased = PERMISSION_MODULE_ALIASES.get(raw, raw)
+    if aliased in ERP_MODULE_KEY_SET:
+        return aliased
+    return None
+
+
+def module_key_for_permission_code(permission_code: str) -> str | None:
+    """Best-effort module key from `module.resource:action` permission codes."""
+    head = permission_code.split(".", 1)[0].strip().lower()
+    return resolve_erp_module_key(head)
+
 
 def has_platform_module_access(user_type: str, role_codes: list[str] | None = None) -> bool:
     if user_type in ADMIN_USER_TYPES:

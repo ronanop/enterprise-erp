@@ -1,75 +1,44 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ClipboardList, Package, RefreshCw, ShoppingCart, Truck } from "lucide-react";
 
 import { PageHeader } from "@/components/layout/page-header";
-import { FinanceStatusBadge } from "@/components/finance/finance-status-badge";
 import { ScmOvfBookFromStockDialog } from "@/components/procurement/scm-ovf-book-from-stock-dialog";
+import { VendorSearchSelect } from "@/components/procurement/vendor-search-select";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import {
-  findLatestApprovalForOrder,
-  findLatestCreatePoInStockApprovalForOvf,
-  findPendingApprovalForOrder,
-  findPendingCreatePoInStockApprovalForOvf,
-  PROCUREMENT_APPROVALS_EVENT,
-} from "@/lib/procurement-approvals";
 import { formatApiError } from "@/services/api-client";
 import {
   getScmOvfPreview,
+  listVendorOptions,
   type ScmOvfPreview,
+  type VendorOption,
 } from "@/services/procurement-service";
 import {
   ovfChallanHref,
-  ovfCreatePoHref,
+  ovfCreatePoRemainderHref,
+  isInStockDistributor,
+  IN_STOCK_DISTRIBUTOR_LABEL,
   ovfDistributorKey,
   ovfProductKey,
   resolvePoForDistributor,
+  setOvfPoRemainderProducts,
   type OvfChallanShipSource,
   type OvfShipDocumentKind,
 } from "@/utils/ovf-stock";
+import { matchVendorByDistributor } from "@/utils/vendor-oem-match";
+
+function lineDistributorKey(productName: string, index: number): string {
+  return `${ovfProductKey(productName)}:${index}`;
+}
 
 function formatPlanQty(value: number | null | undefined): string {
   const n = Number(value) || 0;
   if (Number.isInteger(n)) return String(n);
   return n.toLocaleString("en-IN", { maximumFractionDigits: 2 });
-}
-
-function resolveItemPlanApprovalStatus(input: {
-  lineSource: string;
-  linkedPo: { id: string; status?: string | null } | null;
-  poOpen: boolean;
-  ovfId: string;
-  onHold: boolean;
-}): string | null {
-  const { lineSource, linkedPo, poOpen, ovfId, onHold } = input;
-  if (lineSource === "inventory") return null;
-
-  if (linkedPo) {
-    if (findPendingApprovalForOrder(linkedPo.id)) return "pending";
-    const latest = findLatestApprovalForOrder(linkedPo.id);
-    if (latest?.status === "rejected") return "rejected";
-    if (latest?.status === "accepted") {
-      const poStatus = (linkedPo.status || "").trim().toLowerCase();
-      if (poStatus && !["draft", "submitted"].includes(poStatus)) return poStatus;
-      return "accepted";
-    }
-    const poStatus = (linkedPo.status || "").trim().toLowerCase();
-    if (poStatus && poStatus !== "draft") return poStatus;
-    return null;
-  }
-
-  if (poOpen && !onHold) {
-    if (findPendingCreatePoInStockApprovalForOvf(ovfId)) return "pending";
-    const createPoLatest = findLatestCreatePoInStockApprovalForOvf(ovfId);
-    if (createPoLatest?.status === "rejected") return "rejected";
-    if (createPoLatest?.status === "accepted") return "accepted";
-  }
-
-  return null;
 }
 
 function deliveryStorageKey(ovfId: string): string {
@@ -78,6 +47,7 @@ function deliveryStorageKey(ovfId: string): string {
 
 export function ScmOvfItemPlanPage({ ovfId }: { ovfId: string }) {
   const router = useRouter();
+  const [createPoPending, startCreatePoNav] = useTransition();
   const [preview, setPreview] = useState<ScmOvfPreview | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -85,25 +55,54 @@ export function ScmOvfItemPlanPage({ ovfId }: { ovfId: string }) {
   const [shipKind, setShipKind] = useState<OvfShipDocumentKind>("delivery_challan");
   const [bookProductName, setBookProductName] = useState<string | null>(null);
   const [bookOpen, setBookOpen] = useState(false);
-  const [approvalRevision, setApprovalRevision] = useState(0);
+  const [vendors, setVendors] = useState<VendorOption[]>([]);
+  /** Per-line distributor override keyed by product+index (defaults to fetched CRM name). */
+  const [distributorByLine, setDistributorByLine] = useState<Record<string, string>>({});
 
   useEffect(() => {
-    const sync = () => setApprovalRevision((value) => value + 1);
-    sync();
-    window.addEventListener(PROCUREMENT_APPROVALS_EVENT, sync);
-    window.addEventListener("storage", sync);
+    let cancelled = false;
+    void listVendorOptions()
+      .then((rows) => {
+        if (!cancelled) setVendors(rows);
+      })
+      .catch(() => {
+        if (!cancelled) setVendors([]);
+      });
     return () => {
-      window.removeEventListener(PROCUREMENT_APPROVALS_EVENT, sync);
-      window.removeEventListener("storage", sync);
+      cancelled = true;
     };
   }, []);
+
+  const seedDistributorSelections = useCallback(
+    (ovf: ScmOvfPreview, vendorRows: VendorOption[]) => {
+      const next: Record<string, string> = {};
+      const planLines = ovf.item_plan?.lines || [];
+      planLines.forEach((line, index) => {
+        const key = lineDistributorKey(line.product_name, index);
+        const fetched = (line.distributor_name || "").trim();
+        if (line.source === "inventory" || isInStockDistributor(fetched)) {
+          next[key] = IN_STOCK_DISTRIBUTOR_LABEL;
+          return;
+        }
+        const matched = matchVendorByDistributor(vendorRows, fetched);
+        next[key] = matched?.label || fetched;
+      });
+      setDistributorByLine(next);
+    },
+    [],
+  );
 
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const ovf = await getScmOvfPreview(ovfId);
+      const [ovf, vendorRows] = await Promise.all([
+        getScmOvfPreview(ovfId),
+        listVendorOptions().catch(() => [] as VendorOption[]),
+      ]);
       setPreview(ovf);
+      setVendors(vendorRows);
+      seedDistributorSelections(ovf, vendorRows);
       const recommended = ovf.item_plan?.delivery === "separate" ? "separate" : "together";
       const stored =
         typeof window !== "undefined"
@@ -115,18 +114,13 @@ export function ScmOvfItemPlanPage({ ovfId }: { ovfId: string }) {
     } finally {
       setLoading(false);
     }
-  }, [ovfId]);
+  }, [ovfId, seedDistributorSelections]);
 
   useEffect(() => {
     void load();
   }, [load]);
 
   const lines = preview?.item_plan?.lines || [];
-  const openDistributors = preview?.open_distributor_names || [];
-  const openDistributorKeys = useMemo(
-    () => new Set(openDistributors.map((name) => ovfDistributorKey(name)).filter(Boolean)),
-    [openDistributors],
-  );
   const bookedProducts = (preview?.stock_availability || []).filter(
     (row) => Number(row.allocated_qty) > 0,
   ).length;
@@ -166,6 +160,70 @@ export function ScmOvfItemPlanPage({ ovfId }: { ovfId: string }) {
     setBookProductName(productName);
     setBookOpen(true);
   }
+
+  /** Selected distributor for a plan line (dropdown override or CRM default). */
+  function lineVendorName(
+    line: { product_name: string; distributor_name?: string | null },
+    index: number,
+  ): string {
+    const key = lineDistributorKey(line.product_name, index);
+    return (distributorByLine[key] || line.distributor_name || "").trim();
+  }
+
+  /**
+   * All products on this OVF that share the same selected distributor and still need a PO.
+   * Create PO opens one combined draft for the whole group — not a single line.
+   */
+  function productsNeedingPoForDistributor(distributorName: string): string[] {
+    const needle = ovfDistributorKey(distributorName);
+    if (!needle || isInStockDistributor(distributorName) || !preview) return [];
+    if (resolvePoForDistributor(preview, distributorName)) return [];
+
+    const names: string[] = [];
+    const seen = new Set<string>();
+    lines.forEach((line, index) => {
+      const vendorName = lineVendorName(line, index);
+      if (ovfDistributorKey(vendorName) !== needle) return;
+      if (isInStockDistributor(vendorName)) return;
+
+      const needsPo =
+        line.source === "purchase_order" ||
+        (line.source === "inventory" &&
+          (line.action === "stock_short" || Number(line.po_qty) > 0));
+      if (!needsPo) return;
+
+      const productKey = ovfProductKey(line.product_name);
+      if (!productKey || seen.has(productKey)) return;
+      seen.add(productKey);
+      names.push(line.product_name);
+    });
+    return names;
+  }
+
+  function openCreatePoForDistributor(distributorName: string) {
+    const vendor = distributorName.trim();
+    if (!vendor || isInStockDistributor(vendor)) return;
+    const products = productsNeedingPoForDistributor(vendor);
+    if (products.length === 0) return;
+    setOvfPoRemainderProducts(ovfId, products);
+    startCreatePoNav(() => {
+      router.push(ovfCreatePoRemainderHref(ovfId, vendor));
+    });
+  }
+
+  /** Products whose distributor is currently IN STOCK (eligible for book-from-inventory). */
+  const inStockBookProductNames = lines
+    .map((line, index) => {
+      const vendorName = lineVendorName(line, index);
+      if (!isInStockDistributor(vendorName)) return null;
+      const avail = (preview?.stock_availability || []).find(
+        (row) => ovfProductKey(row.product_name) === ovfProductKey(line.product_name),
+      );
+      const remaining = Number(avail?.remaining_qty) || 0;
+      if (remaining <= 0) return null;
+      return line.product_name;
+    })
+    .filter((name): name is string => Boolean(name));
 
   return (
     <div className="space-y-4">
@@ -219,20 +277,19 @@ export function ScmOvfItemPlanPage({ ovfId }: { ovfId: string }) {
           <section className="space-y-3 rounded-lg border-2 border-foreground/20 bg-card p-4 shadow-sm">
             <h2 className="text-base font-semibold tracking-tight">Items</h2>
             <div className="overflow-x-auto">
-              <table key={approvalRevision} className="w-full min-w-[860px] text-sm">
+              <table className="w-full min-w-[720px] text-sm">
                 <thead className="border-b border-border bg-muted/40 text-xs uppercase tracking-wide text-muted-foreground">
                   <tr>
                     <th className="px-3 py-2 text-left font-medium">Product</th>
                     <th className="px-3 py-2 text-right font-medium">Qty</th>
                     <th className="px-3 py-2 text-left font-medium">Distributor name</th>
-                    <th className="px-3 py-2 text-left font-medium">Approval status</th>
                     <th className="px-3 py-2 text-left font-medium">Action</th>
                   </tr>
                 </thead>
                 <tbody>
                   {lines.length === 0 ? (
                     <tr>
-                      <td colSpan={5} className="px-3 py-8 text-center text-muted-foreground">
+                      <td colSpan={4} className="px-3 py-8 text-center text-muted-foreground">
                         No vendor charge lines on this OVF.
                       </td>
                     </tr>
@@ -243,90 +300,123 @@ export function ScmOvfItemPlanPage({ ovfId }: { ovfId: string }) {
                       );
                       const allocated = Number(avail?.allocated_qty) || 0;
                       const remaining = Number(avail?.remaining_qty) || 0;
+                      const fetchedVendorName = (line.distributor_name || "").trim();
+                      const lineKey = lineDistributorKey(line.product_name, index);
+                      const vendorName =
+                        (distributorByLine[lineKey] || fetchedVendorName).trim();
                       const canBookInventory =
-                        line.source === "inventory" && remaining > 0 && !onHold;
-                      const vendorName = (line.distributor_name || "").trim();
-                      const poOpen =
-                        line.source === "purchase_order" &&
-                        vendorName &&
-                        openDistributorKeys.has(ovfDistributorKey(vendorName));
+                        isInStockDistributor(vendorName) && remaining > 0 && !onHold;
+                      const canCreatePoForShortfall =
+                        line.source === "inventory" &&
+                        line.action === "stock_short" &&
+                        Number(line.po_qty) > 0 &&
+                        !onHold &&
+                        !isInStockDistributor(vendorName);
                       const linkedPo =
                         line.source === "purchase_order" && vendorName && preview
-                          ? resolvePoForDistributor(preview, vendorName)
+                          ? resolvePoForDistributor(preview, vendorName) ||
+                            (fetchedVendorName
+                              ? resolvePoForDistributor(preview, fetchedVendorName)
+                              : null)
                           : null;
-                      const approvalStatus = resolveItemPlanApprovalStatus({
-                        lineSource: line.source,
-                        linkedPo,
-                        poOpen: Boolean(poOpen),
-                        ovfId,
-                        onHold,
-                      });
+                      const canCreatePo =
+                        line.source === "purchase_order" &&
+                        Boolean(vendorName) &&
+                        !isInStockDistributor(vendorName) &&
+                        !linkedPo &&
+                        !onHold;
+                      const canChangeDistributor = !linkedPo && !onHold;
+                      const selectedVendorForPo =
+                        vendorName && !isInStockDistributor(vendorName) ? vendorName : "";
                       return (
                         <tr key={`${line.product_name}-${index}`} className="border-b border-border/70">
                           <td className="px-3 py-2 font-medium">{line.product_name}</td>
                           <td className="px-3 py-2 text-right tabular-nums">{formatPlanQty(line.qty)}</td>
                           <td className="px-3 py-2">
-                            {line.source === "inventory"
-                              ? "Inventory"
-                              : vendorName || "—"}
+                            <VendorSearchSelect
+                              value={vendorName}
+                              vendors={vendors}
+                              includeInStock
+                              disabled={!canChangeDistributor}
+                              placeholder="Select vendor…"
+                              onChange={(label) =>
+                                setDistributorByLine((current) => ({
+                                  ...current,
+                                  [lineKey]: label,
+                                }))
+                              }
+                            />
                           </td>
                           <td className="px-3 py-2">
-                            {approvalStatus ? (
-                              <FinanceStatusBadge status={approvalStatus} />
-                            ) : (
-                              <span className="text-xs text-muted-foreground">—</span>
-                            )}
-                          </td>
-                          <td className="px-3 py-2">
-                            {line.source === "inventory" ? (
-                              <div className="flex flex-wrap items-center gap-2">
-                                {allocated > 0 ? (
-                                  <span className="text-xs font-medium text-emerald-800">Stock booked</span>
-                                ) : null}
-                                {canBookInventory ? (
-                                  <Button
-                                    type="button"
-                                    size="sm"
-                                    variant="outline"
-                                    className="cursor-pointer transition-colors duration-200"
-                                    onClick={() => openBookDialog(line.product_name)}
-                                  >
-                                    <Package className="mr-1.5 size-3.5" />
-                                    Book from inventory
-                                  </Button>
-                                ) : null}
-                                {allocated <= 0 && !canBookInventory ? (
-                                  <span className="text-xs text-muted-foreground">—</span>
-                                ) : null}
-                              </div>
-                            ) : linkedPo ? (
-                              <Link
-                                href={`/procurement/orders/${linkedPo.id}`}
-                                className={cn(
-                                  buttonVariants({ size: "sm", variant: "outline" }),
-                                  "h-auto w-fit cursor-pointer px-2 py-1 text-xs transition-colors duration-200",
-                                )}
-                              >
-                                {linkedPo.label}
-                              </Link>
-                            ) : poOpen && !onHold ? (
-                              <Link
-                                href={ovfCreatePoHref(ovfId, vendorName)}
-                                className={cn(
-                                  buttonVariants({ size: "sm" }),
-                                  "cursor-pointer transition-colors duration-200",
-                                )}
-                              >
-                                <ShoppingCart className="mr-1.5 size-3.5" />
-                                Create PO
-                              </Link>
-                            ) : onHold && line.source === "purchase_order" ? (
-                              <span className="text-xs text-muted-foreground">On hold</span>
-                            ) : (
-                              <span className="text-xs text-muted-foreground">
-                                {line.action === "no_vendor" ? "Assign vendor in CRM" : "—"}
-                              </span>
-                            )}
+                            <div className="flex flex-wrap items-center gap-2">
+                              {allocated > 0 && isInStockDistributor(vendorName) ? (
+                                <span className="text-xs font-medium text-emerald-800">Stock booked</span>
+                              ) : null}
+                              {canBookInventory ? (
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="outline"
+                                  className="cursor-pointer transition-colors duration-200"
+                                  onClick={() => openBookDialog(line.product_name)}
+                                >
+                                  <Package className="mr-1.5 size-3.5" />
+                                  Book from inventory
+                                </Button>
+                              ) : null}
+                              {linkedPo ? (
+                                <Link
+                                  href={`/procurement/orders/${linkedPo.id}`}
+                                  className={cn(
+                                    buttonVariants({ size: "sm", variant: "outline" }),
+                                    "h-auto w-fit cursor-pointer px-2 py-1 text-xs transition-colors duration-200",
+                                  )}
+                                >
+                                  {linkedPo.label}
+                                </Link>
+                              ) : canCreatePo ? (
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  className="cursor-pointer transition-colors duration-200"
+                                  disabled={createPoPending}
+                                  onClick={() =>
+                                    openCreatePoForDistributor(selectedVendorForPo || vendorName)
+                                  }
+                                >
+                                  <ShoppingCart className="mr-1.5 size-3.5" />
+                                  {createPoPending ? "Opening…" : "Create PO"}
+                                </Button>
+                              ) : canCreatePoForShortfall ? (
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  className="cursor-pointer transition-colors duration-200"
+                                  disabled={createPoPending || !selectedVendorForPo}
+                                  title={
+                                    selectedVendorForPo
+                                      ? undefined
+                                      : "Select a vendor before creating a PO"
+                                  }
+                                  onClick={() => openCreatePoForDistributor(selectedVendorForPo)}
+                                >
+                                  <ShoppingCart className="mr-1.5 size-3.5" />
+                                  {createPoPending ? "Opening…" : "Create PO"}
+                                </Button>
+                              ) : onHold && line.source === "purchase_order" ? (
+                                <span className="text-xs text-muted-foreground">On hold</span>
+                              ) : !canBookInventory &&
+                                !linkedPo &&
+                                !canCreatePo &&
+                                !canCreatePoForShortfall &&
+                                !(allocated > 0 && isInStockDistributor(vendorName)) ? (
+                                <span className="text-xs text-muted-foreground">
+                                  {line.action === "no_vendor" && !selectedVendorForPo
+                                    ? "Select vendor"
+                                    : "—"}
+                                </span>
+                              ) : null}
+                            </div>
                           </td>
                         </tr>
                       );
@@ -462,6 +552,7 @@ export function ScmOvfItemPlanPage({ ovfId }: { ovfId: string }) {
         open={bookOpen}
         ovfId={ovfId}
         productName={bookProductName}
+        allowedProductNames={inStockBookProductNames}
         onClose={() => {
           setBookOpen(false);
           setBookProductName(null);

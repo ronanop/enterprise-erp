@@ -319,7 +319,7 @@ function HealthSummaryStrip({
 }
 
 export function PlatformDashboard() {
-  const { user, moduleKeys } = useAuthUser();
+  const { user, moduleKeys, loading: authLoading } = useAuthUser();
   const [data, setData] = useState<PlatformDashboardData | null>(null);
   const [loading, setLoading] = useState(true);
   const authenticated = typeof window !== "undefined" ? isAuthenticated() : false;
@@ -330,13 +330,14 @@ export function PlatformDashboard() {
   );
 
   const load = useCallback(async () => {
+    if (authLoading) return;
     setLoading(true);
     try {
       setData(await loadPlatformDashboard(moduleKeys, user?.userType));
     } finally {
       setLoading(false);
     }
-  }, [moduleKeys, user?.userType]);
+  }, [authLoading, moduleKeys, user?.userType]);
 
   useEffect(() => {
     void load();
@@ -360,12 +361,13 @@ export function PlatformDashboard() {
   const headline = data?.executive ?? [];
   const authBlocked = Boolean(data?.authBlocked) || (!authenticated && Boolean(data?.partial));
   const tracked = data?.modules.length ?? 0;
+  const showLoading = loading || authLoading;
 
   return (
     <div className="space-y-5">
       <PageHeader
         title="Enterprise analytics"
-        description="Cross-module KPIs, connected lead-to-cash pipeline, and live department activity."
+        description="KPIs and activity for the modules assigned to your account."
         actions={
           <div className="flex flex-wrap items-center gap-2">
             <Badge variant="secondary">{visibleModules.length} modules</Badge>
@@ -383,10 +385,10 @@ export function PlatformDashboard() {
               variant="outline"
               size="sm"
               className="cursor-pointer"
-              disabled={loading}
+              disabled={showLoading}
               onClick={() => void load()}
             >
-              <RefreshCw className={cn("size-3.5", loading && "animate-spin")} />
+              <RefreshCw className={cn("size-3.5", showLoading && "animate-spin")} />
               Refresh
             </Button>
           </div>
@@ -409,51 +411,49 @@ export function PlatformDashboard() {
       ) : null}
 
       <CrmHeadlineBand>
-        <div className="grid divide-y divide-white/10 sm:grid-cols-2 sm:divide-x sm:divide-y-0 lg:grid-cols-4">
-          <CrmHeadlineStat
-            label="Pipeline value"
-            value={headline[0]?.value ?? "—"}
-            sub={headline[0]?.hint}
-            loading={loading}
-          />
-          <CrmHeadlineStat
-            label="AR outstanding"
-            value={headline[1]?.value ?? "—"}
-            sub={headline[1]?.hint}
-            loading={loading}
-          />
-          <CrmHeadlineStat
-            label="Open POs"
-            value={headline[3]?.value ?? "—"}
-            sub={headline[3]?.hint}
-            loading={loading}
-          />
-          <CrmHeadlineStat
-            label="Open tickets"
-            value={headline[4]?.value ?? "—"}
-            sub={headline[4]?.hint}
-            loading={loading}
-          />
+        <div
+          className={cn(
+            "grid divide-y divide-white/10 sm:divide-x sm:divide-y-0",
+            headline.length <= 1
+              ? "sm:grid-cols-1"
+              : headline.length === 2
+                ? "sm:grid-cols-2"
+                : headline.length === 3
+                  ? "sm:grid-cols-3"
+                  : "sm:grid-cols-2 lg:grid-cols-4",
+          )}
+        >
+          {(headline.length ? headline.slice(0, 4) : [{ label: "Modules", value: "—", hint: "Assigned modules" }]).map(
+            (stat) => (
+              <CrmHeadlineStat
+                key={stat.label}
+                label={stat.label}
+                value={stat.value}
+                sub={stat.hint}
+                loading={showLoading}
+              />
+            ),
+          )}
         </div>
       </CrmHeadlineBand>
 
       <div className="grid gap-3 xl:grid-cols-3">
         <CrmSection
           title="Lead-to-delivery flow"
-          subtitle="CRM → procurement → projects stage counts"
+          subtitle="Stage counts for your assigned CRM, procurement, and projects modules"
           icon={GitBranch}
           badge={<Badge variant="secondary">Pipeline</Badge>}
         >
-          <PlatformConnectedPipelineChart data={pipelineChart} loading={loading} />
+          <PlatformConnectedPipelineChart data={pipelineChart} loading={showLoading} />
         </CrmSection>
 
         <CrmSection
           title="Module activity"
-          subtitle="Absolute record volume by department"
+          subtitle="Absolute record volume by assigned department"
           icon={BarChart3}
           badge={<Badge variant="secondary">Volume</Badge>}
         >
-          <PlatformModuleActivityChart data={moduleActivityChart} loading={loading} />
+          <PlatformModuleActivityChart data={moduleActivityChart} loading={showLoading} />
         </CrmSection>
 
         <CrmSection
@@ -467,7 +467,7 @@ export function PlatformDashboard() {
               name: row.name,
               value: row.count,
             }))}
-            loading={loading}
+            loading={showLoading}
           />
           <ul className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1 border-t border-border/60 pt-2">
             {(data?.moduleActivity ?? []).slice(0, 6).map((row, index) => {
@@ -494,19 +494,19 @@ export function PlatformDashboard() {
 
       <CrmSection
         title="Department analytics & health"
-        subtitle="API coverage, status, record volume, and live KPIs in one view"
+        subtitle="Status, record volume, and KPIs for modules you can access"
         icon={LayoutDashboard}
         badge={<Badge variant="outline">{tracked} modules</Badge>}
       >
         <HealthSummaryStrip
           health={data?.moduleHealth ?? []}
           tracked={tracked}
-          loading={loading}
+          loading={showLoading}
         />
         <DepartmentAnalyticsTable
           modules={data?.modules ?? []}
           maxRecords={maxModuleRecords}
-          loading={loading}
+          loading={showLoading}
         />
       </CrmSection>
     </div>

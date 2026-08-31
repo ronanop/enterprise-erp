@@ -85,6 +85,8 @@ class ProjectService:
 
         site_kwargs = site_fields if isinstance(site_fields, dict) else {}
         SiteInstallationService(self._db).ensure_for_new_project(ctx, project, **site_kwargs)
+        if proc_order_id is not None:
+            ProjectPoQueueService(self._db).complete_handoff(ctx, proc_order_id)
         return project
 
     def _apply_intake_create_defaults(

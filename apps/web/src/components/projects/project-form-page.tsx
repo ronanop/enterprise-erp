@@ -29,7 +29,7 @@ import { getPurchaseOrder, getScmOvfPreview } from "@/services/procurement-servi
 import { challanDeliveredQuantity } from "@/utils/delivery-challan-bill";
 import { listDeliveryChallansByOrderId } from "@/utils/delivery-challan-storage";
 import { resolveScmInstallationPrefillForOrder } from "@/utils/installation-storage";
-import { getProjectPoQueueHandoff } from "@/utils/project-po-queue-handoff";
+import { getProjectPoHandoff } from "@/services/projects-portal-service";
 
 function digitsOnly(value: string | number | null | undefined): string {
   if (value == null) return "";
@@ -117,8 +117,8 @@ export function ProjectFormPage({ projectId }: { projectId?: string }) {
           companyPoNumber = order.company_po_number || order.document_number || "";
           customerPoNumber = (order.customer_po_number || "").trim();
           if (!customerPoNumber) {
-            const handoff = getProjectPoQueueHandoff(record.proc_order_id);
-            customerPoNumber = (handoff?.customerPoNumber || "").trim();
+            const handoff = await getProjectPoHandoff(record.proc_order_id).catch(() => null);
+            customerPoNumber = (handoff?.customer_po_number || "").trim();
           }
         } catch {
           companyPoNumber = "";
@@ -219,9 +219,9 @@ export function ProjectFormPage({ projectId }: { projectId?: string }) {
     const serverType =
       scmInstall?.serverType?.trim() || ovfOemName || "";
 
-    const handoff = poId ? getProjectPoQueueHandoff(poId) : null;
+    const handoff = poId ? await getProjectPoHandoff(poId).catch(() => null) : null;
     const customerPoNumber =
-      (handoff?.customerPoNumber || "").trim() ||
+      (handoff?.customer_po_number || "").trim() ||
       (prefill?.customer_po_number || "").trim() ||
       orderCustomerPo ||
       "";
@@ -231,6 +231,7 @@ export function ProjectFormPage({ projectId }: { projectId?: string }) {
         branch_id: prefill?.branch_id || branches[0]?.id || "",
         // Circle shows the lead entity state (GST / address), falling back to entity name.
         circle:
+          handoff?.circle_name?.trim() ||
           scmInstall?.circleName?.trim() ||
           prefill?.entity_state?.trim() ||
           prefill?.circle_name?.trim() ||
@@ -238,12 +239,12 @@ export function ProjectFormPage({ projectId }: { projectId?: string }) {
         company_po_number: prefill?.company_po_number?.trim() || "",
         customer_po_number: customerPoNumber,
         customer_id: prefill?.customer_id || "",
-        customer_label: resolvedCustomerLabel || (handoff?.customerName || "").trim() || "",
-        project_name: projectTitle,
-        rack_qty: rackQty,
-        server_qty: serverQty,
-        server_type: serverType,
-        site_name: scmInstall?.site?.trim() || prefill?.site_name || "",
+        customer_label: resolvedCustomerLabel || (handoff?.customer_name || "").trim() || "",
+        project_name: handoff?.project_name?.trim() || projectTitle,
+        rack_qty: digitsOnly(handoff?.rack_quantity) || rackQty,
+        server_qty: digitsOnly(handoff?.server_quantity) || serverQty,
+        server_type: handoff?.server_type?.trim() || serverType,
+        site_name: handoff?.site_name?.trim() || scmInstall?.site?.trim() || prefill?.site_name || "",
         project_manager_employee_id: team[0]?.id ?? "",
         rfai_request_done: "false",
       },

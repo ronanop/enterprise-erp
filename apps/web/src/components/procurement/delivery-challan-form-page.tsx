@@ -1074,13 +1074,6 @@ export function DeliveryChallanFormPage({ challanId, embedded }: DeliveryChallan
               className="h-8"
             />
           </FinanceField>
-          <FinanceField label="GRN number">
-            <Input
-              value={selectedGrnNumbers.length > 0 ? selectedGrnNumbers.join(", ") : "—"}
-              readOnly
-              className="h-8 bg-muted/30"
-            />
-          </FinanceField>
         </div>
         {grnKind === "billing" ? (
           <div className="mt-3 grid gap-3 sm:grid-cols-2">

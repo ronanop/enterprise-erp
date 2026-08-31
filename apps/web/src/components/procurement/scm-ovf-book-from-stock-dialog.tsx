@@ -2,8 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
-import { useRouter } from "next/navigation";
-import { Package, RefreshCw, ShoppingCart, X } from "lucide-react";
+import { Package, RefreshCw, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { ApiClientError, formatApiError } from "@/services/api-client";
@@ -17,31 +16,32 @@ import {
 } from "@/services/procurement-service";
 import {
   findStockAvailability,
-  ovfCreatePoRemainderHref,
   ovfDemandLines,
   ovfLineIsInventoryFulfillment,
   ovfProductKey,
-  setOvfPoRemainderProducts,
 } from "@/utils/ovf-stock";
+import {
+  groupGrnStockByProduct,
+  isInventoryLedgerRow,
+  nonBilledStockQuantity,
+  type GrnStockByProductRow,
+} from "@/utils/procurement-inventory-report";
 
 function unitQty(row: ProcurementInventoryRow): number {
-  return Number(row.received_quantity) || 1;
-}
-
-function unitLabel(row: ProcurementInventoryRow): string {
-  const product = (row.product_name || "—").trim() || "—";
-  const serial = (row.serial_number || "").trim();
-  const grn = (row.grn_number || "").trim();
-  const parts = [product];
-  if (serial && serial !== "—" && serial !== "-") parts.push(`SN ${serial}`);
-  if (grn) parts.push(grn);
-  return parts.join(" · ");
+  const qty = nonBilledStockQuantity(row);
+  return qty > 0 ? qty : Number(row.received_quantity) || 1;
 }
 
 type ScmOvfBookFromStockDialogProps = {
   open: boolean;
   ovfId: string;
+  /** Optional focus product (sorted first). */
   productName?: string | null;
+  /**
+   * When set, only these OVF products appear (e.g. item-plan lines with distributor IN STOCK).
+   * Empty array → no bookable lines.
+   */
+  allowedProductNames?: string[] | null;
   onClose: () => void;
   onBooked: () => void;
 };
@@ -50,16 +50,17 @@ export function ScmOvfBookFromStockDialog({
   open,
   ovfId,
   productName,
+  allowedProductNames,
   onClose,
   onBooked,
 }: ScmOvfBookFromStockDialogProps) {
-  const router = useRouter();
   const [mounted, setMounted] = useState(false);
   const [preview, setPreview] = useState<ScmOvfPreview | null>(null);
   const [inventory, setInventory] = useState<ProcurementInventoryRow[]>([]);
   /** demandProductKey → selected stock_unit_ids (in order). */
   const [selectedByDemand, setSelectedByDemand] = useState<Record<string, string[]>>({});
-  const [orderPoByProduct, setOrderPoByProduct] = useState<Record<string, boolean>>({});
+  /** demandProductKey → inventory product key chosen in the dropdown. */
+  const [pickedProductByDemand, setPickedProductByDemand] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -90,15 +91,23 @@ export function ScmOvfBookFromStockDialog({
         getScmOvfPreview(ovfId),
         listProcurementInventory(),
       ]);
-      const units = stock.filter((row) => row.source === "grn" && row.stock_unit_id);
+      // Same ledger as Procurement → Inventory; only units with stock_unit_id can be booked.
+      const units = stock.filter(
+        (row) =>
+          isInventoryLedgerRow(row) &&
+          row.source !== "grn_reversal" &&
+          Boolean(row.stock_unit_id) &&
+          nonBilledStockQuantity(row) > 0,
+      );
       setPreview(ovf);
       setInventory(units);
       setSelectedByDemand({});
+      setPickedProductByDemand({});
 
       const demand = ovfDemandLines(ovf);
       const avail = ovf.stock_availability || [];
-      const poDefaults: Record<string, boolean> = {};
       const autoSelect: Record<string, string[]> = {};
+      const autoProduct: Record<string, string> = {};
 
       for (const line of demand) {
         if (!ovfLineIsInventoryFulfillment(line)) continue;
@@ -108,24 +117,24 @@ export function ScmOvfBookFromStockDialog({
         const remaining = Number(stockRow?.remaining_qty ?? line.qty) || 0;
         if (remaining <= 0) continue;
         const exact = units.filter((row) => ovfProductKey(row.product_name) === key);
-        poDefaults[key] = exact.length === 0;
-        // Prefill exact name matches up to remaining need.
-        if (exact.length > 0) {
-          const picked: string[] = [];
-          let running = 0;
-          for (const unit of exact) {
-            if (!unit.stock_unit_id) continue;
-            if (running + unitQty(unit) > remaining + 1e-6) continue;
-            picked.push(unit.stock_unit_id);
-            running += unitQty(unit);
-            if (running >= remaining - 1e-6) break;
-          }
-          if (picked.length > 0) autoSelect[key] = picked;
-          if (running + 1e-6 >= remaining) poDefaults[key] = false;
+        if (exact.length === 0) continue;
+        const picked: string[] = [];
+        let running = 0;
+        for (const unit of exact) {
+          if (!unit.stock_unit_id) continue;
+          const qty = unitQty(unit);
+          if (running + qty > remaining + 1e-6) continue;
+          picked.push(unit.stock_unit_id);
+          running += qty;
+          if (running >= remaining - 1e-6) break;
+        }
+        if (picked.length > 0) {
+          autoSelect[key] = picked;
+          autoProduct[key] = key;
         }
       }
-      setOrderPoByProduct(poDefaults);
       setSelectedByDemand(autoSelect);
+      setPickedProductByDemand(autoProduct);
     } catch (err) {
       setError(formatApiError(err, "Failed to load inventory for booking"));
     } finally {
@@ -143,26 +152,41 @@ export function ScmOvfBookFromStockDialog({
   const demandLines = useMemo(() => {
     if (!preview) return [] as ScmVendorLine[];
     const demand = ovfDemandLines(preview);
-    const inventoryOpen = demand.filter((line) => {
-      if (!ovfLineIsInventoryFulfillment(line)) return false;
+    const allowedKeys = new Set(
+      (allowedProductNames || []).map((name) => ovfProductKey(name)).filter(Boolean),
+    );
+    const restrictToAllowed = allowedProductNames != null;
+
+    const withRemaining = (line: ScmVendorLine) => {
       const stock = findStockAvailability(availability, line.product_name);
       return (Number(stock?.remaining_qty ?? line.qty) || 0) > 0;
-    });
-    const anyOpen =
-      inventoryOpen.length > 0
-        ? inventoryOpen
-        : demand.filter((line) => {
-            const stock = findStockAvailability(availability, line.product_name);
-            return (Number(stock?.remaining_qty ?? line.qty) || 0) > 0;
-          });
+    };
+
+    let rows: ScmVendorLine[];
+    if (restrictToAllowed) {
+      rows = demand.filter((line) => {
+        if (allowedKeys.size === 0) return false;
+        if (!allowedKeys.has(ovfProductKey(line.product_name))) return false;
+        return withRemaining(line);
+      });
+    } else {
+      const inventoryOpen = demand.filter(
+        (line) => ovfLineIsInventoryFulfillment(line) && withRemaining(line),
+      );
+      rows =
+        inventoryOpen.length > 0
+          ? inventoryOpen
+          : demand.filter((line) => withRemaining(line));
+    }
+
     const focus = (productName || "").trim().toLowerCase();
-    if (!focus) return anyOpen;
-    return [...anyOpen].sort((a, b) => {
+    if (!focus) return rows;
+    return [...rows].sort((a, b) => {
       const aMatch = ovfProductKey(a.product_name) === focus ? 0 : 1;
       const bMatch = ovfProductKey(b.product_name) === focus ? 0 : 1;
       return aMatch - bMatch;
     });
-  }, [preview, productName, availability]);
+  }, [preview, productName, allowedProductNames, availability]);
 
   const remainingByDemand = useMemo(() => {
     const map = new Map<string, number>();
@@ -176,14 +200,6 @@ export function ScmOvfBookFromStockDialog({
     return map;
   }, [demandLines, availability]);
 
-  const usedUnitIds = useMemo(() => {
-    const used = new Set<string>();
-    for (const ids of Object.values(selectedByDemand)) {
-      for (const id of ids) used.add(id);
-    }
-    return used;
-  }, [selectedByDemand]);
-
   const inventoryById = useMemo(() => {
     const map = new Map<string, ProcurementInventoryRow>();
     for (const row of inventory) {
@@ -192,6 +208,38 @@ export function ScmOvfBookFromStockDialog({
     return map;
   }, [inventory]);
 
+  const usedUnitIds = useMemo(() => {
+    const used = new Set<string>();
+    for (const ids of Object.values(selectedByDemand)) {
+      for (const id of ids) used.add(id);
+    }
+    return used;
+  }, [selectedByDemand]);
+
+  /** Aggregated inventory products (name + qty) — same grouping as Inventory page. */
+  const inventoryProducts = useMemo(
+    () => groupGrnStockByProduct(inventory).filter((row) => row.stockQty > 0),
+    [inventory],
+  );
+
+  const inventoryProductByKey = useMemo(() => {
+    const map = new Map<string, GrnStockByProductRow>();
+    for (const row of inventoryProducts) map.set(row.productKey, row);
+    return map;
+  }, [inventoryProducts]);
+
+  function availableQtyForProduct(productKey: string, demandKey: string): number {
+    const group = inventoryProductByKey.get(productKey);
+    if (!group) return 0;
+    const selectedHere = new Set(selectedByDemand[demandKey] || []);
+    return group.lines.reduce((sum, row) => {
+      const id = row.stock_unit_id;
+      if (!id) return sum;
+      if (usedUnitIds.has(id) && !selectedHere.has(id)) return sum;
+      return sum + unitQty(row);
+    }, 0);
+  }
+
   function pickedQty(demandKey: string): number {
     return (selectedByDemand[demandKey] || []).reduce((sum, id) => {
       const unit = inventoryById.get(id);
@@ -199,83 +247,68 @@ export function ScmOvfBookFromStockDialog({
     }, 0);
   }
 
-  function setDemandSelection(demandKey: string, demandName: string, unitIds: string[]) {
-    const remaining = remainingByDemand.get(demandKey) || 0;
-    let running = 0;
-    const capped: string[] = [];
-    for (const id of unitIds) {
-      const unit = inventoryById.get(id);
-      const qty = unit ? unitQty(unit) : 1;
-      if (running + qty > remaining + 1e-6) break;
-      capped.push(id);
-      running += qty;
+  function pickUnitsForProduct(
+    demandKey: string,
+    inventoryProductKey: string,
+    remaining: number,
+  ): string[] {
+    const group = inventoryProductByKey.get(inventoryProductKey);
+    if (!group || remaining <= 0) return [];
+    const selectedElsewhere = new Set<string>();
+    for (const [key, ids] of Object.entries(selectedByDemand)) {
+      if (key === demandKey) continue;
+      for (const id of ids) selectedElsewhere.add(id);
     }
-    setSelectedByDemand((current) => ({ ...current, [demandKey]: capped }));
-    setOrderPoByProduct((current) => ({
-      ...current,
-      [demandKey]:
-        running + 1e-6 >= remaining
-          ? false
-          : capped.length === 0
-            ? Boolean(current[demandKey]) || true
-            : Boolean(current[demandKey]),
-    }));
-    void demandName;
+    const picked: string[] = [];
+    let running = 0;
+    for (const unit of group.lines) {
+      const id = unit.stock_unit_id;
+      if (!id || selectedElsewhere.has(id)) continue;
+      const qty = unitQty(unit);
+      if (qty <= 0) continue;
+      if (running + qty > remaining + 1e-6) continue;
+      picked.push(id);
+      running += qty;
+      if (running >= remaining - 1e-6) break;
+    }
+    return picked;
   }
 
-  function onPickUnit(demandKey: string, demandName: string, unitId: string) {
-    if (!unitId) {
-      setDemandSelection(demandKey, demandName, []);
+  function onPickInventoryProduct(demandKey: string, demandName: string, inventoryProductKey: string) {
+    if (!inventoryProductKey) {
+      setSelectedByDemand((current) => ({ ...current, [demandKey]: [] }));
+      setPickedProductByDemand((current) => {
+        const next = { ...current };
+        delete next[demandKey];
+        return next;
+      });
       return;
     }
     const remaining = remainingByDemand.get(demandKey) || 0;
-    const current = selectedByDemand[demandKey] || [];
-    if (current.includes(unitId)) return;
-    const unit = inventoryById.get(unitId);
-    const qty = unit ? unitQty(unit) : 1;
-    const already = pickedQty(demandKey);
-    if (already + qty > remaining + 1e-6) {
-      setError(`Need is ${remaining} for "${demandName}". Remove a selection or pick a smaller unit.`);
+    const available = availableQtyForProduct(inventoryProductKey, demandKey);
+    if (available <= 0) {
+      setError(`No available quantity left for that inventory product.`);
+      return;
+    }
+    const units = pickUnitsForProduct(demandKey, inventoryProductKey, remaining);
+    if (units.length === 0) {
+      setError(
+        `Could not allocate stock for "${demandName}". Available quantity may exceed unit sizes for the remaining need.`,
+      );
       return;
     }
     setError(null);
-    // Single-slot when need is 1; otherwise append until filled.
-    if (remaining <= 1 + 1e-6) {
-      setDemandSelection(demandKey, demandName, [unitId]);
-    } else {
-      setDemandSelection(demandKey, demandName, [...current, unitId]);
-    }
-  }
-
-  function removeUnit(demandKey: string, demandName: string, unitId: string) {
-    setDemandSelection(
-      demandKey,
-      demandName,
-      (selectedByDemand[demandKey] || []).filter((id) => id !== unitId),
-    );
+    setSelectedByDemand((current) => ({ ...current, [demandKey]: units }));
+    setPickedProductByDemand((current) => ({
+      ...current,
+      [demandKey]: inventoryProductKey,
+    }));
   }
 
   const selectedTotal = useMemo(
     () => Object.values(selectedByDemand).reduce((sum, ids) => sum + ids.length, 0),
     [selectedByDemand],
   );
-
-  const poSelectedCount = useMemo(
-    () =>
-      demandLines.filter((line) => orderPoByProduct[ovfProductKey(line.product_name)]).length,
-    [demandLines, orderPoByProduct],
-  );
-
-  const confirmLabel = useMemo(() => {
-    if (busy) {
-      if (selectedTotal > 0 && poSelectedCount > 0) return "Booking & opening PO…";
-      if (poSelectedCount > 0) return "Opening PO…";
-      return "Booking…";
-    }
-    if (selectedTotal > 0 && poSelectedCount > 0) return "Book stock & create PO";
-    if (poSelectedCount > 0) return "Create combined PO";
-    return "Confirm booking";
-  }, [busy, selectedTotal, poSelectedCount]);
 
   async function onConfirm() {
     if (!preview) return;
@@ -288,29 +321,17 @@ export function ScmOvfBookFromStockDialog({
         };
       })
       .filter((line) => line.stock_unit_ids.length > 0);
-    const wantsPo = poSelectedCount > 0;
 
-    if (stockPayload.length === 0 && !wantsPo) {
-      setError("Select inventory for at least one item, or mark items to order on a PO.");
+    if (stockPayload.length === 0) {
+      setError("Select inventory for at least one item.");
       return;
     }
 
     setBusy(true);
     setError(null);
     try {
-      if (stockPayload.length > 0) {
-        await fulfillOvfFromStock(ovfId, stockPayload);
-        onBooked();
-      }
-      if (wantsPo) {
-        const poProducts = demandLines
-          .filter((line) => orderPoByProduct[ovfProductKey(line.product_name)])
-          .map((line) => line.product_name);
-        setOvfPoRemainderProducts(ovfId, poProducts);
-        onClose();
-        router.push(ovfCreatePoRemainderHref(ovfId));
-        return;
-      }
+      await fulfillOvfFromStock(ovfId, stockPayload);
+      onBooked();
       onClose();
     } catch (err) {
       setError(
@@ -339,7 +360,7 @@ export function ScmOvfBookFromStockDialog({
         role="dialog"
         aria-modal="true"
         aria-labelledby="book-from-stock-dialog-title"
-        className="flex max-h-[min(40rem,calc(100dvh-2rem))] w-full max-w-4xl flex-col overflow-hidden rounded-xl border border-border/80 bg-card shadow-lg"
+        className="flex max-h-[min(40rem,calc(100dvh-2rem))] w-full max-w-3xl flex-col overflow-hidden rounded-xl border border-border/80 bg-card shadow-lg"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-start justify-between gap-3 border-b border-border/60 px-5 py-4">
@@ -359,10 +380,10 @@ export function ScmOvfBookFromStockDialog({
               </h2>
               <p className="mt-1.5 text-xs font-normal text-muted-foreground">
                 {preview
-                  ? `${preview.ovf_no} · pick inventory for each OVF item${
+                  ? `${preview.ovf_no} · pick inventory products for IN STOCK items${
                       titleProduct ? ` · opened on ${titleProduct}` : ""
                     }`
-                  : "Pick inventory for each OVF item"}
+                  : "Pick inventory products for IN STOCK items"}
               </p>
             </div>
           </div>
@@ -407,44 +428,34 @@ export function ScmOvfBookFromStockDialog({
 
           {preview ? (
             <div className="overflow-x-auto rounded-lg border border-border">
-              <table className="w-full min-w-[760px] text-sm">
+              <table className="w-full min-w-[560px] text-sm">
                 <thead className="border-b border-border bg-muted/40 text-xs uppercase tracking-wide text-muted-foreground">
                   <tr>
                     <th className="px-3 py-2.5 text-left font-medium">Item</th>
                     <th className="px-3 py-2.5 text-right font-medium">Need</th>
                     <th className="px-3 py-2.5 text-left font-medium">From inventory</th>
-                    <th className="px-3 py-2.5 text-left font-medium">Order PO</th>
                   </tr>
                 </thead>
                 <tbody>
                   {demandLines.length === 0 ? (
                     <tr>
-                      <td colSpan={4} className="px-3 py-8 text-center text-muted-foreground">
-                        No open demand left on this OVF.
+                      <td colSpan={3} className="px-3 py-8 text-center text-muted-foreground">
+                        No IN STOCK products left to book on this OVF.
                       </td>
                     </tr>
-                  ) : inventory.length === 0 ? (
+                  ) : inventoryProducts.length === 0 ? (
                     <tr>
-                      <td colSpan={4} className="px-3 py-8 text-center text-muted-foreground">
-                        No inventory stock available. Mark items for PO, or receive stock first.
+                      <td colSpan={3} className="px-3 py-8 text-center text-muted-foreground">
+                        No inventory stock available. Receive or add stock first.
                       </td>
                     </tr>
                   ) : (
                     demandLines.map((line) => {
                       const key = ovfProductKey(line.product_name);
                       const remaining = remainingByDemand.get(key) || 0;
-                      const selected = selectedByDemand[key] || [];
                       const covered = pickedQty(key);
-                      const orderPo = Boolean(orderPoByProduct[key]);
-                      const focused =
-                        titleProduct && ovfProductKey(titleProduct) === key;
-                      const primarySelected = selected[0] || "";
-                      const availableOptions = inventory.filter((row) => {
-                        const id = row.stock_unit_id;
-                        if (!id) return false;
-                        if (selected.includes(id)) return true;
-                        return !usedUnitIds.has(id);
-                      });
+                      const focused = titleProduct && ovfProductKey(titleProduct) === key;
+                      const selectedProductKey = pickedProductByDemand[key] || "";
 
                       return (
                         <tr
@@ -463,84 +474,33 @@ export function ScmOvfBookFromStockDialog({
                           </td>
                           <td className="px-3 py-3 text-right tabular-nums">{remaining}</td>
                           <td className="px-3 py-3">
-                            <div className="space-y-2">
-                              <select
-                                aria-label={`Inventory for ${line.product_name}`}
-                                className="h-8 w-full max-w-md cursor-pointer rounded-md border border-border bg-background px-2 text-xs transition-colors duration-200 disabled:cursor-not-allowed disabled:opacity-50"
-                                value={remaining <= 1 + 1e-6 ? primarySelected : ""}
-                                disabled={busy || remaining <= 0}
-                                onChange={(event) =>
-                                  onPickUnit(key, line.product_name, event.target.value)
-                                }
-                              >
-                                <option value="">
-                                  {remaining <= 1 + 1e-6
-                                    ? "Select inventory item…"
-                                    : covered >= remaining - 1e-6
-                                      ? "Need filled"
-                                      : "Add inventory item…"}
-                                </option>
-                                {availableOptions.map((row) => {
-                                  const id = row.stock_unit_id!;
-                                  const exact =
-                                    ovfProductKey(row.product_name) === key;
-                                  return (
-                                    <option key={id} value={id} disabled={selected.includes(id)}>
-                                      {unitLabel(row)}
-                                      {!exact ? " (name differs)" : ""}
-                                    </option>
-                                  );
-                                })}
-                              </select>
-                              {selected.length > 0 ? (
-                                <ul className="space-y-1">
-                                  {selected.map((id) => {
-                                    const unit = inventoryById.get(id);
-                                    return (
-                                      <li
-                                        key={id}
-                                        className="flex items-center justify-between gap-2 rounded border border-border/70 bg-muted/30 px-2 py-1 text-[11px]"
-                                      >
-                                        <span className="min-w-0 truncate font-mono">
-                                          {unit ? unitLabel(unit) : id}
-                                        </span>
-                                        <button
-                                          type="button"
-                                          className="shrink-0 cursor-pointer text-muted-foreground transition-colors duration-200 hover:text-destructive"
-                                          disabled={busy}
-                                          onClick={() =>
-                                            removeUnit(key, line.product_name, id)
-                                          }
-                                        >
-                                          Remove
-                                        </button>
-                                      </li>
-                                    );
-                                  })}
-                                </ul>
-                              ) : (
-                                <p className="text-[11px] text-muted-foreground">
-                                  Choose any inventory unit — names do not need to match.
-                                </p>
-                              )}
-                            </div>
-                          </td>
-                          <td className="px-3 py-3">
-                            <label className="flex cursor-pointer items-center gap-2 text-xs">
-                              <input
-                                type="checkbox"
-                                className="size-3.5 cursor-pointer accent-foreground"
-                                checked={orderPo}
-                                disabled={busy || covered + 1e-6 >= remaining}
-                                onChange={(event) =>
-                                  setOrderPoByProduct((current) => ({
-                                    ...current,
-                                    [key]: event.target.checked,
-                                  }))
-                                }
-                              />
-                              Include on PO
-                            </label>
+                            <select
+                              aria-label={`Inventory for ${line.product_name}`}
+                              className="h-8 w-full max-w-md cursor-pointer rounded-md border border-border bg-background px-2 text-xs transition-colors duration-200 disabled:cursor-not-allowed disabled:opacity-50"
+                              value={selectedProductKey}
+                              disabled={busy || remaining <= 0}
+                              onChange={(event) =>
+                                onPickInventoryProduct(key, line.product_name, event.target.value)
+                              }
+                            >
+                              <option value="">Select inventory product…</option>
+                              {inventoryProducts.map((row) => {
+                                const available = availableQtyForProduct(row.productKey, key);
+                                const selectedHere = selectedProductKey === row.productKey;
+                                const qtyLabel = selectedHere
+                                  ? Math.max(available, covered)
+                                  : available;
+                                return (
+                                  <option
+                                    key={row.productKey}
+                                    value={row.productKey}
+                                    disabled={!selectedHere && available <= 0}
+                                  >
+                                    {row.productName} · Qty {qtyLabel}
+                                  </option>
+                                );
+                              })}
+                            </select>
                           </td>
                         </tr>
                       );
@@ -567,15 +527,11 @@ export function ScmOvfBookFromStockDialog({
             type="button"
             size="sm"
             className="cursor-pointer transition-colors duration-200"
-            disabled={loading || busy || (selectedTotal === 0 && poSelectedCount === 0)}
+            disabled={loading || busy || selectedTotal === 0}
             onClick={() => void onConfirm()}
           >
-            {poSelectedCount > 0 && selectedTotal === 0 ? (
-              <ShoppingCart className="mr-1.5 size-3.5" />
-            ) : (
-              <Package className="mr-1.5 size-3.5" />
-            )}
-            {confirmLabel}
+            <Package className="mr-1.5 size-3.5" />
+            {busy ? "Booking…" : "Confirm booking"}
           </Button>
         </div>
       </div>
