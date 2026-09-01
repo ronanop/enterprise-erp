@@ -23,7 +23,6 @@ type Props = {
 export function UserModulesCell({
   userId,
   userType,
-  assignedModuleKeys,
   adminModuleKeys,
   canEdit,
   onSaved,
@@ -100,7 +99,6 @@ export function UserModulesCell({
     );
   }
 
-  const memberOnlyKeys = assignedModuleKeys.filter((key) => !adminModuleKeys.includes(key));
   const visible = adminModuleKeys.slice(0, 3);
   const extra = adminModuleKeys.length - visible.length;
 
@@ -120,7 +118,7 @@ export function UserModulesCell({
 
   return (
     <div className="flex flex-wrap items-center gap-1.5">
-      {adminModuleKeys.length === 0 && memberOnlyKeys.length === 0 ? (
+      {adminModuleKeys.length === 0 ? (
         <span className="text-xs text-muted-foreground">None</span>
       ) : (
         <>
@@ -133,11 +131,6 @@ export function UserModulesCell({
             <Badge variant="outline" className="font-normal">
               +{extra}
             </Badge>
-          ) : null}
-          {memberOnlyKeys.length > 0 ? (
-            <span className="text-[11px] text-muted-foreground">
-              +{memberOnlyKeys.length} member
-            </span>
           ) : null}
         </>
       )}

@@ -1,24 +1,23 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
-import { ShieldCheck, Users } from "lucide-react";
+import { ShieldCheck, UserRound, Users } from "lucide-react";
 
 import { UserAvatar } from "@/components/layout/user-avatar";
+import { UserMemberModulesCell } from "@/components/organization/user-member-modules-cell";
 import { UserModulesCell } from "@/components/organization/user-modules-cell";
 import { useAuthUser } from "@/hooks/use-auth-user";
-import { canManageUserModules, isModuleAdmin, moduleTitle } from "@/lib/module-access";
+import { canManageUserModules, moduleTitle } from "@/lib/module-access";
+import {
+  hasModuleAdminAssignment,
+  hasModuleMemberAssignment,
+  memberOnlyModuleKeys,
+} from "@/lib/module-membership";
 import { PageHeader } from "@/components/layout/page-header";
 import { FinanceStatusBadge } from "@/components/finance/finance-status-badge";
 import { Input } from "@/components/ui/input";
 import { ApiClientError } from "@/services/api-client";
 import { listFoundationUsers, type FoundationUser } from "@/services/foundation-users-service";
-
-function hasModuleAssignment(row: FoundationUser): boolean {
-  if (isModuleAdmin(row.user_type)) return true;
-  const assigned = row.assigned_module_keys ?? [];
-  const admins = row.admin_module_keys ?? [];
-  return assigned.length > 0 || admins.length > 0;
-}
 
 function sortUsersByName(users: FoundationUser[]): FoundationUser[] {
   return [...users].sort((a, b) =>
@@ -29,15 +28,22 @@ function sortUsersByName(users: FoundationUser[]): FoundationUser[] {
 function filterUsers(rows: FoundationUser[], query: string): FoundationUser[] {
   const q = query.trim().toLowerCase();
   if (!q) return rows;
-  return rows.filter(
-    (row) =>
+  return rows.filter((row) => {
+    const assigned = row.assigned_module_keys ?? [];
+    const admins = row.admin_module_keys ?? [];
+    const members = memberOnlyModuleKeys(assigned, admins);
+    return (
       row.display_name.toLowerCase().includes(q) ||
       row.email.toLowerCase().includes(q) ||
       row.user_type.toLowerCase().includes(q) ||
-      (row.assigned_module_keys ?? []).some((k) => moduleTitle(k).toLowerCase().includes(q)) ||
-      (row.admin_module_keys ?? []).some((k) => moduleTitle(k).toLowerCase().includes(q)),
-  );
+      assigned.some((k) => moduleTitle(k).toLowerCase().includes(q)) ||
+      admins.some((k) => moduleTitle(k).toLowerCase().includes(q)) ||
+      members.some((k) => moduleTitle(k).toLowerCase().includes(q))
+    );
+  });
 }
+
+type TableVariant = "admin" | "member";
 
 function UsersTableCard({
   title,
@@ -47,6 +53,7 @@ function UsersTableCard({
   loading,
   emptyLabel,
   rows,
+  variant,
   canEditModules,
   onModulesSaved,
 }: {
@@ -57,6 +64,7 @@ function UsersTableCard({
   loading: boolean;
   emptyLabel: string;
   rows: FoundationUser[];
+  variant: TableVariant;
   canEditModules: boolean;
   onModulesSaved: (
     userId: string,
@@ -64,6 +72,8 @@ function UsersTableCard({
     admin_module_keys: string[],
   ) => void;
 }) {
+  const modulesColumnLabel = variant === "admin" ? "Module admins" : "Module membership";
+
   return (
     <div className="overflow-hidden rounded-xl border border-border/80 bg-card shadow-sm">
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border/70 px-4 py-3">
@@ -85,7 +95,7 @@ function UsersTableCard({
             <tr className="border-b border-border/80 bg-muted/60 text-xs font-semibold tracking-wide text-foreground uppercase">
               <th className="px-4 py-2.5">User</th>
               <th className="px-4 py-2.5">Email</th>
-              <th className="px-4 py-2.5">Module admins</th>
+              <th className="px-4 py-2.5">{modulesColumnLabel}</th>
               <th className="px-4 py-2.5">Status</th>
             </tr>
           </thead>
@@ -120,16 +130,23 @@ function UsersTableCard({
                   </td>
                   <td className="px-4 py-2.5 text-muted-foreground">{row.email}</td>
                   <td className="px-4 py-2.5">
-                    <UserModulesCell
-                      userId={row.id}
-                      userType={row.user_type}
-                      assignedModuleKeys={row.assigned_module_keys ?? []}
-                      adminModuleKeys={row.admin_module_keys ?? []}
-                      canEdit={canEditModules}
-                      onSaved={(assigned_module_keys, admin_module_keys) => {
-                        onModulesSaved(row.id, assigned_module_keys, admin_module_keys);
-                      }}
-                    />
+                    {variant === "admin" ? (
+                      <UserModulesCell
+                        userId={row.id}
+                        userType={row.user_type}
+                        assignedModuleKeys={row.assigned_module_keys ?? []}
+                        adminModuleKeys={row.admin_module_keys ?? []}
+                        canEdit={canEditModules}
+                        onSaved={(assigned_module_keys, admin_module_keys) => {
+                          onModulesSaved(row.id, assigned_module_keys, admin_module_keys);
+                        }}
+                      />
+                    ) : (
+                      <UserMemberModulesCell
+                        assignedModuleKeys={row.assigned_module_keys ?? []}
+                        adminModuleKeys={row.admin_module_keys ?? []}
+                      />
+                    )}
                   </td>
                   <td className="px-4 py-2.5">
                     <FinanceStatusBadge status={row.status} />
@@ -150,7 +167,8 @@ export function OrganizationUsersPage() {
   const [rows, setRows] = useState<FoundationUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [assignedQuery, setAssignedQuery] = useState("");
+  const [adminQuery, setAdminQuery] = useState("");
+  const [memberQuery, setMemberQuery] = useState("");
   const [unassignedQuery, setUnassignedQuery] = useState("");
 
   const load = useCallback(async () => {
@@ -178,13 +196,34 @@ export function OrganizationUsersPage() {
     void load();
   }, [load]);
 
-  const assignedUsers = useMemo(() => {
-    const list = rows.filter((row) => hasModuleAssignment(row));
-    return sortUsersByName(filterUsers(list, assignedQuery));
-  }, [rows, assignedQuery]);
+  const adminUsers = useMemo(() => {
+    const list = rows.filter((row) =>
+      hasModuleAdminAssignment(row.user_type, row.admin_module_keys ?? []),
+    );
+    return sortUsersByName(filterUsers(list, adminQuery));
+  }, [rows, adminQuery]);
+
+  const memberUsers = useMemo(() => {
+    const list = rows.filter((row) =>
+      hasModuleMemberAssignment(
+        row.user_type,
+        row.assigned_module_keys ?? [],
+        row.admin_module_keys ?? [],
+      ),
+    );
+    return sortUsersByName(filterUsers(list, memberQuery));
+  }, [rows, memberQuery]);
 
   const unassignedUsers = useMemo(() => {
-    const list = rows.filter((row) => !hasModuleAssignment(row));
+    const list = rows.filter(
+      (row) =>
+        !hasModuleAdminAssignment(row.user_type, row.admin_module_keys ?? []) &&
+        !hasModuleMemberAssignment(
+          row.user_type,
+          row.assigned_module_keys ?? [],
+          row.admin_module_keys ?? [],
+        ),
+    );
     return sortUsersByName(filterUsers(list, unassignedQuery));
   }, [rows, unassignedQuery]);
 
@@ -200,13 +239,23 @@ export function OrganizationUsersPage() {
     );
   }
 
-  const assignedSearchInput = (
+  const adminSearchInput = (
     <Input
-      value={assignedQuery}
-      onChange={(e) => setAssignedQuery(e.target.value)}
+      value={adminQuery}
+      onChange={(e) => setAdminQuery(e.target.value)}
       placeholder="Search name or email…"
       className="h-9 w-full min-w-[200px] max-w-xs"
-      aria-label="Search module-assigned users"
+      aria-label="Search module admin users"
+    />
+  );
+
+  const memberSearchInput = (
+    <Input
+      value={memberQuery}
+      onChange={(e) => setMemberQuery(e.target.value)}
+      placeholder="Search name or email…"
+      className="h-9 w-full min-w-[200px] max-w-xs"
+      aria-label="Search module member users"
     />
   );
 
@@ -224,7 +273,7 @@ export function OrganizationUsersPage() {
     <div className="space-y-5">
       <PageHeader
         title="Organization users"
-        description="Assign module admins. Each admin gets that module’s full ERP panel and can add module users from a Users tab."
+        description="Assign module admins here. Module members are assigned inside each module (for example HR Superadmin Panel) and listed separately below."
       />
 
       {error ? (
@@ -234,21 +283,41 @@ export function OrganizationUsersPage() {
       ) : null}
 
       <UsersTableCard
-        title="Module assigned users"
+        title="Module admin users"
+        subtitle={
+          loading ? "Loading…" : `${adminUsers.length} with module admin rights`
+        }
+        icon={<ShieldCheck className="size-4" />}
+        toolbar={adminSearchInput}
+        loading={loading}
+        emptyLabel={
+          adminQuery.trim()
+            ? "No module admin users match your search."
+            : "No module admins assigned yet."
+        }
+        rows={adminUsers}
+        variant="admin"
+        canEditModules={canEditModules}
+        onModulesSaved={onModulesSaved}
+      />
+
+      <UsersTableCard
+        title="Module member users"
         subtitle={
           loading
             ? "Loading…"
-            : `${assignedUsers.length} with module access or module admin rights`
+            : `${memberUsers.length} with member access (managed in module panels)`
         }
-        icon={<ShieldCheck className="size-4" />}
-        toolbar={assignedSearchInput}
+        icon={<UserRound className="size-4" />}
+        toolbar={memberSearchInput}
         loading={loading}
         emptyLabel={
-          assignedQuery.trim()
-            ? "No module-assigned users match your search."
-            : "No users have module assignments yet."
+          memberQuery.trim()
+            ? "No module member users match your search."
+            : "No module members assigned yet."
         }
-        rows={assignedUsers}
+        rows={memberUsers}
+        variant="member"
         canEditModules={canEditModules}
         onModulesSaved={onModulesSaved}
       />
@@ -269,6 +338,7 @@ export function OrganizationUsersPage() {
             : "Every user has a module assignment."
         }
         rows={unassignedUsers}
+        variant="admin"
         canEditModules={canEditModules}
         onModulesSaved={onModulesSaved}
       />
