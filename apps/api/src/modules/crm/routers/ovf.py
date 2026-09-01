@@ -72,6 +72,16 @@ def update_ovf(
     return APIResponse(message="OK", data=OvfService(db).update(ctx, ovf_id, **extract_update_fields(body)))
 
 
+@ovf_router.delete("/{ovf_id}", response_model=APIResponse[dict[str, str]])
+def delete_ovf(
+    ovf_id: UUID,
+    ctx: Annotated[TenantContext, Depends(require_permission("crm.ovf:update"))],
+    db: Annotated[Session, Depends(get_db)],
+):
+    OvfService(db).delete(ctx, ovf_id)
+    return APIResponse(message="OK", data={"id": str(ovf_id)})
+
+
 @ovf_router.get("/{ovf_id}/lines", response_model=APIResponse[list[OvfLineResponse]])
 def list_ovf_lines(
     ovf_id: UUID,

@@ -72,6 +72,16 @@ def update_quote(
     return APIResponse(message="OK", data=QuoteService(db).update(ctx, quote_id, **extract_update_fields(body)))
 
 
+@quotes_router.delete("/{quote_id}", response_model=APIResponse[dict[str, str]])
+def delete_quote(
+    quote_id: UUID,
+    ctx: Annotated[TenantContext, Depends(require_permission("crm.quote:update"))],
+    db: Annotated[Session, Depends(get_db)],
+):
+    QuoteService(db).delete(ctx, quote_id)
+    return APIResponse(message="OK", data={"id": str(quote_id)})
+
+
 @quotes_router.get("/{quote_id}/lines", response_model=APIResponse[list[QuoteLineResponse]])
 def list_quote_lines(
     quote_id: UUID,

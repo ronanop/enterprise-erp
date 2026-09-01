@@ -7,6 +7,8 @@ import { Copy, Printer, Share2, Trash2 } from "lucide-react";
 import { CompanyShareDialog } from "@/components/crm/sales/company-share-dialog";
 import { ConfirmDialog } from "@/components/finance/journals/confirm-dialog";
 import { RowActionsItem, RowActionsMenu } from "@/components/ui/row-actions-menu";
+import { useAuthUser } from "@/hooks/use-auth-user";
+import { canDeleteCrmRecords } from "@/lib/crm/crm-module-access";
 import { nextCloneCompanyName } from "@/lib/crm/company-clone-name";
 import { exportCompanyPdf } from "@/lib/crm/export-company-pdf";
 import { ApiClientError } from "@/services/api-client";
@@ -21,6 +23,8 @@ import {
 
 export function CompanyAccountActionsMenu({ company }: { company: Company }) {
   const router = useRouter();
+  const { user, adminModuleKeys } = useAuthUser();
+  const canDelete = canDeleteCrmRecords(adminModuleKeys, user?.userType);
   const [menuOpen, setMenuOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
@@ -103,16 +107,18 @@ export function CompanyAccountActionsMenu({ company }: { company: Company }) {
           <Printer className="size-3.5 text-muted-foreground" />
           Print preview
         </RowActionsItem>
-        <RowActionsItem
-          destructive
-          onClick={() => {
-            setMenuOpen(false);
-            setDeleteOpen(true);
-          }}
-        >
-          <Trash2 className="size-3.5" />
-          Delete
-        </RowActionsItem>
+        {canDelete ? (
+          <RowActionsItem
+            destructive
+            onClick={() => {
+              setMenuOpen(false);
+              setDeleteOpen(true);
+            }}
+          >
+            <Trash2 className="size-3.5" />
+            Delete
+          </RowActionsItem>
+        ) : null}
       </RowActionsMenu>
 
       <CompanyShareDialog open={shareOpen} company={company} onClose={() => setShareOpen(false)} />

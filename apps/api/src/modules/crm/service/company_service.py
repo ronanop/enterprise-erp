@@ -17,6 +17,7 @@ from core.exceptions import AppException, ConflictException, NotFoundException
 from modules.crm.domain.enums import CrmEntityType, LeadStatus
 from modules.crm.models import CrmCompany
 from modules.crm.repository.company_repository import CompanyRepository
+from modules.crm.service.crm_module_admin import CrmModuleAdminService
 from modules.crm.service.crm_scope_validator import CrmScopeValidator
 from modules.crm.service.document_number_service import DocumentNumberService
 from modules.foundation.domain.value_objects import TenantContext
@@ -30,6 +31,7 @@ class CompanyService:
         self._scope = CrmScopeValidator(db)
         self._numbers = DocumentNumberService(db)
         self._audit = AuditService(db)
+        self._crm_admin = CrmModuleAdminService(db)
 
     def list(self, ctx: TenantContext, company_id: UUID | None = None):
         cid = self._scope.resolve_company_id(ctx, company_id)
@@ -70,6 +72,7 @@ class CompanyService:
         return row
 
     def delete(self, ctx: TenantContext, row_id: UUID) -> None:
+        self._crm_admin.ensure_admin(ctx)
         existing = self.get(ctx, row_id)
         if existing.locked:
             raise ConflictException("Company account is locked pending approval")

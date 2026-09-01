@@ -57,13 +57,26 @@ def _normalize_sub(lead: CrmLead) -> str:
 def cloud_variant_from_lead(lead: CrmLead) -> str | None:
     if (lead.product_type or "").strip().lower() != CLOUD_PRODUCT_TYPE:
         return None
+    category = (lead.sub_product_category or "").strip().lower()
+
+    if category == "migration" or "migration" in category:
+        return VARIANT_MIGRATION
+    if "billing shift" in category or category.startswith("billing shift"):
+        return VARIANT_BILLING_SHIFT
+    if "finops" in category:
+        return VARIANT_BILLING_SHIFT
+    if "poc" in category or "ola" in category or "map" in category:
+        return VARIANT_POC_ASSESSMENT
+
     sub = _normalize_sub(lead)
     if "billing" in sub and "shift" in sub:
         return VARIANT_BILLING_SHIFT
     if "migration" in sub:
         return VARIANT_MIGRATION
-    if "poc" in sub or "assessment" in sub:
+    if "poc" in sub or "assessment" in sub or "ola" in sub or " map" in f" {sub}":
         return VARIANT_POC_ASSESSMENT
+    if "finops" in sub:
+        return VARIANT_BILLING_SHIFT
     return VARIANT_CLOUD_OTHER
 
 
@@ -109,6 +122,8 @@ def filter_opportunity_actions(record: Any, allowed: list[str]) -> list[str]:
 
 
 def cloud_sub_product_label(lead: CrmLead) -> str | None:
+    if (lead.sub_product_category or "").strip().lower() == "others":
+        return lead.sub_product_other or lead.sub_product_category
     return (
         lead.sub_product_category
         or lead.sub_product

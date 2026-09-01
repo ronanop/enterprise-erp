@@ -16,6 +16,8 @@ import {
 import { ApprovalBanner } from "@/components/crm/sales/approval-banner";
 import { CrmEntityRejectionAlert } from "@/components/crm/sales/crm-approval-inbox-listener";
 import { BlueprintActions } from "@/components/crm/sales/blueprint-actions";
+import { CrmAdminDeleteMenu } from "@/components/crm/sales/crm-admin-delete-menu";
+import { CrmDetailEditLink } from "@/components/crm/sales/crm-detail-edit-link";
 import { EntityAttachmentsList } from "@/components/crm/sales/entity-attachments-list";
 import { LeadDetailsCard } from "@/components/crm/sales/lead-details-card";
 import { CompanyWorkspaceNav } from "@/components/crm/company-workspace-nav";
@@ -27,6 +29,7 @@ import { ApiClientError } from "@/services/api-client";
 import {
   applyOpportunityAction,
   applyQuoteAction,
+  deleteOpportunity,
   formatInr,
   getCompany,
   getOpportunity,
@@ -310,6 +313,11 @@ export function OpportunityDetailPage({ opportunityId }: { opportunityId: string
     }
   }
 
+  const canEditSourceLead =
+    Boolean(opp.lead_id && opp.company_account_id && sourceLead) &&
+    !sourceLead!.locked &&
+    sourceLead!.blueprint_state === "open";
+
   return (
     <div className="flex min-w-0 items-start gap-0">
       {opp.company_account_id ? (
@@ -347,6 +355,11 @@ export function OpportunityDetailPage({ opportunityId }: { opportunityId: string
             description={`Expected revenue ${formatInr(opp.expected_revenue)}`}
             actions={
               <div className="flex flex-wrap items-center gap-2">
+                {canEditSourceLead ? (
+                  <CrmDetailEditLink
+                    href={`/crm/companies/${opp.company_account_id}/leads/${opp.lead_id}/edit`}
+                  />
+                ) : null}
                 {canCreateQuote ? (
                   <Button type="button" size="sm" className="cursor-pointer" disabled={busy} onClick={onCreateQuote}>
                     <Plus className="size-3.5" /> Create Quote
@@ -363,6 +376,12 @@ export function OpportunityDetailPage({ opportunityId }: { opportunityId: string
                     <Plus className="size-3.5" /> Create OVF
                   </Button>
                 ) : null}
+                <CrmAdminDeleteMenu
+                  entityLabel="Opportunity"
+                  entityName={`${opp.opportunity_name} · ${opp.opportunity_code}`}
+                  onDelete={() => deleteOpportunity(opp.id)}
+                  onDeleted={() => router.push("/crm/opportunities")}
+                />
               </div>
             }
           />

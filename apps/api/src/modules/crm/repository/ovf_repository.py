@@ -80,6 +80,18 @@ class OvfRepository(CrmScopedRepository):
         self.db.flush()
         return row
 
+    def soft_delete(self, ctx: TenantContext, row_id: UUID) -> bool:
+        row = self.get(ctx, row_id)
+        if row is None:
+            return False
+        row.is_deleted = True
+        row.deleted_at = utcnow()
+        row.deleted_by = ctx.user_id
+        row.updated_at = utcnow()
+        row.updated_by = ctx.user_id
+        self.db.flush()
+        return True
+
 
 class OvfLineRepository(CrmScopedRepository):
     def __init__(self, db: Session) -> None:

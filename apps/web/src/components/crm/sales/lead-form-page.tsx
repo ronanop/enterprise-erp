@@ -29,115 +29,29 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { formatLeadDistributorNames, parseLeadDistributorNames } from "@/lib/crm/lead-distributor-options";
 import { formatLeadOemNames, parseLeadOemNames } from "@/lib/crm/lead-oem-options";
+import {
+  isCloudLeadProductType,
+  LEAD_PRODUCT_TYPES,
+  normalizeLeadProductType,
+  subProductOptionsForType,
+} from "@/lib/crm/lead-product-options";
 import { ApiClientError, authService } from "@/services/api-client";
 import type { UserProfile } from "@/types/api";
 import {
   createLeadFromCompany,
   getCompany,
+  getSalesLead,
   listLeadSourceOptions,
   listSellingEntities,
+  updateSalesLead,
   type Company,
   type LeadCreateFromCompanyInput,
   type Option,
+  type SalesLead,
   type SellingEntity,
 } from "@/services/sales-crm-service";
 
 const SALUTATIONS = ["Mr.", "Ms.", "Mrs.", "Dr."] as const;
-const PRODUCT_TYPES = [
-  "Hardware",
-  "Software",
-  "Services",
-  "Hardware & Services",
-  "Hardware & Software",
-  "Software & Services",
-  "Networking",
-  "Cybersecurity",
-  "Cloud",
-  "AI",
-  "Others",
-] as const;
-
-type ProductType = (typeof PRODUCT_TYPES)[number];
-
-const SUB_PRODUCT_CATEGORIES: Record<ProductType, readonly string[]> = {
-  Hardware: [
-    "Servers",
-    "Storage",
-    "Workstations / Laptops",
-    "Peripherals",
-    "Networking Hardware",
-    "Others",
-  ],
-  Software: [
-    "Enterprise Applications",
-    "Operating Systems",
-    "Databases",
-    "Licensing / Subscriptions",
-    "Security Software",
-    "Others",
-  ],
-  Services: [
-    "Implementation",
-    "Consulting",
-    "Managed Services",
-    "Support & AMC",
-    "Training",
-    "Others",
-  ],
-  "Hardware & Services": [
-    "Hardware Supply + Installation",
-    "Hardware Supply + Support / AMC",
-    "Turnkey Infrastructure",
-    "Others",
-  ],
-  "Hardware & Software": [
-    "Bundled Solutions",
-    "Appliance / Bundle",
-    "System Integration Kit",
-    "Others",
-  ],
-  "Software & Services": [
-    "Implementation Services",
-    "Customization & Integration",
-    "Managed Application Services",
-    "Support & AMC",
-    "Others",
-  ],
-  Networking: [
-    "Switches",
-    "Routers",
-    "Wireless / Wi-Fi",
-    "SD-WAN",
-    "Firewalls (Network)",
-    "Cabling / Structured Cabling",
-    "Others",
-  ],
-  Cybersecurity: [
-    "Endpoint Security",
-    "Network Security",
-    "Identity & Access Management",
-    "SOC / Managed Detection",
-    "Vulnerability Management",
-    "Others",
-  ],
-  Cloud: [
-    "IaaS",
-    "PaaS",
-    "SaaS",
-    "Cloud Migration",
-    "Managed Cloud",
-    "Others",
-  ],
-  AI: [
-    "AI Platforms / Models",
-    "Analytics & ML",
-    "Computer Vision",
-    "NLP / Generative AI",
-    "AI Consulting & Implementation",
-    "Others",
-  ],
-  Others: ["General", "Custom / Unspecified", "Others"],
-};
 const ENGAGEMENT_SCORES = [25, 50, 75, 100] as const;
 
 const DEFAULT_ENTITY_EMAIL = "info@cachedigitech.com";
@@ -207,9 +121,17 @@ const EMPTY: LeadCreateFromCompanyInput = {
   notes: "",
 };
 
-export function LeadFormPage({ companyAccountId }: { companyAccountId: string }) {
+export function LeadFormPage({
+  companyAccountId,
+  leadId,
+}: {
+  companyAccountId: string;
+  leadId?: string;
+}) {
   const router = useRouter();
+  const isEdit = Boolean(leadId);
   const [company, setCompany] = useState<Company | null>(null);
+  const [existingLead, setExistingLead] = useState<SalesLead | null>(null);
   const [leadSources, setLeadSources] = useState<Option[]>([]);
   const [leadOwnerLabel, setLeadOwnerLabel] = useState("");
   const [industryOther, setIndustryOther] = useState("");
@@ -228,12 +150,14 @@ export function LeadFormPage({ companyAccountId }: { companyAccountId: string })
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [companyRow, sources, meResponse, entities] = await Promise.all([
+      const [companyRow, sources, meResponse, entities, leadRow] = await Promise.all([
         getCompany(companyAccountId),
         listLeadSourceOptions().catch(() => []),
         authService.me().catch(() => null),
         listSellingEntities().catch(() => []),
+        leadId ? getSalesLead(leadId).catch(() => null) : Promise.resolve(null),
       ]);
+      setExistingLead(leadRow);
       const mePayload = meResponse?.data;
       let meUser: UserProfile | undefined;
       if (mePayload && typeof mePayload === "object" && "user" in mePayload) {
@@ -261,6 +185,54 @@ export function LeadFormPage({ companyAccountId }: { companyAccountId: string })
         (source) => source.label.trim().toLowerCase() === sourceLabel,
       );
       setForm((f) => {
+        if (leadRow) {
+          return {
+            ...EMPTY,
+            branch_id: leadRow.branch_id,
+            salutation: leadRow.salutation ?? "",
+            first_name: leadRow.first_name ?? "",
+            last_name: leadRow.last_name ?? "",
+            designation: leadRow.designation ?? "",
+            mobile: leadRow.mobile ?? "",
+            email: leadRow.email ?? "",
+            lead_source_id: leadRow.lead_source_id ?? "",
+            expected_amount: leadRow.expected_amount ?? undefined,
+            expected_closure_date: leadRow.expected_closure_date ?? "",
+            product_type: leadRow.product_type ?? "",
+            sub_product_category: leadRow.sub_product_category ?? "",
+            sub_product: leadRow.sub_product ?? "",
+            sub_product_other: leadRow.sub_product_other ?? "",
+            engagement_score: leadRow.engagement_score ?? undefined,
+            portal_link: leadRow.portal_link ?? "",
+            project_title: leadRow.project_title ?? "",
+            requirement_type: leadRow.requirement_type ?? "",
+            purchase_model: leadRow.purchase_model ?? "",
+            dr_number: leadRow.dr_number ?? "",
+            new_dr_number: leadRow.new_dr_number ?? "",
+            deal_type: leadRow.deal_type ?? "",
+            industry: leadRow.industry ?? "",
+            street: leadRow.street ?? "",
+            city: leadRow.city ?? "",
+            state: leadRow.state ?? "",
+            zip: leadRow.zip ?? "",
+            country: leadRow.country ?? "",
+            oem_name: leadRow.oem_name ?? "",
+            oem_contact_person: leadRow.oem_contact_person ?? "",
+            oem_contact_number: leadRow.oem_contact_number ?? "",
+            oem_contact_email: leadRow.oem_contact_email ?? "",
+            distributor_name: leadRow.distributor_name ?? "",
+            distributor_contact: leadRow.distributor_contact ?? "",
+            distributor_contact_person: leadRow.distributor_contact_person ?? "",
+            distributor_contact_email: leadRow.distributor_contact_email ?? "",
+            end_customer_name: leadRow.end_customer_name ?? "",
+            entity_name: leadRow.entity_name ?? "",
+            entity_email: leadRow.entity_email ?? "",
+            entity_address: leadRow.entity_address ?? "",
+            entity_gst: leadRow.entity_gst ?? "",
+            entity_contact: leadRow.entity_contact ?? "",
+            notes: leadRow.notes ?? "",
+          };
+        }
         return {
           ...f,
           branch_id: companyRow.branch_id,
@@ -286,7 +258,7 @@ export function LeadFormPage({ companyAccountId }: { companyAccountId: string })
     } finally {
       setLoading(false);
     }
-  }, [companyAccountId]);
+  }, [companyAccountId, leadId]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => void load(), 0);
@@ -299,26 +271,25 @@ export function LeadFormPage({ companyAccountId }: { companyAccountId: string })
 
   function onProductTypeChange(value: string) {
     setForm((f) => {
-      const options =
-        value && value in SUB_PRODUCT_CATEGORIES
-          ? SUB_PRODUCT_CATEGORIES[value as ProductType]
-          : [];
+      const normalized = normalizeLeadProductType(value);
+      const options = subProductOptionsForType(normalized ?? value);
       const keepCategory =
         f.sub_product_category && options.includes(f.sub_product_category)
           ? f.sub_product_category
           : "";
       return {
         ...f,
-        product_type: value,
+        product_type: normalized ?? value,
         sub_product_category: keepCategory,
+        sub_product: normalized === "Cloud" ? "" : f.sub_product,
+        sub_product_other: normalized === "Cloud" ? "" : f.sub_product_other,
       };
     });
   }
 
-  const subProductCategoryOptions =
-    form.product_type && form.product_type in SUB_PRODUCT_CATEGORIES
-      ? SUB_PRODUCT_CATEGORIES[form.product_type as ProductType]
-      : [];
+  const normalizedProductType = normalizeLeadProductType(form.product_type);
+  const subProductCategoryOptions = subProductOptionsForType(form.product_type);
+  const isCloudProduct = isCloudLeadProductType(form.product_type);
 
   function onOemNamesChange(names: string[]) {
     setForm((f) => ({
@@ -383,7 +354,9 @@ export function LeadFormPage({ companyAccountId }: { companyAccountId: string })
     if (!form.mobile?.trim()) missing.push("Mobile");
     if (!form.designation?.trim()) missing.push("Designation");
     if (!form.lead_source_id) missing.push("Lead Source");
-    if (!form.sub_product_category?.trim()) missing.push("Sub Product Category");
+    if (!form.sub_product_category?.trim()) {
+      missing.push(isCloudLeadProductType(form.product_type) ? "Sub Product" : "Sub Product Category");
+    }
     if (!form.requirement_type) missing.push("Requirement Type");
     if (!form.purchase_model) missing.push("Purchase Model");
     if (form.expected_amount === undefined || form.expected_amount === null || Number.isNaN(Number(form.expected_amount))) {
@@ -404,14 +377,20 @@ export function LeadFormPage({ companyAccountId }: { companyAccountId: string })
     setError(null);
     try {
       const { owner_employee_id: _owner, ...leadBody } = form;
-      const lead = await createLeadFromCompany(companyAccountId, {
+      const payload = {
         ...leadBody,
         assign_to_id: null,
         assigned_date: null,
         expected_amount: form.expected_amount ? Number(form.expected_amount) : null,
         expected_closure_date: form.expected_closure_date || null,
         distributor_department: null,
-      });
+      };
+      if (isEdit && leadId && existingLead) {
+        await updateSalesLead(leadId, { ...payload, version: existingLead.version });
+        router.push(`/crm/leads/${leadId}`);
+        return;
+      }
+      const lead = await createLeadFromCompany(companyAccountId, payload);
       router.push(`/crm/leads/${lead.id}`);
     } catch (err) {
       setError(
@@ -509,7 +488,7 @@ export function LeadFormPage({ companyAccountId }: { companyAccountId: string })
               onChange={(e) => onProductTypeChange(e.target.value)}
             >
               <option value="">None</option>
-              {PRODUCT_TYPES.map((type) => (
+              {LEAD_PRODUCT_TYPES.map((type) => (
                 <option key={type} value={type}>
                   {type}
                 </option>
@@ -517,15 +496,23 @@ export function LeadFormPage({ companyAccountId }: { companyAccountId: string })
             </FinanceSelect>
           </FinanceField>
 
-          <FinanceField label="Sub Product Category *">
+          <FinanceField label={isCloudProduct ? "Sub Product *" : "Sub Product Category *"}>
             <FinanceSelect
               value={form.sub_product_category ?? ""}
-              onChange={(e) => set("sub_product_category", e.target.value)}
-              disabled={!form.product_type}
+              onChange={(e) => {
+                const next = e.target.value;
+                setForm((f) => ({
+                  ...f,
+                  sub_product_category: next,
+                  sub_product: isCloudProduct ? "" : f.sub_product,
+                  sub_product_other: isCloudProduct ? "" : f.sub_product_other,
+                }));
+              }}
+              disabled={!normalizedProductType}
               required
             >
               <option value="">
-                {form.product_type ? "None" : "Select product type first"}
+                {normalizedProductType ? "None" : "Select product type first"}
               </option>
               {subProductCategoryOptions.map((category) => (
                 <option key={category} value={category}>
@@ -548,9 +535,11 @@ export function LeadFormPage({ companyAccountId }: { companyAccountId: string })
             </FinanceSelect>
           </FinanceField>
 
-          <FinanceField label="Sub Product">
-            <Input value={form.sub_product ?? ""} onChange={(e) => set("sub_product", e.target.value)} />
-          </FinanceField>
+          {!isCloudProduct ? (
+            <FinanceField label="Sub Product">
+              <Input value={form.sub_product ?? ""} onChange={(e) => set("sub_product", e.target.value)} />
+            </FinanceField>
+          ) : null}
           <FinanceField label="Purchase Model *">
             <FinanceSelect
               value={form.purchase_model ?? ""}
@@ -812,7 +801,7 @@ export function LeadFormPage({ companyAccountId }: { companyAccountId: string })
           Cancel
         </Link>
         <Button type="button" className="cursor-pointer" disabled={saving} onClick={() => void onSave()}>
-          {saving ? "Creating…" : "Create Lead"}
+          {saving ? (isEdit ? "Saving…" : "Creating…") : isEdit ? "Save changes" : "Create Lead"}
         </Button>
       </div>
 

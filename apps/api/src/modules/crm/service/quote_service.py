@@ -25,10 +25,12 @@ from modules.crm.repository.lead_repository import LeadRepository
 from modules.crm.repository.opportunity_repository import OpportunityRepository
 from modules.crm.repository.quote_repository import QuoteLineRepository, QuoteRepository
 from modules.crm.service.blueprint_service import log_state_history
+from modules.crm.service.crm_module_admin import CrmModuleAdminService
 from modules.crm.service.crm_scope_validator import CrmScopeValidator
 from modules.crm.service.document_number_service import DocumentNumberService
 from modules.crm.service.engines import margin_engine, sales_blueprint_engine
 from modules.foundation.domain.value_objects import TenantContext
+from modules.foundation.service.audit_service import AuditService
 from modules.master_data.service.employee_service import EmployeeService
 
 
@@ -54,6 +56,8 @@ class QuoteService:
         self._employees = EmployeeService(db)
         self._scope = CrmScopeValidator(db)
         self._numbers = DocumentNumberService(db)
+        self._crm_admin = CrmModuleAdminService(db)
+        self._audit = AuditService(db)
 
     # -- reads -----------------------------------------------------------
     def list(self, ctx: TenantContext, company_id: UUID | None = None, opportunity_id: UUID | None = None):
@@ -80,6 +84,21 @@ class QuoteService:
         if "freight" in fields:
             row = self._recompute(ctx, quote_id)
         return row
+
+    def delete(self, ctx: TenantContext, quote_id: UUID) -> None:
+        self._crm_admin.ensure_admin(ctx)
+        quote = self.get(ctx, quote_id)
+        if quote.locked:
+            raise ConflictException("Quote is locked pending approval")
+        if not self._repo.soft_delete(ctx, quote_id):
+            raise NotFoundException("Quote not found")
+        self._audit.log_entity_change(
+            tenant_id=ctx.tenant_id,
+            entity_name="crm_quote",
+            entity_id=quote_id,
+            operation="delete",
+            performed_by=ctx.user_id,
+        )
 
     def _get_opportunity(self, ctx: TenantContext, opportunity_id: UUID) -> CrmOpportunity:
         opp = self._opportunities.get(ctx, opportunity_id)

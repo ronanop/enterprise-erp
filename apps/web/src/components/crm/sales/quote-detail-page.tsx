@@ -2,13 +2,13 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   AlertTriangle,
   ArrowLeft,
   Building2,
   Download,
   FileText,
-  Pencil,
   Plus,
   Scale,
 } from "lucide-react";
@@ -30,6 +30,8 @@ import { ApprovalBanner } from "@/components/crm/sales/approval-banner";
 import { CrmEntityRejectionAlert } from "@/components/crm/sales/crm-approval-inbox-listener";
 import { AttachmentsPanel } from "@/components/crm/sales/attachments-panel";
 import { BlueprintActions } from "@/components/crm/sales/blueprint-actions";
+import { CrmAdminDeleteMenu } from "@/components/crm/sales/crm-admin-delete-menu";
+import { CrmDetailEditLink } from "@/components/crm/sales/crm-detail-edit-link";
 import { DealTimelineStatusBadge, type DealStage } from "@/components/crm/sales/deal-timeline";
 import { QuoteLineTable } from "@/components/crm/sales/quote-line-table";
 import { FinanceStatusBadge } from "@/components/finance/finance-status-badge";
@@ -39,6 +41,7 @@ import { ApiClientError } from "@/services/api-client";
 import {
   applyQuoteAction,
   approveQuoteInternally,
+  deleteQuote,
   formatInr,
   fullName,
   getOpportunity,
@@ -69,6 +72,7 @@ function formatQuoteStage(stage: string): string {
 }
 
 export function QuoteDetailPage({ quoteId }: { quoteId: string }) {
+  const router = useRouter();
   const [quote, setQuote] = useState<Quote | null>(null);
   const [blueprint, setBlueprint] = useState<BlueprintState | null>(null);
   const [margin, setMargin] = useState<QuoteMarginSummary | null>(null);
@@ -264,12 +268,7 @@ export function QuoteDetailPage({ quoteId }: { quoteId: string }) {
             {!quote.locked &&
               quote.quote_stage !== "accepted" &&
               quote.quote_stage !== "lost" ? (
-              <Link
-                href={`/crm/quotes/${quote.id}/edit`}
-                className="inline-flex h-7 cursor-pointer items-center gap-1.5 rounded-lg border border-border bg-background px-2.5 text-[0.8rem] font-medium text-foreground shadow-sm transition-colors duration-200 hover:bg-muted/60"
-              >
-                <Pencil className="size-3.5" /> Edit
-              </Link>
+              <CrmDetailEditLink href={`/crm/quotes/${quote.id}/edit`} />
             ) : null}
             {canCreateOvf ? (
               <Link
@@ -285,6 +284,18 @@ export function QuoteDetailPage({ quoteId }: { quoteId: string }) {
               >
                 Open OVF
               </Link>
+            ) : null}
+            {quote ? (
+              <CrmAdminDeleteMenu
+                entityLabel="Quote"
+                entityName={quote.quote_no}
+                onDelete={() => deleteQuote(quote.id)}
+                onDeleted={() =>
+                  router.push(
+                    opportunity ? `/crm/opportunities/${opportunity.id}` : "/crm/quotes",
+                  )
+                }
+              />
             ) : null}
           </div>
         }

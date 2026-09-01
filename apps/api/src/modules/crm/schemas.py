@@ -95,6 +95,58 @@ class LeadUpdate(BaseModel):
     version: int | None = None
 
 
+class SalesLeadUpdate(BaseModel):
+    """Full sales-process lead update (company-account scoped leads only)."""
+
+    version: int
+    salutation: str | None = None
+    first_name: str | None = None
+    last_name: str | None = None
+    designation: str | None = None
+    mobile: str | None = None
+    email: str | None = None
+    lead_source_id: UUID | None = None
+    expected_amount: Decimal | None = None
+    expected_closure_date: date | None = None
+    product_type: str | None = None
+    sub_product_category: str | None = None
+    sub_product: str | None = None
+    sub_product_other: str | None = None
+    engagement_score: int | None = None
+    portal_link: str | None = None
+    project_title: str | None = None
+    requirement_type: str | None = None
+    purchase_model: str | None = None
+    dr_number: str | None = None
+    new_dr_number: str | None = None
+    deal_type: str | None = None
+    industry: str | None = None
+    territory: str | None = None
+    region: str | None = None
+    street: str | None = None
+    city: str | None = None
+    state: str | None = None
+    zip: str | None = None
+    country: str | None = None
+    oem_name: str | None = None
+    oem_contact_person: str | None = None
+    oem_contact_number: str | None = None
+    oem_contact_email: str | None = None
+    distributor_name: str | None = None
+    distributor_contact: str | None = None
+    distributor_contact_person: str | None = None
+    distributor_contact_email: str | None = None
+    distributor_department: str | None = None
+    end_customer_name: str | None = None
+    end_customer_location: str | None = None
+    entity_name: str | None = None
+    entity_email: str | None = None
+    entity_address: str | None = None
+    entity_gst: str | None = None
+    entity_contact: str | None = None
+    notes: str | None = None
+
+
 class LeadAssignRequest(BaseModel):
     to_employee_id: UUID
     assignment_type: str = "manual"
@@ -123,6 +175,7 @@ class LeadResponse(OrmModel):
     designation: str | None = None
     mobile: str
     email: str | None
+    lead_source_id: UUID
     status: str
     blueprint_state: str
     locked: bool

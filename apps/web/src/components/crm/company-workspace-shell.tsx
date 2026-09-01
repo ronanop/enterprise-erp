@@ -4,11 +4,12 @@ import type { ReactNode } from "react";
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { ArrowLeft, Pencil } from "lucide-react";
+import { ArrowLeft } from "lucide-react";
 
 import { CrmErrorBanner, CrmPage } from "@/components/crm/crm-ui";
 import { ApprovalBanner } from "@/components/crm/sales/approval-banner";
 import { CompanyAccountActionsMenu } from "@/components/crm/sales/company-account-actions-menu";
+import { CrmDetailEditLink } from "@/components/crm/sales/crm-detail-edit-link";
 import { CompanyWorkspaceNav } from "@/components/crm/company-workspace-nav";
 import { PageHeader } from "@/components/layout/page-header";
 import {
@@ -152,12 +153,7 @@ export function CompanyWorkspaceShell({
                 actions={
                   hideWorkspaceNav ? undefined : (
                     <div className="flex flex-wrap items-center gap-2">
-                      <Link
-                        href={`/crm/companies/${company.id}/edit`}
-                        className="inline-flex h-7 cursor-pointer items-center gap-1.5 rounded-lg border border-border bg-background px-2.5 text-[0.8rem] font-medium text-foreground shadow-sm transition-colors duration-200 hover:bg-muted/60"
-                      >
-                        <Pencil className="size-3.5" /> Edit
-                      </Link>
+                      <CrmDetailEditLink href={`/crm/companies/${company.id}/edit`} />
                       <CompanyAccountActionsMenu company={company} />
                     </div>
                   )

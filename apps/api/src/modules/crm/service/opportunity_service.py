@@ -13,6 +13,7 @@ from modules.crm.repository.opportunity_repository import OpportunityRepository
 from modules.crm.repository.opportunity_stage_repository import OpportunityStageRepository
 from modules.crm.repository.pipeline_repository import PipelineRepository
 from modules.crm.service.cloud_flow import compute_profitability_percent
+from modules.crm.service.crm_module_admin import CrmModuleAdminService
 from modules.crm.service.crm_scope_validator import CrmScopeValidator
 from modules.crm.service.document_number_service import DocumentNumberService
 from modules.crm.service.engines import OpportunityEngine, OpportunityStageEngine, PipelineEngine
@@ -64,6 +65,7 @@ class OpportunityService:
         self._stage_engine = OpportunityStageEngine()
         self._integration = CRMIntegrationService(db)
         self._audit = AuditService(db)
+        self._crm_admin = CrmModuleAdminService(db)
 
     def list(self, ctx: TenantContext, company_id: UUID | None = None):
         cid = self._scope.resolve_company_id(ctx, company_id)
@@ -148,6 +150,21 @@ class OpportunityService:
         if row is None:
             raise NotFoundException("Opportunity not found")
         return row
+
+    def delete(self, ctx: TenantContext, opportunity_id: UUID) -> None:
+        self._crm_admin.ensure_admin(ctx)
+        opp = self.get(ctx, opportunity_id)
+        if opp.locked:
+            raise ConflictException("Opportunity is locked pending approval")
+        if not self._repo.soft_delete(ctx, opportunity_id):
+            raise NotFoundException("Opportunity not found")
+        self._audit.log_entity_change(
+            tenant_id=ctx.tenant_id,
+            entity_name="crm_opportunity",
+            entity_id=opportunity_id,
+            operation="delete",
+            performed_by=ctx.user_id,
+        )
 
     def close_won(self, ctx: TenantContext, opportunity_id: UUID, *, create_quotation: bool = True, currency_code: str = "USD"):
         opp = self.get(ctx, opportunity_id)

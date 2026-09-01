@@ -12,6 +12,8 @@ import {
 import { ApprovalBanner, SyncedBanner } from "@/components/crm/sales/approval-banner";
 import { BlueprintActions } from "@/components/crm/sales/blueprint-actions";
 import { DealTimelineStatusBadge } from "@/components/crm/sales/deal-timeline";
+import { CrmAdminDeleteMenu } from "@/components/crm/sales/crm-admin-delete-menu";
+import { CrmDetailEditLink } from "@/components/crm/sales/crm-detail-edit-link";
 import { LeadDetailsCard } from "@/components/crm/sales/lead-details-card";
 import { FinanceStatusBadge } from "@/components/finance/finance-status-badge";
 import { PageHeader } from "@/components/layout/page-header";
@@ -19,6 +21,7 @@ import { Button } from "@/components/ui/button";
 import { ApiClientError } from "@/services/api-client";
 import {
   convertLead,
+  deleteLead,
   formatInr,
   fullName,
   getCompany,
@@ -126,6 +129,11 @@ export function LeadDetailPage({ leadId }: { leadId: string }) {
   const lost = blueprint.state === "lost";
   const canConvert = blueprint.allowed_actions.includes("convert") && !blueprint.locked;
   const converted = blueprint.state === "converted" && Boolean(lead.converted_opportunity_id);
+  const canEdit =
+    Boolean(lead.company_account_id) &&
+    !blueprint.locked &&
+    blueprint.state === "open" &&
+    !converted;
 
   return (
     <CrmPage>
@@ -154,6 +162,11 @@ export function LeadDetailPage({ leadId }: { leadId: string }) {
           <div className="flex flex-wrap items-center gap-2">
             <DealTimelineStatusBadge stage={converted ? "opportunity" : "lead"} lost={lost} />
             <FinanceStatusBadge status={lead.status} />
+            {canEdit && lead.company_account_id ? (
+              <CrmDetailEditLink
+                href={`/crm/companies/${lead.company_account_id}/leads/${lead.id}/edit`}
+              />
+            ) : null}
             {canConvert ? (
               <Button
                 type="button"
@@ -175,6 +188,14 @@ export function LeadDetailPage({ leadId }: { leadId: string }) {
                 Open Opportunity
               </Button>
             ) : null}
+            <CrmAdminDeleteMenu
+              entityLabel="Lead"
+              entityName={`${fullName(lead)} · ${lead.lead_code}`}
+              onDelete={() => deleteLead(lead.id)}
+              onDeleted={() =>
+                router.push(lead.company_account_id ? `/crm/companies/${lead.company_account_id}` : "/crm/leads")
+              }
+            />
           </div>
         }
       />

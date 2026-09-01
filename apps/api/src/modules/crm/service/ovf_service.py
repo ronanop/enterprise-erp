@@ -26,10 +26,12 @@ from modules.crm.repository.attachment_repository import AttachmentRepository
 from modules.crm.repository.ovf_repository import OvfLineRepository, OvfRepository
 from modules.crm.repository.quote_repository import QuoteLineRepository, QuoteRepository
 from modules.crm.service.blueprint_service import log_state_history
+from modules.crm.service.crm_module_admin import CrmModuleAdminService
 from modules.crm.service.crm_scope_validator import CrmScopeValidator
 from modules.crm.service.document_number_service import DocumentNumberService
 from modules.crm.service.engines import margin_engine, sales_blueprint_engine
 from modules.foundation.domain.value_objects import TenantContext
+from modules.foundation.service.audit_service import AuditService
 from modules.master_data.service.employee_service import EmployeeService
 
 
@@ -126,6 +128,8 @@ class OvfService:
         self._scope = CrmScopeValidator(db)
         self._numbers = DocumentNumberService(db)
         self._attachments = AttachmentRepository(db)
+        self._crm_admin = CrmModuleAdminService(db)
+        self._audit = AuditService(db)
 
     def resolve_customer_po_display_date(self, ctx: TenantContext, ovf: CrmOvf) -> date | None:
         """PO date on the OVF, or when the customer PO file was attached on the opportunity."""
@@ -183,6 +187,21 @@ class OvfService:
     def list_lines(self, ctx: TenantContext, ovf_id: UUID):
         self.get(ctx, ovf_id)
         return self._lines.list_for_ovf(ctx, ovf_id)
+
+    def delete(self, ctx: TenantContext, ovf_id: UUID) -> None:
+        self._crm_admin.ensure_admin(ctx)
+        ovf = self.get(ctx, ovf_id)
+        if ovf.locked:
+            raise ConflictException("OVF is locked pending approval")
+        if not self._repo.soft_delete(ctx, ovf_id):
+            raise NotFoundException("OVF not found")
+        self._audit.log_entity_change(
+            tenant_id=ctx.tenant_id,
+            entity_name="crm_ovf",
+            entity_id=ovf_id,
+            operation="delete",
+            performed_by=ctx.user_id,
+        )
 
     def get_scm_handoff(self, ctx: TenantContext, ovf_id: UUID) -> dict[str, Any]:
         """Full CRM OVF DTO for SCM — queue preview, Create PO, and View OVF."""

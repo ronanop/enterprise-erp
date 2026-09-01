@@ -548,6 +548,23 @@ export async function getSalesLead(id: string): Promise<SalesLead> {
   return unwrap(await resourceService.get<SalesLead>(CRM_LEADS_API, id));
 }
 
+export type SalesLeadUpdateInput = Partial<Omit<LeadCreateFromCompanyInput, "branch_id" | "owner_employee_id">> & {
+  version: number;
+};
+
+export async function updateSalesLead(
+  id: string,
+  body: SalesLeadUpdateInput,
+): Promise<SalesLead> {
+  return unwrap(
+    await apiClient<SalesLead>(`${CRM_LEADS_API}/${id}/sales`, { method: "PATCH", body }),
+  );
+}
+
+export async function deleteLead(id: string): Promise<void> {
+  await apiClient(`${CRM_LEADS_API}/${id}`, { method: "DELETE" });
+}
+
 export async function getLeadBlueprint(id: string): Promise<BlueprintState> {
   return unwrap(await apiClient<BlueprintState>(`${CRM_LEADS_API}/${id}/blueprint`));
 }
@@ -664,6 +681,10 @@ export async function updateOpportunity(id: string, body: OpportunityUpdateInput
   return unwrap(
     await apiClient<Opportunity>(`${CRM_OPPORTUNITIES_API}/${id}`, { method: "PATCH", body }),
   );
+}
+
+export async function deleteOpportunity(id: string): Promise<void> {
+  await apiClient(`${CRM_OPPORTUNITIES_API}/${id}`, { method: "DELETE" });
 }
 
 export async function getOpportunityBlueprint(id: string): Promise<BlueprintState> {
@@ -849,6 +870,10 @@ export async function createQuote(body: QuoteFormInput): Promise<Quote> {
 
 export async function updateQuote(id: string, body: Partial<QuoteFormInput>): Promise<Quote> {
   return unwrap(await resourceService.update<Quote>(CRM_QUOTES_API, id, body));
+}
+
+export async function deleteQuote(id: string): Promise<void> {
+  await apiClient(`${CRM_QUOTES_API}/${id}`, { method: "DELETE" });
 }
 
 export async function listQuoteLines(quoteId: string): Promise<QuoteLine[]> {
@@ -1057,6 +1082,10 @@ export async function createOvf(body: OvfFormInput): Promise<Ovf> {
 
 export async function updateOvf(id: string, body: Partial<OvfFormInput>): Promise<Ovf> {
   return unwrap(await resourceService.update<Ovf>(CRM_OVF_API, id, body));
+}
+
+export async function deleteOvf(id: string): Promise<void> {
+  await apiClient(`${CRM_OVF_API}/${id}`, { method: "DELETE" });
 }
 
 export async function listOvfLines(ovfId: string): Promise<OvfLine[]> {

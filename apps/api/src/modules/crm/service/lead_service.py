@@ -20,6 +20,7 @@ from modules.crm.service.cloud_flow import (
     cloud_sub_product_label,
     cloud_variant_from_lead,
 )
+from modules.crm.service.crm_module_admin import CrmModuleAdminService
 from modules.crm.service.crm_scope_validator import CrmScopeValidator
 from modules.crm.service.document_number_service import DocumentNumberService
 from modules.crm.service.engines import (
@@ -76,6 +77,7 @@ class LeadService:
         self._activity_engine = LeadActivityEngine()
         self._integration = CRMIntegrationService(db)
         self._audit = AuditService(db)
+        self._crm_admin = CrmModuleAdminService(db)
 
     def list(
         self,
@@ -355,6 +357,43 @@ class LeadService:
         if row is None:
             raise NotFoundException("Lead not found")
         return row
+
+    def update_sales_lead(self, ctx: TenantContext, lead_id: UUID, **fields):
+        version = fields.pop("version", None)
+        lead = self.get(ctx, lead_id)
+        if lead.company_account_id is None:
+            raise ConflictException("Only sales-process leads can be updated with this endpoint")
+        if lead.blueprint_state != "open":
+            raise ConflictException("Only open sales leads can be edited")
+        sales_blueprint_engine.assert_not_locked(lead)
+        if version is not None and int(lead.version or 1) != int(version):
+            raise ConflictException("Lead was modified by another user; refresh and try again")
+        row = self._repo.update(ctx, lead_id, **fields)
+        if row is None:
+            raise NotFoundException("Lead not found")
+        self._audit.log_entity_change(
+            tenant_id=ctx.tenant_id,
+            entity_name="crm_lead",
+            entity_id=row.id,
+            operation="update",
+            performed_by=ctx.user_id,
+        )
+        return row
+
+    def delete(self, ctx: TenantContext, lead_id: UUID) -> None:
+        self._crm_admin.ensure_admin(ctx)
+        lead = self.get(ctx, lead_id)
+        if lead.locked:
+            raise ConflictException("Lead is locked pending approval")
+        if not self._repo.soft_delete(ctx, lead_id):
+            raise NotFoundException("Lead not found")
+        self._audit.log_entity_change(
+            tenant_id=ctx.tenant_id,
+            entity_name="crm_lead",
+            entity_id=lead_id,
+            operation="delete",
+            performed_by=ctx.user_id,
+        )
 
     def assign(
         self,

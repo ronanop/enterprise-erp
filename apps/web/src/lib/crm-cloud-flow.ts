@@ -16,13 +16,23 @@ const CLOUD_CONSUMPTION_VARIANTS = new Set([
 
 export function cloudVariantFromLead(lead: SalesLead | null | undefined): string | null {
   if (!lead || (lead.product_type ?? "").trim().toLowerCase() !== "cloud") return null;
+  const category = (lead.sub_product_category ?? "").trim().toLowerCase();
+
+  if (category === "migration" || category.includes("migration")) return "migration";
+  if (category.includes("billing shift") || category.startsWith("billing shift")) return "billing_shift";
+  if (category.includes("finops")) return "billing_shift";
+  if (category.includes("poc") || category.includes("ola") || category.includes("map")) return "poc_assessment";
+
   const sub = [lead.sub_product_category, lead.sub_product, lead.sub_product_other]
     .filter(Boolean)
     .join(" ")
     .toLowerCase();
   if (sub.includes("billing") && sub.includes("shift")) return "billing_shift";
   if (sub.includes("migration")) return "migration";
-  if (sub.includes("poc") || sub.includes("assessment")) return "poc_assessment";
+  if (sub.includes("poc") || sub.includes("assessment") || sub.includes("ola") || sub.includes(" map")) {
+    return "poc_assessment";
+  }
+  if (sub.includes("finops")) return "billing_shift";
   return "cloud_other";
 }
 

@@ -2,7 +2,8 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, ClipboardCheck, Pencil, RefreshCw, Trophy } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { ArrowLeft, ClipboardCheck, RefreshCw, Trophy } from "lucide-react";
 
 import {
   CrmDetailGrid,
@@ -14,6 +15,8 @@ import {
 import { ApprovalBanner } from "@/components/crm/sales/approval-banner";
 import { CrmEntityRejectionAlert } from "@/components/crm/sales/crm-approval-inbox-listener";
 import { BlueprintActions, BlueprintStateBadge } from "@/components/crm/sales/blueprint-actions";
+import { CrmAdminDeleteMenu } from "@/components/crm/sales/crm-admin-delete-menu";
+import { CrmDetailEditLink } from "@/components/crm/sales/crm-detail-edit-link";
 import {
   OvfOrderLinesSection,
   customerRowsFromOvfLines,
@@ -30,6 +33,7 @@ import { ApiClientError } from "@/services/api-client";
 import { parseLeadDistributorNames } from "@/lib/crm/lead-distributor-options";
 import {
   applyOvfAction,
+  deleteOvf,
   formatInr,
   formatInrPrecise,
   getCompany,
@@ -61,6 +65,7 @@ function textOrDash(value: string | number | null | undefined): string {
 }
 
 export function OvfDetailPage({ ovfId }: { ovfId: string }) {
+  const router = useRouter();
   const [ovf, setOvf] = useState<Ovf | null>(null);
   const [blueprint, setBlueprint] = useState<BlueprintState | null>(null);
   const [quote, setQuote] = useState<Quote | null>(null);
@@ -272,13 +277,18 @@ export function OvfDetailPage({ ovfId }: { ovfId: string }) {
           <div className="flex shrink-0 flex-wrap items-center gap-2">
             <BlueprintStateBadge state={blueprint.state} />
             {!ovf.locked && !ovf.deal_won && !ovf.shared_to_scm ? (
-              <Link
-                href={`/crm/ovf/${ovf.id}/edit`}
-                className="inline-flex h-7 cursor-pointer items-center gap-1.5 rounded-lg border border-border bg-background px-2.5 text-[0.8rem] font-medium text-foreground shadow-sm transition-colors duration-200 hover:bg-muted/60"
-              >
-                <Pencil className="size-3.5" /> Edit
-              </Link>
+              <CrmDetailEditLink href={`/crm/ovf/${ovf.id}/edit`} />
             ) : null}
+            <CrmAdminDeleteMenu
+              entityLabel="OVF"
+              entityName={ovf.ovf_no}
+              onDelete={() => deleteOvf(ovf.id)}
+              onDeleted={() =>
+                router.push(
+                  opportunity ? `/crm/opportunities/${opportunity.id}` : "/crm/ovf",
+                )
+              }
+            />
           </div>
         }
       />
