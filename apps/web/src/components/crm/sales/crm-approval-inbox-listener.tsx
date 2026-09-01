@@ -1,16 +1,20 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { AlertTriangle, X } from "lucide-react";
 
 import { listCrmApprovalInbox, type CrmApprovalInboxItem } from "@/services/sales-crm-service";
+import { formatNotificationDateTime } from "@/lib/format-notification-datetime";
 import { cn } from "@/lib/utils";
 import {
-  dismissCrmApproval,
+  CRM_APPROVAL_SURFACE_DISMISS_EVENT,
+  dedupeCrmRejectionsByEntity,
+  dismissCrmApprovalSurface,
+  isCrmApprovalSurfaceDismissed,
   normalizeNotificationText,
-  readDismissedCrmApprovalIds,
+  type CrmApprovalSurfaceDismissDetail,
 } from "@/lib/crm-notification-state";
 
 function entityHref(entityType: string, entityId: string): string {
@@ -51,9 +55,20 @@ function isSameEntity(
   return entity.type === open.type && entity.id === open.id;
 }
 
+function matchesDismissedEntity(
+  row: CrmApprovalInboxItem,
+  detail: CrmApprovalSurfaceDismissDetail,
+): boolean {
+  if (row.id === detail.id) return true;
+  if (!detail.entityType || !detail.entityId) return false;
+  const entity = alertEntity(row);
+  return entity.type === detail.entityType && entity.id === detail.entityId;
+}
+
 export function CrmRejectionAlertCard({
   title,
   body,
+  createdAt,
   href,
   onDismiss,
   showOpenRecord = true,
@@ -61,6 +76,7 @@ export function CrmRejectionAlertCard({
 }: {
   title: string;
   body: string;
+  createdAt?: string | null;
   href?: string;
   onDismiss?: () => void;
   showOpenRecord?: boolean;
@@ -79,6 +95,9 @@ export function CrmRejectionAlertCard({
         <span className="min-w-0 wrap-break-word">
           <span className="font-medium">{title}</span>
           <span className="mt-0.5 block text-xs text-amber-900/90">{body}</span>
+          <span className="mt-1 block text-[11px] text-amber-900/70">
+            {formatNotificationDateTime(createdAt)}
+          </span>
         </span>
       </span>
       <span className="flex shrink-0 items-center gap-1.5">
@@ -116,20 +135,22 @@ export function CrmEntityRejectionAlert({
 }) {
   const [alert, setAlert] = useState<CrmApprovalInboxItem | null>(null);
   const [dismissed, setDismissed] = useState(false);
+  const inboxRef = useRef<CrmApprovalInboxItem[]>([]);
 
   useEffect(() => {
     let cancelled = false;
     void (async () => {
       try {
         const rows = await listCrmApprovalInbox();
-        const match = rows.find((row) => {
-          if (row.event_type !== "crm.approval.rejected") return false;
+        inboxRef.current = rows;
+        const rejections = rows.filter((row) => row.event_type === "crm.approval.rejected" && !row.read_at);
+        const match = dedupeCrmRejectionsByEntity(rejections).find((row) => {
           const entity = alertEntity(row);
           return entity.type === entityType && entity.id === entityId;
         });
         if (!cancelled) {
-          const dismissed = match ? readDismissedCrmApprovalIds().has(match.id) : false;
-          setAlert(match && !dismissed ? match : null);
+          const hidden = match ? isCrmApprovalSurfaceDismissed(match) : false;
+          setAlert(match && !hidden ? match : null);
         }
       } catch {
         if (!cancelled) setAlert(null);
@@ -138,6 +159,19 @@ export function CrmEntityRejectionAlert({
     return () => {
       cancelled = true;
     };
+  }, [entityType, entityId]);
+
+  useEffect(() => {
+    const onSurfaceDismiss = (event: Event) => {
+      const detail = (event as CustomEvent<CrmApprovalSurfaceDismissDetail>).detail;
+      if (!detail) return;
+      if (detail.entityType === entityType && detail.entityId === entityId) {
+        setDismissed(true);
+        setAlert(null);
+      }
+    };
+    window.addEventListener(CRM_APPROVAL_SURFACE_DISMISS_EVENT, onSurfaceDismiss);
+    return () => window.removeEventListener(CRM_APPROVAL_SURFACE_DISMISS_EVENT, onSurfaceDismiss);
   }, [entityType, entityId]);
 
   if (dismissed || !alert) return null;
@@ -149,10 +183,12 @@ export function CrmEntityRejectionAlert({
     <CrmRejectionAlertCard
       title={title}
       body={body}
+      createdAt={alert.created_at}
       showOpenRecord={false}
       onDismiss={() => {
-        dismissCrmApproval(alert.id);
+        dismissCrmApprovalSurface(alert, inboxRef.current);
         setDismissed(true);
+        setAlert(null);
       }}
     />
   );
@@ -161,23 +197,22 @@ export function CrmEntityRejectionAlert({
 export function CrmApprovalInboxListener() {
   const pathname = usePathname() ?? "";
   const [alerts, setAlerts] = useState<CrmApprovalInboxItem[]>([]);
+  const inboxRef = useRef<CrmApprovalInboxItem[]>([]);
   const openEntity = useMemo(() => parseOpenEntity(pathname), [pathname]);
   const companyRail = hasCompanySecondaryRail(pathname);
 
   const poll = useCallback(async () => {
     try {
       const rows = await listCrmApprovalInbox();
-      const seen = readDismissedCrmApprovalIds();
+      inboxRef.current = rows;
       const open = parseOpenEntity(window.location.pathname);
       const rejections = rows.filter((row) => {
-        if (row.event_type !== "crm.approval.rejected" || seen.has(row.id)) return false;
-        // Matching open record is handled by CrmEntityRejectionAlert.
-        if (isSameEntity(row, open)) {
-          return false;
-        }
+        if (row.event_type !== "crm.approval.rejected" || row.read_at) return false;
+        if (isCrmApprovalSurfaceDismissed(row)) return false;
+        if (isSameEntity(row, open)) return false;
         return true;
       });
-      setAlerts(rejections.slice(0, 3));
+      setAlerts(dedupeCrmRejectionsByEntity(rejections).slice(0, 3));
     } catch {
       /* ignore polling errors */
     }
@@ -188,6 +223,16 @@ export function CrmApprovalInboxListener() {
     const timer = window.setInterval(() => void poll(), 20_000);
     return () => window.clearInterval(timer);
   }, [poll]);
+
+  useEffect(() => {
+    const onSurfaceDismiss = (event: Event) => {
+      const detail = (event as CustomEvent<CrmApprovalSurfaceDismissDetail>).detail;
+      if (!detail) return;
+      setAlerts((prev) => prev.filter((row) => !matchesDismissedEntity(row, detail)));
+    };
+    window.addEventListener(CRM_APPROVAL_SURFACE_DISMISS_EVENT, onSurfaceDismiss);
+    return () => window.removeEventListener(CRM_APPROVAL_SURFACE_DISMISS_EVENT, onSurfaceDismiss);
+  }, []);
 
   // Drop floating alerts for the entity currently on screen (inline banner owns them).
   useEffect(() => {
@@ -205,7 +250,6 @@ export function CrmApprovalInboxListener() {
     <div
       className={cn(
         "min-w-0 space-y-2",
-        // Clear the fixed company/opportunity secondary rail (220px).
         companyRail && "pl-51 sm:pl-49 lg:pl-47",
       )}
     >
@@ -219,9 +263,10 @@ export function CrmApprovalInboxListener() {
             key={row.id}
             title={title}
             body={body}
+            createdAt={row.created_at}
             href={href}
             onDismiss={() => {
-              dismissCrmApproval(row.id);
+              dismissCrmApprovalSurface(row, inboxRef.current);
               setAlerts((prev) => prev.filter((item) => item.id !== row.id));
             }}
           />

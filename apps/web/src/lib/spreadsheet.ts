@@ -172,6 +172,10 @@ export function matrixToCsv(matrix: string[][]): string {
 }
 
 /** Parse CSV or XLSX (first sheet) into a string matrix (including header row). */
+export async function parseSpreadsheetMatrix(file: File): Promise<string[][]> {
+  return parseSpreadsheetFileAsMatrix(file);
+}
+
 export async function parseSpreadsheetFileAsMatrix(file: File): Promise<string[][]> {
   const name = file.name.toLowerCase();
 

@@ -167,6 +167,7 @@ class NotificationRepository(TenantScopedRepository):
                 "event_type": e.event_type,
                 "status": e.status,
                 "created_at": e.created_at.isoformat() if e.created_at else None,
+                "read_at": e.read_at.isoformat() if e.read_at else None,
                 "payload_json": e.payload_json,
             }
             for e in rows

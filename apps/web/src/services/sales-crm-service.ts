@@ -1139,6 +1139,7 @@ export type CrmApprovalInboxItem = {
   event_type: string;
   status: string;
   created_at: string | null;
+  read_at?: string | null;
   payload_json: Record<string, unknown> | null;
 };
 

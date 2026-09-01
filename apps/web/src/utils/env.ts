@@ -113,4 +113,23 @@ export const env = {
   demoPassword: process.env.NEXT_PUBLIC_DEMO_PASSWORD || "Secure1!",
   /** ElevenLabs Convai widget (authenticated app shell only). */
   elevenlabsAgentId: process.env.NEXT_PUBLIC_ELEVENLABS_AGENT_ID ?? "",
+  /** Optional public origin for invitation links (e.g. https://hr.example.com). */
+  portalOrigin: (process.env.NEXT_PUBLIC_PORTAL_ORIGIN || "").replace(/\/$/, ""),
+  /** Dev LAN origin injected by next.config (e.g. http://192.168.1.10:3000). */
+  lanOrigin: (process.env.NEXT_PUBLIC_LAN_ORIGIN || "").replace(/\/$/, ""),
 };
+
+function isLoopbackHost(hostname: string): boolean {
+  return hostname === "localhost" || hostname === "127.0.0.1" || hostname === "[::1]" || hostname === "::1";
+}
+
+/**
+ * Origin for copied / emailed onboarding links.
+ * When HR is on localhost, swap in the LAN IP so a phone on the same network can open it.
+ */
+export function getShareableOrigin(): string {
+  if (env.portalOrigin) return env.portalOrigin;
+  if (typeof window === "undefined") return env.lanOrigin;
+  if (isLoopbackHost(window.location.hostname) && env.lanOrigin) return env.lanOrigin;
+  return window.location.origin;
+}

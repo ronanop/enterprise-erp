@@ -15,12 +15,20 @@ import { Bell, CheckCheck, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { useAuthUser } from "@/hooks/use-auth-user";
+import { formatNotificationDateTime } from "@/lib/format-notification-datetime";
 import {
-  dismissCrmApproval,
+  CRM_APPROVAL_SURFACE_DISMISS_EVENT,
+  dedupeCrmRejectionsByEntity,
+  dismissCrmApprovalSurface,
+  isCrmApprovalSurfaceDismissed,
+  markCrmApprovalPopupSeen,
   normalizeNotificationText,
-  readDismissedCrmApprovalIds,
+  readCrmApprovalPopupSeenIds,
+  readSurfaceDismissedCrmApprovalIds,
+  type CrmApprovalSurfaceDismissDetail,
 } from "@/lib/crm-notification-state";
 import { cn } from "@/lib/utils";
+import { markNotificationRead } from "@/services/notification-inbox-service";
 import {
   listCrmApprovalInbox,
   type CrmApprovalInboxItem,
@@ -32,7 +40,6 @@ import {
 } from "@/services/projects-portal-service";
 
 const PROJECT_SEEN_POPUP_KEY = "prj_stage_save_alert_popup_seen";
-const CRM_SEEN_POPUP_KEY = "crm_approval_popup_seen";
 const POLL_MS = 20_000;
 const PANEL_WIDTH = 352;
 const PANEL_GAP = 8;
@@ -42,6 +49,9 @@ type NotificationMode = "projects" | "crm" | "none";
 
 type CrmBellItem = {
   id: string;
+  event_type: string;
+  entity_type: string;
+  entity_id: string;
   title: string;
   body: string;
   href: string;
@@ -71,16 +81,7 @@ function writeIdSet(key: string, ids: Set<string>) {
 }
 
 function formatSavedAt(value: string | null | undefined): string {
-  if (!value) return "—";
-  const d = new Date(value);
-  if (Number.isNaN(d.getTime())) return value;
-  return d.toLocaleString(undefined, {
-    year: "numeric",
-    month: "short",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+  return formatNotificationDateTime(value);
 }
 
 function crmEntityHref(entityType: string, entityId: string): string {
@@ -96,11 +97,14 @@ function mapCrmInboxItem(row: CrmApprovalInboxItem): CrmBellItem {
   const entityId = String(payload.entity_id ?? "");
   return {
     id: row.id,
+    event_type: row.event_type,
+    entity_type: entityType,
+    entity_id: entityId,
     title: normalizeNotificationText(String(payload.title ?? "CRM approval update")),
     body: normalizeNotificationText(String(payload.body ?? "Open the related record to review.")),
     href: crmEntityHref(entityType, entityId),
     created_at: row.created_at,
-    unread: true,
+    unread: !row.read_at,
   };
 }
 
@@ -172,6 +176,7 @@ export function AppTopbarNotifications() {
   const triggerRef = useRef<HTMLDivElement>(null);
   const inboxRef = useRef<HTMLDivElement>(null);
   const toastRef = useRef<HTMLDivElement>(null);
+  const crmInboxRef = useRef<CrmApprovalInboxItem[]>([]);
 
   const projectsEnabled = mode === "projects" && signedIn && projectModuleAdmin;
   const crmEnabled = mode === "crm" && signedIn;
@@ -236,18 +241,37 @@ export function AppTopbarNotifications() {
     }
     try {
       const rows = await listCrmApprovalInbox();
-      const dismissed = readDismissedCrmApprovalIds();
-      const mapped = rows
-        .filter((row) => !dismissed.has(row.id))
-        .slice(0, 40)
-        .map(mapCrmInboxItem);
+      crmInboxRef.current = rows;
+      const mapped = rows.slice(0, 40).map(mapCrmInboxItem);
       setCrmAlerts(mapped);
-      const popupSeen = readIdSet(CRM_SEEN_POPUP_KEY);
-      const fresh = mapped.filter((row) => !popupSeen.has(`crm:${row.id}`));
+      setCrmPopups((prev) =>
+        prev.filter((row) => {
+          const inboxRow = rows.find((candidate) => candidate.id === row.id);
+          return inboxRow ? !isCrmApprovalSurfaceDismissed(inboxRow) : false;
+        }),
+      );
+
+      const popupSeen = readCrmApprovalPopupSeenIds();
+      const rejectionRows = dedupeCrmRejectionsByEntity(
+        rows.filter(
+          (row) =>
+            row.event_type === "crm.approval.rejected" &&
+            !row.read_at &&
+            !isCrmApprovalSurfaceDismissed(row),
+        ),
+      );
+      const fresh = rejectionRows
+        .map(mapCrmInboxItem)
+        .filter((row) => !popupSeen.has(`crm:${row.id}`));
       if (fresh.length > 0) {
-        for (const row of fresh) popupSeen.add(`crm:${row.id}`);
-        writeIdSet(CRM_SEEN_POPUP_KEY, popupSeen);
-        setCrmPopups(fresh.slice(0, 3));
+        markCrmApprovalPopupSeen(fresh.map((row) => `crm:${row.id}`));
+        setCrmPopups((prev) => {
+          const surfaceDismissed = readSurfaceDismissedCrmApprovalIds();
+          const kept = prev.filter((row) => !surfaceDismissed.has(row.id));
+          const seenIds = new Set(kept.map((row) => row.id));
+          const added = fresh.filter((row) => !seenIds.has(row.id));
+          return [...kept, ...added].slice(0, 3);
+        });
       }
     } catch {
       /* ignore polling errors */
@@ -269,6 +293,42 @@ export function AppTopbarNotifications() {
       return () => window.clearInterval(timer);
     }
   }, [authLoading, mode, projectsEnabled, crmEnabled, pollProjects, pollCrm]);
+
+  useEffect(() => {
+    const onSurfaceDismiss = (event: Event) => {
+      const detail = (event as CustomEvent<CrmApprovalSurfaceDismissDetail>).detail;
+      if (!detail) return;
+      setCrmPopups((prev) =>
+        prev.filter((row) => {
+          if (row.id === detail.id) return false;
+          if (detail.entityType && detail.entityId) {
+            return !(
+              row.entity_type === detail.entityType && row.entity_id === detail.entityId
+            );
+          }
+          return true;
+        }),
+      );
+    };
+    window.addEventListener(CRM_APPROVAL_SURFACE_DISMISS_EVENT, onSurfaceDismiss);
+    return () => window.removeEventListener(CRM_APPROVAL_SURFACE_DISMISS_EVENT, onSurfaceDismiss);
+  }, []);
+
+  const onDismissCrmSurface = useCallback((item: CrmBellItem) => {
+    const row = crmInboxRef.current.find((candidate) => candidate.id === item.id);
+    if (row) {
+      dismissCrmApprovalSurface(row, crmInboxRef.current);
+    } else {
+      dismissCrmApprovalSurface({
+        id: item.id,
+        event_type: item.event_type,
+        status: "",
+        created_at: item.created_at,
+        payload_json: null,
+      });
+    }
+    setCrmPopups((prev) => prev.filter((row) => row.id !== item.id));
+  }, []);
 
   useLayoutEffect(() => {
     if (!open && popupCount === 0) {
@@ -325,23 +385,42 @@ export function AppTopbarNotifications() {
     }
   }, []);
 
-  const onMarkCrmRead = useCallback((id: string) => {
-    dismissCrmApproval(id);
-    setCrmAlerts((prev) => prev.filter((row) => row.id !== id));
-    setCrmPopups((prev) => prev.filter((row) => row.id !== id));
-  }, []);
-
   const onMarkAllProjectRead = useCallback(async () => {
     const unread = projectAlerts.filter((a) => a.unread);
     await Promise.all(unread.map((row) => onMarkProjectRead(row.id)));
   }, [projectAlerts, onMarkProjectRead]);
 
-  const onMarkAllCrmRead = useCallback(() => {
-    for (const row of crmAlerts) {
-      dismissCrmApproval(row.id);
+  const onMarkCrmRead = useCallback(async (id: string) => {
+    const row = crmInboxRef.current.find((candidate) => candidate.id === id);
+    if (row) dismissCrmApprovalSurface(row, crmInboxRef.current);
+    setCrmPopups((prev) => prev.filter((row) => row.id !== id));
+    setCrmAlerts((prev) =>
+      prev.map((row) => (row.id === id ? { ...row, unread: false } : row)),
+    );
+    try {
+      await markNotificationRead(id);
+    } catch {
+      /* Keep optimistic read state; next poll will reconcile. */
     }
-    setCrmAlerts([]);
+  }, []);
+
+  const onMarkAllCrmRead = useCallback(async () => {
+    const unread = crmAlerts.filter((a) => a.unread);
+    for (const item of unread) {
+      const row = crmInboxRef.current.find((candidate) => candidate.id === item.id);
+      if (row) dismissCrmApprovalSurface(row, crmInboxRef.current);
+    }
     setCrmPopups([]);
+    setCrmAlerts((prev) => prev.map((row) => ({ ...row, unread: false })));
+    await Promise.all(
+      unread.map(async (row) => {
+        try {
+          await markNotificationRead(row.id);
+        } catch {
+          /* ignore per-item failures */
+        }
+      }),
+    );
   }, [crmAlerts]);
 
   if (!enabled) {
@@ -420,7 +499,7 @@ export function AppTopbarNotifications() {
                         className="inline-flex h-7 cursor-pointer items-center rounded-lg border border-border/80 bg-background px-2.5 text-xs font-medium transition-colors duration-200 hover:bg-muted"
                         onClick={() => {
                           setOpen(false);
-                          if (item.unread) onMarkCrmRead(item.id);
+                          onDismissCrmSurface(item);
                         }}
                       >
                         Open record
@@ -429,7 +508,7 @@ export function AppTopbarNotifications() {
                         <button
                           type="button"
                           className="inline-flex h-7 cursor-pointer items-center rounded-lg px-2 text-xs font-medium text-muted-foreground transition-colors duration-200 hover:bg-muted hover:text-foreground"
-                          onClick={() => onMarkCrmRead(item.id)}
+                          onClick={() => void onMarkCrmRead(item.id)}
                         >
                           Mark read
                         </button>
@@ -507,10 +586,7 @@ export function AppTopbarNotifications() {
                     type="button"
                     aria-label="Dismiss notification"
                     className="inline-flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-md text-muted-foreground transition-colors duration-200 hover:bg-muted hover:text-foreground"
-                    onClick={() => {
-                      setCrmPopups((prev) => prev.filter((row) => row.id !== item.id));
-                      if (item.unread) onMarkCrmRead(item.id);
-                    }}
+                    onClick={() => onDismissCrmSurface(item)}
                   >
                     <X className="size-3.5" />
                   </button>
@@ -519,10 +595,7 @@ export function AppTopbarNotifications() {
                   <Link
                     href={item.href}
                     className="inline-flex h-7 cursor-pointer items-center rounded-lg bg-primary px-2.5 text-xs font-medium text-primary-foreground transition-opacity duration-200 hover:opacity-90"
-                    onClick={() => {
-                      setCrmPopups((prev) => prev.filter((row) => row.id !== item.id));
-                      if (item.unread) onMarkCrmRead(item.id);
-                    }}
+                    onClick={() => onDismissCrmSurface(item)}
                   >
                     Open record
                   </Link>

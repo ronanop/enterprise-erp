@@ -142,6 +142,51 @@ def require_permission(permission_code: str) -> Callable:
     return _checker
 
 
+def require_any_permission(*permission_codes: str) -> Callable:
+    """Allow access if the user has at least one of the given permissions."""
+
+    def _checker(
+        ctx: Annotated[TenantContext, Depends(get_tenant_context)],
+        db: Annotated[Session, Depends(get_db)],
+    ) -> TenantContext:
+        from sqlalchemy import select
+
+        from modules.foundation.domain.erp_modules import (
+            module_key_for_permission_code,
+            resolve_erp_module_key,
+        )
+        from modules.foundation.models.security import SecPermission
+        from modules.foundation.repository.user_module_repository import UserModuleRepository
+
+        rbac = RBACService(db)
+        if ctx.user_type in {"super_admin", "tenant_admin"}:
+            return ctx
+
+        for permission_code in permission_codes:
+            if rbac.has_permission(ctx.user_id, ctx.tenant_id, permission_code):
+                return ctx
+
+            module_key = module_key_for_permission_code(permission_code)
+            if module_key is None:
+                perm = db.scalar(
+                    select(SecPermission).where(SecPermission.permission_code == permission_code)
+                )
+                if perm is not None:
+                    module_key = resolve_erp_module_key(perm.module)
+
+            if module_key is not None:
+                assignment = UserModuleRepository(db).get_assignment(
+                    ctx.tenant_id, ctx.user_id, module_key
+                )
+                if assignment is not None:
+                    return ctx
+
+        codes = ", ".join(permission_codes)
+        raise ForbiddenException(f"Missing permission: one of {codes}")
+
+    return _checker
+
+
 def get_client_ip(request: Request) -> str | None:
     forwarded = request.headers.get("X-Forwarded-For")
     if forwarded:

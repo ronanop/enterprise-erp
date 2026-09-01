@@ -176,6 +176,141 @@ export async function apiClient<T>(
   return payload as ApiResponse<T>;
 }
 
+async function parseErrorMessage(response: Response): Promise<string> {
+  try {
+    const payload = (await response.json()) as ErrorResponse;
+    return payload.message ?? "API request failed";
+  } catch {
+    return "API request failed";
+  }
+}
+
+/** Multipart upload. Do not set Content-Type — the browser must supply the boundary. */
+export async function apiUpload<T>(
+  path: string,
+  formData: FormData,
+  options: { _retried?: boolean; _apiFailover?: boolean } = {},
+): Promise<ApiResponse<T>> {
+  const token = getAccessToken();
+  await ensureApiBase();
+  let response: Response;
+  try {
+    response = await fetch(buildUrl(path), {
+      method: "POST",
+      headers: {
+        Accept: "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: formData,
+      cache: "no-store",
+    });
+  } catch {
+    if (!options._apiFailover) {
+      await failoverApiBase();
+      return apiUpload<T>(path, formData, { ...options, _apiFailover: true });
+    }
+    throw new ApiClientError(
+      "Cannot reach the API. Confirm the backend is running on port 8000.",
+      0,
+    );
+  }
+
+  if (response.status === 401 && !options._retried) {
+    const refreshed = await tryRefreshAccessToken();
+    if (refreshed) {
+      return apiUpload<T>(path, formData, { _retried: true });
+    }
+    clearTokens();
+  }
+
+  let payload: ApiResponse<T> | ErrorResponse;
+  try {
+    payload = (await response.json()) as ApiResponse<T> | ErrorResponse;
+  } catch {
+    throw new ApiClientError("Invalid API response", response.status);
+  }
+
+  if (!response.ok || payload.success === false) {
+    const errorPayload = payload as ErrorResponse;
+    throw new ApiClientError(
+      errorPayload.message ?? "API request failed",
+      response.status,
+      errorPayload.errors ?? [],
+    );
+  }
+  return payload as ApiResponse<T>;
+}
+
+export type BlobFetchResult =
+  | { kind: "legacy"; externalUrl: string }
+  | { kind: "file"; blob: Blob; contentType: string; filename: string };
+
+export async function apiGetBlob(
+  path: string,
+  query?: RequestOptions["query"],
+  options: { _retried?: boolean; _apiFailover?: boolean } = {},
+): Promise<BlobFetchResult> {
+  const token = getAccessToken();
+  await ensureApiBase();
+  let response: Response;
+  try {
+    response = await fetch(buildUrl(path, query), {
+      method: "GET",
+      headers: {
+        Accept: "application/pdf,image/jpeg,image/png,application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      cache: "no-store",
+    });
+  } catch {
+    if (!options._apiFailover) {
+      await failoverApiBase();
+      return apiGetBlob(path, query, { ...options, _apiFailover: true });
+    }
+    throw new ApiClientError(
+      "Cannot reach the API. Confirm the backend is running on port 8000.",
+      0,
+    );
+  }
+
+  if (response.status === 401 && !options._retried) {
+    const refreshed = await tryRefreshAccessToken();
+    if (refreshed) {
+      return apiGetBlob(path, query, { _retried: true });
+    }
+    clearTokens();
+    throw new ApiClientError(await parseErrorMessage(response), 401);
+  }
+
+  if (!response.ok) {
+    throw new ApiClientError(await parseErrorMessage(response), response.status);
+  }
+
+  const contentType = (response.headers.get("content-type") || "").toLowerCase();
+  if (contentType.includes("application/json")) {
+    const payload = (await response.json()) as ApiResponse<{
+      is_legacy?: boolean;
+      external_url?: string;
+    }>;
+    const url = payload.data?.external_url;
+    if (payload.data?.is_legacy && url) {
+      return { kind: "legacy", externalUrl: url };
+    }
+    throw new ApiClientError(payload.message ?? "Document is not available for preview", 400);
+  }
+
+  const blob = await response.blob();
+  const disposition = response.headers.get("content-disposition") || "";
+  const match = /filename\*=UTF-8''([^;]+)|filename="([^"]+)"/i.exec(disposition);
+  const filename = decodeURIComponent(match?.[1] || match?.[2] || "document");
+  return {
+    kind: "file",
+    blob,
+    contentType: response.headers.get("content-type") || blob.type || "application/octet-stream",
+    filename,
+  };
+}
+
 export const healthService = {
   check: () => apiClient<Record<string, string>>("/health", { auth: false }),
 };
