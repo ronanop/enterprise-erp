@@ -11,6 +11,7 @@ import { marketingCard, marketingCardInteractive } from "@/lib/marketing-ui";
 import { cn } from "@/lib/utils";
 import {
   formatMarketingStatus,
+  marketingContentStatusForDisplay,
   type MarketingContentItem,
   type MarketingPipelineCampaign,
 } from "@/services/marketing-service";
@@ -169,7 +170,7 @@ export function MarketingPipelineStageTable({
                     </td>
                     <td className="px-4 py-3">
                       <div className="space-y-1.5">
-                        <FinanceStatusBadge status={item.status} />
+                        <FinanceStatusBadge status={marketingContentStatusForDisplay(item.status)} />
                         {item.posting_report_status && item.posting_report_status !== "pending" ? (
                           <p className="text-[11px] text-muted-foreground">
                             Report: {formatMarketingStatus(item.posting_report_status)}

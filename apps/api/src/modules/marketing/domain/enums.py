@@ -85,6 +85,7 @@ class AssignmentRole(str, Enum):
     CAMPAIGN_HANDLER = "campaign_handler"
     LINKEDIN_HANDLER = "linkedin_handler"
     VIDEO_EDITOR = "video_editor"
+    BUSINESS_OWNER = "business_owner"
     HEAD = "head"
 
 
@@ -93,6 +94,7 @@ class VerifierRole(str, Enum):
     CAMPAIGN_HANDLER = "campaign_handler"
     LINKEDIN_HANDLER = "linkedin_handler"
     VIDEO_EDITOR = "video_editor"
+    BUSINESS_OWNER = "business_owner"
     PUBLISHER = "publisher"
     HEAD = "head"
 
@@ -100,6 +102,7 @@ class VerifierRole(str, Enum):
 class WorkflowStage(str, Enum):
     DRAFT = "draft"
     CAMPAIGN_HANDLER_REVIEW = "campaign_handler_review"
+    BUSINESS_OWNER_REVIEW = "business_owner_review"
     LINKEDIN_HANDLER_REVIEW = "linkedin_handler_review"
     LINKEDIN_FINAL_DRAFT_HEAD_REVIEW = "linkedin_final_draft_head_review"
     VIDEO_EDITOR_REVIEW = "video_editor_review"

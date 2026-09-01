@@ -12,6 +12,8 @@ export type CurrentUserProfile = {
   displayName: string;
   designation: string | null;
   roleName: string | null;
+  roleNames: string[];
+  roleCodes: string[];
   userType: string | null;
   permissions: string[];
   initials: string;
@@ -28,6 +30,7 @@ type MeResponse = {
   designation?: string | null;
   role_name?: string | null;
   role_names?: string[];
+  role_codes?: string[];
 };
 
 function initialsFromName(name: string): string {
@@ -56,6 +59,8 @@ function normalizeProfile(data: MeResponse | UserProfile | null): CurrentUserPro
     ("role_name" in data ? data.role_name : null) ??
     ("role_names" in data && data.role_names?.length ? data.role_names[0] : null) ??
     demoRoleForEmail(email);
+  const roleNames = ("role_names" in data ? data.role_names : []) ?? [];
+  const roleCodes = ("role_codes" in data ? data.role_codes : []) ?? [];
   const permissions = ("permissions" in data ? data.permissions : (data as UserProfile).permissions) ?? [];
   return {
     id: nested.id ? String(nested.id) : null,
@@ -63,6 +68,8 @@ function normalizeProfile(data: MeResponse | UserProfile | null): CurrentUserPro
     displayName,
     designation: designation ? String(designation) : null,
     roleName: roleName ? String(roleName) : null,
+    roleNames: roleNames.map(String),
+    roleCodes: roleCodes.map(String),
     userType: nested.user_type ? String(nested.user_type) : null,
     permissions,
     initials: initialsFromName(displayName),

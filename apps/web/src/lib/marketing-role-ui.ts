@@ -2,6 +2,7 @@ import type { MarketingNavAccessInput } from "@/lib/marketing-nav-access";
 
 export type MarketingPersona =
   | "head"
+  | "business_owner"
   | "linkedin_handler"
   | "campaign_handler"
   | "creator"
@@ -16,9 +17,11 @@ export function detectMarketingPersona(
     canAssetCreate?: boolean;
     canCampaignUpdate?: boolean;
     canCreate?: boolean;
+    canApproveBusiness?: boolean;
   },
 ): MarketingPersona {
   if (perms.canApprove) return "head";
+  if (perms.canApproveBusiness && !perms.canApprove) return "business_owner";
   if (perms.canVerify && perms.canChannelUpdate && !perms.canCampaignUpdate) return "linkedin_handler";
   if (perms.canVerify && perms.canCampaignUpdate) return "campaign_handler";
   if (perms.canPublish && !perms.canVerify) return "publisher";
@@ -79,6 +82,7 @@ const NAV_LABELS: Partial<Record<MarketingPersona, Partial<Record<string, string
 const WORKSPACE_LABELS: Record<MarketingPersona, { section: string; title: string }> = {
   linkedin_handler: { section: "LinkedIn", title: "Post workspace" },
   head: { section: "Marketing", title: "Admin hub" },
+  business_owner: { section: "Marketing", title: "Business owner review" },
   campaign_handler: { section: "Marketing", title: "Campaign workspace" },
   creator: { section: "Marketing", title: "Content workspace" },
   publisher: { section: "Marketing", title: "Publishing hub" },

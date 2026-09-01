@@ -2,27 +2,57 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { AlertTriangle, Bell, Clock, RefreshCw, Shield } from "lucide-react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { AlertTriangle, Clock, RefreshCw, Shield, X } from "lucide-react";
 
 import { FinanceStatusBadge } from "@/components/finance/finance-status-badge";
 import { ResourceListView } from "@/components/module/resource-list-view";
 import { PageHeader } from "@/components/layout/page-header";
 import { Button } from "@/components/ui/button";
+import { useUserPermissions } from "@/hooks/use-user-permissions";
+import { shouldScopeServiceToMine } from "@/lib/service-engineer-access";
 import {
   ApiClientError,
   formatDurationMinutes,
-  listServiceHeadNotifications,
   listSlaTracker,
-  type ServiceNotification,
   type SlaTrackerItem,
 } from "@/services/service-request-ticket-service";
 
 type Tab = "active" | "policies";
 
+const SLA_FILTER_LABELS: Record<string, string> = {
+  within: "Within SLA",
+  breached: "Breached",
+  at_risk: "At risk",
+  on_track: "On track",
+};
+
+function filterSlaRows(rows: SlaTrackerItem[], filter: string | null): SlaTrackerItem[] {
+  if (!filter) return rows;
+  switch (filter) {
+    case "breached":
+      return rows.filter((r) => r.is_breached);
+    case "within":
+      return rows.filter((r) => !r.is_breached);
+    case "at_risk":
+      return rows.filter((r) => !r.is_breached && r.sla_status === "at_risk");
+    case "on_track":
+      return rows.filter((r) => !r.is_breached && r.sla_status !== "at_risk");
+    default:
+      return rows;
+  }
+}
+
 export function ServiceSlaPage() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const { profile } = useUserPermissions();
+  const engineerScoped = shouldScopeServiceToMine(profile?.roleCodes, profile?.permissions);
+  const slaFilter = searchParams.get("filter");
+  const urlMine = searchParams.get("mine") === "1";
+  const scopedToMine = engineerScoped || urlMine;
   const [tab, setTab] = useState<Tab>("active");
   const [rows, setRows] = useState<SlaTrackerItem[]>([]);
-  const [notifications, setNotifications] = useState<ServiceNotification[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -30,31 +60,30 @@ export function ServiceSlaPage() {
     setLoading(true);
     setError(null);
     try {
-      const [slaRows, notifs] = await Promise.all([
-        listSlaTracker(),
-        listServiceHeadNotifications().catch(() => []),
-      ]);
-      setRows(slaRows);
-      setNotifications(notifs);
+      setRows(await listSlaTracker({ mine: scopedToMine }));
     } catch (err) {
       setRows([]);
       setError(err instanceof ApiClientError ? err.message : "Failed to load SLA tracker");
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [scopedToMine]);
 
   useEffect(() => {
     if (tab === "active") void load();
   }, [tab, load]);
 
   const breachedCount = useMemo(() => rows.filter((r) => r.is_breached).length, [rows]);
+  const filteredRows = useMemo(() => filterSlaRows(rows, slaFilter), [rows, slaFilter]);
+
+  const clearDashboardFilter = () => {
+    router.replace("/service/service-slas");
+  };
 
   return (
     <div className="space-y-4">
       <PageHeader
-        title="SLAs"
-        description="Track active ticket SLA clocks and manage SLA policy definitions."
+        title={scopedToMine ? "My SLAs" : "SLAs"}
         actions={
           tab === "active" ? (
             <Button type="button" variant="outline" size="sm" onClick={() => void load()} disabled={loading}>
@@ -87,33 +116,22 @@ export function ServiceSlaPage() {
         />
       ) : (
         <>
-          {notifications.length > 0 ? (
-            <div className="rounded-lg border border-border/70 bg-muted/30 px-4 py-3">
-              <div className="mb-2 flex items-center gap-2 text-sm font-medium">
-                <Bell className="size-4 text-primary" />
-                Service head alerts
-              </div>
-              <ul className="space-y-1.5 text-sm">
-                {notifications.slice(0, 5).map((n) => (
-                  <li key={n.id} className="flex flex-wrap items-center gap-2 text-muted-foreground">
-                    <FinanceStatusBadge status={n.notification_type.replace(/_/g, " ")} />
-                    <span>{n.payload_json?.message ?? n.notification_type}</span>
-                    {n.request_id ? (
-                      <Link href={`/service/service-request-tickets/${n.request_id}`} className="text-primary hover:underline">
-                        {n.payload_json?.document_number ?? "View ticket"}
-                      </Link>
-                    ) : null}
-                    {n.sent_at ? <span className="text-xs">{n.sent_at.slice(0, 16).replace("T", " ")}</span> : null}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          ) : null}
-
           {breachedCount > 0 ? (
             <div className="flex items-center gap-2 rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
               <AlertTriangle className="size-4 shrink-0" />
               {breachedCount} ticket{breachedCount === 1 ? "" : "s"} breached or past due
+            </div>
+          ) : null}
+
+          {slaFilter && SLA_FILTER_LABELS[slaFilter] ? (
+            <div className="flex flex-wrap items-center gap-2 rounded-md border border-sky-200/80 bg-sky-50 px-3 py-2 text-sm text-sky-950">
+              <span>
+                Filter from dashboard: <span className="font-medium">{SLA_FILTER_LABELS[slaFilter]}</span>
+              </span>
+              <Button type="button" size="sm" variant="outline" className="h-7 gap-1" onClick={clearDashboardFilter}>
+                <X className="size-3" />
+                Clear
+              </Button>
             </div>
           ) : null}
 
@@ -147,15 +165,17 @@ export function ServiceSlaPage() {
                         Loading active SLAs…
                       </td>
                     </tr>
-                  ) : rows.length === 0 ? (
+                  ) : filteredRows.length === 0 ? (
                     <tr>
                       <td colSpan={10} className="px-3 py-12 text-center text-muted-foreground">
                         <Clock className="mx-auto mb-2 size-8 opacity-40" />
-                        No active ticket SLAs. SLAs start when an engineer opens an assigned ticket.
+                        {rows.length === 0
+                          ? "No active ticket SLAs. SLAs start when a ticket is created or an email is received (weekends included)."
+                          : "No tickets match this SLA filter."}
                       </td>
                     </tr>
                   ) : (
-                    rows.map((row) => (
+                    filteredRows.map((row) => (
                       <tr key={row.id} className="border-b border-border/50 hover:bg-muted/30">
                         <td className="px-3 py-2 font-mono text-xs">
                           <Link

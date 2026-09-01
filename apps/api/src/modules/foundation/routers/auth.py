@@ -103,7 +103,7 @@ def me(
             designation = emp.designation
 
     role_rows = db.execute(
-        select(SecRole.role_name)
+        select(SecRole.role_name, SecRole.role_code)
         .join(SecUserRole, SecUserRole.role_id == SecRole.id)
         .where(
             SecUserRole.user_id == user.id,
@@ -113,6 +113,7 @@ def me(
         .order_by(SecRole.role_name)
     ).all()
     role_names = [str(r[0]) for r in role_rows]
+    role_codes = [str(r[1]) for r in role_rows]
 
     data = {
         "user": UserResponse(
@@ -129,5 +130,6 @@ def me(
         "designation": designation,
         "role_name": role_names[0] if role_names else None,
         "role_names": role_names,
+        "role_codes": role_codes,
     }
     return APIResponse(message="Current user", data=data)

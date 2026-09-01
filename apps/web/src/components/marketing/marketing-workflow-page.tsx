@@ -11,6 +11,7 @@ import {
   getContentWorkflow,
   getHeadVerificationDashboard,
   getMarketingPipeline,
+  marketingContentStatusForDisplay,
   type MarketingContentItem,
   type MarketingContentWorkflow,
   type MarketingHeadVerificationDashboard,
@@ -111,7 +112,7 @@ export function MarketingWorkflowPage() {
                     <p className="font-mono text-xs text-muted-foreground">{item.content_number}</p>
                   </div>
                   <div className="flex flex-wrap items-center gap-2">
-                    <FinanceStatusBadge status={item.status} />
+                    <FinanceStatusBadge status={marketingContentStatusForDisplay(item.status)} />
                     {item.workflow_stage ? (
                       <span className="rounded-full bg-muted px-2 py-0.5 text-xs">
                         {WORKFLOW_STAGE_LABELS[item.workflow_stage] ?? item.workflow_stage}

@@ -42,6 +42,7 @@ class MktContentItem(Base, *MktTransactionMixin):
     color_codes: Mapped[str | None] = mapped_column(String(500), nullable=True)
     linkedin_head_sections: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     linkedin_final_draft: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    business_owner_review: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     video_head_sections: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     video_final_draft: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     workflow_stage: Mapped[str | None] = mapped_column(String(40), nullable=True)

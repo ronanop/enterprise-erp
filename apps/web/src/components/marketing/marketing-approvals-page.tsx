@@ -20,6 +20,7 @@ import {
   formatMarketingStatus,
   getHeadVerificationDashboard,
   listContentItems,
+  marketingContentStatusForDisplay,
   type MarketingContentItem,
 } from "@/services/marketing-service";
 
@@ -67,7 +68,7 @@ function HeadApprovalTable({
                 <td className="px-3 py-2 text-xs">{row.submitterName}</td>
                 <td className="px-3 py-2 text-xs text-muted-foreground">{row.pendingLabels.join(" · ")}</td>
                 <td className="px-3 py-2">
-                  <FinanceStatusBadge status={row.status} />
+                  <FinanceStatusBadge status={marketingContentStatusForDisplay(row.status)} />
                 </td>
                 <td className="px-3 py-2">
                   <Link
@@ -127,7 +128,7 @@ function ApprovalTable({
                   {item.body ? (item.body.length > 60 ? `${item.body.slice(0, 60)}…` : item.body) : "—"}
                 </td>
                 <td className="px-3 py-2">
-                  <FinanceStatusBadge status={item.status} />
+                  <FinanceStatusBadge status={marketingContentStatusForDisplay(item.status)} />
                 </td>
                 <td className="px-3 py-2 text-xs text-muted-foreground">
                   {item.submitted_at ? new Date(item.submitted_at).toLocaleString() : "—"}

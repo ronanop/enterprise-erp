@@ -14,6 +14,7 @@ class ServiceRequestStatus(str, Enum):
     APPROVED = "approved"
     NEW = "new"
     TICKET_REGISTERED = "ticket_registered"
+    AWAITING_ASSIGNMENT = "awaiting_assignment"
     ASSIGNED = "assigned"
     IN_PROGRESS = "in_progress"
     ENGINEER_WORKING = "engineer_working"
@@ -27,6 +28,7 @@ class ServiceRequestStatus(str, Enum):
 class ModeOfAction(str, Enum):
     REMOTE_SUPPORT = "remote_support"
     ONSITE_SUPPORT = "onsite_support"
+    OEM_SUPPORT = "oem_support"
 
 
 class TicketCategory(str, Enum):

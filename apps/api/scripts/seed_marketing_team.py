@@ -28,6 +28,7 @@ from modules.foundation.models.security import (  # noqa: E402
 from modules.foundation.service.rbac_service import RBACService  # noqa: E402
 from modules.foundation.service.user_service import UserService  # noqa: E402
 from modules.marketing.permissions import (  # noqa: E402
+    MARKETING_BUSINESS_OWNER_PERMISSIONS,
     MARKETING_CAMPAIGN_HANDLER_PERMISSIONS,
     MARKETING_CREATOR_PERMISSIONS,
     MARKETING_LINKEDIN_HANDLER_PERMISSIONS,
@@ -56,6 +57,19 @@ TEAM_SPECS: list[dict] = [
         "designation": "Marketing Head",
         "mobile_suffix": "9201",
         "workflow": "Final approval after all verifiers complete checklist",
+    },
+    {
+        "email": "marketing.businessowner@example.com",
+        "display_name": "Business Owner",
+        "role_code": "MARKETING_BUSINESS_OWNER",
+        "role_name": "Business Owner",
+        "permissions": MARKETING_BUSINESS_OWNER_PERMISSIONS,
+        "employee_code": "MKT-BO1",
+        "first_name": "Suresh",
+        "last_name": "Menon",
+        "designation": "Business Owner",
+        "mobile_suffix": "9207",
+        "workflow": "After marketing head approves draft — approve, reject, or send feedback to head before LinkedIn final draft",
     },
     {
         "email": "marketing.campaign@example.com",
@@ -368,7 +382,7 @@ def main() -> None:
                 rbac.invalidate_user(user.id)
 
         print("=" * 72)
-        print("Marketing team users seeded (6 roles)")
+        print("Marketing team users seeded (7 roles)")
         print(f"Password for all accounts: {DEMO_PASSWORD}")
         print("-" * 72)
         for spec in TEAM_SPECS:
@@ -377,8 +391,8 @@ def main() -> None:
             print(f"    Workflow : {spec['workflow']}")
         print("=" * 72)
         print(
-            "Workflow: Creator -> Campaign Handler -> LinkedIn (if applicable) -> "
-            "Video Editor (if video) -> Publisher -> Marketing Head -> Publish"
+            "Workflow: Creator -> Campaign -> Marketing Head -> Business Owner -> "
+            "LinkedIn Handler (final draft) -> Marketing Head -> Publisher"
         )
     except Exception:
         db.rollback()

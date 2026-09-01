@@ -47,6 +47,7 @@ export function useMarketingPermissions() {
       canSubmit: has("marketing.content:submit"),
       canApproveMedia: has("marketing.content:approve_media"),
       canApprove: has("marketing.content:approve"),
+      canApproveBusiness: has("marketing.content:approve_business"),
       canPublish: has("marketing.content:publish"),
       canArchive: has("marketing.content:archive"),
       canSchedule: has("marketing.content:schedule"),

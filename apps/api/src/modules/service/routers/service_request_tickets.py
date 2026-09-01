@@ -4,7 +4,7 @@ from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query
-from fastapi.responses import FileResponse
+from fastapi.responses import Response
 from sqlalchemy.orm import Session
 
 from modules.service.dependencies import PaginationParams, TenantContext, get_db, get_pagination, get_tenant_context, paginate, require_permission
@@ -18,6 +18,7 @@ from modules.service.service_request_ticket_schemas import (
     ServiceRequestCoOwnerResponse,
     ServiceRequestCommentCreate,
     ServiceRequestCommentResponse,
+    ServiceRequestFollowUpPayload,
     ServiceRequestReopenPayload,
     ServiceRequestResolvePayload,
     ServiceRequestStakeholderCreate,
@@ -31,6 +32,12 @@ from modules.service.service_request_ticket_schemas import (
     ServiceRequestTimelineItem,
     ServiceRequestSlaTrackerItem,
     ServiceRequestResolvedTicketItem,
+    ServiceSlaComplianceSummary,
+    TicketFieldEngineerCreate,
+    TicketFieldEngineerResponse,
+    TicketFieldEngineerSolve,
+    TicketFieldEngineerUpdate,
+    FieldEngineerTicketItem,
 )
 from shared.schemas import APIResponse
 
@@ -91,9 +98,24 @@ def list_ticket_sla_tracker(
     db: Annotated[Session, Depends(get_db)],
     pagination: Annotated[PaginationParams, Depends(get_pagination)],
     company_id: UUID | None = None,
+    mine: bool = False,
 ):
-    items = ServiceRequestTicketService(db).list_sla_tracker(ctx, company_id=company_id)
+    items = ServiceRequestTicketService(db).list_sla_tracker(ctx, company_id=company_id, mine=mine)
     return APIResponse(message="OK", data=paginate(items, pagination))
+
+
+@service_request_tickets_router.get(
+    "/sla-compliance-summary",
+    response_model=APIResponse[ServiceSlaComplianceSummary],
+)
+def sla_compliance_summary(
+    ctx: Annotated[TenantContext, Depends(require_permission("service.request:read"))],
+    db: Annotated[Session, Depends(get_db)],
+    company_id: UUID | None = None,
+    mine: bool = False,
+):
+    summary = ServiceRequestTicketService(db).sla_compliance_summary(ctx, company_id=company_id, mine=mine)
+    return APIResponse(message="OK", data=summary)
 
 
 @service_request_tickets_router.get(
@@ -106,9 +128,39 @@ def list_resolved_tickets(
     pagination: Annotated[PaginationParams, Depends(get_pagination)],
     company_id: UUID | None = None,
     q: str | None = None,
+    sla_outcome: str | None = Query(default=None, pattern="^(within|breach)$"),
+    mine: bool = False,
 ):
-    items = ServiceRequestTicketService(db).list_resolved_tickets(ctx, company_id=company_id, q=q)
+    items = ServiceRequestTicketService(db).list_resolved_tickets(
+        ctx, company_id=company_id, q=q, sla_outcome=sla_outcome, mine=mine
+    )
     return APIResponse(message="OK", data=paginate(items, pagination))
+
+
+@service_request_tickets_router.get("/export.xlsx")
+def export_tickets_xlsx(
+    ctx: Annotated[TenantContext, Depends(require_permission("service.request:read"))],
+    db: Annotated[Session, Depends(get_db)],
+    company_id: UUID | None = None,
+):
+    content = ServiceRequestTicketService(db).export_tickets_xlsx(ctx, company_id=company_id)
+    return Response(
+        content=content,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": "attachment; filename=service-request-tickets.xlsx"},
+    )
+
+
+@service_request_tickets_router.get(
+    "/field-engineer/my-tickets",
+    response_model=APIResponse[list[FieldEngineerTicketItem]],
+)
+def list_my_field_engineer_tickets(
+    ctx: Annotated[TenantContext, Depends(require_permission("service.request:read"))],
+    db: Annotated[Session, Depends(get_db)],
+):
+    items = ServiceRequestTicketService(db).list_my_field_engineer_tickets(ctx)
+    return APIResponse(message="OK", data=items)
 
 
 @service_request_tickets_router.get("/{row_id}", response_model=APIResponse[ServiceRequestTicketDetail])
@@ -247,7 +299,47 @@ def close_ticket(
     reason = body.reason if body else None
     data = ServiceRequestTicketService(db).close_ticket(ctx, row_id, reason=reason)
     db.commit()
-    return APIResponse(message="Ticket closed", data=data)
+    return APIResponse(message="Ticket ended by helpdesk", data=data)
+
+
+@service_request_tickets_router.post("/{row_id}/resume", response_model=APIResponse[ServiceRequestTicketDetail])
+def resume_ticket(
+    row_id: UUID,
+    ctx: Annotated[TenantContext, Depends(require_permission("service.request:update"))],
+    db: Annotated[Session, Depends(get_db)],
+    body: ServiceRequestReopenPayload | None = None,
+):
+    reason = body.reason if body else None
+    data = ServiceRequestTicketService(db).resume_ticket(ctx, row_id, reason=reason)
+    db.commit()
+    return APIResponse(message="Ticket resumed", data=data)
+
+
+@service_request_tickets_router.post("/{row_id}/awaiting-assignment", response_model=APIResponse[ServiceRequestTicketDetail])
+def pause_awaiting_assignment(
+    row_id: UUID,
+    ctx: Annotated[TenantContext, Depends(require_permission("service.request:update"))],
+    db: Annotated[Session, Depends(get_db)],
+    body: ServiceRequestReopenPayload | None = None,
+):
+    reason = body.reason if body else None
+    data = ServiceRequestTicketService(db).pause_awaiting_assignment(ctx, row_id, reason=reason)
+    db.commit()
+    return APIResponse(message="Moved to awaiting assignment", data=data)
+
+
+@service_request_tickets_router.post("/{row_id}/follow-up", response_model=APIResponse[ServiceRequestTicketDetail])
+def schedule_follow_up(
+    row_id: UUID,
+    body: ServiceRequestFollowUpPayload,
+    ctx: Annotated[TenantContext, Depends(require_permission("service.request:update"))],
+    db: Annotated[Session, Depends(get_db)],
+):
+    data = ServiceRequestTicketService(db).schedule_follow_up(
+        ctx, row_id, follow_up_at=body.follow_up_at, follow_up_note=body.follow_up_note
+    )
+    db.commit()
+    return APIResponse(message="Follow-up scheduled", data=data)
 
 
 @service_request_tickets_router.post("/{row_id}/reopen", response_model=APIResponse[ServiceRequestTicketDetail])
@@ -367,11 +459,17 @@ def list_ticket_attachments(
 def upload_ticket_attachment(
     row_id: UUID,
     body: ServiceRequestAttachmentCreate,
-    ctx: Annotated[TenantContext, Depends(require_permission("service.request:update"))],
+    ctx: Annotated[TenantContext, Depends(require_permission("service.request:read"))],
     db: Annotated[Session, Depends(get_db)],
 ):
+    # FE uploads use service.request:read; owner uploads still gated inside service by can_work / FE email.
     att = ServiceRequestTicketService(db).upload_attachment(
-        ctx, row_id, file_name=body.file_name, content_base64=body.content_base64, content_type=body.content_type
+        ctx,
+        row_id,
+        file_name=body.file_name,
+        content_base64=body.content_base64,
+        content_type=body.content_type,
+        field_engineer_id=body.field_engineer_id,
     )
     db.commit()
     return APIResponse(message="Attachment uploaded", data=att)
@@ -396,8 +494,11 @@ def download_ticket_attachment(
     ctx: Annotated[TenantContext, Depends(require_permission("service.request:read"))],
     db: Annotated[Session, Depends(get_db)],
 ):
-    path, file_name, content_type = ServiceRequestTicketService(db).resolve_attachment_path(ctx, row_id, attachment_id)
-    return FileResponse(path, filename=file_name, media_type=content_type or "application/octet-stream")
+    data, file_name, content_type = ServiceRequestTicketService(db).resolve_attachment_content(
+        ctx, row_id, attachment_id
+    )
+    headers = {"Content-Disposition": f'attachment; filename="{file_name}"'}
+    return Response(content=data, media_type=content_type or "application/octet-stream", headers=headers)
 
 
 @service_request_tickets_router.get("/{row_id}/timeline", response_model=APIResponse[list[ServiceRequestTimelineItem]])
@@ -408,3 +509,133 @@ def get_ticket_timeline(
 ):
     items = ServiceRequestTicketService(db).get_timeline(ctx, row_id)
     return APIResponse(message="OK", data=items)
+
+
+@service_request_tickets_router.get("/{row_id}/timeline.xlsx")
+def export_ticket_timeline_xlsx(
+    row_id: UUID,
+    ctx: Annotated[TenantContext, Depends(require_permission("service.request:read"))],
+    db: Annotated[Session, Depends(get_db)],
+):
+    content = ServiceRequestTicketService(db).export_timeline_xlsx(ctx, row_id)
+    return Response(
+        content=content,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f"attachment; filename=ticket-{row_id}-timeline.xlsx"},
+    )
+
+
+@service_request_tickets_router.post(
+    "/{row_id}/field-engineers",
+    response_model=APIResponse[TicketFieldEngineerResponse],
+)
+def add_field_engineer(
+    row_id: UUID,
+    body: TicketFieldEngineerCreate,
+    ctx: Annotated[TenantContext, Depends(require_permission("service.request:update"))],
+    db: Annotated[Session, Depends(get_db)],
+):
+    data = ServiceRequestTicketService(db).add_field_engineer(
+        ctx,
+        row_id,
+        engineer_name=body.engineer_name,
+        engineer_email=body.engineer_email,
+        engineer_contact=body.engineer_contact,
+        assigned_date=body.assigned_date,
+        work_brief=body.work_brief,
+        show_issue=body.show_issue,
+        show_customer=body.show_customer,
+        show_site=body.show_site,
+        show_asset=body.show_asset,
+        show_circuit=body.show_circuit,
+    )
+    db.commit()
+    return APIResponse(message="Field engineer added", data=data)
+
+
+@service_request_tickets_router.patch(
+    "/{row_id}/field-engineers/{field_engineer_id}",
+    response_model=APIResponse[TicketFieldEngineerResponse],
+)
+def update_field_engineer(
+    row_id: UUID,
+    field_engineer_id: UUID,
+    body: TicketFieldEngineerUpdate,
+    ctx: Annotated[TenantContext, Depends(require_permission("service.request:update"))],
+    db: Annotated[Session, Depends(get_db)],
+):
+    payload = body.model_dump(exclude_unset=True)
+    clear_assigned_date = "assigned_date" in payload and payload.get("assigned_date") is None
+    data = ServiceRequestTicketService(db).update_field_engineer(
+        ctx,
+        row_id,
+        field_engineer_id=field_engineer_id,
+        clear_assigned_date=clear_assigned_date,
+        engineer_name=payload.get("engineer_name"),
+        engineer_contact=payload.get("engineer_contact"),
+        engineer_email=payload.get("engineer_email"),
+        assigned_date=payload.get("assigned_date"),
+        work_brief=payload.get("work_brief"),
+        show_issue=payload.get("show_issue"),
+        show_customer=payload.get("show_customer"),
+        show_site=payload.get("show_site"),
+        show_asset=payload.get("show_asset"),
+        show_circuit=payload.get("show_circuit"),
+    )
+    db.commit()
+    return APIResponse(message="Field engineer updated", data=data)
+
+
+@service_request_tickets_router.post(
+    "/{row_id}/field-engineers/{field_engineer_id}/credentials",
+    response_model=APIResponse[TicketFieldEngineerResponse],
+)
+def issue_field_engineer_credentials(
+    row_id: UUID,
+    field_engineer_id: UUID,
+    ctx: Annotated[TenantContext, Depends(require_permission("service.request:update"))],
+    db: Annotated[Session, Depends(get_db)],
+):
+    """Create or reset FE login password and return credentials for on-screen share."""
+    data = ServiceRequestTicketService(db).issue_field_engineer_credentials(
+        ctx, row_id, field_engineer_id=field_engineer_id
+    )
+    db.commit()
+    return APIResponse(message="Field engineer credentials ready", data=data)
+
+
+@service_request_tickets_router.delete(
+    "/{row_id}/field-engineers/{field_engineer_id}",
+    response_model=APIResponse[dict],
+)
+def remove_field_engineer(
+    row_id: UUID,
+    field_engineer_id: UUID,
+    ctx: Annotated[TenantContext, Depends(require_permission("service.request:update"))],
+    db: Annotated[Session, Depends(get_db)],
+):
+    ServiceRequestTicketService(db).remove_field_engineer(ctx, row_id, field_engineer_id=field_engineer_id)
+    db.commit()
+    return APIResponse(message="Field engineer removed", data={"id": str(field_engineer_id)})
+
+
+@service_request_tickets_router.post(
+    "/{row_id}/field-engineers/{field_engineer_id}/solve",
+    response_model=APIResponse[TicketFieldEngineerResponse],
+)
+def field_engineer_mark_solved(
+    row_id: UUID,
+    field_engineer_id: UUID,
+    body: TicketFieldEngineerSolve,
+    ctx: Annotated[TenantContext, Depends(require_permission("service.request:read"))],
+    db: Annotated[Session, Depends(get_db)],
+):
+    data = ServiceRequestTicketService(db).field_engineer_mark_solved(
+        ctx,
+        row_id,
+        field_engineer_id=field_engineer_id,
+        solution_summary=body.solution_summary,
+        attachments=[a.model_dump() for a in body.attachments],
+    )
+    db.commit()
+    return APIResponse(message="Marked solved by field engineer", data=data)

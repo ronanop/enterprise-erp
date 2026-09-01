@@ -18,6 +18,8 @@ from modules.master_data.models.party import MasterCustomer
 from modules.organization.models.branch import OrgBranch
 from modules.service.email_inbound_schemas import EmailToTicketResult, InboundEmailPayload
 from modules.service.models import SvcEmailIngestLog, SvcServiceCategory
+from modules.service.service.mailbox_ticket_classifier import skip_ticket_reason
+from modules.service.service.service_email_parser import parse_service_email_body
 from modules.service.service.service_request_ticket_service import ServiceRequestTicketService
 from shared.email_utils import parse_email_address, send_smtp_email, strip_html
 
@@ -61,6 +63,14 @@ class EmailToTicketService:
 
         contact_name = (payload.from_name or "").strip() or from_email.split("@")[0]
         subject = (payload.subject or "(No subject)").strip()[:500]
+
+        skip_reason = skip_ticket_reason(subject=subject, from_address=from_email)
+        if skip_reason:
+            return EmailToTicketResult(
+                status="skipped",
+                message="Automated sender — no ticket created",
+            )
+
         body = (payload.body_text or "").strip()
         if not body and payload.body_html:
             body = strip_html(payload.body_html)
@@ -94,26 +104,73 @@ class EmailToTicketService:
         self._db.flush()
 
         try:
-            ticket = ServiceRequestTicketService(self._db).create_ticket(
+            parsed = parse_service_email_body(body, subject=subject)
+            # Inbound sender wins for contact email; keep parsed NOC name/phone when present
+            ticket_fields = {
+                "mode_of_action": None,
+                # Must match DB check ck_svc_service_request_type
+                "service_type": "corrective",
+                "subject": parsed.get("subject") or subject,
+                "contact_name": parsed.get("contact_name") or contact_name,
+                "status": "ticket_registered",
+                "priority": "p3",
+                "channel": "email",
+                "ticket_category": None,
+                "sla_status": "within_sla",
+                "email": from_email,
+                "issue_description": parsed.get("issue_description") or body[:8000],
+                "description": parsed.get("description") or body[:8000],
+            }
+            for key in (
+                "mobile",
+                "reference_sr_number",
+                "customer_reference",
+                "lsi",
+                "ckt_id",
+                "end_customer_name",
+                "coordinator_name",
+                "coordinator_phone",
+                "end_customer_street",
+                "end_customer_state",
+                "end_customer_city",
+                "end_customer_postal_code",
+                "asset_name",
+                "serial_number",
+                "asset_status",
+                "additional_description",
+                "site_availability",
+                "site_instructions",
+                "link_type",
+                "bandwidth",
+                "ports_in_use",
+                "previous_fe_notes",
+                "ip_details",
+                "mail_extra_info",
+                "company_name_from_mail",
+            ):
+                if parsed.get(key):
+                    ticket_fields[key] = parsed[key]
+
+            ticket_svc = ServiceRequestTicketService(self._db)
+            ticket = ticket_svc.create_ticket(
                 ctx,
                 branch_id=branch_id,
                 company_id=company_id,
                 category_id=category_id,
                 customer_id=customer.id,
-                mode_of_action="remote_support",
-                service_type="managed_services",
-                subject=subject,
-                contact_name=contact_name,
-                status="ticket_registered",
-                priority="p3",
-                channel="email",
-                ticket_category="hardware",
-                sla_status="within_sla",
-                email=from_email,
-                issue_description=body[:8000],
-                description=body[:8000],
+                **ticket_fields,
             )
             log.request_id = ticket.id
+            row = ticket_svc._repo.get(ctx, ticket.id)
+            if row is not None:
+                # Unassigned email tickets must surface for Service Head / Manager queue.
+                ticket_svc._notify_service_heads(
+                    ctx,
+                    row,
+                    "email_ticket_created",
+                    f"New email ticket {ticket.document_number} from {from_email} — assign an engineer",
+                )
+            # Confirmation mail is optional — never block ticket creation.
             self._send_confirmation(from_email, contact_name, ticket.document_number, subject)
             self._db.flush()
             return EmailToTicketResult(
@@ -194,7 +251,14 @@ class EmailToTicketService:
     def _send_confirmation(
         self, to_address: str, contact_name: str, document_number: str, subject: str
     ) -> None:
+        # Local/dev placeholders (e.g. localhost) are treated as "not ready to send".
         if not settings.smtp_configured:
+            return
+        host = (settings.smtp_host or "").strip().lower()
+        if host in {"", "localhost", "127.0.0.1"}:
+            return
+        if not settings.smtp_user and not settings.smtp_password:
+            # Host set for UI status only — skip real send until credentials are provided.
             return
         body = (
             f"Hello {contact_name},\n\n"

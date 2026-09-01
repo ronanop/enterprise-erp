@@ -41,6 +41,8 @@ class TicketAccess:
     can_reopen: bool
     can_open: bool = False
     is_opened: bool = False
+    can_end: bool = False
+    can_resume: bool = False
 
 
 class TicketAccessService:
@@ -92,6 +94,21 @@ class TicketAccessService:
         )
         return row is not None
 
+    def is_field_engineer_email(self, request_id: UUID, email: str | None) -> bool:
+        if not email:
+            return False
+        from modules.service.models import SvcTicketFieldEngineer
+
+        normalized = email.strip().lower()
+        row = self._db.scalar(
+            select(SvcTicketFieldEngineer.id).where(
+                SvcTicketFieldEngineer.request_id == request_id,
+                SvcTicketFieldEngineer.is_deleted.is_(False),
+                SvcTicketFieldEngineer.engineer_email == normalized,
+            )
+        )
+        return row is not None
+
     def evaluate(self, ctx: TenantContext, row: SvcServiceRequest) -> TicketAccess:
         employee_id = self.resolve_employee_id(ctx)
         is_manager = self.is_manager(ctx)
@@ -103,11 +120,17 @@ class TicketAccessService:
             select(SecUser).where(SecUser.id == ctx.user_id, SecUser.is_deleted.is_(False))
         )
         is_stakeholder = self.is_stakeholder_email(row.id, user.email if user else None)
+        is_field_engineer = self.is_field_engineer_email(row.id, user.email if user else None)
 
         unassigned = row.owner_employee_id is None
         closed = row.status == "closed"
         locked = row.ownership_locked or closed
-        is_opened = row.opened_at is not None or row.status not in ("assigned", "ticket_registered")
+        awaiting = row.status in ("ticket_registered", "awaiting_assignment")
+        is_opened = row.opened_at is not None or row.status not in (
+            "assigned",
+            "ticket_registered",
+            "awaiting_assignment",
+        )
 
         if is_owner or is_co_owner:
             level = TicketAccessLevel.FULL
@@ -117,6 +140,8 @@ class TicketAccessService:
             level = TicketAccessLevel.VIEW_ONLY
         elif unassigned:
             level = TicketAccessLevel.ASSIGN_PREVIEW
+        elif is_field_engineer:
+            level = TicketAccessLevel.VIEW_ONLY
         elif is_stakeholder:
             level = TicketAccessLevel.STAKEHOLDER
         else:
@@ -132,6 +157,11 @@ class TicketAccessService:
         can_work = (is_owner or is_co_owner) and not closed and is_opened
         can_manage_collaborators = is_owner and not locked and is_opened
         can_reopen = is_owner and closed
+        # Helpdesk End only — engineer resolves (End SLA); helpdesk alone closes
+        can_end = is_manager and row.status == "resolved"
+        can_resume = (is_manager or is_owner or is_co_owner) and not closed and (
+            awaiting or row.status in ("pending_customer", "pending_oem", "assigned")
+        )
 
         return TicketAccess(
             level=level,
@@ -146,6 +176,8 @@ class TicketAccessService:
             can_reopen=can_reopen,
             can_open=can_open,
             is_opened=is_opened,
+            can_end=can_end,
+            can_resume=can_resume,
         )
 
     def require_level(

@@ -144,27 +144,19 @@ export function MarketingContentPreviewCard({
               <Lock className="size-4 text-muted-foreground" />
             </div>
             <div className="min-w-0">
-              <h4 className="text-sm font-semibold text-foreground">Published &amp; archived</h4>
+              <h4 className="text-sm font-semibold text-foreground">Published</h4>
               <p className="mt-1 text-xs font-normal leading-relaxed text-muted-foreground">
-                This post is locked and stored in the archive. It cannot be edited by anyone.
+                This post is locked. It cannot be edited by anyone.
               </p>
               {item.published_at || item.archived_at ? (
                 <div className="mt-2.5 flex flex-wrap gap-3 text-xs text-muted-foreground">
-                  {item.published_at ? (
-                    <span className="inline-flex items-center gap-1.5">
-                      <Archive className="size-3.5 shrink-0" />
-                      <span>
-                        <span className="font-semibold text-foreground/80">Published</span>{" "}
-                        {new Date(item.published_at).toLocaleString()}
-                      </span>
-                    </span>
-                  ) : null}
-                  {item.archived_at ? (
+                  <span className="inline-flex items-center gap-1.5">
+                    <Archive className="size-3.5 shrink-0" />
                     <span>
-                      <span className="font-semibold text-foreground/80">Archived</span>{" "}
-                      {new Date(item.archived_at).toLocaleString()}
+                      <span className="font-semibold text-foreground/80">Published</span>{" "}
+                      {new Date(item.published_at ?? item.archived_at!).toLocaleString()}
                     </span>
-                  ) : null}
+                  </span>
                 </div>
               ) : null}
             </div>

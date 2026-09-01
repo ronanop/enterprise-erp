@@ -25,8 +25,8 @@ class SvcServiceRequest(Base, *SvcTransactionMixin):
             name="ck_svc_service_request_priority",
         ),
         CheckConstraint(
-            "status IN ('draft','submitted','approved','new','ticket_registered','assigned',"
-            "'in_progress','engineer_working','pending_customer','pending_oem',"
+            "status IN ('draft','submitted','approved','new','ticket_registered','awaiting_assignment',"
+            "'assigned','in_progress','engineer_working','pending_customer','pending_oem',"
             "'resolved','closed','cancelled')",
             name="ck_svc_service_request_status",
         ),
@@ -172,6 +172,7 @@ class SvcServiceRequest(Base, *SvcTransactionMixin):
     amc_end_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     asset_status: Mapped[str | None] = mapped_column(String(50), nullable=True)
     amc_mail_sent: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    asset_confirmed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     # Ownership workflow — solution & lifecycle
     solution_summary: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -181,7 +182,28 @@ class SvcServiceRequest(Base, *SvcTransactionMixin):
     reopened_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     ownership_locked: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
 
-    # Owner must explicitly open ticket — SLA clock starts here
+    # Remote engineer details (name, number, date)
+    remote_engineer_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    remote_engineer_contact: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    remote_engineer_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+
+    # Follow-up reminders (email / SMS / WhatsApp)
+    follow_up_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    follow_up_note: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    # Parsed from NOC / carrier emails (Airtel-style and similar)
+    ckt_id: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    site_availability: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    site_instructions: Mapped[str | None] = mapped_column(Text, nullable=True)
+    link_type: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    bandwidth: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    ports_in_use: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    previous_fe_notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    ip_details: Mapped[str | None] = mapped_column(Text, nullable=True)
+    mail_extra_info: Mapped[str | None] = mapped_column(Text, nullable=True)
+    company_name_from_mail: Mapped[str | None] = mapped_column(String(255), nullable=True)
+
+    # Engineer opens ticket for work; SLA starts on create / email receipt
     opened_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     opened_by: Mapped[UUID | None] = mapped_column(PG_UUID(as_uuid=True), nullable=True)
     sla_started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

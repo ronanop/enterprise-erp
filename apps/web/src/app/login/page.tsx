@@ -10,6 +10,7 @@ import {
   DEMO_PASSWORD,
   adminLoginAccounts,
   getPostLoginRedirect,
+  resolvePostLoginRedirect,
   marketingTeamLoginAccounts,
   moduleLoginAccounts,
   serviceTeamLoginAccounts,
@@ -38,7 +39,7 @@ export default function LoginPage() {
     setLoading(true);
     try {
       await authService.login(nextEmail.trim(), DEMO_PASSWORD);
-      router.replace(getPostLoginRedirect(nextEmail));
+      router.replace(await resolvePostLoginRedirect(nextEmail.trim(), () => authService.me()));
       router.refresh();
     } catch (err) {
       setError(err instanceof ApiClientError ? err.message : "Login failed");
@@ -54,7 +55,7 @@ export default function LoginPage() {
     try {
       const trimmed = email.trim();
       await authService.login(trimmed, password);
-      router.replace(getPostLoginRedirect(trimmed));
+      router.replace(await resolvePostLoginRedirect(trimmed, () => authService.me()));
       router.refresh();
     } catch (err) {
       setError(err instanceof ApiClientError ? err.message : "Login failed");
@@ -227,7 +228,7 @@ export default function LoginPage() {
               Marketing team
             </p>
             <p className="text-[11px] text-muted-foreground">
-              Creator submits · media/banner approves · head signs off · publisher posts · archive
+              Creator → Campaign → Head → Business Owner → LinkedIn final draft → Head → Publisher
             </p>
             <div className="grid gap-1.5 sm:grid-cols-2">
               {marketingTeamLoginAccounts.map((account) => {

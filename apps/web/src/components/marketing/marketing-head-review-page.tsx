@@ -59,6 +59,7 @@ import {
   headReviewVerificationItem,
   linkedInHeadReviewSection,
   listContentAssets,
+  marketingContentStatusForDisplay,
   type MarketingContentItem,
   type MarketingContentWorkflow,
   type MarketingLinkedAsset,
@@ -266,7 +267,7 @@ export function MarketingHeadReviewPage({ contentId }: MarketingHeadReviewPagePr
                 </div>
               </div>
               <div className="flex flex-wrap items-center gap-2 pl-[52px]">
-                <FinanceStatusBadge status={item.status} />
+                <FinanceStatusBadge status={marketingContentStatusForDisplay(item.status)} />
                 <span className="inline-flex items-center rounded-full border border-border/70 bg-background px-2.5 py-0.5 text-[11px] font-medium text-muted-foreground shadow-sm">
                   {formatStatus(item.content_type)}
                 </span>

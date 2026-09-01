@@ -19,7 +19,7 @@ import {
   type MarketingTeamRoleKey,
 } from "@/lib/marketing-team-queue";
 import { cn } from "@/lib/utils";
-import { ApiClientError, type MarketingContentItem } from "@/services/marketing-service";
+import { ApiClientError, marketingContentStatusForDisplay, type MarketingContentItem } from "@/services/marketing-service";
 
 const ROLE_DESCRIPTIONS: Record<MarketingTeamRoleKey, string> = {
   creator: "Posts and copy submitted by content creators for your review.",
@@ -117,7 +117,7 @@ export function MarketingTeamRoleQueuePage({ roleKey }: MarketingTeamRoleQueuePa
                     <td className="px-3 py-2 text-xs">{row.submitterName}</td>
                     <td className="px-3 py-2 text-xs text-muted-foreground">{row.pendingLabels.join(" · ")}</td>
                     <td className="px-3 py-2">
-                      <FinanceStatusBadge status={row.status} />
+                      <FinanceStatusBadge status={marketingContentStatusForDisplay(row.status)} />
                     </td>
                     <td className="px-3 py-2">
                       <Link

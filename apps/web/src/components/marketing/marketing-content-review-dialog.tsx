@@ -43,6 +43,7 @@ import { MarketingContentActivityTimeline } from "@/components/marketing/marketi
 import { MarketingContentPreviewCard } from "@/components/marketing/marketing-content-preview-card";
 import { MarketingLinkedInHeadFinalDraftApproval } from "@/components/marketing/marketing-linkedin-head-final-draft-approval";
 import { MarketingLinkedInHeadSectionApproval } from "@/components/marketing/marketing-linkedin-head-section-approval";
+import { MarketingBusinessOwnerReviewPanel } from "@/components/marketing/marketing-business-owner-review-panel";
 import { MarketingVideoHeadFinalDraftApproval } from "@/components/marketing/marketing-video-head-final-draft-approval";
 import { MarketingVideoHeadSectionApproval } from "@/components/marketing/marketing-video-head-section-approval";
 import {
@@ -53,6 +54,7 @@ import {
   getContentTimeline,
   getContentWorkflow,
   linkedInSendToPublisher,
+  marketingContentStatusForDisplay,
   publishContentItem,
   reportContentPosting,
   submitContentItem,
@@ -259,7 +261,7 @@ export function MarketingContentReviewDialog({
                 </div>
               </div>
               <div className="flex flex-wrap items-center gap-2 pl-[52px]">
-                <FinanceStatusBadge status={currentItem.status} />
+                <FinanceStatusBadge status={marketingContentStatusForDisplay(currentItem.status)} />
                 <span className="inline-flex items-center rounded-full border border-border/70 bg-background px-2.5 py-0.5 text-[11px] font-medium text-muted-foreground shadow-sm">
                   {formatMarketingStatus(currentItem.content_type)}
                 </span>
@@ -292,10 +294,24 @@ export function MarketingContentReviewDialog({
             {currentItem.rejection_reason ? (
               <div className={marketingFeedbackBanner}>
                 <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-amber-800 dark:text-amber-200">
-                  Marketing head feedback
+                  {currentItem.business_owner_review?.feedback_to_head
+                    ? "Business owner feedback"
+                    : "Marketing head feedback"}
                 </p>
                 <p className="mt-2 whitespace-pre-wrap leading-relaxed">{currentItem.rejection_reason}</p>
               </div>
+            ) : null}
+
+            {perms.canApproveBusiness &&
+            currentItem.workflow_stage === "business_owner_review" &&
+            usesLinkedInSectionWorkflow(currentItem) ? (
+              <MarketingBusinessOwnerReviewPanel
+                item={currentItem}
+                onDone={(updated) => {
+                  void refreshDialogItem(updated);
+                  onDone(updated);
+                }}
+              />
             ) : null}
 
             {showSourceDraftEditor ? (

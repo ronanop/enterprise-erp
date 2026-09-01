@@ -21,6 +21,7 @@ from modules.marketing.schemas import (
     ActivityLogResponse,
     ApprovalResponse,
     AssetUploadPayload,
+    BusinessOwnerReviewPayload,
     CalendarItem,
     CampaignAudienceCreate,
     CampaignAudienceResponse,
@@ -592,6 +593,24 @@ def linkedin_head_review_section(
     )
     db.commit()
     return APIResponse(message="Section review saved", data=ContentItemResponse.model_validate(row))
+
+
+@content_router.post("/{row_id}/business-owner/review", response_model=APIResponse[ContentItemResponse])
+def business_owner_review_content(
+    row_id: UUID,
+    body: BusinessOwnerReviewPayload,
+    ctx: Annotated[TenantContext, Depends(require_permission("marketing.content:approve_business"))],
+    db: Annotated[Session, Depends(get_db)],
+):
+    """Business owner approves, rejects, or sends feedback to marketing head after head draft approval."""
+    row = LinkedInSectionService(db).business_owner_review(
+        ctx,
+        row_id,
+        status=body.status,
+        comments=body.comments,
+    )
+    db.commit()
+    return APIResponse(message="Business owner review saved", data=ContentItemResponse.model_validate(row))
 
 
 @content_router.post("/{row_id}/linkedin/submit-final-draft-to-head", response_model=APIResponse[ContentItemResponse])

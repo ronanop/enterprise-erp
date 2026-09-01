@@ -93,6 +93,13 @@ export type MarketingContentItem = {
     submitted_at?: string | null;
     reviewed_at?: string | null;
   } | null;
+  business_owner_review?: {
+    status?: string;
+    comments?: string | null;
+    reviewed_at?: string | null;
+    reviewed_by_user_id?: string | null;
+    feedback_to_head?: string | null;
+  } | null;
   video_head_sections?: Record<
     string,
     { status: string; comments?: string | null; reviewed_at?: string | null }
@@ -522,6 +529,16 @@ export function linkedInHeadReviewSection(
   });
 }
 
+export function businessOwnerReviewContent(
+  contentId: string,
+  body: { status: "approved" | "changes_requested" | "rejected"; comments?: string },
+) {
+  return unwrap<MarketingContentItem>(`${API}/content-items/${contentId}/business-owner/review`, {
+    method: "POST",
+    body,
+  });
+}
+
 export function linkedInSendToPublisher(contentId: string) {
   return unwrap<MarketingContentItem>(`${API}/content-items/${contentId}/linkedin/send-to-publisher`, {
     method: "POST",
@@ -684,6 +701,11 @@ export function getMarketingHeadReview(params?: ListParams) {
 
 export function formatMarketingStatus(status: string): string {
   return status.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+/** Published content is stored as archived after lock — show Published in the UI. */
+export function marketingContentStatusForDisplay(status: string): string {
+  return status === "archived" ? "published" : status;
 }
 
 /** Whether this user should confirm posting status to marketing head (never the head themselves). */

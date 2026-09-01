@@ -144,7 +144,7 @@ def ensure_role(db, tenant_id, role_code: str, role_name: str) -> SecRole:
 
 
 def grant_role_permissions(db, tenant_id, role_id, perm_map: dict[str, str], codes: list[str]) -> None:
-    for code in codes:
+    for code in dict.fromkeys(codes):
         perm_id = perm_map.get(code)
         if not perm_id:
             continue
@@ -165,6 +165,7 @@ def grant_role_permissions(db, tenant_id, role_id, perm_map: dict[str, str], cod
                 granted_at=utcnow(),
             )
         )
+        db.flush()
 
 
 def ensure_user(db, tenant: SecTenant, email: str, display_name: str) -> SecUser:

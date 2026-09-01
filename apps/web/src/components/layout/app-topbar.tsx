@@ -2,8 +2,9 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { Bell, LogIn, LogOut } from "lucide-react";
+import { LogIn, LogOut } from "lucide-react";
 
+import { ServiceNotificationsBell } from "@/components/layout/service-notifications-bell";
 import { Button } from "@/components/ui/button";
 import { clearTokens, isAuthenticated } from "@/lib/auth";
 import { authService } from "@/services/api-client";
@@ -31,9 +32,7 @@ export function AppTopbar() {
       </div>
 
       <div className="flex items-center gap-2">
-        <Button variant="ghost" size="icon-sm" aria-label="Notifications" disabled className="text-muted-foreground">
-          <Bell className="size-4" />
-        </Button>
+        {signedIn ? <ServiceNotificationsBell /> : null}
         {signedIn ? (
           <Button variant="outline" size="sm" className="shadow-none" onClick={() => void handleLogout()}>
             <LogOut className="size-3.5" />

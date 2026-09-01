@@ -28,9 +28,10 @@ function normalizeRows(data: unknown): ServiceRow[] {
 
 async function safeList(
   apiPath: string,
+  query?: Record<string, string | number | boolean | null | undefined>,
 ): Promise<{ rows: ServiceRow[]; error?: string; status?: number }> {
   try {
-    const response = await resourceService.list(apiPath);
+    const response = await resourceService.list(apiPath, query);
     return { rows: normalizeRows(response.data) };
   } catch (err) {
     if (err instanceof ApiClientError) {
@@ -61,8 +62,9 @@ export function countOpenDocs(
   }).length;
 }
 
-export async function loadServiceOverview(): Promise<ServiceOverview> {
-  const requestTickets = await safeList("/service/service-request-tickets");
+export async function loadServiceOverview(opts?: { mine?: boolean }): Promise<ServiceOverview> {
+  const query = opts?.mine ? { mine: true, page_size: 200 } : { page_size: 200 };
+  const requestTickets = await safeList("/service/service-request-tickets", query);
 
   const errors = requestTickets.error ? [requestTickets.error] : [];
   const statusCodes = requestTickets.status ? [requestTickets.status] : [];

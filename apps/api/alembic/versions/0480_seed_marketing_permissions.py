@@ -133,7 +133,20 @@ def upgrade() -> None:
         for role_code, role_name, perms in ROLE_SPECS:
             role_id = _ensure_role(conn, now, str(tenant_id), role_code, role_name)
             for perm in perms:
-                _grant(conn, now, str(tenant_id), role_id, perm_ids[perm])
+                pid = perm_ids.get(perm)
+                if not pid:
+                    row = conn.execute(
+                        sa.text(
+                            "SELECT id FROM foundation.sec_permission WHERE permission_code = :code"
+                        ),
+                        {"code": perm},
+                    ).first()
+                    if not row:
+                        # Cross-module dependency missing in this DB — skip grant.
+                        continue
+                    pid = str(row[0])
+                    perm_ids[perm] = pid
+                _grant(conn, now, str(tenant_id), role_id, pid)
 
 
 def downgrade() -> None:

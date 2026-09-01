@@ -58,7 +58,7 @@ export const MARKETING_CONTENT_PIPELINE = [
   { key: "approved", label: "Approved" },
   { key: "scheduled", label: "Scheduled" },
   { key: "published", label: "Published" },
-  { key: "archived", label: "Archived" },
+  { key: "archived", label: "Published" },
 ] as const;
 
 export const MARKETING_NAV_ITEMS = [

@@ -34,7 +34,7 @@ function SelectField({
 }) {
   return (
     <select
-      className="h-9 w-full rounded-md border border-input bg-background px-2 text-sm"
+      className="h-9 w-full rounded-md border border-border bg-background px-2.5 text-sm font-medium text-foreground"
       value={value}
       onChange={(e) => onChange(e.target.value)}
       required={required}
@@ -59,34 +59,38 @@ function Field({
   children: React.ReactNode;
 }) {
   return (
-    <label className="block space-y-1 text-sm">
-      <span className="font-medium text-foreground">
-        {label}
-        {required ? <span className="text-destructive"> *</span> : null}
-      </span>
-      {children}
-    </label>
+    <div className="min-w-0 rounded-md border border-border/50 bg-background/80 px-3 py-2.5">
+      <label className="block space-y-1.5 text-sm">
+        <span className="text-[11px] font-medium tracking-wide text-muted-foreground uppercase">
+          {label}
+          {required ? <span className="text-destructive"> *</span> : null}
+        </span>
+        {children}
+      </label>
+    </div>
   );
 }
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <section className="rounded-lg border border-border/70 bg-card p-4 shadow-sm">
-      <h2 className="mb-4 text-sm font-semibold tracking-wide text-foreground uppercase">{title}</h2>
-      <div className="grid gap-4 sm:grid-cols-2">{children}</div>
+    <section className="overflow-hidden rounded-xl border border-border/80 bg-card shadow-sm">
+      <div className="border-b border-border/60 bg-muted/35 px-4 py-2.5">
+        <h2 className="text-xs font-semibold tracking-[0.08em] text-foreground uppercase">{title}</h2>
+      </div>
+      <div className="grid gap-2 p-4 sm:grid-cols-2">{children}</div>
     </section>
   );
 }
 
 const emptyForm = (): Record<string, string> => ({
-  mode_of_action: "remote_support",
+  mode_of_action: "",
   service_type: "managed_services",
   subject: "",
   contact_name: "",
   status: "ticket_registered",
   priority: "p3",
   channel: "portal",
-  ticket_category: "hardware",
+  ticket_category: "",
   sla_status: "within_sla",
   category_id: "",
   customer_id: "",
@@ -103,11 +107,15 @@ const emptyForm = (): Record<string, string> => ({
   amc_end_date: "",
   asset_status: "existing_asset",
   amc_mail_sent: "false",
+  remote_engineer_name: "",
+  remote_engineer_contact: "",
+  remote_engineer_date: "",
   software_version: "",
   issue_description: "",
   reference_sr_number: "",
   customer_reference: "",
   lsi: "",
+  ckt_id: "",
   end_customer_name: "",
   end_customer_email: "",
   coordinator_name: "",
@@ -126,6 +134,15 @@ const emptyForm = (): Record<string, string> => ({
   next_plan: "",
   additional_description: "",
   oem_support_enabled: "false",
+  site_availability: "",
+  site_instructions: "",
+  link_type: "",
+  bandwidth: "",
+  ports_in_use: "",
+  previous_fe_notes: "",
+  ip_details: "",
+  mail_extra_info: "",
+  company_name_from_mail: "",
   fe_engineer_name: "",
   fe_engineer_contact: "",
   fe_distance: "",
@@ -159,11 +176,15 @@ export function ServiceRequestTicketFormPage({ ticketId }: { ticketId?: string }
   const [branches, setBranches] = useState<Option[]>([]);
   const [employees, setEmployees] = useState<Option[]>([]);
   const [products, setProducts] = useState<Option[]>([]);
+  const [modes, setModes] = useState<Option[]>([]);
+  const [ticketCategories, setTicketCategories] = useState<Option[]>([]);
   const [lookupsLoading, setLookupsLoading] = useState(true);
   const [lookupError, setLookupError] = useState<string | null>(null);
   const [loading, setLoading] = useState(isEdit);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [modeLocked, setModeLocked] = useState(false);
+  const [categoryLocked, setCategoryLocked] = useState(false);
 
   const set = (name: string, value: string) => setForm((f) => ({ ...f, [name]: value }));
 
@@ -178,6 +199,8 @@ export function ServiceRequestTicketFormPage({ ticketId }: { ticketId?: string }
         setBranches(lookups.branches);
         setEmployees(lookups.employees);
         setProducts(lookups.products);
+        setModes(lookups.modes);
+        setTicketCategories(lookups.ticketCategories);
         if (lookups.errors.length > 0) {
           setLookupError(lookups.errors.join("; "));
         }
@@ -199,16 +222,18 @@ export function ServiceRequestTicketFormPage({ ticketId }: { ticketId?: string }
       setLoading(true);
       try {
         const t = await getServiceRequestTicket(ticketId);
+        setModeLocked(Boolean(t.mode_of_action?.trim()));
+        setCategoryLocked(Boolean(t.ticket_category?.trim()));
         setForm({
           ...emptyForm(),
-          mode_of_action: t.mode_of_action ?? "remote_support",
+          mode_of_action: t.mode_of_action ?? "",
           service_type: t.service_type ?? "managed_services",
           subject: t.subject,
           contact_name: t.contact_name ?? "",
           status: t.status,
           priority: t.priority,
           channel: t.channel ?? "portal",
-          ticket_category: t.ticket_category ?? "hardware",
+          ticket_category: t.ticket_category ?? "",
           sla_status: t.sla_status ?? "within_sla",
           category_id: t.category_id ?? "",
           customer_id: t.customer_id,
@@ -225,11 +250,15 @@ export function ServiceRequestTicketFormPage({ ticketId }: { ticketId?: string }
           amc_end_date: t.amc_end_date?.slice(0, 10) ?? "",
           asset_status: t.asset_status ?? "",
           amc_mail_sent: String(t.amc_mail_sent ?? false),
+          remote_engineer_name: t.remote_engineer_name ?? "",
+          remote_engineer_contact: t.remote_engineer_contact ?? "",
+          remote_engineer_date: t.remote_engineer_date?.slice(0, 10) ?? "",
           software_version: t.software_version ?? "",
           issue_description: t.issue_description ?? "",
           reference_sr_number: t.reference_sr_number ?? "",
           customer_reference: t.customer_reference ?? "",
           lsi: t.lsi ?? "",
+          ckt_id: t.ckt_id ?? "",
           end_customer_name: t.end_customer_name ?? "",
           end_customer_email: t.end_customer_email ?? "",
           coordinator_name: t.coordinator_name ?? "",
@@ -248,6 +277,15 @@ export function ServiceRequestTicketFormPage({ ticketId }: { ticketId?: string }
           next_plan: t.next_plan ?? "",
           additional_description: t.additional_description ?? "",
           oem_support_enabled: String(t.oem_support_enabled ?? false),
+          site_availability: t.site_availability ?? "",
+          site_instructions: t.site_instructions ?? "",
+          link_type: t.link_type ?? "",
+          bandwidth: t.bandwidth ?? "",
+          ports_in_use: t.ports_in_use ?? "",
+          previous_fe_notes: t.previous_fe_notes ?? "",
+          ip_details: t.ip_details ?? "",
+          mail_extra_info: t.mail_extra_info ?? "",
+          company_name_from_mail: t.company_name_from_mail ?? "",
           fe_engineer_name: t.field_engineer?.engineer_name ?? "",
           fe_engineer_contact: t.field_engineer?.engineer_contact ?? "",
           fe_distance: t.field_engineer?.distance ?? "",
@@ -279,7 +317,7 @@ export function ServiceRequestTicketFormPage({ ticketId }: { ticketId?: string }
     })();
   }, [ticketId]);
 
-  const showFe = form.mode_of_action === "onsite_support";
+  const showFe = form.mode_of_action === "onsite_support" || form.mode_of_action === "oem_support";
   const showOem = form.oem_support_enabled === "true";
 
   const buildPayload = useCallback(() => {
@@ -288,14 +326,12 @@ export function ServiceRequestTicketFormPage({ ticketId }: { ticketId?: string }
       branch_id: form.branch_id,
       category_id: form.category_id,
       customer_id: form.customer_id,
-      mode_of_action: form.mode_of_action,
       service_type: form.service_type,
       subject: form.subject.trim(),
       contact_name: form.contact_name.trim(),
       status: form.status,
       priority: form.priority,
       channel: form.channel,
-      ticket_category: form.ticket_category,
       sla_status: form.sla_status,
       email: nullIfEmpty(form.email),
       alternate_email: nullIfEmpty(form.alternate_email),
@@ -305,6 +341,7 @@ export function ServiceRequestTicketFormPage({ ticketId }: { ticketId?: string }
       reference_sr_number: nullIfEmpty(form.reference_sr_number),
       customer_reference: nullIfEmpty(form.customer_reference),
       lsi: nullIfEmpty(form.lsi),
+      ckt_id: nullIfEmpty(form.ckt_id),
       end_customer_name: nullIfEmpty(form.end_customer_name),
       end_customer_email: nullIfEmpty(form.end_customer_email),
       coordinator_name: nullIfEmpty(form.coordinator_name),
@@ -328,8 +365,20 @@ export function ServiceRequestTicketFormPage({ ticketId }: { ticketId?: string }
       warranty_start_date: nullIfEmpty(form.warranty_start_date),
       warranty_end_date: nullIfEmpty(form.warranty_end_date),
       amc_end_date: nullIfEmpty(form.amc_end_date),
-      asset_status: nullIfEmpty(form.asset_status),
+      asset_status: form.asset_status.trim() || "existing_asset",
       amc_mail_sent: form.amc_mail_sent === "true",
+      remote_engineer_name: nullIfEmpty(form.remote_engineer_name),
+      remote_engineer_contact: nullIfEmpty(form.remote_engineer_contact),
+      remote_engineer_date: nullIfEmpty(form.remote_engineer_date),
+      site_availability: nullIfEmpty(form.site_availability),
+      site_instructions: nullIfEmpty(form.site_instructions),
+      link_type: nullIfEmpty(form.link_type),
+      bandwidth: nullIfEmpty(form.bandwidth),
+      ports_in_use: nullIfEmpty(form.ports_in_use),
+      previous_fe_notes: nullIfEmpty(form.previous_fe_notes),
+      ip_details: nullIfEmpty(form.ip_details),
+      mail_extra_info: nullIfEmpty(form.mail_extra_info),
+      company_name_from_mail: nullIfEmpty(form.company_name_from_mail),
     };
     const ownerId = nullIfEmpty(form.owner_employee_id);
     const productId = nullIfEmpty(form.product_id);
@@ -378,8 +427,8 @@ export function ServiceRequestTicketFormPage({ ticketId }: { ticketId?: string }
         setSaving(false);
         return;
       }
-      if (!payload.subject || !payload.contact_name || !payload.priority || !payload.channel || !payload.ticket_category || !payload.sla_status || !payload.issue_description) {
-        setError("Please fill all mandatory fields (subject, contact, priority, channel, category, SLA, issue description).");
+      if (!payload.subject || !payload.contact_name || !payload.priority || !payload.channel || !payload.sla_status || !payload.issue_description) {
+        setError("Please fill all mandatory fields (subject, contact, priority, channel, SLA, issue description).");
         setSaving(false);
         return;
       }
@@ -402,7 +451,7 @@ export function ServiceRequestTicketFormPage({ ticketId }: { ticketId?: string }
     }
   };
 
-  const selectCls = "h-9 w-full rounded-md border border-input bg-background px-2 text-sm";
+  const selectCls = "h-9 w-full rounded-md border border-border bg-background px-2.5 text-sm font-medium text-foreground";
 
   if (loading || lookupsLoading) {
     return <div className="py-12 text-center text-muted-foreground">Loading…</div>;
@@ -442,11 +491,18 @@ export function ServiceRequestTicketFormPage({ ticketId }: { ticketId?: string }
 
       <div className="space-y-4">
         <Section title="Section 1 — Basic Information">
-          <Field label="Mode of Action" required>
-            <select className={selectCls} value={form.mode_of_action} onChange={(e) => set("mode_of_action", e.target.value)}>
-              <option value="remote_support">Remote Support</option>
-              <option value="onsite_support">Onsite Support</option>
+          <Field label="Mode of Action">
+            <select className={selectCls} value={form.mode_of_action} disabled>
+              <option value="">Assigned engineer chooses after opening the ticket…</option>
+              {modes.map((m) => (
+                <option key={m.value} value={m.value}>{m.label}</option>
+              ))}
             </select>
+            <p className="mt-1 text-[11px] text-muted-foreground">
+              {modeLocked
+                ? "Fixed after engineer selection."
+                : "Set from the ticket detail page after Open Ticket."}
+            </p>
           </Field>
           <Field label="Service Request Type" required>
             <select className={selectCls} value={form.service_type} onChange={(e) => set("service_type", e.target.value)}>
@@ -495,14 +551,6 @@ export function ServiceRequestTicketFormPage({ ticketId }: { ticketId?: string }
               placeholder="Select owner (optional)…"
             />
           </Field>
-          <Field label="Product">
-            <SelectField
-              value={form.product_id}
-              onChange={(v) => set("product_id", v)}
-              options={products}
-              placeholder="Select product (optional)…"
-            />
-          </Field>
           <Field label="Email"><Input type="email" value={form.email} onChange={(e) => set("email", e.target.value)} /></Field>
           <Field label="Alternate Email"><Input type="email" value={form.alternate_email} onChange={(e) => set("alternate_email", e.target.value)} /></Field>
           <Field label="Mobile"><Input value={form.mobile} onChange={(e) => set("mobile", e.target.value)} /></Field>
@@ -518,26 +566,54 @@ export function ServiceRequestTicketFormPage({ ticketId }: { ticketId?: string }
         </Section>
 
         <Section title="Section 3 — Asset Details">
-          <Field label="Asset Name"><Input value={form.asset_name} onChange={(e) => set("asset_name", e.target.value)} /></Field>
-          <Field label="Serial Number"><Input value={form.serial_number} onChange={(e) => set("serial_number", e.target.value)} /></Field>
-          <Field label="Warranty Start"><Input type="date" value={form.warranty_start_date} onChange={(e) => set("warranty_start_date", e.target.value)} /></Field>
-          <Field label="Warranty End"><Input type="date" value={form.warranty_end_date} onChange={(e) => set("warranty_end_date", e.target.value)} /></Field>
-          <Field label="AMC End"><Input type="date" value={form.amc_end_date} onChange={(e) => set("amc_end_date", e.target.value)} /></Field>
-          <Field label="Asset Status">
-            <select className={selectCls} value={form.asset_status} onChange={(e) => set("asset_status", e.target.value)}>
-              <option value="new_asset">New Asset</option>
-              <option value="existing_asset">Existing Asset</option>
+          <div className="sm:col-span-2 rounded-md border border-dashed border-border/60 bg-muted/20 px-3 py-2.5 text-xs leading-relaxed text-muted-foreground">
+            Asset name and serial are filled automatically from the inbound email when the ticket is created.
+            After opening the ticket, review and confirm them on the ticket page (fix missing fields or changes there).
+          </div>
+          <Field label="Product">
+            <SelectField
+              value={form.product_id}
+              onChange={(v) => set("product_id", v)}
+              options={products}
+              placeholder="Select product (optional)…"
+            />
+          </Field>
+          <Field label="Asset Name">
+            <Input value={form.asset_name} readOnly disabled placeholder="From email…" />
+          </Field>
+          <Field label="Device Type">
+            <select className={selectCls} value={form.asset_status || "existing_asset"} disabled>
+              <option value="new_asset">New Device</option>
+              <option value="existing_asset">Existing Device</option>
             </select>
+          </Field>
+          <Field label="Serial Number">
+            <Input value={form.serial_number} readOnly disabled placeholder="From email…" />
+          </Field>
+          <Field label="Warranty Start">
+            <Input type="date" value={form.warranty_start_date} readOnly disabled />
+          </Field>
+          <Field label="Warranty End">
+            <Input type="date" value={form.warranty_end_date} readOnly disabled />
+          </Field>
+          <Field label="AMC End">
+            <Input type="date" value={form.amc_end_date} readOnly disabled />
           </Field>
         </Section>
 
         <Section title="Section 4 — Ticket Information">
-          <Field label="Category of Ticket" required>
-            <select className={selectCls} value={form.ticket_category} onChange={(e) => set("ticket_category", e.target.value)}>
-              <option value="hardware">Hardware</option>
-              <option value="software">Software</option>
-              <option value="network">Network</option>
+          <Field label="Category of Ticket">
+            <select className={selectCls} value={form.ticket_category} disabled>
+              <option value="">Assigned engineer chooses after opening the ticket…</option>
+              {ticketCategories.map((c) => (
+                <option key={c.value} value={c.value}>{c.label}</option>
+              ))}
             </select>
+            <p className="mt-1 text-[11px] text-muted-foreground">
+              {categoryLocked
+                ? "Fixed after engineer selection."
+                : "Set from the ticket detail page after Open Ticket."}
+            </p>
           </Field>
           <Field label="SLA Status" required>
             <select className={selectCls} value={form.sla_status} onChange={(e) => set("sla_status", e.target.value)}>
@@ -556,19 +632,49 @@ export function ServiceRequestTicketFormPage({ ticketId }: { ticketId?: string }
 
         <Section title="Section 5 — Reference Information">
           <Field label="Service Request Number"><Input value={form.reference_sr_number} onChange={(e) => set("reference_sr_number", e.target.value)} /></Field>
+          <Field label="CKT ID"><Input value={form.ckt_id} onChange={(e) => set("ckt_id", e.target.value)} /></Field>
           <Field label="Customer Reference / LSI"><Input value={form.lsi} onChange={(e) => set("lsi", e.target.value)} /></Field>
+          <Field label="Company (from mail)"><Input value={form.company_name_from_mail} onChange={(e) => set("company_name_from_mail", e.target.value)} /></Field>
+          <Field label="Customer Reference"><Input value={form.customer_reference} onChange={(e) => set("customer_reference", e.target.value)} /></Field>
         </Section>
 
         <Section title="Section 6 — End Customer Details">
           <Field label="Customer Name"><Input value={form.end_customer_name} onChange={(e) => set("end_customer_name", e.target.value)} /></Field>
           <Field label="Email"><Input value={form.end_customer_email} onChange={(e) => set("end_customer_email", e.target.value)} /></Field>
           <Field label="Coordinator"><Input value={form.coordinator_name} onChange={(e) => set("coordinator_name", e.target.value)} /></Field>
-          <Field label="Phone"><Input value={form.coordinator_phone} onChange={(e) => set("coordinator_phone", e.target.value)} /></Field>
+          <Field label="Phone (LC)"><Input value={form.coordinator_phone} onChange={(e) => set("coordinator_phone", e.target.value)} /></Field>
           <Field label="Street"><Input value={form.end_customer_street} onChange={(e) => set("end_customer_street", e.target.value)} /></Field>
           <Field label="State"><Input value={form.end_customer_state} onChange={(e) => set("end_customer_state", e.target.value)} /></Field>
           <Field label="City"><Input value={form.end_customer_city} onChange={(e) => set("end_customer_city", e.target.value)} /></Field>
           <Field label="GST"><Input value={form.end_customer_gst} onChange={(e) => set("end_customer_gst", e.target.value)} /></Field>
           <Field label="Postal Code"><Input value={form.end_customer_postal_code} onChange={(e) => set("end_customer_postal_code", e.target.value)} /></Field>
+        </Section>
+
+        <Section title="Circuit / Site (from email)">
+          <Field label="Site Availability"><Input value={form.site_availability} onChange={(e) => set("site_availability", e.target.value)} /></Field>
+          <Field label="Link Type"><Input value={form.link_type} onChange={(e) => set("link_type", e.target.value)} /></Field>
+          <Field label="Bandwidth"><Input value={form.bandwidth} onChange={(e) => set("bandwidth", e.target.value)} /></Field>
+          <Field label="Ports in Use"><Input value={form.ports_in_use} onChange={(e) => set("ports_in_use", e.target.value)} /></Field>
+          <div className="sm:col-span-2">
+            <Field label="Site Instructions (photos / RTR snaps)">
+              <textarea className="min-h-16 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" value={form.site_instructions} onChange={(e) => set("site_instructions", e.target.value)} />
+            </Field>
+          </div>
+          <div className="sm:col-span-2">
+            <Field label="IP / Credentials Notes">
+              <textarea className="min-h-16 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" value={form.ip_details} onChange={(e) => set("ip_details", e.target.value)} />
+            </Field>
+          </div>
+          <div className="sm:col-span-2">
+            <Field label="Previous FE Notes">
+              <textarea className="min-h-16 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" value={form.previous_fe_notes} onChange={(e) => set("previous_fe_notes", e.target.value)} />
+            </Field>
+          </div>
+          <div className="sm:col-span-2">
+            <Field label="Other Information (from mail)">
+              <textarea className="min-h-16 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" value={form.mail_extra_info} onChange={(e) => set("mail_extra_info", e.target.value)} />
+            </Field>
+          </div>
         </Section>
 
         <Section title="Section 7 — Additional Information">
@@ -603,13 +709,29 @@ export function ServiceRequestTicketFormPage({ ticketId }: { ticketId?: string }
           </Field>
         </Section>
 
+        <Section title="Remote Engineer Details">
+          <Field label="Remote Engineer Name"><Input value={form.remote_engineer_name} onChange={(e) => set("remote_engineer_name", e.target.value)} /></Field>
+          <Field label="Remote Engineer Number"><Input value={form.remote_engineer_contact} onChange={(e) => set("remote_engineer_contact", e.target.value)} /></Field>
+          <Field label="Remote Engineer Date"><Input type="date" value={form.remote_engineer_date} onChange={(e) => set("remote_engineer_date", e.target.value)} /></Field>
+        </Section>
+
         {showFe ? (
           <Section title="Section 9 — Field Engineer Visit">
-            <Field label="Engineer Name"><Input value={form.fe_engineer_name} onChange={(e) => set("fe_engineer_name", e.target.value)} /></Field>
-            <Field label="Engineer Contact"><Input value={form.fe_engineer_contact} onChange={(e) => set("fe_engineer_contact", e.target.value)} /></Field>
-            <Field label="Distance"><Input value={form.fe_distance} onChange={(e) => set("fe_distance", e.target.value)} /></Field>
+            <Field label="Field Engineer Name"><Input value={form.fe_engineer_name} onChange={(e) => set("fe_engineer_name", e.target.value)} /></Field>
+            <Field label="Contact Number"><Input value={form.fe_engineer_contact} onChange={(e) => set("fe_engineer_contact", e.target.value)} /></Field>
+            <Field label="Distance from FE Location"><Input value={form.fe_distance} onChange={(e) => set("fe_distance", e.target.value)} /></Field>
             <Field label="Number of Visits"><Input type="number" value={form.fe_visits_count} onChange={(e) => set("fe_visits_count", e.target.value)} /></Field>
-            <Field label="Visit Date"><Input type="date" value={form.fe_visit_date} onChange={(e) => set("fe_visit_date", e.target.value)} /></Field>
+            <Field label="Engineer Carrying spares tools">
+              <select className={selectCls} value={form.fe_carrying_spares} onChange={(e) => set("fe_carrying_spares", e.target.value)}>
+                <option value="false">No</option>
+                <option value="true">Yes</option>
+              </select>
+            </Field>
+            <Field label="Site Visit Date"><Input type="date" value={form.fe_visit_date} onChange={(e) => set("fe_visit_date", e.target.value)} /></Field>
+            <Field label="HW Replacement"><Input value={form.fe_hw_replacement} onChange={(e) => set("fe_hw_replacement", e.target.value)} placeholder="-None-" /></Field>
+            <Field label="Mode of Transport"><Input value={form.fe_transport_mode} onChange={(e) => set("fe_transport_mode", e.target.value)} /></Field>
+            <Field label="Movement Charges"><Input type="number" value={form.fe_movement_charges} onChange={(e) => set("fe_movement_charges", e.target.value)} /></Field>
+            <Field label="Visit Charges"><Input type="number" value={form.fe_visit_charges} onChange={(e) => set("fe_visit_charges", e.target.value)} /></Field>
             <Field label="Total Charges"><Input type="number" value={form.fe_total_charges} onChange={(e) => set("fe_total_charges", e.target.value)} /></Field>
             <div className="sm:col-span-2">
               <Field label="Remarks"><textarea className="min-h-16 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" value={form.fe_remarks} onChange={(e) => set("fe_remarks", e.target.value)} /></Field>

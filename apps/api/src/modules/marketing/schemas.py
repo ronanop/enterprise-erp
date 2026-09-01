@@ -172,6 +172,7 @@ class ContentItemResponse(BaseModel):
     final_head_approved_at: datetime | None = None
     linkedin_head_sections: dict | None = None
     linkedin_final_draft: dict | None = None
+    business_owner_review: dict | None = None
     video_head_sections: dict | None = None
     video_final_draft: dict | None = None
     company_id: UUID
@@ -412,6 +413,13 @@ class LinkedInSubmitFinalDraftPayload(BaseModel):
 
 class LinkedInHeadFinalDraftReviewPayload(BaseModel):
     status: str
+    comments: str | None = None
+
+
+class BusinessOwnerReviewPayload(BaseModel):
+    """Business owner decision after marketing head approves the source draft."""
+
+    status: str  # approved | changes_requested | rejected
     comments: str | None = None
 
 

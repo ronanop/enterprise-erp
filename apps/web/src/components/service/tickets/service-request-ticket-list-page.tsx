@@ -2,20 +2,22 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { Download, Mail, Plus, RefreshCw, Ticket } from "lucide-react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { Download, Plus, RefreshCw, Ticket, X } from "lucide-react";
 
 import { FinanceStatusBadge } from "@/components/finance/finance-status-badge";
 import { PageHeader } from "@/components/layout/page-header";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { serviceStatusGroupFromKey, serviceSupportModeLabel } from "@/config/service-dashboard";
+import { useUserPermissions } from "@/hooks/use-user-permissions";
+import { shouldScopeServiceToMine } from "@/lib/service-engineer-access";
 import {
   ApiClientError,
   exportTicketsCsv,
+  exportTicketsXlsx,
   formatStatus,
-  getEmailAutomationStatus,
   listServiceRequestTickets,
-  testEmailToTicket,
-  type EmailAutomationStatus,
   type ServiceRequestTicket,
 } from "@/services/service-request-ticket-service";
 
@@ -23,6 +25,7 @@ const PRIORITIES = ["", "p1", "p2", "p3", "p4", "critical", "high", "medium", "l
 const STATUSES = [
   "",
   "ticket_registered",
+  "awaiting_assignment",
   "assigned",
   "engineer_working",
   "pending_customer",
@@ -30,19 +33,41 @@ const STATUSES = [
   "resolved",
   "closed",
 ];
-const MODES = ["", "remote_support", "onsite_support"];
+const MODES = ["", "remote_support", "onsite_support", "oem_support"];
 
 export function ServiceRequestTicketListPage() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const { profile } = useUserPermissions();
+  const engineerScoped = shouldScopeServiceToMine(profile?.roleCodes, profile?.permissions);
+  const urlGroup = searchParams.get("group");
+  const urlStatus = searchParams.get("status");
+  const urlMode = searchParams.get("mode");
+  const urlMine = searchParams.get("mine") === "1";
+  const statusGroup = urlGroup ? serviceStatusGroupFromKey(urlGroup) : undefined;
+
   const [rows, setRows] = useState<ServiceRequestTicket[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [q, setQ] = useState("");
   const [priority, setPriority] = useState("");
-  const [status, setStatus] = useState("");
-  const [mode, setMode] = useState("");
-  const [view, setView] = useState<"all" | "mine">("all");
-  const [emailStatus, setEmailStatus] = useState<EmailAutomationStatus | null>(null);
-  const [emailTesting, setEmailTesting] = useState(false);
+  const [status, setStatus] = useState(() => urlStatus ?? "");
+  const [mode, setMode] = useState(() => urlMode ?? "");
+  const [view, setView] = useState<"all" | "mine">(() => (engineerScoped || urlMine ? "mine" : "all"));
+
+  useEffect(() => {
+    setStatus(urlStatus ?? "");
+  }, [urlStatus]);
+
+  useEffect(() => {
+    setMode(urlMode ?? "");
+  }, [urlMode]);
+
+  useEffect(() => {
+    if (engineerScoped || urlMine) {
+      setView("mine");
+    }
+  }, [engineerScoped, urlMine]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -51,9 +76,9 @@ export function ServiceRequestTicketListPage() {
       const data = await listServiceRequestTickets({
         q: q || undefined,
         priority: priority || undefined,
-        status: status || undefined,
+        status: statusGroup ? undefined : status || undefined,
         mode: mode || undefined,
-        mine: view === "mine",
+        mine: engineerScoped || view === "mine",
         page_size: 200,
       });
       setRows(data);
@@ -63,50 +88,51 @@ export function ServiceRequestTicketListPage() {
     } finally {
       setLoading(false);
     }
-  }, [q, priority, status, mode, view]);
+  }, [q, priority, status, mode, view, statusGroup, engineerScoped]);
 
   useEffect(() => {
     void load();
-    void getEmailAutomationStatus()
-      .then(setEmailStatus)
-      .catch(() => setEmailStatus(null));
   }, [load]);
 
-  const onTestEmailTicket = async () => {
-    setEmailTesting(true);
-    setError(null);
-    try {
-      const result = await testEmailToTicket({
-        message_id: `test-${Date.now()}@local`,
-        from_address: "customer@example.com",
-        from_name: "Test Customer",
-        subject: "Email test — automatic ticket",
-        body_text: "This is a test email body to verify email-to-ticket automation.",
-      });
-      await load();
-      setError(null);
-      alert(`Ticket created: ${result.document_number ?? result.ticket_id}`);
-    } catch (err) {
-      setError(err instanceof ApiClientError ? err.message : "Email test failed");
-    } finally {
-      setEmailTesting(false);
-    }
-  };
+  const filtered = useMemo(() => {
+    if (!statusGroup) return rows;
+    const allowed = new Set(statusGroup.statuses.map((s) => s.toLowerCase()));
+    return rows.filter((row) => allowed.has(String(row.status ?? "").toLowerCase()));
+  }, [rows, statusGroup]);
 
   const sorted = useMemo(
-    () => [...rows].sort((a, b) => (b.created_at ?? "").localeCompare(a.created_at ?? "")),
-    [rows],
+    () => [...filtered].sort((a, b) => (b.created_at ?? "").localeCompare(a.created_at ?? "")),
+    [filtered],
   );
+
+  const clearDashboardFilter = () => {
+    router.replace("/service/service-request-tickets");
+    setStatus("");
+    setMode("");
+  };
 
   return (
     <div className="space-y-4">
       <PageHeader
-        title="Service Request Tickets"
+        title={engineerScoped ? "My Service Request Tickets" : "Service Request Tickets"}
         actions={
           <div className="flex flex-wrap gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() =>
+                void exportTicketsXlsx().catch((err) =>
+                  setError(err instanceof ApiClientError ? err.message : "Excel export failed"),
+                )
+              }
+            >
+              <Download className="size-3.5" />
+              Excel Export
+            </Button>
             <Button type="button" variant="outline" size="sm" onClick={() => exportTicketsCsv(sorted)}>
               <Download className="size-3.5" />
-              Export
+              CSV
             </Button>
             <Button type="button" variant="outline" size="sm" onClick={() => void load()} disabled={loading}>
               <RefreshCw className={`size-3.5 ${loading ? "animate-spin" : ""}`} />
@@ -123,43 +149,40 @@ export function ServiceRequestTicketListPage() {
         }
       />
 
-      {emailStatus ? (
-        <div className="rounded-lg border border-border/70 bg-muted/30 px-4 py-3 text-sm">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="flex items-center gap-2">
-              <Mail className="size-4 text-primary" />
-              <span className="font-medium">Email → Ticket automation</span>
-              <FinanceStatusBadge status={emailStatus.enabled ? "active" : "inactive"} />
-            </div>
-            <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
-              <span>SMTP: {emailStatus.smtp_configured ? "ready" : "not configured"}</span>
-              <span>IMAP: {emailStatus.imap_configured ? "polling" : "off"}</span>
-              <span>Processed: {emailStatus.recent_ingests}</span>
-            </div>
-            {emailStatus.enabled ? (
-              <Button type="button" variant="outline" size="sm" disabled={emailTesting} onClick={() => void onTestEmailTicket()}>
-                {emailTesting ? "Creating…" : "Test email → ticket"}
-              </Button>
-            ) : null}
-          </div>
-        </div>
-      ) : null}
-
       {error ? (
         <div className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
           {error}
         </div>
       ) : null}
 
-      <div className="rounded-lg border border-border/70 bg-card p-4 shadow-sm">
-        <div className="mb-4 flex gap-2">
-          <Button type="button" size="sm" variant={view === "all" ? "default" : "outline"} onClick={() => setView("all")}>
-            All Tickets
-          </Button>
-          <Button type="button" size="sm" variant={view === "mine" ? "default" : "outline"} onClick={() => setView("mine")}>
-            My Assigned Tickets
+      {statusGroup || urlStatus || urlMode ? (
+        <div className="flex flex-wrap items-center gap-2 rounded-md border border-sky-200/80 bg-sky-50 px-3 py-2 text-sm text-sky-950">
+          <span>
+            Filter from dashboard:{" "}
+            <span className="font-medium">
+              {statusGroup?.label ??
+                (urlStatus ? formatStatus(urlStatus) : null) ??
+                (urlMode ? serviceSupportModeLabel(urlMode) : "")}
+            </span>
+          </span>
+          <Button type="button" size="sm" variant="outline" className="h-7 gap-1" onClick={clearDashboardFilter}>
+            <X className="size-3" />
+            Clear
           </Button>
         </div>
+      ) : null}
+
+      <div className="rounded-lg border border-border/70 bg-card p-4 shadow-sm">
+        {!engineerScoped ? (
+          <div className="mb-4 flex gap-2">
+            <Button type="button" size="sm" variant={view === "all" ? "default" : "outline"} onClick={() => setView("all")}>
+              All Tickets
+            </Button>
+            <Button type="button" size="sm" variant={view === "mine" ? "default" : "outline"} onClick={() => setView("mine")}>
+              My Assigned Tickets
+            </Button>
+          </div>
+        ) : null}
         <div className="mb-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
           <Input placeholder="Search tickets…" value={q} onChange={(e) => setQ(e.target.value)} />
           <select className="h-9 rounded-md border border-input bg-background px-2 text-sm" value={priority} onChange={(e) => setPriority(e.target.value)}>

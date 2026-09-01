@@ -9,12 +9,12 @@ import { MarketingPageHeader } from "@/components/marketing/marketing-page-heade
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useMarketingPermissions } from "@/hooks/use-marketing-permissions";
-import { linkedInPublishStatusLabel } from "@/lib/linkedin-section-approval";
 import { marketingPage, marketingTableHead, marketingTableRow, marketingTableShell } from "@/lib/marketing-ui";
 import {
   ApiClientError,
   formatMarketingStatus,
   listContentItems,
+  marketingContentStatusForDisplay,
   type MarketingContentItem,
 } from "@/services/marketing-service";
 
@@ -58,7 +58,7 @@ export function MarketingArchivePage() {
     <div className={marketingPage}>
       <MarketingPageHeader
         title="Archive"
-        description="Published posts are locked and moved here automatically. All marketing roles can view the archive."
+        description="Published posts are locked and listed here for all marketing roles."
         actions={
           <Button type="button" variant="outline" size="sm" onClick={() => void load()} disabled={loading}>
             <RefreshCw className={`size-3.5 ${loading ? "animate-spin" : ""}`} />
@@ -85,7 +85,6 @@ export function MarketingArchivePage() {
               <th className="px-3 py-2">Type</th>
               <th className="px-3 py-2">Status</th>
               <th className="px-3 py-2">Published</th>
-              <th className="px-3 py-2">Archived</th>
               <th className="px-3 py-2">Action</th>
             </tr>
           </thead>
@@ -98,16 +97,14 @@ export function MarketingArchivePage() {
                   <td className="px-3 py-2 font-medium">{row.title}</td>
                   <td className="px-3 py-2">{formatMarketingStatus(row.content_type)}</td>
                   <td className="px-3 py-2">
-                    <FinanceStatusBadge status={row.status} />
-                    {linkedInPublishStatusLabel(row) ? (
-                      <p className="mt-1 text-[11px] text-muted-foreground">{linkedInPublishStatusLabel(row)}</p>
-                    ) : null}
+                    <FinanceStatusBadge status={marketingContentStatusForDisplay(row.status)} />
                   </td>
                   <td className="px-3 py-2 text-xs text-muted-foreground">
-                    {row.published_at ? new Date(row.published_at).toLocaleString() : "—"}
-                  </td>
-                  <td className="px-3 py-2 text-xs text-muted-foreground">
-                    {row.archived_at ? new Date(row.archived_at).toLocaleString() : "—"}
+                    {row.published_at
+                      ? new Date(row.published_at).toLocaleString()
+                      : row.archived_at
+                        ? new Date(row.archived_at).toLocaleString()
+                        : "—"}
                   </td>
                   <td className="px-3 py-2">
                     <Button
@@ -126,8 +123,8 @@ export function MarketingArchivePage() {
               ))}
             {!loading && rows.length === 0 ? (
               <tr>
-                <td colSpan={7} className="px-3 py-8 text-center text-muted-foreground">
-                  No archived content yet. When the publisher marks a post as published, it is locked and archived automatically.
+                <td colSpan={6} className="px-3 py-8 text-center text-muted-foreground">
+                  No published content yet. When the publisher marks a post as published, it appears here.
                 </td>
               </tr>
             ) : null}

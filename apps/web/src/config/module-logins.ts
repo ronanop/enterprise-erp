@@ -95,6 +95,12 @@ export const marketingTeamLoginAccounts: MarketingTeamLoginAccount[] = [
     href: "/marketing/workflow",
   },
   {
+    email: "marketing.businessowner@example.com",
+    displayName: "Business Owner",
+    role: "After head draft approval — approve / reject / feedback",
+    href: "/marketing/pipeline",
+  },
+  {
     email: "marketing.campaign@example.com",
     displayName: "Campaign & Social Media Handler",
     role: "First verifier · copy, theme, hashtags",
@@ -115,7 +121,7 @@ export const marketingTeamLoginAccounts: MarketingTeamLoginAccount[] = [
   {
     email: "marketing.linkedin@example.com",
     displayName: "LinkedIn Handler",
-    role: "Draft LinkedIn posts · send to marketing head",
+    role: "Build final draft after business owner · send to publisher",
     href: "/marketing/content",
   },
   {
@@ -142,10 +148,37 @@ const redirectByEmail = new Map<string, string>([
   ...moduleLoginAccounts.map((a) => [a.email.toLowerCase(), a.href] as const),
 ]);
 
-/** Resolve post-login destination from the signed-in email. Unknown → `/`. */
+/** Resolve post-login destination from the signed-in email. Unknown → home dashboard. */
 export function getPostLoginRedirect(email: string | null | undefined): string {
   if (!email) return "/";
   return redirectByEmail.get(email.trim().toLowerCase()) ?? "/";
+}
+
+import {
+  FIELD_ENGINEER_HOME,
+  hasServiceFieldEngineerRole,
+  isServiceFieldEngineerOnly,
+} from "@/lib/service-field-engineer-access";
+
+/** After login, send field engineers straight to their dashboard. */
+export async function resolvePostLoginRedirect(
+  email: string,
+  me: () => Promise<{
+    data?: { role_codes?: string[]; role_names?: string[]; permissions?: string[] } | null;
+  }>,
+): Promise<string> {
+  try {
+    const res = await me();
+    const roleCodes = res.data?.role_codes ?? [];
+    const roleNames = res.data?.role_names ?? [];
+    const permissions = res.data?.permissions ?? [];
+    if (isServiceFieldEngineerOnly(roleCodes, permissions, roleNames)) {
+      return FIELD_ENGINEER_HOME;
+    }
+  } catch {
+    // fall back to email map
+  }
+  return getPostLoginRedirect(email);
 }
 
 export function getModuleLoginByEmail(email: string): ModuleLoginAccount | undefined {

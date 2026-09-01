@@ -14,6 +14,7 @@ MARKETING_PERMISSIONS: list[tuple[str, str, str, str]] = [
     ("marketing.content:submit", "marketing.content", "submit", "marketing"),
     ("marketing.content:approve_media", "marketing.content", "approve_media", "marketing"),
     ("marketing.content:approve", "marketing.content", "approve", "marketing"),
+    ("marketing.content:approve_business", "marketing.content", "approve_business", "marketing"),
     ("marketing.content:schedule", "marketing.content", "schedule", "marketing"),
     ("marketing.content:publish", "marketing.content", "publish", "marketing"),
     ("marketing.content:archive", "marketing.content", "archive", "marketing"),
@@ -99,5 +100,13 @@ MARKETING_PUBLISHER_PERMISSIONS = [
     "marketing.publication:create",
     "marketing.report:read",
 ]
+MARKETING_BUSINESS_OWNER_PERMISSIONS = [
+    "marketing.campaign:read",
+    "marketing.channel:read",
+    "marketing.content:read",
+    "marketing.content:approve_business",
+    "marketing.asset:read",
+    "marketing.report:read",
+] + MARKETING_ORG_READ_PERMISSIONS
 MARKETING_ANALYST_PERMISSIONS = [p for p in _ALL if ":create" not in p and ":update" not in p and ":submit" not in p and ":approve" not in p and ":schedule" not in p and ":publish" not in p and ":archive" not in p and ":activate" not in p]
 MARKETING_VIEWER_PERMISSIONS = [p for p in _ALL if p.endswith(":read") or p == "marketing.report:read"]

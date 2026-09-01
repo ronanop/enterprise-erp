@@ -14,9 +14,12 @@ export type MarketingNavAccessInput = {
   canArchive: boolean;
   canApproveMedia: boolean;
   canApprove: boolean;
+  canApproveBusiness: boolean;
   canCampaignCreate: boolean;
   canCampaignUpdate: boolean;
   canCampaignActivate: boolean;
+  canChannelCreate?: boolean;
+  canChannelUpdate?: boolean;
 };
 
 export function canAccessMarketingCampaigns(perms: MarketingNavAccessInput): boolean {
@@ -44,7 +47,7 @@ export function canAccessMarketingChannels(perms: MarketingNavAccessInput): bool
 }
 
 export function canAccessMarketingApprovals(perms: MarketingNavAccessInput): boolean {
-  return perms.canApproveMedia || perms.canApprove;
+  return perms.canApproveMedia || perms.canApprove || perms.canApproveBusiness;
 }
 
 export function canShowMarketingNavHref(href: string, perms: MarketingNavAccessInput): boolean {
@@ -97,6 +100,7 @@ export function canShowDashboardStat(key: DashboardStatKey, perms: MarketingNavA
         perms.canSubmit ||
         perms.canApproveMedia ||
         perms.canApprove ||
+        perms.canApproveBusiness ||
         perms.canPublish
       );
     case "scheduled_content":

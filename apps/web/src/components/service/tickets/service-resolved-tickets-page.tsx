@@ -1,13 +1,17 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { CheckCircle2, RefreshCw } from "lucide-react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { CheckCircle2, RefreshCw, X } from "lucide-react";
 
 import { FinanceStatusBadge } from "@/components/finance/finance-status-badge";
 import { PageHeader } from "@/components/layout/page-header";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { localDateKey } from "@/config/service-dashboard";
+import { useUserPermissions } from "@/hooks/use-user-permissions";
+import { shouldScopeServiceToMine } from "@/lib/service-engineer-access";
 import {
   ApiClientError,
   formatStatus,
@@ -20,6 +24,15 @@ const solutionLabel = (value: string | null) =>
   SOLUTION_TYPES.find((s) => s.value === value)?.label ?? (value ? formatStatus(value) : "—");
 
 export function ServiceResolvedTicketsPage() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const { profile } = useUserPermissions();
+  const engineerScoped = shouldScopeServiceToMine(profile?.roleCodes, profile?.permissions);
+  const dayFilter = searchParams.get("day");
+  const slaOutcome = searchParams.get("sla_outcome");
+  const urlMine = searchParams.get("mine") === "1";
+  const scopedToMine = engineerScoped || urlMine;
+
   const [rows, setRows] = useState<ResolvedTicketItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -29,7 +42,12 @@ export function ServiceResolvedTicketsPage() {
     setLoading(true);
     setError(null);
     try {
-      const data = await listResolvedTickets({ q: q || undefined, page_size: 200 });
+      const data = await listResolvedTickets({
+        q: q || undefined,
+        page_size: 200,
+        sla_outcome: slaOutcome === "within" || slaOutcome === "breach" ? slaOutcome : undefined,
+        mine: scopedToMine,
+      });
       setRows(data);
     } catch (err) {
       setRows([]);
@@ -37,17 +55,43 @@ export function ServiceResolvedTicketsPage() {
     } finally {
       setLoading(false);
     }
-  }, [q]);
+  }, [q, slaOutcome, scopedToMine]);
 
   useEffect(() => {
     void load();
   }, [load]);
 
+  const filteredRows = useMemo(() => {
+    if (!dayFilter) return rows;
+    return rows.filter((row) => {
+      const raw = row.resolved_at ?? row.closed_at;
+      if (!raw) return false;
+      const d = new Date(raw);
+      if (Number.isNaN(d.getTime())) return false;
+      return localDateKey(d) === dayFilter;
+    });
+  }, [rows, dayFilter]);
+
+  const dayLabel = dayFilter
+    ? new Date(`${dayFilter}T12:00:00`).toLocaleDateString("en-IN", {
+        weekday: "short",
+        day: "numeric",
+        month: "short",
+        year: "numeric",
+      })
+    : null;
+
+  const slaOutcomeLabel =
+    slaOutcome === "within" ? "Closed within SLA" : slaOutcome === "breach" ? "Closed after breach" : null;
+
+  const clearDashboardFilter = () => {
+    router.replace("/service/resolved-tickets");
+  };
+
   return (
     <div className="space-y-4">
       <PageHeader
         title="Resolved Tickets"
-        description="Tickets that have been resolved or closed, with solution details."
         actions={
           <Button type="button" variant="outline" size="sm" onClick={() => void load()} disabled={loading}>
             <RefreshCw className={`size-3.5 ${loading ? "animate-spin" : ""}`} />
@@ -59,6 +103,19 @@ export function ServiceResolvedTicketsPage() {
       {error ? (
         <div className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
           {error}
+        </div>
+      ) : null}
+
+      {dayFilter || slaOutcomeLabel ? (
+        <div className="flex flex-wrap items-center gap-2 rounded-md border border-sky-200/80 bg-sky-50 px-3 py-2 text-sm text-sky-950">
+          <span>
+            Filter from dashboard:{" "}
+            <span className="font-medium">{dayLabel ?? slaOutcomeLabel}</span>
+          </span>
+          <Button type="button" size="sm" variant="outline" className="h-7 gap-1" onClick={clearDashboardFilter}>
+            <X className="size-3" />
+            Clear
+          </Button>
         </div>
       ) : null}
 
@@ -97,15 +154,15 @@ export function ServiceResolvedTicketsPage() {
                     Loading resolved tickets…
                   </td>
                 </tr>
-              ) : rows.length === 0 ? (
+              ) : filteredRows.length === 0 ? (
                 <tr>
                   <td colSpan={9} className="px-3 py-12 text-center text-muted-foreground">
                     <CheckCircle2 className="mx-auto mb-2 size-8 opacity-40" />
-                    No resolved tickets found.
+                    {rows.length === 0 ? "No resolved tickets found." : "No resolved tickets on this day."}
                   </td>
                 </tr>
               ) : (
-                rows.map((row) => (
+                filteredRows.map((row) => (
                   <tr key={row.id} className="border-b border-border/50 hover:bg-muted/30">
                     <td className="px-3 py-2 font-mono text-xs">
                       <Link

@@ -115,7 +115,7 @@ class PipelineService:
             ("media_approved", "Media approved", [ContentStatus.MEDIA_APPROVED.value], "marketing.content:read"),
             ("approved", "Approved", [ContentStatus.APPROVED.value, ContentStatus.SCHEDULED.value], "marketing.content:read"),
             ("published", "Published", [ContentStatus.PUBLISHED.value], "marketing.content:read"),
-            ("archived", "Archived", [ContentStatus.ARCHIVED.value], "marketing.content:read"),
+            ("archived", "Published", [ContentStatus.ARCHIVED.value], "marketing.content:read"),
         ]
         for key, label, statuses, perm in funnel_defs:
             if perm not in perms and "marketing.report:read" not in perms:
@@ -202,6 +202,30 @@ class PipelineService:
 
         linkedin_svc = LinkedInSectionService(self._db)
         video_svc = VideoSectionService(self._db)
+
+        if self._has(ctx, "marketing.content:approve_business"):
+            bo_rows = [
+                r
+                for r in self._content.list_rows(
+                    ctx,
+                    cid,
+                    statuses=[ContentStatus.IN_REVIEW.value, ContentStatus.APPROVED.value],
+                )
+                if linkedin_svc.can_business_owner_review(r)
+            ]
+            if bo_rows or self._has(ctx, "marketing.content:approve_business"):
+                stages.append(
+                    PipelineWorkStage(
+                        key="business_owner_queue",
+                        label="Business owner review",
+                        description="Marketing head approved the draft. Approve, reject, or send feedback to marketing head.",
+                        count=len(bo_rows),
+                        items=self._to_items(bo_rows),
+                    )
+                )
+                if "business_owner" not in role_hints:
+                    role_hints.append("business_owner")
+
         if self._has(ctx, "marketing.content:submit"):
             handler_send_draft = [
                 r

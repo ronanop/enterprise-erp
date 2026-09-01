@@ -37,6 +37,11 @@ FINAL_DRAFT_STATUS_APPROVED = "approved"
 FINAL_DRAFT_STATUS_CHANGES_REQUESTED = "changes_requested"
 FINAL_DRAFT_STATUS_REJECTED = "rejected"
 
+BO_STATUS_AWAITING = "awaiting_business_owner"
+BO_STATUS_APPROVED = "approved"
+BO_STATUS_CHANGES_REQUESTED = "changes_requested"
+BO_STATUS_REJECTED = "rejected"
+
 # UI / API status values stored per section
 SECTION_STATUS_PENDING = "pending"
 SECTION_STATUS_AWAITING_HEAD = "awaiting_head"
@@ -324,11 +329,68 @@ class LinkedInSectionService:
         return True
 
     def _finalize_all_approved(self, ctx: TenantContext, row: MktContentItem) -> None:
+        """After marketing head approves source draft → Business Owner review (not LinkedIn yet)."""
         now = _utcnow()
         row.final_head_approved_at = now
+        row.workflow_stage = WorkflowStage.BUSINESS_OWNER_REVIEW.value
+        row.status = ContentStatus.IN_REVIEW.value
+        row.posting_report_status = None
+        row.rejection_reason = None
+        row.linkedin_final_draft = None
+        row.business_owner_review = {
+            "status": BO_STATUS_AWAITING,
+            "comments": None,
+            "reviewed_at": None,
+            "reviewed_by_user_id": None,
+            "feedback_to_head": None,
+        }
+
+        verification = self._db.scalar(
+            select(MktContentVerification).where(
+                MktContentVerification.content_item_id == row.id,
+                MktContentVerification.verifier_role == VerifierRole.LINKEDIN_HANDLER.value,
+                MktContentVerification.is_deleted.is_(False),
+            )
+        )
+        if verification is None:
+            verification = MktContentVerification(
+                id=uuid4(),
+                tenant_id=ctx.tenant_id,
+                company_id=row.company_id,
+                created_by=ctx.user_id,
+                updated_by=ctx.user_id,
+                content_item_id=row.id,
+                verifier_role=VerifierRole.LINKEDIN_HANDLER.value,
+                overall_status=VerificationOverallStatus.SUBMITTED_TO_HEAD.value,
+            )
+            self._db.add(verification)
+        else:
+            verification.overall_status = VerificationOverallStatus.SUBMITTED_TO_HEAD.value
+            verification.sent_to_publisher_at = None
+            verification.publisher_upload_status = None
+            verification.updated_by = ctx.user_id
+
+        self._activity.log(
+            ctx,
+            entity_type="content",
+            entity_id=row.id,
+            action="linkedin_head_approved_awaiting_business_owner",
+            details="Post approved by marketing head — awaiting business owner review",
+            company_id=row.company_id,
+        )
+
+    def can_business_owner_review(self, row: MktContentItem) -> bool:
+        if not self.is_linkedin_section_workflow(row):
+            return False
+        if row.workflow_stage != WorkflowStage.BUSINESS_OWNER_REVIEW.value:
+            return False
+        bo = dict(row.business_owner_review or {})
+        return bo.get("status") in {BO_STATUS_AWAITING, None, ""}
+
+    def _release_to_linkedin_handler(self, ctx: TenantContext, row: MktContentItem) -> None:
+        """Business owner approved → LinkedIn handler builds final draft."""
         row.workflow_stage = WorkflowStage.LINKEDIN_HANDLER_REVIEW.value
         row.status = ContentStatus.APPROVED.value
-        row.posting_report_status = None
         row.rejection_reason = None
         row.linkedin_final_draft = {
             "content_text": None,
@@ -366,14 +428,73 @@ class LinkedInSectionService:
             verification.publisher_upload_status = None
             verification.updated_by = ctx.user_id
 
+    def business_owner_review(
+        self,
+        ctx: TenantContext,
+        content_id: UUID,
+        *,
+        status: str,
+        comments: str | None = None,
+    ) -> MktContentItem:
+        if status not in {BO_STATUS_APPROVED, BO_STATUS_CHANGES_REQUESTED, BO_STATUS_REJECTED}:
+            raise InvalidMarketingState(
+                "Business owner status must be approved, changes_requested, or rejected"
+            )
+
+        row = self._db.get(MktContentItem, content_id)
+        if row is None or row.is_deleted:
+            raise NotFoundException("Content not found")
+        self._assert_editable(row)
+        if not self.can_business_owner_review(row):
+            raise InvalidMarketingState("This draft is not awaiting business owner review")
+
+        now = _utcnow()
+        feedback = (comments or "").strip() or None
+        row.business_owner_review = {
+            "status": status,
+            "comments": feedback,
+            "reviewed_at": now.isoformat(),
+            "reviewed_by_user_id": str(ctx.user_id),
+            "feedback_to_head": feedback if status == BO_STATUS_CHANGES_REQUESTED else None,
+        }
+        row.updated_by = ctx.user_id
+
+        if status == BO_STATUS_APPROVED:
+            self._release_to_linkedin_handler(ctx, row)
+            action = "business_owner_approved"
+            details = feedback or "Business owner approved — LinkedIn handler can build final draft"
+        elif status == BO_STATUS_CHANGES_REQUESTED:
+            # Send feedback to marketing head to re-review the source draft
+            sections = dict(row.linkedin_head_sections or {})
+            post = dict(sections.get("post") or _empty_section())
+            post["status"] = SECTION_STATUS_CHANGES_REQUESTED
+            post["comments"] = feedback
+            post["reviewed_at"] = now.isoformat()
+            post["reviewed_by_user_id"] = str(ctx.user_id)
+            sections["post"] = post
+            row.linkedin_head_sections = sections
+            row.status = ContentStatus.CHANGES_REQUIRED.value
+            row.workflow_stage = WorkflowStage.CHANGES_REQUIRED.value
+            row.rejection_reason = feedback
+            action = "business_owner_feedback_to_head"
+            details = feedback or "Business owner requested changes — sent back to marketing head"
+        else:
+            row.status = ContentStatus.REJECTED.value
+            row.workflow_stage = WorkflowStage.REJECTED.value
+            row.rejection_reason = feedback
+            action = "business_owner_rejected"
+            details = feedback or "Business owner rejected the draft"
+
         self._activity.log(
             ctx,
             entity_type="content",
-            entity_id=row.id,
-            action="linkedin_head_final_approved",
-            details="Post approved — awaiting final draft from LinkedIn handler",
+            entity_id=content_id,
+            action=action,
+            details=details,
             company_id=row.company_id,
         )
+        self._db.flush()
+        return row
 
     def all_sections_approved(self, row: MktContentItem) -> bool:
         if not row.linkedin_head_sections:

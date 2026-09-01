@@ -2,6 +2,80 @@ import { ApiClientError, apiClient, resourceService } from "@/services/api-clien
 
 const API = "/service/service-request-tickets";
 
+export type TicketAttachment = {
+  id: string;
+  request_id: string;
+  file_name: string;
+  content_type: string | null;
+  file_size: number | null;
+  uploaded_by: string | null;
+  uploaded_at: string;
+  field_engineer_id?: string | null;
+};
+
+export type TicketFieldEngineer = {
+  id: string;
+  request_id: string;
+  engineer_name: string;
+  engineer_contact: string | null;
+  engineer_email: string;
+  assigned_date: string | null;
+  solution_summary: string | null;
+  status: string;
+  solved_at: string | null;
+  work_brief?: string | null;
+  show_issue?: boolean;
+  show_customer?: boolean;
+  show_site?: boolean;
+  show_asset?: boolean;
+  show_circuit?: boolean;
+  attachments?: TicketAttachment[];
+  login_email?: string | null;
+  temporary_password?: string | null;
+  account_created?: boolean;
+  credentials_email_sent?: boolean;
+  credentials_note?: string | null;
+};
+
+export type FieldEngineerTicketItem = {
+  id: string;
+  document_number: string;
+  subject: string;
+  status: string;
+  priority: string;
+  asset_status: string | null;
+  serial_number: string | null;
+  field_engineer_id: string;
+  field_engineer_status: string;
+  assigned_date: string | null;
+  solution_summary: string | null;
+  created_at: string;
+  work_brief?: string | null;
+  show_issue?: boolean;
+  show_customer?: boolean;
+  show_site?: boolean;
+  show_asset?: boolean;
+  show_circuit?: boolean;
+  issue_description?: string | null;
+  end_customer_name?: string | null;
+  coordinator_name?: string | null;
+  coordinator_phone?: string | null;
+  end_customer_street?: string | null;
+  end_customer_city?: string | null;
+  end_customer_state?: string | null;
+  end_customer_postal_code?: string | null;
+  site_availability?: string | null;
+  site_instructions?: string | null;
+  asset_name?: string | null;
+  reference_sr_number?: string | null;
+  ckt_id?: string | null;
+  link_type?: string | null;
+  bandwidth?: string | null;
+  ports_in_use?: string | null;
+  ip_details?: string | null;
+  previous_fe_notes?: string | null;
+};
+
 export type ServiceRequestTicket = {
   id: string;
   document_number: string;
@@ -35,6 +109,7 @@ export type ServiceRequestTicket = {
   reference_sr_number?: string | null;
   customer_reference?: string | null;
   lsi?: string | null;
+  ckt_id?: string | null;
   end_customer_name?: string | null;
   end_customer_email?: string | null;
   coordinator_name?: string | null;
@@ -58,7 +133,25 @@ export type ServiceRequestTicket = {
   warranty_end_date?: string | null;
   amc_end_date?: string | null;
   asset_status?: string | null;
+  asset_confirmed_at?: string | null;
   amc_mail_sent?: boolean;
+  remote_engineer_name?: string | null;
+  remote_engineer_contact?: string | null;
+  remote_engineer_date?: string | null;
+  follow_up_at?: string | null;
+  follow_up_note?: string | null;
+  site_availability?: string | null;
+  site_instructions?: string | null;
+  link_type?: string | null;
+  bandwidth?: string | null;
+  ports_in_use?: string | null;
+  previous_fe_notes?: string | null;
+  ip_details?: string | null;
+  mail_extra_info?: string | null;
+  company_name_from_mail?: string | null;
+  ticket_start_at?: string | null;
+  ticket_end_at?: string | null;
+  field_engineers?: TicketFieldEngineer[];
   field_engineer?: FieldEngineerVisit | null;
   oem_support?: OemSupport | null;
   solution_summary?: string | null;
@@ -104,6 +197,8 @@ export type TicketAccessInfo = {
   can_reopen: boolean;
   can_open: boolean;
   is_opened: boolean;
+  can_end?: boolean;
+  can_resume?: boolean;
   employee_id: string | null;
 };
 
@@ -117,6 +212,16 @@ export type TicketStakeholderView = {
   resolved_at: string | null;
   closed_at: string | null;
   owner_employee_id: string | null;
+  solution_type?: string | null;
+  solution_summary?: string | null;
+  field_engineer_work?: {
+    engineer_name: string;
+    engineer_email?: string | null;
+    status: string;
+    solution_summary?: string | null;
+    solved_at?: string | null;
+    work_brief?: string | null;
+  }[];
 };
 
 export type FieldEngineerVisit = {
@@ -156,16 +261,6 @@ export type TicketComment = {
   commented_at: string;
 };
 
-export type TicketAttachment = {
-  id: string;
-  request_id: string;
-  file_name: string;
-  content_type: string | null;
-  file_size: number | null;
-  uploaded_by: string | null;
-  uploaded_at: string;
-};
-
 export type TimelineItem = {
   event_type: string;
   title: string;
@@ -203,6 +298,12 @@ export type SlaTrackerItem = {
   is_breached: boolean;
 };
 
+export type SlaComplianceSummary = {
+  active_breached: number;
+  closed_within_sla: number;
+  closed_after_breach: number;
+};
+
 export type ResolvedTicketItem = {
   id: string;
   document_number: string;
@@ -213,6 +314,8 @@ export type ResolvedTicketItem = {
   solution_summary: string | null;
   resolved_at: string | null;
   closed_at: string | null;
+  due_at?: string | null;
+  closed_within_sla?: boolean | null;
   owner_employee_id: string | null;
   owner_name: string | null;
 };
@@ -238,12 +341,41 @@ export async function listServiceRequestTickets(query?: TicketListQuery): Promis
   return Array.isArray(data) ? data : [];
 }
 
-export async function listSlaTracker(page_size = 200): Promise<SlaTrackerItem[]> {
-  const res = await apiClient<SlaTrackerItem[]>(`${API}/sla-tracker`, { query: { page_size } });
+export async function listSlaTracker(opts?: { page_size?: number; mine?: boolean }): Promise<SlaTrackerItem[]> {
+  const res = await apiClient<SlaTrackerItem[]>(`${API}/sla-tracker`, {
+    query: { page_size: opts?.page_size ?? 200, mine: opts?.mine ? true : undefined },
+  });
   return Array.isArray(res.data) ? res.data : [];
 }
 
-export async function listResolvedTickets(query?: { q?: string; page_size?: number }): Promise<ResolvedTicketItem[]> {
+export async function getSlaComplianceSummary(opts?: { mine?: boolean }): Promise<SlaComplianceSummary> {
+  const res = await apiClient<SlaComplianceSummary>(`${API}/sla-compliance-summary`, {
+    query: { mine: opts?.mine ? true : undefined },
+  });
+  const summary = (res.data ?? {
+    active_breached: 0,
+    closed_within_sla: 0,
+    closed_after_breach: 0,
+  }) as SlaComplianceSummary;
+
+  if (typeof summary.active_breached === "number") {
+    return summary;
+  }
+
+  // Older API builds only return closed-ticket counts — derive active breaches from SLA tracker.
+  const tracker = await listSlaTracker({ mine: opts?.mine });
+  return {
+    ...summary,
+    active_breached: tracker.filter((row) => row.is_breached).length,
+  };
+}
+
+export async function listResolvedTickets(query?: {
+  q?: string;
+  page_size?: number;
+  sla_outcome?: "within" | "breach";
+  mine?: boolean;
+}): Promise<ResolvedTicketItem[]> {
   const res = await apiClient<ResolvedTicketItem[]>(`${API}/resolved-tickets`, { query });
   return Array.isArray(res.data) ? res.data : [];
 }
@@ -326,9 +458,167 @@ export async function closeTicket(id: string, reason?: string): Promise<ServiceR
   return unwrap(res.data);
 }
 
+export async function resumeTicket(id: string, reason?: string): Promise<ServiceRequestTicket> {
+  const res = await resourceService.action<ServiceRequestTicket>(API, id, "resume", reason ? { reason } : {});
+  return unwrap(res.data);
+}
+
+export async function markAwaitingAssignment(id: string, reason?: string): Promise<ServiceRequestTicket> {
+  const res = await resourceService.action<ServiceRequestTicket>(
+    API,
+    id,
+    "awaiting-assignment",
+    reason ? { reason } : {},
+  );
+  return unwrap(res.data);
+}
+
 export async function reopenTicket(id: string, reason?: string): Promise<ServiceRequestTicket> {
   const res = await resourceService.action<ServiceRequestTicket>(API, id, "reopen", reason ? { reason } : {});
   return unwrap(res.data);
+}
+
+export async function exportTicketsXlsx(): Promise<void> {
+  const { getAccessToken } = await import("@/lib/auth");
+  const { env } = await import("@/utils/env");
+  const token = getAccessToken();
+  const res = await fetch(`${env.apiUrl}${API}/export.xlsx`, {
+    headers: {
+      Accept: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    cache: "no-store",
+  });
+  if (!res.ok) throw new ApiClientError("Excel export failed", res.status);
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `service-request-tickets-${new Date().toISOString().slice(0, 10)}.xlsx`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+export async function exportTicketTimelineXlsx(ticketId: string): Promise<void> {
+  const { getAccessToken } = await import("@/lib/auth");
+  const { env } = await import("@/utils/env");
+  const token = getAccessToken();
+  const res = await fetch(`${env.apiUrl}${API}/${ticketId}/timeline.xlsx`, {
+    headers: {
+      Accept: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    cache: "no-store",
+  });
+  if (!res.ok) throw new ApiClientError("Timeline Excel export failed", res.status);
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `ticket-timeline-${ticketId.slice(0, 8)}.xlsx`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+export async function listMyFieldEngineerTickets(): Promise<FieldEngineerTicketItem[]> {
+  const res = await apiClient<FieldEngineerTicketItem[]>(`${API}/field-engineer/my-tickets`);
+  return Array.isArray(res.data) ? res.data : [];
+}
+
+export type FieldEngineerUpsertPayload = {
+  engineer_name?: string;
+  engineer_email?: string;
+  engineer_contact?: string;
+  assigned_date?: string;
+  work_brief?: string;
+  show_issue?: boolean;
+  show_customer?: boolean;
+  show_site?: boolean;
+  show_asset?: boolean;
+  show_circuit?: boolean;
+};
+
+export async function addTicketFieldEngineer(
+  ticketId: string,
+  payload: {
+    engineer_name: string;
+    engineer_email: string;
+    engineer_contact?: string;
+    assigned_date?: string;
+    work_brief?: string;
+    show_issue?: boolean;
+    show_customer?: boolean;
+    show_site?: boolean;
+    show_asset?: boolean;
+    show_circuit?: boolean;
+  },
+): Promise<TicketFieldEngineer> {
+  const res = await resourceService.action<TicketFieldEngineer>(API, ticketId, "field-engineers", payload);
+  return unwrap(res.data);
+}
+
+export async function updateTicketFieldEngineer(
+  ticketId: string,
+  fieldEngineerId: string,
+  payload: FieldEngineerUpsertPayload,
+): Promise<TicketFieldEngineer> {
+  const res = await apiClient<TicketFieldEngineer>(`${API}/${ticketId}/field-engineers/${fieldEngineerId}`, {
+    method: "PATCH",
+    body: payload,
+  });
+  return unwrap(res.data);
+}
+
+export async function issueTicketFieldEngineerCredentials(
+  ticketId: string,
+  fieldEngineerId: string,
+): Promise<TicketFieldEngineer> {
+  const res = await apiClient<TicketFieldEngineer>(
+    `${API}/${ticketId}/field-engineers/${fieldEngineerId}/credentials`,
+    { method: "POST", body: {} },
+  );
+  return unwrap(res.data);
+}
+
+export async function removeTicketFieldEngineer(ticketId: string, fieldEngineerId: string): Promise<void> {
+  await apiClient(`${API}/${ticketId}/field-engineers/${fieldEngineerId}`, { method: "DELETE" });
+}
+
+export async function markFieldEngineerSolved(
+  ticketId: string,
+  fieldEngineerId: string,
+  solution_summary: string,
+  files: File[] = [],
+): Promise<TicketFieldEngineer> {
+  const attachments = await Promise.all(
+    files.map(async (file) => ({
+      file_name: file.name,
+      content_type: file.type || "application/octet-stream",
+      content_base64: await fileToBase64(file),
+    })),
+  );
+  const res = await apiClient<TicketFieldEngineer>(
+    `${API}/${ticketId}/field-engineers/${fieldEngineerId}/solve`,
+    { method: "POST", body: { solution_summary, attachments } },
+  );
+  return unwrap(res.data);
+}
+
+export type TicketOption = {
+  id: string;
+  option_type: string;
+  option_code: string;
+  option_label: string;
+  sort_order: number;
+  status: string;
+};
+
+export async function listTicketOptions(option_type?: "mode" | "category"): Promise<LookupOption[]> {
+  const res = await apiClient<TicketOption[]>("/service/ticket-options", {
+    query: option_type ? { option_type, active_only: true } : { active_only: true },
+  });
+  const rows = Array.isArray(res.data) ? res.data : [];
+  return rows.map((r) => ({ value: r.option_code, label: r.option_label }));
 }
 
 export async function getTicketStakeholderView(id: string): Promise<TicketStakeholderView> {
@@ -412,7 +702,7 @@ export async function deleteTicketAttachment(ticketId: string, attachmentId: str
 }
 
 export function attachmentDownloadUrl(ticketId: string, attachmentId: string): string {
-  const base = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000/api/v1";
+  const base = process.env.NEXT_PUBLIC_API_URL ?? "http://127.0.0.1:8000/api/v1";
   return `${base}${API}/${ticketId}/attachments/${attachmentId}/content`;
 }
 
@@ -468,16 +758,12 @@ export type EmailAutomationStatus = {
   enabled: boolean;
   smtp_configured: boolean;
   imap_configured: boolean;
+  graph_configured?: boolean;
+  mailbox?: string | null;
   webhook_path: string;
   recent_ingests: number;
-};
-
-export type EmailToTicketResult = {
-  status: string;
-  message: string;
-  ticket_id?: string;
-  document_number?: string;
-  ingest_log_id?: string;
+  subject_patterns?: string[];
+  auto_ticket_enabled?: boolean;
 };
 
 export async function getEmailAutomationStatus(): Promise<EmailAutomationStatus> {
@@ -485,18 +771,57 @@ export async function getEmailAutomationStatus(): Promise<EmailAutomationStatus>
   return res.data as EmailAutomationStatus;
 }
 
-export async function testEmailToTicket(payload: {
-  message_id: string;
-  from_address: string;
-  from_name?: string;
-  subject: string;
-  body_text: string;
-}): Promise<EmailToTicketResult> {
-  const res = await apiClient<EmailToTicketResult>("/service/email-inbound/test", {
+export async function pollSupportMailbox(): Promise<Record<string, unknown>> {
+  const res = await apiClient<Record<string, unknown>>("/service/email-inbound/poll-mailbox", {
     method: "POST",
-    body: payload,
   });
-  return res.data as EmailToTicketResult;
+  return (res.data as Record<string, unknown>) ?? {};
+}
+
+export type MailboxMessageItem = {
+  graph_id: string;
+  message_id: string;
+  internet_message_id?: string | null;
+  from_address: string;
+  from_name?: string | null;
+  subject: string;
+  body_preview: string;
+  received_at?: string | null;
+  is_read: boolean;
+  classification: "likely_ticket" | "not_ticket" | "review" | string;
+  ingest_status?: string | null;
+  ticket_id?: string | null;
+  document_number?: string | null;
+  ticket_status?: string | null;
+  opened_at?: string | null;
+  resolved_at?: string | null;
+  closed_at?: string | null;
+};
+
+export type MailboxMessageDetail = MailboxMessageItem & {
+  body_text?: string | null;
+  body_html?: string | null;
+};
+
+export type MailboxMessagesResult = {
+  mailbox: string;
+  total: number;
+  subject_patterns: string[];
+  messages: MailboxMessageItem[];
+};
+
+export async function listMailboxMessages(top = 50): Promise<MailboxMessagesResult> {
+  const res = await apiClient<MailboxMessagesResult>(
+    `/service/email-inbound/mailbox-messages?top=${top}`,
+  );
+  return res.data as MailboxMessagesResult;
+}
+
+export async function getMailboxMessage(graphId: string): Promise<MailboxMessageDetail> {
+  const res = await apiClient<MailboxMessageDetail>(
+    `/service/email-inbound/mailbox-messages/${encodeURIComponent(graphId)}`,
+  );
+  return res.data as MailboxMessageDetail;
 }
 
 export type LookupOption = { value: string; label: string };
@@ -525,6 +850,8 @@ export async function loadTicketFormLookups(): Promise<{
   branches: LookupOption[];
   employees: LookupOption[];
   products: LookupOption[];
+  modes: LookupOption[];
+  ticketCategories: LookupOption[];
   errors: string[];
 }> {
   const PAGE = 200; // API max page_size per PaginationParams
@@ -534,6 +861,8 @@ export async function loadTicketFormLookups(): Promise<{
     { key: "branches", call: () => resourceService.list("/branches", { page_size: PAGE }) },
     { key: "employees", call: () => resourceService.list("/employees", { page_size: PAGE }) },
     { key: "products", call: () => resourceService.list("/products", { page_size: PAGE }) },
+    { key: "modes", call: () => listTicketOptions("mode") },
+    { key: "ticketCategories", call: () => listTicketOptions("category") },
   ] as const;
 
   const settled = await Promise.allSettled(requests.map((r) => r.call()));
@@ -543,7 +872,7 @@ export async function loadTicketFormLookups(): Promise<{
   settled.forEach((result, i) => {
     const key = requests[i].key;
     if (result.status === "fulfilled") {
-      dataByKey[key] = result.value.data;
+      dataByKey[key] = key === "modes" || key === "ticketCategories" ? result.value : result.value.data;
     } else {
       const msg =
         result.reason instanceof ApiClientError
@@ -554,6 +883,11 @@ export async function loadTicketFormLookups(): Promise<{
     }
   });
 
+  const modes = Array.isArray(dataByKey.modes) ? (dataByKey.modes as LookupOption[]) : [];
+  const ticketCategories = Array.isArray(dataByKey.ticketCategories)
+    ? (dataByKey.ticketCategories as LookupOption[])
+    : [];
+
   return {
     categories: toOptions(dataByKey.categories, (r) => String(r.category_name ?? r.name ?? r.id)),
     customers: toOptions(dataByKey.customers, (r) => String(r.customer_name ?? r.name ?? r.id)),
@@ -563,6 +897,20 @@ export async function loadTicketFormLookups(): Promise<{
       return name || String(r.employee_code ?? r.id);
     }),
     products: toOptions(dataByKey.products, (r) => String(r.product_name ?? r.name ?? r.sku ?? r.id)),
+    modes: modes.length
+      ? modes
+      : [
+          { value: "remote_support", label: "Remote Support" },
+          { value: "onsite_support", label: "Onsite Support" },
+          { value: "oem_support", label: "OEM Support" },
+        ],
+    ticketCategories: ticketCategories.length
+      ? ticketCategories
+      : [
+          { value: "hardware", label: "Hardware" },
+          { value: "software", label: "Software" },
+          { value: "network", label: "Network" },
+        ],
     errors,
   };
 }

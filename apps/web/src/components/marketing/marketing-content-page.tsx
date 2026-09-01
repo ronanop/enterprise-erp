@@ -50,6 +50,7 @@ import {
   formatMarketingStatus,
   getContentTimeline,
   listContentItems,
+  marketingContentStatusForDisplay,
   submitContentItem,
   submitVerificationItem,
   type MarketingActivityLog,
@@ -149,15 +150,15 @@ export function MarketingContentPage() {
       setRows(
         (await listContentItems({
           q: q || undefined,
-          status: status || undefined,
+          status: status === "published" ? undefined : status || undefined,
           page_size: 200,
           mine: sectionWorkflowMode || undefined,
-        })).filter(
-          (row) =>
-            status === "archived" ||
-            status === "published" ||
-            (row.status !== "archived" && row.status !== "published"),
-        ),
+        })).filter((row) => {
+          if (status === "published") {
+            return row.status === "published" || row.status === "archived";
+          }
+          return row.status !== "archived" && row.status !== "published";
+        }),
       );
     } catch (err) {
       setRows([]);
@@ -510,7 +511,7 @@ export function MarketingContentPage() {
           className="h-9 rounded-md border border-input bg-background px-2 text-sm"
         >
           <option value="">All statuses</option>
-          {["draft", "in_review", "changes_required", "media_approved", "approved", "scheduled", "published", "archived", "rejected"].map((s) => (
+          {["draft", "in_review", "changes_required", "media_approved", "approved", "scheduled", "published", "rejected"].map((s) => (
             <option key={s} value={s}>
               {formatMarketingStatus(s)}
             </option>
@@ -620,6 +621,13 @@ function contentActionLabel(
     return { label: "Tell head: Posted?", variant: "default" };
   }
   if (
+    perms.canApproveBusiness &&
+    usesLinkedInSectionWorkflow(row) &&
+    row.workflow_stage === "business_owner_review"
+  ) {
+    return { label: "Business owner review", variant: "default" };
+  }
+  if (
     perms.canApprove &&
     usesLinkedInSectionWorkflow(row) &&
     (row.status === "in_review" || row.status === "changes_required")
@@ -659,6 +667,7 @@ function contentActionLabel(
   if (
     perms.canApproveMedia ||
     perms.canApprove ||
+    perms.canApproveBusiness ||
     perms.canPublish ||
     perms.canSubmit ||
     perms.canVerify
@@ -705,7 +714,7 @@ function ContentRow({
         </td>
         <td className="px-3 py-2">{formatMarketingStatus(row.content_type)}</td>
         <td className="px-3 py-2">
-          <FinanceStatusBadge status={row.status} />
+          <FinanceStatusBadge status={marketingContentStatusForDisplay(row.status)} />
           {linkedInPublishStatusLabel(row) || videoPublishStatusLabel(row) ? (
             <p className="mt-1 text-[11px] text-muted-foreground">
               {linkedInPublishStatusLabel(row) || videoPublishStatusLabel(row)}
