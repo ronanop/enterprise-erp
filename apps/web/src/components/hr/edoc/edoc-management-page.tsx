@@ -26,6 +26,7 @@ import { loadEmployeeDirectory } from "@/services/employee-management-service";
 import { loadOffboardingCases } from "@/services/offboarding-service";
 import type { OnboardingCase, OnboardingDocument } from "@/types/onboarding-management";
 import type { EmployeeRecord } from "@/types/employee-management";
+import { devError, devWarn } from "@/lib/dev-log";
 
 type EdocTab = "employees" | "document-types" | "onboarding-policies" | "other";
 
@@ -144,7 +145,7 @@ export function EdocManagementPage() {
               fromIdb = stamped;
             }
           } catch (err) {
-            console.warn("Could not refresh signed policy PDFs", err);
+            devWarn("Could not refresh signed policy PDFs");
           }
         }
         const signedSource = fromIdb.length

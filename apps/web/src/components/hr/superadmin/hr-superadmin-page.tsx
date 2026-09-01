@@ -212,17 +212,46 @@ export function HrSuperadminPage() {
     return map;
   }, [entities]);
 
+  const assignedEmployeeIds = useMemo(
+    () => new Set(admins.map((row) => row.employee_id)),
+    [admins],
+  );
+
+  const assignedRows = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return admins
+      .map((admin) => {
+        const emp = employees.find((e) => e.id === admin.employee_id);
+        return { admin, emp };
+      })
+      .filter(({ admin, emp }) => {
+        if (!q) return true;
+        const hay = [
+          admin.display_name,
+          admin.employee_code,
+          admin.email,
+          admin.designation,
+          emp?.displayName ?? "",
+        ]
+          .join(" ")
+          .toLowerCase();
+        return hay.includes(q);
+      });
+  }, [admins, employees, query]);
+
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (!q) return employees;
-    return employees.filter(
-      (e) =>
+    return employees.filter((e) => {
+      if (assignedEmployeeIds.has(e.id)) return false;
+      if (!q) return true;
+      return (
         e.displayName.toLowerCase().includes(q) ||
         e.employeeCode.toLowerCase().includes(q) ||
         e.officialEmail.toLowerCase().includes(q) ||
-        e.designationName.toLowerCase().includes(q),
-    );
-  }, [employees, query]);
+        e.designationName.toLowerCase().includes(q)
+      );
+    });
+  }, [employees, query, assignedEmployeeIds]);
 
   const filteredLogs = useMemo(() => {
     const q = logQuery.trim().toLowerCase();
@@ -260,14 +289,14 @@ export function HrSuperadminPage() {
         const row = await assignHrAdmin(employeeId, emp?.companyId ? [emp.companyId] : []);
         if (row.temporary_password) {
           showIssued(row.display_name, row.email, row.temporary_password);
-          toast(`${row.display_name} is now HR Admin. Copy the generated password below.`);
+          toast(`${row.display_name} now has HR module access. Copy the generated password below.`);
           setTab("passwords");
         } else {
-          toast(`${row.display_name} is now HR Admin`);
+          toast(`${row.display_name} now has HR module access`);
         }
       } else {
         await revokeHrAdmin(employeeId);
-        toast("HR Admin access revoked. That user has been signed out.");
+        toast("HR module access revoked. That user has been signed out.");
       }
       await Promise.all([reload(), reloadLogs()]);
     } catch (err) {
@@ -282,7 +311,7 @@ export function HrSuperadminPage() {
     if (next) current.add(companyId);
     else current.delete(companyId);
     if (current.size === 0) {
-      toast("Keep at least one entity, or turn off HR Admin", "error");
+      toast("Keep at least one entity, or turn off HR access", "error");
       return;
     }
     setBusyId(`entity:${employeeId}:${companyId}`);
@@ -323,7 +352,7 @@ export function HrSuperadminPage() {
       <div className="p-6">
         <HrEmptyState
           title="Superadmin Panel"
-          description="Only the HRMS Superadmin can assign HR Admins. This page is hidden from HR Admin users."
+          description="Only HR module admins (assigned from Organization Users) can manage HR module users here."
         />
       </div>
     );
@@ -334,7 +363,7 @@ export function HrSuperadminPage() {
       <SetupToastHost />
       <PageHeader
         title="Superadmin Panel"
-        description="Assign HR Admins, choose which entities they can manage (one or many), generate login passwords, and review activity logs."
+        description="Grant HR module access to employees. Users see HRMS in their ERP menu with standard (non-admin) permissions."
       />
 
       {issued ? (
@@ -397,86 +426,125 @@ export function HrSuperadminPage() {
             <>
               <PanelHeader
                 icon={Shield}
-                title="Employees"
-                caption="Turn on HR Admin to grant access. Then toggle entities (one or many). Turn off HR Admin to revoke access and sign them out."
+                title={`Assigned HR users (${admins.length})`}
+                caption="Employees with HR module access. They see HRMS in their ERP menu with member permissions for the entities below."
               >
                 <Input
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
-                  placeholder="Search name, code, email…"
+                  placeholder="Search assigned or employees…"
                   className="h-9 w-full lg:w-64"
                 />
               </PanelHeader>
               {loading ? (
                 <HrLoadingBlock label="Loading employees…" />
-              ) : filtered.length === 0 ? (
-                <HrEmptyState title="No employees match" description="Try a different search." />
+              ) : assignedRows.length === 0 ? (
+                <HrEmptyState
+                  title="No HR module users yet"
+                  description="Turn on HR access for an employee in the list below."
+                />
               ) : (
-                <ul>
-                  {filtered.map((emp) => {
-                    const admin = adminByEmployee.get(emp.id);
-                    const isAdmin = Boolean(admin);
-                    const assigned = new Set(admin?.company_ids ?? []);
-                    return (
-                      <li key={emp.id} className="border-b border-border/70 py-3 last:border-b-0">
-                        <PersonRow
-                          name={emp.displayName}
-                          meta={`${emp.employeeCode} · ${emp.officialEmail} · ${emp.designationName || "—"}`}
-                        >
-                          <ToggleSwitch
-                            checked={isAdmin}
-                            disabled={busyId === emp.id}
-                            label={isAdmin ? "HR Admin" : "Assign HR"}
-                            onChange={(next) => void onToggleHr(emp.id, next)}
-                          />
-                        </PersonRow>
-                        {isAdmin ? (
-                          <div className="mt-3 rounded-xl border border-border/60 bg-muted/30 px-3 py-2">
-                            <p className="mb-1.5 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-                              Entities{assigned.size ? ` (${assigned.size})` : ""}
-                            </p>
-                            {entities.length === 0 ? (
-                              <p className="text-xs text-muted-foreground">
-                                No companies found. Add them in HR Setup → Legal Entities.
+                <div className="mb-6 overflow-auto rounded-xl border border-border/70">
+                  <table className="w-full min-w-[48rem] text-left text-xs">
+                    <thead className="sticky top-0 bg-muted/80 backdrop-blur">
+                      <tr className="border-b border-border text-[10px] uppercase tracking-wide text-muted-foreground">
+                        <th className="px-3 py-2.5 font-medium">Employee</th>
+                        <th className="px-3 py-2.5 font-medium">Designation</th>
+                        <th className="px-3 py-2.5 font-medium">Entities</th>
+                        <th className="px-3 py-2.5 text-right font-medium">HR access</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {assignedRows.map(({ admin, emp }) => {
+                        const assigned = new Set(admin.company_ids ?? []);
+                        const entityNames = admin.company_ids
+                          .map((id) => entityNameById.get(id))
+                          .filter((name): name is string => Boolean(name));
+                        return (
+                          <tr key={admin.employee_id} className="border-b border-border/50 align-top last:border-b-0">
+                            <td className="px-3 py-3">
+                              <p className="font-semibold text-foreground">
+                                {admin.display_name || emp?.displayName}
                               </p>
-                            ) : (
-                              <ul>
-                                {entities.map((entity) => {
-                                  const on = assigned.has(entity.id);
-                                  const entityBusy = busyId === `entity:${emp.id}:${entity.id}`;
-                                  return (
-                                    <li
-                                      key={entity.id}
-                                      className="flex items-center justify-between gap-3 py-1.5"
-                                    >
-                                      <div className="min-w-0">
-                                        <p className="truncate text-xs font-medium text-foreground">
-                                          {entity.company_name}
-                                        </p>
-                                        <p className="truncate text-[10px] text-muted-foreground">
-                                          {entity.company_code}
-                                          {entity.legal_name && entity.legal_name !== entity.company_name
-                                            ? ` · ${entity.legal_name}`
-                                            : ""}
-                                        </p>
-                                      </div>
-                                      <ToggleSwitch
-                                        compact
-                                        checked={on}
-                                        disabled={busyId === emp.id || entityBusy}
-                                        label={on ? "Assigned" : "Assign"}
-                                        onChange={(next) => void onToggleEntity(emp.id, entity.id, next)}
-                                      />
-                                    </li>
-                                  );
-                                })}
-                              </ul>
-                            )}
-                          </div>
-                        ) : null}
-                      </li>
-                    );
-                  })}
+                              <p className="mt-0.5 text-[11px] text-muted-foreground">
+                                {admin.employee_code} · {admin.email}
+                              </p>
+                            </td>
+                            <td className="px-3 py-3 text-muted-foreground">
+                              {admin.designation || emp?.designationName || "—"}
+                            </td>
+                            <td className="px-3 py-3">
+                              <p className="text-foreground">
+                                {entityNames.length ? entityNames.join(", ") : "—"}
+                              </p>
+                              {entities.length > 0 ? (
+                                <ul className="mt-2 space-y-1">
+                                  {entities.map((entity) => {
+                                    const on = assigned.has(entity.id);
+                                    const entityBusy = busyId === `entity:${admin.employee_id}:${entity.id}`;
+                                    return (
+                                      <li
+                                        key={entity.id}
+                                        className="flex items-center justify-between gap-2 rounded-lg bg-muted/40 px-2 py-1"
+                                      >
+                                        <span className="truncate text-[11px]">{entity.company_name}</span>
+                                        <ToggleSwitch
+                                          compact
+                                          checked={on}
+                                          disabled={busyId === admin.employee_id || entityBusy}
+                                          label={on ? "On" : "Off"}
+                                          onChange={(next) =>
+                                            void onToggleEntity(admin.employee_id, entity.id, next)
+                                          }
+                                        />
+                                      </li>
+                                    );
+                                  })}
+                                </ul>
+                              ) : null}
+                            </td>
+                            <td className="px-3 py-3">
+                              <div className="flex justify-end">
+                                <ToggleSwitch
+                                  checked
+                                  disabled={busyId === admin.employee_id}
+                                  label="HR access"
+                                  onChange={(next) => void onToggleHr(admin.employee_id, next)}
+                                />
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+
+              <PanelHeader
+                icon={UserPlus}
+                title="Employees"
+                caption="Turn on HR access to add HRMS to the user's ERP menu (member permissions)."
+              />
+              {!loading && filtered.length === 0 ? (
+                <HrEmptyState title="No employees match" description="Try a different search." />
+              ) : loading ? null : (
+                <ul>
+                  {filtered.map((emp) => (
+                    <li key={emp.id} className="border-b border-border/70 py-3 last:border-b-0">
+                      <PersonRow
+                        name={emp.displayName}
+                        meta={`${emp.employeeCode} · ${emp.officialEmail} · ${emp.designationName || "—"}`}
+                      >
+                        <ToggleSwitch
+                          checked={false}
+                          disabled={busyId === emp.id}
+                          label="Grant HR"
+                          onChange={(next) => void onToggleHr(emp.id, next)}
+                        />
+                      </PersonRow>
+                    </li>
+                  ))}
                 </ul>
               )}
             </>
@@ -486,13 +554,13 @@ export function HrSuperadminPage() {
             <>
               <PanelHeader
                 icon={KeyRound}
-                title={`HR Admin passwords (${admins.length})`}
+                title={`HR module passwords (${admins.length})`}
                 caption="Turn on Generate to create a random login password. It is shown once above."
               />
               {admins.length === 0 ? (
                 <HrEmptyState
-                  title="No HR Admins yet"
-                  description="Assign someone as HR Admin first, then generate their password here."
+                  title="No HR module users yet"
+                  description="Grant HR access to an employee first, then generate their password here."
                 />
               ) : (
                 <ul>

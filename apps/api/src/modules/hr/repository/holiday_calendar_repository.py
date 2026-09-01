@@ -19,11 +19,10 @@ class HolidayCalendarRepository(HrScopedRepository):
         stmt = self.apply_hr_filter(stmt, HrHolidayCalendar, ctx, branch_scoped=False)
         return self.db.scalar(stmt)
 
-    def list_rows(self, ctx: TenantContext, company_id: UUID):
-        stmt = select(HrHolidayCalendar).where(
-            HrHolidayCalendar.company_id == company_id,
-            HrHolidayCalendar.is_deleted.is_(False),
-        )
+    def list_rows(self, ctx: TenantContext, company_id: UUID | None):
+        stmt = select(HrHolidayCalendar).where(HrHolidayCalendar.is_deleted.is_(False))
+        if company_id is not None:
+            stmt = stmt.where(HrHolidayCalendar.company_id == company_id)
         stmt = self.apply_hr_filter(stmt, HrHolidayCalendar, ctx, branch_scoped=False)
         return list(self.db.scalars(stmt).all())
 

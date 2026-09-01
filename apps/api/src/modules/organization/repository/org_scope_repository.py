@@ -5,6 +5,7 @@ from uuid import UUID, uuid4
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from modules.foundation.domain.org_data_scope import has_tenant_wide_data_access
 from modules.foundation.domain.value_objects import TenantContext
 from modules.foundation.models.security import SecUserOrgScope
 from modules.organization.repository.base import utcnow
@@ -30,7 +31,7 @@ class OrgScopeRepository:
         return self.db.scalar(stmt)
 
     def user_has_company_access(self, ctx: TenantContext, company_id: UUID) -> bool:
-        if ctx.user_type in {"super_admin", "tenant_admin"}:
+        if has_tenant_wide_data_access(ctx):
             return True
         stmt = select(SecUserOrgScope).where(
             SecUserOrgScope.user_id == ctx.user_id,

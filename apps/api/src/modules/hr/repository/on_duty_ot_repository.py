@@ -23,11 +23,10 @@ class OnDutyRequestRepository(HrScopedRepository):
         stmt = self.apply_hr_filter(stmt, HrOnDutyRequest, ctx, branch_scoped=True)
         return self.db.scalar(stmt)
 
-    def list_rows(self, ctx: TenantContext, company_id: UUID):
-        stmt = select(HrOnDutyRequest).where(
-            HrOnDutyRequest.company_id == company_id,
-            HrOnDutyRequest.is_deleted.is_(False),
-        )
+    def list_rows(self, ctx: TenantContext, company_id: UUID | None):
+        stmt = select(HrOnDutyRequest).where(HrOnDutyRequest.is_deleted.is_(False))
+        if company_id is not None:
+            stmt = stmt.where(HrOnDutyRequest.company_id == company_id)
         stmt = self.apply_hr_filter(stmt, HrOnDutyRequest, ctx, branch_scoped=True)
         return list(self.db.scalars(stmt).all())
 
@@ -69,11 +68,10 @@ class OtAllotmentRepository(HrScopedRepository):
         stmt = self.apply_hr_filter(stmt, HrOtAllotment, ctx, branch_scoped=True)
         return self.db.scalar(stmt)
 
-    def list_rows(self, ctx: TenantContext, company_id: UUID):
-        stmt = select(HrOtAllotment).where(
-            HrOtAllotment.company_id == company_id,
-            HrOtAllotment.is_deleted.is_(False),
-        )
+    def list_rows(self, ctx: TenantContext, company_id: UUID | None):
+        stmt = select(HrOtAllotment).where(HrOtAllotment.is_deleted.is_(False))
+        if company_id is not None:
+            stmt = stmt.where(HrOtAllotment.company_id == company_id)
         stmt = self.apply_hr_filter(stmt, HrOtAllotment, ctx, branch_scoped=True)
         return list(self.db.scalars(stmt).all())
 

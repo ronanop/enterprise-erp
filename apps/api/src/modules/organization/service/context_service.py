@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 
 from core.exceptions import NotFoundException
 from core.redis import SessionStore
+from modules.foundation.domain.org_data_scope import has_tenant_wide_data_access
 from modules.foundation.domain.value_objects import TenantContext
 from modules.foundation.service.audit_service import AuditService
 from modules.organization.repository.company_repository import CompanyRepository
@@ -32,7 +33,7 @@ class OrgContextService:
         }
 
     def list_accessible_companies(self, ctx: TenantContext):
-        if ctx.user_type in {"super_admin", "tenant_admin"}:
+        if has_tenant_wide_data_access(ctx):
             return self._companies.list_companies(ctx)
 
         scopes = self._scopes.list_user_scopes(ctx.user_id, ctx.tenant_id)
@@ -99,25 +100,6 @@ class OrgContextService:
         }
 
     def _is_hr_admin(self, ctx: TenantContext) -> bool:
-        from sqlalchemy import select
+        from modules.hr.service.hr_module_admin import HrModuleAdminService
 
-        from modules.foundation.models.security import SecRole, SecUserRole
-
-        role_id = self._db.scalar(
-            select(SecRole.id).where(
-                SecRole.tenant_id == ctx.tenant_id,
-                SecRole.role_code == "HR_ADMIN",
-                SecRole.is_deleted.is_(False),
-            )
-        )
-        if role_id is None:
-            return False
-        return (
-            self._db.scalar(
-                select(SecUserRole.id).where(
-                    SecUserRole.user_id == ctx.user_id,
-                    SecUserRole.role_id == role_id,
-                )
-            )
-            is not None
-        )
+        return HrModuleAdminService(self._db).has_hr_admin_role(ctx.tenant_id, ctx.user_id)

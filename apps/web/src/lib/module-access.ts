@@ -18,6 +18,11 @@ export function moduleKeyForHref(href: string): string | null {
   return mod?.key ?? null;
 }
 
+export function hasModuleAssignments(moduleKeys: string[], userType?: string): boolean {
+  if (isModuleAdmin(userType)) return true;
+  return moduleKeys.length > 0;
+}
+
 export function canAccessHref(href: string, moduleKeys: string[], userType?: string): boolean {
   if (href === "/") return true;
   if (href === "/organization/users") {

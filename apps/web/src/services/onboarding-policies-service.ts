@@ -7,6 +7,7 @@
  */
 
 import { idbGetJson, idbSetJson } from "@/lib/client-idb-json-store";
+import { devError, devWarn } from "@/lib/dev-log";
 
 export type OnboardingPolicyScope = "all" | "entity";
 
@@ -207,7 +208,7 @@ function queuePersist(rows: OnboardingPolicyDoc[]): Promise<void> {
       clearLocalStoragePolicies();
     })
     .catch((err) => {
-      console.error("Failed to persist onboarding policies to IndexedDB", err);
+      devError("Failed to persist onboarding policies to IndexedDB");
       throw err;
     });
   return persistQueue;

@@ -180,7 +180,7 @@ export function ArInvoiceTable(props: Props) {
                     ) : null}
                     {visible.has("customer") ? (
                       <td className="px-2 py-1.5">
-                        <Link href={`/finance/accounts-receivable/customers/${row.customer_id}`} className="cursor-pointer hover:underline">
+                        <Link href={safeAppHref(`/finance/accounts-receivable/customers/${row.customer_id}`)} className="cursor-pointer hover:underline">
                           {row.customer_name ?? row.customer_code ?? row.customer_id.slice(0, 8)}
                         </Link>
                       </td>

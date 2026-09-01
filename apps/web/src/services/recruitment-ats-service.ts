@@ -18,6 +18,7 @@ import type {
   PipelineStage,
 } from "@/types/recruitment-ats";
 import { PIPELINE_STAGES } from "@/types/recruitment-ats";
+import { devError, devWarn } from "@/lib/dev-log";
 
 const JOBS_KEY = "erp_ats_jobs_v1";
 const CANDS_KEY = "erp_ats_candidates_v1";
@@ -377,7 +378,7 @@ export async function createJob(input: CreateJobInput): Promise<JobOpening> {
       }
     }
   } catch (err) {
-    console.warn("ATS createJob API failed; keeping local cache", err);
+    devWarn("ATS createJob API failed; keeping local cache");
   }
 
   const all = loadJobs();
@@ -426,7 +427,7 @@ export async function updateJob(id: string, patch: Partial<JobOpening>): Promise
         entityId: id,
       });
     } catch (err) {
-      console.warn("ATS publishJob API failed; local status still updated", err);
+      devWarn("ATS publishJob API failed; local status still updated");
     }
   }
 
@@ -492,7 +493,7 @@ export async function createCandidate(input: CreateCandidateInput): Promise<AtsC
       row.candidateCode = code;
     }
   } catch (err) {
-    console.warn("ATS createCandidate API failed; keeping local cache", err);
+    devWarn("ATS createCandidate API failed; keeping local cache");
   }
 
   const all = loadCandidates();
@@ -545,7 +546,7 @@ export async function applyCandidateToJob(
       }
     }
   } catch (err) {
-    console.warn("ATS applyCandidateToJob API failed; local cache kept", err);
+    devWarn("ATS applyCandidateToJob API failed; local cache kept");
   }
 
   apps.unshift(row);
@@ -593,7 +594,7 @@ export async function moveApplicationStage(
       }
     }
   } catch (err) {
-    console.warn("ATS moveApplicationStage API failed; local cache kept", err);
+    devWarn("ATS moveApplicationStage API failed; local cache kept");
   }
 
   apps[idx] = { ...apps[idx], stage, updatedAt: nowIso() };
@@ -673,7 +674,7 @@ export async function scheduleInterview(
       }
     }
   } catch (err) {
-    console.warn("ATS scheduleInterview API failed; local cache kept", err);
+    devWarn("ATS scheduleInterview API failed; local cache kept");
   }
 
   const all = loadInterviews();
@@ -714,7 +715,7 @@ export async function updateInterview(
         await resourceService.update("/recruitment/interviews", id, body);
       }
     } catch (err) {
-      console.warn("ATS updateInterview API failed; local cache kept", err);
+      devWarn("ATS updateInterview API failed; local cache kept");
     }
   }
 
@@ -777,7 +778,7 @@ export async function generateOffer(
       }
     }
   } catch (err) {
-    console.warn("ATS generateOffer API failed; local cache kept", err);
+    devWarn("ATS generateOffer API failed; local cache kept");
   }
 
   const all = loadOffers();
@@ -821,7 +822,7 @@ export async function updateOfferStatus(id: string, status: AtsOffer["status"]):
       }
     }
   } catch (err) {
-    console.warn("ATS updateOfferStatus API failed; local cache kept", err);
+    devWarn("ATS updateOfferStatus API failed; local cache kept");
   }
 
   all[idx] = { ...all[idx], status, updatedAt: nowIso() };

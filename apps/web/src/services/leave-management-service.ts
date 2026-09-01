@@ -21,6 +21,7 @@ import {
   leaveStatusDisplay,
 } from "@/types/leave-management";
 import { validateLeaveCycleOnApply } from "@/lib/hr/leave-cycle-rules";
+import { devError, devWarn } from "@/lib/dev-log";
 
 const EXT_KEY = "erp_leave_request_ext_v1";
 const AUDIT_KEY = "erp_leave_audit_v1";
@@ -713,7 +714,7 @@ export async function saveCompOff(record: Omit<CompOffRecord, "id"> & { id?: str
       }
     }
   } catch (err) {
-    console.warn("saveCompOff API failed; local cache kept", err);
+    devWarn("saveCompOff API failed; local cache kept");
   }
   const idx = all.findIndex((c) => c.id === item.id);
   if (idx >= 0) all[idx] = item;
@@ -779,7 +780,7 @@ export async function saveEncashment(
       }
     }
   } catch (err) {
-    console.warn("saveEncashment API failed; local cache kept", err);
+    devWarn("saveEncashment API failed; local cache kept");
   }
   all.unshift(item);
   writeJson(ENCASH_KEY, all);
@@ -835,7 +836,7 @@ export async function generateCarryForward(
     });
     return generated;
   } catch (err) {
-    console.warn("carry-forward API failed; falling back to local preview", err);
+    devWarn("carry-forward API failed; falling back to local preview");
   }
 
   const generated: CarryForwardRecord[] = dir.balances

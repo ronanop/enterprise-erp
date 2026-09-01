@@ -6,7 +6,7 @@ import { useMemo, useState } from "react";
 import { ChevronLeft, ChevronRight, Search } from "lucide-react";
 
 import { navigation } from "@/config/navigation";
-import { filterNavigationGroups } from "@/lib/module-access";
+import { filterNavigationGroups, hasModuleAssignments } from "@/lib/module-access";
 import { SidebarAccountSection } from "@/components/layout/sidebar-account-section";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -24,6 +24,8 @@ export function AppSidebar() {
   const [collapsed, setCollapsed] = useState(false);
   const [query, setQuery] = useState("");
   const { user, loading: userLoading, signedIn, moduleKeys } = useAuthUser();
+
+  const hasModules = hasModuleAssignments(moduleKeys, user?.userType);
 
   const navGroups = useMemo(() => {
     if (userLoading) {
@@ -96,6 +98,11 @@ export function AppSidebar() {
       ) : null}
 
       <nav className="erp-scroll flex-1 overflow-y-auto px-2.5 py-2">
+        {!collapsed && signedIn && !userLoading && !hasModules ? (
+          <div className="mb-4 rounded-lg border border-sidebar-border/80 bg-white/5 px-3 py-2.5 text-[12px] leading-relaxed text-sidebar-foreground/70">
+            No modules assigned. Contact your ERP administrator to get access.
+          </div>
+        ) : null}
         {filtered.map((group) => (
           <div key={group.title} className="mb-5">
             {!collapsed ? (
@@ -107,7 +114,7 @@ export function AppSidebar() {
               {group.items.map((item) => {
                 const active = isActivePath(pathname, item.href);
                 const Icon = item.icon;
-                // Module routes are always full-page chrome — no ?standalone=1.
+                // Operations modules open in a new tab; foundation/org/master-data navigate in-app.
                 const href = item.href;
                 return (
                   <li key={item.href}>

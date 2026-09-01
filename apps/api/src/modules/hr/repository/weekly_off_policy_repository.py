@@ -22,11 +22,10 @@ class WeeklyOffPolicyRepository(HrScopedRepository):
         stmt = self.apply_hr_filter(stmt, HrWeeklyOffPolicy, ctx, branch_scoped=False)
         return self.db.scalar(stmt)
 
-    def list_rows(self, ctx: TenantContext, company_id: UUID):
-        stmt = select(HrWeeklyOffPolicy).where(
-            HrWeeklyOffPolicy.company_id == company_id,
-            HrWeeklyOffPolicy.is_deleted.is_(False),
-        )
+    def list_rows(self, ctx: TenantContext, company_id: UUID | None):
+        stmt = select(HrWeeklyOffPolicy).where(HrWeeklyOffPolicy.is_deleted.is_(False))
+        if company_id is not None:
+            stmt = stmt.where(HrWeeklyOffPolicy.company_id == company_id)
         stmt = self.apply_hr_filter(stmt, HrWeeklyOffPolicy, ctx, branch_scoped=False)
         return list(self.db.scalars(stmt).all())
 

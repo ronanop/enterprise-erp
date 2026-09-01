@@ -3,6 +3,7 @@
 import type { ReactNode } from "react";
 import { usePathname } from "next/navigation";
 
+import { AssetsModuleSidebar } from "@/components/assets/assets-module-sidebar";
 import { CrmSidebar } from "@/components/crm/crm-workspace-nav";
 import { ElevenLabsConvaiWidget } from "@/components/elevenlabs/convai-widget";
 import { HrSidebar } from "@/components/hr/hr-sidebar";
@@ -26,6 +27,7 @@ export function AppShell({ children }: AppShellProps) {
   const isProjects = pathname === "/projects" || pathname.startsWith("/projects/");
   const isProcurement =
     pathname === "/procurement" || pathname.startsWith("/procurement/");
+  const isAssets = pathname === "/assets" || pathname.startsWith("/assets/");
 
   return (
     <div className="flex min-h-dvh w-full max-w-[100dvw] overflow-x-clip bg-background">
@@ -36,6 +38,7 @@ export function AppShell({ children }: AppShellProps) {
           {isCrm ? <CrmSidebar /> : null}
           {isProjects ? <ProjectsSidebar /> : null}
           {isProcurement ? <ProcurementSidebar /> : null}
+          {isAssets ? <AssetsModuleSidebar /> : null}
         </>
       ) : (
         <AppSidebar />

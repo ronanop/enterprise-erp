@@ -14,6 +14,8 @@ export function parseAuthMe(data: unknown): {
   moduleKeys: string[];
   adminModuleKeys: string[];
   projectModuleAdmin: boolean;
+  hrModuleAdmin: boolean;
+  assetsModuleAdmin: boolean;
 } {
   if (!data || typeof data !== "object") {
     return {
@@ -22,6 +24,8 @@ export function parseAuthMe(data: unknown): {
       moduleKeys: [],
       adminModuleKeys: [],
       projectModuleAdmin: false,
+      hrModuleAdmin: false,
+      assetsModuleAdmin: false,
     };
   }
   const record = data as Record<string, unknown>;
@@ -40,6 +44,8 @@ export function parseAuthMe(data: unknown): {
       ? (record.adminModuleKeys as string[])
       : [];
   const projectModuleAdmin = Boolean(record.project_module_admin);
+  const hrModuleAdmin = Boolean(record.hr_module_admin);
+  const assetsModuleAdmin = Boolean(record.assets_module_admin);
 
   if (record.user && typeof record.user === "object") {
     const u = record.user as Record<string, unknown>;
@@ -55,6 +61,8 @@ export function parseAuthMe(data: unknown): {
       moduleKeys,
       adminModuleKeys,
       projectModuleAdmin,
+      hrModuleAdmin,
+      assetsModuleAdmin,
     };
   }
 
@@ -71,6 +79,8 @@ export function parseAuthMe(data: unknown): {
       moduleKeys,
       adminModuleKeys,
       projectModuleAdmin,
+      hrModuleAdmin,
+      assetsModuleAdmin,
     };
   }
 
@@ -80,6 +90,8 @@ export function parseAuthMe(data: unknown): {
     moduleKeys: [],
     adminModuleKeys: [],
     projectModuleAdmin: false,
+    hrModuleAdmin: false,
+    assetsModuleAdmin: false,
   };
 }
 

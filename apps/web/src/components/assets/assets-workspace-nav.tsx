@@ -11,12 +11,15 @@ import {
   type AssetDomainKey,
 } from "@/config/assets";
 import { cn } from "@/lib/utils";
+import { useAuthUser } from "@/hooks/use-auth-user";
 import { fetchMyDomainAccess } from "@/services/asset-domain-membership-service";
 
 /** Horizontal strip when Assets shares the main app sidebar (non-standalone). */
 export function AssetsWorkspaceNav() {
   const pathname = usePathname();
   const searchParams = useSearchParams();
+  const { adminModuleKeys, assetsModuleAdmin } = useAuthUser();
+  const orgAssetsAdmin = adminModuleKeys.includes("assets") || assetsModuleAdmin;
   const [isModuleAdmin, setIsModuleAdmin] = useState(false);
   const [domains, setDomains] = useState<string[]>([]);
   const [adminDomains, setAdminDomains] = useState<string[]>([]);
@@ -28,15 +31,15 @@ export function AssetsWorkspaceNav() {
       try {
         const me = await fetchMyDomainAccess();
         if (!cancelled) {
-          setIsModuleAdmin(me.is_module_admin);
+          setIsModuleAdmin(me.is_module_admin || orgAssetsAdmin);
           setDomains(me.domains ?? []);
           setAdminDomains(me.admin_domains ?? []);
         }
       } catch {
         if (!cancelled) {
-          setIsModuleAdmin(false);
-          setDomains([]);
-          setAdminDomains([]);
+          setIsModuleAdmin(orgAssetsAdmin);
+          setDomains(orgAssetsAdmin ? ["IT", "NON_IT"] : []);
+          setAdminDomains(orgAssetsAdmin ? ["IT", "NON_IT"] : []);
         }
       } finally {
         if (!cancelled) setAccessLoaded(true);
@@ -45,7 +48,7 @@ export function AssetsWorkspaceNav() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [orgAssetsAdmin]);
 
   const activeDomain: AssetDomainKey | null = useMemo(() => {
     if (pathname.startsWith("/assets/users")) {

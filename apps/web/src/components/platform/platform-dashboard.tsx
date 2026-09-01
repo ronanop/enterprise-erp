@@ -28,6 +28,7 @@ import {
   Truck,
   Users,
   Wallet,
+  Mail,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
@@ -48,7 +49,7 @@ import { Button } from "@/components/ui/button";
 import { erpModules } from "@/config/modules";
 import { useAuthUser } from "@/hooks/use-auth-user";
 import { isAuthenticated } from "@/lib/auth";
-import { canAccessHref } from "@/lib/module-access";
+import { canAccessHref, hasModuleAssignments } from "@/lib/module-access";
 import { cn } from "@/lib/utils";
 import {
   loadPlatformDashboard,
@@ -362,6 +363,35 @@ export function PlatformDashboard() {
   const authBlocked = Boolean(data?.authBlocked) || (!authenticated && Boolean(data?.partial));
   const tracked = data?.modules.length ?? 0;
   const showLoading = loading || authLoading;
+  const hasModules = hasModuleAssignments(moduleKeys, user?.userType);
+
+  if (!showLoading && authenticated && !hasModules) {
+    return (
+      <div className="space-y-5">
+        <PageHeader
+          title="Welcome"
+          description="Your ERP account is active, but no modules have been assigned yet."
+        />
+        <div className="rounded-xl border border-border/80 bg-card px-6 py-10 text-center shadow-sm">
+          <div className="mx-auto flex size-12 items-center justify-center rounded-full bg-muted">
+            <Shield className="size-5 text-muted-foreground" aria-hidden />
+          </div>
+          <h2 className="mt-4 text-lg font-semibold text-foreground">No modules assigned</h2>
+          <p className="mx-auto mt-2 max-w-md text-sm text-muted-foreground">
+            Contact your ERP administrator to assign the modules you need. Once assigned, they will
+            appear in the sidebar menu and on this dashboard.
+          </p>
+          <a
+            href="mailto:techbank@cachedigitech.com"
+            className="mt-5 inline-flex cursor-pointer items-center gap-2 rounded-lg border border-border bg-background px-4 py-2 text-sm font-medium text-foreground transition-colors duration-200 hover:bg-accent"
+          >
+            <Mail className="size-4" aria-hidden />
+            Contact admin
+          </a>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-5">

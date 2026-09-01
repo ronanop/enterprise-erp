@@ -180,7 +180,7 @@ export function ApInvoiceTable(props: Props) {
                   ) : null}
                   {visible.has("vendor") ? (
                     <td className="px-2 py-1.5">
-                      <Link href={`/finance/accounts-payable/vendors/${row.vendor_id}`} className="cursor-pointer hover:underline">
+                      <Link href={safeAppHref(`/finance/accounts-payable/vendors/${row.vendor_id}`)} className="cursor-pointer hover:underline">
                         {row.vendor_name ?? row.vendor_code ?? row.vendor_id.slice(0, 8)}
                       </Link>
                     </td>

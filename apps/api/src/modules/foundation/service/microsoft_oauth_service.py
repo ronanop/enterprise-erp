@@ -84,12 +84,15 @@ class MicrosoftOAuthService:
 
         jwk_client = PyJWKClient(jwks_uri)
         signing_key = jwk_client.get_signing_key_from_jwt(id_token)
+        issuer = metadata.get("issuer")
+        if not isinstance(issuer, str) or not issuer:
+            raise MicrosoftLoginNotConfiguredException("Microsoft issuer metadata unavailable")
         decoded = jwt.decode(
             id_token,
             signing_key.key,
             algorithms=["RS256"],
             audience=settings.microsoft_client_id,
-            options={"verify_iss": False},
+            issuer=issuer,
         )
         return decoded
 

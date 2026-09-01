@@ -27,11 +27,10 @@ class EmployeeProfileRepository(HrScopedRepository):
         stmt = self.apply_hr_filter(stmt, HrEmployeeProfile, ctx, branch_scoped=True)
         return self.db.scalar(stmt)
 
-    def list_rows(self, ctx: TenantContext, company_id: UUID):
-        stmt = select(HrEmployeeProfile).where(
-            HrEmployeeProfile.company_id == company_id,
-            HrEmployeeProfile.is_deleted.is_(False),
-        )
+    def list_rows(self, ctx: TenantContext, company_id: UUID | None):
+        stmt = select(HrEmployeeProfile).where(HrEmployeeProfile.is_deleted.is_(False))
+        if company_id is not None:
+            stmt = stmt.where(HrEmployeeProfile.company_id == company_id)
         stmt = self.apply_hr_filter(stmt, HrEmployeeProfile, ctx, branch_scoped=True)
         return list(self.db.scalars(stmt).all())
 

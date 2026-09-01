@@ -20,11 +20,10 @@ class DesignationRepository(HrScopedRepository):
         stmt = self.apply_hr_filter(stmt, HrDesignation, ctx, branch_scoped=False)
         return self.db.scalar(stmt)
 
-    def list_rows(self, ctx: TenantContext, company_id: UUID):
-        stmt = select(HrDesignation).where(
-            HrDesignation.company_id == company_id,
-            HrDesignation.is_deleted.is_(False),
-        )
+    def list_rows(self, ctx: TenantContext, company_id: UUID | None):
+        stmt = select(HrDesignation).where(HrDesignation.is_deleted.is_(False))
+        if company_id is not None:
+            stmt = stmt.where(HrDesignation.company_id == company_id)
         stmt = self.apply_hr_filter(stmt, HrDesignation, ctx, branch_scoped=False)
         return list(self.db.scalars(stmt).all())
 

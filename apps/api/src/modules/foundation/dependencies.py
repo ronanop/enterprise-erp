@@ -73,6 +73,24 @@ def get_tenant_context(
             }
             store.set_session(session_id, cached)
 
+    from modules.hr.service.hr_module_admin import HrModuleAdminService
+    from modules.organization.repository.org_scope_repository import OrgScopeRepository
+
+    scope_rows = OrgScopeRepository(db).list_user_scopes(user_id, tenant_id)
+    scoped_company_ids = tuple(sorted({row.company_id for row in scope_rows}))
+
+    tenant_wide = HrModuleAdminService(db).is_admin(
+        TenantContext(
+            tenant_id=tenant_id,
+            user_id=user_id,
+            user_type=user_type,
+            session_id=session_id,
+            company_id=company_id,
+            branch_id=branch_id,
+            scoped_company_ids=scoped_company_ids,
+        )
+    )
+
     return TenantContext(
         tenant_id=tenant_id,
         user_id=user_id,
@@ -80,6 +98,8 @@ def get_tenant_context(
         session_id=session_id,
         company_id=company_id,
         branch_id=branch_id,
+        tenant_wide=tenant_wide,
+        scoped_company_ids=scoped_company_ids,
     )
 
 

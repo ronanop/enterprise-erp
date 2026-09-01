@@ -266,7 +266,7 @@ function SidebarBrand({ collapsed }: { collapsed: boolean }) {
       title="CACHE"
       className={cn(
         "flex items-center rounded-xl outline-none transition-colors hover:bg-white/5 focus-visible:ring-2 focus-visible:ring-[#9B5BB8]",
-        collapsed ? "justify-center p-1" : "px-0.5 py-1",
+        collapsed ? "justify-center p-1" : "w-full px-0.5 py-1",
       )}
     >
       {collapsed ? (
@@ -274,12 +274,14 @@ function SidebarBrand({ collapsed }: { collapsed: boolean }) {
           <CacheMark className="size-full" />
         </span>
       ) : (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img
-          src="/brand/cache-wordmark.png?v=3"
-          alt="CACHE"
-          className="block h-[52px] w-auto max-w-full object-contain object-left mix-blend-screen"
-        />
+        <div className="w-full rounded-lg bg-white px-2.5 py-2">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src="/brand/cache-wordmark.png"
+            alt="CACHE"
+            className="block h-11 w-full object-contain object-center"
+          />
+        </div>
       )}
     </Link>
   );

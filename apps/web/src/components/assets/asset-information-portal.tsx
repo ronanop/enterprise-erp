@@ -25,7 +25,7 @@ import {
   buildSelfServiceUrl,
 } from "@/services/assets-service";
 import { ApiClientError } from "@/services/api-client";
-import { AssetDiscoveryPanel } from "@/components/assets/asset-discovery-panel";
+import { escapeHtml, openPrintDocument } from "@/lib/html";
 
 function dash(value?: string | null): string {
   return value && String(value).trim() ? String(value) : "—";
@@ -89,22 +89,19 @@ export function AssetInformationPortalView({ assetId }: Props) {
     const canvas = getQrCanvas();
     if (!canvas || !portal) return;
     const dataUrl = canvas.toDataURL("image/png");
-    const win = window.open("", "_blank", "noopener,noreferrer,width=480,height=640");
-    if (!win) return;
-    win.document.write(`<!doctype html><html><head><title>QR ${portal.asset_code}</title>
+    const html = `<!doctype html><html><head><title>QR ${escapeHtml(portal.asset_code)}</title>
       <style>
         body{font-family:system-ui,sans-serif;text-align:center;padding:24px;color:#111}
         img{width:240px;height:240px}
         h1{font-size:18px;margin:12px 0 4px}
         p{font-size:12px;color:#444;word-break:break-all}
       </style></head><body>
-      <h1>${portal.asset_code}</h1>
-      <div>${portal.asset_name}</div>
+      <h1>${escapeHtml(portal.asset_code)}</h1>
+      <div>${escapeHtml(portal.asset_name)}</div>
       <img src="${dataUrl}" alt="QR" />
-      <p>${selfServiceUrl}</p>
-      <script>window.onload=()=>{window.print();}</script>
-      </body></html>`);
-    win.document.close();
+      <p>${escapeHtml(selfServiceUrl)}</p>
+      </body></html>`;
+    openPrintDocument(html, 480, 640);
   }
 
   if (loading) {

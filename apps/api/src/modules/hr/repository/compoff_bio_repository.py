@@ -23,11 +23,10 @@ class CompoffRequestRepository(HrScopedRepository):
         stmt = self.apply_hr_filter(stmt, HrCompoffRequest, ctx, branch_scoped=True)
         return self.db.scalar(stmt)
 
-    def list_rows(self, ctx: TenantContext, company_id: UUID):
-        stmt = select(HrCompoffRequest).where(
-            HrCompoffRequest.company_id == company_id,
-            HrCompoffRequest.is_deleted.is_(False),
-        )
+    def list_rows(self, ctx: TenantContext, company_id: UUID | None):
+        stmt = select(HrCompoffRequest).where(HrCompoffRequest.is_deleted.is_(False))
+        if company_id is not None:
+            stmt = stmt.where(HrCompoffRequest.company_id == company_id)
         stmt = self.apply_hr_filter(stmt, HrCompoffRequest, ctx, branch_scoped=True)
         return list(self.db.scalars(stmt).all())
 
@@ -69,11 +68,10 @@ class BiometricDeviceRepository(HrScopedRepository):
         stmt = self.apply_hr_filter(stmt, HrBiometricDevice, ctx, branch_scoped=True)
         return self.db.scalar(stmt)
 
-    def list_rows(self, ctx: TenantContext, company_id: UUID):
-        stmt = select(HrBiometricDevice).where(
-            HrBiometricDevice.company_id == company_id,
-            HrBiometricDevice.is_deleted.is_(False),
-        )
+    def list_rows(self, ctx: TenantContext, company_id: UUID | None):
+        stmt = select(HrBiometricDevice).where(HrBiometricDevice.is_deleted.is_(False))
+        if company_id is not None:
+            stmt = stmt.where(HrBiometricDevice.company_id == company_id)
         stmt = self.apply_hr_filter(stmt, HrBiometricDevice, ctx, branch_scoped=True)
         return list(self.db.scalars(stmt).all())
 

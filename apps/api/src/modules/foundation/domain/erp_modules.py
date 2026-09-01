@@ -40,6 +40,7 @@ MODULE_ROLES = frozenset({MODULE_ROLE_ADMIN, MODULE_ROLE_MEMBER})
 # Permission seed `module` column occasionally differs from UI/module-assignment keys.
 PERMISSION_MODULE_ALIASES: dict[str, str] = {
     "project": "projects",
+    "asset": "assets",
 }
 
 

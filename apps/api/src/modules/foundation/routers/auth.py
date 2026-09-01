@@ -35,6 +35,7 @@ router = APIRouter(prefix="/auth", tags=["Authentication"])
 
 @router.get("/microsoft/config", response_model=APIResponse[MicrosoftLoginConfigResponse])
 def microsoft_config() -> APIResponse[MicrosoftLoginConfigResponse]:
+    """Public: exposes only whether Microsoft SSO is enabled (no secrets)."""
     return APIResponse(
         message="Microsoft sign-in configuration",
         data=MicrosoftLoginConfigResponse(enabled=MicrosoftOAuthService.is_enabled()),
@@ -193,6 +194,10 @@ def me(
         "admin_module_keys": admin_module_keys,
     }
     from modules.project.service.project_module_admin import ProjectModuleAdminService
+    from modules.hr.service.hr_module_admin import HrModuleAdminService
+    from modules.asset.service.asset_module_admin import AssetModuleAdminService
 
     data["project_module_admin"] = ProjectModuleAdminService(db).is_admin(ctx)
+    data["hr_module_admin"] = HrModuleAdminService(db).is_admin(ctx)
+    data["assets_module_admin"] = AssetModuleAdminService(db).is_admin(ctx)
     return APIResponse(message="Current user", data=data)

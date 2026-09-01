@@ -9,6 +9,18 @@ const iconsDir = path.join(root, "public", "icons");
 
 fs.mkdirSync(iconsDir, { recursive: true });
 
+function assertWithinRoot(baseDir, targetPath) {
+  const resolvedBase = path.resolve(baseDir);
+  const resolvedTarget = path.resolve(targetPath);
+  if (
+    resolvedTarget !== resolvedBase &&
+    !resolvedTarget.startsWith(resolvedBase + path.sep)
+  ) {
+    throw new Error(`Refusing to write outside project root: ${targetPath}`);
+  }
+  return resolvedTarget;
+}
+
 function svg(size, { maskable = false } = {}) {
   const inner = size * (maskable ? 0.64 : 0.76);
   const cx = size / 2;
@@ -32,6 +44,7 @@ function svg(size, { maskable = false } = {}) {
 }
 
 async function writePng(filePath, size, opts) {
+  assertWithinRoot(root, filePath);
   const buf = await sharp(Buffer.from(svg(size, opts))).png().toBuffer();
   fs.writeFileSync(filePath, buf);
   console.log("wrote", path.relative(root, filePath), buf.length);

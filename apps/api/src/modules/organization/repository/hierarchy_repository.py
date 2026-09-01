@@ -22,6 +22,7 @@ from modules.organization.models.hierarchy import (
     OrgLocation,
     OrgProfitCenter,
 )
+from modules.foundation.domain.org_data_scope import apply_company_scope, effective_company_ids
 from modules.organization.repository.base import OrgScopedRepository, utcnow
 
 
@@ -38,6 +39,8 @@ class DepartmentRepository(OrgScopedRepository):
         )
         if company_id:
             stmt = stmt.where(OrgDepartment.company_id == company_id)
+        elif hasattr(OrgDepartment, "company_id"):
+            stmt = apply_company_scope(stmt, OrgDepartment, ctx)
         if branch_id:
             stmt = stmt.where(OrgDepartment.branch_id == branch_id)
         return [self._to_entity(r) for r in self.db.scalars(stmt).all()]
@@ -217,8 +220,15 @@ class LocationRepository(OrgScopedRepository):
             stmt = stmt.where(OrgLocation.branch_id == branch_id)
         elif company_id:
             stmt = stmt.where(OrgLocation.company_id == company_id)
-        elif ctx.company_id:
-            stmt = stmt.where(OrgLocation.company_id == ctx.company_id)
+        else:
+            allowed = effective_company_ids(ctx)
+            if allowed is not None:
+                if not allowed:
+                    stmt = stmt.where(OrgLocation.id.is_(None))
+                elif len(allowed) == 1:
+                    stmt = stmt.where(OrgLocation.company_id == allowed[0])
+                else:
+                    stmt = stmt.where(OrgLocation.company_id.in_(allowed))
         return [
             LocationEntity(
                 id=r.id,

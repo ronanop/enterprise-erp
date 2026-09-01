@@ -14,6 +14,7 @@ import {
   type AssetDomainKey,
 } from "@/config/assets";
 import { cn } from "@/lib/utils";
+import { useAuthUser } from "@/hooks/use-auth-user";
 import { fetchMyDomainAccess } from "@/services/asset-domain-membership-service";
 
 /**
@@ -23,6 +24,7 @@ import { fetchMyDomainAccess } from "@/services/asset-domain-membership-service"
 export function AssetsModuleSidebar() {
   const pathname = usePathname();
   const searchParams = useSearchParams();
+  const { adminModuleKeys, assetsModuleAdmin } = useAuthUser();
   const [collapsed, setCollapsed] = useState(false);
   const [query, setQuery] = useState("");
   const [isModuleAdmin, setIsModuleAdmin] = useState(false);
@@ -30,21 +32,23 @@ export function AssetsModuleSidebar() {
   const [adminDomains, setAdminDomains] = useState<string[]>([]);
   const [accessLoaded, setAccessLoaded] = useState(false);
 
+  const orgAssetsAdmin = adminModuleKeys.includes("assets") || assetsModuleAdmin;
+
   useEffect(() => {
     let cancelled = false;
     void (async () => {
       try {
         const me = await fetchMyDomainAccess();
         if (!cancelled) {
-          setIsModuleAdmin(me.is_module_admin);
+          setIsModuleAdmin(me.is_module_admin || orgAssetsAdmin);
           setDomains(me.domains ?? []);
           setAdminDomains(me.admin_domains ?? []);
         }
       } catch {
         if (!cancelled) {
-          setIsModuleAdmin(false);
-          setDomains([]);
-          setAdminDomains([]);
+          setIsModuleAdmin(orgAssetsAdmin);
+          setDomains(orgAssetsAdmin ? ["IT", "NON_IT"] : []);
+          setAdminDomains(orgAssetsAdmin ? ["IT", "NON_IT"] : []);
         }
       } finally {
         if (!cancelled) setAccessLoaded(true);
@@ -53,7 +57,7 @@ export function AssetsModuleSidebar() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [orgAssetsAdmin]);
 
   const activeDomain: AssetDomainKey | null = useMemo(() => {
     if (pathname.startsWith("/assets/users")) {

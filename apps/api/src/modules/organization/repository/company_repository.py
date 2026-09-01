@@ -5,6 +5,7 @@ from uuid import UUID, uuid4
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from modules.foundation.domain.org_data_scope import apply_company_scope
 from modules.foundation.domain.value_objects import TenantContext
 from modules.organization.domain.entities import CompanyEntity
 from modules.organization.models.company import OrgCompany
@@ -18,8 +19,7 @@ class CompanyRepository(OrgScopedRepository):
     def list_companies(self, ctx: TenantContext) -> list[CompanyEntity]:
         stmt = select(OrgCompany)
         stmt = self.apply_tenant_filter(stmt, OrgCompany, ctx)
-        if ctx.company_id and ctx.user_type not in {"super_admin", "tenant_admin"}:
-            stmt = stmt.where(OrgCompany.id == ctx.company_id)
+        stmt = apply_company_scope(stmt, OrgCompany, ctx)
         return [self._to_entity(r) for r in self.db.scalars(stmt).all()]
 
     def get_by_id(self, ctx: TenantContext, company_id: UUID) -> CompanyEntity | None:

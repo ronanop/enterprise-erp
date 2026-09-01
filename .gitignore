@@ -58,5 +58,7 @@ build-output*.txt
 # Keep versions tracked; ignore local scratch
 alembic/versions/*.pyc
 
+# Local VAPT / security scan reports (not for repo)
+docs/security/
 
 apps/api/var/crm-attachments/

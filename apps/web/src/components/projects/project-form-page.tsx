@@ -45,10 +45,11 @@ function intOrNull(value: string): number | null {
 
 /** Older SCM shares stored type/qty only in remarks text. */
 function valueFromRemarks(remarks: string | null | undefined, label: string): string {
-  if (!remarks?.trim()) return "";
-  const escaped = label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const match = remarks.match(new RegExp(`${escaped}:\\s*(.+)`, "i"));
-  return match?.[1]?.trim().split(/\r?\n/)[0]?.trim() || "";
+  if (!remarks?.trim() || !label.trim()) return "";
+  const prefix = `${label}:`;
+  const idx = remarks.toLowerCase().indexOf(prefix.toLowerCase());
+  if (idx < 0) return "";
+  return remarks.slice(idx + prefix.length).trim().split(/\r?\n/)[0]?.trim() || "";
 }
 
 const EMPTY_CREATE: FormValues = {

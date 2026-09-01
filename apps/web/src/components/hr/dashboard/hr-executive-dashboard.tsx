@@ -37,6 +37,7 @@ import { toast, SetupToastHost } from "@/components/hr/setup/setup-toast";
 import { EmsSkeleton } from "@/components/hr/workforce/ems-primitives";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { useAuthUser } from "@/hooks/use-auth-user";
 import { cn } from "@/lib/utils";
 import {
   greetingForHour,
@@ -151,6 +152,7 @@ function GreetingTitle({ role, displayName }: { role: DashboardRole; displayName
 }
 
 export function HrExecutiveDashboardPage() {
+  const { user: authUser } = useAuthUser();
   const [data, setData] = useState<HrExecutiveDashboard | null>(null);
   const [loading, setLoading] = useState(true);
   const [role, setRole] = useState<DashboardRole>("hr");
@@ -259,6 +261,8 @@ export function HrExecutiveDashboardPage() {
   const attendanceStacked = sliceStacked(charts?.attendanceStacked ?? [], period);
   const leaveTrendByType = sliceLeave(charts?.leaveTrendByType ?? [], period);
 
+  const displayName = authUser?.displayName || data?.displayName;
+
   return (
     <div className="space-y-7 pb-6">
       <SetupToastHost />
@@ -277,7 +281,7 @@ export function HrExecutiveDashboardPage() {
             <p className="text-[11px] font-semibold tracking-[0.16em] text-primary uppercase">
               HRMS Executive Dashboard
             </p>
-            <GreetingTitle role={role} displayName={data?.displayName} />
+            <GreetingTitle role={role} displayName={displayName} />
             <DashboardClock />
           </div>
 
@@ -294,10 +298,10 @@ export function HrExecutiveDashboardPage() {
 
             <div className="flex h-10 items-center gap-2.5 rounded-xl border border-border/70 bg-muted/30 px-3 text-sm">
               <span className="flex size-7 items-center justify-center rounded-full bg-primary text-[11px] font-semibold text-primary-foreground">
-                {(data?.displayName ?? "HR").slice(0, 1).toUpperCase()}
+                {(displayName ?? "HR").slice(0, 1).toUpperCase()}
               </span>
               <span className="hidden font-medium sm:inline">
-                {data?.displayName ?? DASHBOARD_ROLE_LABELS[role]}
+                {displayName ?? DASHBOARD_ROLE_LABELS[role]}
               </span>
             </div>
 

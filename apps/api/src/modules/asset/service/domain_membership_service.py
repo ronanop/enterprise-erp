@@ -30,11 +30,9 @@ class DomainMembershipService:
         self._rbac = RBACService(db)
 
     def is_module_admin(self, ctx: TenantContext) -> bool:
-        if ctx.user_id is None:
-            return False
-        if ctx.user_type in {"super_admin", "tenant_admin"}:
-            return True
-        return self._rbac.has_permission(ctx.user_id, ctx.tenant_id, "asset.module:admin")
+        from modules.asset.service.asset_module_admin import AssetModuleAdminService
+
+        return AssetModuleAdminService(self._db).is_admin(ctx)
 
     def user_domains(self, ctx: TenantContext, user_id: UUID | None = None) -> list[str]:
         uid = user_id or ctx.user_id

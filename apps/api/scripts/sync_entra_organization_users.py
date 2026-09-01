@@ -114,6 +114,20 @@ def _ensure_role(db, tenant_id, role_code: str, role_name: str) -> SecRole:
     return role
 
 
+def _strip_admin_roles(db, user_id) -> None:
+    links = db.scalars(
+        select(SecUserRole)
+        .join(SecRole, SecRole.id == SecUserRole.role_id)
+        .where(
+            SecUserRole.user_id == user_id,
+            SecRole.role_code.in_(("SUPER_ADMIN", "TENANT_ADMIN")),
+            SecRole.is_deleted.is_(False),
+        )
+    ).all()
+    for link in links:
+        db.delete(link)
+
+
 def main() -> None:
     if not settings.microsoft_login_enabled:
         raise SystemExit("Microsoft credentials are not configured in .env")
@@ -131,7 +145,7 @@ def main() -> None:
             raise SystemExit("BOOTSTRAP tenant not found — run seed_demo_data first")
 
         super_admin_role = _ensure_role(db, tenant.id, "SUPER_ADMIN", "Super Admin")
-        tenant_admin_role = _ensure_role(db, tenant.id, "TENANT_ADMIN", "Tenant Admin")
+        _ensure_role(db, tenant.id, "TENANT_ADMIN", "Tenant Admin")
         service = UserService(db)
         org_context = OrgContextService(db)
         user_employee = UserEmployeeLinkService(db)
@@ -169,23 +183,29 @@ def main() -> None:
                 user.status = "active"
                 if is_admin:
                     user.user_type = "super_admin"
+                else:
+                    user.user_type = "employee"
+                    _strip_admin_roles(db, user.id)
                 updated += 1
 
             assert user is not None
-            role = super_admin_role if is_admin else tenant_admin_role
-            link = db.scalar(
-                select(SecUserRole).where(
-                    SecUserRole.user_id == user.id,
-                    SecUserRole.role_id == role.id,
+            if is_admin:
+                role = super_admin_role
+                link = db.scalar(
+                    select(SecUserRole).where(
+                        SecUserRole.user_id == user.id,
+                        SecUserRole.role_id == role.id,
+                    )
                 )
-            )
-            if not link:
-                service.assign_role(
-                    tenant_id=tenant.id,
-                    user_id=user.id,
-                    role_id=role.id,
-                    assigned_by=None,
-                )
+                if not link:
+                    service.assign_role(
+                        tenant_id=tenant.id,
+                        user_id=user.id,
+                        role_id=role.id,
+                        assigned_by=None,
+                    )
+            else:
+                _strip_admin_roles(db, user.id)
 
             if primary_company is not None:
                 org_context.ensure_default_scope(

@@ -5,6 +5,7 @@ from uuid import UUID, uuid4
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from modules.foundation.domain.org_data_scope import effective_company_ids, has_tenant_wide_data_access
 from modules.foundation.domain.value_objects import TenantContext
 from modules.organization.domain.entities import BranchEntity
 from modules.organization.models.branch import OrgBranch
@@ -24,11 +25,17 @@ class BranchRepository(OrgScopedRepository):
         )
         if company_id:
             stmt = stmt.where(OrgBranch.company_id == company_id)
-        elif ctx.user_type in {"super_admin", "tenant_admin"}:
-            # Tenant-wide: show branches for every company in the tenant
+        elif has_tenant_wide_data_access(ctx):
             pass
-        elif ctx.company_id:
-            stmt = stmt.where(OrgBranch.company_id == ctx.company_id)
+        else:
+            allowed = effective_company_ids(ctx)
+            if allowed is not None:
+                if not allowed:
+                    stmt = stmt.where(OrgBranch.id.is_(None))
+                elif len(allowed) == 1:
+                    stmt = stmt.where(OrgBranch.company_id == allowed[0])
+                else:
+                    stmt = stmt.where(OrgBranch.company_id.in_(allowed))
         # Branch-scoped users only see their own branch; admins see all in scope
         if ctx.branch_id and ctx.user_type not in {
             "super_admin",

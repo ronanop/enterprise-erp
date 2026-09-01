@@ -43,8 +43,11 @@ def load_models() -> None:
     for modinfo in pkgutil.walk_packages(modules.__path__, modules.__name__ + "."):
         if not _MODEL_MOD_RE.fullmatch(modinfo.name):
             continue
+        module_name = modinfo.name
+        if not module_name.startswith("modules."):
+            continue
         try:
-            m = importlib.import_module(modinfo.name)
+            m = importlib.import_module(module_name)
         except Exception:
             continue
         for attr in dir(m):

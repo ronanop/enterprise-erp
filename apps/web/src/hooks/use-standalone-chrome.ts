@@ -6,23 +6,32 @@ import { erpModules } from "@/config/modules";
 
 const STANDALONE_KEY = "erp-standalone";
 
-/** Extra in-app routes that still use module chrome (not the platform dashboard). */
-const EXTRA_MODULE_ROOTS = ["/organization/users"] as const;
+/** Extra in-app routes that still use the ERP shell (not module workspace chrome). */
+const EXTRA_IN_APP_ROOTS = ["/organization/users"] as const;
 
-const MODULE_ROOTS: readonly string[] = [
-  ...erpModules.map((m) => m.href),
-  ...EXTRA_MODULE_ROOTS,
+const IN_APP_MODULE_ROOTS: readonly string[] = [
+  ...erpModules
+    .filter((m) => m.group === "foundation" || m.group === "organization" || m.group === "master-data")
+    .map((m) => m.href),
+  ...EXTRA_IN_APP_ROOTS,
 ];
 
+const STANDALONE_MODULE_ROOTS: readonly string[] = erpModules
+  .filter((m) => m.group === "operations")
+  .map((m) => m.href);
+
+function matchesRoot(pathname: string, root: string) {
+  return pathname === root || pathname.startsWith(`${root}/`);
+}
+
 /**
- * True for any ERP module workspace path (Finance, CRM, HR, …).
- * Platform dashboard (`/`) stays in the main shell.
+ * True for operations module workspace paths opened outside the ERP shell.
+ * Foundation, organization, and master data keep the ERP sidebar and topbar.
  */
 export function isModuleStandalonePath(pathname: string) {
   if (!pathname || pathname === "/") return false;
-  return MODULE_ROOTS.some(
-    (root) => pathname === root || pathname.startsWith(`${root}/`),
-  );
+  if (IN_APP_MODULE_ROOTS.some((root) => matchesRoot(pathname, root))) return false;
+  return STANDALONE_MODULE_ROOTS.some((root) => matchesRoot(pathname, root));
 }
 
 /** @deprecated Use isModuleStandalonePath — kept for existing imports. */
@@ -32,7 +41,7 @@ export function isCrmStandalonePath(pathname: string) {
 
 /**
  * True when this route uses module workspace chrome (no ERP module-picker sidebar).
- * All module routes are standalone by default; `?standalone=1` remains for compatibility.
+ * Operations modules are standalone; foundation/org/master-data stay in the ERP shell.
  */
 export function useStandaloneChrome() {
   const pathname = usePathname();

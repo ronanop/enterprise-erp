@@ -81,6 +81,7 @@ import {
   resizeUnitKinds,
 } from "@/components/procurement/receipt-line-serials";
 import { receiptGrnLabelForOrder } from "@/utils/receipt-grn-label";
+import { devError, devWarn } from "@/lib/dev-log";
 import {
   resizeSerialSlots,
   receiptSerialSlotsWithNaDefaults,
@@ -480,7 +481,7 @@ export function OrderDetailPage({ orderId }: { orderId: string }) {
         err instanceof Error && err.message.trim()
           ? err.message
           : "Failed to download PO PDF";
-      console.error("PO PDF download failed", err);
+      devError("PO PDF download failed");
       setError(message);
     } finally {
       setPdfBusy(false);

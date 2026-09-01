@@ -23,11 +23,10 @@ class ManagementGroupRepository(HrScopedRepository):
         stmt = self.apply_hr_filter(stmt, HrManagementGroup, ctx, branch_scoped=False)
         return self.db.scalar(stmt)
 
-    def list_rows(self, ctx: TenantContext, company_id: UUID) -> list[HrManagementGroup]:
-        stmt = select(HrManagementGroup).where(
-            HrManagementGroup.company_id == company_id,
-            HrManagementGroup.is_deleted.is_(False),
-        )
+    def list_rows(self, ctx: TenantContext, company_id: UUID | None) -> list[HrManagementGroup]:
+        stmt = select(HrManagementGroup).where(HrManagementGroup.is_deleted.is_(False))
+        if company_id is not None:
+            stmt = stmt.where(HrManagementGroup.company_id == company_id)
         stmt = self.apply_hr_filter(stmt, HrManagementGroup, ctx, branch_scoped=False)
         return list(self.db.scalars(stmt.order_by(HrManagementGroup.group_name)).all())
 

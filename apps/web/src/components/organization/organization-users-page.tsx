@@ -20,6 +20,25 @@ function hasModuleAssignment(row: FoundationUser): boolean {
   return assigned.length > 0 || admins.length > 0;
 }
 
+function sortUsersByName(users: FoundationUser[]): FoundationUser[] {
+  return [...users].sort((a, b) =>
+    a.display_name.localeCompare(b.display_name, undefined, { sensitivity: "base" }),
+  );
+}
+
+function filterUsers(rows: FoundationUser[], query: string): FoundationUser[] {
+  const q = query.trim().toLowerCase();
+  if (!q) return rows;
+  return rows.filter(
+    (row) =>
+      row.display_name.toLowerCase().includes(q) ||
+      row.email.toLowerCase().includes(q) ||
+      row.user_type.toLowerCase().includes(q) ||
+      (row.assigned_module_keys ?? []).some((k) => moduleTitle(k).toLowerCase().includes(q)) ||
+      (row.admin_module_keys ?? []).some((k) => moduleTitle(k).toLowerCase().includes(q)),
+  );
+}
+
 function UsersTableCard({
   title,
   subtitle,
@@ -131,7 +150,8 @@ export function OrganizationUsersPage() {
   const [rows, setRows] = useState<FoundationUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [query, setQuery] = useState("");
+  const [assignedQuery, setAssignedQuery] = useState("");
+  const [unassignedQuery, setUnassignedQuery] = useState("");
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -158,28 +178,15 @@ export function OrganizationUsersPage() {
     void load();
   }, [load]);
 
-  const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    if (!q) return rows;
-    return rows.filter(
-      (row) =>
-        row.display_name.toLowerCase().includes(q) ||
-        row.email.toLowerCase().includes(q) ||
-        row.user_type.toLowerCase().includes(q) ||
-        (row.assigned_module_keys ?? []).some((k) => moduleTitle(k).toLowerCase().includes(q)) ||
-        (row.admin_module_keys ?? []).some((k) => moduleTitle(k).toLowerCase().includes(q)),
-    );
-  }, [rows, query]);
+  const assignedUsers = useMemo(() => {
+    const list = rows.filter((row) => hasModuleAssignment(row));
+    return sortUsersByName(filterUsers(list, assignedQuery));
+  }, [rows, assignedQuery]);
 
-  const { assignedUsers, unassignedUsers } = useMemo(() => {
-    const assigned: FoundationUser[] = [];
-    const unassigned: FoundationUser[] = [];
-    for (const row of filtered) {
-      if (hasModuleAssignment(row)) assigned.push(row);
-      else unassigned.push(row);
-    }
-    return { assignedUsers: assigned, unassignedUsers: unassigned };
-  }, [filtered]);
+  const unassignedUsers = useMemo(() => {
+    const list = rows.filter((row) => !hasModuleAssignment(row));
+    return sortUsersByName(filterUsers(list, unassignedQuery));
+  }, [rows, unassignedQuery]);
 
   function onModulesSaved(
     userId: string,
@@ -193,13 +200,23 @@ export function OrganizationUsersPage() {
     );
   }
 
-  const searchInput = (
+  const assignedSearchInput = (
     <Input
-      value={query}
-      onChange={(e) => setQuery(e.target.value)}
+      value={assignedQuery}
+      onChange={(e) => setAssignedQuery(e.target.value)}
       placeholder="Search name or email…"
-      className="h-9 max-w-xs"
-      aria-label="Search users"
+      className="h-9 w-full min-w-[200px] max-w-xs"
+      aria-label="Search module-assigned users"
+    />
+  );
+
+  const unassignedSearchInput = (
+    <Input
+      value={unassignedQuery}
+      onChange={(e) => setUnassignedQuery(e.target.value)}
+      placeholder="Search name or email…"
+      className="h-9 w-full min-w-[200px] max-w-xs"
+      aria-label="Search users without module assignment"
     />
   );
 
@@ -224,10 +241,10 @@ export function OrganizationUsersPage() {
             : `${assignedUsers.length} with module access or module admin rights`
         }
         icon={<ShieldCheck className="size-4" />}
-        toolbar={searchInput}
+        toolbar={assignedSearchInput}
         loading={loading}
         emptyLabel={
-          query.trim()
+          assignedQuery.trim()
             ? "No module-assigned users match your search."
             : "No users have module assignments yet."
         }
@@ -244,9 +261,10 @@ export function OrganizationUsersPage() {
             : `${unassignedUsers.length} without module assignment`
         }
         icon={<Users className="size-4" />}
+        toolbar={unassignedSearchInput}
         loading={loading}
         emptyLabel={
-          query.trim()
+          unassignedQuery.trim()
             ? "No unassigned users match your search."
             : "Every user has a module assignment."
         }

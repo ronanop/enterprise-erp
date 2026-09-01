@@ -12,6 +12,8 @@ export function useAuthUser() {
   const [moduleKeys, setModuleKeys] = useState<string[]>([]);
   const [adminModuleKeys, setAdminModuleKeys] = useState<string[]>([]);
   const [projectModuleAdmin, setProjectModuleAdmin] = useState(false);
+  const [hrModuleAdmin, setHrModuleAdmin] = useState(false);
+  const [assetsModuleAdmin, setAssetsModuleAdmin] = useState(false);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -21,6 +23,8 @@ export function useAuthUser() {
       setModuleKeys([]);
       setAdminModuleKeys([]);
       setProjectModuleAdmin(false);
+      setHrModuleAdmin(false);
+      setAssetsModuleAdmin(false);
       setLoading(false);
       return;
     }
@@ -36,6 +40,8 @@ export function useAuthUser() {
           setModuleKeys(parsed.moduleKeys);
           setAdminModuleKeys(parsed.adminModuleKeys);
           setProjectModuleAdmin(parsed.projectModuleAdmin);
+          setHrModuleAdmin(parsed.hrModuleAdmin);
+          setAssetsModuleAdmin(parsed.assetsModuleAdmin);
         }
       } catch {
         if (!cancelled) {
@@ -44,6 +50,8 @@ export function useAuthUser() {
           setModuleKeys([]);
           setAdminModuleKeys([]);
           setProjectModuleAdmin(false);
+          setHrModuleAdmin(false);
+          setAssetsModuleAdmin(false);
         }
       } finally {
         if (!cancelled) setLoading(false);
@@ -61,6 +69,8 @@ export function useAuthUser() {
     moduleKeys,
     adminModuleKeys,
     projectModuleAdmin,
+    hrModuleAdmin,
+    assetsModuleAdmin,
     loading,
     signedIn: Boolean(user),
   };

@@ -23,11 +23,10 @@ class ShiftRotationRepository(HrScopedRepository):
         stmt = self.apply_hr_filter(stmt, HrShiftRotation, ctx, branch_scoped=True)
         return self.db.scalar(stmt)
 
-    def list_rows(self, ctx: TenantContext, company_id: UUID):
-        stmt = select(HrShiftRotation).where(
-            HrShiftRotation.company_id == company_id,
-            HrShiftRotation.is_deleted.is_(False),
-        )
+    def list_rows(self, ctx: TenantContext, company_id: UUID | None):
+        stmt = select(HrShiftRotation).where(HrShiftRotation.is_deleted.is_(False))
+        if company_id is not None:
+            stmt = stmt.where(HrShiftRotation.company_id == company_id)
         stmt = self.apply_hr_filter(stmt, HrShiftRotation, ctx, branch_scoped=True)
         return list(self.db.scalars(stmt).all())
 
@@ -69,11 +68,10 @@ class ShiftSwapRepository(HrScopedRepository):
         stmt = self.apply_hr_filter(stmt, HrShiftSwapRequest, ctx, branch_scoped=True)
         return self.db.scalar(stmt)
 
-    def list_rows(self, ctx: TenantContext, company_id: UUID):
-        stmt = select(HrShiftSwapRequest).where(
-            HrShiftSwapRequest.company_id == company_id,
-            HrShiftSwapRequest.is_deleted.is_(False),
-        )
+    def list_rows(self, ctx: TenantContext, company_id: UUID | None):
+        stmt = select(HrShiftSwapRequest).where(HrShiftSwapRequest.is_deleted.is_(False))
+        if company_id is not None:
+            stmt = stmt.where(HrShiftSwapRequest.company_id == company_id)
         stmt = self.apply_hr_filter(stmt, HrShiftSwapRequest, ctx, branch_scoped=True)
         return list(self.db.scalars(stmt).all())
 

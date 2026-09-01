@@ -19,11 +19,10 @@ class GoalRepository(HrScopedRepository):
         stmt = self.apply_hr_filter(stmt, HrGoal, ctx, branch_scoped=True)
         return self.db.scalar(stmt)
 
-    def list_rows(self, ctx: TenantContext, company_id: UUID):
-        stmt = select(HrGoal).where(
-            HrGoal.company_id == company_id,
-            HrGoal.is_deleted.is_(False),
-        )
+    def list_rows(self, ctx: TenantContext, company_id: UUID | None):
+        stmt = select(HrGoal).where(HrGoal.is_deleted.is_(False))
+        if company_id is not None:
+            stmt = stmt.where(HrGoal.company_id == company_id)
         stmt = self.apply_hr_filter(stmt, HrGoal, ctx, branch_scoped=True)
         return list(self.db.scalars(stmt).all())
 

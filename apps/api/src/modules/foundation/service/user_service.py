@@ -66,6 +66,7 @@ class UserService:
         updated_by: UUID | None,
     ) -> UserEntity:
         user = self.get_user(tenant_id, user_id)
+        previous_admin_keys = list(user.admin_module_keys)
         normalized = sorted({k.strip() for k in module_keys if k and k.strip()})
         invalid = [k for k in normalized if k not in ERP_MODULE_KEY_SET]
         if invalid:
@@ -75,6 +76,15 @@ class UserService:
             user_id=user_id,
             module_keys=normalized,
             assigned_by=updated_by,
+        )
+        from modules.foundation.service.org_module_admin_sync_service import OrgModuleAdminSyncService
+
+        OrgModuleAdminSyncService(self._modules.db).sync_user_admin_modules(
+            tenant_id,
+            user_id,
+            previous_admin_keys=previous_admin_keys,
+            new_admin_keys=normalized,
+            actor_id=updated_by,
         )
         self._audit.log_entity_change(
             tenant_id=tenant_id,
@@ -172,6 +182,40 @@ class UserService:
             entity_id=user_id,
             operation="create",
             performed_by=assigned_by,
+            new_value={"role_id": str(role_id)},
+        )
+
+    def revoke_role(
+        self,
+        *,
+        tenant_id: UUID,
+        user_id: UUID,
+        role_id: UUID,
+        revoked_by: UUID | None = None,
+    ) -> None:
+        from sqlalchemy import select
+
+        from modules.foundation.models.security import SecUserRole
+
+        links = list(
+            self._repo.db.scalars(
+                select(SecUserRole).where(
+                    SecUserRole.tenant_id == tenant_id,
+                    SecUserRole.user_id == user_id,
+                    SecUserRole.role_id == role_id,
+                )
+            ).all()
+        )
+        for link in links:
+            self._repo.db.delete(link)
+        self._repo.db.flush()
+        self._rbac.invalidate_user(user_id)
+        self._audit.log_entity_change(
+            tenant_id=tenant_id,
+            entity_name="sec_user_role",
+            entity_id=user_id,
+            operation="delete",
+            performed_by=revoked_by,
             new_value={"role_id": str(role_id)},
         )
 

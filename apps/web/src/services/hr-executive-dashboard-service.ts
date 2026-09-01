@@ -281,6 +281,51 @@ function peopleFromDirectory(records: EmployeeRecord[]): {
   return { people, empById };
 }
 
+/** Fallback when master employee directory is unavailable (scoped HR module members). */
+function peopleFromHrOverview(overview: HrOverview): {
+  people: DashboardPerson[];
+  empById: Map<string, MasterEmployee>;
+} {
+  const employmentByEmployee = new Map<string, HrRow>();
+  for (const row of overview.employment) {
+    const key = String(row.employee_id ?? "");
+    if (key && !employmentByEmployee.has(key)) employmentByEmployee.set(key, row);
+  }
+
+  const people: DashboardPerson[] = overview.profiles
+    .map((profile) => {
+      const empId = String(profile.employee_id ?? profile.id ?? "");
+      if (!empId) return null;
+      const employment = employmentByEmployee.get(empId);
+      const display =
+        String(profile.employee_name ?? "").trim() ||
+        `${String(profile.first_name ?? "")} ${String(profile.last_name ?? "")}`.trim();
+      const parts = display.split(/\s+/).filter(Boolean);
+      const emp: MasterEmployee = {
+        id: empId,
+        first_name: parts[0] ?? "",
+        last_name: parts.slice(1).join(" "),
+        employee_code: String(profile.employee_code ?? ""),
+        date_of_joining: employment?.date_of_joining,
+        designation: String(profile.designation ?? ""),
+        status: String(employment?.status ?? profile.status ?? "active"),
+      };
+      return {
+        emp,
+        departmentName: "Unassigned",
+        locationName: normalizeLocationCity(String(employment?.work_location_text ?? "")),
+        gender: String(profile.gender ?? "unspecified").toLowerCase(),
+        dob: profile.date_of_birth,
+        doj: employment?.date_of_joining ?? undefined,
+        status: String(employment?.status ?? profile.status ?? "active").toLowerCase(),
+      } satisfies DashboardPerson;
+    })
+    .filter((row): row is DashboardPerson => row !== null);
+
+  const empById = new Map(people.map((p) => [String(p.emp.id), p.emp]));
+  return { people, empById };
+}
+
 function buildStats(
   overview: HrOverview,
   people: DashboardPerson[],
@@ -1138,7 +1183,14 @@ export async function loadHrExecutiveDashboard(
         return Boolean(c.invitation?.sentAt) || ["invitation_sent", "in_progress", "submitted", "hr_review"].includes(st);
       }).length;
     }
-    partial = Boolean(overview.partial) || Boolean(directory.errors?.length);
+    const directoryFailed = Boolean(directory.errors?.length);
+    const { people: directoryPeople } = peopleFromDirectory(directoryRecords);
+    const { people: overviewPeople } = peopleFromHrOverview(overview);
+    const hasPeople = directoryPeople.length > 0 || overviewPeople.length > 0;
+    partial =
+      Boolean(overview.partial) ||
+      (directoryFailed && !hasPeople) ||
+      (!hasPeople && overview.errors.length > 0);
     authBlocked =
       overview.statusCodes.includes(401) ||
       (!isAuthenticated() && overview.errors.length > 0);
@@ -1170,7 +1222,11 @@ export async function loadHrExecutiveDashboard(
     };
   }
 
-  const { people, empById } = peopleFromDirectory(directoryRecords);
+  const directoryPeople =
+    directoryRecords.length > 0
+      ? peopleFromDirectory(directoryRecords)
+      : peopleFromHrOverview(overview);
+  const { people, empById } = directoryPeople;
   const stats = buildStats(overview, people, recruitment, onboardingInProcess);
   const approvals = [
     ...buildApprovals(overview, empById, recruitment),

@@ -35,7 +35,7 @@ export type NavItem = {
   href: string;
   description?: string;
   icon?: LucideIcon;
-  /** Keep navigation in the current tab (e.g. Dashboard). Module links open in a new tab. */
+  /** Keep navigation in the current tab inside the ERP shell. Operations modules open in a new tab. */
   inApp?: boolean;
 };
 
@@ -82,6 +82,9 @@ const groupTitles: Record<ErpModule["group"], string> = {
   operations: "Operations",
 };
 
+/** Foundation, organization, and master data stay in the ERP shell; operations open in a new tab. */
+const IN_APP_NAV_GROUPS = new Set<ErpModule["group"]>(["foundation", "organization", "master-data"]);
+
 export const navigation: NavGroup[] = [
   {
     title: "Overview",
@@ -105,6 +108,7 @@ export const navigation: NavGroup[] = [
           href: m.href,
           description: m.description,
           icon: iconMap[m.icon],
+          inApp: IN_APP_NAV_GROUPS.has(group),
         })),
       ...(group === "organization"
         ? [

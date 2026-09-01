@@ -19,6 +19,7 @@ import type {
   WeeklyOffRule,
 } from "@/types/shift-roster-management";
 import { DEFAULT_SHIFT_EXTENSION } from "@/types/shift-roster-management";
+import { devError, devWarn } from "@/lib/dev-log";
 
 const EXT_KEY = "erp_shift_extensions_v1";
 const ASSIGN_EXT_KEY = "erp_shift_assignment_ext_v1";
@@ -451,7 +452,7 @@ export async function saveRotation(rotation: Omit<ShiftRotation, "id"> & { id?: 
       appendShiftAudit({ action: "rotation_saved", detail: rotation.name, actor: actor() });
       return;
     } catch (err) {
-      console.warn("Rotation API save failed; local cache kept", err);
+      devWarn("Rotation API save failed; local cache kept");
     }
   }
   const all = readJson<ShiftRotation[]>(ROTATIONS_KEY, []);
@@ -490,7 +491,7 @@ export async function submitShiftSwap(
       appendShiftAudit({ action: "swap_requested", detail: req.reason, actor: actor() });
       return;
     } catch (err) {
-      console.warn("Shift swap API failed; local cache kept", err);
+      devWarn("Shift swap API failed; local cache kept");
     }
   }
   const all = readJson<ShiftSwapRequest[]>(SWAPS_KEY, []);
@@ -512,7 +513,7 @@ export async function approveSwap(id: string): Promise<void> {
       appendShiftAudit({ action: "swap_approved", detail: id, actor: actor() });
       return;
     } catch (err) {
-      console.warn("Swap approve API failed; local cache kept", err);
+      devWarn("Swap approve API failed; local cache kept");
     }
   }
   const all = readJson<ShiftSwapRequest[]>(SWAPS_KEY, []);
@@ -546,7 +547,7 @@ export async function setRosterCell(cell: RosterCell): Promise<void> {
         notes: cell.shiftName || null,
       });
     } catch (err) {
-      console.warn("Roster API save failed; local cell kept", err);
+      devWarn("Roster API save failed; local cell kept");
     }
   }
 
@@ -1141,7 +1142,7 @@ export async function saveWeeklyOffRules(
         status: "active",
       });
     } catch (err) {
-      console.warn("Weekly-off API save failed; kept local cache", err);
+      devWarn("Weekly-off API save failed; kept local cache");
     }
   }
   appendShiftAudit({ action: "weekly_off_updated", detail: rules.join(", "), actor: actor() });

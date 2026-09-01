@@ -7,6 +7,12 @@ import {
 
 const TEMPLATE_HEADERS = ["Line ID", "S No.", "Product", "Unit #", "Serial Number"] as const;
 
+const UNSAFE_OBJECT_KEYS = new Set(["__proto__", "constructor", "prototype"]);
+
+function isSafeObjectKey(key: string): boolean {
+  return !UNSAFE_OBJECT_KEYS.has(key) && !key.startsWith("__");
+}
+
 export type ReceiptSerialImportLine = {
   lineId: string;
   receiveQty: number;
@@ -23,7 +29,8 @@ function normalizeSerialValue(raw: string): string {
 }
 
 function cellValue(row: Record<string, unknown>, header: string): string {
-  const v = row[header];
+  if (!isSafeObjectKey(header)) return "";
+  const v = Object.prototype.hasOwnProperty.call(row, header) ? row[header] : undefined;
   if (v == null) return "";
   return String(v).trim();
 }
@@ -77,7 +84,7 @@ function rowLooksLikeProductSerialHeader(row: unknown[]): boolean {
 function parseKeyedProductSerialRows(json: Record<string, unknown>[]): ProductSerialRow[] {
   const rows: ProductSerialRow[] = [];
   for (const row of json) {
-    const keys = Object.keys(row);
+    const keys = Object.keys(row).filter(isSafeObjectKey);
     const productKey = keys.find((k) => /^product/i.test(k.trim()));
     const serialKey = keys.find((k) => /serial/i.test(k.trim()));
     if (!productKey || !serialKey) continue;

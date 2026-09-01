@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import base64
 import json
+import os
 import sys
 from datetime import date, timedelta
 from pathlib import Path
@@ -36,9 +37,12 @@ def unwrap(resp: httpx.Response, label: str):
     return body.get("data", body)
 
 
-def login(client: httpx.Client, email: str, password: str = "Secure1!") -> tuple[str, str]:
+def login(client: httpx.Client, email: str, password: str | None = None) -> tuple[str, str]:
+    resolved_password = password or os.environ.get("CRM_TEST_PASSWORD")
+    if not resolved_password:
+        die("CRM_TEST_PASSWORD environment variable is required")
     data = unwrap(
-        client.post("/auth/login", json={"email": email, "password": password}),
+        client.post("/auth/login", json={"email": email, "password": resolved_password}),
         f"login {email}",
     )
     token = data.get("access_token")

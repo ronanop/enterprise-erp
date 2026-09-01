@@ -1,5 +1,6 @@
 import { getDeliveryChallan } from "@/utils/delivery-challan-storage";
 import { listDeliveryStatuses } from "@/utils/delivery-status-storage";
+import { devError, devWarn } from "@/lib/dev-log";
 
 const SENT_KEY = "erp.procurement.delivery-reminder-sent";
 
@@ -98,7 +99,7 @@ async function queueDeliveryReminderEmail(
     sent[dedupeKey] = new Date().toISOString();
     writeSentMap(sent);
   } catch (err) {
-    console.warn("Delivery reminder email request failed:", err);
+    devWarn("Delivery reminder email request failed:");
     return;
   }
 
