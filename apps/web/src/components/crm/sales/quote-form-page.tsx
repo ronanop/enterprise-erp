@@ -503,7 +503,21 @@ export function QuoteFormPage({
     if (!form.subject.trim()) missing.push("Subject");
     if (!form.valid_until.trim()) missing.push("Valid Until");
     if (!form.service_type.trim()) missing.push("Service Type");
-    if (lines.some((line) => !line.product_name.trim())) missing.push("Product Name (quoted items)");
+    if (lines.length === 0) {
+      missing.push("At least one quoted item row");
+    }
+    for (let index = 0; index < lines.length; index += 1) {
+      const line = lines[index];
+      const rowLabel = `Row ${index + 1}`;
+      if (!line.product_name.trim()) missing.push(`${rowLabel}: Product Name`);
+      if (!line.description.trim()) missing.push(`${rowLabel}: Item Description`);
+      if (!line.line_type.trim()) missing.push(`${rowLabel}: Service Type`);
+      if (!line.qty.trim() || Number(line.qty) <= 0) missing.push(`${rowLabel}: Quantity`);
+      if (!line.unit_sell.trim() || Number(line.unit_sell) <= 0) missing.push(`${rowLabel}: Unit Price`);
+      if (!line.margin_pct.trim()) missing.push(`${rowLabel}: Margin %`);
+      if (!line.gst_pct.trim()) missing.push(`${rowLabel}: GST %`);
+      if (!line.vendorFile && !line.serverId) missing.push(`${rowLabel}: Vendor Quote Attach`);
+    }
     if (missing.length > 0) {
       setMandateMessage(missingRequiredMessage(missing));
       setMandateOpen(true);

@@ -190,6 +190,13 @@ export function LeadFormPage({
         meUser?.email?.trim() ||
         "";
       setLeadOwnerLabel(loggedInLabel);
+      const ownerFromEmployee =
+        meUser?.employee_id && memberOptions.some((member) => member.id === meUser.employee_id)
+          ? meUser.employee_id
+          : memberOptions.find(
+              (member) =>
+                member.email?.trim().toLowerCase() === meUser?.email?.trim().toLowerCase(),
+            )?.id ?? "";
       setCompany(companyRow);
       setLeadSources(sources);
       setEntityCatalog(entities);
@@ -256,6 +263,7 @@ export function LeadFormPage({
         return {
           ...f,
           branch_id: companyRow.branch_id,
+          owner_employee_id: ownerFromEmployee || f.owner_employee_id,
           first_name: companyRow.first_name ?? "",
           last_name: companyRow.last_name ?? "",
           mobile: companyRow.phone ?? "",
@@ -474,7 +482,7 @@ export function LeadFormPage({
       ) : (
         <BlueprintActions
           allowedActions={[]}
-          currentStageLabel="Draft Lead"
+          currentStageLabel="New"
           onAction={async () => {}}
         />
       )}
@@ -673,9 +681,6 @@ export function LeadFormPage({
               value={form.expected_amount ?? ""}
               onChange={(e) => set("expected_amount", e.target.value ? Number(e.target.value) : undefined)}
             />
-          </FinanceField>
-          <FinanceField label="Lead Status">
-            <Input value="New" disabled aria-readonly="true" />
           </FinanceField>
 
           <FinanceField label="Expected Closure Date *">
