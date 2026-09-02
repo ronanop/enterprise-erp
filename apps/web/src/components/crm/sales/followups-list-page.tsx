@@ -139,7 +139,6 @@ export function FollowupsListPage({
       <CrmListPanel>
         <CrmListToolbar
           title="Follow Ups"
-          subtitle="Customer follow-ups"
           icon={ClipboardList}
           count={sorted.length}
           actions={embedded ? actions : null}

@@ -16,6 +16,34 @@ export const LEAD_PRODUCT_TYPES = [
 
 export type LeadProductType = (typeof LEAD_PRODUCT_TYPES)[number];
 
+/** Quote service types mirror lead product types except "Others". */
+export const QUOTE_SERVICE_TYPES = LEAD_PRODUCT_TYPES.filter(
+  (type): type is Exclude<LeadProductType, "Others"> => type !== "Others",
+);
+
+export type QuoteServiceType = (typeof QUOTE_SERVICE_TYPES)[number];
+
+const LEGACY_QUOTE_SERVICE_TYPE_MAP: Record<string, QuoteServiceType> = {
+  hardware: "Hardware",
+  software: "Software",
+  services: "Services",
+};
+
+export function normalizeQuoteServiceType(
+  value: string | null | undefined,
+): QuoteServiceType | "" {
+  const trimmed = (value ?? "").trim();
+  if (!trimmed) return "";
+  const legacy = LEGACY_QUOTE_SERVICE_TYPE_MAP[trimmed.toLowerCase()];
+  if (legacy) return legacy;
+  const match = QUOTE_SERVICE_TYPES.find((type) => type.toLowerCase() === trimmed.toLowerCase());
+  return match ?? "";
+}
+
+export function isQuoteServiceType(value: string | null | undefined): boolean {
+  return normalizeQuoteServiceType(value) !== "";
+}
+
 /** Sub-products shown when Product Type = Cloud. */
 export const CLOUD_SUB_PRODUCTS = [
   "Billing Shift AWS",

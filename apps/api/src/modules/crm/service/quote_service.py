@@ -210,15 +210,53 @@ class QuoteService:
                 lead.entity_contact if lead is not None else None,
                 account.phone if account is not None else None,
             ),
+            "amc_warranty": _first(current.get("amc_warranty"), "none"),
+            "billing_street": _first(
+                current.get("billing_street"),
+                lead.street if lead is not None else None,
+                account.billing_street if account is not None else None,
+            ),
+            "billing_city": _first(
+                current.get("billing_city"),
+                lead.city if lead is not None else None,
+                account.billing_city if account is not None else None,
+            ),
+            "billing_state": _first(
+                current.get("billing_state"),
+                lead.state if lead is not None else None,
+                account.billing_state if account is not None else None,
+            ),
+            "billing_zip": _first(
+                current.get("billing_zip"),
+                lead.zip if lead is not None else None,
+                account.billing_code if account is not None else None,
+            ),
             "billing_country": _first(
                 current.get("billing_country"),
-                account.billing_country if account is not None else None,
                 lead.country if lead is not None else None,
+                account.billing_country if account is not None else None,
+            ),
+            "shipping_street": _first(
+                current.get("shipping_street"),
+                account.shipping_street if account is not None else None,
+            ),
+            "shipping_city": _first(
+                current.get("shipping_city"),
+                account.shipping_city if account is not None else None,
+            ),
+            "shipping_state": _first(
+                current.get("shipping_state"),
+                account.shipping_state if account is not None else None,
+            ),
+            "shipping_zip": _first(
+                current.get("shipping_zip"),
+                account.shipping_code if account is not None else None,
             ),
             "shipping_country": _first(
                 current.get("shipping_country"),
                 account.shipping_country if account is not None else None,
                 account.billing_country if account is not None else None,
+                lead.country if lead is not None else None,
             ),
             "description": _first(
                 current.get("description"),
@@ -245,7 +283,16 @@ class QuoteService:
             "entity_address",
             "entity_gst",
             "entity_contact",
+            "amc_warranty",
+            "billing_street",
+            "billing_city",
+            "billing_state",
+            "billing_zip",
             "billing_country",
+            "shipping_street",
+            "shipping_city",
+            "shipping_state",
+            "shipping_zip",
             "shipping_country",
             "description",
         )

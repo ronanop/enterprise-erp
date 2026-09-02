@@ -103,7 +103,6 @@ export function QuoteListPage({
       <CrmListPanel>
         <CrmListToolbar
           title="Quotes"
-          subtitle="Customer quotations"
           icon={FileText}
           count={sorted.length}
           search={{

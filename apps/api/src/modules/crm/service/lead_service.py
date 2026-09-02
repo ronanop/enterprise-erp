@@ -7,7 +7,7 @@ from uuid import UUID
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from core.exceptions import ConflictException, NotFoundException
+from core.exceptions import ConflictException, ForbiddenException, NotFoundException
 from modules.crm.domain.enums import CrmEntityType, LeadStatus
 from modules.crm.models import CrmLead
 from modules.crm.repository.company_repository import CompanyRepository
@@ -86,14 +86,33 @@ class LeadService:
         company_account_id: UUID | None = None,
     ):
         cid = self._scope.resolve_company_id(ctx, company_id)
-        return self._repo.list_leads(ctx, cid, company_account_id)
+        owner_filter: UUID | None = None
+        if not self._crm_admin.is_admin(ctx):
+            owner_filter = self._current_employee_id(ctx)
+            if owner_filter is None:
+                return []
+        return self._repo.list_leads(ctx, cid, company_account_id, owner_employee_id=owner_filter)
 
     def get(self, ctx: TenantContext, lead_id: UUID) -> CrmLead:
         row = self._repo.get(ctx, lead_id)
         if row is None:
             raise NotFoundException("Lead not found")
+        self._ensure_lead_owner_or_admin(ctx, row)
         self._ensure_display_snapshot(ctx, row)
         return row
+
+    def _current_employee_id(self, ctx: TenantContext) -> UUID | None:
+        try:
+            return self._resolve_owner_employee_id(ctx, None)
+        except ConflictException:
+            return None
+
+    def _ensure_lead_owner_or_admin(self, ctx: TenantContext, lead: CrmLead) -> None:
+        if self._crm_admin.is_admin(ctx):
+            return
+        employee_id = self._current_employee_id(ctx)
+        if employee_id is None or lead.owner_employee_id != employee_id:
+            raise ForbiddenException("You can only access leads assigned to you")
 
     def _ensure_display_snapshot(self, ctx: TenantContext, lead: CrmLead) -> None:
         """Backfill blank address/entity fields from the linked company account."""
@@ -360,6 +379,7 @@ class LeadService:
 
     def update_sales_lead(self, ctx: TenantContext, lead_id: UUID, **fields):
         version = fields.pop("version", None)
+        owner_candidate = fields.pop("owner_employee_id", None)
         lead = self.get(ctx, lead_id)
         if lead.company_account_id is None:
             raise ConflictException("Only sales-process leads can be updated with this endpoint")
@@ -368,6 +388,11 @@ class LeadService:
         sales_blueprint_engine.assert_not_locked(lead)
         if version is not None and int(lead.version or 1) != int(version):
             raise ConflictException("Lead was modified by another user; refresh and try again")
+        if owner_candidate is not None:
+            if self._crm_admin.is_admin(ctx):
+                fields["owner_employee_id"] = self._resolve_owner_employee_id(ctx, owner_candidate)
+            elif owner_candidate != lead.owner_employee_id:
+                raise ForbiddenException("Only CRM admins can change lead owner")
         row = self._repo.update(ctx, lead_id, **fields)
         if row is None:
             raise NotFoundException("Lead not found")

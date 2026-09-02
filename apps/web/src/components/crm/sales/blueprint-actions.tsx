@@ -62,7 +62,7 @@ const ACTION_CONFIG: Record<string, ActionConfig> = {
     description: "Converts immediately using lead defaults.",
   },
   lost: {
-    label: "Mark Lost",
+    label: "Lost Deal",
     tone: "destructive",
     fields: [{ key: "reason", label: "Lost reason", type: "textarea", required: true }],
     description: "Available until the deal is Won.",
@@ -148,7 +148,7 @@ const ACTION_CONFIG: Record<string, ActionConfig> = {
     fields: [{ key: "remark", label: "Rejection remark", type: "textarea", required: true }],
   },
   send_to_customer: {
-    label: "Send to Customer",
+    label: "Quotation send to customer",
     fields: [],
   },
   negotiate: { label: "Move to Negotiation", fields: [REMARK_FIELD_ALT] },
@@ -180,6 +180,10 @@ const ATTACH_ACTIONS = new Set([
   "attach_contract",
 ]);
 
+const OEM_QUOTE_ACTIONS = new Set(["oem_received", "attach_oem_quote"]);
+
+const QUOTE_FLOW_ACTIONS = new Set(["send_to_customer", "accept", "negotiate", "follow_up"]);
+
 const APPROVAL_ACTIONS = new Set([
   "send_boq_approval",
   "send_sow_approval",
@@ -188,9 +192,49 @@ const APPROVAL_ACTIONS = new Set([
   "send_cloud_discount_approval",
 ]);
 
+const QUOTE_OVF_APPROVAL_EMAILS = [
+  "shraddha@cachedigitech.com",
+  "vinod@cachedigitech.com",
+  "prarthana@cachedigitech.com",
+] as const;
+
+const CUSTOMER_PO_APPROVAL_EMAILS = [
+  "accounts@cachedigitech.com",
+  "navneet.kumar@cachedigitech.com",
+] as const;
+
+function pinnedApproverEmailsForAction(action: string): readonly string[] {
+  if (action === "send_po_approval") return CUSTOMER_PO_APPROVAL_EMAILS;
+  if (action === "send_for_approval") return QUOTE_OVF_APPROVAL_EMAILS;
+  return [];
+}
+
+function resolvePinnedApproverIds(
+  action: string,
+  approvalUsers: { id: string; email: string }[],
+): string[] {
+  const emails = pinnedApproverEmailsForAction(action);
+  if (emails.length === 0) return [];
+  const wanted = new Set(emails.map((email) => email.toLowerCase()));
+  return approvalUsers
+    .filter((user) => wanted.has(user.email.trim().toLowerCase()))
+    .map((user) => user.id);
+}
+
+function mergeApproverSelection(
+  next: string[],
+  pinnedIds: string[],
+): string[] {
+  const merged = new Set(next);
+  for (const id of pinnedIds) merged.add(id);
+  return [...merged];
+}
+
 type Props = {
   allowedActions: string[];
   locked?: boolean;
+  /** Human-readable current blueprint stage (28-stage sales flow). */
+  currentStageLabel?: string | null;
   /** Actions rendered elsewhere by the parent (e.g. gated Create Quote / Create OVF CTAs). */
   excludeActions?: string[];
   actionLabelOverrides?: Partial<Record<string, string>>;
@@ -203,6 +247,7 @@ type Props = {
 export function BlueprintActions({
   allowedActions,
   locked,
+  currentStageLabel,
   excludeActions,
   actionLabelOverrides,
   actionDispatchOverrides,
@@ -247,7 +292,7 @@ export function BlueprintActions({
     };
   }, []);
 
-  if (locked || visibleActions.length === 0) return null;
+  if (!currentStageLabel && visibleActions.length === 0) return null;
 
   function resolveConfig(action: string): ActionConfig {
     const base =
@@ -285,6 +330,7 @@ export function BlueprintActions({
       void runImmediate(action);
       return;
     }
+    const pinnedIds = resolvePinnedApproverIds(action, approvalUsers);
     setActiveAction(action);
     setValues(
       Object.fromEntries(
@@ -295,7 +341,7 @@ export function BlueprintActions({
         }),
       ),
     );
-    setApproverIds([]);
+    setApproverIds(pinnedIds);
     setFile(null);
     setFiles([]);
     setError(null);
@@ -388,6 +434,9 @@ export function BlueprintActions({
   }
 
   const activeConfig = activeAction ? resolveConfig(activeAction) : null;
+  const activePinnedApproverIds = activeAction
+    ? resolvePinnedApproverIds(activeAction, approvalUsers)
+    : [];
   const orderedActions = [...visibleActions].sort((a, b) => {
     const rank = (action: string) => {
       if (action === "attach_sow") return 0;
@@ -407,11 +456,24 @@ export function BlueprintActions({
     return rank(a) - rank(b);
   });
 
+  const showTransitions = visibleActions.length > 0;
+
   return (
     <div className="space-y-2">
+      {currentStageLabel ? (
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-[11px] font-medium tracking-wide text-muted-foreground uppercase">
+            Current State
+          </span>
+          <Badge className="rounded-full border-transparent bg-blue-600 px-3 py-0.5 text-xs font-semibold text-white hover:bg-blue-600">
+            {currentStageLabel}
+          </Badge>
+        </div>
+      ) : null}
+      {showTransitions ? (
       <div className="flex flex-wrap items-center gap-2">
         <span className="text-[11px] font-medium tracking-wide text-muted-foreground uppercase">
-          Blueprint actions
+          Transitions
         </span>
         {orderedActions.map((action, index) => {
           const config = resolveConfig(action);
@@ -419,9 +481,11 @@ export function BlueprintActions({
           const isAttach = ATTACH_ACTIONS.has(action);
           const isApproval = APPROVAL_ACTIONS.has(action);
           const isLost = action === "lost";
+          const isOemQuote = OEM_QUOTE_ACTIONS.has(action);
+          const isQuoteFlow = QUOTE_FLOW_ACTIONS.has(action);
           const colorClass = isLost
             ? LOST_BUTTON_CLASS
-            : isAttach || isApproval
+            : isAttach || isApproval || isOemQuote || isQuoteFlow
               ? BLUE_ACTION_BUTTON_CLASS
               : undefined;
           const variant = colorClass ? "outline" : config.tone === "destructive" ? "destructive" : "outline";
@@ -437,7 +501,7 @@ export function BlueprintActions({
                 size="sm"
                 variant={variant}
                 className={["cursor-pointer", colorClass].filter(Boolean).join(" ")}
-                disabled={disabled}
+                disabled={disabled || (locked && action !== "lost")}
                 onClick={() => openAction(action)}
               >
                 {label}
@@ -446,6 +510,7 @@ export function BlueprintActions({
           );
         })}
       </div>
+      ) : null}
 
       <ConfirmDialog
         open={Boolean(activeAction && activeConfig)}
@@ -479,7 +544,8 @@ export function BlueprintActions({
                   <ApproverMultiSelect
                     options={approvalUsers}
                     value={approverIds}
-                    onChange={setApproverIds}
+                    lockedIds={activePinnedApproverIds}
+                    onChange={(ids) => setApproverIds(mergeApproverSelection(ids, activePinnedApproverIds))}
                   />
                 ) : field.type === "file" ? (
                   <div className="flex min-w-0 flex-col gap-1.5">
@@ -563,10 +629,14 @@ export function BlueprintActions({
   );
 }
 
-export function BlueprintStateBadge({ state }: { state: string }) {
+export function BlueprintStateBadge({ state, label }: { state?: string; label?: string }) {
+  const text =
+    label?.trim() ||
+    state?.replaceAll("_", " ").replace(/\b\w/g, (c) => c.toUpperCase()) ||
+    "—";
   return (
-    <Badge variant="outline" className="font-medium capitalize">
-      {state.replaceAll("_", " ") || "—"}
+    <Badge className="rounded-full border-transparent bg-blue-600 px-3 py-0.5 text-xs font-semibold text-white hover:bg-blue-600">
+      {text}
     </Badge>
   );
 }

@@ -169,7 +169,6 @@ export function CompanyListPage() {
       <CrmListPanel>
         <CrmListToolbar
           title="Accounts"
-          subtitle="Sales accounts"
           icon={Building2}
           count={sorted.length}
           actions={

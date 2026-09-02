@@ -6,9 +6,11 @@
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
 
-import type {
-  CustomerChargeRow,
-  VendorChargeRow,
+import {
+  computeOvfMargins,
+  formatChargeRowFileNames,
+  type CustomerChargeRow,
+  type VendorChargeRow,
 } from "@/components/crm/sales/ovf-order-lines-section";
 import type { Opportunity, Ovf, Quote } from "@/services/sales-crm-service";
 
@@ -30,8 +32,6 @@ export type OvfExportInput = {
   shippingContact: string;
   customerRows: CustomerChargeRow[];
   vendorRows: VendorChargeRow[];
-  customerPoFileName?: string | null;
-  vendorQuoteFileName?: string | null;
   createdBy?: string | null;
   modifiedBy?: string | null;
 };
@@ -306,7 +306,13 @@ export function buildOvfExportFilename(ovf: Ovf, quoteName?: string | null): str
 export function exportOvfPdf(input: OvfExportInput): void {
   const doc = new jsPDF({ unit: "mm", format: "a4", orientation: "portrait" });
   const pageRef: PageRef = { n: 1, landscape: false };
-  const { ovf, quote, opportunity, customerRows, vendorRows, customerPoFileName, vendorQuoteFileName } = input;
+  const { ovf, quote, opportunity, customerRows, vendorRows } = input;
+  const { totalMarginAmount, totalMarginPct } = computeOvfMargins({
+    customerRows,
+    vendorRows,
+    freight: ovf.freight,
+    financeCostPct: ovf.finance_cost_pct,
+  });
 
   const saleTotal = customerRows.reduce((sum, row) => sum + (Number(row.total) || 0), 0);
   const purchaseTotal = vendorRows.reduce((sum, row) => sum + (Number(row.total) || 0), 0);
@@ -376,8 +382,8 @@ export function exportOvfPdf(input: OvfExportInput): void {
     doc,
     y,
     [
-      ["Total Margin in Amount.", formatMoney(ovf.total_margin_amount)],
-      ["Total Margin In Percentage.", `${formatMoney(ovf.total_margin_pct)}%`],
+      ["Total Margin in Amount.", formatMoney(totalMarginAmount)],
+      ["Total Margin In Percentage.", `${formatMoney(totalMarginPct)}%`],
       ["Opportunity", opportunity?.opportunity_name || "-"],
       ["Approval Status", ovf.approval_status.replaceAll("_", " ")],
       ["Additional Charges", formatMoney(ovf.additional_charges)],
@@ -408,13 +414,6 @@ export function exportOvfPdf(input: OvfExportInput): void {
   // Charge tables on landscape pages so every column stays readable.
   y = addLandscapePage(doc, pageRef);
   y = sectionTitle(doc, "Customer Charges.", y);
-  if (customerPoFileName?.trim()) {
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(8);
-    doc.setTextColor(...LABEL);
-    doc.text(`PO attachment: ${pdfSafe(customerPoFileName)}`, MARGIN, y);
-    y += 5;
-  }
   autoTable(doc, {
     startY: y,
     margin: { left: MARGIN, right: MARGIN, top: 16, bottom: 16 },
@@ -427,6 +426,7 @@ export function exportOvfPdf(input: OvfExportInput): void {
         "GST %",
         "GST Amount",
         "Amount with GST",
+        "PO Files",
       ],
     ],
     body: customerRows.map((row) => [
@@ -437,6 +437,7 @@ export function exportOvfPdf(input: OvfExportInput): void {
       `${dash(row.gst_pct)}%`,
       formatMoney(row.total_gst, 0),
       formatMoney(row.total_with_gst, 0),
+      pdfSafe(formatChargeRowFileNames(row.poFiles)),
     ]),
     styles: tableBaseStyles(),
     headStyles: tableHeadStyles(),
@@ -449,6 +450,7 @@ export function exportOvfPdf(input: OvfExportInput): void {
       4: { cellWidth: 22, halign: "center" },
       5: { cellWidth: 34, halign: "right" },
       6: { cellWidth: 40, halign: "right" },
+      7: { cellWidth: 52, halign: "left" },
     },
     didDrawPage: () => {
       // autoTable may add pages; keep page counter approximate via footer redraw
@@ -471,13 +473,6 @@ export function exportOvfPdf(input: OvfExportInput): void {
   }
 
   vendorY = sectionTitle(doc, "Vendor Charges.", vendorY);
-  if (vendorQuoteFileName?.trim()) {
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(8);
-    doc.setTextColor(...LABEL);
-    doc.text(`Quote attachment: ${pdfSafe(vendorQuoteFileName)}`, MARGIN, vendorY);
-    vendorY += 5;
-  }
   autoTable(doc, {
     startY: vendorY,
     margin: { left: MARGIN, right: MARGIN, top: 16, bottom: 16 },
@@ -492,6 +487,7 @@ export function exportOvfPdf(input: OvfExportInput): void {
         "Vendor Name",
         "Contact Person",
         "Contact No.",
+        "Quote Files",
       ],
     ],
     body: vendorRows.map((row) => [
@@ -504,6 +500,7 @@ export function exportOvfPdf(input: OvfExportInput): void {
       pdfSafe(row.vendor_name || "-"),
       pdfSafe(row.contact_person || "-"),
       pdfSafe(row.contact_number || "-"),
+      pdfSafe(formatChargeRowFileNames(row.quoteFiles)),
     ]),
     styles: tableBaseStyles(),
     headStyles: tableHeadStyles(),
@@ -518,6 +515,7 @@ export function exportOvfPdf(input: OvfExportInput): void {
       6: { cellWidth: 52, halign: "left" },
       7: { cellWidth: 36, halign: "left" },
       8: { cellWidth: 32, halign: "left" },
+      9: { cellWidth: 52, halign: "left" },
     },
     didDrawPage: () => drawFooter(doc, pageRef),
   });

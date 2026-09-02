@@ -113,13 +113,11 @@ export function buildCompanyDocumentPreviewRows(
 function OverviewPanelHeader({
   icon: Icon,
   title,
-  subtitle,
   count,
   viewAllHref,
 }: {
   icon: LucideIcon;
   title: string;
-  subtitle: string;
   count: number;
   viewAllHref: string;
 }) {
@@ -132,7 +130,6 @@ function OverviewPanelHeader({
             <h2 className="text-base font-extrabold tracking-tight text-foreground">{title}</h2>
             <CrmCountBadge count={count} />
           </div>
-          <p className="text-[11px] text-muted-foreground">{subtitle}</p>
         </div>
       </div>
       <CrmViewAllLink href={viewAllHref} />
@@ -178,7 +175,6 @@ export function CompanyOverviewDealPanels({
           <OverviewPanelHeader
             icon={Handshake}
             title="Opportunities"
-            subtitle="Deals converted from leads"
             count={opportunities.length}
             viewAllHref={`${base}/opportunities`}
           />
@@ -235,7 +231,6 @@ export function CompanyOverviewDealPanels({
           <OverviewPanelHeader
             icon={FileStack}
             title="OEM Quote"
-            subtitle="OEM quotation documents"
             count={oemQuoteRows.length}
             viewAllHref={`${base}/oem-quotes`}
           />
@@ -252,7 +247,6 @@ export function CompanyOverviewDealPanels({
           <OverviewPanelHeader
             icon={FileText}
             title="Quotes"
-            subtitle="Customer quotations"
             count={quotes.length}
             viewAllHref={`${base}/quotes`}
           />
@@ -322,7 +316,6 @@ export function CompanyOverviewDealPanels({
           <OverviewPanelHeader
             icon={FileStack}
             title="Purchase Order"
-            subtitle="Customer purchase orders"
             count={purchaseOrderRows.length}
             viewAllHref={`${base}/purchase-orders`}
           />
@@ -339,7 +332,6 @@ export function CompanyOverviewDealPanels({
           <OverviewPanelHeader
             icon={ClipboardCheck}
             title="OVF"
-            subtitle="Order value forms"
             count={ovfs.length}
             viewAllHref={`${base}/ovf`}
           />
@@ -406,7 +398,6 @@ export function CompanyOverviewDealPanels({
           <OverviewPanelHeader
             icon={Users}
             title="Contacts"
-            subtitle="People linked to this account"
             count={contacts.length}
             viewAllHref={`${base}/contacts`}
           />

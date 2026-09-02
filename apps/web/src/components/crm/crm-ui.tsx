@@ -81,7 +81,6 @@ export function CrmIconBadge({
 /** Section card with dashboard-style icon header. */
 export function CrmSection({
   title,
-  subtitle,
   icon,
   badge,
   actions,
@@ -90,7 +89,6 @@ export function CrmSection({
   bodyClassName,
 }: {
   title: string;
-  subtitle?: string;
   icon?: LucideIcon;
   badge?: ReactNode;
   actions?: ReactNode;
@@ -105,11 +103,6 @@ export function CrmSection({
           {icon ? <CrmIconBadge icon={icon} /> : null}
           <div className="min-w-0">
             <h2 className={CRM_SECTION_TITLE}>{title}</h2>
-            {subtitle ? (
-              <p className="mt-0.5 text-[11px] leading-snug text-muted-foreground break-words">
-                {subtitle}
-              </p>
-            ) : null}
           </div>
         </div>
         <div className="flex shrink-0 items-center gap-2">

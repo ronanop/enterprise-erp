@@ -2,7 +2,7 @@
 
 import type { ReactNode } from "react";
 import { useRef } from "react";
-import { ChevronDown, Plus } from "lucide-react";
+import { Plus, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -16,6 +16,12 @@ import {
 
 export const GST_PCT = 18;
 
+export type ChargeRowFile = {
+  attachmentId?: string;
+  fileName: string;
+  file: File | null;
+};
+
 export type CustomerChargeRow = {
   key: string;
   serverId?: string;
@@ -28,6 +34,7 @@ export type CustomerChargeRow = {
   gst_pct: string;
   total_gst: string;
   total_with_gst: string;
+  poFiles: ChargeRowFile[];
 };
 
 export type VendorChargeRow = {
@@ -45,16 +52,115 @@ export type VendorChargeRow = {
   vendor_name: string;
   contact_person: string;
   contact_number: string;
+  quoteFiles: ChargeRowFile[];
 };
 
-/** One Customer PO / Vendor Quote for the whole charges table (not per product row). */
-export type ChargeAttachment = {
-  fileName: string;
-  file: File | null;
-};
+const LINE_FILE_PREFIX = /^\[line:([^\]]+)\]\s*(.*)$/;
 
-export function emptyChargeAttachment(): ChargeAttachment {
-  return { fileName: "", file: null };
+export function encodeChargeLineFileName(rowKey: string, fileName: string): string {
+  return `[line:${rowKey}] ${fileName}`;
+}
+
+export function parseChargeLineFileName(fileName: string): { rowKey: string | null; displayName: string } {
+  const match = fileName.match(LINE_FILE_PREFIX);
+  if (!match) return { rowKey: null, displayName: fileName };
+  return { rowKey: match[1], displayName: match[2]?.trim() || fileName };
+}
+
+function chargeRowFileFromAttachment(att: { id: string; file_name: string }): ChargeRowFile {
+  const parsed = parseChargeLineFileName(att.file_name);
+  return {
+    attachmentId: att.id,
+    fileName: parsed.displayName,
+    file: null,
+  };
+}
+
+export function mergeCustomerRowsWithPoAttachments(
+  rows: CustomerChargeRow[],
+  attachments: { id: string; file_name: string }[],
+): CustomerChargeRow[] {
+  const byKey = new Map<string, ChargeRowFile[]>();
+  const legacy: ChargeRowFile[] = [];
+
+  for (const att of attachments) {
+    const file = chargeRowFileFromAttachment(att);
+    const parsed = parseChargeLineFileName(att.file_name);
+    if (parsed.rowKey) {
+      const list = byKey.get(parsed.rowKey) ?? [];
+      list.push(file);
+      byKey.set(parsed.rowKey, list);
+    } else {
+      legacy.push(file);
+    }
+  }
+
+  let merged = rows.map((row) => {
+    const files =
+      byKey.get(row.key) ??
+      (row.serverId ? byKey.get(row.serverId) : undefined) ??
+      [];
+    return { ...row, poFiles: files };
+  });
+
+  if (legacy.length > 0) {
+    const targetIndex = merged.findIndex((row) => row.product_name.trim());
+    const idx = targetIndex >= 0 ? targetIndex : 0;
+    if (merged[idx]) {
+      merged = merged.map((row, index) =>
+        index === idx ? { ...row, poFiles: [...row.poFiles, ...legacy] } : row,
+      );
+    }
+  }
+
+  return merged;
+}
+
+export function mergeVendorRowsWithQuoteAttachments(
+  rows: VendorChargeRow[],
+  attachments: { id: string; file_name: string }[],
+): VendorChargeRow[] {
+  const byKey = new Map<string, ChargeRowFile[]>();
+  const legacy: ChargeRowFile[] = [];
+
+  for (const att of attachments) {
+    const file = chargeRowFileFromAttachment(att);
+    const parsed = parseChargeLineFileName(att.file_name);
+    if (parsed.rowKey) {
+      const list = byKey.get(parsed.rowKey) ?? [];
+      list.push(file);
+      byKey.set(parsed.rowKey, list);
+    } else {
+      legacy.push(file);
+    }
+  }
+
+  let merged = rows.map((row) => {
+    const files =
+      byKey.get(row.key) ??
+      (row.serverId ? byKey.get(row.serverId) : undefined) ??
+      [];
+    return { ...row, quoteFiles: files };
+  });
+
+  if (legacy.length > 0) {
+    const targetIndex = merged.findIndex(
+      (row) => row.product_name.trim() || row.vendor_name.trim(),
+    );
+    const idx = targetIndex >= 0 ? targetIndex : 0;
+    if (merged[idx]) {
+      merged = merged.map((row, index) =>
+        index === idx ? { ...row, quoteFiles: [...row.quoteFiles, ...legacy] } : row,
+      );
+    }
+  }
+
+  return merged;
+}
+
+export function formatChargeRowFileNames(files: ChargeRowFile[] | undefined): string {
+  const names = (files ?? []).map((file) => file.fileName.trim()).filter(Boolean);
+  return names.length ? names.join(", ") : "—";
 }
 
 function newKey() {
@@ -73,6 +179,7 @@ export function emptyCustomerRow(): CustomerChargeRow {
     gst_pct: String(GST_PCT),
     total_gst: "",
     total_with_gst: "",
+    poFiles: [],
   };
 }
 
@@ -91,6 +198,7 @@ export function emptyVendorRow(): VendorChargeRow {
     vendor_name: "",
     contact_person: "",
     contact_number: "",
+    quoteFiles: [],
   };
 }
 
@@ -191,6 +299,7 @@ export function customerRowsFromOvfLines(
       gst_pct: gstPct,
       total_gst: money.total_gst,
       total_with_gst: money.total_with_gst,
+      poFiles: [],
     } satisfies CustomerChargeRow;
   });
 }
@@ -250,6 +359,7 @@ export function vendorRowsFromOvfLines(
       vendor_name: distributor,
       contact_person: (line.contact_person ?? "").trim(),
       contact_number: (line.contact_number ?? "").trim(),
+      quoteFiles: [],
     } satisfies VendorChargeRow;
   });
 }
@@ -271,6 +381,7 @@ export function customerFromQuote(quoteLine: QuoteLine, ovfLine?: OvfLine): Cust
     gst_pct: gstPct,
     total_gst: money.total_gst,
     total_with_gst: money.total_with_gst,
+    poFiles: [],
   };
 }
 
@@ -294,6 +405,7 @@ export function vendorFromQuote(quoteLine: QuoteLine, ovfLine?: OvfLine): Vendor
     vendor_name: (ovfLine?.distributor_name ?? "").trim(),
     contact_person: (ovfLine?.contact_person ?? "").trim(),
     contact_number: (ovfLine?.contact_number ?? "").trim(),
+    quoteFiles: [],
   };
 }
 
@@ -358,16 +470,56 @@ export function sumLineTotals(rows: { total: string }[]) {
   return rows.reduce((sum, row) => sum + (Number(row.total) || 0), 0);
 }
 
+export function computeOvfMargins(input: {
+  customerRows: { total: string }[];
+  vendorRows: { total: string }[];
+  freight?: number | string | null;
+  financeCostPct?: number | string | null;
+}) {
+  const totalSaleValue = sumLineTotals(input.customerRows);
+  const totalPurchaseValue = sumLineTotals(input.vendorRows);
+  const freightAmount = Number(input.freight) || 0;
+  const financeCostPct = Number(input.financeCostPct) || 0;
+  const financeCostAmount = (totalPurchaseValue * financeCostPct) / 100;
+  const totalMarginAmount =
+    totalSaleValue - totalPurchaseValue - freightAmount - financeCostAmount;
+  const totalMarginPct = totalSaleValue ? (totalMarginAmount / totalSaleValue) * 100 : 0;
+  return {
+    totalSaleValue,
+    totalPurchaseValue,
+    totalMarginAmount,
+    totalMarginPct,
+    financeCostAmount,
+  };
+}
+
+function chargeRowHasFile(files: ChargeRowFile[] | undefined): boolean {
+  return (files ?? []).some((file) => file.fileName.trim() || file.file);
+}
+
+function chargeTableHasFile<T extends { poFiles?: ChargeRowFile[]; quoteFiles?: ChargeRowFile[] }>(
+  rows: T[],
+  field: "poFiles" | "quoteFiles",
+): boolean {
+  return rows.some((row) => chargeRowHasFile(row[field]));
+}
+
 export function validateChargeAttachments(
-  customerPo: ChargeAttachment,
-  vendorQuote: ChargeAttachment,
+  customerRows: CustomerChargeRow[],
+  vendorRows: VendorChargeRow[],
 ): string | null {
-  if (!customerPo.fileName.trim()) {
-    return "Add PO * is required for Customer Charges.";
+  const hasCustomerProductRows = customerRows.some((row) => row.product_name.trim());
+  if (hasCustomerProductRows && !chargeTableHasFile(customerRows, "poFiles")) {
+    return "Add PO * is required for Customer Charges (upload at least one file on any product row).";
   }
-  if (!vendorQuote.fileName.trim()) {
-    return "Add Quote * is required for Vendor Charges.";
+
+  const hasVendorProductRows = vendorRows.some(
+    (row) => row.product_name.trim() || row.vendor_name.trim(),
+  );
+  if (hasVendorProductRows && !chargeTableHasFile(vendorRows, "quoteFiles")) {
+    return "Add Quote * is required for Vendor Charges (upload at least one file on any product row).";
   }
+
   return null;
 }
 
@@ -409,14 +561,12 @@ function ChargesTableShell({
   title,
   children,
   headerRight,
-  footerLeft,
   totalLabel,
   totalValue,
 }: {
   title: string;
   children: ReactNode;
   headerRight?: ReactNode;
-  footerLeft: ReactNode;
   totalLabel: string;
   totalValue: string;
 }) {
@@ -427,9 +577,8 @@ function ChargesTableShell({
         {headerRight ? <div className="shrink-0">{headerRight}</div> : null}
       </div>
       <div className="overflow-x-auto rounded-md border border-[#e2e8f0]">{children}</div>
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        {footerLeft}
-        <div className="ml-auto flex items-center gap-2">
+      <div className="flex flex-wrap items-center justify-end gap-3">
+        <div className="flex items-center gap-2">
           <span className="text-[13px] font-medium text-foreground">{totalLabel}</span>
           <Input
             readOnly
@@ -451,50 +600,89 @@ function tdClass() {
   return "px-2 py-2 align-middle";
 }
 
-function ChargesLocalFileUpload({
-  fileName,
+function ChargesMultiFileUpload({
+  files,
   required,
   disabled,
-  onFileSelected,
+  addLabel,
+  onFilesChange,
 }: {
-  fileName: string;
+  files: ChargeRowFile[];
   required?: boolean;
   disabled?: boolean;
-  onFileSelected: (file: File) => void;
+  addLabel: string;
+  onFilesChange?: (files: ChargeRowFile[]) => void;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
-  const missing = !disabled && required && !fileName;
+  const hasFiles = files.some((file) => file.fileName.trim());
+  const missing = !disabled && required && !hasFiles;
+
+  function removeAt(index: number) {
+    if (disabled || !onFilesChange) return;
+    onFilesChange(files.filter((_, fileIndex) => fileIndex !== index));
+  }
+
+  function addSelectedFiles(selected: FileList | null) {
+    if (disabled || !onFilesChange || !selected?.length) return;
+    const next = [
+      ...files,
+      ...Array.from(selected).map((file) => ({ fileName: file.name, file })),
+    ];
+    onFilesChange(next);
+  }
+
+  if (disabled && !hasFiles) {
+    return <span className="text-[12px] text-muted-foreground">—</span>;
+  }
 
   return (
-    <div className="relative min-w-[140px]">
-      <button
-        type="button"
-        disabled={disabled}
-        onClick={() => inputRef.current?.click()}
-        className={cn(
-          "flex h-9 w-full cursor-pointer items-center justify-between gap-1 rounded-[4px] border bg-white px-2.5 text-left text-[13px] transition-colors duration-200",
-          missing ? "border-destructive/60" : "border-[#cfd7e3]",
-          "hover:border-sky-400 focus-visible:border-sky-400 focus-visible:ring-1 focus-visible:ring-sky-300 focus-visible:outline-none",
-          disabled && "cursor-default opacity-70",
-        )}
-        title={fileName || "Choose file"}
-      >
-        <span className={cn("min-w-0 truncate", fileName ? "text-foreground" : "text-muted-foreground")}>
-          {fileName || (disabled ? "—" : required ? "Choose file *" : "Choose file")}
-        </span>
-        {!disabled ? <ChevronDown className="size-3.5 shrink-0 text-muted-foreground" /> : null}
-      </button>
-      <input
-        ref={inputRef}
-        type="file"
-        className="sr-only"
-        disabled={disabled}
-        onChange={(e) => {
-          const file = e.target.files?.[0];
-          if (file) onFileSelected(file);
-          if (inputRef.current) inputRef.current.value = "";
-        }}
-      />
+    <div className="min-w-[160px] space-y-1">
+      {files.map((item, index) => (
+        <div key={`${item.attachmentId ?? item.fileName}-${index}`} className="flex items-center gap-1">
+          <span
+            className="min-w-0 flex-1 truncate text-[12px] text-foreground"
+            title={item.fileName}
+          >
+            {item.fileName}
+          </span>
+          {!disabled && onFilesChange ? (
+            <button
+              type="button"
+              aria-label={`Remove ${item.fileName}`}
+              onClick={() => removeAt(index)}
+              className="inline-flex size-6 shrink-0 cursor-pointer items-center justify-center rounded text-muted-foreground transition-colors duration-200 hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-sky-300"
+            >
+              <X className="size-3.5" />
+            </button>
+          ) : null}
+        </div>
+      ))}
+      {!disabled && onFilesChange ? (
+        <>
+          <button
+            type="button"
+            onClick={() => inputRef.current?.click()}
+            className={cn(
+              "flex h-8 w-full cursor-pointer items-center justify-center rounded-[4px] border bg-white px-2 text-[12px] transition-colors duration-200",
+              missing ? "border-destructive/60 text-destructive" : "border-[#cfd7e3] text-muted-foreground",
+              "hover:border-sky-400 hover:text-foreground focus-visible:border-sky-400 focus-visible:ring-1 focus-visible:ring-sky-300 focus-visible:outline-none",
+            )}
+          >
+            {addLabel}
+            {required ? " *" : ""}
+          </button>
+          <input
+            ref={inputRef}
+            type="file"
+            multiple
+            className="sr-only"
+            onChange={(event) => {
+              addSelectedFiles(event.target.files);
+              if (inputRef.current) inputRef.current.value = "";
+            }}
+          />
+        </>
+      ) : null}
     </div>
   );
 }
@@ -504,10 +692,6 @@ type OvfOrderLinesSectionProps = {
   vendorRows: VendorChargeRow[];
   onCustomerRowsChange?: (rows: CustomerChargeRow[]) => void;
   onVendorRowsChange?: (rows: VendorChargeRow[]) => void;
-  customerPo?: ChargeAttachment;
-  vendorQuote?: ChargeAttachment;
-  onCustomerPoChange?: (attachment: ChargeAttachment) => void;
-  onVendorQuoteChange?: (attachment: ChargeAttachment) => void;
   /** Distributor names selected on the lead — options for Distributor Name. */
   vendorNameOptions?: readonly string[];
   disabled?: boolean;
@@ -518,18 +702,18 @@ export function OvfOrderLinesSection({
   vendorRows,
   onCustomerRowsChange,
   onVendorRowsChange,
-  customerPo = emptyChargeAttachment(),
-  vendorQuote = emptyChargeAttachment(),
-  onCustomerPoChange,
-  onVendorQuoteChange,
   vendorNameOptions = [],
   disabled = false,
 }: OvfOrderLinesSectionProps) {
   const totalSaleValue = sumLineTotals(customerRows);
   const totalPurchaseValue = sumLineTotals(vendorRows);
-  // Lead distributors only — never merge row values (those can be OEM/product names).
   const vendorOptions = Array.from(
-    new Set(vendorNameOptions.map((name) => name.trim()).filter(Boolean)),
+    new Set(
+      [
+        ...vendorNameOptions.map((name) => name.trim()).filter(Boolean),
+        ...vendorRows.map((row) => row.vendor_name.trim()).filter(Boolean),
+      ].filter(Boolean),
+    ),
   );
   function selectedDistributor(value: string): string {
     const trimmed = value.trim();
@@ -537,6 +721,15 @@ export function OvfOrderLinesSection({
     const match = vendorOptions.find((name) => name.toLowerCase() === trimmed.toLowerCase());
     return match ?? "";
   }
+
+  const hasCustomerProductRows = customerRows.some((row) => row.product_name.trim());
+  const hasVendorProductRows = vendorRows.some(
+    (row) => row.product_name.trim() || row.vendor_name.trim(),
+  );
+  const customerPoTableMissing =
+    !disabled && hasCustomerProductRows && !chargeTableHasFile(customerRows, "poFiles");
+  const vendorQuoteTableMissing =
+    !disabled && hasVendorProductRows && !chargeTableHasFile(vendorRows, "quoteFiles");
 
   function updateCustomerRow(key: string, patch: Partial<CustomerChargeRow>, recalc = false) {
     if (disabled || !onCustomerRowsChange) return;
@@ -578,47 +771,10 @@ export function OvfOrderLinesSection({
     onVendorRowsChange([...vendorRows, emptyVendorRow()]);
   }
 
-  const customerAttachmentControl = (
-    <div className="flex min-w-0 flex-wrap items-center gap-2">
-      <span className="text-[12px] font-medium whitespace-nowrap text-[#475569]">
-        Add PO <span className="text-destructive">*</span>
-      </span>
-      <div className="w-[220px] max-w-full">
-        <ChargesLocalFileUpload
-          fileName={customerPo.fileName}
-          required={!disabled}
-          disabled={disabled || !onCustomerPoChange}
-          onFileSelected={(file) => onCustomerPoChange?.({ fileName: file.name, file })}
-        />
-      </div>
-    </div>
-  );
-
-  const vendorAttachmentControl = (
-    <div className="flex min-w-0 flex-wrap items-center gap-2">
-      <span className="text-[12px] font-medium whitespace-nowrap text-[#475569]">
-        Add Quote <span className="text-destructive">*</span>
-      </span>
-      <div className="w-[220px] max-w-full">
-        <ChargesLocalFileUpload
-          fileName={vendorQuote.fileName}
-          required={!disabled}
-          disabled={disabled || !onVendorQuoteChange}
-          onFileSelected={(file) => onVendorQuoteChange?.({ fileName: file.name, file })}
-        />
-      </div>
-    </div>
-  );
-
   return (
     <section className="overflow-hidden rounded-xl border border-border/80 bg-card shadow-sm">
       <div className="border-b border-border/70 px-4 py-3">
         <h2 className="text-base font-extrabold tracking-tight">Order Lines</h2>
-        <p className="text-[11px] text-muted-foreground">
-          {disabled
-            ? "Customer Charges and Vendor Charges saved with this OVF."
-            : "Customer Charges and Vendor Charges — prefilled from the quote; use + Add row for extras. One PO and one vendor quote cover all products."}
-        </p>
       </div>
 
       <div className="space-y-10 px-4 py-5">
@@ -639,9 +795,8 @@ export function OvfOrderLinesSection({
               </Button>
             ) : null
           }
-          footerLeft={customerAttachmentControl}
         >
-          <table className="w-full min-w-[1080px] border-collapse text-left">
+          <table className="w-full min-w-[1240px] border-collapse text-left">
             <thead>
               <tr className="bg-[#eef2f6]">
                 <th className={thClass("min-w-[160px]")}>Product Name</th>
@@ -652,12 +807,15 @@ export function OvfOrderLinesSection({
                 <th className={thClass("min-w-[90px]")}>GST ({GST_PCT}%)</th>
                 <th className={thClass("min-w-[120px]")}>Total GST ({GST_PCT}%)</th>
                 <th className={thClass("min-w-[150px]")}>Total Amount with GST</th>
+                <th className={thClass("min-w-[180px]")}>
+                  Add PO <span className="text-destructive">*</span>
+                </th>
               </tr>
             </thead>
             <tbody>
               {customerRows.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="px-3 py-6 text-center text-[12px] text-muted-foreground">
+                  <td colSpan={9} className="px-3 py-6 text-center text-[12px] text-muted-foreground">
                     No customer charge rows. Click + Add row to create one.
                   </td>
                 </tr>
@@ -666,21 +824,21 @@ export function OvfOrderLinesSection({
                   <tr key={row.key} className="border-t border-[#e8edf3]">
                     <td className={tdClass()}>
                       <ChargesField
-                        readOnly={disabled || Boolean(row.fromQuote)}
+                        readOnly={disabled}
                         value={row.product_name}
                         onChange={(v) => updateCustomerRow(row.key, { product_name: v })}
                       />
                     </td>
                     <td className={tdClass()}>
                       <ChargesField
-                        readOnly={disabled || Boolean(row.fromQuote)}
+                        readOnly={disabled}
                         value={row.description}
                         onChange={(v) => updateCustomerRow(row.key, { description: v })}
                       />
                     </td>
                     <td className={tdClass()}>
                       <ChargesField
-                        readOnly={disabled || Boolean(row.fromQuote)}
+                        readOnly={disabled}
                         type="number"
                         value={row.qty}
                         className="text-right tabular-nums"
@@ -689,7 +847,7 @@ export function OvfOrderLinesSection({
                     </td>
                     <td className={tdClass()}>
                       <ChargesField
-                        readOnly={disabled || Boolean(row.fromQuote)}
+                        readOnly={disabled}
                         type="number"
                         value={row.unit_price}
                         className="text-right tabular-nums"
@@ -732,6 +890,19 @@ export function OvfOrderLinesSection({
                         onChange={(v) => updateCustomerRow(row.key, { total_with_gst: v })}
                       />
                     </td>
+                    <td className={tdClass()}>
+                      <ChargesMultiFileUpload
+                        files={row.poFiles}
+                        required={customerPoTableMissing && !chargeRowHasFile(row.poFiles)}
+                        disabled={disabled}
+                        addLabel="Choose files"
+                        onFilesChange={
+                          disabled || !onCustomerRowsChange
+                            ? undefined
+                            : (poFiles) => updateCustomerRow(row.key, { poFiles })
+                        }
+                      />
+                    </td>
                   </tr>
                 ))
               )}
@@ -756,9 +927,8 @@ export function OvfOrderLinesSection({
               </Button>
             ) : null
           }
-          footerLeft={vendorAttachmentControl}
         >
-          <table className="w-full min-w-[1320px] border-collapse text-left">
+          <table className="w-full min-w-[1500px] border-collapse text-left">
             <thead>
               <tr className="bg-[#eef2f6]">
                 <th className={thClass("min-w-[160px]")}>Product Name</th>
@@ -772,12 +942,15 @@ export function OvfOrderLinesSection({
                 <th className={thClass("min-w-[140px]")}>Distributor Name</th>
                 <th className={thClass("min-w-[130px]")}>Contact Person</th>
                 <th className={thClass("min-w-[130px]")}>Contact Number.</th>
+                <th className={thClass("min-w-[180px]")}>
+                  Add Quote <span className="text-destructive">*</span>
+                </th>
               </tr>
             </thead>
             <tbody>
               {vendorRows.length === 0 ? (
                 <tr>
-                  <td colSpan={11} className="px-3 py-6 text-center text-[12px] text-muted-foreground">
+                  <td colSpan={12} className="px-3 py-6 text-center text-[12px] text-muted-foreground">
                     No vendor charge rows. Click + Add row to create one.
                   </td>
                 </tr>
@@ -786,21 +959,21 @@ export function OvfOrderLinesSection({
                   <tr key={row.key} className="border-t border-[#e8edf3]">
                     <td className={tdClass()}>
                       <ChargesField
-                        readOnly={disabled || Boolean(row.fromQuote)}
+                        readOnly={disabled}
                         value={row.product_name}
                         onChange={(v) => updateVendorRow(row.key, { product_name: v })}
                       />
                     </td>
                     <td className={tdClass()}>
                       <ChargesField
-                        readOnly={disabled || Boolean(row.fromQuote)}
+                        readOnly={disabled}
                         value={row.description}
                         onChange={(v) => updateVendorRow(row.key, { description: v })}
                       />
                     </td>
                     <td className={tdClass()}>
                       <ChargesField
-                        readOnly={disabled || Boolean(row.fromQuote)}
+                        readOnly={disabled}
                         type="number"
                         value={row.qty}
                         className="text-right tabular-nums"
@@ -809,7 +982,7 @@ export function OvfOrderLinesSection({
                     </td>
                     <td className={tdClass()}>
                       <ChargesField
-                        readOnly={disabled || Boolean(row.fromQuote)}
+                        readOnly={disabled}
                         type="number"
                         value={row.unit_price}
                         className="text-right tabular-nums"
@@ -865,7 +1038,7 @@ export function OvfOrderLinesSection({
                         )}
                         aria-label="Distributor name"
                       >
-                        <option value="">{vendorOptions.length ? "Select distributor…" : "No distributors on lead"}</option>
+                        <option value="">Select distributor…</option>
                         {vendorOptions.map((name) => (
                           <option key={name} value={name}>
                             {name}
@@ -887,6 +1060,19 @@ export function OvfOrderLinesSection({
                         onChange={(v) => updateVendorRow(row.key, { contact_number: v })}
                       />
                     </td>
+                    <td className={tdClass()}>
+                      <ChargesMultiFileUpload
+                        files={row.quoteFiles}
+                        required={vendorQuoteTableMissing && !chargeRowHasFile(row.quoteFiles)}
+                        disabled={disabled}
+                        addLabel="Choose files"
+                        onFilesChange={
+                          disabled || !onVendorRowsChange
+                            ? undefined
+                            : (quoteFiles) => updateVendorRow(row.key, { quoteFiles })
+                        }
+                      />
+                    </td>
                   </tr>
                 ))
               )}
@@ -898,31 +1084,57 @@ export function OvfOrderLinesSection({
   );
 }
 
+type AttachmentUploadDeps = {
+  createAttachment: (body: {
+    entity_type: string;
+    entity_id: string;
+    branch_id: string;
+    company_id?: string | null;
+    file_name: string;
+    category?: string;
+    content_base64?: string | null;
+    content_type?: string | null;
+  }) => Promise<unknown>;
+  fileToBase64: (file: File) => Promise<string>;
+};
+
+async function uploadChargeRowFiles(
+  ovfId: string,
+  branchId: string,
+  companyId: string | null | undefined,
+  lineKey: string,
+  files: ChargeRowFile[] | undefined,
+  category: "customer_po" | "vendor_quote",
+  deps: AttachmentUploadDeps,
+) {
+  if (!files?.length) return;
+  for (const item of files) {
+    if (!item.file) continue;
+    await deps.createAttachment({
+      entity_type: "ovf",
+      entity_id: ovfId,
+      branch_id: branchId,
+      company_id: companyId,
+      file_name: encodeChargeLineFileName(lineKey, item.file.name),
+      category,
+      content_base64: await deps.fileToBase64(item.file),
+      content_type: item.file.type || "application/octet-stream",
+    });
+  }
+}
+
 export async function persistOvfOrderLinesAfterCreate(
   ovfId: string,
   branchId: string,
   companyId: string | null | undefined,
   customerRows: CustomerChargeRow[],
   vendorRows: VendorChargeRow[],
-  attachments: {
-    customerPo: ChargeAttachment;
-    vendorQuote: ChargeAttachment;
-  },
   deps: {
     listOvfLines: (id: string) => Promise<OvfLine[]>;
     addOvfLine: (id: string, body: OvfLineFormInput) => Promise<OvfLine>;
     updateOvfLine: (lineId: string, body: OvfLineFormInput) => Promise<OvfLine>;
-    createAttachment: (body: {
-      entity_type: string;
-      entity_id: string;
-      branch_id: string;
-      company_id?: string | null;
-      file_name: string;
-      category?: string;
-      content_base64?: string | null;
-      content_type?: string | null;
-    }) => Promise<unknown>;
-    fileToBase64: (file: File) => Promise<string>;
+    createAttachment: AttachmentUploadDeps["createAttachment"];
+    fileToBase64: AttachmentUploadDeps["fileToBase64"];
   },
 ) {
   const existing = await deps.listOvfLines(ovfId);
@@ -959,32 +1171,46 @@ export async function persistOvfOrderLinesAfterCreate(
     }
   }
 
-  const poFile = attachments.customerPo.file;
-  if (poFile) {
-    await deps.createAttachment({
-      entity_type: "ovf",
-      entity_id: ovfId,
-      branch_id: branchId,
-      company_id: companyId,
-      file_name: poFile.name,
-      category: "customer_po",
-      content_base64: await deps.fileToBase64(poFile),
-      content_type: poFile.type || "application/octet-stream",
-    });
+  const savedLines = await deps.listOvfLines(ovfId);
+  let customerLinePool = savedLines
+    .filter((line) => line.side === "customer_po")
+    .sort((a, b) => Number(a.line_no) - Number(b.line_no));
+  let vendorLinePool = savedLines
+    .filter((line) => line.side === "vendor")
+    .sort((a, b) => Number(a.line_no) - Number(b.line_no));
+
+  for (const row of customerRows) {
+    if (!row.product_name.trim()) continue;
+    const match = takeMatchingLine(customerLinePool, row);
+    const lineKey = match?.id ?? row.serverId ?? row.key;
+    await uploadChargeRowFiles(
+      ovfId,
+      branchId,
+      companyId,
+      lineKey,
+      row.poFiles,
+      "customer_po",
+      deps,
+    );
   }
 
-  const quoteFile = attachments.vendorQuote.file;
-  if (quoteFile) {
-    await deps.createAttachment({
-      entity_type: "ovf",
-      entity_id: ovfId,
-      branch_id: branchId,
-      company_id: companyId,
-      file_name: quoteFile.name,
-      category: "vendor_quote",
-      content_base64: await deps.fileToBase64(quoteFile),
-      content_type: quoteFile.type || "application/octet-stream",
+  for (const row of vendorRows) {
+    if (!row.product_name.trim() && !row.vendor_name.trim()) continue;
+    const match = takeMatchingLine(vendorLinePool, {
+      serverId: row.serverId,
+      product_name: row.product_name,
+      vendor_name: row.vendor_name,
     });
+    const lineKey = match?.id ?? row.serverId ?? row.key;
+    await uploadChargeRowFiles(
+      ovfId,
+      branchId,
+      companyId,
+      lineKey,
+      row.quoteFiles,
+      "vendor_quote",
+      deps,
+    );
   }
 }
 
@@ -994,71 +1220,64 @@ export async function persistOvfOrderLinesOnUpdate(
   companyId: string | null | undefined,
   customerRows: CustomerChargeRow[],
   vendorRows: VendorChargeRow[],
-  attachments: {
-    customerPo: ChargeAttachment;
-    vendorQuote: ChargeAttachment;
-  },
   deps: {
     addOvfLine: (id: string, body: OvfLineFormInput) => Promise<OvfLine>;
     updateOvfLine: (lineId: string, body: OvfLineFormInput) => Promise<OvfLine>;
-    createAttachment: (body: {
-      entity_type: string;
-      entity_id: string;
-      branch_id: string;
-      company_id?: string | null;
-      file_name: string;
-      category?: string;
-      content_base64?: string | null;
-      content_type?: string | null;
-    }) => Promise<unknown>;
-    fileToBase64: (file: File) => Promise<string>;
+    createAttachment: AttachmentUploadDeps["createAttachment"];
+    fileToBase64: AttachmentUploadDeps["fileToBase64"];
   },
 ) {
+  const customerLineKeys = new Map<string, string>();
   for (const row of customerRows) {
     if (!row.product_name.trim()) continue;
     const payload = customerLinePayload(row);
     if (row.serverId) {
       await deps.updateOvfLine(row.serverId, payload);
+      customerLineKeys.set(row.key, row.serverId);
     } else {
-      await deps.addOvfLine(ovfId, { side: "customer_po", ...payload });
+      const created = await deps.addOvfLine(ovfId, { side: "customer_po", ...payload });
+      customerLineKeys.set(row.key, created.id);
     }
   }
 
+  const vendorLineKeys = new Map<string, string>();
   for (const row of vendorRows) {
     if (!row.product_name.trim() && !row.vendor_name.trim()) continue;
     const payload = vendorLinePayload(row);
     if (row.serverId) {
       await deps.updateOvfLine(row.serverId, payload);
+      vendorLineKeys.set(row.key, row.serverId);
     } else {
-      await deps.addOvfLine(ovfId, { side: "vendor", ...payload });
+      const created = await deps.addOvfLine(ovfId, { side: "vendor", ...payload });
+      vendorLineKeys.set(row.key, created.id);
     }
   }
 
-  const poFile = attachments.customerPo.file;
-  if (poFile) {
-    await deps.createAttachment({
-      entity_type: "ovf",
-      entity_id: ovfId,
-      branch_id: branchId,
-      company_id: companyId,
-      file_name: poFile.name,
-      category: "customer_po",
-      content_base64: await deps.fileToBase64(poFile),
-      content_type: poFile.type || "application/octet-stream",
-    });
+  for (const row of customerRows) {
+    if (!row.product_name.trim()) continue;
+    const lineKey = customerLineKeys.get(row.key) ?? row.serverId ?? row.key;
+    await uploadChargeRowFiles(
+      ovfId,
+      branchId,
+      companyId,
+      lineKey,
+      row.poFiles,
+      "customer_po",
+      deps,
+    );
   }
 
-  const quoteFile = attachments.vendorQuote.file;
-  if (quoteFile) {
-    await deps.createAttachment({
-      entity_type: "ovf",
-      entity_id: ovfId,
-      branch_id: branchId,
-      company_id: companyId,
-      file_name: quoteFile.name,
-      category: "vendor_quote",
-      content_base64: await deps.fileToBase64(quoteFile),
-      content_type: quoteFile.type || "application/octet-stream",
-    });
+  for (const row of vendorRows) {
+    if (!row.product_name.trim() && !row.vendor_name.trim()) continue;
+    const lineKey = vendorLineKeys.get(row.key) ?? row.serverId ?? row.key;
+    await uploadChargeRowFiles(
+      ovfId,
+      branchId,
+      companyId,
+      lineKey,
+      row.quoteFiles,
+      "vendor_quote",
+      deps,
+    );
   }
 }

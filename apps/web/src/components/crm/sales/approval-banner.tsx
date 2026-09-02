@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Info, Lock } from "lucide-react";
+import { Lock } from "lucide-react";
 
 /** Human-readable lock reasons for sales-blueprint approval states. */
 export function resolveApprovalLockReason(
@@ -97,32 +97,6 @@ export function ApprovalBanner({
       >
         Go to My Jobs
       </Link>
-    </div>
-  );
-}
-
-/** Informational banner indicating a record's fields were synced/prefilled from a parent entity. */
-export function SyncedBanner({
-  from,
-  href,
-  className,
-}: {
-  from: string;
-  href?: string;
-  className?: string;
-}) {
-  return (
-    <div
-      className={`flex flex-wrap items-center justify-between gap-2 rounded-xl border border-blue-200 bg-blue-50 px-4 py-2 text-xs text-blue-900 ${className ?? ""}`}
-    >
-      <span className="flex items-center gap-2">
-        <Info className="size-3.5" /> Synced from {from} — some fields are read-only here.
-      </span>
-      {href ? (
-        <Link href={href} className="cursor-pointer font-medium underline underline-offset-2">
-          View {from}
-        </Link>
-      ) : null}
     </div>
   );
 }

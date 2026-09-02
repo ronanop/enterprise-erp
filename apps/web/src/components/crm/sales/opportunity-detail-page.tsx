@@ -16,14 +16,16 @@ import {
 import { ApprovalBanner } from "@/components/crm/sales/approval-banner";
 import { CrmEntityRejectionAlert } from "@/components/crm/sales/crm-approval-inbox-listener";
 import { BlueprintActions } from "@/components/crm/sales/blueprint-actions";
-import { CrmAdminDeleteMenu } from "@/components/crm/sales/crm-admin-delete-menu";
+import { resolveSalesStageLabel } from "@/lib/crm/sales-blueprint-stages";
 import { CrmDetailEditLink } from "@/components/crm/sales/crm-detail-edit-link";
+import { CrmRecordActionsMenu } from "@/components/crm/sales/crm-record-actions-menu";
 import { EntityAttachmentsList } from "@/components/crm/sales/entity-attachments-list";
 import { LeadDetailsCard } from "@/components/crm/sales/lead-details-card";
 import { CompanyWorkspaceNav } from "@/components/crm/company-workspace-nav";
 import { PageHeader } from "@/components/layout/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { cloneOpportunityRecord, printOpportunityPreview } from "@/lib/crm/crm-record-actions";
 import { setCrmOpportunityContext, setCrmSidebarFocus } from "@/lib/crm-sidebar-focus";
 import { ApiClientError } from "@/services/api-client";
 import {
@@ -313,11 +315,6 @@ export function OpportunityDetailPage({ opportunityId }: { opportunityId: string
     }
   }
 
-  const canEditSourceLead =
-    Boolean(opp.lead_id && opp.company_account_id && sourceLead) &&
-    !sourceLead!.locked &&
-    sourceLead!.blueprint_state === "open";
-
   return (
     <div className="flex min-w-0 items-start gap-0">
       {opp.company_account_id ? (
@@ -355,7 +352,7 @@ export function OpportunityDetailPage({ opportunityId }: { opportunityId: string
             description={`Expected revenue ${formatInr(opp.expected_revenue)}`}
             actions={
               <div className="flex flex-wrap items-center gap-2">
-                {canEditSourceLead ? (
+                {opp.lead_id && opp.company_account_id ? (
                   <CrmDetailEditLink
                     href={`/crm/companies/${opp.company_account_id}/leads/${opp.lead_id}/edit`}
                   />
@@ -376,9 +373,14 @@ export function OpportunityDetailPage({ opportunityId }: { opportunityId: string
                     <Plus className="size-3.5" /> Create OVF
                   </Button>
                 ) : null}
-                <CrmAdminDeleteMenu
+                <CrmRecordActionsMenu
+                  entityType="opportunity"
+                  entityId={opp.id}
                   entityLabel="Opportunity"
                   entityName={`${opp.opportunity_name} · ${opp.opportunity_code}`}
+                  shareTitle={`${opp.opportunity_name} · ${opp.opportunity_code}`}
+                  onClone={() => cloneOpportunityRecord(opp, router)}
+                  onPrintPreview={async () => printOpportunityPreview(opp)}
                   onDelete={() => deleteOpportunity(opp.id)}
                   onDeleted={() => router.push("/crm/opportunities")}
                 />
@@ -400,6 +402,14 @@ export function OpportunityDetailPage({ opportunityId }: { opportunityId: string
           <BlueprintActions
             allowedActions={blueprintActions}
             locked={blueprint.locked}
+            currentStageLabel={resolveSalesStageLabel({
+              entityType: "opportunity",
+              blueprintState: blueprint.state,
+              locked: blueprint.locked,
+              opportunity: opp,
+              quotes,
+              ovfs,
+            })}
             excludeActions={CUSTOM_ACTIONS}
             defaultValues={{
               deal_won_amount: activeQuote?.grand_total ?? existingOvf?.deal_won_amount ?? null,
@@ -529,7 +539,6 @@ export function OpportunityDetailPage({ opportunityId }: { opportunityId: string
           {(fromMyJobs || blueprint.locked) && reviewAttachment ? (
             <CrmSection
               title="Document for approval"
-              subtitle="Open or download the file under review"
               icon={Paperclip}
             >
               <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border/70 bg-muted/30 px-3 py-2.5">
@@ -568,7 +577,7 @@ export function OpportunityDetailPage({ opportunityId }: { opportunityId: string
             </CrmSection>
           ) : null}
 
-          <CrmSection title="Attachments" subtitle="BOQ / SOW / OEM / PO files" icon={Paperclip}>
+          <CrmSection title="Attachments" icon={Paperclip}>
             <EntityAttachmentsList
               attachments={attachments}
               entityType="opportunity"

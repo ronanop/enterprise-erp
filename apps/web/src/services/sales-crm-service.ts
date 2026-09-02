@@ -548,7 +548,7 @@ export async function getSalesLead(id: string): Promise<SalesLead> {
   return unwrap(await resourceService.get<SalesLead>(CRM_LEADS_API, id));
 }
 
-export type SalesLeadUpdateInput = Partial<Omit<LeadCreateFromCompanyInput, "branch_id" | "owner_employee_id">> & {
+export type SalesLeadUpdateInput = Partial<Omit<LeadCreateFromCompanyInput, "branch_id">> & {
   version: number;
 };
 
@@ -660,6 +660,38 @@ export async function getOpportunity(id: string): Promise<Opportunity> {
   return unwrap(await resourceService.get<Opportunity>(CRM_OPPORTUNITIES_API, id));
 }
 
+export type OpportunityCreateInput = {
+  branch_id: string;
+  opportunity_name: string;
+  pipeline_id: string;
+  owner_employee_id: string;
+  lead_id?: string | null;
+  customer_id?: string | null;
+  expected_revenue?: number;
+  probability_percent?: number;
+  expected_close_date?: string | null;
+  current_stage?: string;
+};
+
+export async function createOpportunity(body: OpportunityCreateInput): Promise<Opportunity> {
+  return unwrap(await resourceService.create<Opportunity>(CRM_OPPORTUNITIES_API, body));
+}
+
+export type Pipeline = {
+  id: string;
+  company_id: string;
+  pipeline_code: string;
+  pipeline_name: string;
+  is_default: boolean;
+};
+
+export const CRM_PIPELINES_API = "/crm/pipelines";
+
+export async function listPipelines(): Promise<Pipeline[]> {
+  const res = await apiClient<Pipeline[]>(CRM_PIPELINES_API);
+  return asArray(res.data);
+}
+
 export type OpportunityUpdateInput = {
   version: number;
   opportunity_name?: string;
@@ -763,7 +795,18 @@ export type Quote = {
   entity_address: string | null;
   entity_gst: string | null;
   entity_contact: string | null;
+  amc_warranty?: string | null;
+  amc_start_date?: string | null;
+  amc_end_date?: string | null;
+  billing_street?: string | null;
+  billing_city?: string | null;
+  billing_state?: string | null;
+  billing_zip?: string | null;
   billing_country: string | null;
+  shipping_street?: string | null;
+  shipping_city?: string | null;
+  shipping_state?: string | null;
+  shipping_zip?: string | null;
   shipping_country: string | null;
   quote_no: string;
   quote_revision: number;
@@ -798,7 +841,18 @@ export type QuoteFormInput = {
   entity_address?: string | null;
   entity_gst?: string | null;
   entity_contact?: string | null;
+  amc_warranty?: string | null;
+  amc_start_date?: string | null;
+  amc_end_date?: string | null;
+  billing_street?: string | null;
+  billing_city?: string | null;
+  billing_state?: string | null;
+  billing_zip?: string | null;
   billing_country?: string | null;
+  shipping_street?: string | null;
+  shipping_city?: string | null;
+  shipping_state?: string | null;
+  shipping_zip?: string | null;
   shipping_country?: string | null;
   freight?: number;
   terms?: string | null;

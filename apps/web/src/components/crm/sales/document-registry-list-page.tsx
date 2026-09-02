@@ -182,7 +182,6 @@ export function DocumentRegistryListPage({
       <CrmListPanel>
         <CrmListToolbar
           title={meta.title}
-          subtitle={meta.subtitle}
           icon={FileStack}
           count={sorted.length}
           search={{

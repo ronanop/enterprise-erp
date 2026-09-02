@@ -10,14 +10,12 @@ import { cn } from "@/lib/utils";
 /** Dense single-row toolbar for CRM list cards (icon + title + actions + search). */
 export function CrmListToolbar({
   title,
-  subtitle,
   count,
   icon,
   actions,
   search,
 }: {
   title: string;
-  subtitle?: string;
   count?: number;
   icon?: LucideIcon;
   actions?: ReactNode;
@@ -36,7 +34,6 @@ export function CrmListToolbar({
             <h2 className={cn(CRM_SECTION_TITLE, "truncate")}>{title}</h2>
             {typeof count === "number" ? <CrmCountBadge count={count} /> : null}
           </div>
-          {subtitle ? <p className="text-[11px] text-muted-foreground">{subtitle}</p> : null}
         </div>
       </div>
       <div className="flex shrink-0 flex-nowrap items-center gap-2">

@@ -127,7 +127,6 @@ export function KycAccountMappingPage({
       <CrmListPanel>
         <CrmListToolbar
           title="Account Mapping"
-          subtitle="KYC account profiles"
           icon={ShieldCheck}
           count={sorted.length}
           actions={embedded ? actions : null}

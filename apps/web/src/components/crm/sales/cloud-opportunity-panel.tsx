@@ -114,7 +114,6 @@ export function CloudOpportunityPanel({ opportunity, cloudVariant, disabled, onS
   return (
     <CrmSection
       title="Cloud Opportunity"
-      subtitle={`${VARIANT_LABELS[variantKey] ?? "Cloud"} · consumption & discounting`}
       icon={Cloud}
     >
       <CrmDetailGrid>

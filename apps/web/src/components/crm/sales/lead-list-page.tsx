@@ -82,7 +82,6 @@ export function LeadListPage({
       <CrmListPanel>
         <CrmListToolbar
           title="Leads"
-          subtitle="Active sales leads"
           icon={UserPlus}
           count={sorted.length}
           search={{

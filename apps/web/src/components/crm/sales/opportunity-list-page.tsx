@@ -99,7 +99,6 @@ export function OpportunityListPage({
       <CrmListPanel>
         <CrmListToolbar
           title="Opportunities"
-          subtitle="Open and closed deals"
           icon={Handshake}
           count={sorted.length}
           search={{

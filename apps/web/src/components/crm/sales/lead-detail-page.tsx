@@ -9,15 +9,16 @@ import {
   CrmErrorBanner,
   CrmPage,
 } from "@/components/crm/crm-ui";
-import { ApprovalBanner, SyncedBanner } from "@/components/crm/sales/approval-banner";
+import { ApprovalBanner } from "@/components/crm/sales/approval-banner";
 import { BlueprintActions } from "@/components/crm/sales/blueprint-actions";
-import { DealTimelineStatusBadge } from "@/components/crm/sales/deal-timeline";
-import { CrmAdminDeleteMenu } from "@/components/crm/sales/crm-admin-delete-menu";
+import { resolveSalesStageLabel } from "@/lib/crm/sales-blueprint-stages";
 import { CrmDetailEditLink } from "@/components/crm/sales/crm-detail-edit-link";
+import { CrmRecordActionsMenu } from "@/components/crm/sales/crm-record-actions-menu";
 import { LeadDetailsCard } from "@/components/crm/sales/lead-details-card";
 import { FinanceStatusBadge } from "@/components/finance/finance-status-badge";
 import { PageHeader } from "@/components/layout/page-header";
 import { Button } from "@/components/ui/button";
+import { cloneLeadRecord, printLeadPreview } from "@/lib/crm/crm-record-actions";
 import { ApiClientError } from "@/services/api-client";
 import {
   convertLead,
@@ -126,14 +127,8 @@ export function LeadDetailPage({ leadId }: { leadId: string }) {
     );
   }
 
-  const lost = blueprint.state === "lost";
   const canConvert = blueprint.allowed_actions.includes("convert") && !blueprint.locked;
   const converted = blueprint.state === "converted" && Boolean(lead.converted_opportunity_id);
-  const canEdit =
-    Boolean(lead.company_account_id) &&
-    !blueprint.locked &&
-    blueprint.state === "open" &&
-    !converted;
 
   return (
     <CrmPage>
@@ -147,9 +142,6 @@ export function LeadDetailPage({ leadId }: { leadId: string }) {
       </div>
 
       <ApprovalBanner locked={blueprint.locked} label="This lead" />
-      {lead.company_account_id ? (
-        <SyncedBanner from="Company" href={`/crm/companies/${lead.company_account_id}`} />
-      ) : null}
 
       <PageHeader
         title={`${fullName(lead)} · ${lead.lead_code}`}
@@ -160,9 +152,8 @@ export function LeadDetailPage({ leadId }: { leadId: string }) {
         }
         actions={
           <div className="flex flex-wrap items-center gap-2">
-            <DealTimelineStatusBadge stage={converted ? "opportunity" : "lead"} lost={lost} />
             <FinanceStatusBadge status={lead.status} />
-            {canEdit && lead.company_account_id ? (
+            {lead.company_account_id ? (
               <CrmDetailEditLink
                 href={`/crm/companies/${lead.company_account_id}/leads/${lead.id}/edit`}
               />
@@ -188,9 +179,15 @@ export function LeadDetailPage({ leadId }: { leadId: string }) {
                 Open Opportunity
               </Button>
             ) : null}
-            <CrmAdminDeleteMenu
+            <CrmRecordActionsMenu
+              entityType="lead"
+              entityId={lead.id}
               entityLabel="Lead"
               entityName={`${fullName(lead)} · ${lead.lead_code}`}
+              shareTitle={`${fullName(lead)} · ${lead.lead_code}`}
+              cloneDisabled={!lead.company_account_id}
+              onClone={() => cloneLeadRecord(lead, router)}
+              onPrintPreview={async () => printLeadPreview(lead, company?.customer_name)}
               onDelete={() => deleteLead(lead.id)}
               onDeleted={() =>
                 router.push(lead.company_account_id ? `/crm/companies/${lead.company_account_id}` : "/crm/leads")
@@ -213,6 +210,12 @@ export function LeadDetailPage({ leadId }: { leadId: string }) {
       <BlueprintActions
         allowedActions={blueprint.allowed_actions}
         locked={blueprint.locked}
+        currentStageLabel={resolveSalesStageLabel({
+          entityType: "lead",
+          blueprintState: blueprint.state,
+          locked: blueprint.locked,
+          lead,
+        })}
         excludeActions={["convert"]}
         onAction={onBlueprintAction}
       />

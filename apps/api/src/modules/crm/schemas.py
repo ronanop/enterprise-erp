@@ -1108,7 +1108,18 @@ class QuoteCreate(BaseModel):
     entity_address: str | None = None
     entity_gst: str | None = None
     entity_contact: str | None = None
+    amc_warranty: str | None = None
+    amc_start_date: date | None = None
+    amc_end_date: date | None = None
+    billing_street: str | None = None
+    billing_city: str | None = None
+    billing_state: str | None = None
+    billing_zip: str | None = None
     billing_country: str | None = None
+    shipping_street: str | None = None
+    shipping_city: str | None = None
+    shipping_state: str | None = None
+    shipping_zip: str | None = None
     shipping_country: str | None = None
     freight: Decimal = Decimal("0")
     terms: str | None = None
@@ -1129,7 +1140,18 @@ class QuoteUpdate(BaseModel):
     entity_address: str | None = None
     entity_gst: str | None = None
     entity_contact: str | None = None
+    amc_warranty: str | None = None
+    amc_start_date: date | None = None
+    amc_end_date: date | None = None
+    billing_street: str | None = None
+    billing_city: str | None = None
+    billing_state: str | None = None
+    billing_zip: str | None = None
     billing_country: str | None = None
+    shipping_street: str | None = None
+    shipping_city: str | None = None
+    shipping_state: str | None = None
+    shipping_zip: str | None = None
     shipping_country: str | None = None
     freight: Decimal | None = None
     terms: str | None = None
@@ -1155,7 +1177,18 @@ class QuoteResponse(OrmModel):
     entity_address: str | None
     entity_gst: str | None
     entity_contact: str | None
+    amc_warranty: str | None = None
+    amc_start_date: date | None = None
+    amc_end_date: date | None = None
+    billing_street: str | None = None
+    billing_city: str | None = None
+    billing_state: str | None = None
+    billing_zip: str | None = None
     billing_country: str | None
+    shipping_street: str | None = None
+    shipping_city: str | None = None
+    shipping_state: str | None = None
+    shipping_zip: str | None = None
     shipping_country: str | None
     quote_no: str
     quote_revision: int

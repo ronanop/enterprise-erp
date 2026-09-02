@@ -24,6 +24,7 @@ class LeadRepository(CrmScopedRepository):
         ctx: TenantContext,
         company_id: UUID,
         company_account_id: UUID | None = None,
+        owner_employee_id: UUID | None = None,
     ):
         stmt = select(CrmLead).where(
             CrmLead.company_id == company_id,
@@ -34,6 +35,8 @@ class LeadRepository(CrmScopedRepository):
         )
         if company_account_id is not None:
             stmt = stmt.where(CrmLead.company_account_id == company_account_id)
+        if owner_employee_id is not None:
+            stmt = stmt.where(CrmLead.owner_employee_id == owner_employee_id)
         stmt = self.apply_crm_filter(stmt, CrmLead, ctx, branch_scoped=True)
         stmt = stmt.order_by(CrmLead.created_at.desc())
         return list(self.db.scalars(stmt).all())

@@ -189,7 +189,6 @@ export function ContactsListPage({
       <CrmListPanel>
         <CrmListToolbar
           title="Contacts"
-          subtitle="Company contact persons"
           icon={Users}
           count={sorted.length}
           actions={embedded ? actions : null}

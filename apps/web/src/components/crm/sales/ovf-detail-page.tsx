@@ -14,15 +14,18 @@ import {
 } from "@/components/crm/crm-ui";
 import { ApprovalBanner } from "@/components/crm/sales/approval-banner";
 import { CrmEntityRejectionAlert } from "@/components/crm/sales/crm-approval-inbox-listener";
-import { BlueprintActions, BlueprintStateBadge } from "@/components/crm/sales/blueprint-actions";
-import { CrmAdminDeleteMenu } from "@/components/crm/sales/crm-admin-delete-menu";
+import { BlueprintActions } from "@/components/crm/sales/blueprint-actions";
+import { resolveSalesStageLabel } from "@/lib/crm/sales-blueprint-stages";
 import { CrmDetailEditLink } from "@/components/crm/sales/crm-detail-edit-link";
+import { CrmRecordActionsMenu } from "@/components/crm/sales/crm-record-actions-menu";
 import {
   OvfOrderLinesSection,
+  computeOvfMargins,
   customerRowsFromOvfLines,
-  emptyChargeAttachment,
+  mergeCustomerRowsWithPoAttachments,
+  mergeVendorRowsWithQuoteAttachments,
+  sumLineTotals,
   vendorRowsFromOvfLines,
-  type ChargeAttachment,
   type CustomerChargeRow,
   type VendorChargeRow,
 } from "@/components/crm/sales/ovf-order-lines-section";
@@ -30,7 +33,8 @@ import { FinanceStatusBadge } from "@/components/finance/finance-status-badge";
 import { PageHeader } from "@/components/layout/page-header";
 import { Button } from "@/components/ui/button";
 import { ApiClientError } from "@/services/api-client";
-import { parseLeadDistributorNames } from "@/lib/crm/lead-distributor-options";
+import { cloneOvfRecord, printOvfPreview } from "@/lib/crm/crm-record-actions";
+import { buildLeadDistributorDropdownOptions } from "@/lib/crm/lead-distributor-options";
 import {
   applyOvfAction,
   deleteOvf,
@@ -44,6 +48,7 @@ import {
   getSalesLead,
   listAttachments,
   listEmployeeOptions,
+  listMyJobs,
   listOvfLines,
   listQuoteLines,
   markOvfDealWon,
@@ -64,6 +69,24 @@ function textOrDash(value: string | number | null | undefined): string {
   return text || "—";
 }
 
+function resolveEmployeeLabel(userId: string | null | undefined, employees: Option[]): string | null {
+  if (!userId) return null;
+  const match = employees.find((employee) => employee.id === userId);
+  return match?.label?.trim() || null;
+}
+
+async function resolveOvfApproverName(ovfId: string, employees: Option[]): Promise<string | null> {
+  try {
+    const tasks = await listMyJobs({ entity_type: "ovf", entity_id: ovfId, status: "approved" });
+    const approveTask = tasks
+      .filter((task) => task.action === "approve" && task.decided_by)
+      .sort((a, b) => String(b.decided_at ?? "").localeCompare(String(a.decided_at ?? "")))[0];
+    return resolveEmployeeLabel(approveTask?.decided_by, employees);
+  } catch {
+    return null;
+  }
+}
+
 export function OvfDetailPage({ ovfId }: { ovfId: string }) {
   const router = useRouter();
   const [ovf, setOvf] = useState<Ovf | null>(null);
@@ -74,9 +97,8 @@ export function OvfDetailPage({ ovfId }: { ovfId: string }) {
   const [employees, setEmployees] = useState<Option[]>([]);
   const [customerRows, setCustomerRows] = useState<CustomerChargeRow[]>([]);
   const [vendorRows, setVendorRows] = useState<VendorChargeRow[]>([]);
-  const [customerPo, setCustomerPo] = useState<ChargeAttachment>(emptyChargeAttachment);
-  const [vendorQuote, setVendorQuote] = useState<ChargeAttachment>(emptyChargeAttachment);
   const [vendorNameOptions, setVendorNameOptions] = useState<string[]>([]);
+  const [ovfApproverName, setOvfApproverName] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [banner, setBanner] = useState<{ text: string; tone: "success" | "error" } | null>(null);
@@ -85,6 +107,7 @@ export function OvfDetailPage({ ovfId }: { ovfId: string }) {
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
+    setOvfApproverName(null);
     try {
       const [ovfRow, bp, ovfLines] = await Promise.all([
         getOvf(ovfId),
@@ -101,28 +124,33 @@ export function OvfDetailPage({ ovfId }: { ovfId: string }) {
         listQuoteLines(ovfRow.quote_id).catch(() => []),
         listAttachments("ovf", ovfId).catch(() => []),
       ]);
-      const poNames = attachments
-        .filter((row) => row.category === "customer_po")
-        .map((row) => row.file_name);
-      const quoteNames = attachments
-        .filter((row) => row.category === "vendor_quote")
-        .map((row) => row.file_name);
+      const poAttachments = attachments.filter((row) => row.category === "customer_po");
+      const quoteAttachments = attachments.filter((row) => row.category === "vendor_quote");
       setQuote(quoteRow);
       setOpportunity(oppRow);
       setEmployees(employeeRows);
-      setCustomerRows(customerRowsFromOvfLines(ovfLines, quoteLines));
-      setVendorRows(vendorRowsFromOvfLines(ovfLines, quoteLines));
-      setCustomerPo({ fileName: poNames[0] ?? "", file: null });
-      setVendorQuote({ fileName: quoteNames[0] ?? "", file: null });
+      setCustomerRows(
+        mergeCustomerRowsWithPoAttachments(
+          customerRowsFromOvfLines(ovfLines, quoteLines),
+          poAttachments,
+        ),
+      );
+      setVendorRows(
+        mergeVendorRowsWithQuoteAttachments(
+          vendorRowsFromOvfLines(ovfLines, quoteLines),
+          quoteAttachments,
+        ),
+      );
       if (oppRow?.lead_id) {
         const lead = await getSalesLead(oppRow.lead_id).catch(() => null);
-        setVendorNameOptions(parseLeadDistributorNames(lead?.distributor_name));
+        setVendorNameOptions(buildLeadDistributorDropdownOptions(lead?.distributor_name));
       } else {
-        setVendorNameOptions([]);
+        setVendorNameOptions(buildLeadDistributorDropdownOptions(null));
       }
 
       const accountId = ovfRow.company_account_id ?? oppRow?.company_account_id ?? null;
       setCompany(accountId ? await getCompany(accountId).catch(() => null) : null);
+      setOvfApproverName(await resolveOvfApproverName(ovfId, employeeRows));
     } catch (err) {
       setOvf(null);
       setError(err instanceof ApiClientError ? err.message : "Failed to load OVF");
@@ -245,6 +273,35 @@ export function OvfDetailPage({ ovfId }: { ovfId: string }) {
     company?.billing_country,
   );
   const shippingContact = textOrDash(ovf.shipping_contact_person || quote?.entity_contact);
+  const { totalMarginAmount, totalMarginPct } = computeOvfMargins({
+    customerRows,
+    vendorRows,
+    freight: ovf.freight,
+    financeCostPct: ovf.finance_cost_pct,
+  });
+  const totalSaleValue = sumLineTotals(customerRows);
+
+  async function onPrintPreview() {
+    await printOvfPreview({
+      ovf,
+      quote,
+      opportunity,
+      customerName,
+      accountName,
+      quoteName,
+      ownerName,
+      billingAddress,
+      billingState,
+      billingCountry,
+      billingContact,
+      shippingAddress,
+      shippingState,
+      shippingCountry,
+      shippingContact,
+      customerRows,
+      vendorRows,
+    });
+  }
 
   return (
     <CrmPage>
@@ -275,13 +332,15 @@ export function OvfDetailPage({ ovfId }: { ovfId: string }) {
         description={quote ? `From Quote ${quote.quote_no}` : "Order Value Form"}
         actions={
           <div className="flex shrink-0 flex-wrap items-center gap-2">
-            <BlueprintStateBadge state={blueprint.state} />
-            {!ovf.locked && !ovf.deal_won && !ovf.shared_to_scm ? (
-              <CrmDetailEditLink href={`/crm/ovf/${ovf.id}/edit`} />
-            ) : null}
-            <CrmAdminDeleteMenu
+            <CrmDetailEditLink href={`/crm/ovf/${ovf.id}/edit`} />
+            <CrmRecordActionsMenu
+              entityType="ovf"
+              entityId={ovf.id}
               entityLabel="OVF"
               entityName={ovf.ovf_no}
+              shareTitle={ovf.ovf_no}
+              onClone={() => cloneOvfRecord()}
+              onPrintPreview={onPrintPreview}
               onDelete={() => deleteOvf(ovf.id)}
               onDeleted={() =>
                 router.push(
@@ -319,12 +378,20 @@ export function OvfDetailPage({ ovfId }: { ovfId: string }) {
       <BlueprintActions
         allowedActions={blueprint.allowed_actions}
         locked={blueprint.locked}
-        defaultValues={{ deal_won_amount: quote?.grand_total ?? null }}
+        currentStageLabel={resolveSalesStageLabel({
+          entityType: "ovf",
+          blueprintState: blueprint.state,
+          locked: blueprint.locked,
+          ovf,
+        })}
+        defaultValues={{
+          deal_won_amount: totalSaleValue > 0 ? totalSaleValue : null,
+        }}
         onAction={onBlueprintAction}
         disabled={busy}
       />
 
-      <CrmSection title="OVF Details" subtitle="Module, shipping, and commercial charges" icon={ClipboardCheck}>
+      <CrmSection title="OVF Details" icon={ClipboardCheck}>
         <h3 className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
           OVF Module Information
         </h3>
@@ -332,7 +399,6 @@ export function OvfDetailPage({ ovfId }: { ovfId: string }) {
           <CrmDetailItem label="Customer Name">{customerName}</CrmDetailItem>
           <CrmDetailItem label="Quote Name">{quoteName}</CrmDetailItem>
           <CrmDetailItem label="Quote No.">{textOrDash(quote?.quote_no)}</CrmDetailItem>
-          <CrmDetailItem label="Account">{accountName}</CrmDetailItem>
           <CrmDetailItem label="OVF Module Owner">{ownerName}</CrmDetailItem>
           <CrmDetailItem label="PO Number">{textOrDash(ovf.po_number)}</CrmDetailItem>
           <CrmDetailItem label="Customer PO received date">
@@ -344,9 +410,7 @@ export function OvfDetailPage({ ovfId }: { ovfId: string }) {
           <CrmDetailItem label="Approval Status">
             <FinanceStatusBadge status={ovf.approval_status} />
           </CrmDetailItem>
-          <CrmDetailItem label="Blueprint State">
-            <span className="capitalize">{ovf.blueprint_state.replaceAll("_", " ")}</span>
-          </CrmDetailItem>
+          <CrmDetailItem label="OVF Approver">{textOrDash(ovfApproverName)}</CrmDetailItem>
           <CrmDetailItem label="Opportunity">
             {opportunity ? (
               <Link
@@ -391,9 +455,9 @@ export function OvfDetailPage({ ovfId }: { ovfId: string }) {
           <CrmDetailItem label="Vendor Payment Terms (days)">{ovf.vendor_payment_days}</CrmDetailItem>
           <CrmDetailItem label="Customer Payment Term (days)">{ovf.customer_payment_days}</CrmDetailItem>
           <CrmDetailItem label="Finance Cost (%)">{ovf.finance_cost_pct}%</CrmDetailItem>
-          <CrmDetailItem label="Total Margin in Percentage">{ovf.total_margin_pct}%</CrmDetailItem>
+          <CrmDetailItem label="Total Margin in Percentage">{totalMarginPct.toFixed(2)}%</CrmDetailItem>
           <CrmDetailItem label="Total Margin in Amount">
-            {formatInrPrecise(ovf.total_margin_amount)}
+            {formatInrPrecise(totalMarginAmount)}
           </CrmDetailItem>
           <CrmDetailItem label="Freight Charges (₹)">{formatInr(ovf.freight)}</CrmDetailItem>
           <CrmDetailItem label="Additional Charges (₹)">{formatInr(ovf.additional_charges)}</CrmDetailItem>
@@ -408,8 +472,6 @@ export function OvfDetailPage({ ovfId }: { ovfId: string }) {
       <OvfOrderLinesSection
         customerRows={customerRows}
         vendorRows={vendorRows}
-        customerPo={customerPo}
-        vendorQuote={vendorQuote}
         vendorNameOptions={vendorNameOptions}
         disabled
       />

@@ -228,7 +228,6 @@ export function MyJobsPage({
       <CrmListPanel>
         <CrmListToolbar
           title="Tasks"
-          subtitle="Approval inbox"
           icon={Briefcase}
           count={sorted.length}
         />

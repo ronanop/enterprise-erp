@@ -254,7 +254,6 @@ export function CrmDashboard() {
       <div className="grid gap-3 xl:grid-cols-3">
         <CrmSection
           title="Pipeline funnel"
-          subtitle="Lead → Meeting volume"
           icon={BarChart3}
           badge={<Badge variant="secondary">Counts</Badge>}
         >
@@ -279,7 +278,6 @@ export function CrmDashboard() {
 
         <CrmSection
           title="Stage mix"
-          subtitle="All opportunities"
           icon={PieChart}
           badge={<Badge variant="secondary">Share</Badge>}
         >
@@ -308,7 +306,6 @@ export function CrmDashboard() {
 
         <CrmSection
           title="Pipeline value"
-          subtitle="Expected revenue by stage"
           icon={Target}
           badge={<Badge variant="secondary">INR</Badge>}
         >

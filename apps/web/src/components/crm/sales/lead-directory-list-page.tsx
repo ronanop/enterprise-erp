@@ -243,7 +243,6 @@ export function LeadDirectoryListPage({
       <CrmListPanel>
         <CrmListToolbar
           title={meta.title}
-          subtitle={meta.subtitle}
           icon={BookUser}
           count={sorted.length}
           search={{

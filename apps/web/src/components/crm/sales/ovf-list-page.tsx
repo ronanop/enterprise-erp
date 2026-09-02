@@ -105,7 +105,6 @@ export function OvfListPage({
       <CrmListPanel>
         <CrmListToolbar
           title="OVFs"
-          subtitle="Order value forms"
           icon={ClipboardCheck}
           count={sorted.length}
           search={{

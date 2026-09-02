@@ -46,3 +46,15 @@ export function parseLeadDistributorNames(value: string | null | undefined): str
 export function formatLeadDistributorNames(names: readonly string[]): string {
   return names.join(LEAD_DISTRIBUTOR_SEPARATOR);
 }
+
+/** Preset lead distributors plus any custom names saved on the lead (for single-select dropdowns). */
+export function buildLeadDistributorDropdownOptions(
+  leadDistributorField: string | null | undefined,
+): string[] {
+  const presetLower = new Set(LEAD_DISTRIBUTOR_OPTIONS.map((name) => name.toLowerCase()));
+  const selectedOnLead = parseLeadDistributorNames(leadDistributorField);
+  const customFromLead = selectedOnLead.filter(
+    (name) => !presetLower.has(name.toLowerCase()),
+  );
+  return [...LEAD_DISTRIBUTOR_OPTIONS, ...customFromLead];
+}

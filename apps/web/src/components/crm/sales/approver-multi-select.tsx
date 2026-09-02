@@ -43,11 +43,14 @@ export function ApproverMultiSelect({
   value,
   onChange,
   placeholder = "Select approver(s)",
+  lockedIds,
 }: {
   options: ApproverOption[];
   value: string[];
   onChange: (value: string[]) => void;
   placeholder?: string;
+  /** Approver ids that must stay selected and cannot be removed. */
+  lockedIds?: string[];
 }) {
   const triggerRef = useRef<HTMLDivElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -57,6 +60,7 @@ export function ApproverMultiSelect({
   const [search, setSearch] = useState("");
   const [coords, setCoords] = useState<MenuCoords | null>(null);
 
+  const lockedSet = useMemo(() => new Set(lockedIds ?? []), [lockedIds]);
   const selectedSet = useMemo(() => new Set(value), [value]);
   const optionById = useMemo(() => new Map(options.map((option) => [option.id, option])), [options]);
 
@@ -108,6 +112,7 @@ export function ApproverMultiSelect({
   }
 
   function toggleOption(id: string) {
+    if (lockedSet.has(id)) return;
     if (selectedSet.has(id)) {
       onChange(value.filter((item) => item !== id));
       return;
@@ -116,6 +121,7 @@ export function ApproverMultiSelect({
   }
 
   function removeOption(id: string) {
+    if (lockedSet.has(id)) return;
     onChange(value.filter((item) => item !== id));
   }
 
@@ -178,6 +184,7 @@ export function ApproverMultiSelect({
           ) : (
             filteredOptions.map((option) => {
               const checked = selectedSet.has(option.id);
+              const locked = lockedSet.has(option.id);
               const { name, email } = optionParts(option);
               return (
                 <li key={option.id}>
@@ -185,9 +192,10 @@ export function ApproverMultiSelect({
                     type="button"
                     role="option"
                     aria-selected={checked}
+                    disabled={locked}
                     className={cn(
                       "flex w-full cursor-pointer items-center gap-3 rounded-lg px-2.5 py-2 text-left transition-colors duration-150",
-                      "hover:bg-slate-50 focus-visible:bg-slate-50 focus-visible:outline-none",
+                      locked ? "cursor-default opacity-90" : "hover:bg-slate-50 focus-visible:bg-slate-50 focus-visible:outline-none",
                       checked && "bg-sky-50/80 hover:bg-sky-50",
                     )}
                     onClick={() => toggleOption(option.id)}
@@ -277,6 +285,7 @@ export function ApproverMultiSelect({
             const { name, email } = option
               ? optionParts(option)
               : { name: id, email: null as string | null };
+            const locked = lockedSet.has(id);
             return (
               <span
                 key={id}
@@ -288,17 +297,19 @@ export function ApproverMultiSelect({
                 <span className="min-w-0 truncate font-medium" title={email ?? name}>
                   {name}
                 </span>
-                <button
-                  type="button"
-                  className="cursor-pointer rounded-full p-0.5 text-sky-700/70 transition-colors duration-150 hover:bg-sky-100 hover:text-sky-950"
-                  aria-label={`Remove ${name}`}
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    removeOption(id);
-                  }}
-                >
-                  <X className="size-3.5" />
-                </button>
+                {locked ? null : (
+                  <button
+                    type="button"
+                    className="cursor-pointer rounded-full p-0.5 text-sky-700/70 transition-colors duration-150 hover:bg-sky-100 hover:text-sky-950"
+                    aria-label={`Remove ${name}`}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      removeOption(id);
+                    }}
+                  >
+                    <X className="size-3.5" />
+                  </button>
+                )}
               </span>
             );
           })}

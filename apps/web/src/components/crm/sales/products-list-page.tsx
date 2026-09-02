@@ -147,7 +147,6 @@ export function ProductsListPage({
       <CrmListPanel>
         <CrmListToolbar
           title="Products"
-          subtitle="Product / SKU catalog"
           icon={Package}
           count={sorted.length}
           actions={embedded ? actions : null}

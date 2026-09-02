@@ -13,10 +13,10 @@ import {
 } from "lucide-react";
 
 import { CrmErrorBanner, CrmPage, CrmSection } from "@/components/crm/crm-ui";
+import { BlueprintActions } from "@/components/crm/sales/blueprint-actions";
 import { KycContactDesignationField } from "@/components/crm/sales/kyc-contact-designation-field";
 import { LeadDistributorMultiSelect } from "@/components/crm/sales/lead-distributor-multi-select";
 import { LeadOemMultiSelect } from "@/components/crm/sales/lead-oem-multi-select";
-import { SyncedBanner } from "@/components/crm/sales/approval-banner";
 import {
   RequiredFieldsDialog,
   missingRequiredMessage,
@@ -28,6 +28,8 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { formatLeadDistributorNames, parseLeadDistributorNames } from "@/lib/crm/lead-distributor-options";
+import { isCrmModuleAdmin } from "@/lib/crm/crm-module-access";
+import { resolveSalesStageLabel } from "@/lib/crm/sales-blueprint-stages";
 import { formatLeadOemNames, parseLeadOemNames } from "@/lib/crm/lead-oem-options";
 import {
   isCloudLeadProductType,
@@ -35,15 +37,20 @@ import {
   normalizeLeadProductType,
   subProductOptionsForType,
 } from "@/lib/crm/lead-product-options";
+import { useAuthUser } from "@/hooks/use-auth-user";
 import { ApiClientError, authService } from "@/services/api-client";
 import type { UserProfile } from "@/types/api";
 import {
   createLeadFromCompany,
   getCompany,
+  getLeadBlueprint,
   getSalesLead,
   listLeadSourceOptions,
+  listCrmMemberOptions,
   listSellingEntities,
+  markLeadLost,
   updateSalesLead,
+  type BlueprintState,
   type Company,
   type LeadCreateFromCompanyInput,
   type Option,
@@ -129,6 +136,8 @@ export function LeadFormPage({
   leadId?: string;
 }) {
   const router = useRouter();
+  const { user, adminModuleKeys } = useAuthUser();
+  const isAdmin = isCrmModuleAdmin(adminModuleKeys, user?.userType);
   const isEdit = Boolean(leadId);
   const [company, setCompany] = useState<Company | null>(null);
   const [existingLead, setExistingLead] = useState<SalesLead | null>(null);
@@ -143,6 +152,8 @@ export function LeadFormPage({
   const [mandateMessage, setMandateMessage] = useState("");
   const [entityCatalog, setEntityCatalog] = useState<SellingEntity[]>([]);
   const [entityPick, setEntityPick] = useState("");
+  const [blueprint, setBlueprint] = useState<BlueprintState | null>(null);
+  const [crmMembers, setCrmMembers] = useState<Option[]>([]);
 
   const selectedOemNames = parseLeadOemNames(form.oem_name);
   const selectedDistributorNames = parseLeadDistributorNames(form.distributor_name);
@@ -150,13 +161,21 @@ export function LeadFormPage({
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [companyRow, sources, meResponse, entities, leadRow] = await Promise.all([
+      const [companyRow, sources, meResponse, entities, leadRow, memberOptions] = await Promise.all([
         getCompany(companyAccountId),
         listLeadSourceOptions().catch(() => []),
         authService.me().catch(() => null),
         listSellingEntities().catch(() => []),
         leadId ? getSalesLead(leadId).catch(() => null) : Promise.resolve(null),
+        listCrmMemberOptions().catch(() => [] as Option[]),
       ]);
+      setCrmMembers(memberOptions);
+      if (leadId) {
+        const bp = await getLeadBlueprint(leadId).catch(() => null);
+        setBlueprint(bp);
+      } else {
+        setBlueprint(null);
+      }
       setExistingLead(leadRow);
       const mePayload = meResponse?.data;
       let meUser: UserProfile | undefined;
@@ -230,6 +249,7 @@ export function LeadFormPage({
             entity_address: leadRow.entity_address ?? "",
             entity_gst: leadRow.entity_gst ?? "",
             entity_contact: leadRow.entity_contact ?? "",
+            owner_employee_id: leadRow.owner_employee_id ?? "",
             notes: leadRow.notes ?? "",
           };
         }
@@ -386,7 +406,15 @@ export function LeadFormPage({
         distributor_department: null,
       };
       if (isEdit && leadId && existingLead) {
-        await updateSalesLead(leadId, { ...payload, version: existingLead.version });
+        const ownerPatch =
+          isAdmin && form.owner_employee_id
+            ? { owner_employee_id: form.owner_employee_id }
+            : {};
+        await updateSalesLead(leadId, {
+          ...payload,
+          ...ownerPatch,
+          version: existingLead.version,
+        });
         router.push(`/crm/leads/${leadId}`);
         return;
       }
@@ -403,6 +431,20 @@ export function LeadFormPage({
     }
   }
 
+  async function onBlueprintAction(action: string, payload: Record<string, unknown>) {
+    if (!leadId || !existingLead) return;
+    if (action === "lost") {
+      await markLeadLost(leadId, String(payload.reason ?? payload.remark ?? ""));
+      const bp = await getLeadBlueprint(leadId);
+      setBlueprint(bp);
+      const leadRow = await getSalesLead(leadId);
+      setExistingLead(leadRow);
+    }
+  }
+
+  const ownerDisplayLabel =
+    crmMembers.find((member) => member.id === form.owner_employee_id)?.label ?? leadOwnerLabel;
+
   if (loading) {
     return (
       <div className="space-y-3">
@@ -414,9 +456,28 @@ export function LeadFormPage({
 
   return (
     <CrmPage>
-      {company ? <SyncedBanner from={`Company · ${company.customer_name}`} /> : null}
-
       {error ? <CrmErrorBanner>{error}</CrmErrorBanner> : null}
+
+      {isEdit && existingLead && blueprint ? (
+        <BlueprintActions
+          allowedActions={blueprint.allowed_actions}
+          locked={blueprint.locked}
+          currentStageLabel={resolveSalesStageLabel({
+            entityType: "lead",
+            blueprintState: blueprint.state,
+            locked: blueprint.locked,
+            lead: existingLead,
+          })}
+          excludeActions={["convert"]}
+          onAction={onBlueprintAction}
+        />
+      ) : (
+        <BlueprintActions
+          allowedActions={[]}
+          currentStageLabel="Draft Lead"
+          onAction={async () => {}}
+        />
+      )}
 
       <CrmSection title="Lead Information" icon={UserPlus}>
         <div className="grid gap-x-10 gap-y-3 md:grid-cols-2">
@@ -583,12 +644,26 @@ export function LeadFormPage({
           </FinanceField>
 
           <FinanceField label="Lead Owner *">
-            <Input
-              value={leadOwnerLabel || "—"}
-              disabled
-              aria-readonly="true"
-              title="Assigned from your logged-in user account"
-            />
+            {isAdmin ? (
+              <FinanceSelect
+                value={form.owner_employee_id ?? ""}
+                onChange={(e) => set("owner_employee_id", e.target.value)}
+              >
+                <option value="">Select owner</option>
+                {crmMembers.map((member) => (
+                  <option key={member.id} value={member.id}>
+                    {member.label}
+                  </option>
+                ))}
+              </FinanceSelect>
+            ) : (
+              <Input
+                value={ownerDisplayLabel || "—"}
+                disabled
+                aria-readonly="true"
+                title="Assigned from your logged-in user account"
+              />
+            )}
           </FinanceField>
 
           <FinanceField label="Expected Order Value *">

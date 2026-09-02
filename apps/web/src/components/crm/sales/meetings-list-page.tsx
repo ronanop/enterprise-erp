@@ -128,7 +128,6 @@ export function MeetingsListPage({
       <CrmListPanel>
         <CrmListToolbar
           title="Meetings"
-          subtitle="Scheduled client meetings"
           icon={CalendarDays}
           count={sorted.length}
           actions={embedded ? actions : null}

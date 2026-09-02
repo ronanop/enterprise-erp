@@ -6,19 +6,18 @@ import { useRouter } from "next/navigation";
 import { ArrowLeft, ClipboardCheck, IndianRupee } from "lucide-react";
 
 import { CrmErrorBanner, CrmPage, CrmSection } from "@/components/crm/crm-ui";
-import { SyncedBanner } from "@/components/crm/sales/approval-banner";
 import {
   OvfOrderLinesSection,
+  computeOvfMargins,
   customerRowsFromOvfLines,
   customerRowsFromQuoteLines,
-  emptyChargeAttachment,
+  mergeCustomerRowsWithPoAttachments,
+  mergeVendorRowsWithQuoteAttachments,
   persistOvfOrderLinesAfterCreate,
   persistOvfOrderLinesOnUpdate,
-  sumLineTotals,
   validateChargeAttachments,
   vendorRowsFromOvfLines,
   vendorRowsFromQuoteLines,
-  type ChargeAttachment,
   type CustomerChargeRow,
   type VendorChargeRow,
 } from "@/components/crm/sales/ovf-order-lines-section";
@@ -35,7 +34,7 @@ import { PageHeader } from "@/components/layout/page-header";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ApiClientError } from "@/services/api-client";
-import { parseLeadDistributorNames } from "@/lib/crm/lead-distributor-options";
+import { buildLeadDistributorDropdownOptions } from "@/lib/crm/lead-distributor-options";
 import {
   addOvfLine,
   createAttachment,
@@ -84,8 +83,6 @@ type OvfDraft = {
   customer_payment_days: string;
   freight: string;
   additional_charges: string;
-  total_margin_amount: string;
-  total_margin_pct: string;
   finance_cost_pct: string;
   approval_status: string;
 };
@@ -97,12 +94,12 @@ const NUMBER_NO_SPIN =
   "[appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none";
 
 async function distributorOptionsForOpportunity(opportunityRow: Opportunity): Promise<string[]> {
-  if (!opportunityRow.lead_id) return [];
+  if (!opportunityRow.lead_id) return buildLeadDistributorDropdownOptions(null);
   try {
     const lead = await getSalesLead(opportunityRow.lead_id);
-    return parseLeadDistributorNames(lead.distributor_name);
+    return buildLeadDistributorDropdownOptions(lead.distributor_name);
   } catch {
-    return [];
+    return buildLeadDistributorDropdownOptions(null);
   }
 }
 
@@ -136,8 +133,6 @@ export function OvfFormPage({ quoteId, ovfId }: { quoteId?: string; ovfId?: stri
     customer_payment_days: "",
     freight: "",
     additional_charges: "",
-    total_margin_amount: "",
-    total_margin_pct: "",
     finance_cost_pct: "",
     approval_status: "not_required",
   });
@@ -148,12 +143,12 @@ export function OvfFormPage({ quoteId, ovfId }: { quoteId?: string; ovfId?: stri
   const [mandateMessage, setMandateMessage] = useState("");
   const [customerRows, setCustomerRows] = useState<CustomerChargeRow[]>([]);
   const [vendorRows, setVendorRows] = useState<VendorChargeRow[]>([]);
-  const [customerPo, setCustomerPo] = useState<ChargeAttachment>(emptyChargeAttachment);
-  const [vendorQuote, setVendorQuote] = useState<ChargeAttachment>(emptyChargeAttachment);
+  const [marginInputsDirty, setMarginInputsDirty] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
+    setMarginInputsDirty(false);
     try {
       if (isEdit && ovfId) {
         const ovfRow = await getOvf(ovfId);
@@ -173,20 +168,24 @@ export function OvfFormPage({ quoteId, ovfId }: { quoteId?: string; ovfId?: stri
           listQuoteLines(ovfRow.quote_id).catch(() => []),
           listAttachments("ovf", ovfId).catch(() => []),
         ]);
-        const poNames = attachments
-          .filter((row) => row.category === "customer_po")
-          .map((row) => row.file_name);
-        const quoteNames = attachments
-          .filter((row) => row.category === "vendor_quote")
-          .map((row) => row.file_name);
+        const poAttachments = attachments.filter((row) => row.category === "customer_po");
+        const quoteAttachments = attachments.filter((row) => row.category === "vendor_quote");
         setOvf(ovfRow);
         setQuote(quoteRow);
         setOpportunity(opportunityRow);
         setVendorNameOptions(await distributorOptionsForOpportunity(opportunityRow));
-        setCustomerRows(customerRowsFromOvfLines(ovfLines, quoteLines));
-        setVendorRows(vendorRowsFromOvfLines(ovfLines, quoteLines));
-        setCustomerPo({ fileName: poNames[0] ?? "", file: null });
-        setVendorQuote({ fileName: quoteNames[0] ?? "", file: null });
+        setCustomerRows(
+          mergeCustomerRowsWithPoAttachments(
+            customerRowsFromOvfLines(ovfLines, quoteLines),
+            poAttachments,
+          ),
+        );
+        setVendorRows(
+          mergeVendorRowsWithQuoteAttachments(
+            vendorRowsFromOvfLines(ovfLines, quoteLines),
+            quoteAttachments,
+          ),
+        );
         setForm({
           po_number: ovfRow.po_number ?? "",
           po_date: ovfRow.po_date ? String(ovfRow.po_date).slice(0, 10) : "",
@@ -210,8 +209,6 @@ export function OvfFormPage({ quoteId, ovfId }: { quoteId?: string; ovfId?: stri
           customer_payment_days: String(ovfRow.customer_payment_days ?? ""),
           freight: String(ovfRow.freight ?? ""),
           additional_charges: String(ovfRow.additional_charges ?? ""),
-          total_margin_amount: String(ovfRow.total_margin_amount ?? ""),
-          total_margin_pct: String(ovfRow.total_margin_pct ?? ""),
           finance_cost_pct: String(ovfRow.finance_cost_pct ?? ""),
           approval_status: ovfRow.approval_status || "not_required",
         });
@@ -285,8 +282,6 @@ export function OvfFormPage({ quoteId, ovfId }: { quoteId?: string; ovfId?: stri
       setVendorNameOptions(await distributorOptionsForOpportunity(opportunityRow));
       setCustomerRows(customerRowsFromQuoteLines(quoteLines));
       setVendorRows(vendorRowsFromQuoteLines(quoteLines));
-      setCustomerPo(emptyChargeAttachment());
-      setVendorQuote(emptyChargeAttachment());
       setForm((current) => ({
         ...current,
         customer_name: companyRow?.customer_name ?? quoteRow.entity_name ?? "",
@@ -317,18 +312,34 @@ export function OvfFormPage({ quoteId, ovfId }: { quoteId?: string; ovfId?: stri
   }, [load]);
 
   function setField<K extends keyof OvfDraft>(key: K, value: OvfDraft[K]) {
+    if (key === "freight" || key === "finance_cost_pct") {
+      setMarginInputsDirty(true);
+    }
     setForm((current) => ({ ...current, [key]: value }));
   }
 
-  const totalSaleValue = sumLineTotals(customerRows);
-  const totalPurchaseValue = sumLineTotals(vendorRows);
+  function onCustomerRowsChange(rows: CustomerChargeRow[]) {
+    setMarginInputsDirty(true);
+    setCustomerRows(rows);
+  }
+
+  function onVendorRowsChange(rows: VendorChargeRow[]) {
+    setMarginInputsDirty(true);
+    setVendorRows(rows);
+  }
+
+  const { totalMarginAmount, totalMarginPct } = computeOvfMargins({
+    customerRows,
+    vendorRows,
+    freight: form.freight,
+    financeCostPct: form.finance_cost_pct,
+  });
   const freightAmount = Number(form.freight) || 0;
   const financeCostPct = Number(form.finance_cost_pct) || 0;
-  const financeCostAmount = (totalPurchaseValue * financeCostPct) / 100;
-  const totalMarginAmount = totalSaleValue - totalPurchaseValue - freightAmount - financeCostAmount;
-  const totalMarginPct = totalSaleValue
-    ? (totalMarginAmount / totalSaleValue) * 100
-    : 0;
+  const marginAmountDisplay =
+    marginInputsDirty && Number.isFinite(totalMarginAmount) ? totalMarginAmount.toFixed(2) : "";
+  const marginPctDisplay =
+    marginInputsDirty && Number.isFinite(totalMarginPct) ? totalMarginPct.toFixed(2) : "";
 
   function ovfPayload() {
     return {
@@ -371,7 +382,7 @@ export function OvfFormPage({ quoteId, ovfId }: { quoteId?: string; ovfId?: stri
       setMandateOpen(true);
       return;
     }
-    const chargeError = validateChargeAttachments(customerPo, vendorQuote);
+    const chargeError = validateChargeAttachments(customerRows, vendorRows);
     if (chargeError) {
       setError(chargeError);
       return;
@@ -388,7 +399,6 @@ export function OvfFormPage({ quoteId, ovfId }: { quoteId?: string; ovfId?: stri
           saved.company_id ?? opportunity.company_account_id,
           customerRows,
           vendorRows,
-          { customerPo, vendorQuote },
           { addOvfLine, updateOvfLine, createAttachment, fileToBase64 },
         );
         await updateOvf(saved.id, {
@@ -413,7 +423,6 @@ export function OvfFormPage({ quoteId, ovfId }: { quoteId?: string; ovfId?: stri
         created.company_id ?? opportunity.company_account_id,
         customerRows,
         vendorRows,
-        { customerPo, vendorQuote },
         { listOvfLines, addOvfLine, updateOvfLine, createAttachment, fileToBase64 },
       );
       router.push(`/crm/ovf/${created.id}`);
@@ -443,11 +452,6 @@ export function OvfFormPage({ quoteId, ovfId }: { quoteId?: string; ovfId?: stri
       </Link>
       <PageHeader
         title={isEdit ? `Edit ${ovf?.ovf_no ?? "OVF"}` : "Create OVF Module"}
-        description={
-          isEdit
-            ? "Update OVF details, order lines, and commercial charges."
-            : "OVF details are prefilled from the accepted Quote, Opportunity, and Company."
-        }
         actions={
           <div className="flex items-center gap-2">
             <Link
@@ -462,7 +466,6 @@ export function OvfFormPage({ quoteId, ovfId }: { quoteId?: string; ovfId?: stri
           </div>
         }
       />
-      <SyncedBanner from="Company → Opportunity → Quote" />
       {error ? <CrmErrorBanner>{error}</CrmErrorBanner> : null}
 
       <CrmSection title="OVF Module Information" icon={ClipboardCheck}>
@@ -482,8 +485,15 @@ export function OvfFormPage({ quoteId, ovfId }: { quoteId?: string; ovfId?: stri
           <FinanceField label="Shipping Contact Person"><Input value={form.shipping_contact_person} onChange={(event) => setField("shipping_contact_person", event.target.value)} /></FinanceField>
           <FinanceField label="Delivery Period *"><Input type="date" value={form.delivery_period} onChange={(event) => setField("delivery_period", event.target.value)} /></FinanceField>
           <FinanceField label="Shipping Country"><Input value={form.shipping_country} onChange={(event) => setField("shipping_country", event.target.value)} /></FinanceField>
+          <FinanceField label="OVF sent to SCM team">
+            <Input value={ovf?.shared_to_scm ? "Yes" : "No"} disabled />
+          </FinanceField>
           <FinanceField label="Installation/Service Details"><FinanceTextarea value={form.installation_details} onChange={(event) => setField("installation_details", event.target.value)} /></FinanceField>
-          <FinanceField label="Account"><Input value={form.account_name} onChange={(event) => setField("account_name", event.target.value)} /></FinanceField>
+        </div>
+      </CrmSection>
+
+      <CrmSection title="Technology Segment & Sub Technology Segment" icon={ClipboardCheck}>
+        <div className="grid gap-x-10 gap-y-3 md:grid-cols-2">
           <FinanceField label="Technology Segment">
             <FinanceSelect value={form.technology_segment} onChange={(event) => setField("technology_segment", event.target.value)}>
               <option value="">None</option>
@@ -496,34 +506,18 @@ export function OvfFormPage({ quoteId, ovfId }: { quoteId?: string; ovfId?: stri
               {SUB_SEGMENTS.map((segment) => <option key={segment} value={segment}>{segment}</option>)}
             </FinanceSelect>
           </FinanceField>
-          <FinanceField label="OVF sent to SCM team">
-            <Input value={ovf?.shared_to_scm ? "Yes" : "No"} disabled />
-          </FinanceField>
         </div>
       </CrmSection>
-
-      <OvfOrderLinesSection
-        customerRows={customerRows}
-        vendorRows={vendorRows}
-        onCustomerRowsChange={setCustomerRows}
-        onVendorRowsChange={setVendorRows}
-        customerPo={customerPo}
-        vendorQuote={vendorQuote}
-        onCustomerPoChange={setCustomerPo}
-        onVendorQuoteChange={setVendorQuote}
-        vendorNameOptions={vendorNameOptions}
-        disabled={saving}
-      />
 
       <CrmSection title="Charges and Details" icon={IndianRupee}>
         <div className="grid gap-x-10 gap-y-3 md:grid-cols-2">
           <FinanceField label="Total Margin in Amount">
             <Input
-              type="number"
-              step="0.01"
+              type="text"
+              readOnly
               className={`${NUMBER_NO_SPIN} cursor-default bg-muted/50`}
-              value={Number.isFinite(totalMarginAmount) ? totalMarginAmount.toFixed(2) : "0.00"}
-              disabled
+              value={marginAmountDisplay}
+              placeholder="—"
               title="Customer − Vendor − Freight − Finance Cost"
             />
           </FinanceField>
@@ -538,11 +532,11 @@ export function OvfFormPage({ quoteId, ovfId }: { quoteId?: string; ovfId?: stri
           </FinanceField>
           <FinanceField label="Total Margin in Percentage">
             <Input
-              type="number"
-              step="0.01"
+              type="text"
+              readOnly
               className={`${NUMBER_NO_SPIN} cursor-default bg-muted/50`}
-              value={Number.isFinite(totalMarginPct) ? totalMarginPct.toFixed(2) : "0.00"}
-              disabled
+              value={marginPctDisplay}
+              placeholder="—"
               title="Total Margin Amount ÷ Customer Total × 100"
             />
           </FinanceField>
@@ -607,6 +601,16 @@ export function OvfFormPage({ quoteId, ovfId }: { quoteId?: string; ovfId?: stri
           </FinanceField>
         </div>
       </CrmSection>
+
+      <OvfOrderLinesSection
+        customerRows={customerRows}
+        vendorRows={vendorRows}
+        onCustomerRowsChange={onCustomerRowsChange}
+        onVendorRowsChange={onVendorRowsChange}
+        vendorNameOptions={vendorNameOptions}
+        disabled={saving}
+      />
+
       <RequiredFieldsDialog
         open={mandateOpen}
         message={mandateMessage}
